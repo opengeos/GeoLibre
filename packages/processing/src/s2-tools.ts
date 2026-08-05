@@ -117,7 +117,12 @@ function lonChunks(west: number, span: number): Array<[number, number]> {
   return chunks;
 }
 
-function coverPolygonTokens(polygon: Polygon, level: number, limit: number, into: Set<string>): void {
+function coverPolygonTokens(
+  polygon: Polygon,
+  level: number,
+  limit: number,
+  into: Set<string>,
+): void {
   const coverer = new s2geojson.RegionCoverer({ minLevel: level, maxLevel: level });
   for (const id of coverer.covering(polygon)) {
     into.add(s2.cellid.toToken(id));
@@ -294,7 +299,10 @@ export function expandS2FeatureCollection(
 /** Supported point-binning aggregate operations (same set as H3). */
 export type S2AggOp = "count" | "sum" | "mean" | "min" | "max";
 
-function eachPointCoord(geometry: Geometry | null | undefined, visit: (pos: Position) => void): void {
+function eachPointCoord(
+  geometry: Geometry | null | undefined,
+  visit: (pos: Position) => void,
+): void {
   if (!geometry) return;
   if (geometry.type === "Point") {
     visit(geometry.coordinates);
@@ -323,7 +331,12 @@ export function binPointsToS2(
     eachPointCoord(feature.geometry, (pos) => {
       const lng = pos[0];
       const lat = pos[1];
-      if (lng === undefined || lat === undefined || !Number.isFinite(lng) || !Number.isFinite(lat)) {
+      if (
+        lng === undefined ||
+        lat === undefined ||
+        !Number.isFinite(lng) ||
+        !Number.isFinite(lat)
+      ) {
         return;
       }
       const token = s2CellAtLonLat(lng, lat, level);

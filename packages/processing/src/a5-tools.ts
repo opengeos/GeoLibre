@@ -138,14 +138,9 @@ export function buildA5GridFromBboxSql(
     const left = w + i * step;
     const right = w + (i + 1) * step;
     const wkt = bboxToWktPolygon([left, s, right, n]);
-    selects.push(
-      `SELECT ${cellsFromGeomExpr(`ST_GeomFromText(${sqlStr(wkt)})`, res)} AS cell`,
-    );
+    selects.push(`SELECT ${cellsFromGeomExpr(`ST_GeomFromText(${sqlStr(wkt)})`, res)} AS cell`);
   }
-  return finalizeA5Cells(
-    `SELECT DISTINCT cell FROM (${selects.join(" UNION ALL ")})`,
-    compact,
-  );
+  return finalizeA5Cells(`SELECT DISTINCT cell FROM (${selects.join(" UNION ALL ")})`, compact);
 }
 
 /**
@@ -153,11 +148,7 @@ export function buildA5GridFromBboxSql(
  * (multi)polygon and fills it (used for the polyfill source). `sourceSql` is a
  * FROM-able expression whose geometry column is `geom` (DuckDB `ST_Read`).
  */
-export function buildA5GridFromSourceSql(
-  sourceSql: string,
-  res: number,
-  compact = false,
-): string {
+export function buildA5GridFromSourceSql(sourceSql: string, res: number, compact = false): string {
   // Union only polygonal geometries: a mixed layer would otherwise aggregate to
   // a GEOMETRYCOLLECTION that a5_geometry_to_cells rejects. The outer select
   // filters a NULL union result so a NULL geometry never reaches the a5 function.

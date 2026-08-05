@@ -176,10 +176,7 @@ function resolveResolution(
   dggridType: DggridGridType = DEFAULT_DGGRID_GRID_TYPE,
   dggalType: DggalGridType = DEFAULT_DGGAL_GRID_TYPE,
 ): number | null {
-  const maxRes = maxResolutionForDggs(
-    type,
-    type === "dggal" ? dggalType : dggridType,
-  );
+  const maxRes = maxResolutionForDggs(type, type === "dggal" ? dggalType : dggridType);
   const raw = ctx.parameters.resolution;
   if (raw === undefined || raw === null || raw === "") {
     const suggested =
@@ -876,8 +873,7 @@ export const dggsCompactTool: ProcessingAlgorithm = {
       }
     }
 
-    const label =
-      type === "dggal" ? DGGAL_TYPES[dggalType].className : DGGS_TYPE_LABEL[type];
+    const label = type === "dggal" ? DGGAL_TYPES[dggalType].className : DGGS_TYPE_LABEL[type];
     const emitResult = (fc: FeatureCollection) => {
       if (fc.features.length === 0) {
         ctx.log(
@@ -957,13 +953,9 @@ export const dggsCompactTool: ProcessingAlgorithm = {
               );
               return;
             }
-            emitResult(
-              expandDggalFeatureCollection(engine, layer.geojson!, res, { cellField }),
-            );
+            emitResult(expandDggalFeatureCollection(engine, layer.geojson!, res, { cellField }));
           } else {
-            emitResult(
-              compactDggalFeatureCollection(engine, layer.geojson!, { cellField }),
-            );
+            emitResult(compactDggalFeatureCollection(engine, layer.geojson!, { cellField }));
           }
         });
       } catch (error) {

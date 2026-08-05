@@ -464,7 +464,10 @@ export function expandDggalFeatureCollection(
 /** Supported point-binning aggregate operations (same set as H3). */
 export type DggalAggOp = "count" | "sum" | "mean" | "min" | "max";
 
-function eachPointCoord(geometry: Geometry | null | undefined, visit: (pos: Position) => void): void {
+function eachPointCoord(
+  geometry: Geometry | null | undefined,
+  visit: (pos: Position) => void,
+): void {
   if (!geometry) return;
   if (geometry.type === "Point") {
     visit(geometry.coordinates);
@@ -490,7 +493,12 @@ export function binPointsToDggal(
     eachPointCoord(feature.geometry, (pos) => {
       const lng = pos[0];
       const lat = pos[1];
-      if (lng === undefined || lat === undefined || !Number.isFinite(lng) || !Number.isFinite(lat)) {
+      if (
+        lng === undefined ||
+        lat === undefined ||
+        !Number.isFinite(lng) ||
+        !Number.isFinite(lat)
+      ) {
         return;
       }
       const zone = engine.getZoneFromWGS84Centroid(resolution, {

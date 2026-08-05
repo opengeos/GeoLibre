@@ -43,7 +43,9 @@ describe("dggrid resolution math", () => {
   it("estimates fewer cells for aperture-3 than aperture-4 at the same res", () => {
     const area = bboxAreaKm2([0, 0, 1, 1]);
     // 3^res grows slower than 4^res, so ISEA3H cells are larger → lower count.
-    assert.ok(estimateDggridCellCount(area, 5, "ISEA3H") < estimateDggridCellCount(area, 5, "ISEA4H"));
+    assert.ok(
+      estimateDggridCellCount(area, 5, "ISEA3H") < estimateDggridCellCount(area, 5, "ISEA4H"),
+    );
   });
 
   it("fails safe (Infinity) for an out-of-range resolution", () => {
@@ -56,23 +58,26 @@ describe("dggrid resolution math", () => {
 
 describe("dggrid grid type presets", () => {
   it("lists all DGGRID named types with matching dggs_params SQL", () => {
-    assert.deepEqual([...DGGRID_GRID_TYPES], [
-      "SUPERFUND",
-      "PLANETRISK",
-      "ISEA3H",
-      "ISEA4H",
-      "ISEA4T",
-      "ISEA4D",
-      "ISEA43H",
-      "ISEA7H",
-      "IGEO7",
-      "FULLER3H",
-      "FULLER4H",
-      "FULLER4T",
-      "FULLER4D",
-      "FULLER43H",
-      "FULLER7H",
-    ]);
+    assert.deepEqual(
+      [...DGGRID_GRID_TYPES],
+      [
+        "SUPERFUND",
+        "PLANETRISK",
+        "ISEA3H",
+        "ISEA4H",
+        "ISEA4T",
+        "ISEA4D",
+        "ISEA43H",
+        "ISEA7H",
+        "IGEO7",
+        "FULLER3H",
+        "FULLER4H",
+        "FULLER4T",
+        "FULLER4D",
+        "FULLER43H",
+        "FULLER7H",
+      ],
+    );
     assert.equal(DEFAULT_DGGRID_GRID_TYPE, "ISEA4H");
     assert.match(DGGRID_GRID_PARAMS_SQL.ISEA4H, /'ISEA', 4, 'HEXAGON'/);
     assert.match(DGGRID_GRID_PARAMS_SQL.ISEA3H, /'ISEA', 3, 'HEXAGON'/);

@@ -70,10 +70,7 @@ export {
   estimateA5CellCount,
   A5_MAX_TOOL_RES,
 } from "./a5-tools";
-export {
-  unwrapAntimeridianGeometry,
-  unwrapAntimeridianRing,
-} from "./antimeridian";
+export { unwrapAntimeridianGeometry, unwrapAntimeridianRing } from "./antimeridian";
 export {
   buildDggridGridFromWktSql,
   buildDggridGridFromSourceSql,

@@ -491,8 +491,7 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
                           params.dggsType === "dggal"
                             ? params.dggsType
                             : "h3";
-                        const subtype =
-                          dggsType === "dggal" ? params.dggalType : params.dggridType;
+                        const subtype = dggsType === "dggal" ? params.dggalType : params.dggridType;
                         const max = maxResolutionForDggs(dggsType, subtype);
                         return {
                           ...param,

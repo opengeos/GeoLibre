@@ -108,7 +108,17 @@ describe("a5 SQL builders", () => {
       },
       {
         a5: "obj",
-        geojson: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] },
+        geojson: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 0],
+            ],
+          ],
+        },
       },
       { a5: "skip", geojson: 12 },
     ]);

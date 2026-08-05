@@ -159,11 +159,7 @@ export function buildGridFromBboxSql(
  * (multi)polygon and fills it (used for the polyfill source). `sourceSql` is a
  * FROM-able expression whose geometry column is `geom` (DuckDB `ST_Read`).
  */
-export function buildGridFromSourceSql(
-  sourceSql: string,
-  res: number,
-  compact = false,
-): string {
+export function buildGridFromSourceSql(sourceSql: string, res: number, compact = false): string {
   // Union only polygonal geometries: a mixed layer would otherwise aggregate to
   // a GEOMETRYCOLLECTION that the H3 polyfill rejects. The `cells` CTE
   // filters a NULL union result (no polygons survived) so a NULL WKT never
