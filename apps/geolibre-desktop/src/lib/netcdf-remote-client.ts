@@ -81,17 +81,36 @@ export async function openRemoteNetcdfFile(url: string): Promise<RemoteNetcdfFil
   >();
 
   let markReady: (() => void) | null = null;
+  // Kept so `onerror` can fail the startup wait itself. A module-load failure
+  // happens before the first `send()`, when `pending` is still empty, so
+  // rejecting only pending entries would leave the dialog sitting out the whole
+  // ready timeout for a failure already known.
+  let failStartup: ((error: Error) => void) | null = null;
+  let readyTimer: number | null = null;
   const ready = new Promise<void>((resolve, reject) => {
     markReady = resolve;
-    window.setTimeout(
+    failStartup = reject;
+    readyTimer = window.setTimeout(
       () => reject(new Error("The NetCDF reader worker did not start.")),
       WORKER_READY_TIMEOUT_MS,
     );
   });
 
+  /** Settle the startup wait once, releasing its timer. */
+  const settleReady = (error?: Error): void => {
+    if (readyTimer !== null) {
+      window.clearTimeout(readyTimer);
+      readyTimer = null;
+    }
+    if (error) failStartup?.(error);
+    else markReady?.();
+    markReady = null;
+    failStartup = null;
+  };
+
   worker.onmessage = (event: MessageEvent<NetcdfWorkerResponse>) => {
     if ("ready" in event.data) {
-      markReady?.();
+      settleReady();
       return;
     }
     const entry = pending.get(event.data.id);
@@ -102,8 +121,10 @@ export async function openRemoteNetcdfFile(url: string): Promise<RemoteNetcdfFil
   };
   worker.onerror = (event) => {
     // A worker-level failure (a bad module load) never resolves the in-flight
-    // request, so fail them all rather than hanging the dialog.
+    // request, so fail them all rather than hanging the dialog — and the startup
+    // wait too, in case the failure landed before the first request.
     const error = new Error(event.message || "The NetCDF reader worker failed.");
+    settleReady(error);
     for (const entry of pending.values()) entry.reject(error);
     pending.clear();
   };

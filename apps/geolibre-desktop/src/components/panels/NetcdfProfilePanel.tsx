@@ -28,7 +28,14 @@ const INNER_H = CHART_H - MARGIN.top - MARGIN.bottom;
 const AXIS = "hsl(var(--border))";
 const TICK = "hsl(var(--muted-foreground))";
 
-/** Format an axis value compactly, dropping noise digits on large magnitudes. */
+/**
+ * Format an axis value compactly, dropping noise digits on large magnitudes.
+ *
+ * Deliberately coarser than `formatReading` in `useNetcdfIdentify`, which is the
+ * readout for one pixel the user asked about and so keeps full precision. These
+ * are tick labels on a 560px-wide chart, where a 6-decimal number would collide
+ * with its neighbour.
+ */
 function formatValue(value: number): string {
   if (!Number.isFinite(value)) return "";
   const abs = Math.abs(value);
@@ -90,8 +97,11 @@ export function NetcdfProfilePanel({ layerId }: { layerId: string }) {
   const scaleY = (value: number) => MARGIN.top + INNER_H - ((value - min) / (max - min)) * INNER_H;
 
   const first = readings[0];
-  const axisLabel = first.profile.axis.units
-    ? `${first.profile.axis.name} (${first.profile.axis.units})`
+  // Through `displayUnits` like the value label below: a coordinate variable can
+  // declare `unitless`/`1`/`n/a`, and "wavelength (1)" is noise on an axis.
+  const axisUnits = displayUnits(first.profile.axis.units);
+  const axisLabel = axisUnits
+    ? `${first.profile.axis.name} (${axisUnits})`
     : first.profile.axis.name;
   const valueUnits = displayUnits(first.units);
   const valueLabel = valueUnits ? `${first.variable} (${valueUnits})` : first.variable;

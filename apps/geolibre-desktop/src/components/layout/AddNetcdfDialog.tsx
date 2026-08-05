@@ -40,6 +40,7 @@ import {
   encodeImageOverlay,
   NETCDF_IMAGE_SOURCE_KIND,
   registerNetcdfLayer,
+  warmNetcdfColormap,
 } from "../../lib/netcdf-image-symbology";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { SampleDataSelect } from "./add-data/shared";
@@ -511,6 +512,10 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
             reversed: false,
             clim: clim ?? grid.dataClim,
           };
+          // The picker lists every ramp as soon as it opens, including sprite
+          // ramps the catalogue is still sampling; baking before one resolves
+          // would silently paint viridis under the chosen name.
+          await warmNetcdfColormap(colormap);
           const image = bakeNetcdfImage(grid, symbology);
           const layerId = addImageOverlayLayer(
             `${baseName} - ${variable}`,

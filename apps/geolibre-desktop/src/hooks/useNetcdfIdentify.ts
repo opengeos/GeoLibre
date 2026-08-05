@@ -12,7 +12,13 @@ import {
 } from "../lib/netcdf-image-symbology";
 import { setNetcdfProfileReading } from "../lib/netcdf-profile-store";
 
-/** How many significant digits a readout shows before falling back to exponent form. */
+/**
+ * How many significant digits a readout shows before falling back to exponent form.
+ *
+ * Finer than `NetcdfProfilePanel`'s same-named helper on purpose: this is the
+ * value for the one pixel the user clicked, so it keeps full precision, where the
+ * panel's is formatting chart tick labels that have to stay short.
+ */
 function formatValue(value: number): string {
   const magnitude = Math.abs(value);
   if (magnitude !== 0 && (magnitude >= 1e6 || magnitude < 1e-3)) return value.toExponential(3);
@@ -41,8 +47,15 @@ function formatReading(value: number, units: string | undefined): string {
  * for these layers so the two never both handle a click.
  *
  * @param mapControllerRef - The live map controller.
+ * @param mapReadyGeneration - Bumped by the shell each time the map (re)initialises.
+ *   A ref's `.current` becoming non-null does not re-run an effect, so without
+ *   this the click handler would never attach for an identify target set before
+ *   the map finished loading.
  */
-export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapController | null>): void {
+export function useNetcdfIdentify(
+  mapControllerRef: React.RefObject<MapController | null>,
+  mapReadyGeneration: number,
+): void {
   const { t } = useTranslation();
   // One selector returning a primitive: Zustand re-renders only when the
   // resolved id changes, not on every unrelated layer mutation.
@@ -105,7 +118,15 @@ export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapControlle
         container.append(line);
       }
 
-      popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false })
+      // The same class MapCanvas gives the feature/pixel identify popup: without
+      // it MapLibre's own always-white `.maplibregl-popup-content` survives, and
+      // the rows below — which inherit the theme foreground — render white on
+      // white in dark mode.
+      popup = new maplibregl.Popup({
+        className: "geolibre-identify-popup",
+        closeButton: true,
+        closeOnClick: false,
+      })
         .setLngLat(event.lngLat)
         .setDOMContent(container)
         .addTo(map);
@@ -149,5 +170,5 @@ export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapControlle
       popup?.remove();
       canvas.style.cursor = previousCursor;
     };
-  }, [activeLayerId, mapControllerRef, t]);
+  }, [activeLayerId, mapControllerRef, mapReadyGeneration, t]);
 }

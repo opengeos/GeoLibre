@@ -1146,12 +1146,15 @@ export async function openLocalNetcdf(buffer: ArrayBuffer): Promise<LocalNetcdfF
  *   file small enough to just fetch (see {@link openLocalNetcdf}).
  *
  * The server must send `Accept-Ranges: bytes` and permit the origin via CORS;
- * without byte serving emscripten silently falls back to fetching everything.
+ * without byte serving emscripten silently falls back to fetching everything, so
+ * {@link assertByteServing} checks for it up front rather than letting a 1 GB
+ * cube download itself one blocking chunk at a time.
  *
  * @param url The file's URL.
  * @param name A filesystem name for the mount, unique per open.
  * @returns An open {@link LocalNetcdfFile}, identical in behaviour to a local one.
- * @throws If called outside a worker, or the file is not readable as HDF5.
+ * @throws If called outside a worker, the server does not serve byte ranges, or
+ *   the file is not readable as HDF5.
  */
 export async function openRemoteNetcdf(url: string, name?: string): Promise<LocalNetcdfFile> {
   // `WorkerGlobalScope` is absent on the main thread, where the sync XHR below
@@ -1161,7 +1164,56 @@ export async function openRemoteNetcdf(url: string, name?: string): Promise<Loca
       "Reading a NetCDF/HDF file over HTTP without downloading it needs a Web Worker (it uses synchronous range requests).",
     );
   }
+  await assertByteServing(url);
   return Hdf5NetcdfFile.openLazy(url, name ?? `geolibre-remote-${fileCounter++}.h5`);
+}
+
+/**
+ * Reject a URL whose server will not serve byte ranges, before anything mounts it.
+ *
+ * The lazy filesystem has no way to report this: a server that ignores `Range`
+ * answers with the whole entity, which emscripten accepts, so the "read only what
+ * you look at" mount quietly becomes a full download — issued as blocking
+ * synchronous requests, which for a 1 GB cube is an unresponsive worker with no
+ * error and no progress. One 1-byte request up front turns that into a message.
+ *
+ * The status is the check that matters: `206` cannot be faked by a server that
+ * ignored the header, and unlike `Content-Range` it is readable cross-origin
+ * regardless of `Access-Control-Expose-Headers` — so a range-capable server that
+ * simply does not expose that header must still pass. It is validated only when
+ * the response actually carries it.
+ *
+ * @param url The file's URL.
+ * @throws If the URL is unreachable, errors, or answers a range request whole.
+ */
+export async function assertByteServing(url: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(url, { headers: { Range: "bytes=0-0" } });
+  } catch (err) {
+    throw new Error(
+      `Could not reach ${url}. The server must allow cross-origin requests. (${
+        err instanceof Error ? err.message : String(err)
+      })`,
+    );
+  }
+  // A server that ignored the range is answering with the entire file; drop the
+  // body before it streams rather than after.
+  void response.body?.cancel().catch(() => {});
+  if (!response.ok) {
+    throw new Error(`The server answered ${response.status} ${response.statusText} for ${url}.`);
+  }
+  if (response.status !== 206) {
+    throw new Error(
+      `${url} cannot be read in place: the server ignored a byte-range request (answered ${response.status}, not 206). Download the file and open it locally instead.`,
+    );
+  }
+  const contentRange = response.headers.get("content-range");
+  if (contentRange && !/^\s*bytes\s+0-0\//i.test(contentRange)) {
+    throw new Error(
+      `${url} cannot be read in place: the server answered a byte-range request with an unexpected range ("${contentRange}").`,
+    );
+  }
 }
 
 /** Whether the bytes start with the HDF5 signature. */
@@ -1797,6 +1849,35 @@ function parseRampColor(color: string): [number, number, number] {
 }
 
 /**
+ * Whether a coordinate axis runs high-to-low, decided from its first and last
+ * **finite** entries.
+ *
+ * The endpoints cannot be trusted blindly: a swath-edge quality artifact can
+ * leave `NaN` in the first or last cell centre while the rest of the axis is
+ * monotonic, and every comparison against `NaN` is false — which would read a
+ * descending axis as ascending and mirror the image, over a `gridBounds` extent
+ * computed from the same array that still comes out right. `centresToEdges`
+ * already skips non-finite entries for exactly this reason.
+ *
+ * @param values The cell centres.
+ * @param count How many of them the grid uses.
+ * @returns True when the axis descends; false when it ascends, is flat, or has
+ *   fewer than two finite entries to compare.
+ */
+function axisDescends(values: TypedArrayLike, count: number): boolean {
+  let first: number | null = null;
+  let last: number | null = null;
+  for (let i = 0; i < count; i++) {
+    const v = Number(values[i]);
+    if (!Number.isFinite(v)) continue;
+    if (first === null) first = v;
+    last = v;
+  }
+  if (first === null || last === null) return false;
+  return first > last;
+}
+
+/**
  * The output size and the source-index mapping shared by both image composers:
  * decimation to `maxSize`, the 0..360 longitude roll, and the row/column flips
  * that make the result north-up and west-first (an `image` source's corners are
@@ -1821,8 +1902,8 @@ function imageLayout(input: {
   const columnOf = (x: number): number => (split === null ? x : (x + split) % nx);
   const rolledLon = split === null ? input.lon : rollLongitudeValues(input.lon, split);
 
-  const latDescending = Number(input.lat[0]) > Number(input.lat[ny - 1]);
-  const lonDescending = Number(rolledLon[0]) > Number(rolledLon[nx - 1]);
+  const latDescending = axisDescends(input.lat, ny);
+  const lonDescending = axisDescends(rolledLon, nx);
 
   const step = Math.max(
     1,

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
+  assertByteServing,
   buildInlineZarrRefs,
   buildInlineZarrStore,
   composeColormappedImage,
@@ -596,6 +597,25 @@ describe("composeColormappedImage", () => {
     assert.equal(image.pixels[2 * 4], 0);
   });
 
+  it("reads axis orientation from the finite endpoints, not the raw first and last", () => {
+    // A swath-edge artifact leaves NaN in the first latitude centre. Every
+    // comparison against NaN is false, so a naive `lat[0] > lat[ny-1]` reads this
+    // descending axis as ascending and mirrors the rows — over a `gridBounds`
+    // extent computed from the same array, which still comes out right, so the
+    // result looks plausible and is upside down.
+    const image = composeColormappedImage({
+      ...composition(),
+      ny: 3,
+      values: new Float32Array([0, 1, 2, 3, 4, 5]),
+      lat: new Float64Array([Number.NaN, 20, 10]),
+      clim: [0, 5],
+    });
+    // Still north-first: output row 0 must be the source's own first row (0, 1),
+    // which sits at the ramp bottom, not the last row (4, 5) at the top.
+    assert.equal(image.pixels[0], 0);
+    assert.equal(image.pixels[2 * 2 * 4], 255);
+  });
+
   it("emits the same extent and corners as the RGB composer", () => {
     const image = composeColormappedImage(composition());
     assert.deepEqual(image.bounds, [-0.5, 5, 1.5, 25]);
@@ -733,5 +753,94 @@ describe("readProfile (NetCDF-3)", () => {
     } finally {
       file.close();
     }
+  });
+});
+
+describe("assertByteServing", () => {
+  /**
+   * Swap in a stub `fetch` for one call.
+   *
+   * @param response - What the stubbed fetch resolves to, or a thrower.
+   * @param body - Receives the `RequestInit` the client sent.
+   */
+  async function withFetch(
+    response: Response | (() => never),
+    body: (sent: () => RequestInit | undefined) => Promise<void>,
+  ): Promise<void> {
+    const previous = globalThis.fetch;
+    let init: RequestInit | undefined;
+    globalThis.fetch = (async (_url: string, options?: RequestInit) => {
+      init = options;
+      if (typeof response === "function") response();
+      return response;
+    }) as typeof fetch;
+    try {
+      await body(() => init);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  }
+
+  /** A response carrying the given status and headers, with a drainable body. */
+  function reply(status: number, headers: Record<string, string> = {}): Response {
+    return new Response(status === 204 ? null : "x", { status, headers });
+  }
+
+  it("asks for a single byte", async () => {
+    await withFetch(reply(206, { "content-range": "bytes 0-0/1048576" }), async (sent) => {
+      await assertByteServing("https://example.com/scene.h5");
+      assert.deepEqual(sent()?.headers, { Range: "bytes=0-0" });
+    });
+  });
+
+  it("rejects a server that ignored the range and answered whole", async () => {
+    // The failure this guards: emscripten accepts the full entity, so the mount
+    // silently becomes a blocking download of the entire file.
+    await withFetch(reply(200), async () => {
+      await assertByteServing("https://example.com/scene.h5").then(
+        () => assert.fail("expected a rejection"),
+        (error: Error) => assert.match(error.message, /ignored a byte-range request/i),
+      );
+    });
+  });
+
+  it("accepts a 206 whose Content-Range CORS did not expose", async () => {
+    // A cross-origin response only exposes Content-Range when the server lists it
+    // in Access-Control-Expose-Headers; the status alone must be enough to pass.
+    await withFetch(reply(206), async () => {
+      await assertByteServing("https://example.com/scene.h5");
+    });
+  });
+
+  it("rejects a 206 that answered a different range than asked for", async () => {
+    await withFetch(reply(206, { "content-range": "bytes 500-999/1048576" }), async () => {
+      await assertByteServing("https://example.com/scene.h5").then(
+        () => assert.fail("expected a rejection"),
+        (error: Error) => assert.match(error.message, /unexpected range/i),
+      );
+    });
+  });
+
+  it("reports an error status rather than the range verdict", async () => {
+    await withFetch(reply(404), async () => {
+      await assertByteServing("https://example.com/missing.h5").then(
+        () => assert.fail("expected a rejection"),
+        (error: Error) => assert.match(error.message, /answered 404/),
+      );
+    });
+  });
+
+  it("reports an unreachable URL as a CORS/network failure", async () => {
+    await withFetch(
+      () => {
+        throw new TypeError("Failed to fetch");
+      },
+      async () => {
+        await assertByteServing("https://example.com/scene.h5").then(
+          () => assert.fail("expected a rejection"),
+          (error: Error) => assert.match(error.message, /cross-origin requests/i),
+        );
+      },
+    );
   });
 });

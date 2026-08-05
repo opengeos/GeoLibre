@@ -2,6 +2,7 @@ import { interpolateColors, useAppStore, type GeoLibreLayer } from "@geolibre/co
 import {
   colormapColors,
   composeColormappedImage,
+  warmColormapColors,
   type LocalNetcdfGrid,
   type LocalNetcdfImage,
   type LocalNetcdfProfile,
@@ -189,11 +190,31 @@ export function netcdfImageSymbology(
 }
 
 /**
+ * Sample a colormap into the shared cache, so a following {@link bakeNetcdfImage}
+ * paints the chosen ramp instead of {@link rampStops}' viridis fallback.
+ *
+ * Only the ~100 sprite-sampled matplotlib ramps need this; GeoLibre's own curated
+ * ramps resolve synchronously and this returns immediately for them. Baking is a
+ * one-shot write of pixels into a PNG data URL with nothing that re-runs when a
+ * sample lands later, so an unwarmed ramp would otherwise persist as a permanent
+ * mismatch: the panel showing the picked name over viridis pixels.
+ *
+ * Failure is not an error — a ramp that cannot be sampled (headless, unknown
+ * name) still bakes on the fallback, which is better than refusing the layer.
+ *
+ * @param name - The colormap name.
+ */
+export async function warmNetcdfColormap(name: string): Promise<void> {
+  await warmColormapColors(name);
+}
+
+/**
  * A colormap's anchor colors resampled to {@link COLORMAP_STOPS}.
  *
  * Sprite colormaps only resolve once the shared catalogue has warmed them; an
  * unwarmed one falls back to viridis rather than painting the grid flat black,
- * which is what an empty ramp would do.
+ * which is what an empty ramp would do. Callers that can await should go through
+ * {@link warmNetcdfColormap} first so that fallback stays unreachable.
  *
  * @param name - The colormap name.
  * @param reversed - Whether to apply the ramp high-to-low.

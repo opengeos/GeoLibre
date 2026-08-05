@@ -8,6 +8,7 @@ import {
   encodeImageOverlay,
   getNetcdfImageSource,
   netcdfImageSymbology,
+  warmNetcdfColormap,
   type NetcdfImageSymbology,
 } from "../../lib/netcdf-image-symbology";
 
@@ -45,8 +46,15 @@ export function NetcdfSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   const [draftLayerId, setDraftLayerId] = useState(layer.id);
   if (draftLayerId !== layer.id) {
     setDraftLayerId(layer.id);
-    setMinText(String(applied.clim[0]));
-    setMaxText(String(applied.clim[1]));
+    // From the layer's own record, not `applied`: a bake still in flight from the
+    // previous layer is dropped just below, so seeding from it would put that
+    // layer's limits in this one's fields.
+    const own = netcdfImageSymbology(layer, source?.dataClim ?? [0, 1]);
+    setMinText(String(own.clim[0]));
+    setMaxText(String(own.clim[1]));
+    // The section is not keyed per layer, so a pending bake would otherwise show
+    // the previous layer's colormap in this layer's controls until it resolves.
+    setPendingSymbology(null);
   }
 
   if (!source) return null;
@@ -57,7 +65,10 @@ export function NetcdfSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   // immediately instead of freezing until the image is ready.
   const apply = (next: NetcdfImageSymbology): void => {
     setPendingSymbology(next);
-    window.setTimeout(() => {
+    window.setTimeout(async () => {
+      // A sprite ramp the catalogue has not sampled yet would bake as viridis,
+      // and nothing re-bakes when the sample lands, so wait for it first.
+      await warmNetcdfColormap(next.colormap);
       const image = bakeNetcdfImage(source, next);
       updateLayer(layer.id, {
         source: { ...layer.source, url: encodeImageOverlay(image) },
