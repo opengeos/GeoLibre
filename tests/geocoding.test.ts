@@ -604,6 +604,10 @@ describe("setGeocodingFetch", () => {
       const result = await geocodeReverse(210, 48.85, { config: NOMINATIM });
       assert.equal(result?.displayName, "Somewhere");
       assert.equal(new URL(seen[0]!).searchParams.get("lon"), "-150");
+      // An in-range longitude is passed through untouched — the modulo
+      // round-trip would otherwise return -3.7 as -3.7000000000000455.
+      await geocodeReverse(-3.7, 40.4, { config: NOMINATIM });
+      assert.equal(new URL(seen[1]!).searchParams.get("lon"), "-3.7");
     } finally {
       setGeocodingFetch(null);
     }

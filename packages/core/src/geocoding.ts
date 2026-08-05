@@ -1031,9 +1031,14 @@ async function readGeocodeJson(response: Response): Promise<unknown> {
  * to show repeated world copies, so a click on a non-primary copy arrives as
  * e.g. 210 rather than -150. Rejecting those outright would silently drop a
  * legitimate reverse-geocode click for every provider, so wrap instead.
+ *
+ * An in-range longitude returns untouched: the modulo round-trip is not exact
+ * in floating point (-3.7 comes back as -3.7000000000000455), and the common
+ * case should not be perturbed to handle the rare one.
  */
 function wrapLongitude(lon: number): number | null {
   if (!Number.isFinite(lon)) return null;
+  if (lon >= -180 && lon <= 180) return lon;
   return ((((lon + 180) % 360) + 360) % 360) - 180;
 }
 
