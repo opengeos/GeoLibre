@@ -2484,6 +2484,7 @@
       "largeOsmPbfTitle": "大きな OSM PBF ファイル",
       "largeOsmPbfDesc": "このファイルは約 {{sizeMb}} MB です。解析するとすべてのフィーチャがメモリ上で GeoJSON に変換されるため、処理に時間がかかったり、ブラウザで大量のメモリを消費したりする場合があります。続行しますか?",
       "largeVectorDesc": "{{name}} には約 {{count}} 件のフィーチャがあります。読み込むとすべてのフィーチャがメモリ上で GeoJSON に変換され、アプリの動作が遅くなったりフリーズしたりする場合があります。続行しますか?",
+      "largeVectorFileDesc": "{{name}} は約 {{sizeMb}} MB です。このサイズのファイルの読み込みは大量のメモリを消費し、アプリの動作が遅くなったりフリーズしたりする場合があります。先に PMTiles または GeoParquet に変換すると（プロセシング → 変換）、はるかに高速に読み込めます。続行しますか?",
       "addOsmPbfLayerTitle": "OSM PBF レイヤーを追加",
       "addOsmPbfLayerDesc": "OpenStreetMap の .osm.pbf ファイルを読み込みます。ブラウザ内で解析され、ポイント・ライン・ポリゴンの各レイヤーに分割されます。",
       "urlLabel": "URL",

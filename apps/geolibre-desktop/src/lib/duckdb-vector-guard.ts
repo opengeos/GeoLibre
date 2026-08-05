@@ -18,12 +18,62 @@
  */
 export const DUCKDB_VECTOR_FEATURE_WARN_COUNT = 500_000;
 
+/**
+ * V8 caps a single JavaScript string at `2**29 - 24` bytes (~537 MB) —
+ * `require("buffer").constants.MAX_STRING_LENGTH`. A text vector file at or
+ * above this size cannot be read into a string at all: `readTextFile` /
+ * `File.text()` throw `RangeError: Invalid string length` before `JSON.parse`
+ * ever runs. Loaders check this **before** reading so an oversized GeoJSON/KML/
+ * GPX/CSV skips the doomed text parse and goes straight to the DuckDB reader,
+ * which streams from the file rather than materializing one giant string.
+ *
+ * Without the check the RangeError is swallowed by the loaders' `catch` blocks
+ * and the file is silently re-read through DuckDB anyway — the user waits
+ * through the whole failed attempt first.
+ */
+export const MAX_TEXT_VECTOR_BYTES = 536_870_888;
+
+/**
+ * Local vector files at or above this size prompt a confirmation before any
+ * reading begins. This is the byte-size counterpart to
+ * {@link DUCKDB_VECTOR_FEATURE_WARN_COUNT}, which can only be evaluated after
+ * the source is already open — by which point a half-gigabyte file has already
+ * been read into memory. Mirrors `OSM_PBF_SIZE_WARN_BYTES` (`osm-pbf-loader.ts`)
+ * but sits higher, since ordinary vector formats are cheaper per byte than an
+ * OSM extract.
+ */
+export const LARGE_VECTOR_SIZE_WARN_BYTES = 200 * 1024 * 1024; // 200 MB
+
+/**
+ * Uncompressed `.shp` size at or above which a zipped shapefile skips shpjs and
+ * loads through DuckDB instead.
+ *
+ * shpjs's `parseShp` is fully synchronous and applies the `.prj` proj4
+ * transform **per coordinate**, so a large polygon shapefile wedges the main
+ * thread for tens of seconds with no progress and no way to cancel. DuckDB does
+ * the read off the main thread (native on desktop, the DuckDB-WASM worker in
+ * the browser) and reports a feature count first, so
+ * {@link DUCKDB_VECTOR_FEATURE_WARN_COUNT} gets a chance to fire.
+ *
+ * Below the threshold shpjs stays the default: it is faster for ordinary files
+ * and preserves field-name fidelity without a DuckDB round-trip.
+ */
+export const MAX_SHPJS_SHP_BYTES = 64 * 1024 * 1024; // 64 MB
+
 /** Details passed to {@link DuckDbVectorLoadOptions.onLargeDataset}. */
 export interface LargeVectorDataset {
   /** The file/layer name shown to the user. */
   name: string;
   /** Total feature (row) count DuckDB reported for the source. */
   featureCount: number;
+}
+
+/** Details passed to {@link DuckDbVectorLoadOptions.onLargeFile}. */
+export interface LargeVectorFile {
+  /** The file name shown to the user. */
+  name: string;
+  /** The file's size on disk, in bytes. */
+  sizeBytes: number;
 }
 
 export interface DuckDbVectorLoadOptions {
@@ -38,6 +88,19 @@ export interface DuckDbVectorLoadOptions {
    * single-pass (the extra `COUNT(*)` is only run when a guard is attached).
    */
   onLargeDataset?: (dataset: LargeVectorDataset) => boolean | Promise<boolean>;
+  /**
+   * Invoked when the file's size on disk is at least
+   * {@link LARGE_VECTOR_SIZE_WARN_BYTES}, before a single byte is read. Return
+   * `false` (or a promise resolving to `false`) to abort the load — the loader
+   * then throws {@link VectorLoadCancelledError}, which callers catch to skip
+   * the file. When omitted, large files load without prompting, matching
+   * {@link onLargeDataset}'s non-interactive default.
+   *
+   * This is the only guard that can run before the expensive read, so it is the
+   * one that catches the case {@link onLargeDataset} cannot: a file too large to
+   * open at all.
+   */
+  onLargeFile?: (file: LargeVectorFile) => boolean | Promise<boolean>;
   /**
    * Read a specific OGR layer from a multi-layer source (e.g. a CAD DWG with
    * several layers) by passing its name to `ST_Read(..., layer=...)`. When
@@ -95,4 +158,33 @@ export async function confirmLargeDataset(
   if (dataset.featureCount < DUCKDB_VECTOR_FEATURE_WARN_COUNT) return;
   const proceed = await onLargeDataset(dataset);
   if (!proceed) throw new VectorLoadCancelledError();
+}
+
+/**
+ * Byte-size counterpart to {@link confirmLargeDataset}, run before the file is
+ * read. A no-op below {@link LARGE_VECTOR_SIZE_WARN_BYTES}, when no callback is
+ * attached, or when the size is unknown (a `stat` that failed — an unreadable
+ * file surfaces its own error at read time, and refusing to guess a size is
+ * better than blocking a load on a metadata hiccup).
+ */
+export async function confirmLargeVectorFile(
+  file: LargeVectorFile | undefined,
+  onLargeFile: DuckDbVectorLoadOptions["onLargeFile"],
+): Promise<void> {
+  if (!onLargeFile || !file) return;
+  if (file.sizeBytes < LARGE_VECTOR_SIZE_WARN_BYTES) return;
+  const proceed = await onLargeFile(file);
+  if (!proceed) throw new VectorLoadCancelledError();
+}
+
+/**
+ * Whether a file of this size is too large to read into a single JS string, and
+ * so must skip the text-parsing branch entirely. An unknown size (undefined)
+ * reads as "not too large" so a failed `stat` leaves the existing behaviour
+ * untouched rather than diverting every file to DuckDB.
+ *
+ * @see MAX_TEXT_VECTOR_BYTES
+ */
+export function exceedsTextVectorLimit(sizeBytes: number | undefined): boolean {
+  return sizeBytes !== undefined && sizeBytes >= MAX_TEXT_VECTOR_BYTES;
 }

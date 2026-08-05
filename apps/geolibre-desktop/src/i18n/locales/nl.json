@@ -2528,6 +2528,7 @@
       "largeOsmPbfTitle": "Groot OSM PBF-bestand",
       "largeOsmPbfDesc": "Dit bestand is ongeveer {{sizeMb}} MB groot. Het verwerken ervan converteert elke feature naar GeoJSON in het geheugen, wat traag kan zijn en veel geheugen in de browser kan gebruiken. Doorgaan?",
       "largeVectorDesc": "{{name}} bevat ongeveer {{count}} features. Het laden ervan converteert elke feature naar GeoJSON in het geheugen en kan de app vertragen of laten vastlopen. Doorgaan?",
+      "largeVectorFileDesc": "{{name}} is ongeveer {{sizeMb}} MB groot. Het lezen van zo'n groot bestand gebruikt veel geheugen en kan de app vertragen of laten vastlopen. Het eerst converteren naar PMTiles of GeoParquet (Verwerking → Conversie) laadt veel sneller. Doorgaan?",
       "addOsmPbfLayerTitle": "OSM PBF-laag toevoegen",
       "addOsmPbfLayerDesc": "Laad een OpenStreetMap .osm.pbf-bestand. Het wordt in uw browser verwerkt en opgesplitst in afzonderlijke punt-, lijn- en polygoonlagen.",
       "urlLabel": "URL",

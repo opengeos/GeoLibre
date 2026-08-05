@@ -2528,6 +2528,7 @@
       "largeOsmPbfTitle": "Büyük OSM PBF dosyası",
       "largeOsmPbfDesc": "Bu dosya yaklaşık {{sizeMb}} MB'tır. Ayrıştırma işlemi her öğeyi bellekte GeoJSON'a dönüştürür; bu yavaş olabilir ve tarayıcıda çok bellek kullanabilir. Devam edilsin mi?",
       "largeVectorDesc": "{{name}} yaklaşık {{count}} öğe içeriyor. Yüklemek her öğeyi bellekte GeoJSON'a dönüştürür ve uygulamayı yavaşlatabilir veya dondurabilir. Devam edilsin mi?",
+      "largeVectorFileDesc": "{{name}} yaklaşık {{sizeMb}} MB. Bu boyutta bir dosyayı okumak çok fazla bellek kullanır ve uygulamayı yavaşlatabilir veya dondurabilir. Önce PMTiles ya da GeoParquet biçimine dönüştürmek (İşleme → Dönüştürme) çok daha hızlı yüklenir. Devam edilsin mi?",
       "addOsmPbfLayerTitle": "OSM PBF Katmanı Ekle",
       "addOsmPbfLayerDesc": "Bir OpenStreetMap .osm.pbf dosyası yükleyin. Tarayıcınızda ayrıştırılır ve ayrı nokta, çizgi ve poligon katmanlarına bölünür.",
       "urlLabel": "URL",

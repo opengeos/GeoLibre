@@ -2484,6 +2484,7 @@
       "largeOsmPbfTitle": "大型 OSM PBF 文件",
       "largeOsmPbfDesc": "此文件约为 {{sizeMb}} MB。解析它会将每个要素转换为内存中的 GeoJSON，这可能很慢，并且在浏览器中可能占用大量内存。是否继续？",
       "largeVectorDesc": "{{name}} 约有 {{count}} 个要素。加载它会将每个要素转换为内存中的 GeoJSON，可能会使应用变慢或冻结。是否继续？",
+      "largeVectorFileDesc": "{{name}} 约为 {{sizeMb}} MB。读取这么大的文件会占用大量内存，可能使应用变慢或冻结。先将其转换为 PMTiles 或 GeoParquet（处理 → 转换）可以加载得快得多。是否继续？",
       "addOsmPbfLayerTitle": "添加 OSM PBF 图层",
       "addOsmPbfLayerDesc": "加载 OpenStreetMap .osm.pbf 文件。它会在您的浏览器中解析，并拆分为独立的点、线和面图层。",
       "urlLabel": "URL",

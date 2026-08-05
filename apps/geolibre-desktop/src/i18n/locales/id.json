@@ -2484,6 +2484,7 @@
       "largeOsmPbfTitle": "File OSM PBF besar",
       "largeOsmPbfDesc": "File ini berukuran sekitar {{sizeMb}} MB. Mengurainya mengonversi setiap fitur ke GeoJSON dalam memori, yang bisa lambat dan mungkin menggunakan banyak memori di browser. Lanjutkan?",
       "largeVectorDesc": "{{name}} memiliki sekitar {{count}} fitur. Memuatnya mengonversi setiap fitur ke GeoJSON dalam memori dan dapat memperlambat atau membekukan aplikasi. Lanjutkan?",
+      "largeVectorFileDesc": "{{name}} berukuran sekitar {{sizeMb}} MB. Membaca berkas sebesar ini menggunakan banyak memori dan dapat memperlambat atau membekukan aplikasi. Mengonversinya lebih dulu ke PMTiles atau GeoParquet (Pemrosesan → Konversi) akan jauh lebih cepat dimuat. Lanjutkan?",
       "addOsmPbfLayerTitle": "Tambahkan Layer OSM PBF",
       "addOsmPbfLayerDesc": "Muat file .osm.pbf OpenStreetMap. File diuraikan di browser Anda dan dipisah menjadi layer titik, garis, dan poligon terpisah.",
       "urlLabel": "URL",
