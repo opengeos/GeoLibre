@@ -24,6 +24,7 @@
 
 import { isTauri } from "./is-tauri";
 import {
+  DRIVE_FOLDER_MIME_TYPE,
   DriveError,
   driveErrorCode,
   driveFolderChildrenUrl,
@@ -162,7 +163,7 @@ export async function listDriveFolder(
  * @param credentials - API key or OAuth token (both optional on desktop)
  * @param fallbackName - Name to use when neither source supplies one
  * @returns The downloaded file
- * @throws DriveError for a Google-native document or a refused request
+ * @throws DriveError for a Google-native document, a folder, or a refused request
  */
 export async function downloadDriveFile(
   file: Pick<DriveFile, "id"> & Partial<Pick<DriveFile, "name" | "mimeType">>,
@@ -171,6 +172,13 @@ export async function downloadDriveFile(
 ): Promise<File> {
   if (file.mimeType && isWorkspaceDocument(file.mimeType)) {
     throw new DriveError("workspaceDocument");
+  }
+  // A `?id=` link carries no hint of whether it names a file or a folder, so
+  // `parseDriveTarget` calls it a file and a folder can arrive here. Asking for
+  // `alt=media` on one fails with a status that maps to the generic
+  // "requestFailed", which says nothing about the actual problem.
+  if (file.mimeType === DRIVE_FOLDER_MIME_TYPE) {
+    throw new DriveError("folderLink");
   }
 
   // Desktop with no credential at all: the public host is the only endpoint

@@ -642,6 +642,7 @@
         "requestFailed": "Could not read the file from Google Drive.",
         "workspaceDocument": "That is a Google Docs, Sheets or Slides document, not a data file. Export it to CSV in Drive first, then add the export.",
         "emptyFolder": "That folder holds no files GeoLibre can open.",
+        "folderLink": "That link points to a Google Drive folder, not a file. Open the folder in Drive and paste the link from the address bar — it contains /folders/ — then list its contents.",
         "signInUnavailable": "Google sign-in could not be loaded. Check the network connection, or whether an extension is blocking accounts.google.com.",
         "signInFailed": "Google sign-in did not complete.",
         "noAccessToken": "Google sign-in finished without returning an access token. Try signing in again.",

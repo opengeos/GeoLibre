@@ -1372,7 +1372,7 @@ export function DesktopShell({
       return importedLayers.length;
     });
     return () => setVectorFileImportHandler(null);
-  }, [addImportedVectorLayers]);
+  }, [addImportedVectorLayers, confirmLargeVectorDataset]);
 
   useEffect(() => {
     setKmlFileImportHandler(async (imports) => {

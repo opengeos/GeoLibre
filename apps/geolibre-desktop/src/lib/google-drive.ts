@@ -67,6 +67,8 @@ export type DriveErrorCode =
   | "workspaceDocument"
   /** The folder held nothing GeoLibre knows how to read. */
   | "emptyFolder"
+  /** The link named a folder, but nothing in its shape said so. */
+  | "folderLink"
   /** Google's sign-in SDK could not be loaded or initialized. */
   | "signInUnavailable"
   /** Sign-in ended without a token and Google supplied no reason of its own. */
@@ -115,6 +117,11 @@ const LINK_PATTERNS: readonly { pattern: RegExp; kind: DriveTarget["kind"] }[] =
   // https://drive.google.com/open?id=<id>
   // https://drive.google.com/uc?export=download&id=<id>
   // https://drive.usercontent.google.com/download?id=<id>&export=download
+  //
+  // "file" is a guess here, unlike the two rules above: these older shapes name
+  // a folder just as happily and nothing in the URL says which. Only the item's
+  // metadata settles it, so `downloadDriveFile` rejects a folder that reaches it
+  // with `folderLink` rather than requesting bytes that cannot exist.
   { pattern: /[?&]id=([A-Za-z0-9_-]+)/, kind: "file" },
 ];
 
