@@ -21,7 +21,9 @@ import { NetcdfProfileChart } from "../panels/NetcdfProfileChart";
 const PANEL_MIN_W = 360;
 const PANEL_MIN_H = 260;
 const PANEL_MARGIN = 12;
-const FALLBACK_RECT = { x: PANEL_MARGIN, y: PANEL_MARGIN, w: 520, h: 420 };
+// 512x416 is the CSS default below (32rem x 26rem at a 16px root) in px, so the
+// fallback matches the size as well as the corner.
+const FALLBACK_RECT = { x: PANEL_MARGIN, y: PANEL_MARGIN, w: 512, h: 416 };
 
 /**
  * The spectral profile detached from the Style panel into a movable, resizable

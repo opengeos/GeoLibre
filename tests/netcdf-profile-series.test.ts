@@ -11,6 +11,18 @@ import type { NetcdfProfileSample } from "../apps/geolibre-desktop/src/lib/netcd
 
 type ProfileAxis = { name: string; size: number; units?: string; values?: number[] };
 
+type ChartedSample = NetcdfProfileSample & { profile: NonNullable<NetcdfProfileSample["profile"]> };
+
+/**
+ * Narrows a sample built with values to the shape the axis helper requires,
+ * rather than casting the argument away with `as never` — which would let a
+ * change to that helper's parameter type through unnoticed.
+ */
+function charted(sample: NetcdfProfileSample): ChartedSample {
+  assert.ok(sample.profile);
+  return sample as ChartedSample;
+}
+
 /** A sampled pixel, optionally with a profile attached. */
 function sample(
   order: number,
@@ -47,11 +59,11 @@ describe("netcdf profile series", () => {
       units: "nm",
       values: [381.5, 388.4],
     });
-    assert.deepEqual(netcdfAxisPositions(withWavelengths as never), [381.5, 388.4]);
+    assert.deepEqual(netcdfAxisPositions(charted(withWavelengths)), [381.5, 388.4]);
   });
 
   it("falls back to the band index when the axis carries no coordinates", () => {
-    assert.deepEqual(netcdfAxisPositions(sample(1, [0.1, 0.2]) as never), [0, 1]);
+    assert.deepEqual(netcdfAxisPositions(charted(sample(1, [0.1, 0.2]))), [0, 1]);
   });
 
   it("labels an EMIT wavelength axis on round numbers", () => {

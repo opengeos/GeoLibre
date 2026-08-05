@@ -41,15 +41,23 @@ function buildMarkerElement(sample: NetcdfProfileSample): HTMLElement {
  * against the sample store, so "Clear", the oldest point aging off the cap, and
  * a switch to another layer all clear the map without bookkeeping of their own.
  *
- * Mounted in the map area so its re-renders (one per click) stay off the shell.
+ * Mounted in the map area so its re-renders (one per sample change) stay off
+ * the shell.
  *
  * @param props.mapControllerRef - The live map controller.
+ * @param props.mapReadyGeneration - Bumped by the shell each time the map
+ *   (re)initialises. A ref's `.current` pointing at a new map does not re-run an
+ *   effect, so without this the markers would stay on the discarded map and not
+ *   reappear on the new one until the next click changed `samples`. The same
+ *   signal `useNetcdfIdentify` takes, for the same reason.
  * @returns Nothing.
  */
 export function NetcdfSampleMarkers({
   mapControllerRef,
+  mapReadyGeneration,
 }: {
   mapControllerRef: RefObject<MapController | null>;
+  mapReadyGeneration: number;
 }) {
   const samples = useSyncExternalStore(
     subscribeNetcdfProfile,
@@ -69,12 +77,15 @@ export function NetcdfSampleMarkers({
           .addTo(map),
       );
     }
-    // Rebuilding the whole set each time keeps this to one short effect: there
-    // are at most MAX_PROFILE_SAMPLES markers, and they only change on a click.
+    // Rebuilding the whole set each time keeps this to one short effect. It runs
+    // more often than the markers actually change — every resolved band-axis
+    // read replaces the `samples` array too, without moving or recoloring
+    // anything — but at MAX_PROFILE_SAMPLES markers that is cheaper than the
+    // bookkeeping to reconcile them.
     return () => {
       for (const marker of live.values()) marker.remove();
     };
-  }, [samples, mapControllerRef]);
+  }, [samples, mapControllerRef, mapReadyGeneration]);
 
   return null;
 }

@@ -3,7 +3,7 @@ import { Download, Image as ImageIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveChartDomain } from "../../lib/chart-domain";
-import { downloadChartPng } from "../../lib/chart-export";
+import { downloadChartPng, triggerDownload } from "../../lib/chart-export";
 import { displayUnits } from "../../lib/netcdf-image-symbology";
 import {
   buildNetcdfProfileCsv,
@@ -41,17 +41,6 @@ function formatValue(value: number): string {
   const abs = Math.abs(value);
   if (abs !== 0 && (abs >= 1e6 || abs <= 1e-3)) return value.toExponential(1);
   return Number(value.toFixed(abs >= 100 ? 0 : 3)).toString();
-}
-
-function triggerTextDownload(text: string, filename: string, type: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
 }
 
 /**
@@ -120,7 +109,7 @@ export function NetcdfProfileChart({
     if (!csv) return;
     setExportError(null);
     try {
-      triggerTextDownload(csv, `${exportBase}.csv`, "text/csv;charset=utf-8");
+      triggerDownload(new Blob([csv], { type: "text/csv;charset=utf-8" }), `${exportBase}.csv`);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : t("netcdfProfile.exportError"));
     }
@@ -292,7 +281,14 @@ export function NetcdfProfileChart({
           {t("netcdfProfile.exportCsv")}
         </Button>
       </div>
-      {exportError ? <p className="text-[10px] text-destructive">{exportError}</p> : null}
+      {/* `role="alert"` like the Time Slider chart's export error: the message
+          arrives after the click that triggered it, so without a live region a
+          screen-reader user gets no word that the export failed. */}
+      {exportError ? (
+        <p className="text-[10px] text-destructive" role="alert">
+          {exportError}
+        </p>
+      ) : null}
 
       <ul className="space-y-0.5">
         {samples.map((sample) => (
@@ -300,8 +296,11 @@ export function NetcdfProfileChart({
             key={sample.id}
             className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
           >
+            {/* Not aria-hidden: the color is decorative, but the digit inside
+                is what ties this row to its marker on the map, and the marker
+                itself is hidden from assistive tech. This list is where that
+                number has to be readable. */}
             <span
-              aria-hidden
               className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[8px] font-semibold text-white"
               style={{ backgroundColor: netcdfSeriesColor(sample) }}
             >

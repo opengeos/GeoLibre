@@ -2284,7 +2284,10 @@ export function DesktopShell({
               <MapModeBanner mapControllerRef={mapControllerRef} />
               <QuickAnalysisBanner />
               <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
-              <NetcdfSampleMarkers mapControllerRef={mapControllerRef} />
+              <NetcdfSampleMarkers
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
               <NetcdfProfileWindow />
               <MapLegendPanel
                 mapControllerRef={mapControllerRef}
