@@ -128,6 +128,28 @@ jobs:
           ref: ${{ steps.pr.outputs.sha }}
           persist-credentials: false
           fetch-depth: 1
+          # actions/checkout hard-refuses a fork PR head under
+          # pull_request_target unless this opt-in is set — it is guarding
+          # against "pwn request", where a workflow checks out fork code and
+          # then *executes* it (npm ci, build, test, a lifecycle script) with the
+          # base repo's write-scoped token and secrets. That guard landed in a
+          # v7 patch release, so every fork PR — including known contributors,
+          # who are the ones the `if:` above lets through — started failing this
+          # step with no change on our side.
+          #
+          # This job does none of the things the guard protects against: it never
+          # installs dependencies, never runs a build or test, and never executes
+          # anything from the checkout. The head is only ever *read* — by Claude's
+          # Read/Grep/Glob, which is the entire point of checking it out. The
+          # token is kept out of .git/config by persist-credentials above, out of
+          # the agent's subprocesses by the action's env scrub (see the header),
+          # and the agent has no Bash tool with which to run checked-out code
+          # even if it wanted to. So we opt in deliberately.
+          #
+          # This stays true only as long as no step in this job executes the
+          # checkout. Do not add a build, install, or test step here — put it in
+          # ci.yml, which runs under `pull_request` and gets no secrets.
+          allow-unsafe-pr-checkout: true
 
       # Claude cannot fetch the diff itself (no token in its subprocesses — see
       # the header). Stage it on disk instead. This runs AFTER the checkout and
