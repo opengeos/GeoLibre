@@ -570,6 +570,44 @@ describe("setGeocodingFetch", () => {
       setGeocodingFetch(null);
     }
   });
+
+  it("treats an HTTP 204 or empty body as no results rather than a parse error", async () => {
+    // CartoCiudad answers an unmatched query this way; `response.json()` on an
+    // empty body would throw and surface as "Search failed" instead of no match.
+    setGeocodingFetch(() => Promise.resolve(new Response(null, { status: 204 })));
+    try {
+      assert.deepEqual(await geocodeForward("zzzqqq", { config: NOMINATIM }), []);
+      assert.equal(await geocodeReverse(2.35, 48.85, { config: NOMINATIM }), null);
+    } finally {
+      setGeocodingFetch(null);
+    }
+    setGeocodingFetch(() => Promise.resolve(new Response("   ", { status: 200 })));
+    try {
+      assert.deepEqual(await geocodeForward("zzzqqq", { config: NOMINATIM }), []);
+      assert.equal(await geocodeReverse(2.35, 48.85, { config: NOMINATIM }), null);
+    } finally {
+      setGeocodingFetch(null);
+    }
+  });
+
+  it("wraps an unwrapped longitude from a repeated world copy into range", async () => {
+    // MapLibre reports lngLat.lng unwrapped for clicks on non-primary world
+    // copies, so 210 must reach the provider as -150, not be dropped.
+    const seen: string[] = [];
+    setGeocodingFetch((input) => {
+      seen.push(String(input));
+      return Promise.resolve(
+        new Response(JSON.stringify({ display_name: "Somewhere", address: {} }), { status: 200 }),
+      );
+    });
+    try {
+      const result = await geocodeReverse(210, 48.85, { config: NOMINATIM });
+      assert.equal(result?.displayName, "Somewhere");
+      assert.equal(new URL(seen[0]!).searchParams.get("lon"), "-150");
+    } finally {
+      setGeocodingFetch(null);
+    }
+  });
 });
 
 // --- CartoCiudad provider tests -------------------------------------------
@@ -628,6 +666,33 @@ describe("CartoCiudad provider", () => {
     assert.deepEqual(provider.parseForward({ lat: "", lng: "", address: "Empty coords" }), []);
   });
 
+  it("returns empty array for non-finite or out-of-range forward coordinates", () => {
+    assert.deepEqual(provider.parseForward({ lat: NaN, lng: -3.7, address: "NaN lat" }), []);
+    assert.deepEqual(provider.parseForward({ lat: 40.4, lng: Infinity, address: "Inf lng" }), []);
+    assert.deepEqual(provider.parseForward({ lat: "NaN", lng: "invalid", address: "Junk" }), []);
+    assert.deepEqual(provider.parseForward({ lat: 95, lng: -3.7, address: "Lat too high" }), []);
+    assert.deepEqual(provider.parseForward({ lat: 40.4, lng: 200, address: "Lng too high" }), []);
+  });
+
+  it("returns empty array when the response is an array rather than an object", () => {
+    // `find` answers with one object even for an ambiguous query; an array is a
+    // shape we do not understand, not a candidate list to pick the first of.
+    assert.deepEqual(provider.parseForward([{ lat: 40.4, lng: -3.7, address: "MAYOR" }]), []);
+  });
+
+  it("omits a blank portal number instead of appending a trailing space", () => {
+    const matches = provider.parseForward({
+      lat: 40.4,
+      lng: -3.7,
+      tip_via: "CALLE",
+      address: "MAYOR",
+      portalNumber: "",
+      poblacion: "Madrid",
+    });
+    assert.equal(matches.length, 1);
+    assert.ok(matches[0].displayName.startsWith("CALLE MAYOR,"));
+  });
+
   it("builds a reverse URL with lat/lon params", () => {
     const config = configFor("cartociudad");
     const url = new URL(provider.buildReverseUrl(config, -3.7038, 40.4168, {}));
@@ -664,6 +729,14 @@ describe("CartoCiudad provider", () => {
     assert.equal(provider.parseReverse(undefined), null);
   });
 
+  it("returns null for non-finite or out-of-range reverse coordinates", () => {
+    assert.equal(provider.parseReverse({ address: "No coords" }), null);
+    assert.equal(provider.parseReverse({ lat: null, lng: null, address: "Null" }), null);
+    assert.equal(provider.parseReverse({ lat: "NaN", lng: "invalid", address: "Junk" }), null);
+    assert.equal(provider.parseReverse({ lat: 95, lng: -3.7, address: "Lat too high" }), null);
+    assert.equal(provider.parseReverse({ lat: 40.4, lng: -200, address: "Lng too low" }), null);
+  });
+
   it("does not require an API key", () => {
     assert.equal(
       geocoderNeedsApiKey(resolveGeocoderConfig({ providerId: "cartociudad", apiKeys: {} })),
@@ -672,9 +745,11 @@ describe("CartoCiudad provider", () => {
   });
 
   it("rejects non-finite and out-of-bounds coordinates in geocodeReverse", async () => {
+    // Longitude is wrapped rather than rejected (see the world-copy test above),
+    // so only a non-finite longitude or an impossible latitude short-circuits.
     assert.equal(await geocodeReverse(NaN, 40.4), null);
     assert.equal(await geocodeReverse(-3.7, Infinity), null);
-    assert.equal(await geocodeReverse(190, 40.4), null);
     assert.equal(await geocodeReverse(-3.7, -95), null);
+    assert.equal(await geocodeReverse(-3.7, 95), null);
   });
 });

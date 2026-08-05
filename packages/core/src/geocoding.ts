@@ -672,7 +672,13 @@ function parseGoogleResults(data: unknown): GeocodeMatch[] {
 /**
  * A single CartoCiudad forward/reverse geocoding result. The API returns one
  * object (not an array) for both forward (`find`) and reverse (`reverseGeocode`)
- * lookups. `lat`/`lng` are top-level numbers.
+ * lookups, even for an ambiguous query. `lat`/`lng` are top-level numbers.
+ *
+ * There is no in-body success flag to check: a query the geocoder cannot match
+ * comes back as HTTP 204 with an empty body rather than an object carrying a
+ * failure code, so {@link readGeocodeJson} turns it into "no results" before a
+ * parser ever sees it. The body's `state` is 0 on every match observed against
+ * the live endpoints and is therefore not modeled here.
  */
 interface CartoCiudadResult {
   lat: number;
@@ -687,8 +693,29 @@ interface CartoCiudadResult {
   province?: string;
   comunidadAutonoma?: string;
   refCatastral?: string;
-  state?: number;
   [key: string]: unknown;
+}
+
+/**
+ * Read a CartoCiudad `lat`/`lng` field as a finite number, or null when the
+ * field is absent, blank, or not numeric (`"NaN"` and `"invalid"` included).
+ * Guarding the raw value matters because `Number(null)` is 0, which would turn
+ * a coordinate-less response into a match in the Gulf of Guinea.
+ */
+function cartociudadCoordinate(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Validated WGS84 position for a result, or null when it carries none. */
+function cartociudadCoords(r: CartoCiudadResult): { lat: number; lon: number } | null {
+  const lat = cartociudadCoordinate(r.lat);
+  const lon = cartociudadCoordinate(r.lng);
+  if (lat === null || lon === null) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat, lon };
 }
 
 /** Default endpoints for the public CartoCiudad REST API (no auth required). */
@@ -707,9 +734,9 @@ function cartociudadDisplayName(r: CartoCiudadResult): string {
     .map((s) => String(s).trim());
   if (streetParts.length) {
     let street = streetParts.join(" ");
-    if (r.portalNumber !== undefined && r.portalNumber !== null) {
-      street += ` ${r.portalNumber}`;
-    }
+    const portalNumber =
+      r.portalNumber === undefined || r.portalNumber === null ? "" : String(r.portalNumber).trim();
+    if (portalNumber) street += ` ${portalNumber}`;
     parts.push(street);
   }
   const locality = [r.postalCode, r.poblacion]
@@ -730,28 +757,27 @@ const cartociudadProvider: GeocodingProvider = {
   acceptsApiKey: false,
   defaultForwardEndpoint: CARTOCIUDAD_FORWARD_ENDPOINT,
   defaultReverseEndpoint: CARTOCIUDAD_REVERSE_ENDPOINT,
-  buildForwardUrl: (config, query, options) => {
+  buildForwardUrl: (config, query) => {
     const url = new URL(config.forwardEndpoint);
     url.searchParams.set("q", query);
-    if (options.limit) url.searchParams.set("limit", String(options.limit));
+    // `find` answers with one best result and has no result-count parameter, so
+    // the batch loop's `limit` is intentionally not forwarded.
     return url.toString();
   },
   parseForward: (data) => {
-    // CartoCiudad `find` returns a single object or null, not an array.
-    if (!data || typeof data !== "object") return [];
+    // `find` returns a single object, never an array — verified against the live
+    // endpoint with an ambiguous query ("calle mayor"), which still answers with
+    // one object rather than a candidate list.
+    if (!data || typeof data !== "object" || Array.isArray(data)) return [];
     const r = data as CartoCiudadResult;
-    if (r.lat === null || r.lat === undefined || r.lng === null || r.lng === undefined) return [];
-    if (typeof r.lat === "string" && (r.lat as string).trim() === "") return [];
-    if (typeof r.lng === "string" && (r.lng as string).trim() === "") return [];
-    const lat = Number(r.lat);
-    const lon = Number(r.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+    const coords = cartociudadCoords(r);
+    if (!coords) return [];
     const displayName = cartociudadDisplayName(r).trim();
     if (!displayName) return [];
     return [
       {
-        lat,
-        lon,
+        lat: coords.lat,
+        lon: coords.lon,
         displayName,
         score: null,
       },
@@ -764,11 +790,9 @@ const cartociudadProvider: GeocodingProvider = {
     return url.toString();
   },
   parseReverse: (data) => {
-    if (!data || typeof data !== "object") return null;
+    if (!data || typeof data !== "object" || Array.isArray(data)) return null;
     const r = data as CartoCiudadResult;
-    if (r.lat === null || r.lat === undefined || r.lng === null || r.lng === undefined) return null;
-    if (typeof r.lat === "string" && (r.lat as string).trim() === "") return null;
-    if (typeof r.lng === "string" && (r.lng as string).trim() === "") return null;
+    if (!cartociudadCoords(r)) return null;
     const displayName = cartociudadDisplayName(r).trim();
     if (!displayName) return null;
     // Build a structured address-parts record from the rich CartoCiudad fields.
@@ -984,6 +1008,36 @@ function geocodeFetch(): typeof globalThis.fetch {
 }
 
 /**
+ * Read a geocoder response body as JSON, treating an empty one as "no results".
+ *
+ * CartoCiudad answers an unmatched query with HTTP 204 and an empty body rather
+ * than a JSON null (verified against the live `find` and `reverseGeocode`
+ * endpoints). `response.ok` is true for 204, so parsing unconditionally would
+ * throw a JSON syntax error and surface a nonsense address as "Search failed"
+ * instead of "no match". Returning undefined lets each provider's parser report
+ * no results the way it already does for a null body.
+ */
+async function readGeocodeJson(response: Response): Promise<unknown> {
+  if (response.status === 204) return undefined;
+  const text = await response.text();
+  if (!text.trim()) return undefined;
+  return JSON.parse(text) as unknown;
+}
+
+/**
+ * Normalize a longitude into [-180, 180], or null when it is not finite.
+ *
+ * MapLibre reports `lngLat.lng` unwrapped once the map is zoomed out far enough
+ * to show repeated world copies, so a click on a non-primary copy arrives as
+ * e.g. 210 rather than -150. Rejecting those outright would silently drop a
+ * legitimate reverse-geocode click for every provider, so wrap instead.
+ */
+function wrapLongitude(lon: number): number | null {
+  if (!Number.isFinite(lon)) return null;
+  return ((((lon + 180) % 360) + 360) % 360) - 180;
+}
+
+/**
  * Forward-geocode a single query through the configured provider, returning
  * normalized matches.
  */
@@ -1004,7 +1058,7 @@ export async function geocodeForward(
   if (!response.ok) {
     throw new Error(`Geocoder returned HTTP ${response.status}`);
   }
-  const data: unknown = await response.json();
+  const data: unknown = await readGeocodeJson(response);
   return provider.parseForward(data);
 }
 
@@ -1017,19 +1071,13 @@ export async function geocodeReverse(
   lat: number,
   options: { signal?: AbortSignal; config?: GeocoderConfig; zoom?: number } = {},
 ): Promise<ReverseGeocodeDisplay | null> {
-  if (
-    !Number.isFinite(lon) ||
-    !Number.isFinite(lat) ||
-    lon < -180 ||
-    lon > 180 ||
-    lat < -90 ||
-    lat > 90
-  ) {
+  const wrappedLon = wrapLongitude(lon);
+  if (wrappedLon === null || !Number.isFinite(lat) || lat < -90 || lat > 90) {
     return null;
   }
   const config = options.config ?? getGeocoderConfig();
   const provider = getGeocodingProvider(config.providerId);
-  const url = provider.buildReverseUrl(config, lon, lat, {
+  const url = provider.buildReverseUrl(config, wrappedLon, lat, {
     email: config.email,
     zoom: options.zoom,
   });
@@ -1040,6 +1088,6 @@ export async function geocodeReverse(
   if (!response.ok) {
     throw new Error(`Geocoder returned HTTP ${response.status}`);
   }
-  const data: unknown = await response.json();
+  const data: unknown = await readGeocodeJson(response);
   return provider.parseReverse(data);
 }
