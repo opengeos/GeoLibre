@@ -1884,8 +1884,11 @@ export function detectNonGeographicCoordinates(
       const x = Math.abs(coords[0]);
       const y = Math.abs(coords[1]);
       sampled += 1;
-      if (x > maxAbsX) maxAbsX = x;
-      if (y > maxAbsY) maxAbsY = y;
+      // Gated on finiteness for the same reason as `offending` below: an
+      // Infinity would otherwise be reported as the offending magnitude in the
+      // warning, hiding the real out-of-range value.
+      if (Number.isFinite(x) && x > maxAbsX) maxAbsX = x;
+      if (Number.isFinite(y) && y > maxAbsY) maxAbsY = y;
       // NaN/Infinity are a different defect (a broken file, not a CRS mismatch),
       // so only finite out-of-range values count.
       if (Number.isFinite(x) && Number.isFinite(y) && (x > MAX_WGS84_LON || y > MAX_WGS84_LAT)) {

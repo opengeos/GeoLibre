@@ -1389,6 +1389,10 @@ export function DesktopShell({
   useEffect(() => {
     setKmlFileImportHandler(async (imports) => {
       setDropError(null);
+      // Matches the drop handlers: the catch below sets `dropError` without
+      // reaching `addImportedVectorLayers`, so without this a previous file's
+      // banner would sit beside the new error.
+      setCrsWarning(null);
       try {
         const paths = imports
           .map(({ sourcePath }) => sourcePath)
