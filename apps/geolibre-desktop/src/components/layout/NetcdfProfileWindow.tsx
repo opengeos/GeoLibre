@@ -12,18 +12,26 @@ import {
 } from "../../lib/netcdf-profile-store";
 import { NetcdfProfileChart } from "../panels/NetcdfProfileChart";
 
-/** Panel geometry (px). The window opens in the top-left corner, inset by
- * {@link PANEL_MARGIN}, and can then be dragged and resized anywhere on the map.
- * Top-left because the only resize grip is the bottom-right one: opening on the
- * right would put that grip against the Style panel with nowhere to grow. The
- * CSS default below and {@link FALLBACK_RECT} describe the same corner, so a
- * drag that starts from the untouched default does not jump. */
+/** Panel geometry (px). The window opens near the top-left corner and can then
+ * be dragged and resized anywhere on the map. Top-left because the only resize
+ * grip is the bottom-right one: opening on the right would put that grip against
+ * the Style panel with nowhere to grow. The CSS default below and
+ * {@link FALLBACK_RECT} describe the same spot, so a drag that starts from the
+ * untouched default does not jump. */
 const PANEL_MIN_W = 360;
 const PANEL_MIN_H = 260;
 const PANEL_MARGIN = 12;
+/**
+ * Vertical offset from the top inset. The Time Slider's pixel chart opens at the
+ * same corner and z-index, and the two are gated independently, so a user with a
+ * time-slider stack *and* a popped-out NetCDF profile would otherwise get two
+ * windows stacked exactly on top of each other. Cascading this one down leaves
+ * that panel's drag header exposed and grabbable underneath.
+ */
+const PANEL_TOP = 64;
 // 512x416 is the CSS default below (32rem x 26rem at a 16px root) in px, so the
 // fallback matches the size as well as the corner.
-const FALLBACK_RECT = { x: PANEL_MARGIN, y: PANEL_MARGIN, w: 512, h: 416 };
+const FALLBACK_RECT = { x: PANEL_MARGIN, y: PANEL_TOP, w: 512, h: 416 };
 
 /**
  * The spectral profile detached from the Style panel into a movable, resizable
@@ -65,7 +73,7 @@ export function NetcdfProfileWindow() {
       className={
         rect
           ? "pointer-events-auto absolute z-20 flex flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
-          : "pointer-events-auto absolute start-3 top-3 z-20 flex h-[26rem] max-h-[calc(100%-6rem)] w-[min(32rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+          : "pointer-events-auto absolute start-3 top-16 z-20 flex h-[26rem] max-h-[calc(100%-9rem)] w-[min(32rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
       }
       style={rect ? { left: rect.x, top: rect.y, width: rect.w, height: rect.h } : undefined}
       role="region"
