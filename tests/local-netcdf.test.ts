@@ -924,6 +924,16 @@ describe("gridPixelAt", () => {
     const values = new Float32Array([-9999, 2, 3, 4, 5, 6]);
     assert.equal(gridValueAt({ ...grid(), values }, 0, 0), null);
   });
+
+  it("reports a miss rather than folding an out-of-range column into the next row", () => {
+    // `column === nx` would index the first cell of the following row, which
+    // reads as a perfectly ordinary value from the wrong place.
+    assert.equal(gridValueAt(grid(), 0, 3), null);
+    assert.equal(gridValueAt(grid(), 0, -1), null);
+    assert.equal(gridValueAt(grid(), 2, 0), null);
+    assert.equal(gridValueAt(grid(), -1, 0), null);
+    assert.equal(gridValueAt(grid(), 0.5, 1), null);
+  });
 });
 
 describe("readProfile (NetCDF-3)", () => {
