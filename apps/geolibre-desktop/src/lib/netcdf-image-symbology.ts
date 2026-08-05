@@ -50,6 +50,8 @@ export interface NetcdfLayerState {
 
 const states = new Map<string, NetcdfLayerState>();
 let unsubscribe: (() => void) | null = null;
+/** The layer array the pruner last saw, so unrelated store writes cost nothing. */
+let lastLayers: unknown = null;
 
 /**
  * Remember what a baked NetCDF layer was made from, so its symbology stays
@@ -77,10 +79,23 @@ export function registerNetcdfLayer(layerId: string, state: NetcdfLayerState): v
   // A removed layer would otherwise strand its grid, and its file, for the rest
   // of the session. One subscription serves every registration.
   unsubscribe ??= useAppStore.subscribe((current) => {
+    // Every store write lands here, including the pointer coordinates the map
+    // writes on each mouse move, so do nothing until the layer array itself is
+    // replaced. Without this guard a registered grid costs a Set of every layer
+    // id per mouse move.
+    if (current.layers === lastLayers) return;
+    lastLayers = current.layers;
     if (states.size === 0) return;
     const live = new Set(current.layers.map((layer) => layer.id));
     for (const id of states.keys()) {
       if (!live.has(id)) releaseNetcdfLayer(id);
+    }
+    // Nothing left to prune: stop listening entirely rather than waking on
+    // every layer edit for the rest of the session. The next register
+    // re-subscribes, because `unsubscribe` is cleared here.
+    if (states.size === 0) {
+      unsubscribe?.();
+      unsubscribe = null;
     }
   });
 }

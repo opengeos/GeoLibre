@@ -82,10 +82,15 @@ export function warmColormapColors(name: string): Promise<readonly string[] | nu
 export function normalizeRampColor(color: string): string {
   const match = /^rgba?\(\s*([-+]?[\d.]+)\s*,\s*([-+]?[\d.]+)\s*,\s*([-+]?[\d.]+)/i.exec(color);
   if (!match) return color;
-  const channel = (text: string): number => Math.min(255, Math.max(0, Math.round(Number(text))));
+  // `[\d.]+` also matches junk like "." or "1..2", which `Number` reads as NaN
+  // and `rgbToHex` would emit as "#NaN00…" — worse than leaving it alone, since
+  // that then parses to black downstream.
+  const channels = match.slice(1, 4).map(Number);
+  if (!channels.every((value) => Number.isFinite(value))) return color;
+  const channel = (value: number): number => Math.min(255, Math.max(0, Math.round(value)));
   return rgbToHex({
-    r: channel(match[1]),
-    g: channel(match[2]),
-    b: channel(match[3]),
+    r: channel(channels[0]),
+    g: channel(channels[1]),
+    b: channel(channels[2]),
   });
 }

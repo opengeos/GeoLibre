@@ -220,6 +220,7 @@ import {
 } from "../../lib/postgis-connections";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { isTauri } from "../../lib/is-tauri";
+import { getNetcdfImageSource } from "../../lib/netcdf-image-symbology";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
 import { LayerSwatchIcon } from "./LayerSwatchIcon";
@@ -582,8 +583,12 @@ function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
   // registered by a plugin, but its values are held in memory and read directly
   // by useNetcdfIdentify. Named here rather than given a synthetic
   // `nativeLayerIds`, which would make layer-sync treat it as plugin-owned and
-  // stop drawing it.
-  if (layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) return true;
+  // stop drawing it. Gated on the grid actually being retained: an RGB
+  // composite shares the source kind but registers none, and a reload drops it,
+  // and offering Identify that answers nothing is worse than not offering it.
+  if (layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) {
+    return getNetcdfImageSource(layer.id) !== null;
+  }
 
   return Array.isArray(layer.metadata.nativeLayerIds) && layer.metadata.nativeLayerIds.length > 0;
 }

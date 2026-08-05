@@ -66,6 +66,21 @@ const MAX_AXIS_OPTIONS = 2000;
 // Dimension names read as a time axis, mirroring `TIME_DIMENSION_NAMES` in
 // `zarr-time-axis.ts`. A cube with one of these keeps the Zarr render path so
 // the Time Slider can drive it; see `useImagePath`.
+// Wavelength units a spectral axis may declare, in the spellings CF files use.
+// Micrometres are the other common one; anything else (an index, a time, a
+// pressure level) is not a wavelength and gets evenly spread band defaults.
+const NANOMETRE_UNITS = new Set(["nm", "nanometer", "nanometers", "nanometre", "nanometres"]);
+const MICROMETRE_UNITS = new Set([
+  "um",
+  "µm",
+  "micron",
+  "microns",
+  "micrometer",
+  "micrometers",
+  "micrometre",
+  "micrometres",
+]);
+
 const TIME_DIMENSION_NAMES = new Set([
   "time",
   "valid_time",
@@ -146,16 +161,22 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   const leadingDims = selectedVar
     ? selectedVar.dims.slice(0, Math.max(0, selectedVar.dims.length - 2))
     : [];
-  // The axis an RGB composite draws its three channels from: the first leading
-  // axis with at least three entries (the band axis of a spectral cube).
-  const rgbAxis = axes.find((axis) => axis.size >= 3) ?? null;
+  // The axis an RGB composite draws its three channels from. A time axis is
+  // excluded however many steps it has: combining three dates as red/green/blue
+  // is meaningless, and (time, lat, lon) is the commonest cube shape there is,
+  // so without this nearly every one would offer a bogus RGB option.
+  const rgbAxis = pickBandAxis(axes);
   // Composing an RGB image needs the pixels in hand, which only the local
   // reader has — the cloud path streams chunks through the renderer.
   const canComposeRgb = source === "file" && rgbAxis !== null;
   const rgbMode = mode === "rgb" && canComposeRgb;
   // A cube the Time Slider can drive stays on the Zarr renderer, which can
   // re-select a slice without rebuilding the layer; a baked image cannot.
-  const hasTimeAxis = axes.some((axis) => TIME_DIMENSION_NAMES.has(axis.name.toLowerCase()));
+  // `axes` is empty when listAxes throws, but `leadingDims` comes from
+  // listVariables and survives; without the fallback a time cube would quietly
+  // lose the Time Slider by taking the baked-image path.
+  const hasTimeAxis =
+    axes.some((axis) => isTimeAxisName(axis.name)) || leadingDims.some(isTimeAxisName);
   // Single-band local grids are colormapped on the CPU and added as an image
   // overlay rather than drawn by @carbonplan/zarr-layer, whose `shift_x` uniform
   // lookup throws on drivers that eliminate it (Mesa — most Linux Intel/AMD
@@ -243,7 +264,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
       }
     }
     setAxes(nextAxes);
-    const bandAxis = nextAxes.find((axis) => axis.size >= 3) ?? null;
+    const bandAxis = pickBandAxis(nextAxes);
     setRgbBands(bandAxis ? defaultRgbBands(bandAxis) : [0, 0, 0]);
     if (!bandAxis) setMode("single");
   };
@@ -370,7 +391,13 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
               url: encodeImageOverlay(image),
               coordinates: image.coordinates,
             },
-            { bounds: image.bounds },
+            {
+              bounds: image.bounds,
+              // Without this the store defaults it to "kml-ground-overlay",
+              // which every consumer of that marker would then act on.
+              sourceKind: NETCDF_IMAGE_SOURCE_KIND,
+              metadata: { variable },
+            },
           );
           appApi.fitBounds?.(image.bounds);
         } else if (useImagePath) {
@@ -392,7 +419,14 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
             {
               bounds: image.bounds,
               sourceKind: NETCDF_IMAGE_SOURCE_KIND,
-              metadata: { netcdfSymbology: symbology, variable },
+              metadata: {
+                netcdfSymbology: symbology,
+                variable,
+                // Identify reads a cell value, not a feature, so the button's
+                // tooltip should say so — the same marker COG-backed Time
+                // Slider sources use.
+                pixelIdentify: true,
+              },
             },
           );
           // The file stays open only for a cube, whose band axis is what a
@@ -580,60 +614,68 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
             </div>
           )}
 
-          {rgbMode && rgbAxis
-            ? (["red", "green", "blue"] as const).map((channel, index) => (
-                <div className="space-y-1.5" key={channel}>
-                  <Label htmlFor={`netcdf-rgb-${channel}`}>
-                    {t(`addData.netcdf.channel.${channel}`)}
+          {rgbMode &&
+            rgbAxis &&
+            (["red", "green", "blue"] as const).map((channel, index) => (
+              <div className="space-y-1.5" key={channel}>
+                <Label htmlFor={`netcdf-rgb-${channel}`}>
+                  {t(`addData.netcdf.channel.${channel}`)}
+                </Label>
+                <AxisSelect
+                  id={`netcdf-rgb-${channel}`}
+                  axis={rgbAxis}
+                  value={String(rgbBands[index])}
+                  onChange={(next) =>
+                    setRgbBands((prev) => {
+                      const updated = [...prev] as [number, number, number];
+                      updated[index] = Math.max(
+                        0,
+                        Math.min(rgbAxis.size - 1, Math.trunc(Number(next) || 0)),
+                      );
+                      return updated;
+                    })
+                  }
+                />
+              </div>
+            ))}
+
+          {/* Every leading dimension the channels do not already fix. In RGB
+              mode handleSubmit still reads dimIndex for these, so hiding them
+              would pin e.g. a cube's time step at index 0 with no way to change
+              it. */}
+          {leadingDims
+            .filter((dim) => !(rgbMode && rgbAxis?.name === dim))
+            .map((dim) => {
+              const axis = axes.find((item) => item.name === dim);
+              return (
+                <div className="space-y-1.5" key={dim}>
+                  <Label htmlFor={`netcdf-dim-${dim}`}>
+                    {t("addData.netcdf.dimIndexLabel", { dim })}
                   </Label>
-                  <AxisSelect
-                    id={`netcdf-rgb-${channel}`}
-                    axis={rgbAxis}
-                    value={String(rgbBands[index])}
-                    onChange={(next) =>
-                      setRgbBands((prev) => {
-                        const updated = [...prev] as [number, number, number];
-                        updated[index] = Math.max(
-                          0,
-                          Math.min(rgbAxis.size - 1, Math.trunc(Number(next) || 0)),
-                        );
-                        return updated;
-                      })
-                    }
-                  />
+                  {axis ? (
+                    <AxisSelect
+                      id={`netcdf-dim-${dim}`}
+                      axis={axis}
+                      value={dimIndex[dim] ?? "0"}
+                      onChange={(next) => setDimIndex((prev) => ({ ...prev, [dim]: next }))}
+                    />
+                  ) : (
+                    <Input
+                      id={`netcdf-dim-${dim}`}
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={dimIndex[dim] ?? ""}
+                      onChange={(event) =>
+                        setDimIndex((prev) => ({
+                          ...prev,
+                          [dim]: event.target.value,
+                        }))
+                      }
+                    />
+                  )}
                 </div>
-              ))
-            : leadingDims.map((dim) => {
-                const axis = axes.find((item) => item.name === dim);
-                return (
-                  <div className="space-y-1.5" key={dim}>
-                    <Label htmlFor={`netcdf-dim-${dim}`}>
-                      {t("addData.netcdf.dimIndexLabel", { dim })}
-                    </Label>
-                    {axis ? (
-                      <AxisSelect
-                        id={`netcdf-dim-${dim}`}
-                        axis={axis}
-                        value={dimIndex[dim] ?? "0"}
-                        onChange={(next) => setDimIndex((prev) => ({ ...prev, [dim]: next }))}
-                      />
-                    ) : (
-                      <Input
-                        id={`netcdf-dim-${dim}`}
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={dimIndex[dim] ?? ""}
-                        onChange={(event) =>
-                          setDimIndex((prev) => ({
-                            ...prev,
-                            [dim]: event.target.value,
-                          }))
-                        }
-                      />
-                    )}
-                  </div>
-                );
-              })}
+              );
+            })}
 
           {variables.length > 0 && !rgbMode && (
             <div className="space-y-1.5">
@@ -764,18 +806,30 @@ function defaultRgbBands(axis: LocalNetcdfAxis): [number, number, number] {
   return [0, Math.floor((axis.size - 1) / 2), axis.size - 1];
 }
 
+/** Whether a dimension name reads as a time axis. */
+function isTimeAxisName(name: string): boolean {
+  return TIME_DIMENSION_NAMES.has(name.toLowerCase());
+}
+
+/**
+ * The axis an RGB composite should draw its channels from: a wavelength axis if
+ * the file declares one, else the first non-time axis with at least three
+ * entries. Time is never a candidate (see `rgbAxis`).
+ *
+ * @param axes - The variable's leading axes.
+ * @returns The band axis, or null when the variable has none.
+ */
+function pickBandAxis(axes: LocalNetcdfAxis[]): LocalNetcdfAxis | null {
+  const candidates = axes.filter((axis) => axis.size >= 3 && !isTimeAxisName(axis.name));
+  return candidates.find((axis) => wavelengthsInNanometres(axis)) ?? candidates[0] ?? null;
+}
+
 /** The axis' values as nanometres, or null when it is not a wavelength axis. */
 function wavelengthsInNanometres(axis: LocalNetcdfAxis): number[] | null {
   if (!axis.values || axis.values.length === 0) return null;
-  const units = axis.units?.trim().toLowerCase();
-  if (units === "nm" || units === "nanometer" || units === "nanometers" || units === "nanometres") {
-    return axis.values;
-  }
-  // Micrometres are the other common spelling of a spectral axis; anything else
-  // (an index, a time, a pressure level) is left alone.
-  if (units === "um" || units === "µm" || units === "micron" || units === "micrometers") {
-    return axis.values.map((value) => value * 1000);
-  }
+  const units = axis.units?.trim().toLowerCase() ?? "";
+  if (NANOMETRE_UNITS.has(units)) return axis.values;
+  if (MICROMETRE_UNITS.has(units)) return axis.values.map((value) => value * 1000);
   return null;
 }
 

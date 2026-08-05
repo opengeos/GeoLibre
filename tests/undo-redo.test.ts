@@ -414,3 +414,39 @@ describe("undo/redo behavior", () => {
     assert.equal(futureLen(), 0);
   });
 });
+
+describe("trimHistoryBySize with inline image payloads", () => {
+  /** A snapshot holding one image layer whose source is a data URL of `bytes`. */
+  function imageSnapshot(bytes: number, seed = "a") {
+    return { layers: [{ source: { url: `data:image/png;base64,${seed.repeat(bytes)}` } }] };
+  }
+
+  it("charges a data URL against the budget", () => {
+    // A NetCDF grid baked to pixels holds a whole PNG on `source.url`, which the
+    // feature-count heuristic alone would score as free.
+    const past = [imageSnapshot(100_000, "a"), imageSnapshot(100_000, "b")];
+    // 100k chars each at 200 bytes per equivalent is 500 units apiece.
+    assert.equal(trimHistoryBySize(past, 10_000).length, 2);
+    assert.equal(trimHistoryBySize(past, 600).length, 1);
+  });
+
+  it("charges an unchanged URL once across snapshots", () => {
+    // Editing something else must not evict history just because an image layer
+    // is present; the same URL repeated is one payload.
+    const url = `data:image/png;base64,${"a".repeat(100_000)}`;
+    const past = [
+      { layers: [{ source: { url } }] },
+      { layers: [{ source: { url } }] },
+      { layers: [{ source: { url } }] },
+    ];
+    assert.equal(trimHistoryBySize(past, 600).length, 3);
+  });
+
+  it("ignores a non-inline source url", () => {
+    const past = [
+      { layers: [{ source: { url: "https://example.com/a.png" } }] },
+      { layers: [{ source: { url: "https://example.com/b.png" } }] },
+    ];
+    assert.equal(trimHistoryBySize(past, 0).length, 2);
+  });
+});

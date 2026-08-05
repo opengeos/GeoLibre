@@ -32,7 +32,10 @@ export function NetcdfSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   const updateLayer = useAppStore((state) => state.updateLayer);
   const rampOptions = useColormapRamps();
   const source = getNetcdfImageSource(layer.id);
-  const applied = netcdfImageSymbology(layer, source?.dataClim ?? [0, 1]);
+  // The symbology awaiting its bake, so the controls show the new selection at
+  // once rather than snapping back until the image lands.
+  const [pendingSymbology, setPendingSymbology] = useState<NetcdfImageSymbology | null>(null);
+  const applied = pendingSymbology ?? netcdfImageSymbology(layer, source?.dataClim ?? [0, 1]);
   // Free text while the user types, so a half-entered number ("-", "1.") does
   // not immediately re-bake with a nonsense limit.
   const [minText, setMinText] = useState(String(applied.clim[0]));
@@ -48,12 +51,20 @@ export function NetcdfSymbologySection({ layer }: { layer: GeoLibreLayer }) {
 
   if (!source) return null;
 
+  // Re-baking walks every cell and then PNG-encodes the result, which is
+  // hundreds of milliseconds for a scene-sized grid. Run it after the control
+  // has repainted with the new selection, so the dropdown and checkbox respond
+  // immediately instead of freezing until the image is ready.
   const apply = (next: NetcdfImageSymbology): void => {
-    const image = bakeNetcdfImage(source, next);
-    updateLayer(layer.id, {
-      source: { ...layer.source, url: encodeImageOverlay(image) },
-      metadata: { ...layer.metadata, netcdfSymbology: next },
-    });
+    setPendingSymbology(next);
+    window.setTimeout(() => {
+      const image = bakeNetcdfImage(source, next);
+      updateLayer(layer.id, {
+        source: { ...layer.source, url: encodeImageOverlay(image) },
+        metadata: { ...layer.metadata, netcdfSymbology: next },
+      });
+      setPendingSymbology(null);
+    }, 0);
   };
 
   const applyClim = (min: number, max: number): void => {

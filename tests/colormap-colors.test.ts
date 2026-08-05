@@ -49,6 +49,11 @@ describe("normalizeRampColor", () => {
     assert.equal(normalizeRampColor("#440154"), "#440154");
   });
 
+  it("passes a malformed numeric channel through rather than emitting #NaN", () => {
+    assert.equal(normalizeRampColor("rgb(., 0, 0)"), "rgb(., 0, 0)");
+    assert.equal(normalizeRampColor("rgb(1..2, 0, 0)"), "rgb(1..2, 0, 0)");
+  });
+
   it("passes an unrecognized stop through rather than blanking it", () => {
     assert.equal(normalizeRampColor("rebeccapurple"), "rebeccapurple");
   });
