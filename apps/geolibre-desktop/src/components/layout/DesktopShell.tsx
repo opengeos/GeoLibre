@@ -126,6 +126,8 @@ import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
 import { QuickAnalysisBanner } from "./QuickAnalysisBanner";
 import { PixelTimeSeriesControl } from "./PixelTimeSeriesControl";
+import { NetcdfSampleMarkers } from "./NetcdfSampleMarkers";
+import { NetcdfProfileWindow } from "./NetcdfProfileWindow";
 import { MapLegendPanel } from "../legend/MapLegendPanel";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
@@ -2282,6 +2284,8 @@ export function DesktopShell({
               <MapModeBanner mapControllerRef={mapControllerRef} />
               <QuickAnalysisBanner />
               <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
+              <NetcdfSampleMarkers mapControllerRef={mapControllerRef} />
+              <NetcdfProfileWindow />
               <MapLegendPanel
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}

@@ -5048,7 +5048,14 @@
   "netcdfProfile": {
     "heading": "Spectral profile",
     "clear": "Clear",
-    "chartAria": "Sampled pixel values along the band axis"
+    "chartAria": "Sampled pixel values along the band axis",
+    "popOut": "Pop out",
+    "dock": "Dock",
+    "poppedOutHint": "The chart is open in a window on the map.",
+    "noValues": "No values to chart for these pixels.",
+    "exportPng": "PNG",
+    "exportCsv": "CSV",
+    "exportError": "Could not export the chart."
   },
   "netcdfIdentify": {
     "noData": "no data",

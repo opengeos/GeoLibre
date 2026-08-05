@@ -11,8 +11,9 @@ import {
   readNetcdfProfile,
 } from "../lib/netcdf-image-symbology";
 import {
-  clearNetcdfProfileReadingsForLayer,
-  setNetcdfProfileReading,
+  addNetcdfProfileSample,
+  clearNetcdfProfileSamplesForLayer,
+  setNetcdfProfileSampleProfile,
 } from "../lib/netcdf-profile-store";
 
 /**
@@ -43,8 +44,10 @@ function formatReading(value: number, units: string | undefined): string {
  * is a nearest-cell lookup rather than a fetch: the readout is instant and works
  * offline.
  *
- * When the layer came from a cube, the same click also reads that pixel's values
- * along the band axis and hands them to the spectral profile panel.
+ * Every click inside the grid is also recorded as a sampled point, which puts a
+ * numbered marker on the map. When the layer came from a cube, the click reads
+ * that pixel's values along the band axis too and attaches them to the point,
+ * which is what the spectral profile charts.
  *
  * Mounted once at the app shell, alongside `useRasterIdentify`. MapCanvas bails
  * for these layers so the two never both handle a click.
@@ -76,12 +79,11 @@ export function useNetcdfIdentify(
     const previousCursor = canvas.style.cursor;
     canvas.style.cursor = "crosshair";
     let popup: maplibregl.Popup | null = null;
-    // The deferred profile read below captures this click's layer and pixel, so
-    // a pending one must be dropped when the identify target changes or another
-    // click lands — otherwise a stale read overwrites the newer reading.
-    let profileTimeout: number | null = null;
-    /** Drops the in-flight profile read's result, if one is outstanding. */
-    let cancelProfile: (() => void) | null = null;
+    // Each deferred read below is addressed to the point it was started for, so
+    // several can be in flight at once; they are tracked only so the timeouts
+    // can be dropped on teardown.
+    const profileTimeouts = new Set<number>();
+    let disposed = false;
 
     const handleClick = (event: maplibregl.MapMouseEvent) => {
       const state = getNetcdfLayerState(activeLayerId);
@@ -89,14 +91,10 @@ export function useNetcdfIdentify(
       const pixel = gridPixelAt(state.grid, event.lngLat.lng, event.lngLat.lat);
       popup?.remove();
       popup = null;
-      if (profileTimeout !== null) window.clearTimeout(profileTimeout);
-      profileTimeout = null;
-      cancelProfile?.();
-      cancelProfile = null;
       // A click outside the grid clears the readout rather than reporting the
       // nearest edge cell, which would be misleading far from the data.
       if (!pixel) {
-        clearNetcdfProfileReadingsForLayer(activeLayerId);
+        clearNetcdfProfileSamplesForLayer(activeLayerId);
         return;
       }
 
@@ -134,42 +132,40 @@ export function useNetcdfIdentify(
         .setDOMContent(container)
         .addTo(map);
 
+      // The point goes in before the (slow) profile read, so its marker lands on
+      // the map with the popup rather than a beat later.
+      const sampleId = addNetcdfProfileSample({
+        layerId: activeLayerId,
+        variable: state.variable,
+        units: state.units,
+        lng: pixel.lng,
+        lat: pixel.lat,
+      });
+
       // A cube also yields the pixel's spectrum. Reading it walks the whole band
       // axis in the source file (~200 ms for an EMIT scene), so it runs after
-      // the popup is already on screen.
-      if (!state.profile) {
-        clearNetcdfProfileReadingsForLayer(activeLayerId);
-        return;
-      }
-      profileTimeout = window.setTimeout(() => {
-        profileTimeout = null;
+      // the popup is already on screen. A 2-D grid has no band axis, so the point
+      // stays profile-less: still a marker and a list entry, just no line.
+      if (!state.profile) return;
+      const timeout = window.setTimeout(() => {
+        profileTimeouts.delete(timeout);
         // A remote read is a worker round trip over range requests, so this can
-        // take tens of seconds; `cancelled` drops a result the user has moved on
-        // from rather than charting a stale pixel.
-        let cancelled = false;
-        cancelProfile = () => {
-          cancelled = true;
-        };
+        // take tens of seconds. Nothing cancels it: the result is addressed to
+        // this point, and attaching to a point that has since been cleared or
+        // aged off the cap is a no-op, so a stale read lands nowhere.
         void readNetcdfProfile(activeLayerId, pixel.row, pixel.column).then((profile) => {
-          if (profile && !cancelled) {
-            setNetcdfProfileReading({
-              layerId: activeLayerId,
-              variable: state.variable,
-              units: state.units,
-              lng: pixel.lng,
-              lat: pixel.lat,
-              profile,
-            });
-          }
+          if (profile && !disposed) setNetcdfProfileSampleProfile(sampleId, profile);
         });
       }, 0);
+      profileTimeouts.add(timeout);
     };
 
     map.on("click", handleClick);
     return () => {
+      disposed = true;
       map.off("click", handleClick);
-      if (profileTimeout !== null) window.clearTimeout(profileTimeout);
-      cancelProfile?.();
+      for (const timeout of profileTimeouts) window.clearTimeout(timeout);
+      profileTimeouts.clear();
       popup?.remove();
       canvas.style.cursor = previousCursor;
     };
