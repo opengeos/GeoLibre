@@ -11,6 +11,12 @@
  *
  * Errors are returned as codes rather than sentences for the same reason: the
  * component owns the wording so this module never imports i18n.
+ *
+ * {@link pickerOutcome} lives here for that testability rather than next to the
+ * Picker code that calls it: `google-drive-auth.ts` reaches the plugin barrel,
+ * which touches `window` at import time and so cannot be loaded from a Node
+ * test at all. The rule it encodes decides whether a promise ever settles, which
+ * is precisely the kind of thing that must be covered.
  */
 
 /** Drive's own MIME type for a folder. */
@@ -281,6 +287,42 @@ export function fileNameFromContentDisposition(header: string | null): string | 
 
   const plain = /filename="?([^";]+)"?/.exec(header);
   return plain ? plain[1].trim() || null : null;
+}
+
+/** What a Picker callback action means for the pending selection. */
+export type PickerOutcome =
+  /** The user chose files; read them off the callback payload. */
+  | "picked"
+  /** The session is still open — settle nothing. */
+  | "continue"
+  /** The session ended without a selection. */
+  | "dismissed";
+
+/**
+ * Classifies a Picker callback action.
+ *
+ * The Picker reports its outcome through a single `action` string, and only one
+ * value is non-terminal: `LOADED`, which fires once the widget has rendered.
+ * Everything else ends the session. So this maps the *known* actions and treats
+ * anything unrecognized as `dismissed` rather than as "keep waiting" — the
+ * error action, or one a future Picker version adds, would otherwise leave the
+ * caller's promise pending forever, and the Add Data dialog holds its
+ * submitting flag until that promise settles, so the form would spin with its
+ * own Cancel button disabled and no way out but a reload.
+ *
+ * @param action - The `action` field from the callback payload
+ * @param pickedAction - `google.picker.Action.PICKED`
+ * @param loadedAction - `google.picker.Action.LOADED`, if the API exposes it
+ * @returns How the caller should settle
+ */
+export function pickerOutcome(
+  action: string | undefined,
+  pickedAction: string,
+  loadedAction: string | undefined,
+): PickerOutcome {
+  if (action === pickedAction) return "picked";
+  if (loadedAction !== undefined && action === loadedAction) return "continue";
+  return "dismissed";
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   groupFolderVectorFiles,
   isWorkspaceDocument,
   parseDriveTarget,
+  pickerOutcome,
   type DriveFile,
 } from "../apps/geolibre-desktop/src/lib/google-drive";
 
@@ -257,5 +258,39 @@ describe("SHAPEFILE_SIDECAR_EXTENSIONS", () => {
     assert.ok(match, "could not find SHAPEFILE_SIDECAR_EXTENSIONS in tauri-io.ts");
     const loaderList = [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
     assert.deepEqual([...SHAPEFILE_SIDECAR_EXTENSIONS].sort(), loaderList.sort());
+  });
+});
+
+describe("pickerOutcome", () => {
+  // The Picker reports everything through one `action` string, and the caller's
+  // promise stays pending until this says the session ended. Getting it wrong in
+  // the "keep waiting" direction hangs the Add Data dialog: it holds its
+  // submitting flag until the promise settles, so the form spins with its own
+  // Cancel button disabled and no way out but a reload.
+  const PICKED = "picked";
+  const LOADED = "loaded";
+
+  it("reports a selection", () => {
+    assert.equal(pickerOutcome(PICKED, PICKED, LOADED), "picked");
+  });
+
+  it("keeps waiting only for the one non-terminal action", () => {
+    assert.equal(pickerOutcome(LOADED, PICKED, LOADED), "continue");
+  });
+
+  it("treats cancel, error, and anything unrecognized as dismissed", () => {
+    // The literal reason the catch-all exists: none of these are enumerated,
+    // and every one of them ends the session.
+    for (const action of ["cancel", "error", "loaded:2", "", undefined]) {
+      assert.equal(pickerOutcome(action, PICKED, LOADED), "dismissed", String(action));
+    }
+  });
+
+  it("never treats an action as non-terminal when the API exposes no LOADED", () => {
+    // With `LOADED` absent there is nothing that legitimately keeps the session
+    // open, so no input may return "continue" — that is what would hang.
+    for (const action of [LOADED, "cancel", "error", undefined]) {
+      assert.notEqual(pickerOutcome(action, PICKED, undefined), "continue", String(action));
+    }
   });
 });

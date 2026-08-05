@@ -29,7 +29,7 @@ import {
   isGoogleOAuthLoopbackAvailable,
   isTauriProductionOrigin,
 } from "@geolibre/plugins";
-import type { DriveFile } from "./google-drive";
+import { pickerOutcome, type DriveFile } from "./google-drive";
 
 /** What the Picker returns: the token to download with, and what was chosen. */
 export interface DrivePickerResult {
@@ -234,7 +234,11 @@ interface GoogleGlobal {
     };
   };
   picker?: {
-    Action: { PICKED: string; CANCEL: string };
+    // `LOADED` is the one action that is *not* terminal — the widget reports it
+    // when it finishes rendering, and the session continues. Everything else
+    // ends the session, which is what lets the callback below treat any other
+    // unrecognized action as "nothing chosen" rather than waiting forever.
+    Action: { PICKED: string; CANCEL: string; LOADED?: string };
     Feature: { MULTISELECT_ENABLED: string };
     ViewId: { DOCS: string };
     DocsView: new (viewId: string) => {
@@ -350,7 +354,9 @@ async function openDrivePickerInPage(clientId: string, apiKey: string): Promise<
       .setOAuthToken(accessToken)
       .addView(view)
       .setCallback((data) => {
-        if (data.action === picker.Action.PICKED) {
+        const outcome = pickerOutcome(data.action, picker.Action.PICKED, picker.Action.LOADED);
+        if (outcome === "continue") return;
+        if (outcome === "picked") {
           resolve({
             accessToken,
             files: (data.docs ?? []).map((doc) => ({
@@ -360,11 +366,12 @@ async function openDrivePickerInPage(clientId: string, apiKey: string): Promise<
               size: doc.sizeBytes === undefined ? undefined : Number(doc.sizeBytes),
             })),
           });
-        } else if (data.action === picker.Action.CANCEL) {
-          // Cancelling is a normal outcome, not a failure: resolve with nothing
-          // chosen so the dialog simply returns to its fields.
-          resolve({ accessToken, files: [] });
+          return;
         }
+        // Dismissed — a cancel, an error, or an action this code does not know.
+        // All land the user back on the dialog's fields, which is the one
+        // outcome that is always recoverable.
+        resolve({ accessToken, files: [] });
       })
       .build();
     widget.setVisible(true);
