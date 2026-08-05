@@ -127,6 +127,8 @@ import { MapModeBanner } from "./MapModeBanner";
 import { QuickAnalysisBanner } from "./QuickAnalysisBanner";
 import { PixelTimeSeriesControl } from "./PixelTimeSeriesControl";
 import { NetcdfSampleMarkers } from "./NetcdfSampleMarkers";
+import { NetcdfCubeSetupDialog } from "./NetcdfCubeSetupDialog";
+import { NetcdfCubeWindow } from "./NetcdfCubeWindow";
 import { NetcdfProfileWindow } from "./NetcdfProfileWindow";
 import { MapLegendPanel } from "../legend/MapLegendPanel";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
@@ -2289,6 +2291,8 @@ export function DesktopShell({
                 mapReadyGeneration={mapReadyGeneration}
               />
               <NetcdfProfileWindow />
+              <NetcdfCubeWindow mapControllerRef={mapControllerRef} />
+              <NetcdfCubeSetupDialog mapControllerRef={mapControllerRef} />
               <MapLegendPanel
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}

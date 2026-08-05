@@ -30,6 +30,13 @@ import {
 import { Boxes, FileUp } from "lucide-react";
 import { useColormapRamps } from "../../hooks/useColormapRamps";
 import {
+  axisOptionLabel,
+  defaultRgbBands,
+  isTimeAxisName,
+  MAX_AXIS_OPTIONS,
+  pickBandAxis,
+} from "../../lib/netcdf-band-axis";
+import {
   isNetcdfFileUrl,
   openRemoteNetcdfFile,
   type RemoteNetcdfFile,
@@ -40,6 +47,7 @@ import {
   NETCDF_IMAGE_SOURCE_KIND,
   registerNetcdfLayer,
   warmNetcdfColormap,
+  type NetcdfLayerState,
 } from "../../lib/netcdf-image-symbology";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { SampleDataSelect } from "./add-data/shared";
@@ -60,45 +68,6 @@ const DEFAULT_SOURCE = "file" as const;
 
 /** Default single-band colormap, matching the Zarr panel's own default. */
 const DEFAULT_COLORMAP = "viridis";
-
-// Approximate red/green/blue band centres in nanometres. A hyperspectral cube's
-// band axis is a wavelength coordinate, so a natural-colour composite is the
-// three bands nearest these — which is what a user reaching for "band
-// combination" on an EMIT reflectance cube expects to see first.
-const NATURAL_COLOR_NM: [number, number, number] = [640, 550, 470];
-
-// Above this many entries an axis is offered as a number box rather than a
-// dropdown: a <select> with tens of thousands of options is unusable and slow
-// to build. A band axis (EMIT has 285) stays well under it.
-const MAX_AXIS_OPTIONS = 2000;
-
-// Wavelength units a spectral axis may declare, in the spellings CF files use.
-// Micrometres are the other common one; anything else (an index, a time, a
-// pressure level) is not a wavelength and gets evenly spread band defaults.
-const NANOMETRE_UNITS = new Set(["nm", "nanometer", "nanometers", "nanometre", "nanometres"]);
-const MICROMETRE_UNITS = new Set([
-  "um",
-  "µm",
-  "micron",
-  "microns",
-  "micrometer",
-  "micrometers",
-  "micrometre",
-  "micrometres",
-]);
-
-// Dimension names read as a time axis, mirroring `TIME_DIMENSION_NAMES` in
-// `zarr-time-axis.ts`. A cube with one of these keeps the Zarr render path so
-// the Time Slider can drive it; see `useImagePath`.
-const TIME_DIMENSION_NAMES = new Set([
-  "time",
-  "valid_time",
-  "datetime",
-  "date",
-  "t",
-  "forecast_time",
-  "period",
-]);
 
 /**
  * A renderable variable, shared shape across the cloud and local readers. The
@@ -133,21 +102,31 @@ async function datasetAxes(dataset: OpenDataset, variable: string): Promise<Loca
 }
 
 /**
- * A profile reader bound to one dataset, variable, and axis, for the layer
- * registry. Local reads resolve immediately; remote ones round trip to the
- * worker, which is why the registry stores a function rather than the file.
+ * The cube reads bound to one dataset, variable, and band axis, for the layer
+ * registry: a spectral profile at a pixel, and a single band's plane. Local
+ * reads resolve immediately; remote ones round trip to the worker, which is why
+ * the registry stores functions rather than the file.
  */
-function profileReader(
+function cubeReader(
   dataset: OpenDataset,
   variable: string,
-  axis: string,
+  axis: LocalNetcdfAxis,
   selector: Record<string, number>,
-): { read: (row: number, column: number) => Promise<LocalNetcdfProfile>; close: () => void } {
+): NonNullable<NetcdfLayerState["cube"]> {
   return {
-    read: (row, column) =>
+    axis,
+    readProfile: (row, column) =>
       dataset.kind === "local"
-        ? Promise.resolve(dataset.file.readProfile(variable, { axis, row, column, selector }))
-        : dataset.file.readProfile(variable, { axis, row, column, selector }),
+        ? Promise.resolve(
+            dataset.file.readProfile(variable, { axis: axis.name, row, column, selector }),
+          )
+        : dataset.file.readProfile(variable, { axis: axis.name, row, column, selector }),
+    readBand: (bandIndex, window) => {
+      const bandSelector = { ...selector, [axis.name]: bandIndex };
+      return dataset.kind === "local"
+        ? Promise.resolve(dataset.file.readGrid(variable, bandSelector, window))
+        : dataset.file.readGrid(variable, bandSelector, window);
+    },
     close: () => dataset.file.close(),
   };
 }
@@ -552,9 +531,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
             grid,
             variable,
             ...(selectedVar?.units ? { units: selectedVar.units } : {}),
-            ...(rgbAxis
-              ? { profile: profileReader(dataset, variable, rgbAxis.name, selector) }
-              : {}),
+            ...(rgbAxis ? { cube: cubeReader(dataset, variable, rgbAxis, selector) } : {}),
           });
           appApi.fitBounds?.(image.bounds);
         } else if (dataset.kind === "local") {
@@ -894,73 +871,4 @@ function AxisSelect({
       ))}
     </Select>
   );
-}
-
-/** `"650.41 nm (bands 47)"` — the coordinate value first, then where it sits. */
-function axisOptionLabel(axis: LocalNetcdfAxis, coordinate: number, index: number): string {
-  const rounded = Number.isInteger(coordinate) ? String(coordinate) : coordinate.toFixed(2);
-  const measure = axis.units ? `${rounded} ${axis.units}` : rounded;
-  return `${measure} (${axis.name} ${index})`;
-}
-
-/**
- * The three indices to open an RGB composite on.
- *
- * A wavelength axis (an EMIT `bands` coordinate in nm) gets the bands nearest
- * true red/green/blue, which is the composite a user actually wants to look at.
- * Anything else — an axis with no units, or units that are not a wavelength —
- * gets three evenly spread indices, since guessing colours from, say, a time
- * axis would be meaningless.
- */
-function defaultRgbBands(axis: LocalNetcdfAxis): [number, number, number] {
-  const wavelengths = wavelengthsInNanometres(axis);
-  if (wavelengths) {
-    return NATURAL_COLOR_NM.map((target) => nearestIndex(wavelengths, target)) as [
-      number,
-      number,
-      number,
-    ];
-  }
-  return [0, Math.floor((axis.size - 1) / 2), axis.size - 1];
-}
-
-/** Whether a dimension name reads as a time axis. */
-function isTimeAxisName(name: string): boolean {
-  return TIME_DIMENSION_NAMES.has(name.toLowerCase());
-}
-
-/**
- * The axis an RGB composite should draw its channels from: a wavelength axis if
- * the file declares one, else the first non-time axis with at least three
- * entries. Time is never a candidate (see `rgbAxis`).
- *
- * @param axes - The variable's leading axes.
- * @returns The band axis, or null when the variable has none.
- */
-function pickBandAxis(axes: LocalNetcdfAxis[]): LocalNetcdfAxis | null {
-  const candidates = axes.filter((axis) => axis.size >= 3 && !isTimeAxisName(axis.name));
-  return candidates.find((axis) => wavelengthsInNanometres(axis)) ?? candidates[0] ?? null;
-}
-
-/** The axis' values as nanometres, or null when it is not a wavelength axis. */
-function wavelengthsInNanometres(axis: LocalNetcdfAxis): number[] | null {
-  if (!axis.values || axis.values.length === 0) return null;
-  const units = axis.units?.trim().toLowerCase() ?? "";
-  if (NANOMETRE_UNITS.has(units)) return axis.values;
-  if (MICROMETRE_UNITS.has(units)) return axis.values.map((value) => value * 1000);
-  return null;
-}
-
-/** Index of the entry closest to `target`. */
-function nearestIndex(values: number[], target: number): number {
-  let best = 0;
-  let bestDistance = Infinity;
-  for (let i = 0; i < values.length; i++) {
-    const distance = Math.abs(values[i] - target);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = i;
-    }
-  }
-  return best;
 }

@@ -1,12 +1,15 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { Button, ColorRampSelect, Input, Label, Separator } from "@geolibre/ui";
+import { Boxes } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useColormapRamps } from "../../hooks/useColormapRamps";
+import { openNetcdfCubeSetup } from "../../lib/netcdf-cube-store";
 import {
   bakeNetcdfImage,
   encodeImageOverlay,
   getNetcdfImageSource,
+  getNetcdfLayerState,
   netcdfImageSymbology,
   warmNetcdfColormap,
   type NetcdfImageSymbology,
@@ -155,9 +158,25 @@ export function NetcdfSymbologySection({ layer }: { layer: GeoLibreLayer }) {
           </div>
         </div>
 
-        <Button type="button" variant="outline" size="sm" onClick={resetClim}>
-          {t("netcdfSymbology.resetRange")}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={resetClim}>
+            {t("netcdfSymbology.resetRange")}
+          </Button>
+          {/* Only for a layer whose source file is still open on a band axis:
+              the cube is read plane by plane from that file, so a plain 2-D
+              grid (or a reloaded project) has nothing to build one from. */}
+          {getNetcdfLayerState(layer.id)?.cube ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => openNetcdfCubeSetup(layer.id)}
+            >
+              <Boxes className="me-1.5 h-4 w-4" aria-hidden="true" />
+              {t("netcdfSymbology.openCube")}
+            </Button>
+          ) : null}
+        </div>
       </div>
     </>
   );

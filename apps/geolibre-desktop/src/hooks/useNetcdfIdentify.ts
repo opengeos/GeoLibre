@@ -152,7 +152,7 @@ export function useNetcdfIdentify(
       // axis in the source file (~200 ms for an EMIT scene), so it runs after
       // the popup is already on screen. A 2-D grid has no band axis, so the point
       // stays profile-less: still a marker and a list entry, just no line.
-      if (!state.profile) return;
+      if (!state.cube) return;
       const timeout = window.setTimeout(() => {
         profileTimeouts.delete(timeout);
         // A remote read is a worker round trip over range requests, so this can

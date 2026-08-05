@@ -670,6 +670,70 @@ describe("readGrid (NetCDF-3)", () => {
       file.close();
     }
   });
+
+  it("crops to a window, and moves its coordinates with it", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      // The 2x3 plane is [[1,2,3],[4,5,6]]; take the last two columns of it.
+      const grid = file.readGrid("temp", {}, { row: 0, column: 1, rows: 2, columns: 2 });
+      assert.equal(grid.ny, 2);
+      assert.equal(grid.nx, 2);
+      assert.deepEqual(Array.from(grid.values), [2, 3, 5, 6]);
+      // Coordinates have to follow the crop, or the cropped grid would claim
+      // the full extent and land in the wrong place on the map.
+      assert.deepEqual(Array.from(grid.lat), [10, 20]);
+      assert.deepEqual(Array.from(grid.lon), [1, 2]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("decimates a window past maxSize by a whole-number stride", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      // 3 columns capped to 2 gives a stride of 2: columns 0 and 2, rows 0 only.
+      const grid = file.readGrid(
+        "temp",
+        {},
+        { row: 0, column: 0, rows: 2, columns: 3, maxSize: 2 },
+      );
+      assert.equal(grid.nx, 2);
+      assert.equal(grid.ny, 1);
+      // Cells the file actually holds, not an average of neighbours: these may
+      // be packed integers or a fill value, and averaging either invents data.
+      assert.deepEqual(Array.from(grid.values), [1, 3]);
+      assert.deepEqual(Array.from(grid.lon), [0, 2]);
+      assert.deepEqual(Array.from(grid.lat), [10]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("clamps a window that runs past the grid", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      // The map's view usually overhangs the scene, so an oversized window is
+      // the normal case rather than a caller error.
+      const grid = file.readGrid("temp", {}, { row: 1, column: 2, rows: 99, columns: 99 });
+      assert.equal(grid.ny, 1);
+      assert.equal(grid.nx, 1);
+      assert.deepEqual(Array.from(grid.values), [6]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("reads the whole plane when no window is given", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      const grid = file.readGrid("temp");
+      assert.equal(grid.ny, 2);
+      assert.equal(grid.nx, 3);
+      assert.deepEqual(Array.from(grid.lon), [0, 1, 2]);
+    } finally {
+      file.close();
+    }
+  });
 });
 
 describe("gridPixelAt", () => {

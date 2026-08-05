@@ -10,6 +10,7 @@ import {
   type LocalNetcdfGrid,
   type LocalNetcdfProfile,
   type LocalNetcdfVariable,
+  type LocalNetcdfWindow,
 } from "@geolibre/plugins/local-netcdf";
 
 /**
@@ -28,7 +29,14 @@ import {
 type Request =
   | { id: number; type: "open"; url: string }
   | { id: number; type: "listAxes"; variable: string }
-  | { id: number; type: "readGrid"; variable: string; selector: Record<string, number> }
+  | {
+      id: number;
+      type: "readGrid";
+      variable: string;
+      selector: Record<string, number>;
+      /** Absent for the whole plane at full resolution. */
+      window?: LocalNetcdfWindow;
+    }
   | {
       id: number;
       type: "readProfile";
@@ -66,7 +74,11 @@ async function handle(request: Request): Promise<unknown> {
       return axes;
     }
     case "readGrid": {
-      const grid: LocalNetcdfGrid = requireFile().readGrid(request.variable, request.selector);
+      const grid: LocalNetcdfGrid = requireFile().readGrid(
+        request.variable,
+        request.selector,
+        request.window,
+      );
       return grid;
     }
     case "readProfile": {

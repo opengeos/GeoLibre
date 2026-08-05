@@ -3,6 +3,7 @@ import type {
   LocalNetcdfGrid,
   LocalNetcdfProfile,
   LocalNetcdfVariable,
+  LocalNetcdfWindow,
 } from "@geolibre/plugins";
 import type { NetcdfWorkerResponse } from "../workers/netcdf-remote.worker";
 
@@ -19,8 +20,12 @@ export interface RemoteNetcdfFile {
   variables: LocalNetcdfVariable[];
   /** The variable's leading axes, with coordinate values where present. */
   listAxes(variable: string): Promise<LocalNetcdfAxis[]>;
-  /** One 2-D slice plus its coordinates and packing. */
-  readGrid(variable: string, selector?: Record<string, number>): Promise<LocalNetcdfGrid>;
+  /** One 2-D slice plus its coordinates and packing, optionally windowed. */
+  readGrid(
+    variable: string,
+    selector?: Record<string, number>,
+    window?: LocalNetcdfWindow,
+  ): Promise<LocalNetcdfGrid>;
   /** One pixel's values along a leading axis. */
   readProfile(
     variable: string,
@@ -148,8 +153,8 @@ export async function openRemoteNetcdfFile(url: string): Promise<RemoteNetcdfFil
     return {
       variables,
       listAxes: (variable) => send<LocalNetcdfAxis[]>({ type: "listAxes", variable }),
-      readGrid: (variable, selector = {}) =>
-        send<LocalNetcdfGrid>({ type: "readGrid", variable, selector }),
+      readGrid: (variable, selector = {}, window) =>
+        send<LocalNetcdfGrid>({ type: "readGrid", variable, selector, window }),
       readProfile: (variable, options) =>
         send<LocalNetcdfProfile>({
           type: "readProfile",

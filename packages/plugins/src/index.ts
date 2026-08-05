@@ -169,6 +169,7 @@ export {
   type LocalNetcdfLayerRefs,
   type LocalNetcdfRgbImage,
   type LocalNetcdfRgbOptions,
+  type LocalNetcdfWindow,
   type InlineZarrGrid,
 } from "./plugins/local-netcdf";
 export {

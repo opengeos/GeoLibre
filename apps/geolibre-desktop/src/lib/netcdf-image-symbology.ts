@@ -1,12 +1,16 @@
-import { interpolateColors, useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { interpolateColors, parseHexColor, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   colormapColors,
   composeColormappedImage,
   warmColormapColors,
+  type LocalNetcdfAxis,
   type LocalNetcdfGrid,
   type LocalNetcdfImage,
   type LocalNetcdfProfile,
+  type LocalNetcdfWindow,
 } from "@geolibre/plugins";
+
+import { closeNetcdfCubeForLayer } from "./netcdf-cube-store";
 
 export { NETCDF_IMAGE_SOURCE_KIND } from "@geolibre/core";
 // Re-exported so callers reach one module for everything about these layers.
@@ -36,16 +40,21 @@ export interface NetcdfLayerState {
   units?: string;
   /**
    * Present only for a layer built from a cube. Reading a spectral signature
-   * needs the whole band axis at one pixel, which only the source file has, so
-   * the file stays open for as long as the layer does.
+   * needs the whole band axis at one pixel, and the 3-D cube view needs many
+   * band planes; only the source file has either, so it stays open for as long
+   * as the layer does.
    *
-   * A function rather than the file itself, because the two sources answer
+   * Functions rather than the file itself, because the two sources answer
    * differently: a local file reads synchronously in place, a remote one round
    * trips to the worker that owns its range-request mount.
    */
-  profile?: {
-    /** Read one pixel's values along the layer's profile axis. */
-    read: (row: number, column: number) => Promise<LocalNetcdfProfile>;
+  cube?: {
+    /** The leading axis the bands run along, with its coordinate values. */
+    axis: LocalNetcdfAxis;
+    /** Read one pixel's values along {@link axis}. */
+    readProfile: (row: number, column: number) => Promise<LocalNetcdfProfile>;
+    /** Read one band's plane, optionally windowed and decimated. */
+    readBand: (bandIndex: number, window?: LocalNetcdfWindow) => Promise<LocalNetcdfGrid>;
     /** Release the underlying file or worker. */
     close: () => void;
   };
@@ -70,11 +79,14 @@ let lastLayers: unknown = null;
  * @param state - The decoded slice, and the open file when it came from a cube.
  */
 export function registerNetcdfLayer(layerId: string, state: NetcdfLayerState): void {
-  if (state.profile) {
+  if (state.cube) {
     for (const [id, existing] of states) {
-      if (id !== layerId && existing.profile) {
-        existing.profile.close();
-        states.set(id, { ...existing, profile: undefined });
+      if (id !== layerId && existing.cube) {
+        existing.cube.close();
+        states.set(id, { ...existing, cube: undefined });
+        // The window renders from that file; leaving it open would strand a
+        // frame whose "reload" can no longer read anything.
+        closeNetcdfCubeForLayer(id);
       }
     }
   }
@@ -121,8 +133,9 @@ export function getNetcdfImageSource(layerId: string): NetcdfImageSource | null 
 
 /** Drop a layer's retained grid and close its file, if it had one. */
 export function releaseNetcdfLayer(layerId: string): void {
-  states.get(layerId)?.profile?.close();
+  states.get(layerId)?.cube?.close();
   states.delete(layerId);
+  closeNetcdfCubeForLayer(layerId);
 }
 
 /**
@@ -140,9 +153,9 @@ export async function readNetcdfProfile(
   column: number,
 ): Promise<LocalNetcdfProfile | null> {
   const state = states.get(layerId);
-  if (!state?.profile) return null;
+  if (!state?.cube) return null;
   try {
-    return await state.profile.read(row, column);
+    return await state.cube.readProfile(row, column);
   } catch {
     // A profile is an extra on top of the pixel readout, and the caller reads it
     // outside the click handler; a failed read must degrade to "no chart", not
@@ -224,6 +237,24 @@ export function rampStops(name: string, reversed = false): string[] {
   const anchors = colormapColors(name) ?? colormapColors("viridis") ?? ["#000000", "#ffffff"];
   const ordered = reversed ? [...anchors].reverse() : anchors;
   return interpolateColors(ordered, COLORMAP_STOPS);
+}
+
+/**
+ * {@link rampStops} as `[r, g, b]` triples.
+ *
+ * What a consumer painting pixels itself wants: the 3-D cube view looks a color
+ * up per texel across six faces, and re-parsing the same hex string hundreds of
+ * thousands of times is pure waste.
+ *
+ * @param name - The colormap name.
+ * @param reversed - Whether to apply the ramp high-to-low.
+ * @returns `COLORMAP_STOPS` triples, low to high, each channel 0-255.
+ */
+export function rampRgb(name: string, reversed = false): Array<[number, number, number]> {
+  return rampStops(name, reversed).map((hex) => {
+    const { r, g, b } = parseHexColor(hex);
+    return [r, g, b] as [number, number, number];
+  });
 }
 
 /**

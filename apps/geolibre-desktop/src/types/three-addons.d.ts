@@ -9,6 +9,23 @@ declare module "three/addons/loaders/ColladaLoader.js" {
   }
 }
 
+declare module "three/addons/controls/OrbitControls.js" {
+  import type { Camera, Vector3 } from "three";
+  export class OrbitControls {
+    constructor(camera: Camera, domElement?: HTMLElement);
+    target: Vector3;
+    enableDamping: boolean;
+    dampingFactor: number;
+    enablePan: boolean;
+    minDistance: number;
+    maxDistance: number;
+    rotateSpeed: number;
+    zoomSpeed: number;
+    update(): boolean;
+    dispose(): void;
+  }
+}
+
 declare module "three/addons/exporters/GLTFExporter.js" {
   import type { Object3D } from "three";
   export interface GLTFExporterOptions {
