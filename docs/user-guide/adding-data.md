@@ -85,10 +85,12 @@ The picker needs **both** halves of a Google Cloud project, and pasting only an 
 
 To enable it, create both credentials in **one** project and set both variables:
 
-```
+```env
 GOOGLE_OAUTH_CLIENT_ID=<client-id>.apps.googleusercontent.com
 GOOGLE_API_KEY=<api-key>
 ```
+
+Those bare names work in a `.env` file or the shell; `vite.config.ts` surfaces them under the `VITE_`-prefixed names the app reads, so `VITE_GOOGLE_OAUTH_CLIENT_ID` and `VITE_GOOGLE_API_KEY` are equally valid.
 
 In that project, enable the **Google Drive API** and the **Google Picker API**, and create the OAuth client as a **Web application** whose authorized JavaScript origins include the URL the app is served from (`http://localhost:5173` for the dev server). The desktop app runs the picker from `http://localhost:5173` in the system browser, so that origin covers it too.
 

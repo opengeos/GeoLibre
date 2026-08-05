@@ -612,7 +612,7 @@
       "folderLoaded_other": "พบไฟล์ที่เพิ่มได้ {{count}} ไฟล์",
       "browse": "เลือกจาก Google Drive",
       "browseHelp": "ลงชื่อเข้าใช้แล้วเลือกไฟล์ในหน้าต่างของ Google เอง GeoLibre จะเข้าถึงได้เฉพาะไฟล์ที่คุณเลือกเท่านั้น สำหรับ shapefile ที่ไม่ได้บีบอัด ให้เลือก .shp พร้อมกับ .dbf, .shx และ .prj",
-      "pickerUnconfigured": "การเลือกไฟล์จาก Drive ใช้ไม่ได้ในบิลด์นี้ เพราะหน้าต่างเลือกไฟล์ต้องใช้ API key จาก Google Cloud project เดียวกับ OAuth client ของแอป แต่บิลด์นี้ไม่ได้มี client ของตัวเอง ให้ตั้งค่า VITE_GOOGLE_OAUTH_CLIENT_ID และ VITE_GOOGLE_API_KEY จาก project เดียวกันเพื่อเปิดใช้งาน ส่วนการเปิดจากลิงก์แชร์ใช้ได้ตามปกติ",
+      "pickerUnconfigured": "การเลือกไฟล์จาก Drive ใช้ไม่ได้ในบิลด์นี้ เพราะหน้าต่างเลือกไฟล์ต้องการให้ API key กับ OAuth client ของแอปอยู่ใน Google Cloud project เดียวกัน แต่บิลด์นี้ใช้ client กลางที่เป็นของอีก project หนึ่ง ให้ตั้งค่า GOOGLE_OAUTH_CLIENT_ID และ GOOGLE_API_KEY จาก project ของคุณเองเพื่อเปิดใช้งาน ส่วนการเปิดจากลิงก์แชร์ใช้ได้ตามปกติ",
       "chosenFiles_other": "เลือกไว้ {{count}} ไฟล์",
       "noFilesChosen": "ยังไม่ได้เลือกไฟล์",
       "apiKey": "Google API key (ไม่บังคับ)",

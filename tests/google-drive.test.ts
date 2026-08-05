@@ -321,3 +321,45 @@ describe("drivePickerBlocker", () => {
     assert.equal(drivePickerBlocker(false, false), "unsupported");
   });
 });
+
+describe("the picker blocker is wired to the UI", () => {
+  // `drivePickerBlocker` is a pure function with its own tests, and those passed
+  // while the component silently ignored its result: the Browse button stayed
+  // enabled and opened a picker that could only fail. Nothing caught it — the
+  // ESLint config enables React Hooks rules only, and tsconfig sets no
+  // `noUnusedLocals`, so a computed-but-unused value is invisible to both gates.
+  // These read the component source, the same technique the sidecar-mirror test
+  // below uses, because a green unit test on a helper says nothing about whether
+  // anyone calls it.
+  const source = readFileSync(
+    fileURLToPath(
+      new URL(
+        "../apps/geolibre-desktop/src/components/layout/add-data/sources/GoogleDriveSource.tsx",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  );
+  // Collapse whitespace so the assertions survive reformatting.
+  const flat = source.replace(/\s+/g, " ");
+
+  it("computes the blocker from both the platform and the configuration", () => {
+    assert.match(
+      flat,
+      /drivePickerBlocker\(\s*isDrivePickerAvailable\(\),\s*hasConfiguredOAuthClientId\(\)/,
+    );
+  });
+
+  it("disables the Browse button when blocked", () => {
+    assert.match(
+      flat,
+      /disabled=\{[^}]*pickerBlocked[^}]*\}/,
+      "the Browse button must consume pickerBlocked, not just compute it",
+    );
+  });
+
+  it("shows the configuration explanation in place of the normal help text", () => {
+    assert.match(flat, /pickerBlocker === "unconfigured"/);
+    assert.match(flat, /addData\.googleDrive\.pickerUnconfigured/);
+  });
+});

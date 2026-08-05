@@ -278,12 +278,16 @@ export function GoogleDriveSource() {
             type="button"
             variant="outline"
             onClick={() => void handleBrowse()}
-            disabled={busy}
+            disabled={busy || pickerBlocked}
           >
             <FolderOpen className="me-2 h-3.5 w-3.5" />
             {t("addData.googleDrive.browse")}
           </Button>
-          <p className="text-xs text-muted-foreground">{t("addData.googleDrive.browseHelp")}</p>
+          <p className="text-xs text-muted-foreground">
+            {pickerBlocker === "unconfigured"
+              ? t("addData.googleDrive.pickerUnconfigured")
+              : t("addData.googleDrive.browseHelp")}
+          </p>
           {picked?.files.length ? (
             <ul className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border/60 p-2 text-xs">
               {picked.files.map((file) => (
