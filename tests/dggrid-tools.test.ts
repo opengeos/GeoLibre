@@ -134,6 +134,8 @@ describe("dggrid SQL builders", () => {
     assert.match(sql, new RegExp(`dggs_cls_km\\(5, ${escapeRegex(ISEA4H_PARAMS)}\\)`));
     assert.match(sql, /POLYGON\(\(0 0, 1 0, 1 1, 0 0\)\)''x/);
     assert.match(sql, /CAST\(cell AS VARCHAR\) AS dggrid/);
+    assert.match(sql, /CAST\(ST_AsGeoJSON\(seqnum_to_boundary/);
+    assert.doesNotMatch(sql, /LEAST\(/);
   });
 
   it("passes ISEA3H dggs_params into grid and bin SQL", () => {

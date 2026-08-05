@@ -1,10 +1,6 @@
 import type { FeatureCollection, Geometry } from "geojson";
-import { unwrapAntimeridianGeometry, unwrapAntimeridianRing } from "./antimeridian";
-
-/** @deprecated Prefer {@link unwrapAntimeridianGeometry}. */
-export const unwrapDggridGeometry = unwrapAntimeridianGeometry;
-/** @deprecated Prefer {@link unwrapAntimeridianRing}. */
-export const unwrapDggridRing = unwrapAntimeridianRing;
+import { unwrapAntimeridianGeometry } from "./antimeridian";
+import { sqlIdent, sqlStr } from "./h3-tools";
 
 /**
  * Default DGGRID orientation (ISEA/FULLER pole) used by duck_dggs examples:
@@ -323,14 +319,6 @@ export function suggestDggridResolution(
   return 0;
 }
 
-function sqlStr(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
-}
-
-function sqlIdent(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
-}
-
 function paramsSql(gridType: DggridGridType): string {
   return DGGRID_GRID_PARAMS_SQL[gridType];
 }
@@ -340,20 +328,29 @@ function paramsSql(gridType: DggridGridType): string {
  * intersect it, map each to a seqnum via `geo_to_seqnum`, then emit boundaries.
  * duck_dggs ([docs](https://duckdb.org/community_extensions/extensions/duck_dggs))
  * only converts POINT → cell; there is no H3-style polygon polyfill.
+ *
+ * When the envelope would need more than {@link DGGRID_SAMPLE_AXIS_CAP} samples
+ * on an axis, the step is scaled up so the series still spans the full bbox
+ * (large areas may be under-sampled rather than clipped mid-extent).
+ *
+ * @param areaSelectSql SQL for the `_dggs_area` CTE body, e.g.
+ *   `SELECT ST_GeomFromText(...) AS g` or `SELECT g FROM (...) WHERE g IS NOT NULL`.
  */
-function cellsCteFromGeom(geomSql: string, res: number, gridType: DggridGridType): string {
+function cellsCteFromGeom(areaSelectSql: string, res: number, gridType: DggridGridType): string {
   const cap = DGGRID_SAMPLE_AXIS_CAP;
   const p = paramsSql(gridType);
   return (
-    `WITH _dggs_area AS (SELECT ${geomSql} AS g), ` +
+    `WITH _dggs_area AS (${areaSelectSql}), ` +
     `_dggs_meta AS (` +
     `SELECT ST_XMin(g) AS w, ST_YMin(g) AS s, ST_XMax(g) AS e, ST_YMax(g) AS n, g, ` +
-    // Half the characteristic length scale (km) → degrees (~111.32 km/deg).
-    `GREATEST(dggs_cls_km(${res}, ${p}) / 222.64, 1e-5) AS step FROM _dggs_area), ` +
+    // Half the characteristic length scale (km) → degrees (~111.32 km/deg),
+    // raised enough that ≤ cap samples cover each axis end-to-end.
+    `GREATEST(dggs_cls_km(${res}, ${p}) / 222.64, (e - w) / ${cap}, (n - s) / ${cap}, 1e-5) AS step ` +
+    `FROM _dggs_area), ` +
     `_dggs_grid AS (` +
     `SELECT ST_Point(w + i * step, s + j * step) AS pt, g FROM _dggs_meta, ` +
-    `generate_series(0, LEAST(CAST(CEIL((e - w) / step) AS BIGINT), ${cap})) AS t(i), ` +
-    `generate_series(0, LEAST(CAST(CEIL((n - s) / step) AS BIGINT), ${cap})) AS u(j)), ` +
+    `generate_series(0, CAST(CEIL((e - w) / step) AS BIGINT)) AS t(i), ` +
+    `generate_series(0, CAST(CEIL((n - s) / step) AS BIGINT)) AS u(j)), ` +
     `_dggs_pts AS (` +
     `SELECT pt FROM _dggs_grid WHERE ST_Intersects(pt, g) ` +
     `UNION ALL SELECT ST_Centroid(g) FROM _dggs_meta WHERE g IS NOT NULL), ` +
@@ -365,7 +362,7 @@ function gridSelect(res: number, gridType: DggridGridType): string {
   const p = paramsSql(gridType);
   return (
     `SELECT CAST(cell AS VARCHAR) AS dggrid, ` +
-    `ST_AsGeoJSON(seqnum_to_boundary(cell, ${res}, ${p})) AS geojson FROM cells`
+    `CAST(ST_AsGeoJSON(seqnum_to_boundary(cell, ${res}, ${p})) AS VARCHAR) AS geojson FROM cells`
   );
 }
 
@@ -376,7 +373,7 @@ export function buildDggridGridFromWktSql(
   gridType: DggridGridType = DEFAULT_DGGRID_GRID_TYPE,
 ): string {
   return (
-    `${cellsCteFromGeom(`ST_GeomFromText(${sqlStr(wkt)})`, res, gridType)} ` +
+    `${cellsCteFromGeom(`SELECT ST_GeomFromText(${sqlStr(wkt)}) AS g`, res, gridType)} ` +
     gridSelect(res, gridType)
   );
 }
@@ -391,24 +388,11 @@ export function buildDggridGridFromSourceSql(
   gridType: DggridGridType = DEFAULT_DGGRID_GRID_TYPE,
 ): string {
   const merged =
-    `(SELECT ST_Union_Agg(geom) AS g FROM ${sourceSql} ` +
-    `WHERE geom IS NOT NULL AND ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON'))`;
-  const p = paramsSql(gridType);
-  return (
-    `WITH _dggs_area AS (SELECT g FROM ${merged} WHERE g IS NOT NULL), ` +
-    `_dggs_meta AS (` +
-    `SELECT ST_XMin(g) AS w, ST_YMin(g) AS s, ST_XMax(g) AS e, ST_YMax(g) AS n, g, ` +
-    `GREATEST(dggs_cls_km(${res}, ${p}) / 222.64, 1e-5) AS step FROM _dggs_area), ` +
-    `_dggs_grid AS (` +
-    `SELECT ST_Point(w + i * step, s + j * step) AS pt, g FROM _dggs_meta, ` +
-    `generate_series(0, LEAST(CAST(CEIL((e - w) / step) AS BIGINT), ${DGGRID_SAMPLE_AXIS_CAP})) AS t(i), ` +
-    `generate_series(0, LEAST(CAST(CEIL((n - s) / step) AS BIGINT), ${DGGRID_SAMPLE_AXIS_CAP})) AS u(j)), ` +
-    `_dggs_pts AS (` +
-    `SELECT pt FROM _dggs_grid WHERE ST_Intersects(pt, g) ` +
-    `UNION ALL SELECT ST_Centroid(g) FROM _dggs_meta WHERE g IS NOT NULL), ` +
-    `cells AS (SELECT DISTINCT geo_to_seqnum(pt, ${res}, ${p}) AS cell FROM _dggs_pts WHERE pt IS NOT NULL) ` +
-    gridSelect(res, gridType)
-  );
+    `SELECT g FROM (` +
+    `SELECT ST_Union_Agg(geom) AS g FROM ${sourceSql} ` +
+    `WHERE geom IS NOT NULL AND ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON')` +
+    `) WHERE g IS NOT NULL`;
+  return `${cellsCteFromGeom(merged, res, gridType)} ` + gridSelect(res, gridType);
 }
 
 /** Supported point-binning aggregate operations. */
@@ -444,7 +428,7 @@ export function buildDggridBinSql(
     `binned AS (SELECT geo_to_seqnum(pt, ${res}, ${p}) AS cell, ` +
     `count(*) AS count${aggSelect} FROM pts GROUP BY cell) ` +
     `SELECT CAST(cell AS VARCHAR) AS dggrid, count${aggOut}, ` +
-    `ST_AsGeoJSON(seqnum_to_boundary(cell, ${res}, ${p})) AS geojson FROM binned`
+    `CAST(ST_AsGeoJSON(seqnum_to_boundary(cell, ${res}, ${p})) AS VARCHAR) AS geojson FROM binned`
   );
 }
 

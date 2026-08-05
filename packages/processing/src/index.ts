@@ -8,6 +8,7 @@ export {
 export {
   VECTOR_TOOLS,
   getVectorTool,
+  resolveVectorRerun,
   matchFeaturesByLocation,
   MAX_CLIENT_PAIRS,
   SELECT_LOCATION_PREDICATES,
@@ -76,8 +77,6 @@ export {
   buildDggridGridFromSourceSql,
   buildDggridBinSql,
   dggridRowsToFeatureCollection,
-  unwrapDggridGeometry,
-  unwrapDggridRing,
   suggestDggridResolution,
   estimateDggridCellCount,
   resolveDggridGridType,

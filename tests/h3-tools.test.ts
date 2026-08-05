@@ -15,6 +15,7 @@ import {
   rowsToFeatureCollection,
   suggestResolution,
 } from "../packages/processing/src/h3-tools";
+import { getVectorTool, resolveVectorRerun } from "../packages/processing/src/vector-tools";
 
 describe("h3 resolution math", () => {
   it("exposes 16 average-area entries (res 0..15), strictly decreasing", () => {
@@ -77,6 +78,28 @@ describe("h3 tools registry", () => {
   });
 });
 
+describe("resolveVectorRerun H3 aliases", () => {
+  it("maps old H3 tool ids onto DGGS tools with dggsType h3", () => {
+    const grid = resolveVectorRerun("h3-grid", { resolution: 5, source: "viewport" });
+    assert.equal(grid.toolId, "dggs-grid");
+    assert.equal(grid.parameters.dggsType, "h3");
+    assert.equal(grid.parameters.resolution, 5);
+    assert.ok(getVectorTool(grid.toolId));
+
+    const bin = resolveVectorRerun("h3-bin-points", { aggOp: "count" });
+    assert.equal(bin.toolId, "dggs-bin");
+    assert.equal(bin.parameters.dggsType, "h3");
+    assert.ok(getVectorTool(bin.toolId));
+
+    // Existing dggsType is preserved; unknown ids pass through.
+    const kept = resolveVectorRerun("h3-grid", { dggsType: "s2" });
+    assert.equal(kept.parameters.dggsType, "s2");
+    const passthrough = resolveVectorRerun("buffer", { distance: 1 });
+    assert.equal(passthrough.toolId, "buffer");
+    assert.deepEqual(passthrough.parameters, { distance: 1 });
+  });
+});
+
 describe("h3 SQL + geometry builders", () => {
   it("builds a closed POLYGON WKT from a bbox", () => {
     assert.equal(bboxToWktPolygon([0, 1, 2, 3]), "POLYGON((0 1, 2 1, 2 3, 0 3, 0 1))");
@@ -101,7 +124,7 @@ describe("h3 SQL + geometry builders", () => {
     assert.deepEqual(normalizeLonLatBbox([-200, -60, 200, 60]), [-180, -60, 180, 60]);
     assert.deepEqual(normalizeLonLatBbox([-100, -40, 100, 40]), [-180, -40, 180, 40]);
     assert.deepEqual(normalizeLonLatBbox([10, 20, 30, 40]), [10, 20, 30, 40]);
-    assert.deepEqual(normalizeLonLatBbox([-190, -10, -10, 10]), [-180, -10, -10, 10]);
+    assert.deepEqual(normalizeLonLatBbox([-190, -10, -10, 10]), [-180, -10, 180, 10]);
   });
 
   it("splits a full-world bbox into hemispheres for H3 polyfill", () => {

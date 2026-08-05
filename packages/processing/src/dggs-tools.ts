@@ -194,13 +194,9 @@ function resolveResolution(
   }
   const res = typeof raw === "string" ? Number(raw) : (raw as number);
   if (!Number.isInteger(res) || res < 0 || res > maxRes) {
-    const typeLabel =
-      type === "dggrid"
-        ? dggridType
-        : type === "dggal"
-          ? DGGAL_TYPES[dggalType].className
-          : DGGS_TYPE_LABEL[type];
-    ctx.log(`Error: resolution must be an integer from 0 to ${maxRes} for ${typeLabel}`);
+    ctx.log(
+      `Error: resolution must be an integer from 0 to ${maxRes} for ${dggsLabel(type, dggridType, dggalType)}`,
+    );
     return null;
   }
   return res;
@@ -266,15 +262,15 @@ const DGGAL_TYPE_PARAM = {
 };
 
 /**
- * Unwrap dateline-straddling cell rings for MapLibre. H3, S2, and DGGRID;
- * default on. A5 is unaffected (option hidden).
+ * Unwrap dateline-straddling cell rings for MapLibre. Available for every
+ * DGGS backend; default on.
  */
 const FIX_ANTIMERIDIAN_PARAM = {
   id: "fixAntimeridian",
   label: "Fix antimeridian",
   type: "boolean" as const,
   default: true,
-  visibleWhen: { param: "dggsType", in: ["h3", "s2", "dggrid"] },
+  visibleWhen: { param: "dggsType", in: ["h3", "s2", "a5", "dggrid", "dggal"] },
   description: "Unwrap cell rings that cross ±180° longitude.",
 };
 
@@ -293,11 +289,19 @@ const COMPACT_CELLS_PARAM = {
 };
 
 function resolveFixAntimeridian(ctx: ProcessingContext, type: DggsType): boolean {
-  if (type !== "h3" && type !== "s2" && type !== "dggrid") return false;
+  if (type !== "h3" && type !== "s2" && type !== "a5" && type !== "dggrid" && type !== "dggal") {
+    return false;
+  }
   const raw = ctx.parameters.fixAntimeridian;
   // Default checked when the param was never set (e.g. scripted runs).
   if (raw === undefined || raw === null || raw === "") return true;
   return Boolean(raw);
+}
+
+function dggsLabel(type: DggsType, dggridType: DggridGridType, dggalType: DggalGridType): string {
+  if (type === "dggrid") return dggridType;
+  if (type === "dggal") return DGGAL_TYPES[dggalType].className;
+  return DGGS_TYPE_LABEL[type];
 }
 
 function resolveCompactCells(ctx: ProcessingContext, type: DggsType): boolean {
@@ -461,12 +465,7 @@ export const createDggsGridTool: ProcessingAlgorithm = {
 
     const fixAntimeridian = resolveFixAntimeridian(ctx, type);
     const compactCells = resolveCompactCells(ctx, type);
-    const label =
-      type === "dggrid"
-        ? dggridType
-        : type === "dggal"
-          ? DGGAL_TYPES[dggalType].className
-          : DGGS_TYPE_LABEL[type];
+    const label = dggsLabel(type, dggridType, dggalType);
 
     // S2 is entirely client-side (s2js); no DuckDB extension.
     if (type === "s2") {
@@ -501,14 +500,18 @@ export const createDggsGridTool: ProcessingAlgorithm = {
       return;
     }
 
-    // DGGAL is client-side WASM (dggal); no DuckDB / no antimeridian unwrap.
+    // DGGAL is client-side WASM (dggal); no DuckDB.
     if (type === "dggal") {
       try {
         const fc = await withDggalDggrs(dggalType, (engine) =>
           areaBbox != null
-            ? dggalGridFromBbox(engine, areaBbox, res, hardCap, { compact: compactCells })
+            ? dggalGridFromBbox(engine, areaBbox, res, hardCap, {
+                compact: compactCells,
+                unwrap: fixAntimeridian,
+              })
             : dggalGridFromFeatureCollection(engine, inputGeojson!, res, hardCap, {
                 compact: compactCells,
+                unwrap: fixAntimeridian,
               }),
         );
         if (fc.features.length === 0) {
@@ -534,9 +537,9 @@ export const createDggsGridTool: ProcessingAlgorithm = {
 
     const duckdb = requireDuckDb(ctx);
     const extension = extensionForDggs(type);
-    await duckdb.ensureExtensions(["spatial", extension!]);
     let registered: DuckDbGeoJsonSource | null = null;
     try {
+      await duckdb.ensureExtensions(["spatial", extension!]);
       let sql: string;
       if (areaBbox) {
         sql =
@@ -557,13 +560,13 @@ export const createDggsGridTool: ProcessingAlgorithm = {
       const rows = await duckdb.query(sql);
       const fc =
         type === "a5"
-          ? a5RowsToFeatureCollection(rows)
+          ? a5RowsToFeatureCollection(rows, fixAntimeridian)
           : type === "dggrid"
             ? dggridRowsToFeatureCollection(rows, fixAntimeridian)
             : rowsToFeatureCollection(rows, fixAntimeridian);
       if (fc.features.length === 0) {
         ctx.log(
-          `No ${DGGS_TYPE_LABEL[type]} cells were produced at resolution ${res}. Try a finer resolution or a larger area.`,
+          `No ${label} cells were produced at resolution ${res}. Try a finer resolution or a larger area.`,
         );
         return;
       }
@@ -575,6 +578,9 @@ export const createDggsGridTool: ProcessingAlgorithm = {
         compactCells ? `${label} grid (res ${res}, compact)` : `${label} grid (res ${res})`,
         fc,
       );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      ctx.log(`Error: ${message}`);
     } finally {
       await registered?.release();
     }
@@ -661,12 +667,7 @@ export const dggsBinPointsTool: ProcessingAlgorithm = {
     if (res === null) return;
 
     const fixAntimeridian = resolveFixAntimeridian(ctx, type);
-    const label =
-      type === "dggrid"
-        ? dggridType
-        : type === "dggal"
-          ? DGGAL_TYPES[dggalType].className
-          : DGGS_TYPE_LABEL[type];
+    const label = dggsLabel(type, dggridType, dggalType);
 
     if (type === "s2") {
       const fc = binPointsToS2(layer.geojson, res, op as S2AggOp, field, {
@@ -686,7 +687,9 @@ export const dggsBinPointsTool: ProcessingAlgorithm = {
     if (type === "dggal") {
       try {
         const fc = await withDggalDggrs(dggalType, (engine) =>
-          binPointsToDggal(engine, layer.geojson!, res, op as DggalAggOp, field),
+          binPointsToDggal(engine, layer.geojson!, res, op as DggalAggOp, field, {
+            unwrap: fixAntimeridian,
+          }),
         );
         if (fc.features.length === 0) {
           ctx.log(
@@ -705,9 +708,10 @@ export const dggsBinPointsTool: ProcessingAlgorithm = {
 
     const duckdb = requireDuckDb(ctx);
     const extension = extensionForDggs(type);
-    await duckdb.ensureExtensions(["spatial", extension!]);
-    const registered = await duckdb.registerGeoJson(layer.geojson);
+    let registered: DuckDbGeoJsonSource | null = null;
     try {
+      await duckdb.ensureExtensions(["spatial", extension!]);
+      registered = await duckdb.registerGeoJson(layer.geojson);
       const sql =
         type === "a5"
           ? buildA5BinSql(registered.sql, res, op as A5AggOp, field)
@@ -717,20 +721,23 @@ export const dggsBinPointsTool: ProcessingAlgorithm = {
       const rows = await duckdb.query(sql);
       const fc =
         type === "a5"
-          ? a5RowsToFeatureCollection(rows)
+          ? a5RowsToFeatureCollection(rows, fixAntimeridian)
           : type === "dggrid"
             ? dggridRowsToFeatureCollection(rows, fixAntimeridian)
             : rowsToFeatureCollection(rows, fixAntimeridian);
       if (fc.features.length === 0) {
         ctx.log(
-          `No points fell into ${DGGS_TYPE_LABEL[type]} cells at resolution ${res}. Check the layer has point geometries.`,
+          `No points fell into ${label} cells at resolution ${res}. Check the layer has point geometries.`,
         );
         return;
       }
       ctx.log(`Binned points into ${fc.features.length} ${label} cell(s) at resolution ${res}`);
       ctx.addResultLayer?.(`${label} bins (res ${res})`, fc);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      ctx.log(`Error: ${message}`);
     } finally {
-      await registered.release();
+      await registered?.release();
     }
   },
 };
@@ -806,7 +813,7 @@ export const dggsCompactTool: ProcessingAlgorithm = {
       label: "Fix antimeridian",
       type: "boolean",
       default: true,
-      visibleWhen: { param: "dggsType", in: ["h3", "s2"] },
+      visibleWhen: { param: "dggsType", in: ["h3", "s2", "a5", "dggal"] },
       description: "Unwrap cell rings that cross ±180° longitude.",
     },
   ],
@@ -865,15 +872,17 @@ export const dggsCompactTool: ProcessingAlgorithm = {
       res = typeof raw === "string" ? Number(raw) : (raw as number);
       if (!Number.isInteger(res) || res < 0 || res > maxRes) {
         ctx.log(
-          `Error: resolution must be an integer from 0 to ${maxRes} for ${
-            type === "dggal" ? DGGAL_TYPES[dggalType].className : DGGS_TYPE_LABEL[type]
-          }`,
+          `Error: resolution must be an integer from 0 to ${maxRes} for ${dggsLabel(
+            type,
+            DEFAULT_DGGRID_GRID_TYPE,
+            dggalType,
+          )}`,
         );
         return;
       }
     }
 
-    const label = type === "dggal" ? DGGAL_TYPES[dggalType].className : DGGS_TYPE_LABEL[type];
+    const label = dggsLabel(type, DEFAULT_DGGRID_GRID_TYPE, dggalType);
     const emitResult = (fc: FeatureCollection) => {
       if (fc.features.length === 0) {
         ctx.log(
@@ -933,9 +942,10 @@ export const dggsCompactTool: ProcessingAlgorithm = {
       return;
     }
 
-    // DGGAL is client-side WASM; no DuckDB / no antimeridian unwrap.
+    // DGGAL is client-side WASM; no DuckDB.
     if (type === "dggal") {
       try {
+        const fixAntimeridian = resolveFixAntimeridian(ctx, "dggal");
         await withDggalDggrs(dggalType, (engine) => {
           if (mode === "expand") {
             const tokens = tokensFromDggalLayer(layer.geojson!, cellField);
@@ -953,9 +963,19 @@ export const dggsCompactTool: ProcessingAlgorithm = {
               );
               return;
             }
-            emitResult(expandDggalFeatureCollection(engine, layer.geojson!, res, { cellField }));
+            emitResult(
+              expandDggalFeatureCollection(engine, layer.geojson!, res, {
+                cellField,
+                unwrap: fixAntimeridian,
+              }),
+            );
           } else {
-            emitResult(compactDggalFeatureCollection(engine, layer.geojson!, { cellField }));
+            emitResult(
+              compactDggalFeatureCollection(engine, layer.geojson!, {
+                cellField,
+                unwrap: fixAntimeridian,
+              }),
+            );
           }
         });
       } catch (error) {
@@ -966,9 +986,10 @@ export const dggsCompactTool: ProcessingAlgorithm = {
     }
 
     const duckdb = requireDuckDb(ctx);
-    await duckdb.ensureExtensions(["spatial", extensionForDggs(type)!]);
-    const registered = await duckdb.registerGeoJson(layer.geojson);
+    let registered: DuckDbGeoJsonSource | null = null;
     try {
+      await duckdb.ensureExtensions(["spatial", extensionForDggs(type)!]);
+      registered = await duckdb.registerGeoJson(layer.geojson);
       if (mode === "expand") {
         const countSql =
           type === "a5"
@@ -1001,17 +1022,17 @@ export const dggsCompactTool: ProcessingAlgorithm = {
             : buildH3ExpandSql(registered.sql, res, cellField);
 
       const rows = await duckdb.query(sql);
-      const fixAntimeridian = type === "h3" && resolveFixAntimeridian(ctx, "h3");
+      const fixAntimeridian = resolveFixAntimeridian(ctx, type);
       const fc =
         type === "a5"
-          ? a5RowsToFeatureCollection(rows)
+          ? a5RowsToFeatureCollection(rows, fixAntimeridian)
           : rowsToFeatureCollection(rows, fixAntimeridian);
       emitResult(fc);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       ctx.log(`Error: ${message}`);
     } finally {
-      await registered.release();
+      await registered?.release();
     }
   },
 };

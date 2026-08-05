@@ -57,11 +57,11 @@ export function suggestResolution(
   return 0;
 }
 
-function sqlStr(value: string): string {
+export function sqlStr(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
-function sqlIdent(value: string): string {
+export function sqlIdent(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
@@ -74,6 +74,8 @@ export function bboxToWktPolygon(bbox: [number, number, number, number]): string
 /**
  * Clamp a lon/lat bbox into WGS84. Spans wider than 180° of longitude (typical
  * zoomed-out MapLibre viewports / world copies) collapse to [-180, 180].
+ * Edges outside ±180° also collapse to the full-width path so clipping does
+ * not silently drop coverage (e.g. west=-190, east=-10).
  * Callers that polyfill must still split that full-width ring — DuckDB H3
  * treats `POLYGON((-180 … 180 …))` as a dateline sliver (~tens of cells).
  */
@@ -87,7 +89,7 @@ export function normalizeLonLatBbox(
 
   let lonSpan = east - west;
   if (lonSpan < 0) lonSpan += 360;
-  if (lonSpan > 180) {
+  if (lonSpan > 180 || west < -180 || east > 180 || west > 180 || east < -180) {
     return [-180, south, 180, north];
   }
 

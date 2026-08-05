@@ -553,6 +553,15 @@ const PROCESSING_RUN_KINDS = new Set<ProcessingRunKind>([
 ]);
 
 /**
+ * Old H3 vector-tool IDs from projects saved before the DGGS rename.
+ * Mapped onto current tool ids during project load.
+ */
+const LEGACY_H3_PROCESSING_TOOL_IDS: Readonly<Record<string, string>> = {
+  "h3-grid": "dggs-grid",
+  "h3-bin-points": "dggs-bin",
+};
+
+/**
  * Coerce an untrusted (possibly hand-edited) `processingHistory` array into
  * valid {@link ProcessingRun} records. Drops entries without a usable id, tool
  * id, or known kind, de-duplicates by id, keeps `parameters` as a plain object,
@@ -576,7 +585,7 @@ export function normalizeProcessingHistory(value: unknown): ProcessingRun[] | nu
     if (!entry || typeof entry !== "object") continue;
     const candidate = entry as Partial<ProcessingRun>;
     const id = normalizeString(candidate.id).trim();
-    const toolId = normalizeString(candidate.toolId).trim();
+    let toolId = normalizeString(candidate.toolId).trim();
     const kind = candidate.kind;
     if (!id || !toolId || seen.has(id)) continue;
     if (!kind || !PROCESSING_RUN_KINDS.has(kind)) continue;
@@ -592,16 +601,22 @@ export function normalizeProcessingHistory(value: unknown): ProcessingRun[] | nu
     const outputLayerNames = Array.isArray(candidate.outputLayerNames)
       ? candidate.outputLayerNames.filter((name): name is string => typeof name === "string")
       : undefined;
+    let parameters: Record<string, unknown> =
+      candidate.parameters && typeof candidate.parameters === "object"
+        ? { ...(candidate.parameters as Record<string, unknown>) }
+        : {};
+    const migrated = LEGACY_H3_PROCESSING_TOOL_IDS[toolId];
+    if (migrated) {
+      toolId = migrated;
+      if (parameters.dggsType == null) parameters = { ...parameters, dggsType: "h3" };
+    }
     runs.push({
       id,
       kind,
       toolId,
       toolName: normalizeString(candidate.toolName) || toolId,
       engine: normalizeString(candidate.engine),
-      parameters:
-        candidate.parameters && typeof candidate.parameters === "object"
-          ? (candidate.parameters as Record<string, unknown>)
-          : {},
+      parameters,
       ...(inputLayerNames && Object.keys(inputLayerNames).length > 0 ? { inputLayerNames } : {}),
       ...(outputLayerNames?.length ? { outputLayerNames } : {}),
       ...(normalizeString(candidate.inputPath)

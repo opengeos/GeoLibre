@@ -1266,7 +1266,19 @@ export const useAppStore = create<AppState>()(
       setProcessingInitialTool: (toolId) =>
         set((s) => ({ ui: { ...s.ui, processingInitialTool: toolId } })),
       setConversionOpen: (kind) => set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
-      setVectorToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, vectorToolOpen: kind } })),
+      setVectorToolOpen: (kind) =>
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            // Pre-DGGS projects / callers may still pass h3-grid / h3-bin-points.
+            vectorToolOpen:
+              (kind as string | null) === "h3-grid"
+                ? "dggs-grid"
+                : (kind as string | null) === "h3-bin-points"
+                  ? "dggs-bin"
+                  : kind,
+          },
+        })),
       setNetworkToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, networkToolOpen: kind } })),
       setStatisticsToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, statisticsToolOpen: kind } })),
       setRasterToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, rasterToolOpen: kind } })),

@@ -33,9 +33,8 @@ describe("s2 resolution math", () => {
     const rTiny = suggestS2Resolution(tiny);
     assert.ok(rBig < rTiny);
     assert.ok(estimateS2CellCount(big, rBig) <= 10_000);
-    assert.ok(
-      estimateS2CellCount(big, 30) > S2_HARD_CAP || Number.isFinite(estimateS2CellCount(big, 20)),
-    );
+    assert.ok(estimateS2CellCount(big, 30) > S2_HARD_CAP);
+    assert.ok(Number.isFinite(estimateS2CellCount(big, 20)));
   });
 });
 

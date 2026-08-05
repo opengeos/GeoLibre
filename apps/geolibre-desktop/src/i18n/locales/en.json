@@ -3992,7 +3992,8 @@
       "sidecarUnavailablePyodide": "The GeoPandas sidecar is not available. Start the sidecar with the vector extra, or switch to Python (Pyodide).",
       "pyodideNote": "Runs GeoPandas in your browser. The first run downloads the Python runtime (one-time, needs an internet connection).",
       "run": "Run",
-      "outputPlaceholder": "Output will appear here."
+      "outputPlaceholder": "Output will appear here.",
+      "resolutionRange": "Resolution (0-{{max}})"
     }
   },
   "segmentation": {

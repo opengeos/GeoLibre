@@ -363,8 +363,8 @@ export function binPointsToS2(
     const properties: Record<string, unknown> = { ...feature.properties, count: acc.count };
     if (op === "sum") properties.value = acc.sum;
     else if (op === "mean") properties.value = acc.count > 0 ? acc.sum / acc.count : 0;
-    else if (op === "min") properties.value = acc.min;
-    else if (op === "max") properties.value = acc.max;
+    else if (op === "min") properties.value = Number.isFinite(acc.min) ? acc.min : null;
+    else if (op === "max") properties.value = Number.isFinite(acc.max) ? acc.max : null;
     features.push({ ...feature, properties });
   }
   return { type: "FeatureCollection", features };

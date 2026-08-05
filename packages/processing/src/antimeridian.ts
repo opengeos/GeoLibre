@@ -14,16 +14,17 @@ export function unwrapAntimeridianRing(ring: number[][]): number[][] {
   const closed = ring.length > 1 && last[0] === firstLon && last[1] === firstLat;
   const limit = closed ? ring.length - 1 : ring.length;
 
-  const out: number[][] = [[firstLon, firstLat]];
+  // Preserve elevation / M and any further components; only longitude shifts.
+  const out: number[][] = [[...ring[0]!]];
   for (let i = 1; i < limit; i += 1) {
     let lon = ring[i]![0]!;
-    const lat = ring[i]![1]!;
+    const rest = ring[i]!.slice(1);
     const prev = out[i - 1]![0]!;
     while (lon - prev > 180) lon -= 360;
     while (lon - prev < -180) lon += 360;
-    out.push([lon, lat]);
+    out.push([lon, ...rest]);
   }
-  if (closed) out.push([out[0]![0]!, out[0]![1]!]);
+  if (closed) out.push([...out[0]!]);
   return out;
 }
 

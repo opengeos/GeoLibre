@@ -196,7 +196,7 @@ describe("dggs compact tool", () => {
     assert.ok(typeParam?.options?.some((o) => o.value === "s2"));
     assert.ok(typeParam?.options?.some((o) => o.value === "dggal"));
     const fix = dggsCompactTool.parameters.find((p) => p.id === "fixAntimeridian");
-    assert.deepEqual(fix?.visibleWhen, { param: "dggsType", in: ["h3", "s2"] });
+    assert.deepEqual(fix?.visibleWhen, { param: "dggsType", in: ["h3", "s2", "a5", "dggal"] });
     const dggalType = dggsCompactTool.parameters.find((p) => p.id === "dggalType");
     assert.deepEqual(dggalType?.visibleWhen, { param: "dggsType", in: ["dggal"] });
   });

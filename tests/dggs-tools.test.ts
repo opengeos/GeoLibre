@@ -87,7 +87,7 @@ function mockDuckDb(): DuckDbCapability & {
     query: async (sql: string) => {
       queries.push(sql);
       const geojson = '{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}';
-      if (sql.includes("a5_") || sql.includes("a5_lonlat")) {
+      if (sql.includes("a5_")) {
         return [{ a5: "1600000000000000", geojson, count: 1 }];
       }
       if (sql.includes("geo_to_seqnum") || sql.includes("seqnum_to_boundary")) {
@@ -132,12 +132,15 @@ describe("dggs generator", () => {
     assert.equal(dggsBinPointsTool.name, "DGGS Binning");
   });
 
-  it("exposes Fix antimeridian for H3, S2, and DGGRID, default checked", () => {
+  it("exposes Fix antimeridian for all DGGS backends, default checked", () => {
     const param = createDggsGridTool.parameters.find((p) => p.id === "fixAntimeridian");
     assert.ok(param);
     assert.equal(param.type, "boolean");
     assert.equal(param.default, true);
-    assert.deepEqual(param.visibleWhen, { param: "dggsType", in: ["h3", "s2", "dggrid"] });
+    assert.deepEqual(param.visibleWhen, {
+      param: "dggsType",
+      in: ["h3", "s2", "a5", "dggrid", "dggal"],
+    });
     assert.equal(
       dggsBinPointsTool.parameters.find((p) => p.id === "fixAntimeridian")?.default,
       true,
@@ -357,12 +360,10 @@ describe("dggs generator", () => {
       source: "viewport",
       resolution: 30,
     });
-    // res 30 is valid for ISEA3H but will hit the hard cell-count cap on a 1° viewport.
+    // res 30 is valid for ISEA3H but always exceeds the hard cell-count cap on a 1° viewport.
     await createDggsGridTool.run(okIsea3.ctx);
-    assert.ok(
-      okIsea3.added.length === 1 || okIsea3.logs.some((l) => /cap|cells/i.test(l)),
-      "ISEA3H res 30 is in range (may still abort on hard cell cap)",
-    );
+    assert.equal(okIsea3.added.length, 0);
+    assert.ok(okIsea3.logs.some((l) => /cap/i.test(l)));
   });
 
   it("defaults dggsType to h3", async () => {

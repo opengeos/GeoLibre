@@ -3,6 +3,7 @@ import { detectGeometryProfile, type MapController } from "@geolibre/map";
 import {
   VECTOR_TOOLS,
   getVectorTool,
+  resolveVectorRerun,
   runVectorTool,
   fetchVectorStatus,
   maxResolutionForDggs,
@@ -110,9 +111,10 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
   // win over the defaults when both effects fire in the same commit.
   useEffect(() => {
     if (!open || !rerun || rerun.kind !== "vector") return;
-    // A saved-project history entry can reference a tool that was renamed or
-    // removed since; drop the request instead of leaving it pending forever.
-    if (!getVectorTool(rerun.toolId)) {
+    // History may still carry pre-DGGS H3 tool ids — map them before lookup so
+    // we do not clear the request as "unavailable" and leave it pending.
+    const resolved = resolveVectorRerun(rerun.toolId, rerun.parameters);
+    if (!getVectorTool(resolved.toolId)) {
       setLog((prev) => [
         ...prev,
         `Error: ${t("processing.history.toolUnavailable", { toolId: rerun.toolId })}`,
@@ -120,8 +122,13 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
       setProcessingRerun(null);
       return;
     }
-    if (rerun.toolId !== tool.id) return;
-    setParams({ ...rerun.parameters });
+    if (resolved.toolId !== tool.id) {
+      // Alias mapped to a different tool than the one currently selected
+      // (e.g. History opened with a stale VectorToolKind). Switch over.
+      if (selectedId !== resolved.toolId) setSelectedId(resolved.toolId);
+      return;
+    }
+    setParams({ ...resolved.parameters });
     if (rerun.engine === "client" || rerun.engine === "sidecar" || rerun.engine === "pyodide") {
       // A history entry recorded on a sidecar run re-runs on Pyodide in the
       // Mac App Store build, where the sidecar engine does not exist.
@@ -129,7 +136,7 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     }
     setProcessingRerun(null);
     if (rerun.autoRun) setAutoRunPending(true);
-  }, [open, rerun, tool, setProcessingRerun, t]);
+  }, [open, rerun, tool, selectedId, setProcessingRerun, t]);
 
   // Prefill the DGGS Generator's manual bounding-box fields from the current map
   // viewport when the user first switches to that source, so they can tweak the
@@ -491,12 +498,14 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
                           params.dggsType === "dggal"
                             ? params.dggsType
                             : "h3";
-                        const subtype = dggsType === "dggal" ? params.dggalType : params.dggridType;
+                        const rawSubtype =
+                          dggsType === "dggal" ? params.dggalType : params.dggridType;
+                        const subtype = typeof rawSubtype === "string" ? rawSubtype : undefined;
                         const max = maxResolutionForDggs(dggsType, subtype);
                         return {
                           ...param,
                           max,
-                          label: `Resolution (0-${max})`,
+                          label: t("processing.vectorTools.resolutionRange", { max }),
                         };
                       })()
                     : param;

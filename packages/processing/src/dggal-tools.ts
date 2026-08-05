@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, Geometry, Polygon, Position } from "geojson";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import { point as turfPoint } from "@turf/helpers";
+import { unwrapAntimeridianRing } from "./antimeridian";
 
 /**
  * Named DGGAL DGGRS types for DGGS Generator / Binning. Keys are stable UI
@@ -166,20 +167,24 @@ function normalizeLon(lon: number): number {
   return x;
 }
 
-function zoneRing(engine: DggalDggrs, zone: bigint): [number, number][] {
+function zoneRing(engine: DggalDggrs, zone: bigint, unwrap: boolean): number[][] {
   const ring = engine
     .getZoneRefinedWGS84Vertices(zone, 0)
-    .map(({ lat, lon }): [number, number] => [lon * DEG_PER_RAD, lat * DEG_PER_RAD]);
+    .map(({ lat, lon }): number[] => [lon * DEG_PER_RAD, lat * DEG_PER_RAD]);
   if (ring.length > 0) {
     const [firstLng, firstLat] = ring[0]!;
     const [lastLng, lastLat] = ring[ring.length - 1]!;
-    if (firstLng !== lastLng || firstLat !== lastLat) ring.push([firstLng, firstLat]);
+    if (firstLng !== lastLng || firstLat !== lastLat) ring.push([firstLng!, firstLat!]);
   }
-  return ring;
+  return unwrap ? unwrapAntimeridianRing(ring) : ring;
 }
 
 /** Convert a DGGAL zone text ID to a GeoJSON polygon feature. */
-export function dggalZoneFeature(engine: DggalDggrs, cell: string): Feature<Polygon> {
+export function dggalZoneFeature(
+  engine: DggalDggrs,
+  cell: string,
+  unwrap = true,
+): Feature<Polygon> {
   const zone = engine.getZoneFromTextID(cell);
   const centroid = engine.getZoneWGS84Centroid(zone);
   return {
@@ -191,7 +196,7 @@ export function dggalZoneFeature(engine: DggalDggrs, cell: string): Feature<Poly
       center_lat: centroid.lat * DEG_PER_RAD,
       center_lng: centroid.lon * DEG_PER_RAD,
     },
-    geometry: { type: "Polygon", coordinates: [zoneRing(engine, zone)] },
+    geometry: { type: "Polygon", coordinates: [zoneRing(engine, zone, unwrap)] },
   };
 }
 
@@ -199,10 +204,11 @@ export function dggalZoneFeature(engine: DggalDggrs, cell: string): Feature<Poly
 export function dggalTokensToFeatureCollection(
   engine: DggalDggrs,
   tokens: Iterable<string>,
+  unwrap = true,
 ): FeatureCollection<Polygon> {
   return {
     type: "FeatureCollection",
-    features: [...tokens].map((token) => dggalZoneFeature(engine, token)),
+    features: [...tokens].map((token) => dggalZoneFeature(engine, token, unwrap)),
   };
 }
 
@@ -230,11 +236,13 @@ export function dggalGridFromBbox(
   bounds: [number, number, number, number],
   resolution: number,
   limit = DGGAL_HARD_CAP,
-  options: { compact?: boolean } = {},
+  options: { compact?: boolean; unwrap?: boolean } = {},
 ): FeatureCollection<Polygon> {
+  const unwrap = options.unwrap !== false;
   let [west, south, east, north] = bounds;
   south = Math.max(-90, Math.min(90, south));
   north = Math.max(-90, Math.min(90, north));
+  if (south > north) [south, north] = [north, south];
   if (east - west >= 360) {
     west = -180;
     east = 180;
@@ -245,8 +253,12 @@ export function dggalGridFromBbox(
   if (east < west) {
     // Cover each side without compacting, then compact once over the union so
     // sibling sets that straddle the antimeridian can still merge.
-    const left = dggalGridFromBbox(engine, [west, south, 180, north], resolution, limit);
-    const right = dggalGridFromBbox(engine, [-180, south, east, north], resolution, limit);
+    const left = dggalGridFromBbox(engine, [west, south, 180, north], resolution, limit, {
+      unwrap,
+    });
+    const right = dggalGridFromBbox(engine, [-180, south, east, north], resolution, limit, {
+      unwrap,
+    });
     const seen = new Set<string>();
     const features: Feature<Polygon>[] = [];
     for (const feature of [...left.features, ...right.features]) {
@@ -263,7 +275,7 @@ export function dggalGridFromBbox(
         engine,
         features.map((f) => String(f.properties?.dggal ?? f.id)),
       );
-      return dggalTokensToFeatureCollection(engine, tokens);
+      return dggalTokensToFeatureCollection(engine, tokens, unwrap);
     }
     return { type: "FeatureCollection", features };
   }
@@ -283,7 +295,7 @@ export function dggalGridFromBbox(
   }
   return {
     type: "FeatureCollection",
-    features: zones.map((zone) => dggalZoneFeature(engine, engine.getZoneTextID(zone))),
+    features: zones.map((zone) => dggalZoneFeature(engine, engine.getZoneTextID(zone), unwrap)),
   };
 }
 
@@ -296,8 +308,9 @@ export function dggalGridFromFeatureCollection(
   fc: FeatureCollection,
   resolution: number,
   limit = DGGAL_HARD_CAP,
-  options: { compact?: boolean } = {},
+  options: { compact?: boolean; unwrap?: boolean } = {},
 ): FeatureCollection<Polygon> {
+  const unwrap = options.unwrap !== false;
   const seen = new Set<string>();
   const features: Feature<Polygon>[] = [];
 
@@ -318,7 +331,9 @@ export function dggalGridFromFeatureCollection(
       }
     }
     if (!Number.isFinite(minX) || minX >= maxX || minY >= maxY) return;
-    const candidates = dggalGridFromBbox(engine, [minX, minY, maxX, maxY], resolution, limit);
+    const candidates = dggalGridFromBbox(engine, [minX, minY, maxX, maxY], resolution, limit, {
+      unwrap,
+    });
     for (const feature of candidates.features) {
       const id = String(feature.properties?.dggal ?? feature.id);
       if (seen.has(id)) continue;
@@ -349,7 +364,7 @@ export function dggalGridFromFeatureCollection(
       engine,
       features.map((f) => String(f.properties?.dggal ?? f.id)),
     );
-    return dggalTokensToFeatureCollection(engine, tokens);
+    return dggalTokensToFeatureCollection(engine, tokens, unwrap);
   }
   return { type: "FeatureCollection", features };
 }
@@ -440,10 +455,10 @@ export function estimateDggalExpandCount(
 export function compactDggalFeatureCollection(
   engine: DggalDggrs,
   fc: FeatureCollection,
-  options: { cellField?: string } = {},
+  options: { cellField?: string; unwrap?: boolean } = {},
 ): FeatureCollection<Polygon> {
   const tokens = compactDggalTokens(engine, tokensFromDggalLayer(fc, options.cellField ?? "dggal"));
-  return dggalTokensToFeatureCollection(engine, tokens);
+  return dggalTokensToFeatureCollection(engine, tokens, options.unwrap !== false);
 }
 
 /** Expand a polygon cell layer to a uniform DGGAL level. */
@@ -451,14 +466,14 @@ export function expandDggalFeatureCollection(
   engine: DggalDggrs,
   fc: FeatureCollection,
   level: number,
-  options: { cellField?: string } = {},
+  options: { cellField?: string; unwrap?: boolean } = {},
 ): FeatureCollection<Polygon> {
   const tokens = expandDggalTokens(
     engine,
     tokensFromDggalLayer(fc, options.cellField ?? "dggal"),
     level,
   );
-  return dggalTokensToFeatureCollection(engine, tokens);
+  return dggalTokensToFeatureCollection(engine, tokens, options.unwrap !== false);
 }
 
 /** Supported point-binning aggregate operations (same set as H3). */
@@ -485,7 +500,9 @@ export function binPointsToDggal(
   resolution: number,
   op: DggalAggOp,
   field?: string,
+  options: { unwrap?: boolean } = {},
 ): FeatureCollection<Polygon> {
+  const unwrap = options.unwrap !== false;
   type Acc = { count: number; sum: number; min: number; max: number };
   const byCell = new Map<string, Acc>();
 
@@ -525,12 +542,12 @@ export function binPointsToDggal(
 
   const features: Feature<Polygon>[] = [];
   for (const [token, acc] of byCell) {
-    const feature = dggalZoneFeature(engine, token);
+    const feature = dggalZoneFeature(engine, token, unwrap);
     const properties: Record<string, unknown> = { ...feature.properties, count: acc.count };
     if (op === "sum") properties.value = acc.sum;
     else if (op === "mean") properties.value = acc.count > 0 ? acc.sum / acc.count : 0;
-    else if (op === "min") properties.value = acc.min;
-    else if (op === "max") properties.value = acc.max;
+    else if (op === "min") properties.value = Number.isFinite(acc.min) ? acc.min : null;
+    else if (op === "max") properties.value = Number.isFinite(acc.max) ? acc.max : null;
     features.push({ ...feature, properties });
   }
   return { type: "FeatureCollection", features };
