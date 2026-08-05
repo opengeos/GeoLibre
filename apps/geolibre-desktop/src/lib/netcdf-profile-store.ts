@@ -37,8 +37,15 @@ export const MAX_PROFILE_SAMPLES = 6;
 let samples: NetcdfProfileSample[] = [];
 /** Whether the chart is detached into the floating window over the map. */
 let poppedOut = false;
-/** Feeds both `id` and `order`; reset with the list so labels restart at 1. */
-let counter = 0;
+/**
+ * Feeds `id`. Never reset, unlike `orderCounter`: a profile read in flight when
+ * the list is cleared still resolves against whatever id it was issued, so
+ * recycling ids would let that stale read attach its spectrum to an unrelated
+ * later sample that happened to reuse the number.
+ */
+let idCounter = 0;
+/** Feeds `order`; reset with the list so marker labels restart at 1. */
+let orderCounter = 0;
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -60,9 +67,10 @@ export function addNetcdfProfileSample(sample: Omit<NetcdfProfileSample, "id" | 
   const sameLayer = samples.filter((item) => item.layerId === sample.layerId);
   // A layer switch starts a fresh session, so numbering restarts at 1 rather
   // than continuing from the discarded layer's count.
-  if (sameLayer.length !== samples.length) counter = 0;
-  counter += 1;
-  const added: NetcdfProfileSample = { ...sample, id: counter, order: counter };
+  if (sameLayer.length !== samples.length) orderCounter = 0;
+  idCounter += 1;
+  orderCounter += 1;
+  const added: NetcdfProfileSample = { ...sample, id: idCounter, order: orderCounter };
   samples = [...sameLayer, added].slice(-MAX_PROFILE_SAMPLES);
   emit();
   return added.id;
@@ -88,7 +96,7 @@ export function setNetcdfProfileSampleProfile(id: number, profile: LocalNetcdfPr
 export function clearNetcdfProfileSamples(): void {
   if (samples.length === 0 && !poppedOut) return;
   samples = [];
-  counter = 0;
+  orderCounter = 0;
   // The window charts the samples, so leaving it open would strand an empty
   // frame over the map.
   poppedOut = false;
@@ -112,7 +120,7 @@ export function clearNetcdfProfileSamplesForLayer(layerId: string): void {
   // Emptied by this clear, so restart numbering and dock the (now empty) window,
   // exactly as a full clear would.
   if (kept.length === 0) {
-    counter = 0;
+    orderCounter = 0;
     poppedOut = false;
   }
   emit();

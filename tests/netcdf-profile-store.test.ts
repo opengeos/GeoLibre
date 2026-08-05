@@ -88,6 +88,29 @@ describe("netcdf profile store", () => {
     assert.equal(getNetcdfProfileSamples()[0].order, 1);
   });
 
+  it("never reissues an id, so a stale read cannot land on a later sample", () => {
+    // Marker numbering restarts at 1 after a clear, but ids must not: a read
+    // still in flight when the user cleared would otherwise resolve onto a new,
+    // unrelated point that happened to recycle its number.
+    const stale = addNetcdfProfileSample(sample("a", 1));
+    clearNetcdfProfileSamples();
+    const fresh = addNetcdfProfileSample(sample("a", 2));
+    assert.notEqual(stale, fresh);
+    assert.equal(getNetcdfProfileSamples()[0].order, 1);
+
+    setNetcdfProfileSampleProfile(stale, PROFILE);
+    assert.equal(getNetcdfProfileSamples()[0].profile, undefined);
+  });
+
+  it("never reissues an id after a per-layer clear either", () => {
+    const stale = addNetcdfProfileSample(sample("a", 1));
+    clearNetcdfProfileSamplesForLayer("a");
+    const fresh = addNetcdfProfileSample(sample("a", 2));
+    assert.notEqual(stale, fresh);
+    setNetcdfProfileSampleProfile(stale, PROFILE);
+    assert.equal(getNetcdfProfileSamples()[0].profile, undefined);
+  });
+
   it("clears one layer's samples without touching another's", () => {
     // An off-grid click on the identify target must not wipe a chart another
     // layer's Style panel is still showing.

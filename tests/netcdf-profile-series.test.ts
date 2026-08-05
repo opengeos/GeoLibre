@@ -117,6 +117,22 @@ describe("netcdf profile series", () => {
     assert.deepEqual(csv?.split("\n").slice(1), ["0,0.1,0.4", "1,0.2,", "2,0.3,"]);
   });
 
+  it("drops noise units from the header, as the chart's axis label does", () => {
+    const csv = buildNetcdfProfileCsv([
+      sample(1, [0.5], { name: "bands", size: 1, units: "unitless" }),
+    ]);
+    assert.equal(csv?.split("\n")[0].split(",")[0], "bands");
+  });
+
+  it("neutralizes a formula in an axis name out of the file's metadata", () => {
+    // A dimension name is untrusted file content; a leading `=` would execute
+    // when the export is opened in a spreadsheet.
+    const csv = buildNetcdfProfileCsv([sample(1, [0.5], { name: "=cmd|'/c calc'!A0", size: 1 })]);
+    // The leading apostrophe is what stops the spreadsheet evaluating it; the
+    // cell needs no quoting, since it carries no comma, quote, or newline.
+    assert.equal(csv?.split("\n")[0].split(",")[0], "'=cmd|'/c calc'!A0");
+  });
+
   it("skips samples with no profile, and returns null when none has one", () => {
     assert.equal(buildNetcdfProfileCsv([sample(1), sample(2)]), null);
     const csv = buildNetcdfProfileCsv([sample(1), sample(2, [0.5])]);

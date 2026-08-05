@@ -32,9 +32,9 @@ import { exportVectorLayer } from "../../lib/vector-export";
 /** Default panel geometry (px). The panel opens flush in the top-left corner,
  * inset by {@link PANEL_MARGIN} on both sides, and its max height keeps it clear
  * of the Time Slider timeline at the bottom; the user can then drag/resize it.
- * The CSS default below and {@link PixelTimeSeriesControl.measureRect}'s
- * fallback describe the same corner, so a drag that starts from the untouched
- * default does not jump. */
+ * The CSS default below and {@link PANEL_FALLBACK_RECT}, which {@link
+ * useFloatingPanelRect} measures against, describe the same corner, so a drag
+ * that starts from the untouched default does not jump. */
 const PANEL_DEFAULT_W = 448;
 const PANEL_MIN_W = 320;
 const PANEL_MIN_H = 240;

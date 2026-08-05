@@ -272,21 +272,6 @@ export function encodeImageOverlay(image: LocalNetcdfImage): string {
   return canvas.toDataURL("image/png");
 }
 
-/**
- * CF `units` values that mean "this quantity has no unit". Writers spell that
- * several ways, and printing any of them next to a number is noise: EMIT
- * reflectance declares `unitless`, so a readout would say "0.0145 unitless".
- */
-const EMPTY_UNITS = new Set(["", "unitless", "dimensionless", "none", "n/a", "na", "-", "1"]);
-
-/**
- * A variable's units when they are worth showing, else undefined.
- *
- * @param units - The CF `units` attribute, if any.
- * @returns The units to render beside a value, or undefined to render none.
- */
-export function displayUnits(units: string | undefined): string | undefined {
-  const trimmed = units?.trim();
-  if (!trimmed || EMPTY_UNITS.has(trimmed.toLowerCase())) return undefined;
-  return trimmed;
-}
+// Lives in its own dependency-free module so the profile CSV builder can reach
+// it without importing this one, which pulls in the plugin barrel.
+export { displayUnits } from "./cf-units";

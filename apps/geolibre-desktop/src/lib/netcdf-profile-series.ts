@@ -1,5 +1,6 @@
 import type { NetcdfProfileSample } from "./netcdf-profile-store";
-import { csvCell } from "./csv";
+import { csvCell, spreadsheetSafeText } from "./csv";
+import { displayUnits } from "./cf-units";
 
 /**
  * Per-sample colors, shared by the chart lines, the legend swatches, and the
@@ -129,14 +130,21 @@ export function buildNetcdfProfileCsv(samples: NetcdfProfileSample[]): string | 
   if (charted.length === 0) return null;
 
   const first = charted[0];
-  const axisName = first.profile.axis.units
-    ? `${first.profile.axis.name} (${first.profile.axis.units})`
+  // Through `displayUnits` like the chart's own axis label: a coordinate
+  // variable can declare `unitless`/`1`/`n/a`, and the export should not say
+  // "wavelength (1)" where the chart it came from says "wavelength".
+  const axisUnits = displayUnits(first.profile.axis.units);
+  const axisName = axisUnits
+    ? `${first.profile.axis.name} (${axisUnits})`
     : first.profile.axis.name;
   const positions = netcdfAxisPositions(first);
   const rowCount = Math.max(...charted.map((sample) => sample.profile.values.length));
 
   const header = [
-    csvCell(axisName),
+    // The axis name and units are free text out of the file's own metadata, so
+    // guard the export against spreadsheet formula injection. The point columns
+    // below are built from numbers and stay verbatim.
+    csvCell(spreadsheetSafeText(axisName)),
     ...charted.map((sample) =>
       // The lon/lat is what identifies the pixel; the point number ties the
       // column back to its marker on the map.
