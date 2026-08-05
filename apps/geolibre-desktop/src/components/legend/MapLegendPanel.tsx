@@ -931,7 +931,12 @@ function LegendClassRow({
       )}
       <div className="flex items-center gap-1.5">
         {row.marker ? (
-          <MarkerSwatch marker={row.marker} opacity={entry.opacity} />
+          <MarkerSwatch
+            marker={row.marker}
+            size={row.size}
+            maxSize={maxRowSize > 0 ? maxRowSize : undefined}
+            opacity={entry.opacity}
+          />
         ) : (
           <GeometrySwatch
             shape={row.shape}

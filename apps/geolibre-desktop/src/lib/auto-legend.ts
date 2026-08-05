@@ -457,6 +457,8 @@ function proportionalSizeRows(
   locale: string | undefined,
   /** Field caption for the block, when the entry's own caption names another. */
   caption?: string,
+  /** The layer's point marker, so the ramp shows the symbol the map draws. */
+  marker?: LegendMarker,
 ): RawRow[] {
   const rowShape: LayerSwatchShape = shape === "line" ? "line" : "circle";
   return [0, 0.5, 1].map((ratio, index) => ({
@@ -464,6 +466,7 @@ function proportionalSizeRows(
     color,
     shape: rowShape,
     size: lerp(range.minRadius, range.maxRadius, ratio),
+    ...(marker ? { marker } : {}),
     ...(index === 0 && caption ? { caption } : {}),
   }));
 }
@@ -492,6 +495,8 @@ function sizeClassRows(
   rows: RawRow[],
   stops: VectorStyleStop[],
   range: ProportionalSizeRange,
+  /** The layer's point marker, so the ramp shows the symbol the map draws. */
+  marker?: LegendMarker,
 ): RawRow[] {
   return rows.map((row, index) => {
     const from = Number(stops[index]?.value);
@@ -499,7 +504,11 @@ function sizeClassRows(
     // The top class has no upper bound ("≥ x"): represent it at its lower bound.
     const representative = Number.isFinite(to) ? (from + to) / 2 : from;
     if (!Number.isFinite(representative)) return row;
-    return { ...row, size: proportionalSize(range, representative) };
+    return {
+      ...row,
+      size: proportionalSize(range, representative),
+      ...(marker ? { marker } : {}),
+    };
   });
 }
 
@@ -673,6 +682,11 @@ function vectorParts(
   // sizing on exactly the layers the map actually sizes. Only circles and line
   // strokes carry a size; polygon fills ignore it.
   const sizeRange = shape === "circle" || shape === "line" ? proportionalSizeRange(style) : null;
+  // A marker layer's proportional rows draw the marker (scaled by icon-size on
+  // the map), not a circle, so carry it onto every sized row. Lines never take a
+  // marker. Markers bake ONE sprite from markerColor, so a per-row color is not
+  // something the map renders here — the marker is the faithful symbol.
+  const sizeMarker = shape === "circle" ? pointMarkerSwatch(style)?.marker : undefined;
 
   if ((mode === "graduated" || mode === "categorized") && stops.length > 0) {
     const classProperty = styleValue(style, "vectorStyleProperty");
@@ -683,7 +697,9 @@ function vectorParts(
       sizeRange !== null && mode === "graduated" && sizeRange.property === classProperty;
     return {
       rows: [
-        ...(merged && sizeRange ? sizeClassRows(classRows, stops, sizeRange) : classRows),
+        ...(merged && sizeRange
+          ? sizeClassRows(classRows, stops, sizeRange, sizeMarker)
+          : classRows),
         ...(sizeRange && !merged
           ? proportionalSizeRows(
               sizeRange,
@@ -693,6 +709,7 @@ function vectorParts(
               // The entry caption already names the classified field; say which
               // field this second block sizes by so the two are not confused.
               sizeRange.property === classProperty ? undefined : sizeRange.property,
+              sizeMarker,
             )
           : []),
         ...diagrams,
@@ -715,6 +732,7 @@ function vectorParts(
                 shape,
                 locale,
                 sizeRange.property,
+                sizeMarker,
               )
             : []),
           ...diagrams,
@@ -737,6 +755,7 @@ function vectorParts(
                 shape,
                 locale,
                 sizeRange.property === parts.fieldLabel ? undefined : sizeRange.property,
+                sizeMarker,
               )
             : []),
           ...diagrams,
@@ -751,7 +770,14 @@ function vectorParts(
   // Single symbology: the size ramp IS the classification, so it carries the
   // field caption and replaces the single-swatch heading chip.
   const sizeRows = sizeRange
-    ? proportionalSizeRows(sizeRange, styleValue(style, "fillColor") || NEUTRAL, shape, locale)
+    ? proportionalSizeRows(
+        sizeRange,
+        styleValue(style, "fillColor") || NEUTRAL,
+        shape,
+        locale,
+        undefined,
+        sizeMarker,
+      )
     : [];
   const marker = pointMarkerSwatch(style);
   const headerSwatch = marker

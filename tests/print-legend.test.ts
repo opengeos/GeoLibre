@@ -199,6 +199,64 @@ describe("buildLegend", () => {
     assert.equal(legend[0].swatches[0].marker, undefined);
   });
 
+  it("draws a marker layer's proportional size ramp with the marker", () => {
+    const svg = "https://example.com/bee.svg";
+    const legend = buildLegend([
+      makeLayer({
+        name: "Ruchers",
+        metadata: { geometryType: "point" },
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#3388ff",
+          markerEnabled: true,
+          markerShape: "custom",
+          markerColor: "#3b82f6",
+          markerSvg: svg,
+          proportionalSizeEnabled: true,
+          proportionalSizeProperty: "nb_ruches",
+          proportionalSizeMinValue: 1,
+          proportionalSizeMaxValue: 86,
+          proportionalSizeMinRadius: 4,
+          proportionalSizeMaxRadius: 24,
+        } as LayerStyle,
+      }),
+    ]);
+    // Three sized rows, each carrying the marker the map scales through
+    // icon-size, rather than a plain circle (GH discussion #1711).
+    assert.deepEqual(
+      legend[0].swatches.map((swatch) => [swatch.size, swatch.marker?.shape, swatch.marker?.svg]),
+      [
+        [4, "custom", svg],
+        [14, "custom", svg],
+        [24, "custom", svg],
+      ],
+    );
+  });
+
+  it("keeps a line layer's proportional stroke ramp markerless", () => {
+    const legend = buildLegend([
+      makeLayer({
+        name: "Rivers",
+        metadata: { geometryType: "line" },
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#3388ff",
+          markerEnabled: true,
+          markerShape: "star",
+          markerColor: "#ff8800",
+          proportionalSizeEnabled: true,
+          proportionalSizeProperty: "flow",
+          proportionalSizeMinValue: 0,
+          proportionalSizeMaxValue: 100,
+          proportionalSizeMinRadius: 1,
+          proportionalSizeMaxRadius: 8,
+        } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches.length, 3);
+    assert.ok(legend[0].swatches.every((swatch) => swatch.marker === undefined));
+  });
+
   it("leaves non-marker layers with a plain fill swatch and no marker", () => {
     const legend = buildLegend([
       makeLayer({
