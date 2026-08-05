@@ -80,10 +80,16 @@ export function useNetcdfIdentify(
     canvas.style.cursor = "crosshair";
     let popup: maplibregl.Popup | null = null;
     // Each deferred read below is addressed to the point it was started for, so
-    // several can be in flight at once; they are tracked only so the timeouts
-    // can be dropped on teardown.
+    // several can be in flight at once; they are tracked only so a read that has
+    // not started yet is not started after teardown.
+    //
+    // A read already in flight is deliberately *not* discarded on teardown: the
+    // effect tears down whenever the identify target changes, and switching away
+    // and back during a read that takes tens of seconds would otherwise leave
+    // that point permanently profile-less even though the fetch completed. The
+    // store's own guard is what makes this safe — a result for a point that has
+    // since been cleared or aged off the cap lands nowhere.
     const profileTimeouts = new Set<number>();
-    let disposed = false;
 
     const handleClick = (event: maplibregl.MapMouseEvent) => {
       const state = getNetcdfLayerState(activeLayerId);
@@ -154,7 +160,7 @@ export function useNetcdfIdentify(
         // this point, and attaching to a point that has since been cleared or
         // aged off the cap is a no-op, so a stale read lands nowhere.
         void readNetcdfProfile(activeLayerId, pixel.row, pixel.column).then((profile) => {
-          if (profile && !disposed) setNetcdfProfileSampleProfile(sampleId, profile);
+          if (profile) setNetcdfProfileSampleProfile(sampleId, profile);
         });
       }, 0);
       profileTimeouts.add(timeout);
@@ -162,7 +168,6 @@ export function useNetcdfIdentify(
 
     map.on("click", handleClick);
     return () => {
-      disposed = true;
       map.off("click", handleClick);
       for (const timeout of profileTimeouts) window.clearTimeout(timeout);
       profileTimeouts.clear();
