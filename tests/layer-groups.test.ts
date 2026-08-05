@@ -6,6 +6,7 @@ import {
   applyProjectToStore,
   buildLayerTree,
   createEmptyProject,
+  effectiveLayerRenderState,
   normalizeGroupContiguity,
   parseProject,
   projectFromStore,
@@ -126,6 +127,36 @@ describe("applyGroupEffects", () => {
     const result = applyGroupEffects(layers, groups);
     assert.equal(result[0].visible, false);
     assert.equal(result[0].opacity, 0.1);
+  });
+});
+
+describe("effectiveLayerRenderState", () => {
+  it("folds the whole group chain, matching applyGroupEffects", () => {
+    const child = layer("a", { groupId: "child", opacity: 0.8 });
+    const groups = [
+      group("parent", { opacity: 0.5, visible: false }),
+      group("child", { parentId: "parent", opacity: 0.25 }),
+    ];
+    assert.deepEqual(effectiveLayerRenderState(child, groups), {
+      visible: false,
+      opacity: 0.1,
+    });
+  });
+
+  it("returns the layer's own values when it is ungrouped", () => {
+    const orphan = layer("a", { opacity: 0.3, visible: false });
+    assert.deepEqual(effectiveLayerRenderState(orphan, [group("g", { visible: false })]), {
+      visible: false,
+      opacity: 0.3,
+    });
+  });
+
+  it("ignores a dangling groupId rather than dropping the layer", () => {
+    const dangling = layer("a", { groupId: "gone", opacity: 0.6 });
+    assert.deepEqual(effectiveLayerRenderState(dangling, [group("g", { opacity: 0.5 })]), {
+      visible: true,
+      opacity: 0.6,
+    });
   });
 });
 

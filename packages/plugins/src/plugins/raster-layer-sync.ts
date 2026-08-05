@@ -1,4 +1,11 @@
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, styleValue, useAppStore } from "@geolibre/core";
+import {
+  applyGroupEffects,
+  DEFAULT_LAYER_STYLE,
+  effectiveLayerRenderState,
+  type GeoLibreLayer,
+  styleValue,
+  useAppStore,
+} from "@geolibre/core";
 import type { RasterLayerInfo, RasterLayerState, RenderEngine } from "maplibre-gl-raster";
 
 export const RASTER_SOURCE_KIND = "maplibre-gl-raster";
@@ -240,6 +247,8 @@ export function syncRasterLayersToStoreWithOptions(
   const infos = control.getRasters();
   const infoIds = new Set(infos.map((info) => info.id));
   const panelCollapsed = rasterPanelCollapsedFromControl(control);
+  // Nothing below adds or edits a group, so one read covers the whole pass.
+  const groups = useAppStore.getState().layerGroups;
 
   syncingLayersToStore = true;
   try {
@@ -272,9 +281,21 @@ export function syncRasterLayersToStoreWithOptions(
       const metadata =
         Object.keys(preserved).length > 0 ? { ...layer.metadata, ...preserved } : layer.metadata;
 
+      // wireRasterStoreSync pushes the *group-folded* visibility/opacity at the
+      // control, so a control that reports those values back is echoing the
+      // group, not recording a user edit. Mirroring the echo would burn a
+      // hidden group's `false` into the layer's own `visible`, leaving it
+      // hidden after the group is shown again. Only a value that differs from
+      // the fold is a genuine control-side change.
+      const effective = effectiveLayerRenderState(existing, groups);
+      const visible = layer.visible === effective.visible ? existing.visible : layer.visible;
+      const opacity = numbersEqual(layer.opacity, effective.opacity)
+        ? existing.opacity
+        : layer.opacity;
+
       if (
-        existing.visible !== layer.visible ||
-        existing.opacity !== layer.opacity ||
+        existing.visible !== visible ||
+        existing.opacity !== opacity ||
         existing.sourcePath !== layer.sourcePath ||
         !recordsEqual(existing.source, layer.source) ||
         !recordsEqual(existing.metadata, metadata)
@@ -283,10 +304,10 @@ export function syncRasterLayersToStoreWithOptions(
           // Replace metadata wholesale so stale keys (error, bounds) cannot
           // survive a raster being swapped out under the same id.
           metadata,
-          opacity: layer.opacity,
+          opacity,
           source: layer.source,
           sourcePath: layer.sourcePath,
-          visible: layer.visible,
+          visible,
         });
       }
     }
@@ -314,7 +335,7 @@ export function wireRasterStoreSync(control: RasterSyncableControl): void {
       !activeControl ||
       syncingLayersToStore ||
       isRasterStoreSyncSuspended() ||
-      state.layers === previous.layers
+      (state.layers === previous.layers && state.layerGroups === previous.layerGroups)
     ) {
       return;
     }
@@ -323,9 +344,17 @@ export function wireRasterStoreSync(control: RasterSyncableControl): void {
     // when the previous snapshot held no control-managed rasters at all.
     if (!previous.layers.some(isRasterControlStoreLayer)) return;
 
-    const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
+    // Diff the *group-folded* visibility and opacity, not the layers' own
+    // fields: hiding or fading a parent group never touches a child layer, so
+    // watching `layer.visible` alone leaves a grouped raster on the map
+    // (GeoLibre#1717). A deck.gl-rendered raster has no MapLibre style layer
+    // for layer-sync to toggle, so this control push is its only channel.
+    const currentById = new Map(
+      applyGroupEffects(state.layers, state.layerGroups).map((layer) => [layer.id, layer]),
+    );
+    const previousLayers = applyGroupEffects(previous.layers, previous.layerGroups);
     runWithRasterStoreSyncSuspended(() => {
-      for (const layer of previous.layers) {
+      for (const layer of previousLayers) {
         if (!isRasterControlStoreLayer(layer)) continue;
 
         const current = currentById.get(layer.id);
@@ -614,6 +643,14 @@ function valuesEqual(left: unknown, right: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Opacity round-trips through the control as a float that a group fold has
+// multiplied, so compare the echo with a tolerance rather than by identity —
+// a last-bit difference would read as a user edit and overwrite the layer's
+// own opacity with the folded one.
+function numbersEqual(left: number, right: number): boolean {
+  return Math.abs(left - right) < 1e-9;
 }
 
 function serializableRasterState(state: RasterLayerState): Record<string, unknown> {

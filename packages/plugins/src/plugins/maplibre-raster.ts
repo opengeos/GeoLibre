@@ -1,4 +1,4 @@
-import { styleValue, useAppStore } from "@geolibre/core";
+import { effectiveLayerRenderState, styleValue, useAppStore } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
 import type {
   RasterControl,
@@ -565,6 +565,7 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
         if (!storeLayerIds.has(info.id)) control.removeRaster(info.id);
       }
 
+      const restoredGroups = useAppStore.getState().layerGroups;
       for (const layer of useAppStore.getState().layers) {
         if (!isRasterControlStoreLayer(layer)) continue;
         if (control.getRaster(layer.id)) continue;
@@ -587,6 +588,11 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
           continue;
         }
 
+        // A parent group's visibility/opacity never touch the child layer's
+        // own fields, so replay the folded values — otherwise a project saved
+        // with a hidden group reopens with its rasters painted on the map.
+        const effective = effectiveLayerRenderState(layer, restoredGroups);
+
         pending.push(
           control
             .addRaster(source, {
@@ -594,8 +600,8 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
               name: layer.name,
               state: {
                 ...savedRasterState(layer),
-                opacity: layer.opacity,
-                visible: layer.visible,
+                opacity: effective.opacity,
+                visible: effective.visible,
                 // The zoom range lives on layer.style (the shared Style-panel
                 // control), not in metadata.rasterState, so it is replayed here
                 // to survive a project reload / map reinitialisation.
