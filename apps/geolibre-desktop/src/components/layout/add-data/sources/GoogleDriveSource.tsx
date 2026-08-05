@@ -25,12 +25,14 @@ import { useTranslation } from "react-i18next";
 import {
   googleApiKey,
   hasBuildTimeGoogleApiKey,
+  hasConfiguredOAuthClientId,
   isDrivePickerAvailable,
   openDrivePicker,
   setStoredGoogleApiKey,
 } from "../../../../lib/google-drive-auth";
 import {
   DriveError,
+  drivePickerBlocker,
   groupFolderVectorFiles,
   parseDriveTarget,
   type DriveCredentials,
@@ -59,7 +61,12 @@ interface FolderEntry {
 export function GoogleDriveSource() {
   const { t } = useTranslation();
   const shell = useAddDataShell();
-  const pickerAvailable = isDrivePickerAvailable();
+  // `unsupported` hides the browse mode entirely (the build cannot sign in at
+  // all); `unconfigured` still shows it, disabled with an explanation, because
+  // it is a deployment setting someone reading this can actually fix.
+  const pickerBlocker = drivePickerBlocker(isDrivePickerAvailable(), hasConfiguredOAuthClientId());
+  const pickerAvailable = pickerBlocker !== "unsupported";
+  const pickerBlocked = pickerBlocker !== null;
 
   const [mode, setMode] = useState<DriveMode>("link");
   const [link, setLink] = useState("");

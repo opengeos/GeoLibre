@@ -71,10 +71,28 @@ function envString(value: unknown): string {
  * Drive without any extra configuration. A deployment that wants its own
  * consent screen sets `VITE_GOOGLE_OAUTH_CLIENT_ID`.
  *
+ * Note the fallback is only good enough for *signing in*. The Picker also needs
+ * a developer key from the client's own project, and GeoLibre ships none — see
+ * {@link hasConfiguredOAuthClientId}.
+ *
  * @returns The OAuth client ID
  */
 export function googleOAuthClientId(): string {
   return envString(importMetaEnv().VITE_GOOGLE_OAUTH_CLIENT_ID) || DEFAULT_GEE_OAUTH_CLIENT_ID;
+}
+
+/**
+ * Whether an OAuth client ID was configured, rather than falling back.
+ *
+ * This is what separates "sign-in works" from "the Picker works": the fallback
+ * client belongs to GeoLibre's Cloud project, and any API key belongs to the
+ * deployment's, so the Picker's key/app-id check can never pass on a stock
+ * build. `drivePickerBlocker` turns this into the decision the dialog renders.
+ *
+ * @returns True when `VITE_GOOGLE_OAUTH_CLIENT_ID` is set
+ */
+export function hasConfiguredOAuthClientId(): boolean {
+  return Boolean(envString(importMetaEnv().VITE_GOOGLE_OAUTH_CLIENT_ID));
 }
 
 /**

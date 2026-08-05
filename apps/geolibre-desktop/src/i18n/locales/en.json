@@ -627,6 +627,7 @@
       "folderLoaded_other": "Found {{count}} files that can be added.",
       "browse": "Browse Google Drive",
       "browseHelp": "Sign in and choose files in Google's own picker. GeoLibre only gets access to the files you pick. For an unzipped shapefile, select the .shp together with its .dbf, .shx and .prj.",
+      "pickerUnconfigured": "Browsing Drive is unavailable in this build. The picker needs an API key from the same Google Cloud project as the app's OAuth client, and this build ships no client of its own — set VITE_GOOGLE_OAUTH_CLIENT_ID and VITE_GOOGLE_API_KEY from one project to enable it. Opening a share link works either way.",
       "chosenFiles_one": "{{count}} file chosen.",
       "chosenFiles_other": "{{count}} files chosen.",
       "noFilesChosen": "No files chosen.",

@@ -66,20 +66,33 @@ There are two ways in:
 | Mode | Use it for | Requirements |
 | --- | --- | --- |
 | **Share link or file ID** | A file someone sent you. | The file must be shared with **Anyone with the link**. On the desktop app that is all you need; the browser build also needs an API key (below). |
-| **Browse Google Drive** | Your own files, including private ones. | Sign in with Google and pick files in Google's own picker. Needs an API key. Not available in the Mac App Store / iOS builds. |
+| **Browse Google Drive** | Your own files, including private ones. | Sign in with Google and pick files in Google's own picker. Needs a deployment configured with its own Google Cloud project (below). Not available in the Mac App Store / iOS builds. |
 
 Paste either a **file** link or a **folder** link. A folder link lists what is inside so you can tick the layers you want — this is how an unzipped shapefile is added, since selecting the `.shp` automatically pulls in its `.dbf`, `.shx`, `.prj`, and `.cpg`. In the picker, select those sidecar files yourself alongside the `.shp`.
 
 !!! note "Why sign-in only ever sees the files you pick"
     GeoLibre requests Google's non-sensitive `drive.file` scope, which grants access to individual files **as the user picks them** and nothing else. It never asks for the restricted `drive.readonly` scope, so the app has no ability to list or read your Drive on its own. That is also why sign-in and choosing files are a single action: a `drive.file` token by itself reaches nothing.
 
-### API key
+### API key, for opening links in the browser build
 
-A Google API key ("developer key") is needed to read Drive from the browser build and to open the picker on any build. Create one in the [Google Cloud console](https://console.cloud.google.com/) with the **Google Drive API** and **Google Picker API** enabled, then paste it into the field in the dialog — it is stored in that browser only.
+A Google API key ("developer key") lets the browser build read Drive at all. Create one in the [Google Cloud console](https://console.cloud.google.com/) with the **Google Drive API** enabled, then paste it into the field in the dialog — it is stored in that browser only. Deployments can supply one for all users at build time via `VITE_GOOGLE_API_KEY` (or a bare `GOOGLE_API_KEY` in the environment or a `.env` file); the field is then hidden.
 
-Deployments can supply one for all users at build time instead, via `VITE_GOOGLE_API_KEY` (or a bare `GOOGLE_API_KEY` in the environment or a `.env` file); the field is then hidden. `VITE_GOOGLE_OAUTH_CLIENT_ID` likewise overrides the OAuth client, which otherwise falls back to GeoLibre's own.
+The desktop app needs none of this for a link: it reads Drive's public download host through its native HTTP client, so a shared link works with no configuration at all.
 
-The desktop app needs neither: it reads Drive's public download host through its native HTTP client, so a shared link works with no configuration at all.
+### Enabling "Browse Google Drive"
+
+The picker needs **both** halves of a Google Cloud project, and pasting only an API key is not enough — Google's picker checks that the key and the app's OAuth client belong to the same project, and GeoLibre ships no client of its own for a key to match. Where that is not configured the button is disabled and says so, rather than failing with Google's own "The API developer key is invalid", which names neither the client nor the mismatch.
+
+To enable it, create both credentials in **one** project and set both variables:
+
+```
+GOOGLE_OAUTH_CLIENT_ID=<client-id>.apps.googleusercontent.com
+GOOGLE_API_KEY=<api-key>
+```
+
+In that project, enable the **Google Drive API** and the **Google Picker API**, and create the OAuth client as a **Web application** whose authorized JavaScript origins include the URL the app is served from (`http://localhost:5173` for the dev server). The desktop app runs the picker from `http://localhost:5173` in the system browser, so that origin covers it too.
+
+Opening a share link keeps working regardless of any of this.
 
 ## Drag and drop
 

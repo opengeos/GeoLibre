@@ -10,6 +10,7 @@ import {
   driveFolderChildrenUrl,
   driveMediaUrl,
   driveMetadataUrl,
+  drivePickerBlocker,
   drivePublicDownloadUrl,
   fileNameFromContentDisposition,
   groupFolderVectorFiles,
@@ -292,5 +293,31 @@ describe("pickerOutcome", () => {
     for (const action of [LOADED, "cancel", "error", undefined]) {
       assert.notEqual(pickerOutcome(action, PICKED, undefined), "continue", String(action));
     }
+  });
+});
+
+describe("drivePickerBlocker", () => {
+  it("blocks a build that cannot sign in at all", () => {
+    assert.equal(drivePickerBlocker(false, true), "unsupported");
+    assert.equal(drivePickerBlocker(false, false), "unsupported");
+  });
+
+  it("blocks a supported build with no OAuth client configured", () => {
+    // The case that shipped broken: GeoLibre bundles no API key, so the key is
+    // always the deployment's while the fallback client is GeoLibre's own. The
+    // Picker's key/app-id check therefore cannot pass, and Google answers with
+    // "The API developer key is invalid", naming neither.
+    assert.equal(drivePickerBlocker(true, false), "unconfigured");
+  });
+
+  it("allows a supported build with an OAuth client configured", () => {
+    assert.equal(drivePickerBlocker(true, true), null);
+  });
+
+  it("reports unsupported ahead of unconfigured", () => {
+    // Order matters for the UI: `unsupported` hides the control, `unconfigured`
+    // shows it disabled with a fix. A build that can never sign in should not
+    // advertise a setting that would not help.
+    assert.equal(drivePickerBlocker(false, false), "unsupported");
   });
 });

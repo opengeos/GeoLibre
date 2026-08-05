@@ -289,6 +289,44 @@ export function fileNameFromContentDisposition(header: string | null): string | 
   return plain ? plain[1].trim() || null : null;
 }
 
+/** Why the Google Picker cannot be opened, or null when it can. */
+export type DrivePickerBlocker =
+  /** This build has no way to sign in at all (Apple App Store targets). */
+  | "unsupported"
+  /** No OAuth client ID was configured, so no key can match it. See below. */
+  | "unconfigured";
+
+/**
+ * Whether the Picker can work at all, and if not, why.
+ *
+ * The second case is the non-obvious one. Google's Picker takes a *developer
+ * key* alongside the OAuth token, and rejects the pair unless the key belongs
+ * to the same Cloud project as the app id — which GeoLibre derives from the
+ * OAuth client id. GeoLibre deliberately ships **no** default API key (a key is
+ * billed to whoever issued it), so every key in play comes from the user's own
+ * project. Therefore, whenever the client id is the built-in fallback, the two
+ * necessarily belong to different projects and the Picker *always* fails, with
+ * Google's own opaque "The API developer key is invalid".
+ *
+ * That combination is unreachable by configuration — no key the user can supply
+ * will fix it — so the caller disables the control and says what to set, rather
+ * than offering a button whose only outcome is a third-party error dialog that
+ * names neither the client id nor the project mismatch.
+ *
+ * @param platformSupported - Whether this build ships the sign-in listener
+ * @param hasConfiguredClientId - Whether an OAuth client id was set explicitly,
+ *   as opposed to falling back to the built-in one
+ * @returns The blocking reason, or null when the Picker can be opened
+ */
+export function drivePickerBlocker(
+  platformSupported: boolean,
+  hasConfiguredClientId: boolean,
+): DrivePickerBlocker | null {
+  if (!platformSupported) return "unsupported";
+  if (!hasConfiguredClientId) return "unconfigured";
+  return null;
+}
+
 /** What a Picker callback action means for the pending selection. */
 export type PickerOutcome =
   /** The user chose files; read them off the callback payload. */
