@@ -5046,6 +5046,11 @@
     "clear": "Clear",
     "chartAria": "Sampled pixel values along the band axis"
   },
+  "netcdfIdentify": {
+    "noData": "no data",
+    "coordinates": "lon, lat",
+    "cell": "row, col"
+  },
   "rasterAttributeTable": {
     "title": "Raster attribute table",
     "resize": "Resize raster attribute table",

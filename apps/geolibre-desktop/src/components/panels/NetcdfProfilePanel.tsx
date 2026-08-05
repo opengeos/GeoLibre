@@ -2,6 +2,7 @@ import { Button } from "@geolibre/ui";
 import { useId, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveChartDomain } from "../../lib/chart-domain";
+import { displayUnits } from "../../lib/netcdf-image-symbology";
 import {
   clearNetcdfProfileReadings,
   getNetcdfProfileReadings,
@@ -57,16 +58,20 @@ function axisPositions(reading: NetcdfProfileReading): number[] {
  * Renders nothing until a pixel has been sampled, so it costs nothing for the
  * (common) 2-D grid that has no band axis to profile.
  *
- * @returns The chart, or null when no pixel has been sampled.
+ * @param props.layerId - The layer whose readings to chart; readings sampled
+ *   from any other layer are ignored, so selecting a second NetCDF layer does
+ *   not show the first one's spectra under the second one's heading.
+ * @returns The chart, or null when this layer has no sampled pixel.
  */
-export function NetcdfProfilePanel() {
+export function NetcdfProfilePanel({ layerId }: { layerId: string }) {
   const { t } = useTranslation();
   const clipId = `${useId()}-plot`;
-  const readings = useSyncExternalStore(
+  const allReadings = useSyncExternalStore(
     subscribeNetcdfProfileReadings,
     getNetcdfProfileReadings,
     getNetcdfProfileReadings,
   );
+  const readings = allReadings.filter((reading) => reading.layerId === layerId);
 
   if (readings.length === 0) return null;
 
@@ -88,7 +93,8 @@ export function NetcdfProfilePanel() {
   const axisLabel = first.profile.axis.units
     ? `${first.profile.axis.name} (${first.profile.axis.units})`
     : first.profile.axis.name;
-  const valueLabel = first.units ? `${first.variable} (${first.units})` : first.variable;
+  const valueUnits = displayUnits(first.units);
+  const valueLabel = valueUnits ? `${first.variable} (${valueUnits})` : first.variable;
 
   return (
     <div className="space-y-2 border-t p-3">

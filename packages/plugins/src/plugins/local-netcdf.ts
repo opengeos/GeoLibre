@@ -752,7 +752,24 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
  * A local classic NetCDF-3 file backed by netcdfjs (pure JS).
  */
 class Netcdf3File implements LocalNetcdfFile {
+  /**
+   * Decoded variables, kept so repeated plane and profile reads decode once.
+   * netcdfjs has no hyperslab read, so every read otherwise decodes and copies
+   * the whole variable again — which the identify path would pay on each click.
+   */
+  private readonly decoded = new Map<string, TypedArrayLike>();
+
   private constructor(private readonly reader: NetCDFReader) {}
+
+  /** The whole variable as a typed array, decoded at most once. */
+  private fullVariable(v: Nc3Variable, info: (typeof NC3_DTYPES)[string]): TypedArrayLike {
+    let cached = this.decoded.get(v.name);
+    if (!cached) {
+      cached = info.make(this.reader.getDataVariable(v.name) as number[]);
+      this.decoded.set(v.name, cached);
+    }
+    return cached;
+  }
 
   static async open(buffer: ArrayBuffer): Promise<Netcdf3File> {
     const { NetCDFReader } = await import("netcdfjs");
@@ -768,7 +785,9 @@ class Netcdf3File implements LocalNetcdfFile {
   }
 
   close(): void {
-    // netcdfjs is pure JS with no external resources to release.
+    // netcdfjs is pure JS with no external resources to release, but the decode
+    // cache holds a full copy of every variable read.
+    this.decoded.clear();
   }
 
   private variables(): Nc3Variable[] {
@@ -925,7 +944,7 @@ class Netcdf3File implements LocalNetcdfFile {
     const column = clampIndex(options.column, nx);
 
     // netcdfjs has no hyperslab read, so index the whole variable in JS.
-    const full = info.make(this.reader.getDataVariable(v.name) as number[]);
+    const full = this.fullVariable(v, info);
     const size = shape[axisPosition];
     const raw = info.make(new Array(size).fill(0));
     for (let step = 0; step < size; step++) {
@@ -980,7 +999,7 @@ class Netcdf3File implements LocalNetcdfFile {
     const ny = shape[shape.length - 2];
     const nx = shape[shape.length - 1];
     // netcdfjs reads the whole variable; slice the selected 2-D plane in JS.
-    const full = info.make(this.reader.getDataVariable(v.name) as number[]);
+    const full = this.fullVariable(v, info);
     let lead = 0; // C-order flattening of the leading (non-spatial) indices
     for (let i = 0; i < shape.length - 2; i++) {
       lead = lead * shape[i] + clampIndex(selector[dims[i]] ?? 0, shape[i]);

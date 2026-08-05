@@ -137,12 +137,19 @@ export function readNetcdfProfile(
 ): LocalNetcdfProfile | null {
   const state = states.get(layerId);
   if (!state?.profile) return null;
-  return state.profile.file.readProfile(state.variable, {
-    axis: state.profile.axis,
-    row,
-    column,
-    selector: state.profile.selector,
-  });
+  try {
+    return state.profile.file.readProfile(state.variable, {
+      axis: state.profile.axis,
+      row,
+      column,
+      selector: state.profile.selector,
+    });
+  } catch {
+    // A profile is an extra on top of the pixel readout, and the caller reads it
+    // from a timer; a failed read must degrade to "no chart", not surface as an
+    // uncaught error on every click.
+    return null;
+  }
 }
 
 /** The symbology a baked NetCDF image is currently drawn with. */
@@ -244,4 +251,23 @@ export function encodeImageOverlay(image: LocalNetcdfImage): string {
   if (!context) throw new Error("Could not create a 2-D canvas for the NetCDF image.");
   context.putImageData(new ImageData(image.pixels, image.width, image.height), 0, 0);
   return canvas.toDataURL("image/png");
+}
+
+/**
+ * CF `units` values that mean "this quantity has no unit". Writers spell that
+ * several ways, and printing any of them next to a number is noise: EMIT
+ * reflectance declares `unitless`, so a readout would say "0.0145 unitless".
+ */
+const EMPTY_UNITS = new Set(["", "unitless", "dimensionless", "none", "n/a", "na", "-", "1"]);
+
+/**
+ * A variable's units when they are worth showing, else undefined.
+ *
+ * @param units - The CF `units` attribute, if any.
+ * @returns The units to render beside a value, or undefined to render none.
+ */
+export function displayUnits(units: string | undefined): string | undefined {
+  const trimmed = units?.trim();
+  if (!trimmed || EMPTY_UNITS.has(trimmed.toLowerCase())) return undefined;
+  return trimmed;
 }

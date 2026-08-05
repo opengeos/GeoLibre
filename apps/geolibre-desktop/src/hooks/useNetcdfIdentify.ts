@@ -1,8 +1,10 @@
 import { useAppStore } from "@geolibre/core";
 import maplibregl from "maplibre-gl";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import type { MapController } from "@geolibre/map";
 import {
+  displayUnits,
   getNetcdfLayerState,
   gridPixelAt,
   NETCDF_IMAGE_SOURCE_KIND,
@@ -15,6 +17,12 @@ function formatValue(value: number): string {
   const magnitude = Math.abs(value);
   if (magnitude !== 0 && (magnitude >= 1e6 || magnitude < 1e-3)) return value.toExponential(3);
   return Number(value.toFixed(6)).toString();
+}
+
+/** A value with its units appended, when the variable declares meaningful ones. */
+function formatReading(value: number, units: string | undefined): string {
+  const unit = displayUnits(units);
+  return unit ? `${formatValue(value)} ${unit}` : formatValue(value);
 }
 
 /**
@@ -35,6 +43,7 @@ function formatValue(value: number): string {
  * @param mapControllerRef - The live map controller.
  */
 export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapController | null>): void {
+  const { t } = useTranslation();
   // One selector returning a primitive: Zustand re-renders only when the
   // resolved id changes, not on every unrelated layer mutation.
   const activeLayerId = useAppStore((s) => {
@@ -51,6 +60,10 @@ export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapControlle
     const previousCursor = canvas.style.cursor;
     canvas.style.cursor = "crosshair";
     let popup: maplibregl.Popup | null = null;
+    // The deferred profile read below captures this click's layer and pixel, so
+    // a pending one must be dropped when the identify target changes or another
+    // click lands — otherwise a stale read overwrites the newer reading.
+    let profileTimeout: number | null = null;
 
     const handleClick = (event: maplibregl.MapMouseEvent) => {
       const state = getNetcdfLayerState(activeLayerId);
@@ -58,6 +71,8 @@ export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapControlle
       const pixel = gridPixelAt(state.grid, event.lngLat.lng, event.lngLat.lat);
       popup?.remove();
       popup = null;
+      if (profileTimeout !== null) window.clearTimeout(profileTimeout);
+      profileTimeout = null;
       // A click outside the grid clears the readout rather than reporting the
       // nearest edge cell, which would be misleading far from the data.
       if (!pixel) {
@@ -71,11 +86,11 @@ export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapControlle
         [
           state.variable,
           pixel.value === null
-            ? "no data"
-            : `${formatValue(pixel.value)}${state.units ? ` ${state.units}` : ""}`,
+            ? t("netcdfIdentify.noData")
+            : formatReading(pixel.value, state.units),
         ],
-        ["lon, lat", `${pixel.lng.toFixed(5)}, ${pixel.lat.toFixed(5)}`],
-        ["row, col", `${pixel.row}, ${pixel.column}`],
+        [t("netcdfIdentify.coordinates"), `${pixel.lng.toFixed(5)}, ${pixel.lat.toFixed(5)}`],
+        [t("netcdfIdentify.cell"), `${pixel.row}, ${pixel.column}`],
       ];
       for (const [label, value] of rows) {
         const line = document.createElement("div");
@@ -98,7 +113,8 @@ export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapControlle
         setNetcdfProfileReading(null);
         return;
       }
-      window.setTimeout(() => {
+      profileTimeout = window.setTimeout(() => {
+        profileTimeout = null;
         const profile = readNetcdfProfile(activeLayerId, pixel.row, pixel.column);
         if (profile) {
           setNetcdfProfileReading({
@@ -116,8 +132,9 @@ export function useNetcdfIdentify(mapControllerRef: React.RefObject<MapControlle
     map.on("click", handleClick);
     return () => {
       map.off("click", handleClick);
+      if (profileTimeout !== null) window.clearTimeout(profileTimeout);
       popup?.remove();
       canvas.style.cursor = previousCursor;
     };
-  }, [activeLayerId, mapControllerRef]);
+  }, [activeLayerId, mapControllerRef, t]);
 }

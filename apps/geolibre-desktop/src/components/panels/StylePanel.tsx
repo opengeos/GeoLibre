@@ -4667,7 +4667,7 @@ export function StylePanel({
             ) : (
               <p className="text-xs text-muted-foreground">{t("style.noControls")}</p>
             )}
-            {hasNetcdfSymbology && <NetcdfProfilePanel />}
+            {hasNetcdfSymbology && <NetcdfProfilePanel layerId={layer.id} />}
           </div>
         </ScrollArea>
         <Separator />
