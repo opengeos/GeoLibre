@@ -95,10 +95,10 @@ export const DEFAULT_TILECODE_LABELS: TilecodeLabels = {
   title: "Tilecode",
   controlTitle: "Tilecode settings",
   autoResolution: "Automatic resolution",
-  resolution: "Zoom level",
+  resolution: "Resolution",
   cellCount: (count) => `${count.toLocaleString()} tiles in view`,
   tooManyCells: (limit) =>
-    `This view exceeds the ${limit.toLocaleString()} tile limit. Zoom in or lower the zoom level.`,
+    `This view exceeds the ${limit.toLocaleString()} tile limit. Zoom in or lower the resolution.`,
   fillColor: "Fill color",
   fillOpacity: "Fill opacity",
   lineColor: "Outline color",
@@ -810,7 +810,7 @@ function renderPanel(container: HTMLElement): void {
       labels.addAsLayer,
       () => {
         if (currentGrid.features.length) {
-          appRef?.addGeoJsonLayer(`Tilecode (zoom ${effectiveResolution()})`, currentGrid);
+          appRef?.addGeoJsonLayer(`Tilecode (res ${effectiveResolution()})`, currentGrid);
         }
       },
       currentGrid.features.length === 0,

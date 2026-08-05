@@ -123,8 +123,9 @@ export type VectorToolKind =
   | "grid"
   | "voronoi"
   | "cell-sectors"
-  | "h3-grid"
-  | "h3-bin-points"
+  | "dggs-grid"
+  | "dggs-bin"
+  | "dggs-compact"
   | "trajectory-speed"
   | "detect-stops"
   | "space-time-proximity"
@@ -610,6 +611,14 @@ export interface AppState {
       /** Epoch-ms time bounds of a KML `<TimeSpan>`/`<TimeStamp>` frame; the
        * Time Slider toggles this frame's visibility by the current date. */
       timeSpan?: { begin: number | null; end: number | null };
+      /**
+       * What produced the overlay, e.g. a NetCDF grid baked to pixels. Defaults
+       * to the KML ground overlay this was first written for; panels gate their
+       * per-source controls on it.
+       */
+      sourceKind?: string;
+      /** Extra metadata merged onto the layer (e.g. a symbology record). */
+      metadata?: Record<string, unknown>;
     },
     beforeLayerId?: string | null,
   ) => string;
@@ -1265,7 +1274,19 @@ export const useAppStore = create<AppState>()(
       setProcessingInitialTool: (toolId) =>
         set((s) => ({ ui: { ...s.ui, processingInitialTool: toolId } })),
       setConversionOpen: (kind) => set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
-      setVectorToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, vectorToolOpen: kind } })),
+      setVectorToolOpen: (kind) =>
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            // Pre-DGGS projects / callers may still pass h3-grid / h3-bin-points.
+            vectorToolOpen:
+              (kind as string | null) === "h3-grid"
+                ? "dggs-grid"
+                : (kind as string | null) === "h3-bin-points"
+                  ? "dggs-bin"
+                  : kind,
+          },
+        })),
       setNetworkToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, networkToolOpen: kind } })),
       setStatisticsToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, statisticsToolOpen: kind } })),
       setRasterToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, rasterToolOpen: kind } })),
@@ -1827,9 +1848,10 @@ export const useAppStore = create<AppState>()(
           opacity: options?.opacity ?? 1,
           style: { ...DEFAULT_LAYER_STYLE },
           metadata: {
-            sourceKind: "kml-ground-overlay",
+            sourceKind: options?.sourceKind ?? "kml-ground-overlay",
             ...(options?.bounds ? { bounds: options.bounds } : {}),
             ...(options?.timeSpan ? { timeSpan: options.timeSpan } : {}),
+            ...(options?.metadata ?? {}),
           },
           ...(options?.sourcePath ? { sourcePath: options.sourcePath } : {}),
         };

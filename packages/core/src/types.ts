@@ -1002,6 +1002,16 @@ export interface LayerGroup {
 export const SQL_QUERY_SOURCE_KIND = "sql-query";
 
 /**
+ * Metadata `sourceKind` marking a NetCDF/HDF grid baked into an `image` overlay,
+ * as opposed to the KML ground overlays that otherwise use that layer type.
+ *
+ * Defined here so `@geolibre/map` (which must not run its feature-query identify
+ * on these) and the desktop app (which owns the symbology panel, the pixel
+ * readout, and the spectral profile) share one value.
+ */
+export const NETCDF_IMAGE_SOURCE_KIND = "netcdf-image";
+
+/**
  * Detect a DuckDB query layer rendered through the plugin's external deck.gl
  * overlay. Shared by `@geolibre/map`, `@geolibre/plugins`, and the desktop
  * app so the detection criteria cannot drift.

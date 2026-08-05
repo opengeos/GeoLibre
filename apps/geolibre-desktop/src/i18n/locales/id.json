@@ -2191,8 +2191,6 @@
       "grid": "Grid teratur",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Cakupan sel BTS",
-      "h3Grid": "Buat grid H3",
-      "h3BinPoints": "Bin titik ke H3",
       "trajectorySpeed": "Kecepatan lintasan",
       "detectStops": "Deteksi pemberhentian",
       "spaceTimeProximity": "Kedekatan ruang-waktu",

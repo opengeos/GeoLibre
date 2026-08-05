@@ -2191,8 +2191,6 @@
       "grid": "规则格网",
       "voronoi": "泰森多边形 / 德劳内三角网",
       "cellSectors": "基站覆盖扇区",
-      "h3Grid": "创建 H3 网格",
-      "h3BinPoints": "将点聚合到 H3",
       "trajectorySpeed": "轨迹速度",
       "detectStops": "检测停留点",
       "spaceTimeProximity": "时空邻近性",

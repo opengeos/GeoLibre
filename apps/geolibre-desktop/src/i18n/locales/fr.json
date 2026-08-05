@@ -2234,8 +2234,6 @@
       "grid": "Grille régulière",
       "voronoi": "Voronoï / Delaunay",
       "cellSectors": "Couverture de site cellulaire",
-      "h3Grid": "Créer une grille H3",
-      "h3BinPoints": "Regrouper les points en H3",
       "trajectorySpeed": "Vitesse de trajectoire",
       "detectStops": "Détecter les arrêts",
       "spaceTimeProximity": "Proximité spatio-temporelle",

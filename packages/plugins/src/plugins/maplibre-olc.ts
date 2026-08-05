@@ -98,10 +98,10 @@ export const DEFAULT_OLC_LABELS: OlcLabels = {
   title: "OLC",
   controlTitle: "OLC settings",
   autoResolution: "Automatic resolution",
-  resolution: "Code length",
+  resolution: "Resolution",
   cellCount: (count) => `${count.toLocaleString()} cells in view`,
   tooManyCells: (limit) =>
-    `This view exceeds the ${limit.toLocaleString()} cell limit. Zoom in or lower the code length.`,
+    `This view exceeds the ${limit.toLocaleString()} cell limit. Zoom in or lower the resolution.`,
   fillColor: "Fill color",
   fillOpacity: "Fill opacity",
   lineColor: "Outline color",
@@ -785,7 +785,7 @@ function renderPanel(container: HTMLElement): void {
       labels.addAsLayer,
       () => {
         if (currentGrid.features.length) {
-          appRef?.addGeoJsonLayer(`OLC (code length ${effectiveResolution()})`, currentGrid);
+          appRef?.addGeoJsonLayer(`OLC (res ${effectiveResolution()})`, currentGrid);
         }
       },
       currentGrid.features.length === 0,

@@ -2234,8 +2234,6 @@
       "grid": "Griglia regolare",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Copertura delle celle radio",
-      "h3Grid": "Crea griglia H3",
-      "h3BinPoints": "Assegna punti a celle H3",
       "trajectorySpeed": "Velocità di traiettoria",
       "detectStops": "Rileva soste",
       "spaceTimeProximity": "Prossimità spazio-temporale",

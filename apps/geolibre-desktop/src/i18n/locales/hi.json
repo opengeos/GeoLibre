@@ -2234,8 +2234,6 @@
       "grid": "नियमित ग्रिड",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "सेल-साइट कवरेज",
-      "h3Grid": "H3 ग्रिड बनाएं",
-      "h3BinPoints": "बिंदुओं को H3 में बिन करें",
       "trajectorySpeed": "प्रक्षेपवक्र गति",
       "detectStops": "रुकावटें पहचानें",
       "spaceTimeProximity": "स्थान-समय निकटता",

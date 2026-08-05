@@ -2234,8 +2234,6 @@
       "grid": "Regelmatig raster",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Dekkingsgebied zendmast",
-      "h3Grid": "H3-raster maken",
-      "h3BinPoints": "Punten binnen in H3",
       "trajectorySpeed": "Trajectsnelheid",
       "detectStops": "Stops detecteren",
       "spaceTimeProximity": "Ruimte-tijdnabijheid",

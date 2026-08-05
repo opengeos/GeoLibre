@@ -2191,8 +2191,6 @@
       "grid": "正方格子",
       "voronoi": "ボロノイ / ドロネー",
       "cellSectors": "セルサイトのカバレッジ",
-      "h3Grid": "H3グリッドを作成",
-      "h3BinPoints": "ポイントをH3にビン化",
       "trajectorySpeed": "軌跡速度",
       "detectStops": "停止を検出",
       "spaceTimeProximity": "時空間近接",

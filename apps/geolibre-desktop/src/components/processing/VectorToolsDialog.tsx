@@ -3,8 +3,10 @@ import { detectGeometryProfile, type MapController } from "@geolibre/map";
 import {
   VECTOR_TOOLS,
   getVectorTool,
+  resolveVectorRerun,
   runVectorTool,
   fetchVectorStatus,
+  maxResolutionForDggs,
   type AlgorithmParameter,
   type GeometryFamily,
   type ProcessingAlgorithm,
@@ -109,9 +111,10 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
   // win over the defaults when both effects fire in the same commit.
   useEffect(() => {
     if (!open || !rerun || rerun.kind !== "vector") return;
-    // A saved-project history entry can reference a tool that was renamed or
-    // removed since; drop the request instead of leaving it pending forever.
-    if (!getVectorTool(rerun.toolId)) {
+    // History may still carry pre-DGGS H3 tool ids — map them before lookup so
+    // we do not clear the request as "unavailable" and leave it pending.
+    const resolved = resolveVectorRerun(rerun.toolId, rerun.parameters);
+    if (!getVectorTool(resolved.toolId)) {
       setLog((prev) => [
         ...prev,
         `Error: ${t("processing.history.toolUnavailable", { toolId: rerun.toolId })}`,
@@ -119,8 +122,13 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
       setProcessingRerun(null);
       return;
     }
-    if (rerun.toolId !== tool.id) return;
-    setParams({ ...rerun.parameters });
+    if (resolved.toolId !== tool.id) {
+      // Alias mapped to a different tool than the one currently selected
+      // (e.g. History opened with a stale VectorToolKind). Switch over.
+      if (selectedId !== resolved.toolId) setSelectedId(resolved.toolId);
+      return;
+    }
+    setParams({ ...resolved.parameters });
     if (rerun.engine === "client" || rerun.engine === "sidecar" || rerun.engine === "pyodide") {
       // A history entry recorded on a sidecar run re-runs on Pyodide in the
       // Mac App Store build, where the sidecar engine does not exist.
@@ -128,14 +136,14 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     }
     setProcessingRerun(null);
     if (rerun.autoRun) setAutoRunPending(true);
-  }, [open, rerun, tool, setProcessingRerun, t]);
+  }, [open, rerun, tool, selectedId, setProcessingRerun, t]);
 
-  // Prefill the H3 grid's manual bounding-box fields from the current map
+  // Prefill the DGGS Generator's manual bounding-box fields from the current map
   // viewport when the user first switches to that source, so they can tweak the
   // box rather than type it from scratch. Only fills empty fields, so it never
   // clobbers manual edits. Keyed on the source value, not every keystroke.
   useEffect(() => {
-    if (selectedId !== "h3-grid" || params.source !== "bbox") return;
+    if (selectedId !== "dggs-grid" || params.source !== "bbox") return;
     if (
       params.west !== undefined ||
       params.south !== undefined ||
@@ -475,16 +483,43 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
             <p className="text-sm text-muted-foreground">{tool.description}</p>
 
             <div className="flex flex-col gap-3">
-              {tool.parameters.filter(isParamVisible).map((param) => (
-                <ParameterField
-                  key={param.id}
-                  param={param}
-                  value={params[param.id]}
-                  layerOptions={layerOptions(param.geometryFilter)}
-                  fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
-                  onChange={(value) => handleParamChange(param.id, value)}
-                />
-              ))}
+              {tool.parameters.filter(isParamVisible).map((param) => {
+                // Narrow the resolution spinner to the selected DGGS type's range.
+                const fieldParam =
+                  (tool.id === "dggs-grid" ||
+                    tool.id === "dggs-bin" ||
+                    tool.id === "dggs-compact") &&
+                  param.id === "resolution"
+                    ? (() => {
+                        const dggsType =
+                          params.dggsType === "s2" ||
+                          params.dggsType === "a5" ||
+                          params.dggsType === "dggrid" ||
+                          params.dggsType === "dggal"
+                            ? params.dggsType
+                            : "h3";
+                        const rawSubtype =
+                          dggsType === "dggal" ? params.dggalType : params.dggridType;
+                        const subtype = typeof rawSubtype === "string" ? rawSubtype : undefined;
+                        const max = maxResolutionForDggs(dggsType, subtype);
+                        return {
+                          ...param,
+                          max,
+                          label: t("processing.vectorTools.resolutionRange", { max }),
+                        };
+                      })()
+                    : param;
+                return (
+                  <ParameterField
+                    key={param.id}
+                    param={fieldParam}
+                    value={params[param.id]}
+                    layerOptions={layerOptions(param.geometryFilter)}
+                    fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
+                    onChange={(value) => handleParamChange(param.id, value)}
+                  />
+                );
+              })}
             </div>
 
             {tool.supportsSidecar || tool.requiresSidecar ? (

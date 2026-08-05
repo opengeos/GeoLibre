@@ -2,6 +2,8 @@ import type { DuckDbCapability, DuckDbGeoJsonSource } from "@geolibre/processing
 import type { FeatureCollection } from "geojson";
 import { stripAutoFidColumn } from "./duckdb-geometry";
 import {
+  ensureA5Extension,
+  ensureDuckDggsExtension,
   ensureH3Extension,
   ensureSpatialExtension,
   getDatabase,
@@ -25,6 +27,8 @@ export function createDuckDbCapability(): DuckDbCapability {
       try {
         if (names.includes("spatial")) await ensureSpatialExtension(db, connection);
         if (names.includes("h3")) await ensureH3Extension(connection);
+        if (names.includes("a5")) await ensureA5Extension(connection);
+        if (names.includes("duck_dggs")) await ensureDuckDggsExtension(connection);
       } finally {
         await connection.close();
       }

@@ -89,10 +89,10 @@ export const DEFAULT_GEOHASH_LABELS: GeohashLabels = {
   title: "Geohash",
   controlTitle: "Geohash settings",
   autoResolution: "Automatic resolution",
-  resolution: "Precision",
+  resolution: "Resolution",
   cellCount: (count) => `${count.toLocaleString()} cells in view`,
   tooManyCells: (limit) =>
-    `This view exceeds the ${limit.toLocaleString()} cell limit. Zoom in or lower the precision.`,
+    `This view exceeds the ${limit.toLocaleString()} cell limit. Zoom in or lower the resolution.`,
   fillColor: "Fill color",
   fillOpacity: "Fill opacity",
   lineColor: "Outline color",
@@ -739,7 +739,7 @@ function renderPanel(container: HTMLElement): void {
       labels.addAsLayer,
       () => {
         if (currentGrid.features.length) {
-          appRef?.addGeoJsonLayer(`Geohash (precision ${effectiveResolution()})`, currentGrid);
+          appRef?.addGeoJsonLayer(`Geohash (res ${effectiveResolution()})`, currentGrid);
         }
       },
       currentGrid.features.length === 0,

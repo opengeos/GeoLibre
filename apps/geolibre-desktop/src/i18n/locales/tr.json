@@ -2234,8 +2234,6 @@
       "grid": "Düzenli ızgara",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Baz istasyonu kapsama alanı",
-      "h3Grid": "H3 ızgarası oluştur",
-      "h3BinPoints": "Noktaları H3'e grupla",
       "trajectorySpeed": "Güzergah hızı",
       "detectStops": "Durakları algıla",
       "spaceTimeProximity": "Uzay-zaman yakınlığı",

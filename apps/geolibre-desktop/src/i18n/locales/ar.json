@@ -2405,8 +2405,6 @@
       "grid": "شبكة منتظمة",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "تغطية المواقع الخلوية",
-      "h3Grid": "إنشاء شبكة H3",
-      "h3BinPoints": "تجميع النقاط في خلايا H3",
       "trajectorySpeed": "سرعة مسار الحركة",
       "detectStops": "اكتشاف التوقفات",
       "spaceTimeProximity": "التقارب الزماني المكاني",

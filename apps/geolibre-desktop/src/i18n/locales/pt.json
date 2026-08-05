@@ -2234,8 +2234,6 @@
       "grid": "Grade regular",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Cobertura de estações de célula",
-      "h3Grid": "Criar grade H3",
-      "h3BinPoints": "Agrupar pontos em H3",
       "trajectorySpeed": "Velocidade da trajetória",
       "detectStops": "Detectar paradas",
       "spaceTimeProximity": "Proximidade espaço-temporal",

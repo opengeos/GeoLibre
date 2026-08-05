@@ -2234,8 +2234,6 @@
       "grid": "Regelmäßiges Raster",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Mobilfunkzellen-Abdeckung",
-      "h3Grid": "H3-Raster erstellen",
-      "h3BinPoints": "Punkte zu H3 binnen",
       "trajectorySpeed": "Trajektoriengeschwindigkeit",
       "detectStops": "Stopps erkennen",
       "spaceTimeProximity": "Raum-Zeit-Nähe",

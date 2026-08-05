@@ -2191,8 +2191,6 @@
       "grid": "정규 격자",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "기지국 커버리지",
-      "h3Grid": "H3 격자 생성",
-      "h3BinPoints": "포인트를 H3 셀로 구간화",
       "trajectorySpeed": "궤적 속도",
       "detectStops": "정지 지점 감지",
       "spaceTimeProximity": "시공간 근접성",

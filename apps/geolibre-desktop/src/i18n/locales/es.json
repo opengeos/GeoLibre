@@ -2234,8 +2234,6 @@
       "grid": "Cuadrícula regular",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Cobertura de sitios celulares",
-      "h3Grid": "Crear cuadrícula H3",
-      "h3BinPoints": "Agrupar puntos en H3",
       "trajectorySpeed": "Velocidad de trayectoria",
       "detectStops": "Detectar paradas",
       "spaceTimeProximity": "Proximidad espacio-temporal",
