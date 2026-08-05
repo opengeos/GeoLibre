@@ -2957,9 +2957,11 @@ export function LayerPanel({
             // hiding it (issue #430). If the layer's own toggle is also off,
             // the EyeOff icon already explains it, so skip the group cue then.
             // Folded through effectiveLayerRenderState rather than read off the
-            // immediate parent, so a hidden grandparent gets the cue too.
+            // immediate parent, so a hidden grandparent gets the cue too. Given
+            // the memoized `groupById` rather than the array, so folding every
+            // row does not rebuild that map once per layer.
             const groupHidden =
-              layer.visible && !effectiveLayerRenderState(layer, layerGroups).visible;
+              layer.visible && !effectiveLayerRenderState(layer, groupById).visible;
             const canIdentify =
               layer.type === "geojson" ||
               isDuckDBQueryLayer(layer) ||

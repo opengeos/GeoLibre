@@ -88,32 +88,34 @@ let syncingLayersToStore = false;
 // control emits raster* events synchronously from those calls, and syncing
 // mid-mutation would observe a partially updated layer list.
 let storeSyncSuspended = 0;
-// The group-folded visibility/opacity this module last forced on each raster,
-// by layer id. A parent group's state never lives on the child layer, so it
-// only reaches a deck.gl raster by being pushed at the control -- which then
-// reports it back on every later event. Recording what was pushed is what lets
-// the control->store mirror tell that echo from a real control-side edit; see
-// syncRasterLayersToStoreWithOptions. Keyed on the *pushed* value rather than
-// on re-deriving the fold so a user edit that numerically coincides with the
-// fold is still recorded: the only value this misses is the one the control
-// already holds, which is a no-op edit.
-const pushedRenderState = new Map<string, { visible?: boolean; opacity?: number }>();
+// The last visibility/opacity this module knows each raster to hold in the
+// control, by layer id -- whether it got there by being pushed (a group fold,
+// which never lives on the child layer and so reaches a deck.gl raster only
+// through the control) or by a control-side edit this module accepted. The
+// control reports its state back on every later event, and comparing against
+// this is what lets syncRasterLayersToStoreWithOptions tell that echo from a
+// real edit. It must track *accepted* values too, not just pushed ones: with
+// only the pushed value recorded, a user toggling a control's checkbox away
+// and back would land on the pushed value again and have that second edit
+// misread as an echo and dropped.
+const controlRenderState = new Map<string, { visible?: boolean; opacity?: number }>();
 
 /**
- * Record a group-folded value handed to the control, so the next
- * control->store mirror can recognize it as an echo rather than a user edit.
- * Called by this module's store subscriber and by the project-restore replay
- * in maplibre-raster, the two places that force folded values on the control.
+ * Record what the control now holds for a raster, so the next control->store
+ * mirror can recognize it as an echo rather than a user edit. Called wherever
+ * this module forces a group-folded value on the control -- its own store
+ * subscriber and the project-restore replay in maplibre-raster -- and again
+ * whenever the mirror accepts a control-side edit.
  *
  * @param id - The raster/store layer id.
- * @param patch - The folded fields just pushed.
+ * @param patch - The fields the control now holds.
  */
-export function rememberPushedRasterRenderState(
+export function rememberControlRasterRenderState(
   id: string,
   patch: { visible?: boolean; opacity?: number },
 ): void {
-  const existing = pushedRenderState.get(id);
-  pushedRenderState.set(id, existing ? { ...existing, ...patch } : { ...patch });
+  const existing = controlRenderState.get(id);
+  controlRenderState.set(id, existing ? { ...existing, ...patch } : { ...patch });
 }
 
 /**
@@ -276,8 +278,8 @@ export function syncRasterLayersToStoreWithOptions(
 
   // A raster the control no longer holds can never echo again, and its id
   // could otherwise mis-suppress a future raster added under the same id.
-  for (const id of pushedRenderState.keys()) {
-    if (!infoIds.has(id)) pushedRenderState.delete(id);
+  for (const id of controlRenderState.keys()) {
+    if (!infoIds.has(id)) controlRenderState.delete(id);
   }
 
   syncingLayersToStore = true;
@@ -311,20 +313,24 @@ export function syncRasterLayersToStoreWithOptions(
       const metadata =
         Object.keys(preserved).length > 0 ? { ...layer.metadata, ...preserved } : layer.metadata;
 
-      // A control still reporting the group-folded value this module forced on
-      // it is echoing the group, not recording a user edit. Mirroring the echo
+      // A control still reporting the value this module last knows it to hold
+      // is echoing that value, not recording a user edit. Mirroring the echo
       // would burn a hidden group's `false` into the layer's own `visible`,
-      // leaving it hidden after the group is shown again. Any other value is a
-      // genuine control-side change and is recorded as before.
-      const pushed = pushedRenderState.get(layer.id);
-      const visible =
-        pushed?.visible !== undefined && layer.visible === pushed.visible
-          ? existing.visible
-          : layer.visible;
-      const opacity =
-        pushed?.opacity !== undefined && numbersEqual(layer.opacity, pushed.opacity)
-          ? existing.opacity
-          : layer.opacity;
+      // leaving it hidden after the group is shown again. Anything else is a
+      // genuine control-side change: take it, and remember it so the control's
+      // next report is compared against the value it actually holds now.
+      const known = controlRenderState.get(layer.id);
+      const visibleIsEcho = known?.visible !== undefined && layer.visible === known.visible;
+      const opacityIsEcho =
+        known?.opacity !== undefined && numbersEqual(layer.opacity, known.opacity);
+      const visible = visibleIsEcho ? existing.visible : layer.visible;
+      const opacity = opacityIsEcho ? existing.opacity : layer.opacity;
+      if (!visibleIsEcho || !opacityIsEcho) {
+        rememberControlRasterRenderState(layer.id, {
+          ...(visibleIsEcho ? {} : { visible: layer.visible }),
+          ...(opacityIsEcho ? {} : { opacity: layer.opacity }),
+        });
+      }
 
       if (
         existing.visible !== visible ||
@@ -393,17 +399,17 @@ export function wireRasterStoreSync(control: RasterSyncableControl): void {
         const current = currentById.get(layer.id);
         if (!current) {
           activeControl.removeRaster(layer.id);
-          pushedRenderState.delete(layer.id);
+          controlRenderState.delete(layer.id);
           continue;
         }
 
         if (current.visible !== layer.visible) {
           activeControl.setVisible(layer.id, current.visible);
-          rememberPushedRasterRenderState(layer.id, { visible: current.visible });
+          rememberControlRasterRenderState(layer.id, { visible: current.visible });
         }
         if (current.opacity !== layer.opacity) {
           activeControl.setRasterState(layer.id, { opacity: current.opacity });
-          rememberPushedRasterRenderState(layer.id, { opacity: current.opacity });
+          rememberControlRasterRenderState(layer.id, { opacity: current.opacity });
         }
         const patch = rasterStatePatch(layer, current);
         if (patch) activeControl.setRasterState(layer.id, patch);
@@ -502,7 +508,7 @@ export function unwireRasterStoreSync(): void {
   syncedControl = null;
   // The successor control has been told nothing, so no echo of this one's
   // pushes can arrive; a stale record would only mis-suppress its first sync.
-  pushedRenderState.clear();
+  controlRenderState.clear();
 }
 
 /**

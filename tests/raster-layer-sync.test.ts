@@ -727,6 +727,28 @@ describe("wireRasterStoreSync with layer groups", () => {
     assert.equal(useAppStore.getState().layers[0].opacity, 0.9);
   });
 
+  it("records a control-side toggle away from the pushed value and back again", () => {
+    const { control } = fakeControl([rasterInfo()]);
+    syncRasterLayersToStore(control);
+    wireRasterStoreSync(control);
+
+    const groupId = useAppStore.getState().addLayerGroup("Group 1", ["raster-1"]);
+    useAppStore.getState().setLayerGroupVisibility(groupId, false);
+
+    // The user checks the control's own box, then unchecks it. The second edit
+    // lands back on the value the group fold pushed, so a guard that only ever
+    // remembered the *pushed* value would read it as an echo and drop it --
+    // leaving the raster to reappear when the group is shown again.
+    syncRasterLayersToStore(control);
+    assert.equal(useAppStore.getState().layers[0].visible, true);
+
+    syncRasterLayersToStore(
+      fakeControl([rasterInfo({ state: rasterState({ visible: false }) })]).control,
+    );
+
+    assert.equal(useAppStore.getState().layers[0].visible, false);
+  });
+
   it("still records a genuine control-side hide made under a visible group", () => {
     const { control } = fakeControl([rasterInfo()]);
     syncRasterLayersToStore(control);

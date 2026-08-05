@@ -106,7 +106,7 @@ export function applyGroupEffects(layers: GeoLibreLayer[], groups: LayerGroup[])
  */
 function foldGroupChain(
   layer: GeoLibreLayer,
-  groupById: Map<string, LayerGroup>,
+  groupById: ReadonlyMap<string, LayerGroup>,
 ): { visible: boolean; opacity: number } {
   let visible = layer.visible;
   let opacity = layer.opacity;
@@ -132,18 +132,25 @@ function foldGroupChain(
  * instead.
  *
  * @param layer The layer to fold.
- * @param groups Group definitions.
+ * @param groups Group definitions, or an already-built id → group map. Callers
+ *   in a render path that fold many layers against the same groups (the layer
+ *   panel) should pass a memoized map, since the array form rebuilds one per
+ *   call.
  * @returns The effective render state (the layer's own values when it is
  *   ungrouped or its `groupId` is dangling).
  */
 export function effectiveLayerRenderState(
   layer: GeoLibreLayer,
-  groups: LayerGroup[],
+  groups: LayerGroup[] | ReadonlyMap<string, LayerGroup>,
 ): { visible: boolean; opacity: number } {
-  if (groups.length === 0 || !layer.groupId) {
+  const size = Array.isArray(groups) ? groups.length : groups.size;
+  if (size === 0 || !layer.groupId) {
     return { visible: layer.visible, opacity: layer.opacity };
   }
-  return foldGroupChain(layer, new Map(groups.map((g) => [g.id, g])));
+  return foldGroupChain(
+    layer,
+    Array.isArray(groups) ? new Map(groups.map((g) => [g.id, g])) : groups,
+  );
 }
 
 /**

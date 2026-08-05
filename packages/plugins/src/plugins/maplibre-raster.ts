@@ -17,7 +17,7 @@ import {
 import {
   isRasterControlStoreLayer,
   rememberLocalRasterPath,
-  rememberPushedRasterRenderState,
+  rememberControlRasterRenderState,
   rendersNativeMapLibreLayer,
   resetRasterStoreSyncSuspension,
   runWithRasterStoreSyncSuspended,
@@ -595,7 +595,7 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
         // Recorded so the first control event after the restore reads them as
         // this replay's echo rather than as a control-side edit.
         const effective = effectiveLayerRenderState(layer, restoredGroups);
-        rememberPushedRasterRenderState(layer.id, effective);
+        rememberControlRasterRenderState(layer.id, effective);
 
         pending.push(
           control
