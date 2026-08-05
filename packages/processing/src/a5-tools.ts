@@ -1,6 +1,5 @@
 import type { FeatureCollection, Geometry } from "geojson";
 import { bboxToWktPolygon, normalizeLonLatBbox, sqlIdent, sqlStr } from "./h3-tools";
-import { unwrapAntimeridianGeometry } from "./antimeridian";
 
 /**
  * Approximate average A5 cell area (km²) at resolutions 0..30.
@@ -239,10 +238,7 @@ function geometryFromGeoJsonCell(raw: unknown): Geometry | null {
 }
 
 /** Build a FeatureCollection from rows carrying `a5`, optional `count`/`value`, and `geojson`. */
-export function a5RowsToFeatureCollection(
-  rows: Record<string, unknown>[],
-  fixAntimeridian = true,
-): FeatureCollection {
+export function a5RowsToFeatureCollection(rows: Record<string, unknown>[]): FeatureCollection {
   const features = [];
   for (const row of rows) {
     const geometry = geometryFromGeoJsonCell(row.geojson);
@@ -256,7 +252,7 @@ export function a5RowsToFeatureCollection(
     }
     features.push({
       type: "Feature" as const,
-      geometry: fixAntimeridian ? unwrapAntimeridianGeometry(geometry) : geometry,
+      geometry,
       properties,
     });
   }

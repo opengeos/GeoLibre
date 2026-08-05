@@ -109,4 +109,15 @@ describe("dggal grid / bin (WASM)", () => {
       assert.equal(bins.features[0]!.properties?.value, 3);
     });
   });
+
+  it("returns native contiguous rings for antimeridian-crossing bboxes", async () => {
+    await withDggalDggrs("isea3h", (engine) => {
+      const fc = dggalGridFromBbox(engine, [179.6, -0.3, 180.4, 0.3], 8);
+      assert.ok(fc.features.length > 0);
+      for (const feature of fc.features) {
+        const lons = feature.geometry.coordinates[0]!.map(([lng]) => lng);
+        assert.ok(Math.max(...lons) - Math.min(...lons) < 180);
+      }
+    });
+  });
 });

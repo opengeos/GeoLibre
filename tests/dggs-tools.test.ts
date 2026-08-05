@@ -132,19 +132,19 @@ describe("dggs generator", () => {
     assert.equal(dggsBinPointsTool.name, "DGGS Binning");
   });
 
-  it("exposes Fix antimeridian for all DGGS backends, default checked", () => {
-    const param = createDggsGridTool.parameters.find((p) => p.id === "fixAntimeridian");
-    assert.ok(param);
-    assert.equal(param.type, "boolean");
-    assert.equal(param.default, true);
-    assert.deepEqual(param.visibleWhen, {
-      param: "dggsType",
-      in: ["h3", "s2", "a5", "dggrid", "dggal"],
-    });
-    assert.equal(
-      dggsBinPointsTool.parameters.find((p) => p.id === "fixAntimeridian")?.default,
-      true,
-    );
+  it("exposes Fix antimeridian for H3, S2, and DGGRID only, default checked", () => {
+    for (const tool of [createDggsGridTool, dggsBinPointsTool]) {
+      const param = tool.parameters.find((p) => p.id === "fixAntimeridian");
+      assert.ok(param);
+      assert.equal(param.type, "boolean");
+      assert.equal(param.default, true);
+      assert.deepEqual(param.visibleWhen, {
+        param: "dggsType",
+        in: ["h3", "s2", "dggrid"],
+      });
+      assert.ok(!param.visibleWhen!.in.includes("a5"));
+      assert.ok(!param.visibleWhen!.in.includes("dggal"));
+    }
     const typeParam = createDggsGridTool.parameters.find((p) => p.id === "dggsType");
     assert.ok(typeParam && typeParam.type === "select");
     assert.deepEqual(

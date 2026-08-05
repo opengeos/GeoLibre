@@ -191,12 +191,18 @@ describe("dggs compact tool", () => {
     assert.ok(logs.some((l) => /cap/.test(l)));
   });
 
-  it("exposes S2 and DGGAL in the type picker", () => {
+  it("exposes S2 and DGGAL in the type picker; Fix antimeridian is H3/S2 only", () => {
     const typeParam = dggsCompactTool.parameters.find((p) => p.id === "dggsType");
+    assert.deepEqual(
+      typeParam?.options?.map((o) => o.value),
+      ["h3", "s2", "a5", "dggal"],
+    );
     assert.ok(typeParam?.options?.some((o) => o.value === "s2"));
     assert.ok(typeParam?.options?.some((o) => o.value === "dggal"));
     const fix = dggsCompactTool.parameters.find((p) => p.id === "fixAntimeridian");
-    assert.deepEqual(fix?.visibleWhen, { param: "dggsType", in: ["h3", "s2", "a5", "dggal"] });
+    assert.deepEqual(fix?.visibleWhen, { param: "dggsType", in: ["h3", "s2"] });
+    assert.ok(!fix?.visibleWhen?.in.includes("a5"));
+    assert.ok(!fix?.visibleWhen?.in.includes("dggal"));
     const dggalType = dggsCompactTool.parameters.find((p) => p.id === "dggalType");
     assert.deepEqual(dggalType?.visibleWhen, { param: "dggsType", in: ["dggal"] });
   });

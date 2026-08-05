@@ -128,4 +128,24 @@ describe("a5 SQL builders", () => {
     assert.equal(fc.features[0].properties?.value, 4.5);
     assert.equal(fc.features[1].properties?.a5, "obj");
   });
+
+  it("leaves A5 cell geometry unchanged (native dateline handling)", () => {
+    const raw = [
+      [170, 0],
+      [-170, 0],
+      [-170, 1],
+      [170, 1],
+      [170, 0],
+    ];
+    const fc = a5RowsToFeatureCollection([
+      {
+        a5: "x",
+        geojson: JSON.stringify({ type: "Polygon", coordinates: [raw] }),
+      },
+    ]);
+    assert.deepEqual(
+      (fc.features[0].geometry as { coordinates: number[][][] }).coordinates[0],
+      raw,
+    );
+  });
 });
