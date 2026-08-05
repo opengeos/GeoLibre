@@ -116,6 +116,7 @@ describe("dggal grid / bin (WASM)", () => {
       assert.ok(fc.features.length > 0);
       for (const feature of fc.features) {
         const lons = feature.geometry.coordinates[0]!.map(([lng]) => lng);
+        assert.ok(lons.length >= 4, "DGGAL cell ring must contain a closed polygon");
         assert.ok(Math.max(...lons) - Math.min(...lons) < 180);
       }
     });
