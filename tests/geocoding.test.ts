@@ -585,13 +585,15 @@ describe("CartoCiudad provider", () => {
     assert.deepEqual(provider.parseForward(undefined), []);
   });
 
-  it("returns empty array when lat/lng are missing", () => {
+  it("returns empty array when lat/lng are missing, null, or blank", () => {
     assert.deepEqual(provider.parseForward({ address: "No coords" }), []);
+    assert.deepEqual(provider.parseForward({ lat: null, lng: null, address: "Null coords" }), []);
+    assert.deepEqual(provider.parseForward({ lat: "", lng: "", address: "Empty coords" }), []);
   });
 
   it("builds a reverse URL with lat/lon params", () => {
     const config = configFor("cartociudad");
-    const url = new URL(provider.buildReverseUrl(config, -3.7038, 40.4168));
+    const url = new URL(provider.buildReverseUrl(config, -3.7038, 40.4168, {}));
     assert.equal(url.searchParams.get("lat"), "40.4168");
     assert.equal(url.searchParams.get("lon"), "-3.7038");
     assert.ok(url.pathname.includes("reverseGeocode"));
@@ -630,5 +632,12 @@ describe("CartoCiudad provider", () => {
       geocoderNeedsApiKey(resolveGeocoderConfig({ providerId: "cartociudad", apiKeys: {} })),
       false,
     );
+  });
+
+  it("rejects non-finite and out-of-bounds coordinates in geocodeReverse", async () => {
+    assert.equal(await geocodeReverse(NaN, 40.4), null);
+    assert.equal(await geocodeReverse(-3.7, Infinity), null);
+    assert.equal(await geocodeReverse(190, 40.4), null);
+    assert.equal(await geocodeReverse(-3.7, -95), null);
   });
 });

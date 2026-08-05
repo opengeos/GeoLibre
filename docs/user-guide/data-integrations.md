@@ -67,6 +67,7 @@ Choose a backend in **Settings → Geocoding**. The selection, per-provider API 
 | Provider | API key | Notes |
 | --- | --- | --- |
 | **Nominatim (OpenStreetMap)** | No | Default. Public endpoint is paced and row-capped (see below); point it at a self-hosted instance to relax both. |
+| **CartoCiudad (IGN España)** | No | Official Spanish national geocoder (IGN/CNIG). Free public API, no key required. |
 | **Pelias** | Optional | Hosted [geocode.earth](https://geocode.earth/) needs a key; a self-hosted Pelias does not. |
 | **ArcGIS World Geocoder** | Yes | Esri token / API key. |
 | **Mapbox** | Yes | Mapbox access token (`pk.…`). |
@@ -84,7 +85,7 @@ The Geocoding settings panel is the easiest way to configure a provider, but the
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `VITE_GEOCODER_PROVIDER` | `nominatim` | Provider id: `nominatim`, `pelias`, `arcgis`, `mapbox`, or `google`. |
+| `VITE_GEOCODER_PROVIDER` | `nominatim` | Provider id: `nominatim`, `cartociudad`, `pelias`, `arcgis`, `mapbox`, or `google`. |
 | `VITE_GEOCODER_API_KEY` | unset | API key / access token for the selected provider. |
 | `VITE_GEOCODER_ENDPOINT` | provider default | Forward (address to point) search endpoint override. |
 | `VITE_GEOCODER_REVERSE_ENDPOINT` | provider default | Reverse (point to address) endpoint override. |

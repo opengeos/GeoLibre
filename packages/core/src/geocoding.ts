@@ -12,8 +12,8 @@ import { getRuntimeEnvironment } from "./runtime-env";
  * unit-tested without a browser or network.
  *
  * Providers: geocoding is dispatched through a small {@link GeocodingProvider}
- * registry so alternatives to Nominatim (ArcGIS World Geocoder, Mapbox, Pelias,
- * Google) can be selected per project. Each provider builds its own request
+ * registry so alternatives to Nominatim (ArcGIS World Geocoder, CartoCiudad, Mapbox,
+ * Pelias, Google) can be selected per project. Each provider builds its own request
  * URLs and normalizes its response into a {@link GeocodeMatch} (forward) or a
  * {@link ReverseGeocodeDisplay} (reverse), so the dialog and plugin stay
  * provider-agnostic. Nominatim is the default.
@@ -632,7 +632,7 @@ function parseGoogleResults(data: unknown): GeocodeMatch[] {
 /**
  * A single CartoCiudad forward/reverse geocoding result. The API returns one
  * object (not an array) for both forward (`find`) and reverse (`reverseGeocode`)
- * lookups. `lat`/`lng` are top-level numbers; `geom` is a WKT POINT string.
+ * lookups. `lat`/`lng` are top-level numbers.
  */
 interface CartoCiudadResult {
   lat: number;
@@ -701,14 +701,19 @@ const cartociudadProvider: GeocodingProvider = {
     // CartoCiudad `find` returns a single object or null, not an array.
     if (!data || typeof data !== "object") return [];
     const r = data as CartoCiudadResult;
+    if (r.lat === null || r.lat === undefined || r.lng === null || r.lng === undefined) return [];
+    if (typeof r.lat === "string" && (r.lat as string).trim() === "") return [];
+    if (typeof r.lng === "string" && (r.lng as string).trim() === "") return [];
     const lat = Number(r.lat);
     const lon = Number(r.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+    const displayName = cartociudadDisplayName(r).trim();
+    if (!displayName) return [];
     return [
       {
         lat,
         lon,
-        displayName: cartociudadDisplayName(r),
+        displayName,
         score: null,
       },
     ];
@@ -722,6 +727,9 @@ const cartociudadProvider: GeocodingProvider = {
   parseReverse: (data) => {
     if (!data || typeof data !== "object") return null;
     const r = data as CartoCiudadResult;
+    if (r.lat === null || r.lat === undefined || r.lng === null || r.lng === undefined) return null;
+    if (typeof r.lat === "string" && (r.lat as string).trim() === "") return null;
+    if (typeof r.lng === "string" && (r.lng as string).trim() === "") return null;
     const displayName = cartociudadDisplayName(r).trim();
     if (!displayName) return null;
     // Build a structured address-parts record from the rich CartoCiudad fields.
@@ -971,6 +979,16 @@ export async function geocodeReverse(
   lat: number,
   options: { signal?: AbortSignal; config?: GeocoderConfig; zoom?: number } = {},
 ): Promise<ReverseGeocodeDisplay | null> {
+  if (
+    !Number.isFinite(lon) ||
+    !Number.isFinite(lat) ||
+    lon < -180 ||
+    lon > 180 ||
+    lat < -90 ||
+    lat > 90
+  ) {
+    return null;
+  }
   const config = options.config ?? getGeocoderConfig();
   const provider = getGeocodingProvider(config.providerId);
   const url = provider.buildReverseUrl(config, lon, lat, {
