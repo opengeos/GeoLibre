@@ -78,7 +78,11 @@ API keys are stored in plain text in the `.geolibre.json` project file, so avoid
 
 ### Usage policy and limits
 
-Requests to the public Nominatim endpoint are paced to one per second and a single batch run is capped at 1000 rows, in line with the [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/). Browsers cannot set a `User-Agent`, so the app identifies itself through the page `Referer` and the optional `email` parameter. Self-hosted Nominatim and the keyed providers (Mapbox, ArcGIS, Google, hosted Pelias) are not paced or capped by GeoLibre; their own quotas apply.
+Requests to the public Nominatim endpoint are paced to one per second and a single batch run is capped at 1000 rows, in line with the [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/). Browsers cannot set a `User-Agent`, so the app identifies itself through the page `Referer` and the optional `email` parameter.
+
+The public CartoCiudad endpoint is paced to roughly five requests per second and is not row-capped. IGN publishes no rate limit, so this is a courtesy default rather than their policy: it keeps a large batch from bursting at a free public service without borrowing Nominatim's much stricter numbers.
+
+Self-hosted Nominatim and the keyed providers (Mapbox, ArcGIS, Google, hosted Pelias) are not paced or capped by GeoLibre; their own quotas apply.
 
 ### Configuring with environment variables
 

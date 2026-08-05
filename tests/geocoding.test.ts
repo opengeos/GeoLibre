@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   buildForwardGeocodeUrl,
   buildReverseGeocodeUrl,
+  CARTOCIUDAD_MIN_INTERVAL_MS,
+  CARTOCIUDAD_PUBLIC_HOST,
   csvRowsToGeocodeRequests,
   geocodeMatchToFeature,
   geocodeForward,
@@ -191,10 +193,24 @@ describe("shouldThrottle / rowCap", () => {
 });
 
 describe("geocoderMinIntervalMs", () => {
+  const CARTOCIUDAD = "https://www.cartociudad.es/geocoder/api/geocoder/find";
+
   it("paces by hostname: only the public Nominatim host", () => {
     assert.equal(geocoderMinIntervalMs(PUBLIC_FORWARD), NOMINATIM_MIN_INTERVAL_MS);
     assert.equal(geocoderMinIntervalMs(SELF_HOSTED), 0);
     assert.equal(geocoderMinIntervalMs("https://api.mapbox.com/x"), 0);
+  });
+
+  it("paces the public CartoCiudad host gently, without Nominatim's row cap", () => {
+    assert.equal(geocoderMinIntervalMs(CARTOCIUDAD), CARTOCIUDAD_MIN_INTERVAL_MS);
+    assert.equal(
+      geocoderMinIntervalMs(`https://${CARTOCIUDAD_PUBLIC_HOST}/x`),
+      CARTOCIUDAD_MIN_INTERVAL_MS,
+    );
+    assert.ok(CARTOCIUDAD_MIN_INTERVAL_MS < NOMINATIM_MIN_INTERVAL_MS);
+    // Paced, but not subject to Nominatim's published policy gate.
+    assert.equal(shouldThrottle(CARTOCIUDAD), false);
+    assert.equal(rowCap(CARTOCIUDAD), Number.POSITIVE_INFINITY);
   });
 
   it("paces any provider pointed at the public Nominatim host (matches rowCap)", () => {
@@ -695,6 +711,37 @@ describe("CartoCiudad provider", () => {
     });
     assert.equal(matches.length, 1);
     assert.ok(matches[0].displayName.startsWith("CALLE MAYOR,"));
+  });
+
+  it("falls back to muni for the locality when poblacion is absent", () => {
+    // Shape taken from a live "A-6 km 120" response: a road kilometre point
+    // carries muni but no poblacion, so the municipality must not be dropped.
+    const matches = provider.parseForward({
+      lat: 40.9,
+      lng: -4.8,
+      address: "A-6",
+      postalCode: "05296",
+      poblacion: null,
+      muni: "Espinosa de los Caballeros",
+      province: "Ávila",
+      type: "portal",
+    });
+    assert.equal(matches.length, 1);
+    assert.ok(matches[0].displayName.includes("05296 Espinosa de los Caballeros"));
+  });
+
+  it("prefers poblacion over muni when both are present", () => {
+    const matches = provider.parseForward({
+      lat: 42.05,
+      lng: 1.74,
+      address: "Cal Mayoral",
+      poblacion: "Cal Mayoral",
+      muni: "l'Espunyola",
+      province: "Barcelona",
+    });
+    assert.equal(matches.length, 1);
+    assert.ok(matches[0].displayName.includes("Cal Mayoral"));
+    assert.ok(!matches[0].displayName.includes("Espunyola"));
   });
 
   it("builds a reverse URL with lat/lon params", () => {

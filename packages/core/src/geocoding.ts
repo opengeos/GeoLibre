@@ -39,6 +39,18 @@ export const NOMINATIM_PUBLIC_HOST = "nominatim.openstreetmap.org";
 /** Minimum spacing between requests to the public Nominatim endpoint. */
 export const NOMINATIM_MIN_INTERVAL_MS = 1100;
 
+/** Host of the free, unkeyed public CartoCiudad geocoder (IGN/CNIG). */
+export const CARTOCIUDAD_PUBLIC_HOST = "cartociudad.es";
+
+/**
+ * Courtesy spacing (~5 req/sec) between requests to the public CartoCiudad
+ * endpoint. Unlike {@link NOMINATIM_MIN_INTERVAL_MS} this is not a published
+ * policy — IGN documents no rate limit — it is our own conservative default so
+ * a large batch does not burst at a free public government service. See
+ * {@link geocoderMinIntervalMs}.
+ */
+export const CARTOCIUDAD_MIN_INTERVAL_MS = 200;
+
 /** Max rows a single batch run will geocode against the public endpoint. */
 export const PUBLIC_GEOCODE_ROW_CAP = 1000;
 
@@ -743,14 +755,20 @@ function cartociudadDisplayName(r: CartoCiudadResult): string {
     if (portalNumber) street += ` ${portalNumber}`;
     parts.push(street);
   }
-  const locality = [r.postalCode, r.poblacion]
+  // `poblacion` is null on some results that still carry `muni` — a road
+  // kilometre point such as "A-6 km 120" answers with muni "Espinosa de los
+  // Caballeros" and no poblacion — so fall back to the municipality rather than
+  // drop it from the display name. When both are present, `poblacion` wins as
+  // the more specific locality.
+  const localityName = [r.poblacion, r.muni].find((s) => s && String(s).trim());
+  const locality = [r.postalCode, localityName]
     .filter((s) => s && String(s).trim())
     .map((s) => String(s).trim())
     .join(" ");
   if (locality) parts.push(locality);
   const province = r.province ? String(r.province).trim() : "";
   if (province) parts.push(`(${province})`);
-  return parts.join(", ") || r.address || r.poblacion || "";
+  return parts.join(", ") || r.address || r.poblacion || r.muni || "";
 }
 
 const cartociudadProvider: GeocodingProvider = {
@@ -894,40 +912,64 @@ export function resolveGeocoderConfig(input: GeocodingPreferenceInput): Geocoder
   };
 }
 
-/**
- * Whether requests to `endpoint` must be throttled/capped. True for the public
- * Nominatim host (its usage policy applies) and, defensively, for any endpoint
- * that does not parse as a URL. Every other host (a self-hosted Nominatim or a
- * keyed provider) returns false.
- *
- * CartoCiudad is deliberately not included even though it is the other free,
- * unkeyed public host: the 1 req/sec pace and 1000-row cap are Nominatim's
- * published policy, not a general one. IGN documents no rate limit, and its own
- * bulk address geocoder processes up to 60,000 records per run, so applying
- * Nominatim's numbers would invent a constraint the service does not impose and
- * stretch a 60k batch across 18 hours.
- */
-export function shouldThrottle(endpoint: string): boolean {
+/** Hostname of `endpoint`, or null when it does not parse as a URL. */
+function geocoderHostname(endpoint: string): string | null {
   try {
-    return new URL(endpoint).hostname === NOMINATIM_PUBLIC_HOST;
+    return new URL(endpoint).hostname;
   } catch {
-    return true;
+    return null;
   }
 }
 
-/** The row cap to apply for `endpoint`: a finite cap for the public host, else Infinity. */
+/** Whether `hostname` is the public CartoCiudad service or a subdomain of it. */
+function isCartociudadHost(hostname: string | null): boolean {
+  if (hostname === null) return false;
+  return hostname === CARTOCIUDAD_PUBLIC_HOST || hostname.endsWith(`.${CARTOCIUDAD_PUBLIC_HOST}`);
+}
+
+/**
+ * Whether requests to `endpoint` must be throttled AND row-capped. True for the
+ * public Nominatim host (its usage policy applies) and, defensively, for any
+ * endpoint that does not parse as a URL. Every other host (a self-hosted
+ * Nominatim or a keyed provider) returns false.
+ *
+ * Note this is the *Nominatim policy* gate, not "is this host paced at all" —
+ * see {@link geocoderMinIntervalMs}, which paces CartoCiudad more gently
+ * without capping its row count.
+ */
+export function shouldThrottle(endpoint: string): boolean {
+  const hostname = geocoderHostname(endpoint);
+  return hostname === null || hostname === NOMINATIM_PUBLIC_HOST;
+}
+
+/**
+ * The row cap to apply for `endpoint`: a finite cap for the public Nominatim
+ * host, else Infinity. CartoCiudad is uncapped — IGN publishes no row limit and
+ * its own bulk address geocoder processes up to 60,000 records per run, so a
+ * cap here would be an invented constraint. It is still paced; see
+ * {@link geocoderMinIntervalMs}.
+ */
 export function rowCap(endpoint: string): number {
   return shouldThrottle(endpoint) ? PUBLIC_GEOCODE_ROW_CAP : Number.POSITIVE_INFINITY;
 }
 
 /**
- * Minimum spacing (ms) between requests for `endpoint`. Gated on the hostname
- * (like {@link rowCap}), not the selected provider, so pointing any provider at
- * the public Nominatim host still honors its 1 req/sec policy; keyed providers
- * and self-hosted endpoints are not paced by us.
+ * Minimum spacing (ms) between requests for `endpoint`. Gated on the hostname,
+ * not the selected provider, so pointing any provider at the public Nominatim
+ * host still honors its 1 req/sec policy.
+ *
+ * CartoCiudad gets a gentler pace of its own. IGN documents no rate limit for
+ * the single-lookup `find`/`reverseGeocode` endpoints either way, so the honest
+ * position is that unbounded bursting is unverified rather than sanctioned:
+ * a large CSV run against a free public government service with zero spacing
+ * risks getting the caller's IP throttled and degrading the service for
+ * everyone. Nominatim's 1 req/sec is that provider's published policy and is
+ * not borrowed here. Keyed providers and self-hosted endpoints are paced by
+ * their own quotas, not by us.
  */
 export function geocoderMinIntervalMs(endpoint: string): number {
-  return shouldThrottle(endpoint) ? NOMINATIM_MIN_INTERVAL_MS : 0;
+  if (shouldThrottle(endpoint)) return NOMINATIM_MIN_INTERVAL_MS;
+  return isCartociudadHost(geocoderHostname(endpoint)) ? CARTOCIUDAD_MIN_INTERVAL_MS : 0;
 }
 
 /** Hosted Pelias service that rejects keyless requests. */
