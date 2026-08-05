@@ -49,7 +49,13 @@ export const GEOCODE_DISPLAY_NAME_KEY = "geocode_display_name";
 export const GEOCODE_SCORE_KEY = "geocode_importance";
 
 /** Identifier of a selectable geocoding backend. */
-export type GeocodingProviderId = "nominatim" | "pelias" | "arcgis" | "mapbox" | "google";
+export type GeocodingProviderId =
+  | "nominatim"
+  | "pelias"
+  | "arcgis"
+  | "mapbox"
+  | "google"
+  | "cartociudad";
 
 /** The provider used when none is configured. */
 export const DEFAULT_GEOCODING_PROVIDER_ID: GeocodingProviderId = "nominatim";
@@ -621,6 +627,124 @@ function parseGoogleResults(data: unknown): GeocodeMatch[] {
     .filter((m): m is GeocodeMatch => m !== null);
 }
 
+// --- CartoCiudad (IGN/CNIG — Spanish national geocoder) -------------------
+
+/**
+ * A single CartoCiudad forward/reverse geocoding result. The API returns one
+ * object (not an array) for both forward (`find`) and reverse (`reverseGeocode`)
+ * lookups. `lat`/`lng` are top-level numbers; `geom` is a WKT POINT string.
+ */
+interface CartoCiudadResult {
+  lat: number;
+  lng: number;
+  address?: string;
+  type?: string;
+  tip_via?: string;
+  portalNumber?: number | string;
+  postalCode?: string;
+  poblacion?: string;
+  muni?: string;
+  province?: string;
+  comunidadAutonoma?: string;
+  refCatastral?: string;
+  state?: number;
+  [key: string]: unknown;
+}
+
+/** Default endpoints for the public CartoCiudad REST API (no auth required). */
+const CARTOCIUDAD_FORWARD_ENDPOINT =
+  "https://www.cartociudad.es/geocoder/api/geocoder/find";
+const CARTOCIUDAD_REVERSE_ENDPOINT =
+  "https://www.cartociudad.es/geocoder/api/geocoder/reverseGeocode";
+
+/**
+ * Build a human-readable display name from CartoCiudad address fields.
+ * Format: "Tip Via Address Num, CP Poblacion (Province)"
+ */
+function cartociudadDisplayName(r: CartoCiudadResult): string {
+  const parts: string[] = [];
+  const streetParts = [r.tip_via, r.address]
+    .filter((s) => s && String(s).trim())
+    .map((s) => String(s).trim());
+  if (streetParts.length) {
+    let street = streetParts.join(" ");
+    if (r.portalNumber !== undefined && r.portalNumber !== null) {
+      street += ` ${r.portalNumber}`;
+    }
+    parts.push(street);
+  }
+  const locality = [r.postalCode, r.poblacion]
+    .filter((s) => s && String(s).trim())
+    .map((s) => String(s).trim())
+    .join(" ");
+  if (locality) parts.push(locality);
+  if (r.province && String(r.province).trim()) parts.push(`(${r.province})`);
+  return parts.join(", ") || r.address || r.poblacion || "";
+}
+
+const cartociudadProvider: GeocodingProvider = {
+  id: "cartociudad",
+  label: "CartoCiudad (IGN España)",
+  forward: true,
+  reverse: true,
+  requiresApiKey: false,
+  acceptsApiKey: false,
+  defaultForwardEndpoint: CARTOCIUDAD_FORWARD_ENDPOINT,
+  defaultReverseEndpoint: CARTOCIUDAD_REVERSE_ENDPOINT,
+  buildForwardUrl: (config, query, options) => {
+    const url = new URL(config.forwardEndpoint);
+    url.searchParams.set("q", query);
+    if (options.limit) url.searchParams.set("limit", String(options.limit));
+    return url.toString();
+  },
+  parseForward: (data) => {
+    // CartoCiudad `find` returns a single object or null, not an array.
+    if (!data || typeof data !== "object") return [];
+    const r = data as CartoCiudadResult;
+    const lat = Number(r.lat);
+    const lon = Number(r.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+    return [
+      {
+        lat,
+        lon,
+        displayName: cartociudadDisplayName(r),
+        score: null,
+      },
+    ];
+  },
+  buildReverseUrl: (config, lon, lat) => {
+    const url = new URL(config.reverseEndpoint);
+    url.searchParams.set("lat", String(lat));
+    url.searchParams.set("lon", String(lon));
+    return url.toString();
+  },
+  parseReverse: (data) => {
+    if (!data || typeof data !== "object") return null;
+    const r = data as CartoCiudadResult;
+    const displayName = cartociudadDisplayName(r).trim();
+    if (!displayName) return null;
+    // Build a structured address-parts record from the rich CartoCiudad fields.
+    const parts: Record<string, string> = {};
+    for (const [key, value] of Object.entries({
+      type: r.type,
+      tip_via: r.tip_via,
+      address: r.address,
+      portalNumber: r.portalNumber,
+      postalCode: r.postalCode,
+      poblacion: r.poblacion,
+      muni: r.muni,
+      province: r.province,
+      comunidadAutonoma: r.comunidadAutonoma,
+      refCatastral: r.refCatastral,
+    })) {
+      if (value !== undefined && value !== null && value !== "")
+        parts[key] = String(value);
+    }
+    return { displayName, parts };
+  },
+};
+
 /** All selectable geocoding providers, Nominatim first (the default). */
 export const GEOCODING_PROVIDERS: readonly GeocodingProvider[] = [
   nominatimProvider,
@@ -628,6 +752,7 @@ export const GEOCODING_PROVIDERS: readonly GeocodingProvider[] = [
   arcgisProvider,
   mapboxProvider,
   googleProvider,
+  cartociudadProvider,
 ];
 
 const PROVIDERS_BY_ID = new Map<GeocodingProviderId, GeocodingProvider>(

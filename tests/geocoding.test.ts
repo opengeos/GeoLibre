@@ -242,7 +242,7 @@ describe("provider registry", () => {
 
   it("includes the proposed alternatives", () => {
     const ids = GEOCODING_PROVIDERS.map((p) => p.id).sort();
-    assert.deepEqual(ids, ["arcgis", "google", "mapbox", "nominatim", "pelias"]);
+    assert.deepEqual(ids, ["arcgis", "cartociudad", "google", "mapbox", "nominatim", "pelias"]);
   });
 
   it("normalizes unknown provider ids to Nominatim", () => {
@@ -532,5 +532,103 @@ describe("setGeocodingFetch", () => {
     } finally {
       setGeocodingFetch(null);
     }
+  });
+});
+
+// --- CartoCiudad provider tests -------------------------------------------
+
+describe("CartoCiudad provider", () => {
+  const provider = getGeocodingProvider("cartociudad");
+
+  it("is registered with correct metadata", () => {
+    assert.equal(provider.id, "cartociudad");
+    assert.equal(provider.label, "CartoCiudad (IGN España)");
+    assert.equal(provider.forward, true);
+    assert.equal(provider.reverse, true);
+    assert.equal(provider.requiresApiKey, false);
+    assert.equal(provider.acceptsApiKey, false);
+  });
+
+  it("builds a forward URL with q param", () => {
+    const config = configFor("cartociudad");
+    const url = new URL(provider.buildForwardUrl(config, "Calle Mayor 1, Madrid", {}));
+    assert.equal(url.searchParams.get("q"), "Calle Mayor 1, Madrid");
+    assert.ok(url.hostname.includes("cartociudad"));
+    assert.ok(url.pathname.includes("find"));
+  });
+
+  it("parses a forward result object into a single match", () => {
+    const matches = provider.parseForward({
+      lat: 40.416461059323886,
+      lng: -3.7046584169537073,
+      address: "MAYOR",
+      tip_via: "CALLE",
+      portalNumber: 1,
+      postalCode: "28013",
+      poblacion: "Madrid",
+      muni: "Madrid",
+      province: "Madrid",
+      type: "portal",
+      refCatastral: "0343302VK4704C",
+      state: 0,
+    });
+    assert.equal(matches.length, 1);
+    const m = matches[0];
+    assert.deepEqual([m.lat, m.lon], [40.416461059323886, -3.7046584169537073]);
+    assert.ok(m.displayName.includes("MAYOR"));
+    assert.ok(m.displayName.includes("Madrid"));
+    assert.equal(m.score, null);
+  });
+
+  it("returns empty array for null/undefined forward data", () => {
+    assert.deepEqual(provider.parseForward(null), []);
+    assert.deepEqual(provider.parseForward(undefined), []);
+  });
+
+  it("returns empty array when lat/lng are missing", () => {
+    assert.deepEqual(provider.parseForward({ address: "No coords" }), []);
+  });
+
+  it("builds a reverse URL with lat/lon params", () => {
+    const config = configFor("cartociudad");
+    const url = new URL(provider.buildReverseUrl(config, -3.7038, 40.4168));
+    assert.equal(url.searchParams.get("lat"), "40.4168");
+    assert.equal(url.searchParams.get("lon"), "-3.7038");
+    assert.ok(url.pathname.includes("reverseGeocode"));
+  });
+
+  it("parses a reverse result into display + structured parts", () => {
+    const result = provider.parseReverse({
+      lat: 40.41652681555059,
+      lng: -3.7037876690807514,
+      address: "PUERTA DEL SOL",
+      tip_via: "PLAZA",
+      portalNumber: 7,
+      postalCode: "28012",
+      poblacion: "Madrid",
+      muni: "Madrid",
+      province: "Madrid",
+      type: "portal",
+      refCatastral: "0444101VK4704C",
+      state: 0,
+    });
+    assert.ok(result);
+    assert.ok(result!.displayName.includes("PUERTA DEL SOL"));
+    assert.equal(result!.parts.tip_via, "PLAZA");
+    assert.equal(result!.parts.postalCode, "28012");
+    assert.equal(result!.parts.refCatastral, "0444101VK4704C");
+    assert.equal(result!.parts.province, "Madrid");
+  });
+
+  it("returns null for null/undefined reverse data", () => {
+    assert.equal(provider.parseReverse(null), null);
+    assert.equal(provider.parseReverse(undefined), null);
+  });
+
+  it("does not require an API key", () => {
+    assert.equal(
+      geocoderNeedsApiKey(resolveGeocoderConfig({ providerId: "cartociudad", apiKeys: {} })),
+      false,
+    );
   });
 });
