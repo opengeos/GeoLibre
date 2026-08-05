@@ -68,6 +68,13 @@ export function WidgetEditorDialog({
   const [indicatorAggregation, setIndicatorAggregation] = useState<IndicatorAggregation>("count");
   const [prefix, setPrefix] = useState("");
   const [suffix, setSuffix] = useState("");
+  // "selector" widget fields (issue #1381).
+  const [multiple, setMultiple] = useState(false);
+  // "list" widget fields (issue #1381).
+  const [listFields, setListFields] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState("");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [limit, setLimit] = useState(20);
   // "" means no custom color: fall back to the theme primary / palette.
   const [color, setColor] = useState("");
 
@@ -88,6 +95,11 @@ export function WidgetEditorDialog({
     setIndicatorAggregation(widget?.indicatorAggregation ?? "count");
     setPrefix(widget?.prefix ?? "");
     setSuffix(widget?.suffix ?? "");
+    setMultiple(widget?.multiple ?? false);
+    setListFields(widget?.listFields ?? []);
+    setSortBy(widget?.sortBy ?? "");
+    setSortDir(widget?.sortDir ?? "desc");
+    setLimit(widget?.limit ?? 20);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, widget]);
 
@@ -104,15 +116,21 @@ export function WidgetEditorDialog({
   // aren't forced to the same column; the rest need one numeric field.
   const isCategorical = type === "bar" || type === "pie";
   const isIndicator = type === "indicator";
+  const isSelector = type === "selector";
+  const isList = type === "list";
   const canSave =
     layerId !== "" &&
     (isIndicator
       ? indicatorAggregation === "count" || hasNumeric
-      : isCategorical
-        ? hasCategory && (aggregation === "count" || hasNumeric)
-        : type === "scatter"
-          ? numericCols.length >= 2
-          : hasNumeric);
+      : isSelector
+        ? hasCategory
+        : isList
+          ? hasChartable
+          : isCategorical
+            ? hasCategory && (aggregation === "count" || hasNumeric)
+            : type === "scatter"
+              ? numericCols.length >= 2
+              : hasNumeric);
   const save = () => {
     if (!canSave) return;
     const next: DashboardWidget = {
@@ -150,6 +168,19 @@ export function WidgetEditorDialog({
       // Preserve whitespace: prefix/suffix may have intentional spaces (" ha").
       if (prefix) next.prefix = prefix;
       if (suffix) next.suffix = suffix;
+    }
+    if (type === "selector") {
+      next.category = pick(category, categoryCols);
+      if (multiple) next.multiple = true;
+    }
+    if (type === "list") {
+      // Ensure at least one column is selected; default to all available.
+      const allCols = [...numericCols, ...categoryCols];
+      const cols = listFields.filter((f) => allCols.includes(f));
+      next.listFields = cols.length > 0 ? cols : allCols.slice(0, 3);
+      if (sortBy) next.sortBy = sortBy;
+      if (sortDir !== "desc") next.sortDir = sortDir;
+      if (limit !== 20) next.limit = limit;
     }
     onSave(next);
     onOpenChange(false);
@@ -229,6 +260,12 @@ export function WidgetEditorDialog({
                     {t("dashboard.chartType.pie")}
                   </option>
                   <option value="indicator">{t("dashboard.chartType.indicator")}</option>
+                  <option value="selector" disabled={!hasCategory}>
+                    {t("dashboard.chartType.selector")}
+                  </option>
+                  <option value="list" disabled={!hasChartable}>
+                    {t("dashboard.chartType.list")}
+                  </option>
                 </Select>
               </div>
 
@@ -332,6 +369,94 @@ export function WidgetEditorDialog({
                       onChange={setValueField}
                     />
                   )}
+                </>
+              )}
+
+              {type === "selector" && (
+                <>
+                  <FieldSelect
+                    id="widget-selector-category"
+                    label={t("dashboard.editor.category")}
+                    value={pick(category, categoryCols)}
+                    options={categoryCols}
+                    onChange={setCategory}
+                  />
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={multiple}
+                      onChange={(event) => setMultiple(event.target.checked)}
+                    />
+                    {t("dashboard.editor.multiSelect")}
+                  </label>
+                </>
+              )}
+
+              {type === "list" && (
+                <>
+                  <div className="grid gap-1.5">
+                    <Label>{t("dashboard.editor.listColumns")}</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[...numericCols, ...categoryCols].map((col) => {
+                        const checked = listFields.includes(col);
+                        return (
+                          <label
+                            key={col}
+                            className="flex items-center gap-1 rounded border border-border px-2 py-0.5 text-xs"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) => {
+                                if (event.target.checked) {
+                                  setListFields((prev) => [...prev, col]);
+                                } else {
+                                  setListFields((prev) => prev.filter((f) => f !== col));
+                                }
+                              }}
+                            />
+                            {col}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <FieldSelect
+                      id="widget-list-sort"
+                      label={t("dashboard.editor.sortBy")}
+                      value={sortBy}
+                      options={["", ...numericCols, ...categoryCols]}
+                      onChange={setSortBy}
+                    />
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="widget-list-sortdir">{t("dashboard.editor.sortDir")}</Label>
+                      <Select
+                        id="widget-list-sortdir"
+                        className="w-28"
+                        value={sortDir}
+                        onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                      >
+                        <option value="asc">{t("dashboard.editor.ascending")}</option>
+                        <option value="desc">{t("dashboard.editor.descending")}</option>
+                      </Select>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="widget-list-limit">{t("dashboard.editor.limit")}</Label>
+                      <Input
+                        id="widget-list-limit"
+                        type="number"
+                        className="w-20"
+                        min={1}
+                        max={500}
+                        value={limit}
+                        onChange={(event) => {
+                          const v = Number(event.target.value);
+                          if (Number.isFinite(v)) setLimit(Math.max(1, Math.trunc(v)));
+                        }}
+                      />
+                    </div>
+                  </div>
                 </>
               )}
 

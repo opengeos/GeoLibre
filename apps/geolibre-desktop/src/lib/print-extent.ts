@@ -7,7 +7,7 @@
  * line layers) that persists after the drag so the user can see and re-draw it.
  * {@link captureMapImage} later crops the snapshot to this extent.
  */
-import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
+import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
 
 /** A geographic bounding box as `[west, south, east, north]`. */
 export type PrintExtent = [number, number, number, number];
@@ -144,12 +144,15 @@ export interface DrawPrintExtentOptions {
 }
 
 /**
- * Enter interactive draw mode: the next click-and-drag on the map defines the
- * print extent. Resolves with the drawn extent, or `null` if the user cancels
- * (Escape) or the gesture is degenerate (a click with no drag).
+ * Enter interactive draw mode: the next click-and-drag (or single-finger
+ * touch drag) on the map defines the print extent. Resolves with the drawn
+ * extent, or `null` if the user cancels (Escape, a touch cancel, or a second
+ * finger joining mid-drag) or the gesture is degenerate (a click/tap with no
+ * drag).
  *
- * Map panning is suspended during the drag and restored afterwards; the drawn
- * box is left on the map so the caller can show it until it is cleared.
+ * Map panning and two-finger touch gestures are suspended during the drag and
+ * restored afterwards; the drawn box is left on the map so the caller can show
+ * it until it is cleared.
  */
 export function drawPrintExtent(
   map: MapLibreMap,
@@ -168,9 +171,16 @@ export function drawPrintExtent(
     const panWasEnabled = map.dragPan.isEnabled();
     const scrollWasEnabled = map.scrollZoom.isEnabled();
     const dblClickWasEnabled = map.doubleClickZoom.isEnabled();
+    const touchZoomWasEnabled = map.touchZoomRotate.isEnabled();
+    const touchPitchWasEnabled = map.touchPitch.isEnabled();
     map.dragPan.disable();
     map.scrollZoom.disable();
     map.doubleClickZoom.disable();
+    // Also suspend two-finger gestures: dragPan already covers single-finger
+    // touch panning, but a second finger landing mid-draw would otherwise pinch
+    // -zoom or rotate the map under the box being drawn.
+    map.touchZoomRotate.disable();
+    map.touchPitch.disable();
 
     let start: { x: number; y: number } | null = null;
     let settled = false;
@@ -184,6 +194,10 @@ export function drawPrintExtent(
       map.off("mousedown", onDown);
       map.off("mousemove", onMapMove);
       map.off("mouseup", onMapUp);
+      map.off("touchstart", onTouchStart);
+      map.off("touchmove", onTouchMove);
+      map.off("touchend", onTouchEnd);
+      map.off("touchcancel", onTouchCancel);
       window.removeEventListener("mousemove", onWindowMove);
       window.removeEventListener("mouseup", onWindowUp);
       window.removeEventListener("keydown", onKey);
@@ -193,6 +207,8 @@ export function drawPrintExtent(
       if (panWasEnabled) map.dragPan.enable();
       if (scrollWasEnabled) map.scrollZoom.enable();
       if (dblClickWasEnabled) map.doubleClickZoom.enable();
+      if (touchZoomWasEnabled) map.touchZoomRotate.enable();
+      if (touchPitchWasEnabled) map.touchPitch.enable();
       // Clear any caller-drawn preview on every exit (commit, cancel, abort).
       options.onPreview?.(null);
       resolve(result);
@@ -261,17 +277,20 @@ export function drawPrintExtent(
     };
 
     // Schedule a single preview per animation frame from the latest pointer
-    // position (both the map and window move handlers feed this, so over-canvas
-    // motion that fires both is still drawn only once per frame).
-    const queueMove = (clientX: number, clientY: number, shiftKey: boolean) => {
+    // position (the map's own mousemove/touchmove and the window fallback all
+    // feed this, so motion that fires more than one of those in a frame is
+    // still drawn only once). Takes an already canvas-relative point so mouse
+    // (via pointFromClient) and touch (via MapTouchEvent.point, which
+    // MapLibre already reports relative to the map container) share one path.
+    const queueCanvasMove = (point: { x: number; y: number }, shiftKey: boolean) => {
       if (!start) return;
-      pendingMove = { x: clientX, y: clientY, shiftKey };
+      pendingMove = { x: point.x, y: point.y, shiftKey };
       if (!moveRaf) {
         moveRaf = requestAnimationFrame(() => {
           moveRaf = 0;
           const move = pendingMove;
           pendingMove = null;
-          if (move) preview(pointFromClient(move.x, move.y), move.shiftKey);
+          if (move) preview({ x: move.x, y: move.y }, move.shiftKey);
         });
       }
     };
@@ -288,8 +307,12 @@ export function drawPrintExtent(
       start = pointFromClient(e.originalEvent.clientX, e.originalEvent.clientY);
     };
     const onMapMove = (e: MapMouseEvent) =>
-      queueMove(e.originalEvent.clientX, e.originalEvent.clientY, e.originalEvent.shiftKey);
-    const onWindowMove = (e: MouseEvent) => queueMove(e.clientX, e.clientY, e.shiftKey);
+      queueCanvasMove(
+        pointFromClient(e.originalEvent.clientX, e.originalEvent.clientY),
+        e.originalEvent.shiftKey,
+      );
+    const onWindowMove = (e: MouseEvent) =>
+      queueCanvasMove(pointFromClient(e.clientX, e.clientY), e.shiftKey);
     const onMapUp = (e: MapMouseEvent) => {
       if (e.originalEvent.button !== 0) return;
       commit(
@@ -308,15 +331,73 @@ export function drawPrintExtent(
     // mouseup would never arrive, leaving the interaction armed so the next
     // unrelated click anywhere would commit a stray extent. Note: in an embedded
     // iframe this also fires when the parent frame is clicked; that's fine for
-    // the desktop and top-level web builds, but revisit if the mouse-only path
-    // below is ever extended to a Jupyter/embedded context.
+    // the desktop and top-level web builds, but revisit if this is ever
+    // extended to a Jupyter/embedded context.
     const onBlur = () => finish(null);
 
-    // TODO: mouse-only for now (the print workflow is desktop-centric). Add a
-    // touch / pointer-event path for tablets and touchscreens as a follow-up.
+    // TouchEvent carries UIEvent's modifier keys in most engines (e.g. an
+    // external keyboard paired with a tablet); fall back to false where a
+    // browser omits it rather than throwing.
+    const touchShiftKey = (e: MapTouchEvent): boolean =>
+      Boolean((e.originalEvent as unknown as { shiftKey?: boolean }).shiftKey);
+
+    // Touch support (tablets, touchscreens): a single-finger drag defines the
+    // same rubber-band box as a mouse drag. `MapTouchEvent.point` is already
+    // reported relative to the map container, and — unlike mouse, where a
+    // release outside the canvas needs the window fallback below — a touch
+    // sequence stays targeted at its origin element for its whole lifetime, so
+    // touchmove/touchend keep arriving here even once the finger leaves the
+    // canvas. No window-level touch listeners are needed.
+    const onTouchStart = (e: MapTouchEvent) => {
+      // A fresh contact landing while a draw is already armed reads as an
+      // attempted pinch/rotate, so cancel — matching onTouchMove below. Merely
+      // ignoring it would leave `start` set from the first finger, and a later
+      // touchend from *either* finger would then commit against a release point
+      // that has nothing to do with the drag the user was making. `touchstart`
+      // derives its points from the native `touches` list (every active
+      // contact), so a second finger always surfaces here while the first is
+      // still down.
+      if (start) return finish(null);
+      // Only a single finger starts a draw. touchZoomRotate/touchPitch are
+      // disabled above, but this also guards a stray secondary contact point
+      // reported alongside the first.
+      if (e.points.length !== 1) return;
+      start = { x: e.point.x, y: e.point.y };
+    };
+    const onTouchMove = (e: MapTouchEvent) => {
+      if (!start) return;
+      // A second finger joining mid-draw reads as an attempted pinch/rotate,
+      // not a continued drag: cancel rather than draw from an ambiguous
+      // multi-touch center point, and let the user restart the tool.
+      if (e.points.length > 1) {
+        finish(null);
+        return;
+      }
+      queueCanvasMove({ x: e.point.x, y: e.point.y }, touchShiftKey(e));
+    };
+    const onTouchEnd = (e: MapTouchEvent) => {
+      // `touchend` is the one touch event whose point comes from the native
+      // `changedTouches` (the finger that just lifted) rather than the contacts
+      // still down — which is exactly the point wanted here: onTouchStart
+      // cancels as soon as a second contact reaches the canvas, so while
+      // `start` is set there is exactly one canvas-originated finger down and it
+      // is the one lifting. Deliberately *not* gated on
+      // `originalEvent.touches.length === 0`: `touches` is surface-wide, so an
+      // unrelated contact away from the canvas (a thumb steadying a tablet)
+      // would swallow a legitimate release and wedge the tool armed.
+      commit({ x: e.point.x, y: e.point.y }, touchShiftKey(e));
+    };
+    // The OS or browser reclaiming the gesture (e.g. an incoming call, a
+    // system edge-swipe) — there is no completed drag to commit.
+    const onTouchCancel = () => finish(null);
+
     map.on("mousedown", onDown);
     map.on("mousemove", onMapMove);
     map.on("mouseup", onMapUp);
+    map.on("touchstart", onTouchStart);
+    map.on("touchmove", onTouchMove);
+    map.on("touchend", onTouchEnd);
+    map.on("touchcancel", onTouchCancel);
     window.addEventListener("mousemove", onWindowMove);
     window.addEventListener("mouseup", onWindowUp);
     window.addEventListener("keydown", onKey);

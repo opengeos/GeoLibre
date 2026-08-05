@@ -1,9 +1,19 @@
 /**
- * Pure helpers shared by the Add Data dialog sources: layer construction,
- * URL building, parsing/validation, and PostgreSQL connection persistence.
+ * Helpers shared by the Add Data dialog sources: layer construction, URL
+ * building, parsing/validation, and PostgreSQL connection persistence.
+ *
+ * All of them are pure except {@link createBaseLayer}, which reads the project's
+ * current layers so a new vector layer can pick a color none of them is using.
  */
 
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  hasSimpleStyleProperties,
+  initialLayerStyle,
+  type LayerStyle,
+  useAppStore,
+} from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { TFunction } from "i18next";
 import { classifyFetchFailure } from "../../../lib/fetch-error";
@@ -60,11 +70,58 @@ export function normalizeCrs(raw: string): string {
   return value.toUpperCase();
 }
 
+/**
+ * The vector data a layer being built will carry, so {@link createBaseLayer} can
+ * style it the way `addGeoJsonLayer` styles one.
+ */
+export interface BaseLayerVectorOptions {
+  /**
+   * The collection the layer will render. Supplying it opts the layer into the
+   * as-added vector styling of #1519: its own palette color plus sizes chosen
+   * for the geometry it actually contains. Sources with no collection to paint
+   * from — rasters, tile services, video — leave it unset and keep the flat
+   * schema defaults, so nothing draws a palette color it would never paint with.
+   */
+  geojson?: FeatureCollection;
+  /**
+   * Layers built earlier in the same submit but not yet added to the store. A
+   * multi-layer import (a GPX with tracks *and* waypoints) would otherwise hand
+   * every group the same first free palette entry, since the store does not
+   * learn about any of them until they are all added.
+   */
+  pendingLayers?: readonly GeoLibreLayer[];
+}
+
+/** The style a new layer starts with, given whatever vector data it carries. */
+function initialStyleFor(vector: BaseLayerVectorOptions): LayerStyle {
+  const { geojson, pendingLayers } = vector;
+  if (!geojson) return { ...DEFAULT_LAYER_STYLE };
+  const projectLayers = useAppStore.getState().layers;
+  return initialLayerStyle({
+    geojson,
+    layers: pendingLayers?.length ? [...projectLayers, ...pendingLayers] : projectLayers,
+    overrides: { simpleStyleEnabled: hasSimpleStyleProperties(geojson) },
+  });
+}
+
+/**
+ * Builds the common {@link GeoLibreLayer} shell every Add Data source starts
+ * from.
+ *
+ * @param name - The layer name shown in the layer list.
+ * @param type - The layer type.
+ * @param source - The source descriptor persisted with the project.
+ * @param metadata - Source-specific metadata.
+ * @param vector - The data a vector layer will carry; see
+ *   {@link BaseLayerVectorOptions}. Omit it for non-vector layers.
+ * @returns The constructed layer.
+ */
 export function createBaseLayer(
   name: string,
   type: GeoLibreLayer["type"],
   source: Record<string, unknown>,
   metadata: Record<string, unknown> = {},
+  vector: BaseLayerVectorOptions = {},
 ): GeoLibreLayer {
   return {
     id: createLayerId(),
@@ -73,7 +130,7 @@ export function createBaseLayer(
     source,
     visible: true,
     opacity: 1,
-    style: { ...DEFAULT_LAYER_STYLE },
+    style: initialStyleFor(vector),
     metadata,
   };
 }

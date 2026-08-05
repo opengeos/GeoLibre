@@ -1251,7 +1251,7 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
       app.registerRightPanel?.({
         id: PANEL_ID,
         title: () => labels.getTitle?.() ?? labels.title,
-        dock: "right-of-style",
+        dock: "replace-style",
         render: (container) => renderPanel(container),
       }) ?? null;
 

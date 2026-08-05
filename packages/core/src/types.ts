@@ -54,27 +54,35 @@ export const BLANK_BASEMAP = "";
 
 export const PROJECT_VERSION = "0.2.0";
 
-export type LayerType =
-  | "geojson"
-  | "raster"
-  | "wms"
-  | "wmts"
-  | "xyz"
-  | "vector-tiles"
-  | "arcgis"
-  | "pmtiles"
-  | "mbtiles"
-  | "zarr"
-  | "lidar"
-  | "gaussian-splat"
-  | "3d-tiles"
-  | "cog"
-  | "flatgeobuf"
-  | "geoparquet"
-  | "duckdb-query"
-  | "deckgl-viz"
-  | "video"
-  | "image";
+/**
+ * Every layer type, as a runtime list so untrusted input (an imported Layer
+ * Library bundle, a hand-edited project) can be validated against it.
+ * {@link LayerType} is derived from this array, so the two cannot drift.
+ */
+export const LAYER_TYPES = [
+  "geojson",
+  "raster",
+  "wms",
+  "wmts",
+  "xyz",
+  "vector-tiles",
+  "arcgis",
+  "pmtiles",
+  "mbtiles",
+  "zarr",
+  "lidar",
+  "gaussian-splat",
+  "3d-tiles",
+  "cog",
+  "flatgeobuf",
+  "geoparquet",
+  "duckdb-query",
+  "deckgl-viz",
+  "video",
+  "image",
+] as const;
+
+export type LayerType = (typeof LAYER_TYPES)[number];
 
 export type VectorStyleMode = "single" | "graduated" | "categorized" | "rule-based" | "expression";
 
@@ -830,6 +838,27 @@ export interface LayerVirtualField {
   errorCount?: number;
 }
 
+/** Persisted refresh policy and most recent synchronization result for a layer. */
+export interface LayerConnection {
+  /** Owning layer id. Repeated here so records remain self-describing when exported. */
+  layerId: string;
+  /** Automatic refresh cadence in seconds, or null for manual synchronization only. */
+  interval: number | null;
+  /** ISO timestamp of the most recent successful synchronization. */
+  lastSyncedAt: string | null;
+  /** Most recent synchronization error. Cleared by a successful synchronization. */
+  lastError: string | null;
+  /** Whether a failed synchronization retains the last good data or clears it. */
+  onFailure: "keep-last" | "clear";
+}
+
+/**
+ * Visibility of a layer's attribute field.
+ * - "hidden": Not shown in the attribute table, identify popup, tooltips, or field pickers, but remains in the data.
+ * - "excluded": Removed entirely from the data when the project is shared or exported.
+ */
+export type FieldVisibility = "hidden" | "excluded";
+
 export interface GeoLibreLayer {
   id: string;
   name: string;
@@ -841,6 +870,11 @@ export interface GeoLibreLayer {
   metadata: Record<string, unknown>;
   beforeId?: string;
   geojson?: FeatureCollection;
+  /**
+   * Field-level visibility overrides. Fields marked as "excluded" are physically
+   * removed from the data during export and sharing.
+   */
+  fieldVisibility?: Record<string, FieldVisibility>;
   /**
    * Per-field edit-widget, constraint, and visibility configuration authored
    * in the Attribute Form designer. Applied by the attribute editing surfaces
@@ -873,6 +907,8 @@ export interface GeoLibreLayer {
    * activation. `undefined` means no time filter is applied.
    */
   timeFilter?: unknown[];
+  /** Transient MapLibre expression applied by the iframe embed API. */
+  embedFilter?: unknown[];
   sourcePath?: string;
   /**
    * Id of the {@link LayerGroup} this layer belongs to, or `undefined` when the
@@ -881,6 +917,11 @@ export interface GeoLibreLayer {
    * as one block; see `@geolibre/core`'s `layer-groups` helpers.
    */
   groupId?: string;
+  /**
+   * Project-persisted connection policy for reloadable layers. Runtime timers
+   * are reconstructed from this record when a project opens.
+   */
+  connection?: LayerConnection;
 }
 
 /**
@@ -931,7 +972,8 @@ export interface AddTileLayerOptions {
 
 /**
  * A named, collapsible folder in the layer panel that organizes a contiguous
- * run of layers (single-level nesting; groups never contain other groups).
+ * run of layers. Groups may be nested by referencing another group as their
+ * parent; the root groups omit `parentId`.
  *
  * The group's `visible` flag and `opacity` multiplier are folded into each
  * child layer's effective render state by `applyGroupEffects` before the map
@@ -940,6 +982,8 @@ export interface AddTileLayerOptions {
 export interface LayerGroup {
   id: string;
   name: string;
+  /** Parent folder id, or undefined when this folder is at the panel root. */
+  parentId?: string;
   /** When true, the group's children are hidden in the panel (not on the map). */
   collapsed: boolean;
   /** Group-level visibility; ANDed with each child layer's own visibility. */
@@ -956,6 +1000,16 @@ export interface LayerGroup {
  * these layers from in-place geometry editing) share one value.
  */
 export const SQL_QUERY_SOURCE_KIND = "sql-query";
+
+/**
+ * Metadata `sourceKind` marking a NetCDF/HDF grid baked into an `image` overlay,
+ * as opposed to the KML ground overlays that otherwise use that layer type.
+ *
+ * Defined here so `@geolibre/map` (which must not run its feature-query identify
+ * on these) and the desktop app (which owns the symbology panel, the pixel
+ * readout, and the spectral profile) share one value.
+ */
+export const NETCDF_IMAGE_SOURCE_KIND = "netcdf-image";
 
 /**
  * Detect a DuckDB query layer rendered through the plugin's external deck.gl
@@ -1520,7 +1574,9 @@ export type DashboardWidgetType =
   | "line"
   | "box"
   | "pie"
-  | "indicator";
+  | "indicator"
+  | "selector"
+  | "list";
 
 /** How a bar widget reduces its category groups. */
 export type DashboardWidgetAggregation = "count" | "sum" | "mean";
@@ -1567,6 +1623,16 @@ export interface DashboardWidget {
   prefix?: string;
   /** Indicator widget: optional suffix (e.g. " kg", " ha"). */
   suffix?: string;
+  /** Selector widget: whether multiple values can be picked (default false). */
+  multiple?: boolean;
+  /** List widget: columns to display. */
+  listFields?: string[];
+  /** List widget: field to sort by. */
+  sortBy?: string;
+  /** List widget: sort direction (default "desc"). */
+  sortDir?: "asc" | "desc";
+  /** List widget: max rows to show (default 20). */
+  limit?: number;
 }
 
 /** Aggregation functions for indicator widgets (issue #1381). Extends the bar
@@ -1608,7 +1674,69 @@ export interface StyleLibraryEntry {
   updatedAt: string;
 }
 
+/**
+ * One saved, re-addable layer in the Layer Library (issue #1520) — the "My
+ * Data" section of the Browser panel. Stores the layer's **source
+ * specification** plus its full presentation state (style, labels, filters,
+ * joins, virtual fields, attribute form), deliberately *not* the data, so the
+ * library stays small and an entry always reflects the current contents of its
+ * source.
+ *
+ * The exception is a layer whose features exist only in memory (drawn features,
+ * processing output) or in a local file: those have no re-fetchable source, so
+ * their features are embedded in {@link geojson} behind a size cap. See
+ * `layer-library.ts` for how an entry is captured and re-added.
+ */
+export interface LayerLibraryEntry {
+  /** Stable id, used as the IndexedDB/store key; upserts overwrite by id. */
+  id: string;
+  /** Display name shown in the Browser panel's My Data section. */
+  name: string;
+  /** ISO timestamp of the last save. */
+  addedAt: string;
+  /** The layer type to recreate ({@link GeoLibreLayer.type}). */
+  layerType: LayerType;
+  /** The MapLibre/plugin source spec to recreate the layer from. */
+  source: Record<string, unknown>;
+  /** The saved layer's complete {@link LayerStyle} (labels included). */
+  style: LayerStyle;
+  /** Layer opacity in [0, 1]. */
+  opacity: number;
+  /** The layer metadata the renderers and plugin sync modules key off. */
+  metadata: Record<string, unknown>;
+  /** Absolute local path, for a layer read from a file on disk. */
+  sourcePath?: string;
+  /** Persistent attribute joins to reapply. */
+  joins?: LayerJoin[];
+  /** Expression-backed virtual fields to reapply. */
+  virtualFields?: LayerVirtualField[];
+  /** Per-field edit-widget/constraint configuration to reapply. */
+  attributeForm?: AttributeFormConfig;
+  /**
+   * Embedded features, present only for a layer whose source cannot be
+   * re-read (in-memory features) or whose local file may be unavailable.
+   */
+  geojson?: FeatureCollection;
+  /**
+   * True when the entry can only be re-added by a host that can read
+   * {@link sourcePath} — i.e. its features were too large to embed, so the
+   * desktop app must re-read the file and the browser build cannot.
+   */
+  needsLocalFile?: boolean;
+}
+
+/** One saved template in the Template Library. */
+export interface ProjectTemplateEntry {
+  id: string;
+  name: string;
+  description?: string;
+  project: GeoLibreProject;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GeoLibreProject {
+  id?: string;
   version: string;
   name: string;
   mapView: MapViewState;
@@ -1656,7 +1784,35 @@ export interface GeoLibreProject {
    * library is persisted outside the project file and never serialized here.
    */
   styleLibrary?: StyleLibraryEntry[];
+  /** Anchored review comments on map points or features (issue #1518). */
+  comments?: ProjectComment[];
   metadata: Record<string, unknown>;
+}
+
+export type CommentAnchor =
+  | { type: "point"; lngLat: [number, number] }
+  | { type: "feature"; layerId: string; featureId: string | number; lngLat?: [number, number] };
+
+export interface CommentAuthor {
+  name: string;
+  color: string;
+}
+
+export interface CommentReply {
+  id: string;
+  author: CommentAuthor;
+  body: string;
+  createdAt: string;
+}
+
+export interface ProjectComment {
+  id: string;
+  anchor: CommentAnchor;
+  author: CommentAuthor;
+  body: string;
+  createdAt: string;
+  resolved: boolean;
+  replies: CommentReply[];
 }
 
 export interface RecentProjectEntry {

@@ -1133,7 +1133,7 @@ function createSourceCoopPlugin(config: SourceCoopPluginConfig): GeoLibrePlugin 
         app.registerRightPanel?.({
           id: config.id,
           title: config.name,
-          dock: "right-of-style",
+          dock: "replace-style",
           defaultWidth: 340,
           render: (container) => {
             mountPanel(container);

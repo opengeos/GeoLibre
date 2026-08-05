@@ -1,0 +1,170 @@
+import {
+  chooseGraduatedProperty,
+  getPropertyValues,
+  isCategoricalProperty,
+  type ClassifiableLayer,
+} from "./vector-style-classification";
+
+/**
+ * One-click styling offers derived from a layer's own data (issue #1519).
+ *
+ * A newly added layer arrives with single-symbol styling, and turning that into
+ * a useful map means knowing which column to classify by — a decision the data
+ * can usually make for itself. These suggestions are built from the same
+ * predicates the Style panel already uses to pre-select an attribute when the
+ * user picks a renderer by hand, so the shortcut and the manual path never
+ * disagree about what a good field is.
+ */
+
+/** A renderer offered for a layer, with the attribute it would classify by. */
+export interface StyleSuggestion {
+  kind: "categorized" | "graduated" | "heatmap";
+  /** Attribute to classify by; unset for the heatmap suggestion. */
+  property?: string;
+}
+
+/** Feature count above which a point layer reads better as a density surface. */
+export const HEATMAP_SUGGESTION_MIN_FEATURES = 200;
+
+/**
+ * Column names that are numeric but carry no magnitude worth mapping —
+ * identifiers and timestamps. Classifying by them produces a legend of epoch
+ * milliseconds or row numbers.
+ */
+const UNMAPPABLE_NAME = /(^|[_\s-])(id|fid|gid|oid|objectid|uid|uuid|key|index)$/i;
+const TIMESTAMP_NAME = /(^|[_\s-])(time|timestamp|datetime|date|updated|created|epoch|at)$/i;
+
+/**
+ * Insert a separator at every camelCase boundary so the name patterns above see
+ * `featureId` and `createdAt` the same way they see `feature_id` and
+ * `created_at`. Matching those suffixes without a boundary would swallow
+ * ordinary words — `grid` ends in "id", `candidate` ends in "date".
+ */
+function separateCamelCase(property: string): string {
+  return property.replace(/([a-z0-9])([A-Z])/g, "$1_$2");
+}
+
+/**
+ * Share of distinct values above which a *label* column is treated as an
+ * identifier regardless of its name: a value per feature classifies into noise.
+ */
+const NEAR_UNIQUE_RATIO = 0.9;
+/** Below this many features, a high distinct ratio is just a small sample. */
+const NEAR_UNIQUE_MIN_FEATURES = 20;
+
+/** A value that reads as a number — not a blank, a boolean, or free text. */
+function isNumericValue(value: unknown): boolean {
+  if (value === null || value === "" || typeof value === "boolean") return false;
+  return Number.isFinite(Number(value));
+}
+
+/**
+ * True when a column's values are so nearly all-distinct it behaves as an id.
+ *
+ * Deliberately **not** applied to columns that are numeric throughout. A
+ * continuous measurement is near-unique by its nature — building heights,
+ * areas, populations — and rejecting those would throw away precisely the
+ * columns a graduated renderer exists to show. Numeric identifiers are caught
+ * by their name instead; distinctness cannot tell `height` from `parcel_id`.
+ */
+function isNearUniqueLabel(layer: ClassifiableLayer, property: string): boolean {
+  const values = getPropertyValues(layer, property);
+  if (values.length < NEAR_UNIQUE_MIN_FEATURES) return false;
+  if (values.every(isNumericValue)) return false;
+  return new Set(values.map(String)).size / values.length > NEAR_UNIQUE_RATIO;
+}
+
+/**
+ * Columns worth *recommending* a classification on.
+ *
+ * A suggestion is held to a higher bar than the manual dropdown's pre-selection:
+ * offering "Graduate by time" on a feed whose `time` column is epoch
+ * milliseconds is worse than offering nothing, because it reads as advice. The
+ * manual path keeps its existing behavior — this filter only narrows what the
+ * panel volunteers.
+ */
+function mappableProperties(layer: ClassifiableLayer, properties: string[]): string[] {
+  return properties.filter((property) => {
+    const normalized = separateCamelCase(property);
+    return (
+      !UNMAPPABLE_NAME.test(normalized) &&
+      !TIMESTAMP_NAME.test(normalized) &&
+      !isNearUniqueLabel(layer, property)
+    );
+  });
+}
+
+/** The layer shape a suggestion is derived from. */
+export type SuggestableLayer = ClassifiableLayer & {
+  geojson?: { features?: unknown[] };
+};
+
+/**
+ * Features read when *choosing* what to suggest.
+ *
+ * Every predicate below walks the layer's values, and it happens once per
+ * candidate column, so an unbounded scan is O(columns x features) on the main
+ * thread the moment the Style panel opens. Matching the cap `dominantGeometry`
+ * already applies for the same reason keeps that bounded.
+ *
+ * This bounds the *choice* only. Applying a suggestion classifies the layer
+ * through the ordinary Style panel path, which still sees every feature, so a
+ * sampled decision never produces sampled class breaks.
+ *
+ * The trade-off is real but small: on a layer with several comparable numeric
+ * columns the sample can rank them differently than a full scan would (on the
+ * USGS earthquake feed the pick moves from `dmin` to `gap`). Both are offers
+ * the user accepts or ignores, and the attribute dropdown sits directly below,
+ * so a different-but-reasonable suggestion costs less than an unbounded scan
+ * on the main thread every time the panel opens.
+ */
+const SUGGESTION_SAMPLE_SIZE = 500;
+
+/** A view of the layer over at most {@link SUGGESTION_SAMPLE_SIZE} features. */
+function sampleLayer(layer: SuggestableLayer): SuggestableLayer {
+  const features = layer.geojson?.features ?? [];
+  if (features.length <= SUGGESTION_SAMPLE_SIZE) return layer;
+  return {
+    ...layer,
+    geojson: { ...layer.geojson, features: features.slice(0, SUGGESTION_SAMPLE_SIZE) },
+  };
+}
+
+/**
+ * Suggest up to three renderers for a layer, best first.
+ *
+ * @param layer - The layer to inspect; its GeoJSON supplies the values.
+ * @param properties - Attribute names the symbology controls offer.
+ * @param options - `supportsPointRenderer` gates the heatmap offer to layers
+ *   where the heatmap/cluster renderers actually apply (point-only layers).
+ * @returns Suggestions in display order; empty when nothing fits.
+ */
+export function buildStyleSuggestions(
+  layer: SuggestableLayer,
+  properties: string[],
+  options: { supportsPointRenderer: boolean },
+): StyleSuggestion[] {
+  const suggestions: StyleSuggestion[] = [];
+  // Every predicate below scans values per column; do it over a bounded sample.
+  const sample = sampleLayer(layer);
+  const candidates = mappableProperties(sample, properties);
+
+  // Categorized first: a low-cardinality label is what a reader most often
+  // wants a map colored by, and it needs no scale to interpret.
+  const categorical = candidates.find((property) => isCategoricalProperty(sample, property));
+  if (categorical) suggestions.push({ kind: "categorized", property: categorical });
+
+  // No fallback to the unfiltered list: when every numeric column is an id or a
+  // timestamp, offering none is better than recommending a meaningless one.
+  const numeric = chooseGraduatedProperty(sample, candidates);
+  if (numeric) suggestions.push({ kind: "graduated", property: numeric });
+
+  if (
+    options.supportsPointRenderer &&
+    (layer.geojson?.features?.length ?? 0) >= HEATMAP_SUGGESTION_MIN_FEATURES
+  ) {
+    suggestions.push({ kind: "heatmap" });
+  }
+
+  return suggestions;
+}

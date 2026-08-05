@@ -5,17 +5,30 @@ GeoLibre runs as a native Android app built from the same React codebase via
 the app shell works offline; map tiles and the heavier engines are fetched on
 demand (same as the desktop build).
 
+## Install
+
+GeoLibre is published on
+[Google Play](https://play.google.com/store/apps/details?id=org.geolibre.app).
+The Play build is signed and updates automatically:
+
+[Get GeoLibre on Google Play](https://play.google.com/store/apps/details?id=org.geolibre.app){ .md-button .md-button--primary }
+
+Prefer to sideload? Every [release](https://github.com/opengeos/GeoLibre/releases)
+attaches signed, per-ABI APKs — see [Downloads](downloads.md#android-installation).
+The rest of this page is for developers building the app themselves.
+
 ## What works on Android vs desktop
 
-The Android build ships the full map workspace, Add Data, the Vector tools
-(Turf.js / in-browser GeoPandas via Pyodide), the SQL Workspace (DuckDB-WASM and
-the in-browser PGlite/PostGIS engine), the Python Console (Pyodide), geocoding,
-statistics, the AI assistant, story maps, and plugins.
+The Android build ships the full map workspace, Add Data, the Whitebox
+geoprocessing toolbox (1,000+ tools, run in the browser on WebAssembly), the
+Vector tools (Turf.js / in-browser GeoPandas via Pyodide), the SQL Workspace
+(DuckDB-WASM and the in-browser PGlite/PostGIS engine), the Python Console
+(Pyodide), geocoding, statistics, the AI assistant, story maps, and plugins.
 
 Tools that depend on a **local desktop process** are hidden on mobile, because
 Android has no Python sidecar or local helper binaries:
 
-- Processing → **Whitebox**, **Raster**, **Conversion**, **AI Segmentation**
+- Processing → **Raster**, **Conversion**, **AI Segmentation**
   (all need the Python sidecar)
 - Add Data → **PostgreSQL** (served by the local Martin tile server)
 
@@ -205,8 +218,12 @@ adb install -r geolibre-x86_64.apk
 
 ## Publishing to Google Play
 
-The build side is covered by the CI workflow above; the rest is Play Console
-onboarding.
+GeoLibre is live on Play as
+[`org.geolibre.app`](https://play.google.com/store/apps/details?id=org.geolibre.app);
+this section records the onboarding for reference and for anyone publishing a
+fork. Only step 3 recurs per release: build the AAB with the upload key and bump
+the `versionCode`. The build side is covered by the CI workflow above; the rest
+is one-time Play Console onboarding.
 
 1. **Developer account** ($25, one-time). Register as an **organization** rather
    than a personal account if you can: personal accounts created after
@@ -231,10 +248,10 @@ onboarding.
    backend that retains user data, but the form asks per-purpose.
 7. **Content rating** questionnaire and target audience.
 
-Before the first public release, re-read *Known limitations* below: several Add
-Data paths are inert on Android. A reviewer tapping one and getting nothing is a
-one-star review, so consider gating them on mobile the way the sidecar tools
-already are via `isMobile()`.
+Keep *Known limitations* below in mind for each update: several Add Data paths
+are still inert on Android. A user tapping one and getting nothing is a one-star
+review, so gate them on mobile the way the sidecar tools already are via
+`isMobile()`.
 
 ## Known limitations / follow-ups
 

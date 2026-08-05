@@ -19,6 +19,8 @@ from typing import Any, Callable
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from geolibre_server.vector_ops import MAX_FEATURES as MAX_LAYER_FEATURES
+
 from . import conversion
 from .runtime import (
     RUNTIME_CATALOG_TIMEOUT_SECS,
@@ -43,6 +45,36 @@ WHITEBOX_RUNTIME_PACKAGE = os.environ.get(
     "whitebox-workflows>=2.0.2",
 )
 WHITEBOX_PYTHON_VERSION = os.environ.get("GEOLIBRE_WHITEBOX_PYTHON_VERSION", "3.12")
+
+_ENSURE_COG_SCRIPT = """
+import json, os, stat, sys
+
+from rio_cogeo.cogeo import cog_translate, cog_validate
+from rio_cogeo.profiles import cog_profiles
+
+path = sys.argv[1]
+temporary = sys.argv[2]
+original_mode = stat.S_IMODE(os.stat(path).st_mode)
+valid, _, _ = cog_validate(path, quiet=True)
+if valid:
+    print("{marker}" + json.dumps({"converted": False}))
+    raise SystemExit(0)
+
+cog_translate(
+    path,
+    temporary,
+    cog_profiles.get("deflate"),
+    in_memory=False,
+    quiet=True,
+    use_cog_driver=False,
+)
+valid, errors, _ = cog_validate(temporary, quiet=True)
+if not valid:
+    raise RuntimeError("COG validation failed: " + "; ".join(errors))
+os.chmod(temporary, original_mode)
+os.replace(temporary, path)
+print("{marker}" + json.dumps({"converted": True}))
+""".replace("{marker}", conversion._RESULT_MARKER)
 
 
 def _whitebox_run_timeout_secs() -> int:
@@ -88,6 +120,10 @@ _JOBS: dict[str, JobState] = {}
 _JOBS_LOCK = threading.Lock()
 _RUNTIME_SETUP_LOCK = threading.Lock()
 MAX_RETAINED_JOBS = 100
+# Concurrent pending/running Whitebox jobs. Finished jobs are retained up to
+# MAX_RETAINED_JOBS; in-flight work is refused with HTTP 429 once this cap is
+# hit so a burst of /run calls cannot spawn unbounded tool sessions.
+MAX_IN_FLIGHT_JOBS = 8
 
 
 def _check_python_import(python_executable: str) -> None:
@@ -701,10 +737,19 @@ def _write_layer_input(param_name: str, layer: dict[str, Any], temp_paths: list[
 
     Returns:
         Path to the materialized input file.
+
+    Raises:
+        ValueError: When the layer payload is not GeoJSON, or exceeds the
+            shared feature cap used by vector/PostGIS/Sedona paths.
     """
     geojson = layer.get("geojson")
     if not isinstance(geojson, dict):
         raise ValueError(f"Layer input for {param_name} does not contain GeoJSON.")
+    features = geojson.get("features") or []
+    if isinstance(features, list) and len(features) > MAX_LAYER_FEATURES:
+        raise ValueError(
+            f"Layer input for {param_name} exceeds the {MAX_LAYER_FEATURES}-feature limit"
+        )
     folder = Path(tempfile.mkdtemp(prefix="geolibre-whitebox-input-"))
     temp_paths.append(folder)
     path = folder / f"{_safe_output_stem('input', param_name)}.geojson"
@@ -915,6 +960,67 @@ def _extract_outputs(
     return outputs
 
 
+def _raster_output_paths(args: dict[str, Any], tool: dict[str, Any] | None) -> list[str]:
+    """Return existing filesystem paths declared as raster outputs."""
+    paths: list[str] = []
+    for param in (tool or {}).get("params", []):
+        if not isinstance(param, dict) or str(param.get("kind") or "") != "raster_out":
+            continue
+        value = args.get(str(param.get("name") or ""))
+        if isinstance(value, str) and value.strip() and Path(value).is_file():
+            paths.append(value)
+    return paths
+
+
+def _ensure_raster_outputs_are_cogs(
+    args: dict[str, Any],
+    tool: dict[str, Any] | None,
+    on_message: Callable[[str], None],
+    temp_paths: list[Path],
+) -> None:
+    """Convert striped Whitebox raster outputs to valid COGs in place."""
+    paths = _raster_output_paths(args, tool)
+    if not paths:
+        return
+    python = conversion._runtime_python()
+    for path in paths:
+        output_path = Path(path)
+        descriptor, temporary = tempfile.mkstemp(
+            prefix=f".{output_path.name}.",
+            suffix=".geolibre-cog.tmp",
+            dir=output_path.parent,
+        )
+        os.close(descriptor)
+        temporary_path = Path(temporary)
+        temp_paths.append(temporary_path)
+        completed = subprocess.run(
+            [python, "-c", _ENSURE_COG_SCRIPT, path, temporary],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=_clean_env(),
+            timeout=conversion.CONVERSION_RUN_TIMEOUT_SECS,
+            **_subprocess_startup_kwargs(),
+        )
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            raise RuntimeError(f"Could not optimize Whitebox raster output: {detail}")
+        converted = False
+        for line in completed.stdout.splitlines():
+            if not line.startswith(conversion._RESULT_MARKER):
+                continue
+            try:
+                converted = bool(
+                    json.loads(line[len(conversion._RESULT_MARKER) :]).get("converted")
+                )
+            except (json.JSONDecodeError, AttributeError):
+                pass
+        if converted:
+            on_message(f"Converted {Path(path).name} to a Cloud Optimized GeoTIFF.")
+
+
 def _job_update(job_id: str, **patch: Any) -> None:
     """Update an in-memory Whitebox job."""
     with _JOBS_LOCK:
@@ -955,6 +1061,12 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
             working_directory=working_directory,
         )
         result = _parse_json_maybe(raw_result)
+        _ensure_raster_outputs_are_cogs(
+            args,
+            request.tool,
+            lambda message: _append_job_message(job_id, message),
+            temp_paths,
+        )
         _job_update(
             job_id,
             status="succeeded",
@@ -1041,15 +1153,38 @@ def _evict_finished_jobs_locked() -> None:
         _JOBS.pop(job_id, None)
 
 
+def _count_in_flight_jobs_locked() -> int:
+    """Return how many jobs are pending or running. Caller must hold ``_JOBS_LOCK``."""
+    return sum(1 for job in _JOBS.values() if job.status in {"pending", "running"})
+
+
 @router.post("/run")
 def whitebox_run(request: WhiteboxRunRequest):
     """Start a background Whitebox tool run."""
     tool_id = request.tool_id.strip()
     if not tool_id:
         raise HTTPException(status_code=400, detail="tool_id is required")
+    # Reject oversized embedded layers before enqueueing work, matching the
+    # 413 vector/PostGIS/Sedona feature cap (defense-in-depth also lives in
+    # ``_write_layer_input``).
+    for name, layer in request.layer_inputs.items():
+        geojson = layer.get("geojson") if isinstance(layer, dict) else None
+        if not isinstance(geojson, dict):
+            continue
+        features = geojson.get("features") or []
+        if isinstance(features, list) and len(features) > MAX_LAYER_FEATURES:
+            raise HTTPException(
+                status_code=413,
+                detail=(f"Layer input for {name} exceeds the {MAX_LAYER_FEATURES}-feature limit"),
+            )
     job_id = str(uuid.uuid4())
     now = _utc_now()
     with _JOBS_LOCK:
+        if _count_in_flight_jobs_locked() >= MAX_IN_FLIGHT_JOBS:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many Whitebox jobs in progress; try again shortly.",
+            )
         _JOBS[job_id] = JobState(
             id=job_id,
             status="pending",
@@ -1059,7 +1194,14 @@ def whitebox_run(request: WhiteboxRunRequest):
         )
         _evict_finished_jobs_locked()
     thread = threading.Thread(target=_run_job, args=(job_id, request), daemon=True)
-    thread.start()
+    try:
+        thread.start()
+    except RuntimeError:
+        # Drop the reserved pending slot so a failed Thread.start does not
+        # permanently consume an in-flight capacity slot (and force 429s).
+        with _JOBS_LOCK:
+            _JOBS.pop(job_id, None)
+        raise
     with _JOBS_LOCK:
         return _JOBS[job_id]
 

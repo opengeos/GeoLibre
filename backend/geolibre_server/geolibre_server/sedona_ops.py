@@ -15,12 +15,22 @@ below to status codes. SedonaDB is imported lazily so ``/sql/status`` can report
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
+import logging
 import math
 import re
 from typing import Any, Optional
 
+logger = logging.getLogger(__name__)
+
 WGS84 = "EPSG:4326"
+
+# Wall-clock budget for a single SQL statement (execute + materialise). Mirrors
+# the PostGIS ``_STATEMENT_TIMEOUT_MS`` so both engines expose a consistent cap.
+# Uses ``concurrent.futures`` rather than SedonaDB/DataFusion session config
+# because the Rust engine exposes no timeout knob to Python today.
+_STATEMENT_TIMEOUT_MS = 60_000
 
 # Layer/view names must be plain SQL identifiers. The frontend already sanitises
 # them, but `/sql/run` is an HTTP boundary that can be called directly, so the
@@ -39,6 +49,10 @@ class SqlInputTooLarge(ValueError):
     A :class:`ValueError` subclass so generic callers treat it as bad input,
     while the sidecar can catch it specifically to return HTTP 413.
     """
+
+
+class SqlTimeout(Exception):
+    """Raised when a SQL statement exceeds :data:`_STATEMENT_TIMEOUT_MS`."""
 
 
 def _import_sedona() -> Any:
@@ -121,7 +135,7 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
         ``rows`` and as GeoJSON in ``geojson``.
 
     Raises:
-        SqlInputTooLarge: A layer exceeds :data:`MAX_FEATURES`.
+        SqlInputTooLarge: A layer or the query result exceeds :data:`MAX_FEATURES`.
         ValueError: Invalid input.
         Exception: Whatever SedonaDB raises for an invalid SQL statement.
     """
@@ -129,6 +143,7 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
     import geopandas as gpd  # noqa: PLC0415
 
     connection = sedona_db.connect()
+    future = None
     try:
         for layer in layers or []:
             name = str(layer.get("name") or "").strip()
@@ -147,10 +162,35 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
             gdf = gpd.GeoDataFrame.from_features(features, crs=WGS84)
             connection.create_data_frame(gdf).to_view(name)
 
-        result = connection.sql(sql)
-        # to_pandas() returns a GeoDataFrame when the result has a geometry
-        # column, otherwise a plain DataFrame.
-        frame = result.to_pandas()
+        timeout_secs = _STATEMENT_TIMEOUT_MS / 1000
+
+        def _execute():
+            r = connection.sql(sql)
+            r = r.limit(MAX_FEATURES + 1)
+            return r.to_pandas()
+
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        try:
+            future = pool.submit(_execute)
+            try:
+                frame = future.result(timeout=timeout_secs)
+            except concurrent.futures.TimeoutError:
+                # No cancellation attempt: the pool has a single worker and a
+                # single task, so by the time this fires ``_execute`` is already
+                # running and ``future.cancel()`` would return False. The Rust
+                # engine exposes no way to interrupt an in-flight query, so the
+                # statement runs to completion and the ``finally`` block below
+                # defers closing the connection until it does.
+                raise SqlTimeout(
+                    f"Spatial SQL timed out after {int(timeout_secs)} seconds"
+                ) from None
+        finally:
+            pool.shutdown(wait=False)
+        if len(frame) > MAX_FEATURES:
+            # Input registration already caps each layer, but a query can still
+            # expand rows (cross joins, generate_series, etc.). Bound the
+            # response the same way vector/PostGIS paths bound payloads.
+            raise SqlInputTooLarge(f"Query result exceeds the {MAX_FEATURES}-feature limit")
         columns = [str(column) for column in frame.columns]
 
         geometry_column: Optional[str] = None
@@ -190,9 +230,17 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
     finally:
         # SedonaDB connections are Rust-backed; release promptly rather than
         # waiting on GC. Tolerate bindings that expose no close().
-        close = getattr(connection, "close", None)
-        if callable(close):
-            try:
-                close()
-            except Exception:  # noqa: BLE001 - best-effort cleanup
-                pass
+        def _close_connection(*_args: object) -> None:
+            close = getattr(connection, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:  # noqa: BLE001 - best-effort cleanup
+                    # A failed close can strand Rust-backed resources, so give
+                    # operators a signal. The SQL text is deliberately omitted.
+                    logger.warning("Failed to close the SedonaDB connection", exc_info=True)
+
+        if future is not None and not future.done():
+            future.add_done_callback(_close_connection)
+        else:
+            _close_connection()

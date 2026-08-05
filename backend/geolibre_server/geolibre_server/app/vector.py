@@ -106,7 +106,10 @@ def vector_run(request: VectorToolRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - surface a stable error to the client
         logger.exception("Vector tool %s failed", request.tool_id)
-        raise HTTPException(status_code=400, detail=f"Vector tool failed: {exc}") from exc
+        raise HTTPException(
+            status_code=400,
+            detail="Vector tool failed due to an internal error.",
+        ) from exc
 
     return {"geojson": geojson, "messages": messages}
 
@@ -211,20 +214,25 @@ def _write_geopackage(target: Path, geojson: dict, layer: Optional[str]) -> tupl
         A ``(feature_count, layer_name)`` tuple.
 
     Raises:
-        HTTPException: The named layer is absent, or the file has several feature
-            layers and none was specified.
+        HTTPException: The named layer is absent, the named layer is an aspatial
+            attribute table, or the file holds no feature layer at all.
     """
     gpd = vector_ops._import_geopandas()
     layers = gpd.list_layers(str(target))
     names = list(layers["name"])
     # Layers with a geometry type are the writable feature tables; aspatial
     # attribute tables (geometry_type is None) are never a write target.
-    spatial = [name for name, geom in zip(names, layers["geometry_type"]) if geom is not None]
+    spatial = layers[layers["geometry_type"].notna()]["name"].tolist()
     if layer:
         if layer not in names:
             raise HTTPException(
                 status_code=404,
                 detail=f"Layer '{layer}' not found in {target.name}",
+            )
+        if layer not in spatial:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Layer '{layer}' is an aspatial table and cannot be written",
             )
         target_layer = layer
     elif spatial:
@@ -233,9 +241,10 @@ def _write_geopackage(target: Path, geojson: dict, layer: Optional[str]) -> tupl
         # it too. Explicit per-layer targeting for a multi-layer GeoPackage is a
         # follow-up (issue #1070).
         target_layer = spatial[0]
-    elif len(names) == 1:
-        target_layer = names[0]
     else:
+        # Only aspatial tables (or nothing) left: there is no writable target, and
+        # falling back to names[0] here would hand OGR the very aspatial table the
+        # explicit-layer branch above rejects.
         raise HTTPException(
             status_code=400,
             detail=f"No feature layer to write in {target.name}",
@@ -298,7 +307,10 @@ def vector_write(request: WriteVectorRequest):
         raise
     except Exception as exc:  # noqa: BLE001 - surface a stable error to the client
         logger.exception("Write-back to %s failed", target)
-        raise HTTPException(status_code=400, detail=f"Write-back failed: {exc}") from exc
+        raise HTTPException(
+            status_code=400,
+            detail="Write-back failed due to an internal error.",
+        ) from exc
 
     return {
         "path": str(target),

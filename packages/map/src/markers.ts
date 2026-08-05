@@ -18,6 +18,7 @@ const MARKER_PIXEL_RATIO = 2;
 // enormous canvas; the rendered size is set via the marker image's own pixels.
 const MIN_MARKER_SIZE = 6;
 const MAX_MARKER_SIZE = 96;
+export const KML_ICON_URL_PROPERTY = "__geolibre_kml_icon_url";
 
 const BUILTIN_SHAPES: ReadonlySet<MarkerShape> = new Set([
   "circle",
@@ -212,4 +213,38 @@ export function prepareMarker(style: LayerStyle): string | null {
   const id = `geolibre-marker-${shape}-${color.replace("#", "")}-${size}`;
   registerGeneratedImage(id, () => drawBuiltinMarker(shape, color, size));
   return id;
+}
+
+function loadRasterMarker(url: string): Promise<GeneratedImageResult | null> {
+  if (!/^data:image\/(?!svg)[\w.+-]+;base64,/i.test(url)) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => resolve({ image, pixelRatio: 2 });
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+}
+
+/**
+ * Register embedded KMZ raster icons and return an icon-image expression for
+ * the features that carry them.
+ */
+export function prepareKmlFeatureIcons(
+  collection: GeoJSON.FeatureCollection,
+  fallbackImage = "",
+): unknown[] | null {
+  const matches: unknown[] = [];
+  const seen = new Set<string>();
+  for (const feature of collection.features) {
+    const url = feature.properties?.[KML_ICON_URL_PROPERTY];
+    if (typeof url !== "string" || seen.has(url)) continue;
+    seen.add(url);
+    const id = `geolibre-kml-icon-${hashText(url)}`;
+    registerGeneratedImage(id, () => loadRasterMarker(url));
+    matches.push(url, id);
+  }
+  return matches.length
+    ? ["match", ["get", KML_ICON_URL_PROPERTY], ...matches, fallbackImage]
+    : null;
 }

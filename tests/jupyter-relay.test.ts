@@ -3,10 +3,13 @@ import { describe, it } from "node:test";
 import {
   RELAY_RECONNECT_MAX_MS,
   RELAY_RECONNECT_MIN_MS,
+  encodeRelayResult,
   parseRelayMessage,
   relayReconnectDelay,
   relaySocketUrl,
+  runRelayCommand,
 } from "../apps/geolibre-desktop/src/lib/jupyter-relay";
+import type { ScriptingHandlers } from "../apps/geolibre-desktop/src/lib/scripting/scriptingApi";
 
 // The wire format the app shares with the desktop Jupyter map-command relay
 // (backend/geolibre_server/geolibre_server/jupyter_relay.py), which is what lets
@@ -56,7 +59,7 @@ describe("parseRelayMessage", () => {
         params: { zoom: 4 },
       }),
     );
-    assert.deepEqual(command, { method: "flyTo", params: { zoom: 4 } });
+    assert.deepEqual(command, { requestId: "", method: "flyTo", params: { zoom: 4 } });
   });
 
   it("defaults missing or non-object params to an empty object", () => {
@@ -65,7 +68,19 @@ describe("parseRelayMessage", () => {
         JSON.stringify({ type: "geolibre:command", method: "x", params }),
       );
       assert.deepEqual(command?.params, {});
+      assert.equal(command?.requestId, "");
     }
+  });
+
+  it("preserves a correlated request id", () => {
+    const command = parseRelayMessage(
+      JSON.stringify({
+        type: "geolibre:command",
+        requestId: "request-1",
+        method: "listLayers",
+      }),
+    );
+    assert.equal(command?.requestId, "request-1");
   });
 
   it("ignores the relay's ready greeting", () => {
@@ -82,6 +97,133 @@ describe("parseRelayMessage", () => {
     assert.equal(parseRelayMessage("not json"), null);
     assert.equal(parseRelayMessage(new ArrayBuffer(4)), null);
     assert.equal(parseRelayMessage(null), null);
+  });
+});
+
+describe("runRelayCommand", () => {
+  // The reply this builds is what the relay's correlated request/reply path
+  // returns to the kernel, so `list_layers()` / `add_geojson()` read-back in the
+  // notebook client is exactly these payloads.
+  const handlers = {
+    listLayers: () => [{ id: "layer-1" }],
+    addGeoJsonLayer: async () => "layer-2",
+    boom: () => {
+      throw new Error("handler exploded");
+    },
+  } as unknown as ScriptingHandlers;
+
+  /** Run without the hook's diagnostics polluting the test output. */
+  const quietly = async <T>(run: () => Promise<T>): Promise<T> => {
+    const { warn, error } = console;
+    console.warn = () => {};
+    console.error = () => {};
+    try {
+      return await run();
+    } finally {
+      console.warn = warn;
+      console.error = error;
+    }
+  };
+
+  it("returns the handler's value under the request id", async () => {
+    const result = await runRelayCommand(handlers, {
+      requestId: "request-1",
+      method: "listLayers",
+      params: {},
+    });
+    assert.deepEqual(result, {
+      type: "geolibre:result",
+      requestId: "request-1",
+      ok: true,
+      value: [{ id: "layer-1" }],
+    });
+  });
+
+  it("awaits an async handler", async () => {
+    const result = await runRelayCommand(handlers, {
+      requestId: "request-2",
+      method: "addGeoJsonLayer",
+      params: {},
+    });
+    assert.deepEqual(result, {
+      type: "geolibre:result",
+      requestId: "request-2",
+      ok: true,
+      value: "layer-2",
+    });
+  });
+
+  it("reports a handler failure as ok:false", async () => {
+    const result = await quietly(() =>
+      runRelayCommand(handlers, { requestId: "request-3", method: "boom", params: {} }),
+    );
+    assert.deepEqual(result, {
+      type: "geolibre:result",
+      requestId: "request-3",
+      ok: false,
+      error: "handler exploded",
+    });
+  });
+
+  it("reports an unknown command as ok:false rather than hanging the caller", async () => {
+    const result = await quietly(() =>
+      runRelayCommand(handlers, { requestId: "request-4", method: "nope", params: {} }),
+    );
+    assert.deepEqual(result, {
+      type: "geolibre:result",
+      requestId: "request-4",
+      ok: false,
+      error: 'Unknown command "nope"',
+    });
+  });
+
+  it("never dispatches an inherited member as a command", async () => {
+    const result = await quietly(() =>
+      runRelayCommand(handlers, { requestId: "request-5", method: "constructor", params: {} }),
+    );
+    assert.equal(result?.ok, false);
+  });
+
+  it("replies with nothing for a fire-and-forget command", async () => {
+    // An empty requestId means the kernel is not waiting; the handler still runs.
+    let ran = false;
+    const spy = { ping: () => (ran = true) } as unknown as ScriptingHandlers;
+    assert.equal(await runRelayCommand(spy, { requestId: "", method: "ping", params: {} }), null);
+    assert.equal(ran, true);
+    assert.equal(
+      await quietly(() => runRelayCommand(spy, { requestId: "", method: "boom", params: {} })),
+      null,
+    );
+  });
+});
+
+describe("encodeRelayResult", () => {
+  it("encodes an ordinary result unchanged", () => {
+    const result = {
+      type: "geolibre:result",
+      requestId: "request-1",
+      ok: true,
+      value: [{ id: "layer-1" }],
+    } as const;
+    assert.deepEqual(JSON.parse(encodeRelayResult(result)), result);
+  });
+
+  it("degrades an unserializable value to a readable failure", () => {
+    // Sending nothing would leave the kernel waiting out the relay's whole
+    // result timeout for a generic 504.
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const frame = JSON.parse(
+      encodeRelayResult({
+        type: "geolibre:result",
+        requestId: "request-2",
+        ok: true,
+        value: circular,
+      }),
+    );
+    assert.equal(frame.requestId, "request-2");
+    assert.equal(frame.ok, false);
+    assert.match(frame.error, /could not be serialized/);
   });
 });
 

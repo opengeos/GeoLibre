@@ -21,6 +21,7 @@ import {
   tagViewFeaturesForImport,
 } from "./geo-editor-view-import";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { GEO_EDITOR_PLUGIN_ID } from "../plugin-ids";
 
 export { canEditLayerGeometry, SKETCHES_SOURCE_KIND } from "./geo-editor-geometry";
 
@@ -122,7 +123,7 @@ let viewImportLoadCounter = 0;
 
 const GEOMAN_EDIT_SYNC_EVENTS = ["gm:dragend", "gm:editend", "gm:rotateend"] as const;
 
-export const GEO_EDITOR_PLUGIN_ID = "maplibre-gl-geo-editor";
+export { GEO_EDITOR_PLUGIN_ID };
 
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   id: GEO_EDITOR_PLUGIN_ID,

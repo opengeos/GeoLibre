@@ -77,6 +77,15 @@ const BENIGN_CONSOLE_WARNINGS = [
   "WARNING: Multiple instances of Three.js being imported.",
 ];
 
+// ResizeObserver reports a delivery-cycle guard through window.onerror even
+// though no application exception was thrown. The browser defers the remaining
+// notifications to the next frame, so recording it as a runtime error produces
+// noisy `/:0:0` diagnostics during ordinary panel and map resizing.
+const BENIGN_WINDOW_ERRORS = [
+  "ResizeObserver loop completed with undelivered notifications.",
+  "ResizeObserver loop limit exceeded",
+];
+
 /** Whether a console.warn message is a known-benign warning to drop entirely. */
 function isBenignConsoleWarning(args: unknown[]): boolean {
   return (
@@ -419,7 +428,10 @@ export function installDiagnosticsCapture(): () => void {
     const forwarded = stripOptionalResourceHeader(input, init);
 
     try {
-      const response = await originalFetch(forwarded.input, forwarded.init);
+      const response =
+        forwarded.init !== undefined
+          ? await originalFetch(forwarded.input, forwarded.init)
+          : await originalFetch(forwarded.input);
       appendDiagnostic({
         category: "network",
         level: response.ok || optional ? "info" : "error",
@@ -507,6 +519,12 @@ export function installDiagnosticsCapture(): () => void {
   };
 
   const handleWindowError = (event: ErrorEvent) => {
+    if (BENIGN_WINDOW_ERRORS.includes(event.message)) {
+      // Suppress Chromium/WebKit's console error as well as the diagnostics
+      // entry. ResizeObserver will deliver the deferred notification next frame.
+      event.preventDefault();
+      return;
+    }
     appendDiagnostic({
       category: "runtime",
       level: "error",

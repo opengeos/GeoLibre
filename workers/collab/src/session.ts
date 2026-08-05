@@ -1,55 +1,43 @@
 import { DurableObject } from "cloudflare:workers";
 import type {
   CollabChatMessage,
-  CollabCursor,
   CollabParticipant,
-  CollabView,
   ClientMessage,
   CollaborationMode,
   CollaborationRole,
   PresenceEntry,
   ServerMessage,
 } from "./protocol";
-
-function finite(n: unknown): n is number {
-  return typeof n === "number" && Number.isFinite(n);
-}
-
-// Accepted participant color: a 3- or 6-digit hex. Shared by the join path and
-// the stored-chat validator so both enforce the same shape.
-const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-
-/** Accept a cursor only when both coordinates are finite numbers, so a crafted
- *  frame can't push NaN/strings into peers' `marker.setLngLat`. */
-function sanitizeCursor(c: unknown): CollabCursor | null {
-  if (c && typeof c === "object") {
-    const { lng, lat } = c as Record<string, unknown>;
-    if (finite(lng) && finite(lat)) return { lng, lat };
-  }
-  return null;
-}
-
-/** Accept a view only with a finite center; coerce the rest and keep bbox only
- *  when it is a finite 4-tuple. Drops any hostile extra fields. */
-function sanitizeView(v: unknown): CollabView | null {
-  if (!v || typeof v !== "object") return null;
-  const o = v as Record<string, unknown>;
-  const center = o.center;
-  if (!Array.isArray(center) || !finite(center[0]) || !finite(center[1])) {
-    return null;
-  }
-  const view: CollabView = {
-    center: [center[0], center[1]],
-    zoom: finite(o.zoom) ? o.zoom : 0,
-    bearing: finite(o.bearing) ? o.bearing : 0,
-    pitch: finite(o.pitch) ? o.pitch : 0,
-  };
-  const bbox = o.bbox;
-  if (Array.isArray(bbox) && bbox.length === 4 && bbox.every((n) => finite(n))) {
-    view.bbox = [bbox[0], bbox[1], bbox[2], bbox[3]];
-  }
-  return view;
-}
+import {
+  isBoundedId,
+  MAX_COMMENTS_PER_SESSION,
+  MAX_REPLIES_PER_COMMENT,
+  MIN_COMMENT_INTERVAL_MS,
+  preserveStoredComments,
+  validateComment,
+  validateReply,
+} from "./comment-validate";
+import {
+  authorizeHostAction,
+  authorizeSnapshot,
+  CHAT_HISTORY_LIMIT,
+  clearParticipantOverrides,
+  EMPTY_SESSION_TTL_MS,
+  MAX_CHAT_STORAGE_BYTES,
+  MAX_CHAT_TEXT_LENGTH,
+  MAX_SNAPSHOT_BYTES,
+  parseStoredChat,
+  MIN_CHAT_INTERVAL_MS,
+  normalizeMode,
+  participantCanEdit,
+  sanitizeColor,
+  sanitizeCursor,
+  sanitizeDisplayName,
+  sanitizeView,
+  setParticipantOverride,
+  toWireParticipant,
+  type SessionParticipant,
+} from "@geolibre/collab-core";
 
 /** Parse the stored snapshot defensively: a corrupt value yields null rather
  *  than throwing (which would lock joiners out of the session). */
@@ -66,95 +54,25 @@ export interface Env {
   COLLAB_SESSION: DurableObjectNamespace<CollabSession>;
 }
 
-// Cloudflare caps a single WebSocket message at ~1 MiB. Reject project
-// snapshots above this so one oversized embedded FeatureCollection can't blow
-// the actor; the client surfaces a "share via URL instead" hint.
-const MAX_SNAPSHOT_BYTES = 1_000_000;
-
-// Reclaim an empty session's storage this long after the last socket closes, so
-// abandoned codes don't accumulate. A rejoin before the alarm fires cancels it.
-const EMPTY_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
-
-// Cap a single chat message so one frame can't store an unbounded string.
-const MAX_CHAT_TEXT_LENGTH = 2000;
-// How many recent chat messages to retain so a late joiner sees recent history.
-// Persisted (not in-memory) so it survives a hibernation between messages.
-const CHAT_HISTORY_LIMIT = 50;
-// Hard byte budget for the persisted chat log, comfortably under Cloudflare's
-// ~128 KiB per-value storage cap (multi-byte text can blow the count limit).
-const MAX_CHAT_STORAGE_BYTES = 100_000;
-// Minimum gap between a socket's chat frames. Each chat costs a storage
-// read+write and a fan-out, so silently drop bursts faster than this floor to
-// keep one client from exhausting the session's storage-op budget. Generous
-// enough that normal typing/sending is never affected.
-const MIN_CHAT_INTERVAL_MS = 250;
+// The snapshot cap, empty-session TTL, and chat limits now live in
+// `@geolibre/collab-core` (imported above) so both relays enforce one set of
+// numbers; see that module for why each value is what it is.
 
 // Stateless and reused across frames (snapshots can arrive several times a
 // second), so we don't allocate a new encoder per message.
 const ENCODER = new TextEncoder();
 
-interface SocketAttachment {
-  clientId: string;
-  displayName: string;
-  color: string;
-  role: CollaborationRole;
-  /**
-   * Host-set per-participant edit override (#754, Part 3). `undefined` means
-   * "follow the session mode"; `true`/`false` pins this socket to can-edit /
-   * view-only. Stored on the attachment so it survives a hibernation wake and is
-   * never persisted to storage (it is keyed to a clientId, which is per-socket).
-   */
-  editOverride?: boolean;
-  /** Epoch-ms of this socket's last accepted chat frame, for rate-limiting. */
-  lastChatTs?: number;
-}
-
-/** Effective edit permission: the host always edits; otherwise a host-set
- *  override wins, falling back to the session mode. */
-function canEdit(attachment: SocketAttachment, mode: CollaborationMode): boolean {
-  if (attachment.role === "host") return true;
-  if (attachment.editOverride !== undefined) return attachment.editOverride;
-  return mode === "co-edit";
-}
-
-/** Validate a single stored chat entry's field types so a corrupt record can't
- *  reach clients (where it would, e.g., crash `coordinate.lat.toFixed`). */
-function isValidChatMessage(m: unknown): m is CollabChatMessage {
-  if (!m || typeof m !== "object") return false;
-  const o = m as Record<string, unknown>;
-  const coord = o.coordinate as Record<string, unknown> | null | undefined;
-  const coordOk =
-    coord === null ||
-    coord === undefined ||
-    (typeof coord === "object" && finite(coord.lng) && finite(coord.lat));
-  return (
-    typeof o.id === "string" &&
-    typeof o.clientId === "string" &&
-    typeof o.displayName === "string" &&
-    // Reject records whose field types/shapes would crash or mislead a client:
-    // a non-hex color, a blank body, a non-finite timestamp, or a bad coordinate
-    // (which would crash `coordinate.lat.toFixed`). Not a full write-path mirror.
-    typeof o.color === "string" &&
-    HEX_COLOR_RE.test(o.color) &&
-    typeof o.text === "string" &&
-    o.text !== "" &&
-    finite(o.ts) &&
-    coordOk
-  );
-}
-
-/** Parse the stored chat log defensively; a corrupt value yields an empty log
- *  (rather than throwing, which would lock joiners out of the welcome) and any
- *  malformed individual entries are dropped. */
-function parseStoredChat(raw: string | undefined): CollabChatMessage[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isValidChatMessage) : [];
-  } catch {
-    return [];
-  }
-}
+/**
+ * The shared `SessionParticipant` state, serialized onto a hibernatable socket.
+ * `editOverride`, `lastChatTs`, and `lastCommentTs` ride on the attachment so
+ * they survive a hibernation wake; none is persisted to storage, because each is
+ * keyed to a per-socket clientId (#754, Part 3).
+ *
+ * Deliberately an alias rather than an interface restating the fields: a copy
+ * would compile fine while silently reintroducing the drift the extraction into
+ * `@geolibre/collab-core` exists to prevent.
+ */
+type SocketAttachment = SessionParticipant;
 
 type PresenceState = PresenceEntry;
 
@@ -279,6 +197,9 @@ export class CollabSession extends DurableObject<Env> {
       case "chat":
         await this.handleChat(ws, attachment, message);
         break;
+      case "comment-mutation":
+        await this.handleCommentMutation(ws, attachment, message);
+        break;
     }
   }
 
@@ -344,17 +265,12 @@ export class CollabSession extends DurableObject<Env> {
       clientId: crypto.randomUUID(),
       // Guard against a non-string displayName (JSON.parse won't enforce the
       // type) so a crafted frame can't crash the handler on `.slice`.
-      displayName:
-        (typeof message.displayName === "string" ? message.displayName : "").slice(0, 60) ||
-        "Guest",
+      displayName: sanitizeDisplayName(message.displayName),
       // Only accept a hex color; fall back to neutral grey so a hostile value
       // never reaches peers (defense-in-depth with the client's DOM rendering).
       // Guard the type first: `.test()` coerces a non-string (number/array) to a
       // string, which could spuriously pass and store a non-string color.
-      color:
-        typeof message.color === "string" && HEX_COLOR_RE.test(message.color)
-          ? message.color
-          : "#888888",
+      color: sanitizeColor(message.color),
       role,
     };
     ws.serializeAttachment(attachment);
@@ -391,30 +307,26 @@ export class CollabSession extends DurableObject<Env> {
     // A host-set per-participant override takes precedence over the session
     // default, so a single guest can be pinned to view-only (or granted edit) in
     // an otherwise co-edit (or view-only) session (#754, Part 3).
-    if (!canEdit(attachment, mode)) {
+    const decision = authorizeSnapshot(attachment, mode, byteLength);
+    if (!decision.ok) {
       this.send(ws, {
         type: "error",
-        code: "forbidden",
-        message:
-          attachment.editOverride === false
-            ? "The host has set you to view-only."
-            : "This session is view-only.",
-      });
-      return;
-    }
-    if (byteLength > MAX_SNAPSHOT_BYTES) {
-      this.send(ws, {
-        type: "error",
-        code: "too-large",
-        message: "Project is too large to sync live. Share it via URL instead.",
+        code: decision.code,
+        message: decision.message,
       });
       return;
     }
 
     // The project was parsed in webSocketMessage; re-serialize it only to
-    // persist a string for storage and forward the object verbatim. The relay
-    // never reads any field inside the project.
-    const project = message.project ?? null;
+    // persist a string for storage and forward the object verbatim. `comments`
+    // is the one field the relay touches (it also writes it directly in
+    // `handleCommentMutation`), so preserve the stored list when this snapshot
+    // doesn't carry one — see `preserveStoredComments`. Peers get the merged
+    // project below, which heals a sender that had drifted.
+    const project = preserveStoredComments(
+      message.project ?? null,
+      parseStoredSnapshot(await this.ctx.storage.get<string>("snapshot")),
+    );
     // `rev` is written during /init before any socket can join, so the stored
     // value is always present; the `?? 0` is a defensive floor, never the
     // client's counter (a server-owned monotonic value must not trust input).
@@ -458,28 +370,29 @@ export class CollabSession extends DurableObject<Env> {
     attachment: SocketAttachment,
     mode: CollaborationMode,
   ): Promise<void> {
-    if (attachment.role !== "host") {
+    const forbidden = authorizeHostAction(attachment, "session mode");
+    if (forbidden) {
       this.send(ws, {
         type: "error",
         code: "forbidden",
-        message: "Only the host can change the session mode.",
+        message: forbidden,
       });
       return;
     }
-    const next: CollaborationMode = mode === "view-only" ? "view-only" : "co-edit";
+    const next = normalizeMode(mode);
     await this.ctx.storage.put("mode", next);
     // A session-wide mode change is authoritative: clear any per-participant
     // overrides so the new mode applies to everyone. Without this, a guest the
     // host previously pinned to can-edit would keep editing through a later
     // switch to view-only (a "sticky override" footgun), and there is otherwise
     // no path to reset an override back to "follow the session mode".
-    let clearedAny = false;
-    for (const socket of this.ctx.getWebSockets()) {
-      const a = socket.deserializeAttachment() as SocketAttachment | null;
-      if (a && a.editOverride !== undefined) {
-        a.editOverride = undefined;
-        socket.serializeAttachment(a);
-        clearedAny = true;
+    const socketsWithAttachments = this.attachedSockets();
+    const clearedAny = clearParticipantOverrides(
+      socketsWithAttachments.map((entry) => entry.attachment),
+    );
+    if (clearedAny) {
+      for (const { socket, attachment } of socketsWithAttachments) {
+        socket.serializeAttachment(attachment);
       }
     }
     // Broadcast the cleared roster first, then the new mode, so clients have
@@ -494,32 +407,34 @@ export class CollabSession extends DurableObject<Env> {
     attachment: SocketAttachment,
     message: Extract<ClientMessage, { type: "set-participant-mode" }>,
   ): void {
-    if (attachment.role !== "host") {
+    const forbidden = authorizeHostAction(attachment, "participant permissions");
+    if (forbidden) {
       this.send(ws, {
         type: "error",
         code: "forbidden",
-        message: "Only the host can change participant permissions.",
+        message: forbidden,
       });
       return;
     }
-    // `message` is untrusted JSON, so guard the lookup key's type (mirrors the
-    // strict-boolean coercion below) before matching it against attachments.
-    if (typeof message.clientId !== "string") return;
-    // Find the addressed participant's socket and pin its override. The host
-    // (and any other host socket) is always an editor, so refuse to override one
-    // — that keeps `editOverride` meaningful only for guests.
-    const target = this.socketByClientId(message.clientId);
-    // Target disconnected between the host's click and this frame: the
-    // disconnect already broadcasts an updated roster, so the host's view (and
-    // the now-absent toggle) reconciles on its own; no error frame needed.
+    // `message` is untrusted JSON; setParticipantOverride does the type guard on
+    // the lookup key and the strict-boolean coercion of `canEdit`, and returns
+    // false for an unknown or already-disconnected target. That case needs no
+    // error frame: the disconnect broadcast already reconciles the host's view.
+    const socketsWithAttachments = this.attachedSockets();
+    const changed = setParticipantOverride(
+      attachment,
+      socketsWithAttachments.map((entry) => entry.attachment),
+      message.clientId,
+      message.canEdit,
+    );
+    if (!changed) return;
+    // `changed` implies the entry is in this same snapshot -- setParticipantOverride
+    // found and mutated it, with no await in between -- so this always resolves.
+    const target = socketsWithAttachments.find(
+      (entry) => entry.attachment.clientId === message.clientId,
+    );
     if (!target) return;
-    const targetAttachment = target.deserializeAttachment() as SocketAttachment | null;
-    if (!targetAttachment || targetAttachment.role === "host") return;
-    // Coerce to a strict boolean: `message` is untrusted JSON (the static type
-    // is erased at runtime), so a crafted `"canEdit": 1` must not store a
-    // non-boolean on the attachment.
-    targetAttachment.editOverride = message.canEdit === true;
-    target.serializeAttachment(targetAttachment);
+    target.socket.serializeAttachment(target.attachment);
     // Everyone re-derives effective permission from the participants list (the
     // affected guest learns its own change here too), so a single broadcast
     // suffices.
@@ -588,12 +503,18 @@ export class CollabSession extends DurableObject<Env> {
 
   // -- helpers ----------------------------------------------------------------
 
-  private socketByClientId(clientId: string): WebSocket | null {
+  /**
+   * Live sockets paired with their deserialized attachment. Callers mutate the
+   * returned attachment objects in place and must re-serialize that same
+   * instance for the change to survive a hibernation wake.
+   */
+  private attachedSockets(): { socket: WebSocket; attachment: SocketAttachment }[] {
+    const result: { socket: WebSocket; attachment: SocketAttachment }[] = [];
     for (const socket of this.ctx.getWebSockets()) {
-      const a = socket.deserializeAttachment() as SocketAttachment | null;
-      if (a?.clientId === clientId) return socket;
+      const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (attachment) result.push({ socket, attachment });
     }
-    return null;
+    return result;
   }
 
   private participants(except?: WebSocket): CollabParticipant[] {
@@ -602,15 +523,7 @@ export class CollabSession extends DurableObject<Env> {
       if (socket === except) continue;
       const a = socket.deserializeAttachment() as SocketAttachment | null;
       if (a) {
-        result.push({
-          clientId: a.clientId,
-          displayName: a.displayName,
-          color: a.color,
-          role: a.role,
-          // Normalize the attachment's `undefined` (follow session mode) to the
-          // wire's `null`; the host is always an editor with no override.
-          editOverride: a.role === "host" ? null : (a.editOverride ?? null),
-        });
+        result.push(toWireParticipant(a));
       }
     }
     return result;
@@ -651,5 +564,227 @@ export class CollabSession extends DurableObject<Env> {
         // Skip a dead socket.
       }
     }
+  }
+
+  private async handleCommentMutation(
+    ws: WebSocket,
+    attachment: SocketAttachment,
+    message: Extract<ClientMessage, { type: "comment-mutation" }>,
+  ): Promise<void> {
+    const action = message.action;
+    if (!action || typeof action !== "object") {
+      this.send(ws, {
+        type: "error",
+        code: "bad-message",
+        message: "Missing or invalid comment-mutation action.",
+      });
+      return;
+    }
+
+    // Validate payloads for add/reply; toggle-resolve and delete only need a
+    // string commentId and carry no untrusted object bodies. Do this before
+    // rate-limiting so invalid frames always get bad-message and never consume
+    // the per-socket interval.
+    let sanitizedAction = action;
+    if (action.type === "add") {
+      const validated = validateComment(action.comment);
+      if (!validated) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid comment payload.",
+        });
+        return;
+      }
+      sanitizedAction = { type: "add", comment: validated };
+    } else if (action.type === "reply") {
+      if (!isBoundedId(action.commentId)) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid reply target.",
+        });
+        return;
+      }
+      const validated = validateReply(action.reply);
+      if (!validated) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid reply payload.",
+        });
+        return;
+      }
+      sanitizedAction = { type: "reply", commentId: action.commentId, reply: validated };
+    } else if (action.type === "toggle-resolve") {
+      if (!isBoundedId(action.commentId)) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid toggle-resolve target.",
+        });
+        return;
+      }
+      sanitizedAction = {
+        type: "toggle-resolve",
+        commentId: action.commentId,
+        ...(action.resolved !== undefined ? { resolved: action.resolved === true } : {}),
+      };
+    } else if (action.type === "delete") {
+      if (!isBoundedId(action.commentId)) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Invalid delete target.",
+        });
+        return;
+      }
+      sanitizedAction = { type: "delete", commentId: action.commentId };
+    } else {
+      this.send(ws, {
+        type: "error",
+        code: "bad-message",
+        message: "Unsupported comment-mutation action type.",
+      });
+      return;
+    }
+
+    const mode = (await this.ctx.storage.get<CollaborationMode>("mode")) ?? "co-edit";
+    if (!participantCanEdit(attachment, mode)) {
+      this.send(ws, {
+        type: "error",
+        code: "forbidden",
+        message: "You are in view-only mode and cannot comment.",
+      });
+      return;
+    }
+
+    // Rate-limit accepted, authorized mutations before storage work.
+    const now = Date.now();
+    if (
+      attachment.lastCommentTs !== undefined &&
+      now - attachment.lastCommentTs < MIN_COMMENT_INTERVAL_MS
+    ) {
+      return;
+    }
+    attachment.lastCommentTs = now;
+    ws.serializeAttachment(attachment);
+
+    const sanitizedMessage: Extract<ClientMessage, { type: "comment-mutation" }> = {
+      type: "comment-mutation",
+      action: sanitizedAction,
+    };
+
+    // Persist even when no full project snapshot has been written yet, so early
+    // comments survive late joiners / reconnects. Seed an empty object when
+    // storage is empty or corrupt — the relay never inspects other project fields.
+    const rawSnapshot = await this.ctx.storage.get<string>("snapshot");
+    let parsed: Record<string, unknown> = { comments: [] };
+    if (rawSnapshot) {
+      try {
+        const value = JSON.parse(rawSnapshot) as unknown;
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          parsed = value as Record<string, unknown>;
+        }
+      } catch {
+        // Fall through with the empty seed; still fan out below.
+      }
+    }
+
+    try {
+      const comments = Array.isArray(parsed.comments)
+        ? (parsed.comments as Record<string, unknown>[])
+        : [];
+      let updatedComments = comments;
+
+      if (sanitizedAction.type === "add") {
+        const newComment = sanitizedAction.comment as Record<string, unknown>;
+        const exists = comments.some((c) => c && typeof c === "object" && c.id === newComment.id);
+        if (!exists && comments.length >= MAX_COMMENTS_PER_SESSION) {
+          this.send(ws, {
+            type: "error",
+            code: "bad-message",
+            message: "Comment limit reached for this session.",
+          });
+          return;
+        }
+        updatedComments = exists ? comments : [...comments, newComment];
+      } else if (sanitizedAction.type === "reply") {
+        const replyObj = sanitizedAction.reply as Record<string, unknown>;
+        const target = comments.find(
+          (c) => c && typeof c === "object" && c.id === sanitizedAction.commentId,
+        );
+        if (!target) {
+          this.send(ws, {
+            type: "error",
+            code: "bad-message",
+            message: "Invalid reply target.",
+          });
+          return;
+        }
+        const targetReplies = Array.isArray(target.replies)
+          ? (target.replies as Record<string, unknown>[])
+          : [];
+        if (targetReplies.length >= MAX_REPLIES_PER_COMMENT) {
+          this.send(ws, {
+            type: "error",
+            code: "bad-message",
+            message: "Reply limit reached for this comment.",
+          });
+          return;
+        }
+        updatedComments = comments.map((c) => {
+          if (!c || typeof c !== "object" || c.id !== sanitizedAction.commentId) return c;
+          const existingReplies = Array.isArray(c.replies)
+            ? (c.replies as Record<string, unknown>[])
+            : [];
+          if (existingReplies.some((r) => r && typeof r === "object" && r.id === replyObj.id))
+            return c;
+          return { ...c, replies: [...existingReplies, replyObj] };
+        });
+      } else if (sanitizedAction.type === "toggle-resolve") {
+        updatedComments = comments.map((c) =>
+          c && typeof c === "object" && c.id === sanitizedAction.commentId
+            ? {
+                ...c,
+                resolved:
+                  sanitizedAction.resolved !== undefined ? sanitizedAction.resolved : !c.resolved,
+              }
+            : c,
+        );
+      } else if (sanitizedAction.type === "delete") {
+        updatedComments = comments.filter(
+          (c) => c && typeof c === "object" && c.id !== sanitizedAction.commentId,
+        );
+      }
+
+      parsed.comments = updatedComments;
+      const serialized = JSON.stringify(parsed);
+      // `handleSnapshot` bounds a full project the same way. Check before the
+      // put so an oversized value surfaces as an error the sender can see
+      // rather than a throw the catch below would have to guess at.
+      if (ENCODER.encode(serialized).length > MAX_SNAPSHOT_BYTES) {
+        this.send(ws, {
+          type: "error",
+          code: "bad-message",
+          message: "Project is too large to store this comment.",
+        });
+        return;
+      }
+      await this.ctx.storage.put("snapshot", serialized);
+    } catch {
+      // The mutation never reached storage, so a late joiner or a reconnect
+      // (both of which read from storage) would not see it. Tell the sender and
+      // skip the fan-out rather than leaving connected peers holding a comment
+      // that isn't persisted anywhere.
+      this.send(ws, {
+        type: "error",
+        code: "bad-message",
+        message: "Could not save the comment. Try again.",
+      });
+      return;
+    }
+
+    this.broadcast(sanitizedMessage, ws);
   }
 }

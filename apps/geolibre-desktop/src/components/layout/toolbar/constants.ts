@@ -171,8 +171,9 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "smooth", titleKey: "toolbar.vectorTool.smooth" },
   { kind: "grid", titleKey: "toolbar.vectorTool.grid" },
   { kind: "voronoi", titleKey: "toolbar.vectorTool.voronoi" },
-  { kind: "h3-grid", titleKey: "toolbar.vectorTool.h3Grid" },
-  { kind: "h3-bin-points", titleKey: "toolbar.vectorTool.h3BinPoints" },
+  { kind: "dggs-grid", titleKey: "toolbar.vectorTool.dggsGenerator" },
+  { kind: "dggs-bin", titleKey: "toolbar.vectorTool.dggsBinning" },
+  { kind: "dggs-compact", titleKey: "toolbar.vectorTool.dggsCompact" },
 ];
 
 export const RASTER_TOOL_COMMANDS: Array<{

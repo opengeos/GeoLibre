@@ -16,6 +16,7 @@ import {
   stopMartinServer,
 } from "../../../../lib/martin";
 import { postgisFeatureKeys, registerPostgisConnection } from "../../../../lib/postgis-connections";
+import { IS_MAS_BUILD } from "../../../../lib/build-flags";
 import { startGeoLibreSidecar } from "../../../../lib/sidecar";
 import { isTauri } from "../../../../lib/tauri-io";
 import {
@@ -133,6 +134,12 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
       if (!isTauri()) {
         throw new Error(t("addData.postgres.errorDesktopOnly"));
       }
+      // Defensive: the source is hidden from the Add Data menu in the Mac App
+      // Store build (no sidecar), but a saved dialog state could still reach
+      // this handler.
+      if (IS_MAS_BUILD) {
+        throw new Error(t("masBuild.unavailable"));
+      }
       if (!postgresConnectionString.trim()) {
         throw new Error(t("addData.postgres.errorConnectionString"));
       }
@@ -218,6 +225,11 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
     try {
       if (!isTauri()) {
         throw new Error(t("addData.postgres.errorDesktopOnly"));
+      }
+      // Defensive, mirroring handleConnectEditable: no martin server in the
+      // Mac App Store build.
+      if (IS_MAS_BUILD) {
+        throw new Error(t("masBuild.unavailable"));
       }
       if (!postgresConnectionString.trim()) {
         throw new Error(t("addData.postgres.errorConnectionString"));
@@ -384,6 +396,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
           // survives a reload (keys are not credentials).
           postgisBaselineKeys: postgisFeatureKeys(result.geojson),
         },
+        { geojson: result.geojson },
       ),
       geojson: result.geojson,
     };

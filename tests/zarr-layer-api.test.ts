@@ -4,6 +4,7 @@ import { getExternalNativePaintBridge, pluginOwnsPaint, useAppStore } from "@geo
 import {
   __setComponentsModuleLoaderForTests,
   addZarrRasterLayer,
+  queryZarrLayer,
   setZarrLayerSelector,
   type ComponentsModules,
 } from "../packages/plugins/src/plugins/maplibre-components.ts";
@@ -42,7 +43,17 @@ const addCalls: { url?: string; variable?: string; options?: StubAddOptions }[] 
 const opacityCalls: { layerId: string; opacity: number }[] = [];
 const visibilityCalls: { layerId: string; visible: boolean; opacity?: number }[] = [];
 const selectorCalls: Record<string, number | string>[] = [];
+const queryCalls: { geometry: unknown; selector?: unknown; options?: unknown }[] = [];
 let failNextAdd: string | null = null;
+
+// What the stub renderer answers a query with: values plus the store's own
+// spatial axis names, whose coordinates are in the source CRS (see the
+// renderer's QueryResult contract).
+const QUERY_RESULT = {
+  sst: [12.5],
+  dimensions: ["y", "x"],
+  coordinates: { y: [1234567.5], x: [-987654.5] },
+};
 
 class ZarrLayerControlStub {
   private handlers = new Map<string, Set<(event: unknown) => void>>();
@@ -58,7 +69,17 @@ class ZarrLayerControlStub {
     proj4?: string;
     bounds?: [number, number, number, number];
   }[] = [];
-  private instances = new Map<string, { setSelector: (s: never) => Promise<void> }>();
+  private instances = new Map<
+    string,
+    {
+      setSelector: (s: never) => Promise<void>;
+      queryData: (
+        geometry: unknown,
+        selector?: unknown,
+        options?: unknown,
+      ) => Promise<typeof QUERY_RESULT>;
+    }
+  >();
   private counter = 0;
 
   on(event: string, handler: (event: unknown) => void) {
@@ -98,6 +119,10 @@ class ZarrLayerControlStub {
     this.instances.set(id, {
       setSelector: async (selector) => {
         selectorCalls.push(selector as Record<string, number | string>);
+      },
+      queryData: async (geometry, selector, options) => {
+        queryCalls.push({ geometry, selector, options });
+        return QUERY_RESULT;
       },
     });
     this.emit("layeradd", { url, layerId: id, state: { layers: this.layers } });
@@ -305,5 +330,76 @@ describe("setZarrLayerSelector", () => {
   it("reports false for a layer the Zarr renderer does not own", async () => {
     installStubModule();
     assert.equal(await setZarrLayerSelector("not-a-zarr-layer", { month: 2 }), false);
+  });
+});
+
+// The read counterpart: a plugin that renders through addZarrLayer has no handle
+// on the renderer's layer instance, so click-to-value and region statistics have
+// to reach `queryData` by layer id (opengeos/GeoLibre#1555).
+describe("queryZarrLayer", () => {
+  it("reads the clicked point through the renderer and returns its result", async () => {
+    installStubModule();
+    queryCalls.length = 0;
+
+    const id = await addZarrRasterLayer(app, {
+      url: "https://example.org/oisst.zarr",
+      variable: "sst",
+      selector: { time: 0 },
+    });
+
+    const point = { type: "Point" as const, coordinates: [-30.5, 42.25] as [number, number] };
+    const result = await queryZarrLayer(id, point);
+
+    // Handed to the renderer untouched: it owns the reprojection into the
+    // store's grid, so the WGS84 click must not be transformed on the way in.
+    assert.deepEqual(queryCalls.at(-1)?.geometry, point);
+    assert.equal(queryCalls.at(-1)?.selector, undefined);
+    assert.deepEqual(result, QUERY_RESULT);
+  });
+
+  it("forwards a selector override, a polygon, and the abort signal", async () => {
+    installStubModule();
+    queryCalls.length = 0;
+    selectorCalls.length = 0;
+
+    const id = await addZarrRasterLayer(app, {
+      url: "https://example.org/oisst.zarr",
+      variable: "sst",
+      selector: { time: 0 },
+    });
+
+    const controller = new AbortController();
+    const polygon = {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [-31, 42],
+          [-30, 42],
+          [-30, 43],
+          [-31, 43],
+          [-31, 42],
+        ],
+      ],
+    };
+    await queryZarrLayer(id, polygon, { time: 12 }, { signal: controller.signal });
+
+    const call = queryCalls.at(-1);
+    assert.deepEqual(call?.geometry, polygon);
+    // A region query on a slice other than the one on screen: the override must
+    // reach the renderer without re-selecting the layer itself.
+    assert.deepEqual(call?.selector, { time: 12 });
+    assert.equal(
+      (call?.options as { signal?: AbortSignal } | undefined)?.signal,
+      controller.signal,
+    );
+    assert.deepEqual(selectorCalls.at(-1), undefined);
+  });
+
+  it("resolves null for a layer the Zarr renderer does not own", async () => {
+    installStubModule();
+    assert.equal(
+      await queryZarrLayer("not-a-zarr-layer", { type: "Point", coordinates: [0, 0] }),
+      null,
+    );
   });
 });

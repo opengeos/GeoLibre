@@ -1,4 +1,5 @@
 import { type NetworkToolKind, useAppStore } from "@geolibre/core";
+import { isEarthEngineAvailable } from "@geolibre/plugins";
 import {
   Button,
   DropdownMenu,
@@ -17,9 +18,18 @@ import { useTranslation } from "react-i18next";
 import type { ToolbarPanel } from "../../../hooks/useToolbarPanels";
 import { isMobile } from "../../../lib/is-mobile";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
+import { masHidesMenuItem } from "../../../lib/mas-build";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
 import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
 import type { ToolbarChrome } from "./constants";
+
+// Earth Engine sign-in needs the Rust loopback OAuth listener, which the Apple
+// App Store builds (Mac App Store and iOS) compile out so the app claims no
+// `com.apple.security.network.server` entitlement — App Review rejected it
+// otherwise. Module scope, like IS_MAS_BUILD: the build flag and user agent it
+// reads are fixed for the session, so there is nothing to recompute per render.
+// TopToolbar's command-palette gate reads the same constant.
+export const EARTH_ENGINE_AVAILABLE = isEarthEngineAvailable();
 
 interface ProcessingMenuProps {
   chrome: ToolbarChrome;
@@ -63,11 +73,15 @@ export function ProcessingMenu({
   // agent is stable for the session, so evaluate once.
   const mobile = useMemo(() => isMobile(), []);
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
-  const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  // The Mac App Store build hides sidecar-only items with no client fallback
+  // (AI Segmentation); composed with the profile gate like HelpMenu's
+  // IS_STORE_BUILD check.
+  const show = (id: string) => !masHidesMenuItem(id) && isMenuItemVisible(uiProfile, id);
   // The Whitebox toolbox (and its WASI/GeoLibre tool catalog) runs entirely in
   // the browser via WebAssembly, so unlike the sidecar-backed tools it stays
   // available on mobile.
   const showWhitebox = show("processing.whitebox");
+  const showEarthEngine = EARTH_ENGINE_AVAILABLE && show("processing.earthEngine");
 
   // Open the Whitebox toolbox dialog preselected to a specific tool, used by the
   // per-category submenus below. Two store writes: queue the tool, then open.
@@ -100,7 +114,7 @@ export function ProcessingMenu({
     show("processing.notebook") ||
     show("processing.dashboard") ||
     show("processing.planetaryComputer") ||
-    show("processing.earthEngine");
+    showEarthEngine;
 
   return (
     <DropdownMenu>
@@ -295,13 +309,16 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupH3")}
+                      {t("toolbar.item.subGroupDggs")}
                     </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setVectorToolOpen("h3-grid")}>
-                      {t("toolbar.vectorTool.h3Grid")}
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dggs-grid")}>
+                      {t("toolbar.vectorTool.dggsGenerator")}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setVectorToolOpen("h3-bin-points")}>
-                      {t("toolbar.vectorTool.h3BinPoints")}
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dggs-bin")}>
+                      {t("toolbar.vectorTool.dggsBinning")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dggs-compact")}>
+                      {t("toolbar.vectorTool.dggsCompact")}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
@@ -526,7 +543,7 @@ export function ProcessingMenu({
             {t("toolbar.command.planetaryComputer")}
           </DropdownMenuItem>
         )}
-        {show("processing.earthEngine") && (
+        {showEarthEngine && (
           <DropdownMenuItem onSelect={earthEnginePanel.toggle}>
             {t("toolbar.command.earthEngine")}
             {earthEnginePanel.visible ? " ✓" : ""}

@@ -1,4 +1,5 @@
 import type { JupyterServerInfo } from "./jupyter";
+import type { ScriptingHandlers } from "./scripting/scriptingApi";
 
 // Wire format for the desktop Jupyter map-command relay
 // (backend/geolibre_server/geolibre_server/jupyter_relay.py). The relay lets a
@@ -11,6 +12,7 @@ import type { JupyterServerInfo } from "./jupyter";
 
 /** One scripting command relayed from a kernel, in the shared bridge envelope. */
 export interface RelayCommand {
+  requestId: string;
   method: string;
   params: Record<string, unknown>;
 }
@@ -51,14 +53,97 @@ export function parseRelayMessage(data: unknown): RelayCommand | null {
     return null;
   }
   if (!payload || typeof payload !== "object") return null;
-  const message = payload as { type?: unknown; method?: unknown; params?: unknown };
+  const message = payload as {
+    type?: unknown;
+    requestId?: unknown;
+    method?: unknown;
+    params?: unknown;
+  };
   if (message.type !== "geolibre:command") return null;
   if (typeof message.method !== "string" || !message.method) return null;
   const params =
     message.params && typeof message.params === "object" && !Array.isArray(message.params)
       ? (message.params as Record<string, unknown>)
       : {};
-  return { method: message.method, params };
+  return {
+    requestId: typeof message.requestId === "string" ? message.requestId : "",
+    method: message.method,
+    params,
+  };
+}
+
+/** The correlated reply the app sends back for a command carrying a requestId. */
+export type RelayResult =
+  | { type: "geolibre:result"; requestId: string; ok: true; value: unknown }
+  | { type: "geolibre:result"; requestId: string; ok: false; error: string };
+
+/**
+ * Run one relayed command against the scripting handlers and build its reply.
+ *
+ * @param handlers - The scripting command surface (`createScriptingHandlers`).
+ * @param command - The parsed command to run.
+ * @returns The result to send back, or null for a fire-and-forget command (empty
+ *   `requestId`) — the handler still ran, there is just nothing to correlate.
+ */
+export async function runRelayCommand(
+  handlers: ScriptingHandlers,
+  command: RelayCommand,
+): Promise<RelayResult | null> {
+  // Own-property only, so an inherited member ("constructor", …) can never be
+  // invoked as a command.
+  if (!Object.hasOwn(handlers, command.method)) {
+    console.warn(`Jupyter relay: unknown command "${command.method}"`);
+    return command.requestId
+      ? {
+          type: "geolibre:result",
+          requestId: command.requestId,
+          ok: false,
+          error: `Unknown command "${command.method}"`,
+        }
+      : null;
+  }
+  try {
+    const value = await handlers[command.method](command.params);
+    return command.requestId
+      ? { type: "geolibre:result", requestId: command.requestId, ok: true, value }
+      : null;
+  } catch (error) {
+    console.error(`Jupyter relay: command "${command.method}" failed`, error);
+    return command.requestId
+      ? {
+          type: "geolibre:result",
+          requestId: command.requestId,
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      : null;
+  }
+}
+
+/**
+ * Serialize a result for the wire, degrading to an error rather than nothing.
+ *
+ * A handler can in principle resolve with a value `JSON.stringify` refuses (a
+ * circular structure, a BigInt). Sending no frame at all would leave the kernel
+ * waiting out the relay's whole result timeout for a generic 504, so send a
+ * failure the caller can actually read.
+ *
+ * @param result - The reply to encode.
+ * @returns The JSON frame to send.
+ */
+export function encodeRelayResult(result: RelayResult): string {
+  try {
+    return JSON.stringify(result);
+  } catch (error) {
+    return JSON.stringify({
+      type: "geolibre:result",
+      requestId: result.requestId,
+      ok: false,
+      error: `Result could not be serialized: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    } satisfies RelayResult);
+  }
 }
 
 /** Reconnect backoff (ms) after a dropped socket, capped so it stays responsive. */

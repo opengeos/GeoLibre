@@ -6,6 +6,7 @@ import {
   type StatisticsToolKind,
   type VectorToolKind,
 } from "@geolibre/core";
+import { resolveVectorRerun } from "@geolibre/processing";
 import { allAlgorithms } from "../../lib/scripting/scriptingApi";
 import {
   Button,
@@ -127,16 +128,22 @@ export function ProcessingHistoryDialog(): ReactElement {
   // the reopened dialog is visible.
   const openForRun = useCallback(
     (run: ProcessingRun, autoRun: boolean) => {
+      // Pre-DGGS history may still store h3-grid / h3-bin-points — map those
+      // onto dggs-* before queuing the re-run and opening the dialog.
+      const vectorResolved =
+        run.kind === "vector" ? resolveVectorRerun(run.toolId, run.parameters) : null;
+      const toolId = vectorResolved?.toolId ?? run.toolId;
+      const parameters = vectorResolved?.parameters ?? run.parameters;
       setProcessingRerun({
         kind: run.kind,
-        toolId: run.toolId,
-        parameters: run.parameters,
+        toolId,
+        parameters,
         engine: run.engine,
         autoRun,
       });
       switch (run.kind) {
         case "vector":
-          setVectorToolOpen(run.toolId as VectorToolKind);
+          setVectorToolOpen(toolId as VectorToolKind);
           break;
         case "statistics":
           setStatisticsToolOpen(run.toolId as StatisticsToolKind);

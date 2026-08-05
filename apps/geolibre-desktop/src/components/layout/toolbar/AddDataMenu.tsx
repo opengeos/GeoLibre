@@ -12,6 +12,7 @@ import { Fragment, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { AddDataKind } from "../AddDataDialog";
 import { isMobile } from "../../../lib/is-mobile";
+import { masHidesDataSource } from "../../../lib/mas-build";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import {
   DATA_SOURCE_CATALOG,
@@ -92,15 +93,17 @@ export function AddDataMenu({
   };
 
   // Each rendered section is the catalog entries it owns, filtered by the UI
-  // profile (and the mobile rule for postgres). Sections with no visible items
-  // are dropped along with their header/separator.
+  // profile (and the mobile rule for postgres, and the Mac App Store rule for
+  // the sidecar/martin-only sources). Sections with no visible items are
+  // dropped along with their header/separator.
   const sections = DATA_SOURCE_SECTION_ORDER.map((section) => ({
     section,
     entries: DATA_SOURCE_CATALOG.filter(
       (entry) =>
         entry.section === section &&
         isDataSourceVisible(uiProfile, entry.id) &&
-        !(entry.id === "postgres" && mobile),
+        !(entry.id === "postgres" && mobile) &&
+        !masHidesDataSource(entry.id),
     ),
   })).filter((group) => group.entries.length > 0);
 

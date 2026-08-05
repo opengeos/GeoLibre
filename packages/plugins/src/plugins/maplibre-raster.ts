@@ -3,6 +3,7 @@ import type { Layer } from "@deck.gl/core";
 import type {
   RasterControl,
   RasterControlEventHandler,
+  RasterLayerState,
   RasterSampleDataset,
   RenderEngine,
 } from "maplibre-gl-raster";
@@ -30,6 +31,7 @@ import {
   disposeRasterClassification,
 } from "./raster-symbology-texture";
 import { disposeAllPaletteLegends, disposePaletteLegend } from "./raster-palette";
+import { isNonTiledRasterError } from "./non-tiled-raster-error";
 
 const rasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const RASTER_PANEL_CLASS = "geolibre-raster-panel";
@@ -263,15 +265,6 @@ export function setLocalRasterPicker(picker: LocalRasterPicker | null): void {
   localRasterPicker = picker;
 }
 
-/** Whether a raster load error is the upstream "striped, not tiled" failure.
- * maplibre-gl-raster (re-verified against v0.12.0) rejects non-tiled GeoTIFFs with a message
- * containing "not tiled"; this is the only signal it exposes, so the match is
- * coupled to that wording. Re-verify it (and broaden if needed) when bumping the
- * dependency -- a reworded message degrades to the plain error, not a crash. */
-function isNonTiledRasterError(error: Error | null | undefined): boolean {
-  return error != null && /not tiled/i.test(error.message);
-}
-
 /**
  * Opens the maplibre-gl-raster panel, mounting the control on first use.
  * Replaces the former Add Raster Layer dialog: the panel loads COGs and
@@ -324,7 +317,17 @@ export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
 export async function addRasterToMap(
   app: GeoLibreAppAPI,
   source: string | File,
-  options: { name?: string; localPath?: string; defaults?: RasterVisualizationDefaults } = {},
+  options: {
+    name?: string;
+    localPath?: string;
+    defaults?: RasterVisualizationDefaults;
+    /** Initial renderer state supplied by programmatic COG callers. */
+    state?: Partial<RasterLayerState>;
+    /** Existing map style layer beneath which the raster is inserted. */
+    beforeId?: string;
+    /** Whether to fit the map to the raster after loading. Defaults to true. */
+    zoomTo?: boolean;
+  } = {},
 ): Promise<string> {
   const control = await ensureRasterControl(app);
   if (!control) {
@@ -341,10 +344,18 @@ export async function addRasterToMap(
   }
   const id = await control.addRaster(source, {
     name: options.name,
-    zoomTo: true,
+    zoomTo: options.zoomTo ?? true,
     // Safe to pass before the band count is known: the renderer applies a
     // colormap only in single-band mode and ignores it otherwise.
-    ...(options.defaults?.colormap ? { state: { colormap: options.defaults.colormap } } : {}),
+    ...(options.state || options.defaults?.colormap
+      ? {
+          state: {
+            ...(options.defaults?.colormap ? { colormap: options.defaults.colormap } : {}),
+            ...options.state,
+          },
+        }
+      : {}),
+    ...(options.beforeId ? { beforeId: options.beforeId } : {}),
   });
   applyRgbBandDefaults(control, id, options.defaults?.rgbBands);
   if (options.localPath) {

@@ -187,6 +187,29 @@ milliseconds:
 
 Manual refresh uses the same saved source URL without requiring this metadata.
 
+Reloadable layers also persist a top-level `connection` record, which is the
+primary source of truth for the refresh cadence and carries the durable
+synchronization status shown in the Layers panel. `metadata.refresh` is kept as
+a legacy fallback for projects saved before `connection` existed:
+
+```json
+{
+  "connection": {
+    "layerId": "layer-1",
+    "interval": 60,
+    "lastSyncedAt": "2026-08-01T14:20:00.000Z",
+    "lastError": null,
+    "onFailure": "keep-last"
+  }
+}
+```
+
+`interval` is the automatic refresh cadence in **seconds**, or `null` for
+manual synchronization only. `lastSyncedAt` records the most recent successful
+synchronization and `lastError` the most recent failure (cleared on the next
+success). `onFailure` decides whether a failed synchronization retains the last
+good data (`"keep-last"`, the default) or discards it (`"clear"`).
+
 For local-file vector layers on the desktop app, `metadata.watch` can persist a
 "watch this file for changes" toggle. When enabled, the desktop app registers a
 filesystem watcher that reloads the layer's features from `sourcePath` whenever
@@ -246,7 +269,7 @@ layer), falling back to `style.textColor` when a feature does not set it.
 
 ## Layer types
 
-| Type             | v1.0 status                                                                                        |
+| Type             | Status                                                                                             |
 | ---------------- | -------------------------------------------------------------------------------------------------- |
 | `geojson`        | Supported for imported files and GeoJSON URLs                                                      |
 | `xyz`            | Supported for raster tile templates                                                                |
@@ -271,6 +294,28 @@ layer), falling back to `style.textColor` when a feature does not set it.
 import {
   createEmptyProject,
   parseProject,
+  redactCredentials,
   serializeProject,
 } from "@geolibre/core";
 ```
+
+## Credential redaction
+
+A local project may contain credentials needed to restore authenticated data,
+including layer request headers, geocoding API keys, environment variables, and
+plugin settings. Any project leaving the local workspace must pass through
+`redactCredentials(project)` first. GeoLibre applies this invariant to Share,
+standalone HTML export, embed snapshots, and collaboration snapshots. Local
+Save and Save As ask whether credentials should be stripped or deliberately
+kept.
+
+Saved model and processing-history parameter bags do not currently accept
+credentials and are treated as structural project content. If a future
+processing tool accepts credentials, those fields must be added to the central
+redaction registry and traversal.
+
+The redaction pass removes credential-bearing fields and authentication
+parameters in URLs while preserving non-secret broker references. External
+plugin settings are arbitrary, so they are omitted from egress snapshots by
+default. Recipients retain the plugin manifest and activation metadata, but
+must configure their own settings.

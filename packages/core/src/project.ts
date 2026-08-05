@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from "uuid";
 import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
@@ -43,10 +44,19 @@ import {
   type StoryMap,
   type StorySlideMode,
   type StyleLibraryEntry,
+  type CommentAnchor,
+  type CommentAuthor,
+  type CommentReply,
+  type ProjectComment,
 } from "./types";
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
 import { normalizeStyleLibraryEntries } from "./style-library";
 import { getEllipsoid } from "./ellipsoids";
+import {
+  scrubWidgetsForRemovedLayers,
+  scrubCommentsForRemovedLayers,
+  scrubLegendForRemovedLayers,
+} from "./layer-ref-scrub";
 
 /** Placeholder name a project carries before the user names it. */
 export const DEFAULT_PROJECT_NAME = "Untitled Project";
@@ -91,6 +101,7 @@ export function createEmptyProject(
         }
       : DEFAULT_PROJECT_PREFERENCES,
     legend: { ...DEFAULT_LEGEND_CONFIG },
+    comments: [],
     metadata: {},
   };
 }
@@ -121,16 +132,21 @@ export function parseProject(json: string): GeoLibreProject {
   const basemapStyleUrl = data.basemapStyleUrl ?? DEFAULT_BASEMAP;
   const basemapVisible = data.basemapVisible ?? true;
   const basemapOpacity = data.basemapOpacity ?? 1;
+  // Secondary panes already go through normalizeMapViewState; the primary
+  // camera must too so a hand-edited project cannot store an out-of-range
+  // view that MapLibre would silently clamp, leaving saved state wrong.
+  const mapView = normalizeMapViewState(data.mapView);
   const { mapLayout, secondaryMapViews } = resolveMapGrid(
     normalizeMapLayout(data.mapLayout),
     normalizeSecondaryMapViews(data.secondaryMapViews),
-    { mapView: data.mapView },
+    { mapView },
   );
   const styleLibrary = normalizeStyleLibraryEntries(data.styleLibrary);
+  const parsedComments = normalizeProjectComments(data.comments);
   return {
     version: data.version,
     name: data.name,
-    mapView: data.mapView,
+    mapView,
     basemapStyleUrl,
     basemapVisible,
     basemapOpacity,
@@ -160,6 +176,7 @@ export function parseProject(json: string): GeoLibreProject {
         }
       : {}),
     ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
+    ...(parsedComments.length > 0 ? { comments: parsedComments } : {}),
     metadata: data.metadata ?? {},
   };
 }
@@ -189,12 +206,29 @@ function normalizeLayerGroups(value: unknown): LayerGroup[] {
     groups.push({
       id,
       name: typeof candidate.name === "string" ? candidate.name : id,
+      ...(typeof candidate.parentId === "string" && candidate.parentId.trim()
+        ? { parentId: candidate.parentId.trim() }
+        : {}),
       collapsed: candidate.collapsed === true,
       visible: candidate.visible !== false,
       opacity,
     });
   }
-  return groups;
+  const ids = new Set(groups.map((group) => group.id));
+  const byId = new Map(groups.map((group) => [group.id, group]));
+  return groups.map((group) => {
+    if (!group.parentId || !ids.has(group.parentId) || group.parentId === group.id) {
+      return group.parentId ? { ...group, parentId: undefined } : group;
+    }
+    let id: string | undefined = group.parentId;
+    const seen = new Set([group.id]);
+    while (id) {
+      if (seen.has(id)) return { ...group, parentId: undefined };
+      seen.add(id);
+      id = byId.get(id)?.parentId;
+    }
+    return group;
+  });
 }
 
 /**
@@ -519,6 +553,15 @@ const PROCESSING_RUN_KINDS = new Set<ProcessingRunKind>([
 ]);
 
 /**
+ * Old H3 vector-tool IDs from projects saved before the DGGS rename.
+ * Mapped onto current tool ids during project load.
+ */
+const LEGACY_H3_PROCESSING_TOOL_IDS: Readonly<Record<string, string>> = {
+  "h3-grid": "dggs-grid",
+  "h3-bin-points": "dggs-bin",
+};
+
+/**
  * Coerce an untrusted (possibly hand-edited) `processingHistory` array into
  * valid {@link ProcessingRun} records. Drops entries without a usable id, tool
  * id, or known kind, de-duplicates by id, keeps `parameters` as a plain object,
@@ -542,7 +585,7 @@ export function normalizeProcessingHistory(value: unknown): ProcessingRun[] | nu
     if (!entry || typeof entry !== "object") continue;
     const candidate = entry as Partial<ProcessingRun>;
     const id = normalizeString(candidate.id).trim();
-    const toolId = normalizeString(candidate.toolId).trim();
+    let toolId = normalizeString(candidate.toolId).trim();
     const kind = candidate.kind;
     if (!id || !toolId || seen.has(id)) continue;
     if (!kind || !PROCESSING_RUN_KINDS.has(kind)) continue;
@@ -558,16 +601,22 @@ export function normalizeProcessingHistory(value: unknown): ProcessingRun[] | nu
     const outputLayerNames = Array.isArray(candidate.outputLayerNames)
       ? candidate.outputLayerNames.filter((name): name is string => typeof name === "string")
       : undefined;
+    let parameters: Record<string, unknown> =
+      candidate.parameters && typeof candidate.parameters === "object"
+        ? { ...(candidate.parameters as Record<string, unknown>) }
+        : {};
+    const migrated = LEGACY_H3_PROCESSING_TOOL_IDS[toolId];
+    if (migrated) {
+      toolId = migrated;
+      if (parameters.dggsType == null) parameters = { ...parameters, dggsType: "h3" };
+    }
     runs.push({
       id,
       kind,
       toolId,
       toolName: normalizeString(candidate.toolName) || toolId,
       engine: normalizeString(candidate.engine),
-      parameters:
-        candidate.parameters && typeof candidate.parameters === "object"
-          ? (candidate.parameters as Record<string, unknown>)
-          : {},
+      parameters,
       ...(inputLayerNames && Object.keys(inputLayerNames).length > 0 ? { inputLayerNames } : {}),
       ...(outputLayerNames?.length ? { outputLayerNames } : {}),
       ...(normalizeString(candidate.inputPath)
@@ -735,15 +784,25 @@ const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
  * renderer's clamp (`MAX_HISTOGRAM_BINS` in the desktop app's chart helpers). */
 const MAX_PERSISTED_BINS = 50;
 
-const DASHBOARD_WIDGET_TYPES: readonly DashboardWidgetType[] = [
-  "histogram",
-  "scatter",
-  "bar",
-  "line",
-  "box",
-  "pie",
-  "indicator",
-];
+/** Upper bound for a persisted list-widget row limit, mirroring the widget
+ * editor's row-count input (`max={500}` in `WidgetEditorDialog`). */
+const MAX_PERSISTED_LIST_ROWS = 500;
+
+// Spelled as a Record so adding a member to DashboardWidgetType fails to
+// compile until it is listed here. A plain array accepted a short list
+// silently, and a type missing from it makes normalizeWidgets drop every widget
+// of that type — which is how selector widgets vanished on save and reload.
+const DASHBOARD_WIDGET_TYPES = Object.keys({
+  histogram: true,
+  scatter: true,
+  bar: true,
+  line: true,
+  box: true,
+  pie: true,
+  indicator: true,
+  selector: true,
+  list: true,
+} satisfies Record<DashboardWidgetType, true>) as readonly DashboardWidgetType[];
 const DASHBOARD_WIDGET_AGGREGATIONS: readonly DashboardWidgetAggregation[] = [
   "count",
   "sum",
@@ -827,6 +886,34 @@ export function normalizeWidgets(value: unknown): DashboardWidget[] | null {
       if (prefix) widget.prefix = prefix;
       const suffix = normalizeString(candidate.suffix);
       if (suffix) widget.suffix = suffix;
+    }
+    // Selector widget fields (issue #1381). Only a selector reads the flag, and
+    // false is the default, so persist it only when it is on.
+    if (type === "selector" && candidate.multiple === true) {
+      widget.multiple = true;
+    }
+    // List widget fields (issue #1381). normalizeWidgets also runs on the save
+    // path (projectFromStore), so dropping these would blank a list widget the
+    // moment its project is saved — the renderer falls back to "no data"
+    // without listFields.
+    if (type === "list") {
+      if (Array.isArray(candidate.listFields)) {
+        const listFields = candidate.listFields
+          .map((entry) => normalizeString(entry).trim())
+          .filter((entry) => entry !== "");
+        if (listFields.length > 0) widget.listFields = listFields;
+      }
+      const sortBy = normalizeString(candidate.sortBy).trim();
+      if (sortBy) widget.sortBy = sortBy;
+      if (candidate.sortDir === "asc" || candidate.sortDir === "desc") {
+        widget.sortDir = candidate.sortDir;
+      }
+      if (typeof candidate.limit === "number" && Number.isFinite(candidate.limit)) {
+        // Clamp to the editor's range so a hand-edited 0 or 10_000 cannot reach
+        // the renderer.
+        const limit = Math.trunc(candidate.limit);
+        if (limit >= 1) widget.limit = Math.min(MAX_PERSISTED_LIST_ROWS, limit);
+      }
     }
     widgets.push(widget);
   }
@@ -1099,6 +1186,100 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
   };
 }
 
+export function normalizeProjectComments(rawComments: unknown): ProjectComment[] {
+  if (!Array.isArray(rawComments)) return [];
+  const result: ProjectComment[] = [];
+  for (const item of rawComments) {
+    if (!item || typeof item !== "object") continue;
+    const c = item as Record<string, unknown>;
+    if (typeof c.id !== "string" || !c.id) continue;
+
+    if (!c.anchor || typeof c.anchor !== "object") continue;
+    const anchorObj = c.anchor as Record<string, unknown>;
+    let anchor: CommentAnchor;
+    if (
+      anchorObj.type === "point" &&
+      Array.isArray(anchorObj.lngLat) &&
+      anchorObj.lngLat.length === 2 &&
+      typeof anchorObj.lngLat[0] === "number" &&
+      typeof anchorObj.lngLat[1] === "number"
+    ) {
+      anchor = { type: "point", lngLat: [anchorObj.lngLat[0], anchorObj.lngLat[1]] };
+    } else if (
+      anchorObj.type === "feature" &&
+      typeof anchorObj.layerId === "string" &&
+      (typeof anchorObj.featureId === "string" || typeof anchorObj.featureId === "number")
+    ) {
+      const featLngLat =
+        Array.isArray(anchorObj.lngLat) &&
+        anchorObj.lngLat.length === 2 &&
+        typeof anchorObj.lngLat[0] === "number" &&
+        typeof anchorObj.lngLat[1] === "number"
+          ? ([anchorObj.lngLat[0], anchorObj.lngLat[1]] as [number, number])
+          : undefined;
+      anchor = {
+        type: "feature",
+        layerId: anchorObj.layerId,
+        featureId: anchorObj.featureId,
+        ...(featLngLat ? { lngLat: featLngLat } : {}),
+      };
+    } else {
+      continue;
+    }
+
+    const authorObj =
+      c.author && typeof c.author === "object" ? (c.author as Record<string, unknown>) : {};
+    const HEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+    const author: CommentAuthor = {
+      name:
+        typeof authorObj.name === "string" && authorObj.name.trim()
+          ? authorObj.name.trim()
+          : "Anonymous",
+      color:
+        typeof authorObj.color === "string" && HEX.test(authorObj.color.trim())
+          ? authorObj.color.trim()
+          : "#3b82f6",
+    };
+
+    const replies: CommentReply[] = [];
+    if (Array.isArray(c.replies)) {
+      for (const rItem of c.replies) {
+        if (!rItem || typeof rItem !== "object") continue;
+        const r = rItem as Record<string, unknown>;
+        if (typeof r.id !== "string" || !r.id) continue;
+        const rAuthorObj =
+          r.author && typeof r.author === "object" ? (r.author as Record<string, unknown>) : {};
+        replies.push({
+          id: r.id,
+          author: {
+            name:
+              typeof rAuthorObj.name === "string" && rAuthorObj.name.trim()
+                ? rAuthorObj.name.trim()
+                : "Anonymous",
+            color:
+              typeof rAuthorObj.color === "string" && HEX.test(rAuthorObj.color.trim())
+                ? rAuthorObj.color.trim()
+                : "#3b82f6",
+          },
+          body: typeof r.body === "string" ? r.body : "",
+          createdAt: typeof r.createdAt === "string" ? r.createdAt : new Date().toISOString(),
+        });
+      }
+    }
+
+    result.push({
+      id: c.id,
+      anchor,
+      author,
+      body: typeof c.body === "string" ? c.body : "",
+      createdAt: typeof c.createdAt === "string" ? c.createdAt : new Date().toISOString(),
+      resolved: Boolean(c.resolved),
+      replies,
+    });
+  }
+  return result;
+}
+
 export function projectFromStore(state: {
   projectName: string;
   mapView: MapViewState;
@@ -1121,6 +1302,7 @@ export function projectFromStore(state: {
   primaryMapLabel?: string;
   /** Project-scoped Style Manager entries (the store's `projectStyleLibrary`). */
   styleLibrary?: StyleLibraryEntry[] | null;
+  comments?: ProjectComment[] | null;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
@@ -1133,6 +1315,7 @@ export function projectFromStore(state: {
   const models = normalizeModels(state.models);
   const processingHistory = normalizeProcessingHistory(state.processingHistory);
   const widgets = normalizeWidgets(state.widgets);
+  const comments = normalizeProjectComments(state.comments);
   // Persist a non-default column count only; a default-layout dashboard (or a
   // widget-less project) stays free of the key for legacy readers.
   const dashboardColumns =
@@ -1189,6 +1372,7 @@ export function projectFromStore(state: {
         }
       : {}),
     ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
+    ...(comments.length > 0 ? { comments } : {}),
     metadata: state.metadata,
   };
 }
@@ -1216,6 +1400,10 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
   // re-applies the filter the next time it activates.
   if (layer.timeFilter !== undefined) {
     const { timeFilter: _timeFilter, ...rest } = layer;
+    layer = rest;
+  }
+  if (layer.embedFilter !== undefined) {
+    const { embedFilter: _embedFilter, ...rest } = layer;
     layer = rest;
   }
 
@@ -1296,6 +1484,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   secondaryMapViews: SecondaryMapView[];
   primaryMapLabel: string;
   projectStyleLibrary: StyleLibraryEntry[];
+  comments: ProjectComment[];
   metadata: Record<string, unknown>;
 } {
   const layers = project.layers.map((layer) => ({
@@ -1324,14 +1513,50 @@ export function applyProjectToStore(project: GeoLibreProject): {
   const basemapOpacity = project.basemapOpacity ?? 1;
   // Reconcile the (possibly hand-edited or programmatic) grid so the store's
   // invariant `secondaryMapViews.length === rows * cols - 1` always holds.
+  const mapView = normalizeMapViewState(project.mapView);
   const { mapLayout, secondaryMapViews } = resolveMapGrid(
     normalizeMapLayout(project.mapLayout),
     normalizeSecondaryMapViews(project.secondaryMapViews),
-    { mapView: project.mapView },
+    { mapView },
   );
+
+  // Scrub cross-references that point at layers not present in the loaded
+  // project (orphans from hand-editing or a partial project file).
+  const existingLayerIds = new Set(normalizedLayers.map((l) => l.id));
+  const widgets = normalizeWidgets(project.widgets) ?? [];
+  const comments = normalizeProjectComments(project.comments);
+  const legend = normalizeLegendConfig(project.legend) ?? {
+    ...DEFAULT_LEGEND_CONFIG,
+  };
+
+  const allReferencedIds = new Set<string>();
+  for (const w of widgets) allReferencedIds.add(w.layerId);
+  for (const c of comments) {
+    if (c.anchor.type === "feature") allReferencedIds.add(c.anchor.layerId);
+  }
+  for (const id of legend.order) allReferencedIds.add(id);
+  for (const key of Object.keys(legend.overrides)) {
+    const base = key.includes("::") ? key.slice(0, key.indexOf("::")) : key;
+    allReferencedIds.add(base);
+  }
+  if (legend.customEntries) {
+    for (const key of Object.keys(legend.customEntries)) {
+      if (!key.startsWith("custom:")) allReferencedIds.add(key);
+    }
+  }
+
+  const orphanIds = new Set([...allReferencedIds].filter((id) => !existingLayerIds.has(id)));
+
+  const scrubbedWidgets =
+    orphanIds.size > 0 ? scrubWidgetsForRemovedLayers(widgets, orphanIds) : widgets;
+  const scrubbedComments =
+    orphanIds.size > 0 ? scrubCommentsForRemovedLayers(comments, orphanIds) : comments;
+  const scrubbedLegend =
+    orphanIds.size > 0 ? scrubLegendForRemovedLayers(legend, orphanIds) : legend;
+
   return {
     projectName: project.name,
-    mapView: project.mapView,
+    mapView,
     basemapStyleUrl,
     basemapVisible,
     basemapOpacity,
@@ -1339,16 +1564,70 @@ export function applyProjectToStore(project: GeoLibreProject): {
     layerGroups,
     preferences: normalizeProjectPreferences(project.preferences),
     projectPlugins: normalizeProjectPlugins(project.plugins),
-    legend: normalizeLegendConfig(project.legend) ?? { ...DEFAULT_LEGEND_CONFIG },
+    legend: scrubbedLegend,
     storymap: normalizeStoryMap(project.storymap),
     models: normalizeModels(project.models) ?? [],
     processingHistory: normalizeProcessingHistory(project.processingHistory) ?? [],
-    widgets: normalizeWidgets(project.widgets) ?? [],
+    widgets: scrubbedWidgets,
     dashboardColumns: normalizeDashboardColumns(project.dashboardColumns),
     mapLayout,
     secondaryMapViews,
     primaryMapLabel: normalizeString(project.primaryMapLabel),
     projectStyleLibrary: normalizeStyleLibraryEntries(project.styleLibrary),
+    comments: scrubbedComments,
     metadata: project.metadata,
+  };
+}
+
+/**
+ * Create an unlinked copy of a project, suffixed with "(copy)" by default and
+ * stripped of share-specific metadata (shareId, shareUrl, etc.).
+ */
+export function detachProjectCopy(
+  project: GeoLibreProject,
+  options: { nameSuffix?: string } = {},
+): GeoLibreProject {
+  const suffix = options.nameSuffix ?? "(copy)";
+  const rawName = project.name.trim() || DEFAULT_PROJECT_NAME;
+  const name = suffix ? (rawName.endsWith(suffix) ? rawName : `${rawName} ${suffix}`) : rawName;
+
+  const metadata = { ...(project.metadata ?? {}) };
+  for (const key of Object.keys(metadata)) {
+    if (/^share/i.test(key)) {
+      delete metadata[key];
+    }
+  }
+
+  return {
+    ...project,
+    id: uuidv4(),
+    name,
+    metadata,
+  };
+}
+
+/**
+ * Create a template snapshot of a project. Optionally strips data layers while
+ * keeping basemap, layer groups, styles, legend config, preferences, widgets, and
+ * print layout.
+ */
+export function createProjectTemplate(
+  project: GeoLibreProject,
+  options: { name?: string; stripDataLayers?: boolean } = {},
+): GeoLibreProject {
+  const detached = detachProjectCopy(project, { nameSuffix: "" });
+  const name = options.name?.trim() || detached.name;
+  const stripDataLayers = options.stripDataLayers !== false;
+
+  const layers = stripDataLayers ? [] : detached.layers;
+
+  return {
+    ...detached,
+    name,
+    layers,
+    metadata: {
+      ...detached.metadata,
+      isTemplate: true,
+    },
   };
 }

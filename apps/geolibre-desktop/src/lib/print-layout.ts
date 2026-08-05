@@ -202,6 +202,12 @@ export interface LegendSwatch {
    * back to the square if a custom SVG icon has not been preloaded.
    */
   marker?: LegendMarker;
+  /**
+   * Circle radius in map pixels for a proportional-symbol row. When set, the
+   * legend draws a filled circle instead of a color square (scaled to fit the
+   * legend box, keeping ratios across the entry).
+   */
+  size?: number;
 }
 
 export interface LegendEntry {
@@ -419,6 +425,12 @@ export interface LayoutOptions {
    * classes; when false, classes are listed flat without the layer heading.
    */
   legendGroupByLayer: boolean;
+  /**
+   * Translated formatter for the legend's "+N more" note, drawn when the class
+   * rows do not fit the map body; falls back to English when omitted (like the
+   * table's and chart's formatters).
+   */
+  legendFormatNote?: (count: number) => string;
   /**
    * Preloaded custom-SVG marker icons for legend swatches, keyed by the
    * swatch marker's `svg` string ({@link LegendMarker.svg}). Loading SVGs is
@@ -876,6 +888,8 @@ export function drawLayout(canvas: HTMLCanvasElement, opts: LayoutOptions): void
       title: opts.legendTitle,
       groupByLayer: opts.legendGroupByLayer,
       markerIcons: opts.markerIcons,
+      maxHeight: bodyH - inset * 2,
+      formatNote: opts.legendFormatNote,
     });
     ctx.restore();
   }
@@ -1976,6 +1990,9 @@ function drawLegend(
     title: string;
     groupByLayer: boolean;
     markerIcons?: ReadonlyMap<string, CanvasImageSource>;
+    /** Vertical space the box may occupy before rows are elided. */
+    maxHeight?: number;
+    formatNote?: (count: number) => string;
   },
 ): number {
   const pad = unit * 1.4;
@@ -1990,7 +2007,17 @@ function drawLegend(
   // multi-class entry renders a layer heading (when groupByLayer is on) above
   // its class swatches, or just the flat class swatches when it is off. A row
   // draws a swatch when it has a color or a marker; a group heading has neither.
-  const rows: { color: string; text: string; marker?: LegendMarker }[] = [];
+  // `entryId` keeps proportional scaling scoped to one legend entry even when
+  // groupByLayer is off and adjacent layers' size rows become contiguous.
+  const rows: {
+    entryId: string;
+    color: string;
+    text: string;
+    marker?: LegendMarker;
+    size?: number;
+    /** True for a groupByLayer layer heading: scaffolding, not a legend item. */
+    heading?: boolean;
+  }[] = [];
   for (const entry of entries) {
     if (entry.swatches.length <= 1) {
       // Prefer the swatch's own label so a multi-class entry collapsed to one
@@ -1999,22 +2026,81 @@ function drawLegend(
       // entries carry no swatch label, so they still show entry.name.
       const swatch = entry.swatches[0];
       rows.push({
+        entryId: entry.id,
         color: swatch?.color ?? "#999999",
         text: swatch?.label ?? entry.name,
         marker: swatch?.marker,
+        size: swatch?.size,
       });
     } else {
-      if (opts.groupByLayer) rows.push({ color: "", text: entry.name });
+      if (opts.groupByLayer) {
+        rows.push({ entryId: entry.id, color: "", text: entry.name, heading: true });
+      }
       for (const sw of entry.swatches) {
         // Carry the marker so a marker + diagram layer (a multi-swatch entry
         // whose primary swatch is the marker) draws its marker, not a square.
-        rows.push({ color: sw.color, text: sw.label ?? "", marker: sw.marker });
+        rows.push({
+          entryId: entry.id,
+          color: sw.color,
+          text: sw.label ?? "",
+          marker: sw.marker,
+          size: sw.size,
+        });
       }
     }
   }
 
   const rowHasSwatch = (r: { color: string; marker?: LegendMarker }): boolean =>
     Boolean(r.color) || Boolean(r.marker);
+
+  // Fit the rows to the space the caller allows. A categorized layer can carry
+  // dozens of classes, and the legend is clipped to the map body, so without
+  // this the tail would vanish at the body edge with nothing to say it had
+  // (GH #1608). Reserve one row for the note the truncation produces, the same
+  // budget rule the attribute-table panel uses.
+  let hiddenRows = 0;
+  const maxHeight = opts.maxHeight;
+  if (maxHeight !== undefined) {
+    const chromeH = pad * 2 + (hasTitle ? titleSize + unit : 0);
+    if (chromeH + rows.length * rowH > maxHeight) {
+      const fitRows = Math.max(0, Math.floor((maxHeight - chromeH - rowH) / rowH));
+      // Not even one row plus its note fits. Drawing anyway would produce a box
+      // taller than the caller allotted whose only content is "+N more", so
+      // draw nothing and report no height. Defensive: every unit here scales
+      // with the page, so drawLayout's own maxHeight always clears ~24 rows
+      // whatever the paper size. Safe to return early — ctx.save() is below.
+      if (fitRows === 0) return 0;
+      if (fitRows < rows.length) {
+        // A layer heading only means something with class rows under it, so a
+        // cut that lands right after one drops it too rather than printing a
+        // section title that describes nothing.
+        let kept = fitRows;
+        while (kept > 0 && rows[kept - 1]!.heading) kept -= 1;
+        // Headings are scaffolding, so the note counts elided class rows only;
+        // counting the headings too would overstate what the reader is missing.
+        hiddenRows = rows.slice(kept).filter((r) => !r.heading).length;
+        rows.length = kept;
+      }
+    }
+  }
+  const note = hiddenRows > 0 ? (opts.formatNote?.(hiddenRows) ?? `+${hiddenRows} more`) : "";
+  const hasNote = note.length > 0;
+
+  // Cap proportional circles so a huge max radius still fits the legend box,
+  // while keeping ratios within each entry (same idea as the on-map LegendSwatch).
+  const MAX_CIRCLE_R = swatch * 0.55;
+  const entryMaxSize = new Map<string, number>();
+  for (const r of rows) {
+    if (r.size === undefined) continue;
+    entryMaxSize.set(r.entryId, Math.max(entryMaxSize.get(r.entryId) ?? 0, r.size));
+  }
+  const entryScale = new Map<string, number>();
+  for (const [entryId, maxSize] of entryMaxSize) {
+    entryScale.set(entryId, maxSize > MAX_CIRCLE_R ? MAX_CIRCLE_R / maxSize : 1);
+  }
+  const rowScale: number[] = rows.map((r) =>
+    r.size !== undefined ? (entryScale.get(r.entryId) ?? 1) : 1,
+  );
 
   // Measure required width.
   ctx.save();
@@ -2025,10 +2111,11 @@ function drawLegend(
     const w = ctx.measureText(r.text).width + (rowHasSwatch(r) ? swatch + unit : 0);
     if (w > maxText) maxText = w;
   }
+  if (hasNote) maxText = Math.max(maxText, ctx.measureText(note).width);
 
   const boxW = maxText + pad * 2;
   const titleBlock = hasTitle ? titleSize + unit : 0;
-  const boxH = pad * 2 + titleBlock + rows.length * rowH;
+  const boxH = pad * 2 + titleBlock + (rows.length + (hasNote ? 1 : 0)) * rowH;
 
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.strokeStyle = BORDER;
@@ -2053,7 +2140,8 @@ function drawLegend(
     cy += unit;
   }
 
-  for (const r of rows) {
+  for (let index = 0; index < rows.length; index++) {
+    const r = rows[index]!;
     cy += rowH;
     const hasSwatch = rowHasSwatch(r);
     const textX = hasSwatch ? x + pad + swatch + unit : x + pad;
@@ -2061,6 +2149,17 @@ function drawLegend(
     const sy = cy - swatch * 0.85;
     if (r.marker) {
       drawLegendMarker(ctx, r.marker, sx, sy, swatch, r.color, opts.markerIcons);
+    } else if (r.size !== undefined && r.color) {
+      const radius = Math.max(unit * 0.35, r.size * rowScale[index]!);
+      const cx = sx + swatch / 2;
+      const cyc = sy + swatch / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cyc, radius, 0, Math.PI * 2);
+      ctx.fillStyle = r.color;
+      ctx.fill();
+      ctx.strokeStyle = BORDER;
+      ctx.lineWidth = Math.max(1, unit * 0.1);
+      ctx.stroke();
     } else if (r.color) {
       ctx.fillStyle = r.color;
       ctx.fillRect(sx, sy, swatch, swatch);
@@ -2070,6 +2169,12 @@ function drawLegend(
     ctx.fillStyle = hasSwatch ? INK : MUTED;
     ctx.font = `${hasSwatch ? 400 : 600} ${labelSize}px system-ui, sans-serif`;
     ctx.fillText(r.text, textX, cy);
+  }
+  if (hasNote) {
+    cy += rowH;
+    ctx.fillStyle = MUTED;
+    ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+    ctx.fillText(note, x + pad, cy);
   }
   ctx.restore();
   return boxH;

@@ -16,6 +16,7 @@ import {
   createEmptyProject,
   DEFAULT_PROJECT_NAME,
 } from "./project";
+import { initialLayerStyle } from "./layer-defaults";
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
 import {
   DEFAULT_BASEMAP,
@@ -38,6 +39,7 @@ import {
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerGroup,
+  type LayerLibraryEntry,
   type AttributeFormConfig,
   type LayerJoin,
   type LayerVirtualField,
@@ -55,7 +57,18 @@ import {
   type StoryChapter,
   type StoryMap,
   type StyleLibraryEntry,
+  type ProjectTemplateEntry,
+  type CommentAnchor,
+  type CommentAuthor,
+  type CommentReply,
+  type ProjectComment,
 } from "./types";
+import {
+  removedLayerIdSet,
+  scrubWidgetsForRemovedLayers,
+  scrubCommentsForRemovedLayers,
+  scrubLegendForRemovedLayers,
+} from "./layer-ref-scrub";
 import { hasSimpleStyleProperties } from "./vector-color";
 import {
   applyCopiedLayerStyle,
@@ -63,6 +76,7 @@ import {
   extractCopiedLayerStyle,
 } from "./layer-style-clipboard";
 import { applyJoinsToLayer, cascadeLayerJoinRefresh, reapplyLayerJoins } from "./joins";
+import { MAX_LAYER_LIBRARY_ENTRIES } from "./layer-library";
 import {
   DEFAULT_ELLIPSOID_ID,
   getPlanetaryBasemapByStyleUrl,
@@ -109,8 +123,9 @@ export type VectorToolKind =
   | "grid"
   | "voronoi"
   | "cell-sectors"
-  | "h3-grid"
-  | "h3-bin-points"
+  | "dggs-grid"
+  | "dggs-bin"
+  | "dggs-compact"
   | "trajectory-speed"
   | "detect-stops"
   | "space-time-proximity"
@@ -165,6 +180,8 @@ export interface GpsStatusFix {
   lat: number;
   /** Horizontal accuracy radius in meters. */
   accuracy: number;
+  /** Satellites used for the fix, or null when the provider does not report it. */
+  satellites: number | null;
   /** Ground speed in m/s, or null when the device doesn't report one. */
   speed: number | null;
   /** Fix time in epoch milliseconds. */
@@ -194,6 +211,17 @@ export interface AppState {
    * newProject/loadProject, and persisted by the desktop app (IndexedDB).
    */
   styleLibrary: StyleLibraryEntry[];
+  /**
+   * App-level Layer Library (issue #1520) — the Browser panel's My Data
+   * section. Like {@link styleLibrary} it lives outside the project lifecycle:
+   * never serialized into the project file, untouched by newProject/loadProject,
+   * and persisted by the desktop app (IndexedDB). Most recently saved first.
+   */
+  layerLibrary: LayerLibraryEntry[];
+  /**
+   * App-level Template Library. Persisted by the desktop app (IndexedDB).
+   */
+  templateLibrary: ProjectTemplateEntry[];
   /**
    * Project-scoped Style Manager entries (issue #1294), serialized into the
    * `.geolibre.json` `styleLibrary` array and replaced on project load.
@@ -232,6 +260,8 @@ export interface AppState {
   pointerCoords: [number, number] | null;
   /** Live GPS fix for the status bar, or null while GPS tracking is off. */
   gpsStatus: GpsStatusFix | null;
+  /** Anchored review comments on map points or features (issue #1518). */
+  comments: ProjectComment[];
   metadata: Record<string, unknown>;
   recentProjects: RecentProjectEntry[];
   attributeFilter: string;
@@ -425,6 +455,28 @@ export interface AppState {
    */
   deleteStyleLibraryEntry: (id: string, scope?: "app" | "project") => void;
 
+  /**
+   * Replace the app-level Layer Library wholesale. Used by the persistence
+   * layer on startup and by bundle imports.
+   */
+  setLayerLibrary: (entries: LayerLibraryEntry[]) => void;
+  /**
+   * Insert or replace (matching by `id`) a Layer Library entry. New entries go
+   * to the front so the most recently saved layer leads the My Data section.
+   */
+  saveLayerLibraryEntry: (entry: LayerLibraryEntry) => void;
+  /** Rename a Layer Library entry; a blank name is ignored. */
+  renameLayerLibraryEntry: (id: string, name: string) => void;
+  /** Remove a Layer Library entry by id. */
+  deleteLayerLibraryEntry: (id: string) => void;
+
+  /** Replace the app-level template library wholesale. */
+  setTemplateLibrary: (templates: ProjectTemplateEntry[]) => void;
+  /** Insert or replace a template in the Template Library. */
+  saveTemplateEntry: (entry: ProjectTemplateEntry) => void;
+  /** Remove a template entry by id from the Template Library. */
+  deleteTemplateEntry: (id: string) => void;
+
   /** Insert a new model or replace an existing one matching by `id`. */
   saveModel: (model: ProcessingModel) => void;
   /** Remove a saved model by id. */
@@ -439,8 +491,14 @@ export interface AppState {
 
   /** Append a new dashboard widget. */
   addWidget: (widget: DashboardWidget) => void;
-  /** Patch an existing dashboard widget by id (no-op if absent). */
+  /** Patch an existing dashboard widget by id (no-op if absent). Merges, so an
+   * omitted key keeps its current value; use replaceWidget to clear one. */
   updateWidget: (id: string, patch: Partial<Omit<DashboardWidget, "id">>) => void;
+  /** Swap an existing dashboard widget for a complete new record, keeping its
+   * id and position (no-op if absent). Unlike updateWidget this does not merge,
+   * so fields the caller omits are cleared — what the widget editor needs to
+   * persist an emptied title, color, prefix, or suffix. */
+  replaceWidget: (id: string, widget: Omit<DashboardWidget, "id">) => void;
   /** Remove a dashboard widget by id. */
   removeWidget: (id: string) => void;
   /** Move a widget to a new index, clamped into range, preserving the rest. */
@@ -522,6 +580,11 @@ export interface AppState {
   setLayerVirtualFields: (id: string, fields: LayerVirtualField[]) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   moveLayer: (id: string, targetIndex: number) => void;
+  moveLayersRelative: (
+    layerIds: string[],
+    targetLayerId: string,
+    position: "above" | "below",
+  ) => void;
   addGeoJsonLayer: (
     name: string,
     geojson: FeatureCollection,
@@ -548,6 +611,14 @@ export interface AppState {
       /** Epoch-ms time bounds of a KML `<TimeSpan>`/`<TimeStamp>` frame; the
        * Time Slider toggles this frame's visibility by the current date. */
       timeSpan?: { begin: number | null; end: number | null };
+      /**
+       * What produced the overlay, e.g. a NetCDF grid baked to pixels. Defaults
+       * to the KML ground overlay this was first written for; panels gate their
+       * per-source controls on it.
+       */
+      sourceKind?: string;
+      /** Extra metadata merged onto the layer (e.g. a symbology record). */
+      metadata?: Record<string, unknown>;
     },
     beforeLayerId?: string | null,
   ) => string;
@@ -575,7 +646,19 @@ export interface AppState {
     groupId: string | null,
     beforeLayerId?: string | null,
   ) => void;
+  moveLayersToGroup: (
+    layerIds: string[],
+    groupId: string | null,
+    beforeLayerId?: string | null,
+  ) => void;
+  moveLayerGroupToGroup: (id: string, parentId: string | null) => void;
   reorderLayerGroup: (id: string, direction: "up" | "down") => void;
+
+  addComment: (comment: ProjectComment) => void;
+  replyToComment: (commentId: string, reply: CommentReply) => void;
+  toggleResolveComment: (commentId: string, resolved?: boolean) => void;
+  deleteComment: (commentId: string) => void;
+  setComments: (comments: ProjectComment[]) => void;
 }
 
 const MAX_RECENT_PROJECTS = 10;
@@ -679,6 +762,74 @@ function sameCamera(a: MapViewState, b: MapViewState): boolean {
   );
 }
 
+/**
+ * Strip storymap chapter enter/exit opacity rows that reference any of the
+ * removed layer ids. Returns the same reference when nothing changes so
+ * callers can avoid unnecessary storymap churn.
+ */
+function scrubStorymapLayerRefs(
+  storymap: StoryMap | null,
+  layerIds: string | Iterable<string>,
+): StoryMap | null {
+  if (!storymap) return null;
+  const removed = removedLayerIdSet(layerIds);
+  if (removed.size === 0) return storymap;
+  let changed = false;
+  const chapters = storymap.chapters.map((chapter) => {
+    const onChapterEnter = chapter.onChapterEnter.filter((change) => !removed.has(change.layerId));
+    const onChapterExit = chapter.onChapterExit.filter((change) => !removed.has(change.layerId));
+    if (
+      onChapterEnter.length === chapter.onChapterEnter.length &&
+      onChapterExit.length === chapter.onChapterExit.length
+    ) {
+      return chapter;
+    }
+    changed = true;
+    return { ...chapter, onChapterEnter, onChapterExit };
+  });
+  return changed ? { ...storymap, chapters } : storymap;
+}
+
+/**
+ * Drop per-pane visibility overrides for removed layer ids so stale keys do
+ * not accumulate (or serialize) in secondary panes after deletion.
+ */
+function scrubSecondaryPaneLayerVisibility(
+  panes: SecondaryMapView[],
+  layerIds: string | Iterable<string>,
+): SecondaryMapView[] {
+  const removed = removedLayerIdSet(layerIds);
+  if (removed.size === 0) return panes;
+  let anyChanged = false;
+  const next = panes.map((pane) => {
+    let changed = false;
+    const layerVisibility: Record<string, boolean> = {};
+    for (const [id, visible] of Object.entries(pane.layerVisibility)) {
+      if (removed.has(id)) {
+        changed = true;
+        continue;
+      }
+      layerVisibility[id] = visible;
+    }
+    if (!changed) return pane;
+    anyChanged = true;
+    return { ...pane, layerVisibility };
+  });
+  return anyChanged ? next : panes;
+}
+
+/** Re-derive layers whose joins consumed any of the removed sources. */
+function cascadeJoinRefreshForRemoved(
+  layers: GeoLibreLayer[],
+  layerIds: string | Iterable<string>,
+): GeoLibreLayer[] {
+  let current = layers;
+  for (const id of removedLayerIdSet(layerIds)) {
+    current = cascadeLayerJoinRefresh(current, id);
+  }
+  return current;
+}
+
 /** Clamp a requested grid row/column count into the supported [1, MAX] range. */
 function clampGridDim(value: number): number {
   if (!Number.isFinite(value)) return 1;
@@ -700,7 +851,12 @@ function clampGridDim(value: number): number {
  */
 function fitGrid(total: number, preferredCols: number): { rows: number; cols: number } {
   if (total <= 1) return { rows: 1, cols: 1 };
-  let best: { rows: number; cols: number; empty: number; score: number } | null = null;
+  let best: {
+    rows: number;
+    cols: number;
+    empty: number;
+    score: number;
+  } | null = null;
   for (let rows = 1; rows <= MAX_MAP_GRID_DIM; rows++) {
     for (let cols = 1; cols <= MAX_MAP_GRID_DIM; cols++) {
       const capacity = rows * cols;
@@ -723,6 +879,52 @@ function fitGrid(total: number, preferredCols: number): { rows: number; cols: nu
 
 /** Cancels the active history coalesce window (assigned by zundo's handleSet). */
 let cancelHistoryCoalesce: () => void = () => {};
+
+interface ProjectRestoreHistoryEntry {
+  before: GeoLibreProject;
+  beforePath: string | null;
+  after: GeoLibreProject;
+  afterPath: string | null;
+}
+
+let projectRestoreUndo: ProjectRestoreHistoryEntry | null = null;
+let projectRestoreRedo: ProjectRestoreHistoryEntry | null = null;
+let applyingProjectRestoreHistory = false;
+const projectRestoreHistoryListeners = new Set<() => void>();
+
+function notifyProjectRestoreHistory(): void {
+  projectRestoreHistoryListeners.forEach((listener) => listener());
+}
+
+export function subscribeProjectRestoreHistory(listener: () => void): () => void {
+  projectRestoreHistoryListeners.add(listener);
+  return () => projectRestoreHistoryListeners.delete(listener);
+}
+
+export function canUndoProjectRestore(): boolean {
+  return projectRestoreUndo !== null;
+}
+
+export function canRedoProjectRestore(): boolean {
+  return projectRestoreRedo !== null;
+}
+
+/**
+ * Register a whole-project restore as one undoable operation. The regular
+ * temporal history intentionally tracks only editing fields, while restoring a
+ * history snapshot also changes project metadata, camera, plugins, and other
+ * serialized state, so it needs a full canonical project pair.
+ */
+export function registerProjectRestoreHistory(
+  before: GeoLibreProject,
+  beforePath: string | null,
+  after: GeoLibreProject,
+  afterPath: string | null = null,
+): void {
+  projectRestoreUndo = { before, beforePath, after, afterPath };
+  projectRestoreRedo = null;
+  notifyProjectRestoreHistory();
+}
 
 /**
  * Drop the oldest undo snapshots once their combined feature payload exceeds the
@@ -759,6 +961,8 @@ export const useAppStore = create<AppState>()(
       storymap: null,
       models: [],
       styleLibrary: [],
+      layerLibrary: [],
+      templateLibrary: [],
       projectStyleLibrary: [],
       processingHistory: [],
       widgets: [],
@@ -773,6 +977,7 @@ export const useAppStore = create<AppState>()(
       identifyLayerId: null,
       pointerCoords: null,
       gpsStatus: null,
+      comments: [],
       metadata: {},
       recentProjects: [],
       attributeFilter: "",
@@ -816,6 +1021,43 @@ export const useAppStore = create<AppState>()(
 
       setPointerCoords: (coords) => set({ pointerCoords: coords }),
       setGpsStatus: (fix) => set({ gpsStatus: fix }),
+
+      addComment: (comment) =>
+        set((s) => {
+          // Ignore a duplicate id: the WebSocket relay echoes our own
+          // comment-mutation back to the sender, and a reconnect can replay
+          // recent history, so de-dupe defensively (mirrors addCollaborationChat).
+          if (s.comments.some((c) => c.id === comment.id)) return s;
+          return { comments: [...s.comments, comment], isDirty: true };
+        }),
+      replyToComment: (commentId, reply) =>
+        set((s) => {
+          let appended = false;
+          const nextComments = s.comments.map((c) => {
+            if (c.id !== commentId) return c;
+            if (c.replies.some((r) => r.id === reply.id)) return c;
+            appended = true;
+            return { ...c, replies: [...c.replies, reply] };
+          });
+          if (!appended) return s;
+          return { comments: nextComments, isDirty: true };
+        }),
+      toggleResolveComment: (commentId, resolved) =>
+        set((s) => ({
+          comments: s.comments.map((c) =>
+            c.id === commentId
+              ? { ...c, resolved: resolved !== undefined ? resolved : !c.resolved }
+              : c,
+          ),
+          isDirty: true,
+        })),
+      deleteComment: (commentId) =>
+        set((s) => ({
+          comments: s.comments.filter((c) => c.id !== commentId),
+          isDirty: true,
+        })),
+      setComments: (comments) => set({ comments, isDirty: true }),
+
       setCollaboration: (patch) =>
         set((s) => ({ collaboration: { ...s.collaboration, ...patch } })),
       // Add or remove a single remote participant's presence without rebuilding
@@ -1010,7 +1252,11 @@ export const useAppStore = create<AppState>()(
           isDirty: shouldMarkDirty || s.isDirty,
         })),
       selectLayer: (id) =>
-        set({ selectedLayerId: id, selectedFeatureId: null, selectedFeatureIds: [] }),
+        set({
+          selectedLayerId: id,
+          selectedFeatureId: null,
+          selectedFeatureIds: [],
+        }),
       selectFeature: (id) => set({ selectedFeatureId: id, selectedFeatureIds: id ? [id] : [] }),
       selectFeatures: (ids, anchorId) =>
         set({
@@ -1028,7 +1274,19 @@ export const useAppStore = create<AppState>()(
       setProcessingInitialTool: (toolId) =>
         set((s) => ({ ui: { ...s.ui, processingInitialTool: toolId } })),
       setConversionOpen: (kind) => set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
-      setVectorToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, vectorToolOpen: kind } })),
+      setVectorToolOpen: (kind) =>
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            // Pre-DGGS projects / callers may still pass h3-grid / h3-bin-points.
+            vectorToolOpen:
+              (kind as string | null) === "h3-grid"
+                ? "dggs-grid"
+                : (kind as string | null) === "h3-bin-points"
+                  ? "dggs-bin"
+                  : kind,
+          },
+        })),
       setNetworkToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, networkToolOpen: kind } })),
       setStatisticsToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, statisticsToolOpen: kind } })),
       setRasterToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, rasterToolOpen: kind } })),
@@ -1135,6 +1393,52 @@ export const useAppStore = create<AppState>()(
           };
         }),
 
+      // The entry cap is applied on every write, not just when reading
+      // untrusted input, so ordinary use (repeated saves, importing several
+      // bundles over time) cannot grow the library past it. Mirrors
+      // `writeBrowserFavorites`, which slices to MAX_FAVORITES on each write.
+      setLayerLibrary: (entries) =>
+        set({ layerLibrary: entries.slice(0, MAX_LAYER_LIBRARY_ENTRIES) }),
+      saveLayerLibraryEntry: (entry) =>
+        set((s) => ({
+          // App-level saves don't touch the project file, so no dirty flag
+          // (mirrors saveStyleLibraryEntry's "app" scope). A new entry goes to
+          // the front, so at the cap the oldest falls off the end.
+          layerLibrary: s.layerLibrary.some((e) => e.id === entry.id)
+            ? s.layerLibrary.map((e) => (e.id === entry.id ? entry : e))
+            : [entry, ...s.layerLibrary].slice(0, MAX_LAYER_LIBRARY_ENTRIES),
+        })),
+      renameLayerLibraryEntry: (id, name) =>
+        set((s) => {
+          const trimmed = name.trim();
+          // Keep the array reference stable for a no-op rename so the
+          // IndexedDB persistence (which watches the reference) skips a write.
+          if (!trimmed || !s.layerLibrary.some((e) => e.id === id && e.name !== trimmed)) {
+            return {};
+          }
+          return {
+            layerLibrary: s.layerLibrary.map((e) => (e.id === id ? { ...e, name: trimmed } : e)),
+          };
+        }),
+      deleteLayerLibraryEntry: (id) =>
+        set((s) =>
+          s.layerLibrary.some((e) => e.id === id)
+            ? { layerLibrary: s.layerLibrary.filter((e) => e.id !== id) }
+            : {},
+        ),
+
+      setTemplateLibrary: (templates) => set({ templateLibrary: templates }),
+      saveTemplateEntry: (entry) =>
+        set((s) => ({
+          templateLibrary: s.templateLibrary.some((t) => t.id === entry.id)
+            ? s.templateLibrary.map((t) => (t.id === entry.id ? entry : t))
+            : [...s.templateLibrary, entry],
+        })),
+      deleteTemplateEntry: (id) =>
+        set((s) => ({
+          templateLibrary: s.templateLibrary.filter((t) => t.id !== id),
+        })),
+
       saveModel: (model) =>
         set((s) => {
           const exists = s.models.some((m) => m.id === model.id);
@@ -1184,6 +1488,14 @@ export const useAppStore = create<AppState>()(
           if (!exists) return s;
           return {
             widgets: s.widgets.map((w) => (w.id === id ? { ...w, ...patch, id: w.id } : w)),
+            isDirty: true,
+          };
+        }),
+      replaceWidget: (id, widget) =>
+        set((s) => {
+          if (!s.widgets.some((w) => w.id === id)) return s;
+          return {
+            widgets: s.widgets.map((w) => (w.id === id ? { ...widget, id } : w)),
             isDirty: true,
           };
         }),
@@ -1319,17 +1631,17 @@ export const useAppStore = create<AppState>()(
           // the source gone the join resolves to nothing, so its previously
           // materialized columns strip away instead of staying frozen (the
           // join definition itself stays, shown as missing in the Joins UI).
-          layers: cascadeLayerJoinRefresh(
+          layers: cascadeJoinRefreshForRemoved(
             s.layers.filter((l) => l.id !== id),
             id,
           ),
-          // Drop any per-pane visibility override for the removed layer so stale
-          // ids don't accumulate (and serialize) in secondary panes over time.
-          secondaryMapViews: s.secondaryMapViews.map((pane) => {
-            if (!(id in pane.layerVisibility)) return pane;
-            const { [id]: _removed, ...rest } = pane.layerVisibility;
-            return { ...pane, layerVisibility: rest };
-          }),
+          secondaryMapViews: scrubSecondaryPaneLayerVisibility(s.secondaryMapViews, id),
+          // Drop storymap chapter enter/exit opacity rows that pointed at the
+          // removed layer so they do not keep a dangling id across save/reload.
+          storymap: scrubStorymapLayerRefs(s.storymap, id),
+          widgets: scrubWidgetsForRemovedLayers(s.widgets, id),
+          comments: scrubCommentsForRemovedLayers(s.comments, id),
+          legend: scrubLegendForRemovedLayers(s.legend, id),
           selectedLayerId:
             s.selectedLayerId === id
               ? (s.layers.find((l) => l.id !== id)?.id ?? null)
@@ -1337,6 +1649,15 @@ export const useAppStore = create<AppState>()(
           selectedFeatureId: s.selectedLayerId === id ? null : s.selectedFeatureId,
           selectedFeatureIds: s.selectedLayerId === id ? [] : s.selectedFeatureIds,
           identifyLayerId: s.identifyLayerId === id ? null : s.identifyLayerId,
+          ui: {
+            ...s.ui,
+            selectByExpressionLayerId:
+              s.ui.selectByExpressionLayerId === id ? null : s.ui.selectByExpressionLayerId,
+            selectByLocationLayerId:
+              s.ui.selectByLocationLayerId === id ? null : s.ui.selectByLocationLayerId,
+            loadEditorFeaturesLayerId:
+              s.ui.loadEditorFeaturesLayerId === id ? null : s.ui.loadEditorFeaturesLayerId,
+          },
           isDirty: true,
         })),
 
@@ -1456,6 +1777,36 @@ export const useAppStore = create<AppState>()(
           return { layers: next, isDirty: true };
         }),
 
+      moveLayersRelative: (layerIds, targetLayerId, position) =>
+        set((s) => {
+          const requestedIds = new Set(layerIds);
+          if (requestedIds.has(targetLayerId)) return s;
+          const target = s.layers.find((layer) => layer.id === targetLayerId);
+          if (!target) return s;
+          const targetGroupId = target.groupId ?? null;
+          // This is a pure reorder — `groupId` is never touched — so a requested
+          // layer from another group can only be lifted out of its own block,
+          // and `normalizeGroupContiguity` would then drag that group's
+          // untouched members along to reunite it. Move only the layers that
+          // already sit in the target's group.
+          const moving = s.layers.filter(
+            (layer) => requestedIds.has(layer.id) && (layer.groupId ?? null) === targetGroupId,
+          );
+          if (moving.length === 0) return s;
+          const movingIds = new Set(moving.map((layer) => layer.id));
+          const without = s.layers.filter((layer) => !movingIds.has(layer.id));
+          const targetIndex = without.findIndex((layer) => layer.id === targetLayerId);
+          if (targetIndex < 0) return s;
+          // Store order is the reverse of panel display order, so "above" is
+          // immediately after the target in this array.
+          const insertIndex = position === "above" ? targetIndex + 1 : targetIndex;
+          const next = [...without];
+          next.splice(insertIndex, 0, ...moving);
+          const normalized = normalizeGroupContiguity(next);
+          if (normalized.every((layer, index) => layer.id === s.layers[index]?.id)) return s;
+          return { layers: normalized, isDirty: true };
+        }),
+
       addGeoJsonLayer: (name, geojson, sourcePath, beforeLayerId = null) => {
         const id = uuidv4();
         const layer: GeoLibreLayer = {
@@ -1465,10 +1816,15 @@ export const useAppStore = create<AppState>()(
           source: { type: "geojson" },
           visible: true,
           opacity: 1,
-          style: {
-            ...DEFAULT_LAYER_STYLE,
-            simpleStyleEnabled: hasSimpleStyleProperties(geojson),
-          },
+          // Its own palette color and geometry-appropriate sizing (#1519), so a
+          // stack of freshly added layers is legible without restyling each one.
+          style: initialLayerStyle({
+            geojson,
+            layers: get().layers,
+            overrides: {
+              simpleStyleEnabled: hasSimpleStyleProperties(geojson),
+            },
+          }),
           metadata: {},
           geojson,
           sourcePath,
@@ -1483,14 +1839,19 @@ export const useAppStore = create<AppState>()(
           id,
           name,
           type: "image",
-          source: { type: "image", url: source.url, coordinates: source.coordinates },
+          source: {
+            type: "image",
+            url: source.url,
+            coordinates: source.coordinates,
+          },
           visible: options?.visible ?? true,
           opacity: options?.opacity ?? 1,
           style: { ...DEFAULT_LAYER_STYLE },
           metadata: {
-            sourceKind: "kml-ground-overlay",
+            sourceKind: options?.sourceKind ?? "kml-ground-overlay",
             ...(options?.bounds ? { bounds: options.bounds } : {}),
             ...(options?.timeSpan ? { timeSpan: options.timeSpan } : {}),
+            ...(options?.metadata ?? {}),
           },
           ...(options?.sourcePath ? { sourcePath: options.sourcePath } : {}),
         };
@@ -1579,15 +1940,51 @@ export const useAppStore = create<AppState>()(
       removeLayerGroup: (id, options) =>
         set((s) => {
           const removeChildren = options?.removeChildren ?? false;
-          const removedIds = new Set(s.layers.filter((l) => l.groupId === id).map((l) => l.id));
-          const layers = removeChildren
-            ? s.layers.filter((l) => l.groupId !== id)
+          const removedGroup = s.layerGroups.find((g) => g.id === id);
+          if (!removedGroup) return s;
+          const groupIds = new Set([id]);
+          if (removeChildren) {
+            let changed = true;
+            while (changed) {
+              changed = false;
+              for (const group of s.layerGroups) {
+                if (group.parentId && groupIds.has(group.parentId) && !groupIds.has(group.id)) {
+                  groupIds.add(group.id);
+                  changed = true;
+                }
+              }
+            }
+          }
+          const removedIds = new Set(
+            s.layers.filter((l) => l.groupId && groupIds.has(l.groupId)).map((l) => l.id),
+          );
+          let layers = removeChildren
+            ? s.layers.filter((l) => !l.groupId || !groupIds.has(l.groupId))
             : s.layers.map((l) => (l.groupId === id ? { ...l, groupId: undefined } : l));
+          // Match removeLayer: refreshing joins and scrubbing secondary-pane /
+          // storymap refs for every deleted child so group delete cannot leave
+          // stale joined columns or dangling visibility overrides behind.
+          if (removeChildren && removedIds.size > 0) {
+            layers = cascadeJoinRefreshForRemoved(layers, removedIds);
+          }
           const selectionRemoved =
             removeChildren && s.selectedLayerId !== null && removedIds.has(s.selectedLayerId);
           return {
             layers,
-            layerGroups: s.layerGroups.filter((g) => g.id !== id),
+            layerGroups: s.layerGroups
+              .filter((g) => !groupIds.has(g.id))
+              .map((g) => (g.parentId === id ? { ...g, parentId: removedGroup.parentId } : g)),
+            secondaryMapViews: removeChildren
+              ? scrubSecondaryPaneLayerVisibility(s.secondaryMapViews, removedIds)
+              : s.secondaryMapViews,
+            storymap: removeChildren ? scrubStorymapLayerRefs(s.storymap, removedIds) : s.storymap,
+            widgets: removeChildren
+              ? scrubWidgetsForRemovedLayers(s.widgets, removedIds)
+              : s.widgets,
+            comments: removeChildren
+              ? scrubCommentsForRemovedLayers(s.comments, removedIds)
+              : s.comments,
+            legend: removeChildren ? scrubLegendForRemovedLayers(s.legend, removedIds) : s.legend,
             selectedLayerId: selectionRemoved
               ? (layers[layers.length - 1]?.id ?? null)
               : s.selectedLayerId,
@@ -1597,6 +1994,26 @@ export const useAppStore = create<AppState>()(
               s.identifyLayerId !== null && removedIds.has(s.identifyLayerId)
                 ? null
                 : s.identifyLayerId,
+            ui: removeChildren
+              ? {
+                  ...s.ui,
+                  selectByExpressionLayerId:
+                    s.ui.selectByExpressionLayerId !== null &&
+                    removedIds.has(s.ui.selectByExpressionLayerId)
+                      ? null
+                      : s.ui.selectByExpressionLayerId,
+                  selectByLocationLayerId:
+                    s.ui.selectByLocationLayerId !== null &&
+                    removedIds.has(s.ui.selectByLocationLayerId)
+                      ? null
+                      : s.ui.selectByLocationLayerId,
+                  loadEditorFeaturesLayerId:
+                    s.ui.loadEditorFeaturesLayerId !== null &&
+                    removedIds.has(s.ui.loadEditorFeaturesLayerId)
+                      ? null
+                      : s.ui.loadEditorFeaturesLayerId,
+                }
+              : s.ui,
             isDirty: true,
           };
         }),
@@ -1633,42 +2050,92 @@ export const useAppStore = create<AppState>()(
         })),
 
       moveLayerToGroup: (layerId, groupId, beforeLayerId = null) =>
+        get().moveLayersToGroup([layerId], groupId, beforeLayerId),
+
+      moveLayersToGroup: (layerIds, groupId, beforeLayerId = null) =>
         set((s) => {
-          const current = s.layers.find((l) => l.id === layerId);
-          if (!current) return s;
           if (groupId && !s.layerGroups.some((g) => g.id === groupId)) return s;
-          const updated = { ...current, groupId: groupId ?? undefined };
-          const without = s.layers.filter((l) => l.id !== layerId);
+          const requestedIds = new Set(layerIds);
+          const moving = s.layers.filter(
+            (layer) =>
+              requestedIds.has(layer.id) &&
+              (beforeLayerId !== null || (layer.groupId ?? null) !== groupId),
+          );
+          if (moving.length === 0) return s;
+          const movingIds = new Set(moving.map((layer) => layer.id));
+          const without = s.layers.filter((layer) => !movingIds.has(layer.id));
+          const updated = moving.map((layer) => ({
+            ...layer,
+            groupId: groupId ?? undefined,
+          }));
           let index: number;
-          if (beforeLayerId) {
-            const at = without.findIndex((l) => l.id === beforeLayerId);
+          if (beforeLayerId && !movingIds.has(beforeLayerId)) {
+            const at = without.findIndex((layer) => layer.id === beforeLayerId);
             index = at < 0 ? without.length : at;
           } else if (groupId) {
-            // Append to the end of the target group's block (top of the group
-            // in the panel); fall back to the array end for an empty group.
             let last = -1;
-            without.forEach((l, i) => {
-              if (l.groupId === groupId) last = i;
+            without.forEach((layer, layerIndex) => {
+              if (layer.groupId === groupId) last = layerIndex;
             });
             index = last < 0 ? without.length : last + 1;
           } else {
             index = without.length;
           }
           const next = [...without];
-          next.splice(index, 0, updated);
+          next.splice(index, 0, ...updated);
           const normalized = normalizeGroupContiguity(next);
           const unchanged = normalized.every(
-            (l, i) => l.id === s.layers[i]?.id && l.groupId === s.layers[i]?.groupId,
+            (layer, layerIndex) =>
+              layer.id === s.layers[layerIndex]?.id &&
+              layer.groupId === s.layers[layerIndex]?.groupId,
           );
           if (unchanged) return s;
           return { layers: normalized, isDirty: true };
         }),
 
+      moveLayerGroupToGroup: (id, parentId) =>
+        set((s) => {
+          if (parentId === id) return s;
+          const group = s.layerGroups.find((g) => g.id === id);
+          if (!group) return s;
+          if (parentId && !s.layerGroups.some((g) => g.id === parentId)) return s;
+          // Walking upward from the proposed parent must never reach the group
+          // being moved, otherwise the assignment would create a cycle.
+          const byId = new Map(s.layerGroups.map((g) => [g.id, g]));
+          let ancestorId = parentId ?? undefined;
+          const visited = new Set<string>();
+          while (ancestorId && !visited.has(ancestorId)) {
+            if (ancestorId === id) return s;
+            visited.add(ancestorId);
+            ancestorId = byId.get(ancestorId)?.parentId;
+          }
+          const nextParentId = parentId ?? undefined;
+          if (group.parentId === nextParentId) return s;
+          return {
+            layerGroups: s.layerGroups.map((g) =>
+              g.id === id ? { ...g, parentId: nextParentId } : g,
+            ),
+            isDirty: true,
+          };
+        }),
+
       reorderLayerGroup: (id, direction) =>
         set((s) => {
+          const groupIds = new Set([id]);
+          let foundDescendant = true;
+          while (foundDescendant) {
+            foundDescendant = false;
+            for (const group of s.layerGroups) {
+              if (group.parentId && groupIds.has(group.parentId) && !groupIds.has(group.id)) {
+                groupIds.add(group.id);
+                foundDescendant = true;
+              }
+            }
+          }
           // Build the top-level units in store (render) order: each ungrouped
           // layer is its own unit, and a group's contiguous members form one
-          // unit. Reordering swaps the whole group block past its neighbor.
+          // unit. A nested organizer group may have no direct layers, so its
+          // block includes every unit belonging to a descendant group.
           const units: { key: string; layers: GeoLibreLayer[] }[] = [];
           for (const layer of s.layers) {
             const key = layer.groupId ?? `layer:${layer.id}`;
@@ -1676,13 +2143,21 @@ export const useAppStore = create<AppState>()(
             if (last && last.key === key) last.layers.push(layer);
             else units.push({ key, layers: [layer] });
           }
-          const unitIndex = units.findIndex((u) => u.key === id);
-          if (unitIndex < 0) return s; // empty group: nothing to move
-          const target = direction === "up" ? unitIndex + 1 : unitIndex - 1;
-          if (target < 0 || target >= units.length) return s;
-          const [unit] = units.splice(unitIndex, 1);
-          units.splice(target, 0, unit);
-          return { layers: units.flatMap((u) => u.layers), isDirty: true };
+          const matching = units
+            .map((unit, index) => (groupIds.has(unit.key) ? index : -1))
+            .filter((index) => index >= 0);
+          if (matching.length === 0) return s;
+          const first = matching[0];
+          const last = matching[matching.length - 1];
+          const neighbor = direction === "up" ? last + 1 : first - 1;
+          if (neighbor < 0 || neighbor >= units.length) return s;
+          const block = units.filter((unit) => groupIds.has(unit.key));
+          const remaining = units.filter((unit) => !groupIds.has(unit.key));
+          const neighborKey = units[neighbor].key;
+          const neighborIndex = remaining.findIndex((unit) => unit.key === neighborKey);
+          const insertAt = direction === "up" ? neighborIndex + 1 : neighborIndex;
+          remaining.splice(insertAt, 0, ...block);
+          return { layers: remaining.flatMap((u) => u.layers), isDirty: true };
         }),
 
       newProject: (options = {}) => {
@@ -1715,6 +2190,8 @@ export const useAppStore = create<AppState>()(
             selectByExpressionLayerId: null,
             selectByLocationOpen: false,
             selectByLocationLayerId: null,
+            loadEditorFeaturesOpen: false,
+            loadEditorFeaturesLayerId: null,
           },
         }));
         clearHistory();
@@ -1766,6 +2243,8 @@ export const useAppStore = create<AppState>()(
             selectByExpressionLayerId: null,
             selectByLocationOpen: false,
             selectByLocationLayerId: null,
+            loadEditorFeaturesOpen: false,
+            loadEditorFeaturesLayerId: null,
           },
         }));
         clearHistory();
@@ -1789,6 +2268,7 @@ export const useAppStore = create<AppState>()(
         basemapVisible: s.basemapVisible,
         basemapOpacity: s.basemapOpacity,
         storymap: s.storymap,
+        comments: s.comments,
       }),
       // Records a history entry only when the tracked slice really changed.
       // Basemap fields compare with ===; `layers` is compared element-by-element
@@ -1799,12 +2279,14 @@ export const useAppStore = create<AppState>()(
       // new object, so real edits differ while an unchanged null stays equal.
       // `layerGroups` is compared ignoring `collapsed`, which is a UI preference
       // excluded from undo (see toggleLayerGroupCollapsed).
+      // `comments` is compared shallowly by reference.
       equality: (a, b) =>
         a.basemapStyleUrl === b.basemapStyleUrl &&
         a.basemapVisible === b.basemapVisible &&
         a.basemapOpacity === b.basemapOpacity &&
         a.storymap === b.storymap &&
         shallow(a.layers, b.layers) &&
+        shallow(a.comments, b.comments) &&
         layerGroupsEqualForHistory(a.layerGroups, b.layerGroups),
       limit: 100,
       // Group rapid bursts (slider drags) into one entry; window is 0 in tests.
@@ -1821,6 +2303,10 @@ export const useAppStore = create<AppState>()(
           const before = useAppStore.temporal.getState().pastStates;
           debounced(...args);
           if (useAppStore.temporal.getState().pastStates !== before) {
+            if (!applyingProjectRestoreHistory && projectRestoreRedo) {
+              projectRestoreRedo = null;
+              notifyProjectRestoreHistory();
+            }
             pruneHistoryBySize();
           }
         };
@@ -1895,6 +2381,25 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
  */
 export function undo(): void {
   const temporal = useAppStore.temporal.getState();
+  if (temporal.pastStates.length === 0 && projectRestoreUndo) {
+    const entry = projectRestoreUndo;
+    applyingProjectRestoreHistory = true;
+    try {
+      useAppStore.getState().loadProject(entry.before, entry.beforePath, {
+        rememberRecent: false,
+        presenting: false,
+      });
+      projectRestoreUndo = null;
+      useAppStore.setState({ isDirty: true });
+      projectRestoreRedo = entry;
+      notifyProjectRestoreHistory();
+    } catch (error) {
+      console.error("Could not undo the project snapshot restore.", error);
+    } finally {
+      applyingProjectRestoreHistory = false;
+    }
+    return;
+  }
   if (temporal.pastStates.length === 0) return; // nothing to undo; stay clean
   cancelHistoryCoalesce(); // break any in-flight burst so the next edit records
   const previousBasemapStyleUrl = useAppStore.getState().basemapStyleUrl;
@@ -1905,6 +2410,25 @@ export function undo(): void {
 /** Step the history forward one entry and mark the project dirty. */
 export function redo(): void {
   const temporal = useAppStore.temporal.getState();
+  if (temporal.futureStates.length === 0 && projectRestoreRedo) {
+    const entry = projectRestoreRedo;
+    applyingProjectRestoreHistory = true;
+    try {
+      useAppStore.getState().loadProject(entry.after, entry.afterPath, {
+        rememberRecent: false,
+        presenting: false,
+      });
+      projectRestoreRedo = null;
+      useAppStore.setState({ isDirty: true });
+      projectRestoreUndo = entry;
+      notifyProjectRestoreHistory();
+    } catch (error) {
+      console.error("Could not redo the project snapshot restore.", error);
+    } finally {
+      applyingProjectRestoreHistory = false;
+    }
+    return;
+  }
   if (temporal.futureStates.length === 0) return; // nothing to redo; stay clean
   cancelHistoryCoalesce(); // break any in-flight burst so the next edit records
   const previousBasemapStyleUrl = useAppStore.getState().basemapStyleUrl;
@@ -1916,4 +2440,9 @@ export function redo(): void {
 export function clearHistory(): void {
   cancelHistoryCoalesce(); // reset any in-flight burst so the next edit records
   useAppStore.temporal.getState().clear();
+  if (!applyingProjectRestoreHistory) {
+    projectRestoreUndo = null;
+    projectRestoreRedo = null;
+    notifyProjectRestoreHistory();
+  }
 }

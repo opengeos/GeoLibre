@@ -9,28 +9,14 @@ import {
   parseProject,
   parseStoryMapCsv,
   parseStoryMapJson,
+  applyProjectToStore,
   projectFromStore,
   serializeProject,
   serializeStoryMapCsv,
   serializeStoryMapJson,
   useAppStore,
-  type GeoLibreLayer,
 } from "@geolibre/core";
-
-function geojsonLayer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
-  return {
-    id: "layer-a",
-    name: "Layer A",
-    type: "geojson",
-    source: { type: "geojson" },
-    visible: true,
-    opacity: 1,
-    style: { ...DEFAULT_LAYER_STYLE },
-    metadata: {},
-    geojson: { type: "FeatureCollection", features: [] },
-    ...patch,
-  };
-}
+import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("project parsing", () => {
   it("preserves a valid selected layer and drops a dangling selection", () => {
@@ -241,6 +227,37 @@ describe("project parsing", () => {
       { label: "Bad", color: "#000000" },
       { label: "None", color: "#111111" },
     ]);
+  });
+
+  it("strips the transient per-feature filters when saving", () => {
+    // `timeFilter` (Time Slider) and `embedFilter` (the embed API's runtime
+    // `setFilter`, set by whatever host page framed the app) are both session
+    // state, not project state. A leaked `embedFilter` would silently bake one
+    // host's runtime filter into the shared `.geolibre.json` — the next person
+    // to open it would see a filtered map with nothing in the UI explaining it.
+    const layer = {
+      ...geojsonLayer({ id: "roads" }),
+      timeFilter: ["<=", ["get", "t"], 5],
+      embedFilter: ["==", ["get", "kind"], "road"],
+    } as unknown as Parameters<typeof projectFromStore>[0]["layers"][number];
+    const project = projectFromStore({
+      projectName: "Filters",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [layer],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+    const saved = project.layers[0] as Record<string, unknown>;
+    assert.ok(!("timeFilter" in saved), "timeFilter must not be saved");
+    assert.ok(!("embedFilter" in saved), "embedFilter must not be saved");
+    // Everything else about the layer survives.
+    assert.equal(saved.id, "roads");
+
+    const reparsed = parseProject(serializeProject(project)).layers[0] as Record<string, unknown>;
+    assert.ok(!("embedFilter" in reparsed));
   });
 
   it("round-trips a legend config through projectFromStore", () => {
@@ -1269,5 +1286,43 @@ describe("annotation layer persistence", () => {
       (feature) => feature.properties?.__annotation === "arrowhead",
     );
     assert.equal(head?.properties?.annotationId, "a1");
+  });
+});
+
+describe("primary mapView normalization", () => {
+  it("clamps an out-of-range primary camera on parse", () => {
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Camera",
+        mapView: {
+          center: ["x", 200],
+          zoom: -1,
+          bearing: -90,
+          pitch: 200,
+        },
+      }),
+    );
+    // Invalid lon falls back to the default camera longitude; lat clamps to 90.
+    assert.deepEqual(project.mapView.center, [-100, 90]);
+    assert.equal(project.mapView.zoom, 0);
+    assert.equal(project.mapView.pitch, 85);
+    assert.equal(project.mapView.bearing, 270);
+  });
+
+  it("normalizes an out-of-range camera through applyProjectToStore", () => {
+    const applied = applyProjectToStore({
+      ...createEmptyProject("Camera"),
+      mapView: {
+        center: ["x", 200] as unknown as [number, number],
+        zoom: -1,
+        bearing: -90,
+        pitch: 200,
+      },
+    });
+    assert.deepEqual(applied.mapView.center, [-100, 90]);
+    assert.equal(applied.mapView.zoom, 0);
+    assert.equal(applied.mapView.pitch, 85);
+    assert.equal(applied.mapView.bearing, 270);
   });
 });
