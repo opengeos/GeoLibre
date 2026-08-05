@@ -18,7 +18,7 @@ import type {
 } from "@geolibre/core";
 import bbox from "@turf/bbox";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { LayerControl, type CustomLayerAdapter, type LayerState } from "maplibre-gl-layer-control";
 import { CollapsedAttributionControl } from "./collapsed-attribution-control";
 import {
@@ -50,6 +50,18 @@ import { getOfflineBasemapStyle, isOfflineBasemapSentinel } from "./protomaps-ba
 import { ResetBearingControl } from "./reset-bearing-control";
 import { MaptoolkitLogoControl } from "./maptoolkit-logo-control";
 import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control";
+import { getDynamicPaintProperty, setDynamicPaintProperty } from "./dynamic-style-property";
+
+/**
+ * GeolocateControl is constructed through this indirection so tests can
+ * substitute a fake. Assigning over `maplibregl.GeolocateControl` is not an
+ * option: a MapLibre v6 ESM namespace is sealed and rejects assignment
+ * (`TypeError: Cannot assign to property 'GeolocateControl' of [object Module]`).
+ */
+export const geolocateControlFactory = {
+  create: (options: maplibregl.GeolocateControlOptions): maplibregl.GeolocateControl =>
+    new maplibregl.GeolocateControl(options),
+};
 
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
   type: "globe",
@@ -644,11 +656,11 @@ export class MapController {
       const props = OPACITY_PAINT_PROPERTIES[styleLayer.type] ?? [];
       for (const prop of props) {
         if (typeof durationMs === "number" && durationMs >= 0) {
-          this.map.setPaintProperty(nativeId, `${prop}-transition`, {
+          setDynamicPaintProperty(this.map, nativeId, `${prop}-transition`, {
             duration: durationMs,
           });
         }
-        this.map.setPaintProperty(nativeId, prop, clamped);
+        setDynamicPaintProperty(this.map, nativeId, prop, clamped);
       }
     }
   }
@@ -674,7 +686,7 @@ export class MapController {
           const styleLayer = this.map.getLayer(nativeId);
           if (!styleLayer) continue;
           for (const prop of OPACITY_PAINT_PROPERTIES[styleLayer.type] ?? []) {
-            this.map.setPaintProperty(nativeId, `${prop}-transition`, {
+            setDynamicPaintProperty(this.map, nativeId, `${prop}-transition`, {
               duration: 0,
             });
           }
@@ -1197,7 +1209,7 @@ export class MapController {
       this.basemapOriginalPaintValues.set(layerId, originalPaintValues);
     }
     if (!originalPaintValues.has(property)) {
-      originalPaintValues.set(property, this.map.getPaintProperty(layerId, property));
+      originalPaintValues.set(property, getDynamicPaintProperty(this.map, layerId, property));
     }
 
     const original = originalPaintValues.get(property);
@@ -1208,9 +1220,9 @@ export class MapController {
           ? original * this.basemapOpacity
           : this.basemapOpacity;
     try {
-      const current = this.map.getPaintProperty(layerId, property);
+      const current = getDynamicPaintProperty(this.map, layerId, property);
       if (styleValuesEqual(current, opacity)) return;
-      this.map.setPaintProperty(layerId, property, opacity);
+      setDynamicPaintProperty(this.map, layerId, property, opacity);
     } catch {
       // Some third-party custom style layers may not expose paint properties.
     }
@@ -2355,7 +2367,7 @@ export class MapController {
     if (!this.map || this.geolocateControl || !this.controlVisibility.geolocate) {
       return false;
     }
-    const control = new maplibregl.GeolocateControl({
+    const control = geolocateControlFactory.create({
       positionOptions: {
         enableHighAccuracy: true,
       },

@@ -11,6 +11,7 @@ import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyRtlText } from "./vite-plugins/copy-rtl-text";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
+import { maplibreDefaultImportShim } from "./vite-plugins/maplibre-default-import-shim";
 import { proxyBinaryRequestGuarded } from "./vite-proxy-guard";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
@@ -846,6 +847,7 @@ function pwaPlugin(): Plugin[] {
 export default defineConfig({
   base: APP_BASE,
   plugins: [
+    maplibreDefaultImportShim(),
     ...(PGLITE_CDN ? [pgliteCdnLoaderPlugin()] : []),
     ...(CEREUS_CDN ? [cereusCdnLoaderPlugin()] : []),
     duckdbWasmBundlesPlugin(),
@@ -959,6 +961,13 @@ export default defineConfig({
       // asset reference, so serve it as-is. Only reached through the lazy
       // dynamic import in local-netcdf.ts when a user opens a local file.
       "h5wasm",
+      // These two still default-import maplibre-gl, which v6 does not provide.
+      // `maplibreDefaultImportShim` rewrites that, but the dependency optimizer
+      // runs outside the plugin pipeline and would fail before the shim is ever
+      // consulted, so serve them unbundled and let the shim transform them.
+      // Remove alongside their entries in the shim. See opengeos/GeoLibre#1489.
+      "@esri/maplibre-arcgis",
+      "@geoman-io/maplibre-geoman-free",
     ],
   },
   build: {

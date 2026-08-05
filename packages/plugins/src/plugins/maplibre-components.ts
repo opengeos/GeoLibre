@@ -17,7 +17,7 @@ import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import { RasterLayer, type RasterLayerProps } from "@developmentseed/deck.gl-raster";
 import { fromArrayBuffer } from "geotiff";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import proj4 from "proj4";
 import type {
   AddVectorControl,

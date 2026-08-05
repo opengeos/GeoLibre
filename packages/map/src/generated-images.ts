@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 /**
  * Lazily-generated MapLibre sprite images (fill-pattern tiles and marker icons).

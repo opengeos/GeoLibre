@@ -1,5 +1,5 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { useTranslation } from "react-i18next";
 import type { StoryActiveSlideMode, StoryChapter, StoryMap } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";

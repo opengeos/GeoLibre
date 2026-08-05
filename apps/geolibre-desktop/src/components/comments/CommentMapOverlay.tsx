@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useAppStore, type ProjectComment } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import maplibreGl from "maplibre-gl";
+import * as maplibreGl from "maplibre-gl";
 
 interface CommentMapOverlayProps {
   mapControllerRef: React.RefObject<MapController | null>;

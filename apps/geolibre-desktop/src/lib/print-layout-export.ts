@@ -6,7 +6,7 @@
  * export helpers rasterize {@link drawLayout} at print resolution.
  */
 import { zipSync } from "fflate";
-import jsPDF from "jspdf";
+import { jsPDF } from "jspdf";
 import { isFullViewportMapCanvas } from "./print-capture";
 import { drawLayout, pageMm, pagePx, resolvePageSize, type LayoutOptions } from "./print-layout";
 import type { PrintExtent } from "./print-extent";

@@ -7,7 +7,7 @@ import {
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { memo, useEffect, useMemo, useRef } from "react";
 import {
   circleLayerId,

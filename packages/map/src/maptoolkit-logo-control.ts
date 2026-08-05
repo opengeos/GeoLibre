@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 /** Where the logo links, and the brand name used for the tooltip/aria label. */
 const MAPTOOLKIT_URL = "https://www.maptoolkit.org/";
