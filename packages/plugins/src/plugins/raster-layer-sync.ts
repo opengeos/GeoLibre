@@ -1,7 +1,6 @@
 import {
   applyGroupEffects,
   DEFAULT_LAYER_STYLE,
-  effectiveLayerRenderState,
   type GeoLibreLayer,
   styleValue,
   useAppStore,
@@ -89,6 +88,33 @@ let syncingLayersToStore = false;
 // control emits raster* events synchronously from those calls, and syncing
 // mid-mutation would observe a partially updated layer list.
 let storeSyncSuspended = 0;
+// The group-folded visibility/opacity this module last forced on each raster,
+// by layer id. A parent group's state never lives on the child layer, so it
+// only reaches a deck.gl raster by being pushed at the control -- which then
+// reports it back on every later event. Recording what was pushed is what lets
+// the control->store mirror tell that echo from a real control-side edit; see
+// syncRasterLayersToStoreWithOptions. Keyed on the *pushed* value rather than
+// on re-deriving the fold so a user edit that numerically coincides with the
+// fold is still recorded: the only value this misses is the one the control
+// already holds, which is a no-op edit.
+const pushedRenderState = new Map<string, { visible?: boolean; opacity?: number }>();
+
+/**
+ * Record a group-folded value handed to the control, so the next
+ * control->store mirror can recognize it as an echo rather than a user edit.
+ * Called by this module's store subscriber and by the project-restore replay
+ * in maplibre-raster, the two places that force folded values on the control.
+ *
+ * @param id - The raster/store layer id.
+ * @param patch - The folded fields just pushed.
+ */
+export function rememberPushedRasterRenderState(
+  id: string,
+  patch: { visible?: boolean; opacity?: number },
+): void {
+  const existing = pushedRenderState.get(id);
+  pushedRenderState.set(id, existing ? { ...existing, ...patch } : { ...patch });
+}
 
 /**
  * Detects a layer panel entry owned by the maplibre-gl-raster control.
@@ -247,8 +273,12 @@ export function syncRasterLayersToStoreWithOptions(
   const infos = control.getRasters();
   const infoIds = new Set(infos.map((info) => info.id));
   const panelCollapsed = rasterPanelCollapsedFromControl(control);
-  // Nothing below adds or edits a group, so one read covers the whole pass.
-  const groups = useAppStore.getState().layerGroups;
+
+  // A raster the control no longer holds can never echo again, and its id
+  // could otherwise mis-suppress a future raster added under the same id.
+  for (const id of pushedRenderState.keys()) {
+    if (!infoIds.has(id)) pushedRenderState.delete(id);
+  }
 
   syncingLayersToStore = true;
   try {
@@ -281,17 +311,20 @@ export function syncRasterLayersToStoreWithOptions(
       const metadata =
         Object.keys(preserved).length > 0 ? { ...layer.metadata, ...preserved } : layer.metadata;
 
-      // wireRasterStoreSync pushes the *group-folded* visibility/opacity at the
-      // control, so a control that reports those values back is echoing the
-      // group, not recording a user edit. Mirroring the echo would burn a
-      // hidden group's `false` into the layer's own `visible`, leaving it
-      // hidden after the group is shown again. Only a value that differs from
-      // the fold is a genuine control-side change.
-      const effective = effectiveLayerRenderState(existing, groups);
-      const visible = layer.visible === effective.visible ? existing.visible : layer.visible;
-      const opacity = numbersEqual(layer.opacity, effective.opacity)
-        ? existing.opacity
-        : layer.opacity;
+      // A control still reporting the group-folded value this module forced on
+      // it is echoing the group, not recording a user edit. Mirroring the echo
+      // would burn a hidden group's `false` into the layer's own `visible`,
+      // leaving it hidden after the group is shown again. Any other value is a
+      // genuine control-side change and is recorded as before.
+      const pushed = pushedRenderState.get(layer.id);
+      const visible =
+        pushed?.visible !== undefined && layer.visible === pushed.visible
+          ? existing.visible
+          : layer.visible;
+      const opacity =
+        pushed?.opacity !== undefined && numbersEqual(layer.opacity, pushed.opacity)
+          ? existing.opacity
+          : layer.opacity;
 
       if (
         existing.visible !== visible ||
@@ -360,14 +393,17 @@ export function wireRasterStoreSync(control: RasterSyncableControl): void {
         const current = currentById.get(layer.id);
         if (!current) {
           activeControl.removeRaster(layer.id);
+          pushedRenderState.delete(layer.id);
           continue;
         }
 
         if (current.visible !== layer.visible) {
           activeControl.setVisible(layer.id, current.visible);
+          rememberPushedRasterRenderState(layer.id, { visible: current.visible });
         }
         if (current.opacity !== layer.opacity) {
           activeControl.setRasterState(layer.id, { opacity: current.opacity });
+          rememberPushedRasterRenderState(layer.id, { opacity: current.opacity });
         }
         const patch = rasterStatePatch(layer, current);
         if (patch) activeControl.setRasterState(layer.id, patch);
@@ -464,6 +500,9 @@ export function unwireRasterStoreSync(): void {
   storeUnsubscribe?.();
   storeUnsubscribe = null;
   syncedControl = null;
+  // The successor control has been told nothing, so no echo of this one's
+  // pushes can arrive; a stale record would only mis-suppress its first sync.
+  pushedRenderState.clear();
 }
 
 /**

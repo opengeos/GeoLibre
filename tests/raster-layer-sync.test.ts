@@ -709,6 +709,24 @@ describe("wireRasterStoreSync with layer groups", () => {
     assert.equal(useAppStore.getState().layers[0].opacity, 1);
   });
 
+  it("still records a control-side opacity edit made under a faded group", () => {
+    const { control } = fakeControl([rasterInfo({ state: rasterState({ opacity: 0.5 }) })]);
+    syncRasterLayersToStore(control);
+    wireRasterStoreSync(control);
+
+    const groupId = useAppStore.getState().addLayerGroup("Group 1", ["raster-1"]);
+    useAppStore.getState().setLayerGroupOpacity(groupId, 0.4);
+
+    // The guard suppresses only the 0.2 this module pushed (0.5 * 0.4). The
+    // user dragging the control's own opacity slider reports something else,
+    // which must still reach the layer's own opacity.
+    syncRasterLayersToStore(
+      fakeControl([rasterInfo({ state: rasterState({ opacity: 0.9 }) })]).control,
+    );
+
+    assert.equal(useAppStore.getState().layers[0].opacity, 0.9);
+  });
+
   it("still records a genuine control-side hide made under a visible group", () => {
     const { control } = fakeControl([rasterInfo()]);
     syncRasterLayersToStore(control);

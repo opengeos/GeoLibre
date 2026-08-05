@@ -17,6 +17,7 @@ import {
 import {
   isRasterControlStoreLayer,
   rememberLocalRasterPath,
+  rememberPushedRasterRenderState,
   rendersNativeMapLibreLayer,
   resetRasterStoreSyncSuspension,
   runWithRasterStoreSyncSuspended,
@@ -591,7 +592,10 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
         // A parent group's visibility/opacity never touch the child layer's
         // own fields, so replay the folded values — otherwise a project saved
         // with a hidden group reopens with its rasters painted on the map.
+        // Recorded so the first control event after the restore reads them as
+        // this replay's echo rather than as a control-side edit.
         const effective = effectiveLayerRenderState(layer, restoredGroups);
+        rememberPushedRasterRenderState(layer.id, effective);
 
         pending.push(
           control
