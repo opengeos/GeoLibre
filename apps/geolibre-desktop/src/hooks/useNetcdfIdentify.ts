@@ -1,14 +1,19 @@
 import { useAppStore } from "@geolibre/core";
+import type { TFunction } from "i18next";
 import maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { MapController } from "@geolibre/map";
+import { bandMeasure } from "../lib/netcdf-band-axis";
 import {
   displayUnits,
   getNetcdfLayerState,
   gridPixelAt,
+  gridValueAt,
   NETCDF_IMAGE_SOURCE_KIND,
   readNetcdfProfile,
+  type GridPixel,
+  type NetcdfLayerState,
 } from "../lib/netcdf-image-symbology";
 import {
   addNetcdfProfileSample,
@@ -33,6 +38,55 @@ function formatValue(value: number): string {
 function formatReading(value: number, units: string | undefined): string {
   const unit = displayUnits(units);
   return unit ? `${formatValue(value)} ${unit}` : formatValue(value);
+}
+
+/**
+ * The channel names an RGB composite's rows are labelled with, red first — the
+ * same three the Add dialog's band pickers carry, so a reading is named exactly
+ * as the field that chose it.
+ */
+const CHANNEL_LABEL_KEYS = [
+  "addData.netcdf.channel.red",
+  "addData.netcdf.channel.green",
+  "addData.netcdf.channel.blue",
+] as const;
+
+/**
+ * The value rows for one clicked cell.
+ *
+ * A single-band layer reports the variable it was built from. A composite
+ * reports all three channels instead: they are the same variable at three
+ * bands, so naming it three times would say nothing, where the channel and the
+ * band it was drawn from say everything. The three share a geometry, so the
+ * cell `gridPixelAt` found on the red channel addresses the other two directly.
+ *
+ * @param state - The layer's retained grids.
+ * @param pixel - The cell under the click.
+ * @param t - The translator, for the channel names and the no-data marker.
+ * @returns Label/value pairs, in display order.
+ */
+function valueRows(
+  state: NetcdfLayerState,
+  pixel: GridPixel,
+  t: TFunction,
+): Array<[string, string]> {
+  const reading = (value: number | null): string =>
+    value === null ? t("netcdfIdentify.noData") : formatReading(value, state.units);
+
+  const rgb = state.rgb;
+  if (!rgb) return [[state.variable, reading(pixel.value)]];
+
+  const axis = state.cube?.axis;
+  return rgb.bands.map((band, channel) => {
+    const name = t(CHANNEL_LABEL_KEYS[channel]);
+    return [
+      // The axis is gone once the file behind a second cube closed it, and with
+      // it any way to say which wavelength this was; the channel name alone
+      // still reads correctly.
+      axis ? `${name} (${bandMeasure(axis, band)})` : name,
+      reading(gridValueAt(rgb.channels[channel], pixel.row, pixel.column)),
+    ] as [string, string];
+  });
 }
 
 /**
@@ -107,12 +161,7 @@ export function useNetcdfIdentify(
       const container = document.createElement("div");
       container.className = "space-y-0.5 text-xs";
       const rows: Array<[string, string]> = [
-        [
-          state.variable,
-          pixel.value === null
-            ? t("netcdfIdentify.noData")
-            : formatReading(pixel.value, state.units),
-        ],
+        ...valueRows(state, pixel, t),
         [t("netcdfIdentify.coordinates"), `${pixel.lng.toFixed(5)}, ${pixel.lat.toFixed(5)}`],
         [t("netcdfIdentify.cell"), `${pixel.row}, ${pixel.column}`],
       ];

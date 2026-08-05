@@ -475,7 +475,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
             scaleFactor: channels[0].scaleFactor,
             addOffset: channels[0].addOffset,
           });
-          addImageOverlayLayer(
+          const layerId = addImageOverlayLayer(
             `${baseName} - ${variable} (RGB)`,
             {
               url: encodeImageOverlay(image),
@@ -486,9 +486,25 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
               // Without this the store defaults it to "kml-ground-overlay",
               // which every consumer of that marker would then act on.
               sourceKind: NETCDF_IMAGE_SOURCE_KIND,
-              metadata: { variable },
+              // Identify reads cell values, not features, exactly as the
+              // single-band path does; a composite reports all three channels.
+              metadata: { variable, pixelIdentify: true },
             },
           );
+          // A composite is by definition built on a band axis, so the file
+          // always stays open: it is what a click's spectral signature and the
+          // 3-D cube view are read from.
+          retainedFileRef.current = dataset.file;
+          registerNetcdfLayer(layerId, {
+            grid: channels[0],
+            variable,
+            ...(selectedVar?.units ? { units: selectedVar.units } : {}),
+            cube: cubeReader(dataset, variable, rgbAxis, selector),
+            rgb: {
+              bands: rgbBands,
+              channels: channels as [LocalNetcdfGrid, LocalNetcdfGrid, LocalNetcdfGrid],
+            },
+          });
           appApi.fitBounds?.(image.bounds);
         } else if (useImagePath) {
           // The grid itself, not just its pixels, so the Style panel can

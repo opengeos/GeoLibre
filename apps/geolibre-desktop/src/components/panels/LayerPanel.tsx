@@ -221,7 +221,7 @@ import {
 } from "../../lib/postgis-connections";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { isTauri } from "../../lib/is-tauri";
-import { getNetcdfImageSource } from "../../lib/netcdf-image-symbology";
+import { getNetcdfLayerState } from "../../lib/netcdf-image-symbology";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
 import { LayerSwatchIcon } from "./LayerSwatchIcon";
@@ -584,11 +584,13 @@ function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
   // registered by a plugin, but its values are held in memory and read directly
   // by useNetcdfIdentify. Named here rather than given a synthetic
   // `nativeLayerIds`, which would make layer-sync treat it as plugin-owned and
-  // stop drawing it. Gated on the grid actually being retained: an RGB
-  // composite shares the source kind but registers none, and a reload drops it,
-  // and offering Identify that answers nothing is worse than not offering it.
+  // stop drawing it. Gated on the grids actually being retained — a project
+  // reload drops them — since offering Identify that answers nothing is worse
+  // than not offering it. Deliberately the layer state rather than
+  // `getNetcdfImageSource`, which is null for an RGB composite: that has no
+  // colormap to re-apply but does have three channels a click can read.
   if (layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) {
-    return getNetcdfImageSource(layer.id) !== null;
+    return getNetcdfLayerState(layer.id) !== null;
   }
 
   return Array.isArray(layer.metadata.nativeLayerIds) && layer.metadata.nativeLayerIds.length > 0;

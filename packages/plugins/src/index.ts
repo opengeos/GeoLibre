@@ -154,6 +154,7 @@ export {
   composeRgbImage,
   gridBounds,
   gridPixelAt,
+  gridValueAt,
   percentileClim,
   type ColormapComposition,
   type RgbComposition,

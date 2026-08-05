@@ -56,7 +56,7 @@ import { useTranslation } from "react-i18next";
 import { AttributeFormSection } from "./AttributeFormSection";
 import { LayerJoinsSection } from "./LayerJoinsSection";
 import { VirtualFieldsSection } from "./VirtualFieldsSection";
-import { getNetcdfImageSource, NETCDF_IMAGE_SOURCE_KIND } from "../../lib/netcdf-image-symbology";
+import { getNetcdfLayerState, NETCDF_IMAGE_SOURCE_KIND } from "../../lib/netcdf-image-symbology";
 import { NetcdfProfilePanel } from "./NetcdfProfilePanel";
 import { NetcdfSymbologySection } from "./NetcdfSymbologySection";
 import { RasterSymbologySection } from "./RasterSymbologySection";
@@ -4631,11 +4631,14 @@ export function StylePanel({
   }
 
   if (!hasVectorPaintControls) {
-    // The section renders nothing without a retained grid, so ask here too, or
+    // The section renders nothing without retained grids, so ask here too, or
     // the panel would suppress the fallback message and show an empty body.
+    // The layer state rather than `getNetcdfImageSource`, which is null for an
+    // RGB composite: that one has no colormap to re-apply, but it does have a
+    // band summary to show and pixels to sample.
     const hasNetcdfSymbology =
       layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND &&
-      getNetcdfImageSource(layer.id) !== null;
+      getNetcdfLayerState(layer.id) !== null;
     return (
       <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
@@ -4660,8 +4663,8 @@ export function StylePanel({
             {/* A NetCDF grid baked to pixels has no MapLibre paint properties,
                 so it lands in this branch; its colormap/limits are re-applied
                 by re-baking the image rather than by a style property. The
-                grid is dropped on a project reload, and an RGB composite never
-                had one, so the generic message still has to appear for those. */}
+                grids are dropped on a project reload, so the generic message
+                still has to appear for a layer restored from one. */}
             {hasNetcdfSymbology ? (
               <NetcdfSymbologySection layer={layer} />
             ) : (

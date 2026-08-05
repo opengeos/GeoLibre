@@ -10,6 +10,7 @@ import {
   composeRgbImage,
   gridBounds,
   gridPixelAt,
+  gridValueAt,
   openLocalNetcdf,
   percentileClim,
   type InlineZarrGrid,
@@ -907,6 +908,21 @@ describe("gridPixelAt", () => {
     // The extent runs half a cell past the last centre, so the very edge of the
     // drawn image must still resolve rather than reporting a miss.
     assert.equal(gridPixelAt(grid(), 2.4, 20)?.column, 2);
+  });
+
+  it("reads the same cell from a second grid without searching again", () => {
+    // What an RGB composite's identify does: the click locates the cell on one
+    // channel, and the other two are read straight off those indices.
+    const pixel = gridPixelAt(grid(), 1.1, 19.6);
+    assert.ok(pixel);
+    const green = { ...grid(), values: new Float32Array([10, 20, 30, 40, 50, 60]) };
+    assert.equal(gridValueAt(green, pixel.row, pixel.column), 20);
+  });
+
+  it("unpacks and masks the same way gridPixelAt does", () => {
+    assert.equal(gridValueAt({ ...grid(), scaleFactor: 2, addOffset: 1 }, 0, 0), 3);
+    const values = new Float32Array([-9999, 2, 3, 4, 5, 6]);
+    assert.equal(gridValueAt({ ...grid(), values }, 0, 0), null);
   });
 });
 

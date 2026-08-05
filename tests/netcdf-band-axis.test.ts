@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   axisOptionLabel,
   bandLabel,
+  bandMeasure,
   defaultRgbBands,
   isTimeAxisName,
   pickBandAxis,
@@ -94,6 +95,21 @@ describe("axis labelling", () => {
 
   it("falls back to the bare index when the axis has no coordinates", () => {
     assert.equal(bandLabel(axis("bands", 3), 2), "bands 2");
+  });
+
+  it("gives the measure alone where the axis is already implied", () => {
+    // The identify popup's channel rows: "Red band (500.50 nm)" reads, "Red
+    // band (500.50 nm (bands 1))" does not.
+    assert.equal(bandMeasure(axis("bands", 3, 400, 600, "nm"), 1), "500 nm");
+    assert.equal(bandMeasure(axis("bands", 5, 400, 600, "nm"), 1), "450 nm");
+  });
+
+  it("keeps the axis name in the measure when there are no units to give it meaning", () => {
+    assert.equal(bandMeasure(axis("level", 3, 0, 2), 1), "level 1");
+    assert.equal(bandMeasure(axis("bands", 3), 2), "bands 2");
+    // Past the end of the coordinates, which is what a composite carried over
+    // from a wider axis would ask for.
+    assert.equal(bandMeasure(axis("bands", 3, 400, 600, "nm"), 9), "bands 9");
   });
 });
 

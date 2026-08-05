@@ -4,6 +4,7 @@ import { Boxes } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useColormapRamps } from "../../hooks/useColormapRamps";
+import { bandMeasure } from "../../lib/netcdf-band-axis";
 import { openNetcdfCubeSetup } from "../../lib/netcdf-cube-store";
 import {
   bakeNetcdfImage,
@@ -13,7 +14,64 @@ import {
   netcdfImageSymbology,
   warmNetcdfColormap,
   type NetcdfImageSymbology,
+  type NetcdfLayerState,
 } from "../../lib/netcdf-image-symbology";
+
+/** The three band pickers' names, red first, reused for the RGB summary rows. */
+const CHANNEL_LABEL_KEYS = [
+  "addData.netcdf.channel.red",
+  "addData.netcdf.channel.green",
+  "addData.netcdf.channel.blue",
+] as const;
+
+/**
+ * What an RGB composite gets in place of the colormap controls: the three bands
+ * it was composed from, and the way into the 3-D cube.
+ *
+ * There is nothing to re-apply here — the pixels came from three channels, each
+ * stretched to its own range, and re-baking any one of them with a colormap
+ * would replace the composite with a single-band image. So the bands are shown
+ * rather than edited; changing them means adding the layer again.
+ *
+ * @param props.layerId - The composite's layer id, for the cube setup.
+ * @param props.state - Its retained grids, which must carry `rgb`.
+ * @returns The summary section.
+ */
+function NetcdfRgbSection({ layerId, state }: { layerId: string; state: NetcdfLayerState }) {
+  const { t } = useTranslation();
+  const axis = state.cube?.axis;
+  return (
+    <>
+      <Separator />
+      <div className="space-y-3">
+        <p className="text-xs font-semibold">{t("addData.netcdf.bandCombinationLabel")}</p>
+        <dl className="space-y-1 text-xs">
+          {(state.rgb?.bands ?? []).map((band, channel) => (
+            <div key={CHANNEL_LABEL_KEYS[channel]} className="flex items-baseline gap-2">
+              <dt className="text-muted-foreground">{t(CHANNEL_LABEL_KEYS[channel])}</dt>
+              <dd className="truncate font-medium">
+                {axis ? bandMeasure(axis, band) : String(band)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        {/* Same condition as the single-band section's button: only a layer
+            whose source file is still open on a band axis has a cube to read. */}
+        {state.cube ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => openNetcdfCubeSetup(layerId)}
+          >
+            <Boxes className="me-1.5 h-4 w-4" aria-hidden="true" />
+            {t("netcdfSymbology.openCube")}
+          </Button>
+        ) : null}
+      </div>
+    </>
+  );
+}
 
 /**
  * Symbology for a NetCDF grid baked into an `image` overlay: the same colormap
@@ -28,8 +86,12 @@ import {
  * case after a project reload: the baked pixels are in the project file but the
  * values behind them are not, so there is nothing to re-colormap.
  *
+ * An RGB composite retains its grids but has no single ramp to edit, so it gets
+ * {@link NetcdfRgbSection} — its bands, and the cube — instead.
+ *
  * @param props.layer - The image layer to style.
- * @returns The symbology controls, or null when the grid is unavailable.
+ * @returns The symbology controls, the RGB summary, or null when nothing about
+ *   the layer is retained.
  */
 export function NetcdfSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   const { t } = useTranslation();
@@ -59,6 +121,11 @@ export function NetcdfSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     // the previous layer's colormap in this layer's controls until it resolves.
     setPendingSymbology(null);
   }
+
+  // After the hooks above, not before: an early return that skipped them would
+  // change the hook order between a single-band layer and a composite.
+  const rgbState = getNetcdfLayerState(layer.id);
+  if (rgbState?.rgb) return <NetcdfRgbSection layerId={layer.id} state={rgbState} />;
 
   if (!source) return null;
 
