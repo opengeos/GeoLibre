@@ -57,6 +57,7 @@ import { AttributeFormSection } from "./AttributeFormSection";
 import { LayerJoinsSection } from "./LayerJoinsSection";
 import { VirtualFieldsSection } from "./VirtualFieldsSection";
 import { NETCDF_IMAGE_SOURCE_KIND } from "../../lib/netcdf-image-symbology";
+import { NetcdfProfilePanel } from "./NetcdfProfilePanel";
 import { NetcdfSymbologySection } from "./NetcdfSymbologySection";
 import { RasterSymbologySection } from "./RasterSymbologySection";
 import { TimeSliderSymbologySection } from "./TimeSliderSymbologySection";
@@ -4657,6 +4658,7 @@ export function StylePanel({
             <NetcdfSymbologySection layer={layer} />
           )}
         </div>
+        {layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND && <NetcdfProfilePanel />}
         {layer.metadata.sourceKind !== NETCDF_IMAGE_SOURCE_KIND && (
           <p className="p-4 text-xs text-muted-foreground">{t("style.noControls")}</p>
         )}

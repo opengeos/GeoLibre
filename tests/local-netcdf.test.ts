@@ -8,6 +8,7 @@ import {
   composeColormappedImage,
   composeRgbImage,
   gridBounds,
+  gridPixelAt,
   openLocalNetcdf,
   percentileClim,
   type InlineZarrGrid,
@@ -645,6 +646,90 @@ describe("readGrid (NetCDF-3)", () => {
     const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
     try {
       assert.deepEqual(Array.from(file.readGrid("temp").values), [1, 2, 3, 4, 5, 6]);
+    } finally {
+      file.close();
+    }
+  });
+});
+
+describe("gridPixelAt", () => {
+  /** A 2x3 grid on a descending latitude axis, values tagging their cell. */
+  function grid() {
+    return {
+      ny: 2,
+      nx: 3,
+      values: new Float32Array([1, 2, 3, 4, 5, 6]),
+      lat: new Float64Array([20, 10]),
+      lon: new Float64Array([0, 1, 2]),
+      fillValue: -9999 as number | string | null,
+      dataClim: [1, 6] as [number, number],
+    };
+  }
+
+  it("finds the cell under a click and reports its value", () => {
+    const pixel = gridPixelAt(grid(), 1.1, 19.6);
+    assert.deepEqual(pixel, { row: 0, column: 1, lng: 1, lat: 20, value: 2 });
+  });
+
+  it("reads the southern row of a descending latitude axis", () => {
+    assert.equal(gridPixelAt(grid(), 2, 10)?.value, 6);
+  });
+
+  it("applies scale_factor and add_offset to the readout", () => {
+    const pixel = gridPixelAt({ ...grid(), scaleFactor: 2, addOffset: 1 }, 0, 20);
+    assert.equal(pixel?.value, 3);
+  });
+
+  it("reports a fill cell as no data rather than as its sentinel", () => {
+    const values = new Float32Array([-9999, 2, 3, 4, 5, 6]);
+    assert.equal(gridPixelAt({ ...grid(), values }, 0, 20)?.value, null);
+  });
+
+  it("returns null for a click outside the grid", () => {
+    assert.equal(gridPixelAt(grid(), 40, 20), null);
+    assert.equal(gridPixelAt(grid(), 1, -40), null);
+  });
+
+  it("still reads the outermost cell half a cell past the edge", () => {
+    // The extent runs half a cell past the last centre, so the very edge of the
+    // drawn image must still resolve rather than reporting a miss.
+    assert.equal(gridPixelAt(grid(), 2.4, 20)?.column, 2);
+  });
+});
+
+describe("readProfile (NetCDF-3)", () => {
+  it("walks a leading axis at one pixel", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      // temp is (time=2, lat=2, lon=3); row 1 / column 2 is 6 then 16.
+      const profile = file.readProfile("temp", { axis: "time", row: 1, column: 2 });
+      assert.equal(profile.axis.name, "time");
+      assert.equal(profile.axis.size, 2);
+      assert.deepEqual(profile.values, [6, 16]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("clamps a pixel outside the grid onto the nearest edge cell", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      assert.deepEqual(
+        file.readProfile("temp", { axis: "time", row: 99, column: 99 }).values,
+        [6, 16],
+      );
+    } finally {
+      file.close();
+    }
+  });
+
+  it("rejects an axis that is not one of the variable's leading dimensions", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      assert.throws(
+        () => file.readProfile("temp", { axis: "lat", row: 0, column: 0 }),
+        /not one of this variable's non-spatial dimensions/i,
+      );
     } finally {
       file.close();
     }

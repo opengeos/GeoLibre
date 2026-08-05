@@ -14,6 +14,7 @@ import {
 import { useTranslation } from "react-i18next";
 import type { ParseKeys, TFunction } from "i18next";
 import {
+  NETCDF_IMAGE_SOURCE_KIND,
   DEFAULT_BASEMAP,
   getPlanetaryBasemapById,
   getPlanetaryBasemapByStyleUrl,
@@ -576,6 +577,13 @@ function relativeSyncTime(iso: string, locale: string): string {
 
 function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
   if (layer.metadata.identifiable === false) return false;
+
+  // A NetCDF grid baked to pixels has no queryable features and no native layer
+  // registered by a plugin, but its values are held in memory and read directly
+  // by useNetcdfIdentify. Named here rather than given a synthetic
+  // `nativeLayerIds`, which would make layer-sync treat it as plugin-owned and
+  // stop drawing it.
+  if (layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) return true;
 
   return Array.isArray(layer.metadata.nativeLayerIds) && layer.metadata.nativeLayerIds.length > 0;
 }

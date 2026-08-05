@@ -2,16 +2,15 @@ import { interpolateColors, useAppStore, type GeoLibreLayer } from "@geolibre/co
 import {
   colormapColors,
   composeColormappedImage,
+  type LocalNetcdfFile,
   type LocalNetcdfGrid,
   type LocalNetcdfImage,
+  type LocalNetcdfProfile,
 } from "@geolibre/plugins";
 
-/**
- * Marks a layer as a NetCDF grid baked into an `image` overlay, as opposed to
- * the KML ground overlays that otherwise use that layer type. The Style panel
- * gates its NetCDF symbology section on this.
- */
-export const NETCDF_IMAGE_SOURCE_KIND = "netcdf-image";
+export { NETCDF_IMAGE_SOURCE_KIND } from "@geolibre/core";
+// Re-exported so callers reach one module for everything about these layers.
+export { gridPixelAt, type GridPixel } from "@geolibre/plugins";
 
 /** Ramp stops resampled for the CPU colormapper (8-bit lookup depth). */
 export const COLORMAP_STOPS = 256;
@@ -27,43 +26,108 @@ export const COLORMAP_STOPS = 256;
  */
 export type NetcdfImageSource = LocalNetcdfGrid;
 
-const sources = new Map<string, NetcdfImageSource>();
+/** Everything retained in memory for one baked NetCDF layer. */
+export interface NetcdfLayerState {
+  /** The displayed slice: backs both re-colormapping and pixel identify. */
+  grid: LocalNetcdfGrid;
+  /** The variable the layer was built from, for labelling readouts. */
+  variable: string;
+  /** The variable's CF `units`, when it declares any. */
+  units?: string;
+  /**
+   * Present only for a layer built from a cube. Reading a spectral signature
+   * needs the whole band axis at one pixel, which only the source file has, so
+   * the file stays open for as long as the layer does.
+   */
+  profile?: {
+    file: LocalNetcdfFile;
+    /** The leading axis to walk, e.g. `bands`. */
+    axis: string;
+    /** Fixed index for every other leading dimension. */
+    selector: Record<string, number>;
+  };
+}
+
+const states = new Map<string, NetcdfLayerState>();
 let unsubscribe: (() => void) | null = null;
 
 /**
- * Remember the values behind a baked NetCDF image so its symbology stays
- * editable, and start pruning entries whose layer is gone.
+ * Remember what a baked NetCDF layer was made from, so its symbology stays
+ * editable and its pixels stay readable, and start releasing entries whose
+ * layer is gone.
+ *
+ * An open file is large (a hyperspectral cube runs to ~1 GB in the WebAssembly
+ * heap), and the address space is 4 GB, so **only one** file is retained: adding
+ * a second cube closes the first, which loses only its spectral profiles. Every
+ * layer keeps its own grid, which is far smaller.
  *
  * @param layerId - The image layer's id.
- * @param source - The decoded slice and its coordinates.
+ * @param state - The decoded slice, and the open file when it came from a cube.
  */
-export function registerNetcdfImageSource(layerId: string, source: NetcdfImageSource): void {
-  sources.set(layerId, source);
-  // A removed layer would otherwise strand its grid (tens of MB) for the rest of
-  // the session. One subscription serves every registration.
-  unsubscribe ??= useAppStore.subscribe((state) => {
-    if (sources.size === 0) return;
-    const live = new Set(state.layers.map((layer) => layer.id));
-    for (const id of sources.keys()) {
-      if (!live.has(id)) sources.delete(id);
+export function registerNetcdfLayer(layerId: string, state: NetcdfLayerState): void {
+  if (state.profile) {
+    for (const [id, existing] of states) {
+      if (id !== layerId && existing.profile) {
+        existing.profile.file.close();
+        states.set(id, { ...existing, profile: undefined });
+      }
+    }
+  }
+  states.set(layerId, state);
+  // A removed layer would otherwise strand its grid, and its file, for the rest
+  // of the session. One subscription serves every registration.
+  unsubscribe ??= useAppStore.subscribe((current) => {
+    if (states.size === 0) return;
+    const live = new Set(current.layers.map((layer) => layer.id));
+    for (const id of states.keys()) {
+      if (!live.has(id)) releaseNetcdfLayer(id);
     }
   });
 }
 
 /**
- * The values behind a baked NetCDF image, or null when this layer is not one
- * (or its values were lost with a project reload).
+ * What a baked NetCDF layer was made from, or null when this layer is not one
+ * (or its state was lost with a project reload).
  *
  * @param layerId - The layer's id.
- * @returns The registered slice, or null.
+ * @returns The retained state, or null.
  */
-export function getNetcdfImageSource(layerId: string): NetcdfImageSource | null {
-  return sources.get(layerId) ?? null;
+export function getNetcdfLayerState(layerId: string): NetcdfLayerState | null {
+  return states.get(layerId) ?? null;
 }
 
-/** Drop a layer's retained grid, e.g. when its symbology is no longer editable. */
-export function unregisterNetcdfImageSource(layerId: string): void {
-  sources.delete(layerId);
+/** The displayed slice for a layer, or null. */
+export function getNetcdfImageSource(layerId: string): NetcdfImageSource | null {
+  return states.get(layerId)?.grid ?? null;
+}
+
+/** Drop a layer's retained grid and close its file, if it had one. */
+export function releaseNetcdfLayer(layerId: string): void {
+  states.get(layerId)?.profile?.file.close();
+  states.delete(layerId);
+}
+
+/**
+ * Read one pixel's values along the layer's profile axis.
+ *
+ * @param layerId - The layer's id.
+ * @param row - Row into the grid's y extent.
+ * @param column - Column into the grid's x extent.
+ * @returns The profile, or null when this layer has no retained file.
+ */
+export function readNetcdfProfile(
+  layerId: string,
+  row: number,
+  column: number,
+): LocalNetcdfProfile | null {
+  const state = states.get(layerId);
+  if (!state?.profile) return null;
+  return state.profile.file.readProfile(state.variable, {
+    axis: state.profile.axis,
+    row,
+    column,
+    selector: state.profile.selector,
+  });
 }
 
 /** The symbology a baked NetCDF image is currently drawn with. */

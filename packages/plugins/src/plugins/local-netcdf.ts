@@ -253,8 +253,37 @@ export interface LocalNetcdfFile {
    * {@link composeColormappedImage} (now, and again later with new symbology).
    */
   readGrid(variable: string, selector?: Record<string, number>): LocalNetcdfGrid;
+  /**
+   * Read one variable's values along a leading axis at a single pixel: the
+   * spectral signature of a hyperspectral cube, or a time series of one cell.
+   */
+  readProfile(variable: string, options: LocalNetcdfProfileOptions): LocalNetcdfProfile;
   /** Release backend resources (e.g. the WASM filesystem entry). */
   close(): void;
+}
+
+/** Which pixel, along which axis, to read a profile from. */
+export interface LocalNetcdfProfileOptions {
+  /** The leading axis to walk (e.g. `bands`). */
+  axis: string;
+  /** Row into the grid's y/lat extent. */
+  row: number;
+  /** Column into the grid's x/lon extent. */
+  column: number;
+  /** Index for every *other* leading dimension, keyed by dimension name. */
+  selector?: Record<string, number>;
+}
+
+/** One pixel's values along a leading axis, in physical units. */
+export interface LocalNetcdfProfile {
+  /** The axis walked, with its coordinate values where the file has them. */
+  axis: LocalNetcdfAxis;
+  /**
+   * One value per axis entry, already unpacked by `scale_factor`/`add_offset`.
+   * Fill and non-finite readings are null so a chart can break the line rather
+   * than plotting a spike at the nodata value.
+   */
+  values: Array<number | null>;
 }
 
 let modulePromise: Promise<H5wasmModule> | null = null;
@@ -400,14 +429,14 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
   listAxes(variable: string): LocalNetcdfAxis[] {
     const { ds, shape, dims } = this.openVariable(variable);
     void ds;
-    return dims.slice(0, Math.max(0, shape.length - 2)).map((name, index) => {
-      const coordinate = this.findAxisCoordinate(name, shape[index], variable);
-      return {
-        name,
-        size: shape[index],
-        ...(coordinate ?? {}),
-      };
-    });
+    return dims
+      .slice(0, Math.max(0, shape.length - 2))
+      .map((name, index) => this.describeAxis(name, shape[index], variable));
+  }
+
+  /** One axis with its coordinate values, when the file provides them. */
+  private describeAxis(name: string, size: number, variable: string): LocalNetcdfAxis {
+    return { name, size, ...(this.findAxisCoordinate(name, size, variable) ?? {}) };
   }
 
   buildLayerRefs(variable: string, selector: Record<string, number> = {}): LocalNetcdfLayerRefs {
@@ -496,6 +525,43 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
       dataClim: percentileClim(values, { fillValue, scale: scaleFactor, offset: addOffset }) ?? [
         0, 1,
       ],
+    };
+  }
+
+  readProfile(variable: string, options: LocalNetcdfProfileOptions): LocalNetcdfProfile {
+    const { ds, shape, dims } = this.openVariable(variable);
+    const axisPosition = leadingAxisPosition(dims, shape, options.axis);
+    const ny = shape[shape.length - 2];
+    const nx = shape[shape.length - 1];
+    const row = clampIndex(options.row, ny);
+    const column = clampIndex(options.column, nx);
+
+    // One hyperslab spanning the whole profile axis at a single cell. Reading
+    // the axis in one call matters: a chunked cube would otherwise fault in the
+    // same chunks once per band.
+    const ranges: Array<[] | [number, number]> = [];
+    for (let i = 0; i < shape.length - 2; i++) {
+      if (i === axisPosition) {
+        ranges.push([0, shape[i]]);
+        continue;
+      }
+      const index = clampIndex(options.selector?.[dims[i]] ?? 0, shape[i]);
+      ranges.push([index, index + 1]);
+    }
+    ranges.push([row, row + 1]);
+    ranges.push([column, column + 1]);
+
+    const raw = ds.slice(ranges);
+    if (!isTypedArray(raw)) {
+      throw new Error(`Could not read a profile for variable "${variable}".`);
+    }
+    return {
+      axis: this.describeAxis(dims[axisPosition], shape[axisPosition], variable),
+      values: unpackProfile(raw, {
+        fillValue: h5FillValue(ds),
+        scale: h5NumericAttr(ds, "scale_factor"),
+        offset: h5NumericAttr(ds, "add_offset"),
+      }),
     };
   }
 
@@ -740,10 +806,14 @@ class Netcdf3File implements LocalNetcdfFile {
 
   listAxes(variable: string): LocalNetcdfAxis[] {
     const { shape, dims } = this.openVariable(variable);
-    return dims.slice(0, Math.max(0, shape.length - 2)).map((name, index) => {
-      const coordinate = this.findAxisCoordinate(name, shape[index]);
-      return { name, size: shape[index], ...(coordinate ?? {}) };
-    });
+    return dims
+      .slice(0, Math.max(0, shape.length - 2))
+      .map((name, index) => this.describeAxis(name, shape[index]));
+  }
+
+  /** One axis with its coordinate values, when the file provides them. */
+  private describeAxis(name: string, size: number): LocalNetcdfAxis {
+    return { name, size, ...(this.findAxisCoordinate(name, size) ?? {}) };
   }
 
   buildLayerRefs(variable: string, selector: Record<string, number> = {}): LocalNetcdfLayerRefs {
@@ -843,6 +913,40 @@ class Netcdf3File implements LocalNetcdfFile {
       dataClim: percentileClim(values, { fillValue, scale: scaleFactor, offset: addOffset }) ?? [
         0, 1,
       ],
+    };
+  }
+
+  readProfile(variable: string, options: LocalNetcdfProfileOptions): LocalNetcdfProfile {
+    const { v, shape, dims, info } = this.openVariable(variable);
+    const axisPosition = leadingAxisPosition(dims, shape, options.axis);
+    const ny = shape[shape.length - 2];
+    const nx = shape[shape.length - 1];
+    const row = clampIndex(options.row, ny);
+    const column = clampIndex(options.column, nx);
+
+    // netcdfjs has no hyperslab read, so index the whole variable in JS.
+    const full = info.make(this.reader.getDataVariable(v.name) as number[]);
+    const size = shape[axisPosition];
+    const raw = info.make(new Array(size).fill(0));
+    for (let step = 0; step < size; step++) {
+      let lead = 0; // C-order flattening of the leading indices
+      for (let i = 0; i < shape.length - 2; i++) {
+        const index =
+          i === axisPosition ? step : clampIndex(options.selector?.[dims[i]] ?? 0, shape[i]);
+        lead = lead * shape[i] + index;
+      }
+      raw[step] = full[lead * ny * nx + row * nx + column];
+    }
+
+    return {
+      axis: this.describeAxis(dims[axisPosition], size),
+      values: unpackProfile(raw, {
+        fillValue: normalizeFillValue(
+          nc3NumericAttr(v, "_FillValue", true) ?? nc3NumericAttr(v, "missing_value", true),
+        ),
+        scale: nc3NumericAttr(v, "scale_factor"),
+        offset: nc3NumericAttr(v, "add_offset"),
+      }),
     };
   }
 
@@ -1650,6 +1754,97 @@ function imageLayout(input: {
       };
     },
   };
+}
+
+/**
+ * Unpack raw profile readings into physical units, nulling out fill and
+ * non-finite entries so a chart breaks its line instead of plotting a spike at
+ * the nodata value.
+ *
+ * @param raw The readings straight from the file.
+ * @param decoding Fill value and any `scale_factor`/`add_offset`.
+ * @returns One value (or null) per reading.
+ */
+function unpackProfile(raw: TypedArrayLike, decoding: ValueDecoding): Array<number | null> {
+  const fill = typeof decoding.fillValue === "number" ? decoding.fillValue : null;
+  const scale = decoding.scale ?? 1;
+  const offset = decoding.offset ?? 0;
+  return Array.from(raw, (entry) => {
+    const value = Number(entry);
+    if (!Number.isFinite(value) || (fill !== null && value === fill)) return null;
+    const physical = value * scale + offset;
+    return Number.isFinite(physical) ? physical : null;
+  });
+}
+
+/** A grid cell, as row/column indices into the retained slice. */
+export interface GridPixel {
+  row: number;
+  column: number;
+  /** The cell centre's coordinates, which may differ from where the user clicked. */
+  lng: number;
+  lat: number;
+  /** The cell's value in physical units, or null when it is fill/nodata. */
+  value: number | null;
+}
+
+/**
+ * The grid cell under a map click, by nearest cell centre.
+ *
+ * Nearest-neighbour rather than arithmetic from an origin and step, because a
+ * NetCDF grid's coordinates are only usually regular; a search is a few thousand
+ * comparisons and is exact either way.
+ *
+ * @param grid - The retained slice.
+ * @param lng - Clicked longitude, in -180..180.
+ * @param lat - Clicked latitude.
+ * @returns The cell, or null when the click is outside the grid.
+ */
+export function gridPixelAt(grid: LocalNetcdfGrid, lng: number, lat: number): GridPixel | null {
+  const row = nearestIndex(grid.lat, lat);
+  // A grid written on a 0..360 axis keeps those longitudes even though the map
+  // reports the click in -180..180, so try the wrapped value too.
+  const column =
+    nearestIndex(grid.lon, lng) ??
+    (lng < 0 ? nearestIndex(grid.lon, lng + 360) : nearestIndex(grid.lon, lng - 360));
+  if (row === null || column === null) return null;
+
+  const raw = Number(grid.values[row * grid.nx + column]);
+  const fill = typeof grid.fillValue === "number" ? grid.fillValue : null;
+  const missing = !Number.isFinite(raw) || (fill !== null && raw === fill);
+  const value = missing ? null : raw * (grid.scaleFactor ?? 1) + (grid.addOffset ?? 0);
+  return {
+    row,
+    column,
+    lng: Number(grid.lon[column]),
+    lat: Number(grid.lat[row]),
+    value: value !== null && Number.isFinite(value) ? value : null,
+  };
+}
+
+/**
+ * Index of the coordinate nearest `target`, or null when `target` falls more
+ * than half a cell outside the axis (the click missed the grid).
+ */
+function nearestIndex(coordinates: ArrayLike<number>, target: number): number | null {
+  let best = -1;
+  let bestDistance = Infinity;
+  for (let i = 0; i < coordinates.length; i++) {
+    const distance = Math.abs(Number(coordinates[i]) - target);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = i;
+    }
+  }
+  if (best < 0) return null;
+  // Half a cell of tolerance past the edge, so a click on the outermost row
+  // still reads it while a click well outside reports a miss.
+  const span =
+    coordinates.length > 1
+      ? Math.abs(Number(coordinates[coordinates.length - 1]) - Number(coordinates[0])) /
+        (coordinates.length - 1)
+      : 0;
+  return bestDistance <= span / 2 + Number.EPSILON || span === 0 ? best : null;
 }
 
 /** Index of the leading dimension named `axis`, or a thrown explanation. */

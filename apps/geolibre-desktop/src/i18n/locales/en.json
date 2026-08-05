@@ -5041,6 +5041,11 @@
     "colorMax": "Color max",
     "resetRange": "Reset to data range"
   },
+  "netcdfProfile": {
+    "heading": "Spectral profile",
+    "clear": "Clear",
+    "chartAria": "Sampled pixel values along the band axis"
+  },
   "rasterAttributeTable": {
     "title": "Raster attribute table",
     "resize": "Resize raster attribute table",

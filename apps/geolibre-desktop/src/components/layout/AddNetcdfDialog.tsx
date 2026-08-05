@@ -30,7 +30,7 @@ import {
   bakeNetcdfImage,
   encodeImageOverlay,
   NETCDF_IMAGE_SOURCE_KIND,
-  registerNetcdfImageSource,
+  registerNetcdfLayer,
 } from "../../lib/netcdf-image-symbology";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { SampleDataSelect } from "./add-data/shared";
@@ -76,8 +76,12 @@ const TIME_DIMENSION_NAMES = new Set([
   "period",
 ]);
 
-/** A renderable variable, shared shape across the cloud and local readers. */
-type RenderableVariable = KerchunkVariable;
+/**
+ * A renderable variable, shared shape across the cloud and local readers. The
+ * local reader also reports CF `long_name`/`units`; the cloud one does not, so
+ * both are optional.
+ */
+type RenderableVariable = KerchunkVariable & { longName?: string; units?: string };
 
 /** How a local variable is turned into a layer. */
 type RenderMode = "single" | "rgb";
@@ -133,6 +137,9 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   // Holds the currently-open local file so it can be closed synchronously on
   // reset even if the latest setLocalFile has not flushed to state yet.
   const openFileRef = useRef<LocalNetcdfFile | null>(null);
+  // A file handed to a layer for spectral profiles outlives this dialog, so
+  // reset must not close it; the layer registry owns it from then on.
+  const retainedFileRef = useRef<LocalNetcdfFile | null>(null);
 
   const selectedVar = variables.find((v) => v.name === variable);
   // Dimensions other than the trailing two (lat/lon) need a fixed index.
@@ -156,7 +163,9 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   const useImagePath = source === "file" && !rgbMode && !hasTimeAxis;
 
   const closeOpenFile = () => {
-    openFileRef.current?.close();
+    if (openFileRef.current && openFileRef.current !== retainedFileRef.current) {
+      openFileRef.current.close();
+    }
     openFileRef.current = null;
   };
 
@@ -386,7 +395,16 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
               metadata: { netcdfSymbology: symbology, variable },
             },
           );
-          registerNetcdfImageSource(layerId, grid);
+          // The file stays open only for a cube, whose band axis is what a
+          // spectral signature walks; a plain 2-D grid needs nothing beyond the
+          // slice already read.
+          if (rgbAxis) retainedFileRef.current = file;
+          registerNetcdfLayer(layerId, {
+            grid,
+            variable,
+            ...(selectedVar?.units ? { units: selectedVar.units } : {}),
+            ...(rgbAxis ? { profile: { file, axis: rgbAxis.name, selector } } : {}),
+          });
           appApi.fitBounds?.(image.bounds);
         } else {
           const built = file.buildLayerRefs(variable, selector);
