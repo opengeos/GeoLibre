@@ -28,8 +28,11 @@ export const DUCKDB_VECTOR_FEATURE_WARN_COUNT = 500_000;
  * which streams from the file rather than materializing one giant string.
  *
  * Without the check the RangeError is swallowed by the loaders' `catch` blocks
- * and the file is silently re-read through DuckDB anyway — the user waits
- * through the whole failed attempt first.
+ * and the file is re-read through DuckDB anyway, with nothing in the log saying
+ * why. Measured on an 873 MB GeoJSON in the browser the wasted attempt costs
+ * only ~2s — `File.text()` fails on the known size rather than after reading —
+ * so the value here is the explicit route and the breadcrumb, not the time. The
+ * Tauri path (`readTextFile` over IPC) has not been measured and may pay more.
  */
 export const MAX_TEXT_VECTOR_BYTES = 536_870_888;
 
@@ -50,13 +53,21 @@ export const LARGE_VECTOR_SIZE_WARN_BYTES = 200 * 1024 * 1024; // 200 MB
  *
  * shpjs's `parseShp` is fully synchronous and applies the `.prj` proj4
  * transform **per coordinate**, so a large polygon shapefile wedges the main
- * thread for tens of seconds with no progress and no way to cancel. DuckDB does
- * the read off the main thread (native on desktop, the DuckDB-WASM worker in
- * the browser) and reports a feature count first, so
- * {@link DUCKDB_VECTOR_FEATURE_WARN_COUNT} gets a chance to fire.
+ * thread with no progress and no way to cancel. DuckDB does the read off the
+ * main thread (native on desktop, the DuckDB-WASM worker in the browser) and
+ * reports a feature count first, so {@link DUCKDB_VECTOR_FEATURE_WARN_COUNT}
+ * gets a chance to fire.
  *
- * Below the threshold shpjs stays the default: it is faster for ordinary files
- * and preserves field-name fidelity without a DuckDB round-trip.
+ * This trades total time for responsiveness rather than being a pure win.
+ * Measured on a 197 MB / 170k-polygon `.shp` in the browser: with a projected
+ * `.prj` the worst main-thread stall drops from 8.9s to 1.6s while the whole
+ * load goes from 10.3s to 13.3s; with an already-WGS84 `.prj` (where proj4 is
+ * nearly free) it is 4.7s → 1.9s of stall for 6.1s → 10.3s overall. A UI that
+ * keeps responding is worth the extra seconds; a nine-second freeze reads as a
+ * crash.
+ *
+ * Below the threshold shpjs stays the default: it is faster end to end for
+ * ordinary files and preserves field-name fidelity without a DuckDB round-trip.
  */
 export const MAX_SHPJS_SHP_BYTES = 64 * 1024 * 1024; // 64 MB
 
