@@ -27,6 +27,7 @@ import {
   pluginOwnsPaint,
   supportsBridgedOpacity,
   useAppStore,
+  excludeHiddenFieldsFromGeojson,
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
@@ -1542,8 +1543,11 @@ export function LayerPanel({
           scheduleStatusClear(layer.id);
           return;
         }
+        const egressGeojson = layer.fieldVisibility
+          ? excludeHiddenFieldsFromGeojson(geojson, layer.fieldVisibility)
+          : geojson;
         const savedPath = await exportVectorLayer(
-          geojson,
+          egressGeojson,
           format,
           sanitizeExportFileName(layer.name),
           layer.name,
@@ -1915,6 +1919,11 @@ export function LayerPanel({
               connection,
               schema_name: schema,
               table,
+              excluded_fields: layer.fieldVisibility
+                ? Object.keys(layer.fieldVisibility).filter(
+                    (k) => layer.fieldVisibility![k] === "excluded",
+                  )
+                : undefined,
             });
           } catch {
             // The write committed; only the refresh failed. Reporting this as

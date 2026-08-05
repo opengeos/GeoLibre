@@ -426,6 +426,12 @@ export interface LayoutOptions {
    */
   legendGroupByLayer: boolean;
   /**
+   * Translated formatter for the legend's "+N more" note, drawn when the class
+   * rows do not fit the map body; falls back to English when omitted (like the
+   * table's and chart's formatters).
+   */
+  legendFormatNote?: (count: number) => string;
+  /**
    * Preloaded custom-SVG marker icons for legend swatches, keyed by the
    * swatch marker's `svg` string ({@link LegendMarker.svg}). Loading SVGs is
    * async, but {@link drawLayout} is synchronous, so the caller resolves them
@@ -882,6 +888,8 @@ export function drawLayout(canvas: HTMLCanvasElement, opts: LayoutOptions): void
       title: opts.legendTitle,
       groupByLayer: opts.legendGroupByLayer,
       markerIcons: opts.markerIcons,
+      maxHeight: bodyH - inset * 2,
+      formatNote: opts.legendFormatNote,
     });
     ctx.restore();
   }
@@ -1982,6 +1990,9 @@ function drawLegend(
     title: string;
     groupByLayer: boolean;
     markerIcons?: ReadonlyMap<string, CanvasImageSource>;
+    /** Vertical space the box may occupy before rows are elided. */
+    maxHeight?: number;
+    formatNote?: (count: number) => string;
   },
 ): number {
   const pad = unit * 1.4;
@@ -2004,6 +2015,8 @@ function drawLegend(
     text: string;
     marker?: LegendMarker;
     size?: number;
+    /** True for a groupByLayer layer heading: scaffolding, not a legend item. */
+    heading?: boolean;
   }[] = [];
   for (const entry of entries) {
     if (entry.swatches.length <= 1) {
@@ -2021,7 +2034,7 @@ function drawLegend(
       });
     } else {
       if (opts.groupByLayer) {
-        rows.push({ entryId: entry.id, color: "", text: entry.name });
+        rows.push({ entryId: entry.id, color: "", text: entry.name, heading: true });
       }
       for (const sw of entry.swatches) {
         // Carry the marker so a marker + diagram layer (a multi-swatch entry
@@ -2039,6 +2052,39 @@ function drawLegend(
 
   const rowHasSwatch = (r: { color: string; marker?: LegendMarker }): boolean =>
     Boolean(r.color) || Boolean(r.marker);
+
+  // Fit the rows to the space the caller allows. A categorized layer can carry
+  // dozens of classes, and the legend is clipped to the map body, so without
+  // this the tail would vanish at the body edge with nothing to say it had
+  // (GH #1608). Reserve one row for the note the truncation produces, the same
+  // budget rule the attribute-table panel uses.
+  let hiddenRows = 0;
+  const maxHeight = opts.maxHeight;
+  if (maxHeight !== undefined) {
+    const chromeH = pad * 2 + (hasTitle ? titleSize + unit : 0);
+    if (chromeH + rows.length * rowH > maxHeight) {
+      const fitRows = Math.max(0, Math.floor((maxHeight - chromeH - rowH) / rowH));
+      // Not even one row plus its note fits. Drawing anyway would produce a box
+      // taller than the caller allotted whose only content is "+N more", so
+      // draw nothing and report no height. Defensive: every unit here scales
+      // with the page, so drawLayout's own maxHeight always clears ~24 rows
+      // whatever the paper size. Safe to return early — ctx.save() is below.
+      if (fitRows === 0) return 0;
+      if (fitRows < rows.length) {
+        // A layer heading only means something with class rows under it, so a
+        // cut that lands right after one drops it too rather than printing a
+        // section title that describes nothing.
+        let kept = fitRows;
+        while (kept > 0 && rows[kept - 1]!.heading) kept -= 1;
+        // Headings are scaffolding, so the note counts elided class rows only;
+        // counting the headings too would overstate what the reader is missing.
+        hiddenRows = rows.slice(kept).filter((r) => !r.heading).length;
+        rows.length = kept;
+      }
+    }
+  }
+  const note = hiddenRows > 0 ? (opts.formatNote?.(hiddenRows) ?? `+${hiddenRows} more`) : "";
+  const hasNote = note.length > 0;
 
   // Cap proportional circles so a huge max radius still fits the legend box,
   // while keeping ratios within each entry (same idea as the on-map LegendSwatch).
@@ -2065,10 +2111,11 @@ function drawLegend(
     const w = ctx.measureText(r.text).width + (rowHasSwatch(r) ? swatch + unit : 0);
     if (w > maxText) maxText = w;
   }
+  if (hasNote) maxText = Math.max(maxText, ctx.measureText(note).width);
 
   const boxW = maxText + pad * 2;
   const titleBlock = hasTitle ? titleSize + unit : 0;
-  const boxH = pad * 2 + titleBlock + rows.length * rowH;
+  const boxH = pad * 2 + titleBlock + (rows.length + (hasNote ? 1 : 0)) * rowH;
 
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.strokeStyle = BORDER;
@@ -2122,6 +2169,12 @@ function drawLegend(
     ctx.fillStyle = hasSwatch ? INK : MUTED;
     ctx.font = `${hasSwatch ? 400 : 600} ${labelSize}px system-ui, sans-serif`;
     ctx.fillText(r.text, textX, cy);
+  }
+  if (hasNote) {
+    cy += rowH;
+    ctx.fillStyle = MUTED;
+    ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+    ctx.fillText(note, x + pad, cy);
   }
   ctx.restore();
   return boxH;

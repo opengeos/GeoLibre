@@ -852,6 +852,13 @@ export interface LayerConnection {
   onFailure: "keep-last" | "clear";
 }
 
+/**
+ * Visibility of a layer's attribute field.
+ * - "hidden": Not shown in the attribute table, identify popup, tooltips, or field pickers, but remains in the data.
+ * - "excluded": Removed entirely from the data when the project is shared or exported.
+ */
+export type FieldVisibility = "hidden" | "excluded";
+
 export interface GeoLibreLayer {
   id: string;
   name: string;
@@ -863,6 +870,11 @@ export interface GeoLibreLayer {
   metadata: Record<string, unknown>;
   beforeId?: string;
   geojson?: FeatureCollection;
+  /**
+   * Field-level visibility overrides. Fields marked as "excluded" are physically
+   * removed from the data during export and sharing.
+   */
+  fieldVisibility?: Record<string, FieldVisibility>;
   /**
    * Per-field edit-widget, constraint, and visibility configuration authored
    * in the Attribute Form designer. Applied by the attribute editing surfaces

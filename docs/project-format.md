@@ -294,6 +294,28 @@ layer), falling back to `style.textColor` when a feature does not set it.
 import {
   createEmptyProject,
   parseProject,
+  redactCredentials,
   serializeProject,
 } from "@geolibre/core";
 ```
+
+## Credential redaction
+
+A local project may contain credentials needed to restore authenticated data,
+including layer request headers, geocoding API keys, environment variables, and
+plugin settings. Any project leaving the local workspace must pass through
+`redactCredentials(project)` first. GeoLibre applies this invariant to Share,
+standalone HTML export, embed snapshots, and collaboration snapshots. Local
+Save and Save As ask whether credentials should be stripped or deliberately
+kept.
+
+Saved model and processing-history parameter bags do not currently accept
+credentials and are treated as structural project content. If a future
+processing tool accepts credentials, those fields must be added to the central
+redaction registry and traversal.
+
+The redaction pass removes credential-bearing fields and authentication
+parameters in URLs while preserving non-secret broker references. External
+plugin settings are arbitrary, so they are omitted from egress snapshots by
+default. Recipients retain the plugin manifest and activation metadata, but
+must configure their own settings.

@@ -850,6 +850,14 @@ External plugin entries are executed with `import(URL.createObjectURL(...))`, wh
 
 Because plugins run as trusted code in the host document, they can read `window.__GEOLIBRE_RUNTIME_ENV__`, the runtime environment map. On the desktop app this map includes the AI Assistant's [OS-environment keys](user-guide/ai-assistant.md#reading-keys-from-your-system-environment-desktop) (the allowlisted provider variables read from the user's shell), not only the values typed into Settings → Environment Variables. Treat any credential reachable through the app's environment as visible to installed plugins, and only install plugins you trust.
 
+Plugin project settings are treated as sensitive at the project egress
+boundary. GeoLibre keeps them in a trusted local save only when the user
+explicitly chooses to retain credentials, and removes the entire
+`plugins.settings` object from shares, standalone HTML exports, embed
+snapshots, and collaboration snapshots. Store portable, non-secret identifiers
+such as broker references in layer source or metadata instead when recipients
+need them.
+
 Manifest paths must be relative zip paths with forward slashes, no leading slash, no backslashes, and no `..` segments. External plugins cannot set `activeByDefault` on the exported plugin object, and the manifest-level flag is honored only for bundled drop-ins (see "Bundled plugins" above); saved project state can still reactivate an external plugin by ID after the zip is loaded.
 
 The optional `style` CSS is injected globally into the host document, not scoped to the plugin. Plugin authors are responsible for scoping their selectors (for example with a plugin-specific class prefix) so broad rules do not restyle the rest of the app. Injected CSS can also issue network requests through `url()` references and `@import`, so a plugin stylesheet can load external fonts, images, or additional sheets; treat plugin CSS with the same trust expectations as plugin code.

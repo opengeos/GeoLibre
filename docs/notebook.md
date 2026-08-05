@@ -48,14 +48,12 @@ returns one matching layer or raises `ValueError`. The id can be passed directly
 `set_visibility`, `set_opacity`, `set_style`, `remove_layer`, or
 `zoom_to_layer`.
 
-These three are also the only commands that do **not** fan out: a correlated
-request/reply can have exactly one authoritative responder, so `add_geojson`,
-`list_layers`, and `get_layer` run in a single app window (the one that
-connected first) and consistently keep using it, which is what makes an id
-returned by `add_geojson` resolvable by a later `get_layer`. Every
-fire-and-forget command — including `add_marker`/`add_markers` — still reaches
-every connected window. This is only visible if you attach two GeoLibre windows
-to one Jupyter server.
+All commands fan out to every GeoLibre window connected to the same Jupyter
+server. For `add_geojson`, `list_layers`, and `get_layer`, the first correlated
+reply is returned to the notebook and later replies are ignored. Because each
+window maintains its own map state, use one connected window when chaining a
+returned layer id into later read-back calls. This behavior is only visible if
+you attach multiple GeoLibre windows to one Jupyter server.
 
 `add_geojson` returns `None` instead of an id in two situations, and never
 fails outright in either:

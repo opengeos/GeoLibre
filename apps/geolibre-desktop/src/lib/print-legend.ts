@@ -42,6 +42,17 @@ export const NON_LEGEND_TYPES: ReadonlySet<LayerType> = new Set<LayerType>([
 
 const NEUTRAL_SWATCH = "#94a3b8";
 const MAX_RAMP_SWATCHES = 6;
+/**
+ * Upper bound on categorized class rows. Categories are nominal values, so
+ * dropping one loses information no neighbouring row implies (unlike a
+ * graduated ramp, where sampling still reads as the same continuous range) —
+ * every class is listed and only a runaway class count is elided from the tail.
+ * Mirrors the on-map auto legend's `MAX_LEGEND_ROWS` so both legends elide at
+ * the same point; kept as a local copy because `auto-legend.ts` imports from
+ * this module and the reverse import would be circular. Exported so
+ * `tests/print-legend.test.ts` can fail if the two drift apart.
+ */
+export const MAX_CATEGORY_SWATCHES = 100;
 
 /**
  * Build legend entries from the visible layers. Vector layers contribute a
@@ -89,10 +100,16 @@ export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
       Array.isArray(stops) &&
       stops.length > 0
     ) {
-      // Sample once so color/label rows and proportional sizes stay paired when
-      // the class list exceeds MAX_RAMP_SWATCHES.
+      // Reduce once so color/label rows and proportional sizes stay paired when
+      // the class list is long. A graduated ramp is a continuous range, so
+      // sampling evenly still describes it; categories are discrete, so every
+      // one is listed (GH #1608).
       const displayedStops =
-        stops.length > MAX_RAMP_SWATCHES ? sampleEvenly(stops, MAX_RAMP_SWATCHES) : stops;
+        mode === "categorized"
+          ? stops.slice(0, MAX_CATEGORY_SWATCHES)
+          : stops.length > MAX_RAMP_SWATCHES
+            ? sampleEvenly(stops, MAX_RAMP_SWATCHES)
+            : stops;
       const ramp = rampSwatches(displayedStops, mode);
       const classProperty = styleValue(layer.style, "vectorStyleProperty");
       // Same field classified and sized: merge sizes into the class rows so the

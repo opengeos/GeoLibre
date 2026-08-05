@@ -796,6 +796,7 @@ export interface ReadPostgisTableRequest {
   connection: string;
   schema_name?: string;
   table: string;
+  excluded_fields?: string[];
 }
 
 export interface ReadPostgisTableResult {

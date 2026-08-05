@@ -11,6 +11,7 @@ import pytest
 
 import geolibre.geolibre as gmod
 from geolibre.geolibre import Feature, Layer, Map
+from geolibre.project import redact_credentials
 
 
 @pytest.fixture
@@ -297,6 +298,135 @@ def test_to_html_returns_string_with_project(m):
     assert "geolibre:load-project" in html
     # The project rides inside the JSON <script> block.
     assert '"mapView"' in html
+
+
+def test_python_project_egress_redacts_credentials(m, tmp_path):
+    m.project["basemapStyleUrl"] = (
+        "https://styles.example.com/map.json?api-key=python-basemap-secret"
+    )
+    m.project["preferences"]["environmentVariables"] = [
+        {"key": "SERVICE_TOKEN", "value": "python-env-secret", "enabled": True}
+    ]
+    m.project["preferences"]["geocoding"] = {
+        "providerId": "mapbox",
+        "apiKeys": {"mapbox": "python-geocoder-secret"},
+        "forwardEndpoint": "https://geocode.example.com?key=python-endpoint-secret",
+    }
+    m.project["layers"] = [
+        {
+            "id": "auth",
+            "name": "Authenticated tiles",
+            "type": "3d-tiles",
+            "source": {
+                "url": "https://user:p@ssword@example.com/tiles?token=python-url-secret&subscription%2Dkey=python-subscription-secret",
+                "requestHeaders": {"Authorization": "Bearer python-header-secret"},
+            },
+            "visible": True,
+            "opacity": 1,
+            "style": {},
+            "metadata": {},
+            "sourcePath": "https://files.example.com/data?token=python-path-secret",
+        }
+    ]
+    m.project["plugins"] = {
+        "manifestUrls": ["https://example.com/plugin.json?sasToken=python-manifest-secret"],
+        "activePluginIds": ["external"],
+        "mapControlPositions": {},
+        "settings": {"external": {"arbitrary": "python-plugin-secret"}},
+    }
+
+    safe = m.to_project()
+    serialized = str(safe)
+    html = m.to_html()
+    out = tmp_path / "safe.geolibre.json"
+    m.save_project(str(out))
+    saved = out.read_text(encoding="utf-8")
+    for secret in (
+        "python-env-secret",
+        "python-geocoder-secret",
+        "python-endpoint-secret",
+        "password",
+        "python-url-secret",
+        "python-subscription-secret",
+        "python-header-secret",
+        "python-path-secret",
+        "python-plugin-secret",
+        "python-basemap-secret",
+        "python-manifest-secret",
+        "ssword",
+    ):
+        assert secret not in serialized
+        assert secret not in html
+        assert secret not in saved
+
+    assert m.to_project(keep_credentials=True)["plugins"]["settings"]
+
+
+def test_python_credential_field_registry_matches_js():
+    """Every object-key spelling the JS registry strips must be stripped here too."""
+    safe = redact_credentials(
+        {
+            "layers": [
+                {
+                    "source": {
+                        "sasToken": "py-sas-secret",
+                        "bearer": "py-bearer-secret",
+                        "auth": {"user": "u", "pass": "py-auth-secret"},
+                        "subscription-key": "py-subscription-secret",
+                        "api_key": "py-underscore-secret",
+                        "pwd": "py-pwd-secret",
+                        # Credentials only inside a query string; as field names
+                        # they are ordinary configuration.
+                        "sr": 4326,
+                        "key": "layer-identifier",
+                    }
+                }
+            ]
+        }
+    )
+    serialized = str(safe)
+    for secret in (
+        "py-sas-secret",
+        "py-bearer-secret",
+        "py-auth-secret",
+        "py-subscription-secret",
+        "py-underscore-secret",
+        "py-pwd-secret",
+    ):
+        assert secret not in serialized
+    assert safe["layers"][0]["source"] == {"sr": 4326, "key": "layer-identifier"}
+
+
+def test_python_redaction_sweeps_layer_connection():
+    """`connection.lastError` is free-form error text and must be swept too."""
+    safe = redact_credentials(
+        {
+            "layers": [
+                {
+                    "source": {"url": "https://example.com/tiles"},
+                    "connection": {
+                        "layerId": "auth",
+                        "interval": 300,
+                        "lastSyncedAt": "2026-01-01T00:00:00.000Z",
+                        "lastError": "Failed to fetch https://example.com/tiles?token=py-connection-secret",
+                        "onFailure": "keep-last",
+                    },
+                }
+            ]
+        }
+    )
+    connection = safe["layers"][0]["connection"]
+    assert "py-connection-secret" not in str(safe)
+    assert connection["lastError"] == "Failed to fetch https://example.com/tiles"
+    assert connection["interval"] == 300
+
+
+def test_python_redaction_fails_closed_at_depth_limit():
+    nested = {"password": "too-deep-secret"}
+    for _ in range(12):
+        nested = {"child": nested}
+    safe = redact_credentials({"layers": [{"source": nested}]})
+    assert "too-deep-secret" not in str(safe)
 
 
 def test_to_html_writes_path(m, tmp_path):

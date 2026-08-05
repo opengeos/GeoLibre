@@ -733,6 +733,7 @@ export function PrintLayoutDialog({
       legend,
       legendTitle: legendConfig.title,
       legendGroupByLayer: legendConfig.groupByLayer,
+      legendFormatNote: (count: number) => t("printLayout.legend.moreItems", { count }),
       markerIcons,
       metersPerPixel: captured?.metersPerPixel ?? 0,
       bearingDeg: captured?.bearingDeg ?? 0,

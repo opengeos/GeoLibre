@@ -41,6 +41,7 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
   const order: string[] = [];
   const calls: { method: string; args: unknown[] }[] = [];
   const setDataCalls: { id: string; data: unknown }[] = [];
+  const images = new Set<string>();
   let pendingRenderedFeatures: unknown[] = [];
 
   for (const id of initialBasemapLayers) {
@@ -68,6 +69,7 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
       layers: order.map((id) => ({ id, ...layers.get(id) })),
       sources: Object.fromEntries(sources),
     }),
+    getLayersOrder: () => [...order],
     getSource: (id: string) => {
       if (!sources.has(id)) return undefined;
       if (!sourceHandles.has(id)) {
@@ -97,6 +99,9 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
       calls.push({ method: "removeSource", args: [id] });
     },
     getLayer: (id: string) => (layers.has(id) ? { id, ...layers.get(id) } : undefined),
+    hasImage: (id: string) => images.has(id),
+    addImage: (id: string) => images.add(id),
+    removeImage: (id: string) => images.delete(id),
     addLayer: (spec: Record<string, unknown>, beforeId?: string) => {
       layers.set(spec.id as string, spec);
       insertBefore(spec.id as string, beforeId);
@@ -276,6 +281,38 @@ const rasterId = (id: string) => `layer-${id}-raster`;
 const srcId = (id: string) => `source-${id}`;
 
 describe("MapController.syncLayers reconciliation", () => {
+  it("keeps a lower raster beneath every companion of a mixed KML point layer", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const kml = pointLayer("kml", {
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {
+              __geolibre_kml_icon_url:
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ",
+            },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Point", coordinates: [1, 1] },
+          },
+        ],
+      },
+    });
+
+    controller.syncLayers([rasterLayer("imagery"), kml]);
+
+    const imageryIndex = fake.order.indexOf(rasterId("imagery"));
+    assert.ok(imageryIndex >= 0);
+    assert.ok(imageryIndex < fake.order.indexOf(markerId("kml")));
+    assert.ok(imageryIndex < fake.order.indexOf(circleId("kml")));
+  });
+
   it("runs the initial sync once and restores layers after a style reload", () => {
     const { map, fake } = makeFakeMap();
     const listeners = new Map<string, Set<() => void>>();

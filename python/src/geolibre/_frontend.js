@@ -190,6 +190,7 @@ async function render({ model, el }) {
       type: "geolibre:load-project",
       seq: model.get("_seq"),
       project: model.get("project"),
+      trustedWidget: true,
     });
   };
 
