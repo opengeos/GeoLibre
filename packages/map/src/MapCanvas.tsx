@@ -1,6 +1,7 @@
 import {
   applyGroupEffects,
   isDuckDBQueryLayer,
+  NETCDF_IMAGE_SOURCE_KIND,
   PHOTO_FULL_PROPERTY,
   PHOTO_PROPERTY,
   useAppStore,
@@ -1281,6 +1282,10 @@ export const MapCanvas = memo(function MapCanvas({
     // query. Bail so the two don't both register a map-click handler. (Only
     // "cog" is identify-enabled; plain "raster" never reaches here.)
     if (layer.type === "cog") return;
+
+    // Likewise for a NetCDF grid baked to pixels: useNetcdfIdentify reads its
+    // retained grid directly, and the image layer has no features to query.
+    if (layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) return;
 
     map.getCanvas().style.cursor = "crosshair";
 

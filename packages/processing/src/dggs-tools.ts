@@ -317,7 +317,7 @@ export const createDggsGridTool: ProcessingAlgorithm = {
   id: "dggs-grid",
   name: "DGGS Generator",
   description:
-    "Fill an area with DGGS cells. Source: a layer's geometry, a layer's extent, the current map view, or a manual bounding box.",
+    "Fill an area with DGGS cells (H3, S2, A5, DGGRID, DGGAL). Source: a layer's geometry, a layer's extent, the current map view, or a manual bounding box.",
   group: "DGGS",
   parameters: [
     DGGS_TYPE_PARAM,
@@ -750,7 +750,7 @@ export const dggsCompactTool: ProcessingAlgorithm = {
   id: "dggs-compact",
   name: "DGGS Compact",
   description:
-    "Compact DGGS polygon cells, or expand them to a certain resolution. Input must be a cell layer with a cell ID property.",
+    "Compact DGGS polygon cells, or expand them to a uniform resolution (H3, S2, A5, DGGAL). Input must be a cell layer with an ID property.",
   group: "DGGS",
   parameters: [
     {

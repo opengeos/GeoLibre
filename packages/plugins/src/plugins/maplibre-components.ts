@@ -2158,10 +2158,21 @@ export interface CloudNetcdfLayerOptions {
   selector?: Record<string, number | string>;
   /** Color limits `[min, max]`. */
   clim?: [number, number];
-  /** Colormap (array of hex colors). */
-  colormap?: string[];
+  /**
+   * A named GeoLibre ramp (e.g. `"viridis"`) or an explicit list of hex colors,
+   * matching {@link ZarrRasterLayerOptions.colormap}. An unrecognized name falls
+   * back to the renderer's default ramp.
+   */
+  colormap?: string | string[];
   /** Layer opacity (0-1). */
   opacity?: number;
+  /**
+   * Explicit spatial bounds `[west, south, east, north]`. Recorded on the layer
+   * so "Zoom to layer" and the Metadata panel know where the grid is: the
+   * renderer resolves the extent internally and never reports it back, so
+   * without this the layer has no bounds the host can fly to.
+   */
+  bounds?: [number, number, number, number];
   /** Optional request headers (e.g. for authenticated stores). */
   headers?: Record<string, string>;
 }
@@ -2192,6 +2203,11 @@ export async function addCloudNetcdfLayer(
       throw new Error("Could not add the Zarr control to the map.");
     }
     zarrControlMounted = true;
+    // Mounted only to borrow its render path, exactly as addZarrRasterLayer
+    // does. ZARR_OPTIONS sets `collapsed: false` for the "open the Zarr panel"
+    // flow, so without this the panel unfolds over the map the moment a dialog
+    // add lands — on top of the extent the camera has just been flown to.
+    zarrControl.hide();
   }
 
   // The untiled Zarr renderer draws in Web Mercator; switch off globe first
@@ -2231,8 +2247,9 @@ export async function addCloudNetcdfLayer(
         zarrVersion: 2,
         selector: options.selector,
         clim: options.clim,
-        colormap: options.colormap,
+        colormap: resolveZarrColormap(options.colormap),
         opacity: options.opacity,
+        bounds: options.bounds,
       });
     } finally {
       control.off("layeradd", captureLayerId);
@@ -2244,6 +2261,11 @@ export async function addCloudNetcdfLayer(
     // manifest, not a Zarr store whose metadata documents could be walked.
     if (addedLayerId) {
       registerZarrTemporalAdapter(addedLayerId, options.url, { refs, headers: options.headers });
+      // Record the extent on the layer itself. The control accepts `bounds` as a
+      // render hint but does not always carry it back on the "layeradd" event,
+      // and the renderer never reports the extent it resolved — so without this
+      // write the Layers panel's "Zoom to layer" has nothing to fly to.
+      if (options.bounds) applyZarrLayerBounds(addedLayerId, options.bounds);
     }
   });
 
@@ -2251,6 +2273,23 @@ export async function addCloudNetcdfLayer(
   // Zarr control collapsed/hidden: the layer is managed from the layer and
   // style panels. Users can still open the Zarr panel from the menu to tweak
   // colormap/clim.
+}
+
+/**
+ * Write a layer's spatial extent onto its store record, so the Layers panel's
+ * "Zoom to layer" and the Metadata panel can read it back.
+ *
+ * @param layerId The layer added by the Zarr control.
+ * @param bounds `[west, south, east, north]`.
+ */
+function applyZarrLayerBounds(layerId: string, bounds: [number, number, number, number]): void {
+  const store = useAppStore.getState();
+  const layer = store.layers.find((item) => item.id === layerId);
+  if (!layer) return;
+  store.updateLayer(layerId, {
+    source: { ...layer.source, bounds },
+    metadata: { ...layer.metadata, bounds },
+  });
 }
 
 /** Options for {@link addZarrRasterLayer}. */

@@ -611,6 +611,14 @@ export interface AppState {
       /** Epoch-ms time bounds of a KML `<TimeSpan>`/`<TimeStamp>` frame; the
        * Time Slider toggles this frame's visibility by the current date. */
       timeSpan?: { begin: number | null; end: number | null };
+      /**
+       * What produced the overlay, e.g. a NetCDF grid baked to pixels. Defaults
+       * to the KML ground overlay this was first written for; panels gate their
+       * per-source controls on it.
+       */
+      sourceKind?: string;
+      /** Extra metadata merged onto the layer (e.g. a symbology record). */
+      metadata?: Record<string, unknown>;
     },
     beforeLayerId?: string | null,
   ) => string;
@@ -1840,9 +1848,10 @@ export const useAppStore = create<AppState>()(
           opacity: options?.opacity ?? 1,
           style: { ...DEFAULT_LAYER_STYLE },
           metadata: {
-            sourceKind: "kml-ground-overlay",
+            sourceKind: options?.sourceKind ?? "kml-ground-overlay",
             ...(options?.bounds ? { bounds: options.bounds } : {}),
             ...(options?.timeSpan ? { timeSpan: options.timeSpan } : {}),
+            ...(options?.metadata ?? {}),
           },
           ...(options?.sourcePath ? { sourcePath: options.sourcePath } : {}),
         };

@@ -112,6 +112,7 @@ import { wikipediaLang } from "../../lib/knowledge";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
+import { useNetcdfIdentify } from "../../hooks/useNetcdfIdentify";
 import {
   useAutoCollapsedPanel,
   useReplaceLayersPanelId,
@@ -849,6 +850,7 @@ export function DesktopShell({
   // Routes the Layers-panel Identify action to the raster pixel inspector for
   // COG layers (read band values on click). Inert until a COG is identified.
   useRasterIdentify();
+  useNetcdfIdentify(mapControllerRef, mapReadyGeneration);
   const [layerPanelWidth, setLayerPanelWidth] = useState(initialSidePanelWidth);
   const [stylePanelWidth, setStylePanelWidth] = useState(initialSidePanelWidth);
   const [notebookPanelWidth, setNotebookPanelWidth] = useState(DEFAULT_NOTEBOOK_PANEL_WIDTH);

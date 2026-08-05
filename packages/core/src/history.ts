@@ -43,25 +43,48 @@ export function getMaxHistoryFeatureCount(): number {
 
 /** Structural shape of a partialized undo snapshot, for size accounting. */
 interface HistorySnapshot {
-  layers?: { geojson?: { features?: unknown[] } | null }[];
+  layers?: {
+    geojson?: { features?: unknown[] } | null;
+    source?: { url?: unknown } | null;
+  }[];
 }
 
 /**
- * Sum the feature counts of a snapshot's layer `geojson` payloads, skipping any
- * payload whose object reference is already in `seen` so feature sets shared
- * across snapshots (unchanged layers keep the same reference) are counted once.
- * Mutates `seen` with each newly counted payload.
+ * Bytes of inline payload charged as one feature-equivalent, so a `data:` URL
+ * competes for the same budget as geometry. A rough vector feature costs a few
+ * hundred bytes of live JS objects, which is the order this matches.
  */
-function distinctFeatureCount(snapshot: HistorySnapshot, seen: Set<object>): number {
+const BYTES_PER_FEATURE_EQUIVALENT = 200;
+
+/**
+ * The size a snapshot adds to the budget, skipping any payload already in
+ * `seen` so payloads shared across snapshots (unchanged layers keep the same
+ * reference) are counted once. Mutates `seen` with each newly counted payload.
+ *
+ * Two payload kinds count. Vector `geojson` contributes its feature count. A
+ * layer whose `source.url` is an inline `data:` URL contributes its length as
+ * feature-equivalents: a NetCDF grid baked to pixels holds a whole PNG there,
+ * and re-symbolizing it writes a fresh multi-megabyte string on every change, so
+ * without this the pruner sees a "free" snapshot and history grows unbounded.
+ */
+function distinctFeatureCount(snapshot: HistorySnapshot, seen: Set<unknown>): number {
   let count = 0;
   for (const layer of snapshot.layers ?? []) {
     const geojson = layer?.geojson;
     // Dedup the reference first so a payload shared across snapshots is visited
     // once even when its `features` is missing/malformed (it then contributes 0).
-    if (!geojson || seen.has(geojson)) continue;
-    seen.add(geojson);
-    if (!Array.isArray(geojson.features)) continue;
-    count += geojson.features.length;
+    if (geojson && !seen.has(geojson)) {
+      seen.add(geojson);
+      if (Array.isArray(geojson.features)) count += geojson.features.length;
+    }
+    const url = layer?.source?.url;
+    // Strings have no stable identity to dedup by reference, so `seen` holds the
+    // value itself; an unchanged layer repeats the same URL across snapshots and
+    // must be charged once, exactly as a shared feature payload is.
+    if (typeof url === "string" && url.startsWith("data:") && !seen.has(url)) {
+      seen.add(url);
+      count += Math.ceil(url.length / BYTES_PER_FEATURE_EQUIVALENT);
+    }
   }
   return count;
 }
@@ -87,7 +110,7 @@ export function trimHistoryBySize<T extends HistorySnapshot>(
     throw new RangeError(`maxFeatures must be a non-negative finite number, got ${maxFeatures}`);
   }
   if (pastStates.length <= 1) return pastStates;
-  const seen = new Set<object>();
+  const seen = new Set<unknown>();
   const lastIndex = pastStates.length - 1;
   // The newest snapshot is always retained, even if it alone exceeds the budget.
   let total = distinctFeatureCount(pastStates[lastIndex], seen);

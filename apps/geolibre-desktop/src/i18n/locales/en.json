@@ -694,15 +694,26 @@
       "localFileLabel": "Local file",
       "chooseDifferentFile": "Choose a different file",
       "readingFile": "Reading...",
+      "readingRemote": "Reading the file's metadata over HTTP...",
       "localFileHelp": "Select a local NetCDF or HDF5 file (.nc, .nc4, .cdf, .h5, or .hdf5); classic NetCDF-3 and NetCDF-4/HDF5 are both supported. It is decoded in your browser; large files use more memory.",
       "errorNoVariables": "No renderable (2-D or higher) variables found in the file.",
       "errorNoFile": "No file loaded.",
-      "kerchunkUrlLabel": "Kerchunk reference URL",
-      "kerchunkUrlHelp": "Choose a sample dataset above, or paste your own kerchunk reference URL, then click Load variables.",
+      "kerchunkUrlLabel": "Kerchunk reference or NetCDF/HDF file URL",
+      "kerchunkUrlHelp": "Paste a kerchunk reference URL, or a direct NetCDF/HDF file URL (.nc, .nc4, .h5). A direct file is read by range request, so only the parts you view are downloaded; the server must allow cross-origin range requests.",
       "loading": "Loading...",
       "loadVariables": "Load variables",
       "variableLabel": "Variable",
       "dimIndexLabel": "{{dim}} index",
+      "colormapLabel": "Colormap",
+      "bandCombinationLabel": "Band combination",
+      "bandCombinationHelp": "A single band is color-mapped; an RGB composite draws three bands of this variable as the red, green, and blue channels, each stretched to its own 2-98% range.",
+      "modeSingleBand": "Single band (color-mapped)",
+      "modeRgb": "RGB composite (three bands)",
+      "channel": {
+        "red": "Red band",
+        "green": "Green band",
+        "blue": "Blue band"
+      },
       "colorMin": "Color min (optional)",
       "colorMax": "Color max (optional)",
       "adding": "Adding...",
@@ -5025,6 +5036,24 @@
     "nodataAuto": "Auto (from file)",
     "nodataOff": "Render all pixels",
     "nodataCustom": "Custom value"
+  },
+  "netcdfSymbology": {
+    "heading": "NetCDF symbology",
+    "colorRampLabel": "Colormap",
+    "reverse": "Reverse colormap",
+    "colorMin": "Color min",
+    "colorMax": "Color max",
+    "resetRange": "Reset to data range"
+  },
+  "netcdfProfile": {
+    "heading": "Spectral profile",
+    "clear": "Clear",
+    "chartAria": "Sampled pixel values along the band axis"
+  },
+  "netcdfIdentify": {
+    "noData": "no data",
+    "coordinates": "lon, lat",
+    "cell": "row, col"
   },
   "rasterAttributeTable": {
     "title": "Raster attribute table",
