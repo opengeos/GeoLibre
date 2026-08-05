@@ -161,4 +161,31 @@ describe("openRemoteNetcdfFile startup", () => {
       await assert.rejects(inFlight, /closed/);
     });
   });
+
+  it("fails a read that starts after the file is closed", async () => {
+    /** A worker that answers `open` but never replies to anything after it. */
+    class SilentWorker {
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: { message: string }) => void) | null = null;
+      constructor() {
+        setTimeout(() => this.onmessage?.({ data: { ready: true } }), 0);
+      }
+      postMessage(message: { id: number; type: string }): void {
+        if (message.type !== "open") return;
+        setTimeout(() => this.onmessage?.({ data: { id: message.id, ok: true, result: [] } }), 0);
+      }
+      terminate(): void {}
+    }
+
+    await withWorkerStub(SilentWorker, async () => {
+      const file = await openRemoteNetcdfFile("https://example.com/scene.nc");
+      file.close();
+      // Rejecting what was already pending is not enough on its own: a cube
+      // read yields to the event loop between planes, so a close lands in that
+      // gap and the next plane would register a fresh request against a worker
+      // that is already gone — the same hang, one plane later.
+      await assert.rejects(file.readGrid("reflectance"), /closed/);
+      await assert.rejects(file.listAxes("reflectance"), /closed/);
+    });
+  });
 });

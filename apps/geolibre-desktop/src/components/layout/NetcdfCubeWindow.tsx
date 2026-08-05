@@ -119,6 +119,10 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
       rgbAbortRef.current?.abort();
       const controller = new AbortController();
       rgbAbortRef.current = controller;
+      // A failed overlay read leaves its message over the canvas; without this
+      // the next successful pick would swap the image in underneath a stale
+      // error that never clears.
+      setError(null);
       setRecomposing(true);
       try {
         const next = await recomposeCubeRgb(cube, source.readBand, bands, controller.signal);
