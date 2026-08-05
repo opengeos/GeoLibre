@@ -22,7 +22,11 @@ import {
   isHexColor,
   shadeRamp,
 } from "../apps/geolibre-desktop/src/components/panels/charts/chart-colors";
-import type { ChartRow } from "../apps/geolibre-desktop/src/lib/attribute-charts";
+import {
+  distinctCategoryValues,
+  filterRowsBySelections,
+  type ChartRow,
+} from "../apps/geolibre-desktop/src/lib/attribute-charts";
 
 function widget(patch: Partial<DashboardWidget> = {}): DashboardWidget {
   return {
@@ -165,6 +169,101 @@ describe("normalizeWidgets", () => {
     assert.equal("suffix" in widget, false);
   });
 
+  // "selector" was missing from the type allow-list, so normalizeWidgets threw
+  // every selector widget away: they disappeared from a saved project and never
+  // came back on reload.
+  it("keeps a selector widget and its multi-select flag", () => {
+    const result = normalizeWidgets([
+      { id: "s", layerId: "l", type: "selector", category: "CONTINENT", multiple: true },
+    ] as never);
+    assert.equal(result?.length, 1);
+    assert.equal(result?.[0].type, "selector");
+    assert.equal(result?.[0].category, "CONTINENT");
+    assert.equal(result?.[0].multiple, true);
+  });
+
+  it("omits the multi-select flag when it is off or not a boolean", () => {
+    const result = normalizeWidgets([
+      { id: "a", layerId: "l", type: "selector", category: "c", multiple: false },
+      { id: "b", layerId: "l", type: "selector", category: "c", multiple: "yes" },
+      { id: "c", layerId: "l", type: "selector", category: "c" },
+    ] as never);
+    assert.equal(result?.length, 3);
+    for (const id of ["a", "b", "c"]) {
+      const normalized = result?.find((w) => w.id === id);
+      assert.ok(normalized, `selector ${id} should survive normalization`);
+      assert.equal("multiple" in normalized, false);
+    }
+  });
+
+  it("drops the multi-select flag from a non-selector widget", () => {
+    const result = normalizeWidgets([
+      { id: "p", layerId: "l", type: "pie", category: "kind", multiple: true },
+    ] as never);
+    const normalized = result?.[0];
+    assert.ok(normalized, "the pie widget should survive normalization");
+    assert.equal("multiple" in normalized, false);
+  });
+
+  // normalizeWidgets also runs on the save path, so a list widget whose
+  // columns/sort/limit were dropped here went blank the moment its project was
+  // saved — the renderer falls back to "no data" without listFields.
+  it("keeps a list widget's columns, sort, and row limit", () => {
+    const result = normalizeWidgets([
+      {
+        id: "l1",
+        layerId: "l",
+        type: "list",
+        listFields: ["NAME", "POP"],
+        sortBy: "POP",
+        sortDir: "asc",
+        limit: 50,
+      },
+    ] as never);
+    const normalized = result?.[0];
+    assert.ok(normalized, "the list widget should survive normalization");
+    assert.deepEqual(normalized.listFields, ["NAME", "POP"]);
+    assert.equal(normalized.sortBy, "POP");
+    assert.equal(normalized.sortDir, "asc");
+    assert.equal(normalized.limit, 50);
+  });
+
+  it("drops unusable list columns, sort directions, and row limits", () => {
+    const result = normalizeWidgets([
+      {
+        id: "l1",
+        layerId: "l",
+        type: "list",
+        listFields: ["NAME", "", 7, "  "],
+        sortBy: "   ",
+        sortDir: "sideways",
+        limit: 0,
+      },
+      { id: "l2", layerId: "l", type: "list", listFields: [], limit: 10_000 },
+    ] as never);
+    const first = result?.find((w) => w.id === "l1");
+    assert.ok(first, "l1 should survive normalization");
+    assert.deepEqual(first.listFields, ["NAME"]);
+    assert.equal("sortBy" in first, false);
+    assert.equal("sortDir" in first, false);
+    assert.equal("limit" in first, false);
+    const second = result?.find((w) => w.id === "l2");
+    assert.ok(second, "l2 should survive normalization");
+    assert.equal("listFields" in second, false);
+    // Clamped to the editor's maximum rather than round-tripped.
+    assert.equal(second.limit, 500);
+  });
+
+  it("drops list fields from a non-list widget", () => {
+    const result = normalizeWidgets([
+      { id: "p", layerId: "l", type: "pie", category: "kind", listFields: ["NAME"], limit: 5 },
+    ] as never);
+    const normalized = result?.[0];
+    assert.ok(normalized, "the pie widget should survive normalization");
+    assert.equal("listFields" in normalized, false);
+    assert.equal("limit" in normalized, false);
+  });
+
   it("returns null for a non-array or an all-invalid list", () => {
     assert.equal(normalizeWidgets(undefined), null);
     assert.equal(normalizeWidgets("nope"), null);
@@ -259,6 +358,123 @@ describe("widgets in the project file", () => {
       metadata: {},
     });
     assert.equal("widgets" in project, false);
+  });
+});
+
+describe("cross-filtering by selector values", () => {
+  const rows: ChartRow[] = [
+    { properties: { CONTINENT: "Africa", INCOME_GRP: "5. Low income", NAME: "Chad" } },
+    { properties: { CONTINENT: "Africa", INCOME_GRP: "3. Upper middle", NAME: "Gabon" } },
+    { properties: { CONTINENT: "Asia", INCOME_GRP: "5. Low income", NAME: "Nepal" } },
+    { properties: { CONTINENT: "Europe", INCOME_GRP: "1. High income", NAME: "France" } },
+  ];
+  const names = (result: ChartRow[]) => result.map((row) => row.properties.NAME);
+
+  it("returns every row when nothing is selected", () => {
+    assert.equal(filterRowsBySelections(rows, []), rows);
+    assert.equal(filterRowsBySelections(rows, [{ field: "CONTINENT", values: [] }]), rows);
+  });
+
+  it("keeps only the rows matching a single selected value", () => {
+    const result = filterRowsBySelections(rows, [{ field: "CONTINENT", values: ["Africa"] }]);
+    assert.deepEqual(names(result), ["Chad", "Gabon"]);
+  });
+
+  it("ORs the values within one selection", () => {
+    const result = filterRowsBySelections(rows, [
+      { field: "CONTINENT", values: ["Africa", "Asia"] },
+    ]);
+    assert.deepEqual(names(result), ["Chad", "Gabon", "Nepal"]);
+  });
+
+  it("ANDs separate selections", () => {
+    const result = filterRowsBySelections(rows, [
+      { field: "CONTINENT", values: ["Africa", "Asia"] },
+      { field: "INCOME_GRP", values: ["5. Low income"] },
+    ]);
+    assert.deepEqual(names(result), ["Chad", "Nepal"]);
+  });
+
+  it("yields nothing when the selections cannot overlap", () => {
+    const result = filterRowsBySelections(rows, [
+      { field: "CONTINENT", values: ["Europe"] },
+      { field: "INCOME_GRP", values: ["5. Low income"] },
+    ]);
+    assert.deepEqual(result, []);
+  });
+
+  // The chips are built with String(...), so a numeric or boolean category has
+  // to match the same way or clicking a chip would filter everything away.
+  it("matches non-string values against their chip label", () => {
+    const mixed: ChartRow[] = [
+      { properties: { zone: 1, NAME: "one" } },
+      { properties: { zone: 2, NAME: "two" } },
+      { properties: { zone: true, NAME: "yes" } },
+    ];
+    assert.deepEqual(names(filterRowsBySelections(mixed, [{ field: "zone", values: ["1"] }])), [
+      "one",
+    ]);
+    assert.deepEqual(names(filterRowsBySelections(mixed, [{ field: "zone", values: ["true"] }])), [
+      "yes",
+    ]);
+  });
+});
+
+describe("selector and list widgets in the project file", () => {
+  it("round-trips a selector widget through serialize/parse", () => {
+    const widgets: DashboardWidget[] = [
+      {
+        id: "sel-1",
+        layerId: "layer-a",
+        type: "selector",
+        category: "CONTINENT",
+        multiple: true,
+        title: "Continent",
+      },
+    ];
+    const project = projectFromStore({
+      projectName: "Selector",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      widgets,
+      metadata: {},
+    });
+    assert.deepEqual(project.widgets, widgets);
+    const reparsed = parseProject(serializeProject(project));
+    assert.deepEqual(reparsed.widgets, widgets);
+  });
+
+  it("round-trips a list widget through serialize/parse", () => {
+    const widgets: DashboardWidget[] = [
+      {
+        id: "list-1",
+        layerId: "layer-a",
+        type: "list",
+        listFields: ["NAME", "POP_EST"],
+        sortBy: "POP_EST",
+        sortDir: "asc",
+        limit: 25,
+        title: "Top countries",
+      },
+    ];
+    const project = projectFromStore({
+      projectName: "List",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      widgets,
+      metadata: {},
+    });
+    assert.deepEqual(project.widgets, widgets);
+    const reparsed = parseProject(serializeProject(project));
+    assert.deepEqual(reparsed.widgets, widgets);
   });
 });
 
@@ -407,5 +623,128 @@ describe("computeChart", () => {
   it("returns an empty result when the required field is missing", () => {
     const result = computeChart(rows, { type: "histogram" });
     assert.equal(chartResultHasData(result), false);
+  });
+});
+
+describe("selector widget values", () => {
+  // Rows carry their attributes in a `properties` bag, not on the row itself.
+  // Reading the row directly yields undefined for every feature, which left the
+  // selector widget rendering its "no data" fallback instead of any chips.
+  const rows: ChartRow[] = [
+    { properties: { CONTINENT: "Africa", NAME: "Kenya" } },
+    { properties: { CONTINENT: "Asia", NAME: "Nepal" } },
+    { properties: { CONTINENT: "Africa", NAME: "Chad" } },
+  ];
+
+  it("reads distinct values out of each row's property bag", () => {
+    assert.deepEqual(distinctCategoryValues(rows, "CONTINENT"), ["Africa", "Asia"]);
+  });
+
+  it("sorts values and drops blank, whitespace-only, and nullish ones", () => {
+    const sparse: ChartRow[] = [
+      { properties: { region: "Oceania" } },
+      { properties: { region: "" } },
+      { properties: { region: "   " } },
+      { properties: { region: "\t\n" } },
+      { properties: { region: null } },
+      { properties: {} },
+      { properties: { region: "Americas" } },
+    ];
+    assert.deepEqual(distinctCategoryValues(sparse, "region"), ["Americas", "Oceania"]);
+  });
+
+  it("keeps a value's original spacing as its label", () => {
+    const padded: ChartRow[] = [{ properties: { region: " Asia " } }];
+    assert.deepEqual(distinctCategoryValues(padded, "region"), [" Asia "]);
+  });
+
+  it("returns nothing for a field no row carries", () => {
+    assert.deepEqual(distinctCategoryValues(rows, "missing"), []);
+  });
+});
+
+describe("saving an edited widget", () => {
+  beforeEach(() => {
+    useAppStore.getState().newProject({ name: "Test Project" });
+  });
+
+  // The widget editor omits optional fields the user left empty, so saving has
+  // to replace the record. Merging kept the old values and an emptied title,
+  // color, prefix, or suffix silently reverted the moment the dialog closed.
+  it("clears the optional fields the new record omits", () => {
+    useAppStore.getState().addWidget(
+      widget({
+        id: "w",
+        type: "indicator",
+        title: "Old title",
+        color: "#004D43",
+        prefix: "€",
+        suffix: " ha",
+      }),
+    );
+    useAppStore.getState().replaceWidget("w", {
+      layerId: "layer-a",
+      type: "indicator",
+      indicatorAggregation: "count",
+    });
+    const saved = useAppStore.getState().widgets.find((w) => w.id === "w");
+    assert.ok(saved, "the widget should survive being replaced");
+    assert.equal("title" in saved, false);
+    assert.equal("color" in saved, false);
+    assert.equal("prefix" in saved, false);
+    assert.equal("suffix" in saved, false);
+  });
+
+  it("clears multi-select when the new record omits the flag", () => {
+    useAppStore
+      .getState()
+      .addWidget(widget({ id: "s", type: "selector", category: "CONTINENT", multiple: true }));
+    useAppStore.getState().replaceWidget("s", {
+      layerId: "layer-a",
+      type: "selector",
+      category: "CONTINENT",
+    });
+    const saved = useAppStore.getState().widgets.find((w) => w.id === "s");
+    assert.ok(saved, "the widget should survive being replaced");
+    assert.equal("multiple" in saved, false);
+  });
+
+  it("drops fields belonging to the previous widget type", () => {
+    useAppStore
+      .getState()
+      .addWidget(widget({ id: "w", type: "histogram", field: "pop", bins: 12 }));
+    useAppStore
+      .getState()
+      .replaceWidget("w", { layerId: "layer-a", type: "pie", category: "kind" });
+    const saved = useAppStore.getState().widgets.find((w) => w.id === "w");
+    assert.ok(saved, "the widget should survive being replaced");
+    assert.equal("bins" in saved, false);
+    assert.equal("field" in saved, false);
+  });
+
+  it("keeps the widget's id and position, and ignores an unknown id", () => {
+    useAppStore.getState().addWidget(widget({ id: "a" }));
+    useAppStore.getState().addWidget(widget({ id: "b" }));
+    useAppStore.getState().replaceWidget("a", { layerId: "layer-z", type: "box", field: "area" });
+    assert.deepEqual(
+      useAppStore.getState().widgets.map((w) => w.id),
+      ["a", "b"],
+    );
+    assert.equal(useAppStore.getState().widgets[0].layerId, "layer-z");
+
+    useAppStore.getState().replaceWidget("missing", { layerId: "l", type: "box", field: "x" });
+    assert.equal(useAppStore.getState().widgets.length, 2);
+  });
+
+  // Kept distinct from replaceWidget: updateWidget is still the partial-patch
+  // API, and this merge behavior is why the editor cannot use it.
+  it("updateWidget still merges, retaining a field the patch omits", () => {
+    useAppStore
+      .getState()
+      .addWidget(widget({ id: "s", type: "selector", category: "CONTINENT", multiple: true }));
+    useAppStore.getState().updateWidget("s", { category: "REGION_UN" });
+    const saved = useAppStore.getState().widgets.find((w) => w.id === "s");
+    assert.equal(saved?.multiple, true);
+    assert.equal(saved?.category, "REGION_UN");
   });
 });

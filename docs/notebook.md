@@ -28,21 +28,52 @@ import geolibre
 
 m = geolibre.connect()          # or geolibre.Map()
 m.fly_to(-122.4, 37.8, zoom=11) # animate the live map in the left pane
-m.add_geojson(gdf, name="My layer")   # GeoDataFrame, dict, or JSON string
+layer_id = m.add_geojson(
+    gdf,
+    name="My layer",
+    fillColor="#facc15",
+    strokeColor="#d97706",
+)  # GeoDataFrame, dict, or JSON string; returns an id on desktop
+m.get_layer(layer_id)
+m.list_layers()
 m.fit_bounds([-123, 37, -122, 38])
 m.set_basemap("https://…/style.json")
-m.set_visibility(layer_id, False)
-m.remove_layer(layer_id)
 ```
 
-Calls are **fire-and-forget**: each posts a command to the host app over the
-shared scripting protocol (the same `createScriptingHandlers` surface used by the
-in-app Python console and the Jupyter widget) and returns immediately, so the
-client behaves identically on the in-browser kernel and a real server. Canonical
-client source: `backend/geolibre_server/notebook_client.py`.
+Most mutation calls are **fire-and-forget**. On desktop, `add_geojson` uses the
+relay's correlated request/reply path and returns the new layer id. The same
+path exposes `list_layers()`, which returns one dict per live layer with `id`,
+`name`, `type`, `visible`, and `opacity`, and `get_layer(layer_id)`, which
+returns one matching layer or raises `ValueError`. The id can be passed directly to
+`set_visibility`, `set_opacity`, `set_style`, `remove_layer`, or
+`zoom_to_layer`.
 
-> Read-back queries (e.g. `get_center`) are not exposed by this fire-and-forget
-> client; they need the blocking request/reply path the `geolibre` widget uses.
+All commands fan out to every GeoLibre window connected to the same Jupyter
+server. For `add_geojson`, `list_layers`, and `get_layer`, the first correlated
+reply is returned to the notebook and later replies are ignored. Because each
+window maintains its own map state, use one connected window when chaining a
+returned layer id into later read-back calls. This behavior is only visible if
+you attach multiple GeoLibre windows to one Jupyter server.
+
+`add_geojson` returns `None` instead of an id in two situations, and never
+fails outright in either:
+
+- **Nothing received the command** (no window connected, or the relay itself
+  unreachable). It behaves like every other mutation — the layer goes out over
+  the display transport with a `GeoLibreNotConnectedWarning`.
+- **A window took it but did not answer within 5s**, which a large
+  `FeatureCollection` can do. You get a `GeoLibreTimeoutWarning`; the layer is
+  still being added, so it is deliberately *not* re-sent (that would add it
+  twice) — find it with `list_layers()`.
+
+The read-back calls have nothing to return in either situation, so they raise
+`GeoLibreNotConnectedError` / `GeoLibreTimeoutError` (both `RuntimeError`)
+instead.
+
+Synchronous read-back is desktop-only. JupyterLite uses browser `postMessage`;
+blocking its Python call would also block the browser event loop that must
+deliver the result. Canonical client source:
+`backend/geolibre_server/notebook_client.py`.
 
 ## Driving the map from an external client (VS Code, …)
 

@@ -6,6 +6,7 @@
 // the hook is an inert no-op. The session-create REST call and the WebSocket URL
 // are both derived from this one base.
 
+import { readDeploymentEnvValue, type EnvRecord } from "./deployment-env";
 import type { ClientMessage, ServerMessage } from "./collab-protocol";
 import type { CollaborationMode } from "@geolibre/core";
 
@@ -21,30 +22,44 @@ const RECONNECT_MIN_MS = 500;
 const RECONNECT_MAX_MS = 10_000;
 
 /**
- * Resolve the collaboration relay base from the Vite env, returning `null` when
- * unset or invalid so callers can keep the feature dark.
+ * Deployment variable naming the collaboration relay. Settable at build time or,
+ * on a prebuilt Docker image, with `-e GEOLIBRE_COLLAB_URL=…`.
+ */
+export const COLLAB_URL_ENV = "VITE_GEOLIBRE_COLLAB_URL";
+
+/**
+ * Resolve the collaboration relay base, returning `null` when unset or invalid
+ * so callers can keep the feature dark.
  *
- * Only `wss://` (or `ws://` on loopback for local `wrangler dev`) is accepted,
- * mirroring `resolveShareBaseUrl`: parse the URL and match the hostname exactly
- * so a value like `ws://localhost.evil.com` is rejected.
+ * Read from the deployment env (the Docker entrypoint's runtime config) before
+ * the build-time Vite env, so a prebuilt image can be pointed at a self-hosted
+ * relay without a rebuild.
  *
- * @param configured - The raw env value; defaults to `VITE_GEOLIBRE_COLLAB_URL`.
+ * Only `wss://` (or `ws://` on loopback for a local relay) is accepted,
+ * mirroring `resolveShareHost`: parse the URL and match the hostname exactly
+ * so a value like `ws://localhost.evil.com` is rejected. Credentials in the URL
+ * are rejected regardless of scheme, as `service_url()` in
+ * `docker/entrypoint.sh` does for the same value.
+ *
+ * @param configured - The raw value; read from the env when omitted.
+ * @param deploymentEnv - Runtime env override, for tests.
  * @returns The trimmed base URL without a trailing slash, or `null`.
  */
 export function resolveCollabBaseUrl(
-  configured: unknown = import.meta.env?.VITE_GEOLIBRE_COLLAB_URL,
+  configured?: unknown,
+  deploymentEnv?: EnvRecord,
 ): string | null {
-  if (typeof configured !== "string" || !configured.trim()) return null;
-  const trimmed = configured.trim().replace(/\/+$/, "");
+  const value =
+    configured !== undefined ? configured : readDeploymentEnvValue(COLLAB_URL_ENV, deploymentEnv);
+  if (typeof value !== "string" || !value.trim()) return null;
+  const trimmed = value.trim().replace(/\/+$/, "");
   try {
     const url = new URL(trimmed);
+    if (url.username || url.password) return null;
     if (
       url.protocol === "wss:" ||
       (url.protocol === "ws:" &&
-        (url.hostname === "localhost" ||
-          url.hostname === "127.0.0.1" ||
-          // WHATWG URL keeps the brackets on an IPv6 host.
-          url.hostname === "[::1]"))
+        (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]"))
     ) {
       return trimmed;
     }
@@ -64,21 +79,13 @@ export function sessionWsUrl(wsBase: string, sessionId: string): string {
   return `${wsBase}/sessions/${encodeURIComponent(sessionId)}/ws`;
 }
 
-/**
- * Create a new session on the relay and return its shareable code plus the host
- * token (which only the creator ever sees, so a guest can't claim host).
- *
- * @param mode - Initial session mode (view-only or co-edit).
- * @param baseUrl - Override the relay base; defaults to the configured env value.
- * @param fetchImpl - Injected for testing; defaults to the global fetch.
- */
 export async function createSession(
   mode: CollaborationMode,
   baseUrl: string | null = resolveCollabBaseUrl(),
   fetchImpl: typeof fetch = fetch,
 ): Promise<CreateSessionResult> {
   if (!baseUrl) {
-    throw new Error("Live collaboration is not configured.");
+    throw new Error("Collaboration is not configured. Set VITE_GEOLIBRE_COLLAB_URL.");
   }
   const httpBase = httpBaseFromWs(baseUrl);
   let response: Response;
@@ -93,7 +100,9 @@ export async function createSession(
     if (error instanceof DOMException && error.name === "TimeoutError") {
       throw new Error("Timed out creating the session. Please try again.");
     }
-    throw new Error("Could not reach the collaboration server.");
+    throw new Error(
+      "Could not reach the collaboration server. Check your connection and try again.",
+    );
   }
   if (!response.ok) {
     throw new Error(`Could not create the session (HTTP ${response.status}).`);

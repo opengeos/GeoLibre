@@ -56,9 +56,10 @@ GeoLibre can turn addresses into points and points into addresses. Both run thro
 | Tool | Where | What it does |
 | --- | --- | --- |
 | **Geocode Addresses** | Processing menu | Pick a CSV with an address column and geocode each row into a point layer. Each matched row keeps its original columns plus `geocode_lat`, `geocode_lon`, `geocode_display_name`, and `geocode_importance` (a match score). A per-run provider picker lets you switch backend for that batch. |
+| **Delimited Text Layer → Addresses** | Add Data | Geocode a CSV/TSV at import time instead of a separate step: choose "Addresses" as the import mode, pick one or more columns to concatenate into the address (e.g. street, city, state), and each row is geocoded through the project's configured provider. Matched rows become points; rows with no match are kept (not dropped) with `geocode_status: "unmatched"` so they stay visible and fixable in the attribute table. |
 | **Reverse Geocode** | Controls menu | A toggle. While on, click anywhere on the map to look up the address at that point, shown in a popup with a copy button. |
 
-Both send coordinates or addresses to a third-party service, so the first time you enable Reverse Geocode (and whenever you run a batch) your data leaves your device for those requests. Reverse Geocode shows a one-time notice before it is first enabled.
+All three send coordinates or addresses to a third-party service, so the first time you enable Reverse Geocode (and whenever you run a batch, including at CSV import time) your data leaves your device for those requests. Reverse Geocode shows a one-time notice before it is first enabled.
 
 ### Providers
 

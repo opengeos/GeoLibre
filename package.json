@@ -1,6 +1,6 @@
 {
   "name": "geolibre",
-  "version": "2.3.0",
+  "version": "2.4.1",
   "private": true,
   "description": "GeoLibre: a free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private",
   "workspaces": [
@@ -20,7 +20,7 @@
     "test:frontend:coverage": "node --import tsx --test --experimental-test-coverage --test-coverage-lines=78 --test-coverage-branches=78 --test-coverage-functions=63 --test-coverage-exclude=\"tests/**\" --test-coverage-exclude=\"e2e/**\" --test-coverage-exclude=\"**/*.config.*\" tests/*.test.ts",
     "test:backend": "python -m pytest backend/geolibre_server/tests",
     "test:backend:coverage": "python -m pytest backend/geolibre_server/tests --cov=geolibre_server --cov-report=term-missing --cov-fail-under=55",
-    "test:worker": "npm run typecheck -w geolibre-viewer-worker && npm run typecheck -w geolibre-collab-worker && npm run typecheck -w geolibre-tiles-worker && npm run typecheck -w geolibre-ai-proxy-worker",
+    "test:worker": "npm run typecheck -w geolibre-viewer-worker && npm run typecheck -w geolibre-collab-worker && npm run typecheck -w geolibre-collab-node && npm test -w geolibre-collab-node && npm run typecheck -w geolibre-tiles-worker && npm run typecheck -w geolibre-ai-proxy-worker",
     "test:e2e": "playwright test",
     "check:rust": "cargo check --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml",
     "ci": "npm run lint && npm run build && npm run test:frontend:coverage && npm run test:worker && npm run test:backend:coverage && npm run check:rust",
@@ -28,21 +28,23 @@
     "tauri:dev": "npm run tauri dev -w geolibre-desktop",
     "tauri:build": "node scripts/tauri-build.mjs",
     "tauri:build:native-duckdb": "node scripts/tauri-build.mjs --native-duckdb",
+    "tauri:build:mas": "node scripts/tauri-build.mjs --mas",
     "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/msix/build-msix.ps1",
     "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
-    "@playwright/test": "^1.62.0",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^26.1.2",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "linkedom": "^0.18.13",
     "tsx": "^4.23.1",
     "typescript-eslint": "^8.65.0"
   },
   "overrides": {
     "brace-expansion": "^5.0.8",
-    "fast-uri": "3.1.4",
+    "fast-uri": "^3.1.5",
     "filelist": "^2.0.2",
     "sweepline-intersections": "^1.5.0",
     "uuid": "^14.0.0"

@@ -1,4 +1,12 @@
-import { useAppStore } from "@geolibre/core";
+import {
+  createLayerLibraryEntryId,
+  parseLayerLibrary,
+  planLayerLibraryAdd,
+  serializeLayerLibrary,
+  unresolvedLayerLibraryJoins,
+  useAppStore,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { fetchPostgisStatus, listPostgisTables } from "@geolibre/processing";
 import { Input, ScrollArea } from "@geolibre/ui";
@@ -6,9 +14,18 @@ import { Search } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
-import { isLoadableFilePath, isTauri, listDirectory, pickLocalDirectory } from "../../lib/tauri-io";
+import {
+  isLoadableFilePath,
+  isTauri,
+  listDirectory,
+  openLocalDataFileWithFallback,
+  pickLocalDirectory,
+  saveTextFileWithFallback,
+} from "../../lib/tauri-io";
 import { pinFolder, unpinFolder } from "../../lib/browser-folders";
 import { addFavorite, isFavoritableKind, removeFavorite } from "../../lib/browser-favorites";
+import { createAppAPI } from "../../hooks/usePlugins";
+import { restoreLibraryLayer } from "../../lib/restore-library-layer";
 import { useBrowserTree } from "../../hooks/useBrowserTree";
 import {
   augmentConnections,
@@ -48,11 +65,22 @@ interface BrowserPanelProps {
 /** The section nodes are expanded by default so their contents are visible. */
 const DEFAULT_EXPANDED = new Set([
   "section:favorites",
+  "section:my-data",
   "section:services",
   "section:recent",
   "section:databases",
   "section:files",
 ]);
+
+/**
+ * Whether a layer records `path` as the file it was read from. The vector import
+ * puts the absolute path in `sourcePath`; the raster control puts it in
+ * `metadata.localFilePath` and keeps only the basename in `sourcePath`. Used to
+ * pick the layer a library re-add's file import just produced.
+ */
+function layerCameFromPath(layer: GeoLibreLayer, path: string): boolean {
+  return layer.sourcePath === path || layer.metadata.localFilePath === path;
+}
 
 /** Collects every group node id in a tree (used to expand-all while searching). */
 function collectGroupIds(nodes: readonly BrowserNode[], into: Set<string>): void {
@@ -83,12 +111,23 @@ export function BrowserPanel({
 }: BrowserPanelProps) {
   const { t } = useTranslation();
   const addLayer = useAppStore((s) => s.addLayer);
-  const { tree, serviceById, favoriteIds } = useBrowserTree();
+  const renameLayerLibraryEntry = useAppStore((s) => s.renameLayerLibraryEntry);
+  const deleteLayerLibraryEntry = useAppStore((s) => s.deleteLayerLibraryEntry);
+  const { tree, serviceById, favoriteIds, libraryLayerById } = useBrowserTree();
 
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(DEFAULT_EXPANDED));
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Id of the My Data row whose name is being edited in place, or null.
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  // Ref mirror of renamingId, so the deferred focus restore in endRename can see
+  // whether another editor opened in the meantime (state would still be stale).
+  const renamingIdRef = useRef<string | null>(null);
+  const setRenaming = (id: string | null) => {
+    renamingIdRef.current = id;
+    setRenamingId(id);
+  };
   // Ref mirror of busyId for the re-entrancy guard: two clicks dispatched
   // back-to-back (before React commits the state update and the button's
   // disabled prop) would both read a stale `busyId === null`, so the guard
@@ -434,6 +473,97 @@ export function BrowserPanel({
           table: node.tableName,
         },
       });
+    } else if (node.kind === "library-layer" && node.libraryLayerId) {
+      const entry = libraryLayerById(node.libraryLayerId);
+      if (!entry) {
+        // The tree renders straight off the store slice, so an entry can only
+        // be missing if it was deleted between render and click.
+        setError(t("browser.libraryLayerMissing"));
+        return;
+      }
+      const plan = planLayerLibraryAdd(entry, { id: createLayerLibraryEntryId() });
+      if (plan.kind === "layer") {
+        // Re-add exactly like a project load does: put the layer record in the
+        // store so MapController.syncLayers builds its map output, then run the
+        // owning plugin's restore pass when the layer is control-painted (that
+        // pass, not the store sync, is what draws those layers). Held under the
+        // busy flag so a second click during the add cannot duplicate the layer.
+        // Note the flag only covers dispatching the restore, not the re-ingest
+        // that follows: see `restoreLibraryLayer` on why four of the five passes
+        // cannot be awaited to completion.
+        beginBusy(node.id);
+        try {
+          // A saved join points at another layer by its project-local id, so it
+          // only resolves when that layer is present here. Checked before the add
+          // so the layer's own id cannot count as a match, and reported because
+          // the join engine drops an unresolved join silently.
+          const unresolvedJoins = unresolvedLayerLibraryJoins(
+            entry,
+            useAppStore.getState().layers.map((l) => l.id),
+          );
+          addLayer(plan.layer);
+          await restoreLibraryLayer(plan.layer, createAppAPI(mapControllerRef));
+          if (unresolvedJoins.length > 0) {
+            setError(t("browser.libraryLayerJoinsUnresolved", { count: unresolvedJoins.length }));
+          }
+        } finally {
+          endBusy();
+        }
+        return;
+      }
+      // Entries whose features were too large to embed carry only a file path,
+      // so re-adding needs the desktop host's filesystem read.
+      if (!onAddFilePath) {
+        setError(t("browser.libraryLayerNeedsDesktop"));
+        return;
+      }
+      beginBusy(node.id);
+      try {
+        // The file import builds a fresh, default-styled layer, so the entry's
+        // saved configuration is applied to it afterwards — otherwise a degraded
+        // entry would silently come back unstyled. `onAddFilePath` reports only
+        // success or an error message (one file can yield several layers — a KML
+        // adds placemarks plus ground overlays and models), so the target is
+        // found among the newly-added ids by matching the path this add used.
+        // That stays correct if an unrelated layer lands concurrently, and
+        // patches nothing rather than the wrong layer if none matches.
+        const idsBefore = new Set(useAppStore.getState().layers.map((l) => l.id));
+        const addError = await onAddFilePath(plan.path);
+        if (addError) {
+          setError(addError);
+        } else {
+          const added = useAppStore.getState().layers.filter((l) => !idsBefore.has(l.id));
+          const matches = added.filter((l) => layerCameFromPath(l, plan.path));
+          const target =
+            matches.length === 1
+              ? matches[0]
+              : // Nothing recorded the path (a format that keeps neither): a lone
+                // new layer is still unambiguous. Several matches are not — one
+                // file can yield siblings that share a path (a KML's placemarks
+                // plus its ground overlays) — so patch none of them.
+                matches.length === 0 && added.length === 1
+                ? added[0]
+                : undefined;
+          if (target) {
+            const { joins, virtualFields, ...rest } = plan.config;
+            useAppStore.getState().updateLayer(target.id, rest);
+            // Joins and virtual fields must go through their own actions so the
+            // derived columns are materialized rather than stored inert.
+            if (joins) useAppStore.getState().setLayerJoins(target.id, joins);
+            if (virtualFields) {
+              useAppStore.getState().setLayerVirtualFields(target.id, virtualFields);
+            }
+          } else {
+            // Either the import produced several indistinguishable layers, or it
+            // reported success while adding none. Both leave the entry's saved
+            // configuration unapplied, so say so rather than letting the user
+            // discover their styling silently did not return.
+            setError(t("browser.libraryLayerConfigNotApplied", { name: plan.config.name }));
+          }
+        }
+      } finally {
+        endBusy();
+      }
     } else if (node.kind === "file" && node.path && onAddFilePath) {
       // Add the clicked file as a layer via the shell's dispatcher (which owns
       // the vector/raster/MBTiles store add-paths); it resolves to an error
@@ -540,11 +670,104 @@ export function BrowserPanel({
     });
   };
 
+  // My Data rename/delete. The store slice drives the tree, so both changes are
+  // reflected (and persisted to IndexedDB) with no refresh event to fire.
+  // Closing the editor unmounts the focused input, which would drop a
+  // keyboard-only user's focus to <body> and lose their place in the tree, so
+  // hand focus back to the row. Deferred a frame because the row's button does
+  // not exist again until this state change has rendered.
+  const endRename = (rowId: string) => {
+    setRenaming(null);
+    requestAnimationFrame(() => {
+      // Clicking a second row's pencil commits this one by blur, and that row's
+      // editor has already mounted and taken focus by the time this frame runs —
+      // so only reclaim focus if no editor is open, or the deferred call would
+      // yank it out of the input the user just asked for.
+      if (renamingIdRef.current === null) focusRow(rowId);
+    });
+  };
+
+  const commitRename = (node: BrowserNode, name: string) => {
+    endRename(node.id);
+    if (node.libraryLayerId) renameLayerLibraryEntry(node.libraryLayerId, name);
+  };
+
+  const deleteLibraryLayer = (node: BrowserNode) => {
+    setError(null);
+    if (!node.libraryLayerId) return;
+    // Leave no rename editor open on a row that no longer exists.
+    if (renamingId === node.id) setRenaming(null);
+    // The trash button being removed held focus, so send it to the section header
+    // — the nearest row that survives the delete — rather than letting it fall to
+    // <body> and lose the user's place (same reason as endRename above).
+    const fallbackRowId = visibleRows.find((row) => row.id === node.id)?.parentId ?? undefined;
+    deleteLayerLibraryEntry(node.libraryLayerId);
+    if (fallbackRowId) requestAnimationFrame(() => focusRow(fallbackRowId));
+  };
+
+  // Import/export the whole library as a JSON bundle, matching how the Style
+  // Manager shares its presets. Ids collide on purpose so re-importing an
+  // exported bundle updates entries instead of duplicating them.
+  const importLibrary = async () => {
+    setError(null);
+    try {
+      const picked = await openLocalDataFileWithFallback({
+        filters: [{ name: t("browser.libraryFilterName"), extensions: ["json"] }],
+        accept: ".json,application/json",
+        readText: true,
+      });
+      if (!picked || picked.text === undefined) return;
+      const imported = parseLayerLibrary(picked.text);
+      // Read the library fresh from the store: the file picker above can block
+      // while another surface saves a layer.
+      const current = useAppStore.getState().layerLibrary;
+      const byId = new Map(imported.map((e) => [e.id, e]));
+      // Genuinely new entries lead the list and the rest keep their places, so
+      // an import reads like a save (most recent first, per saveLayerLibraryEntry)
+      // instead of burying the freshly shared layers under the whole library.
+      // An id already present is an in-place update, not a reorder.
+      const updated = current.map((e) => byId.get(e.id) ?? e);
+      const currentIds = new Set(current.map((e) => e.id));
+      const added = imported.filter((e) => !currentIds.has(e.id));
+      useAppStore.getState().setLayerLibrary([...added, ...updated]);
+    } catch (err) {
+      // parseLayerLibrary's messages name the specific problem (bad JSON,
+      // unsupported version, no usable entries), so surface them directly.
+      setError(err instanceof Error ? err.message : t("browser.libraryImportFailed"));
+    }
+  };
+
+  const exportLibrary = async () => {
+    setError(null);
+    const entries = useAppStore.getState().layerLibrary;
+    if (entries.length === 0) return;
+    try {
+      await saveTextFileWithFallback(serializeLayerLibrary(entries), {
+        defaultName: "geolibre-layers.json",
+        filters: [{ name: t("browser.libraryFilterName"), extensions: ["json"] }],
+        browserTypes: [
+          {
+            description: t("browser.libraryFilterName"),
+            accept: { "application/json": [".json"] },
+          },
+        ],
+        mimeType: "application/json",
+      });
+    } catch (err) {
+      console.error("Failed to export the layer library", err);
+      setError(t("browser.libraryExportFailed"));
+    }
+  };
+
   // A section counts as content if it has children *or* an always-on ＋ action
   // (Databases' "New connection" and Files' "Add folder" show even with zero
   // entries, so a first-run user isn't stuck on the empty-state message).
   const hasContent = filtered.some(
-    (section) => section.children?.length || section.newConnectionKind || section.addFolderAction,
+    (section) =>
+      section.children?.length ||
+      section.newConnectionKind ||
+      section.addFolderAction ||
+      section.libraryImportExport,
   );
 
   return (
@@ -590,6 +813,13 @@ export function BrowserPanel({
                 onRemoveFolder={removeFolder}
                 favoriteIds={favoriteIds}
                 onToggleFavorite={toggleFavorite}
+                renamingId={renamingId}
+                onBeginRename={setRenaming}
+                onCommitRename={commitRename}
+                onCancelRename={endRename}
+                onDeleteLibraryLayer={deleteLibraryLayer}
+                onImportLibrary={() => void importLibrary()}
+                onExportLibrary={() => void exportLibrary()}
               />
             ))}
           </ul>

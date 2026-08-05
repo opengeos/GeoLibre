@@ -131,6 +131,7 @@ fi
 python -c '
 import json
 import os
+import re
 from urllib.parse import urlsplit
 
 deployment = {}
@@ -165,11 +166,97 @@ for entry in os.environ.get("GEOLIBRE_EMBED_ORIGINS", "").replace(",", " ").spli
 if origins:
     deployment["VITE_GEOLIBRE_EMBED_ORIGINS"] = ",".join(origins)
 
+
+def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
+    """Validate a self-hosted service URL, or exit with an explanation.
+
+    Both of these carry a Bearer token, so a plaintext scheme is only allowed on
+    loopback (development). The app applies the same rule and *refuses* a value it
+    rejects rather than falling back to the public hosted service — so a value
+    that reaches the app unvalidated becomes a silently disabled feature. Failing
+    the boot instead puts the error where an operator will actually see it.
+    """
+    parsed = urlsplit(value)
+    # Both checks below run before the loopback shortcut, so their guarantees hold
+    # for every accepted value. That ordering is load-bearing: urlsplit() parses
+    # ws://localhost:8080"; ... with hostname "localhost", which would match the
+    # loopback allowlist while netloc still carried the rest.
+    #
+    # Credentials: both values are echoed to stdout further down, so a credentialed
+    # URL would also land in the container logs.
+    if parsed.username or parsed.password:
+        raise SystemExit(f"ERROR: {name} must not embed credentials.")
+    # Character set: netloc is substituted unescaped into the double-quoted CSP
+    # add_header value in nginx.conf.template, so anything outside a hostname,
+    # port, or IPv6 literal could break out of that string and inject nginx
+    # directives. urlsplit() puts everything up to the next /, ? or # into netloc,
+    # quotes and semicolons included. Same discipline as GEOLIBRE_TRUSTED_PROXIES
+    # (parsed through ipaddress) and GEOLIBRE_AI_PROXY_URL (no path/query/fragment).
+    if re.search(r"[^A-Za-z0-9.\-:\[\]]", parsed.netloc):
+        raise SystemExit(
+            f"ERROR: {name} host may contain only letters, digits, dots, hyphens, "
+            f"colons, and brackets, not {parsed.netloc!r}."
+        )
+    if parsed.scheme in loopback_schemes and parsed.hostname in loopback_hosts:
+        return value
+    if parsed.scheme not in schemes or not parsed.netloc:
+        # Joined outside the f-string, and with double quotes. This whole program
+        # is one single-quoted `python -c` argument, so a literal apostrophe here
+        # would close that argument in the shell; Python would then receive
+        # `{/.join(...)}` and die of a SyntaxError. Note -c compiles as a unit, so
+        # that failure hits every deployment at boot, not just an invalid URL.
+        allowed_hosts = "/".join(loopback_hosts)
+        raise SystemExit(
+            f"ERROR: {name} must be a {schemes[0]}:// URL "
+            f"(or {loopback_schemes[0]}:// on {allowed_hosts}), not {value!r}."
+        )
+    return value
+
+
+# Project sharing server. Unset means the public hosted service; "off" removes
+# Share and the Project Gallery from the UI entirely.
+share_url = os.environ.get("GEOLIBRE_SHARE_URL", "").strip()
+if share_url:
+    if share_url.lower() == "off":
+        deployment["VITE_GEOLIBRE_SHARE_URL"] = "off"
+    else:
+        deployment["VITE_GEOLIBRE_SHARE_URL"] = service_url(
+            "GEOLIBRE_SHARE_URL", share_url, ("https",), ("http",), ("localhost", "127.0.0.1")
+        )
+
+# Live collaboration relay. Unset leaves collaboration dark.
+collab_url = os.environ.get("GEOLIBRE_COLLAB_URL", "").strip()
+if collab_url:
+    deployment["VITE_GEOLIBRE_COLLAB_URL"] = service_url(
+        "GEOLIBRE_COLLAB_URL", collab_url, ("wss",), ("ws",), ("localhost", "127.0.0.1", "::1")
+    )
+
 with open("/usr/share/nginx/html/geolibre-runtime-config.js", "w") as output:
     output.write("window.__GEOLIBRE_DEPLOYMENT_ENV__ = ")
     json.dump(deployment, output, separators=(",", ":"))
     output.write(";\n")
 '
+
+# Strip surrounding whitespace exactly as the Python block above does, so the boot
+# log reports the value that actually landed in the runtime config rather than the
+# raw variable (`" off "` is disabled there, and should read as disabled here too).
+trim() {
+  printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
+if [ -n "$(trim "${GEOLIBRE_SHARE_URL:-}")" ]; then
+  SHARE_URL_LOG=$(trim "$GEOLIBRE_SHARE_URL")
+  # Case-insensitive to match the Python validator above and the client's
+  # resolveShareHost, both of which lowercase before comparing to "off".
+  case "$SHARE_URL_LOG" in
+    [oO][fF][fF]) echo "Project sharing disabled (GEOLIBRE_SHARE_URL=off)." ;;
+    *) echo "Project sharing server: $SHARE_URL_LOG" ;;
+  esac
+fi
+
+if [ -n "$(trim "${GEOLIBRE_COLLAB_URL:-}")" ]; then
+  echo "Collaboration relay: $(trim "$GEOLIBRE_COLLAB_URL")"
+fi
 
 if [ -n "${GEOLIBRE_EMBED_ORIGINS:-}" ]; then
   echo "Embed postMessage API enabled for: $GEOLIBRE_EMBED_ORIGINS"
@@ -183,10 +270,33 @@ fi
 # surprises).
 python -c '
 import os
+import re
+from urllib.parse import urlsplit
+
 token = os.environ["GEOLIBRE_SIDECAR_TOKEN"]
+
+# A self-hosted relay has to be allowed in connect-src or the browser blocks its
+# WebSocket: the directive has a bare "https:" (so any share host works) but no
+# bare "wss:". Only the origin is inserted -- CSP source expressions do not take a
+# path, and the value was already validated above.
+collab = os.environ.get("GEOLIBRE_COLLAB_URL", "").strip()
+# Carries its own leading space so the header is byte-identical to the template
+# when no relay is configured.
+collab_src = ""
+if collab:
+    parsed = urlsplit(collab)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    # Re-checked here rather than trusting service_url(): this string goes into a
+    # quoted nginx directive, so it must be a plain origin or nothing at all.
+    if not re.fullmatch(r"[A-Za-z]+://[A-Za-z0-9.\-:\[\]]+", origin):
+        raise SystemExit(f"ERROR: GEOLIBRE_COLLAB_URL is not a plain origin: {collab!r}.")
+    collab_src = f" {origin}"
+
 src = open("/etc/nginx/nginx.conf.template").read()
 open("/etc/nginx/conf.d/default.conf", "w").write(
-    src.replace("__GEOLIBRE_SIDECAR_TOKEN__", token)
+    src.replace("__GEOLIBRE_SIDECAR_TOKEN__", token).replace(
+        "__GEOLIBRE_COLLAB_CONNECT_SRC__", collab_src
+    )
 )
 '
 

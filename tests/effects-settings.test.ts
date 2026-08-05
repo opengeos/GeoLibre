@@ -6,6 +6,7 @@ import {
   HALO_EXTENT_MIN,
   HALO_OPACITY_MAX,
   HALO_OPACITY_MIN,
+  nextEffectsFrameTime,
   normalizeEffectsSettings,
 } from "../packages/plugins/src/plugins/maplibre-effects";
 
@@ -62,5 +63,25 @@ describe("normalizeEffectsSettings", () => {
     assert.equal(result.haloColor, "#111111");
     assert.equal(result.spaceColor, "#222222");
     assert.equal(result.haloOpacity, 0.5);
+  });
+});
+
+describe("nextEffectsFrameTime", () => {
+  it("keeps decorative frames one 60 FPS interval apart on high-refresh displays", () => {
+    let lastFrameTime = -Infinity;
+    const renderedAt: number[] = [];
+
+    for (let index = 0; index < 180; index += 1) {
+      const timestamp = index * (1000 / 90);
+      const nextFrameTime = nextEffectsFrameTime(timestamp, lastFrameTime);
+      if (nextFrameTime === null) continue;
+      renderedAt.push(nextFrameTime);
+      lastFrameTime = nextFrameTime;
+    }
+
+    assert.equal(renderedAt.length, 90);
+    for (let index = 1; index < renderedAt.length; index += 1) {
+      assert.ok(renderedAt[index] - renderedAt[index - 1] + 0.1 >= 1000 / 60);
+    }
   });
 });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GeoLibreProject } from "@geolibre/core";
+import { createEmptyProject } from "@geolibre/core";
 import {
   buildProjectHtml,
   DEFAULT_VIEWER_BASE_URL,
@@ -39,6 +40,24 @@ describe("buildProjectHtml", () => {
     // JSON.parse decodes the < escapes natively, so the parsed object
     // round-trips back to the original project.
     assert.deepEqual(JSON.parse(json[1]), PROJECT);
+  });
+
+  it("redacts credentials from the standalone HTML payload", () => {
+    const project = createEmptyProject("Secret map");
+    project.preferences.geocoding.apiKeys.mapbox = "html-egress-secret";
+    project.layers.push({
+      id: "auth",
+      name: "Authenticated tiles",
+      type: "3d-tiles",
+      source: { requestHeaders: { Authorization: "Bearer html-egress-secret" } },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: {},
+    });
+    const html = buildProjectHtml({ project, title: project.name });
+    assert.ok(!html.includes("html-egress-secret"));
+    assert.match(html, /"apiKeys":\{\}/);
   });
 
   it("defaults the app URL to the hosted viewer", () => {

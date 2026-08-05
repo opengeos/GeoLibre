@@ -1,12 +1,18 @@
 import { useAppStore } from "@geolibre/core";
 import { type RefObject, useEffect } from "react";
 import type { MapController } from "@geolibre/map";
+import { captureMapImage } from "../lib/print-layout-export";
 import {
-  EMBED_ORIGIN_WILDCARD,
   buildEmbedEvent,
+  buildEmbedLayer,
+  embedEventTargets,
+  embedEventVersions,
+  embedLayerSummaries,
+  embedRequestVersion,
   isEmbedOriginAllowed,
   parseEmbedRequest,
   readEmbedOrigins,
+  requireEmbedLayer,
   resolveHighlightIds,
   type EmbedCommand,
   type EmbedEventType,
@@ -55,34 +61,47 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
     // Not framed: there is no host to talk to (the app is the top-level page).
     if (!host || host === window) return;
 
-    const wildcard = allowedOrigins.includes(EMBED_ORIGIN_WILDCARD);
-    // Learned from the host's first allowed message; until then broadcasts go to
-    // each configured origin, so the host never has to speak first to hear
-    // `ready`. Scoping to the exact origin afterwards keeps later payloads off
-    // any other frame that happens to share the allowlist.
+    // Both learned from the host's first allowed message, and both pinned for
+    // the rest of the session; see `embedEventTargets` / `embedEventVersions`
+    // for what each is null until then.
     let hostOrigin: string | null = null;
+    let hostVersion: 1 | 2 | null = null;
     let disposed = false;
 
-    const emit = (type: EmbedEventType, payload: Record<string, unknown>) => {
+    const emit = (type: EmbedEventType, payload: Record<string, unknown>, version?: 1 | 2) => {
       if (disposed) return;
-      const message = buildEmbedEvent(type, payload);
-      const targets = hostOrigin
-        ? [hostOrigin]
-        : wildcard
-          ? [EMBED_ORIGIN_WILDCARD]
-          : allowedOrigins;
-      for (const target of targets) {
-        try {
-          host.postMessage(message, target);
-        } catch (error) {
-          console.error("[GeoLibre] Failed to post embed event", error);
+      const targets = embedEventTargets(hostOrigin, allowedOrigins);
+      const versions = embedEventVersions(version, hostVersion);
+      for (const eventVersion of versions) {
+        const message = buildEmbedEvent(type, payload, eventVersion);
+        for (const target of targets) {
+          try {
+            host.postMessage(message, target);
+          } catch (error) {
+            console.error("[GeoLibre] Failed to post embed event", error);
+          }
         }
       }
     };
 
-    const ack = (requestId: string | null, ok: boolean, error?: string) => {
+    const ack = (
+      requestId: string | null,
+      version: 1 | 2,
+      ok: boolean,
+      error?: string,
+      result?: unknown,
+    ) => {
       if (!requestId) return;
-      emit("ack", { requestId, ok, ...(error ? { error } : {}) });
+      emit(
+        "ack",
+        {
+          requestId,
+          ok,
+          ...(error ? { error } : {}),
+          ...(result === undefined ? {} : { result }),
+        },
+        version,
+      );
     };
 
     const controller = () => mapControllerRef.current;
@@ -166,7 +185,10 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
       state.setProcessingOpen(true);
     };
 
-    const runCommand = async (command: EmbedCommand): Promise<void> => {
+    const requireLayer = (layerId: string) =>
+      requireEmbedLayer(useAppStore.getState().layers, layerId);
+
+    const runCommand = async (command: EmbedCommand): Promise<unknown> => {
       switch (command.type) {
         case "loadProject":
           await loadProjectFromUrl(command.url);
@@ -180,6 +202,34 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
         case "openTool":
           applyOpenTool(command);
           return;
+        case "setLayerVisibility":
+          requireLayer(command.layerId);
+          useAppStore.getState().setLayerVisibility(command.layerId, command.visible);
+          return;
+        case "listLayers":
+          return embedLayerSummaries(useAppStore.getState().layers);
+        case "setFilter":
+          requireLayer(command.layerId);
+          useAppStore.getState().updateLayer(command.layerId, {
+            embedFilter: command.expression ?? undefined,
+          });
+          return;
+        case "getViewport": {
+          const view = controller()?.readView();
+          if (!view) throw new Error("The map is not ready yet");
+          return view;
+        }
+        case "addLayer": {
+          const state = useAppStore.getState();
+          const layer = buildEmbedLayer(command.spec, state.layers);
+          state.addLayer(layer, command.spec.beforeId);
+          return layer.id;
+        }
+        case "exportImage": {
+          const map = controller()?.getMap();
+          if (!map) throw new Error("The map is not ready yet");
+          return captureMapImage(map).image.toDataURL("image/png");
+        }
       }
     };
 
@@ -192,14 +242,21 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
       // exactly this origin. ("null" is an opaque origin, only reachable under
       // the wildcard, and cannot be used as a postMessage target.)
       if (!hostOrigin && event.origin && event.origin !== "null") hostOrigin = event.origin;
+      const requestVersion = embedRequestVersion(event.data);
+      hostVersion ??= requestVersion;
       if ("error" in request) {
-        ack(request.requestId, false, request.error);
+        ack(request.requestId, requestVersion, false, request.error);
         return;
       }
       void runCommand(request.command).then(
-        () => ack(request.requestId, true),
+        (result) => ack(request.requestId, requestVersion, true, undefined, result),
         (error: unknown) => {
-          ack(request.requestId, false, error instanceof Error ? error.message : String(error));
+          ack(
+            request.requestId,
+            requestVersion,
+            false,
+            error instanceof Error ? error.message : String(error),
+          );
         },
       );
     };

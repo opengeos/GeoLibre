@@ -2,6 +2,7 @@ import type { GeoLibreLayer } from "@geolibre/core";
 import { fetchSqlStatus, runSedonaSql } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
 import { tableFromIPC } from "apache-arrow";
+import { IS_MAS_BUILD } from "./build-flags";
 import { loadCereusDb, type CereusInstance } from "./cereus-loader";
 import {
   assignTableNames,
@@ -348,6 +349,9 @@ let sidecarProbe: { at: number; available: boolean } | null = null;
  * connection failure as unavailable.
  */
 async function sidecarSqlAvailable(): Promise<boolean> {
+  // The Mac App Store build has no sidecar; skip the probe and let every
+  // query run on the in-browser CereusDB engine.
+  if (IS_MAS_BUILD) return false;
   const now = Date.now();
   if (sidecarProbe && now - sidecarProbe.at < SIDECAR_PROBE_TTL_MS) {
     return sidecarProbe.available;

@@ -32,6 +32,7 @@ export type BrowserNodeKind =
   | "table" // a database table leaf that opens the add flow for it
   | "folder" // a filesystem directory; expands to its subfolders/loadable files
   | "file" // a loadable file on disk that adds a layer when activated
+  | "library-layer" // a saved Layer Library entry, re-added when activated
   | "info"; // a non-interactive status row (loading / error)
 
 /** One node in the Browser tree. */
@@ -67,6 +68,22 @@ export interface BrowserNode {
   path?: string;
   /** True for a pinned root folder the user can unpin (kind `folder`). */
   removable?: boolean;
+  /** The Layer Library entry this node re-adds (kind `library-layer`). */
+  libraryLayerId?: string;
+  /** True when the node can be renamed in place (kind `library-layer`). */
+  renamable?: boolean;
+  /** True when the node can be deleted from its library (kind `library-layer`). */
+  deletable?: boolean;
+  /**
+   * True when re-adding this saved layer needs a host that can read local
+   * files, for a "desktop only" badge (kind `library-layer`).
+   */
+  needsLocalFile?: boolean;
+  /**
+   * True on the My Data section, whose header carries the library's
+   * import/export (JSON bundle) actions (kind `section`).
+   */
+  libraryImportExport?: boolean;
   /** True for a built-in preset service (read-only), for badge display. */
   builtin?: boolean;
   /** The project path a recent node opens (kind `recent-project`). */
@@ -104,6 +121,14 @@ export interface BrowserTreeInput {
    */
   favorites?: readonly FavoriteNodeInput[];
   /**
+   * The user's saved Layer Library entries (issue #1520), listed under a My
+   * Data section. Omitted (undefined) hides the section; an empty array still
+   * renders it, so the library's Import action is reachable on a first run.
+   * {@link LibraryLayerNodeInput} is the structural subset of
+   * `LayerLibraryEntry` the tree needs.
+   */
+  libraryLayers?: readonly LibraryLayerNodeInput[];
+  /**
    * Translated labels for the top-level sections. Optional so the pure module
    * (and its tests) default to English; the app passes `t()` values.
    */
@@ -113,7 +138,16 @@ export interface BrowserTreeInput {
     databases: string;
     files?: string;
     favorites?: string;
+    myData?: string;
   };
+}
+
+/** A saved Layer Library entry (structural subset of `LayerLibraryEntry`). */
+export interface LibraryLayerNodeInput {
+  id: string;
+  name: string;
+  /** True when only a filesystem-capable host can re-add it. */
+  needsLocalFile?: boolean;
 }
 
 /** Locale-aware, case-insensitive compare for stable label sorting. */
@@ -175,7 +209,8 @@ function buildServiceKinds(services: readonly ServiceLibraryEntry[]): BrowserNod
  * Builds the full Browser tree. Sections with no children are still returned so
  * the panel can render an empty-state hint under them.
  *
- * @param input - The services, recent projects, and database connections.
+ * @param input - The services, recent projects, saved layers, and database
+ *   connections.
  * @returns The top-level section nodes (Services, Recent, and Databases when
  *   `databaseConnections` is provided).
  */
@@ -186,6 +221,7 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
     databases: "Databases",
     files: "Files",
     favorites: "Favorites",
+    myData: "My Data",
   };
   const kinds = buildServiceKinds(input.services);
   const servicesSection: BrowserNode = {
@@ -226,6 +262,33 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
       addable: false,
       count: input.favorites.length,
       children: buildFavoriteNodes(input.favorites),
+    });
+  }
+
+  // My Data (the Layer Library) sits directly under Favorites: it is the user's
+  // own saved content, so it reads before the app's service catalog. Rendered
+  // whenever the input is provided, even when empty, so the Import action is
+  // reachable before anything has been saved.
+  if (input.libraryLayers) {
+    sections.push({
+      id: "section:my-data",
+      kind: "section",
+      label: labels.myData ?? "My Data",
+      addable: false,
+      libraryImportExport: true,
+      count: input.libraryLayers.length,
+      children: input.libraryLayers.map(
+        (entry): BrowserNode => ({
+          id: `library-layer:${entry.id}`,
+          kind: "library-layer",
+          label: entry.name,
+          addable: true,
+          libraryLayerId: entry.id,
+          renamable: true,
+          deletable: true,
+          ...(entry.needsLocalFile ? { needsLocalFile: true } : {}),
+        }),
+      ),
     });
   }
 

@@ -7,8 +7,9 @@
 [![image](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/opengeos/GeoLibre/blob/main/python/examples/getting-started.ipynb)
 [![image](https://img.shields.io/conda/vn/conda-forge/geolibre.svg)](https://anaconda.org/conda-forge/geolibre)
 [![Conda Recipe](https://img.shields.io/badge/recipe-geolibre-green.svg)](https://github.com/conda-forge/geolibre-feedstock)
-[![Open in CodeSandbox](https://img.shields.io/badge/Open%20in-CodeSandbox-blue?logo=codesandbox)](https://codesandbox.io/p/github/opengeos/geolibre)
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-GeoLibre-0078D4?logo=windows)](https://apps.microsoft.com/detail/9nwt67rv531x)
+[![Mac App Store](https://img.shields.io/badge/Mac%20App%20Store-GeoLibre-000000?logo=apple&logoColor=white)](https://apps.apple.com/app/geolibre-desktop/id6796848769)
+[![Google Play](https://img.shields.io/badge/Google%20Play-GeoLibre-01875F?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=org.geolibre.app)
 [![AUR version](https://img.shields.io/aur/version/geolibre-bin?logo=archlinux&label=AUR)](https://aur.archlinux.org/packages/geolibre-bin)
 [![FlatPark](https://img.shields.io/badge/FlatPark-GeoLibre-4A90D9?logo=flatpak)](https://flatpark.org/apps/app.geolibre.GeoLibre/)
 [![image](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -16,10 +17,15 @@
 
 A free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs everywhere you do, in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private.
 
+It also ships **1,000+ geoprocessing tools** that run *entirely in your browser* on WebAssembly — terrain, hydrology, LiDAR, remote sensing, and vector analysis with no server, no install, and no data ever leaving your machine.
+
 GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, **DuckDB-WASM Spatial**, and **deck.gl**. The same workspace runs as a native desktop app, a native Android app, in any modern web browser, and adapts responsively to mobile and small screens.
 
 - **[Launch GeoLibre Web](https://web.geolibre.app/)** — the full app in your browser, nothing to install
 - **[Download the desktop app](https://geolibre.app/downloads/)** — Windows, macOS, and Linux installers
+- **[Get it on the Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769)** — the sandboxed macOS build
+- **[Get it on Google Play](https://play.google.com/store/apps/details?id=org.geolibre.app)** — the native Android app
+- **[1,000+ geoprocessing tools](https://geolibre.app/user-guide/processing/#geoprocessing-toolbox)** — the full toolbox, in the browser
 - **[Get started](https://geolibre.app/getting-started/)** — install, run from source, and configure
 - **[Features](https://geolibre.app/features/)** — the complete feature list
 
@@ -70,6 +76,16 @@ GeoLibre is not limited to Earth. Planetary basemaps from OpenPlanetaryMap and U
     <td align="center"><b>Pluto</b></td>
     <td align="center"><b>Venus</b></td>
   </tr>
+  <tr>
+    <td width="33%"><a href="https://files.opengeos.org/europa.webp"><img src="https://files.opengeos.org/europa.webp" alt="GeoLibre globe view of Europa over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://files.opengeos.org/callisto.webp"><img src="https://files.opengeos.org/callisto.webp" alt="GeoLibre globe view of Callisto over a starfield backdrop"></a></td>
+    <td width="33%"><a href="https://files.opengeos.org/charon.webp"><img src="https://files.opengeos.org/charon.webp" alt="GeoLibre globe view of Charon over a starfield backdrop"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Europa</b></td>
+    <td align="center"><b>Callisto</b></td>
+    <td align="center"><b>Charon</b></td>
+  </tr>
 </table>
 
 Switch bodies from the planet switcher in the Layers panel. See [Demos](https://geolibre.app/demos/) for more.
@@ -78,6 +94,38 @@ Switch bodies from the planet switcher in the Layers panel. See [Demos](https://
 
 - [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 - [Geoprocessing in the Browser: 700+ Free GIS Tools in GeoLibre, Zero Install](https://youtu.be/W32bIQO_nG8)
+
+## Geoprocessing: 1,000+ tools, zero install
+
+[![The GeoLibre Whitebox toolbox running locally with WebAssembly, listing the full catalog of 1,000+ tools with the Regularize Building Footprints tool selected](https://files.opengeos.org/whitebox.webp)](https://files.opengeos.org/whitebox.webp)
+
+**Processing → Whitebox** opens a toolbox of **1,000+ geoprocessing tools** that
+execute in the browser through a WebAssembly runtime with native raster and
+vector I/O. There is no Python sidecar to install and no server to call — the
+tools, your data, and the results all stay on your machine, so the full toolbox
+is available on [GeoLibre Web](https://web.geolibre.app/), on the desktop app,
+and on Android alike.
+
+The tools come from the [Whitebox Next Gen](https://github.com/opengeos/Whitebox-Next-Gen-ArcGIS)
+suite plus GeoLibre's own WASM tools, and are browsable by category straight from
+the Processing menu:
+
+| Category | Tools | Examples |
+| --- | --- | --- |
+| **Vector** | 280 | overlays, buffers, joins, cleaning, topology, generalization |
+| **Raster** | 232 | algebra, filters, reclassification, zonal and focal statistics |
+| **Remote sensing** | 154 | spectral indices, band math, classification, change detection |
+| **Hydrology** | 100 | flow accumulation, watersheds, stream networks, depression filling |
+| **Terrain** | 99 | slope, aspect, hillshade, curvature, ruggedness, viewsheds |
+| **LiDAR** | 65 | point-cloud filtering, ground classification, DEM/DSM generation |
+| **Conversion** | 49 | format translation to cloud-native GeoParquet, PMTiles, and COG |
+| **Network** | 26 | connectivity, cost distance, and routing analysis |
+| **Projection** | 4 | reprojection for raster and vector data |
+
+Any tool is deep-linkable with a `?tool=` URL parameter that preselects it and
+pre-fills its form. See the [Processing Tools guide](https://geolibre.app/user-guide/processing/#geoprocessing-toolbox)
+for details, and [Geoprocessing in the Browser](https://youtu.be/W32bIQO_nG8) for
+a video walkthrough.
 
 ## Documentation
 

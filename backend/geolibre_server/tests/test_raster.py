@@ -634,7 +634,12 @@ def test_raster_calculator_blocks_numpy_io(tmp_path: Path) -> None:
         text=True,
     )
     assert completed.returncode != 0
-    assert "Failed to evaluate expression" in (completed.stdout + completed.stderr)
+    combined = completed.stdout + completed.stderr
+    # ``np.where`` parses as an Attribute-backed Call, and ast.walk reaches the
+    # Call before the Attribute, so the Name-only call allowlist is what rejects
+    # it. Assert the exact message: a looser match would still pass if the check
+    # moved to an unrelated node type.
+    assert "Call to 'Attribute' is not allowed in band math" in combined
     assert not out.exists()
 
 
@@ -1024,3 +1029,152 @@ def test_focal_std_zero_on_flat_input(tmp_path: Path) -> None:
     with rasterio.open(out) as ds:
         got = ds.read(1)
     assert np.allclose(got, 0.0, atol=1e-4)
+
+
+@requires_rasterio
+def test_raster_calculator_blocks_ndarray_tofile(tmp_path: Path) -> None:
+    """Ndarray file I/O via attribute access must not bypass the path allowlist."""
+    src = _write_dem(tmp_path / "dem.tif")
+    out = tmp_path / "calc.tif"
+    evil = tmp_path / "evil.bin"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _RASTER_TOOL_SCRIPTS["raster-calc"],
+            json.dumps(
+                {
+                    "input_path": str(src),
+                    "output_path": str(out),
+                    "expression": f"(A.tofile({str(evil)!r}), A)[1]",
+                }
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    combined = completed.stdout + completed.stderr
+    # The tuple-subscript wrapper is rejected first, so name the node the check
+    # actually reports rather than matching any "may not use" message.
+    assert "Expression may not use Subscript" in combined
+    assert not evil.exists()
+    assert not out.exists()
+
+    # Without the wrapper the call itself is what must be refused, otherwise the
+    # assertion above would still hold if attribute access stopped being blocked.
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _RASTER_TOOL_SCRIPTS["raster-calc"],
+            json.dumps(
+                {
+                    "input_path": str(src),
+                    "output_path": str(out),
+                    "expression": f"A.tofile({str(evil)!r})",
+                }
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "Call to 'Attribute' is not allowed in band math" in (
+        completed.stdout + completed.stderr
+    )
+    assert not evil.exists()
+    assert not out.exists()
+
+
+@requires_rasterio
+def test_raster_calculator_rejects_unbounded_allocations(tmp_path: Path) -> None:
+    """List/bytes/tuple multiplication must not allocate before the shape check."""
+    src = _write_dem(tmp_path / "dem.tif")
+    out = tmp_path / "calc.tif"
+    for expression in (
+        "[0] * 10**9",
+        'b"x" * 10**9',
+        "(0,) * 10**9",
+    ):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                _RASTER_TOOL_SCRIPTS["raster-calc"],
+                json.dumps(
+                    {
+                        "input_path": str(src),
+                        "output_path": str(out),
+                        "expression": expression,
+                    }
+                ),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode != 0, expression
+        combined = completed.stdout + completed.stderr
+        assert "may not use" in combined or "numeric constants" in combined, expression
+        assert not out.exists()
+
+
+@requires_rasterio
+def test_raster_calculator_rejects_runaway_exponents(tmp_path: Path) -> None:
+    """Chained or oversized ``**`` must be refused before eval computes a bignum."""
+    src = _write_dem(tmp_path / "dem.tif")
+    out = tmp_path / "calc.tif"
+    for expression in (
+        "A + 9**9**6",
+        "A + 9**999999",
+        "A + 9 ** (500 * 500)",
+    ):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                _RASTER_TOOL_SCRIPTS["raster-calc"],
+                json.dumps(
+                    {
+                        "input_path": str(src),
+                        "output_path": str(out),
+                        "expression": expression,
+                    }
+                ),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert completed.returncode != 0, expression
+        combined = completed.stdout + completed.stderr
+        assert "Exponent" in combined, expression
+        assert not out.exists()
+
+
+@requires_rasterio
+def test_raster_calculator_allows_ordinary_exponents(tmp_path: Path) -> None:
+    """The ``**`` cap must not disturb the small powers band math actually uses."""
+    import numpy as np
+    import rasterio
+
+    src = _write_dem(tmp_path / "dem.tif")  # band 1 = x + y
+    out = tmp_path / "calc.tif"
+    _run_script(
+        _RASTER_TOOL_SCRIPTS["raster-calc"],
+        {
+            "input_path": str(src),
+            "output_path": str(out),
+            # A negative literal exponent must survive the unary-sign strip.
+            "expression": "(A ** 2) ** 0.5 * 2 ** -2",
+        },
+    )
+    with rasterio.open(src) as ds:
+        a = ds.read(1).astype("float64")
+    with rasterio.open(out) as ds:
+        result = ds.read(1).astype("float64")
+    assert np.allclose(result, (a**2) ** 0.5 * 0.25, atol=1e-4)

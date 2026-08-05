@@ -1544,7 +1544,7 @@ export const maplibreEarthdataGisPlugin: GeoLibrePlugin = {
       app.registerRightPanel?.({
         id: PANEL_ID,
         title: "Earthdata GIS",
-        dock: "right-of-style",
+        dock: "replace-style",
         defaultWidth: 340,
         render: (container) => {
           mountPanel(container);

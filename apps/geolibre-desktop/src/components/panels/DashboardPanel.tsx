@@ -14,7 +14,14 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { numericValues, type ChartRow, type ChartType } from "../../lib/attribute-charts";
+import {
+  distinctCategoryValues,
+  filterRowsBySelections,
+  numericValues,
+  type CategorySelection,
+  type ChartRow,
+  type ChartType,
+} from "../../lib/attribute-charts";
 import { isChartableLayer, useLayerChartData } from "../../hooks/useLayerChartData";
 import { ChartView, computeChart, type ChartSpec } from "./charts/chart-view";
 import { WidgetEditorDialog } from "./WidgetEditorDialog";
@@ -27,6 +34,10 @@ const DEFAULT_DASHBOARD_HEIGHT = 360;
 // scrolls instead of crushing the charts. A single row has no floor, so it
 // fills and resizes with the panel height (issue #728).
 const MIN_DASHBOARD_ROW_HEIGHT = 200;
+// Shared empty selection, so an unselected widget gets a stable array identity
+// and does not re-run its filter memo on every render.
+const EMPTY_SELECTION: string[] = [];
+const EMPTY_SELECTIONS: CategorySelection[] = [];
 
 /** Compute the indicator value from layer data and an aggregation. Returns
  * null when there is no numeric data to aggregate. Count works on any layer. */
@@ -90,8 +101,9 @@ function widgetToSpec(widget: DashboardWidget, type: ChartType): ChartSpec {
  * The Dashboard panel: a bottom-docked, resizable strip of chart widgets, each
  * bound to a layer and field(s), in the spirit of CARTO Builder / Foursquare
  * Studio (issue #401). Widgets are stored in the project, so a dashboard
- * reopens intact. Rendered only while open. Charts are read-only summaries
- * here; cross-filtering the map is intentionally out of scope for now.
+ * reopens intact. Rendered only while open. Selector widgets cross-filter the
+ * other widgets bound to the same layer (issue #1381); filtering the map itself
+ * is still out of scope.
  */
 export function DashboardPanel() {
   const { t } = useTranslation();
@@ -101,7 +113,7 @@ export function DashboardPanel() {
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
   const setDashboardColumns = useAppStore((s) => s.setDashboardColumns);
   const addWidget = useAppStore((s) => s.addWidget);
-  const updateWidget = useAppStore((s) => s.updateWidget);
+  const replaceWidget = useAppStore((s) => s.replaceWidget);
   const removeWidget = useAppStore((s) => s.removeWidget);
   const moveWidget = useAppStore((s) => s.moveWidget);
 
@@ -123,6 +135,44 @@ export function DashboardPanel() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<DashboardWidget | null>(null);
+  // Each selector widget's picked values, by widget id. Held here rather than
+  // inside the selector so the other widgets on the same layer can filter by it
+  // (issue #1381). Deliberately not part of the project: a selection is a way
+  // of looking at the data, not a property of it, so it starts empty each time
+  // the dashboard opens.
+  const [selections, setSelections] = useState<Record<string, string[]>>({});
+
+  const setSelection = (widgetId: string, values: string[]) => {
+    setSelections((prev) => ({ ...prev, [widgetId]: values }));
+  };
+  const clearSelection = (widgetId: string) => {
+    setSelections((prev) => {
+      if (!(widgetId in prev)) return prev;
+      const { [widgetId]: _dropped, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  // The filters each widget should honor: every *other* selector bound to the
+  // same layer. A selector never filters itself — its own chips stay complete
+  // so a choice can always be changed or undone. Memoized so a widget's filter
+  // list keeps its identity until the widgets or the selections actually move.
+  const selectionsByWidget = useMemo(() => {
+    const selectors = widgets.filter(
+      (widget): widget is DashboardWidget & { category: string } =>
+        widget.type === "selector" && Boolean(widget.category),
+    );
+    const byWidget: Record<string, CategorySelection[]> = {};
+    for (const widget of widgets) {
+      byWidget[widget.id] = selectors
+        .filter((other) => other.id !== widget.id && other.layerId === widget.layerId)
+        .map((other) => ({
+          field: other.category,
+          values: selections[other.id] ?? EMPTY_SELECTION,
+        }));
+    }
+    return byWidget;
+  }, [widgets, selections]);
 
   // Layers that expose chartable attributes, for the editor's layer picker.
   const chartableLayers = useMemo(
@@ -193,9 +243,23 @@ export function DashboardPanel() {
     setEditorOpen(true);
   };
   const handleSave = (widget: DashboardWidget) => {
-    if (widgets.some((w) => w.id === widget.id)) {
-      const { id: _id, ...patch } = widget;
-      updateWidget(widget.id, patch);
+    const previous = widgets.find((w) => w.id === widget.id);
+    if (previous) {
+      // Drop a selection the edit invalidates: values picked from another
+      // layer, another field, or in multi-select mode no longer apply once the
+      // selector points somewhere else.
+      if (
+        previous.layerId !== widget.layerId ||
+        previous.category !== widget.category ||
+        previous.multiple !== widget.multiple
+      ) {
+        clearSelection(widget.id);
+      }
+      // The editor hands back a complete record, so replace rather than merge:
+      // it omits the optional fields that were left empty, and merging would
+      // keep the previous title/color/prefix/suffix instead of clearing them.
+      const { id: _id, ...next } = widget;
+      replaceWidget(widget.id, next);
     } else {
       addWidget(widget);
     }
@@ -335,8 +399,14 @@ export function DashboardPanel() {
                   widget={widget}
                   index={index}
                   count={widgets.length}
+                  selected={selections[widget.id] ?? EMPTY_SELECTION}
+                  onSelect={(values) => setSelection(widget.id, values)}
+                  selections={selectionsByWidget[widget.id] ?? EMPTY_SELECTIONS}
                   onEdit={() => openEdit(widget)}
-                  onRemove={() => removeWidget(widget.id)}
+                  onRemove={() => {
+                    clearSelection(widget.id);
+                    removeWidget(widget.id);
+                  }}
                   onMove={(toIndex) => moveWidget(widget.id, toIndex)}
                 />
               ))}
@@ -360,6 +430,9 @@ function WidgetCard({
   widget,
   index,
   count,
+  selected,
+  onSelect,
+  selections,
   onEdit,
   onRemove,
   onMove,
@@ -367,19 +440,49 @@ function WidgetCard({
   widget: DashboardWidget;
   index: number;
   count: number;
+  selected: string[];
+  onSelect: (values: string[]) => void;
+  selections: CategorySelection[];
   onEdit: () => void;
   onRemove: () => void;
   onMove: (toIndex: number) => void;
 }) {
   const { t } = useTranslation();
   const data = useLayerChartData(widget.layerId);
+  // Rows narrowed by the other selectors on this layer. A selector reads the
+  // unfiltered rows instead, so its own chip list always offers every value.
+  const rows = useMemo(
+    () => (widget.type === "selector" ? data.rows : filterRowsBySelections(data.rows, selections)),
+    [data.rows, selections, widget.type],
+  );
   const result = useMemo(
     () =>
-      widget.type === "indicator"
+      widget.type === "indicator" || widget.type === "selector" || widget.type === "list"
         ? null
-        : computeChart(data.rows, widgetToSpec(widget, widget.type)),
-    [data.rows, widget],
+        : computeChart(rows, widgetToSpec(widget, widget.type)),
+    [rows, widget],
   );
+  // A selector's chip values and its "N of total" counts. Memoized because the
+  // render branch below is an IIFE: without this, every re-render of the card
+  // (including ones driven by unrelated dashboard state) repeats a full scan of
+  // the layer's rows.
+  const selectorData = useMemo(() => {
+    if (widget.type !== "selector" || !widget.category) return null;
+    const category = widget.category;
+    // Both counts are measured against the same baseline — the rows left by the
+    // *other* selectors on this layer — so "N of total" never reads as a
+    // fraction of the whole layer while another selector has already narrowed
+    // it.
+    const narrowed = filterRowsBySelections(rows, selections);
+    return {
+      values: distinctCategoryValues(rows, category),
+      total: narrowed.length,
+      matched:
+        selected.length > 0
+          ? filterRowsBySelections(narrowed, [{ field: category, values: selected }]).length
+          : null,
+    };
+  }, [rows, selections, selected, widget.type, widget.category]);
   // A readable title from the widget's chart type and fields when untitled.
   const defaultWidgetTitle = (): string => {
     switch (widget.type) {
@@ -406,6 +509,16 @@ function WidgetCard({
         const agg = widget.indicatorAggregation ?? "count";
         const aggLabel = t(`dashboard.indicatorAggregation.${agg}`);
         return widget.field ? `${aggLabel} · ${widget.field}` : aggLabel;
+      }
+      case "selector":
+        return `${t("dashboard.chartType.selector")} · ${widget.category ?? ""}`;
+      case "list": {
+        // The layer name is already the subtitle, so fall back to the chosen
+        // columns rather than repeating it (or showing the internal layer id).
+        const columns = widget.listFields?.join(", ") ?? "";
+        return columns
+          ? `${t("dashboard.chartType.list")} · ${columns}`
+          : t("dashboard.chartType.list");
       }
     }
   };
@@ -473,7 +586,7 @@ function WidgetCard({
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1">
           {(() => {
             const agg = widget.indicatorAggregation ?? "count";
-            const value = computeIndicator(data.rows, widget.field, agg);
+            const value = computeIndicator(rows, widget.field, agg);
             if (value === null) {
               return (
                 <p className="text-center text-xs text-muted-foreground">{t("dashboard.noData")}</p>
@@ -496,6 +609,75 @@ function WidgetCard({
             );
           })()}
         </div>
+      ) : widget.type === "selector" ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto">
+          {(() => {
+            if (!data.hasData || !selectorData || selectorData.values.length === 0) {
+              return (
+                <p className="text-center text-xs text-muted-foreground">{t("dashboard.noData")}</p>
+              );
+            }
+
+            // `matched` is how many features the dashboard is left looking at,
+            // including this selector's own choice. Shown so a selection reads
+            // as having done something even on a dashboard with no other widget
+            // to filter — otherwise the chip highlight is the only feedback.
+            return (
+              <SelectorValues
+                values={selectorData.values}
+                multiple={widget.multiple ?? false}
+                selected={selected}
+                onChange={onSelect}
+                matched={selectorData.matched}
+                total={selectorData.total}
+                matchLabel={(count, total) => t("dashboard.selectorMatches", { count, total })}
+                onClear={() => onSelect(EMPTY_SELECTION)}
+                clearLabel={t("dashboard.selectorClear")}
+              />
+            );
+          })()}
+        </div>
+      ) : widget.type === "list" ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+          {(() => {
+            if (!data.hasData || !widget.listFields || widget.listFields.length === 0) {
+              return (
+                <p className="text-center text-xs text-muted-foreground">{t("dashboard.noData")}</p>
+              );
+            }
+            // `rows` is the outer memo: already narrowed by the selectors on
+            // this layer, so a list cross-filters like every other widget.
+            const sortBy = widget.sortBy;
+            const sortDir = widget.sortDir ?? "desc";
+            const limit = widget.limit ?? 20;
+
+            // Sort rows if sortBy is set.
+            let sorted = rows;
+            if (sortBy) {
+              sorted = [...rows].sort((a, b) => {
+                const av = (a as unknown as Record<string, unknown>)[sortBy];
+                const bv = (b as unknown as Record<string, unknown>)[sortBy];
+                // Numeric comparison if both values are numbers.
+                const an = Number(av);
+                const bn = Number(bv);
+                if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) {
+                  return sortDir === "asc" ? an - bn : bn - an;
+                }
+                // Fall back to string comparison.
+                const as = String(av ?? "");
+                const bs = String(bv ?? "");
+                return sortDir === "asc" ? as.localeCompare(bs) : bs.localeCompare(as);
+              });
+            }
+
+            return (
+              <ListTable
+                fields={widget.listFields}
+                rows={sorted.slice(0, limit) as unknown as Record<string, unknown>[]}
+              />
+            );
+          })()}
+        </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col [&>svg]:min-h-0 [&>svg]:flex-1">
           {data.hasData && result ? (
@@ -508,5 +690,118 @@ function WidgetCard({
         </div>
       )}
     </div>
+  );
+}
+
+/** Renders the selector widget body: a scrollable list of clickable value
+ * chips. In single mode clicking a value selects it alone; in multi mode each
+ * chip toggles independently, and clicking a selected chip clears it. Controlled
+ * by the panel, which holds the selection so the other widgets on the layer can
+ * filter by it. */
+function SelectorValues({
+  values,
+  multiple,
+  selected,
+  onChange,
+  matched,
+  total,
+  matchLabel,
+  onClear,
+  clearLabel,
+}: {
+  values: string[];
+  multiple: boolean;
+  selected: string[];
+  onChange: (values: string[]) => void;
+  /** Features left after this selection, or null when nothing is selected. */
+  matched: number | null;
+  total: number;
+  matchLabel: (count: number, total: number) => string;
+  onClear: () => void;
+  clearLabel: string;
+}) {
+  const active = new Set(selected);
+
+  const toggle = (value: string) => {
+    if (active.has(value)) {
+      onChange(selected.filter((entry) => entry !== value));
+      return;
+    }
+    onChange(multiple ? [...selected, value] : [value]);
+  };
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-1.5">
+        {values.map((value) => {
+          const isSelected = active.has(value);
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={isSelected}
+              onClick={() => toggle(value)}
+              className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                isSelected
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground hover:border-primary/50"
+              }`}
+            >
+              {value}
+            </button>
+          );
+        })}
+      </div>
+      {matched !== null ? (
+        <div className="flex shrink-0 items-center justify-between gap-2 text-xs text-muted-foreground">
+          {/* aria-live so the count is announced when a chip changes it; the
+              chips themselves only convey selection, not its effect. */}
+          <span aria-live="polite">{matchLabel(matched, total)}</span>
+          <button
+            type="button"
+            onClick={onClear}
+            className="rounded px-1.5 py-0.5 underline-offset-2 hover:underline"
+          >
+            {clearLabel}
+          </button>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/** Renders the list widget body: a compact scrollable HTML table showing the
+ * selected columns for the top-N features (by sortBy/sortDir, limited by limit).
+ * Like the selector, this does not yet participate in cross-filtering. */
+function ListTable({ fields, rows }: { fields: string[]; rows: Record<string, unknown>[] }) {
+  return (
+    <table className="w-full border-collapse text-xs">
+      <thead>
+        <tr>
+          {fields.map((f) => (
+            <th
+              key={f}
+              className="border-b border-border px-1.5 py-1 text-left font-medium text-muted-foreground"
+            >
+              {f}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, i) => (
+          <tr key={i} className="hover:bg-muted/50">
+            {fields.map((f) => {
+              const v = row[f];
+              return (
+                <td key={f} className="border-b border-border/50 px-1.5 py-0.5">
+                  {v === null || v === undefined ? "" : String(v)}
+                </td>
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

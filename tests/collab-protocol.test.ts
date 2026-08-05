@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  COLLAB_URL_ENV,
   CollabConnection,
   createSession,
   httpBaseFromWs,
@@ -42,6 +43,25 @@ describe("resolveCollabBaseUrl", () => {
   it("returns null when unset", () => {
     assert.equal(resolveCollabBaseUrl(undefined), null);
     assert.equal(resolveCollabBaseUrl(""), null);
+  });
+
+  // The Docker entrypoint writes this at container startup, so a prebuilt image
+  // can point at a self-hosted relay without a rebuild (GeoLibre#1684).
+  it("prefers the deployment env over the build-time env", () => {
+    assert.equal(
+      resolveCollabBaseUrl(undefined, { [COLLAB_URL_ENV]: "wss://collab.example.org" }),
+      "wss://collab.example.org",
+    );
+  });
+
+  it("refuses credentials embedded in the URL, on any scheme", () => {
+    assert.equal(resolveCollabBaseUrl("wss://user:pass@collab.example.org"), null);
+    assert.equal(resolveCollabBaseUrl("ws://user:pass@127.0.0.1:8787"), null);
+  });
+
+  it("still validates a deployment-provided value", () => {
+    assert.equal(resolveCollabBaseUrl(undefined, { [COLLAB_URL_ENV]: "ws://relay.corp" }), null);
+    assert.equal(resolveCollabBaseUrl(undefined, { [COLLAB_URL_ENV]: "  " }), null);
   });
 });
 
@@ -146,8 +166,8 @@ describe("createSession", () => {
     });
   });
 
-  it("throws when collaboration is not configured", async () => {
-    await assert.rejects(() => createSession("co-edit", null, ok({})), /not configured/);
+  it("rejects when collaboration baseUrl is null", async () => {
+    await assert.rejects(() => createSession("co-edit", null), /Collaboration is not configured/);
   });
 
   it("throws on an unexpected response shape", async () => {
@@ -262,5 +282,79 @@ describe("CollabConnection", () => {
     second.conn.close();
     second.holder.socket!.emit("close");
     assert.ok(second.events.includes("close:false"));
+  });
+
+  it("receives and parses comment-mutation messages", () => {
+    const { conn, holder, received } = setup();
+    conn.connect();
+    holder.socket!.readyState = FakeWebSocket.OPEN;
+
+    const mutationMsg: ServerMessage = {
+      type: "comment-mutation",
+      action: {
+        type: "add",
+        comment: {
+          id: "comm-123",
+          anchor: { type: "point", lngLat: [10, 20] },
+          author: { name: "Tester", color: "#ff0000" },
+          body: "Hello Test Comment",
+          createdAt: "2026-08-01T00:00:00.000Z",
+          resolved: false,
+          replies: [],
+        },
+      },
+    };
+
+    holder.socket!.emit("message", { data: JSON.stringify(mutationMsg) });
+    assert.equal(received.length, 1);
+    assert.equal(received[0]?.type, "comment-mutation");
+    if (received[0]?.type === "comment-mutation") {
+      assert.equal(received[0].action.type, "add");
+      assert.equal(received[0].action.comment.id, "comm-123");
+    }
+    conn.close();
+  });
+
+  it("sends comment-mutation client messages correctly", () => {
+    const { conn, holder } = setup();
+    conn.connect();
+    holder.socket!.readyState = FakeWebSocket.OPEN;
+
+    const sendMsg: ClientMessage = {
+      type: "comment-mutation",
+      action: {
+        type: "toggle-resolve",
+        commentId: "comm-456",
+        resolved: true,
+      },
+    };
+
+    conn.send(sendMsg);
+    assert.equal(holder.socket!.sent.length, 1);
+    const parsed = JSON.parse(holder.socket!.sent[0] ?? "null") as ClientMessage;
+    assert.equal(parsed.type, "comment-mutation");
+    if (parsed.type === "comment-mutation") {
+      assert.equal(parsed.action.type, "toggle-resolve");
+      assert.equal(parsed.action.commentId, "comm-456");
+    }
+    conn.close();
+  });
+
+  it("handles malformed comment-mutation actions safely", () => {
+    const { conn, holder } = setup();
+    conn.connect();
+    holder.socket!.readyState = FakeWebSocket.OPEN;
+
+    const malformedMsg = {
+      type: "comment-mutation",
+      action: {
+        type: "add",
+        comment: "not-an-object",
+      },
+    };
+
+    conn.send(malformedMsg as unknown as ClientMessage);
+    assert.equal(holder.socket!.sent.length, 1);
+    conn.close();
   });
 });

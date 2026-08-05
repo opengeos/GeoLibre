@@ -45,6 +45,7 @@ import {
   type FileDialogFilter,
 } from "../../lib/tauri-io";
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
 import i18n from "../../i18n";
@@ -276,7 +277,9 @@ const WASM_ONLY_KINDS: ReadonlySet<ConversionToolKind> = new Set(["raster-to-pmt
 /** Whether a tool runs client-side rather than through the Python sidecar. */
 function conversionUsesBrowserRuntime(kind: ConversionToolKind, desktop: boolean): boolean {
   if (WASM_ONLY_KINDS.has(kind)) return true;
-  return !desktop && WEB_RUNTIME_KINDS.has(kind);
+  // The Mac App Store build has no sidecar, so it routes like the web build:
+  // every kind with a client-side engine runs in the browser runtime.
+  return (!desktop || IS_MAS_BUILD) && WEB_RUNTIME_KINDS.has(kind);
 }
 
 // Vector output extensions no JS writer covers but geolibre-wasm's
@@ -614,14 +617,17 @@ export function ConversionDialog() {
       setRuntimeMessage(i18n.t(browserRuntimeMessageKey(kind)));
       return;
     }
-    if (!desktop) {
+    if (!desktop || IS_MAS_BUILD) {
       // No kind reaches this today — every ConversionToolKind now has a
       // client-side engine (see WEB_RUNTIME_KINDS/WASM_ONLY_KINDS), Vector to
       // PMTiles being the last to get one. It stays as the guard for any future
-      // sidecar-only conversion, so a pure web build says so outright instead of
+      // sidecar-only conversion, so a pure web build (or the Mac App Store
+      // build, which has no sidecar either) says so outright instead of
       // trying to reach a sidecar it cannot start.
       setRuntimeAvailable(false);
-      setRuntimeMessage(i18n.t("toolbar.conversion.needsDesktop"));
+      setRuntimeMessage(
+        IS_MAS_BUILD ? i18n.t("masBuild.unavailable") : i18n.t("toolbar.conversion.needsDesktop"),
+      );
       return;
     }
     setRuntimeAvailable(null);
@@ -1487,7 +1493,9 @@ export function ConversionDialog() {
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 {runtimeMessage}
               </p>
-              {desktop && (
+              {/* No Start server in the Mac App Store build: the sidecar
+                  cannot be spawned there. */}
+              {desktop && !IS_MAS_BUILD && (
                 <Button
                   type="button"
                   variant="outline"

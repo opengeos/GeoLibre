@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import sys
+import types
+
 import pytest
 
 import geolibre.geolibre as gmod
@@ -91,6 +94,15 @@ def test_add_flatgeobuf_sets_format(m):
     assert _last_layer(m)["metadata"]["vectorState"]["format"] == "flatgeobuf"
 
 
+def test_format_convenience_methods(m):
+    m.add_kml("https://e/data.kml")
+    assert _last_layer(m)["metadata"]["vectorState"]["format"] == "kml"
+    m.add_gpkg("https://e/data.gpkg", layer="roads")
+    layer = _last_layer(m)
+    assert layer["metadata"]["vectorState"]["format"] == "gpkg"
+    assert layer["metadata"]["vectorState"]["sourceLayer"] == "roads"
+
+
 def test_add_vector_tiles(m):
     m.add_vector_tiles("https://e/tiles.json", source_layer="x")
     layer = _last_layer(m)
@@ -142,9 +154,10 @@ def test_add_vector_local_file_inlined(monkeypatch, m):
     fake_fc = {"type": "FeatureCollection", "features": []}
     captured = {}
 
-    def fake_read(path, data_format=None):
+    def fake_read(path, data_format=None, source_layer=None):
         captured["path"] = path
         captured["data_format"] = data_format
+        captured["source_layer"] = source_layer
         return fake_fc
 
     monkeypatch.setattr(gmod, "_read_local_vector", fake_read)
@@ -156,10 +169,45 @@ def test_add_vector_local_file_inlined(monkeypatch, m):
     assert captured["data_format"] == "parquet"
 
 
-def test_add_vector_local_file_warns_on_ignored_kwargs(monkeypatch, m):
-    monkeypatch.setattr(gmod, "_read_local_vector", lambda _p, data_format=None: {"type": "x"})
+def test_add_vector_local_file_warns_on_ignored_render_mode(monkeypatch, m):
+    monkeypatch.setattr(
+        gmod,
+        "_read_local_vector",
+        lambda _p, data_format=None, source_layer=None: {"type": "x"},
+    )
     with pytest.warns(UserWarning, match="ignored for local files"):
-        m.add_vector("/data/parcels.shp", source_layer="layer0")
+        m.add_vector("/data/parcels.shp", render_mode="tiles")
+
+
+def test_add_gpkg_forwards_local_source_layer(monkeypatch, m):
+    captured = {}
+
+    def fake_read(path, data_format=None, source_layer=None):
+        captured.update(path=path, data_format=data_format, source_layer=source_layer)
+        return {"type": "FeatureCollection", "features": []}
+
+    monkeypatch.setattr(gmod, "_read_local_vector", fake_read)
+    m.add_gpkg("/data/maps.gpkg", layer="roads")
+    assert captured == {
+        "path": "/data/maps.gpkg",
+        "data_format": "gpkg",
+        "source_layer": "roads",
+    }
+
+
+def test_read_local_vector_warns_on_parquet_source_layer(monkeypatch, tmp_path):
+    class _FakeGdf:
+        crs = None
+
+        def to_json(self):
+            return '{"type": "FeatureCollection", "features": []}'
+
+    path = tmp_path / "data.parquet"
+    path.write_bytes(b"")
+    fake_geopandas = types.SimpleNamespace(read_parquet=lambda _p: _FakeGdf())
+    monkeypatch.setitem(sys.modules, "geopandas", fake_geopandas)
+    with pytest.warns(UserWarning, match="source_layer is ignored"):
+        gmod._read_local_vector(path, source_layer="roads")
 
 
 def test_add_vector_geo_interface_inlined(m):
@@ -278,7 +326,80 @@ def test_add_markers_from_geojson(m):
 
 def test_add_circle_markers_sets_radius(m):
     m.add_circle_markers([(0, 0)], radius=12)
-    assert _last_layer(m)["style"]["circleRadius"] == 12.0
+    assert _last_layer(m)["style"]["circleRadius"] == 12
+
+
+def test_add_heatmap_sets_renderer(m):
+    m.add_heatmap([(0, 0), (1, 1)], radius=42, intensity=1.5)
+    style = _last_layer(m)["style"]
+    assert style["pointRenderer"] == "heatmap"
+    assert style["heatmapRadius"] == 42
+    assert style["heatmapIntensity"] == 1.5
+
+
+def test_add_heatmap_validates_parameters(m):
+    with pytest.raises(ValueError, match="radius"):
+        m.add_heatmap([(0, 0)], radius=0)
+    with pytest.raises(ValueError, match="intensity"):
+        m.add_heatmap([(0, 0)], intensity=-1)
+    with pytest.raises(ValueError, match="radius"):
+        m.add_heatmap([(0, 0)], radius=float("nan"))
+    with pytest.raises(ValueError, match="radius"):
+        m.add_heatmap([(0, 0)], radius=float("inf"))
+    with pytest.raises(ValueError, match="intensity"):
+        m.add_heatmap([(0, 0)], intensity=float("nan"))
+
+
+def test_add_xy_data_from_records(m):
+    m.add_xy_data(
+        [{"lon": "-100", "lat": "40", "city": "A"}],
+        x="lon",
+        y="lat",
+    )
+    feature = _last_layer(m)["geojson"]["features"][0]
+    assert feature["geometry"]["coordinates"] == [-100.0, 40.0]
+    assert feature["properties"] == {"city": "A"}
+
+
+def test_add_csv_from_text(m):
+    m.add_csv("longitude,latitude,name\n-100,40,A\n")
+    feature = _last_layer(m)["geojson"]["features"][0]
+    assert feature["properties"]["name"] == "A"
+
+
+def test_add_xy_data_rejects_missing_or_invalid_coordinates(m):
+    with pytest.raises(ValueError, match="missing coordinate"):
+        m.add_xy_data([{"longitude": 1}])
+    with pytest.raises(ValueError, match="invalid coordinates"):
+        m.add_xy_data([{"longitude": "nope", "latitude": 1}])
+    with pytest.raises(ValueError, match="invalid coordinates"):
+        m.add_xy_data([{"longitude": "nan", "latitude": 1}])
+    with pytest.raises(ValueError, match="invalid coordinates"):
+        m.add_xy_data([{"longitude": 1, "latitude": float("inf")}])
+
+
+def test_add_csv_keeps_extra_fields_under_a_string_key(m):
+    m.add_csv("longitude,latitude\n-100,40,spill\n")
+    properties = _last_layer(m)["geojson"]["features"][0]["properties"]
+    assert properties == {gmod._CSV_RESTKEY: ["spill"]}
+
+
+def test_add_csv_rejects_non_public_url(m):
+    with pytest.raises(ValueError, match="non-public address"):
+        m.add_csv("http://127.0.0.1/points.csv")
+
+
+def test_add_csv_rejects_oversized_file(monkeypatch, tmp_path, m):
+    path = tmp_path / "points.csv"
+    path.write_text("longitude,latitude\n-100,40\n", encoding="utf-8")
+    monkeypatch.setattr(gmod, "_MAX_TABULAR_BYTES", 4)
+    with pytest.raises(ValueError, match="size limit"):
+        m.add_csv(str(path))
+
+
+def test_add_gdf_requires_geo_interface(m):
+    with pytest.raises(TypeError, match="__geo_interface__"):
+        m.add_gdf([{"x": 1}])
 
 
 def test_add_marker_cluster_enables_clustering(m):

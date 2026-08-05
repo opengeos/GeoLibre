@@ -31,6 +31,7 @@ export const LANGUAGE_NAMES: Record<string, { nativeName: string; englishName: s
   hi: { nativeName: "हिन्दी", englishName: "Hindi" },
   ar: { nativeName: "العربية", englishName: "Arabic" },
   ka: { nativeName: "ქართული", englishName: "Georgian" },
+  th: { nativeName: "ไทย", englishName: "Thai" },
 };
 
 /**

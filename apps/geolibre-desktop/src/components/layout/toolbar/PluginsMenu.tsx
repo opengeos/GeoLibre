@@ -1,6 +1,7 @@
 import {
   COMPONENTS_PLUGIN_ID,
   DECK_VIZ_PLUGIN_ID,
+  DGGS_PLUGIN_IDS,
   DIRECTIONS_PLUGIN_ID,
   type GeoLibreMapControlPosition,
   GRATICULE_PLUGIN_ID,
@@ -36,6 +37,9 @@ type RegisteredPlugin = PluginRegistry["plugins"][number];
 
 // Plugins grouped under the "Web Services" submenu of the Plugins menu.
 const WEB_SERVICE_PLUGIN_ID_SET = new Set<string>(WEB_SERVICE_PLUGIN_IDS);
+
+// The discrete global grids (H3, S2, A5) grouped under the "DGGS" submenu.
+const DGGS_PLUGIN_ID_SET = new Set<string>(DGGS_PLUGIN_IDS);
 
 interface PluginsMenuProps {
   chrome: ToolbarChrome;
@@ -117,6 +121,13 @@ export function PluginsMenu({
   // first of them appears in registration order (just above Historical Imagery).
   let webServicesRendered = false;
 
+  const dggsPlugins = plugins.filter(
+    (p) => DGGS_PLUGIN_ID_SET.has(p.id) && !hiddenPluginIds.has(p.id),
+  );
+  // The DGGS grid plugins (H3, S2, A5) render as one grouped submenu, placed
+  // where the first of them appears in registration order.
+  let dggsRendered = false;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -160,6 +171,24 @@ export function PluginsMenu({
           // Hidden by the active UI profile (issue #500).
           if (hiddenPluginIds.has(p.id)) {
             return null;
+          }
+          if (DGGS_PLUGIN_ID_SET.has(p.id)) {
+            // Same one-shot pattern as the Web Services submenu below: the
+            // submenu renders at the first visible DGGS plugin's position and
+            // later ones are skipped.
+            if (dggsRendered) return null;
+            dggsRendered = true;
+            return (
+              <DropdownMenuSub key="dggs">
+                <DropdownMenuSubTrigger>
+                  {t("toolbar.item.dggs")}
+                  {dggsPlugins.some((plugin) => isActive(plugin.id)) ? " ✓" : ""}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {dggsPlugins.map(renderPluginMenuItem)}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            );
           }
           if (!WEB_SERVICE_PLUGIN_ID_SET.has(p.id)) {
             return renderPluginMenuItem(p);

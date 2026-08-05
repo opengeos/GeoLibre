@@ -32,7 +32,7 @@ import type {
 } from "geojson";
 import { layerJoinKey, type GeoLibreLayer } from "@geolibre/core";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
-import { createH3GridTool, binPointsTool } from "./h3-tools";
+import { createDggsGridTool, dggsBinPointsTool, dggsCompactTool } from "./dggs-tools";
 import { TOPOLOGY_TOOLS } from "./topology-tools";
 
 /** Upper bound on input×overlay pairs for the main-thread pairwise loops. */
@@ -2691,9 +2691,10 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   gridTool,
   voronoiTool,
   cellSectorsTool,
-  createH3GridTool,
-  binPointsTool,
-  // Movement & time tools come after H3 so the dialog's group order (derived
+  createDggsGridTool,
+  dggsBinPointsTool,
+  dggsCompactTool,
+  // Movement & time tools come after DGGS so the dialog's group order (derived
   // from this array) matches the Processing → Vector menu order.
   trajectorySpeedTool,
   detectStopsTool,
@@ -2704,4 +2705,33 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
 
 export function getVectorTool(id: string): ProcessingAlgorithm | undefined {
   return VECTOR_TOOLS.find((tool) => tool.id === id);
+}
+
+/**
+ * Old H3 processing tool IDs from history entries written before the DGGS
+ * rename. Map them onto the current tools and default `dggsType` to `"h3"`.
+ */
+const H3_VECTOR_TOOL_ALIASES: Readonly<Record<string, string>> = {
+  "h3-grid": "dggs-grid",
+  "h3-bin-points": "dggs-bin",
+};
+
+/**
+ * Resolve a vector History re-run's tool id (and parameters) for today's
+ * registry. Unknown ids pass through unchanged so the dialog can still report
+ * "tool unavailable".
+ */
+export function resolveVectorRerun(
+  toolId: string,
+  parameters: Record<string, unknown> = {},
+): { toolId: string; parameters: Record<string, unknown> } {
+  const mapped = H3_VECTOR_TOOL_ALIASES[toolId];
+  if (!mapped) return { toolId, parameters };
+  return {
+    toolId: mapped,
+    parameters: {
+      ...parameters,
+      dggsType: parameters.dggsType ?? "h3",
+    },
+  };
 }

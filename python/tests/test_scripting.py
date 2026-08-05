@@ -11,6 +11,7 @@ import pytest
 
 import geolibre.geolibre as gmod
 from geolibre.geolibre import Feature, Layer, Map
+from geolibre.project import redact_credentials
 
 
 @pytest.fixture
@@ -299,6 +300,135 @@ def test_to_html_returns_string_with_project(m):
     assert '"mapView"' in html
 
 
+def test_python_project_egress_redacts_credentials(m, tmp_path):
+    m.project["basemapStyleUrl"] = (
+        "https://styles.example.com/map.json?api-key=python-basemap-secret"
+    )
+    m.project["preferences"]["environmentVariables"] = [
+        {"key": "SERVICE_TOKEN", "value": "python-env-secret", "enabled": True}
+    ]
+    m.project["preferences"]["geocoding"] = {
+        "providerId": "mapbox",
+        "apiKeys": {"mapbox": "python-geocoder-secret"},
+        "forwardEndpoint": "https://geocode.example.com?key=python-endpoint-secret",
+    }
+    m.project["layers"] = [
+        {
+            "id": "auth",
+            "name": "Authenticated tiles",
+            "type": "3d-tiles",
+            "source": {
+                "url": "https://user:p@ssword@example.com/tiles?token=python-url-secret&subscription%2Dkey=python-subscription-secret",
+                "requestHeaders": {"Authorization": "Bearer python-header-secret"},
+            },
+            "visible": True,
+            "opacity": 1,
+            "style": {},
+            "metadata": {},
+            "sourcePath": "https://files.example.com/data?token=python-path-secret",
+        }
+    ]
+    m.project["plugins"] = {
+        "manifestUrls": ["https://example.com/plugin.json?sasToken=python-manifest-secret"],
+        "activePluginIds": ["external"],
+        "mapControlPositions": {},
+        "settings": {"external": {"arbitrary": "python-plugin-secret"}},
+    }
+
+    safe = m.to_project()
+    serialized = str(safe)
+    html = m.to_html()
+    out = tmp_path / "safe.geolibre.json"
+    m.save_project(str(out))
+    saved = out.read_text(encoding="utf-8")
+    for secret in (
+        "python-env-secret",
+        "python-geocoder-secret",
+        "python-endpoint-secret",
+        "password",
+        "python-url-secret",
+        "python-subscription-secret",
+        "python-header-secret",
+        "python-path-secret",
+        "python-plugin-secret",
+        "python-basemap-secret",
+        "python-manifest-secret",
+        "ssword",
+    ):
+        assert secret not in serialized
+        assert secret not in html
+        assert secret not in saved
+
+    assert m.to_project(keep_credentials=True)["plugins"]["settings"]
+
+
+def test_python_credential_field_registry_matches_js():
+    """Every object-key spelling the JS registry strips must be stripped here too."""
+    safe = redact_credentials(
+        {
+            "layers": [
+                {
+                    "source": {
+                        "sasToken": "py-sas-secret",
+                        "bearer": "py-bearer-secret",
+                        "auth": {"user": "u", "pass": "py-auth-secret"},
+                        "subscription-key": "py-subscription-secret",
+                        "api_key": "py-underscore-secret",
+                        "pwd": "py-pwd-secret",
+                        # Credentials only inside a query string; as field names
+                        # they are ordinary configuration.
+                        "sr": 4326,
+                        "key": "layer-identifier",
+                    }
+                }
+            ]
+        }
+    )
+    serialized = str(safe)
+    for secret in (
+        "py-sas-secret",
+        "py-bearer-secret",
+        "py-auth-secret",
+        "py-subscription-secret",
+        "py-underscore-secret",
+        "py-pwd-secret",
+    ):
+        assert secret not in serialized
+    assert safe["layers"][0]["source"] == {"sr": 4326, "key": "layer-identifier"}
+
+
+def test_python_redaction_sweeps_layer_connection():
+    """`connection.lastError` is free-form error text and must be swept too."""
+    safe = redact_credentials(
+        {
+            "layers": [
+                {
+                    "source": {"url": "https://example.com/tiles"},
+                    "connection": {
+                        "layerId": "auth",
+                        "interval": 300,
+                        "lastSyncedAt": "2026-01-01T00:00:00.000Z",
+                        "lastError": "Failed to fetch https://example.com/tiles?token=py-connection-secret",
+                        "onFailure": "keep-last",
+                    },
+                }
+            ]
+        }
+    )
+    connection = safe["layers"][0]["connection"]
+    assert "py-connection-secret" not in str(safe)
+    assert connection["lastError"] == "Failed to fetch https://example.com/tiles"
+    assert connection["interval"] == 300
+
+
+def test_python_redaction_fails_closed_at_depth_limit():
+    nested = {"password": "too-deep-secret"}
+    for _ in range(12):
+        nested = {"child": nested}
+    safe = redact_credentials({"layers": [{"source": nested}]})
+    assert "too-deep-secret" not in str(safe)
+
+
 def test_to_html_writes_path(m, tmp_path):
     out = tmp_path / "nested" / "map.html"
     assert m.to_html(str(out)) is None
@@ -373,6 +503,29 @@ def test_get_layer_unknown_raises(m):
         m.get_layer("missing")
 
 
+def test_layer_lookup_and_map_mutators(m):
+    first_id = m.add_geojson({"type": "FeatureCollection", "features": []}, name="A")
+    m.add_geojson({"type": "FeatureCollection", "features": []}, name="B")
+    assert m.layer_names == ["A", "B"]
+    assert m.find_layer("A").id == first_id
+    assert m.find_layer("missing") is None
+    assert m.find_layer_index("B") == 1
+    assert m.find_layer_index("missing") == -1
+
+    m.set_layer_visibility("A", visible=False)
+    m.set_layer_opacity(first_id, 0.25)
+    assert m.get_layer(first_id).visible is False
+    assert m.get_layer(first_id).opacity == 0.25
+
+
+def test_layer_opacity_validation(m):
+    layer_id = m.add_geojson({"type": "FeatureCollection", "features": []})
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        m.get_layer(layer_id).opacity = 2
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        m.get_layer(layer_id).opacity = -0.1
+
+
 def test_layer_setters_mutate_project_and_bump_seq(m):
     layer_id = m.add_geojson({"type": "FeatureCollection", "features": []}, name="A")
     layer = m.get_layer(layer_id)
@@ -411,6 +564,33 @@ def test_layer_zoom_to_sends_command(m, monkeypatch):
     m.get_layer(layer_id).zoom_to()
     assert captured["method"] == "zoomToLayer"
     assert captured["params"] == {"layerId": layer_id}
+
+
+def test_zoom_aliases_send_commands(m, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        m,
+        "request",
+        lambda method, params=None, **_k: calls.append((method, params)),
+    )
+    layer_id = m.add_geojson({"type": "FeatureCollection", "features": []}, name="A")
+    m.zoom_to_bounds([-10, -5, 10, 5])
+    m.zoom_to_layer("A")
+    assert calls == [
+        ("fitBounds", {"bounds": [-10.0, -5.0, 10.0, 5.0]}),
+        ("zoomToLayer", {"layerId": layer_id}),
+    ]
+
+
+def test_fit_bounds_validates_shape_and_order(m):
+    with pytest.raises(ValueError, match="contain"):
+        m.fit_bounds([0, 1])
+    with pytest.raises(ValueError, match="west <= east"):
+        m.fit_bounds([10, 0, -10, 1])
+    with pytest.raises(ValueError, match="south <= north"):
+        m.fit_bounds([-10, 5, 10, -5])
+    with pytest.raises(ValueError, match="finite"):
+        m.fit_bounds([-10, -5, float("nan"), 5])
 
 
 def test_stale_layer_access_raises(m):

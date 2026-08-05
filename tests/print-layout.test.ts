@@ -164,6 +164,94 @@ describe("drawLayout legend rendering", () => {
     );
   });
 
+  it("elides class rows that do not fit the map body and says how many (GH #1608)", () => {
+    // A categorized layer can carry more classes than the body is tall; the
+    // legend is clipped to the body, so the overflow must be reported rather
+    // than disappearing at the edge.
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "otex",
+            name: "Farms",
+            swatches: Array.from({ length: 60 }, (_, i) => ({
+              color: "#00aa00",
+              label: `class-${i.toString()}`,
+            })),
+          },
+        ],
+        legendFormatNote: (count) => `+${count.toString()} more`,
+      }),
+    );
+    const drawn = fills.filter((f) => f.text.startsWith("class-"));
+    assert.ok(drawn.length > 0, "expected some class rows to be drawn");
+    assert.ok(drawn.length < 60, "expected the overflowing rows to be elided");
+    const note = fills.find((f) => f.text.startsWith("+") && f.text.endsWith("more"));
+    assert.ok(note, "expected a truncation note");
+    assert.equal(note.text, `+${(60 - drawn.length).toString()} more`);
+  });
+
+  it("counts only class rows in the note and drops a dangling group heading", () => {
+    // With groupByLayer on, the flattened rows interleave layer headings. A
+    // heading is scaffolding: it must not inflate the "+N more" count, and one
+    // left with no classes under it describes nothing.
+    const { canvas, fills } = recordingCanvas();
+    const entry = (id: string, name: string, n: number): LegendEntry => ({
+      id,
+      name,
+      swatches: Array.from({ length: n }, (_, i) => ({
+        color: "#00aa00",
+        label: `${id}-${i.toString()}`,
+      })),
+    });
+    // Sized so the cut falls on Layer B's heading: at this page size the body
+    // fits 25 legend rows, and Layer A occupies exactly the first 24.
+    drawLayout(
+      canvas,
+      baseOptions({
+        legendGroupByLayer: true,
+        legend: [entry("a", "Layer A", 23), entry("b", "Layer B", 30)],
+        legendFormatNote: (count) => `+${count.toString()} more`,
+      }),
+    );
+    const texts = fills.map((f) => f.text);
+    const classRows = texts.filter((t) => /^[ab]-\d+$/.test(t));
+    const note = texts.find((t) => t.startsWith("+") && t.endsWith("more"));
+    assert.ok(note, "expected a truncation note");
+    // 53 class rows across the two layers; the headings must not be counted.
+    assert.equal(note, `+${(53 - classRows.length).toString()} more`);
+    // A heading is only drawn when at least one of its classes survives the cut.
+    assert.ok(
+      !texts.includes("Layer B") || classRows.some((t) => t.startsWith("b-")),
+      "expected no orphan layer heading",
+    );
+    assert.ok(texts.includes("Layer A"), "expected the surviving layer's heading");
+  });
+
+  it("draws no truncation note when every class row fits", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "otex",
+            name: "Farms",
+            swatches: Array.from({ length: 4 }, (_, i) => ({
+              color: "#00aa00",
+              label: `class-${i.toString()}`,
+            })),
+          },
+        ],
+        legendFormatNote: (count) => `+${count.toString()} more`,
+      }),
+    );
+    assert.equal(fills.filter((f) => f.text.startsWith("class-")).length, 4);
+    assert.ok(!fills.some((f) => f.text.endsWith("more")));
+  });
+
   it("renders the layer name for a genuine single-symbol entry", () => {
     const { canvas, fills } = recordingCanvas();
     drawLayout(

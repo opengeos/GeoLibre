@@ -1,4 +1,10 @@
-import { DEFAULT_PROJECT_NAME, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_PROJECT_NAME,
+  excludeHiddenFieldsFromProject,
+  redactProjectCredentials,
+  serializeProject,
+  useAppStore,
+} from "@geolibre/core";
 import { DEFAULT_BUILT_IN_CONTROL_VISIBILITY, type MapController } from "@geolibre/map";
 import {
   closeDuckDBLayerPanel,
@@ -22,12 +28,23 @@ import {
   setAnnotationLabels,
   setBasemapControlLabels,
   setGraticuleLabels,
+  setH3Labels,
+  setS2Labels,
+  setA5Labels,
+  setDggridLabels,
+  setDggalLabels,
+  setOlcLabels,
+  setGeohashLabels,
+  setTilecodeLabels,
   setMapillaryLabels,
   setEarthdataGisLabels,
   setOpenAerialMapLabels,
+  setArcGisHubLabels,
+  setOpenDataCatalogLabels,
   setHuggingFaceLabels,
   setSourceCoopLabels,
   setReverseGeocodeLabels,
+  setStacLabels,
   setTimelapseLabels,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
@@ -36,6 +53,7 @@ import {
   PRECIPITATION_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
+  openRightPanel,
 } from "@geolibre/plugins";
 import { Button, cn, Input } from "@geolibre/ui";
 import {
@@ -73,7 +91,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI, getPluginManager, usePluginRegistry } from "../../hooks/usePlugins";
 import { useConsentGatedActions } from "../../hooks/useConsentGatedActions";
@@ -82,6 +100,7 @@ import type { ProjectFileActions } from "../../hooks/useProjectFileActions";
 import { useToolbarPanels } from "../../hooks/useToolbarPanels";
 import { useVectorTileGeometryBackfill } from "../../hooks/useVectorTileGeometryBackfill";
 import type { ThemeMode } from "../../hooks/useThemeMode";
+import { isMobile } from "../../lib/is-mobile";
 import { isTauri } from "../../lib/tauri-io";
 import { isMaptoolkitBasemapActive } from "../../lib/maptoolkit-basemap";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
@@ -91,6 +110,8 @@ import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
 import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
 import { useViewportHistory } from "../../hooks/useViewportHistory";
 import type { Command } from "../../lib/commands";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
+import { masHidesDataSource } from "../../lib/mas-build";
 import { IS_STORE_BUILD } from "../../lib/updates";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import {
@@ -104,6 +125,7 @@ import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
 import { ProjectGalleryDialog } from "./ProjectGalleryDialog";
 import { ShareProjectDialog } from "./ShareProjectDialog";
+import { resolveShareHost } from "../../lib/share-geolibre";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
 import { SettingsDialog } from "./SettingsDialog";
 import { SetViewDialog } from "./SetViewDialog";
@@ -123,7 +145,7 @@ import { HelpMenu } from "./toolbar/HelpMenu";
 import { OsmPbfDialogs } from "./toolbar/OsmPbfDialogs";
 import { PluginsMenu } from "./toolbar/PluginsMenu";
 import { PluginToolbarMenus } from "./toolbar/PluginToolbarMenus";
-import { ProcessingMenu } from "./toolbar/ProcessingMenu";
+import { EARTH_ENGINE_AVAILABLE, ProcessingMenu } from "./toolbar/ProcessingMenu";
 import { ProjectFileDialogs } from "./toolbar/ProjectFileDialogs";
 import { ProjectMenu } from "./toolbar/ProjectMenu";
 import { googleEarthUrl, googleMapsUrl } from "../../lib/external-map-links";
@@ -160,10 +182,12 @@ interface TopToolbarProps {
   // instance — two would not coordinate their in-flight "open recent" aborts.
   projectFiles: ProjectFileActions;
   onOpenDiagnostics: () => void;
+  onOpenProjectHistory: () => void;
   onToggleThemeMode: () => void;
   // Opens the Offline Basemap Extract panel, mounted in DesktopShell over the
   // map so it can stay non-modal (the map is interactive for drawing a bbox).
   onOpenBasemapExtract: () => void;
+  viewer?: boolean;
 }
 
 export function TopToolbar({
@@ -177,8 +201,10 @@ export function TopToolbar({
   collaboration,
   projectFiles,
   onOpenDiagnostics,
+  onOpenProjectHistory,
   onToggleThemeMode,
   onOpenBasemapExtract,
+  viewer = false,
 }: TopToolbarProps) {
   const { t, i18n } = useTranslation();
   // The reverse-geocode plugin lives in the framework-agnostic plugins package
@@ -197,12 +223,16 @@ export function TopToolbar({
     setAnnotationLabels({
       toolbar: t("annotations.toolbar"),
       layerName: t("annotations.layerName"),
+      elementsPanelTitle: t("annotations.elementsPanelTitle"),
       tools: {
         text: t("annotations.tools.text"),
         arrow: t("annotations.tools.arrow"),
         rectangle: t("annotations.tools.rectangle"),
         ellipse: t("annotations.tools.ellipse"),
         freehand: t("annotations.tools.freehand"),
+        pin: t("annotations.tools.pin"),
+        sticky_note: t("annotations.tools.sticky_note"),
+        placed_image: t("annotations.tools.placed_image"),
       },
       color: t("annotations.color"),
       width: t("annotations.width"),
@@ -214,6 +244,14 @@ export function TopToolbar({
       deleteLast: t("annotations.deleteLast"),
       clearAll: t("annotations.clearAll"),
       textPlaceholder: t("annotations.textPlaceholder"),
+      pinTitlePrompt: t("annotations.pinTitlePrompt"),
+      pinDescPrompt: t("annotations.pinDescPrompt"),
+      stickyNotePrompt: t("annotations.stickyNotePrompt"),
+      imageUrlPrompt: t("annotations.imageUrlPrompt"),
+      cancel: t("annotations.cancel"),
+      saveElement: t("annotations.saveElement"),
+      atPoint: t("annotations.atPoint"),
+      pinnedToExtent: t("annotations.pinnedToExtent"),
     });
     setMapillaryLabels({
       title: t("mapillary.title"),
@@ -274,6 +312,52 @@ export function TopToolbar({
       metaBounds: t("openAerialMap.metaBounds"),
       metaSource: t("openAerialMap.metaSource"),
       metaRaw: t("openAerialMap.metaRaw"),
+    });
+    setArcGisHubLabels({
+      hint: t("arcgisHub.hint"),
+      searchPlaceholder: t("arcgisHub.searchPlaceholder"),
+      search: t("arcgisHub.search"),
+      searchCurrentView: t("arcgisHub.searchCurrentView"),
+      enterKeyword: t("arcgisHub.enterKeyword"),
+      loadMore: t("arcgisHub.loadMore"),
+      searching: t("arcgisHub.searching"),
+      loadingMore: t("arcgisHub.loadingMore"),
+      noResults: t("arcgisHub.noResults"),
+      searchError: t("arcgisHub.searchError"),
+      showing: (shown, total) => t("arcgisHub.showing", { shown, total }),
+      noDescription: t("arcgisHub.noDescription"),
+      add: t("arcgisHub.add"),
+      adding: (title) => t("arcgisHub.adding", { title }),
+      added: (title) => t("arcgisHub.added", { title }),
+      addError: t("arcgisHub.addError"),
+      zoom: t("arcgisHub.zoom"),
+      download: t("arcgisHub.download"),
+      preparing: (title) => t("arcgisHub.preparing", { title }),
+      downloading: (completed, total, title) =>
+        t("arcgisHub.downloading", { completed, total, title }),
+      downloadStarted: (title) => t("arcgisHub.downloadStarted", { title }),
+      downloadFirstLayer: (title, layerCount) =>
+        t("arcgisHub.downloadFirstLayer", { title, layerCount }),
+      downloadError: t("arcgisHub.downloadError"),
+      details: t("arcgisHub.details"),
+    });
+    setOpenDataCatalogLabels({
+      socrataHint: t("openDataCatalogs.socrataHint"),
+      ckanHint: t("openDataCatalogs.ckanHint"),
+      searchPlaceholder: (name) => t("openDataCatalogs.searchPlaceholder", { name }),
+      search: t("openDataCatalogs.search"),
+      enterKeyword: t("openDataCatalogs.enterKeyword"),
+      loadMore: t("openDataCatalogs.loadMore"),
+      searching: t("openDataCatalogs.searching"),
+      noResults: t("openDataCatalogs.noResults"),
+      showing: (shown, total) => t("openDataCatalogs.showing", { shown, total }),
+      noDescription: t("openDataCatalogs.noDescription"),
+      add: t("openDataCatalogs.add"),
+      details: t("openDataCatalogs.details"),
+      adding: (title) => t("openDataCatalogs.adding", { title }),
+      added: (title) => t("openDataCatalogs.added", { title }),
+      addError: t("openDataCatalogs.addError"),
+      searchError: t("openDataCatalogs.searchError"),
     });
     setEarthdataGisLabels({
       hint: t("earthdataGis.hint"),
@@ -522,6 +606,244 @@ export function TopToolbar({
       labelColor: t("graticule.labelColor"),
       labelSize: t("graticule.labelSize"),
     });
+    setH3Labels({
+      title: t("h3Plugin.title"),
+      getTitle: () => i18n.t("h3Plugin.title"),
+      controlTitle: t("h3Plugin.controlTitle"),
+      autoResolution: t("h3Plugin.autoResolution"),
+      resolution: t("h3Plugin.resolution"),
+      cellCount: (count) => t("h3Plugin.cellCount", { count }),
+      tooManyCells: (limit) => t("h3Plugin.tooManyCells", { limit }),
+      fillColor: t("h3Plugin.fillColor"),
+      fillOpacity: t("h3Plugin.fillOpacity"),
+      lineColor: t("h3Plugin.lineColor"),
+      lineWidth: t("h3Plugin.lineWidth"),
+      showLabels: t("h3Plugin.showLabels"),
+      identifyHint: t("h3Plugin.identifyHint"),
+      selectedCell: t("h3Plugin.selectedCell"),
+      noSelection: t("h3Plugin.noSelection"),
+      copyId: t("h3Plugin.copyId"),
+      copied: t("h3Plugin.copied"),
+      parent: t("h3Plugin.parent"),
+      children: t("h3Plugin.children"),
+      neighbors: t("h3Plugin.neighbors"),
+      baseCell: t("h3Plugin.baseCell"),
+      center: t("h3Plugin.center"),
+      pentagon: t("h3Plugin.pentagon"),
+      yes: t("h3Plugin.yes"),
+      no: t("h3Plugin.no"),
+      zoomToCell: t("h3Plugin.zoomToCell"),
+      addAsLayer: t("h3Plugin.addAsLayer"),
+      exportGeoJson: t("h3Plugin.exportGeoJson"),
+      exportCsv: t("h3Plugin.exportCsv"),
+      includeNeighbors: t("h3Plugin.includeNeighbors"),
+      includeParents: t("h3Plugin.includeParents"),
+      showIcosahedron: t("h3Plugin.showIcosahedron"),
+    });
+    setS2Labels({
+      title: t("s2Plugin.title"),
+      getTitle: () => i18n.t("s2Plugin.title"),
+      controlTitle: t("s2Plugin.controlTitle"),
+      autoResolution: t("s2Plugin.autoResolution"),
+      resolution: t("s2Plugin.resolution"),
+      cellCount: (count) => t("s2Plugin.cellCount", { count }),
+      tooManyCells: (limit) => t("s2Plugin.tooManyCells", { limit }),
+      fillColor: t("s2Plugin.fillColor"),
+      fillOpacity: t("s2Plugin.fillOpacity"),
+      lineColor: t("s2Plugin.lineColor"),
+      lineWidth: t("s2Plugin.lineWidth"),
+      showLabels: t("s2Plugin.showLabels"),
+      identifyHint: t("s2Plugin.identifyHint"),
+      selectedCell: t("s2Plugin.selectedCell"),
+      noSelection: t("s2Plugin.noSelection"),
+      copyId: t("s2Plugin.copyId"),
+      parent: t("s2Plugin.parent"),
+      children: t("s2Plugin.children"),
+      neighbors: t("s2Plugin.neighbors"),
+      center: t("s2Plugin.center"),
+      zoomToCell: t("s2Plugin.zoomToCell"),
+      addAsLayer: t("s2Plugin.addAsLayer"),
+      exportGeoJson: t("s2Plugin.exportGeoJson"),
+      exportCsv: t("s2Plugin.exportCsv"),
+      includeNeighbors: t("s2Plugin.includeNeighbors"),
+      includeParents: t("s2Plugin.includeParents"),
+    });
+    setA5Labels({
+      title: t("a5Plugin.title"),
+      getTitle: () => i18n.t("a5Plugin.title"),
+      controlTitle: t("a5Plugin.controlTitle"),
+      autoResolution: t("a5Plugin.autoResolution"),
+      resolution: t("a5Plugin.resolution"),
+      cellCount: (count) => t("a5Plugin.cellCount", { count }),
+      tooManyCells: (limit) => t("a5Plugin.tooManyCells", { limit }),
+      fillColor: t("a5Plugin.fillColor"),
+      fillOpacity: t("a5Plugin.fillOpacity"),
+      lineColor: t("a5Plugin.lineColor"),
+      lineWidth: t("a5Plugin.lineWidth"),
+      showLabels: t("a5Plugin.showLabels"),
+      identifyHint: t("a5Plugin.identifyHint"),
+      selectedCell: t("a5Plugin.selectedCell"),
+      noSelection: t("a5Plugin.noSelection"),
+      copyId: t("a5Plugin.copyId"),
+      parent: t("a5Plugin.parent"),
+      children: t("a5Plugin.children"),
+      neighbors: t("a5Plugin.neighbors"),
+      center: t("a5Plugin.center"),
+      zoomToCell: t("a5Plugin.zoomToCell"),
+      addAsLayer: t("a5Plugin.addAsLayer"),
+      exportGeoJson: t("a5Plugin.exportGeoJson"),
+      exportCsv: t("a5Plugin.exportCsv"),
+      includeNeighbors: t("a5Plugin.includeNeighbors"),
+      includeParents: t("a5Plugin.includeParents"),
+    });
+    setDggridLabels({
+      title: t("dggridPlugin.title"),
+      getTitle: () => i18n.t("dggridPlugin.title"),
+      controlTitle: t("dggridPlugin.controlTitle"),
+      cellType: t("dggridPlugin.cellType"),
+      topologyHexagon: t("dggridPlugin.topologyHexagon"),
+      topologyDiamond: t("dggridPlugin.topologyDiamond"),
+      topologyTriangle: t("dggridPlugin.topologyTriangle"),
+      projection: t("dggridPlugin.projection"),
+      aperture: t("dggridPlugin.aperture"),
+      autoResolution: t("dggridPlugin.autoResolution"),
+      resolution: t("dggridPlugin.resolution"),
+      cellCount: (count) => t("dggridPlugin.cellCount", { count }),
+      tooManyCells: (limit) => t("dggridPlugin.tooManyCells", { limit }),
+      fillColor: t("dggridPlugin.fillColor"),
+      fillOpacity: t("dggridPlugin.fillOpacity"),
+      lineColor: t("dggridPlugin.lineColor"),
+      lineWidth: t("dggridPlugin.lineWidth"),
+      showLabels: t("dggridPlugin.showLabels"),
+      identifyHint: t("dggridPlugin.identifyHint"),
+      selectedCell: t("dggridPlugin.selectedCell"),
+      noSelection: t("dggridPlugin.noSelection"),
+      copyId: t("dggridPlugin.copyId"),
+      parent: t("dggridPlugin.parent"),
+      children: t("dggridPlugin.children"),
+      neighbors: t("dggridPlugin.neighbors"),
+      center: t("dggridPlugin.center"),
+      zoomToCell: t("dggridPlugin.zoomToCell"),
+      addAsLayer: t("dggridPlugin.addAsLayer"),
+      exportGeoJson: t("dggridPlugin.exportGeoJson"),
+      exportCsv: t("dggridPlugin.exportCsv"),
+      includeNeighbors: t("dggridPlugin.includeNeighbors"),
+      includeParents: t("dggridPlugin.includeParents"),
+    });
+    setDggalLabels({
+      title: t("dggalPlugin.title"),
+      getTitle: () => i18n.t("dggalPlugin.title"),
+      controlTitle: t("dggalPlugin.controlTitle"),
+      gridType: t("dggalPlugin.gridType"),
+      autoResolution: t("dggalPlugin.autoResolution"),
+      resolution: t("dggalPlugin.resolution"),
+      cellCount: (count) => t("dggalPlugin.cellCount", { count }),
+      tooManyCells: (limit) => t("dggalPlugin.tooManyCells", { limit }),
+      fillColor: t("dggalPlugin.fillColor"),
+      fillOpacity: t("dggalPlugin.fillOpacity"),
+      lineColor: t("dggalPlugin.lineColor"),
+      lineWidth: t("dggalPlugin.lineWidth"),
+      showLabels: t("dggalPlugin.showLabels"),
+      identifyHint: t("dggalPlugin.identifyHint"),
+      selectedCell: t("dggalPlugin.selectedCell"),
+      noSelection: t("dggalPlugin.noSelection"),
+      copyId: t("dggalPlugin.copyId"),
+      parent: t("dggalPlugin.parent"),
+      children: t("dggalPlugin.children"),
+      neighbors: t("dggalPlugin.neighbors"),
+      center: t("dggalPlugin.center"),
+      zoomToCell: t("dggalPlugin.zoomToCell"),
+      addAsLayer: t("dggalPlugin.addAsLayer"),
+      exportGeoJson: t("dggalPlugin.exportGeoJson"),
+      exportCsv: t("dggalPlugin.exportCsv"),
+      includeNeighbors: t("dggalPlugin.includeNeighbors"),
+      includeParents: t("dggalPlugin.includeParents"),
+    });
+    setOlcLabels({
+      title: t("olcPlugin.title"),
+      getTitle: () => i18n.t("olcPlugin.title"),
+      controlTitle: t("olcPlugin.controlTitle"),
+      autoResolution: t("olcPlugin.autoResolution"),
+      resolution: t("olcPlugin.resolution"),
+      cellCount: (count) => t("olcPlugin.cellCount", { count }),
+      tooManyCells: (limit) => t("olcPlugin.tooManyCells", { limit }),
+      fillColor: t("olcPlugin.fillColor"),
+      fillOpacity: t("olcPlugin.fillOpacity"),
+      lineColor: t("olcPlugin.lineColor"),
+      lineWidth: t("olcPlugin.lineWidth"),
+      showLabels: t("olcPlugin.showLabels"),
+      identifyHint: t("olcPlugin.identifyHint"),
+      selectedCell: t("olcPlugin.selectedCell"),
+      noSelection: t("olcPlugin.noSelection"),
+      copyId: t("olcPlugin.copyId"),
+      parent: t("olcPlugin.parent"),
+      children: t("olcPlugin.children"),
+      neighbors: t("olcPlugin.neighbors"),
+      center: t("olcPlugin.center"),
+      zoomToCell: t("olcPlugin.zoomToCell"),
+      addAsLayer: t("olcPlugin.addAsLayer"),
+      exportGeoJson: t("olcPlugin.exportGeoJson"),
+      exportCsv: t("olcPlugin.exportCsv"),
+      includeNeighbors: t("olcPlugin.includeNeighbors"),
+      includeParent: t("olcPlugin.includeParent"),
+    });
+    setGeohashLabels({
+      title: t("geohashPlugin.title"),
+      getTitle: () => i18n.t("geohashPlugin.title"),
+      controlTitle: t("geohashPlugin.controlTitle"),
+      autoResolution: t("geohashPlugin.autoResolution"),
+      resolution: t("geohashPlugin.resolution"),
+      cellCount: (count) => t("geohashPlugin.cellCount", { count }),
+      tooManyCells: (limit) => t("geohashPlugin.tooManyCells", { limit }),
+      fillColor: t("geohashPlugin.fillColor"),
+      fillOpacity: t("geohashPlugin.fillOpacity"),
+      lineColor: t("geohashPlugin.lineColor"),
+      lineWidth: t("geohashPlugin.lineWidth"),
+      showLabels: t("geohashPlugin.showLabels"),
+      identifyHint: t("geohashPlugin.identifyHint"),
+      selectedCell: t("geohashPlugin.selectedCell"),
+      noSelection: t("geohashPlugin.noSelection"),
+      copyId: t("geohashPlugin.copyId"),
+      parent: t("geohashPlugin.parent"),
+      children: t("geohashPlugin.children"),
+      neighbors: t("geohashPlugin.neighbors"),
+      center: t("geohashPlugin.center"),
+      zoomToCell: t("geohashPlugin.zoomToCell"),
+      addAsLayer: t("geohashPlugin.addAsLayer"),
+      exportGeoJson: t("geohashPlugin.exportGeoJson"),
+      exportCsv: t("geohashPlugin.exportCsv"),
+      includeNeighbors: t("geohashPlugin.includeNeighbors"),
+      includeParent: t("geohashPlugin.includeParent"),
+    });
+    setTilecodeLabels({
+      title: t("tilecodePlugin.title"),
+      getTitle: () => i18n.t("tilecodePlugin.title"),
+      controlTitle: t("tilecodePlugin.controlTitle"),
+      autoResolution: t("tilecodePlugin.autoResolution"),
+      resolution: t("tilecodePlugin.resolution"),
+      cellCount: (count) => t("tilecodePlugin.cellCount", { count }),
+      tooManyCells: (limit) => t("tilecodePlugin.tooManyCells", { limit }),
+      fillColor: t("tilecodePlugin.fillColor"),
+      fillOpacity: t("tilecodePlugin.fillOpacity"),
+      lineColor: t("tilecodePlugin.lineColor"),
+      lineWidth: t("tilecodePlugin.lineWidth"),
+      showLabels: t("tilecodePlugin.showLabels"),
+      identifyHint: t("tilecodePlugin.identifyHint"),
+      selectedCell: t("tilecodePlugin.selectedCell"),
+      noSelection: t("tilecodePlugin.noSelection"),
+      copyId: t("tilecodePlugin.copyId"),
+      quadkey: t("tilecodePlugin.quadkey"),
+      parent: t("tilecodePlugin.parent"),
+      children: t("tilecodePlugin.children"),
+      neighbors: t("tilecodePlugin.neighbors"),
+      center: t("tilecodePlugin.center"),
+      zoomToCell: t("tilecodePlugin.zoomToCell"),
+      addAsLayer: t("tilecodePlugin.addAsLayer"),
+      exportGeoJson: t("tilecodePlugin.exportGeoJson"),
+      exportCsv: t("tilecodePlugin.exportCsv"),
+      includeNeighbors: t("tilecodePlugin.includeNeighbors"),
+      includeParent: t("tilecodePlugin.includeParent"),
+    });
     setTimelapseLabels({
       title: t("timelapse.title"),
       provider: t("timelapse.provider"),
@@ -539,6 +861,73 @@ export function TopToolbar({
       recordingFailed: t("timelapse.recordingFailed"),
       recordingUnsupported: t("timelapse.recordingUnsupported"),
       loadingTiles: t("timelapse.loadingTiles"),
+    });
+    setStacLabels({
+      title: t("stacPlugin.title"),
+      getTitle: () => i18n.t("stacPlugin.title"),
+      footprintLayerName: t("stacPlugin.footprintLayerName"),
+      catalogSearch: t("stacPlugin.catalogSearch"),
+      catalogSearchPlaceholder: t("stacPlugin.catalogSearchPlaceholder"),
+      indexLoading: t("stacPlugin.indexLoading"),
+      indexUnavailable: t("stacPlugin.indexUnavailable"),
+      indexLoadFailed: t("stacPlugin.indexLoadFailed"),
+      urlLabel: t("stacPlugin.urlLabel"),
+      connect: t("stacPlugin.connect"),
+      connecting: t("stacPlugin.connecting"),
+      connected: t("stacPlugin.connected"),
+      connectFailed: t("stacPlugin.connectFailed"),
+      selectCatalog: t("stacPlugin.selectCatalog"),
+      noMatchingCatalogs: t("stacPlugin.noMatchingCatalogs"),
+      catalogApiSuffix: t("stacPlugin.catalogApiSuffix"),
+      catalogStaticSuffix: t("stacPlugin.catalogStaticSuffix"),
+      kindApi: t("stacPlugin.kindApi"),
+      kindStatic: t("stacPlugin.kindStatic"),
+      collectionsHint: t("stacPlugin.collectionsHint"),
+      limitToExtent: t("stacPlugin.limitToExtent"),
+      bboxLabel: t("stacPlugin.bboxLabel"),
+      bboxPlaceholder: t("stacPlugin.bboxPlaceholder"),
+      bboxInvalid: t("stacPlugin.bboxInvalid"),
+      drawBbox: t("stacPlugin.drawBbox"),
+      cancelDrawing: t("stacPlugin.cancelDrawing"),
+      clearDrawnBbox: t("stacPlugin.clearDrawnBbox"),
+      drawHint: t("stacPlugin.drawHint"),
+      drawnBbox: (bbox) => t("stacPlugin.drawnBbox", { bbox }),
+      drawnBboxCleared: t("stacPlugin.drawnBboxCleared"),
+      mapNotReady: t("stacPlugin.mapNotReady"),
+      startDate: t("stacPlugin.startDate"),
+      endDate: t("stacPlugin.endDate"),
+      additionalParams: t("stacPlugin.additionalParams"),
+      additionalInvalid: t("stacPlugin.additionalInvalid"),
+      searchItems: t("stacPlugin.searchItems"),
+      clearResults: t("stacPlugin.clearResults"),
+      resultsCleared: t("stacPlugin.resultsCleared"),
+      searching: t("stacPlugin.searching"),
+      loadingMore: t("stacPlugin.loadingMore"),
+      noResults: t("stacPlugin.noResults"),
+      searchFailed: t("stacPlugin.searchFailed"),
+      showing: (count) => t("stacPlugin.showing", { count }),
+      showingOfMatched: (count, matched) => t("stacPlugin.showingOfMatched", { count, matched }),
+      loadMore: t("stacPlugin.loadMore"),
+      renderOptions: t("stacPlugin.renderOptions"),
+      bands: t("stacPlugin.bands"),
+      bandsPlaceholder: t("stacPlugin.bandsPlaceholder"),
+      colormap: t("stacPlugin.colormap"),
+      colormapDefault: t("stacPlugin.colormapDefault"),
+      minValue: t("stacPlugin.minValue"),
+      maxValue: t("stacPlugin.maxValue"),
+      nodata: t("stacPlugin.nodata"),
+      nodataPlaceholder: t("stacPlugin.nodataPlaceholder"),
+      renderHint: t("stacPlugin.renderHint"),
+      initialStatus: t("stacPlugin.initialStatus"),
+      catalogInfo: (title, kind) => t("stacPlugin.catalogInfo", { title, kind }),
+      zoom: t("stacPlugin.zoom"),
+      add: t("stacPlugin.add"),
+      download: t("stacPlugin.download"),
+      adding: (asset) => t("stacPlugin.adding", { asset }),
+      added: (asset) => t("stacPlugin.added", { asset }),
+      addUnsupported: t("stacPlugin.addUnsupported"),
+      addFailed: t("stacPlugin.addFailed"),
+      cogUnsupported: t("stacPlugin.cogUnsupported"),
     });
   }, [t]);
 
@@ -635,6 +1024,17 @@ export function TopToolbar({
     ),
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
+  const [addDataTargetGroupId, setAddDataTargetGroupId] = useState<string | null>(null);
+  const addDataInitialLayerIdsRef = useRef<Set<string>>(new Set());
+  // Every path that opens the dialog outside the OPEN_ADD_DATA_EVENT listener
+  // (the Add Data menu, the command palette, the 3D-model button) is ungrouped,
+  // so it must drop any group target a previous open left behind — otherwise
+  // this session's layers would be swept into that stale, unrelated group when
+  // the dialog closes. Only the listener sets a target, and it sets both.
+  const openAddDataKind = useCallback((kind: AddDataKind) => {
+    setAddDataTargetGroupId(null);
+    setAddDataKind(kind);
+  }, []);
   // PostgreSQL prefill (saved connection / clicked table) from the Browser panel.
   const [addDataPostgres, setAddDataPostgres] = useState<OpenAddDataPostgres | undefined>(
     undefined,
@@ -652,15 +1052,23 @@ export function TopToolbar({
   // openSettingsSection. This toolbar owns the dialog + its kind state.
   useEffect(() => {
     const onOpenAddData = (event: Event) => {
+      // Read-only embeds must not open Add Data via the Browser panel event.
+      if (viewer) return;
       const detail = (event as CustomEvent<OpenAddDataDetail>).detail;
-      if (detail?.kind) {
+      // Reject kinds the Mac App Store build hides so a stray event cannot
+      // open a dialog whose backing service is compiled out.
+      if (detail?.kind && !masHidesDataSource(detail.kind)) {
         setAddDataPostgres(detail.postgres);
+        setAddDataTargetGroupId(detail.groupId ?? null);
+        addDataInitialLayerIdsRef.current = new Set(
+          useAppStore.getState().layers.map((layer) => layer.id),
+        );
         setAddDataKind(detail.kind);
       }
     };
     window.addEventListener(OPEN_ADD_DATA_EVENT, onOpenAddData);
     return () => window.removeEventListener(OPEN_ADD_DATA_EVENT, onOpenAddData);
-  }, []);
+  }, [viewer]);
   // Deck.gl Layer kind the Add Data dialog opens on (e.g. the 3D-model entry
   // jumps straight to the scenegraph layer type).
   const [addDataDeckVizKind, setAddDataDeckVizKind] = useState<string | undefined>(undefined);
@@ -669,6 +1077,11 @@ export function TopToolbar({
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [galleryDialogOpen, setGalleryDialogOpen] = useState(false);
+  // Whether this deployment has a usable share host. Read once per render (the
+  // deployment env does not change while the app is running) and passed down so
+  // the menu, the command palette, and the dialogs agree.
+  const shareHost = resolveShareHost();
+  const shareAvailable = shareHost.baseUrl != null;
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
@@ -795,13 +1208,19 @@ export function TopToolbar({
       shortcut: { key: "s", mod: true, shift: true },
       run: () => void projectFiles.handleSaveAs(),
     },
-    {
-      id: "project.share",
-      title: t("toolbar.command.projectShare"),
-      group: t("toolbar.commandGroup.project"),
-      icon: Share2,
-      run: () => setShareDialogOpen(true),
-    },
+    // Only when the deployment has a usable share host; a command that always
+    // failed would be worse than an absent one.
+    ...(shareAvailable
+      ? [
+          {
+            id: "project.share",
+            title: t("toolbar.command.projectShare"),
+            group: t("toolbar.commandGroup.project"),
+            icon: Share2,
+            run: () => setShareDialogOpen(true),
+          },
+        ]
+      : []),
     // Only surfaced when live collaboration is configured (env flag).
     ...(collaboration.enabled
       ? [
@@ -842,12 +1261,16 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.addData"),
       run: () => osmPbf.setDialogOpen(true),
     },
-    ...ADD_DATA_KIND_COMMANDS.map(({ kind, titleKey }) => ({
-      id: `add.${kind}`,
-      title: t("toolbar.command.addLayer", { name: t(titleKey) }),
-      group: t("toolbar.commandGroup.addData"),
-      run: () => setAddDataKind(kind),
-    })),
+    // Sources the Mac App Store build hides in the Add Data menu must not be
+    // reachable through the palette either.
+    ...ADD_DATA_KIND_COMMANDS.filter(({ kind }) => !masHidesDataSource(kind)).map(
+      ({ kind, titleKey }) => ({
+        id: `add.${kind}`,
+        title: t("toolbar.command.addLayer", { name: t(titleKey) }),
+        group: t("toolbar.commandGroup.addData"),
+        run: () => openAddDataKind(kind),
+      }),
+    ),
     {
       id: "add.stac",
       title: t("toolbar.command.addStacLayer"),
@@ -955,14 +1378,20 @@ export function TopToolbar({
       icon: Workflow,
       run: () => setModelBuilderOpen(true),
     },
-    {
-      id: "proc.segmentation",
-      title: t("toolbar.command.segmentation"),
-      group: t("toolbar.commandGroup.processing"),
-      keywords: "segmentation samgeo sam3 ai segment imagery",
-      icon: Sparkles,
-      run: () => setSegmentationOpen(true),
-    },
+    // The Mac App Store build omits AI Segmentation: it is sidecar-only (the
+    // App Sandbox forbids the sidecar) and has no client-side fallback.
+    ...(IS_MAS_BUILD
+      ? []
+      : [
+          {
+            id: "proc.segmentation",
+            title: t("toolbar.command.segmentation"),
+            group: t("toolbar.commandGroup.processing"),
+            keywords: "segmentation samgeo sam3 ai segment imagery",
+            icon: Sparkles,
+            run: () => setSegmentationOpen(true),
+          },
+        ]),
     {
       id: "proc.objectDetection",
       title: t("toolbar.command.objectDetection"),
@@ -1006,12 +1435,21 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.processing"),
       run: handleOpenPlanetaryComputer,
     },
-    {
-      id: "proc.earth-engine",
-      title: t("toolbar.command.earthEngine"),
-      group: t("toolbar.commandGroup.processing"),
-      run: panels.earthEngine.toggle,
-    },
+    // Earth Engine sign-in needs the Rust loopback OAuth listener, which the
+    // Apple App Store builds (Mac App Store and iOS) compile out so the app
+    // claims no `com.apple.security.network.server` entitlement. Shares the
+    // ProcessingMenu gate's module-level constant rather than recomputing it in
+    // this array, which is rebuilt on every render.
+    ...(EARTH_ENGINE_AVAILABLE
+      ? [
+          {
+            id: "proc.earth-engine",
+            title: t("toolbar.command.earthEngine"),
+            group: t("toolbar.commandGroup.processing"),
+            run: panels.earthEngine.toggle,
+          },
+        ]
+      : []),
     // Controls
     ...MAP_CONTROL_ITEMS.map((control) => ({
       id: `control.${control.id}`,
@@ -1160,6 +1598,14 @@ export function TopToolbar({
       run: () => setSetViewOpen(true),
     },
     {
+      id: "view.comments",
+      title: t("toolbar.command.viewComments"),
+      group: t("toolbar.commandGroup.view"),
+      keywords: "comments review threads notes annotations pins",
+      icon: MessageSquare,
+      run: () => openRightPanel("comments"),
+    },
+    {
       id: "view.theme",
       title:
         themeMode === "dark"
@@ -1255,13 +1701,20 @@ export function TopToolbar({
         run: () => toggle(plugin.id, appApi),
       })),
     // Settings
-    {
-      id: "settings.manage-plugins",
-      title: t("toolbar.command.managePlugins"),
-      group: t("toolbar.commandGroup.settings"),
-      keywords: "install external plugin marketplace",
-      run: () => setManagePluginsOpen(true),
-    },
+    // The Mac App Store build omits the plugin marketplace: installing
+    // external plugins is not allowed there, and bundled plugins need no
+    // management. Same pattern as the Store build's update command above.
+    ...(IS_MAS_BUILD
+      ? []
+      : [
+          {
+            id: "settings.manage-plugins",
+            title: t("toolbar.command.managePlugins"),
+            group: t("toolbar.commandGroup.settings"),
+            keywords: "install external plugin marketplace",
+            run: () => setManagePluginsOpen(true),
+          },
+        ]),
     {
       id: "settings.style-manager",
       title: t("toolbar.command.styleManager"),
@@ -1272,10 +1725,27 @@ export function TopToolbar({
     },
   ];
 
+  // The viewer preset hides every authoring menu, so the surfaces that reach
+  // those commands without a menu go with them: the command palette
+  // (Ctrl/Cmd+K) and the cheat sheet (?) are not mounted, and the Help menu
+  // drops its entries for them (see `viewer` on HelpMenu). Otherwise a
+  // `layout=viewer` embed would still answer Ctrl+N with "New Project", or
+  // overwrite the host's project on Ctrl+S — exactly what the read-only chrome
+  // promises it cannot do.
+  //
+  // The shortcut layer is narrowed rather than switched off, because the View
+  // menu *does* stay visible in this mode: `view.*` is camera and theme work
+  // only, so dropping its keys would leave those items clickable but silently
+  // keyless. Every command carrying a `shortcut` is either `view.*` or
+  // `project.*`, so this is the whole authoring keyboard surface.
+  const shortcutCommands = useMemo(
+    () => (viewer ? commands.filter((command) => command.id.startsWith("view.")) : commands),
+    [commands, viewer],
+  );
   useGlobalShortcuts({
-    commands,
-    onOpenPalette: () => setCommandPaletteOpen(true),
-    onOpenShortcuts: () => setShortcutsOpen(true),
+    commands: shortcutCommands,
+    onOpenPalette: viewer ? undefined : () => setCommandPaletteOpen(true),
+    onOpenShortcuts: viewer ? undefined : () => setShortcutsOpen(true),
   });
 
   const toolbarButtonSize = compact ? "icon" : "sm";
@@ -1286,7 +1756,11 @@ export function TopToolbar({
   // its trigger Button this class instead of `toolbarButtonClass`.
   const toolbarSecondaryButtonClass = cn(toolbarButtonClass, "hidden md:inline-flex");
   const toolbarIconClassName = cn("h-3.5 w-3.5", showLabels && "sm:me-1");
-  const appTitle = isTauri() ? "GeoLibre Desktop" : "GeoLibre";
+  // "GeoLibre Desktop" is the *desktop* product name. `isTauri()` alone is true
+  // on iOS and Android too — where the app is named plain "GeoLibre" (the bundle
+  // name from tauri.ios.conf.json, the home-screen icon, and the store listing),
+  // so titling it "GeoLibre Desktop" there contradicts every other surface.
+  const appTitle = isTauri() && !isMobile() ? "GeoLibre Desktop" : "GeoLibre";
   const renderToolbarLabel = (label: string) =>
     showLabels ? <span className="hidden sm:inline">{label}</span> : null;
   const chrome: ToolbarChrome = {
@@ -1311,21 +1785,27 @@ export function TopToolbar({
         <Map className="h-4 w-4" />
         {showProjectInfo ? <span className="hidden sm:inline">{appTitle}</span> : null}
       </span>
-      {isMenuVisible(uiProfile, "project") && (
+      {!viewer && isMenuVisible(uiProfile, "project") && (
         <ProjectMenu
           chrome={chrome}
           collaborationEnabled={collaboration.enabled}
+          shareHostStatus={shareHost.status}
           onNewProject={() => setNewProjectDialogOpen(true)}
           onOpenFromFile={() => void projectFiles.handleOpenFromFile()}
           onOpenFromUrl={() => projectFiles.setProjectUrlDialogOpen(true)}
           onOpenGallery={() => setGalleryDialogOpen(true)}
+          onImportQgisProject={() => void projectFiles.handleImportQgisProject()}
+          onImportArcgisProject={() => void projectFiles.handleImportArcgisProject()}
           onOpenRecent={(path) => {
             void projectFiles.handleOpenRecent(path).then((error) => {
               if (error) projectFiles.setActionError(error);
             });
           }}
+          onOpenHistory={onOpenProjectHistory}
           onSave={() => void projectFiles.handleSave()}
           onSaveAs={() => void projectFiles.handleSaveAs()}
+          onDuplicate={() => projectFiles.handleDuplicate()}
+          onSaveAsTemplate={() => projectFiles.handleSaveAsTemplate()}
           onShare={() => setShareDialogOpen(true)}
           onExportHtml={() => void projectFiles.handleExportHtml()}
           onCollaborate={() => setCollaborateDialogOpen(true)}
@@ -1333,7 +1813,7 @@ export function TopToolbar({
           onOpenOfflineBasemap={onOpenBasemapExtract}
         />
       )}
-      {isMenuVisible(uiProfile, "edit") && (
+      {!viewer && isMenuVisible(uiProfile, "edit") && (
         <EditMenu chrome={chrome} mapControllerRef={mapControllerRef} />
       )}
       {isMenuVisible(uiProfile, "view") && (
@@ -1377,20 +1857,20 @@ export function TopToolbar({
         onSaveCurrentProject={projectFiles.handleSave}
         onProjectCreated={resetRuntimeControlsForNewProject}
       />
-      {isMenuVisible(uiProfile, "addData") && (
+      {!viewer && isMenuVisible(uiProfile, "addData") && (
         <AddDataMenu
           chrome={chrome}
           addLayer={addLayer}
           osmPbfBusy={osmPbf.busy}
-          onSetAddDataKind={setAddDataKind}
+          onSetAddDataKind={openAddDataKind}
           onAddGltfModel={() => {
             setAddDataDeckVizKind("scenegraph");
-            setAddDataKind("deckgl-viz");
+            openAddDataKind("deckgl-viz");
           }}
           onOpenOsmPbfDialog={() => osmPbf.setDialogOpen(true)}
         />
       )}
-      {isMenuVisible(uiProfile, "processing") && (
+      {!viewer && isMenuVisible(uiProfile, "processing") && (
         <ProcessingMenu
           chrome={chrome}
           earthEnginePanel={panels.earthEngine}
@@ -1402,6 +1882,7 @@ export function TopToolbar({
       {isMenuVisible(uiProfile, "controls") && (
         <ControlsMenu
           chrome={chrome}
+          viewer={viewer}
           controlsVisible={controlsVisible}
           panels={panels}
           effectsActive={isActive(EFFECTS_PLUGIN_ID)}
@@ -1426,7 +1907,7 @@ export function TopToolbar({
           onOpenRecordVideo={() => setRecordVideoOpen(true)}
         />
       )}
-      {isMenuVisible(uiProfile, "plugins") && (
+      {!viewer && isMenuVisible(uiProfile, "plugins") && (
         <PluginsMenu
           chrome={chrome}
           appApi={appApi}
@@ -1441,38 +1922,53 @@ export function TopToolbar({
       {/* Top-level toolbar menus registered by built-in plugins via
           app.registerToolbarMenu(); external plugin menus render after Help
           (below). Renders nothing when none exist. */}
-      <PluginToolbarMenus chrome={chrome} placement="builtin" />
-      <SettingsDialog
-        buttonClassName={toolbarButtonClass}
-        buttonSize={toolbarButtonSize}
-        iconClassName={toolbarIconClassName}
-        mapControllerRef={mapControllerRef}
-        showLabels={showLabels}
-        onOpenManagePlugins={() => setManagePluginsOpen(true)}
-        profilePlugins={profilePlugins}
-        themeMode={themeMode}
-        onToggleThemeMode={onToggleThemeMode}
-      />
-      <ManagePluginsDialog
-        open={managePluginsOpen}
-        onOpenChange={setManagePluginsOpen}
-        mapControllerRef={mapControllerRef}
-      />
+      {!viewer ? <PluginToolbarMenus chrome={chrome} placement="builtin" /> : null}
+      {!viewer ? (
+        <SettingsDialog
+          buttonClassName={toolbarButtonClass}
+          buttonSize={toolbarButtonSize}
+          iconClassName={toolbarIconClassName}
+          mapControllerRef={mapControllerRef}
+          showLabels={showLabels}
+          onOpenManagePlugins={() => setManagePluginsOpen(true)}
+          profilePlugins={profilePlugins}
+          themeMode={themeMode}
+          onToggleThemeMode={onToggleThemeMode}
+        />
+      ) : null}
+      {/* No plugin marketplace in the Mac App Store build (all its entry
+          points are hidden too; this keeps the install surface out of the
+          bundle). */}
+      {!IS_MAS_BUILD && (
+        <ManagePluginsDialog
+          open={managePluginsOpen}
+          onOpenChange={setManagePluginsOpen}
+          mapControllerRef={mapControllerRef}
+        />
+      )}
       <PrintLayoutDialog
         open={printLayoutOpen}
         onOpenChange={setPrintLayoutOpen}
         mapControllerRef={mapControllerRef}
       />
-      <FieldCollectionDialog
-        open={fieldCollectionOpen}
-        onOpenChange={setFieldCollectionOpen}
-        mapControllerRef={mapControllerRef}
-      />
-      <GpsTrackingDialog
-        open={gpsTrackingOpen}
-        onOpenChange={setGpsTrackingOpen}
-        mapControllerRef={mapControllerRef}
-      />
+      {/* Field Collection and GPS Tracking add features and layers to the
+          project, so they follow the Controls menu entries that open them out
+          of the read-only viewer preset. Record Tour and Record Video below
+          only read the map, so they stay. */}
+      {!viewer && (
+        <FieldCollectionDialog
+          open={fieldCollectionOpen}
+          onOpenChange={setFieldCollectionOpen}
+          mapControllerRef={mapControllerRef}
+        />
+      )}
+      {!viewer && (
+        <GpsTrackingDialog
+          open={gpsTrackingOpen}
+          onOpenChange={setGpsTrackingOpen}
+          mapControllerRef={mapControllerRef}
+        />
+      )}
       <RecordTourDialog
         open={recordTourOpen}
         onOpenChange={setRecordTourOpen}
@@ -1506,7 +2002,8 @@ export function TopToolbar({
         getProject={async (title) => {
           // Shared projects are opened on another machine where the local files
           // don't exist, so always embed the vector data (never file references).
-          const { content, defaultProjectName } = await projectFiles.buildEmbeddedProject(title);
+          const { project, defaultProjectName } = await projectFiles.buildEmbeddedProject(title);
+          const redacted = redactProjectCredentials(excludeHiddenFieldsFromProject(project));
           // Strip path separators, control chars, and other characters that are
           // illegal in filenames so the server gets a predictable name.
           const safeName = defaultProjectName.replace(
@@ -1516,7 +2013,11 @@ export function TopToolbar({
             /[\u0000-\u001f\u007f/\\:*?"<>|]/g,
             "_",
           );
-          return { content, filename: `${safeName}.geolibre.json` };
+          return {
+            content: serializeProject(redacted.project),
+            filename: `${safeName}.geolibre.json`,
+            redactedCount: redacted.redactedCount,
+          };
         }}
       />
       <ProjectGalleryDialog
@@ -1527,6 +2028,7 @@ export function TopToolbar({
       {isMenuVisible(uiProfile, "help") && (
         <HelpMenu
           chrome={chrome}
+          viewer={viewer}
           diagnosticsErrorCount={diagnosticsErrorCount}
           onOpenCommandPalette={() => setCommandPaletteOpen(true)}
           onOpenShortcuts={() => setShortcutsOpen(true)}
@@ -1540,7 +2042,7 @@ export function TopToolbar({
       )}
       {/* External plugin toolbar menus render after Help so third-party menus
           sit at the end of the banner, past the built-in menus. */}
-      <PluginToolbarMenus chrome={chrome} placement="external" />
+      {!viewer ? <PluginToolbarMenus chrome={chrome} placement="external" /> : null}
       <AddDataDialog
         kind={addDataKind}
         mapControllerRef={mapControllerRef}
@@ -1548,7 +2050,17 @@ export function TopToolbar({
         initialPostgres={addDataPostgres}
         onOpenChange={(open: boolean) => {
           if (!open) {
+            if (addDataTargetGroupId) {
+              const state = useAppStore.getState();
+              const addedIds = state.layers
+                .filter((layer) => !addDataInitialLayerIdsRef.current.has(layer.id))
+                .map((layer) => layer.id);
+              if (addedIds.length > 0) {
+                state.moveLayersToGroup(addedIds, addDataTargetGroupId);
+              }
+            }
             setAddDataKind(null);
+            setAddDataTargetGroupId(null);
             setAddDataDeckVizKind(undefined);
             setAddDataPostgres(undefined);
           }
@@ -1564,16 +2076,20 @@ export function TopToolbar({
         renderTrigger={false}
         onOpenChange={setAboutOpen}
       />
-      <CommandPalette
-        open={commandPaletteOpen}
-        commands={commands}
-        onOpenChange={setCommandPaletteOpen}
-      />
-      <KeyboardShortcutsDialog
-        open={shortcutsOpen}
-        commands={commands}
-        onOpenChange={setShortcutsOpen}
-      />
+      {!viewer && (
+        <CommandPalette
+          open={commandPaletteOpen}
+          commands={commands}
+          onOpenChange={setCommandPaletteOpen}
+        />
+      )}
+      {!viewer && (
+        <KeyboardShortcutsDialog
+          open={shortcutsOpen}
+          commands={commands}
+          onOpenChange={setShortcutsOpen}
+        />
+      )}
       <div className="ms-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Button
           aria-label={
@@ -1603,7 +2119,11 @@ export function TopToolbar({
               aria-label={t("toolbar.item.projectName")}
               className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
               value={projectName}
-              onChange={(event) => setProjectName(event.target.value)}
+              readOnly={viewer}
+              onChange={(event) => {
+                if (viewer) return;
+                setProjectName(event.target.value);
+              }}
               onKeyDown={(event) => {
                 if (
                   event.key === "Enter" &&
@@ -1620,6 +2140,7 @@ export function TopToolbar({
                 projectNameComposingRef.current = false;
               }}
               onBlur={(event) => {
+                if (viewer) return;
                 const nextName = event.target.value.trim();
                 // Persist the canonical, locale-independent default name; a
                 // translated string would otherwise be written into the saved

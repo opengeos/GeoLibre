@@ -19,8 +19,10 @@ import { EMBED_ORIGIN_WILDCARD, isEmbedOriginAllowed, readEmbedOrigins } from ".
  * not throw cross-origin, so it can't be used for this). A random cross-origin
  * page that iframes a deployed app therefore never auto-activates the bridge.
  * The explicit `?embed=1` opt-in, however, trusts whatever the framing parent
- * is — the bridge
- * broadcasts full project state to it. Because the legitimate hosts (the Jupyter
+ * is — the bridge broadcasts project state to it, redacted unless that host
+ * asks for full fidelity with `trustedWidget` (see `useEmbedBridge.ts`, where
+ * that flag is documented as self-declared and therefore not a boundary of its
+ * own). Because the legitimate hosts (the Jupyter
  * widget, Colab's proxy) have arbitrary, unknowable origins, an origin allowlist
  * is not viable here; instead the deployment constraint is: an `?embed=1`
  * export must only be served from a trusted context, never a public URL. A

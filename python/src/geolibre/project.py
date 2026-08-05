@@ -11,16 +11,162 @@ from __future__ import annotations
 import copy
 import ipaddress
 import json
+import re
 import socket
 import uuid
 import warnings
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, unquote_plus, urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
 from .basemaps import DEFAULT_BASEMAP
+
+
+def _normalize_credential_name(name: str) -> str:
+    """Fold the spellings of one credential name together.
+
+    Mirrors ``normalizeCredentialName`` in ``packages/core/src/credentials.ts``
+    so ``apiKey``, ``api_key``, ``api-key``, and ``APIKEY`` are one entry.
+
+    Args:
+        name: An object key or URL parameter name.
+
+    Returns:
+        The lowercased name with ``-`` and ``_`` removed.
+    """
+    return name.lower().replace("-", "").replace("_", "")
+
+
+# Mirrors PROJECT_CREDENTIAL_FIELDS.layerConfiguration in
+# packages/core/src/credentials.ts. Keep the two in sync: this module exists to
+# keep the Python and JS project builders faithful to each other, and an entry
+# missing here ships a credential the JS egress path would have stripped.
+_CREDENTIAL_FIELD_NAMES = {
+    _normalize_credential_name(name)
+    for name in (
+        "requestHeaders",
+        "headers",
+        "authorization",
+        "apiKey",
+        "apiKeys",
+        "accessToken",
+        "token",
+        "password",
+        "clientSecret",
+        "connectionString",
+        "secret",
+        "bearer",
+        "auth",
+        "authKey",
+        "sasToken",
+        "subscriptionKey",
+        "signature",
+        "pwd",
+    )
+}
+# Wider than the field registry by design, and for the same reason as the JS
+# side: `key` and the Azure SAS positional parameters are credentials only
+# inside a query string. As configuration field names they collide with ordinary
+# state (`sr` is a spatial reference on an ArcGIS source).
+_CREDENTIAL_URL_PARAMS = _CREDENTIAL_FIELD_NAMES | {
+    _normalize_credential_name(name)
+    for name in ("key", "sig", "se", "sp", "sv", "sr", "st", "skoid")
+}
+_MAX_REDACT_DEPTH = 12
+
+
+def _redact_url(value: str) -> str:
+    """Strip URL userinfo and credential parameters without re-encoding it."""
+
+    def keep_params(params: str) -> str:
+        return "&".join(
+            pair
+            for pair in params.split("&")
+            if pair
+            and _normalize_credential_name(name := unquote_plus(pair.split("=", 1)[0]).lower())
+            not in _CREDENTIAL_URL_PARAMS
+            and not name.startswith("x-amz-")
+        )
+
+    before_hash, separator, fragment = value.partition("#")
+    base, query_separator, query = before_hash.partition("?")
+    scheme_match = re.match(r"(?i)([a-z][a-z0-9+.-]*://)", base)
+    if scheme_match:
+        authority_start = scheme_match.end()
+        authority_end = base.find("/", authority_start)
+        if authority_end == -1:
+            authority_end = len(base)
+        authority = base[authority_start:authority_end]
+        if "@" in authority:
+            base = base[:authority_start] + authority.rsplit("@", 1)[1] + base[authority_end:]
+    kept_query = keep_params(query) if query_separator else ""
+    kept_fragment = keep_params(fragment) if separator and "=" in fragment else fragment
+    return (
+        base
+        + (f"?{kept_query}" if kept_query else "")
+        + (f"#{kept_fragment}" if kept_fragment else "")
+    )
+
+
+def _redact_config(value: Any, depth: int = 0) -> Any:
+    """Return project configuration with credential-named fields removed."""
+    if depth >= _MAX_REDACT_DEPTH:
+        return None
+    if isinstance(value, str):
+        return _redact_url(value)
+    if isinstance(value, list):
+        return [_redact_config(item, depth + 1) for item in value]
+    if not isinstance(value, dict):
+        return copy.deepcopy(value)
+    if value.get("type") in {"FeatureCollection", "Feature", "GeometryCollection"}:
+        return copy.deepcopy(value)
+    return {
+        key: _redact_config(nested, depth + 1)
+        for key, nested in value.items()
+        if _normalize_credential_name(key) not in _CREDENTIAL_FIELD_NAMES
+    }
+
+
+def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
+    """Return a detached project safe to publish, export, or hand to others."""
+    safe = copy.deepcopy(project)
+    if isinstance(safe.get("basemapStyleUrl"), str):
+        safe["basemapStyleUrl"] = _redact_url(safe["basemapStyleUrl"])
+    preferences = safe.get("preferences")
+    if isinstance(preferences, dict):
+        preferences["environmentVariables"] = []
+        geocoding = preferences.get("geocoding")
+        if isinstance(geocoding, dict):
+            geocoding["apiKeys"] = {}
+            for field in ("forwardEndpoint", "reverseEndpoint"):
+                if isinstance(geocoding.get(field), str):
+                    geocoding[field] = _redact_url(geocoding[field])
+    layers = safe.get("layers")
+    if isinstance(layers, list):
+        for layer in layers:
+            if not isinstance(layer, dict):
+                continue
+            # `connection.lastError` is free-form text taken from a caught
+            # error, which a future refresh path could easily build from the
+            # request URL. Sweeping it costs nothing and keeps the no-secret
+            # guarantee from depending on how an error message is worded.
+            for field in ("source", "metadata", "sourcePath", "connection"):
+                if field in layer:
+                    layer[field] = _redact_config(layer[field])
+    plugins = safe.get("plugins")
+    if isinstance(plugins, dict):
+        manifest_urls = plugins.get("manifestUrls")
+        if isinstance(manifest_urls, list):
+            plugins["manifestUrls"] = [
+                _redact_url(url) if isinstance(url, str) else url for url in manifest_urls
+            ]
+        plugins["settings"] = {}
+    if "metadata" in safe:
+        safe["metadata"] = _redact_config(safe["metadata"])
+    return safe
+
 
 PROJECT_VERSION = "0.1.0"
 

@@ -48,12 +48,20 @@ def relay(monkeypatch):
         body = (
             {"listeners": Relay.listeners}
             if request.full_url.endswith("/status")
-            else {"delivered": Relay.listeners}
+            else _command_response(request, Relay.listeners)
         )
         return FakeResponse(json.dumps(body).encode())
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     return Relay
+
+
+def _command_response(request, listeners):
+    message = json.loads(request.data)
+    response = {"delivered": listeners}
+    if message.get("requestId"):
+        response.update({"ok": True, "value": f"result-for-{message['method']}"})
+    return response
 
 
 @pytest.fixture
@@ -173,11 +181,31 @@ def test_is_connected_without_a_relay_follows_the_kernel_kind(monkeypatch):
 
 
 def test_add_geojson_wraps_a_bare_geometry(relay, displays):
-    notebook_client.HostMap().add_geojson({"type": "Point", "coordinates": [1, 2]}, name="Pin")
+    layer_id = notebook_client.HostMap().add_geojson(
+        {"type": "Point", "coordinates": [1, 2]}, name="Pin"
+    )
 
     params = json.loads(relay.calls[0].data)["params"]
+    assert json.loads(relay.calls[0].data)["requestId"]
+    assert layer_id == "result-for-addGeoJsonLayer"
     assert params["name"] == "Pin"
     assert params["geojson"]["features"][0]["geometry"]["coordinates"] == [1, 2]
+    assert params["style"] == {}
+
+
+def test_add_geojson_sends_inline_style_overrides(relay, displays):
+    notebook_client.HostMap().add_geojson(
+        {"type": "FeatureCollection", "features": []},
+        name="Major Cities",
+        fillColor="#facc15",
+        strokeColor="#d97706",
+    )
+
+    params = json.loads(relay.calls[0].data)["params"]
+    assert params["style"] == {
+        "fillColor": "#facc15",
+        "strokeColor": "#d97706",
+    }
 
 
 def test_add_markers_builds_a_point_collection(relay, displays):
@@ -186,3 +214,159 @@ def test_add_markers_builds_a_point_collection(relay, displays):
     features = json.loads(relay.calls[0].data)["params"]["geojson"]["features"]
     assert [f["geometry"]["coordinates"] for f in features] == [[-122.4, 37.8], [1.0, 2.0]]
     assert features[1]["properties"] == {"kind": "x"}
+
+
+def test_list_layers_returns_live_metadata(relay, monkeypatch):
+    layers = [{"id": "cities", "name": "Cities", "type": "geojson"}]
+    monkeypatch.setattr(
+        notebook_client,
+        "_request",
+        lambda method, params=None: layers if method == "listLayers" else None,
+    )
+
+    assert notebook_client.HostMap().list_layers() == layers
+
+
+def test_get_layer_returns_a_matching_layer(monkeypatch):
+    layers = [
+        {"id": "roads", "name": "Roads", "type": "geojson"},
+        {"id": "cities", "name": "Cities", "type": "geojson"},
+    ]
+    monkeypatch.setattr(notebook_client.HostMap, "list_layers", lambda self: layers)
+
+    assert notebook_client.HostMap().get_layer("cities") == layers[1]
+
+
+def test_get_layer_raises_for_an_unknown_id(monkeypatch):
+    monkeypatch.setattr(notebook_client.HostMap, "list_layers", lambda self: [])
+
+    with pytest.raises(ValueError, match="missing"):
+        notebook_client.HostMap().get_layer("missing")
+
+
+def test_list_layers_raises_on_a_non_list_result(relay, monkeypatch):
+    # An empty list would read as "the map has no layers" and hide the bug.
+    monkeypatch.setattr(notebook_client, "_request", lambda method, params=None: {"oops": True})
+
+    with pytest.raises(RuntimeError, match="unexpected layer list"):
+        notebook_client.HostMap().list_layers()
+
+
+def test_add_geojson_falls_back_when_no_window_is_connected(relay, displays):
+    # Every other mutation degrades to the display transport (which still reaches
+    # the embedded Notebook panel) rather than failing, so this must too.
+    relay.listeners = 0
+
+    with pytest.warns(notebook_client.GeoLibreNotConnectedWarning):
+        layer_id = notebook_client.HostMap().add_geojson(
+            {"type": "FeatureCollection", "features": []}
+        )
+
+    assert layer_id is None
+    assert len(displays) == 1
+
+
+def test_add_geojson_does_not_resend_after_a_result_timeout(relay, displays):
+    # A window took the command (504 from the relay) and is probably still adding
+    # the layer, so re-sending it would add a duplicate. Only the id is lost.
+    relay.error = urllib.error.HTTPError(
+        "http://127.0.0.1:8766/geolibre/relay/command", 504, "Gateway Timeout", {}, None
+    )
+
+    with pytest.warns(notebook_client.GeoLibreTimeoutWarning, match="still running") as caught:
+        layer_id = notebook_client.HostMap().add_geojson(
+            {"type": "FeatureCollection", "features": []}
+        )
+
+    assert layer_id is None
+    assert displays == []
+    # The warning must blame the caller's line, not notebook_client's internals,
+    # so it points at the user's cell and repeats per cell.
+    assert caught[0].filename == __file__
+
+
+def test_add_geojson_falls_back_when_the_relay_is_unreachable(relay, displays):
+    # Nothing was dispatched, so re-sending is safe — and is what every other
+    # mutation does.
+    relay.error = urllib.error.URLError("connection refused")
+
+    with pytest.warns(notebook_client.GeoLibreNotConnectedWarning):
+        layer_id = notebook_client.HostMap().add_geojson(
+            {"type": "FeatureCollection", "features": []}
+        )
+
+    assert layer_id is None
+    assert len(displays) == 1
+    # One POST, not two: re-asking an endpoint that just failed to answer would
+    # wait out a second full timeout on top of the read-back's.
+    assert len(relay.calls) == 1
+
+
+def test_add_geojson_still_retries_the_relay_when_it_is_merely_unsubscribed(relay, displays):
+    # Here the relay answered (delivered: 0), so it is up and the second POST is
+    # immediate — worth making, since a window may have connected in between.
+    relay.listeners = 0
+
+    with pytest.warns(notebook_client.GeoLibreNotConnectedWarning):
+        notebook_client.HostMap().add_geojson({"type": "FeatureCollection", "features": []})
+
+    assert len(relay.calls) == 2
+
+
+def test_read_back_timeout_raises_rather_than_reporting_no_layers(relay):
+    relay.error = urllib.error.HTTPError(
+        "http://127.0.0.1:8766/geolibre/relay/command", 504, "Gateway Timeout", {}, None
+    )
+
+    with pytest.raises(notebook_client.GeoLibreTimeoutError, match="still running"):
+        notebook_client.HostMap().list_layers()
+
+
+def test_add_geojson_still_raises_when_the_handler_fails(relay, monkeypatch):
+    # Only the not-connected case degrades; a real handler error must surface.
+    def fail(url, method, params=None):
+        raise RuntimeError("layerId must be a non-empty string")
+
+    monkeypatch.setattr(notebook_client, "_request_from_relay", fail)
+
+    with pytest.raises(RuntimeError, match="layerId"):
+        notebook_client.HostMap().add_geojson({"type": "FeatureCollection", "features": []})
+
+
+def test_add_geojson_raises_on_a_missing_layer_id(relay, monkeypatch):
+    # str(None) would hand back "None", an id no later call could ever resolve.
+    monkeypatch.setattr(
+        notebook_client, "_request_from_relay", lambda url, method, params=None: None
+    )
+
+    with pytest.raises(RuntimeError, match="unexpected layer id"):
+        notebook_client.HostMap().add_geojson({"type": "FeatureCollection", "features": []})
+
+
+# -- relay failures ----------------------------------------------------------
+
+
+def test_read_back_reports_an_answered_error_status_as_such(relay):
+    # The relay answered (400 = it rejected the command), so the message must not
+    # send the reader looking for an unreachable server. 504 is its own case, see
+    # test_read_back_timeout_raises_rather_than_reporting_no_layers.
+    relay.error = urllib.error.HTTPError(
+        "http://127.0.0.1:8766/geolibre/relay/command",
+        400,
+        "Bad Request",
+        {},
+        io.BytesIO(json.dumps({"message": "Missing a non-empty 'method'."}).encode()),
+    )
+
+    with pytest.raises(RuntimeError, match="returned HTTP 400") as excinfo:
+        notebook_client.HostMap().list_layers()
+
+    assert "Missing a non-empty" in str(excinfo.value)
+    assert "could not be reached" not in str(excinfo.value)
+
+
+def test_read_back_reports_an_unreachable_relay_as_such(relay):
+    relay.error = urllib.error.URLError("connection refused")
+
+    with pytest.raises(RuntimeError, match="could not be reached"):
+        notebook_client.HostMap().list_layers()

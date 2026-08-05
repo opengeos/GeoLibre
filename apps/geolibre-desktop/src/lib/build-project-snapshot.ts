@@ -1,4 +1,9 @@
-import { projectFromStore, useAppStore, type GeoLibreProject } from "@geolibre/core";
+import {
+  projectFromStore,
+  redactCredentials,
+  useAppStore,
+  type GeoLibreProject,
+} from "@geolibre/core";
 import type { RefObject } from "react";
 import type { MapController } from "@geolibre/map";
 import { getPluginManager } from "../hooks/usePlugins";
@@ -44,6 +49,18 @@ export function buildProjectSnapshot(
     secondaryMapViews: state.secondaryMapViews,
     primaryMapLabel: state.primaryMapLabel,
     styleLibrary: state.projectStyleLibrary,
+    comments: state.comments,
     metadata: state.metadata,
   });
+}
+
+/**
+ * Build the public wire form used by collaboration and embed hosts.
+ * Keeping this boundary shared prevents either transport from accidentally
+ * reverting to the credential-bearing local snapshot.
+ */
+export function buildProjectEgressSnapshot(
+  mapControllerRef: RefObject<MapController | null>,
+): GeoLibreProject {
+  return redactCredentials(buildProjectSnapshot(mapControllerRef));
 }

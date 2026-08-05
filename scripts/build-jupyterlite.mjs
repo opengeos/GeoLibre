@@ -36,11 +36,18 @@ const outputDir = resolve(repoRoot, "apps/geolibre-desktop/public/jupyterlite");
 
 const isWin = process.platform === "win32";
 
-// The desktop (Tauri) build launches a real JupyterLab server, so the static
-// JupyterLite site is dead weight in the installer. Tauri sets TAURI_ENV_* on
-// its beforeBuildCommand; skip the build there. The plain web build and the
-// embed build (Jupyter widget) do not set it, so they still get the site.
-if (process.env.TAURI_ENV_PLATFORM) {
+// The Mac App Store build cannot spawn the JupyterLab server (App Sandbox +
+// guideline 2.5.2), so its Notebook panel embeds the JupyterLite site exactly
+// like the web build and the site is NOT dead weight there. `tauri-build.mjs`
+// sets GEOLIBRE_MAS_BUILD=1 on the tauri CLI, which the beforeBuildCommand
+// inherits, so this is visible here.
+const IS_MAS_BUILD = process.env.GEOLIBRE_MAS_BUILD === "1";
+
+// Every other desktop (Tauri) build launches a real JupyterLab server, so the
+// static site is dead weight in the installer. Tauri sets TAURI_ENV_* on its
+// beforeBuildCommand; skip the build there. The plain web build and the embed
+// build (Jupyter widget) do not set it, so they still get the site.
+if (process.env.TAURI_ENV_PLATFORM && !IS_MAS_BUILD) {
   console.log(
     "[build-jupyterlite] Tauri build detected — skipping JupyterLite " +
       "(desktop uses a real JupyterLab server).",
@@ -70,12 +77,29 @@ const probe = spawnSync("jupyter", ["lite", "--version"], {
 });
 
 if (probe.status !== 0) {
+  const install =
+    "  pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt\n" +
+    "then re-run `npm run build:jupyterlite`.";
+  // Best-effort everywhere except the Mac App Store build, which has no
+  // JupyterLab server to fall back to: shipping it without the site leaves the
+  // Notebook panel pointing at a missing asset, and Tauri's asset resolver
+  // serves index.html for anything it cannot find, so the panel would render a
+  // second copy of GeoLibre inside its iframe. Fail the build instead.
+  if (IS_MAS_BUILD) {
+    console.error(
+      "[build-jupyterlite] `jupyter lite` is not available, but the Mac App " +
+        "Store build embeds the JupyterLite site (it cannot spawn a Jupyter " +
+        "server). Install the build deps:\n" +
+        install,
+    );
+    process.exit(1);
+  }
   console.warn(
     "[build-jupyterlite] `jupyter lite` is not available — skipping the " +
-      "JupyterLite build. The web Notebook panel will show a 'not built' " +
-      "message. To enable it, install the build deps:\n" +
-      "  pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt\n" +
-      "then re-run `npm run build:jupyterlite`.",
+      "JupyterLite build. Any build that embeds the site (web, embed) will " +
+      "have a Notebook panel that cannot load. To enable it, install the " +
+      "build deps:\n" +
+      install,
   );
   process.exit(0);
 }

@@ -35,6 +35,13 @@ import {
   THREE_D_TILES_DECK_LOAD_OPTIONS,
 } from "./arcgis-i3s-tiles";
 
+/**
+ * `metadata.sourceKind` marking the 3D Tiles layers this plugin adds. Exported so the Layer Library's restore
+ * dispatch keys off the same value this plugin writes rather than a hand-typed
+ * copy (issue #1520).
+ */
+export const THREE_D_TILES_SOURCE_KIND = "3d-tiles-url";
+
 const threeDTilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const THREE_D_TILES_LAYER_ID = "geolibre-3d-tiles";
 // Keep in sync with the three.js version maplibre-gl-3d-tiles is built
@@ -517,7 +524,7 @@ function createThreeDTilesStoreLayer(
       nativeLayerIds: [tileset.layerId],
       panelCollapsed,
       sourceId: tileset.id,
-      sourceKind: "3d-tiles-url",
+      sourceKind: THREE_D_TILES_SOURCE_KIND,
       status: tileset.status,
     },
     sourcePath: tileset.tilesetUrl,
@@ -575,7 +582,7 @@ function resetThreeDTilesControl(control: ThreeDTilesControl | null): void {
 function isThreeDTilesControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "3d-tiles" &&
-    layer.metadata.sourceKind === "3d-tiles-url" &&
+    layer.metadata.sourceKind === THREE_D_TILES_SOURCE_KIND &&
     layer.metadata.externalNativeLayer === true &&
     !isGooglePhotorealisticTilesetLayerUrl(layer)
   );

@@ -376,6 +376,21 @@ export function isVectorControlRefreshLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+/**
+ * True when the "clear the layer on refresh failure" policy can actually be
+ * honored for this layer. Clearing works by writing an empty FeatureCollection
+ * into `layer.geojson`, which vector-control layers never populate — their
+ * features live in the external control's own sources and are mirrored into the
+ * store only as metadata. Offering the option there would silently do nothing,
+ * so the refresh-settings dialog hides it for those layers.
+ *
+ * @param layer - The store layer to test.
+ * @returns Whether a failure policy other than "keep-last" takes effect.
+ */
+export function supportsRefreshFailurePolicy(layer: GeoLibreLayer): boolean {
+  return !isVectorControlRefreshLayer(layer);
+}
+
 export function isRefreshableLayer(layer: GeoLibreLayer): boolean {
   return (
     Boolean(refreshSourceUrl(layer)) ||
@@ -387,6 +402,16 @@ export function isRefreshableLayer(layer: GeoLibreLayer): boolean {
 }
 
 export function getLayerRefreshConfig(layer: GeoLibreLayer): LayerRefreshConfig {
+  if (layer.connection) {
+    const seconds = layer.connection.interval;
+    const converted =
+      typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+    const intervalMs =
+      converted > 0 && Number.isFinite(converted)
+        ? Math.max(MIN_REFRESH_INTERVAL_MS, converted)
+        : 0;
+    return { enabled: intervalMs > 0, intervalMs };
+  }
   const refresh = layer.metadata.refresh;
   if (!refresh || typeof refresh !== "object" || Array.isArray(refresh)) {
     return { enabled: false, intervalMs: 0 };
@@ -417,12 +442,36 @@ export function setLayerRefreshConfig(
   // accumulate meaningless { enabled: false, intervalMs: 0 } entries.
   const { refresh: _refresh, ...restMetadata } = layer.metadata;
   return {
+    connection: {
+      layerId: layer.id,
+      interval: enabled ? config.intervalMs / 1000 : null,
+      lastSyncedAt: layer.connection?.lastSyncedAt ?? null,
+      lastError: layer.connection?.lastError ?? null,
+      onFailure: layer.connection?.onFailure ?? "keep-last",
+    },
     metadata: enabled
       ? {
           ...restMetadata,
           refresh: { enabled: true, intervalMs: config.intervalMs },
         }
       : restMetadata,
+  };
+}
+
+/** Return a layer patch that records the outcome of a synchronization. */
+export function setLayerConnectionResult(
+  layer: GeoLibreLayer,
+  result: { syncedAt?: string; error?: string | null },
+): Partial<GeoLibreLayer> {
+  const config = getLayerRefreshConfig(layer);
+  return {
+    connection: {
+      layerId: layer.id,
+      interval: config.enabled ? config.intervalMs / 1000 : null,
+      lastSyncedAt: result.syncedAt ?? layer.connection?.lastSyncedAt ?? null,
+      lastError: result.error === undefined ? (layer.connection?.lastError ?? null) : result.error,
+      onFailure: layer.connection?.onFailure ?? "keep-last",
+    },
   };
 }
 

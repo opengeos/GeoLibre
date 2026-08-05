@@ -194,4 +194,27 @@ describe("normalizeProcessingHistory", () => {
     assert.equal(runs?.length, MAX_PROCESSING_HISTORY);
     assert.equal(runs?.[0].id, "run-10");
   });
+
+  it("migrates legacy H3 tool ids to DGGS tools with dggsType h3", () => {
+    const runs = normalizeProcessingHistory([
+      makeRun({
+        id: "legacy-grid",
+        toolId: "h3-grid",
+        toolName: "H3 Grid",
+        parameters: { resolution: 5 },
+      }),
+      makeRun({
+        id: "legacy-bin",
+        toolId: "h3-bin-points",
+        parameters: { resolution: 4, dggsType: "s2" },
+      }),
+    ]);
+    assert.equal(runs?.length, 2);
+    assert.equal(runs?.[0].toolId, "dggs-grid");
+    assert.equal(runs?.[0].parameters.dggsType, "h3");
+    assert.equal(runs?.[0].parameters.resolution, 5);
+    assert.equal(runs?.[1].toolId, "dggs-bin");
+    // Explicit dggsType from the saved run is preserved.
+    assert.equal(runs?.[1].parameters.dggsType, "s2");
+  });
 });

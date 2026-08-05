@@ -72,6 +72,12 @@ function asBounds(value: unknown): [number, number, number, number] | undefined 
   return undefined;
 }
 
+/** Whether a reference already carries a scheme (or is protocol-relative), and
+ * so needs no resolution against the document it was read from. */
+function isAbsoluteUrl(value: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith("//");
+}
+
 /** Non-empty string tile templates from an unknown `tiles` value. */
 function asTiles(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -251,6 +257,19 @@ export function tileJsonConfig(
   ) {
     config.center = center as number[];
   }
+  // An Esri `VectorTileServer` document is TileJSON-shaped enough to read
+  // (`name`, `maxzoom`) but lists its tiles relatively — `tile/{z}/{y}/{x}.pbf`.
+  // MapLibre would resolve those against the app origin, so when the document
+  // carries relative templates, hand it explicit absolute `tiles` instead of the
+  // document URL. Absolute templates are left alone so a conforming TileJSON
+  // keeps being loaded by MapLibre itself (it re-reads more than is copied here).
+  const tiles = asTiles(tilejson.tiles);
+  if (tiles?.some((tile) => !isAbsoluteUrl(tile))) {
+    config.tiles = tiles.map((tile) =>
+      normalizeTilePlaceholders(resolveDocumentUrl(tile, tilejsonUrl)),
+    );
+    delete config.url;
+  }
   const sourceLayers = vectorLayerIds(tilejson);
   if (sourceLayers.length > 0) config.sourceLayers = sourceLayers;
   return config;
@@ -261,6 +280,35 @@ export function tileJsonConfig(
  * verbatim and silently fail to load. */
 function normalizeTilePlaceholders(url: string): string {
   return url.replace(/\{z\}/gi, "{z}").replace(/\{x\}/gi, "{x}").replace(/\{y\}/gi, "{y}");
+}
+
+/**
+ * Resolves a reference taken out of a fetched document against that document's
+ * own URL.
+ *
+ * Style and service documents routinely use relative references: every Esri
+ * vector tile style declares its tileset as `{"type":"vector","url":"../../"}`,
+ * and an Esri `VectorTileServer` document lists `tiles:
+ * ["tile/{z}/{y}/{x}.pbf"]`. MapLibre resolves whatever it is handed against
+ * the *app* origin rather than the document it came from, so passing such a
+ * value through verbatim requests the wrong host entirely — the layer is added
+ * and then silently renders nothing (GeoLibre#1639).
+ *
+ * `URL` percent-encodes the `{`/`}` of a tile template, which would defeat
+ * MapLibre's placeholder substitution, so the braces are restored afterwards.
+ *
+ * @param value - The (possibly relative) reference read from the document.
+ * @param baseUrl - The URL the document was fetched from.
+ * @returns The absolute URL, or the trimmed input when it cannot be resolved.
+ */
+export function resolveDocumentUrl(value: string, baseUrl?: string): string {
+  const trimmed = value.trim();
+  if (trimmed === "" || !baseUrl) return trimmed;
+  try {
+    return new URL(trimmed, baseUrl).toString().replace(/%7B/gi, "{").replace(/%7D/gi, "}");
+  } catch {
+    return trimmed;
+  }
 }
 
 /**
@@ -324,12 +372,49 @@ export async function resolveOgcVectorTiles(input: {
     }
     if (vector) {
       // Fall back to the style's own vector source only when no tiles input was
-      // given...
+      // given. Both forms are resolved against the style URL first: they are
+      // routinely relative (see `resolveDocumentUrl`).
       if (!config.url && !config.tiles) {
         if (typeof vector.source.url === "string") {
-          config.url = vector.source.url;
+          const sourceUrl = resolveDocumentUrl(vector.source.url, styleUrl);
+          config.url = sourceUrl || undefined;
+          // The style only names the tileset; the document it points at holds
+          // the tile templates and zoom range. Read it so a non-TileJSON
+          // service (Esri's `VectorTileServer`) still yields usable absolute
+          // tiles. Best-effort: the style's own metadata below still applies if
+          // this fails, so a fetch error must not block adding the layer.
+          if (sourceUrl) {
+            const tileset = await fetchOgcJson(sourceUrl, signal).catch((error) => {
+              if (input.signal?.aborted) throw error;
+              return null;
+            });
+            if (tileset && typeof tileset === "object") {
+              // Style-derived source layers and name stay authoritative
+              // (manual > style > TileJSON), so the tileset must not clobber
+              // them. `url` is assigned rather than spread: `tileJsonConfig`
+              // *drops* it when it emits explicit `tiles`, and a spread would
+              // leave the stale value behind — a MapLibre vector source given
+              // both `url` and `tiles` is invalid.
+              const {
+                sourceLayers: tilesetLayers,
+                name: tilesetName,
+                url: tilesetUrl,
+                ...tilesetConfig
+              } = tileJsonConfig(tileset as Record<string, unknown>, sourceUrl);
+              config = {
+                ...config,
+                ...tilesetConfig,
+                url: tilesetUrl,
+                name: config.name ?? tilesetName,
+                sourceLayers:
+                  config.sourceLayers.length > 0 ? config.sourceLayers : (tilesetLayers ?? []),
+              };
+            }
+          }
         } else {
-          config.tiles = asTiles(vector.source.tiles)?.map(normalizeTilePlaceholders);
+          config.tiles = asTiles(vector.source.tiles)?.map((tile) =>
+            normalizeTilePlaceholders(resolveDocumentUrl(tile, styleUrl)),
+          );
         }
       }
       // ...but always fill a missing zoom range / bounds from the style, even

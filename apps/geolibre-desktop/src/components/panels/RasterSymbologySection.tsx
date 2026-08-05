@@ -34,6 +34,7 @@ import {
 } from "maplibre-gl-raster";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useColormapRamps } from "../../hooks/useColormapRamps";
 import { setLegendCustomEntry } from "../../lib/auto-legend";
 import { savedRasterAttributeTable } from "../../lib/raster-attribute-table";
 
@@ -68,15 +69,6 @@ const DEFAULT_CLASS_COUNT = 5;
 const CUSTOM_RAMP_VALUE = "__custom__";
 /** A custom ramp needs at least this many colors to interpolate. */
 const MIN_CUSTOM_COLORS = RASTER_MIN_CUSTOM_COLORS;
-/**
- * Every renderer colormap (the same list the maplibre-gl-raster panel offers),
- * sorted by display label for the dropdown. Labels use matplotlib casing
- * (RdBu, YlOrBr, …); the value is the lowercase colormap key. A fixed "en"
- * locale keeps the order identical across browsers.
- */
-const SORTED_COLORMAPS = [...COLORMAP_OPTIONS].sort((a, b) =>
-  a.label.localeCompare(b.label, "en", { sensitivity: "base" }),
-);
 
 /** True when a pre-migration project stored `reversed` on rasterSymbology. */
 function legacyReversed(layer: GeoLibreLayer): boolean {
@@ -294,38 +286,10 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewRamp, previewCustomKey]);
 
-  // Colors for every colormap so each option in the ramp picker can show its
-  // own swatch. Built-in ramps resolve synchronously (seeded once below); the
-  // remaining sprite colormaps are sampled once from the renderer's sprite and
-  // fill in as they resolve. Declared before the RGB early return so the hook
-  // order stays stable.
-  const [rampColors, setRampColors] = useState<Record<string, readonly string[]>>(() => {
-    const seed: Record<string, readonly string[]> = {};
-    for (const colormap of SORTED_COLORMAPS) {
-      const known = colormapColors(colormap.name);
-      if (known) seed[colormap.name] = known;
-    }
-    return seed;
-  });
-  useEffect(() => {
-    let cancelled = false;
-    for (const colormap of SORTED_COLORMAPS) {
-      // Built-in ramps were already seeded synchronously above.
-      if (colormapColors(colormap.name)) continue;
-      void warmColormapColors(colormap.name).then((colors) => {
-        if (cancelled || !colors) return;
-        setRampColors((prev) =>
-          prev[colormap.name] ? prev : { ...prev, [colormap.name]: colors },
-        );
-      });
-    }
-    return () => {
-      // Only guards state: in-flight warmColormapColors fetches keep populating
-      // the module-level anchorCache, so a remount picks them up synchronously
-      // via the colormapColors() seed above instead of re-fetching.
-      cancelled = true;
-    };
-  }, []);
+  // Every colormap as a swatched option, shared with the Add NetCDF dialog so
+  // both pickers offer the same catalogue. Declared before the RGB early return
+  // so the hook order stays stable.
+  const catalogueRamps = useColormapRamps();
 
   function commit(options: {
     statePatch?: Partial<RasterStateRecord>;
@@ -643,22 +607,12 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     rampOptions.push({
       value: ramp,
       label: isImagePalette ? t("rasterSymbology.imagePalette") : ramp,
-      // rampColors only warms names in SORTED_COLORMAPS, so for an
-      // out-of-catalog ramp rampColors[ramp] is always undefined; rampPreview
-      // (seeded by the previewRamp effect above) is the real source here.
-      colors:
-        isImagePalette && paletteColors.length > 0
-          ? paletteColors
-          : (rampColors[ramp] ?? rampPreview),
+      // The catalogue only warms names it lists, so for an out-of-catalog ramp
+      // rampPreview (seeded by the previewRamp effect above) is the real source.
+      colors: isImagePalette && paletteColors.length > 0 ? paletteColors : rampPreview,
     });
   }
-  for (const colormap of SORTED_COLORMAPS) {
-    rampOptions.push({
-      value: colormap.name,
-      label: colormap.label,
-      colors: rampColors[colormap.name] ?? [],
-    });
-  }
+  rampOptions.push(...catalogueRamps);
   rampOptions.push({
     value: CUSTOM_RAMP_VALUE,
     label: t("rasterSymbology.customRamp"),

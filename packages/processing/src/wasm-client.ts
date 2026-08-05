@@ -6,6 +6,7 @@
 // algorithms and outputs as the sidecar; bounded by WASM's ~4 GiB memory and
 // single-threaded execution (use the sidecar for very large data).
 import type { FeatureCollection } from "geojson";
+import { convertGeoTiffToCog } from "./cog-convert";
 import { normalizeVectorOutputFormat } from "./sidecar-client";
 import type {
   RunWhiteboxToolRequest,
@@ -545,6 +546,17 @@ const SUBSET_OUTPUT_TOOL_IDS = new Set([
 ]);
 
 /**
+ * Ensure a browser-run Whitebox raster can be streamed by GeoLibre's raster
+ * renderer. Whitebox tools may emit striped GeoTIFFs just like the Python
+ * runtime. The browser converter does not expose full COG validation, and a
+ * tiled GeoTIFF is not necessarily cloud optimized, so re-encode every declared
+ * raster output instead of treating tile layout alone as proof of conformance.
+ */
+export async function ensureWhiteboxRasterCog(bytes: Uint8Array): Promise<Uint8Array> {
+  return convertGeoTiffToCog(bytes);
+}
+
+/**
  * Run a Whitebox tool in the browser via WASM. Mirrors `runWhiteboxTool` but
  * executes locally and returns an already-completed {@link WhiteboxJob}. Output
  * values are inline: a `FeatureCollection` for `vector_out`, or a `Uint8Array`
@@ -556,13 +568,14 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
   const input: Record<string, Uint8Array> = {};
   const args: string[] = [];
   // How each output file is turned into a job output: "geojson" is parsed into a
-  // FeatureCollection (a map layer); "bytes" is returned raw (a raster COG, a
-  // file_out blob, or a CRS-preserving vector file to download); "shapefile" is
-  // zipped with its sidecars first.
+  // FeatureCollection (a map layer); "raster" is normalized to a COG before it
+  // reaches the map; "bytes" is returned raw (a file_out blob or a
+  // CRS-preserving vector file to download); "shapefile" is zipped with its
+  // sidecars first.
   const outputs: {
     name: string;
     file: string;
-    kind: "geojson" | "bytes" | "shapefile";
+    kind: "geojson" | "raster" | "bytes" | "shapefile";
   }[] = [];
   // Defensive: validate the requested format so a bad value (e.g. a stale
   // output path from switching sidecar/WASM modes) degrades to GeoJSON instead
@@ -643,7 +656,7 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
       const ext =
         kind === "file_out" ? fileOutputTargetExtension(param, request.parameters[name]) : "tif";
       const file = `${outputBaseName(request.tool_id, name)}.${ext}`;
-      outputs.push({ name, file, kind: "bytes" });
+      outputs.push({ name, file, kind: kind === "raster_out" ? "raster" : "bytes" });
       args.push(`--${name}=/work/${file}`);
     } else {
       const value = request.parameters[name];
@@ -682,6 +695,12 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
     }
     const bytes = files[entry.file];
     if (!bytes) continue;
+    if (entry.kind === "raster") {
+      const cog = await ensureWhiteboxRasterCog(bytes);
+      out[entry.name] = cog;
+      stdout.push(`Converted ${entry.file} to a Cloud Optimized GeoTIFF.`);
+      continue;
+    }
     if (entry.kind === "bytes") {
       out[entry.name] = bytes;
       continue;

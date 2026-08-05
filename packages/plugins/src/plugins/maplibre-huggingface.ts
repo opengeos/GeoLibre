@@ -2190,7 +2190,7 @@ export const maplibreHuggingFacePlugin: GeoLibrePlugin = (() => {
         app.registerRightPanel?.({
           id: HUGGINGFACE_PLUGIN_ID,
           title: "Hugging Face",
-          dock: "right-of-style",
+          dock: "replace-style",
           defaultWidth: 340,
           render: (container) => {
             mountPanel(container);

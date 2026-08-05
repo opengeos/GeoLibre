@@ -12,6 +12,7 @@ import type { Feature, FeatureCollection } from "geojson";
 import type { MapController } from "@geolibre/map";
 import { beginProcessingRun } from "../processing-history";
 import { captureMapImage } from "../print-layout-export";
+import { styleParamPatch } from "./style-params";
 
 // The scripting command surface, shared by every programmatic entry point: the
 // Jupyter widget's postMessage bridge (useCommandBridge) and the in-app Python
@@ -129,7 +130,12 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
     addGeoJsonLayer: (params) => {
       const name = String(params.name ?? "GeoJSON");
       const geojson = params.geojson as FeatureCollection;
-      return useAppStore.getState().addGeoJsonLayer(name, geojson);
+      const layerId = useAppStore.getState().addGeoJsonLayer(name, geojson);
+      const style = styleParamPatch(params.style);
+      if (style) {
+        useAppStore.getState().setLayerStyle(layerId, style);
+      }
+      return layerId;
     },
     removeLayer: (params) => {
       useAppStore.getState().removeLayer(requireLayerId(params));

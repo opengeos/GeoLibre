@@ -1,4 +1,11 @@
-import { redo, undo, useAppStore } from "@geolibre/core";
+import {
+  canRedoProjectRestore,
+  canUndoProjectRestore,
+  redo,
+  subscribeProjectRestoreHistory,
+  undo,
+  useAppStore,
+} from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   Button,
@@ -22,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useSyncExternalStore } from "react";
 import { useStore } from "zustand";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import {
@@ -45,8 +53,20 @@ interface EditMenuProps {
  */
 export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
   const { t } = useTranslation();
-  const canUndo = useStore(useAppStore.temporal, (s) => s.pastStates.length > 0);
-  const canRedo = useStore(useAppStore.temporal, (s) => s.futureStates.length > 0);
+  const temporalCanUndo = useStore(useAppStore.temporal, (s) => s.pastStates.length > 0);
+  const temporalCanRedo = useStore(useAppStore.temporal, (s) => s.futureStates.length > 0);
+  const canUndoRestore = useSyncExternalStore(
+    subscribeProjectRestoreHistory,
+    canUndoProjectRestore,
+    canUndoProjectRestore,
+  );
+  const canRedoRestore = useSyncExternalStore(
+    subscribeProjectRestoreHistory,
+    canRedoProjectRestore,
+    canRedoProjectRestore,
+  );
+  const canUndo = temporalCanUndo || canUndoRestore;
+  const canRedo = temporalCanRedo || canRedoRestore;
   const setSelectByExpressionOpen = useAppStore((s) => s.setSelectByExpressionOpen);
   const setSelectByLocationOpen = useAppStore((s) => s.setSelectByLocationOpen);
   // Narrow boolean/number selectors so the menu re-renders only when the

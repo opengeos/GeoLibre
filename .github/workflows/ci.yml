@@ -144,7 +144,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/geolibre_server/pyproject.toml
+          cache-dependency-path: |
+            backend/geolibre_server/pyproject.toml
+            backend/geolibre_server_api/pyproject.toml
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
@@ -176,7 +178,9 @@ jobs:
       - name: Install backend test dependencies
         # The full test suite needs the optional engines; without them the
         # vector/raster/SQL/ML tests skip themselves and CI is green but hollow.
-        run: python -m pip install -e "backend/geolibre_server[test]"
+        run: |
+          python -m pip install -e "backend/geolibre_server[test]"
+          python -m pip install -e "backend/geolibre_server_api[test]"
 
       # backend/geolibre_server/uv.lock is committed because the desktop
       # installers bundle that project and `uv run --frozen` it from a read-only
@@ -217,3 +221,6 @@ jobs:
         run: npm run ci
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+
+      - name: Test projects and identity server
+        run: python -m pytest backend/geolibre_server_api/tests

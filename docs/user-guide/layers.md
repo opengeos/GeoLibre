@@ -21,9 +21,23 @@ Each layer exposes a set of actions:
 - **Remove layer**: delete the layer from the project.
 - **Insert before**: control where a new layer is placed in the stack.
 
+## Layer groups
+
+Groups are folders in the layer stack. They can nest, so a project can carry a real hierarchy rather than one flat list.
+
+- **Create**: **New group** adds an empty folder. **New group from layer** wraps the layer you are on, and **New group from selected layers** wraps a multi-selection.
+- **Fill**: **Move to group** moves one layer, **Move selected layers to group** moves a whole selection in one step (keeping their relative order), and **Add data to group** opens Add Data with the new layer targeted at that group.
+- **Organize**: rename a group, collapse or expand it, move it up or down, and set a group-level opacity that applies to everything inside.
+- **Visibility**: hiding a group hides its layers. A layer inside a hidden group is marked *Hidden because its group is not visible*, so you can tell it apart from a layer you turned off yourself.
+- **Remove**: **Ungroup (keep layers)** dissolves the folder and leaves its layers in place; **Delete group and layers** removes both.
+
+Groups and their nesting are saved with the project, and [importing a QGIS project](projects.md#importing-a-qgis-project) brings that project's group tree across.
+
 ## Refreshing live layers
 
 WFS and GeoJSON URL layers can refresh automatically so the map stays current with a changing source. Open the layer's refresh configuration and choose an interval (for example off, 15 seconds, 30 seconds, 1 minute, 5 minutes, 15 minutes, or a custom value), or trigger a manual refresh.
+
+Each reloadable layer persists a **connection** record with the project, so the refresh cadence survives a save and reopen. The record also carries the layer's synchronization status — when it last succeeded and the most recent error — which the Layers panel shows, and an on-failure policy that decides whether a failed refresh keeps the last good data or clears it. See [Project Format](../project-format.md) for the schema.
 
 ## DuckDB layers
 

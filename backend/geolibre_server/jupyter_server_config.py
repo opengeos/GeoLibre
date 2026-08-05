@@ -5,7 +5,7 @@ environment and embeds it in an ``<iframe>`` beside the map. By default Jupyter
 Server only allows itself to be framed by its own origin
 (``Content-Security-Policy: frame-ancestors 'self'``), which would block the
 GeoLibre webview (a different origin: ``tauri://localhost`` /
-``https://tauri.localhost``). This config relaxes ``frame-ancestors`` to the
+``http://tauri.localhost``). This config relaxes ``frame-ancestors`` to the
 loopback / Tauri webview origins so the panel can host it.
 
 The server is bound to ``127.0.0.1`` and protected by a per-launch token
@@ -17,11 +17,19 @@ build, which embeds the in-browser JupyterLite site instead.
 """
 
 # Origins permitted to embed this server in an iframe. Covers the Tauri webview
-# (macOS/Linux use the tauri:// scheme; Windows uses https://tauri.localhost)
 # and any loopback dev origin.
+#
+# Windows needs BOTH schemes of tauri.localhost. Tauri v1 served the webview
+# from https://tauri.localhost, but v2's `app.windows[].useHttpsScheme` defaults
+# to false, so the real origin there is http://tauri.localhost. Listing only the
+# https form left the panel showing Chromium's "127.0.0.1 refused to connect."
+# on Windows -- the server was healthy and listening, its CSP just refused to be
+# framed by the app. macOS and Linux were unaffected: they use tauri://localhost.
+# Keep https here too, so flipping useHttpsScheme on cannot silently break this
+# again.
 _FRAME_ANCESTORS = (
     "frame-ancestors 'self' "
-    "tauri://localhost https://tauri.localhost "
+    "tauri://localhost http://tauri.localhost https://tauri.localhost "
     "http://localhost:* http://127.0.0.1:*"
 )
 

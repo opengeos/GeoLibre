@@ -1,0 +1,16 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["app"],
+    "category": "Productivity",
+    "resources": [],
+    "macOS": {
+      "entitlements": "./mas/Entitlements.mas.plist",
+      "hardenedRuntime": false,
+      "minimumSystemVersion": "10.15",
+      "files": {
+        "embedded.provisionprofile": "./mas/embedded.provisionprofile"
+      }
+    }
+  }
+}

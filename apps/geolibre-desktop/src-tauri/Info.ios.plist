@@ -2,10 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   iOS-only Info.plist keys, merged into the generated
-  gen/apple/geolibre_iOS/Info.plist at build time (gen/apple is generated and
-  git-ignored, so per-key overrides must live here to survive regeneration).
+  gen/apple/geolibre-desktop_iOS/Info.plist at build time (gen/apple is generated
+  and git-ignored, so per-key overrides must live here to survive regeneration;
+  the directory is named from the Cargo package, not from productName).
   Tauri v2 merges src-tauri/Info.plist (all Apple), Info.ios.plist (iOS), and
-  Info.macos.plist (macOS).
+  Info.macos.plist (macOS). The merge runs during `tauri ios build`/`dev`, not
+  during `tauri ios init`.
 
   The location string is REQUIRED, not cosmetic: unlike Android — where the
   geolocation plugin declares the runtime permission and the OS shows a generic
@@ -21,5 +23,21 @@
   <dict>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>GeoLibre uses your location to center the map, capture GPS points during Field Collection, and record GPS tracks.</string>
+
+    <!--
+      Export compliance. App Store Connect asks about encryption on *every*
+      upload, and a build with the question unanswered cannot be submitted or
+      sent to TestFlight ("Missing Compliance"). Declaring it here answers it
+      once, at build time, instead of by hand per upload.
+
+      `false` asserts that GeoLibre's use of encryption is limited to what Apple
+      treats as exempt: HTTPS/TLS through the system libraries for basemap
+      tiles, geocoding, the AI assistant, cloud catalogs, and the collaboration
+      relay. GeoLibre ships no cryptography of its own and implements no custom
+      encryption. Revisit this if that ever changes — it is a legal declaration,
+      not a build flag.
+    -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
   </dict>
 </plist>

@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
 import {
+  attributeLinkUrl,
   coerceAttributeFormValue,
   isDuckDBQueryLayer,
   useAppStore,
   validateAttributeFormValues,
+  excludeHiddenFieldsFromGeojson,
   type AttributeFormConfig,
   type AttributeFormFieldConfig,
   type AttributeFormFieldError,
@@ -69,6 +71,7 @@ import {
   Telescope,
   Trash2,
   X,
+  Ban,
 } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
@@ -119,11 +122,13 @@ import {
   exportVectorLayer,
   formatAttributeValue,
   geojsonVectorSourceId,
+  kmlExportErrorMessage,
   sanitizeExportFileName,
   shapefileFieldWarnings,
   type VectorExportFormat,
 } from "../../lib/vector-export";
 import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
+import { openExternalLink } from "../../lib/open-external";
 
 type SortDirection = "asc" | "desc";
 type SortKey = "__featureId" | string;
@@ -924,11 +929,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     try {
       setExportError(null);
       setExportWarning(null);
-      const exportGeojson = geojsonWithDrafts();
+      let exportGeojson = geojsonWithDrafts();
       if (!exportGeojson) return;
+      if (layer.fieldVisibility) {
+        exportGeojson = excludeHiddenFieldsFromGeojson(exportGeojson, layer.fieldVisibility);
+      }
 
       const baseName = sanitizeExportFileName(layer.name);
-      const savedPath = await exportVectorLayer(exportGeojson, format, baseName);
+      const savedPath = await exportVectorLayer(exportGeojson, format, baseName, layer.name);
       // Surface Shapefile field-name limitations (10-char truncation and any
       // resulting collisions) only when a file was actually written; a null
       // path means the user cancelled the save dialog.
@@ -938,7 +946,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       }
     } catch (error) {
       console.error("Failed to export attribute table", error);
-      setExportError(error instanceof Error ? error.message : t("attributeTable.exportFailed"));
+      setExportError(
+        kmlExportErrorMessage(error, t) ??
+          (error instanceof Error ? error.message : t("attributeTable.exportFailed")),
+      );
     }
   };
 
@@ -987,6 +998,19 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const handleToggleHidden = (col: string) => {
     if (!layer) return;
     updateLayer(layer.id, toggleColumnHidden(layer, col));
+  };
+
+  const handleToggleExcluded = (col: string) => {
+    if (!layer) return;
+    const current = layer.fieldVisibility || {};
+    const isExcluded = current[col] === "excluded";
+    const next = { ...current };
+    if (isExcluded) {
+      delete next[col];
+    } else {
+      next[col] = "excluded";
+    }
+    updateLayer(layer.id, { fieldVisibility: next });
   };
 
   const handleShowAllColumns = () => {
@@ -1362,6 +1386,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               <EyeOff className="me-2 h-3.5 w-3.5" />
               {t("attributeTable.hideField")}
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => handleToggleExcluded(col)}>
+              <Ban className="me-2 h-3.5 w-3.5" />
+              {layer?.fieldVisibility?.[col] === "excluded"
+                ? t("attributeTable.includeField", "Include field on export")
+                : t("attributeTable.excludeField", "Exclude field on export")}
+            </DropdownMenuItem>
             <DropdownMenuItem
               disabled={isRtl ? index === columns.length - 1 : index === 0}
               onSelect={() => handleMoveColumn(col, isRtl ? "right" : "left")}
@@ -1661,6 +1691,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuItem onSelect={() => void exportLayer("geopackage")}>
               GeoPackage
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("kml")}>KML</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("kmz")}>KMZ</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void exportLayer("shapefile")}>
               Shapefile (zipped)
             </DropdownMenuItem>
@@ -1829,6 +1861,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                             : "h-7 min-w-0 px-2 text-xs";
                         const config = formFields.get(col);
                         const current = draft ?? formatAttributeValue(value);
+                        const isEditableCell = isEditing && !derivedColumns.has(col);
+                        const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
                         const invalidTitle = invalid
                           ? formError
                             ? formErrorText(formError)
@@ -1853,7 +1887,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                                   : undefined
                             }
                           >
-                            {isEditing && !derivedColumns.has(col) ? (
+                            {isEditableCell ? (
                               config?.widget === "valueMap" && config.valueMap?.length ? (
                                 <Select
                                   className={inputClassName}
@@ -1912,6 +1946,21 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                                   onChange={(event) => commitDraft(event.target.value)}
                                 />
                               )
+                            ) : linkUrl ? (
+                              <a
+                                href={linkUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={linkUrl}
+                                className="inline-block max-w-full truncate align-bottom text-primary underline underline-offset-2"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  void openExternalLink(linkUrl);
+                                }}
+                              >
+                                {linkUrl}
+                              </a>
                             ) : (
                               formatAttributeValue(value)
                             )}

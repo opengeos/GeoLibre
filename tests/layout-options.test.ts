@@ -87,4 +87,26 @@ describe("layoutOptionsFromLocation", () => {
     assert.equal(options.attributePanelVisible, false);
     assert.equal(options.panelsHidden, true);
   });
+
+  it("provides read-only viewer chrome between the full app and maponly", () => {
+    withSearch("?layout=viewer");
+    const options = layoutOptionsFromLocation(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
+    assert.equal(options.viewer, true);
+    assert.equal(options.compact, true);
+    assert.equal(options.toolbarVisible, true);
+    assert.equal(options.statusBarVisible, true);
+    assert.equal(options.layerPanelVisible, true);
+    assert.equal(options.stylePanelVisible, false);
+    assert.equal(options.attributePanelVisible, false);
+    assert.equal(options.panelsHidden, false);
+  });
+
+  it("forces the viewer layer legend on despite a persisted hidden setting", () => {
+    withSearch("?layout=viewer");
+    const options = layoutOptionsFromLocation({
+      ...DEFAULT_DESKTOP_LAYOUT_SETTINGS,
+      layerPanelVisible: false,
+    });
+    assert.equal(options.layerPanelVisible, true);
+  });
 });

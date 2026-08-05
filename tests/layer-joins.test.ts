@@ -391,6 +391,25 @@ describe("store integration", () => {
     assert.equal(layer.joins?.length, 1);
   });
 
+  it("deleting a group with its join-source children strips dependent columns", () => {
+    const store = useAppStore.getState();
+    const groupId = store.addLayerGroup("Tables");
+    const targetId = store.addGeoJsonLayer("States", states());
+    const tableId = store.addGeoJsonLayer("Census", census());
+    store.moveLayerToGroup(tableId, groupId);
+    store.setLayerJoins(targetId, [join({ joinLayerId: tableId })]);
+    assert.equal(layerById(targetId).geojson?.features[0].properties?.pop, 5_000_000);
+
+    store.removeLayerGroup(groupId, { removeChildren: true });
+    const layer = layerById(targetId);
+    assert.equal("pop" in (layer.geojson?.features[0].properties ?? {}), false);
+    assert.equal(layer.joins?.length, 1);
+    assert.equal(
+      useAppStore.getState().layers.some((candidate) => candidate.id === tableId),
+      false,
+    );
+  });
+
   it("takes a patch carrying both geojson and joins verbatim (external callers)", () => {
     const { targetId, tableId } = addLayers();
     useAppStore.getState().setLayerJoins(targetId, [join({ joinLayerId: tableId })]);

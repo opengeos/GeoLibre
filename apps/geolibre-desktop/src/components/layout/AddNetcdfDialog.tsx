@@ -2,16 +2,22 @@ import { useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   addCloudNetcdfLayer,
+  composeRgbImage,
   listKerchunkVariables,
   loadKerchunkReference,
   openLocalNetcdf,
   type GeoLibreAppAPI,
   type KerchunkRefs,
   type KerchunkVariable,
+  type LocalNetcdfAxis,
   type LocalNetcdfFile,
+  type LocalNetcdfGrid,
+  type LocalNetcdfProfile,
 } from "@geolibre/plugins";
+import { useAppStore } from "@geolibre/core";
 import {
   Button,
+  ColorRampSelect,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -22,6 +28,19 @@ import {
   Select,
 } from "@geolibre/ui";
 import { Boxes, FileUp } from "lucide-react";
+import { useColormapRamps } from "../../hooks/useColormapRamps";
+import {
+  isNetcdfFileUrl,
+  openRemoteNetcdfFile,
+  type RemoteNetcdfFile,
+} from "../../lib/netcdf-remote-client";
+import {
+  bakeNetcdfImage,
+  encodeImageOverlay,
+  NETCDF_IMAGE_SOURCE_KIND,
+  registerNetcdfLayer,
+  warmNetcdfColormap,
+} from "../../lib/netcdf-image-symbology";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { SampleDataSelect } from "./add-data/shared";
 
@@ -36,8 +55,113 @@ const SAMPLE_URL = "https://data.source.coop/giswqs/opengeos/netcdf/air-temperat
 // `.hdf` (usually HDF4) is omitted since neither backend reads it.
 const LOCAL_EXTENSIONS = ["nc", "nc4", "cdf", "h5", "hdf5"];
 
-/** A renderable variable, shared shape across the cloud and local readers. */
-type RenderableVariable = KerchunkVariable;
+/** Which source the dialog opens on. */
+const DEFAULT_SOURCE = "file" as const;
+
+/** Default single-band colormap, matching the Zarr panel's own default. */
+const DEFAULT_COLORMAP = "viridis";
+
+// Approximate red/green/blue band centres in nanometres. A hyperspectral cube's
+// band axis is a wavelength coordinate, so a natural-colour composite is the
+// three bands nearest these — which is what a user reaching for "band
+// combination" on an EMIT reflectance cube expects to see first.
+const NATURAL_COLOR_NM: [number, number, number] = [640, 550, 470];
+
+// Above this many entries an axis is offered as a number box rather than a
+// dropdown: a <select> with tens of thousands of options is unusable and slow
+// to build. A band axis (EMIT has 285) stays well under it.
+const MAX_AXIS_OPTIONS = 2000;
+
+// Wavelength units a spectral axis may declare, in the spellings CF files use.
+// Micrometres are the other common one; anything else (an index, a time, a
+// pressure level) is not a wavelength and gets evenly spread band defaults.
+const NANOMETRE_UNITS = new Set(["nm", "nanometer", "nanometers", "nanometre", "nanometres"]);
+const MICROMETRE_UNITS = new Set([
+  "um",
+  "µm",
+  "micron",
+  "microns",
+  "micrometer",
+  "micrometers",
+  "micrometre",
+  "micrometres",
+]);
+
+// Dimension names read as a time axis, mirroring `TIME_DIMENSION_NAMES` in
+// `zarr-time-axis.ts`. A cube with one of these keeps the Zarr render path so
+// the Time Slider can drive it; see `useImagePath`.
+const TIME_DIMENSION_NAMES = new Set([
+  "time",
+  "valid_time",
+  "datetime",
+  "date",
+  "t",
+  "forecast_time",
+  "period",
+]);
+
+/**
+ * A renderable variable, shared shape across the cloud and local readers. The
+ * local reader also reports CF `long_name`/`units`; the cloud one does not, so
+ * both are optional.
+ */
+type RenderableVariable = KerchunkVariable & { longName?: string; units?: string };
+
+/** How a local variable is turned into a layer. */
+type RenderMode = "single" | "rgb";
+
+/**
+ * The dataset the dialog is working with, whichever way it was opened. Both
+ * answer the same questions; a remote one answers them over range requests, so
+ * every accessor is async and callers must not assume they return promptly.
+ */
+type OpenDataset =
+  | { kind: "local"; file: LocalNetcdfFile }
+  | { kind: "remote"; file: RemoteNetcdfFile; url: string };
+
+/** The dataset's leading axes for a variable, or [] when they cannot be read. */
+async function datasetAxes(dataset: OpenDataset, variable: string): Promise<LocalNetcdfAxis[]> {
+  try {
+    return dataset.kind === "local"
+      ? dataset.file.listAxes(variable)
+      : await dataset.file.listAxes(variable);
+  } catch {
+    // A variable whose axes cannot be described still renders; the dialog falls
+    // back to the plain numeric index boxes.
+    return [];
+  }
+}
+
+/**
+ * A profile reader bound to one dataset, variable, and axis, for the layer
+ * registry. Local reads resolve immediately; remote ones round trip to the
+ * worker, which is why the registry stores a function rather than the file.
+ */
+function profileReader(
+  dataset: OpenDataset,
+  variable: string,
+  axis: string,
+  selector: Record<string, number>,
+): { read: (row: number, column: number) => Promise<LocalNetcdfProfile>; close: () => void } {
+  return {
+    read: (row, column) =>
+      dataset.kind === "local"
+        ? Promise.resolve(dataset.file.readProfile(variable, { axis, row, column, selector }))
+        : dataset.file.readProfile(variable, { axis, row, column, selector }),
+    close: () => dataset.file.close(),
+  };
+}
+
+/** One 2-D slice of a variable, with its coordinates and packing. */
+function datasetGrid(
+  dataset: OpenDataset,
+  variable: string,
+  selector: Record<string, number>,
+): Promise<LocalNetcdfGrid> {
+  return dataset.kind === "local"
+    ? Promise.resolve(dataset.file.readGrid(variable, selector))
+    : dataset.file.readGrid(variable, selector);
+}
 
 interface AddNetcdfDialogProps {
   open: boolean;
@@ -46,19 +170,31 @@ interface AddNetcdfDialogProps {
 }
 
 /**
- * Dialog for adding a NetCDF/HDF5 layer. Two sources are supported: a remote
- * Cloud-Optimized NetCDF via a kerchunk reference URL (read over HTTP range
- * requests), or a local HDF5/NetCDF-4 file decoded in-browser with h5wasm. In
- * both cases the user picks a renderable variable (and any leading dimension
- * index), and the layer renders through the shared Zarr control.
+ * Dialog for adding a NetCDF/HDF5 layer, from any of three sources:
+ *
+ * - a local HDF5/NetCDF-4 or NetCDF-3 file, decoded in-browser;
+ * - a direct NetCDF/HDF **URL**, read in place by HTTP range request in a
+ *   worker, so a cube far larger than the slice wanted is not downloaded whole;
+ * - a kerchunk reference URL, streamed by the shared Zarr control.
+ *
+ * The first two share one code path once opened (see {@link OpenDataset}): the
+ * user picks a variable and any leading-dimension index, and the grid is
+ * colormapped here rather than by a shader.
  */
 export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogProps) {
   const { t } = useTranslation();
-  const [source, setSource] = useState<"url" | "file">("url");
+  const addImageOverlayLayer = useAppStore((state) => state.addImageOverlayLayer);
+  // The same catalogue the Style panel's Raster symbology offers, so the choice
+  // made here and the choice made after the fact are drawn from one list.
+  const rampOptions = useColormapRamps();
+  // Local file first: it is the common case, and it is the path that renders the
+  // pixels itself (see `useImagePath`) rather than through the Zarr control.
+  const [source, setSource] = useState<"url" | "file">(DEFAULT_SOURCE);
   const [url, setUrl] = useState("");
-  // The local file opened in the WASM filesystem, kept between "Load variables"
-  // and submit so the (potentially large) decode happens once. Closed on reset.
-  const [localFile, setLocalFile] = useState<LocalNetcdfFile | null>(null);
+  // The opened dataset, local or remote, kept between loading its variables and
+  // submitting so the (potentially expensive) open happens once. Closed on
+  // reset, unless a layer took ownership of it for spectral profiles.
+  const [dataset, setDataset] = useState<OpenDataset | null>(null);
   const [fileName, setFileName] = useState("");
   const [variables, setVariables] = useState<RenderableVariable[]>([]);
   const [variable, setVariable] = useState("");
@@ -68,6 +204,12 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   const [dimIndex, setDimIndex] = useState<Record<string, string>>({});
   const [climMin, setClimMin] = useState("");
   const [climMax, setClimMax] = useState("");
+  const [colormap, setColormap] = useState(DEFAULT_COLORMAP);
+  const [mode, setMode] = useState<RenderMode>("single");
+  // The selected variable's leading axes with their coordinate values, read once
+  // per variable so the band pickers can label indices with wavelengths.
+  const [axes, setAxes] = useState<LocalNetcdfAxis[]>([]);
+  const [rgbBands, setRgbBands] = useState<[number, number, number]>([0, 0, 0]);
   const [loadingVars, setLoadingVars] = useState(false);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,27 +217,57 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   // Incremented on every reset; lets in-flight async handlers detect that the
   // dialog was closed/reopened and bail out before stomping fresh state.
   const opGen = useRef(0);
+  // Per-call ordering for `selectVariable`, which `opGen` cannot provide: it
+  // reads within one unchanged dataset, so two overlapping reads share a gen.
+  const selectSeq = useRef(0);
   // Holds the currently-open local file so it can be closed synchronously on
   // reset even if the latest setLocalFile has not flushed to state yet.
-  const openFileRef = useRef<LocalNetcdfFile | null>(null);
+  const openFileRef = useRef<OpenDataset | null>(null);
+  // A file handed to a layer for spectral profiles outlives this dialog, so
+  // reset must not close it; the layer registry owns it from then on.
+  const retainedFileRef = useRef<LocalNetcdfFile | RemoteNetcdfFile | null>(null);
 
   const selectedVar = variables.find((v) => v.name === variable);
   // Dimensions other than the trailing two (lat/lon) need a fixed index.
   const leadingDims = selectedVar
     ? selectedVar.dims.slice(0, Math.max(0, selectedVar.dims.length - 2))
     : [];
+  // The axis an RGB composite draws its three channels from. A time axis is
+  // excluded however many steps it has: combining three dates as red/green/blue
+  // is meaningless, and (time, lat, lon) is the commonest cube shape there is,
+  // so without this nearly every one would offer a bogus RGB option.
+  const rgbAxis = pickBandAxis(axes);
+  // Composing an RGB image needs the pixels in hand, which means an opened
+  // dataset (local file or remote URL). A kerchunk manifest has none: it streams
+  // chunks through the renderer instead.
+  const canComposeRgb = dataset !== null && rgbAxis !== null;
+  const rgbMode = mode === "rgb" && canComposeRgb;
+  // A cube the Time Slider can drive stays on the Zarr renderer, which can
+  // re-select a slice without rebuilding the layer; a baked image cannot.
+  // `axes` is empty when listAxes throws, but `leadingDims` comes from
+  // listVariables and survives; without the fallback a time cube would quietly
+  // lose the Time Slider by taking the baked-image path.
+  const hasTimeAxis =
+    axes.some((axis) => isTimeAxisName(axis.name)) || leadingDims.some(isTimeAxisName);
+  // Single-band grids from an opened dataset are colormapped on the CPU and
+  // added as an image overlay rather than drawn by @carbonplan/zarr-layer, whose
+  // `shift_x` uniform lookup throws on drivers that eliminate it (Mesa, so most
+  // Linux Intel/AMD machines), leaving the layer permanently blank. See
+  // composeColormappedImage.
+  const useImagePath = dataset !== null && !rgbMode && !hasTimeAxis;
 
   const closeOpenFile = () => {
-    openFileRef.current?.close();
+    const open = openFileRef.current;
+    if (open && open.file !== retainedFileRef.current) open.file.close();
     openFileRef.current = null;
   };
 
   const reset = () => {
     opGen.current += 1;
     closeOpenFile();
-    setSource("url");
+    setSource(DEFAULT_SOURCE);
     setUrl("");
-    setLocalFile(null);
+    setDataset(null);
     setFileName("");
     setVariables([]);
     setVariable("");
@@ -103,6 +275,10 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
     setDimIndex({});
     setClimMin("");
     setClimMax("");
+    setColormap(DEFAULT_COLORMAP);
+    setMode("single");
+    setAxes([]);
+    setRgbBands([0, 0, 0]);
     setError(null);
     setStatus(null);
     setLoadingVars(false);
@@ -117,7 +293,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   const invalidateLoadedSource = () => {
     opGen.current += 1;
     closeOpenFile();
-    setLocalFile(null);
+    setDataset(null);
     setFileName("");
     setVariables([]);
     setVariable("");
@@ -125,16 +301,43 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
     setDimIndex({});
     setClimMin("");
     setClimMax("");
+    setMode("single");
+    setAxes([]);
+    setRgbBands([0, 0, 0]);
     setStatus(null);
     setError(null);
     setLoadingVars(false);
     setAdding(false);
   };
 
-  const applyLoadedVariables = (vars: RenderableVariable[]) => {
+  const applyLoadedVariables = (vars: RenderableVariable[], opened?: OpenDataset) => {
     setVariables(vars);
     setVariable(vars[0].name);
+    void selectVariable(vars[0].name, opened ?? openFileRef.current);
     setStatus(`Found ${vars.length} variable${vars.length > 1 ? "s" : ""}.`);
+  };
+
+  /**
+   * Point the dimension/band controls at a variable: read its leading axes (with
+   * their coordinate values) from the local reader and seed the RGB channels
+   * from the axis' own wavelengths, so the composite opens on a sensible
+   * natural-colour guess rather than three copies of band 0.
+   */
+  const selectVariable = async (name: string, opened: OpenDataset | null) => {
+    setDimIndex({});
+    const gen = opGen.current;
+    // `opGen` only moves when the dialog resets or its source changes, so it
+    // cannot order two reads of the *same* dataset. Switching variables while a
+    // read is outstanding — seconds, for a remote cube — would otherwise let
+    // whichever finishes last win, seeding the axes and RGB defaults from a
+    // variable the user has already moved off.
+    const seq = ++selectSeq.current;
+    const nextAxes = opened ? await datasetAxes(opened, name) : [];
+    if (gen !== opGen.current || seq !== selectSeq.current) return; // moved on while reading
+    setAxes(nextAxes);
+    const bandAxis = pickBandAxis(nextAxes);
+    setRgbBands(bandAxis ? defaultRgbBands(bandAxis) : [0, 0, 0]);
+    if (!bandAxis) setMode("single");
   };
 
   const handleLoadVariables = async () => {
@@ -148,7 +351,33 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
     setLoadedRefs(null);
     setLoadingVars(true);
     try {
-      const refs = await loadKerchunkReference(url.trim());
+      const target = url.trim();
+      // A raw NetCDF/HDF URL is read in place by range request; only a kerchunk
+      // manifest goes through the reference loader.
+      if (isNetcdfFileUrl(target)) {
+        // Close a dataset from a previous load, but deliberately do NOT call
+        // invalidateLoadedSource: it bumps opGen, which would make this
+        // function's own `finally` skip clearing the loading flag and strand the
+        // button on "Loading...".
+        closeOpenFile();
+        setDataset(null);
+        setStatus(t("addData.netcdf.readingRemote"));
+        const remote = await openRemoteNetcdfFile(target);
+        if (gen !== opGen.current) {
+          remote.close();
+          return;
+        }
+        if (remote.variables.length === 0) {
+          remote.close();
+          throw new Error(t("addData.netcdf.errorNoVariables"));
+        }
+        const opened: OpenDataset = { kind: "remote", file: remote, url: target };
+        openFileRef.current = opened;
+        setDataset(opened);
+        applyLoadedVariables(remote.variables, opened);
+        return;
+      }
+      const refs = await loadKerchunkReference(target);
       const vars = listKerchunkVariables(refs);
       if (gen !== opGen.current) return; // dialog was closed/reopened
       if (vars.length === 0) {
@@ -200,12 +429,13 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
       if (vars.length === 0) {
         throw new Error(t("addData.netcdf.errorNoVariables"));
       }
-      openFileRef.current = file;
-      setLocalFile(file);
-      applyLoadedVariables(vars);
+      const opened: OpenDataset = { kind: "local", file };
+      openFileRef.current = opened;
+      setDataset(opened);
+      applyLoadedVariables(vars, opened);
     } catch (err) {
       // Close the just-opened handle unless it was stored for later use.
-      if (file && openFileRef.current !== file) file.close();
+      if (file && openFileRef.current?.file !== file) file.close();
       if (gen !== opGen.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -237,31 +467,123 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
           ? ([min, max] as [number, number])
           : undefined;
 
-      if (source === "file") {
-        const file = localFile;
-        if (!file) throw new Error(t("addData.netcdf.errorNoFile"));
-        // Yield once so the "Adding..." state paints before the synchronous,
-        // CPU-heavy decode/base64-encode of a potentially large local grid.
+      if (dataset) {
+        // Yield once so the "Adding..." state paints before the CPU-heavy
+        // decode/encode of a potentially large grid.
         await new Promise((resolve) => setTimeout(resolve, 0));
-        const { refs } = file.buildLayerRefs(variable, selector);
-        // Use just the file's base name (fileName is a full path on desktop) so
-        // the derived layer name is clean on every platform. Encode it so a name
-        // with URL-special chars (#, ?, %) survives layerNameFromUrl's new
-        // URL(...) parse; that helper decodes it again for the display name.
-        const baseName = fileName.split(/[\\/]/).pop() || "netcdf";
-        await addCloudNetcdfLayer(appApi, {
-          url: `local:${encodeURIComponent(baseName)}`,
-          refs,
-          variable,
-          clim,
-        });
+        // A local path is a full path on desktop; a URL's last segment is its
+        // file name. Either way the layer takes the bare name.
+        const baseName =
+          (dataset.kind === "local" ? fileName : new URL(dataset.url).pathname)
+            .split(/[\\/]/)
+            .pop() || "netcdf";
+
+        if (rgbMode && rgbAxis) {
+          // Compose from three plane reads rather than the reader's own helper,
+          // so the remote path (which has no synchronous reader) works too.
+          const channels = await Promise.all(
+            rgbBands.map((index) =>
+              datasetGrid(dataset, variable, { ...selector, [rgbAxis.name]: index }),
+            ),
+          );
+          const image = composeRgbImage({
+            ny: channels[0].ny,
+            nx: channels[0].nx,
+            channels: channels.map((channel: LocalNetcdfGrid) => channel.values),
+            lat: channels[0].lat,
+            lon: channels[0].lon,
+            fillValue: channels[0].fillValue,
+            scaleFactor: channels[0].scaleFactor,
+            addOffset: channels[0].addOffset,
+          });
+          addImageOverlayLayer(
+            `${baseName} - ${variable} (RGB)`,
+            {
+              url: encodeImageOverlay(image),
+              coordinates: image.coordinates,
+            },
+            {
+              bounds: image.bounds,
+              // Without this the store defaults it to "kml-ground-overlay",
+              // which every consumer of that marker would then act on.
+              sourceKind: NETCDF_IMAGE_SOURCE_KIND,
+              metadata: { variable },
+            },
+          );
+          appApi.fitBounds?.(image.bounds);
+        } else if (useImagePath) {
+          // The grid itself, not just its pixels, so the Style panel can
+          // re-colormap the layer without re-reading the file.
+          const grid = await datasetGrid(dataset, variable, selector);
+          const symbology = {
+            colormap,
+            reversed: false,
+            clim: clim ?? grid.dataClim,
+          };
+          // The picker lists every ramp as soon as it opens, including sprite
+          // ramps the catalogue is still sampling; baking before one resolves
+          // would silently paint viridis under the chosen name.
+          await warmNetcdfColormap(colormap);
+          const image = bakeNetcdfImage(grid, symbology);
+          const layerId = addImageOverlayLayer(
+            `${baseName} - ${variable}`,
+            {
+              url: encodeImageOverlay(image),
+              coordinates: image.coordinates,
+            },
+            {
+              bounds: image.bounds,
+              sourceKind: NETCDF_IMAGE_SOURCE_KIND,
+              metadata: {
+                netcdfSymbology: symbology,
+                variable,
+                // Identify reads a cell value, not a feature, so the button's
+                // tooltip should say so — the same marker COG-backed Time
+                // Slider sources use.
+                pixelIdentify: true,
+              },
+            },
+          );
+          // The file stays open only for a cube, whose band axis is what a
+          // spectral signature walks; a plain 2-D grid needs nothing beyond the
+          // slice already read.
+          if (rgbAxis) retainedFileRef.current = dataset.file;
+          registerNetcdfLayer(layerId, {
+            grid,
+            variable,
+            ...(selectedVar?.units ? { units: selectedVar.units } : {}),
+            ...(rgbAxis
+              ? { profile: profileReader(dataset, variable, rgbAxis.name, selector) }
+              : {}),
+          });
+          appApi.fitBounds?.(image.bounds);
+        } else if (dataset.kind === "local") {
+          const built = dataset.file.buildLayerRefs(variable, selector);
+          await addCloudNetcdfLayer(appApi, {
+            // Encoded so a name with URL-special chars (#, ?, %) survives
+            // layerNameFromUrl's new URL(...) parse; that helper decodes it
+            // again for the display name.
+            url: `local:${encodeURIComponent(baseName)}`,
+            refs: built.refs,
+            variable,
+            // The renderer's stock 0-300 limits paint most real grids as a flat
+            // wash, so fall back to the slice's own robust range when the user
+            // left the fields blank.
+            clim: clim ?? built.clim ?? undefined,
+            colormap,
+            bounds: built.bounds,
+          });
+          appApi.fitBounds?.(built.bounds);
+        }
       } else {
+        // No opened dataset: a kerchunk manifest, streamed by the Zarr renderer.
         await addCloudNetcdfLayer(appApi, {
           url: url.trim(),
           refs: loadedRefs ?? undefined,
           variable,
           selector: leadingDims.length > 0 ? selector : undefined,
           clim,
+          colormap,
         });
       }
       if (gen !== opGen.current) return; // dialog was closed/reopened
@@ -377,7 +699,10 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
               <Select
                 id="netcdf-variable"
                 value={variable}
-                onChange={(event) => setVariable(event.target.value)}
+                onChange={(event) => {
+                  setVariable(event.target.value);
+                  void selectVariable(event.target.value, openFileRef.current);
+                }}
               >
                 {variables.map((item) => (
                   <option key={item.name} value={item.name}>
@@ -390,27 +715,100 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
             </div>
           )}
 
-          {leadingDims.map((dim) => (
-            <div className="space-y-1.5" key={dim}>
-              <Label htmlFor={`netcdf-dim-${dim}`}>
-                {t("addData.netcdf.dimIndexLabel", { dim })}
-              </Label>
-              <Input
-                id={`netcdf-dim-${dim}`}
-                inputMode="numeric"
-                placeholder="0"
-                value={dimIndex[dim] ?? ""}
-                onChange={(event) =>
-                  setDimIndex((prev) => ({
-                    ...prev,
-                    [dim]: event.target.value,
-                  }))
-                }
+          {canComposeRgb && (
+            <div className="space-y-1.5">
+              <Label htmlFor="netcdf-mode">{t("addData.netcdf.bandCombinationLabel")}</Label>
+              <Select
+                id="netcdf-mode"
+                value={mode}
+                onChange={(event) => setMode(event.target.value as RenderMode)}
+              >
+                <option value="single">{t("addData.netcdf.modeSingleBand")}</option>
+                <option value="rgb">{t("addData.netcdf.modeRgb")}</option>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {t("addData.netcdf.bandCombinationHelp")}
+              </p>
+            </div>
+          )}
+
+          {rgbMode &&
+            rgbAxis &&
+            (["red", "green", "blue"] as const).map((channel, index) => (
+              <div className="space-y-1.5" key={channel}>
+                <Label htmlFor={`netcdf-rgb-${channel}`}>
+                  {t(`addData.netcdf.channel.${channel}`)}
+                </Label>
+                <AxisSelect
+                  id={`netcdf-rgb-${channel}`}
+                  axis={rgbAxis}
+                  value={String(rgbBands[index])}
+                  onChange={(next) =>
+                    setRgbBands((prev) => {
+                      const updated = [...prev] as [number, number, number];
+                      updated[index] = Math.max(
+                        0,
+                        Math.min(rgbAxis.size - 1, Math.trunc(Number(next) || 0)),
+                      );
+                      return updated;
+                    })
+                  }
+                />
+              </div>
+            ))}
+
+          {/* Every leading dimension the channels do not already fix. In RGB
+              mode handleSubmit still reads dimIndex for these, so hiding them
+              would pin e.g. a cube's time step at index 0 with no way to change
+              it. */}
+          {leadingDims
+            .filter((dim) => !(rgbMode && rgbAxis?.name === dim))
+            .map((dim) => {
+              const axis = axes.find((item) => item.name === dim);
+              return (
+                <div className="space-y-1.5" key={dim}>
+                  <Label htmlFor={`netcdf-dim-${dim}`}>
+                    {t("addData.netcdf.dimIndexLabel", { dim })}
+                  </Label>
+                  {axis ? (
+                    <AxisSelect
+                      id={`netcdf-dim-${dim}`}
+                      axis={axis}
+                      value={dimIndex[dim] ?? "0"}
+                      onChange={(next) => setDimIndex((prev) => ({ ...prev, [dim]: next }))}
+                    />
+                  ) : (
+                    <Input
+                      id={`netcdf-dim-${dim}`}
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={dimIndex[dim] ?? ""}
+                      onChange={(event) =>
+                        setDimIndex((prev) => ({
+                          ...prev,
+                          [dim]: event.target.value,
+                        }))
+                      }
+                    />
+                  )}
+                </div>
+              );
+            })}
+
+          {variables.length > 0 && !rgbMode && (
+            <div className="space-y-1.5">
+              <Label htmlFor="netcdf-colormap">{t("addData.netcdf.colormapLabel")}</Label>
+              <ColorRampSelect
+                id="netcdf-colormap"
+                aria-label={t("addData.netcdf.colormapLabel")}
+                value={colormap}
+                ramps={rampOptions}
+                onValueChange={setColormap}
               />
             </div>
-          ))}
+          )}
 
-          {variables.length > 0 && (
+          {variables.length > 0 && !rgbMode && (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="netcdf-clim-min">{t("addData.netcdf.colorMin")}</Label>
@@ -455,4 +853,114 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * A picker for one index along a non-spatial axis, labelled with the axis' own
+ * coordinate values when the file has them — so a hyperspectral cube reads as
+ * "650.4 nm (band 47)" rather than a bare number the user has to look up.
+ *
+ * Falls back to a number box for an axis with no coordinate variable or with
+ * more entries than a `<select>` can carry (see {@link MAX_AXIS_OPTIONS}).
+ */
+function AxisSelect({
+  axis,
+  id,
+  onChange,
+  value,
+}: {
+  axis: LocalNetcdfAxis;
+  id: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  if (!axis.values || axis.size > MAX_AXIS_OPTIONS) {
+    return (
+      <Input
+        id={id}
+        inputMode="numeric"
+        placeholder="0"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    );
+  }
+  return (
+    <Select id={id} value={value} onChange={(event) => onChange(event.target.value)}>
+      {axis.values.map((coordinate, index) => (
+        <option key={index} value={String(index)}>
+          {axisOptionLabel(axis, coordinate, index)}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+/** `"650.41 nm (bands 47)"` — the coordinate value first, then where it sits. */
+function axisOptionLabel(axis: LocalNetcdfAxis, coordinate: number, index: number): string {
+  const rounded = Number.isInteger(coordinate) ? String(coordinate) : coordinate.toFixed(2);
+  const measure = axis.units ? `${rounded} ${axis.units}` : rounded;
+  return `${measure} (${axis.name} ${index})`;
+}
+
+/**
+ * The three indices to open an RGB composite on.
+ *
+ * A wavelength axis (an EMIT `bands` coordinate in nm) gets the bands nearest
+ * true red/green/blue, which is the composite a user actually wants to look at.
+ * Anything else — an axis with no units, or units that are not a wavelength —
+ * gets three evenly spread indices, since guessing colours from, say, a time
+ * axis would be meaningless.
+ */
+function defaultRgbBands(axis: LocalNetcdfAxis): [number, number, number] {
+  const wavelengths = wavelengthsInNanometres(axis);
+  if (wavelengths) {
+    return NATURAL_COLOR_NM.map((target) => nearestIndex(wavelengths, target)) as [
+      number,
+      number,
+      number,
+    ];
+  }
+  return [0, Math.floor((axis.size - 1) / 2), axis.size - 1];
+}
+
+/** Whether a dimension name reads as a time axis. */
+function isTimeAxisName(name: string): boolean {
+  return TIME_DIMENSION_NAMES.has(name.toLowerCase());
+}
+
+/**
+ * The axis an RGB composite should draw its channels from: a wavelength axis if
+ * the file declares one, else the first non-time axis with at least three
+ * entries. Time is never a candidate (see `rgbAxis`).
+ *
+ * @param axes - The variable's leading axes.
+ * @returns The band axis, or null when the variable has none.
+ */
+function pickBandAxis(axes: LocalNetcdfAxis[]): LocalNetcdfAxis | null {
+  const candidates = axes.filter((axis) => axis.size >= 3 && !isTimeAxisName(axis.name));
+  return candidates.find((axis) => wavelengthsInNanometres(axis)) ?? candidates[0] ?? null;
+}
+
+/** The axis' values as nanometres, or null when it is not a wavelength axis. */
+function wavelengthsInNanometres(axis: LocalNetcdfAxis): number[] | null {
+  if (!axis.values || axis.values.length === 0) return null;
+  const units = axis.units?.trim().toLowerCase() ?? "";
+  if (NANOMETRE_UNITS.has(units)) return axis.values;
+  if (MICROMETRE_UNITS.has(units)) return axis.values.map((value) => value * 1000);
+  return null;
+}
+
+/** Index of the entry closest to `target`. */
+function nearestIndex(values: number[], target: number): number {
+  let best = 0;
+  let bestDistance = Infinity;
+  for (let i = 0; i < values.length; i++) {
+    const distance = Math.abs(values[i] - target);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = i;
+    }
+  }
+  return best;
 }
