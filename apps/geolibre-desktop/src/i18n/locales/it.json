@@ -5297,7 +5297,7 @@
     "reverse": "Inverti la mappa colori",
     "colorMin": "Colore min",
     "colorMax": "Colore max",
-    "resetRange": "Ripristina all'intervallo dei dati",
+    "resetRange": "Ripristina l'intervallo dei dati",
     "openCube": "Cubo 3D"
   },
   "netcdfCube": {

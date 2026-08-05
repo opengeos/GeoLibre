@@ -684,7 +684,7 @@
       "dimIndexLabel": "Index {{dim}}",
       "colormapLabel": "Kleurenkaart",
       "bandCombinationLabel": "Bandcombinatie",
-      "bandCombinationHelp": "Eén band wordt met een kleurenkaart weergegeven; een RGB-compositie tekent drie banden van deze variabele als het rode, groene en blauwe kanaal, elk opgerekt naar het eigen 2-98 %-bereik.",
+      "bandCombinationHelp": "Eén band wordt met een kleurenkaart weergegeven; een RGB-compositie tekent drie banden van deze variabele als de rode, groene en blauwe kanalen, elk opgerekt naar het eigen 2-98 %-bereik.",
       "modeSingleBand": "Enkele band (met kleurenkaart)",
       "modeRgb": "RGB-compositie (drie banden)",
       "colorMin": "Kleurminimum (optioneel)",
@@ -5348,7 +5348,7 @@
   "netcdfProfile": {
     "heading": "Spectraal profiel",
     "clear": "Wissen",
-    "chartAria": "Bemonsterde pixelwaarden langs de bandas",
+    "chartAria": "Bemonsterde pixelwaarden langs de banden-as",
     "popOut": "Losmaken",
     "dock": "Vastzetten",
     "poppedOutHint": "Het diagram is geopend in een venster op de kaart.",

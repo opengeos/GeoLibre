@@ -5295,8 +5295,8 @@
     "heading": "NetCDF-Symbolisierung",
     "colorRampLabel": "Farbtabelle",
     "reverse": "Farbtabelle umkehren",
-    "colorMin": "Farbe Min",
-    "colorMax": "Farbe Max",
+    "colorMin": "Farbminimum",
+    "colorMax": "Farbmaximum",
     "resetRange": "Auf Datenbereich zurücksetzen",
     "openCube": "3D-Würfel"
   },

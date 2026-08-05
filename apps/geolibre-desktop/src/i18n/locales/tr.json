@@ -684,7 +684,7 @@
       "dimIndexLabel": "{{dim}} dizini",
       "colormapLabel": "Renk haritası",
       "bandCombinationLabel": "Bant kombinasyonu",
-      "bandCombinationHelp": "Tek bant bir renk haritasıyla çizilir; RGB kompoziti bu değişkenin üç bandını kırmızı, yeşil ve mavi kanal olarak çizer ve her birini kendi 2-98 % aralığına gerer.",
+      "bandCombinationHelp": "Tek bant bir renk haritasıyla çizilir; RGB kompoziti bu değişkenin üç bandını kırmızı, yeşil ve mavi kanal olarak çizer ve her birini kendi %2-98 aralığına gerer.",
       "modeSingleBand": "Tek bant (renk haritalı)",
       "modeRgb": "RGB kompoziti (üç bant)",
       "colorMin": "Renk alt sınırı (isteğe bağlı)",

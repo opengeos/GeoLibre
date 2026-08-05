@@ -2586,7 +2586,7 @@
       "arcgisImportWarnings_many": "Проект импортирован, но {{count}} слоёв не удалось загрузить.",
       "arcgisImportWarnings_few": "Проект импортирован, но {{count}} слоя не удалось загрузить.",
       "arcgisImportWarnings_other": "Проект импортирован, но {{count}} слоя не удалось загрузить.",
-      "arcgisUnknownLayerType": "неизвестно",
+      "arcgisUnknownLayerType": "неизвестный",
       "qgisImportComplete": "Проект QGIS импортирован",
       "qgisImportWarnings_one": "Проект импортирован, но {{count}} слой не удалось загрузить.",
       "qgisImportWarnings_other": "Проект импортирован, но {{count}} слоя не удалось загрузить.",

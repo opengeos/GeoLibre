@@ -5211,7 +5211,7 @@
   },
   "olcPlugin": {
     "title": "OLC",
-    "controlTitle": "Paramètres de OLC",
+    "controlTitle": "Paramètres d'OLC",
     "autoResolution": "Résolution automatique",
     "resolution": "Résolution",
     "cellCount": "Cellules dans la vue : {{count}}",
