@@ -157,3 +157,43 @@ describe("detectNonGeographicCoordinates", () => {
     assert.equal(detectNonGeographicCoordinates(many as never, 25), null);
   });
 });
+
+describe("detectNonGeographicCoordinates with GeometryCollection", () => {
+  it("visits coordinates nested under geometries[]", () => {
+    // A GeometryCollection has no `coordinates` of its own, so it was skipped
+    // entirely before and a wholly-GeometryCollection file passed silently.
+    const gc = {
+      type: "FeatureCollection" as const,
+      features: [
+        {
+          type: "Feature" as const,
+          properties: {},
+          geometry: {
+            type: "GeometryCollection",
+            geometries: [{ type: "Point", coordinates: [1905935.66, 2337159.4] }],
+          },
+        },
+      ],
+    };
+    const found = detectNonGeographicCoordinates(gc as never);
+    assert.ok(found);
+    assert.equal(Math.round(found.maxAbsX), 1905936);
+  });
+
+  it("still passes a geographic GeometryCollection", () => {
+    const gc = {
+      type: "FeatureCollection" as const,
+      features: [
+        {
+          type: "Feature" as const,
+          properties: {},
+          geometry: {
+            type: "GeometryCollection",
+            geometries: [{ type: "Point", coordinates: [-72.6, 41.9] }],
+          },
+        },
+      ],
+    };
+    assert.equal(detectNonGeographicCoordinates(gc as never), null);
+  });
+});

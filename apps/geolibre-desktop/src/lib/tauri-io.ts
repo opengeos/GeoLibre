@@ -564,6 +564,43 @@ async function localFileSizeBytes(path: string): Promise<number | undefined> {
   }
 }
 
+/**
+ * Extensions whose in-memory reader is bypassed by the size route. Containers
+ * (`zip`, `kmz`) unpack first and decide from their contents, and delimited text
+ * always uses the JS parser, so neither belongs here.
+ */
+const ROUTABLE_TEXT_EXTENSIONS = new Set(["geojson", "json", "kml", "gpx"]);
+
+/**
+ * Read a dropped file as text, routing a file too large for one JS string
+ * through a byte read and an incremental decode instead of `File.text()`, which
+ * throws `RangeError: Invalid string length` past V8's cap.
+ */
+async function readVectorFileText(file: File): Promise<string> {
+  if (!shouldRouteToDuckDb(file.size)) return file.text();
+  return new TextDecoder("utf-8").decode(await file.arrayBuffer());
+}
+
+/** {@link readVectorFileText}, but an unreadable/oversized file yields "". */
+async function readVectorFileTextOrEmpty(file: File): Promise<string> {
+  try {
+    return await readVectorFileText(file);
+  } catch (error) {
+    console.warn(`[GeoLibre] Could not read "${file.name}" as text; skipping its overlays.`, error);
+    return "";
+  }
+}
+
+/** Path counterpart to {@link readVectorFileTextOrEmpty}. */
+async function readLocalFileTextOrEmpty(path: string): Promise<string> {
+  try {
+    return await readLocalFileText(path);
+  } catch (error) {
+    console.warn(`[GeoLibre] Could not read "${path}" as text; skipping its overlays.`, error);
+    return "";
+  }
+}
+
 function parseGpxText(text: string): FeatureCollection {
   const result = parseGpxLayer(text);
   return mergeFeatureCollections([result.waypoints, result.tracks, result.routes]);
@@ -1807,7 +1844,10 @@ async function loadBrowserVectorFile(
   // Browser counterpart to the metadata preflight in `loadTauriVectorFile`;
   // `File.size` is known without reading the blob, so the same rule applies.
   const streamViaDuckDb = shouldRouteToDuckDb(file.size);
-  if (streamViaDuckDb) {
+  // `zip`/`kmz` ignore this flag (the archive is unpacked first and
+  // `loadShapefileZip` decides from the *uncompressed* `.shp`), so announcing a
+  // route here would be misleading for a container near the threshold.
+  if (streamViaDuckDb && ROUTABLE_TEXT_EXTENSIONS.has(extension)) {
     console.info(
       `[GeoLibre] "${file.name}" is ${Math.round(file.size / (1024 * 1024))} MB; streaming it through DuckDB instead of the in-memory reader.`,
     );
@@ -1857,7 +1897,13 @@ async function loadBrowserVectorFile(
     };
   }
 
-  if (!streamViaDuckDb && isDelimitedTextFileName(file.name)) {
+  // Deliberately NOT gated on `streamViaDuckDb`: `loadDuckDbVectorFile` has no
+  // longitude/latitude column detection (that lives only in the GeoParquet
+  // conversion path), so routing a plain lon/lat CSV to DuckDB fails with
+  // "DuckDB did not find a geometry column in this file." Delimited text is
+  // line-oriented and cheap to parse, so size is not the concern it is for
+  // GeoJSON or shapefiles.
+  if (isDelimitedTextFileName(file.name)) {
     const points = parseDelimitedTextFile(await file.text(), file.name);
     // No lon/lat columns: fall through to DuckDB so spatial CSV variants
     // (e.g. a WKT geometry column) still load.
@@ -2076,7 +2122,8 @@ async function loadTauriVectorFile(
   // oversized file never starts a text parse that would freeze the UI.
   const sizeBytes = await localFileSizeBytes(path);
   const streamViaDuckDb = shouldRouteToDuckDb(sizeBytes);
-  if (streamViaDuckDb) {
+  // See `loadBrowserVectorFile`: containers decide their own routing later.
+  if (streamViaDuckDb && ROUTABLE_TEXT_EXTENSIONS.has(extension)) {
     console.info(
       `[GeoLibre] "${browserSafeFileName(path)}" is ${Math.round((sizeBytes ?? 0) / (1024 * 1024))} MB; streaming it through DuckDB instead of the in-memory reader.`,
     );
@@ -2137,7 +2184,9 @@ async function loadTauriVectorFile(
     }
   }
 
-  if (!streamViaDuckDb && isDelimitedTextFileName(path)) {
+  // Not gated on `streamViaDuckDb` — see the note in `loadBrowserVectorFile`:
+  // the DuckDB reader cannot build points from lon/lat columns.
+  if (isDelimitedTextFileName(path)) {
     const points = parseDelimitedTextFile(await readLocalFileText(path), path);
     // No lon/lat columns: fall through to DuckDB so spatial CSV variants
     // (e.g. a WKT geometry column) still load.
@@ -2791,7 +2840,7 @@ export async function loadDroppedVectorFiles(
       if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
 
       if (extension === "gpx") {
-        layers.push(...parseGpxTextLayers(await file.text(), file.name));
+        layers.push(...parseGpxTextLayers(await readVectorFileText(file), file.name));
         continue;
       }
 
@@ -2809,7 +2858,10 @@ export async function loadDroppedVectorFiles(
         // Load the vector placemarks and the ground overlays independently so an
         // overlay-only KML still adds its overlays even when it has no readable
         // placemarks (which makes the vector load throw).
-        const text = await file.text();
+        // Overlay/model extraction needs the whole document as text. A file too
+        // large for that yields no overlays rather than aborting the batch; the
+        // guarded vector load below still runs and routes it to DuckDB.
+        const text = await readVectorFileTextOrEmpty(file);
         const overlays = groundOverlaysFromKml(text, file.name);
         const models = options?.skipModels ? [] : await modelsFromKml(text, file.name);
         // Overlays go under the placemarks (added first), matching the KMZ path.
@@ -3087,7 +3139,9 @@ export async function loadDroppedVectorPaths(
       if (extension === "kml") {
         // Load placemarks and ground overlays independently so an overlay-only
         // KML still contributes its overlays when the vector load throws.
-        const kmlText = await readLocalFileText(path);
+        // See the browser counterpart: too large to read as text means no
+        // overlays, not a failed drop.
+        const kmlText = await readLocalFileTextOrEmpty(path);
         const overlays = groundOverlaysFromKml(kmlText, path);
         const models = options?.skipModels ? [] : await modelsFromKml(kmlText, path);
         // Overlays go under the placemarks (added first), matching the KMZ path.

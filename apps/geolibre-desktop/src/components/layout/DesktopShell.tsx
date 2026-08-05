@@ -903,6 +903,9 @@ export function DesktopShell({
       dropMessageTimeoutRef.current = null;
       setDropMessage(null);
       setDropError(null);
+      // Cleared with the other drop status so a warning about a previous file
+      // cannot linger over an unrelated drop.
+      setCrsWarning(null);
     }, 4000);
   }, []);
 
@@ -1565,6 +1568,9 @@ export function DesktopShell({
 
           setIsDraggingFiles(false);
           setDropError(null);
+          // Matches the browser drop handler: a warning about a previous file
+          // must not linger over an unrelated drop.
+          setCrsWarning(null);
           setDropMessage("Importing data...");
 
           try {

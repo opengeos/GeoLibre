@@ -1901,8 +1901,19 @@ export function detectNonGeographicCoordinates(
 
   for (const feature of geojson.features) {
     if (sampled >= sampleLimit) break;
-    const geometry = feature?.geometry as { coordinates?: unknown } | null;
+    const geometry = feature?.geometry as {
+      coordinates?: unknown;
+      geometries?: { coordinates?: unknown }[];
+    } | null;
+    // A GeometryCollection holds its coordinates one level down, under
+    // `geometries[]`, so it has no `coordinates` of its own to visit.
     if (geometry?.coordinates !== undefined) visit(geometry.coordinates);
+    else if (Array.isArray(geometry?.geometries)) {
+      for (const member of geometry.geometries) {
+        if (sampled >= sampleLimit) break;
+        if (member?.coordinates !== undefined) visit(member.coordinates);
+      }
+    }
   }
 
   return offending ? { sampled, maxAbsX, maxAbsY } : null;

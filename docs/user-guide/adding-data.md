@@ -31,10 +31,12 @@ Vector files are reprojected to EPSG:4326 on load. In the browser, vector import
     limit — a small GeoParquet can hold millions of rows.
 
     For very large data, converting first still pays: **Processing → Conversion
-    → Vector to PMTiles** (or GeoParquet) writes a format the map streams a tile
-    at a time instead of loading whole. GeoJSON is the most expensive option at
-    any size — it expands several-fold in memory — so prefer a Shapefile,
-    GeoParquet, or FlatGeobuf source when you have the choice.
+    → Vector to PMTiles** writes a tiled format the map loads one tile at a
+    time instead of reading the whole file. Converting to **GeoParquet**
+    instead gives a compact columnar format that reads far faster than text,
+    though it is not tiled. GeoJSON is the most expensive option at any size —
+    it expands several-fold in memory — so prefer a Shapefile, GeoParquet, or
+    FlatGeobuf source when you have the choice.
 
 !!! tip "KML and KMZ"
     KML is read by an in-house parser that keeps the file's own symbology, so styled KML renders the way it does in Google Earth. A file that parser cannot handle falls back to the DuckDB Spatial reader, which loads the geometry without the styling.
