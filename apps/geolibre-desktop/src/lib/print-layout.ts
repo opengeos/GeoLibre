@@ -2009,7 +2009,7 @@ function drawLegend(
   // box grows (uniformly, so rows stay evenly spaced) and the ramp reads at
   // roughly the ratios the map draws.
   const hasSizedSwatch = entries.some((entry) =>
-    entry.swatches.some((swatch) => swatch.size !== undefined),
+    entry.swatches.some((entrySwatch) => entrySwatch.size !== undefined),
   );
   const rowH = unit * (hasSizedSwatch ? 3.6 : 2.6);
   const swatch = unit * (hasSizedSwatch ? 3 : 2);
