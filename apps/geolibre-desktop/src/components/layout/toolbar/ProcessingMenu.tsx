@@ -309,19 +309,6 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupDggs")}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dggs-grid")}>
-                      {t("toolbar.vectorTool.dggsGenerator")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dggs-bin")}>
-                      {t("toolbar.vectorTool.dggsBinning")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dggs-compact")}>
-                      {t("toolbar.vectorTool.dggsCompact")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
                       {t("toolbar.item.subGroupMovement")}
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("trajectory-speed")}>
@@ -473,6 +460,22 @@ export function ProcessingMenu({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onSelect={onOpenGeoreferencer}>
                       {t("toolbar.item.georeferencing")}
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              {show("processing.vector") && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>{t("toolbar.item.dggs")}</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dggs-grid")}>
+                      {t("toolbar.vectorTool.dggsGenerator")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dggs-bin")}>
+                      {t("toolbar.vectorTool.dggsBinning")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dggs-compact")}>
+                      {t("toolbar.vectorTool.dggsCompact")}
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
