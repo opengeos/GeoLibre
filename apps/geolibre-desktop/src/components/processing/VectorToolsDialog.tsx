@@ -5,6 +5,7 @@ import {
   getVectorTool,
   runVectorTool,
   fetchVectorStatus,
+  maxResolutionForDggs,
   type AlgorithmParameter,
   type GeometryFamily,
   type ProcessingAlgorithm,
@@ -130,12 +131,12 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     if (rerun.autoRun) setAutoRunPending(true);
   }, [open, rerun, tool, setProcessingRerun, t]);
 
-  // Prefill the H3 grid's manual bounding-box fields from the current map
+  // Prefill the DGGS Generator's manual bounding-box fields from the current map
   // viewport when the user first switches to that source, so they can tweak the
   // box rather than type it from scratch. Only fills empty fields, so it never
   // clobbers manual edits. Keyed on the source value, not every keystroke.
   useEffect(() => {
-    if (selectedId !== "h3-grid" || params.source !== "bbox") return;
+    if (selectedId !== "dggs-grid" || params.source !== "bbox") return;
     if (
       params.west !== undefined ||
       params.south !== undefined ||
@@ -475,16 +476,42 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
             <p className="text-sm text-muted-foreground">{tool.description}</p>
 
             <div className="flex flex-col gap-3">
-              {tool.parameters.filter(isParamVisible).map((param) => (
-                <ParameterField
-                  key={param.id}
-                  param={param}
-                  value={params[param.id]}
-                  layerOptions={layerOptions(param.geometryFilter)}
-                  fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
-                  onChange={(value) => handleParamChange(param.id, value)}
-                />
-              ))}
+              {tool.parameters.filter(isParamVisible).map((param) => {
+                // Narrow the resolution spinner to the selected DGGS type's range.
+                const fieldParam =
+                  (tool.id === "dggs-grid" ||
+                    tool.id === "dggs-bin" ||
+                    tool.id === "dggs-compact") &&
+                  param.id === "resolution"
+                    ? (() => {
+                        const dggsType =
+                          params.dggsType === "s2" ||
+                          params.dggsType === "a5" ||
+                          params.dggsType === "dggrid" ||
+                          params.dggsType === "dggal"
+                            ? params.dggsType
+                            : "h3";
+                        const subtype =
+                          dggsType === "dggal" ? params.dggalType : params.dggridType;
+                        const max = maxResolutionForDggs(dggsType, subtype);
+                        return {
+                          ...param,
+                          max,
+                          label: `Resolution (0-${max})`,
+                        };
+                      })()
+                    : param;
+                return (
+                  <ParameterField
+                    key={param.id}
+                    param={fieldParam}
+                    value={params[param.id]}
+                    layerOptions={layerOptions(param.geometryFilter)}
+                    fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
+                    onChange={(value) => handleParamChange(param.id, value)}
+                  />
+                );
+              })}
             </div>
 
             {tool.supportsSidecar || tool.requiresSidecar ? (

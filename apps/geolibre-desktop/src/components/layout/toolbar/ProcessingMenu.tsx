@@ -309,13 +309,16 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      {t("toolbar.item.subGroupH3")}
+                      {t("toolbar.item.subGroupDggs")}
                     </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setVectorToolOpen("h3-grid")}>
-                      {t("toolbar.vectorTool.h3Grid")}
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dggs-grid")}>
+                      {t("toolbar.vectorTool.dggsGenerator")}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setVectorToolOpen("h3-bin-points")}>
-                      {t("toolbar.vectorTool.h3BinPoints")}
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dggs-bin")}>
+                      {t("toolbar.vectorTool.dggsBinning")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dggs-compact")}>
+                      {t("toolbar.vectorTool.dggsCompact")}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">

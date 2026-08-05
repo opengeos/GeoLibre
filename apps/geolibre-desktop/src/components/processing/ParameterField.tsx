@@ -106,16 +106,21 @@ export function ParameterField({
 
   if (param.type === "boolean") {
     return (
-      <label className="flex items-center gap-2 text-sm" htmlFor={param.id}>
-        <input
-          id={param.id}
-          type="checkbox"
-          checked={Boolean(value)}
-          onChange={(e) => onChange(e.target.checked)}
-          className="h-4 w-4 rounded border-input"
-        />
-        {param.label}
-      </label>
+      <div className="flex flex-col gap-1">
+        <label className="flex items-center gap-2 text-sm" htmlFor={param.id}>
+          <input
+            id={param.id}
+            type="checkbox"
+            checked={Boolean(value)}
+            onChange={(e) => onChange(e.target.checked)}
+            className="h-4 w-4 rounded border-input"
+          />
+          {param.label}
+        </label>
+        {param.description ? (
+          <p className="text-xs text-muted-foreground ps-6">{param.description}</p>
+        ) : null}
+      </div>
     );
   }
 

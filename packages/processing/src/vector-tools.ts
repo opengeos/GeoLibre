@@ -32,7 +32,7 @@ import type {
 } from "geojson";
 import { layerJoinKey, type GeoLibreLayer } from "@geolibre/core";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
-import { createH3GridTool, binPointsTool } from "./h3-tools";
+import { createDggsGridTool, dggsBinPointsTool, dggsCompactTool } from "./dggs-tools";
 import { TOPOLOGY_TOOLS } from "./topology-tools";
 
 /** Upper bound on input×overlay pairs for the main-thread pairwise loops. */
@@ -2691,9 +2691,10 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   gridTool,
   voronoiTool,
   cellSectorsTool,
-  createH3GridTool,
-  binPointsTool,
-  // Movement & time tools come after H3 so the dialog's group order (derived
+  createDggsGridTool,
+  dggsBinPointsTool,
+  dggsCompactTool,
+  // Movement & time tools come after DGGS so the dialog's group order (derived
   // from this array) matches the Processing → Vector menu order.
   trajectorySpeedTool,
   detectStopsTool,

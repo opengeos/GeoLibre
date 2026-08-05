@@ -263,6 +263,48 @@ export async function ensureH3Extension(connection: duckdb.AsyncDuckDBConnection
   }
 }
 
+let a5ExtensionPromise: Promise<void> | null = null;
+
+/**
+ * Install and load the DuckDB `a5` community extension once per database
+ * instance. Mirrors {@link ensureH3Extension}: memoized as a promise so
+ * concurrent callers share one INSTALL/LOAD, and cleared on failure so a later
+ * call can retry.
+ */
+export async function ensureA5Extension(connection: duckdb.AsyncDuckDBConnection): Promise<void> {
+  a5ExtensionPromise ??= (async () => {
+    await connection.query("INSTALL a5 FROM community");
+    await connection.query("LOAD a5");
+  })();
+  try {
+    await a5ExtensionPromise;
+  } catch (error) {
+    a5ExtensionPromise = null;
+    throw error;
+  }
+}
+
+let duckDggsExtensionPromise: Promise<void> | null = null;
+
+/**
+ * Install and load the DuckDB `duck_dggs` community extension (DGGRID v8)
+ * once per database instance. Mirrors {@link ensureH3Extension}.
+ */
+export async function ensureDuckDggsExtension(
+  connection: duckdb.AsyncDuckDBConnection,
+): Promise<void> {
+  duckDggsExtensionPromise ??= (async () => {
+    await connection.query("INSTALL duck_dggs FROM community");
+    await connection.query("LOAD duck_dggs");
+  })();
+  try {
+    await duckDggsExtensionPromise;
+  } catch (error) {
+    duckDggsExtensionPromise = null;
+    throw error;
+  }
+}
+
 async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
   const bundle = await selectDuckDbBundle();
   const worker = new Worker(bundle.mainWorker!, { type: "module" });
