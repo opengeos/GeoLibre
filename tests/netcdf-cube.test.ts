@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   composeCubeRgb,
   CUBE_FACES,
+  CubeError,
   cubeFaceSize,
   faceSampleIndex,
   intersectRect,
@@ -265,7 +266,11 @@ describe("readNetcdfCube", () => {
         variable: "reflectance",
         axis: { name: "bands", size: 2 },
       }),
-      /do not share one shape/,
+      (error: unknown) => {
+        assert.ok(error instanceof CubeError);
+        assert.equal(error.code, "shapeMismatch");
+        return true;
+      },
     );
   });
 });
@@ -715,7 +720,13 @@ describe("recomposeCubeRgb", () => {
     const cube = await builtCube();
     await assert.rejects(
       recomposeCubeRgb(cube, () => Promise.resolve(grid([1], 1, 1)), [1, 2, 3]),
-      /must be rebuilt/,
+      (error: unknown) => {
+        // Carries a code, so the window can show it in the user's language;
+        // this module has no `t()` of its own to do that with.
+        assert.ok(error instanceof CubeError);
+        assert.equal(error.code, "noReadWindow");
+        return true;
+      },
     );
   });
 

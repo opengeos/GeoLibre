@@ -9,8 +9,10 @@ import { useColormapRamps } from "../../hooks/useColormapRamps";
 import { bandLabel, defaultRgbBands, MAX_AXIS_OPTIONS } from "../../lib/netcdf-band-axis";
 import { useFloatingPanelRect } from "../../hooks/useFloatingPanelRect";
 import {
+  CubeError,
   CubeReadAbortedError,
   intersectRect,
+  type CubeErrorCode,
   readNetcdfCube,
   recomposeCubeRgb,
   validDataRect,
@@ -129,7 +131,7 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
         if (!controller.signal.aborted) setCube(next);
       } catch (err) {
         if (err instanceof CubeReadAbortedError || controller.signal.aborted) return;
-        setError(err instanceof Error ? err.message : String(err));
+        setError(describeError(err, t));
       } finally {
         if (rgbAbortRef.current === controller) {
           rgbAbortRef.current = null;
@@ -137,7 +139,7 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
         }
       }
     },
-    [cube, layerId],
+    [cube, layerId, t],
   );
 
   // The layer's own limits, so the cube and the map agree; falling back to the
@@ -183,7 +185,7 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
         setSliceFraction(1);
       } catch (err) {
         if (err instanceof CubeReadAbortedError || controller.signal.aborted) return;
-        setError(err instanceof Error ? err.message : String(err));
+        setError(describeError(err, t));
       } finally {
         if (abortRef.current === controller) {
           abortRef.current = null;
@@ -376,30 +378,48 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
         {cube?.readWindow && rgbAxis ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-muted-foreground">{t("netcdfCube.rgbBands")}</span>
-            {([0, 1, 2] as const).map((channel) => (
-              <select
-                key={channel}
-                className="max-w-40 rounded-md border bg-background px-1.5 py-1"
-                value={String(activeRgb[channel])}
-                disabled={recomposing}
-                aria-label={t(`netcdfCube.${(["red", "green", "blue"] as const)[channel]}`)}
-                onChange={(event) => {
-                  const next: [number, number, number] = [...activeRgb];
-                  next[channel] = Number(event.target.value);
-                  void changeRgb(next);
-                }}
-              >
-                {rgbAxis.values && rgbAxis.size <= MAX_AXIS_OPTIONS ? (
-                  rgbAxis.values.map((_, index) => (
+            {([0, 1, 2] as const).map((channel) => {
+              const label = t(`netcdfCube.${(["red", "green", "blue"] as const)[channel]}`);
+              const pick = (index: number): void => {
+                if (!Number.isFinite(index)) return;
+                const next: [number, number, number] = [...activeRgb];
+                next[channel] = Math.min(rgbAxis.size - 1, Math.max(0, Math.trunc(index)));
+                void changeRgb(next);
+              };
+              // An axis with no coordinate values, or one too long to list, gets
+              // a number box instead of a dropdown — the same fallback the Add
+              // NetCDF dialog's band pickers use. A single-option select would
+              // leave the channel with nothing to pick.
+              return rgbAxis.values && rgbAxis.size <= MAX_AXIS_OPTIONS ? (
+                <select
+                  key={channel}
+                  className="max-w-40 rounded-md border bg-background px-1.5 py-1"
+                  value={String(activeRgb[channel])}
+                  disabled={recomposing}
+                  aria-label={label}
+                  onChange={(event) => pick(Number(event.target.value))}
+                >
+                  {rgbAxis.values.map((_, index) => (
                     <option key={index} value={String(index)}>
                       {bandLabel(rgbAxis, index)}
                     </option>
-                  ))
-                ) : (
-                  <option value={String(activeRgb[channel])}>{activeRgb[channel]}</option>
-                )}
-              </select>
-            ))}
+                  ))}
+                </select>
+              ) : (
+                <input
+                  key={channel}
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={rgbAxis.size - 1}
+                  className="w-24 rounded-md border bg-background px-1.5 py-1"
+                  value={activeRgb[channel]}
+                  disabled={recomposing}
+                  aria-label={label}
+                  onChange={(event) => pick(Number(event.target.value))}
+                />
+              );
+            })}
             {recomposing ? (
               <span className="text-muted-foreground">{t("netcdfCube.recomposing")}</span>
             ) : null}
@@ -469,6 +489,38 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
     </div>
   );
 }
+
+/**
+ * A failure, in the user's language where the reader named the reason.
+ *
+ * The cube module is a plain library with no `t()` of its own, so it raises a
+ * {@link CubeError} carrying a code and this maps it to the catalog. Anything
+ * else falls back to its own message, which is better than a blank panel even
+ * when it is untranslated.
+ *
+ * @param error - Whatever was thrown.
+ * @param t - The translator from the calling component.
+ * @returns A message to show over the canvas.
+ */
+function describeError(
+  error: unknown,
+  t: (key: (typeof CUBE_ERROR_KEYS)[CubeErrorCode]) => string,
+): string {
+  if (error instanceof CubeError) return t(CUBE_ERROR_KEYS[error.code]);
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Catalog key per reader failure. Spelled out rather than built from the code
+ * with a template literal, so the typed catalog checks every one of them and a
+ * renamed key fails the build instead of showing the raw key to a user.
+ */
+const CUBE_ERROR_KEYS = {
+  shapeMismatch: "netcdfCube.error.shapeMismatch",
+  rgbShapeMismatch: "netcdfCube.error.rgbShapeMismatch",
+  noBands: "netcdfCube.error.noBands",
+  noReadWindow: "netcdfCube.error.noReadWindow",
+} as const satisfies Record<CubeErrorCode, string>;
 
 /** A band coordinate, short enough to sit inline next to the slider. */
 function formatBand(value: number): string {

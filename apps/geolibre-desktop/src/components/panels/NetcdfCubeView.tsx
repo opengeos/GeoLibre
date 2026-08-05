@@ -111,8 +111,14 @@ export function NetcdfCubeView({
   const fittedRef = useRef(0);
   const refitRef = useRef<(() => void) | null>(null);
 
-  // The scene itself: rebuilt only when the cube's geometry changes, because
-  // that is what the plane sizes and the camera distance are derived from.
+  // The scene itself: rebuilt only when the cube's *shape* changes, because that
+  // is what the plane sizes and the camera distance are derived from.
+  //
+  // Keyed on the dimensions rather than on the cube object, because changing the
+  // overlay's bands hands back a new object over the same values
+  // (`recomposeCubeRgb`). Keying on identity would tear down the renderer, the
+  // controls and all six textures — and re-frame the camera, throwing away
+  // wherever the user had orbited to — for a change that touches one plane.
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -272,7 +278,7 @@ export function NetcdfCubeView({
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [cube]);
+  }, [cube.nx, cube.ny, cube.nz]);
 
   // Face geometry: placement and size depend on the cube's shape, the vertical
   // exaggeration, and where the slice plane sits — and on nothing about colors.
@@ -298,7 +304,7 @@ export function NetcdfCubeView({
     overlay.geometry.dispose();
     overlay.geometry = new PlaneGeometry(width, height);
     overlay.position.set(0, 0, zCenter + depth / 2 + Math.max(full * 1e-3, 1e-4));
-  }, [cube, zScale, sliceBands]);
+  }, [cube.nx, cube.ny, cube.nz, zScale, sliceBands]);
 
   // Re-frame after the cube's full height changes, which the fit distance is
   // derived from — a Height of 3 on a wide cube otherwise grows out of the
@@ -306,7 +312,7 @@ export function NetcdfCubeView({
   // away under a stationary camera rather than make the view chase it.
   useEffect(() => {
     refitRef.current?.();
-  }, [cube, zScale]);
+  }, [cube.nx, cube.ny, cube.nz, zScale]);
 
   // Textures: repainted on a symbology change or a slice, both of which change
   // what each face shows without changing the cube.
@@ -317,7 +323,10 @@ export function NetcdfCubeView({
     for (const [face, mesh] of faces) {
       applyTexture(mesh, paintCubeFace(shown, face, colors, clim), sharp);
     }
-  }, [cube, colors, clim, sharp, sliceBands]);
+    // `cube.values` rather than `cube`: an overlay recompose shares the same
+    // values, and the faces are painted from those alone, so it must not cost
+    // six texture uploads.
+  }, [cube.values, colors, clim, sharp, sliceBands]);
 
   // The RGB overlay's texture, uploaded once per cube. Kept apart from the
   // visibility flip below so hiding and showing the overlay does not dispose and

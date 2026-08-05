@@ -207,7 +207,7 @@ export async function readNetcdfCube(options: ReadNetcdfCubeOptions): Promise<Ne
       // Every plane is read with the same window, so a mismatch means the file
       // changed shape underneath us; stacking it would silently misalign the
       // faces rather than fail.
-      throw new Error("The cube's band planes do not share one shape.");
+      throw new CubeError("shapeMismatch", "The cube's band planes do not share one shape.");
     }
     unpackInto(values, z * ny * nx, grid, cells);
     bands.push({
@@ -222,7 +222,7 @@ export async function readNetcdfCube(options: ReadNetcdfCubeOptions): Promise<Ne
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
-  if (!values) throw new Error("The cube has no bands to read.");
+  if (!values) throw new CubeError("noBands", "The cube has no bands to read.");
 
   let rgb: CubeFaceImage | undefined;
   if (rgbIndices) {
@@ -235,7 +235,7 @@ export async function readNetcdfCube(options: ReadNetcdfCubeOptions): Promise<Ne
       // channels through a different window would silently stretch the image
       // across the cube rather than fail.
       if (plane.nx !== nx || plane.ny !== ny) {
-        throw new Error("The RGB bands do not share the cube's shape.");
+        throw new CubeError("rgbShapeMismatch", "The RGB bands do not share the cube's shape.");
       }
       channels.push(plane);
       options.onProgress?.(indices.length + channels.length, total);
@@ -387,14 +387,17 @@ export async function recomposeCubeRgb(
   signal?: AbortSignal,
 ): Promise<NetcdfCube> {
   if (!cube.readWindow) {
-    throw new Error("This cube did not record how it was read, so it must be rebuilt.");
+    throw new CubeError(
+      "noReadWindow",
+      "This cube did not record how it was read, so it must be rebuilt.",
+    );
   }
   const channels: LocalNetcdfGrid[] = [];
   for (const index of bands) {
     if (signal?.aborted) throw new CubeReadAbortedError();
     const plane = await readBand(index, cube.readWindow);
     if (plane.nx !== cube.nx || plane.ny !== cube.ny) {
-      throw new Error("The RGB bands do not share the cube's shape.");
+      throw new CubeError("rgbShapeMismatch", "The RGB bands do not share the cube's shape.");
     }
     channels.push(plane);
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -410,6 +413,35 @@ export class CubeReadAbortedError extends Error {
   constructor() {
     super("The cube read was cancelled.");
     this.name = "CubeReadAbortedError";
+  }
+}
+
+/** The ways a cube read can fail that a user might actually see. */
+export type CubeErrorCode =
+  /** The band planes came back with different shapes. */
+  | "shapeMismatch"
+  /** The overlay's planes do not match the cube they sit on. */
+  | "rgbShapeMismatch"
+  /** The variable's band axis is empty. */
+  | "noBands"
+  /** The cube predates the window being recorded, so it cannot be re-read. */
+  | "noReadWindow";
+
+/**
+ * A cube failure the UI can translate.
+ *
+ * This module has no `t()` — it is a plain library, deliberately usable from a
+ * test run with no i18n — so it carries a code the window maps to a catalog key
+ * instead. The message stays English for logs and for a caller that does not
+ * know the code.
+ */
+export class CubeError extends Error {
+  constructor(
+    readonly code: CubeErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "CubeError";
   }
 }
 

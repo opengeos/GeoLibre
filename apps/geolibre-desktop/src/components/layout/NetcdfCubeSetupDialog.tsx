@@ -68,14 +68,10 @@ export function NetcdfCubeSetupDialog({ mapControllerRef }: NetcdfCubeSetupDialo
     // Through the normaliser, because the carried settings were chosen against
     // some other layer: its drawn bbox is somewhere else entirely, and its band
     // indices may not exist on this axis.
-    setDraft(
-      normalizeCubeSettings(
-        state.settings,
-        axis.size,
-        draftLayerId === state.layerId,
-        defaultRgbBands(axis),
-      ),
-    );
+    // `keepExtent: false` unconditionally: this block only runs when the layer
+    // changed, and a same-layer reopen never re-seeds the draft at all, so its
+    // bbox survives untouched by not passing through here.
+    setDraft(normalizeCubeSettings(state.settings, axis.size, false, defaultRgbBands(axis)));
   }
 
   // Abandon an armed draw if the dialog closes under it; the map would

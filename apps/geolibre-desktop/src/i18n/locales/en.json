@@ -5083,7 +5083,13 @@
     "sliceAt": "cut at {{band}} {{units}}",
     "reading": "Reading band {{done}} of {{total}}...",
     "summary": "{{nx}} x {{ny}} cells, {{nz}} bands along {{axis}}",
-    "errorNoCube": "This layer's source file is no longer open, so a cube cannot be read."
+    "errorNoCube": "This layer's source file is no longer open, so a cube cannot be read.",
+    "error": {
+      "shapeMismatch": "The variable's band planes do not share one shape, so they cannot be stacked into a cube.",
+      "rgbShapeMismatch": "The chosen RGB bands do not match the cube's shape.",
+      "noBands": "This variable has no bands to read.",
+      "noReadWindow": "This cube cannot be updated in place. Rebuild it from Settings."
+    }
   },
   "netcdfProfile": {
     "heading": "Spectral profile",
