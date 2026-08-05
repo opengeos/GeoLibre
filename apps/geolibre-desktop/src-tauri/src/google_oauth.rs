@@ -46,13 +46,13 @@ const TOKEN_PATH: &str = "/__geolibre_ee_token";
 pub struct GoogleOAuthState {
     counter: AtomicU64,
     /// Set only once the listener is bound and accepting, so a second caller
-    /// that sees it can rely on the port being live. See {@link ensure_oauth_server}.
+    /// that sees it can rely on the port being live. See [ensure_oauth_server].
     server_started: AtomicBool,
     /// Serializes startup so two concurrent callers cannot both try to bind.
     startup: Mutex<()>,
     results: Arc<Mutex<HashMap<String, GoogleOAuthResult>>>,
     /// Pending picker sessions, keyed by the same state id the result comes
-    /// back under. See {@link PickerSession}.
+    /// back under. See [PickerSession].
     picker_sessions: Arc<Mutex<HashMap<String, PickerSession>>>,
 }
 
@@ -140,7 +140,7 @@ pub fn start_earth_engine_oauth(
 ///
 /// Neither the key nor the client ID goes in that URL — they are stashed under
 /// the state id and read back when the page is served, so nothing sensitive
-/// reaches the browser's address bar or history. See {@link PickerSession}.
+/// reaches the browser's address bar or history. See the `PickerSession` doc.
 #[tauri::command]
 pub fn start_google_drive_picker(
     client_id: String,
