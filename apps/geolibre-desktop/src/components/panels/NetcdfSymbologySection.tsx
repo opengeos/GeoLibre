@@ -122,10 +122,12 @@ export function NetcdfSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     setPendingSymbology(null);
   }
 
-  // After the hooks above, not before: an early return that skipped them would
-  // change the hook order between a single-band layer and a composite.
-  const rgbState = getNetcdfLayerState(layer.id);
-  if (rgbState?.rgb) return <NetcdfRgbSection layerId={layer.id} state={rgbState} />;
+  // Read once and reused by the cube button below, so the two checks cannot
+  // drift apart. After the hooks above, not before: an early return that
+  // skipped them would change the hook order between a single-band layer and a
+  // composite.
+  const layerState = getNetcdfLayerState(layer.id);
+  if (layerState?.rgb) return <NetcdfRgbSection layerId={layer.id} state={layerState} />;
 
   if (!source) return null;
 
@@ -232,7 +234,7 @@ export function NetcdfSymbologySection({ layer }: { layer: GeoLibreLayer }) {
           {/* Only for a layer whose source file is still open on a band axis:
               the cube is read plane by plane from that file, so a plain 2-D
               grid (or a reloaded project) has nothing to build one from. */}
-          {getNetcdfLayerState(layer.id)?.cube ? (
+          {layerState?.cube ? (
             <Button
               type="button"
               variant="outline"
