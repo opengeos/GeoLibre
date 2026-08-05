@@ -165,8 +165,14 @@ export function MarkerSwatch({
         )
       : MARKER_CHIP_SIZE;
 
+  const svgSource = marker.shape === "custom" ? resolveSvgSource(marker.svg ?? "") : null;
+
   useEffect(() => {
-    if (marker.shape === "custom") return;
+    // A custom marker whose source resolved renders as an <img> below; one that
+    // did not (an unsupported scheme — `pointMarkerSwatch` only rejects EMPTY
+    // markup) falls through to this canvas, where drawMarkerPath traces its
+    // documented default circle rather than leaving the chip blank.
+    if (marker.shape === "custom" && svgSource) return;
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
@@ -178,9 +184,8 @@ export function MarkerSwatch({
     ctx.strokeStyle = OUTLINE;
     ctx.lineWidth = 1;
     ctx.stroke();
-  }, [marker, box]);
+  }, [marker, box, svgSource]);
 
-  const svgSource = marker.shape === "custom" ? resolveSvgSource(marker.svg ?? "") : null;
   if (marker.shape === "custom" && svgSource) {
     return (
       <span
