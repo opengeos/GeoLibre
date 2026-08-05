@@ -652,8 +652,7 @@ interface CartoCiudadResult {
 }
 
 /** Default endpoints for the public CartoCiudad REST API (no auth required). */
-const CARTOCIUDAD_FORWARD_ENDPOINT =
-  "https://www.cartociudad.es/geocoder/api/geocoder/find";
+const CARTOCIUDAD_FORWARD_ENDPOINT = "https://www.cartociudad.es/geocoder/api/geocoder/find";
 const CARTOCIUDAD_REVERSE_ENDPOINT =
   "https://www.cartociudad.es/geocoder/api/geocoder/reverseGeocode";
 
@@ -738,8 +737,7 @@ const cartociudadProvider: GeocodingProvider = {
       comunidadAutonoma: r.comunidadAutonoma,
       refCatastral: r.refCatastral,
     })) {
-      if (value !== undefined && value !== null && value !== "")
-        parts[key] = String(value);
+      if (value !== undefined && value !== null && value !== "") parts[key] = String(value);
     }
     return { displayName, parts };
   },
