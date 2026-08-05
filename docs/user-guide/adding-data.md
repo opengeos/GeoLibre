@@ -94,6 +94,18 @@ In that project, enable the **Google Drive API** and the **Google Picker API**, 
 
 Opening a share link keeps working regardless of any of this.
 
+#### Three things that block the picker after it looks configured
+
+Each of these fails with a message that does not name its own cause, so they are worth checking in this order.
+
+**"Access blocked: … has not completed the Google verification process" (Error 403: `access_denied`)** — the OAuth consent screen is in *Testing*, which admits only listed testers, **including the project owner's own account**. Add the account under **APIs & Services → OAuth consent screen → Test users**. Publishing the app instead also works and needs no verification review, because `drive.file` is a non-sensitive scope — the one benefit of GeoLibre using the picker rather than the restricted `drive.readonly` scope.
+
+**"The API developer key is invalid"** — usually the **Google Picker API** is not enabled in the project. It is a separate API from the Drive API, and enabling only the latter is the common mistake. It is also what you see when the key and the OAuth client come from different projects.
+
+**A key that used to work stops working** — check the key's **API restrictions**. A key can only be restricted to APIs already enabled in its project, so restricting it before enabling the Picker API silently locks the Picker out. This surfaces from the Drive API as `PERMISSION_DENIED` with "Requests to this API drive method … are blocked", which names the method but not the restriction. Either add both APIs to the allowed list or clear the restriction.
+
+An API key in a web build is never secret — it is compiled into the JavaScript every visitor downloads. Restricting it (to specific referrers and to these two APIs) is the protection; keeping it hidden is not available.
+
 ## Drag and drop
 
 Drag a vector file (GeoJSON, zipped Shapefile, KMZ, and similar) or a GeoTIFF/COG raster directly onto the map to add it as a layer. GPX files dropped on the map are split into named waypoint, track, and route layers.
