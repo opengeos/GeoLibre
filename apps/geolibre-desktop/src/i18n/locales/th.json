@@ -678,6 +678,7 @@
       "localFileLabel": "ไฟล์ในเครื่อง",
       "chooseDifferentFile": "เลือกไฟล์อื่น",
       "readingFile": "กำลังอ่าน...",
+      "readingRemote": "กำลังอ่านเมตาดาตาของไฟล์ผ่าน HTTP...",
       "localFileHelp": "เลือกไฟล์ NetCDF หรือ HDF5 ในเครื่อง (.nc, .nc4, .cdf, .h5 หรือ .hdf5) รองรับทั้ง NetCDF-3 แบบดั้งเดิมและ NetCDF-4/HDF5 ไฟล์จะถูกถอดรหัสในเบราว์เซอร์ของคุณ ไฟล์ขนาดใหญ่จะใช้หน่วยความจำมากขึ้น",
       "errorNoVariables": "ไม่พบตัวแปรที่แสดงผลได้ (2 มิติขึ้นไป) ในไฟล์นี้",
       "errorNoFile": "ยังไม่ได้โหลดไฟล์",
@@ -687,10 +688,20 @@
       "loadVariables": "โหลดตัวแปร",
       "variableLabel": "ตัวแปร",
       "dimIndexLabel": "ดัชนี {{dim}}",
+      "colormapLabel": "แผนผังสี",
+      "bandCombinationLabel": "การผสมแบนด์",
+      "bandCombinationHelp": "แบนด์เดียวจะแสดงด้วยแผนผังสี ส่วนภาพผสม RGB จะวาดสามแบนด์ของตัวแปรนี้เป็นช่องสีแดง เขียว และน้ำเงิน โดยยืดค่าแต่ละช่องตามช่วง 2-98 % ของตัวเอง",
+      "modeSingleBand": "แบนด์เดียว (ใช้แผนผังสี)",
+      "modeRgb": "ภาพผสม RGB (สามแบนด์)",
       "colorMin": "ค่าสีต่ำสุด (ไม่บังคับ)",
       "colorMax": "ค่าสีสูงสุด (ไม่บังคับ)",
       "adding": "กำลังเพิ่ม...",
-      "addLayer": "เพิ่มเลเยอร์"
+      "addLayer": "เพิ่มเลเยอร์",
+      "channel": {
+        "red": "แบนด์สีแดง",
+        "green": "แบนด์สีเขียว",
+        "blue": "แบนด์สีน้ำเงิน"
+      }
     },
     "deckViz": {
       "defaultName": "เลเยอร์ Deck.gl",
@@ -2193,6 +2204,9 @@
       "grid": "กริดสม่ำเสมอ",
       "voronoi": "โวโรนอย / เดอโลเน",
       "cellSectors": "พื้นที่ครอบคลุมของสถานีฐาน",
+      "dggsGenerator": "ตัวสร้าง DGGS",
+      "dggsBinning": "การจัดกลุ่มด้วย DGGS",
+      "dggsCompact": "การบีบอัด DGGS",
       "trajectorySpeed": "ความเร็วตามเส้นทางการเคลื่อนที่",
       "detectStops": "ตรวจหาจุดหยุด",
       "spaceTimeProximity": "ความใกล้เคียงเชิงพื้นที่และเวลา",
@@ -2377,6 +2391,7 @@
       "subGroupOverlay": "การซ้อนทับ",
       "subGroupJoin": "การเชื่อมข้อมูล",
       "subGroupSelect": "การเลือก",
+      "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "การเคลื่อนที่และเวลา",
       "subGroupDataQuality": "คุณภาพข้อมูล",
@@ -3927,7 +3942,8 @@
       "sidecarUnavailablePyodide": "ไม่สามารถใช้ sidecar ของ GeoPandas ได้ กรุณาเริ่ม sidecar พร้อมส่วนเสริม vector หรือสลับไปใช้ Python (Pyodide)",
       "pyodideNote": "เรียกใช้ GeoPandas ในเบราว์เซอร์ของคุณ การเรียกใช้ครั้งแรกจะดาวน์โหลดรันไทม์ Python (ครั้งเดียว และต้องเชื่อมต่ออินเทอร์เน็ต)",
       "run": "เรียกใช้",
-      "outputPlaceholder": "ผลลัพธ์จะแสดงที่นี่"
+      "outputPlaceholder": "ผลลัพธ์จะแสดงที่นี่",
+      "resolutionRange": "ความละเอียด (0-{{max}})"
     }
   },
   "segmentation": {
@@ -4138,6 +4154,8 @@
     "manageFieldAria": "จัดการฟิลด์ {{name}}",
     "renameField": "เปลี่ยนชื่อฟิลด์",
     "hideField": "ซ่อนฟิลด์",
+    "excludeField": "ไม่รวมฟิลด์เมื่อส่งออก",
+    "includeField": "รวมฟิลด์เมื่อส่งออก",
     "moveLeft": "ย้ายไปทางซ้าย",
     "moveRight": "ย้ายไปทางขวา",
     "deleteField": "ลบฟิลด์",
@@ -5195,5 +5213,76 @@
     "confirmDelete": "คุณแน่ใจหรือไม่ว่าต้องการลบกระทู้ความคิดเห็นนี้?",
     "sessionDisconnected": "เซสชันถูกตัดการเชื่อมต่อ",
     "defaultAuthorName": "ผู้เขียน"
+  },
+  "netcdfSymbology": {
+    "heading": "สัญลักษณ์ของ NetCDF",
+    "colorRampLabel": "แผนผังสี",
+    "reverse": "กลับด้านแผนผังสี",
+    "colorMin": "สีต่ำสุด",
+    "colorMax": "สีสูงสุด",
+    "resetRange": "รีเซ็ตเป็นช่วงของข้อมูล",
+    "openCube": "คิวบ์ 3 มิติ"
+  },
+  "netcdfCube": {
+    "heading": "คิวบ์ภาพ 3 มิติ",
+    "close": "ปิด",
+    "settings": "ตั้งค่า",
+    "setupTitle": "คิวบ์ภาพ 3 มิติ",
+    "setupDescription": "เลือกสิ่งที่จะอ่านก่อนสร้างคิวบ์ แต่ละแบนด์จะถูกอ่านแยกกัน ดังนั้นขอบเขตและจำนวนแบนด์จึงเป็นตัวกำหนดเวลาที่ใช้",
+    "extent": "ขอบเขต",
+    "extentView": "มุมมองแผนที่ปัจจุบัน",
+    "extentDraw": "วาดบนแผนที่",
+    "extentFull": "ขอบเขตทั้งหมดของเลเยอร์",
+    "viewHint": "อ่านสิ่งที่แผนที่แสดงอยู่ ณ ตอนที่สร้างคิวบ์",
+    "fullHint": "อ่านกริดทั้งหมด ซึ่งจะช้าสำหรับคิวบ์ขนาดเท่าฉากภาพ",
+    "drawBbox": "วาดบนแผนที่",
+    "drawing": "ลากกรอบบนแผนที่เพื่อกำหนดขอบเขตของคิวบ์",
+    "drawHint": "ลากกรอบบนแผนที่เพื่อกำหนดขอบเขต",
+    "drawnExtent": "ตะวันตก {{west}}, ใต้ {{south}}, ตะวันออก {{east}}, เหนือ {{north}}",
+    "detail": "ระดับรายละเอียด",
+    "detailOption": "ด้านละ {{size}} เซลล์",
+    "bands": "แบนด์",
+    "allBands": "ทั้งหมด ({{count}})",
+    "rgbOverlay": "วางภาพ RGB ไว้ด้านบน",
+    "rgbHint": "ผสมสามแบนด์เป็นภาพสีแล้ววางไว้บนหน้าด้านบน เพื่อให้คิวบ์ยังดูออกว่าเป็นสถานที่ใด",
+    "red": "แดง",
+    "green": "เขียว",
+    "blue": "น้ำเงิน",
+    "planeEstimate": "อ่านแบนด์ {{count}} ครั้ง",
+    "create": "สร้างคิวบ์",
+    "colorRampLabel": "แผนผังสี",
+    "reverse": "กลับด้าน",
+    "showRgb": "RGB ด้านบน",
+    "rgbBands": "แบนด์ RGB",
+    "recomposing": "กำลังอ่าน...",
+    "zScale": "ความสูง",
+    "slice": "ระนาบตัด",
+    "sliceAt": "ตัดที่ {{band}} {{units}}",
+    "reading": "กำลังอ่านแบนด์ที่ {{done}} จาก {{total}}...",
+    "summary": "{{nx}} x {{ny}} เซลล์, {{nz}} แบนด์ตามแกน {{axis}}",
+    "errorNoCube": "ไฟล์ต้นทางของเลเยอร์นี้ไม่ได้เปิดอยู่แล้ว จึงอ่านคิวบ์ไม่ได้",
+    "error": {
+      "shapeMismatch": "ระนาบแบนด์ของตัวแปรนี้มีรูปทรงไม่ตรงกัน จึงซ้อนเป็นคิวบ์ไม่ได้",
+      "rgbShapeMismatch": "แบนด์ RGB ที่เลือกไม่ตรงกับรูปทรงของคิวบ์",
+      "noBands": "ตัวแปรนี้ไม่มีแบนด์ให้อ่าน",
+      "noReadWindow": "คิวบ์นี้อัปเดตในที่เดิมไม่ได้ กรุณาสร้างใหม่จากการตั้งค่า"
+    }
+  },
+  "netcdfProfile": {
+    "heading": "โปรไฟล์เชิงสเปกตรัม",
+    "clear": "ล้าง",
+    "chartAria": "ค่าพิกเซลที่สุ่มอ่านตามแกนแบนด์",
+    "popOut": "แยกออกเป็นหน้าต่าง",
+    "dock": "ผนึกเข้าที่",
+    "poppedOutHint": "แผนภูมิเปิดอยู่ในหน้าต่างบนแผนที่",
+    "noValues": "ไม่มีค่าที่จะพล็อตสำหรับพิกเซลเหล่านี้",
+    "exportPng": "PNG",
+    "exportCsv": "CSV",
+    "exportError": "ไม่สามารถส่งออกแผนภูมิได้"
+  },
+  "netcdfIdentify": {
+    "noData": "ไม่มีข้อมูล",
+    "coordinates": "ลองจิจูด, ละติจูด",
+    "cell": "แถว, คอลัมน์"
   }
 }
