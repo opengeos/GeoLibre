@@ -15,6 +15,7 @@ export type AddDataKind =
   | "cad"
   | "gdb"
   | "photos"
+  | "google-drive"
   | "mbtiles"
   | "arcgis"
   | "postgres"

@@ -48,15 +48,18 @@ Tauri commands with stubs, and `GEOLIBRE_MAS_BUILD=1` hides the matching UI:
 - **In-app update checks** (`GEOLIBRE_STORE_BUILD=1`, same as the Microsoft
   Store MSIX build): a Store app updates only through the Store.
 - **Earth Engine sign-in** (Processing → Earth Engine, and the GeoAgent
-  plugin's Earth Engine overlay). Unlike the items above this is not a sandbox
-  limit but an *entitlement* one — see below.
+  plugin's Earth Engine overlay), and the **Google Drive picker** (Add Data →
+  Google Drive → "Browse Google Drive"), which shares the same loopback helper.
+  Unlike the items above this is not a sandbox limit but an *entitlement* one —
+  see below. Add Data → Google Drive itself still works: opening a shared link
+  is a plain outgoing request, so only the browse button is hidden.
 
-### Earth Engine and the `network.server` entitlement
+### Google sign-in and the `network.server` entitlement
 
-Earth Engine sign-in uses Google's OAuth **loopback-redirect** flow for native
-apps: `src-tauri/src/earth_engine_oauth.rs` binds a listener on `127.0.0.1`,
-opens the consent page in the system browser, and accepts the browser's inbound
-redirect to receive the token. Accepting an inbound connection requires
+Google sign-in uses Google's OAuth **loopback-redirect** flow for native apps:
+`src-tauri/src/google_oauth.rs` binds a listener on `127.0.0.1`, opens the
+consent page in the system browser, and accepts the browser's inbound redirect
+to receive the token. Accepting an inbound connection requires
 `com.apple.security.network.server`.
 
 App Review **rejected GeoLibre Desktop 2.4.0** over exactly this (guideline

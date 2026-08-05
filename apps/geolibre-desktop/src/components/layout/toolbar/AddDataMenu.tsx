@@ -61,6 +61,7 @@ export function AddDataMenu({
     cad: { onSelect: () => onSetAddDataKind("cad") },
     gdb: { onSelect: () => onSetAddDataKind("gdb") },
     photos: { onSelect: () => onSetAddDataKind("photos") },
+    "google-drive": { onSelect: () => onSetAddDataKind("google-drive") },
     gpx: { onSelect: () => onSetAddDataKind("gpx") },
     mbtiles: { onSelect: () => onSetAddDataKind("mbtiles") },
     "osm-pbf": { onSelect: onOpenOsmPbfDialog, disabled: osmPbfBusy },

@@ -295,6 +295,10 @@
         "label": "เพิ่มรูปภาพที่มีพิกัดภูมิศาสตร์",
         "description": "นำเข้ารูปภาพ JPEG/HEIC เป็นเลเยอร์จุด โดยวางแต่ละภาพตามตำแหน่ง GPS ใน EXIF"
       },
+      "googleDrive": {
+        "label": "เพิ่มเลเยอร์จาก Google Drive",
+        "description": "เปิดข้อมูลเวกเตอร์ที่เก็บไว้ใน Google Drive ทั้ง shapefile (ไฟล์ zip หรือ .shp พร้อมไฟล์ประกอบ), GeoJSON, GeoPackage, GeoParquet, FlatGeobuf, KML/KMZ, GPX หรือ CSV โดยวางลิงก์แชร์ หรือเลือกจาก Drive ของคุณเอง"
+      },
       "mbtiles": {
         "label": "เพิ่มเลเยอร์ MBTiles",
         "description": "เพิ่มไฟล์ MBTiles ในเครื่องเป็นเลเยอร์ไทล์แบบแรสเตอร์หรือเวกเตอร์"
@@ -597,6 +601,35 @@
       "manualPromptCenter": "กึ่งกลางแผนที่: {{lng}}, {{lat}}",
       "manualPlace": "วางที่กึ่งกลางแผนที่",
       "manualHint": "ลากหมุดนี้เพื่อกำหนดตำแหน่งรูปภาพ แล้วคลิก “เสร็จสิ้น”"
+    },
+    "googleDrive": {
+      "modeLink": "ลิงก์แชร์หรือรหัสไฟล์",
+      "modeBrowse": "เลือกจาก Google Drive",
+      "link": "ลิงก์ Google Drive",
+      "linkPlaceholder": "https://drive.google.com/file/d/…",
+      "linkHelp": "วางลิงก์ของไฟล์หรือโฟลเดอร์ หรือใส่เฉพาะรหัสก็ได้ ไฟล์ต้องตั้งค่าแชร์เป็น \"ทุกคนที่มีลิงก์\" ถ้าเป็นลิงก์โฟลเดอร์จะเลือกไฟล์ภายในได้ ซึ่งเป็นวิธีเพิ่ม shapefile ที่ไม่ได้บีบอัดพร้อมไฟล์ .dbf, .shx และ .prj",
+      "loadFolder": "แสดงรายการในโฟลเดอร์",
+      "folderLoaded_other": "พบไฟล์ที่เพิ่มได้ {{count}} ไฟล์",
+      "browse": "เลือกจาก Google Drive",
+      "browseHelp": "ลงชื่อเข้าใช้แล้วเลือกไฟล์ในหน้าต่างของ Google เอง GeoLibre จะเข้าถึงได้เฉพาะไฟล์ที่คุณเลือกเท่านั้น สำหรับ shapefile ที่ไม่ได้บีบอัด ให้เลือก .shp พร้อมกับ .dbf, .shx และ .prj",
+      "chosenFiles_other": "เลือกไว้ {{count}} ไฟล์",
+      "noFilesChosen": "ยังไม่ได้เลือกไฟล์",
+      "apiKey": "Google API key (ไม่บังคับ)",
+      "apiKeyPlaceholder": "AIza…",
+      "apiKeyHelp": "จำเป็นสำหรับการอ่าน Drive บนเวอร์ชันเว็บ และสำหรับเปิดหน้าต่างเลือกไฟล์ สร้างได้ที่ Google Cloud console โดยเปิดใช้ Drive API และ Picker API คีย์นี้จะเก็บไว้ในเบราว์เซอร์นี้เท่านั้น",
+      "error": {
+        "unrecognizedLink": "ข้อความนี้ไม่ใช่ลิงก์หรือรหัสไฟล์ของ Google Drive",
+        "forbidden": "Google Drive ปฏิเสธการเข้าถึงไฟล์นี้ กรุณาตั้งค่าแชร์เป็น \"ทุกคนที่มีลิงก์\" หรือใช้ \"เลือกจาก Google Drive\" เพื่อเลือกไฟล์จาก Drive ของคุณเอง",
+        "notFound": "ไม่พบไฟล์นี้ใน Google Drive หรือบัญชีที่ลงชื่อเข้าใช้มองไม่เห็นไฟล์นี้",
+        "unauthorized": "Google Drive ปฏิเสธข้อมูลรับรอง กรุณาตรวจสอบ API key หรือลงชื่อเข้าใช้ใหม่",
+        "requestFailed": "อ่านไฟล์จาก Google Drive ไม่สำเร็จ",
+        "workspaceDocument": "ไฟล์นี้เป็นเอกสาร Google Docs, Sheets หรือ Slides ไม่ใช่ไฟล์ข้อมูล กรุณาส่งออกเป็น CSV ใน Drive ก่อน แล้วค่อยเพิ่มไฟล์ที่ส่งออก",
+        "emptyFolder": "โฟลเดอร์นี้ไม่มีไฟล์ที่ GeoLibre เปิดได้",
+        "apiKeyRequired": "ต้องใช้ Google API key สำหรับขั้นตอนนี้ กรุณากรอกด้านล่าง",
+        "loadFolderFirst": "กรุณาแสดงรายการในโฟลเดอร์ก่อน แล้วจึงเลือกไฟล์ที่ต้องการเพิ่ม",
+        "noSelection": "กรุณาเลือกอย่างน้อยหนึ่งไฟล์",
+        "noLayers": "อ่านข้อมูลจากไฟล์ที่เลือกไม่ได้เลย"
+      }
     },
     "mbtiles": {
       "defaultName": "เลเยอร์ MBTiles",
@@ -2075,6 +2108,7 @@
     "layerType": {
       "delimitedText": "เลเยอร์ข้อความคั่นด้วยตัวแบ่ง",
       "photos": "รูปภาพที่มีพิกัดภูมิศาสตร์",
+      "googleDrive": "Google Drive",
       "gpx": "เลเยอร์ GPX",
       "mbtiles": "เลเยอร์ MBTiles",
       "xyz": "เลเยอร์ XYZ",

@@ -81,6 +81,7 @@ import {
   loadDroppedVectorPaths,
   type DroppedRaster,
 } from "../../lib/tauri-io";
+import { setVectorFileImportHandler } from "../../lib/vector-file-import";
 import { buildKmlModelLayer } from "../../lib/kml-model-layer";
 import { isPhotoDropFileName, type GeotaggedPhotoResult } from "../../lib/geotagged-photos";
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
@@ -1355,6 +1356,21 @@ export function DesktopShell({
       t,
     ],
   );
+
+  // The same pipeline a drop uses, exposed to anything that acquires files from
+  // elsewhere — today the Add Data → Google Drive source, which downloads them.
+  // Registered here because `addImportedVectorLayers` and the oversized-dataset
+  // prompt only exist in this component; see lib/vector-file-import.ts.
+  useEffect(() => {
+    setVectorFileImportHandler(async (files) => {
+      const importedLayers = await loadDroppedVectorFiles(files, {
+        onLargeDataset: confirmLargeVectorDataset,
+      });
+      if (importedLayers.length) addImportedVectorLayers(importedLayers);
+      return importedLayers.length;
+    });
+    return () => setVectorFileImportHandler(null);
+  }, [addImportedVectorLayers]);
 
   useEffect(() => {
     setKmlFileImportHandler(async (imports) => {

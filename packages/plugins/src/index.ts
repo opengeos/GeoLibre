@@ -183,8 +183,10 @@ export {
   toggleEarthEnginePanel,
 } from "./plugins/maplibre-earth-engine";
 export {
+  DEFAULT_GEE_OAUTH_CLIENT_ID,
   EARTH_ENGINE_UNAVAILABLE_MESSAGE,
   isEarthEngineAvailable,
+  isTauriProductionOrigin,
 } from "./plugins/earth-engine-auth";
 export {
   closeThreeDTilesLayerPanel,

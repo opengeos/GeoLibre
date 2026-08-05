@@ -12,7 +12,7 @@ export const DEFAULT_GEE_OAUTH_CLIENT_ID =
 // full drive by default, but GeoLibre only displays tiles/thumbnails and exports
 // to Drive — it never touches Cloud Storage, BigQuery, or project/asset
 // management, so cloud-platform is unnecessary. Keep this in sync with the scope
-// list in the desktop helper page (src-tauri/src/earth_engine_oauth.rs).
+// list in the desktop helper page (src-tauri/src/google_oauth.rs).
 //   - earthengine: request/display Earth Engine map tiles and visualizations.
 //   - drive.file:  the EE control's "Export" writes to Google Drive; drive.file
 //     is the non-sensitive per-file scope, avoiding the restricted full-drive

@@ -1,0 +1,261 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, it } from "node:test";
+
+import {
+  DRIVE_FOLDER_MIME_TYPE,
+  SHAPEFILE_SIDECAR_EXTENSIONS,
+  driveErrorCode,
+  driveFolderChildrenUrl,
+  driveMediaUrl,
+  driveMetadataUrl,
+  drivePublicDownloadUrl,
+  fileNameFromContentDisposition,
+  groupFolderVectorFiles,
+  isWorkspaceDocument,
+  parseDriveTarget,
+  type DriveFile,
+} from "../apps/geolibre-desktop/src/lib/google-drive";
+
+describe("parseDriveTarget", () => {
+  it("reads the id from every link shape Drive hands out", () => {
+    const cases: [string, string, "file" | "folder"][] = [
+      [
+        "https://drive.google.com/file/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW/view?usp=sharing",
+        "1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW",
+        "file",
+      ],
+      [
+        "https://drive.google.com/open?id=1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW",
+        "1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW",
+        "file",
+      ],
+      [
+        "https://drive.google.com/uc?export=download&id=1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW",
+        "1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW",
+        "file",
+      ],
+      [
+        "https://drive.usercontent.google.com/download?id=1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW&export=download",
+        "1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW",
+        "file",
+      ],
+      [
+        "https://drive.google.com/drive/folders/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW?usp=drive_link",
+        "1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW",
+        "folder",
+      ],
+      [
+        "https://drive.google.com/drive/u/0/folders/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW",
+        "1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW",
+        "folder",
+      ],
+    ];
+    for (const [input, id, kind] of cases) {
+      assert.deepEqual(parseDriveTarget(input), { id, kind }, input);
+    }
+  });
+
+  it("accepts a bare id, which is what people paste when they copy from a URL", () => {
+    assert.deepEqual(parseDriveTarget("  1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW  "), {
+      id: "1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvW",
+      kind: "file",
+    });
+  });
+
+  it("prefers the folder rule so a folder link is never read as a file", () => {
+    const target = parseDriveTarget("https://drive.google.com/drive/folders/1AAAAAAAAAAAAAAA");
+    assert.equal(target?.kind, "folder");
+  });
+
+  it("rejects text with nothing id-shaped in it", () => {
+    for (const input of ["", "   ", "https://example.com/data.zip", "shapefile.zip", "d/edit"]) {
+      assert.equal(parseDriveTarget(input), null, input);
+    }
+  });
+});
+
+describe("Drive request URLs", () => {
+  it("sends an API key in the query but never an access token", () => {
+    const withKey = new URL(driveMetadataUrl("FILE_ID", { apiKey: "AIzaKEY" }));
+    assert.equal(withKey.searchParams.get("key"), "AIzaKEY");
+
+    // A token authenticates through the Authorization header (added by the
+    // client), so putting it in the URL would leak it into logs for no gain.
+    const withToken = new URL(driveMetadataUrl("FILE_ID", { accessToken: "ya29.TOKEN" }));
+    assert.equal(withToken.searchParams.get("key"), null);
+    assert.ok(!withToken.href.includes("ya29.TOKEN"));
+  });
+
+  it("asks for the fields the download depends on", () => {
+    // The name is what the import pipeline classifies the format on, so losing
+    // it from the field mask would break every add, not just an edge case.
+    const url = new URL(driveMetadataUrl("FILE_ID", { apiKey: "K" }));
+    const fields = url.searchParams.get("fields") ?? "";
+    for (const field of ["id", "name", "mimeType", "size"]) {
+      assert.ok(fields.split(",").includes(field), `fields is missing ${field}`);
+    }
+  });
+
+  it("requests the media, not the metadata, for a download", () => {
+    const url = new URL(driveMediaUrl("FILE_ID", {}));
+    assert.equal(url.searchParams.get("alt"), "media");
+    assert.ok(url.pathname.endsWith("/FILE_ID"));
+  });
+
+  it("scopes a folder listing to the folder and excludes trashed items", () => {
+    const url = new URL(driveFolderChildrenUrl("FOLDER_ID", { apiKey: "K" }, "PAGE2"));
+    assert.equal(url.searchParams.get("q"), "'FOLDER_ID' in parents and trashed = false");
+    assert.equal(url.searchParams.get("pageToken"), "PAGE2");
+    assert.equal(url.searchParams.get("includeItemsFromAllDrives"), "true");
+  });
+
+  it("confirms the virus-scan interstitial on the public download host", () => {
+    // Without confirm=t Drive answers a large file with an HTML warning page in
+    // place of the bytes, which fails deep in the loader as a parse error.
+    const url = new URL(drivePublicDownloadUrl("FILE_ID"));
+    assert.equal(url.searchParams.get("confirm"), "t");
+    assert.equal(url.searchParams.get("id"), "FILE_ID");
+  });
+});
+
+describe("isWorkspaceDocument", () => {
+  it("flags Google-native documents, which have no bytes to download", () => {
+    assert.equal(isWorkspaceDocument("application/vnd.google-apps.spreadsheet"), true);
+    assert.equal(isWorkspaceDocument("application/vnd.google-apps.document"), true);
+  });
+
+  it("does not flag a folder, which the caller handles rather than rejects", () => {
+    assert.equal(isWorkspaceDocument(DRIVE_FOLDER_MIME_TYPE), false);
+  });
+
+  it("does not flag ordinary binary files", () => {
+    assert.equal(isWorkspaceDocument("application/zip"), false);
+    assert.equal(isWorkspaceDocument("application/octet-stream"), false);
+  });
+});
+
+describe("fileNameFromContentDisposition", () => {
+  it("prefers the RFC 5987 form, which is how Drive sends non-ASCII names", () => {
+    const header =
+      "attachment; filename=\"________.zip\"; filename*=UTF-8''%E0%B8%82%E0%B8%AD%E0%B8%9A%E0%B9%80%E0%B8%82%E0%B8%95.zip";
+    assert.equal(fileNameFromContentDisposition(header), "ขอบเขต.zip");
+  });
+
+  it("falls back to the plain parameter", () => {
+    assert.equal(
+      fileNameFromContentDisposition('attachment; filename="provinces.zip"'),
+      "provinces.zip",
+    );
+  });
+
+  it("returns null when there is no header or no name in it", () => {
+    assert.equal(fileNameFromContentDisposition(null), null);
+    assert.equal(fileNameFromContentDisposition("attachment"), null);
+  });
+});
+
+describe("driveErrorCode", () => {
+  it("separates a rejected credential from a file that is simply not shared", () => {
+    // Different fixes: 401 means re-enter the key or sign in again, 403 means
+    // change the file's sharing. Collapsing them would send users to the wrong
+    // one for the case they hit most.
+    assert.equal(driveErrorCode(401), "unauthorized");
+    assert.equal(driveErrorCode(403), "forbidden");
+    assert.equal(driveErrorCode(404), "notFound");
+    assert.equal(driveErrorCode(500), "requestFailed");
+  });
+});
+
+describe("groupFolderVectorFiles", () => {
+  const isAddable = (name: string) => /\.(shp|zip|geojson|gpkg|csv)$/i.test(name);
+
+  function file(name: string, id = name): DriveFile {
+    return { id, name, mimeType: "application/octet-stream" };
+  }
+
+  it("attaches a shapefile's sidecars to the .shp and never lists them alone", () => {
+    const entries = groupFolderVectorFiles(
+      [
+        file("provinces.shp"),
+        file("provinces.dbf"),
+        file("provinces.shx"),
+        file("provinces.prj"),
+        file("provinces.cpg"),
+      ],
+      isAddable,
+    );
+
+    assert.equal(entries.length, 1, "only the .shp is an addable layer");
+    assert.equal(entries[0].file.name, "provinces.shp");
+    assert.deepEqual(entries[0].sidecars.map((sidecar) => sidecar.name).sort(), [
+      "provinces.cpg",
+      "provinces.dbf",
+      "provinces.prj",
+      "provinces.shx",
+    ]);
+  });
+
+  it("matches sidecars case-insensitively, as Drive preserves whatever case was uploaded", () => {
+    const entries = groupFolderVectorFiles([file("Roads.shp"), file("ROADS.DBF")], isAddable);
+    assert.deepEqual(
+      entries[0].sidecars.map((sidecar) => sidecar.name),
+      ["ROADS.DBF"],
+    );
+  });
+
+  it("drops an orphan sidecar rather than offering an add that cannot work", () => {
+    assert.deepEqual(groupFolderVectorFiles([file("orphan.dbf")], isAddable), []);
+  });
+
+  it("keeps sidecars of one shapefile off another with a different base name", () => {
+    const entries = groupFolderVectorFiles(
+      [file("a.shp"), file("a.dbf"), file("b.shp"), file("b.dbf")],
+      isAddable,
+    );
+    assert.deepEqual(
+      entries.map((entry) => [entry.file.name, entry.sidecars.map((s) => s.name)]),
+      [
+        ["a.shp", ["a.dbf"]],
+        ["b.shp", ["b.dbf"]],
+      ],
+    );
+  });
+
+  it("excludes subfolders and formats the loader does not accept", () => {
+    const entries = groupFolderVectorFiles(
+      [
+        { id: "sub", name: "nested", mimeType: DRIVE_FOLDER_MIME_TYPE },
+        file("notes.txt"),
+        file("cities.geojson"),
+      ],
+      isAddable,
+    );
+    assert.deepEqual(
+      entries.map((entry) => entry.file.name),
+      ["cities.geojson"],
+    );
+  });
+
+  it("attaches no sidecars to a non-shapefile that happens to share a base name", () => {
+    const entries = groupFolderVectorFiles([file("cities.geojson"), file("cities.dbf")], isAddable);
+    assert.deepEqual(entries[0].sidecars, []);
+  });
+});
+
+describe("SHAPEFILE_SIDECAR_EXTENSIONS", () => {
+  it("mirrors the loader's own sidecar list", () => {
+    // The loader's copy is module-private, so this reads it out of the source.
+    // If the two drift, a folder link silently downloads a .shp without the
+    // component the loader wants and the add fails with a parse error.
+    const source = readFileSync(
+      fileURLToPath(new URL("../apps/geolibre-desktop/src/lib/tauri-io.ts", import.meta.url)),
+      "utf8",
+    );
+    const match = /const SHAPEFILE_SIDECAR_EXTENSIONS = \[([^\]]*)\]/.exec(source);
+    assert.ok(match, "could not find SHAPEFILE_SIDECAR_EXTENSIONS in tauri-io.ts");
+    const loaderList = [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
+    assert.deepEqual([...SHAPEFILE_SIDECAR_EXTENSIONS].sort(), loaderList.sort());
+  });
+});

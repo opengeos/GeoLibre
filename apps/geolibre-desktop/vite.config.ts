@@ -105,6 +105,21 @@ if (!process.env.VITE_GEE_OAUTH_CLIENT_ID) {
   }
 }
 
+// Google Drive (Add Data → Google Drive): same bare→prefixed bridge again. The
+// OAuth client ID is optional — it falls back to the Earth Engine client, which
+// is the same Cloud project and already requests the `drive.file` scope. The API
+// key has no default on purpose: a key is billed to whoever issued it, so a
+// shipped one would be a shared quota any user could exhaust for everyone else.
+// Without a key the browser build asks the user for one and the desktop build
+// still opens shared links (it reads Drive's public host natively).
+for (const name of ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_API_KEY"] as const) {
+  const viteName = `VITE_${name}`;
+  if (!process.env[viteName]) {
+    const value = process.env[name] || FILE_ENV[viteName] || FILE_ENV[name];
+    if (value) process.env[viteName] = value;
+  }
+}
+
 // Tauri sets TAURI_ENV_* env vars while running its beforeBuildCommand
 // (`npm run build`), so their presence flags a desktop build. Used below to drop
 // the service worker from the desktop bundle.

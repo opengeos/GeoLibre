@@ -12,6 +12,7 @@ import { DeckVizSource } from "./add-data/sources/DeckVizSource";
 import { DelimitedTextSource } from "./add-data/sources/DelimitedTextSource";
 import { GdbSource } from "./add-data/sources/GdbSource";
 import { GeoRssSource } from "./add-data/sources/GeoRssSource";
+import { GoogleDriveSource } from "./add-data/sources/GoogleDriveSource";
 import { GpxSource } from "./add-data/sources/GpxSource";
 import { MbtilesSource } from "./add-data/sources/MbtilesSource";
 import { OgcFeaturesSource } from "./add-data/sources/OgcFeaturesSource";
@@ -81,6 +82,8 @@ function renderSource(
       return <GdbSource />;
     case "photos":
       return <PhotosSource />;
+    case "google-drive":
+      return <GoogleDriveSource />;
     case "mbtiles":
       return <MbtilesSource />;
     case "arcgis":

@@ -24,6 +24,7 @@ export type KindI18nKey =
   | "cad"
   | "gdb"
   | "photos"
+  | "googleDrive"
   | "mbtiles"
   | "arcgis"
   | "postgres"
@@ -48,6 +49,7 @@ export const KIND_I18N_KEY: Record<AddDataKind, KindI18nKey> = {
   cad: "cad",
   gdb: "gdb",
   photos: "photos",
+  "google-drive": "googleDrive",
   mbtiles: "mbtiles",
   arcgis: "arcgis",
   postgres: "postgres",

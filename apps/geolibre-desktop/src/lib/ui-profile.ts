@@ -81,6 +81,12 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "cad", section: "files", labelKey: "toolbar.item.cadLayer", tier: "intermediate" },
   { id: "gdb", section: "files", labelKey: "toolbar.item.gdbLayer", tier: "intermediate" },
   { id: "photos", section: "files", labelKey: "toolbar.layerType.photos", tier: "intermediate" },
+  {
+    id: "google-drive",
+    section: "files",
+    labelKey: "toolbar.layerType.googleDrive",
+    tier: "basic",
+  },
   { id: "gpx", section: "files", labelKey: "toolbar.layerType.gpx", tier: "intermediate" },
   { id: "mbtiles", section: "files", labelKey: "toolbar.layerType.mbtiles", tier: "basic" },
   { id: "osm-pbf", section: "files", labelKey: "toolbar.item.osmPbfLayer", tier: "advanced" },

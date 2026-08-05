@@ -297,6 +297,10 @@
         "label": "Add Geotagged Photos",
         "description": "Import JPEG/HEIC photos as a point layer, placing each one from its EXIF GPS location."
       },
+      "googleDrive": {
+        "label": "Add Layer from Google Drive",
+        "description": "Open vector data stored in Google Drive — a shapefile (zipped, or a .shp with its sidecar files), GeoJSON, GeoPackage, GeoParquet, FlatGeobuf, KML/KMZ, GPX or CSV. Paste a share link, or browse your own Drive."
+      },
       "mbtiles": {
         "label": "Add MBTiles Layer",
         "description": "Add a local MBTiles file as a raster or vector tile layer."
@@ -611,6 +615,37 @@
       "manualPromptCenter": "Map center: {{lng}}, {{lat}}",
       "manualPlace": "Place at map center",
       "manualHint": "Drag this pin to position the photo, then click Done."
+    },
+    "googleDrive": {
+      "modeLink": "Share link or file ID",
+      "modeBrowse": "Browse Google Drive",
+      "link": "Google Drive link",
+      "linkPlaceholder": "https://drive.google.com/file/d/…",
+      "linkHelp": "Paste a link to a file or a folder, or just its ID. The file must be shared with \"Anyone with the link\". A folder link lets you pick from its contents, which is how an unzipped shapefile is added with its .dbf, .shx and .prj.",
+      "loadFolder": "List folder contents",
+      "folderLoaded_one": "Found {{count}} file that can be added.",
+      "folderLoaded_other": "Found {{count}} files that can be added.",
+      "browse": "Browse Google Drive",
+      "browseHelp": "Sign in and choose files in Google's own picker. GeoLibre only gets access to the files you pick. For an unzipped shapefile, select the .shp together with its .dbf, .shx and .prj.",
+      "chosenFiles_one": "{{count}} file chosen.",
+      "chosenFiles_other": "{{count}} files chosen.",
+      "noFilesChosen": "No files chosen.",
+      "apiKey": "Google API key (optional)",
+      "apiKeyPlaceholder": "AIza…",
+      "apiKeyHelp": "Needed to read Drive from the browser build and to open the picker. Create one in the Google Cloud console with the Drive API and Picker API enabled. It is stored in this browser only.",
+      "error": {
+        "unrecognizedLink": "That does not look like a Google Drive link or file ID.",
+        "forbidden": "Google Drive refused access to that file. Share it with \"Anyone with the link\", or use Browse Google Drive to pick it from your own Drive.",
+        "notFound": "No such file in Google Drive, or the signed-in account cannot see it.",
+        "unauthorized": "Google Drive rejected the credentials. Check the API key, or sign in again.",
+        "requestFailed": "Could not read the file from Google Drive.",
+        "workspaceDocument": "That is a Google Docs, Sheets or Slides document, not a data file. Export it to CSV in Drive first, then add the export.",
+        "emptyFolder": "That folder holds no files GeoLibre can open.",
+        "apiKeyRequired": "A Google API key is required for this. Enter one below.",
+        "loadFolderFirst": "List the folder contents first, then choose what to add.",
+        "noSelection": "Choose at least one file to add.",
+        "noLayers": "Nothing could be read from the selected files."
+      }
     },
     "mbtiles": {
       "defaultName": "MBTiles Layer",
@@ -2117,6 +2152,7 @@
     "layerType": {
       "delimitedText": "Delimited Text Layer",
       "photos": "Geotagged Photos",
+      "googleDrive": "Google Drive",
       "gpx": "GPX Layer",
       "mbtiles": "MBTiles Layer",
       "xyz": "XYZ Layer",

@@ -104,6 +104,7 @@ export const ADD_DATA_KIND_COMMANDS: Array<{
   { kind: "delimited-text", titleKey: "toolbar.layerType.delimitedText" },
   { kind: "cad", titleKey: "toolbar.item.cadLayer" },
   { kind: "gpx", titleKey: "toolbar.layerType.gpx" },
+  { kind: "google-drive", titleKey: "toolbar.layerType.googleDrive" },
   { kind: "mbtiles", titleKey: "toolbar.layerType.mbtiles" },
   { kind: "xyz", titleKey: "toolbar.layerType.xyz" },
   { kind: "wms", titleKey: "toolbar.layerType.wms" },

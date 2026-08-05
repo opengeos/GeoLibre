@@ -1,21 +1,27 @@
-// Earth Engine sign-in uses Google's OAuth loopback-redirect flow, which binds
-// a listener on 127.0.0.1 to accept the browser's redirect. Accepting an
-// inbound connection requires the `com.apple.security.network.server`
-// entitlement, which App Review rejects for an app that otherwise only makes
-// outgoing requests (guideline 2.4.5, submission 76036eca). Both Apple App
-// Store targets therefore compile the whole flow out and hide the Earth Engine
-// UI, so no Apple build ever binds a listening socket: the `mas` (macOS) build,
-// and iOS — which ships through the same review pipeline and has no way to
-// justify a listener either. Every other target (Developer ID macOS, Windows,
-// Linux, Android, web) keeps it. See docs/mac-app-store.md.
+// Google sign-in (Earth Engine, and the Drive picker behind Add Data → Google
+// Drive) uses Google's OAuth loopback-redirect flow, which binds a listener on
+// 127.0.0.1 to accept the browser's redirect. Accepting an inbound connection
+// requires the `com.apple.security.network.server` entitlement, which App Review
+// rejects for an app that otherwise only makes outgoing requests (guideline
+// 2.4.5, submission 76036eca). Both Apple App Store targets therefore compile
+// the whole flow out and hide the Earth Engine UI, so no Apple build ever binds
+// a listening socket: the `mas` (macOS) build, and iOS — which ships through the
+// same review pipeline and has no way to justify a listener either. Every other
+// target (Developer ID macOS, Windows, Linux, Android, web) keeps it. See
+// docs/mac-app-store.md.
+//
+// The Drive *link* path needs none of this — it is a plain outgoing request — so
+// Add Data → Google Drive still opens shared links on the App Store builds; only
+// its "Browse Google Drive" button is unavailable there.
 #[cfg(not(any(feature = "mas", target_os = "ios")))]
-mod earth_engine_oauth;
+mod google_oauth;
 // App Store stub, mirroring the `native_duckdb` pattern below: the commands stay
 // in the handler list (so a stale panel state or an external plugin gets a clear
 // message instead of an "unknown command" error) but no socket is ever bound.
 #[cfg(any(feature = "mas", target_os = "ios"))]
-mod earth_engine_oauth {
-    const UNAVAILABLE: &str = "Earth Engine sign-in is not available in the App Store build of GeoLibre.";
+mod google_oauth {
+    const UNAVAILABLE: &str =
+        "Google sign-in is not available in the App Store build of GeoLibre.";
 
     #[tauri::command]
     pub fn start_earth_engine_oauth(_client_id: String) -> Result<serde_json::Value, String> {
@@ -24,6 +30,21 @@ mod earth_engine_oauth {
 
     #[tauri::command]
     pub fn poll_earth_engine_oauth(_state_id: String) -> Result<Option<serde_json::Value>, String> {
+        Err(UNAVAILABLE.to_string())
+    }
+
+    #[tauri::command]
+    pub fn start_google_drive_picker(
+        _client_id: String,
+        _api_key: String,
+    ) -> Result<serde_json::Value, String> {
+        Err(UNAVAILABLE.to_string())
+    }
+
+    #[tauri::command]
+    pub fn poll_google_drive_picker(
+        _state_id: String,
+    ) -> Result<Option<serde_json::Value>, String> {
         Err(UNAVAILABLE.to_string())
     }
 }
@@ -56,9 +77,12 @@ mod native_duckdb {
 #[cfg(all(feature = "mas", feature = "native-duckdb"))]
 compile_error!("the `mas` (Mac App Store) build must not enable `native-duckdb`: DuckDB loads its spatial extension as unsigned native code at runtime, which App Sandbox and App Store guideline 2.5.2 forbid.");
 
-use earth_engine_oauth::{poll_earth_engine_oauth, start_earth_engine_oauth};
+use google_oauth::{
+    poll_earth_engine_oauth, poll_google_drive_picker, start_earth_engine_oauth,
+    start_google_drive_picker,
+};
 #[cfg(not(any(feature = "mas", target_os = "ios")))]
-use earth_engine_oauth::EarthEngineOAuthState;
+use google_oauth::GoogleOAuthState;
 use flate2::read::{GzDecoder, ZlibDecoder};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -285,11 +309,11 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init());
 
-    // The Earth Engine OAuth loopback listener is compiled out of the Apple App
-    // Store builds (see the module gate at the top of this file); the stub
-    // commands are stateless, so the state goes with it.
+    // The Google OAuth loopback listener is compiled out of the Apple App Store
+    // builds (see the module gate at the top of this file); the stub commands
+    // are stateless, so the state goes with it.
     #[cfg(not(any(feature = "mas", target_os = "ios")))]
-    let builder = builder.manage(EarthEngineOAuthState::default());
+    let builder = builder.manage(GoogleOAuthState::default());
 
     // The Martin/sidecar/Jupyter process managers exist only where the commands
     // that spawn those processes do; the MAS build compiles both out together.
@@ -333,7 +357,9 @@ pub fn run() {
             start_jupyter_server,
             stop_jupyter_server,
             start_earth_engine_oauth,
-            poll_earth_engine_oauth
+            poll_earth_engine_oauth,
+            start_google_drive_picker,
+            poll_google_drive_picker
         ])
         .setup(|app| {
             create_main_window(app)?;
