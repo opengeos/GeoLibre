@@ -674,11 +674,15 @@ function parseGoogleResults(data: unknown): GeocodeMatch[] {
  * object (not an array) for both forward (`find`) and reverse (`reverseGeocode`)
  * lookups, even for an ambiguous query. `lat`/`lng` are top-level numbers.
  *
- * There is no in-body success flag to check: a query the geocoder cannot match
- * comes back as HTTP 204 with an empty body rather than an object carrying a
- * failure code, so {@link readGeocodeJson} turns it into "no results" before a
- * parser ever sees it. The body's `state` is 0 on every match observed against
- * the live endpoints and is therefore not modeled here.
+ * There is no in-body success flag or confidence signal to check. A query the
+ * geocoder cannot match comes back as HTTP 204 with an empty body rather than
+ * an object carrying a failure code, so {@link readGeocodeJson} turns it into
+ * "no results" before a parser ever sees it. The `state`/`stateMsg` fields are
+ * vestigial: IGN's own service docs record them as suppressed in the current
+ * Elasticsearch-backed geocoder, which "cannot configure candidate output by
+ * degree of match", so `state` is permanently 0 and `stateMsg` empty
+ * (github.com/IDEESpain/Cartociudad). Neither is modeled here, and matches
+ * carry `score: null` because the API exposes no ranking to map onto it.
  */
 interface CartoCiudadResult {
   lat: number;
@@ -744,7 +748,8 @@ function cartociudadDisplayName(r: CartoCiudadResult): string {
     .map((s) => String(s).trim())
     .join(" ");
   if (locality) parts.push(locality);
-  if (r.province && String(r.province).trim()) parts.push(`(${r.province})`);
+  const province = r.province ? String(r.province).trim() : "";
+  if (province) parts.push(`(${province})`);
   return parts.join(", ") || r.address || r.poblacion || "";
 }
 
@@ -894,6 +899,13 @@ export function resolveGeocoderConfig(input: GeocodingPreferenceInput): Geocoder
  * Nominatim host (its usage policy applies) and, defensively, for any endpoint
  * that does not parse as a URL. Every other host (a self-hosted Nominatim or a
  * keyed provider) returns false.
+ *
+ * CartoCiudad is deliberately not included even though it is the other free,
+ * unkeyed public host: the 1 req/sec pace and 1000-row cap are Nominatim's
+ * published policy, not a general one. IGN documents no rate limit, and its own
+ * bulk address geocoder processes up to 60,000 records per run, so applying
+ * Nominatim's numbers would invent a constraint the service does not impose and
+ * stretch a 60k batch across 18 hours.
  */
 export function shouldThrottle(endpoint: string): boolean {
   try {
