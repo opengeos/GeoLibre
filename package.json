@@ -43,9 +43,12 @@
     "typescript-eslint": "^8.65.0"
   },
   "overrides": {
-    "brace-expansion": "^5.0.8",
+    "brace-expansion": "^5.0.9",
     "fast-uri": "^3.1.5",
     "filelist": "^2.0.2",
+    "miniflare": {
+      "undici": "^7.29.0"
+    },
     "sweepline-intersections": "^1.5.0",
     "uuid": "^14.0.0"
   },
