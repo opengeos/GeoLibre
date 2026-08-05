@@ -45,7 +45,11 @@ const TOKEN_PATH: &str = "/__geolibre_ee_token";
 #[derive(Default)]
 pub struct GoogleOAuthState {
     counter: AtomicU64,
+    /// Set only once the listener is bound and accepting, so a second caller
+    /// that sees it can rely on the port being live. See {@link ensure_oauth_server}.
     server_started: AtomicBool,
+    /// Serializes startup so two concurrent callers cannot both try to bind.
+    startup: Mutex<()>,
     results: Arc<Mutex<HashMap<String, GoogleOAuthResult>>>,
 }
 
@@ -181,22 +185,29 @@ fn next_state_id(state: &tauri::State<'_, GoogleOAuthState>) -> Result<String, S
     Ok(format!("geolibre-{now}-{counter}"))
 }
 
+/// Starts the loopback listener if it is not already running.
+///
+/// The flag is published *after* `bind` succeeds, and the whole sequence is
+/// serialized behind `startup`. The obvious cheaper arrangement — claim the flag
+/// with a compare-exchange, then bind — reports success to a concurrent caller
+/// while the socket is still unbound, so that caller opens its browser page
+/// against a port nothing is listening on yet and the sign-in silently fails.
+/// Two callers is not hypothetical here: Earth Engine sign-in and the Drive
+/// picker share this listener.
 fn ensure_oauth_server(state: &GoogleOAuthState) -> Result<(), String> {
     if state.server_started.load(Ordering::Acquire) {
         return Ok(());
     }
-    if state
-        .server_started
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
+
+    let _guard = state.startup.lock().map_err(|error| error.to_string())?;
+    // Re-check under the lock: whoever held it before us may have started it.
+    if state.server_started.load(Ordering::Acquire) {
         return Ok(());
     }
 
     let listener = match TcpListener::bind((OAUTH_HOST, OAUTH_PORT)) {
         Ok(listener) => listener,
         Err(error) => {
-            state.server_started.store(false, Ordering::Release);
             if error.kind() == ErrorKind::AddrInUse {
                 return Err(format!(
                     "Could not start the Google sign-in helper on http://localhost:{OAUTH_PORT} because the port is already in use. Close any running GeoLibre dev server or other app using port {OAUTH_PORT}, then try again.",
@@ -216,6 +227,9 @@ fn ensure_oauth_server(state: &GoogleOAuthState) -> Result<(), String> {
         }
     });
 
+    // Published last: the socket is bound (so already queueing connections) and
+    // the accept loop is running, which is exactly what the flag now promises.
+    state.server_started.store(true, Ordering::Release);
     Ok(())
 }
 
@@ -272,6 +286,14 @@ fn handle_connection(
     }
 }
 
+/// Largest request body this helper will read.
+///
+/// The only bodies it ever receives are the small JSON results its own pages
+/// post back — a token and at most a page of picked-file metadata. Allocating
+/// whatever `Content-Length` claims would let any local process make the app
+/// reserve arbitrary memory with a header alone, never sending the bytes.
+const MAX_REQUEST_BODY_BYTES: usize = 64 * 1024;
+
 fn read_request(stream: &TcpStream) -> Result<(String, String, Vec<u8>), String> {
     let mut reader = BufReader::new(stream.try_clone().map_err(|error| error.to_string())?);
     let mut request_line = String::new();
@@ -291,11 +313,19 @@ fn read_request(stream: &TcpStream) -> Result<(String, String, Vec<u8>), String>
         if line == "\r\n" || line.is_empty() {
             break;
         }
-        if let Some(value) = line.strip_prefix("Content-Length:") {
-            content_length = value.trim().parse().unwrap_or(0);
-        } else if let Some(value) = line.strip_prefix("content-length:") {
-            content_length = value.trim().parse().unwrap_or(0);
+        // HTTP field names are case-insensitive (RFC 9110 §5.1), so match on the
+        // lowercased name rather than enumerating spellings.
+        if let Some((name, value)) = line.split_once(':') {
+            if name.trim().eq_ignore_ascii_case("content-length") {
+                content_length = value.trim().parse().unwrap_or(0);
+            }
         }
+    }
+
+    if content_length > MAX_REQUEST_BODY_BYTES {
+        return Err(format!(
+            "Request body of {content_length} bytes exceeds the {MAX_REQUEST_BODY_BYTES}-byte limit."
+        ));
     }
 
     let mut body = vec![0; content_length];
@@ -347,6 +377,27 @@ fn write_response(
          {body}",
         body.len()
     )
+}
+
+/// A value safe to paste into an inline `<script>` block as a JS literal.
+///
+/// `serde_json::to_string` escapes quotes and backslashes, which is enough for
+/// a JSON *document* but not for JSON embedded in HTML: it leaves `<` and `>`
+/// alone, so a value containing `</script>` closes the block early and anything
+/// after it is parsed as markup. That is a script-injection primitive, and the
+/// values here are reachable — the API key is typed by the user into the Add
+/// Data dialog and handed to `start_google_drive_picker` verbatim.
+///
+/// Escaping to `\uXXXX` keeps the string identical once the JS engine parses
+/// it, so nothing downstream has to un-escape anything. `&` is included because
+/// it is the other character an HTML parser can act on before JavaScript ever
+/// sees the text.
+fn script_literal(value: &str) -> String {
+    serde_json::to_string(value)
+        .unwrap_or_else(|_| "\"\"".to_string())
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026")
 }
 
 /// Shared CSS for both helper pages, so the sign-in and picker windows read as
@@ -404,8 +455,8 @@ const HELPER_PAGE_STYLE: &str = r#"
 "#;
 
 fn auth_page(client_id: &str, state: &str) -> String {
-    let client_id_json = serde_json::to_string(client_id).unwrap_or_else(|_| "\"\"".to_string());
-    let state_json = serde_json::to_string(state).unwrap_or_else(|_| "\"\"".to_string());
+    let client_id_json = script_literal(client_id);
+    let state_json = script_literal(state);
     format!(
         r#"<!doctype html>
 <html lang="en">
@@ -494,9 +545,9 @@ fn auth_page(client_id: &str, state: &str) -> String {
 /// picker is what *creates* the file grants — under `drive.file` a token on its
 /// own reaches nothing pre-existing, so there is no useful state between them.
 fn picker_page(client_id: &str, api_key: &str, state: &str) -> String {
-    let client_id_json = serde_json::to_string(client_id).unwrap_or_else(|_| "\"\"".to_string());
-    let api_key_json = serde_json::to_string(api_key).unwrap_or_else(|_| "\"\"".to_string());
-    let state_json = serde_json::to_string(state).unwrap_or_else(|_| "\"\"".to_string());
+    let client_id_json = script_literal(client_id);
+    let api_key_json = script_literal(api_key);
+    let state_json = script_literal(state);
     format!(
         r#"<!doctype html>
 <html lang="en">
@@ -638,9 +689,18 @@ fn url_decode(value: &str) -> String {
     let bytes = value.as_bytes();
     let mut index = 0;
     while index < bytes.len() {
+        // Decode the two hex digits from the byte slice, not by re-slicing the
+        // &str: `&value[index + 1..index + 3]` panics when those offsets fall
+        // inside a multi-byte character, which any `%` followed by non-ASCII
+        // produces — reachable from a crafted request to this listener.
+        //
+        // The bound is `index + 2 < len` rather than `<=` to match the original
+        // behaviour: a `%` in the final two bytes is left literal.
         if bytes[index] == b'%' && index + 2 < bytes.len() {
-            if let Ok(hex) = u8::from_str_radix(&value[index + 1..index + 3], 16) {
-                decoded.push(hex);
+            let high = (bytes[index + 1] as char).to_digit(16);
+            let low = (bytes[index + 2] as char).to_digit(16);
+            if let (Some(high), Some(low)) = (high, low) {
+                decoded.push((high * 16 + low) as u8);
                 index += 3;
                 continue;
             }
@@ -653,4 +713,72 @@ fn url_decode(value: &str) -> String {
         index += 1;
     }
     String::from_utf8_lossy(&decoded).into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn script_literal_cannot_close_the_script_block() {
+        // The whole point: `serde_json::to_string` alone leaves `</script>`
+        // intact, which ends the inline block and turns the rest into markup.
+        let escaped = script_literal("</script><script>alert(1)</script>");
+        assert!(
+            !escaped.contains("</script>"),
+            "value still closes the script block: {escaped}"
+        );
+        assert!(!escaped.contains('<'));
+        assert!(!escaped.contains('>'));
+    }
+
+    #[test]
+    fn script_literal_escapes_ampersands_too() {
+        assert!(!script_literal("a&b").contains('&'));
+    }
+
+    #[test]
+    fn script_literal_round_trips_through_a_json_parser() {
+        // The escapes must be transparent: whatever JS parses out has to equal
+        // the original, or the client ID/API key would arrive corrupted.
+        for value in [
+            "plain",
+            "</script>",
+            "a&b<c>d",
+            "ขอบเขต",
+            "quote\"back\\slash",
+        ] {
+            let parsed: String = serde_json::from_str(&script_literal(value)).expect("valid JSON");
+            assert_eq!(parsed, value);
+        }
+    }
+
+    #[test]
+    fn url_decode_does_not_panic_on_multibyte_after_percent() {
+        // `%` followed by a multi-byte character used to slice the &str at a
+        // non-char-boundary and panic.
+        for input in ["%ขอ", "%%%", "%ก", "abc%เ", "%E0%B8%82"] {
+            let _ = url_decode(input);
+        }
+    }
+
+    #[test]
+    fn url_decode_still_decodes_ordinary_escapes() {
+        assert_eq!(url_decode("a%20b"), "a b");
+        assert_eq!(url_decode("a+b"), "a b");
+        assert_eq!(url_decode("%E0%B8%82%E0%B8%AD"), "ขอ");
+        // A stray `%` with nothing decodable after it stays literal.
+        assert_eq!(url_decode("100%"), "100%");
+        assert_eq!(url_decode("%zz"), "%zz");
+    }
+
+    #[test]
+    fn query_params_decodes_each_pair() {
+        let params = query_params("client_id=a%20b&state=geolibre-1-2");
+        assert_eq!(params.get("client_id").map(String::as_str), Some("a b"));
+        assert_eq!(
+            params.get("state").map(String::as_str),
+            Some("geolibre-1-2")
+        );
+    }
 }

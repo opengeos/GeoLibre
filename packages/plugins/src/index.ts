@@ -186,6 +186,7 @@ export {
   DEFAULT_GEE_OAUTH_CLIENT_ID,
   EARTH_ENGINE_UNAVAILABLE_MESSAGE,
   isEarthEngineAvailable,
+  isGoogleOAuthLoopbackAvailable,
   isTauriProductionOrigin,
 } from "./plugins/earth-engine-auth";
 export {

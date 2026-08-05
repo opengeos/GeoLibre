@@ -20,8 +20,7 @@ mod google_oauth;
 // message instead of an "unknown command" error) but no socket is ever bound.
 #[cfg(any(feature = "mas", target_os = "ios"))]
 mod google_oauth {
-    const UNAVAILABLE: &str =
-        "Google sign-in is not available in the App Store build of GeoLibre.";
+    const UNAVAILABLE: &str = "Google sign-in is not available in the App Store build of GeoLibre.";
 
     #[tauri::command]
     pub fn start_earth_engine_oauth(_client_id: String) -> Result<serde_json::Value, String> {
@@ -77,13 +76,13 @@ mod native_duckdb {
 #[cfg(all(feature = "mas", feature = "native-duckdb"))]
 compile_error!("the `mas` (Mac App Store) build must not enable `native-duckdb`: DuckDB loads its spatial extension as unsigned native code at runtime, which App Sandbox and App Store guideline 2.5.2 forbid.");
 
+use flate2::read::{GzDecoder, ZlibDecoder};
+#[cfg(not(any(feature = "mas", target_os = "ios")))]
+use google_oauth::GoogleOAuthState;
 use google_oauth::{
     poll_earth_engine_oauth, poll_google_drive_picker, start_earth_engine_oauth,
     start_google_drive_picker,
 };
-#[cfg(not(any(feature = "mas", target_os = "ios")))]
-use google_oauth::GoogleOAuthState;
-use flate2::read::{GzDecoder, ZlibDecoder};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

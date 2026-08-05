@@ -253,14 +253,38 @@ function isAppleAppStoreRuntime(userAgent?: string, maxTouchPoints?: number): bo
 }
 
 /**
- * Whether Earth Engine sign-in is available in this build.
+ * Whether this build ships the Rust loopback OAuth listener
+ * (`src-tauri/src/google_oauth.rs`).
  *
- * Signing in from a packaged app needs the Rust loopback OAuth listener, which
- * the Apple App Store builds compile out (see the module gate in
- * `src-tauri/src/lib.rs`) so the app claims no `network.server` entitlement.
- * A browser — including Safari on iOS — still uses Google's popup/redirect flow
- * and keeps Earth Engine, so the check is scoped to the packaged app via
- * `isTauriProductionOrigin`.
+ * Every Google sign-in a *packaged* app performs goes through that listener,
+ * because Google will not accept the Tauri WebView's origin as an OAuth
+ * JavaScript origin. The Apple App Store builds compile it out (see the module
+ * gate in `src-tauri/src/lib.rs`) so the app claims no `network.server`
+ * entitlement, which App Review rejected GeoLibre Desktop 2.4.0 over. A browser
+ * — including Safari on iOS — runs Google's SDKs in the page and needs no
+ * listener, so the check is scoped to the packaged app.
+ *
+ * This is the single rule behind every "can we sign in to Google here?"
+ * question: {@link isEarthEngineAvailable} and the Add Data → Google Drive
+ * picker (`lib/google-drive-auth.ts`) both defer to it. They must agree — they
+ * are gated by the same `#[cfg]` — so neither re-derives it.
+ *
+ * @param appleAppStore - Override for testing; defaults to the runtime check.
+ * @param packagedApp - Override for testing; defaults to
+ *   `isTauriProductionOrigin()`.
+ * @returns True when a Google sign-in flow can complete in this build.
+ */
+export function isGoogleOAuthLoopbackAvailable(
+  appleAppStore: boolean = isAppleAppStoreRuntime(),
+  packagedApp: boolean = isTauriProductionOrigin(),
+): boolean {
+  return !(packagedApp && appleAppStore);
+}
+
+/**
+ * Whether Earth Engine sign-in is available in this build. Earth Engine's
+ * sign-in is one of the flows behind {@link isGoogleOAuthLoopbackAvailable}, so
+ * it is exactly that predicate.
  *
  * @param appleAppStore - Override for testing; defaults to the runtime check.
  * @param packagedApp - Override for testing; defaults to
@@ -271,7 +295,7 @@ export function isEarthEngineAvailable(
   appleAppStore: boolean = isAppleAppStoreRuntime(),
   packagedApp: boolean = isTauriProductionOrigin(),
 ): boolean {
-  return !(packagedApp && appleAppStore);
+  return isGoogleOAuthLoopbackAvailable(appleAppStore, packagedApp);
 }
 
 /** The message shown where Earth Engine is compiled out. */

@@ -24,7 +24,11 @@
  *    `http://localhost:5173` in the system browser and posts the result back.
  */
 
-import { DEFAULT_GEE_OAUTH_CLIENT_ID, isTauriProductionOrigin } from "@geolibre/plugins";
+import {
+  DEFAULT_GEE_OAUTH_CLIENT_ID,
+  isGoogleOAuthLoopbackAvailable,
+  isTauriProductionOrigin,
+} from "@geolibre/plugins";
 import type { DriveFile } from "./google-drive";
 
 /** What the Picker returns: the token to download with, and what was chosen. */
@@ -119,27 +123,23 @@ export function hasBuildTimeGoogleApiKey(): boolean {
 /**
  * Whether this build can open the Picker at all.
  *
- * False on the Apple App Store builds, which compile the loopback listener out
- * (it would need the `network.server` entitlement App Review rejects). There
- * the link path still works, so the dialog hides the browse button rather than
- * failing on click.
+ * The Picker needs a Google sign-in, and on a packaged app that means the Rust
+ * loopback listener — which the Apple App Store builds compile out, since it
+ * would need the `network.server` entitlement App Review rejects. That is the
+ * same listener Earth Engine sign-in uses, and it is compiled out of both by
+ * one `#[cfg]`, so this defers to the shared predicate rather than re-deriving
+ * "is this an Apple build?" here: a local copy would have to repeat the
+ * iPadOS 13+ rule (an iPad reports a "Macintosh" user agent) and would silently
+ * disagree with Earth Engine the moment either changed.
+ *
+ * Where it returns false the link path still works, so the dialog hides the
+ * browse button rather than failing on click.
  *
  * @returns True when the Picker can be shown
  */
 export function isDrivePickerAvailable(): boolean {
   if (typeof window === "undefined") return false;
-  if (!isTauriProductionOrigin()) return true;
-  // Mirrors the module gate in src-tauri/src/lib.rs: the App Store targets ship
-  // the stub commands, which reject rather than bind a socket.
-  return !isAppleAppStoreRuntime();
-}
-
-declare const __GEOLIBRE_MAS_BUILD__: boolean;
-
-function isAppleAppStoreRuntime(): boolean {
-  if (typeof __GEOLIBRE_MAS_BUILD__ !== "undefined" && __GEOLIBRE_MAS_BUILD__) return true;
-  if (typeof navigator === "undefined") return false;
-  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  return isGoogleOAuthLoopbackAvailable();
 }
 
 /**
