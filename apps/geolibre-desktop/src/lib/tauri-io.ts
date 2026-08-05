@@ -565,26 +565,29 @@ async function localFileSizeBytes(path: string): Promise<number | undefined> {
 }
 
 /**
- * Extensions whose in-memory reader is bypassed by the size route. Containers
- * (`zip`, `kmz`) unpack first and decide from their contents, and delimited text
- * always uses the JS parser, so neither belongs here.
+ * Extensions whose in-memory reader is bypassed by the size route.
+ *
+ * Containers (`zip`, `kmz`) unpack first and decide from their contents.
+ * Delimited text and GPX always use the JS parser: `loadDuckDbVector` passes no
+ * `layer` argument, so `ST_Read` would read only a GPX's first OGR layer
+ * (usually `waypoints`) and silently discard its tracks and routes, and it
+ * cannot build points from a CSV's lon/lat columns.
  */
-const ROUTABLE_TEXT_EXTENSIONS = new Set(["geojson", "json", "kml", "gpx"]);
+const ROUTABLE_TEXT_EXTENSIONS = new Set(["geojson", "json", "kml"]);
 
 /**
- * Read a dropped file as text, routing a file too large for one JS string
- * through a byte read and an incremental decode instead of `File.text()`, which
- * throws `RangeError: Invalid string length` past V8's cap.
+ * Read a dropped file as text, yielding "" when it cannot be read.
+ *
+ * KML overlay/model extraction needs the whole document as a string, and there
+ * is no way around that: `TextDecoder.decode()` over the full buffer builds one
+ * JS string exactly as `File.text()` does, so both hit the same
+ * `RangeError: Invalid string length` past the engine's cap. Rather than
+ * pretend to avoid it, the failure is caught here — a file too large to read as
+ * text contributes no overlays instead of aborting the whole drop batch.
  */
-async function readVectorFileText(file: File): Promise<string> {
-  if (!shouldRouteToDuckDb(file.size)) return file.text();
-  return new TextDecoder("utf-8").decode(await file.arrayBuffer());
-}
-
-/** {@link readVectorFileText}, but an unreadable/oversized file yields "". */
 async function readVectorFileTextOrEmpty(file: File): Promise<string> {
   try {
-    return await readVectorFileText(file);
+    return await file.text();
   } catch (error) {
     console.warn(`[GeoLibre] Could not read "${file.name}" as text; skipping its overlays.`, error);
     return "";
@@ -1890,7 +1893,9 @@ async function loadBrowserVectorFile(
     }
   }
 
-  if (!streamViaDuckDb && extension === "gpx") {
+  // Not gated on `streamViaDuckDb`: see ROUTABLE_TEXT_EXTENSIONS — the DuckDB
+  // reader would return only this GPX's first OGR layer.
+  if (extension === "gpx") {
     return {
       data: parseGpxText(await file.text()),
       path: file.name,
@@ -2172,7 +2177,8 @@ async function loadTauriVectorFile(
     }
   }
 
-  if (!streamViaDuckDb && extension === "gpx") {
+  // Not gated on `streamViaDuckDb`; see the browser counterpart.
+  if (extension === "gpx") {
     try {
       return {
         data: parseGpxText(await readLocalFileText(path)),
@@ -2840,15 +2846,6 @@ export async function loadDroppedVectorFiles(
       if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
 
       if (extension === "gpx") {
-        // Past the route threshold the in-house splitter would still have to
-        // hold the whole document as one string, so hand it to the guarded
-        // loader instead. The DuckDB reader returns a single merged layer
-        // rather than the waypoint/track/route split, which is the accepted
-        // trade for a GPX this size.
-        if (shouldRouteToDuckDb(file.size)) {
-          layers.push(await loadBrowserVectorFile(file, [], options));
-          continue;
-        }
         layers.push(...parseGpxTextLayers(await file.text(), file.name));
         continue;
       }
@@ -3124,12 +3121,6 @@ export async function loadDroppedVectorPaths(
       const extension = fileExtension(path);
       if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
       if (extension === "gpx") {
-        // See the browser counterpart: an oversized GPX goes to the guarded
-        // loader rather than through one giant string.
-        if (shouldRouteToDuckDb(await localFileSizeBytes(path))) {
-          layers.push(await loadTauriVectorFile(path, options));
-          continue;
-        }
         try {
           layers.push(...parseGpxTextLayers(await readLocalFileText(path), path));
         } catch (error) {

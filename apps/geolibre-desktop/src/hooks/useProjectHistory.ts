@@ -97,7 +97,14 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
         try {
           content = serializeProject(snapshot);
         } catch (error) {
-          console.warn("Project autosave skipped: the project is too large to serialize.", error);
+          // Only the string-length cap means "too large"; anything else is a
+          // real serialization bug and must not be filed under a size problem,
+          // or that class of failure becomes invisible in the wild.
+          if (error instanceof RangeError) {
+            console.warn("Project autosave skipped: the project is too large to serialize.", error);
+          } else {
+            console.error("Could not autosave the project.", error);
+          }
           return;
         }
         void addProjectSnapshot(content, currentProjectKey()).catch((error) =>
