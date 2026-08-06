@@ -391,9 +391,23 @@ export function reorderLayerGroupInPanel(
   id: string,
   direction: "up" | "down",
 ): { layers: GeoLibreLayer[]; groups: LayerGroup[] } | null {
+  return moveGroupThroughUnits(buildLayerPanelUnits(layers, groups), layers, groups, id, direction);
+}
+
+/**
+ * The body of {@link reorderLayerGroupInPanel}, against panel blocks the caller
+ * already has, so asking about every group in turn splits the panel once rather
+ * than once per question.
+ */
+function moveGroupThroughUnits(
+  units: LayerPanelUnit[],
+  layers: GeoLibreLayer[],
+  groups: LayerGroup[],
+  id: string,
+  direction: "up" | "down",
+): { layers: GeoLibreLayer[]; groups: LayerGroup[] } | null {
   if (!groups.some((group) => group.id === id)) return null;
   const groupById = new Map(groups.map((g) => [g.id, g]));
-  const units = buildLayerPanelUnits(layers, groups);
   const moving = groupSubtreeIds(groups, id);
   const matching = new Set<number>();
   units.forEach((unit, index) => {
@@ -440,11 +454,12 @@ export function layerGroupMoveability(
   layers: GeoLibreLayer[],
   groups: LayerGroup[],
 ): Map<string, { up: boolean; down: boolean }> {
+  const units = buildLayerPanelUnits(layers, groups);
   const result = new Map<string, { up: boolean; down: boolean }>();
   for (const group of groups) {
     result.set(group.id, {
-      up: reorderLayerGroupInPanel(layers, groups, group.id, "up") !== null,
-      down: reorderLayerGroupInPanel(layers, groups, group.id, "down") !== null,
+      up: moveGroupThroughUnits(units, layers, groups, group.id, "up") !== null,
+      down: moveGroupThroughUnits(units, layers, groups, group.id, "down") !== null,
     });
   }
   return result;

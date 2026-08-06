@@ -514,6 +514,25 @@ describe("layer group store actions", () => {
     assert.deepEqual(order(), [g2, g1]);
   });
 
+  it("undoes a reorder that only moved empty groups", () => {
+    // Swapping two empty folders leaves `layers` untouched, so the history
+    // entry rests entirely on the group order having changed.
+    const g1 = useAppStore.getState().addLayerGroup("Group 1");
+    const g2 = useAppStore.getState().addLayerGroup("Group 2");
+    useAppStore.temporal.getState().clear();
+
+    useAppStore.getState().reorderLayerGroup(g2, "up");
+    assert.deepEqual(
+      useAppStore.getState().layerGroups.map((group) => group.id),
+      [g2, g1],
+    );
+    undo();
+    assert.deepEqual(
+      useAppStore.getState().layerGroups.map((group) => group.id),
+      [g1, g2],
+    );
+  });
+
   it("ungroups children by default but can delete them", () => {
     const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
     const gid = useAppStore.getState().addLayerGroup("G", [a]);
