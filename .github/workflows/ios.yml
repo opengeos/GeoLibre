@@ -187,9 +187,17 @@ jobs:
             echo "::error::No generated project.yml at $project"
             exit 1
           fi
-          # tr strips YAML quoting if the template ever emits any, leaving the
-          # bare dotted version.
-          got="$(awk '/^[[:space:]]*deploymentTarget:/ {f=1; next} f && /^[[:space:]]*iOS:/ {print $2; exit}' "$project" | tr -cd '0-9.')"
+          # Scoped to the `deploymentTarget:` block, resetting at the first line
+          # that dedents back out of it, so an `iOS:` key elsewhere in the file
+          # can never be read as this one. Parsed as text rather than YAML on
+          # purpose: a YAML loader turns `15.0` into a float, and `15.10` would
+          # come back out as `15.1`. tr strips quoting if the template emits any.
+          got="$(awk '
+            /^[[:space:]]*deploymentTarget:/ { depth = match($0, /[^[:space:]]/); inblock = 1; next }
+            !inblock || /^[[:space:]]*$/ { next }
+            match($0, /[^[:space:]]/) <= depth { inblock = 0; next }
+            $1 == "iOS:" { print $2; exit }
+          ' "$project" | tr -cd '0-9.')"
           if [ "$got" != "$want" ]; then
             echo "::error::Generated project.yml has deploymentTarget.iOS '$got', expected the configured '$want'. Did the Tauri CLI stop honoring bundle.iOS.minimumSystemVersion?"
             exit 1
