@@ -6,8 +6,55 @@ import type { Feature, FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
 
-export type ArcGISLayerType = "feature" | "vector-tile";
+export type ArcGISLayerType = "feature" | "vector-tile" | "map-service" | "image-service";
 export type ArcGISSourceType = "url" | "portal-item";
+
+/**
+ * Every {@link ArcGISLayerType}, as a runtime list so a stored value (a saved
+ * service-library entry, a hand-edited project) can be validated against it
+ * instead of being coerced to a default that silently loads the wrong service.
+ */
+export const ARCGIS_LAYER_TYPES: readonly ArcGISLayerType[] = [
+  "feature",
+  "vector-tile",
+  "map-service",
+  "image-service",
+];
+
+/**
+ * Narrow an untrusted string to an {@link ArcGISLayerType}.
+ *
+ * @param value - The stored or user-supplied layer type.
+ * @param fallback - The type to use when `value` is not a known layer type.
+ * @returns The matching layer type, or `fallback`.
+ */
+export function parseArcGISLayerType(
+  value: unknown,
+  fallback: ArcGISLayerType = "feature",
+): ArcGISLayerType {
+  return ARCGIS_LAYER_TYPES.find((layerType) => layerType === value) ?? fallback;
+}
+
+/**
+ * `metadata.sourceKind` for the two image-producing service types. A MapServer
+ * or ImageServer renders as ordinary raster tiles, so the layer these produce is
+ * a plain `raster` layer rather than an `arcgis` one; the source kind is what
+ * marks where it came from.
+ */
+export const ARCGIS_MAP_SERVICE_SOURCE_KIND = "arcgis-map-service";
+export const ARCGIS_IMAGE_SERVICE_SOURCE_KIND = "arcgis-image-service";
+
+/** Tile size requested from `/export` and `/exportImage`, in pixels. */
+const ARCGIS_EXPORT_TILE_SIZE = 256;
+
+/**
+ * The Web Mercator tiling scheme a cached ArcGIS service must use for its
+ * `/tile/{z}/{y}/{x}` endpoint to be an XYZ source MapLibre can consume: the
+ * top-left origin and the level-0 resolution of the standard scheme (a 256 px
+ * tile spanning the whole world).
+ */
+const WEB_MERCATOR_ORIGIN_X = -20037508.342787;
+const WEB_MERCATOR_LEVEL0_RESOLUTION = 156543.03392800014;
 
 /**
  * Features requested per `/query` call when the service does not advertise a
@@ -64,7 +111,26 @@ export interface ArcGISLayerOptions {
    */
   pageSize?: number;
   portalUrl?: string;
+  /**
+   * ImageServer rendering rule, as the JSON ArcGIS expects for the
+   * `renderingRule` parameter (e.g. `{"rasterFunction":"Hillshade"}`).
+   *
+   * Only meaningful for `layerType: "image-service"`. Supplying one forces the
+   * dynamic `/exportImage` path: a cached service's tiles were rendered when
+   * the cache was built, so they cannot honor a rule chosen here.
+   */
+  renderingRule?: string;
   sourceType: ArcGISSourceType;
+  /**
+   * MapServer sublayers to draw, as the comma-separated id list ArcGIS takes in
+   * `layers=show:<ids>` (e.g. `0,2,5`). Blank draws the service's own default
+   * set of visible sublayers.
+   *
+   * Only meaningful for `layerType: "map-service"`. Supplying a list forces the
+   * dynamic `/export` path, because a cached service serves one fused image per
+   * tile that no longer has separable sublayers.
+   */
+  sublayers?: string;
   token?: string;
   url?: string;
   /**
@@ -103,6 +169,37 @@ interface ArcGISServiceInfo {
   extent?: ArcGISExtent;
   fullExtent?: ArcGISExtent;
   initialExtent?: ArcGISExtent;
+}
+
+/**
+ * The `?f=json` description of a MapServer or ImageServer, narrowed to what the
+ * raster path reads: the extent to fit, the credit line, and whether the service
+ * has a Web Mercator tile cache that can be consumed as XYZ tiles.
+ */
+interface ArcGISImageProducingServiceInfo extends ArcGISServiceInfo {
+  copyrightText?: string;
+  mapName?: string;
+  name?: string;
+  singleFusedMapCache?: boolean;
+  tileInfo?: ArcGISTileInfo;
+}
+
+interface ArcGISTileInfo {
+  cols?: number;
+  lods?: Array<{ level?: number; resolution?: number }>;
+  origin?: { x?: number; y?: number };
+  rows?: number;
+  spatialReference?: {
+    latestWkid?: number;
+    wkid?: number;
+  };
+}
+
+/** A cached service's tile endpoint, resolved to what a raster source needs. */
+interface ArcGISTileScheme {
+  maxzoom: number;
+  minzoom: number;
+  tileSize: number;
 }
 
 interface ArcGISPortalItemInfo {
@@ -147,6 +244,15 @@ export async function addArcGISLayer(
   // instead of only the fill/stroke paint an external-native layer exposes.
   if (options.layerType === "feature") {
     return addArcGISFeatureLayerAsGeoJson(app, options, input);
+  }
+
+  // A MapServer or ImageServer hands back rendered images, not data, so it is
+  // loaded as an ordinary raster layer (cached tiles when the service has a Web
+  // Mercator cache, otherwise an `/export` request per tile). That keeps the
+  // whole raster surface — opacity, brightness/contrast, reordering, and project
+  // save/reload — working without a bespoke handler.
+  if (options.layerType === "map-service" || options.layerType === "image-service") {
+    return addArcGISImageServiceLayer(app, options, input);
   }
 
   const map = app.getMap?.();
@@ -316,6 +422,312 @@ async function addArcGISFeatureLayerAsGeoJson(
   const bounds = arcgisExtentToBounds(layerInfo.extent);
   if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
   return id;
+}
+
+/**
+ * Load an ArcGIS MapServer or ImageServer as a raster tile layer.
+ *
+ * Both services answer with rendered images rather than data, so neither has a
+ * useful GeoJSON or vector-tile form. They become an ordinary `raster` layer,
+ * which is what makes the whole raster surface (opacity, the Style panel's
+ * raster adjustments, reordering, project save and reload) work on them with no
+ * dedicated handler anywhere else in the app.
+ *
+ * Two tile strategies, chosen from the service's own metadata:
+ *
+ * - **Cached tiles** (`/tile/{z}/{y}/{x}`) when the service advertises a fused
+ *   cache built on the standard Web Mercator scheme. These are pre-rendered and
+ *   CDN-friendly, so they are used whenever they are available and applicable.
+ * - **Dynamic export** (`/export` for MapServer, `/exportImage` for ImageServer)
+ *   otherwise, as a `{bbox-epsg-3857}` request template — the same mechanism
+ *   GeoLibre's WMS layers use. This is also forced when the caller picked
+ *   sublayers or a rendering rule, because a cache was rendered before either
+ *   choice existed and cannot honor it.
+ *
+ * @param app - The host app API (used to fit the view to the service extent).
+ * @param options - The ArcGIS layer options (source type, URL/item, token).
+ * @param input - The resolved service URL or portal item id from the options.
+ * @returns The new GeoLibre layer's id.
+ */
+async function addArcGISImageServiceLayer(
+  app: GeoLibreAppAPI,
+  options: ArcGISLayerOptions,
+  input: string,
+): Promise<string> {
+  const resolved =
+    options.sourceType === "url"
+      ? resolveArcGISImageServiceUrl(input, options.layerType)
+      : await resolvePortalArcGISImageServiceUrl(input, options);
+  const { serviceUrl } = resolved;
+  const info = await fetchArcGISJson<ArcGISImageProducingServiceInfo>(
+    serviceUrl,
+    options,
+    undefined,
+  );
+
+  // A sublayer id read off the pasted URL is a default: the explicit field wins
+  // when the user filled both in.
+  const sublayers = normalizeArcGISSublayers(options.sublayers) ?? resolved.sublayers;
+  const renderingRule = validArcGISRenderingRule(options.renderingRule);
+  const token = options.token?.trim() || undefined;
+
+  // Sublayers and rendering rules are dynamic-only, so the cache is only an
+  // option when neither was asked for.
+  const tileScheme = sublayers || renderingRule ? null : arcgisTileScheme(info);
+  const tiles = tileScheme
+    ? arcgisCachedTileUrl(serviceUrl, token)
+    : arcgisExportTileUrl(serviceUrl, {
+        layerType: options.layerType,
+        renderingRule,
+        sublayers,
+        token,
+      });
+
+  const bounds = arcgisExtentToBounds(info.fullExtent ?? info.initialExtent ?? info.extent);
+  const attribution = info.copyrightText?.trim() || undefined;
+  const id = createArcGISLayerId();
+  const layer: GeoLibreLayer = {
+    id,
+    name: options.name?.trim() || layerNameFromArcGISInput(serviceUrl, "ArcGIS Layer"),
+    type: "raster",
+    source: {
+      type: "raster",
+      tiles: [tiles],
+      tileSize: tileScheme?.tileSize ?? ARCGIS_EXPORT_TILE_SIZE,
+      ...(bounds ? { bounds } : {}),
+      ...(attribution ? { attribution } : {}),
+      ...(tileScheme ? { minzoom: tileScheme.minzoom, maxzoom: tileScheme.maxzoom } : {}),
+    },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {
+      arcgisLayerType: options.layerType,
+      arcgisSourceType: options.sourceType,
+      arcgisTiled: tileScheme !== null,
+      ...(bounds ? { bounds } : {}),
+      // The token has to travel in the tile URL for the tiles to render at all,
+      // unlike the feature path where it is only on the live requests. It is
+      // flagged here for the same reason the vector-tile path flags it, and
+      // `redactCredentials` (core) strips the `token` parameter from any project
+      // that leaves the app through sharing, embedding, or collaboration.
+      hasAccessToken: Boolean(token),
+      ...(options.sourceType === "portal-item" ? { itemId: input } : {}),
+      ...(options.portalUrl?.trim() ? { portalUrl: options.portalUrl.trim() } : {}),
+      ...(renderingRule ? { arcgisRenderingRule: renderingRule } : {}),
+      ...(sublayers ? { arcgisSublayers: sublayers } : {}),
+      sourceKind:
+        options.layerType === "image-service"
+          ? ARCGIS_IMAGE_SERVICE_SOURCE_KIND
+          : ARCGIS_MAP_SERVICE_SOURCE_KIND,
+    },
+    sourcePath: serviceUrl,
+  };
+
+  useAppStore.getState().addLayer(layer, options.beforeLayerId ?? null);
+  if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
+  return id;
+}
+
+/**
+ * Validate a MapServer/ImageServer URL and split off a trailing sublayer id.
+ *
+ * `/export` and `/exportImage` live on the service root, so a URL that points at
+ * one MapServer sublayer (`.../MapServer/3`, which is what the REST directory
+ * links to) is rewritten to the root plus a `show:3` sublayer selection rather
+ * than rejected.
+ *
+ * @param input - The URL the caller supplied.
+ * @param layerType - Which of the two service types is expected.
+ * @returns The service root URL and any sublayer id read from the input.
+ */
+function resolveArcGISImageServiceUrl(
+  input: string,
+  layerType: ArcGISLayerType,
+): { serviceUrl: string; sublayers?: string } {
+  // A URL copied from the REST directory often carries `?f=html` (or a token);
+  // the query is rebuilt from scratch below, so drop whatever came in.
+  const url = trimTrailingSlash(stripArcGISUrlQuery(input));
+  if (layerType === "image-service") {
+    if (!/\/ImageServer$/i.test(url)) {
+      throw new Error("Enter an ArcGIS ImageServer URL.");
+    }
+    return { serviceUrl: url };
+  }
+
+  const match = /^(.*\/MapServer)(?:\/(\d+))?$/i.exec(url);
+  if (!match) {
+    throw new Error("Enter an ArcGIS MapServer URL.");
+  }
+  return { serviceUrl: match[1], ...(match[2] ? { sublayers: match[2] } : {}) };
+}
+
+/** Resolves a portal item to the MapServer/ImageServer URL it points at. */
+async function resolvePortalArcGISImageServiceUrl(
+  itemId: string,
+  options: ArcGISLayerOptions,
+): Promise<{ serviceUrl: string; sublayers?: string }> {
+  const itemInfo = await fetchArcGISPortalItemInfo(itemId, options, undefined);
+  if (!itemInfo.url) {
+    throw new Error("The ArcGIS portal item does not include a service URL.");
+  }
+  return resolveArcGISImageServiceUrl(itemInfo.url, options.layerType);
+}
+
+function stripArcGISUrlQuery(input: string): string {
+  const trimmed = input.trim();
+  const cut = trimmed.search(/[?#]/);
+  return cut === -1 ? trimmed : trimmed.slice(0, cut);
+}
+
+/**
+ * Normalize a sublayer selection to the comma-separated id list ArcGIS takes.
+ *
+ * A non-numeric entry throws rather than being dropped: silently ignoring it
+ * would draw the service's default sublayers, which looks like the selection
+ * was honored.
+ *
+ * @param value - The caller's raw `sublayers` input.
+ * @returns The normalized id list, or undefined when nothing was selected.
+ * @throws If the input contains anything that is not a sublayer id.
+ */
+function normalizeArcGISSublayers(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const ids = trimmed.split(/[\s,]+/).filter(Boolean);
+  if (!ids.every((id) => /^\d+$/.test(id))) {
+    throw new Error("Enter the MapServer sublayers as numeric ids, for example 0,2,5.");
+  }
+  return ids.join(",");
+}
+
+/**
+ * Validate an ImageServer rendering rule. ArcGIS answers an unparseable rule
+ * with an error image on every tile, so a bad rule is rejected up front where
+ * the message can still reach the dialog.
+ *
+ * @param value - The caller's raw `renderingRule` input.
+ * @returns The trimmed rule JSON, or undefined when none was supplied.
+ * @throws If the rule is not valid JSON.
+ */
+function validArcGISRenderingRule(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  try {
+    JSON.parse(trimmed);
+  } catch {
+    throw new Error('The rendering rule must be JSON, for example {"rasterFunction":"Hillshade"}.');
+  }
+  return trimmed;
+}
+
+/**
+ * The `/tile/{z}/{y}/{x}` template for a cached service.
+ *
+ * Built by hand rather than through `appendArcGISParams`: the WHATWG URL parser
+ * percent-encodes the braces, and MapLibre only substitutes literal `{z}`/`{x}`/
+ * `{y}` placeholders.
+ */
+function arcgisCachedTileUrl(serviceUrl: string, token: string | undefined): string {
+  const template = `${trimTrailingSlash(serviceUrl)}/tile/{z}/{y}/{x}`;
+  return token ? `${template}?token=${encodeURIComponent(token)}` : template;
+}
+
+/**
+ * The `/export` (MapServer) or `/exportImage` (ImageServer) request template for
+ * a service with no usable cache, as a MapLibre `{bbox-epsg-3857}` raster tile
+ * URL. `png32` with `transparent=true` keeps the service drawable as an overlay
+ * over the basemap rather than an opaque sheet.
+ */
+function arcgisExportTileUrl(
+  serviceUrl: string,
+  options: {
+    layerType: ArcGISLayerType;
+    renderingRule: string | undefined;
+    sublayers: string | undefined;
+    token: string | undefined;
+  },
+): string {
+  const isImageService = options.layerType === "image-service";
+  const size = `${ARCGIS_EXPORT_TILE_SIZE},${ARCGIS_EXPORT_TILE_SIZE}`;
+  const params: Array<[string, string]> = [
+    ["bbox", "{bbox-epsg-3857}"],
+    ["bboxSR", "3857"],
+    ["imageSR", "3857"],
+    ["size", size],
+    ["format", "png32"],
+    ["transparent", "true"],
+  ];
+  if (!isImageService) params.push(["dpi", "96"]);
+  if (!isImageService && options.sublayers) params.push(["layers", `show:${options.sublayers}`]);
+  if (isImageService && options.renderingRule) {
+    params.push(["renderingRule", options.renderingRule]);
+  }
+  if (options.token) params.push(["token", options.token]);
+  params.push(["f", "image"]);
+
+  const query = params
+    // The bbox placeholder is the one value MapLibre substitutes, so it has to
+    // survive as literal braces; everything else is encoded normally.
+    .map(
+      ([key, value]) =>
+        `${key}=${value === "{bbox-epsg-3857}" ? value : encodeURIComponent(value)}`,
+    )
+    .join("&");
+  return `${trimTrailingSlash(serviceUrl)}/${isImageService ? "exportImage" : "export"}?${query}`;
+}
+
+/**
+ * Read a service's tile cache as an XYZ scheme, when it is one.
+ *
+ * A fused cache is only usable as a MapLibre raster source if it was built on
+ * the standard Web Mercator scheme: the same projection, the same top-left
+ * origin, and resolutions that halve per level from the world-in-one-tile
+ * level 0. Caches in other projections or with custom LOD tables exist and would
+ * render misaligned, so anything that does not match falls back to `/export`,
+ * which is correct for every service.
+ *
+ * @param info - The service's `?f=json` description.
+ * @returns The tile size and zoom range, or null when the cache is not usable.
+ */
+function arcgisTileScheme(info: ArcGISImageProducingServiceInfo): ArcGISTileScheme | null {
+  const tileInfo = info.tileInfo;
+  if (info.singleFusedMapCache !== true || !tileInfo) return null;
+
+  const wkid = tileInfo.spatialReference?.latestWkid ?? tileInfo.spatialReference?.wkid;
+  if (wkid !== 3857 && wkid !== 102100 && wkid !== 102113) return null;
+
+  const tileSize = tileInfo.cols;
+  if (typeof tileSize !== "number" || tileSize !== tileInfo.rows) return null;
+  if (tileSize !== 256 && tileSize !== 512) return null;
+
+  const originX = tileInfo.origin?.x;
+  // One metre of slack: services round the origin to a varying number of places.
+  if (typeof originX !== "number" || Math.abs(originX - WEB_MERCATOR_ORIGIN_X) > 1) return null;
+
+  const levels = (tileInfo.lods ?? []).filter(
+    (lod): lod is { level: number; resolution: number } =>
+      typeof lod.level === "number" &&
+      Number.isFinite(lod.level) &&
+      typeof lod.resolution === "number" &&
+      lod.resolution > 0,
+  );
+  if (levels.length === 0) return null;
+
+  // Compare against the standard resolution for each level rather than assuming
+  // the cache starts at level 0 — plenty of caches begin partway down.
+  const level0Resolution = WEB_MERCATOR_LEVEL0_RESOLUTION * (256 / tileSize);
+  const matchesScheme = levels.every((lod) => {
+    const expected = level0Resolution / 2 ** lod.level;
+    return Math.abs(lod.resolution - expected) / expected < 0.01;
+  });
+  if (!matchesScheme) return null;
+
+  return {
+    maxzoom: Math.max(...levels.map((lod) => lod.level)),
+    minzoom: Math.min(...levels.map((lod) => lod.level)),
+    tileSize,
+  };
 }
 
 /**
@@ -1041,7 +1453,9 @@ function layerNameFromArcGISInput(input: string, fallback: string): string {
   try {
     const url = new URL(input);
     const parts = url.pathname.split("/").filter(Boolean);
-    const serverIndex = parts.findIndex((part) => /^(FeatureServer|VectorTileServer)$/i.test(part));
+    const serverIndex = parts.findIndex((part) =>
+      /^(FeatureServer|VectorTileServer|MapServer|ImageServer)$/i.test(part),
+    );
     const namePart = serverIndex > 0 ? parts[serverIndex - 1] : parts[parts.length - 1];
     return decodeURIComponent(namePart ?? "").replaceAll("_", " ") || fallback;
   } catch {

@@ -303,7 +303,7 @@
       },
       "arcgis": {
         "label": "Add ArcGIS Layer",
-        "description": "Add an ArcGIS FeatureServer layer, VectorTileServer layer, or portal item."
+        "description": "Add an ArcGIS FeatureServer, VectorTileServer, MapServer, or ImageServer layer, or a portal item."
       },
       "postgres": {
         "label": "Add PostgreSQL Layer",
@@ -469,11 +469,23 @@
       "defaultName": "ArcGIS Layer",
       "sampleFeatureLabel": "US major cities (feature)",
       "sampleVectorTileLabel": "Santa Monica parcels (vector tiles)",
+      "sampleMapServiceLabel": "US boundaries (map service)",
+      "sampleImageServiceLabel": "USGS 3DEP hillshade (image service)",
       "featureLayer": "Feature layer",
       "vectorTileLayer": "Vector tile layer",
+      "mapServiceLayer": "Map service",
+      "imageServiceLayer": "Image service",
       "portalItemId": "Portal item ID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Sublayers",
+      "sublayersPlaceholder": "All visible sublayers",
+      "sublayersHint": "Optional comma-separated sublayer ids, for example 0,2,5. Selecting sublayers draws the service dynamically instead of using its cached tiles.",
+      "renderingRule": "Rendering rule",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "Optional raster function JSON applied by the service. A rendering rule draws the service dynamically instead of using its cached tiles.",
       "portalUrl": "Portal URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "Access token",

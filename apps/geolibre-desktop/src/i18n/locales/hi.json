@@ -299,7 +299,7 @@
       },
       "arcgis": {
         "label": "ArcGIS लेयर जोड़ें",
-        "description": "एक ArcGIS FeatureServer लेयर, VectorTileServer लेयर, या पोर्टल आइटम जोड़ें।"
+        "description": "ArcGIS FeatureServer, VectorTileServer, MapServer या ImageServer लेयर, या पोर्टल आइटम जोड़ें।"
       },
       "postgres": {
         "label": "PostgreSQL लेयर जोड़ें",
@@ -447,11 +447,23 @@
       "defaultName": "ArcGIS लेयर",
       "sampleFeatureLabel": "US प्रमुख शहर (फ़ीचर)",
       "sampleVectorTileLabel": "Santa Monica पार्सल (वेक्टर टाइल्स)",
+      "sampleMapServiceLabel": "US सीमाएँ (मैप सेवा)",
+      "sampleImageServiceLabel": "USGS 3DEP हिलशेड (इमेज सेवा)",
       "featureLayer": "फ़ीचर लेयर",
       "vectorTileLayer": "वेक्टर टाइल लेयर",
+      "mapServiceLayer": "मैप सेवा",
+      "imageServiceLayer": "इमेज सेवा",
       "portalItemId": "पोर्टल आइटम ID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "उप-लेयर",
+      "sublayersPlaceholder": "सभी दृश्य उप-लेयर",
+      "sublayersHint": "वैकल्पिक अल्पविराम से अलग किए गए उप-लेयर आईडी, जैसे 0,2,5. उप-लेयर चुनने पर सेवा कैश की गई टाइल्स के बजाय गतिशील रूप से बनाई जाती है।",
+      "renderingRule": "रेंडरिंग नियम",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "सेवा द्वारा लागू किया जाने वाला वैकल्पिक रास्टर फ़ंक्शन JSON. रेंडरिंग नियम देने पर सेवा कैश की गई टाइल्स के बजाय गतिशील रूप से बनाई जाती है।",
       "portalUrl": "पोर्टल URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "एक्सेस टोकन"

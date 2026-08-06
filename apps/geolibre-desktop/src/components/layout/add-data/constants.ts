@@ -120,9 +120,20 @@ export const DEFAULT_ARCGIS_FEATURE_URL =
   "https://services3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/USA_Major_Cities/FeatureServer/0";
 export const DEFAULT_ARCGIS_VECTOR_TILE_URL =
   "https://vectortileservices3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/Santa_Monica_parcels_VTL/VectorTileServer";
+// USGS National Boundaries Dataset (states, counties, tribal and federal areas).
+// A keyless *dynamic* (uncached) MapServer, so it exercises the `/export` path
+// rather than a tile cache.
+export const DEFAULT_ARCGIS_MAP_SERVICE_URL =
+  "https://carto.nationalmap.gov/arcgis/rest/services/govunits/MapServer";
+// USGS 3DEP bare-earth elevation, a keyless ImageServer that renders through
+// `/exportImage` (it has no tile cache) and accepts rendering rules.
+export const DEFAULT_ARCGIS_IMAGE_SERVICE_URL =
+  "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer";
 export const DEFAULT_ARCGIS_URLS: Record<ArcGISLayerType, string> = {
   feature: DEFAULT_ARCGIS_FEATURE_URL,
   "vector-tile": DEFAULT_ARCGIS_VECTOR_TILE_URL,
+  "map-service": DEFAULT_ARCGIS_MAP_SERVICE_URL,
+  "image-service": DEFAULT_ARCGIS_IMAGE_SERVICE_URL,
 };
 // Keep in sync with GPX_PROXY_PATH in vite.config.ts (the dev proxy binds it there).
 export const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";

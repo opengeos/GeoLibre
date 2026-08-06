@@ -297,7 +297,7 @@
       },
       "arcgis": {
         "label": "ArcGISレイヤーを追加",
-        "description": "ArcGISのFeatureServerレイヤー、VectorTileServerレイヤー、またはポータルアイテムを追加します。"
+        "description": "ArcGIS の FeatureServer、VectorTileServer、MapServer、ImageServer レイヤー、またはポータル アイテムを追加します。"
       },
       "postgres": {
         "label": "PostgreSQLレイヤーを追加",
@@ -441,11 +441,23 @@
       "defaultName": "ArcGISレイヤー",
       "sampleFeatureLabel": "米国の主要都市(フィーチャ)",
       "sampleVectorTileLabel": "サンタモニカの地籍(ベクタータイル)",
+      "sampleMapServiceLabel": "米国の行政界(マップサービス)",
+      "sampleImageServiceLabel": "USGS 3DEP 陰影起伏(イメージサービス)",
       "featureLayer": "フィーチャレイヤー",
       "vectorTileLayer": "ベクタータイルレイヤー",
+      "mapServiceLayer": "マップサービス",
+      "imageServiceLayer": "イメージサービス",
       "portalItemId": "ポータルアイテムID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "サブレイヤー",
+      "sublayersPlaceholder": "表示中のすべてのサブレイヤー",
+      "sublayersHint": "任意のサブレイヤー ID をカンマ区切りで指定します(例: 0,2,5)。サブレイヤーを選ぶと、キャッシュされたタイルではなく動的な描画になります。",
+      "renderingRule": "レンダリング ルール",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "サービスが適用するラスター関数の JSON(任意)。レンダリング ルールを指定すると、キャッシュされたタイルではなく動的な描画になります。",
       "portalUrl": "ポータルURL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "アクセストークン"

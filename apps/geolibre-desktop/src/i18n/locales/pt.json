@@ -299,7 +299,7 @@
       },
       "arcgis": {
         "label": "Adicionar camada ArcGIS",
-        "description": "Adicione uma camada ArcGIS FeatureServer, camada VectorTileServer ou item de portal."
+        "description": "Adicione uma camada ArcGIS FeatureServer, VectorTileServer, MapServer ou ImageServer, ou um item de portal."
       },
       "postgres": {
         "label": "Adicionar camada PostgreSQL",
@@ -447,11 +447,23 @@
       "defaultName": "Camada ArcGIS",
       "sampleFeatureLabel": "Principais cidades dos EUA (feição)",
       "sampleVectorTileLabel": "Lotes de Santa Monica (tiles vetoriais)",
+      "sampleMapServiceLabel": "Limites dos EUA (serviço de mapa)",
+      "sampleImageServiceLabel": "Sombreamento USGS 3DEP (serviço de imagem)",
       "featureLayer": "Camada de feições",
       "vectorTileLayer": "Camada de tiles vetoriais",
+      "mapServiceLayer": "Serviço de mapa",
+      "imageServiceLayer": "Serviço de imagem",
       "portalItemId": "ID do item do portal",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Subcamadas",
+      "sublayersPlaceholder": "Todas as subcamadas visíveis",
+      "sublayersHint": "Ids de subcamadas opcionais separados por vírgulas, por exemplo 0,2,5. Selecionar subcamadas desenha o serviço dinamicamente em vez de usar seus tiles em cache.",
+      "renderingRule": "Regra de renderização",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "JSON opcional de uma função raster aplicada pelo serviço. Uma regra de renderização desenha o serviço dinamicamente em vez de usar seus tiles em cache.",
       "portalUrl": "URL do portal",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "Token de acesso"

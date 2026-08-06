@@ -297,7 +297,7 @@
       },
       "arcgis": {
         "label": "添加 ArcGIS 图层",
-        "description": "添加 ArcGIS FeatureServer 图层、VectorTileServer 图层或门户项目。"
+        "description": "添加 ArcGIS FeatureServer、VectorTileServer、MapServer 或 ImageServer 图层，或门户项目。"
       },
       "postgres": {
         "label": "添加 PostgreSQL 图层",
@@ -441,11 +441,23 @@
       "defaultName": "ArcGIS 图层",
       "sampleFeatureLabel": "美国主要城市（要素）",
       "sampleVectorTileLabel": "圣莫尼卡地块（矢量瓦片）",
+      "sampleMapServiceLabel": "美国行政边界（地图服务）",
+      "sampleImageServiceLabel": "USGS 3DEP 山体阴影（影像服务）",
       "featureLayer": "要素图层",
       "vectorTileLayer": "矢量瓦片图层",
+      "mapServiceLayer": "地图服务",
+      "imageServiceLayer": "影像服务",
       "portalItemId": "门户项目 ID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "子图层",
+      "sublayersPlaceholder": "所有可见子图层",
+      "sublayersHint": "可选的子图层 ID，以逗号分隔，例如 0,2,5。选择子图层后将动态绘制该服务，而不使用其缓存切片。",
+      "renderingRule": "渲染规则",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "可选的栅格函数 JSON，由服务端应用。设置渲染规则后将动态绘制该服务，而不使用其缓存切片。",
       "portalUrl": "门户 URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "访问令牌"

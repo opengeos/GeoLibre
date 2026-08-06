@@ -297,7 +297,7 @@
       },
       "arcgis": {
         "label": "ArcGIS 레이어 추가",
-        "description": "ArcGIS FeatureServer 레이어, VectorTileServer 레이어, 또는 포털 항목을 추가합니다."
+        "description": "ArcGIS FeatureServer, VectorTileServer, MapServer, ImageServer 레이어 또는 포털 항목을 추가합니다."
       },
       "postgres": {
         "label": "PostgreSQL 레이어 추가",
@@ -441,11 +441,23 @@
       "defaultName": "ArcGIS 레이어",
       "sampleFeatureLabel": "미국 주요 도시(피처)",
       "sampleVectorTileLabel": "산타모니카 필지(벡터 타일)",
+      "sampleMapServiceLabel": "미국 행정 경계(맵 서비스)",
+      "sampleImageServiceLabel": "USGS 3DEP 음영기복(이미지 서비스)",
       "featureLayer": "피처 레이어",
       "vectorTileLayer": "벡터 타일 레이어",
+      "mapServiceLayer": "맵 서비스",
+      "imageServiceLayer": "이미지 서비스",
       "portalItemId": "포털 항목 ID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "하위 레이어",
+      "sublayersPlaceholder": "표시된 모든 하위 레이어",
+      "sublayersHint": "선택 사항인 하위 레이어 ID를 쉼표로 구분해 입력합니다(예: 0,2,5). 하위 레이어를 선택하면 캐시된 타일 대신 서비스를 동적으로 그립니다.",
+      "renderingRule": "렌더링 규칙",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "서비스가 적용하는 래스터 함수 JSON(선택 사항)입니다. 렌더링 규칙을 지정하면 캐시된 타일 대신 서비스를 동적으로 그립니다.",
       "portalUrl": "포털 URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "액세스 토큰"

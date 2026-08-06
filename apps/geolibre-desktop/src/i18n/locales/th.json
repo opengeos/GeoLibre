@@ -301,7 +301,7 @@
       },
       "arcgis": {
         "label": "เพิ่มเลเยอร์ ArcGIS",
-        "description": "เพิ่มเลเยอร์ ArcGIS FeatureServer, เลเยอร์ VectorTileServer หรือรายการจากพอร์ทัล"
+        "description": "เพิ่มเลเยอร์ ArcGIS แบบ FeatureServer, VectorTileServer, MapServer หรือ ImageServer หรือรายการพอร์ทัล"
       },
       "postgres": {
         "label": "เพิ่มเลเยอร์ PostgreSQL",
@@ -462,11 +462,23 @@
       "defaultName": "เลเยอร์ ArcGIS",
       "sampleFeatureLabel": "เมืองสำคัญของสหรัฐฯ (ฟีเจอร์)",
       "sampleVectorTileLabel": "แปลงที่ดินซานตาโมนิกา (ไทล์เวกเตอร์)",
+      "sampleMapServiceLabel": "ขอบเขตการปกครองสหรัฐฯ (บริการแผนที่)",
+      "sampleImageServiceLabel": "ภาพเงาภูมิประเทศ USGS 3DEP (บริการภาพ)",
       "featureLayer": "เลเยอร์ฟีเจอร์",
       "vectorTileLayer": "เลเยอร์ไทล์เวกเตอร์",
+      "mapServiceLayer": "บริการแผนที่",
+      "imageServiceLayer": "บริการภาพ",
       "portalItemId": "รหัสรายการในพอร์ทัล",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "เลเยอร์ย่อย",
+      "sublayersPlaceholder": "เลเยอร์ย่อยที่แสดงทั้งหมด",
+      "sublayersHint": "ระบุรหัสเลเยอร์ย่อยคั่นด้วยจุลภาคได้ตามต้องการ เช่น 0,2,5 การเลือกเลเยอร์ย่อยจะวาดบริการแบบไดนามิกแทนการใช้ไทล์ที่แคชไว้",
+      "renderingRule": "กฎการเรนเดอร์",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "JSON ของฟังก์ชันแรสเตอร์ที่บริการนำไปใช้ (ไม่บังคับ) การกำหนดกฎการเรนเดอร์จะวาดบริการแบบไดนามิกแทนการใช้ไทล์ที่แคชไว้",
       "portalUrl": "URL ของพอร์ทัล",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "โทเค็นการเข้าถึง"

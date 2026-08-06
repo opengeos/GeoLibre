@@ -299,7 +299,7 @@
       },
       "arcgis": {
         "label": "ArcGIS-Ebene hinzufügen",
-        "description": "Fügt eine ArcGIS-FeatureServer-Ebene, VectorTileServer-Ebene oder ein Portalelement hinzu."
+        "description": "ArcGIS-Ebene von einem FeatureServer, VectorTileServer, MapServer oder ImageServer oder ein Portalelement hinzufügen."
       },
       "postgres": {
         "label": "PostgreSQL-Ebene hinzufügen",
@@ -447,11 +447,23 @@
       "defaultName": "ArcGIS-Ebene",
       "sampleFeatureLabel": "Große US-Städte (Feature)",
       "sampleVectorTileLabel": "Flurstücke Santa Monica (Vektorkacheln)",
+      "sampleMapServiceLabel": "US-Grenzen (Kartendienst)",
+      "sampleImageServiceLabel": "USGS-3DEP-Schummerung (Bilddienst)",
       "featureLayer": "Feature-Ebene",
       "vectorTileLayer": "Vektorkachelebene",
+      "mapServiceLayer": "Kartendienst",
+      "imageServiceLayer": "Bilddienst",
       "portalItemId": "Portalelement-ID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Unterebenen",
+      "sublayersPlaceholder": "Alle sichtbaren Unterebenen",
+      "sublayersHint": "Optionale kommagetrennte IDs der Unterebenen, zum Beispiel 0,2,5. Eine Auswahl zeichnet den Dienst dynamisch statt über seine zwischengespeicherten Kacheln.",
+      "renderingRule": "Rendering-Regel",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "Optionales JSON einer Rasterfunktion, die der Dienst anwendet. Eine Rendering-Regel zeichnet den Dienst dynamisch statt über seine zwischengespeicherten Kacheln.",
       "portalUrl": "Portal-URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "Zugriffstoken"

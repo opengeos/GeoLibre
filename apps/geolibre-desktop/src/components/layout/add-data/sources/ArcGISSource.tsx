@@ -1,4 +1,9 @@
-import { addArcGISLayer, type ArcGISLayerType, type ArcGISSourceType } from "@geolibre/plugins";
+import {
+  addArcGISLayer,
+  parseArcGISLayerType,
+  type ArcGISLayerType,
+  type ArcGISSourceType,
+} from "@geolibre/plugins";
 import { Input, Label, Select } from "@geolibre/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -22,6 +27,14 @@ function positiveCount(value: string): number | undefined {
   return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : undefined;
 }
 
+/** The example URL shown for each layer type, so the expected endpoint is clear. */
+const URL_PLACEHOLDER_KEYS = {
+  feature: "addData.arcgis.featureUrlPlaceholder",
+  "vector-tile": "addData.arcgis.vectorTileUrlPlaceholder",
+  "map-service": "addData.arcgis.mapServiceUrlPlaceholder",
+  "image-service": "addData.arcgis.imageServiceUrlPlaceholder",
+} as const satisfies Record<ArcGISLayerType, string>;
+
 export function ArcGISSource() {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.arcgis.defaultName"));
@@ -33,6 +46,8 @@ export function ArcGISSource() {
   const [arcgisAccessToken, setArcgisAccessToken] = useState("");
   const [arcgisPageSize, setArcgisPageSize] = useState("");
   const [arcgisMaxFeatures, setArcgisMaxFeatures] = useState("");
+  const [arcgisSublayers, setArcgisSublayers] = useState("");
+  const [arcgisRenderingRule, setArcgisRenderingRule] = useState("");
   const [progress, setProgress] = useState<{ loaded: number; total: number | null } | null>(null);
 
   // The access token is intentionally excluded from saved fields — credentials
@@ -45,12 +60,12 @@ export function ArcGISSource() {
     portalUrl: arcgisPortalUrl,
     pageSize: arcgisPageSize,
     maxFeatures: arcgisMaxFeatures,
+    sublayers: arcgisSublayers,
+    renderingRule: arcgisRenderingRule,
   });
 
   const applyFields = (fields: ServiceFields) => {
-    setArcgisLayerType(
-      serviceFieldString(fields, "layerType") === "vector-tile" ? "vector-tile" : "feature",
-    );
+    setArcgisLayerType(parseArcGISLayerType(serviceFieldString(fields, "layerType")));
     setArcgisSourceType(
       serviceFieldString(fields, "sourceType") === "portal-item" ? "portal-item" : "url",
     );
@@ -59,6 +74,8 @@ export function ArcGISSource() {
     setArcgisPortalUrl(serviceFieldString(fields, "portalUrl"));
     setArcgisPageSize(serviceFieldString(fields, "pageSize"));
     setArcgisMaxFeatures(serviceFieldString(fields, "maxFeatures"));
+    setArcgisSublayers(serviceFieldString(fields, "sublayers"));
+    setArcgisRenderingRule(serviceFieldString(fields, "renderingRule"));
     // Tokens are never saved, so clear any token typed for a previous entry to
     // avoid sending it to the newly selected service's endpoint.
     setArcgisAccessToken("");
@@ -89,7 +106,9 @@ export function ArcGISSource() {
         onProgress: (loaded, total) => setProgress({ loaded, total }),
         pageSize: positiveCount(arcgisPageSize),
         portalUrl: arcgisPortalUrl.trim() || undefined,
+        renderingRule: arcgisRenderingRule.trim() || undefined,
         sourceType: arcgisSourceType,
+        sublayers: arcgisSublayers.trim() || undefined,
         token: arcgisAccessToken.trim() || undefined,
         url: arcgisUrl.trim() || undefined,
       });
@@ -131,6 +150,8 @@ export function ArcGISSource() {
             >
               <option value="feature">{t("addData.arcgis.featureLayer")}</option>
               <option value="vector-tile">{t("addData.arcgis.vectorTileLayer")}</option>
+              <option value="map-service">{t("addData.arcgis.mapServiceLayer")}</option>
+              <option value="image-service">{t("addData.arcgis.imageServiceLayer")}</option>
             </Select>
           </div>
           <div className="space-y-1.5">
@@ -150,11 +171,7 @@ export function ArcGISSource() {
             <Label htmlFor="arcgis-url">{t("addData.common.serviceUrl")}</Label>
             <Input
               id="arcgis-url"
-              placeholder={
-                arcgisLayerType === "feature"
-                  ? t("addData.arcgis.featureUrlPlaceholder")
-                  : t("addData.arcgis.vectorTileUrlPlaceholder")
-              }
+              placeholder={t(URL_PLACEHOLDER_KEYS[arcgisLayerType])}
               value={arcgisUrl}
               onChange={(event) => setArcgisUrl(event.target.value)}
             />
@@ -222,6 +239,30 @@ export function ArcGISSource() {
             <p className="text-xs text-muted-foreground">{t("addData.arcgis.pagingHint")}</p>
           </div>
         ) : null}
+        {arcgisLayerType === "map-service" ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="arcgis-sublayers">{t("addData.arcgis.sublayers")}</Label>
+            <Input
+              id="arcgis-sublayers"
+              placeholder={t("addData.arcgis.sublayersPlaceholder")}
+              value={arcgisSublayers}
+              onChange={(event) => setArcgisSublayers(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">{t("addData.arcgis.sublayersHint")}</p>
+          </div>
+        ) : null}
+        {arcgisLayerType === "image-service" ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="arcgis-rendering-rule">{t("addData.arcgis.renderingRule")}</Label>
+            <Input
+              id="arcgis-rendering-rule"
+              placeholder={t("addData.arcgis.renderingRulePlaceholder")}
+              value={arcgisRenderingRule}
+              onChange={(event) => setArcgisRenderingRule(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">{t("addData.arcgis.renderingRuleHint")}</p>
+          </div>
+        ) : null}
         {/* Mounted for the life of the panel, not only while a download runs:
             several screen readers ignore a live region that appears together
             with its first text. `sr-only` keeps the empty state out of the
@@ -255,6 +296,26 @@ export function ArcGISSource() {
                 layerType: "vector-tile",
                 sourceType: "url",
                 url: DEFAULT_ARCGIS_URLS["vector-tile"],
+              },
+            },
+            {
+              label: t("addData.arcgis.sampleMapServiceLabel"),
+              value: {
+                layerType: "map-service",
+                sourceType: "url",
+                url: DEFAULT_ARCGIS_URLS["map-service"],
+              },
+            },
+            {
+              label: t("addData.arcgis.sampleImageServiceLabel"),
+              value: {
+                layerType: "image-service",
+                sourceType: "url",
+                url: DEFAULT_ARCGIS_URLS["image-service"],
+                // 3DEP is a single-band elevation service, so the default
+                // grayscale stretch reads as a flat gray sheet. The hillshade
+                // rule is what makes the sample look like terrain.
+                renderingRule: '{"rasterFunction":"Hillshade"}',
               },
             },
           ]}

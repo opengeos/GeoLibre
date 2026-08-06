@@ -307,7 +307,7 @@
       },
       "arcgis": {
         "label": "إضافة طبقة ArcGIS",
-        "description": "إضافة طبقة من ArcGIS FeatureServer، أو طبقة VectorTileServer، أو عنصر بوابة."
+        "description": "أضف طبقة ArcGIS من نوع FeatureServer أو VectorTileServer أو MapServer أو ImageServer، أو عنصر بوابة."
       },
       "postgres": {
         "label": "إضافة طبقة PostgreSQL",
@@ -471,11 +471,23 @@
       "defaultName": "طبقة ArcGIS",
       "sampleFeatureLabel": "المدن الأمريكية الكبرى (معالم)",
       "sampleVectorTileLabel": "قطع أراضي سانتا مونيكا (بلاطات متجهة)",
+      "sampleMapServiceLabel": "حدود الولايات المتحدة (خدمة خرائط)",
+      "sampleImageServiceLabel": "تظليل تضاريس USGS 3DEP (خدمة صور)",
       "featureLayer": "طبقة معالم",
       "vectorTileLayer": "طبقة بلاطات متجهة",
+      "mapServiceLayer": "خدمة خرائط",
+      "imageServiceLayer": "خدمة صور",
       "portalItemId": "معرّف عنصر البوابة",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "الطبقات الفرعية",
+      "sublayersPlaceholder": "كل الطبقات الفرعية الظاهرة",
+      "sublayersHint": "معرفات طبقات فرعية اختيارية مفصولة بفواصل، مثل 0,2,5. اختيار طبقات فرعية يرسم الخدمة ديناميكيًا بدلًا من استخدام بلاطاتها المخزنة.",
+      "renderingRule": "قاعدة العرض",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "JSON اختياري لدالة راستر تطبقها الخدمة. قاعدة العرض ترسم الخدمة ديناميكيًا بدلًا من استخدام بلاطاتها المخزنة.",
       "portalUrl": "عنوان URL للبوابة",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "رمز الوصول"

@@ -303,7 +303,7 @@
       },
       "arcgis": {
         "label": "ArcGIS შრის დამატება",
-        "description": "დაამატეთ ArcGIS FeatureServer შრე, VectorTileServer შრე ან პორტალის ელემენტი."
+        "description": "დაამატეთ ArcGIS-ის FeatureServer, VectorTileServer, MapServer ან ImageServer შრე, ან პორტალის ელემენტი."
       },
       "postgres": {
         "label": "PostgreSQL შრის დამატება",
@@ -469,11 +469,23 @@
       "defaultName": "ArcGIS შრე",
       "sampleFeatureLabel": "აშშ-ის მსხვილი ქალაქები (ობიექტები)",
       "sampleVectorTileLabel": "Santa Monica-ის ნაკვეთები (ვექტორული ფილები)",
+      "sampleMapServiceLabel": "აშშ-ის საზღვრები (რუკის სერვისი)",
+      "sampleImageServiceLabel": "USGS 3DEP დაჩრდილვა (გამოსახულების სერვისი)",
       "featureLayer": "ობიექტების შრე",
       "vectorTileLayer": "ვექტორული ფილების შრე",
+      "mapServiceLayer": "რუკის სერვისი",
+      "imageServiceLayer": "გამოსახულების სერვისი",
       "portalItemId": "პორტალის ელემენტის ID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "ქვეშრეები",
+      "sublayersPlaceholder": "ყველა ხილული ქვეშრე",
+      "sublayersHint": "არასავალდებულო ქვეშრეების id-ები მძიმით გამოყოფილი, მაგალითად 0,2,5. ქვეშრეების არჩევისას სერვისი დინამიკურად დაიხატება ქეშირებული ფილების ნაცვლად.",
+      "renderingRule": "რენდერის წესი",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "არასავალდებულო რასტრული ფუნქციის JSON, რომელსაც სერვისი იყენებს. რენდერის წესის მითითებისას სერვისი დინამიკურად დაიხატება ქეშირებული ფილების ნაცვლად.",
       "portalUrl": "პორტალის URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "წვდომის ტოკენი"

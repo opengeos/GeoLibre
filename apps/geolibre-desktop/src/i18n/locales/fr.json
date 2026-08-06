@@ -299,7 +299,7 @@
       },
       "arcgis": {
         "label": "Ajouter une couche ArcGIS",
-        "description": "Ajouter une couche ArcGIS FeatureServer, une couche VectorTileServer, ou un élément de portail."
+        "description": "Ajouter une couche ArcGIS FeatureServer, VectorTileServer, MapServer ou ImageServer, ou un élément de portail."
       },
       "postgres": {
         "label": "Ajouter une couche PostgreSQL",
@@ -447,11 +447,23 @@
       "defaultName": "Couche ArcGIS",
       "sampleFeatureLabel": "Grandes villes américaines (entités)",
       "sampleVectorTileLabel": "Parcelles de Santa Monica (tuiles vectorielles)",
+      "sampleMapServiceLabel": "Limites administratives des États-Unis (service de carte)",
+      "sampleImageServiceLabel": "Ombrage USGS 3DEP (service d'imagerie)",
       "featureLayer": "Couche d'entités",
       "vectorTileLayer": "Couche de tuiles vectorielles",
+      "mapServiceLayer": "Service de carte",
+      "imageServiceLayer": "Service d'imagerie",
       "portalItemId": "ID de l'élément du portail",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Sous-couches",
+      "sublayersPlaceholder": "Toutes les sous-couches visibles",
+      "sublayersHint": "Identifiants de sous-couches facultatifs séparés par des virgules, par exemple 0,2,5. Sélectionner des sous-couches dessine le service dynamiquement au lieu d'utiliser ses tuiles en cache.",
+      "renderingRule": "Règle de rendu",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "JSON facultatif d'une fonction raster appliquée par le service. Une règle de rendu dessine le service dynamiquement au lieu d'utiliser ses tuiles en cache.",
       "portalUrl": "URL du portail",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "Jeton d'accès"

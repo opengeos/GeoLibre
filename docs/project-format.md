@@ -277,7 +277,7 @@ layer), falling back to `style.textColor` when a feature does not set it.
 | `raster`         | Supported for raster tile templates                                                                |
 | `vector-tiles`   | Supported for MapLibre vector tile sources                                                         |
 | `mbtiles`        | Supported in the desktop app through a local MapLibre protocol                                     |
-| `arcgis`         | Supported for ArcGIS FeatureServer and VectorTileServer layers                                     |
+| `arcgis`         | Supported for ArcGIS VectorTileServer layers (FeatureServer layers are saved as `geojson`, and MapServer/ImageServer layers as `raster`) |
 | `pmtiles`        | Supported through the Components plugin                                                            |
 | `cog`            | Supported for COG and GeoTIFF raster layers                                                        |
 | `flatgeobuf`     | Supported through the Components plugin and imported as GeoJSON when loaded as a local vector file |

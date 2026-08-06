@@ -299,7 +299,7 @@
       },
       "arcgis": {
         "label": "Aggiungi livello ArcGIS",
-        "description": "Aggiungi un livello ArcGIS FeatureServer, un livello VectorTileServer o un elemento del portale."
+        "description": "Aggiungi un livello ArcGIS FeatureServer, VectorTileServer, MapServer o ImageServer, oppure un elemento del portale."
       },
       "postgres": {
         "label": "Aggiungi livello PostgreSQL",
@@ -447,11 +447,23 @@
       "defaultName": "Livello ArcGIS",
       "sampleFeatureLabel": "Principali città USA (elementi)",
       "sampleVectorTileLabel": "Particelle di Santa Monica (tile vettoriali)",
+      "sampleMapServiceLabel": "Confini degli USA (servizio mappa)",
+      "sampleImageServiceLabel": "Ombreggiatura USGS 3DEP (servizio immagini)",
       "featureLayer": "Livello di elementi",
       "vectorTileLayer": "Livello di tile vettoriali",
+      "mapServiceLayer": "Servizio mappa",
+      "imageServiceLayer": "Servizio immagini",
       "portalItemId": "ID elemento del portale",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Sottolivelli",
+      "sublayersPlaceholder": "Tutti i sottolivelli visibili",
+      "sublayersHint": "Id dei sottolivelli facoltativi separati da virgole, ad esempio 0,2,5. Selezionare i sottolivelli disegna il servizio in modo dinamico anziché usare le sue tile in cache.",
+      "renderingRule": "Regola di rendering",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "JSON facoltativo di una funzione raster applicata dal servizio. Una regola di rendering disegna il servizio in modo dinamico anziché usare le sue tile in cache.",
       "portalUrl": "URL del portale",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "Token di accesso"

@@ -297,7 +297,7 @@
       },
       "arcgis": {
         "label": "Tambahkan Layer ArcGIS",
-        "description": "Tambahkan layer ArcGIS FeatureServer, layer VectorTileServer, atau item portal."
+        "description": "Tambahkan layer ArcGIS FeatureServer, VectorTileServer, MapServer, atau ImageServer, atau item portal."
       },
       "postgres": {
         "label": "Tambahkan Layer PostgreSQL",
@@ -441,11 +441,23 @@
       "defaultName": "Layer ArcGIS",
       "sampleFeatureLabel": "Kota-kota besar AS (fitur)",
       "sampleVectorTileLabel": "Bidang tanah Santa Monica (ubin vektor)",
+      "sampleMapServiceLabel": "Batas wilayah AS (layanan peta)",
+      "sampleImageServiceLabel": "Hillshade USGS 3DEP (layanan citra)",
       "featureLayer": "Layer fitur",
       "vectorTileLayer": "Layer ubin vektor",
+      "mapServiceLayer": "Layanan peta",
+      "imageServiceLayer": "Layanan citra",
       "portalItemId": "ID item portal",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Sublayer",
+      "sublayersPlaceholder": "Semua sublayer yang terlihat",
+      "sublayersHint": "Id sublayer opsional dipisahkan koma, misalnya 0,2,5. Memilih sublayer menggambar layanan secara dinamis alih-alih memakai ubin cache-nya.",
+      "renderingRule": "Aturan render",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "JSON fungsi raster opsional yang diterapkan layanan. Aturan render menggambar layanan secara dinamis alih-alih memakai ubin cache-nya.",
       "portalUrl": "URL portal",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "Token akses"

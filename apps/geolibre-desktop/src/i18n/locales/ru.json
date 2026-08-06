@@ -303,7 +303,7 @@
       },
       "arcgis": {
         "label": "Добавить слой ArcGIS",
-        "description": "Добавить слой ArcGIS FeatureServer, VectorTileServer или элемент портала."
+        "description": "Добавьте слой ArcGIS FeatureServer, VectorTileServer, MapServer или ImageServer либо элемент портала."
       },
       "postgres": {
         "label": "Добавить слой PostgreSQL",
@@ -459,11 +459,23 @@
       "defaultName": "Слой ArcGIS",
       "sampleFeatureLabel": "Крупные города США (объектный)",
       "sampleVectorTileLabel": "Участки Санта-Моники (векторные тайлы)",
+      "sampleMapServiceLabel": "Границы США (сервис карт)",
+      "sampleImageServiceLabel": "Отмывка рельефа USGS 3DEP (сервис изображений)",
       "featureLayer": "Объектный слой",
       "vectorTileLayer": "Слой векторных тайлов",
+      "mapServiceLayer": "Сервис карт",
+      "imageServiceLayer": "Сервис изображений",
       "portalItemId": "ID элемента портала",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Подслои",
+      "sublayersPlaceholder": "Все видимые подслои",
+      "sublayersHint": "Необязательные идентификаторы подслоёв через запятую, например 0,2,5. Выбор подслоёв отрисовывает сервис динамически вместо использования его кэшированных тайлов.",
+      "renderingRule": "Правило отрисовки",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "Необязательный JSON растровой функции, применяемой сервисом. Правило отрисовки отрисовывает сервис динамически вместо использования его кэшированных тайлов.",
       "portalUrl": "URL портала",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "Токен доступа"

@@ -299,7 +299,7 @@
       },
       "arcgis": {
         "label": "Añadir capa de ArcGIS",
-        "description": "Añade una capa FeatureServer de ArcGIS, una capa VectorTileServer o un elemento del portal."
+        "description": "Añade una capa de ArcGIS FeatureServer, VectorTileServer, MapServer o ImageServer, o un elemento de portal."
       },
       "postgres": {
         "label": "Añadir capa de PostgreSQL",
@@ -447,11 +447,23 @@
       "defaultName": "Capa de ArcGIS",
       "sampleFeatureLabel": "Principales ciudades de EE. UU. (entidades)",
       "sampleVectorTileLabel": "Parcelas de Santa Monica (teselas vectoriales)",
+      "sampleMapServiceLabel": "Límites de EE. UU. (servicio de mapas)",
+      "sampleImageServiceLabel": "Relieve sombreado USGS 3DEP (servicio de imágenes)",
       "featureLayer": "Capa de entidades",
       "vectorTileLayer": "Capa de teselas vectoriales",
+      "mapServiceLayer": "Servicio de mapas",
+      "imageServiceLayer": "Servicio de imágenes",
       "portalItemId": "ID del elemento del portal",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Subcapas",
+      "sublayersPlaceholder": "Todas las subcapas visibles",
+      "sublayersHint": "Ids de subcapas opcionales separados por comas, por ejemplo 0,2,5. Seleccionar subcapas dibuja el servicio de forma dinámica en lugar de usar sus teselas en caché.",
+      "renderingRule": "Regla de representación",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "JSON opcional de una función ráster que aplica el servicio. Una regla de representación dibuja el servicio de forma dinámica en lugar de usar sus teselas en caché.",
       "portalUrl": "URL del portal",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "Token de acceso"

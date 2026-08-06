@@ -299,7 +299,7 @@
       },
       "arcgis": {
         "label": "ArcGIS-laag toevoegen",
-        "description": "Voeg een ArcGIS FeatureServer-laag, VectorTileServer-laag of portalitem toe."
+        "description": "Voeg een ArcGIS FeatureServer-, VectorTileServer-, MapServer- of ImageServer-laag toe, of een portalitem."
       },
       "postgres": {
         "label": "PostgreSQL-laag toevoegen",
@@ -447,11 +447,23 @@
       "defaultName": "ArcGIS-laag",
       "sampleFeatureLabel": "Grote Amerikaanse steden (feature)",
       "sampleVectorTileLabel": "Kadastrale percelen Santa Monica (vectortegels)",
+      "sampleMapServiceLabel": "Amerikaanse grenzen (kaartservice)",
+      "sampleImageServiceLabel": "USGS 3DEP-heuvelarcering (beeldservice)",
       "featureLayer": "Featurelaag",
       "vectorTileLayer": "Vectortegellaag",
+      "mapServiceLayer": "Kaartservice",
+      "imageServiceLayer": "Beeldservice",
       "portalItemId": "Portalitem-ID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Sublagen",
+      "sublayersPlaceholder": "Alle zichtbare sublagen",
+      "sublayersHint": "Optionele sublaag-id's, gescheiden door komma's, bijvoorbeeld 0,2,5. Sublagen kiezen tekent de service dynamisch in plaats van via de tegels in de cache.",
+      "renderingRule": "Renderregel",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "Optionele JSON van een rasterfunctie die de service toepast. Een renderregel tekent de service dynamisch in plaats van via de tegels in de cache.",
       "portalUrl": "Portal-URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "Toegangstoken"

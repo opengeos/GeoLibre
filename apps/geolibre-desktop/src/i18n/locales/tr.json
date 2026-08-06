@@ -299,7 +299,7 @@
       },
       "arcgis": {
         "label": "ArcGIS Katmanı Ekle",
-        "description": "Bir ArcGIS FeatureServer katmanı, VectorTileServer katmanı veya portal öğesi ekleyin."
+        "description": "ArcGIS FeatureServer, VectorTileServer, MapServer veya ImageServer katmanı ya da bir portal öğesi ekleyin."
       },
       "postgres": {
         "label": "PostgreSQL Katmanı Ekle",
@@ -447,11 +447,23 @@
       "defaultName": "ArcGIS Katmanı",
       "sampleFeatureLabel": "ABD büyük şehirleri (öğe)",
       "sampleVectorTileLabel": "Santa Monica parselleri (vektör döşemeler)",
+      "sampleMapServiceLabel": "ABD idari sınırları (harita servisi)",
+      "sampleImageServiceLabel": "USGS 3DEP kabartma gölgesi (görüntü servisi)",
       "featureLayer": "Öğe katmanı",
       "vectorTileLayer": "Vektör döşeme katmanı",
+      "mapServiceLayer": "Harita servisi",
+      "imageServiceLayer": "Görüntü servisi",
       "portalItemId": "Portal öğe kimliği",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Alt katmanlar",
+      "sublayersPlaceholder": "Görünen tüm alt katmanlar",
+      "sublayersHint": "İsteğe bağlı, virgülle ayrılmış alt katman kimlikleri, örneğin 0,2,5. Alt katman seçmek servisi önbelleğe alınmış döşemeler yerine dinamik olarak çizer.",
+      "renderingRule": "Görselleştirme kuralı",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "Servisin uyguladığı isteğe bağlı raster işlevi JSON'u. Görselleştirme kuralı, servisi önbelleğe alınmış döşemeler yerine dinamik olarak çizer.",
       "portalUrl": "Portal URL'si",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
       "accessToken": "Erişim belirteci"
