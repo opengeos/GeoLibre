@@ -439,8 +439,9 @@ export function normalizeGroupContiguity(layers: GeoLibreLayer[]): GeoLibreLayer
  *
  * - the id of the child of `parentId` the unit is nested in, however deep — the
  *   sibling block a move steps over, or the moving group's own block;
- * - `parentId` itself when the unit holds that group's own layers, the block a
- *   first child cannot move above;
+ * - `parentId` itself when the unit holds that group's own layers: one more
+ *   block inside the parent, which a child steps over like any other rather
+ *   than a wall;
  * - `null` for an ungrouped layer at the root of the panel (`parentId` `null`);
  * - `undefined` when the unit sits outside `parentId` altogether — a wall,
  *   since a nested group has no position outside the parent holding it.
@@ -498,9 +499,16 @@ export function layerGroupDepth(
  * its siblings, the groups sharing its parent.
  *
  * A nested group moves inside its parent only: it steps over a whole sibling
- * block rather than into it, and the parent's own rows are the end of its
- * travel, so `null` comes back once it is the first or last child. A top-level
- * group moves among the other top-level groups and the ungrouped layers.
+ * block rather than into it, and the parent's boundary is the end of its
+ * travel, so `null` comes back rather than a move that would take it out of the
+ * folder holding it. Inside that boundary it steps over its parent's *own*
+ * layers as readily as over a sibling folder, since those rows are one more
+ * block of the parent and ordering a child against them is a real reorder. A
+ * folder holding no layer is the exception: it has no way to record a position
+ * between two layer rows, so a move that would only cross them changes nothing
+ * and reports `null` — the same limit empty folders already have at the top
+ * level. A top-level group moves among the other top-level groups and the
+ * ungrouped layers.
  *
  * Both arrays carry part of the panel order, so both come back: `layers` holds
  * the order of every populated block, and `groups` holds the order the empty

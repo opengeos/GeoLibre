@@ -362,6 +362,40 @@ describe("reorderLayerGroupInPanel", () => {
     assert.equal(reorderLayerGroupInPanel(layers, groups, "c2", "down"), null);
   });
 
+  it("steps a nested group over its parent's own layers without leaving it", () => {
+    // "p" owns "L" directly and holds the populated child "c1". Those rows are
+    // one more block inside "p", so ordering the child against them is a real
+    // reorder — but "other" is outside "p" and stays a wall.
+    const layers = [
+      layer("Z", { groupId: "other" }),
+      layer("L", { groupId: "p" }),
+      layer("M", { groupId: "c1" }),
+    ];
+    const groups = [group("p"), group("c1", { parentId: "p" }), group("other")];
+    assert.deepEqual(panelOrder(layers, groups), ["group:c1", "group:p", "group:other"]);
+
+    const moved = reorderLayerGroupInPanel(layers, groups, "c1", "down");
+    assert.ok(moved);
+    assert.deepEqual(panelOrder(moved.layers, moved.groups), [
+      "group:p",
+      "group:c1",
+      "group:other",
+    ]);
+    // Still the last block inside "p": it cannot go on to cross "other".
+    assert.equal(reorderLayerGroupInPanel(moved.layers, moved.groups, "c1", "down"), null);
+  });
+
+  it("leaves an empty child where it is when only layer rows are adjacent", () => {
+    // An empty folder cannot record a position between two layer rows, so a
+    // move that would only cross its parent's own layers changes nothing — the
+    // same limit empty folders have at the top level.
+    const layers = [layer("L", { groupId: "p" })];
+    const groups = [group("p"), group("c1", { parentId: "p" })];
+    assert.deepEqual(panelOrder(layers, groups), ["group:p", "group:c1"]);
+    assert.equal(reorderLayerGroupInPanel(layers, groups, "c1", "up"), null);
+    assert.equal(reorderLayerGroupInPanel(layers, groups, "c1", "down"), null);
+  });
+
   it("steps a top-level group over a whole subtree in one move", () => {
     const layers = [layer("a", { groupId: "c1" }), layer("b", { groupId: "c2" })];
     const groups = [
