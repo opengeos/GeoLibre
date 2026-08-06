@@ -68,6 +68,12 @@ export function rememberControlVectorRenderState(
   controlRenderState.set(id, existing ? { ...existing, ...patch } : { ...patch });
 }
 
+/**
+ * Stop treating selected render fields as echoes of a prior control push.
+ *
+ * @param id - The vector/store layer id.
+ * @param fields - The tracked fields to clear.
+ */
 function forgetControlVectorRenderState(
   id: string,
   fields: { visible?: boolean; opacity?: boolean },
@@ -930,6 +936,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Compare render opacities while tolerating floating-point group multiplication.
+ *
+ * @param left - The first opacity.
+ * @param right - The second opacity.
+ * @returns True when the values differ only by floating-point noise.
+ */
 function numbersEqual(left: number, right: number): boolean {
   return Math.abs(left - right) < 1e-9;
 }

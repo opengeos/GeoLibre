@@ -987,6 +987,32 @@ describe("replayVectorLayer with layer groups", () => {
       assert.equal(useAppStore.getState().layers[0].visible, true);
     });
   }
+
+  it("clears restored render tracking after group overrides are removed", async () => {
+    const info = vectorInfo();
+    const layer = {
+      ...createVectorStoreLayer(info),
+      groupId: "child-group",
+      opacity: 0.8,
+      visible: true,
+    };
+    useAppStore.setState({ layers: [layer], layerGroups: [...groups.values()] });
+    const control = {
+      addData: async () => info,
+    } as unknown as VectorControl;
+    await replayVectorLayer(control, layer, "https://example.com/countries.geojson", groups);
+
+    // With the groups gone, this genuine edit needs no render override. It
+    // clears the old folded value (0.1) from the echo tracker.
+    useAppStore.setState({ layerGroups: [] });
+    syncVectorLayersToStore(fakeControl([vectorInfo({ opacity: 0.6 })]).control);
+    assert.equal(useAppStore.getState().layers[0].opacity, 0.6);
+
+    // Returning to the former folded value is still a genuine edit and must
+    // reach the child's store state instead of being swallowed as an echo.
+    syncVectorLayersToStore(fakeControl([vectorInfo({ opacity: 0.1 })]).control);
+    assert.equal(useAppStore.getState().layers[0].opacity, 0.1);
+  });
 });
 
 describe("removeVectorStoreLayers", () => {
