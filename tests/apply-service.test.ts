@@ -283,6 +283,9 @@ describe("field mappers", () => {
         url: undefined,
         itemId: "abc",
         portalUrl: undefined,
+        // Unset paging fields mean "use the defaults" (whole layer, auto page).
+        pageSize: undefined,
+        maxFeatures: undefined,
       },
     );
     // Unknown/absent values fall back to the feature + url defaults.

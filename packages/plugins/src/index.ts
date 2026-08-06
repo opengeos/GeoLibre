@@ -58,6 +58,8 @@ export {
 } from "./plugins/maplibre-basemap-control";
 export {
   addArcGISLayer,
+  ARCGIS_FEATURE_SOURCE_KIND,
+  refreshArcGISFeatureLayer,
   type ArcGISLayerOptions,
   type ArcGISLayerType,
   type ArcGISSourceType,

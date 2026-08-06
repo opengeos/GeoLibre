@@ -476,7 +476,14 @@
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
       "portalUrl": "Portal URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Access token"
+      "accessToken": "Access token",
+      "pageSize": "Records per request",
+      "pageSizePlaceholder": "Auto",
+      "maxFeatures": "Maximum features",
+      "maxFeaturesPlaceholder": "All",
+      "pagingHint": "Feature layers download in pages. Lower the records per request if the service times out.",
+      "loadingProgress": "Loaded {{loaded}} of {{total}} features…",
+      "loadingProgressUnknown": "Loaded {{loaded}} features…"
     },
     "gpx": {
       "defaultName": "GPX Layer",

@@ -364,6 +364,8 @@ export interface ArcGISOptions {
   url: string | undefined;
   itemId: string | undefined;
   portalUrl: string | undefined;
+  pageSize: number | undefined;
+  maxFeatures: number | undefined;
 }
 
 /** Reads the ArcGIS fields from a saved entry, mirroring `ArcGISSource`. */
@@ -377,7 +379,18 @@ export function arcgisFieldsToOptions(entry: ServiceLibraryEntry): ArcGISOptions
     url: serviceFieldString(fields, "url").trim() || undefined,
     itemId: serviceFieldString(fields, "itemId").trim() || undefined,
     portalUrl: serviceFieldString(fields, "portalUrl").trim() || undefined,
+    pageSize: serviceFieldCount(fields, "pageSize"),
+    maxFeatures: serviceFieldCount(fields, "maxFeatures"),
   };
+}
+
+/**
+ * Reads an optional whole-number field, mirroring `ArcGISSource`'s
+ * `positiveCount`: blank/zero/unparseable all mean "use the default".
+ */
+function serviceFieldCount(fields: ServiceFields, key: string): number | undefined {
+  const parsed = Number(serviceFieldString(fields, key).trim());
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : undefined;
 }
 
 // --- Dispatcher ------------------------------------------------------------
@@ -460,7 +473,9 @@ export async function applyServiceEntry(
         beforeLayerId,
         itemId: options.itemId,
         layerType: options.layerType,
+        maxFeatures: options.maxFeatures,
         name: options.name,
+        pageSize: options.pageSize,
         portalUrl: options.portalUrl,
         sourceType: options.sourceType,
         // Tokens are never persisted to the service library, so none is sent.
