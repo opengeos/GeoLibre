@@ -42,8 +42,8 @@ app as a desktop install, an Android app, and a Jupyter widget.
 |---|---|---|---|---|---|---|
 | **Format breadth** | Wide — DuckDB-WASM Spatial plus in-house readers | **Widest** — everything GDAL/OGR reads | Very wide, plus native Esri formats | Common upload formats | Common upload formats | CSV, GeoJSON, Arrow/Parquet |
 | **Cloud-native vector** | GeoParquet, FlatGeobuf, PMTiles, streamed over HTTP range requests | GeoParquet, FlatGeobuf, PMTiles (recent GDAL) | GeoParquet (recent), no native PMTiles | — | Some cloud sources on higher plans | Arrow/Parquet |
-| **Cloud-native raster** | COG, Zarr, Cloud-Optimized NetCDF/HDF, kerchunk, MBTiles | COG, Zarr (plugin-assisted) | COG; Zarr via extensions | Hosted imagery layers | GeoTIFF upload | — |
-| **STAC** | Built-in catalog browser + STAC Index discovery | Via plugins | Via add-ins | Living Atlas (not STAC) | — | — |
+| **Cloud-native raster** | COG, Zarr, Cloud-Optimized NetCDF/HDF, kerchunk, MBTiles | COG, Zarr (GDAL's built-in driver) | COG; Zarr as a native multidimensional raster type | Hosted imagery layers | GeoTIFF upload | — |
+| **STAC** | Built-in catalog browser + STAC Index discovery | Via plugins | Built-in STAC connections and the Explore STAC pane | Living Atlas (not STAC) | — | — |
 | **OGC services** | XYZ; WMS/WFS/WMTS discovered via GetCapabilities; OGC API Features/Tiles from a landing page, collection, or items URL | Full OGC support | Full OGC support | Yes | Limited | XYZ / vector tiles |
 | **Esri services and geodatabases** | ArcGIS FeatureServer, VectorTileServer, I3S, plus local `.gdb` File Geodatabase folders (desktop) | Yes | Native | Native | Some ArcGIS layers | — |
 | **Databases** | PostGIS browsing, DuckDB, in-browser PGlite/PostGIS | PostGIS, SpatiaLite, Oracle, SQL Server, SAP HANA | Enterprise geodatabases (SDE) | Hosted only | PostGIS / Snowflake connections (higher plans) | — |
@@ -85,8 +85,8 @@ app as a desktop install, an Android app, and a Jupyter widget.
 | **Scripting** | Python Console, `geolibre` Python package, docked Jupyter notebook beside the map | PyQGIS, `qgis_process` headless CLI | `arcpy`, notebooks | ArcGIS API for Python / JavaScript | REST API + Python client | JS library |
 | **Notebook integration** | The **whole app** embeds as a Jupyter anywidget with two-way project sync | Bindings, not the UI | Notebooks in Pro drive `arcpy` | Hosted notebooks | — | Widget |
 | **Plugin ecosystem** | TypeScript plugin API, built-ins, zip installs, bundled drop-ins | **Largest** — thousands of Python plugins | .NET add-ins, Python toolboxes | Configurable app templates | None (API only) | Fork the library |
-| **AI assistant** | Natural-language assistant that turns plain English into auditable, undoable operations; bring your own API key | Via plugins | Copilot features | — | AI-assisted map making | Yes — OpenAI, Gemini, DeepSeek, or local Ollama; bring your own key |
-| **Real-time collaboration** | Yes (MVP, self-hosted server) + anchored review comments | No (Mergin Maps for sync) | No | Shared editing of hosted layers | **Best-in-class** multiplayer editing and comments | — |
+| **AI assistant** | Natural-language assistant that turns plain English into auditable, undoable operations; bring your own API key | Via plugins | Copilot features | Arcade assistant (beta) and the AI assistants family | AI-assisted map making | Yes — OpenAI, Gemini, DeepSeek, or local Ollama; bring your own key |
+| **Real-time collaboration** | Yes (MVP) — hosted relay, optionally self-hosted — plus anchored review comments | No (Mergin Maps for sync) | No | Shared editing of hosted layers | **Best-in-class** multiplayer editing and comments | — |
 | **Embedding** | `maponly` and `layout=viewer` URL modes, a versioned `postMessage` API, and the typed `@geolibre/embed` npm client | QGIS Server / QGIS2Web export | — | Embeddable web apps | Embeddable maps | Embeddable |
 | **Self-hosting** | Docker image, or serve the static build anywhere | QGIS Server | ArcGIS Enterprise (paid) | — | Single-tenant AWS VPC, Felt-maintained (Enterprise) | Static build |
 | **Standalone export** | Whole project to **one offline HTML file**, no server | Via qgis2web plugin | — | — | — | HTML export |
