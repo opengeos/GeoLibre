@@ -56,6 +56,14 @@ def test_save_project_writes_readable_json(proj, tmp_path):
     assert "\n  " in text
 
 
+def test_save_project_leaves_no_temporary_file_behind(proj, tmp_path):
+    """The write lands atomically, so only the project itself is left in place."""
+    out = tmp_path / "map.geolibre.json"
+    authoring.save_project(out, proj)
+    authoring.save_project(out, proj)
+    assert [path.name for path in tmp_path.iterdir()] == ["map.geolibre.json"]
+
+
 def test_load_project_missing_file(tmp_path):
     with pytest.raises(ValueError, match="not found"):
         authoring.load_project(tmp_path / "nope.json")
@@ -148,6 +156,19 @@ def test_layer_properties_requires_inlined_geojson(proj):
 def test_column_values_rejects_a_missing_column(proj):
     with pytest.raises(ValueError, match="not found in any feature"):
         authoring.column_values(proj["layers"][0], "nope")
+
+
+def test_column_values_tolerates_a_null_properties_member(proj):
+    """GeoJSON permits `"properties": null`; that feature reads as no value."""
+    layer = proj["layers"][0]
+    layer["geojson"]["features"].append(
+        {
+            "type": "Feature",
+            "properties": None,
+            "geometry": {"type": "Point", "coordinates": [0, 0]},
+        }
+    )
+    assert authoring.column_values(layer, "pop") == [10, 90, None]
 
 
 # -- layer mutation -----------------------------------------------------------

@@ -18,7 +18,9 @@ from typing import Iterable
 ROOTS_ENV_VAR = "GEOLIBRE_MCP_ROOTS"
 
 #: Extensions the server will write a project to. Anything else is refused, so a
-#: mistaken path cannot overwrite source code or a dotfile.
+#: mistaken path cannot overwrite source code or a dotfile. ``.geolibre.json`` is
+#: a subset of ``.json`` and so never widens the check — it is listed to name the
+#: conventional extension in the error message a client sees.
 PROJECT_SUFFIXES = (".json", ".geolibre.json")
 
 #: Extensions the server will write an export to.
@@ -41,9 +43,10 @@ class Workspace:
                 directory.
 
         Raises:
-            WorkspaceError: If a named root does not exist or is not a
-                directory. Failing at startup is better than accepting every
-                later call and refusing it for a reason the client cannot see.
+            WorkspaceError: If no root is configured, or a named root does not
+                exist or is not a directory. Failing at startup is better than
+                accepting every later call and refusing it for a reason the
+                client cannot see.
         """
         candidates = list(roots) if roots else _roots_from_env()
         resolved: list[Path] = []
@@ -52,6 +55,13 @@ class Workspace:
             if not root.is_dir():
                 raise WorkspaceError(f"Workspace root is not a directory: {root}")
             resolved.append(root)
+        # A separators-only `GEOLIBRE_MCP_ROOTS` (":") survives the emptiness
+        # check in `_roots_from_env` and filters down to nothing here. Without
+        # this, `resolve` would raise IndexError on the first relative path.
+        if not resolved:
+            raise WorkspaceError(
+                f"No workspace roots configured. Pass --root or set {ROOTS_ENV_VAR}."
+            )
         self.roots = tuple(resolved)
 
     def __repr__(self) -> str:
@@ -109,7 +119,11 @@ class Workspace:
                 unsupported extension, or exists while ``overwrite`` is False.
         """
         target = self.resolve(path)
-        if not any(target.name.endswith(suffix) for suffix in suffixes):
+        # `len(name) > len(suffix)` requires a non-empty stem, so a bare dotfile
+        # named exactly `.json` or `.html` is refused rather than accepted.
+        if not any(
+            target.name.endswith(suffix) and len(target.name) > len(suffix) for suffix in suffixes
+        ):
             raise WorkspaceError(
                 f"Refusing to write {target.name}: expected a file ending in "
                 f"{' or '.join(suffixes)}."

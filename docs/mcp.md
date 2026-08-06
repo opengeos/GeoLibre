@@ -74,9 +74,11 @@ server touches it, mirroring `GEOLIBRE_CONVERSION_ROOTS` in the
 inside a root that points out of it. Relative paths resolve against the first
 root, so a client can say `city.geolibre.json` without knowing the host layout.
 
-Two more guards on writes: the server only writes files ending in `.json`
-(projects) or `.html` (exports), and it refuses to replace an existing file
-unless the call passes `overwrite`.
+Three more guards on writes: the server only writes files ending in `.json`
+(projects) or `.html` (exports) — a bare `.json` with no name is refused too —
+it refuses to replace an existing file unless the call passes `overwrite`, and
+a tool that edits an existing project first checks the file actually is one, so
+an unrelated `package.json` sitting inside a root cannot be rewritten as a map.
 
 Give it a directory meant for maps, not your home directory.
 

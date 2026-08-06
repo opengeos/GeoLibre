@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 
 import pytest
 
@@ -83,7 +84,7 @@ def test_workspace_rejects_a_path_outside_its_roots(tmp_path):
 
 
 def test_workspace_rejects_traversal_out_of_a_root(tmp_path):
-    workspace = Workspace([tmp_path / "inner"] if (tmp_path / "inner").is_dir() else [tmp_path])
+    workspace = Workspace([tmp_path])
     with pytest.raises(WorkspaceError, match="outside this server's workspace"):
         workspace.resolve("../../etc/passwd")
 
@@ -120,10 +121,24 @@ def test_workspace_guards_an_existing_output(tmp_path):
     assert workspace.resolve_output("a.json", suffixes=(".json",), overwrite=True)
 
 
+def test_workspace_rejects_a_bare_dotfile_output(tmp_path):
+    """`.json` is a suffix match but has no stem, so it is not a project name."""
+    workspace = Workspace([tmp_path])
+    with pytest.raises(WorkspaceError, match="Refusing to write"):
+        workspace.resolve_output(".json", suffixes=(".json",))
+
+
 def test_workspace_rejects_a_root_that_is_not_a_directory(tmp_path):
     missing = tmp_path / "nope"
     with pytest.raises(WorkspaceError, match="not a directory"):
         Workspace([missing])
+
+
+def test_workspace_rejects_an_environment_holding_only_separators(monkeypatch):
+    """A separators-only value filters down to no roots, which cannot serve."""
+    monkeypatch.setenv("GEOLIBRE_MCP_ROOTS", os.pathsep)
+    with pytest.raises(WorkspaceError, match="No workspace roots configured"):
+        Workspace()
 
 
 # -- tool surface -------------------------------------------------------------
@@ -162,6 +177,29 @@ def test_create_project_refuses_a_path_outside_the_workspace(server):
     assert "outside this server's workspace" in call_error(
         server, "create_project", path="/tmp/escaped.geolibre.json"
     )
+
+
+def test_create_project_clamps_the_initial_zoom(server, tmp_path):
+    """The starting camera is clamped the same way a later set_view would be."""
+    call(server, "create_project", path="map.geolibre.json", zoom=100)
+    written = json.loads((tmp_path / "map.geolibre.json").read_text(encoding="utf-8"))
+    assert written["mapView"]["zoom"] == 24
+
+
+def test_editing_refuses_a_json_file_that_is_not_a_project(server, tmp_path):
+    """An unrelated JSON file inside a root is not a project to be rewritten."""
+    package = tmp_path / "package.json"
+    package.write_text(json.dumps({"name": "app", "version": "1.0.0"}), encoding="utf-8")
+    error = call_error(
+        server, "add_geojson_layer", path="package.json", name="X", data=json.dumps(POINT_FC)
+    )
+    assert "does not look like a GeoLibre project" in error
+    assert json.loads(package.read_text(encoding="utf-8")) == {"name": "app", "version": "1.0.0"}
+
+
+def test_editing_refuses_a_destination_with_an_unsupported_extension(server, tmp_path):
+    (tmp_path / "notes.txt").write_text("{}", encoding="utf-8")
+    assert "Refusing to write" in call_error(server, "set_view", path="notes.txt", zoom=4)
 
 
 def test_add_geojson_layer_inlines_literal_geojson(server, project_path):

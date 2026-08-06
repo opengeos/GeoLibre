@@ -15,6 +15,8 @@ from __future__ import annotations
 import copy
 import json
 import math
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -81,6 +83,12 @@ def save_project(path: str | Path, project: dict[str, Any]) -> Path:
     and two-space indentation so it reads and diffs like the rest of the repo's
     JSON.
 
+    The write goes to a temporary file alongside the destination and is then
+    moved into place, so an interrupted write cannot leave a half-written
+    project where a complete one used to be. A project inlines its GeoJSON and
+    can approach ``MAX_PROJECT_BYTES``, and the MCP server rewrites the whole
+    file on every edit, so a truncating write is a real way to lose work.
+
     Args:
         path: Destination path.
         project: The project dict to serialize.
@@ -90,7 +98,17 @@ def save_project(path: str | Path, project: dict[str, Any]) -> Path:
     """
     file = Path(path).expanduser()
     file.parent.mkdir(parents=True, exist_ok=True)
-    file.write_text(json.dumps(project, indent=2) + "\n", encoding="utf-8")
+    handle = tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=file.parent, prefix=f".{file.name}.", delete=False
+    )
+    temporary = Path(handle.name)
+    try:
+        with handle:
+            handle.write(json.dumps(project, indent=2) + "\n")
+        os.replace(temporary, file)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
     return file
 
 
@@ -286,11 +304,13 @@ def column_values(layer: dict[str, Any], column: str) -> list[Any]:
             f"Layer {layer.get('name')!r} has no inlined GeoJSON, so column "
             f"{column!r} cannot be read."
         )
-    values = [
-        feature.get("properties", {}).get(column)
-        for feature in geojson.get("features", [])
-        if isinstance(feature, dict)
-    ]
+    values = []
+    for feature in geojson.get("features", []):
+        if not isinstance(feature, dict):
+            continue
+        # GeoJSON permits `"properties": null`, so this cannot assume a dict.
+        properties = feature.get("properties")
+        values.append(properties.get(column) if isinstance(properties, dict) else None)
     if all(value is None for value in values):
         raise ValueError(f"Column {column!r} not found in any feature's properties")
     return values

@@ -54,6 +54,33 @@ feature data.
 """
 
 
+#: Keys that mark a loaded JSON object as a GeoLibre project. ``load_project``
+#: accepts any JSON object and seeds ``layers`` when it is absent, so without
+#: this check an edit tool pointed at an unrelated JSON file inside a root —
+#: ``package.json``, say — would load it, apply the change, and write a project
+#: over it. Every project this package or the app writes carries both keys.
+PROJECT_MARKERS = ("mapView", "basemapStyleUrl")
+
+
+def _require_project(file: Path, project: dict[str, Any]) -> None:
+    """Refuse to rewrite a JSON file that is not a GeoLibre project.
+
+    Args:
+        file: The resolved path the project was loaded from.
+        project: The loaded JSON object.
+
+    Raises:
+        WorkspaceError: If the object carries no sign of being a project.
+    """
+    if any(key in project for key in PROJECT_MARKERS) or project.get("layers"):
+        return
+    raise WorkspaceError(
+        f"{file} does not look like a GeoLibre project (no "
+        f"{' or '.join(PROJECT_MARKERS)} key). Refusing to overwrite it; call "
+        "create_project to start a new one."
+    )
+
+
 def _summarize(path: Path, project: dict[str, Any], **extra: Any) -> dict[str, Any]:
     """Build a tool result: what changed, plus where the project now stands."""
     return {
@@ -85,10 +112,16 @@ def build_server(workspace: Workspace) -> MCPServer:
         """Load a project, yield it for mutation, and save it back.
 
         The write happens only if the body returns normally, so a tool that
-        raises part-way leaves the file on disk untouched.
+        raises part-way leaves the file on disk untouched. The destination has
+        to pass the same extension allowlist `create_project` writes through,
+        and to look like a project, so no tool can rewrite an unrelated JSON
+        file that happens to sit inside a root.
         """
-        file = workspace.resolve(path, must_exist=True)
+        file = workspace.resolve_output(path, suffixes=PROJECT_SUFFIXES, overwrite=True)
+        if not file.is_file():
+            raise WorkspaceError(f"File not found: {file}")
         project = authoring.load_project(file)
+        _require_project(file, project)
         yield file, project
         authoring.save_project(file, project)
 
@@ -141,7 +174,11 @@ def build_server(workspace: Workspace) -> MCPServer:
             The path written and the project's starting state.
         """
         file = workspace.resolve_output(path, suffixes=PROJECT_SUFFIXES, overwrite=overwrite)
-        project = _project.build_empty_project(name, center=center, zoom=zoom)
+        project = _project.build_empty_project(name, center=center)
+        if zoom is not None:
+            # Through set_view so the initial zoom is clamped to [0, 24] exactly
+            # as a later set_view call would clamp it.
+            authoring.set_view(project, zoom=zoom)
         if basemap:
             authoring.set_basemap(project, basemap)
         authoring.save_project(file, project)
@@ -211,6 +248,9 @@ def build_server(workspace: Workspace) -> MCPServer:
         Returns:
             The new layer's id and the project's updated layer count.
         """
+        # Check the destination before fetching or reading `data`, so a bad path
+        # fails without first paying for a 50 MB download.
+        workspace.resolve(path, must_exist=True)
         collection, source_url = load_geojson(data)
         layer = _project.geojson_layer(name, collection, source_url=source_url, **(style or {}))
         return add(path, layer, index)
