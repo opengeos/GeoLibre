@@ -55,6 +55,40 @@ function groupUnitRanges(
 }
 
 /**
+ * Group indices ordered so that a group's parent always comes first, keeping
+ * the `groups` order otherwise. `moveLayerGroupToGroup` reparents in place
+ * without touching the array, so a child can sit ahead of its own parent; a
+ * parent has to be placed first for the child to have a block to sit under.
+ * A `parentId` cycle never resolves, so what is left is emitted in array order
+ * rather than dropped.
+ */
+function parentsFirstOrder(
+  groups: LayerGroup[],
+  groupById: ReadonlyMap<string, LayerGroup>,
+): number[] {
+  const order: number[] = [];
+  const placed = new Set<string>();
+  let pending = groups.map((_, index) => index);
+  while (pending.length > 0) {
+    const deferred: number[] = [];
+    for (const index of pending) {
+      const parentId = groups[index].parentId;
+      if (parentId && groupById.has(parentId) && !placed.has(parentId)) deferred.push(index);
+      else {
+        order.push(index);
+        placed.add(groups[index].id);
+      }
+    }
+    if (deferred.length === pending.length) {
+      order.push(...deferred);
+      break;
+    }
+    pending = deferred;
+  }
+  return order;
+}
+
+/**
  * Split the panel into its top-level blocks, **top-of-panel first** (the
  * reverse of the store's render order, where the last array element draws on
  * top).
@@ -67,6 +101,10 @@ function groupUnitRanges(
  * layer array, a folder keeps its place relative to the other folders when one
  * of them gains its first layer (GeoLibre#1739). A group nested in a positioned
  * parent lands directly below that parent's block regardless of array order.
+ *
+ * An *organizer* — a group with no layers of its own but with some beneath it —
+ * gets no block here: the panel draws its header against its top-most
+ * descendant layer instead. Only a group whose whole subtree is empty needs one.
  *
  * A `groupId` that does not match any group is treated as ungrouped, so a
  * dangling reference degrades gracefully instead of dropping the layer.
@@ -90,10 +128,16 @@ export function buildLayerPanelUnits(
   }
 
   let ranges = groupUnitRanges(units, groupById);
-  if (ranges.size === groups.length) return units;
-  for (let at = 0; at < groups.length; at++) {
+  // Every group a layer reaches — the ones that own a block and the organizers
+  // spanning them — already has a position. `ranges` alone cannot stand in for
+  // that set once the loop starts: splicing a folder in gives its ancestors an
+  // inherited range too, and an ancestor whose subtree holds no layer still
+  // needs a block of its own or it renders nowhere at all.
+  const positioned = new Set(ranges.keys());
+  if (positioned.size === groups.length) return units;
+  for (const at of parentsFirstOrder(groups, groupById)) {
     const group = groups[at];
-    if (ranges.has(group.id)) continue;
+    if (positioned.has(group.id)) continue;
     const parentRange = group.parentId ? ranges.get(group.parentId) : undefined;
     let insertAt = parentRange ? parentRange[1] + 1 : undefined;
     for (let i = at - 1; insertAt === undefined && i >= 0; i--) {
@@ -105,6 +149,7 @@ export function buildLayerPanelUnits(
       if (range) insertAt = range[0];
     }
     units.splice(insertAt ?? 0, 0, { groupId: group.id, layers: [] });
+    positioned.add(group.id);
     // Placing this folder shifts the units below it, and makes the folder
     // itself an anchor for the ones still to be placed.
     ranges = groupUnitRanges(units, groupById);

@@ -130,6 +130,28 @@ describe("buildLayerPanelUnits", () => {
     );
   });
 
+  it("keeps a fully empty parent visible when its child precedes it", () => {
+    // "Move to group" only rewrites parentId, so a child can sit ahead of its
+    // own parent in the array. Both folders are empty, so neither can be drawn
+    // against a descendant layer and both need a block of their own.
+    assert.deepEqual(panelOrder([], [group("child", { parentId: "parent" }), group("parent")]), [
+      "group:parent",
+      "group:child",
+    ]);
+  });
+
+  it("gives an empty organizer's own empty child a block, not the organizer", () => {
+    // "outer" has a layer beneath it via "inner", so the panel draws its header
+    // against that layer; only "spare", whose subtree is empty, needs a block.
+    const layers = [layer("a", { groupId: "inner" })];
+    const groups = [
+      group("outer"),
+      group("inner", { parentId: "outer" }),
+      group("spare", { parentId: "outer" }),
+    ];
+    assert.deepEqual(panelOrder(layers, groups), ["group:inner", "group:spare"]);
+  });
+
   it("anchors empty groups against the layer rows the panel draws", () => {
     const layers = [layer("bottom"), layer("a", { groupId: "g1" }), layer("top")];
     const placement = placeUnpositionedGroups(layers, [group("g1"), group("g2")]);
