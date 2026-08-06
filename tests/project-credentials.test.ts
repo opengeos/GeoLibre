@@ -91,6 +91,30 @@ describe("project credential redaction", () => {
     assert.ok(redactedPaths.includes("plugins.settings"));
   });
 
+  it("drops the components plugin's hand-authored HTML panel", () => {
+    const original = credentialProject();
+    original.plugins!.settings = {
+      "maplibre-gl-components": {
+        legend: { A: "#112233" },
+        html: { htmls: [{ html: '<img src="https://x/y?api_key=html-secret">' }] },
+      },
+    };
+    const { project } = redactProjectCredentials(original);
+    const components = project.plugins!.settings["maplibre-gl-components"];
+
+    assert.deepEqual(components, { legend: { A: "#112233" } });
+    assert.ok(!serializeProject(project).includes("html-secret"));
+  });
+
+  it("still sweeps a kept plugin blob for credentials", () => {
+    const original = credentialProject();
+    original.plugins!.settings = { "maplibre-gl-swipe": { position: 50, apiKey: "swipe-secret" } };
+    const { project } = redactProjectCredentials(original);
+
+    assert.ok(!serializeProject(project).includes("swipe-secret"));
+    assert.equal(project.plugins!.settings["maplibre-gl-swipe"].position, 50);
+  });
+
   it("reports nothing redacted when only publishable plugin settings are present", () => {
     const original = credentialProject();
     original.plugins!.settings = { "maplibre-gl-swipe": { position: 50 } };

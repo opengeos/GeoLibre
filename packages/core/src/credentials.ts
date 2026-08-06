@@ -31,21 +31,27 @@ export const PROJECT_CREDENTIAL_FIELDS = {
 } as const;
 
 /**
- * Plugin ids whose `settings` survive redaction.
+ * Plugin settings that survive redaction: plugin id to the sub-keys kept from
+ * its blob, or `null` to keep the whole blob.
  *
- * A plugin's settings blob is free-form and an external plugin can persist a
- * credential there, so the default is to drop all of it. These two are
- * first-party and hold only map-control composition — legend entries and
- * colors, the colorbar's range and ramp, the swipe split — which is what a
- * shared or exported project needs in order to render the map it was built as.
- * Dropping them silently stripped every legend, colorbar, and swipe from an
- * export. Mirrored by `PUBLISHABLE_PLUGIN_SETTINGS` in `python/src/geolibre/
- * project.py`; the two must agree.
+ * A plugin's settings are free-form and an external plugin can persist a
+ * credential there, so the default is to drop all of it. What is listed here is
+ * map-control *composition* — the swipe split, legend entries and colors, the
+ * colorbar's range and ramp — which is what a shared or exported project needs
+ * in order to render the map it was built as, and is structured rather than
+ * free text. Dropping it silently stripped every legend, colorbar, and swipe
+ * from an export.
+ *
+ * The components plugin's `html` sub-key is deliberately absent: it holds a
+ * custom HTML panel the user authored by hand (`ComponentHtmlGuiEntryState`),
+ * so it can carry anything, including a URL with a token in it. It is dropped
+ * like any unknown blob. Mirrored by `PUBLISHABLE_PLUGIN_SETTINGS` in
+ * `python/src/geolibre/project.py`; the two must agree.
  */
-export const PUBLISHABLE_PLUGIN_SETTINGS: readonly string[] = [
-  "maplibre-gl-swipe",
-  "maplibre-gl-components",
-];
+export const PUBLISHABLE_PLUGIN_SETTINGS: Readonly<Record<string, readonly string[] | null>> = {
+  "maplibre-gl-swipe": null,
+  "maplibre-gl-components": ["legend", "colorbar"],
+};
 
 export interface CredentialRedactionResult {
   project: GeoLibreProject;
@@ -327,17 +333,50 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
       return redacted;
     });
     const settings = plugins.settings ?? {};
-    const kept = Object.fromEntries(
-      Object.entries(settings).filter(([id]) => PUBLISHABLE_PLUGIN_SETTINGS.includes(id)),
-    );
-    const dropped = Object.fromEntries(
-      Object.entries(settings).filter(([id]) => !PUBLISHABLE_PLUGIN_SETTINGS.includes(id)),
-    );
+    const kept: Record<string, unknown> = {};
+    const dropped: Record<string, unknown> = {};
+    for (const [id, value] of Object.entries(settings)) {
+      const allowed = Object.prototype.hasOwnProperty.call(PUBLISHABLE_PLUGIN_SETTINGS, id)
+        ? PUBLISHABLE_PLUGIN_SETTINGS[id]
+        : undefined;
+      if (allowed === undefined) {
+        dropped[id] = value;
+        continue;
+      }
+      if (allowed === null) {
+        kept[id] = value;
+        continue;
+      }
+      // An unexpected shape is dropped rather than passed through.
+      if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        dropped[id] = value;
+        continue;
+      }
+      const subset: Record<string, unknown> = {};
+      const rest: Record<string, unknown> = {};
+      for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+        if (allowed.includes(key)) subset[key] = item;
+        else rest[key] = item;
+      }
+      if (Object.keys(subset).length > 0) kept[id] = subset;
+      if (Object.keys(rest).length > 0) dropped[id] = rest;
+    }
     if (Object.keys(dropped).length > 0) {
       redactedPaths.push("plugins.settings");
       redactedCount.value += countLeafValues(dropped);
     }
-    plugins = { ...plugins, manifestUrls, settings: kept };
+    // What survives is still swept by the same pass layer configuration gets,
+    // so a credentialed URL inside a kept blob is scrubbed rather than trusted.
+    plugins = {
+      ...plugins,
+      manifestUrls,
+      settings: redactConfigurationValue(
+        kept,
+        "plugins.settings",
+        redactedPaths,
+        redactedCount,
+      ) as Record<string, never>,
+    };
   }
 
   return {

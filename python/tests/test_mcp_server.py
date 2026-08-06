@@ -190,6 +190,16 @@ def test_create_project_refuses_to_overwrite_a_json_file_that_is_not_a_project(s
     assert json.loads(config.read_text(encoding="utf-8")) == original
 
 
+def test_create_project_refuses_to_overwrite_an_unreadable_file(server, tmp_path):
+    """A file that will not parse is the case to refuse hardest, not to wave through."""
+    for name, content in (("broken.json", "{not json"), ("list.json", "[1, 2, 3]")):
+        (tmp_path / name).write_text(content, encoding="utf-8")
+        assert "could not be read as a GeoLibre project" in call_error(
+            server, "create_project", path=name, overwrite=True
+        )
+        assert (tmp_path / name).read_text(encoding="utf-8") == content
+
+
 def test_create_project_clamps_the_initial_zoom(server, tmp_path):
     """The starting camera is clamped the same way a later set_view would be."""
     call(server, "create_project", path="map.geolibre.json", zoom=100)

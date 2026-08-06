@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import json
 import sys
 import types
 
@@ -380,6 +381,36 @@ def test_redact_credentials_keeps_the_first_party_map_controls():
     assert settings["maplibre-gl-swipe"] == {"position": 50}
     # An unknown plugin's blob is free-form and can hold a key, so it still goes.
     assert "some-third-party-plugin" not in settings
+
+
+def test_redact_credentials_drops_the_custom_html_panel():
+    """The HTML panel is hand-authored, so it can carry a credentialed URL."""
+    safe = redact_credentials(
+        {
+            "plugins": {
+                "settings": {
+                    "maplibre-gl-components": {
+                        "legend": {"A": "#111"},
+                        "html": {
+                            "htmls": [{"html": '<img src="https://x/y?api_key=html-secret">'}]
+                        },
+                    }
+                }
+            }
+        }
+    )
+    components = safe["plugins"]["settings"]["maplibre-gl-components"]
+    assert components == {"legend": {"A": "#111"}}
+    assert "html-secret" not in json.dumps(safe)
+
+
+def test_redact_credentials_still_sweeps_a_kept_plugin_blob():
+    """A kept blob gets the same scrub layer configuration gets, not a free pass."""
+    safe = redact_credentials(
+        {"plugins": {"settings": {"maplibre-gl-swipe": {"position": 50, "apiKey": "swipe-secret"}}}}
+    )
+    assert "swipe-secret" not in json.dumps(safe)
+    assert safe["plugins"]["settings"]["maplibre-gl-swipe"]["position"] == 50
 
 
 def test_to_html_keeps_the_composed_map_controls(m):

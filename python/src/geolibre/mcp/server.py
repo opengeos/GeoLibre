@@ -226,15 +226,18 @@ def build_server(workspace: Workspace) -> MCPServer:
         # `overwrite` says "replace the project there", not "replace whatever is
         # there". PROJECT_SUFFIXES admits any `.json`, so without this an agent
         # retrying with overwrite=True after an "already exists" error could
-        # destroy an unrelated config. Same rule the edit tools apply, except a
-        # file that is not JSON at all is left to the extension check.
+        # destroy an unrelated config. A file that cannot be read as a project
+        # at all — malformed, not an object, oversized — is the case to refuse
+        # hardest, not the one where the check falls away.
         if file.exists():
             try:
                 existing = authoring.load_project(file)
-            except ValueError:
-                existing = None
-            if existing is not None:
-                _require_project(file, existing)
+            except ValueError as exc:
+                raise WorkspaceError(
+                    f"{file} exists and could not be read as a GeoLibre project ({exc}). "
+                    "Refusing to overwrite it; delete it first if it is not wanted."
+                ) from exc
+            _require_project(file, existing)
         project = _project.build_empty_project(name, center=center)
         if zoom is not None:
             # Through set_view so the initial zoom is clamped to [0, 24] exactly
