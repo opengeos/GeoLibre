@@ -8,11 +8,14 @@ not pull the SDK) stays green rather than silently losing coverage it never had.
 from __future__ import annotations
 
 import asyncio
+import builtins
 import json
 import os
+import sys
 
 import pytest
 
+import geolibre.mcp as mcp_package
 from geolibre.mcp.workspace import Workspace, WorkspaceError
 
 mcp = pytest.importorskip("mcp", reason="the mcp SDK is an optional extra")
@@ -72,6 +75,37 @@ def project_path(server):
     """A created project, returned as the path string tools take."""
     call(server, "create_project", path="map.geolibre.json", name="Demo")
     return "map.geolibre.json"
+
+
+# -- the console-script entry point -------------------------------------------
+
+
+def _import_failing_on_the_sdk(missing: str):
+    """An __import__ that fails any `mcp` import, blaming *missing*."""
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name.split(".")[0] == "mcp":
+            raise ModuleNotFoundError(f"No module named {missing!r}", name=missing)
+        return real_import(name, *args, **kwargs)
+
+    return fake_import
+
+
+def test_entry_point_reports_a_missing_sdk_without_a_traceback(monkeypatch, capsys):
+    """`pip install geolibre` then `geolibre-mcp` must say what to install."""
+    monkeypatch.delitem(sys.modules, "geolibre.mcp.server", raising=False)
+    monkeypatch.setattr(builtins, "__import__", _import_failing_on_the_sdk("mcp"))
+    assert mcp_package.main([]) == 1
+    assert 'pip install "geolibre[mcp]"' in capsys.readouterr().err
+
+
+def test_entry_point_propagates_an_unrelated_import_error(monkeypatch):
+    """A dependency missing under an installed SDK is a broken env, not a missing extra."""
+    monkeypatch.delitem(sys.modules, "geolibre.mcp.server", raising=False)
+    monkeypatch.setattr(builtins, "__import__", _import_failing_on_the_sdk("sse_starlette"))
+    with pytest.raises(ModuleNotFoundError, match="sse_starlette"):
+        mcp_package.main([])
 
 
 # -- workspace confinement ----------------------------------------------------
