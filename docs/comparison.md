@@ -28,12 +28,12 @@ app as a desktop install, an Android app, and a Jupyter widget.
 |---|---|---|---|---|---|---|
 | **License** | MIT, open source | GPL-2.0+, open source | Proprietary | Proprietary | Proprietary | MIT, open source |
 | **Cost** | Free | Free | Paid subscription | Paid subscription (credit-metered analysis) | Paid subscription | Free |
-| **Browser** | Full app, nothing to install | No official browser build | No | Yes (the product *is* the browser app) | Yes (browser-only) | Yes |
+| **Browser** | Full app, nothing to install | No official browser build | No | Yes (the product *is* the browser app) | Yes (the authoring product) | Yes |
 | **Desktop** | Windows, macOS, Linux (Tauri) | Windows, macOS, Linux | Windows only | — | — | — |
-| **Mobile** | Native Android app; responsive touch layout | Via QField / Mergin Maps (separate apps) | — | Via ArcGIS Field Maps (separate app) | Responsive web | Responsive web |
+| **Mobile** | Native Android app; responsive touch layout | Via QField / Mergin Maps (separate apps) | — | Via ArcGIS Field Maps (separate app) | Felt Field App for iOS and Android (separate app) | Responsive web |
 | **In Jupyter** | Full app as an anywidget, two-way sync | Via `qgis` bindings, not the UI | Notebooks drive `arcpy`, not the UI | ArcGIS API for Python | — | Yes (widget) |
-| **Works offline** | Yes — PWA install, offline area download, desktop build | Yes | Yes | Limited (Field Maps offline areas) | No | Client-side, but assets are hosted |
-| **Where your data lives** | Your device — processed client-side in the browser session | Your device | Your device / your enterprise geodatabase | Vendor cloud | Vendor cloud | Your browser |
+| **Works offline** | Yes — PWA install, offline area download, desktop build | Yes | Yes | Limited (Field Maps offline areas) | Field App offline areas, syncing on reconnect (higher plans) | Client-side, but assets are hosted |
+| **Where your data lives** | Your device — processed client-side in the browser session | Your device | Your device / your enterprise geodatabase | Vendor cloud | Vendor cloud, or a single-tenant instance in your own AWS account (Enterprise) | Your browser |
 | **Project file** | `.geolibre.json` (open, documented) | `.qgs` / `.qgz` (open) | `.aprx` (proprietary) | Web map JSON (hosted) | Hosted map (no local file) | Exportable map config JSON |
 
 ## Data and formats
@@ -44,8 +44,8 @@ app as a desktop install, an Android app, and a Jupyter widget.
 | **Cloud-native vector** | GeoParquet, FlatGeobuf, PMTiles, streamed over HTTP range requests | GeoParquet, FlatGeobuf, PMTiles (recent GDAL) | GeoParquet (recent), no native PMTiles | — | Some cloud sources on higher plans | Arrow/Parquet |
 | **Cloud-native raster** | COG, Zarr, Cloud-Optimized NetCDF/HDF, kerchunk, MBTiles | COG, Zarr (plugin-assisted) | COG; Zarr via extensions | Hosted imagery layers | GeoTIFF upload | — |
 | **STAC** | Built-in catalog browser + STAC Index discovery | Via plugins | Via add-ins | Living Atlas (not STAC) | — | — |
-| **OGC services** | XYZ, WMS, WFS, WMTS, OGC API Features/Tiles, with GetCapabilities discovery | Full OGC support | Full OGC support | Yes | Limited | XYZ / vector tiles |
-| **Esri services** | ArcGIS FeatureServer, VectorTileServer, I3S, `.gdb` folders (desktop) | Yes | Native | Native | Some ArcGIS layers | — |
+| **OGC services** | XYZ; WMS/WFS/WMTS discovered via GetCapabilities; OGC API Features/Tiles from a landing page, collection, or items URL | Full OGC support | Full OGC support | Yes | Limited | XYZ / vector tiles |
+| **Esri services and geodatabases** | ArcGIS FeatureServer, VectorTileServer, I3S, plus local `.gdb` File Geodatabase folders (desktop) | Yes | Native | Native | Some ArcGIS layers | — |
 | **Databases** | PostGIS browsing, DuckDB, in-browser PGlite/PostGIS | PostGIS, SpatiaLite, Oracle, SQL Server, SAP HANA | Enterprise geodatabases (SDE) | Hosted only | PostGIS / Snowflake connections (higher plans) | — |
 | **3D and point clouds** | LiDAR, 3D Tiles, I3S, Gaussian splats, glTF/GLB, Cesium globe pane | Point clouds, 3D map view, tiled scene layers | **Deepest 3D** — scenes, I3S, mesh, LAS | Scene Viewer | — | Extrusions and hexbins only |
 | **Planetary basemaps** | Moon, Mars, Mercury, Venus, Galilean moons, Titan, Pluto, Charon — with a per-project ellipsoid driving measurements | Via plugins | Limited | — | — | — |
@@ -54,11 +54,11 @@ app as a desktop install, an Android app, and a Jupyter widget.
 
 | | **GeoLibre** | **QGIS** | **ArcGIS Pro** | **ArcGIS Online** | **Felt** | **kepler.gl** |
 |---|---|---|---|---|---|---|
-| **Geoprocessing tools** | **1,000+** (Whitebox suite + GeoLibre's own), running in the browser on WebAssembly | **1,000+** (native, GDAL, GRASS, SAGA) | **Most mature and complete**, plus paid extensions | A useful subset, credit-metered | A small set of common tools | None (filter and aggregate only) |
+| **Geoprocessing tools** | **1,000+** (Whitebox suite + GeoLibre's own), running in the browser on WebAssembly | **1,000+** (native, GDAL, GRASS, SAGA) | **Most mature and complete**, plus paid extensions | A useful subset, credit-metered | A small set of common tools | No tool catalog — analysis goes through SQL and the AI assistant |
 | **Where analysis runs** | Your browser (WASM), no server required; optional Python sidecar on desktop | Your machine | Your machine, or a server/portal | Vendor cloud | Vendor cloud | Your browser |
-| **Vector analysis** | Buffer, overlay, dissolve, joins, selection, topology checks — Turf.js, or GeoPandas via Pyodide/sidecar | Comprehensive | Comprehensive | Common tools | Common tools | — |
+| **Vector analysis** | Buffer, overlay, dissolve, joins, selection, topology checks — Turf.js, or GeoPandas via Pyodide/sidecar | Comprehensive | Comprehensive | Common tools | Common tools | Spatial joins via SQL or the AI assistant |
 | **Raster analysis** | Hillshade, slope, contour, zonal/focal stats, raster calculator, reclassify, mosaic — rasterio sidecar with a browser fallback | Comprehensive (GDAL/GRASS/SAGA) | Comprehensive; Spatial Analyst extension | Limited | — | — |
-| **Spatial SQL** | DuckDB Spatial, PGlite/PostGIS, and Apache Sedona — **all in the browser** | Virtual layers, DB Manager, PostGIS connections | SQL against enterprise geodatabases | — | SQL on connected sources (higher plans) | — |
+| **Spatial SQL** | DuckDB Spatial, PGlite/PostGIS, and Apache Sedona — **all in the browser** | Virtual layers, DB Manager, PostGIS connections | SQL against enterprise geodatabases | — | SQL on connected sources (higher plans) | DuckDB SQL Data Explorer over loaded data and remote URLs |
 | **Model / batch chaining** | Batch runner with model and pipeline chaining | Graphical Model Designer | ModelBuilder | — | — | — |
 | **Spatial statistics** | Toolbox including Emerging Hot Spot Analysis | Via plugins and processing providers | Full Spatial Statistics toolbox | Some | — | — |
 | **Network analysis** | Isochrones, service areas, OD cost matrices, routing | QGIS Network Analysis, plugins (ORS, pgRouting) | Network Analyst extension | Routing services (credits) | — | — |
@@ -76,7 +76,7 @@ app as a desktop install, an Android app, and a Jupyter widget.
 | **Style interchange** | Imports and exports **OGC SLD, QGIS QML, and Mapbox GL JSON** | QML, SLD | `.lyrx`, limited SLD | — | — | — |
 | **Project import** | Reads **QGIS `.qgs`/`.qgz` and ArcGIS Pro `.aprx`/`.mapx`** | Reads its own | Reads its own (and `.mxd`) | — | — | — |
 | **Story maps** | Built-in story map builder with presenter view and standalone HTML export | Via plugins | — | ArcGIS StoryMaps (separate product) | Shareable maps, not chaptered stories | — |
-| **Dashboards** | Dashboard panel of chart and indicator widgets with cross-filtering | Via plugins | — | ArcGIS Dashboards (separate product) | — | Charts and filters in-map |
+| **Dashboards** | Dashboard panel of chart and indicator widgets with cross-filtering | Via plugins | — | ArcGIS Dashboards (separate product) | Dashboard components — statistics, bar, histogram, time series | Charts and filters in-map |
 
 ## Automation, extensibility, and sharing
 
@@ -85,10 +85,10 @@ app as a desktop install, an Android app, and a Jupyter widget.
 | **Scripting** | Python Console, `geolibre` Python package, docked Jupyter notebook beside the map | PyQGIS, `qgis_process` headless CLI | `arcpy`, notebooks | ArcGIS API for Python / JavaScript | REST API + Python client | JS library |
 | **Notebook integration** | The **whole app** embeds as a Jupyter anywidget with two-way project sync | Bindings, not the UI | Notebooks in Pro drive `arcpy` | Hosted notebooks | — | Widget |
 | **Plugin ecosystem** | TypeScript plugin API, built-ins, zip installs, bundled drop-ins | **Largest** — thousands of Python plugins | .NET add-ins, Python toolboxes | Configurable app templates | None (API only) | Fork the library |
-| **AI assistant** | Natural-language assistant that turns plain English into auditable, undoable operations; bring your own API key | Via plugins | Copilot features | — | AI-assisted map making | — |
+| **AI assistant** | Natural-language assistant that turns plain English into auditable, undoable operations; bring your own API key | Via plugins | Copilot features | — | AI-assisted map making | Yes — OpenAI, Gemini, DeepSeek, or local Ollama; bring your own key |
 | **Real-time collaboration** | Yes (MVP, self-hosted server) + anchored review comments | No (Mergin Maps for sync) | No | Shared editing of hosted layers | **Best-in-class** multiplayer editing and comments | — |
 | **Embedding** | `maponly` and `layout=viewer` URL modes, a versioned `postMessage` API, and the typed `@geolibre/embed` npm client | QGIS Server / QGIS2Web export | — | Embeddable web apps | Embeddable maps | Embeddable |
-| **Self-hosting** | Docker image, or serve the static build anywhere | QGIS Server | ArcGIS Enterprise (paid) | — | — | Static build |
+| **Self-hosting** | Docker image, or serve the static build anywhere | QGIS Server | ArcGIS Enterprise (paid) | — | Single-tenant AWS VPC, Felt-maintained (Enterprise) | Static build |
 | **Standalone export** | Whole project to **one offline HTML file**, no server | Via qgis2web plugin | — | — | — | HTML export |
 
 ## Where each one is the right choice
@@ -114,12 +114,14 @@ sharing and permissions, and the surrounding Esri app family (Dashboards,
 StoryMaps, Field Maps, Experience Builder).
 
 **Choose Felt when** collaborative, low-friction map *making* with a team is the
-whole job, and polished multiplayer editing matters more than analysis depth or
-keeping data off a vendor's servers.
+whole job, and polished multiplayer editing and field data collection matter more
+than analysis depth. Enterprise plans can run a single-tenant instance in your own
+AWS account if data residency is the blocker.
 
 **Choose kepler.gl when** you want fast, beautiful exploratory visualization of
-large point and trip datasets and do not need analysis, a project format, or
-layer management.
+large point and trip datasets, and DuckDB SQL plus its AI assistant cover the
+analysis you need — rather than a geoprocessing toolbox, cartographic output, or
+a portable project file.
 
 They also compose. GeoLibre reads QGIS and ArcGIS Pro projects and exchanges
 symbology as SLD, QML, and Mapbox GL JSON, so it is reasonable to author in
