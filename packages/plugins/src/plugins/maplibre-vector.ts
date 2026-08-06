@@ -397,7 +397,7 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
  * @param options - The shapefile sidecars and/or absolute path of a File source.
  * @returns A promise that settles when the layer has loaded or failed.
  */
-function replayVectorLayer(
+export function replayVectorLayer(
   control: VectorControl,
   layer: GeoLibreLayer,
   source: string | File | FeatureCollection,

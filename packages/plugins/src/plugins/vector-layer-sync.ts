@@ -68,6 +68,22 @@ export function rememberControlVectorRenderState(
   controlRenderState.set(id, existing ? { ...existing, ...patch } : { ...patch });
 }
 
+function forgetControlVectorRenderState(
+  id: string,
+  fields: { visible?: boolean; opacity?: boolean },
+): void {
+  const existing = controlRenderState.get(id);
+  if (!existing) return;
+  const next = { ...existing };
+  if (fields.visible) delete next.visible;
+  if (fields.opacity) delete next.opacity;
+  if (next.visible === undefined && next.opacity === undefined) {
+    controlRenderState.delete(id);
+  } else {
+    controlRenderState.set(id, next);
+  }
+}
+
 /**
  * Detects a layer panel entry owned by the maplibre-gl-vector control.
  *
@@ -226,12 +242,6 @@ export function syncVectorLayersToStore(control: VectorSyncableControl): void {
         known?.opacity !== undefined && numbersEqual(layer.opacity, known.opacity);
       const visible = visibleIsEcho ? existing.visible : layer.visible;
       const opacity = opacityIsEcho ? existing.opacity : layer.opacity;
-      if (!visibleIsEcho || !opacityIsEcho) {
-        rememberControlVectorRenderState(layer.id, {
-          ...(visibleIsEcho ? {} : { visible: layer.visible }),
-          ...(opacityIsEcho ? {} : { opacity: layer.opacity }),
-        });
-      }
 
       if (
         existing.type !== layer.type ||
@@ -256,6 +266,37 @@ export function syncVectorLayersToStore(control: VectorSyncableControl): void {
           type: layer.type,
           visible,
         });
+      }
+
+      // The control uses one value for both its layer UI and map paint. After a
+      // genuine control-side edit updates the child's own value, immediately
+      // fold the current group chain back over it so a faded or hidden parent
+      // continues to affect the rendered layer.
+      if (!visibleIsEcho || !opacityIsEcho) {
+        const state = useAppStore.getState();
+        const effective = applyGroupEffects(state.layers, state.layerGroups).find(
+          (current) => current.id === layer.id,
+        );
+        if (effective) {
+          runWithVectorStoreSyncSuspended(() => {
+            if (!visibleIsEcho) {
+              if (effective.visible !== layer.visible) {
+                control.setLayerVisibility(layer.id, effective.visible);
+                rememberControlVectorRenderState(layer.id, { visible: effective.visible });
+              } else {
+                forgetControlVectorRenderState(layer.id, { visible: true });
+              }
+            }
+            if (!opacityIsEcho) {
+              if (!numbersEqual(effective.opacity, layer.opacity)) {
+                control.setLayerOpacity(layer.id, effective.opacity);
+                rememberControlVectorRenderState(layer.id, { opacity: effective.opacity });
+              } else {
+                forgetControlVectorRenderState(layer.id, { opacity: true });
+              }
+            }
+          });
+        }
       }
     }
   } finally {
