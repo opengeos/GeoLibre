@@ -151,9 +151,19 @@ Full documentation, including the User Guide and Tutorials, is published at
   - [Roadmap](docs/roadmap.md)
   - [Contributing](docs/contributing.md)
   - [How to Cite](docs/citation.md)
+  - [Become a Sponsor](docs/sponsor.md)
 
 Contributions are welcome. See the [Contributing](docs/contributing.md) guide
 for the development setup, repository layout, and quality gate.
+
+## Sponsor
+
+GeoLibre is free and open source, and stays that way. If it is useful to you or your team, sponsorship is the most direct way to keep development, hosting, and cross-platform distribution going.
+
+- [**GitHub Sponsors**](https://github.com/sponsors/giswqs) - monthly or one-time, billed through your GitHub account.
+- [**Buy Me a Coffee**](https://buymeacoffee.com/giswqs) - a quick one-off contribution, no account required.
+
+See the [Become a Sponsor](https://geolibre.app/sponsor/) page for what sponsorship supports and for other, free ways to help.
 
 ## Acknowledgements
 

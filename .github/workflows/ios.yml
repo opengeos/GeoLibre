@@ -143,6 +143,78 @@ jobs:
         # upload rather than at build time.
         run: ./scripts/sync-ios-app-icon.sh
 
+      - name: Verify the iOS deployment target
+        # Apple's floor, not ours: from Spring 2027 App Store Connect refuses any
+        # upload whose MinimumOSVersion is below 15.0, and today it accepts the
+        # build and answers with a warning email instead (ITMS-90068, which is how
+        # 2.5.0 build 7 was found to still carry 14.0). A warning that arrives
+        # after the upload is exactly the kind of failure this job asserts away.
+        #
+        # The value is NOT written by anything in this repo: it comes from
+        # `bundle.iOS.minimumSystemVersion` in tauri.ios.conf.json, which the Tauri
+        # CLI templates into the generated project.yml as XcodeGen's
+        # `deploymentTarget.iOS` (-> IPHONEOS_DEPLOYMENT_TARGET -> the .app's
+        # MinimumOSVersion). Omit the key and the CLI's own default (14.0) applies
+        # silently. So the config is read as the source of truth, checked against
+        # Apple's floor, and then compared with what `ios init` actually
+        # generated: a CLI that stopped honoring the key would otherwise look
+        # identical here and only surface as another warning email.
+        run: |
+          set -euo pipefail
+          conf="apps/geolibre-desktop/src-tauri/tauri.ios.conf.json"
+          project="apps/geolibre-desktop/src-tauri/gen/apple/project.yml"
+
+          # `// empty` rather than `jq -e` so a removed or renamed key lands on
+          # the message below instead of jq's bare "Error: null (null)". Invalid
+          # JSON still fails the step through `set -e`, as it should.
+          want="$(jq -r '.bundle.iOS.minimumSystemVersion // empty' "$conf")"
+          if [ -z "$want" ]; then
+            echo "::error::$conf does not set bundle.iOS.minimumSystemVersion, so the Tauri CLI's 14.0 default would apply (ITMS-90068)"
+            exit 1
+          fi
+
+          # Component-wise dotted-version compare, exiting 0 when the configured
+          # target is at or above the floor. Deliberately not `sort -V`: this
+          # runs on macOS, whose sort is BSD rather than GNU, and a `-V` that
+          # errored out would fail the step with the message below no matter what
+          # the config actually says. awk behaves the same on both.
+          floor="15.0"
+          if ! awk -v want="$want" -v floor="$floor" 'BEGIN {
+                n = split(want, a, "."); m = split(floor, b, ".")
+                for (i = 1; i <= (n > m ? n : m); i++) {
+                  if (a[i] + 0 != b[i] + 0) exit (a[i] + 0 < b[i] + 0)
+                }
+                exit 0
+              }'; then
+            echo "::error::$conf sets bundle.iOS.minimumSystemVersion to '$want', below Apple's $floor floor (ITMS-90068)"
+            exit 1
+          fi
+
+          if [ ! -f "$project" ]; then
+            echo "::error::No generated project.yml at $project"
+            exit 1
+          fi
+          # Scoped to the `deploymentTarget:` block, resetting at the first line
+          # that dedents back out of it, so an `iOS:` key elsewhere in the file
+          # can never be read as this one. Parsed as text rather than YAML on
+          # purpose: a YAML loader turns `15.0` into a float, and `15.10` would
+          # come back out as `15.1`. tr strips quoting if the template emits any.
+          got="$(awk '
+            /^[[:space:]]*deploymentTarget:/ { depth = match($0, /[^[:space:]]/); inblock = 1; next }
+            !inblock || /^[[:space:]]*$/ { next }
+            match($0, /[^[:space:]]/) <= depth { inblock = 0; next }
+            $1 == "iOS:" { print $2; exit }
+          ' "$project" | tr -cd '0-9.')"
+          if [ "$got" != "$want" ]; then
+            echo "::error::Generated project.yml has deploymentTarget.iOS '$got', expected the configured '$want'. Did the Tauri CLI stop honoring bundle.iOS.minimumSystemVersion?"
+            exit 1
+          fi
+
+          echo "::notice::iOS deployment target $want"
+          # Handed to the IPA verify step so it asserts against the configured
+          # value rather than a second hardcoded copy of it.
+          echo "IOS_MIN_OS=$want" >> "$GITHUB_ENV"
+
       - name: Check for Apple signing secrets
         id: signing
         # `secrets` can't be used in a step-level `if:`, so presence is turned
@@ -481,7 +553,16 @@ jobs:
             exit 1
           fi
 
-          echo "IPA $ipa: bundle id $EXPECTED_BUNDLE_ID, version $short ($build), signed by $authority."
+          # The deployment target was checked against the generated project.yml
+          # before the archive; this asserts it survived into the shipped bytes,
+          # which is the copy App Store Connect reads for ITMS-90068.
+          minos="$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$plist")"
+          if [ "$minos" != "$IOS_MIN_OS" ]; then
+            echo "::error::$ipa has MinimumOSVersion '$minos', expected the configured '$IOS_MIN_OS'"
+            exit 1
+          fi
+
+          echo "IPA $ipa: bundle id $EXPECTED_BUNDLE_ID, version $short ($build), min iOS $minos, signed by $authority."
           echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
 
       - name: Clean up the signing keychain

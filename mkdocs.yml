@@ -44,6 +44,7 @@ nav:
   - Comparison: comparison.md
   - Demos: demos.md
   - Downloads: downloads.md
+  - Sponsor: sponsor.md
   - Launch GeoLibre Web: /demo/
   - User Guide:
       - Interface Overview: user-guide/interface.md
@@ -118,3 +119,9 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/opengeos/GeoLibre
       name: GeoLibre on GitHub
+    - icon: fontawesome/solid/heart
+      link: https://github.com/sponsors/giswqs
+      name: Sponsor GeoLibre on GitHub
+    - icon: fontawesome/solid/mug-hot
+      link: https://buymeacoffee.com/giswqs
+      name: Buy the maintainer a coffee

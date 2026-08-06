@@ -64,6 +64,58 @@ It covers all three location consumers: Field Collection, GPS Tracking, and the
 Controls → GeoLocate map control. After a build, confirm the key survived the
 merge (see *Build* below).
 
+## Minimum iOS version
+
+GeoLibre targets **iOS 15.0**, set once in
+`apps/geolibre-desktop/src-tauri/tauri.ios.conf.json`:
+
+```json
+"bundle": { "iOS": { "minimumSystemVersion": "15.0" } }
+```
+
+Tauri templates that value into the generated `gen/apple/project.yml` as
+XcodeGen's `deploymentTarget.iOS`, which Xcode turns into
+`IPHONEOS_DEPLOYMENT_TARGET` and finally the app's `MinimumOSVersion`. There is
+nothing to hand-edit in the generated project, and nothing in `Info.ios.plist`:
+Xcode writes the plist key from the build setting.
+
+Leave the key out and the **Tauri CLI's own default applies**, which is `14.0`.
+That is below Apple's floor: starting Spring 2027, App Store Connect refuses any
+upload with a `MinimumOSVersion` under 15.0. Until then it accepts the build and
+sends a warning email afterward (`ITMS-90068`), which is how version 2.5.0
+build 7 was found to have shipped at 14.0.
+
+Because `gen/apple` is generated, a change here only takes effect once the
+project is regenerated. CI regenerates on every run, so it picks the value up
+automatically; locally, regenerate it yourself (paths relative to
+`apps/geolibre-desktop`, as everywhere else in this document):
+
+```bash
+cd apps/geolibre-desktop
+rm -rf src-tauri/gen/apple
+npx tauri ios init
+
+# What init generated:
+grep -A2 'deploymentTarget:' src-tauri/gen/apple/project.yml
+
+# What a build actually shipped. `MinimumOSVersion` exists only in the *built*
+# app, since Xcode writes it from the build setting; it is not in the generated
+# source Info.plist. So this needs an archive, which `init` alone does not
+# produce.
+npx tauri ios build --no-sign
+/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' \
+  src-tauri/gen/apple/build/geolibre-desktop_iOS.xcarchive/Products/Applications/GeoLibre.app/Info.plist
+```
+
+The CI job asserts this in two places (see *Continuous integration*): the
+configured value against Apple's floor and against the generated `project.yml`
+right after `ios init`, and then the exported `.ipa`'s `MinimumOSVersion`, which
+is the copy App Store Connect actually reads.
+
+Raising the floor further is a product decision, not a technical one. iOS 15 is
+the last release for the iPhone 6s/7 and iPad Air 2 generation, so 16.0 would
+drop those devices in exchange for a newer WebKit baseline.
+
 ## Toolchain setup (one time)
 
 You need a **Mac** with **Xcode** (from the App Store; open it once to accept the
@@ -143,9 +195,10 @@ npx tauri ios build --no-sign          # unsigned .ipa + .xcarchive (no Apple ac
 > *not* appear in `security find-identity -v -p codesigning`. An empty identity
 > list is not evidence the signing failed — check the `.ipa` itself.
 
-- `gen/apple` is generated (git-ignored) and regenerated on demand. `init` also
-  merges `tauri.ios.conf.json` (bundle id, drops the Python backend) and
-  `Info.ios.plist` (the location string).
+- `gen/apple` is generated (git-ignored) and regenerated on demand. `init`
+  applies `tauri.ios.conf.json` (bundle id, deployment target, drops the Python
+  backend); `Info.ios.plist` (the location string) is merged later, by
+  `tauri ios build`/`dev`, as noted below.
 - The app is named **GeoLibre** on iOS (the desktop build is "GeoLibre Desktop")
   and uses the bundle id **`org.geolibre.app`**, both set via
   `src-tauri/tauri.ios.conf.json` — the same override pattern and reasoning as
@@ -204,8 +257,8 @@ not free to choose — see the Xcode floor below.
 
 - **With Apple signing secrets set**, it imports the identity into a throwaway
   keychain, archives **unsigned**, exports a signed `.ipa` under manual signing,
-  verifies the bundle id and the signature, and uploads it as the
-  `geolibre-ios-ipa` artifact:
+  verifies the bundle id, the signature, the build number shape and the
+  `MinimumOSVersion`, and uploads it as the `geolibre-ios-ipa` artifact:
   - `APPLE_IOS_CERTIFICATE_BASE64` — `base64 -i dist.p12`
   - `APPLE_IOS_CERTIFICATE_PASSWORD`
   - `APPLE_IOS_PROVISIONING_PROFILE_BASE64` — `base64 -i profile.mobileprovision`

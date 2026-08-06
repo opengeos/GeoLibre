@@ -225,6 +225,14 @@ launch), see the [sidecar README](https://github.com/opengeos/GeoLibre/blob/main
 Run its tests with `npm run test:backend` from the repository root, or
 `python -m pytest` from the backend directory.
 
+## Sponsoring
+
+Code is not the only way to contribute. If you or your organization depend on
+GeoLibre, financial support keeps development, hosting, and app-store
+distribution going — see [Become a Sponsor](sponsor.md) for
+[GitHub Sponsors](https://github.com/sponsors/giswqs) and
+[Buy Me a Coffee](https://buymeacoffee.com/giswqs).
+
 ## License
 
 GeoLibre is released under the [MIT License](https://github.com/opengeos/GeoLibre/blob/main/LICENSE).
