@@ -195,6 +195,31 @@ describe("buildLayerPanelUnits", () => {
     assert.equal(headers.bottom.length, 0);
   });
 
+  it("orders and draws grandchild folders at two levels of nesting", () => {
+    // Depth 2: only "leafB" holds a layer, so "leafA" is placed by its own
+    // sibling rather than by "mid" or "p", both of which are ancestors whose
+    // ranges already contain the slot. "other" clears the whole subtree.
+    const layers = [layer("a", { groupId: "leafB" })];
+    const groups = [
+      group("p"),
+      group("mid", { parentId: "p" }),
+      group("leafA", { parentId: "mid" }),
+      group("leafB", { parentId: "mid" }),
+      group("other"),
+    ];
+    assert.deepEqual(panelOrder(layers, groups), ["group:leafA", "group:leafB", "group:other"]);
+    // Every ancestor header precedes the folders nested in it.
+    const headers = layerPanelGroupHeaders(layers, groups);
+    assert.deepEqual(
+      headers.aboveLayer.get("a")?.map((g) => g.id),
+      ["p", "mid", "leafA", "leafB"],
+    );
+    assert.deepEqual(
+      headers.bottom.map((g) => g.id),
+      ["other"],
+    );
+  });
+
   it("anchors headers against the layer rows the panel draws", () => {
     const layers = [layer("bottom"), layer("a", { groupId: "g1" }), layer("top")];
     const headers = layerPanelGroupHeaders(layers, [group("g1"), group("g2")]);
@@ -394,6 +419,29 @@ describe("reorderLayerGroupInPanel", () => {
     assert.deepEqual(panelOrder(layers, groups), ["group:p", "group:c1"]);
     assert.equal(reorderLayerGroupInPanel(layers, groups, "c1", "up"), null);
     assert.equal(reorderLayerGroupInPanel(layers, groups, "c1", "down"), null);
+  });
+
+  it("moves a grandchild among its siblings and stops at its own parent", () => {
+    const layers = [layer("a", { groupId: "leafB" })];
+    const groups = [
+      group("p"),
+      group("mid", { parentId: "p" }),
+      group("leafA", { parentId: "mid" }),
+      group("leafB", { parentId: "mid" }),
+      group("other"),
+    ];
+    // "mid" is the wall for its children, not the outer "p" or "other".
+    const moveability = layerGroupMoveability(layers, groups);
+    assert.deepEqual(moveability.get("leafA"), { up: false, down: true });
+    assert.deepEqual(moveability.get("leafB"), { up: true, down: false });
+
+    const moved = reorderLayerGroupInPanel(layers, groups, "leafA", "down");
+    assert.ok(moved);
+    assert.deepEqual(panelOrder(moved.layers, moved.groups), [
+      "group:leafB",
+      "group:leafA",
+      "group:other",
+    ]);
   });
 
   it("steps a top-level group over a whole subtree in one move", () => {
