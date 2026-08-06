@@ -30,6 +30,8 @@ import {
   supportsBridgedOpacity,
   useAppStore,
   excludeHiddenFieldsFromGeojson,
+  layerGroupMoveability,
+  placeUnpositionedGroups,
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
@@ -973,15 +975,17 @@ export function LayerPanel({
     }
     return result;
   }, [descendantLayerAnchorByGroup, groupDepth, layerGroups]);
-  // Empty folders have no member to anchor them, so they render pinned at the
-  // top of the panel where they are easy to drop layers into.
-  const emptyGroups = useMemo(
-    () =>
-      layerGroups.filter(
-        (group) =>
-          !firstMemberIdByGroup.has(group.id) && !descendantLayerAnchorByGroup.has(group.id),
-      ),
-    [descendantLayerAnchorByGroup, firstMemberIdByGroup, layerGroups],
+  // Empty folders have no member to anchor them, so the core places them
+  // against their neighbours in the group order instead: a folder keeps its
+  // spot relative to the other folders when one of them gains a layer, and it
+  // can still be reordered (GeoLibre#1739).
+  const unpositionedGroups = useMemo(
+    () => placeUnpositionedGroups(layers, layerGroups),
+    [layers, layerGroups],
+  );
+  const groupMoveability = useMemo(
+    () => layerGroupMoveability(layers, layerGroups),
+    [layers, layerGroups],
   );
   // Resize the metadata dialog from its bottom-end grip. The dialog is centred
   // via a -50% transform, so each edge moves by half the size change; growing
@@ -2583,8 +2587,7 @@ export function LayerPanel({
   const renderGroupHeader = (group: LayerGroup) => {
     if (hasCollapsedAncestor(group)) return null;
     const isDropTarget = dropTargetGroupId === group.id;
-    const canReorderGroup =
-      firstMemberIdByGroup.has(group.id) || descendantLayerAnchorByGroup.has(group.id);
+    const moveability = groupMoveability.get(group.id);
     const moveTargets = groupMoveTargets(group);
     return (
       <div
@@ -2746,7 +2749,7 @@ export function LayerPanel({
                   menu on select; only the rename item above keeps it, so the
                   menu's close does not race its input autofocus. */}
               <DropdownMenuItem
-                disabled={!canReorderGroup}
+                disabled={!moveability?.up}
                 onSelect={() => {
                   reorderLayerGroup(group.id, "up");
                 }}
@@ -2755,7 +2758,7 @@ export function LayerPanel({
                 {t("layers.moveGroupUp")}
               </DropdownMenuItem>
               <DropdownMenuItem
-                disabled={!canReorderGroup}
+                disabled={!moveability?.down}
                 onSelect={() => {
                   reorderLayerGroup(group.id, "down");
                 }}
@@ -2945,9 +2948,6 @@ export function LayerPanel({
               {isBeginnerProfile ? t("layers.emptyBeginner") : t("layers.empty")}
             </p>
           )}
-          {emptyGroups.map((group) => (
-            <Fragment key={group.id}>{renderGroupHeader(group)}</Fragment>
-          ))}
           {visibleLayers.map((layer, displayIndex) => {
             const group = layer.groupId ? groupById.get(layer.groupId) : undefined;
             const isFirstOfGroup = group ? firstMemberIdByGroup.get(group.id) === layer.id : false;
@@ -3113,6 +3113,9 @@ export function LayerPanel({
             const moveIds = selectedMoveIds(layer.id);
             return (
               <Fragment key={layer.id}>
+                {unpositionedGroups.aboveLayer.get(layer.id)?.map((empty) => (
+                  <Fragment key={empty.id}>{renderGroupHeader(empty)}</Fragment>
+                ))}
                 {isFirstOfGroup &&
                   group &&
                   organizerHeadersByAnchor
@@ -4024,6 +4027,11 @@ export function LayerPanel({
               </Fragment>
             );
           })}
+          {/* Folders placed below the last layer row: the panel has no layer
+              left to anchor them above. */}
+          {unpositionedGroups.bottom.map((group) => (
+            <Fragment key={group.id}>{renderGroupHeader(group)}</Fragment>
+          ))}
           <div
             data-layer-card=""
             className={`rounded-md border p-2 transition-colors ${

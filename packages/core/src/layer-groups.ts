@@ -12,6 +12,155 @@ export type LayerTreeItem =
   | { kind: "group"; group: LayerGroup; children: GeoLibreLayer[] };
 
 /**
+ * One top-level block of the layer panel, in top-of-panel-first order: either a
+ * single ungrouped layer or the contiguous run of layers a group owns.
+ *
+ * A group that owns no layer anywhere beneath it still gets a unit, with an
+ * empty `layers` array, so that empty folders have a position in the panel and
+ * can be reordered like any other row.
+ */
+export type LayerPanelUnit = {
+  /** Group the block belongs to, or `null` for a lone ungrouped layer. */
+  groupId: string | null;
+  /** Member layers, top-first. Empty for a group with no layers under it. */
+  layers: GeoLibreLayer[];
+};
+
+/**
+ * Panel index range `[first, last]` each group spans, keyed by group id. A
+ * group with no unit of its own (an organizer whose layers all live in child
+ * groups) spans the union of its descendants' units, so it is absent only when
+ * nothing under it has a position yet.
+ */
+function groupUnitRanges(
+  units: LayerPanelUnit[],
+  groupById: ReadonlyMap<string, LayerGroup>,
+): Map<string, [number, number]> {
+  const ranges = new Map<string, [number, number]>();
+  units.forEach((unit, index) => {
+    let id: string | null = unit.groupId;
+    const visited = new Set<string>();
+    while (id && !visited.has(id)) {
+      visited.add(id);
+      const range = ranges.get(id);
+      if (range) ranges.set(id, [Math.min(range[0], index), Math.max(range[1], index)]);
+      else ranges.set(id, [index, index]);
+      // A dangling `parentId` ends the walk rather than recording a range for a
+      // group that does not exist.
+      const parentId = groupById.get(id)?.parentId;
+      id = parentId && groupById.has(parentId) ? parentId : null;
+    }
+  });
+  return ranges;
+}
+
+/**
+ * Split the panel into its top-level blocks, **top-of-panel first** (the
+ * reverse of the store's render order, where the last array element draws on
+ * top).
+ *
+ * Layers give every populated group a position of its own. A group with no
+ * layers under it has none to derive, so it is slotted in next to its
+ * neighbours in `groups` order: directly below the nearest group above it in
+ * that array, else directly above the nearest one below it, else at the top of
+ * the panel. Because the neighbours are read from `groups` rather than from the
+ * layer array, a folder keeps its place relative to the other folders when one
+ * of them gains its first layer (GeoLibre#1739). A group nested in a positioned
+ * parent lands directly below that parent's block regardless of array order.
+ *
+ * A `groupId` that does not match any group is treated as ungrouped, so a
+ * dangling reference degrades gracefully instead of dropping the layer.
+ *
+ * @param layers Flat layer list in store (render) order.
+ * @param groups Group definitions.
+ * @returns Panel blocks in top-to-bottom display order.
+ */
+export function buildLayerPanelUnits(
+  layers: GeoLibreLayer[],
+  groups: LayerGroup[],
+): LayerPanelUnit[] {
+  const groupById = new Map(groups.map((g) => [g.id, g]));
+  const units: LayerPanelUnit[] = [];
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const layer = layers[i];
+    const groupId = layer.groupId && groupById.has(layer.groupId) ? layer.groupId : null;
+    const last = units[units.length - 1];
+    if (groupId && last && last.groupId === groupId) last.layers.push(layer);
+    else units.push({ groupId, layers: [layer] });
+  }
+
+  let ranges = groupUnitRanges(units, groupById);
+  if (ranges.size === groups.length) return units;
+  for (let at = 0; at < groups.length; at++) {
+    const group = groups[at];
+    if (ranges.has(group.id)) continue;
+    const parentRange = group.parentId ? ranges.get(group.parentId) : undefined;
+    let insertAt = parentRange ? parentRange[1] + 1 : undefined;
+    for (let i = at - 1; insertAt === undefined && i >= 0; i--) {
+      const range = ranges.get(groups[i].id);
+      if (range) insertAt = range[1] + 1;
+    }
+    for (let i = at + 1; insertAt === undefined && i < groups.length; i++) {
+      const range = ranges.get(groups[i].id);
+      if (range) insertAt = range[0];
+    }
+    units.splice(insertAt ?? 0, 0, { groupId: group.id, layers: [] });
+    // Placing this folder shifts the units below it, and makes the folder
+    // itself an anchor for the ones still to be placed.
+    ranges = groupUnitRanges(units, groupById);
+  }
+  return units;
+}
+
+/**
+ * Where the layer panel should draw the header of each group that owns no
+ * layers, expressed against the layer rows the panel already renders.
+ */
+export type UnpositionedGroupPlacement = {
+  /** Groups drawn immediately above the keyed layer's row, in panel order. */
+  aboveLayer: Map<string, LayerGroup[]>;
+  /** Groups drawn below every layer row, in panel order. */
+  bottom: LayerGroup[];
+};
+
+/**
+ * Resolve {@link buildLayerPanelUnits} into draw positions for the folders that
+ * have no layer of their own, so a panel that renders row-by-row from the flat
+ * layer list can place them without rebuilding its whole render as a tree.
+ *
+ * @param layers Flat layer list in store (render) order.
+ * @param groups Group definitions.
+ * @returns The anchor layer (or the panel bottom) each empty folder sits above.
+ */
+export function placeUnpositionedGroups(
+  layers: GeoLibreLayer[],
+  groups: LayerGroup[],
+): UnpositionedGroupPlacement {
+  const groupById = new Map(groups.map((g) => [g.id, g]));
+  const units = buildLayerPanelUnits(layers, groups);
+  const aboveLayer = new Map<string, LayerGroup[]>();
+  const bottom: LayerGroup[] = [];
+  for (let i = 0; i < units.length; i++) {
+    const unit = units[i];
+    if (unit.layers.length > 0 || !unit.groupId) continue;
+    const group = groupById.get(unit.groupId);
+    if (!group) continue;
+    let anchorId: string | undefined;
+    for (let j = i + 1; anchorId === undefined && j < units.length; j++) {
+      anchorId = units[j].layers[0]?.id;
+    }
+    if (anchorId === undefined) {
+      bottom.push(group);
+      continue;
+    }
+    const at = aboveLayer.get(anchorId);
+    if (at) at.push(group);
+    else aboveLayer.set(anchorId, [group]);
+  }
+  return { aboveLayer, bottom };
+}
+
+/**
  * Derive the layer-panel tree from the flat `layers` array and the group
  * definitions.
  *
@@ -20,8 +169,8 @@ export type LayerTreeItem =
  * children are likewise ordered top-first. Each group is emitted once, at the
  * panel position of its top-most member; a group's members are normally
  * contiguous in the array, but if they are not, every member is still gathered
- * under a single header. Groups with no members (empty folders) are emitted at
- * the very top of the panel, in `groups` order, ready to receive drops.
+ * under a single header. Groups with no members (empty folders) sit where
+ * {@link buildLayerPanelUnits} places them.
  *
  * A `groupId` that does not match any group is treated as ungrouped, so a
  * dangling reference degrades gracefully instead of dropping the layer.
@@ -32,46 +181,27 @@ export type LayerTreeItem =
  */
 export function buildLayerTree(layers: GeoLibreLayer[], groups: LayerGroup[]): LayerTreeItem[] {
   const groupById = new Map(groups.map((g) => [g.id, g]));
-  const display = [...layers].reverse();
-
-  // Bucket every layer's children by group id in a single pass so emitting a
-  // group is an O(1) lookup rather than a per-group filter over `display`.
-  const childrenByGroupId = new Map<string, GeoLibreLayer[]>();
-  for (const layer of display) {
-    if (!layer.groupId || !groupById.has(layer.groupId)) continue;
-    const bucket = childrenByGroupId.get(layer.groupId);
-    if (bucket) bucket.push(layer);
-    else childrenByGroupId.set(layer.groupId, [layer]);
-  }
-
   const items: LayerTreeItem[] = [];
-  const emitted = new Set<string>();
+  const emittedAt = new Map<string, LayerTreeItem & { kind: "group" }>();
 
-  for (const layer of display) {
-    const group = layer.groupId ? groupById.get(layer.groupId) : undefined;
+  for (const unit of buildLayerPanelUnits(layers, groups)) {
+    const group = unit.groupId ? groupById.get(unit.groupId) : undefined;
     if (!group) {
-      items.push({ kind: "layer", layer });
+      for (const layer of unit.layers) items.push({ kind: "layer", layer });
       continue;
     }
-    if (emitted.has(group.id)) continue;
-    emitted.add(group.id);
-    items.push({
-      kind: "group",
-      group,
-      children: childrenByGroupId.get(group.id) ?? [],
-    });
+    // A group's members are normally one contiguous run, but a scattered group
+    // still gets a single header, at its top-most member.
+    const existing = emittedAt.get(group.id);
+    if (existing) {
+      existing.children.push(...unit.layers);
+      continue;
+    }
+    const item = { kind: "group" as const, group, children: [...unit.layers] };
+    emittedAt.set(group.id, item);
+    items.push(item);
   }
-
-  const emptyGroups = groups.filter((g) => !childrenByGroupId.has(g.id));
-  if (emptyGroups.length === 0) return items;
-  return [
-    ...emptyGroups.map((group) => ({
-      kind: "group" as const,
-      group,
-      children: [] as GeoLibreLayer[],
-    })),
-    ...items,
-  ];
+  return items;
 }
 
 /**
@@ -201,6 +331,121 @@ export function normalizeGroupContiguity(layers: GeoLibreLayer[]): GeoLibreLayer
         placed.add(candidate.id);
       }
     }
+  }
+  return result;
+}
+
+/** `id` plus every group nested beneath it, however deep. */
+function groupSubtreeIds(groups: LayerGroup[], id: string): Set<string> {
+  const ids = new Set([id]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const group of groups) {
+      if (group.parentId && ids.has(group.parentId) && !ids.has(group.id)) {
+        ids.add(group.id);
+        grew = true;
+      }
+    }
+  }
+  return ids;
+}
+
+/** Nesting depth of a group, so a re-sort can keep parents ahead of children. */
+function groupDepth(group: LayerGroup, groupById: ReadonlyMap<string, LayerGroup>): number {
+  let depth = 0;
+  let parentId = group.parentId;
+  const visited = new Set([group.id]);
+  while (parentId && !visited.has(parentId)) {
+    visited.add(parentId);
+    const parent = groupById.get(parentId);
+    if (!parent) break;
+    depth += 1;
+    parentId = parent.parentId;
+  }
+  return depth;
+}
+
+/**
+ * Move a group — with everything nested inside it — one row up or down among
+ * the layer panel's top-level blocks.
+ *
+ * Both arrays carry part of the panel order, so both come back: `layers` holds
+ * the order of every populated block, and `groups` holds the order the empty
+ * folders are placed against (see {@link buildLayerPanelUnits}). Swapping two
+ * folders that own no layers moves nothing in `layers`, and moving a populated
+ * group past an empty one moves nothing but the group order, so a caller must
+ * apply both.
+ *
+ * @param layers Flat layer list in store (render) order.
+ * @param groups Group definitions.
+ * @param id Group to move.
+ * @param direction `"up"` toward the top of the panel, `"down"` toward the
+ *   bottom.
+ * @returns The new arrays, or `null` when the group is already at that end of
+ *   the panel and nothing would change.
+ */
+export function reorderLayerGroupInPanel(
+  layers: GeoLibreLayer[],
+  groups: LayerGroup[],
+  id: string,
+  direction: "up" | "down",
+): { layers: GeoLibreLayer[]; groups: LayerGroup[] } | null {
+  if (!groups.some((group) => group.id === id)) return null;
+  const groupById = new Map(groups.map((g) => [g.id, g]));
+  const units = buildLayerPanelUnits(layers, groups);
+  const moving = groupSubtreeIds(groups, id);
+  const matching = new Set<number>();
+  units.forEach((unit, index) => {
+    if (unit.groupId && moving.has(unit.groupId)) matching.add(index);
+  });
+  if (matching.size === 0) return null;
+  const indices = [...matching].sort((a, b) => a - b);
+  // Units run top-first, so "up" swaps with the block above the group's first.
+  const neighbor = direction === "up" ? indices[0] - 1 : indices[indices.length - 1] + 1;
+  if (neighbor < 0 || neighbor >= units.length) return null;
+  const neighborUnit = units[neighbor];
+  const block = units.filter((_, index) => matching.has(index));
+  const remaining = units.filter((_, index) => !matching.has(index));
+  const neighborIndex = remaining.indexOf(neighborUnit);
+  const reordered = [...remaining];
+  reordered.splice(direction === "up" ? neighborIndex : neighborIndex + 1, 0, ...block);
+
+  // Units are top-first and so are the layers inside them; the store keeps the
+  // reverse, with the last element drawing on top.
+  const nextLayers = reordered.flatMap((unit) => unit.layers).reverse();
+  // Re-derive the group order from the new panel so the empty folders, which
+  // are placed against it, follow the move. Ties (an organizer and the child
+  // block it spans) keep parents first.
+  const ranges = groupUnitRanges(reordered, groupById);
+  const nextGroups = [...groups].sort((a, b) => {
+    const byPosition = (ranges.get(a.id)?.[0] ?? 0) - (ranges.get(b.id)?.[0] ?? 0);
+    return byPosition !== 0 ? byPosition : groupDepth(a, groupById) - groupDepth(b, groupById);
+  });
+  const layersMoved = nextLayers.some((layer, index) => layer.id !== layers[index]?.id);
+  const groupsMoved = nextGroups.some((group, index) => group.id !== groups[index]?.id);
+  if (!layersMoved && !groupsMoved) return null;
+  return { layers: nextLayers, groups: nextGroups };
+}
+
+/**
+ * Which directions {@link reorderLayerGroupInPanel} can actually move each
+ * group, so the layer panel can disable a menu item that would do nothing.
+ *
+ * @param layers Flat layer list in store (render) order.
+ * @param groups Group definitions.
+ * @returns Per-group flags, keyed by group id.
+ */
+export function layerGroupMoveability(
+  layers: GeoLibreLayer[],
+  groups: LayerGroup[],
+): Map<string, { up: boolean; down: boolean }> {
+  const result = new Map<string, { up: boolean; down: boolean }>();
+  for (const group of groups) {
+    result.set(group.id, {
+      up: reorderLayerGroupInPanel(layers, groups, group.id, "up") !== null,
+      down: reorderLayerGroupInPanel(layers, groups, group.id, "down") !== null,
+    });
   }
   return result;
 }
