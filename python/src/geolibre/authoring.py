@@ -16,6 +16,7 @@ import copy
 import json
 import math
 import os
+import stat
 import tempfile
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -42,6 +43,31 @@ MAX_PROJECT_BYTES = 256 * 1024 * 1024
 
 
 # -- file I/O -----------------------------------------------------------------
+
+
+def _finite(value: Any, field: str) -> float:
+    """Coerce to float, rejecting the values JSON cannot represent.
+
+    ``json.loads`` turns an out-of-range literal like ``1e400`` into ``inf``
+    without raising, and ``json.dumps`` writes it back as a bare ``Infinity``
+    token, which is not valid JSON per RFC 8259 and fails the app's
+    ``JSON.parse``. Every camera field a client can set goes through here so
+    that never reaches the file.
+
+    Args:
+        value: The client-supplied number.
+        field: The field name, for the error message.
+
+    Returns:
+        The value as a float.
+
+    Raises:
+        ValueError: If the value is not finite.
+    """
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{field} must be a finite number, got {number}")
+    return number
 
 
 def load_project(path: str | Path) -> dict[str, Any]:
@@ -104,12 +130,17 @@ def save_project(path: str | Path, project: dict[str, Any]) -> Path:
     temporary = Path(handle.name)
     try:
         with handle:
-            handle.write(json.dumps(project, indent=2) + "\n")
+            # allow_nan=False so an Infinity/NaN that reached the dict by some
+            # other path fails loudly here rather than being written as a bare
+            # token the app's JSON.parse rejects. Camera fields are already
+            # checked at the setter (see _finite); this is the backstop.
+            handle.write(json.dumps(project, indent=2, allow_nan=False) + "\n")
         # NamedTemporaryFile creates at 0600. Carry the destination's mode over
         # so re-saving an existing project does not quietly make it private —
-        # the MCP server calls this on every edit, however small.
+        # the MCP server calls this on every edit, however small. S_IMODE drops
+        # the file-type bits, keeping only the permissions.
         if file.exists():
-            os.chmod(temporary, file.stat().st_mode)
+            os.chmod(temporary, stat.S_IMODE(file.stat().st_mode))
         os.replace(temporary, file)
     except BaseException:
         temporary.unlink(missing_ok=True)
@@ -362,6 +393,9 @@ def add_layer(project: dict[str, Any], layer: dict[str, Any], *, index: int | No
 def remove_layer(project: dict[str, Any], ref: str) -> str:
     """Remove a layer by id or name.
 
+    Any swipe control referencing the layer drops it from its side, so the
+    saved project cannot carry a split pointing at a layer that is gone.
+
     Args:
         project: The project dict (mutated in place).
         ref: A layer id or display name.
@@ -374,7 +408,22 @@ def remove_layer(project: dict[str, Any], ref: str) -> str:
     """
     layer = find_layer(project, ref)
     layers_of(project).remove(layer)
-    return str(layer["id"])
+    layer_id = str(layer["id"])
+    _drop_swipe_reference(project, layer_id)
+    return layer_id
+
+
+def _drop_swipe_reference(project: dict[str, Any], layer_id: str) -> None:
+    """Remove a layer id from the swipe control's two sides."""
+    plugins = project.get("plugins")
+    settings = plugins.get("settings") if isinstance(plugins, dict) else None
+    swipe = settings.get(_project.SWIPE_PLUGIN_ID) if isinstance(settings, dict) else None
+    if not isinstance(swipe, dict):
+        return
+    for side in ("leftLayers", "rightLayers"):
+        ids = swipe.get(side)
+        if isinstance(ids, list):
+            swipe[side] = [value for value in ids if value != layer_id]
 
 
 def update_layer(
@@ -575,7 +624,8 @@ def set_view(
         The project's ``mapView`` after the change.
 
     Raises:
-        ValueError: If ``center`` is not a 2-element ``[lng, lat]``.
+        ValueError: If ``center`` is not a 2-element ``[lng, lat]``, or any
+            value is not finite.
     """
     view = project.get("mapView")
     if not isinstance(view, dict):
@@ -583,11 +633,11 @@ def set_view(
         project["mapView"] = view
     if center is not None:
         coords = [float(value) for value in center]
-        if len(coords) != 2:
-            raise ValueError("center must be a [lng, lat] sequence with exactly 2 elements")
+        if len(coords) != 2 or not all(math.isfinite(value) for value in coords):
+            raise ValueError("center must be a [lng, lat] sequence of exactly 2 finite numbers")
         view["center"] = coords
     if zoom is not None:
-        view["zoom"] = min(24.0, max(0.0, float(zoom)))
+        view["zoom"] = min(24.0, max(0.0, _finite(zoom, "zoom")))
     if center is not None or zoom is not None:
         # `bbox` is recorded by fit_bounds to describe the camera it computed.
         # Moving the camera by hand leaves it describing a different extent, and
@@ -595,9 +645,9 @@ def set_view(
         # than persist a stale one. Bearing and pitch do not change the extent.
         view.pop("bbox", None)
     if bearing is not None:
-        view["bearing"] = float(bearing)
+        view["bearing"] = _finite(bearing, "bearing")
     if pitch is not None:
-        view["pitch"] = min(85.0, max(0.0, float(pitch)))
+        view["pitch"] = min(85.0, max(0.0, _finite(pitch, "pitch")))
     return view
 
 

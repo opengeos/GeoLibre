@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import inspect
 import os
 import sys
 from pathlib import Path
@@ -94,11 +95,13 @@ def _build_layer(
 
     Every builder takes ``**style``, so an unrecognized key is simply carried
     into the layer's style. A key that names one of the builder's own
-    parameters (``source_url``, ``render_mode``, ``colormap``, ...) is
-    different: it arrives as a duplicate keyword and raises ``TypeError``. A
-    model driving these tools sees only "style: object" in the schema, so
-    guessing such a key is realistic, and it should read back as a plain
-    message naming the offending key rather than an unhandled type error.
+    parameters (``source_url``, ``render_mode``, ``colormap``, ``picker``, ...)
+    is different: it either arrives as a duplicate keyword and raises
+    ``TypeError``, or — for a parameter this tool does not forward — binds to
+    real behavior while the docstring promised style overrides. A model driving
+    these tools sees only "style: object" in the schema, so guessing such a key
+    is realistic, and either outcome should read back as a plain message naming
+    the offending key.
 
     Args:
         builder: The ``geolibre.project`` layer builder to call.
@@ -113,11 +116,21 @@ def _build_layer(
         ValueError: If a style key collides with a parameter of the builder.
     """
     style = style or {}
-    collisions = sorted(set(style) & set(kwargs))
+    # Compare against the builder's whole signature, not just the arguments this
+    # tool forwards. A builder takes parameters the tool does not expose
+    # (vector_layer's `picker`/`ingest_mode`, vector_tiles_layer's singular
+    # `source_layer`), and those bind to real behavior rather than to **style —
+    # so a model treating `style` as paint-only would silently flip them.
+    reserved = {
+        parameter.name
+        for parameter in inspect.signature(builder).parameters.values()
+        if parameter.kind is not inspect.Parameter.VAR_KEYWORD
+    }
+    collisions = sorted(set(style) & reserved)
     if collisions:
         raise ValueError(
-            f"style keys {collisions} name parameters of this layer type; pass "
-            "them as their own arguments instead of inside style."
+            f"style keys {collisions} name parameters of this layer type, not style "
+            "properties; pass them as their own arguments, or drop them."
         )
     try:
         return builder(*args, **kwargs, **style)

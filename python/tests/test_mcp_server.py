@@ -275,7 +275,7 @@ def test_add_geojson_layer_reports_a_colliding_style_key(server, project_path):
 
 
 def test_add_geojson_layer_reports_a_style_key_colliding_with_a_positional(server, project_path):
-    """`name` is positional, so the collision surfaces from the builder call."""
+    """A positional parameter is in the signature too, so it is caught up front."""
     error = call_error(
         server,
         "add_geojson_layer",
@@ -284,7 +284,21 @@ def test_add_geojson_layer_reports_a_style_key_colliding_with_a_positional(serve
         data=json.dumps(POINT_FC),
         style={"name": "Other"},
     )
-    assert "pass it as that parameter instead" in error
+    assert "style keys ['name'] name parameters of this layer type" in error
+
+
+def test_style_cannot_reach_a_builder_parameter_the_tool_does_not_expose(server, project_path):
+    """`style` is paint-only; a behavioral parameter must not bind through it."""
+    error = call_error(
+        server,
+        "add_vector_layer",
+        path=project_path,
+        name="Roads",
+        url="https://example.com/roads.fgb",
+        # vector_layer takes `picker`, but add_vector_layer does not forward it.
+        style={"picker": False},
+    )
+    assert "style keys ['picker'] name parameters of this layer type" in error
 
 
 def test_add_raster_layer_reports_a_colliding_style_key(server, project_path):

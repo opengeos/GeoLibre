@@ -214,6 +214,18 @@ def test_remove_layer_by_name(proj):
     assert proj["layers"] == []
 
 
+def test_remove_layer_drops_a_swipe_reference_to_it(proj):
+    """A swipe split must not keep pointing at a layer that is gone."""
+    layer_id = proj["layers"][0]["id"]
+    authoring.add_swipe(proj, left_layers=["__basemap__"], right_layers=[layer_id])
+    swipe = proj["plugins"]["settings"]["maplibre-gl-swipe"]
+    assert swipe["rightLayers"] == [layer_id]
+    authoring.remove_layer(proj, "Cities")
+    assert swipe["rightLayers"] == []
+    # The basemap pseudo-id is not a layer, so it survives untouched.
+    assert swipe["leftLayers"] == ["__basemap__"]
+
+
 def test_update_layer_applies_only_what_is_passed(proj):
     summary = authoring.update_layer(proj, "Cities", visible=False)
     assert summary["visible"] is False
@@ -278,8 +290,28 @@ def test_set_view_clamps_zoom_and_pitch(proj):
 
 
 def test_set_view_rejects_a_malformed_center(proj):
-    with pytest.raises(ValueError, match="exactly 2 elements"):
+    with pytest.raises(ValueError, match="exactly 2 finite numbers"):
         authoring.set_view(proj, center=[1, 2, 3])
+
+
+def test_set_view_rejects_non_finite_camera_values(proj):
+    """`1e400` parses to inf, and json.dumps would write a bare Infinity token."""
+    infinity = float("1e400")
+    with pytest.raises(ValueError, match="exactly 2 finite numbers"):
+        authoring.set_view(proj, center=[infinity, 0])
+    for field in ("zoom", "bearing", "pitch"):
+        with pytest.raises(ValueError, match=f"{field} must be a finite number"):
+            authoring.set_view(proj, **{field: infinity})
+        with pytest.raises(ValueError, match=f"{field} must be a finite number"):
+            authoring.set_view(proj, **{field: float("nan")})
+
+
+def test_save_project_refuses_to_write_invalid_json(proj, tmp_path):
+    """The backstop: no path may write an Infinity token the app cannot parse."""
+    proj["mapView"]["zoom"] = float("inf")
+    with pytest.raises(ValueError):
+        authoring.save_project(tmp_path / "map.geolibre.json", proj)
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_set_view_drops_a_bbox_the_camera_no_longer_shows(proj):
