@@ -18,6 +18,7 @@ export const LANGUAGE_NAMES: Record<string, { nativeName: string; englishName: s
   en: { nativeName: "English", englishName: "English" },
   zh: { nativeName: "中文", englishName: "Chinese" },
   es: { nativeName: "Español", englishName: "Spanish" },
+  fa: { nativeName: "فارسی", englishName: "Persian" },
   fr: { nativeName: "Français", englishName: "French" },
   de: { nativeName: "Deutsch", englishName: "German" },
   pt: { nativeName: "Português", englishName: "Portuguese" },
