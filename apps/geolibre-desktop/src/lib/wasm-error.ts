@@ -45,9 +45,15 @@ export function messageFromThrown(thrown: unknown, fallback: string): string {
  * that mean nothing to someone converting a file, so recognizing this case lets
  * the UI add what to actually do instead.
  *
+ * Matched on the whole documented phrase rather than a fragment of it,
+ * deliberately: the two ways this can be wrong are not symmetric. Missing a
+ * reworded refusal only drops a hint the engine's own text partly covers, while
+ * matching some other failure would tell someone to go and install GDAL over a
+ * problem that has nothing to do with size.
+ *
  * @param message - The message extracted by {@link messageFromThrown}.
  * @returns True when the raster exceeds what the browser engine can decode.
  */
 export function isRasterTooLargeForWasm(message: string): boolean {
-  return /too large to fully decode/i.test(message);
+  return /raster too large to fully decode in 32-bit wasm/i.test(message);
 }

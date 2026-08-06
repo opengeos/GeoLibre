@@ -57,4 +57,12 @@ describe("isRasterTooLargeForWasm", () => {
     assert.equal(isRasterTooLargeForWasm(FALLBACK), false);
     assert.equal(isRasterTooLargeForWasm(""), false);
   });
+
+  it("needs the whole documented phrase, not a fragment of it", () => {
+    // A fragment could show up in a message about something else entirely, and
+    // sending someone to install GDAL over an unrelated failure is worse than
+    // staying quiet. Missing a reworded refusal only drops the extra hint.
+    assert.equal(isRasterTooLargeForWasm("too large to fully decode"), false);
+    assert.equal(isRasterTooLargeForWasm("raster too large"), false);
+  });
 });
