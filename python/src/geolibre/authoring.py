@@ -371,6 +371,24 @@ def column_values(layer: dict[str, Any], column: str) -> list[Any]:
 # -- layer mutation -----------------------------------------------------------
 
 
+def _reject_reserved_name(name: Any) -> None:
+    """Refuse the basemap pseudo-id as a layer's display name.
+
+    :func:`resolve_layer_ids` passes this sentinel straight through before it
+    consults the layer list, so a layer wearing it would be unaddressable by
+    name there — the swipe control would silently target the basemap instead of
+    the layer. Enforced at creation as well as on rename, since a layer can
+    acquire the name either way.
+
+    Raises:
+        ValueError: If *name* is the reserved pseudo-id.
+    """
+    if name is not None and str(name) == BASEMAP_LAYER_ID:
+        raise ValueError(
+            f"{BASEMAP_LAYER_ID!r} is reserved for the basemap and cannot name a layer"
+        )
+
+
 def add_layer(project: dict[str, Any], layer: dict[str, Any], *, index: int | None = None) -> str:
     """Insert a built layer into the project's draw order.
 
@@ -381,7 +399,11 @@ def add_layer(project: dict[str, Any], layer: dict[str, Any], *, index: int | No
 
     Returns:
         The layer's id.
+
+    Raises:
+        ValueError: If the layer's name is the reserved basemap pseudo-id.
     """
+    _reject_reserved_name(layer.get("name"))
     layers = layers_of(project)
     if index is None:
         layers.append(layer)
@@ -456,13 +478,7 @@ def update_layer(
     """
     layer = find_layer(project, ref)
     if name is not None:
-        # resolve_layer_ids passes this sentinel straight through, so a layer
-        # wearing it as a display name would be unaddressable there — the swipe
-        # control would silently target the basemap instead of the layer.
-        if str(name) == BASEMAP_LAYER_ID:
-            raise ValueError(
-                f"{BASEMAP_LAYER_ID!r} is reserved for the basemap and cannot name a layer"
-            )
+        _reject_reserved_name(name)
         layer["name"] = str(name)
     if visible is not None:
         layer["visible"] = bool(visible)

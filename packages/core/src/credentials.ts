@@ -375,7 +375,7 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
         "plugins.settings",
         redactedPaths,
         redactedCount,
-      ) as Record<string, never>,
+      ) as Record<string, unknown>,
     };
   }
 

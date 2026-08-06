@@ -237,6 +237,13 @@ def test_update_layer_clamps_opacity(proj):
     assert authoring.update_layer(proj, "Cities", opacity=-5)["opacity"] == 0.0
 
 
+def test_add_layer_refuses_the_reserved_basemap_name(proj):
+    """The reservation holds at creation, not only on rename."""
+    with pytest.raises(ValueError, match="reserved for the basemap"):
+        authoring.add_layer(proj, project.geojson_layer("__basemap__", POINT_FC))
+    assert len(proj["layers"]) == 1
+
+
 def test_update_layer_refuses_the_reserved_basemap_name(proj):
     """resolve_layer_ids passes the sentinel through, so a layer must not wear it."""
     with pytest.raises(ValueError, match="reserved for the basemap"):

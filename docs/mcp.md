@@ -134,6 +134,22 @@ and injects the project into it, so the recipient needs no install. Credentials
 are stripped from the project on the way out. Layers pointing at local files
 will not load for anyone else, so use hosted URLs for a shareable export.
 
+!!! warning "`app_url` is a trust boundary"
+
+    `export_html`'s optional `app_url` names the viewer the exported page
+    embeds, and the page posts the project to exactly that origin (it must be
+    an `http`/`https` URL). It exists so you can pin a self-hosted deployment.
+
+    Treat it as a destination, not a cosmetic setting: whoever opens the
+    exported file hands the project's contents — inlined GeoJSON, layer URLs,
+    the camera — to that origin. Credentials are already stripped, so this is
+    not a key leak, but the rest of the project still travels.
+
+    This matters because the caller here is a model, which may be acting on
+    content it has read. If an exported page points somewhere you did not
+    choose, that is worth a second look. Only accept an `app_url` you
+    intended.
+
 ## Notes and limits
 
 - **`set_view` with a `bbox` is approximate.** A saved project stores a center
