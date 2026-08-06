@@ -87,6 +87,7 @@ export {
   isViewStatePanelVisible,
   COMPONENTS_PLUGIN_ID,
   maplibreComponentsPlugin,
+  applyStacSearchLayerOrder,
   openBookmarkPanel,
   openFlatGeobufAddVectorLayerPanel,
   openColorbarPanel,
@@ -154,6 +155,7 @@ export {
   composeRgbImage,
   gridBounds,
   gridPixelAt,
+  gridValueAt,
   percentileClim,
   type ColormapComposition,
   type RgbComposition,
@@ -169,6 +171,7 @@ export {
   type LocalNetcdfLayerRefs,
   type LocalNetcdfRgbImage,
   type LocalNetcdfRgbOptions,
+  type LocalNetcdfWindow,
   type InlineZarrGrid,
 } from "./plugins/local-netcdf";
 export {

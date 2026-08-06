@@ -92,21 +92,65 @@ export function applyGroupEffects(layers: GeoLibreLayer[], groups: LayerGroup[])
   if (groups.length === 0) return layers;
   const groupById = new Map(groups.map((g) => [g.id, g]));
   return layers.map((layer) => {
-    if (!layer.groupId) return layer;
-    let group = groupById.get(layer.groupId);
-    if (!group) return layer;
-    let visible = layer.visible;
-    let opacity = layer.opacity;
-    const visited = new Set<string>();
-    while (group && !visited.has(group.id)) {
-      visited.add(group.id);
-      visible = visible && group.visible;
-      opacity *= group.opacity;
-      group = group.parentId ? groupById.get(group.parentId) : undefined;
-    }
+    if (!layer.groupId || !groupById.has(layer.groupId)) return layer;
+    const { visible, opacity } = foldGroupChain(layer, groupById);
     if (visible === layer.visible && opacity === layer.opacity) return layer;
     return { ...layer, visible, opacity };
   });
+}
+
+/**
+ * Walk a layer's group chain upward, ANDing each group's visibility into the
+ * layer's own and multiplying each group's opacity into it. The `visited` set
+ * makes a corrupted `parentId` cycle terminate instead of hanging.
+ */
+function foldGroupChain(
+  layer: GeoLibreLayer,
+  groupById: ReadonlyMap<string, LayerGroup>,
+): { visible: boolean; opacity: number } {
+  let visible = layer.visible;
+  let opacity = layer.opacity;
+  let group = layer.groupId ? groupById.get(layer.groupId) : undefined;
+  const visited = new Set<string>();
+  while (group && !visited.has(group.id)) {
+    visited.add(group.id);
+    visible = visible && group.visible;
+    opacity *= group.opacity;
+    group = group.parentId ? groupById.get(group.parentId) : undefined;
+  }
+  return { visible, opacity };
+}
+
+/**
+ * The single layer form of {@link applyGroupEffects}: the visibility and
+ * opacity a layer should actually render at once its (possibly nested) parent
+ * groups are folded in.
+ *
+ * Group state never mutates a child's own `visible`/`opacity` fields, so any
+ * renderer that cannot read the folded array — a plugin control that owns its
+ * own paint and is driven layer by layer — asks for a single layer here
+ * instead.
+ *
+ * @param layer The layer to fold.
+ * @param groups Group definitions, or an already-built id → group map. Callers
+ *   in a render path that fold many layers against the same groups (the layer
+ *   panel) should pass a memoized map, since the array form rebuilds one per
+ *   call.
+ * @returns The effective render state (the layer's own values when it is
+ *   ungrouped or its `groupId` is dangling).
+ */
+export function effectiveLayerRenderState(
+  layer: GeoLibreLayer,
+  groups: LayerGroup[] | ReadonlyMap<string, LayerGroup>,
+): { visible: boolean; opacity: number } {
+  const size = Array.isArray(groups) ? groups.length : groups.size;
+  if (size === 0 || !layer.groupId) {
+    return { visible: layer.visible, opacity: layer.opacity };
+  }
+  return foldGroupChain(
+    layer,
+    Array.isArray(groups) ? new Map(groups.map((g) => [g.id, g])) : groups,
+  );
 }
 
 /**

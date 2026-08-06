@@ -8,6 +8,7 @@ import {
   addRasterToMap,
   prepareRasterControl,
   applyRasterLayerOrder,
+  applyStacSearchLayerOrder,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
@@ -85,6 +86,7 @@ import { setVectorFileImportHandler } from "../../lib/vector-file-import";
 import { buildKmlModelLayer } from "../../lib/kml-model-layer";
 import { isPhotoDropFileName, type GeotaggedPhotoResult } from "../../lib/geotagged-photos";
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
+import { detectNonGeographicCoordinates } from "@geolibre/core";
 import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
 import i18n from "../../i18n";
 import {
@@ -127,6 +129,10 @@ import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
 import { QuickAnalysisBanner } from "./QuickAnalysisBanner";
 import { PixelTimeSeriesControl } from "./PixelTimeSeriesControl";
+import { NetcdfSampleMarkers } from "./NetcdfSampleMarkers";
+import { NetcdfCubeSetupDialog } from "./NetcdfCubeSetupDialog";
+import { NetcdfCubeWindow } from "./NetcdfCubeWindow";
+import { NetcdfProfileWindow } from "./NetcdfProfileWindow";
 import { MapLegendPanel } from "../legend/MapLegendPanel";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
@@ -805,6 +811,11 @@ export function DesktopShell({
   const [mapReadyGeneration, setMapReadyGeneration] = useState(0);
   const [dropMessage, setDropMessage] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
+  // Kept out of `dropError` because the drop handler sets its own success
+  // message after `addImportedVectorLayers` returns, which would clobber this
+  // one. A mislabelled-CRS layer loads *successfully* and still renders
+  // nowhere, so both messages are true at once and need separate slots.
+  const [crsWarning, setCrsWarning] = useState<string | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
@@ -1149,10 +1160,15 @@ export function DesktopShell({
     // Re-read drag-dropped / Add Data local-file GeoJSON layers from disk
     // (their data was saved as a path, not embedded).
     void restoreLocalFileLayers();
-    // Let layer-sync push the store-derived beforeId into the raster control so
-    // deck.gl COG rasters interleave with vector layers instead of always
-    // drawing on top.
-    setExternalDeckLayerOrderHandler(applyRasterLayerOrder);
+    // Let layer-sync push the store-derived beforeId into the control that owns
+    // each deck.gl COG raster so it interleaves with vector layers instead of
+    // always drawing on top. Two controls render such layers: the raster
+    // control and the STAC Search control (#1718). The STAC one claims only its
+    // own layer ids, so ask it first and fall through for everything else.
+    setExternalDeckLayerOrderHandler((layerId, beforeId) => {
+      if (applyStacSearchLayerOrder(layerId, beforeId)) return;
+      applyRasterLayerOrder(layerId, beforeId);
+    });
     // activeByDefault plugins are marked active without activate() being
     // called, so the effects engine must be kicked explicitly to match the
     // restored active state (idempotent).
@@ -1250,6 +1266,9 @@ export function DesktopShell({
   const addImportedVectorLayers = useCallback(
     (importedLayers: ImportedVectorLayer[]) => {
       let lastLayerId: string | null = null;
+      // Layers whose coordinates cannot be WGS84; surfaced together after the
+      // loop so a multi-file drop reports once rather than per file.
+      const nonGeographic: string[] = [];
       // Frame ids for each time-animated overlay sequence (keyed by the loader's
       // group marker), so they can be gathered into one layer group afterward.
       const frameGroups = new Map<string, string[]>();
@@ -1300,12 +1319,29 @@ export function DesktopShell({
         }
         // `||` (not `??`) so an empty-string name falls back to the path, and
         // matches the name shown in the drop confirmation toast.
-        lastLayerId = addGeoJsonLayer(
-          layer.name || layerNameFromPath(layer.path),
-          layer.data,
-          layer.path,
-        );
+        const layerName = layer.name || layerNameFromPath(layer.path);
+        // A file that declares WGS84 but holds projected coordinates loads
+        // cleanly, lists in the Layers panel, and renders nowhere — the map
+        // simply never moves. Warn rather than fail: the data is readable and
+        // only the user knows its true CRS.
+        const offRange = detectNonGeographicCoordinates(layer.data);
+        if (offRange) {
+          nonGeographic.push(layerName);
+          console.warn(
+            `[GeoLibre] "${layerName}" declares geographic coordinates but its values are out of range ` +
+              `(max |x| ${Math.round(offRange.maxAbsX).toLocaleString()}, max |y| ${Math.round(offRange.maxAbsY).toLocaleString()} ` +
+              `over ${offRange.sampled.toLocaleString()} sampled coordinates). The file's CRS is almost certainly ` +
+              `mislabelled — reproject it, or correct its .prj/crs, and load it again.`,
+          );
+        }
+        lastLayerId = addGeoJsonLayer(layerName, layer.data, layer.path);
       }
+
+      setCrsWarning(
+        nonGeographic.length > 0
+          ? t("addData.nonGeographicCoordinates", { names: nonGeographic.join(", ") })
+          : null,
+      );
 
       // Gather each time-animated overlay's frames into one collapsible group so
       // the sequence reads as a single timeline entry, not N stacked layers.
@@ -1377,6 +1413,10 @@ export function DesktopShell({
   useEffect(() => {
     setKmlFileImportHandler(async (imports) => {
       setDropError(null);
+      // Matches the drop handlers: the catch below sets `dropError` without
+      // reaching `addImportedVectorLayers`, so without this a previous file's
+      // banner would sit beside the new error.
+      setCrsWarning(null);
       try {
         const paths = imports
           .map(({ sourcePath }) => sourcePath)
@@ -1386,12 +1426,12 @@ export function DesktopShell({
         // pyramid, which a path-less browser File cannot support.
         const layers =
           paths.length === imports.length
-            ? await loadDroppedVectorPaths(paths, {
-                onLargeDataset: confirmLargeVectorDataset,
-              })
+            ? await loadDroppedVectorPaths(paths, { onLargeDataset: confirmLargeVectorDataset })
             : await loadDroppedVectorFiles(
                 imports.map(({ file }) => file),
-                { onLargeDataset: confirmLargeVectorDataset },
+                {
+                  onLargeDataset: confirmLargeVectorDataset,
+                },
               );
         addImportedVectorLayers(layers);
       } catch (error) {
@@ -1399,7 +1439,7 @@ export function DesktopShell({
       }
     });
     return () => setKmlFileImportHandler(null);
-  }, [addImportedVectorLayers, confirmLargeVectorDataset, t]);
+  }, [addImportedVectorLayers, t]);
 
   const addDroppedPhotos = useCallback(
     (result: GeotaggedPhotoResult | null): number => {
@@ -1553,6 +1593,9 @@ export function DesktopShell({
 
           setIsDraggingFiles(false);
           setDropError(null);
+          // Matches the browser drop handler: a warning about a previous file
+          // must not linger over an unrelated drop.
+          setCrsWarning(null);
           setDropMessage("Importing data...");
 
           try {
@@ -1722,6 +1765,10 @@ export function DesktopShell({
       dragDepthRef.current = 0;
       setIsDraggingFiles(false);
       setDropError(null);
+      // Not auto-dismissed on the status timeout (it has its own Close button),
+      // so it is cleared here instead: a warning about a previous file must not
+      // linger over an unrelated drop.
+      setCrsWarning(null);
       setDropMessage("Importing data...");
 
       try {
@@ -2298,6 +2345,19 @@ export function DesktopShell({
               <MapModeBanner mapControllerRef={mapControllerRef} />
               <QuickAnalysisBanner />
               <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
+              <NetcdfSampleMarkers
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
+              <NetcdfProfileWindow />
+              {/* Its own boundary: the cube window builds a `WebGLRenderer`,
+                  whose constructor throws outright when the browser or driver
+                  gives it no context. Sharing the map's boundary would turn a
+                  failure to draw one panel into the loss of the whole map. */}
+              <SilentErrorBoundary label="NetCDF 3D cube">
+                <NetcdfCubeWindow mapControllerRef={mapControllerRef} />
+              </SilentErrorBoundary>
+              <NetcdfCubeSetupDialog mapControllerRef={mapControllerRef} />
               <MapLegendPanel
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}
@@ -2649,6 +2709,23 @@ export function DesktopShell({
           className="pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
         >
           {projectUrlLoadState.error}
+        </div>
+      ) : null}
+      {crsWarning ? (
+        <div
+          data-testid="crs-warning"
+          role="status"
+          aria-live="polite"
+          className="absolute bottom-24 left-1/2 z-50 max-w-[min(90vw,36rem)] -translate-x-1/2 rounded-md border border-destructive/40 bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
+        >
+          {crsWarning}
+          <button
+            type="button"
+            onClick={() => setCrsWarning(null)}
+            className="ms-2 underline underline-offset-2"
+          >
+            {t("common.close")}
+          </button>
         </div>
       ) : null}
       {dropMessage || dropError ? (

@@ -1935,6 +1935,11 @@ function drawDataChart(
  * built-in shape recolored to the marker color. Falls back to a plain
  * `fallbackColor` square when a custom SVG has not been (or could not be)
  * preloaded, so the swatch is never blank.
+ *
+ * `boxed` frames a custom SVG so a light or transparent-edged icon still reads
+ * as a bounded swatch. A proportional size ramp passes false: there the varying
+ * icon size IS the information, and a frame around each step makes the rows read
+ * as nested squares instead of one growing symbol.
  */
 function drawLegendMarker(
   ctx: CanvasRenderingContext2D,
@@ -1944,22 +1949,35 @@ function drawLegendMarker(
   size: number,
   fallbackColor: string,
   markerIcons?: ReadonlyMap<string, CanvasImageSource>,
+  boxed = true,
 ): void {
   if (marker.shape === "custom") {
     const icon = marker.svg ? markerIcons?.get(marker.svg) : undefined;
     if (icon) {
       ctx.drawImage(icon, sx, sy, size, size);
-      // Border for parity with every other swatch (built-in shapes, the
-      // fallback square, fill/ramp squares), so a light or transparent-edged
-      // SVG still reads as a bounded swatch.
-      ctx.strokeStyle = BORDER;
-      ctx.strokeRect(sx, sy, size, size);
+      if (boxed) {
+        // Border for parity with every other swatch (built-in shapes, the
+        // fallback square, fill/ramp squares).
+        ctx.strokeStyle = BORDER;
+        ctx.strokeRect(sx, sy, size, size);
+      }
       return;
     }
-    // SVG not available: fall back to a neutral color square.
+    // SVG not available (still loading, or the load failed): fall back to a
+    // neutral shape. A proportional row falls back to the same circle the
+    // markerless ramp draws, so an entry mid-load still reads as one growing
+    // symbol; the outline stays either way, since a pale fallback color would
+    // otherwise vanish against the legend box.
     ctx.fillStyle = fallbackColor || "#999999";
-    ctx.fillRect(sx, sy, size, size);
     ctx.strokeStyle = BORDER;
+    if (!boxed) {
+      ctx.beginPath();
+      ctx.arc(sx + size / 2, sy + size / 2, size / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      return;
+    }
+    ctx.fillRect(sx, sy, size, size);
     ctx.strokeRect(sx, sy, size, size);
     return;
   }
@@ -1996,8 +2014,16 @@ function drawLegend(
   },
 ): number {
   const pad = unit * 1.4;
-  const rowH = unit * 2.6;
-  const swatch = unit * 2;
+  // Proportional-symbol rows are only as faithful as the box they fit in: a
+  // swatch column sized for a text-height color square crushes a 4 → 24 px ramp
+  // into near-identical dots. When any entry carries sized symbols, the whole
+  // box grows (uniformly, so rows stay evenly spaced) and the ramp reads at
+  // roughly the ratios the map draws.
+  const hasSizedSwatch = entries.some((entry) =>
+    entry.swatches.some((entrySwatch) => entrySwatch.size !== undefined),
+  );
+  const rowH = unit * (hasSizedSwatch ? 3.6 : 2.6);
+  const swatch = unit * (hasSizedSwatch ? 3 : 2);
   const titleSize = unit * 2;
   const labelSize = unit * 1.7;
   const title = opts.title.trim();
@@ -2148,7 +2174,23 @@ function drawLegend(
     const sx = x + pad;
     const sy = cy - swatch * 0.85;
     if (r.marker) {
-      drawLegendMarker(ctx, r.marker, sx, sy, swatch, r.color, opts.markerIcons);
+      // A sized marker row is a proportional symbol: the map scales the sprite
+      // through icon-size, so draw the marker at the same footprint the circle
+      // branch below would use (same center, edge = 2 × radius) rather than at
+      // the fixed swatch box, which would flatten the whole ramp.
+      const edge =
+        r.size !== undefined ? Math.max(unit * 0.7, r.size * rowScale[index]! * 2) : swatch;
+      const inset = (swatch - edge) / 2;
+      drawLegendMarker(
+        ctx,
+        r.marker,
+        sx + inset,
+        sy + inset,
+        edge,
+        r.color,
+        opts.markerIcons,
+        r.size === undefined,
+      );
     } else if (r.size !== undefined && r.color) {
       const radius = Math.max(unit * 0.35, r.size * rowScale[index]!);
       const cx = sx + swatch / 2;

@@ -1820,3 +1820,104 @@ export interface RecentProjectEntry {
   name: string;
   openedAt: string;
 }
+
+/**
+ * Size at or above which a local vector file is read through DuckDB instead of
+ * the in-memory JavaScript readers, and the feature count above which the user
+ * is asked before every feature is materialized as GeoJSON.
+ *
+ * These live in core so the desktop loaders (`duckdb-vector-guard.ts`) and the
+ * Add Vector Layer panel (`@geolibre/plugins`, which configures the
+ * `maplibre-gl-vector` control's `autoThreshold`) switch strategy at the *same*
+ * numbers. Before they were unified the two entry points disagreed — the panel
+ * tiled at 25 MB / 50k while drag-and-drop stayed in memory to 100 MB — so the
+ * same file behaved differently depending on how it was added, and no single
+ * number could be documented.
+ */
+export const DUCKDB_VECTOR_ROUTE_BYTES = 100 * 1024 * 1024; // 100 MB
+export const DUCKDB_VECTOR_FEATURE_WARN_COUNT = 100_000;
+
+/** A collection whose coordinates cannot be WGS84 longitude/latitude. */
+export interface NonGeographicCoordinates {
+  /** How many coordinates were inspected. */
+  sampled: number;
+  /** The largest |x| seen — a longitude may not exceed 180. */
+  maxAbsX: number;
+  /** The largest |y| seen — a latitude may not exceed 90. */
+  maxAbsY: number;
+}
+
+const MAX_WGS84_LON = 180;
+const MAX_WGS84_LAT = 90;
+
+/**
+ * Detect a collection that declares (or is assumed to be) WGS84 but carries
+ * projected coordinates — the failure mode where a layer loads cleanly, appears
+ * in the Layers panel, and renders nowhere because its "longitude" is a easting
+ * in metres or feet.
+ *
+ * GeoLibre honours whatever CRS a file declares, so a file that declares
+ * `CRS84`/`GCS_WGS_1984` while holding State Plane or Albers coordinates is
+ * passed through untouched and lands off the map with no error. Callers use
+ * this to warn instead of failing silently; it does not guess the true CRS,
+ * which only the user knows.
+ *
+ * Sampling stops at `sampleLimit` coordinates: out-of-range values are a
+ * property of the whole file, so a prefix is enough and a 3-million-coordinate
+ * collection is not walked twice.
+ *
+ * @returns Details when a coordinate is out of geographic range, else null.
+ */
+export function detectNonGeographicCoordinates(
+  geojson: GeoJSON.FeatureCollection | undefined,
+  sampleLimit = 1000,
+): NonGeographicCoordinates | null {
+  if (!geojson?.features?.length) return null;
+  let sampled = 0;
+  let maxAbsX = 0;
+  let maxAbsY = 0;
+  let offending = false;
+
+  const visit = (coords: unknown): void => {
+    if (sampled >= sampleLimit || !Array.isArray(coords)) return;
+    if (typeof coords[0] === "number" && typeof coords[1] === "number") {
+      const x = Math.abs(coords[0]);
+      const y = Math.abs(coords[1]);
+      sampled += 1;
+      // Gated on finiteness for the same reason as `offending` below: an
+      // Infinity would otherwise be reported as the offending magnitude in the
+      // warning, hiding the real out-of-range value.
+      if (Number.isFinite(x) && x > maxAbsX) maxAbsX = x;
+      if (Number.isFinite(y) && y > maxAbsY) maxAbsY = y;
+      // NaN/Infinity are a different defect (a broken file, not a CRS mismatch),
+      // so only finite out-of-range values count.
+      if (Number.isFinite(x) && Number.isFinite(y) && (x > MAX_WGS84_LON || y > MAX_WGS84_LAT)) {
+        offending = true;
+      }
+      return;
+    }
+    for (const part of coords) {
+      if (sampled >= sampleLimit) return;
+      visit(part);
+    }
+  };
+
+  for (const feature of geojson.features) {
+    if (sampled >= sampleLimit) break;
+    const geometry = feature?.geometry as {
+      coordinates?: unknown;
+      geometries?: { coordinates?: unknown }[];
+    } | null;
+    // A GeometryCollection holds its coordinates one level down, under
+    // `geometries[]`, so it has no `coordinates` of its own to visit.
+    if (geometry?.coordinates !== undefined) visit(geometry.coordinates);
+    else if (Array.isArray(geometry?.geometries)) {
+      for (const member of geometry.geometries) {
+        if (sampled >= sampleLimit) break;
+        if (member?.coordinates !== undefined) visit(member.coordinates);
+      }
+    }
+  }
+
+  return offending ? { sampled, maxAbsX, maxAbsY } : null;
+}

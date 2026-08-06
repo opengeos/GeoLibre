@@ -1,18 +1,24 @@
 import { useAppStore } from "@geolibre/core";
+import type { TFunction } from "i18next";
 import maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { MapController } from "@geolibre/map";
+import { bandMeasure } from "../lib/netcdf-band-axis";
 import {
   displayUnits,
   getNetcdfLayerState,
   gridPixelAt,
+  gridValueAt,
   NETCDF_IMAGE_SOURCE_KIND,
   readNetcdfProfile,
+  type GridPixel,
+  type NetcdfLayerState,
 } from "../lib/netcdf-image-symbology";
 import {
-  clearNetcdfProfileReadingsForLayer,
-  setNetcdfProfileReading,
+  addNetcdfProfileSample,
+  clearNetcdfProfileSamplesForLayer,
+  setNetcdfProfileSampleProfile,
 } from "../lib/netcdf-profile-store";
 
 /**
@@ -35,6 +41,55 @@ function formatReading(value: number, units: string | undefined): string {
 }
 
 /**
+ * The channel names an RGB composite's rows are labelled with, red first — the
+ * same three the Add dialog's band pickers carry, so a reading is named exactly
+ * as the field that chose it.
+ */
+const CHANNEL_LABEL_KEYS = [
+  "addData.netcdf.channel.red",
+  "addData.netcdf.channel.green",
+  "addData.netcdf.channel.blue",
+] as const;
+
+/**
+ * The value rows for one clicked cell.
+ *
+ * A single-band layer reports the variable it was built from. A composite
+ * reports all three channels instead: they are the same variable at three
+ * bands, so naming it three times would say nothing, where the channel and the
+ * band it was drawn from say everything. The three share a geometry, so the
+ * cell `gridPixelAt` found on the red channel addresses the other two directly.
+ *
+ * @param state - The layer's retained grids.
+ * @param pixel - The cell under the click.
+ * @param t - The translator, for the channel names and the no-data marker.
+ * @returns Label/value pairs, in display order.
+ */
+function valueRows(
+  state: NetcdfLayerState,
+  pixel: GridPixel,
+  t: TFunction,
+): Array<[string, string]> {
+  const reading = (value: number | null): string =>
+    value === null ? t("netcdfIdentify.noData") : formatReading(value, state.units);
+
+  const rgb = state.rgb;
+  if (!rgb) return [[state.variable, reading(pixel.value)]];
+
+  const axis = state.cube?.axis;
+  return rgb.bands.map((band, channel) => {
+    const name = t(CHANNEL_LABEL_KEYS[channel]);
+    return [
+      // The axis is gone once the file behind a second cube closed it, and with
+      // it any way to say which wavelength this was; the channel name alone
+      // still reads correctly.
+      axis ? `${name} (${bandMeasure(axis, band)})` : name,
+      reading(gridValueAt(rgb.channels[channel], pixel.row, pixel.column)),
+    ] as [string, string];
+  });
+}
+
+/**
  * Bridges the store's `identifyLayerId` to a NetCDF image layer's retained grid.
  *
  * The counterpart of `useRasterIdentify` for the layers the NetCDF dialog bakes
@@ -43,8 +98,10 @@ function formatReading(value: number, units: string | undefined): string {
  * is a nearest-cell lookup rather than a fetch: the readout is instant and works
  * offline.
  *
- * When the layer came from a cube, the same click also reads that pixel's values
- * along the band axis and hands them to the spectral profile panel.
+ * Every click inside the grid is also recorded as a sampled point, which puts a
+ * numbered marker on the map. When the layer came from a cube, the click reads
+ * that pixel's values along the band axis too and attaches them to the point,
+ * which is what the spectral profile charts.
  *
  * Mounted once at the app shell, alongside `useRasterIdentify`. MapCanvas bails
  * for these layers so the two never both handle a click.
@@ -76,12 +133,17 @@ export function useNetcdfIdentify(
     const previousCursor = canvas.style.cursor;
     canvas.style.cursor = "crosshair";
     let popup: maplibregl.Popup | null = null;
-    // The deferred profile read below captures this click's layer and pixel, so
-    // a pending one must be dropped when the identify target changes or another
-    // click lands — otherwise a stale read overwrites the newer reading.
-    let profileTimeout: number | null = null;
-    /** Drops the in-flight profile read's result, if one is outstanding. */
-    let cancelProfile: (() => void) | null = null;
+    // Each deferred read below is addressed to the point it was started for, so
+    // several can be in flight at once; they are tracked only so a read that has
+    // not started yet is not started after teardown.
+    //
+    // A read already in flight is deliberately *not* discarded on teardown: the
+    // effect tears down whenever the identify target changes, and switching away
+    // and back during a read that takes tens of seconds would otherwise leave
+    // that point permanently profile-less even though the fetch completed. The
+    // store's own guard is what makes this safe — a result for a point that has
+    // since been cleared or aged off the cap lands nowhere.
+    const profileTimeouts = new Set<number>();
 
     const handleClick = (event: maplibregl.MapMouseEvent) => {
       const state = getNetcdfLayerState(activeLayerId);
@@ -89,26 +151,17 @@ export function useNetcdfIdentify(
       const pixel = gridPixelAt(state.grid, event.lngLat.lng, event.lngLat.lat);
       popup?.remove();
       popup = null;
-      if (profileTimeout !== null) window.clearTimeout(profileTimeout);
-      profileTimeout = null;
-      cancelProfile?.();
-      cancelProfile = null;
       // A click outside the grid clears the readout rather than reporting the
       // nearest edge cell, which would be misleading far from the data.
       if (!pixel) {
-        clearNetcdfProfileReadingsForLayer(activeLayerId);
+        clearNetcdfProfileSamplesForLayer(activeLayerId);
         return;
       }
 
       const container = document.createElement("div");
       container.className = "space-y-0.5 text-xs";
       const rows: Array<[string, string]> = [
-        [
-          state.variable,
-          pixel.value === null
-            ? t("netcdfIdentify.noData")
-            : formatReading(pixel.value, state.units),
-        ],
+        ...valueRows(state, pixel, t),
         [t("netcdfIdentify.coordinates"), `${pixel.lng.toFixed(5)}, ${pixel.lat.toFixed(5)}`],
         [t("netcdfIdentify.cell"), `${pixel.row}, ${pixel.column}`],
       ];
@@ -134,42 +187,39 @@ export function useNetcdfIdentify(
         .setDOMContent(container)
         .addTo(map);
 
+      // The point goes in before the (slow) profile read, so its marker lands on
+      // the map with the popup rather than a beat later.
+      const sampleId = addNetcdfProfileSample({
+        layerId: activeLayerId,
+        variable: state.variable,
+        units: state.units,
+        lng: pixel.lng,
+        lat: pixel.lat,
+      });
+
       // A cube also yields the pixel's spectrum. Reading it walks the whole band
       // axis in the source file (~200 ms for an EMIT scene), so it runs after
-      // the popup is already on screen.
-      if (!state.profile) {
-        clearNetcdfProfileReadingsForLayer(activeLayerId);
-        return;
-      }
-      profileTimeout = window.setTimeout(() => {
-        profileTimeout = null;
+      // the popup is already on screen. A 2-D grid has no band axis, so the point
+      // stays profile-less: still a marker and a list entry, just no line.
+      if (!state.cube) return;
+      const timeout = window.setTimeout(() => {
+        profileTimeouts.delete(timeout);
         // A remote read is a worker round trip over range requests, so this can
-        // take tens of seconds; `cancelled` drops a result the user has moved on
-        // from rather than charting a stale pixel.
-        let cancelled = false;
-        cancelProfile = () => {
-          cancelled = true;
-        };
+        // take tens of seconds. Nothing cancels it: the result is addressed to
+        // this point, and attaching to a point that has since been cleared or
+        // aged off the cap is a no-op, so a stale read lands nowhere.
         void readNetcdfProfile(activeLayerId, pixel.row, pixel.column).then((profile) => {
-          if (profile && !cancelled) {
-            setNetcdfProfileReading({
-              layerId: activeLayerId,
-              variable: state.variable,
-              units: state.units,
-              lng: pixel.lng,
-              lat: pixel.lat,
-              profile,
-            });
-          }
+          if (profile) setNetcdfProfileSampleProfile(sampleId, profile);
         });
       }, 0);
+      profileTimeouts.add(timeout);
     };
 
     map.on("click", handleClick);
     return () => {
       map.off("click", handleClick);
-      if (profileTimeout !== null) window.clearTimeout(profileTimeout);
-      cancelProfile?.();
+      for (const timeout of profileTimeouts) window.clearTimeout(timeout);
+      profileTimeouts.clear();
       popup?.remove();
       canvas.style.cursor = previousCursor;
     };

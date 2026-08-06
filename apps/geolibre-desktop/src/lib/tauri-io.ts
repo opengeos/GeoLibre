@@ -11,6 +11,7 @@ import {
   readFile,
   readTextFile,
   readTextFileLines,
+  stat,
   writeFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
@@ -30,6 +31,7 @@ import { IS_MAS_BUILD } from "./build-flags";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import {
   confirmLargeDataset,
+  shouldRouteToDuckDb,
   type DuckDbVectorLoadOptions,
   type LargeVectorDataset,
 } from "./duckdb-vector-guard";
@@ -545,6 +547,63 @@ async function readLocalFileText(path: string): Promise<string> {
   }
 }
 
+/**
+ * A local file's size in bytes, read from filesystem metadata so the size is
+ * known *before* the file is read into memory. Returns undefined outside Tauri
+ * (the browser has no path-based `stat`; those callers use `File.size`) or when
+ * the `stat` fails — an unreadable path surfaces its own error at read time, so
+ * a metadata failure must not block the load.
+ */
+async function localFileSizeBytes(path: string): Promise<number | undefined> {
+  if (!isTauri()) return undefined;
+  try {
+    return (await stat(path)).size;
+  } catch (error) {
+    console.debug(`[GeoLibre] Could not stat "${path}" for the large-file guard.`, error);
+    return undefined;
+  }
+}
+
+/**
+ * Extensions whose in-memory reader is bypassed by the size route.
+ *
+ * Containers (`zip`, `kmz`) unpack first and decide from their contents.
+ * Delimited text and GPX always use the JS parser: `loadDuckDbVector` passes no
+ * `layer` argument, so `ST_Read` would read only a GPX's first OGR layer
+ * (usually `waypoints`) and silently discard its tracks and routes, and it
+ * cannot build points from a CSV's lon/lat columns.
+ */
+const ROUTABLE_TEXT_EXTENSIONS = new Set(["geojson", "json", "kml"]);
+
+/**
+ * Read a dropped file as text, yielding "" when it cannot be read.
+ *
+ * KML overlay/model extraction needs the whole document as a string, and there
+ * is no way around that: `TextDecoder.decode()` over the full buffer builds one
+ * JS string exactly as `File.text()` does, so both hit the same
+ * `RangeError: Invalid string length` past the engine's cap. Rather than
+ * pretend to avoid it, the failure is caught here — a file too large to read as
+ * text contributes no overlays instead of aborting the whole drop batch.
+ */
+async function readVectorFileTextOrEmpty(file: File): Promise<string> {
+  try {
+    return await file.text();
+  } catch (error) {
+    console.warn(`[GeoLibre] Could not read "${file.name}" as text; skipping its overlays.`, error);
+    return "";
+  }
+}
+
+/** Path counterpart to {@link readVectorFileTextOrEmpty}. */
+async function readLocalFileTextOrEmpty(path: string): Promise<string> {
+  try {
+    return await readLocalFileText(path);
+  } catch (error) {
+    console.warn(`[GeoLibre] Could not read "${path}" as text; skipping its overlays.`, error);
+    return "";
+  }
+}
+
 function parseGpxText(text: string): FeatureCollection {
   const result = parseGpxLayer(text);
   return mergeFeatureCollections([result.waypoints, result.tracks, result.routes]);
@@ -718,6 +777,13 @@ function parseShapefileComponents({ file, sidecar }: UnzippedShapefile): Feature
  * already-extracted buffers, retrying through DuckDB if shpjs cannot read it. A
  * corrupt archive or one without a `.shp` throws, since GeoLibre reads only
  * shapefile `.zip`s.
+ *
+ * A `.shp` at or above {@link DUCKDB_VECTOR_ROUTE_BYTES} skips shpjs and streams
+ * through DuckDB: shpjs would otherwise freeze the main thread reprojecting
+ * every coordinate synchronously, with no progress, no cancel, and no
+ * feature-count guard. The threshold is measured on the *uncompressed* `.shp`,
+ * which is the number that governs the parse cost — shapefiles compress heavily,
+ * so the zip's own size says little about it.
  */
 async function loadShapefileZip(
   data: ArrayBuffer | Uint8Array,
@@ -728,6 +794,12 @@ async function loadShapefileZip(
     throw new Error("The zip archive does not contain a .shp file.");
   }
   if (unzipped.isMultiPatch) {
+    return loadDuckDbVector(unzipped.file, options);
+  }
+  if (shouldRouteToDuckDb(unzipped.file.data.byteLength)) {
+    console.info(
+      `[GeoLibre] "${unzipped.file.name}" is ${Math.round(unzipped.file.data.byteLength / (1024 * 1024))} MB uncompressed; reading it with DuckDB instead of shpjs to keep the parse off the main thread.`,
+    );
     return loadDuckDbVector(unzipped.file, options);
   }
   try {
@@ -1772,7 +1844,19 @@ async function loadBrowserVectorFile(
   options?: DuckDbVectorLoadOptions,
 ): Promise<LoadedVectorLayer> {
   const extension = fileExtension(file.name);
-  if (extension === "geojson" || extension === "json") {
+  // Browser counterpart to the metadata preflight in `loadTauriVectorFile`;
+  // `File.size` is known without reading the blob, so the same rule applies.
+  const streamViaDuckDb = shouldRouteToDuckDb(file.size);
+  // `zip`/`kmz` ignore this flag (the archive is unpacked first and
+  // `loadShapefileZip` decides from the *uncompressed* `.shp`), so announcing a
+  // route here would be misleading for a container near the threshold.
+  if (streamViaDuckDb && ROUTABLE_TEXT_EXTENSIONS.has(extension)) {
+    console.info(
+      `[GeoLibre] "${file.name}" is ${Math.round(file.size / (1024 * 1024))} MB; streaming it through DuckDB instead of the in-memory reader.`,
+    );
+  }
+
+  if (!streamViaDuckDb && (extension === "geojson" || extension === "json")) {
     try {
       return {
         data: await parseGeoJsonText(await file.text()),
@@ -1798,7 +1882,7 @@ async function loadBrowserVectorFile(
     };
   }
 
-  if (extension === "kml") {
+  if (!streamViaDuckDb && extension === "kml") {
     try {
       return {
         data: parseKmlText(await file.text()),
@@ -1809,6 +1893,8 @@ async function loadBrowserVectorFile(
     }
   }
 
+  // Not gated on `streamViaDuckDb`: see ROUTABLE_TEXT_EXTENSIONS — the DuckDB
+  // reader would return only this GPX's first OGR layer.
   if (extension === "gpx") {
     return {
       data: parseGpxText(await file.text()),
@@ -1816,6 +1902,12 @@ async function loadBrowserVectorFile(
     };
   }
 
+  // Deliberately NOT gated on `streamViaDuckDb`: `loadDuckDbVectorFile` has no
+  // longitude/latitude column detection (that lives only in the GeoParquet
+  // conversion path), so routing a plain lon/lat CSV to DuckDB fails with
+  // "DuckDB did not find a geometry column in this file." Delimited text is
+  // line-oriented and cheap to parse, so size is not the concern it is for
+  // GeoJSON or shapefiles.
   if (isDelimitedTextFileName(file.name)) {
     const points = parseDelimitedTextFile(await file.text(), file.name);
     // No lon/lat columns: fall through to DuckDB so spatial CSV variants
@@ -2031,7 +2123,18 @@ async function loadTauriVectorFile(
   path: string;
 }> {
   const extension = fileExtension(path);
-  if (extension === "geojson" || extension === "json") {
+  // Decided from filesystem metadata, before the first byte is read, so an
+  // oversized file never starts a text parse that would freeze the UI.
+  const sizeBytes = await localFileSizeBytes(path);
+  const streamViaDuckDb = shouldRouteToDuckDb(sizeBytes);
+  // See `loadBrowserVectorFile`: containers decide their own routing later.
+  if (streamViaDuckDb && ROUTABLE_TEXT_EXTENSIONS.has(extension)) {
+    console.info(
+      `[GeoLibre] "${browserSafeFileName(path)}" is ${Math.round((sizeBytes ?? 0) / (1024 * 1024))} MB; streaming it through DuckDB instead of the in-memory reader.`,
+    );
+  }
+
+  if (!streamViaDuckDb && (extension === "geojson" || extension === "json")) {
     try {
       return {
         data: await parseGeoJsonText(await readLocalFileText(path)),
@@ -2063,7 +2166,7 @@ async function loadTauriVectorFile(
     }
   }
 
-  if (extension === "kml") {
+  if (!streamViaDuckDb && extension === "kml") {
     try {
       return {
         data: parseKmlText(await readLocalFileText(path)),
@@ -2074,6 +2177,7 @@ async function loadTauriVectorFile(
     }
   }
 
+  // Not gated on `streamViaDuckDb`; see the browser counterpart.
   if (extension === "gpx") {
     try {
       return {
@@ -2086,6 +2190,8 @@ async function loadTauriVectorFile(
     }
   }
 
+  // Not gated on `streamViaDuckDb` — see the note in `loadBrowserVectorFile`:
+  // the DuckDB reader cannot build points from lon/lat columns.
   if (isDelimitedTextFileName(path)) {
     const points = parseDelimitedTextFile(await readLocalFileText(path), path);
     // No lon/lat columns: fall through to DuckDB so spatial CSV variants
@@ -2758,7 +2864,10 @@ export async function loadDroppedVectorFiles(
         // Load the vector placemarks and the ground overlays independently so an
         // overlay-only KML still adds its overlays even when it has no readable
         // placemarks (which makes the vector load throw).
-        const text = await file.text();
+        // Overlay/model extraction needs the whole document as text. A file too
+        // large for that yields no overlays rather than aborting the batch; the
+        // guarded vector load below still runs and routes it to DuckDB.
+        const text = await readVectorFileTextOrEmpty(file);
         const overlays = groundOverlaysFromKml(text, file.name);
         const models = options?.skipModels ? [] : await modelsFromKml(text, file.name);
         // Overlays go under the placemarks (added first), matching the KMZ path.
@@ -3036,7 +3145,9 @@ export async function loadDroppedVectorPaths(
       if (extension === "kml") {
         // Load placemarks and ground overlays independently so an overlay-only
         // KML still contributes its overlays when the vector load throws.
-        const kmlText = await readLocalFileText(path);
+        // See the browser counterpart: too large to read as text means no
+        // overlays, not a failed drop.
+        const kmlText = await readLocalFileTextOrEmpty(path);
         const overlays = groundOverlaysFromKml(kmlText, path);
         const models = options?.skipModels ? [] : await modelsFromKml(kmlText, path);
         // Overlays go under the placemarks (added first), matching the KMZ path.

@@ -284,6 +284,116 @@ describe("buildAutoLegend — vector layers", () => {
     );
   });
 
+  it("draws the size ramp with the layer's marker, not a plain circle", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "marked",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            markerEnabled: true,
+            markerShape: "custom",
+            markerColor: "#3b82f6",
+            markerSvg: "https://example.com/bee.svg",
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "nb_ruches",
+            proportionalSizeMinValue: 1,
+            proportionalSizeMaxValue: 86,
+            proportionalSizeMinRadius: 4,
+            proportionalSizeMaxRadius: 24,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    // The map scales the marker sprite through icon-size, so every sized row
+    // carries the marker; a plain circle would advertise a symbol the map does
+    // not draw (GH discussion #1711).
+    assert.deepEqual(
+      entry.rows.map((row) => [row.size, row.marker?.shape, row.marker?.svg]),
+      [
+        [4, "custom", "https://example.com/bee.svg"],
+        [14, "custom", "https://example.com/bee.svg"],
+        [24, "custom", "https://example.com/bee.svg"],
+      ],
+    );
+    // The heading chip stays the marker too, so the entry reads as one symbol.
+    assert.equal(entry.headerSwatch?.marker?.shape, "custom");
+  });
+
+  it("carries the marker onto merged graduated class rows", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "merged",
+          metadata: { geometryType: "point" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            vectorStyleMode: "graduated",
+            vectorStyleProperty: "pop_max",
+            vectorStyleStops: [
+              { value: 0, color: "#440154" },
+              { value: 100, color: "#31688e" },
+              { value: 200, color: "#fde725" },
+            ],
+            markerEnabled: true,
+            markerShape: "star",
+            markerColor: "#f59e0b",
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "pop_max",
+            proportionalSizeMinValue: 0,
+            proportionalSizeMaxValue: 200,
+            proportionalSizeMinRadius: 4,
+            proportionalSizeMaxRadius: 24,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    assert.deepEqual(
+      entry.rows.map((row) => [row.size, row.marker?.shape]),
+      [
+        [9, "star"],
+        [19, "star"],
+        [24, "star"],
+      ],
+    );
+  });
+
+  it("leaves a line layer's size ramp markerless", () => {
+    const entries = buildAutoLegend(
+      [
+        layer({
+          id: "line",
+          metadata: { geometryType: "line" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            // markerEnabled on a line layer draws nothing on the map, so the
+            // stroke ramp must not pick up a marker.
+            markerEnabled: true,
+            markerShape: "star",
+            proportionalSizeEnabled: true,
+            proportionalSizeProperty: "flow",
+            proportionalSizeMinValue: 0,
+            proportionalSizeMaxValue: 100,
+            proportionalSizeMinRadius: 1,
+            proportionalSizeMaxRadius: 8,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    const [entry] = entries;
+    assert.ok(entry.rows.length > 0);
+    assert.ok(entry.rows.every((row) => row.marker === undefined && row.shape === "line"));
+  });
+
   it("omits size rows when the proportional range is degenerate", () => {
     const entries = buildAutoLegend(
       [

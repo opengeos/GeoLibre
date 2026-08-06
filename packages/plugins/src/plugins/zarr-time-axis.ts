@@ -14,8 +14,16 @@ import { parseTimeValue } from "./time-slider-binding";
  * layer: it takes a store URL, a dimension name, and raw values.
  */
 
-/** Dimension names read as a store's time axis, best first. */
-const TIME_DIMENSION_NAMES = [
+/**
+ * Dimension names read as a time axis, best first.
+ *
+ * Exported because the NetCDF path has to make the same call: a variable whose
+ * leading axis is one of these keeps the Zarr render path so the Time Slider can
+ * drive it, and is never offered as a band axis. Two copies would drift, and the
+ * same file would then take different render paths depending on how it was
+ * opened.
+ */
+export const TIME_DIMENSION_NAMES = [
   "time",
   "valid_time",
   "datetime",

@@ -232,6 +232,36 @@ export interface LocalNetcdfGrid {
 }
 
 /**
+ * A rectangular sub-region of a variable's grid, optionally decimated.
+ *
+ * Reading a *window* rather than the whole plane is what makes stacking many
+ * planes affordable. A chunked cube (EMIT writes 10x256x256) decompresses whole
+ * chunks whatever is asked of it, so the cost of a read is set by how many
+ * chunks it touches: a 512x512 window over a 1875x2442 grid touches 4 spatial
+ * chunks instead of 80, which is the difference between a cube read taking
+ * seconds and taking minutes.
+ *
+ * {@link maxSize} then bounds what comes *back* — decimation happens after the
+ * read, so it trims memory and draw cost, not I/O.
+ */
+export interface LocalNetcdfWindow {
+  /** First row of the window, into the variable's y extent. */
+  row: number;
+  /** First column of the window, into the variable's x extent. */
+  column: number;
+  /** Rows in the window. */
+  rows: number;
+  /** Columns in the window. */
+  columns: number;
+  /**
+   * Longest edge of the returned grid. A larger window is decimated by a
+   * whole-number stride, so the result is a subset of the source cells and
+   * never an interpolation of them.
+   */
+  maxSize?: number;
+}
+
+/**
  * A local NetCDF/HDF file opened in the browser. List its renderable variables,
  * build a Zarr store for a chosen slice, then {@link close} it to release any
  * backend resources.
@@ -251,8 +281,15 @@ export interface LocalNetcdfFile {
   /**
    * Read one 2-D slice plus its coordinates and packing, ready to hand to
    * {@link composeColormappedImage} (now, and again later with new symbology).
+   *
+   * Pass `window` to read a sub-region, decimated to a bounded size; omit it for
+   * the whole plane at full resolution.
    */
-  readGrid(variable: string, selector?: Record<string, number>): LocalNetcdfGrid;
+  readGrid(
+    variable: string,
+    selector?: Record<string, number>,
+    window?: LocalNetcdfWindow,
+  ): LocalNetcdfGrid;
   /**
    * Read one variable's values along a leading axis at a single pixel: the
    * spectral signature of a hyperspectral cube, or a time series of one cell.
@@ -489,7 +526,14 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
     const ny = shape[shape.length - 2];
     const nx = shape[shape.length - 1];
 
-    const sliceData = this.readPlane(ds, shape, dims, selector, variable);
+    const sliceData = this.readPlane(
+      ds,
+      shape,
+      dims,
+      selector,
+      variable,
+      resolveWindow(undefined, ny, nx),
+    );
     const fillValue = h5FillValue(ds);
     const { lat, lon } = this.readCoordinates(ny, nx, variable);
     const { refs, bounds } = buildInlineZarrStore({
@@ -524,6 +568,7 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
     const nx = shape[shape.length - 1];
     const axisPosition = leadingAxisPosition(dims, shape, options.axis);
     const fillValue = h5FillValue(ds);
+    const whole = resolveWindow(undefined, ny, nx);
 
     const channels = options.indices.map((index) =>
       this.readPlane(
@@ -532,6 +577,7 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
         dims,
         { ...options.selector, [dims[axisPosition]]: index },
         variable,
+        whole,
       ),
     );
     const { lat, lon } = this.readCoordinates(ny, nx, variable);
@@ -549,21 +595,26 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
     });
   }
 
-  readGrid(variable: string, selector: Record<string, number> = {}): LocalNetcdfGrid {
+  readGrid(
+    variable: string,
+    selector: Record<string, number> = {},
+    window?: LocalNetcdfWindow,
+  ): LocalNetcdfGrid {
     const { ds, shape, dims } = this.openVariable(variable);
     const ny = shape[shape.length - 2];
     const nx = shape[shape.length - 1];
+    const view = resolveWindow(window, ny, nx);
     const { lat, lon } = this.readCoordinates(ny, nx, variable);
-    const values = this.readPlane(ds, shape, dims, selector, variable);
+    const values = this.readPlane(ds, shape, dims, selector, variable, view);
     const fillValue = h5FillValue(ds);
     const scaleFactor = h5NumericAttr(ds, "scale_factor");
     const addOffset = h5NumericAttr(ds, "add_offset");
     return {
-      ny,
-      nx,
+      ny: view.outRows,
+      nx: view.outColumns,
       values,
-      lat: lat.data,
-      lon: lon.data,
+      lat: decimateCoordinate(lat.data, view.row, view.outRows, view.step),
+      lon: decimateCoordinate(lon.data, view.column, view.outColumns, view.step),
       fillValue,
       scaleFactor,
       addOffset,
@@ -632,28 +683,35 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
     return { ds, shape, dims: this.dimensionNames(ds, shape) };
   }
 
-  /** Read one full 2-D plane, fixing every leading dimension from `selector`. */
+  /**
+   * Read one 2-D plane, fixing every leading dimension from `selector` and
+   * restricting the spatial extent to `view`.
+   */
   private readPlane(
     ds: H5Dataset,
     shape: number[],
     dims: string[],
     selector: Record<string, number>,
     variable: string,
+    view: ResolvedWindow,
   ): TypedArrayLike {
-    // The hyperslab: one index per leading dim, full extent for y and x.
+    // The hyperslab: one index per leading dim, the window's extent for y and x.
+    // Asking HDF5 for only the window is what keeps a cube read affordable —
+    // the library faults in whole chunks, so a narrow request touches far fewer
+    // of them than a full plane does.
     const ranges: Array<[] | [number, number]> = [];
     for (let i = 0; i < shape.length - 2; i++) {
       const idx = clampIndex(selector[dims[i]] ?? 0, shape[i]);
       ranges.push([idx, idx + 1]);
     }
-    ranges.push([0, shape[shape.length - 2]]);
-    ranges.push([0, shape[shape.length - 1]]);
+    ranges.push([view.row, view.row + view.rows]);
+    ranges.push([view.column, view.column + view.columns]);
 
     const data = ds.slice(ranges);
     if (!isTypedArray(data)) {
       throw new Error(`Could not read data for variable "${variable}".`);
     }
-    return data;
+    return decimatePlane(data, view);
   }
 
   /**
@@ -885,7 +943,14 @@ class Netcdf3File implements LocalNetcdfFile {
     const ny = shape[shape.length - 2];
     const nx = shape[shape.length - 1];
 
-    const sliceData = this.readPlane(v, shape, dims, info, selector);
+    const sliceData = this.readPlane(
+      v,
+      shape,
+      dims,
+      info,
+      selector,
+      resolveWindow(undefined, ny, nx),
+    );
     const fillValue = normalizeFillValue(
       nc3NumericAttr(v, "_FillValue", true) ?? nc3NumericAttr(v, "missing_value", true),
     );
@@ -924,12 +989,17 @@ class Netcdf3File implements LocalNetcdfFile {
     const ny = shape[shape.length - 2];
     const nx = shape[shape.length - 1];
     const axisPosition = leadingAxisPosition(dims, shape, options.axis);
+    const whole = resolveWindow(undefined, ny, nx);
 
     const channels = options.indices.map((index) =>
-      this.readPlane(v, shape, dims, info, {
-        ...options.selector,
-        [dims[axisPosition]]: index,
-      }),
+      this.readPlane(
+        v,
+        shape,
+        dims,
+        info,
+        { ...options.selector, [dims[axisPosition]]: index },
+        whole,
+      ),
     );
     const lat = this.readCoordinate(LAT_NAMES, ny, LAT_RANGE);
     const lon = this.readCoordinate(LON_NAMES, nx, LON_RANGE);
@@ -951,7 +1021,11 @@ class Netcdf3File implements LocalNetcdfFile {
     });
   }
 
-  readGrid(variable: string, selector: Record<string, number> = {}): LocalNetcdfGrid {
+  readGrid(
+    variable: string,
+    selector: Record<string, number> = {},
+    window?: LocalNetcdfWindow,
+  ): LocalNetcdfGrid {
     const { v, shape, dims, info } = this.openVariable(variable);
     const ny = shape[shape.length - 2];
     const nx = shape[shape.length - 1];
@@ -959,18 +1033,19 @@ class Netcdf3File implements LocalNetcdfFile {
     const lon = this.readCoordinate(LON_NAMES, nx, LON_RANGE);
     if (!lat || !lon) throw new Error(NO_COORDINATES_MESSAGE);
 
-    const values = this.readPlane(v, shape, dims, info, selector);
+    const view = resolveWindow(window, ny, nx);
+    const values = this.readPlane(v, shape, dims, info, selector, view);
     const fillValue = normalizeFillValue(
       nc3NumericAttr(v, "_FillValue", true) ?? nc3NumericAttr(v, "missing_value", true),
     );
     const scaleFactor = nc3NumericAttr(v, "scale_factor");
     const addOffset = nc3NumericAttr(v, "add_offset");
     return {
-      ny,
-      nx,
+      ny: view.outRows,
+      nx: view.outColumns,
       values,
-      lat: lat.data,
-      lon: lon.data,
+      lat: decimateCoordinate(lat.data, view.row, view.outRows, view.step),
+      lon: decimateCoordinate(lon.data, view.column, view.outColumns, view.step),
       fillValue,
       scaleFactor,
       addOffset,
@@ -1033,13 +1108,17 @@ class Netcdf3File implements LocalNetcdfFile {
     return { v, shape, dims: this.dims(v), info };
   }
 
-  /** Read one 2-D plane, fixing every leading dimension from `selector`. */
+  /**
+   * Read one 2-D plane, fixing every leading dimension from `selector` and
+   * restricting the spatial extent to `view`.
+   */
   private readPlane(
     v: Nc3Variable,
     shape: number[],
     dims: string[],
     info: (typeof NC3_DTYPES)[string],
     selector: Record<string, number>,
+    view: ResolvedWindow,
   ): TypedArrayLike {
     const ny = shape[shape.length - 2];
     const nx = shape[shape.length - 1];
@@ -1050,7 +1129,20 @@ class Netcdf3File implements LocalNetcdfFile {
       lead = lead * shape[i] + clampIndex(selector[dims[i]] ?? 0, shape[i]);
     }
     const start = lead * ny * nx;
-    return full.subarray(start, start + ny * nx);
+    const plane = full.subarray(start, start + ny * nx);
+    // Unlike HDF5 there is nothing to save on the read itself (the variable is
+    // already decoded whole), so the window is a pure crop-and-decimate of the
+    // plane, applied here so both backends return the same shape.
+    if (view.row === 0 && view.column === 0 && view.rows === ny && view.columns === nx) {
+      return decimatePlane(plane, view);
+    }
+    const cropped = makeLike(plane, view.rows * view.columns);
+    for (let y = 0; y < view.rows; y++) {
+      const source = (view.row + y) * nx + view.column;
+      const target = y * view.columns;
+      for (let x = 0; x < view.columns; x++) cropped[target + x] = plane[source + x];
+    }
+    return decimatePlane(cropped, view);
   }
 
   /** The 1-D coordinate variable that labels an axis, when the file has one. */
@@ -1990,17 +2082,48 @@ export function gridPixelAt(grid: LocalNetcdfGrid, lng: number, lat: number): Gr
     (lng < 0 ? nearestIndex(grid.lon, lng + 360) : nearestIndex(grid.lon, lng - 360));
   if (row === null || column === null) return null;
 
-  const raw = Number(grid.values[row * grid.nx + column]);
-  const fill = typeof grid.fillValue === "number" ? grid.fillValue : null;
-  const missing = !Number.isFinite(raw) || (fill !== null && raw === fill);
-  const value = missing ? null : raw * (grid.scaleFactor ?? 1) + (grid.addOffset ?? 0);
   return {
     row,
     column,
     lng: Number(grid.lon[column]),
     lat: Number(grid.lat[row]),
-    value: value !== null && Number.isFinite(value) ? value : null,
+    value: gridValueAt(grid, row, column),
   };
+}
+
+/**
+ * One cell's value in physical units, with the grid's packing applied.
+ *
+ * Split out of {@link gridPixelAt} for the caller that has already located the
+ * cell and wants the same reading from a *second* grid: the channels of an RGB
+ * composite share one geometry, so the coordinate search runs once and this
+ * reads the other two channels straight off the index.
+ *
+ * @param grid - The retained slice.
+ * @param row - Row into its y extent.
+ * @param column - Column into its x extent.
+ * @returns The value, or null when the cell is fill/nodata or out of range.
+ */
+export function gridValueAt(grid: LocalNetcdfGrid, row: number, column: number): number | null {
+  // A cell located on one grid is only addressable on another that shares its
+  // shape. Without this a column past the row's width would silently fold into
+  // the next row and report a real value from the wrong place — worse than the
+  // documented miss, because nothing about the reading looks wrong.
+  if (
+    !Number.isInteger(row) ||
+    !Number.isInteger(column) ||
+    row < 0 ||
+    row >= grid.ny ||
+    column < 0 ||
+    column >= grid.nx
+  ) {
+    return null;
+  }
+  const raw = Number(grid.values[row * grid.nx + column]);
+  const fill = typeof grid.fillValue === "number" ? grid.fillValue : null;
+  if (!Number.isFinite(raw) || (fill !== null && raw === fill)) return null;
+  const value = raw * (grid.scaleFactor ?? 1) + (grid.addOffset ?? 0);
+  return Number.isFinite(value) ? value : null;
 }
 
 /**
@@ -2177,6 +2300,108 @@ function tryGet(group: H5Group, name: string): unknown {
 function clampIndex(index: number, size: number): number {
   if (!Number.isFinite(index)) return 0;
   return Math.min(Math.max(0, Math.trunc(index)), Math.max(0, size - 1));
+}
+
+/** A {@link LocalNetcdfWindow} clamped to a grid, with its stride worked out. */
+interface ResolvedWindow {
+  /** First row to read. */
+  row: number;
+  /** First column to read. */
+  column: number;
+  /** Rows to read, after clamping to the grid. */
+  rows: number;
+  /** Columns to read, after clamping to the grid. */
+  columns: number;
+  /** Whole-number decimation stride applied to both axes. */
+  step: number;
+  /** Rows in the decimated result. */
+  outRows: number;
+  /** Columns in the decimated result. */
+  outColumns: number;
+}
+
+/**
+ * Clamp a requested window to a grid and resolve its decimation stride.
+ *
+ * One stride for both axes rather than one each, so the result keeps the
+ * window's aspect ratio: a cube drawn from a stretched grid would be visibly
+ * wrong, and there is no cheap way to un-stretch it afterwards.
+ *
+ * @param window - The requested window, or undefined for the whole plane.
+ * @param ny - The variable's row count.
+ * @param nx - The variable's column count.
+ * @returns The window actually readable, and the result's size.
+ */
+function resolveWindow(
+  window: LocalNetcdfWindow | undefined,
+  ny: number,
+  nx: number,
+): ResolvedWindow {
+  const row = window ? clampIndex(window.row, ny) : 0;
+  const column = window ? clampIndex(window.column, nx) : 0;
+  const span = (requested: number, start: number, size: number): number =>
+    Number.isFinite(requested)
+      ? Math.min(Math.max(1, Math.trunc(requested)), size - start)
+      : size - start;
+  const rows = window ? span(window.rows, row, ny) : ny;
+  const columns = window ? span(window.columns, column, nx) : nx;
+  const maxSize = window?.maxSize;
+  const step =
+    maxSize !== undefined && Number.isFinite(maxSize) && maxSize >= 1
+      ? Math.max(1, Math.ceil(Math.max(rows, columns) / Math.trunc(maxSize)))
+      : 1;
+  return {
+    row,
+    column,
+    rows,
+    columns,
+    step,
+    outRows: Math.ceil(rows / step),
+    outColumns: Math.ceil(columns / step),
+  };
+}
+
+/** A new typed array of the same kind as `like`. */
+function makeLike(like: TypedArrayLike, length: number): TypedArrayLike {
+  const Ctor = (like as { constructor: unknown }).constructor as new (n: number) => TypedArrayLike;
+  return new Ctor(length);
+}
+
+/**
+ * Decimate a window-sized plane by its stride, taking every `step`-th cell.
+ *
+ * Nearest neighbour, not an average: the values may be packed integers or carry
+ * a fill value, and averaging either would invent readings the file does not
+ * contain.
+ *
+ * @param plane - The `window.rows * window.columns` cells, row-major.
+ * @param window - The resolved window the plane was read for.
+ * @returns The decimated plane, or `plane` itself when the stride is 1.
+ */
+function decimatePlane(plane: TypedArrayLike, window: ResolvedWindow): TypedArrayLike {
+  if (window.step === 1) return plane;
+  const out = makeLike(plane, window.outRows * window.outColumns);
+  for (let y = 0; y < window.outRows; y++) {
+    const sourceRow = y * window.step * window.columns;
+    const targetRow = y * window.outColumns;
+    for (let x = 0; x < window.outColumns; x++) {
+      out[targetRow + x] = plane[sourceRow + x * window.step];
+    }
+  }
+  return out;
+}
+
+/** The window's slice of a coordinate axis, decimated to match the plane. */
+function decimateCoordinate(
+  coordinate: TypedArrayLike,
+  start: number,
+  count: number,
+  step: number,
+): TypedArrayLike {
+  if (step === 1 && start === 0 && count === coordinate.length) return coordinate;
+  const out = makeLike(coordinate, count);
+  for (let i = 0; i < count; i++) out[i] = coordinate[start + i * step];
+  return out;
 }
 
 function isTypedArray(value: unknown): value is TypedArrayLike {

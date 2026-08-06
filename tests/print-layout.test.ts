@@ -20,12 +20,16 @@ function recordingCanvas(): {
   canvas: HTMLCanvasElement;
   fills: { text: string; textAlign: string; textBaseline: string }[];
   fillRects: { w: number; h: number; fillStyle: string }[];
+  imageBoxes: { w: number; h: number }[];
   arcs: number;
   polylines: number[];
 } {
   const fills: { text: string; textAlign: string; textBaseline: string }[] = [];
   // Filled rectangles (swatches, chart bars), with the fill colour in effect.
   const fillRects: { w: number; h: number; fillStyle: string }[] = [];
+  // Drawn images (custom SVG marker icons), with the box each was drawn into,
+  // so a proportional marker ramp's graduated sizes can be asserted.
+  const imageBoxes: { w: number; h: number }[] = [];
   // Stroked polylines: one entry per beginPath..stroke sequence that used
   // lineTo, holding the segment count (the line chart's path).
   const polylines: number[] = [];
@@ -55,8 +59,9 @@ function recordingCanvas(): {
         };
       }
       if (prop === "drawImage") {
-        return () => {
+        return (_img: unknown, _x: number, _y: number, w: number, h: number) => {
           counters.drawImages += 1;
+          imageBoxes.push({ w, h });
         };
       }
       if (prop === "beginPath") {
@@ -93,6 +98,7 @@ function recordingCanvas(): {
     canvas,
     fills,
     fillRects,
+    imageBoxes,
     get arcs() {
       return counters.arcs;
     },
@@ -312,6 +318,45 @@ describe("drawLayout legend rendering", () => {
     );
   });
 
+  it("scales a proportional size ramp's marker icons instead of drawing one fixed box", () => {
+    const svg = "<svg/>";
+    const image = {} as unknown as CanvasImageSource;
+    const marker = { shape: "custom", color: "#3b82f6", svg } as const;
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "ruchers",
+            name: "Ruchers",
+            swatches: [
+              { color: "#3b82f6", label: "1", size: 4, marker },
+              { color: "#3b82f6", label: "43.5", size: 14, marker },
+              { color: "#3b82f6", label: "86", size: 24, marker },
+            ],
+          },
+        ],
+        markerIcons: new Map([[svg, image]]),
+      }),
+    );
+    assert.equal(rec.drawImages, 3);
+    const widths = rec.imageBoxes.map((box) => box.w);
+    // Strictly growing, at the map's size ratios, so the ramp reads as one
+    // symbol growing rather than three identical icons (GH discussion #1711).
+    // The smallest row sits on the shared visible-symbol floor (like the circle
+    // branch), so the ratio is asserted between the two unclamped rows.
+    assert.ok(widths[0] < widths[1] && widths[1] < widths[2], `not growing: ${widths.join()}`);
+    assert.ok(
+      Math.abs(widths[1] / widths[2] - 14 / 24) < 0.02,
+      `middle/max ratio off: ${widths.join()}`,
+    );
+    assert.ok(
+      rec.imageBoxes.every((box) => box.w === box.h),
+      "expected square marker boxes",
+    );
+  });
+
   it("falls back to a color square when a custom SVG marker icon is not preloaded", () => {
     const svg = "<svg/>";
     const rec = recordingCanvas();
@@ -332,6 +377,37 @@ describe("drawLayout legend rendering", () => {
     assert.ok(
       rec.fillRects.some((r) => r.fillStyle === "#3b82f6" && r.w === r.h),
       "expected a fallback color square when the icon is missing",
+    );
+  });
+
+  it("falls back to sized circles, not framed squares, for an unloaded ramp icon", () => {
+    const svg = "<svg/>";
+    const marker = { shape: "custom", color: "#3b82f6", svg } as const;
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "ruchers",
+            name: "Ruchers",
+            swatches: [
+              { color: "#3b82f6", label: "1", size: 4, marker },
+              { color: "#3b82f6", label: "43.5", size: 14, marker },
+              { color: "#3b82f6", label: "86", size: 24, marker },
+            ],
+          },
+        ],
+        // No markerIcons: a remote icon still fetching, or one that failed.
+      }),
+    );
+    assert.equal(rec.drawImages, 0);
+    // Three filled circles, so the ramp still reads as one growing symbol
+    // during the load window rather than a column of identical framed boxes.
+    assert.ok(rec.arcs >= 3, `expected fallback circles, got ${rec.arcs} arcs`);
+    assert.ok(
+      !rec.fillRects.some((r) => r.fillStyle === "#3b82f6" && r.w === r.h),
+      "expected no square fallback swatch for a proportional row",
     );
   });
 

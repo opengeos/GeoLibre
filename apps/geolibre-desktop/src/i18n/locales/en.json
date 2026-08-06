@@ -799,7 +799,8 @@
       "lineWidth": "Line width",
       "extrusion": "3D extrusion",
       "modelUrlPlaceholder": "https://example.com/model.glb"
-    }
+    },
+    "nonGeographicCoordinates": "Coordinates in {{names}} are not longitude/latitude, so nothing will be drawn on the map. The CRS is mislabelled — reproject the data (or fix its .prj) and load it again."
   },
   "offline": {
     "title": "Download Offline Area",
@@ -5089,12 +5090,65 @@
     "reverse": "Reverse colormap",
     "colorMin": "Color min",
     "colorMax": "Color max",
-    "resetRange": "Reset to data range"
+    "resetRange": "Reset to data range",
+    "openCube": "3D cube"
+  },
+  "netcdfCube": {
+    "heading": "3D image cube",
+    "close": "Close",
+    "settings": "Settings",
+    "setupTitle": "3D image cube",
+    "setupDescription": "Choose what to read before building the cube. Every band is a separate read, so the extent and band count decide how long it takes.",
+    "extent": "Extent",
+    "extentView": "Current map view",
+    "extentDraw": "Draw on map",
+    "extentFull": "Full layer extent",
+    "viewHint": "Reads whatever the map is showing when the cube is built.",
+    "fullHint": "Reads the whole grid. Slow for a scene-sized cube.",
+    "drawBbox": "Draw on map",
+    "drawing": "Drag a box on the map to set the cube's extent",
+    "drawHint": "Drag a box on the map to set the extent.",
+    "drawnExtent": "W {{west}}, S {{south}}, E {{east}}, N {{north}}",
+    "detail": "Detail",
+    "detailOption": "{{size}} cells per side",
+    "bands": "Bands",
+    "allBands": "All ({{count}})",
+    "rgbOverlay": "RGB image on top",
+    "rgbHint": "Composes three bands into a color image laid over the top face, so the cube is recognizable as a place.",
+    "red": "Red",
+    "green": "Green",
+    "blue": "Blue",
+    "planeEstimate": "{{count}} band reads",
+    "create": "Create cube",
+    "colorRampLabel": "Colormap",
+    "reverse": "Reverse",
+    "showRgb": "RGB top",
+    "rgbBands": "RGB bands",
+    "recomposing": "reading...",
+    "zScale": "Height",
+    "slice": "Slice",
+    "sliceAt": "cut at {{band}} {{units}}",
+    "reading": "Reading band {{done}} of {{total}}...",
+    "summary": "{{nx}} x {{ny}} cells, {{nz}} bands along {{axis}}",
+    "errorNoCube": "This layer's source file is no longer open, so a cube cannot be read.",
+    "error": {
+      "shapeMismatch": "The variable's band planes do not share one shape, so they cannot be stacked into a cube.",
+      "rgbShapeMismatch": "The chosen RGB bands do not match the cube's shape.",
+      "noBands": "This variable has no bands to read.",
+      "noReadWindow": "This cube cannot be updated in place. Rebuild it from Settings."
+    }
   },
   "netcdfProfile": {
     "heading": "Spectral profile",
     "clear": "Clear",
-    "chartAria": "Sampled pixel values along the band axis"
+    "chartAria": "Sampled pixel values along the band axis",
+    "popOut": "Pop out",
+    "dock": "Dock",
+    "poppedOutHint": "The chart is open in a window on the map.",
+    "noValues": "No values to chart for these pixels.",
+    "exportPng": "PNG",
+    "exportCsv": "CSV",
+    "exportError": "Could not export the chart."
   },
   "netcdfIdentify": {
     "noData": "no data",

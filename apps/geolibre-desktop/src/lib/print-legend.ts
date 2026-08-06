@@ -95,6 +95,14 @@ export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
     const sizeRange = layerSupportsProportionalLegend(layer)
       ? proportionalSizeRange(layer.style)
       : null;
+    // A marker layer's sized rows draw the marker (the map scales the sprite via
+    // icon-size), not a plain circle. Mirrors the on-map auto legend so both
+    // legends show the symbol the reader actually sees. Excluded for lines,
+    // whose sized rows are strokes and which the map never draws a marker for.
+    const sizeMarker =
+      sizeRange && legendGeometryKind(layer) !== "line"
+        ? (pointMarkerSwatch(layer.style)?.marker ?? undefined)
+        : undefined;
     if (
       (mode === "graduated" || mode === "categorized") &&
       Array.isArray(stops) &&
@@ -115,11 +123,13 @@ export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
       // Same field classified and sized: merge sizes into the class rows so the
       // print legend matches the on-map auto-legend (one block, not two).
       if (sizeRange && mode === "graduated" && sizeRange.property === classProperty) {
-        return [...sizeClassSwatches(ramp, displayedStops, sizeRange), ...diagrams];
+        return [...sizeClassSwatches(ramp, displayedStops, sizeRange, sizeMarker), ...diagrams];
       }
       return [
         ...ramp,
-        ...(sizeRange ? proportionalSizeSwatches(sizeRange, sizeRampColor(ramp, layer.style)) : []),
+        ...(sizeRange
+          ? proportionalSizeSwatches(sizeRange, sizeRampColor(ramp, layer.style), sizeMarker)
+          : []),
         ...diagrams,
       ];
     }
@@ -129,7 +139,7 @@ export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
         return [
           ...swatches,
           ...(sizeRange
-            ? proportionalSizeSwatches(sizeRange, sizeRampColor(swatches, layer.style))
+            ? proportionalSizeSwatches(sizeRange, sizeRampColor(swatches, layer.style), sizeMarker)
             : []),
           ...diagrams,
         ];
@@ -141,6 +151,7 @@ export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
         ...proportionalSizeSwatches(
           sizeRange,
           styleValue(layer.style, "fillColor") || NEUTRAL_SWATCH,
+          sizeMarker,
         ),
         ...diagrams,
       ];
@@ -481,24 +492,35 @@ function rampSwatches(
 }
 
 /**
+ * The geometry the legend should represent this layer as, from its metadata
+ * when present and otherwise sniffed from the loaded features. `null` means
+ * "unknown" — no metadata and nothing conclusive in the sample — which callers
+ * treat permissively (a tiled layer whose features have not loaded yet).
+ */
+function legendGeometryKind(layer: GeoLibreLayer): "point" | "line" | "polygon" | null {
+  const geometryType =
+    typeof layer.metadata?.geometryType === "string" ? layer.metadata.geometryType : null;
+  if (geometryType === "point" || geometryType === "line" || geometryType === "polygon") {
+    return geometryType;
+  }
+
+  const features = layer.geojson?.features;
+  if (!features || features.length === 0) return null;
+  for (const feature of features.slice(0, 200)) {
+    const type = feature.geometry?.type ?? "";
+    if (type === "Point" || type === "MultiPoint") return "point";
+    if (type === "LineString" || type === "MultiLineString") return "line";
+    if (type === "Polygon" || type === "MultiPolygon") return "polygon";
+  }
+  return null;
+}
+
+/**
  * Whether the map would size this layer's symbols (circles / line strokes).
  * Polygon fills ignore proportional sizing, matching the on-map auto-legend.
  */
 function layerSupportsProportionalLegend(layer: GeoLibreLayer): boolean {
-  const geometryType =
-    typeof layer.metadata?.geometryType === "string" ? layer.metadata.geometryType : null;
-  if (geometryType === "point" || geometryType === "line") return true;
-  if (geometryType === "polygon") return false;
-
-  const features = layer.geojson?.features;
-  if (!features || features.length === 0) return true;
-  for (const feature of features.slice(0, 200)) {
-    const type = feature.geometry?.type ?? "";
-    if (type === "Point" || type === "MultiPoint") return true;
-    if (type === "LineString" || type === "MultiLineString") return true;
-    if (type === "Polygon" || type === "MultiPolygon") return false;
-  }
-  return true;
+  return legendGeometryKind(layer) !== "polygon";
 }
 
 function lerp(from: number, to: number, ratio: number): number {
@@ -509,11 +531,17 @@ function lerp(from: number, to: number, ratio: number): number {
  * Proportional-symbol size rows: min / middle / max symbol sizes with their
  * data values, mirroring the interpolate the map renders and the on-map legend.
  */
-function proportionalSizeSwatches(range: ProportionalSizeRange, color: string): LegendSwatch[] {
+function proportionalSizeSwatches(
+  range: ProportionalSizeRange,
+  color: string,
+  /** The layer's point marker, so the ramp shows the symbol the map draws. */
+  marker?: LegendMarker,
+): LegendSwatch[] {
   return [0, 0.5, 1].map((ratio) => ({
     color,
     label: formatStopValue(lerp(range.minValue, range.maxValue, ratio)),
     size: lerp(range.minRadius, range.maxRadius, ratio),
+    ...(marker ? { marker } : {}),
   }));
 }
 
@@ -526,6 +554,8 @@ function sizeClassSwatches(
   swatches: { color: string; label: string }[],
   stops: VectorStyleStop[],
   range: ProportionalSizeRange,
+  /** The layer's point marker, so the ramp shows the symbol the map draws. */
+  marker?: LegendMarker,
 ): LegendSwatch[] {
   return swatches.map((swatch, index) => {
     const from = Number(stops[index]?.value);
@@ -536,6 +566,7 @@ function sizeClassSwatches(
     return {
       ...swatch,
       size: lerp(range.minRadius, range.maxRadius, Math.min(1, Math.max(0, ratio))),
+      ...(marker ? { marker } : {}),
     };
   });
 }

@@ -1,4 +1,10 @@
-import { getSpatialExtensionPath, hasPathTraversal, useAppStore } from "@geolibre/core";
+import {
+  DUCKDB_VECTOR_FEATURE_WARN_COUNT,
+  DUCKDB_VECTOR_ROUTE_BYTES,
+  getSpatialExtensionPath,
+  hasPathTraversal,
+  useAppStore,
+} from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 // Imported from the `/errors` subpath, a standalone entry point holding just
 // these helpers. The package root re-exports VectorControl, so importing from
@@ -578,6 +584,15 @@ function createVectorControl(
     // Skip the remote spatial-extension install in offline/sandboxed
     // environments when a local extension path is configured.
     spatialExtensionPath: getSpatialExtensionPath(),
+    // Switch to the tiled path at the same numbers the drag-and-drop loaders
+    // use to switch to DuckDB (`duckdb-vector-guard.ts`). The control's own
+    // defaults are 25 MB / 50k, so without this the same file behaves
+    // differently depending on whether it was dropped on the map or added
+    // through this panel, and no single limit could be documented.
+    autoThreshold: {
+      featureCount: DUCKDB_VECTOR_FEATURE_WARN_COUNT,
+      byteSize: DUCKDB_VECTOR_ROUTE_BYTES,
+    },
   });
 
   for (const event of ["layeradded", "layerremoved", "layerupdated"] as const) {

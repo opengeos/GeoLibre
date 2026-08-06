@@ -7,16 +7,12 @@
  * `node --test` without pulling the WASM engine into the bundle/test.
  */
 
-/**
- * Sources whose feature (row) count reaches this threshold prompt a
- * confirmation before {@link loadDuckDbVectorFile} materializes every row as a
- * GeoJSON Feature in memory — each row is JSON-parsed and turned into its own
- * object, so a multi-million-row file can exhaust browser memory or wedge the
- * tab. This is the DuckDB ingestion counterpart to `OSM_PBF_SIZE_WARN_BYTES`
- * (`osm-pbf-loader.ts`); unlike a raw byte size it is accurate for compressed
- * formats like GeoParquet, where a small file can hold millions of rows.
- */
-export const DUCKDB_VECTOR_FEATURE_WARN_COUNT = 500_000;
+import { DUCKDB_VECTOR_FEATURE_WARN_COUNT, DUCKDB_VECTOR_ROUTE_BYTES } from "@geolibre/core";
+
+// Both thresholds live in `@geolibre/core` so the desktop loaders here and the
+// Add Vector Layer panel (`@geolibre/plugins`) switch strategy at the same
+// numbers; re-exported so callers keep importing them from the guard module.
+export { DUCKDB_VECTOR_FEATURE_WARN_COUNT, DUCKDB_VECTOR_ROUTE_BYTES };
 
 /** Details passed to {@link DuckDbVectorLoadOptions.onLargeDataset}. */
 export interface LargeVectorDataset {
@@ -95,4 +91,16 @@ export async function confirmLargeDataset(
   if (dataset.featureCount < DUCKDB_VECTOR_FEATURE_WARN_COUNT) return;
   const proceed = await onLargeDataset(dataset);
   if (!proceed) throw new VectorLoadCancelledError();
+}
+
+/**
+ * Whether a file of this size should skip the in-memory JavaScript readers and
+ * stream through DuckDB instead. An unknown size (undefined) reads as "small",
+ * so a failed `stat` leaves the existing behaviour untouched rather than
+ * diverting every file to DuckDB on a metadata hiccup.
+ *
+ * @see DUCKDB_VECTOR_ROUTE_BYTES
+ */
+export function shouldRouteToDuckDb(sizeBytes: number | undefined): boolean {
+  return sizeBytes !== undefined && sizeBytes >= DUCKDB_VECTOR_ROUTE_BYTES;
 }

@@ -86,8 +86,18 @@ describe("shared-deck-overlay", () => {
       "raster drawn first (bottom), deckviz last (top)",
     );
 
+    // STAC Search COGs are imagery too, so they sit with the rasters at the
+    // bottom rather than above the 3D tiles / vector overlays (#1718).
+    setSharedDeckLayers("stac-search", [layer("s1")] as never);
+    assert.deepEqual(
+      overlay?.layerIds(),
+      ["r1", "s1", "g1", "d1"],
+      "STAC Search imagery draws with the rasters, under google and deckviz",
+    );
+
     // Cleanup for the next test.
     setSharedDeckLayers("raster", [] as never);
+    setSharedDeckLayers("stac-search", [] as never);
     setSharedDeckLayers("google-3d-tiles", [] as never);
     setSharedDeckLayers("deckviz", [] as never);
     assert.deepEqual(overlay?.layerIds(), []);

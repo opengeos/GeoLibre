@@ -76,7 +76,37 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;
-        const content = serializeProject(buildProjectSnapshot(mapControllerRef));
+        // `serializeProject` runs synchronously, so its failure cannot be caught
+        // by the promise chain below. A project embedding a large vector layer
+        // serializes to more than V8's 536,870,888-byte string cap and throws
+        // `RangeError: Invalid string length`, which previously escaped as an
+        // unhandled error on every autosave tick. Autosave is best-effort — a
+        // project too large to snapshot must degrade to "no crash recovery",
+        // never to a crash.
+        // Built and serialized in separate steps so the two failures are not
+        // conflated: a snapshot that cannot be constructed is a genuine error,
+        // while one too large to stringify is an expected limit.
+        let snapshot: ReturnType<typeof buildProjectSnapshot>;
+        try {
+          snapshot = buildProjectSnapshot(mapControllerRef);
+        } catch (error) {
+          console.error("Could not autosave the project.", error);
+          return;
+        }
+        let content: string;
+        try {
+          content = serializeProject(snapshot);
+        } catch (error) {
+          // Only the string-length cap means "too large"; anything else is a
+          // real serialization bug and must not be filed under a size problem,
+          // or that class of failure becomes invisible in the wild.
+          if (error instanceof RangeError) {
+            console.warn("Project autosave skipped: the project is too large to serialize.", error);
+          } else {
+            console.error("Could not autosave the project.", error);
+          }
+          return;
+        }
         void addProjectSnapshot(content, currentProjectKey()).catch((error) =>
           console.error("Could not autosave the project.", error),
         );

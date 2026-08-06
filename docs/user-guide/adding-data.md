@@ -17,6 +17,28 @@ The **Add Data** menu is the main way to bring layers into GeoLibre. It groups s
 
 Vector files are reprojected to EPSG:4326 on load. In the browser, vector import relies on DuckDB-WASM Spatial, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives.
 
+!!! warning "Large vector files"
+    There is no fixed size limit. Files **under 100 MB** are read by the
+    in-memory JavaScript readers, which are fastest for everyday data. At
+    **100 MB or larger**, GeoLibre streams the file through DuckDB instead —
+    off the main thread, so the interface keeps responding. For a zipped
+    Shapefile the threshold applies to the *uncompressed* `.shp`, since
+    shapefiles compress heavily and the archive's size says little about the
+    parse cost. This happens automatically; nothing is asked of you.
+
+    A separate check counts features once the source is open. Past
+    **100,000 features**, GeoLibre asks before converting every one to GeoJSON
+    in memory, because that is where memory rather than file size becomes the
+    limit — a small GeoParquet can hold millions of rows.
+
+    For very large data, converting first still pays: **Processing → Conversion
+    → Vector to PMTiles** writes a tiled format the map loads one tile at a
+    time instead of reading the whole file. Converting to **GeoParquet**
+    instead gives a compact columnar format that reads far faster than text,
+    though it is not tiled. GeoJSON is the most expensive option at any size —
+    it expands several-fold in memory — so prefer a Shapefile, GeoParquet, or
+    FlatGeobuf source when you have the choice.
+
 !!! tip "KML and KMZ"
     KML is read by an in-house parser that keeps the file's own symbology, so styled KML renders the way it does in Google Earth. A file that parser cannot handle falls back to the DuckDB Spatial reader, which loads the geometry without the styling.
 

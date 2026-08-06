@@ -3,6 +3,7 @@ import type {
   LocalNetcdfGrid,
   LocalNetcdfProfile,
   LocalNetcdfVariable,
+  LocalNetcdfWindow,
 } from "@geolibre/plugins";
 import type { NetcdfWorkerResponse } from "../workers/netcdf-remote.worker";
 
@@ -19,8 +20,12 @@ export interface RemoteNetcdfFile {
   variables: LocalNetcdfVariable[];
   /** The variable's leading axes, with coordinate values where present. */
   listAxes(variable: string): Promise<LocalNetcdfAxis[]>;
-  /** One 2-D slice plus its coordinates and packing. */
-  readGrid(variable: string, selector?: Record<string, number>): Promise<LocalNetcdfGrid>;
+  /** One 2-D slice plus its coordinates and packing, optionally windowed. */
+  readGrid(
+    variable: string,
+    selector?: Record<string, number>,
+    window?: LocalNetcdfWindow,
+  ): Promise<LocalNetcdfGrid>;
   /** One pixel's values along a leading axis. */
   readProfile(
     variable: string,
@@ -79,6 +84,16 @@ export async function openRemoteNetcdfFile(url: string): Promise<RemoteNetcdfFil
     number,
     { resolve: (value: never) => void; reject: (e: Error) => void }
   >();
+  /**
+   * Why the worker is gone, once it is.
+   *
+   * Rejecting only what is already pending is not enough: a cube read yields to
+   * the event loop between planes, so a close can land in that gap and the
+   * *next* plane would then register a fresh request against a terminated
+   * worker — the same silent hang, one plane later. This latch makes every read
+   * after the end fail immediately instead.
+   */
+  let terminalError: Error | null = null;
 
   let markReady: (() => void) | null = null;
   // Kept so `onerror` can fail the startup wait itself. A module-load failure
@@ -119,22 +134,30 @@ export async function openRemoteNetcdfFile(url: string): Promise<RemoteNetcdfFil
     if (event.data.ok) entry.resolve(event.data.result as never);
     else entry.reject(new Error(event.data.error));
   };
+  /** Fail everything outstanding, refuse everything later, and let the worker go. */
+  const shutDown = (error: Error): void => {
+    if (terminalError) return;
+    terminalError = error;
+    for (const entry of pending.values()) entry.reject(error);
+    pending.clear();
+    worker.terminate();
+  };
+
   worker.onerror = (event) => {
     // A worker-level failure (a bad module load) never resolves the in-flight
     // request, so fail them all rather than hanging the dialog — and the startup
     // wait too, in case the failure landed before the first request.
     const error = new Error(event.message || "The NetCDF reader worker failed.");
     settleReady(error);
-    for (const entry of pending.values()) entry.reject(error);
-    pending.clear();
     // Nothing can be read through it again — every later `send` would hang on a
     // reply that cannot come — and it owns a lazy-filesystem mount, so let it go
     // rather than leaking it for the rest of the session. A `close()` after this
-    // is harmless: `terminate()` is idempotent.
-    worker.terminate();
+    // is harmless: `shutDown` is idempotent.
+    shutDown(error);
   };
 
   const send = <T>(message: Record<string, unknown>): Promise<T> => {
+    if (terminalError) return Promise.reject(terminalError);
     const id = nextId++;
     return new Promise<T>((resolve, reject) => {
       pending.set(id, { resolve: resolve as (value: never) => void, reject });
@@ -148,8 +171,8 @@ export async function openRemoteNetcdfFile(url: string): Promise<RemoteNetcdfFil
     return {
       variables,
       listAxes: (variable) => send<LocalNetcdfAxis[]>({ type: "listAxes", variable }),
-      readGrid: (variable, selector = {}) =>
-        send<LocalNetcdfGrid>({ type: "readGrid", variable, selector }),
+      readGrid: (variable, selector = {}, window) =>
+        send<LocalNetcdfGrid>({ type: "readGrid", variable, selector, window }),
       readProfile: (variable, options) =>
         send<LocalNetcdfProfile>({
           type: "readProfile",
@@ -159,7 +182,13 @@ export async function openRemoteNetcdfFile(url: string): Promise<RemoteNetcdfFil
           column: options.column,
           selector: options.selector ?? {},
         }),
-      close: () => worker.terminate(),
+      // Fail the reads rather than just terminating. `terminate()` silently
+      // drops replies, so a caller awaiting one would otherwise wait forever: a
+      // cube read issues dozens of sequential `readGrid` calls, and closing the
+      // layer (or opening a second cube, which releases the first file) lands
+      // in the middle of one. The read loop would hang with its progress bar
+      // frozen and its abort checks never reached.
+      close: () => shutDown(new Error("The NetCDF reader worker was closed.")),
     };
   } catch (error) {
     worker.terminate();
