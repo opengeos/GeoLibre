@@ -478,13 +478,15 @@ export function mergeProducts(...groups: SourceCoopProduct[][]): SourceCoopProdu
       // The feed carries no tags, `/products/*` does; the two sources can
       // enrich different fields (one adds tags, the other a description), so
       // prefer whichever record actually has each one rather than replacing
-      // the whole record. A whole-object spread would silently drop a field
-      // the later record happens to leave empty.
+      // the whole record. A whole-product spread would silently drop a field
+      // the later record leaves empty — and a feed record (`featured: false`)
+      // must not un-flag a product the API lists as featured, so truthy wins
+      // for the boolean too. Everything else keeps the first-seen record.
       byId.set(id, {
         ...existing,
-        ...product,
+        description: product.description || existing.description,
         tags: product.tags.length > 0 ? product.tags : existing.tags,
-        description: product.description ? product.description : existing.description,
+        featured: existing.featured || product.featured,
       });
     }
   }

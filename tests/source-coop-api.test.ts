@@ -519,6 +519,24 @@ describe("mergeProducts", () => {
     const merged = mergeProducts([product({ productId: "a" })], [product({ productId: "b" })]);
     assert.equal(merged.length, 2);
   });
+
+  it("keeps the featured flag when a feed record merges in second", () => {
+    const apiEntry = product({ tags: ["pmtiles"], description: "Full", featured: true });
+    const feedEntry = product({ tags: [], description: "" });
+    const merged = mergeProducts([apiEntry], [feedEntry]);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].featured, true);
+    assert.deepEqual(merged[0].tags, ["pmtiles"]);
+    assert.equal(merged[0].description, "Full");
+  });
+
+  it("keeps the first-seen title and url when a thinner record merges in second", () => {
+    const apiEntry = product({ title: "From API", tags: ["pmtiles"] });
+    const feedEntry = product({ title: "From feed", tags: [] });
+    const merged = mergeProducts([apiEntry], [feedEntry]);
+    assert.equal(merged[0].title, "From API");
+    assert.equal(merged[0].url, "https://source.coop/acme/buildings");
+  });
 });
 
 describe("fetchProduct", () => {
