@@ -1,0 +1,317 @@
+"""Tests for the MCP server's tool surface and its filesystem confinement.
+
+The workspace tests need only the standard library. The tool tests need the
+optional ``mcp`` SDK and skip without it, so the default CI install (which does
+not pull the SDK) stays green rather than silently losing coverage it never had.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+
+import pytest
+
+from geolibre.mcp.workspace import Workspace, WorkspaceError
+
+mcp = pytest.importorskip("mcp", reason="the mcp SDK is an optional extra")
+
+from mcp.server.mcpserver.exceptions import ToolError  # noqa: E402 - after the skip guard
+
+from geolibre.mcp.server import build_server  # noqa: E402 - after the skip guard
+
+POINT_FC = {
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {"name": "A", "pop": 10},
+            "geometry": {"type": "Point", "coordinates": [-84, 36]},
+        },
+        {
+            "type": "Feature",
+            "properties": {"name": "B", "pop": 90},
+            "geometry": {"type": "Point", "coordinates": [-83, 35]},
+        },
+    ],
+}
+
+
+@pytest.fixture
+def server(tmp_path):
+    """A server confined to a fresh temporary workspace."""
+    return build_server(Workspace([tmp_path]))
+
+
+# `server` and the tool name are positional-only so that a tool's own `name`
+# argument (create_project, add_geojson_layer, ...) lands in **arguments instead
+# of colliding with the helper's parameter.
+def call(server, tool, /, **arguments):
+    """Invoke a tool and return its structured result, failing on a tool error."""
+    result = asyncio.run(server.call_tool(tool, arguments))
+    if result.is_error:
+        raise AssertionError(f"{tool} failed: {result.content[0].text}")
+    return result.structured_content
+
+
+def call_error(server, tool, /, **arguments):
+    """Invoke a tool expected to fail and return its error text.
+
+    A tool that raises surfaces as a ``ToolError`` from this in-process entry
+    point; over the wire the same failure reaches the client as an ``isError``
+    result.
+    """
+    with pytest.raises(ToolError) as excinfo:
+        asyncio.run(server.call_tool(tool, arguments))
+    return str(excinfo.value)
+
+
+@pytest.fixture
+def project_path(server):
+    """A created project, returned as the path string tools take."""
+    call(server, "create_project", path="map.geolibre.json", name="Demo")
+    return "map.geolibre.json"
+
+
+# -- workspace confinement ----------------------------------------------------
+
+
+def test_workspace_rejects_a_path_outside_its_roots(tmp_path):
+    workspace = Workspace([tmp_path])
+    with pytest.raises(WorkspaceError, match="outside this server's workspace"):
+        workspace.resolve("/etc/passwd")
+
+
+def test_workspace_rejects_traversal_out_of_a_root(tmp_path):
+    workspace = Workspace([tmp_path / "inner"] if (tmp_path / "inner").is_dir() else [tmp_path])
+    with pytest.raises(WorkspaceError, match="outside this server's workspace"):
+        workspace.resolve("../../etc/passwd")
+
+
+def test_workspace_rejects_a_symlink_escape(tmp_path):
+    """A link planted inside a root resolves to its target, which is not inside."""
+    outside = tmp_path.parent / "outside-root"
+    outside.mkdir(exist_ok=True)
+    (outside / "secret.json").write_text("{}", encoding="utf-8")
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "link.json").symlink_to(outside / "secret.json")
+    workspace = Workspace([root])
+    with pytest.raises(WorkspaceError, match="outside this server's workspace"):
+        workspace.resolve("link.json")
+
+
+def test_workspace_resolves_relative_paths_against_the_first_root(tmp_path):
+    workspace = Workspace([tmp_path])
+    assert workspace.resolve("maps/a.json") == (tmp_path / "maps" / "a.json").resolve()
+
+
+def test_workspace_rejects_an_unsupported_output_extension(tmp_path):
+    workspace = Workspace([tmp_path])
+    with pytest.raises(WorkspaceError, match="Refusing to write"):
+        workspace.resolve_output("notes.txt", suffixes=(".json",))
+
+
+def test_workspace_guards_an_existing_output(tmp_path):
+    (tmp_path / "a.json").write_text("{}", encoding="utf-8")
+    workspace = Workspace([tmp_path])
+    with pytest.raises(WorkspaceError, match="already exists"):
+        workspace.resolve_output("a.json", suffixes=(".json",))
+    assert workspace.resolve_output("a.json", suffixes=(".json",), overwrite=True)
+
+
+def test_workspace_rejects_a_root_that_is_not_a_directory(tmp_path):
+    missing = tmp_path / "nope"
+    with pytest.raises(WorkspaceError, match="not a directory"):
+        Workspace([missing])
+
+
+# -- tool surface -------------------------------------------------------------
+
+
+def test_every_tool_is_registered_with_a_description(server):
+    tools = asyncio.run(server.list_tools())
+    names = {tool.name for tool in tools}
+    assert {"create_project", "add_geojson_layer", "classify_layer", "export_html"} <= names
+    # An undescribed tool is invisible to a model choosing between them.
+    assert all(tool.description for tool in tools)
+
+
+def test_create_project_writes_a_file(server, tmp_path):
+    result = call(
+        server,
+        "create_project",
+        path="map.geolibre.json",
+        name="Knoxville",
+        center=[-83.92, 35.96],
+        zoom=10,
+        basemap="dark",
+    )
+    written = json.loads((tmp_path / "map.geolibre.json").read_text(encoding="utf-8"))
+    assert result["name"] == "Knoxville"
+    assert written["mapView"]["center"] == [-83.92, 35.96]
+    assert written["basemapStyleUrl"].endswith("/dark")
+
+
+def test_create_project_refuses_to_clobber_without_overwrite(server, project_path):
+    assert "already exists" in call_error(server, "create_project", path=project_path)
+    assert call(server, "create_project", path=project_path, name="Replaced", overwrite=True)
+
+
+def test_create_project_refuses_a_path_outside_the_workspace(server):
+    assert "outside this server's workspace" in call_error(
+        server, "create_project", path="/tmp/escaped.geolibre.json"
+    )
+
+
+def test_add_geojson_layer_inlines_literal_geojson(server, project_path):
+    result = call(
+        server,
+        "add_geojson_layer",
+        path=project_path,
+        name="Cities",
+        data=json.dumps(POINT_FC),
+        style={"fillColor": "#ff0000"},
+    )
+    assert result["layerCount"] == 1
+    described = call(server, "describe_project", path=project_path)
+    assert described["layers"][0]["featureCount"] == 2
+
+
+def test_add_geojson_layer_reads_a_file_inside_the_workspace(server, project_path, tmp_path):
+    (tmp_path / "cities.geojson").write_text(json.dumps(POINT_FC), encoding="utf-8")
+    result = call(
+        server, "add_geojson_layer", path=project_path, name="Cities", data="cities.geojson"
+    )
+    assert result["layerCount"] == 1
+
+
+def test_add_geojson_layer_refuses_a_file_outside_the_workspace(server, project_path):
+    assert "outside this server's workspace" in call_error(
+        server, "add_geojson_layer", path=project_path, name="Escape", data="/etc/hosts"
+    )
+
+
+def test_add_raster_layer_records_its_source(server, project_path):
+    call(
+        server,
+        "add_raster_layer",
+        path=project_path,
+        name="DEM",
+        url="https://example.com/dem.tif",
+        bands=[1],
+        colormap="terrain",
+        rescale=[[0, 3000]],
+    )
+    described = call(server, "describe_project", path=project_path)
+    assert described["layers"][0]["name"] == "DEM"
+
+
+def test_add_ogc_layer_requires_layers_for_wms(server, project_path):
+    assert "'layers' is required" in call_error(
+        server,
+        "add_ogc_layer",
+        path=project_path,
+        name="WMS",
+        service="wms",
+        endpoint="https://example.com/wms",
+    )
+
+
+def test_add_ogc_layer_rejects_an_unknown_service(server, project_path):
+    assert "wms" in call_error(
+        server,
+        "add_ogc_layer",
+        path=project_path,
+        name="Weird",
+        service="wfs",
+        endpoint="https://example.com",
+    )
+
+
+def test_add_tiles_layer_rejects_an_unknown_kind(server, project_path):
+    assert "pmtiles" in call_error(
+        server,
+        "add_tiles_layer",
+        path=project_path,
+        name="Tiles",
+        url="https://example.com/t.pmtiles",
+        kind="mbtiles",
+    )
+
+
+def test_layers_can_be_referenced_by_name(server, project_path):
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    updated = call(server, "update_layer", path=project_path, layer="Cities", opacity=0.5)
+    assert updated["layer"]["opacity"] == 0.5
+
+
+def test_classify_layer_writes_graduated_stops(server, project_path):
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    result = call(
+        server, "classify_layer", path=project_path, layer="Cities", column="pop", class_count=3
+    )
+    assert result["symbology"]["vectorStyleMode"] == "graduated"
+    assert len(result["symbology"]["vectorStyleStops"]) == 3
+
+
+def test_list_layer_properties_reports_columns(server, project_path):
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    result = call(server, "list_layer_properties", path=project_path, layer="Cities")
+    assert result["properties"]["pop"] == [10, 90]
+
+
+def test_a_failing_tool_leaves_the_project_untouched(server, project_path, tmp_path):
+    """The write happens only after the mutation returns, so a failure is a no-op."""
+    before = (tmp_path / "map.geolibre.json").read_text(encoding="utf-8")
+    assert call_error(server, "remove_layer", path=project_path, layer="Nonexistent")
+    assert (tmp_path / "map.geolibre.json").read_text(encoding="utf-8") == before
+
+
+def test_set_view_fits_a_bounding_box(server, project_path):
+    result = call(server, "set_view", path=project_path, bbox=[-84.0, 35.9, -83.8, 36.0])
+    assert result["mapView"]["center"][0] == pytest.approx(-83.9)
+    assert result["mapView"]["zoom"] > 8
+
+
+def test_set_view_lets_an_explicit_zoom_win_over_a_bbox(server, project_path):
+    result = call(server, "set_view", path=project_path, bbox=[-84, 35.9, -83.8, 36], zoom=3)
+    assert result["mapView"]["zoom"] == 3
+
+
+def test_add_swipe_resolves_names_to_ids(server, project_path):
+    added = call(
+        server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC)
+    )
+    result = call(
+        server,
+        "add_swipe",
+        path=project_path,
+        left_layers=["__basemap__"],
+        right_layers=["Cities"],
+    )
+    assert result["swipe"]["rightLayers"] == [added["layerId"]]
+
+
+def test_list_catalog_reports_the_workspace(server, tmp_path):
+    catalog = call(server, "list_catalog")
+    assert "liberty" in catalog["basemaps"]
+    assert "viridis" in catalog["colorRamps"]
+    assert catalog["workspaceRoots"] == [str(tmp_path.resolve())]
+
+
+def test_export_html_embeds_the_project(server, project_path, tmp_path):
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    result = call(server, "export_html", path=project_path, out_path="map.html", title="Demo")
+    html = (tmp_path / "map.html").read_text(encoding="utf-8")
+    assert result["bytes"] == len(html.encode("utf-8"))
+    assert "<title>Demo</title>" in html
+    assert "geolibre:load-project" in html
+    # The project rides in a JSON script block, so its layer is in the page.
+    assert "Cities" in html
+
+
+def test_export_html_refuses_a_non_html_destination(server, project_path):
+    assert "Refusing to write" in call_error(
+        server, "export_html", path=project_path, out_path="map.json"
+    )

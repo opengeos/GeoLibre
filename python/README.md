@@ -111,3 +111,19 @@ m.to_project()["mapView"]["center"]
   dataset is held in memory and re-synced on every project update. For very large
   layers, prefer a tile or COG source (`add_tile_layer`/`add_cog`) the app fetches
   directly.
+
+## MCP server
+
+The package also ships a headless [MCP](https://modelcontextprotocol.io) server
+that authors `.geolibre.json` projects from an AI client:
+
+```bash
+pip install "geolibre[mcp]"
+geolibre-mcp --root ~/maps
+```
+
+It confines every read and write to the roots you pass (`--root`, repeatable, or
+`GEOLIBRE_MCP_ROOTS`) and builds projects through the same builders this package
+uses, so anything it writes opens in the widget unchanged. See
+[docs/mcp.md](https://geolibre.app/mcp/) for the tool list and client
+configuration.

@@ -23,7 +23,13 @@ dependencies = ["anywidget>=0.9", "traitlets>=5", "jupyter-ui-poll>=0.2"]
 
 [project.optional-dependencies]
 all = ["geopandas", "shapely"]
-dev = ["pytest", "build", "anywidget[dev]", "jupyter-server"]
+# The MCP server (geolibre.mcp) is the only thing that imports the SDK, so it
+# stays optional: the widget and the project builders work without it.
+mcp = ["mcp>=2.0"]
+dev = ["pytest", "build", "anywidget[dev]", "jupyter-server", "mcp>=2.0"]
+
+[project.scripts]
+geolibre-mcp = "geolibre.mcp.server:main"
 
 [project.urls]
 Homepage = "https://geolibre.app"
