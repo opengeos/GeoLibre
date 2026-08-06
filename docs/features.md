@@ -4,7 +4,8 @@ A feature-by-feature list of what GeoLibre can do today — the latest release p
 what has landed on `main` since (see [Recently added](index.md#recently-added)).
 For task-oriented walkthroughs, see the [User Guide](user-guide/interface.md) and
 the [Tutorials](tutorials/index.md); for what is planned next, see the
-[Roadmap](roadmap.md).
+[Roadmap](roadmap.md). For how this stacks up against QGIS, ArcGIS, Felt, and
+kepler.gl, see the [Comparison](comparison.md).
 
 ## Platforms and interface
 

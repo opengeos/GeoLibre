@@ -41,6 +41,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Features: features.md
+  - Comparison: comparison.md
   - Demos: demos.md
   - Downloads: downloads.md
   - Launch GeoLibre Web: /demo/
