@@ -2,18 +2,67 @@
 
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { HostedLayer, VectorTileLayer } from "@esri/maplibre-arcgis";
-import type { FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
 
 export type ArcGISLayerType = "feature" | "vector-tile";
 export type ArcGISSourceType = "url" | "portal-item";
 
+/**
+ * Features requested per `/query` call when the service does not advertise a
+ * smaller `maxRecordCount`.
+ *
+ * Deliberately far below the 1000-50000 `maxRecordCount` services typically
+ * advertise: that ceiling is what the service will *return*, not what it can
+ * assemble without falling over. Asking a large layer for everything at once is
+ * exactly what fails (GeoLibre#1745 — a 41k-polygon FeatureServer answers the
+ * unbounded query with an HTTP 500 "Error performing query operation" while the
+ * same data pages back fine).
+ */
+const DEFAULT_ARCGIS_PAGE_SIZE = 1000;
+
+/**
+ * Runaway guard for the paging loops. At the default page size this is 5M
+ * features, well past any layer that belongs in an in-memory GeoJSON source, so
+ * it only ever trips on a service that keeps answering without making progress.
+ */
+const MAX_ARCGIS_PAGES = 5000;
+
+/**
+ * `metadata.sourceKind` on a feature layer loaded through the paged query path.
+ * `layer-refresh.ts` matches on it to replay the paging on refresh instead of
+ * re-fetching the stored URL, which would return only the first page.
+ */
+export const ARCGIS_FEATURE_SOURCE_KIND = "arcgis-feature-query";
+
 export interface ArcGISLayerOptions {
   beforeLayerId?: string | null;
   itemId?: string;
   layerType: ArcGISLayerType;
+  /**
+   * Stop after this many features. Defaults to no cap (the whole layer).
+   *
+   * Only meaningful for `layerType: "feature"`, whose features are pulled into
+   * an in-memory GeoJSON source; a cap is the escape hatch for a layer too big
+   * to hold in the browser at all.
+   */
+  maxFeatures?: number;
   name?: string;
+  /**
+   * Called after each page of a feature layer's download, with the features
+   * loaded so far and the service's total count (`null` when the service would
+   * not answer `returnCountOnly`). Lets a caller show progress across what can
+   * be dozens of requests.
+   */
+  onProgress?: (loaded: number, total: number | null) => void;
+  /**
+   * Features to request per `/query` call (ArcGIS `resultRecordCount`).
+   * Defaults to the smaller of {@link DEFAULT_ARCGIS_PAGE_SIZE} and the
+   * service's advertised `maxRecordCount`. Lower it for a service that times
+   * out even on the default page.
+   */
+  pageSize?: number;
   portalUrl?: string;
   sourceType: ArcGISSourceType;
   token?: string;
@@ -31,10 +80,16 @@ export interface ArcGISLayerOptions {
 }
 
 interface ArcGISFeatureLayerInfo {
+  advancedQueryCapabilities?: {
+    supportsOrderBy?: boolean;
+    supportsPagination?: boolean;
+  };
   copyrightText?: string;
   extent?: ArcGISExtent;
   geometryType?: string;
+  maxRecordCount?: number;
   name?: string;
+  objectIdField?: string;
 }
 
 interface ArcGISFeatureServiceInfo {
@@ -196,11 +251,12 @@ function addArcGISRuntimeLayerToMap(hostedLayer: ArcGISRuntimeLayer, map: maplib
 /**
  * Load an ArcGIS FeatureServer layer as a host-managed GeoJSON layer.
  *
- * The features are fetched up front (`/query?f=geojson`) and handed to the
- * store's GeoJSON layer path, so the layer is a first-class vector layer with
- * its attributes available — enabling labels and their formatting, the
- * attribute table, identify, symbology, and export. Vector tile layers keep the
- * external-native runtime path; only feature layers come through here.
+ * The features are fetched up front (`/query?f=geojson`, paged — see
+ * {@link fetchArcGISFeaturePages}) and handed to the store's GeoJSON layer path,
+ * so the layer is a first-class vector layer with its attributes available —
+ * enabling labels and their formatting, the attribute table, identify,
+ * symbology, and export. Vector tile layers keep the external-native runtime
+ * path; only feature layers come through here.
  *
  * @param app - The host app API (used to fit the view to the layer extent).
  * @param options - The ArcGIS layer options (source type, URL/item, token).
@@ -222,17 +278,15 @@ async function addArcGISFeatureLayerAsGeoJson(
   }
 
   // The token is kept out of the persisted refresh URL so it is never written
-  // to a saved project; it is only appended to the one-off request below.
-  const refreshUrl = appendArcGISParams(`${trimTrailingSlash(layerUrl)}/query`, {
+  // to a saved project; it is only appended to the live requests below.
+  const queryUrl = `${trimTrailingSlash(layerUrl)}/query`;
+  const refreshUrl = appendArcGISParams(queryUrl, {
     f: "geojson",
     outFields: "*",
     returnGeometry: "true",
     where: "1=1",
   });
-  const requestUrl = appendArcGISParams(refreshUrl, {
-    token: options.token?.trim(),
-  });
-  const geojson = await fetchArcGISGeoJson(requestUrl);
+  const geojson = await fetchArcGISFeaturePages(queryUrl, options, layerInfo);
 
   const name =
     options.name?.trim() || layerInfo.name || layerNameFromArcGISInput(layerUrl, "ArcGIS Layer");
@@ -241,16 +295,417 @@ async function addArcGISFeatureLayerAsGeoJson(
   // the source path so the layer's GeoJSON refresh re-fetches valid features.
   const id = store.addGeoJsonLayer(name, geojson, refreshUrl, options.beforeLayerId ?? null);
 
-  // Preserve the service's copyright watermark in MapLibre's attribution
-  // control, matching the prior URL-source behavior.
-  const attribution = layerInfo.copyrightText?.trim();
-  if (attribution) {
-    store.updateLayer(id, { source: { type: "geojson", attribution } });
-  }
+  store.updateLayer(id, {
+    source: {
+      type: "geojson",
+      // Preserve the service's copyright watermark in MapLibre's attribution
+      // control, matching the prior URL-source behavior.
+      attribution: layerInfo.copyrightText?.trim() || undefined,
+      // What a refresh needs to replay the same paged download. Re-fetching the
+      // stored query URL on its own would shrink the layer back to a single
+      // page (the ArcGIS twin of the OGC API - Features case in layer-refresh).
+      // The token is deliberately absent: it is never persisted, so refreshing
+      // a token-protected layer fails the same way it does today.
+      arcgisQueryUrl: queryUrl,
+      maxFeatures: options.maxFeatures,
+      pageSize: options.pageSize,
+    },
+    metadata: { sourceKind: ARCGIS_FEATURE_SOURCE_KIND },
+  });
 
   const bounds = arcgisExtentToBounds(layerInfo.extent);
   if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
   return id;
+}
+
+/**
+ * Re-download an ArcGIS feature layer, replaying the paging it was added with.
+ *
+ * A refresh cannot just re-fetch the layer's stored `sourcePath`: that URL is
+ * the unbounded `where=1=1` query, which is the very request that truncates at
+ * `maxRecordCount` or fails outright on a large service (GeoLibre#1745). Going
+ * back through {@link fetchArcGISFeaturePages} keeps a refreshed layer the same
+ * size as the one that was added.
+ *
+ * @param params - The paging state persisted on the layer's source.
+ * @returns The re-downloaded features.
+ */
+export async function refreshArcGISFeatureLayer(params: {
+  maxFeatures?: number;
+  pageSize?: number;
+  queryUrl: string;
+}): Promise<FeatureCollection> {
+  const queryUrl = trimTrailingSlash(params.queryUrl).replace(/\/query$/i, "");
+  const options: ArcGISLayerOptions = {
+    layerType: "feature",
+    maxFeatures: params.maxFeatures,
+    pageSize: params.pageSize,
+    sourceType: "url",
+  };
+  // Re-read the metadata rather than trusting a stored copy: `maxRecordCount`
+  // and the paging capabilities are the service's to change between sessions.
+  const layerInfo = await fetchArcGISJson<ArcGISFeatureLayerInfo>(queryUrl, options, undefined);
+  return fetchArcGISFeaturePages(`${queryUrl}/query`, options, layerInfo);
+}
+
+/**
+ * Everything the paging strategies need, resolved once from the layer metadata.
+ */
+interface ArcGISPagingPlan {
+  /** Hard cap on features to keep, or `null` for the whole layer. */
+  maxFeatures: number | null;
+  /** The layer's ObjectID field, when the service names one. */
+  objectIdField: string | undefined;
+  onProgress: ArcGISLayerOptions["onProgress"];
+  /** Features to request per `/query` call. */
+  pageSize: number;
+  /** Query params every page shares (including the token, if any). */
+  params: Record<string, string | undefined>;
+  /** The `/query` endpoint, without paging params. */
+  queryUrl: string;
+  /** Whether the service claims to honor `resultOffset`. */
+  supportsPagination: boolean;
+  /** Whether the service accepts `orderByFields` (needed for stable paging). */
+  supportsOrderBy: boolean;
+  /** The service's feature count, or `null` when it would not report one. */
+  total: number | null;
+}
+
+/**
+ * Download every feature of an ArcGIS feature layer, one page at a time.
+ *
+ * A single unbounded `where=1=1` query is what the old code sent, and it does
+ * not scale: past some layer size the service either truncates the result at
+ * `maxRecordCount` (loading a silently partial layer) or gives up entirely with
+ * an HTTP 500 (GeoLibre#1745). Paging keeps every individual request small
+ * enough for the service to answer, so the layer that used to fail outright now
+ * loads in full.
+ *
+ * Two strategies, because not every service supports the first:
+ *
+ * - `resultOffset`/`resultRecordCount` paging, when the layer advertises
+ *   `advancedQueryCapabilities.supportsPagination` (ArcGIS 10.3+). Cheapest —
+ *   no extra round trip.
+ * - ObjectID-range paging otherwise: ask for the layer's ObjectIDs
+ *   (`returnIdsOnly`), then walk them in sorted chunks with a
+ *   `<oidField> >= a AND <oidField> <= b` filter. Works on any service that can
+ *   run a query at all, which is what older ArcGIS Server deployments need.
+ *
+ * A service that advertises pagination but ignores `resultOffset` would page
+ * forever over the same rows, so that is detected (each page's first feature is
+ * compared with the previous page's) and falls back to the ObjectID walk.
+ *
+ * @param queryUrl - The layer's `/query` endpoint, with no query string.
+ * @param options - The ArcGIS layer options (token, page size, feature cap).
+ * @param layerInfo - The layer's `?f=json` metadata.
+ * @returns Every feature the service returned, as one FeatureCollection.
+ */
+async function fetchArcGISFeaturePages(
+  queryUrl: string,
+  options: ArcGISLayerOptions,
+  layerInfo: ArcGISFeatureLayerInfo,
+): Promise<FeatureCollection> {
+  const plan = await planArcGISPaging(queryUrl, options, layerInfo);
+
+  if (plan.supportsPagination) {
+    const paged = await fetchArcGISPagesByOffset(plan);
+    if (!paged.truncated) return finishArcGISPaging(plan, paged.features, false);
+    // The service advertised `supportsPagination` but handed back the same rows
+    // for a second offset. Walking ObjectIDs does not rely on that promise.
+    const byObjectId = await fetchArcGISPagesByObjectId(plan);
+    if (byObjectId) return finishArcGISPaging(plan, byObjectId.features, byObjectId.truncated);
+    return finishArcGISPaging(plan, paged.features, true);
+  }
+
+  const byObjectId = await fetchArcGISPagesByObjectId(plan);
+  if (byObjectId) return finishArcGISPaging(plan, byObjectId.features, byObjectId.truncated);
+  // No usable ObjectIDs either. Try offset paging anyway — plenty of services
+  // honor it without advertising it — and accept a single page if they do not.
+  const paged = await fetchArcGISPagesByOffset(plan);
+  return finishArcGISPaging(plan, paged.features, paged.truncated);
+}
+
+async function planArcGISPaging(
+  queryUrl: string,
+  options: ArcGISLayerOptions,
+  layerInfo: ArcGISFeatureLayerInfo,
+): Promise<ArcGISPagingPlan> {
+  const params = {
+    f: "geojson",
+    outFields: "*",
+    returnGeometry: "true",
+    where: "1=1",
+    token: options.token?.trim() || undefined,
+  };
+  return {
+    maxFeatures: positiveInteger(options.maxFeatures),
+    objectIdField: layerInfo.objectIdField?.trim() || undefined,
+    onProgress: options.onProgress,
+    pageSize: resolveArcGISPageSize(options.pageSize, layerInfo.maxRecordCount),
+    params,
+    queryUrl,
+    supportsPagination: layerInfo.advancedQueryCapabilities?.supportsPagination === true,
+    supportsOrderBy: layerInfo.advancedQueryCapabilities?.supportsOrderBy !== false,
+    total: await fetchArcGISFeatureCount(queryUrl, params.token),
+  };
+}
+
+/**
+ * The page size to request.
+ *
+ * A caller-supplied size wins (that is the point of the Add Data field), but is
+ * still held under the service's own `maxRecordCount` — asking for more only
+ * gets the cap back, and would make a truncated page look like the last one.
+ *
+ * @param requested - The caller's `pageSize` option, if any.
+ * @param maxRecordCount - The service's advertised per-query ceiling, if any.
+ */
+function resolveArcGISPageSize(
+  requested: number | undefined,
+  maxRecordCount: number | undefined,
+): number {
+  const serviceCap = positiveInteger(maxRecordCount);
+  const wanted = positiveInteger(requested) ?? DEFAULT_ARCGIS_PAGE_SIZE;
+  return serviceCap ? Math.min(wanted, serviceCap) : wanted;
+}
+
+function positiveInteger(value: number | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1
+    ? Math.floor(value)
+    : null;
+}
+
+/**
+ * The layer's feature count, used for progress reporting and as a stop
+ * condition. Best-effort: a service that will not answer `returnCountOnly`
+ * still pages fine, so any failure resolves to `null` rather than throwing.
+ *
+ * @param queryUrl - The layer's `/query` endpoint.
+ * @param token - The access token to send, if any.
+ */
+async function fetchArcGISFeatureCount(
+  queryUrl: string,
+  token: string | undefined,
+): Promise<number | null> {
+  try {
+    const response = await fetch(
+      appendArcGISParams(queryUrl, {
+        f: "json",
+        returnCountOnly: "true",
+        where: "1=1",
+        token,
+      }),
+    );
+    if (!response.ok) return null;
+    const json = (await response.json()) as { count?: unknown };
+    return typeof json.count === "number" && Number.isFinite(json.count) && json.count >= 0
+      ? json.count
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Page with `resultOffset`/`resultRecordCount`.
+ *
+ * @param plan - The resolved paging plan.
+ * @returns The features collected, plus whether the walk stopped with rows the
+ *   service still had — either because it was caught ignoring `resultOffset`
+ *   (the features are then only the first page, and the caller should try
+ *   another strategy) or because the page guard tripped.
+ */
+async function fetchArcGISPagesByOffset(
+  plan: ArcGISPagingPlan,
+): Promise<{ features: Feature[]; truncated: boolean }> {
+  const features: Feature[] = [];
+  // Paging is only coherent over a stable sort. Services default to ObjectID
+  // order, but say so explicitly when the layer names an ObjectID field and
+  // accepts `orderByFields`, so pages cannot overlap or skip rows.
+  const orderByFields = plan.supportsOrderBy && plan.objectIdField ? plan.objectIdField : undefined;
+  let previousSignature: string | null = null;
+  let pageSize = plan.pageSize;
+
+  for (let page = 0; ; page += 1) {
+    if (page >= MAX_ARCGIS_PAGES) return { features, truncated: true };
+
+    const wanted = remainingArcGISFeatures(plan, features.length, pageSize);
+    if (wanted <= 0) break;
+
+    const chunk = await fetchArcGISGeoJson(
+      appendArcGISParams(plan.queryUrl, {
+        ...plan.params,
+        orderByFields,
+        resultOffset: String(features.length),
+        resultRecordCount: String(wanted),
+      }),
+    );
+    if (chunk.features.length === 0) break;
+
+    const signature = arcgisPageSignature(chunk.features[0]);
+    if (page > 0 && signature !== null && signature === previousSignature) {
+      // The same first row came back for a different offset: the service is
+      // ignoring `resultOffset`, so every further page would be this one again.
+      return { features: features.slice(0, plan.pageSize), truncated: true };
+    }
+    previousSignature = signature;
+
+    features.push(...chunk.features);
+    plan.onProgress?.(features.length, plan.total);
+
+    if (plan.total !== null && features.length >= plan.total) break;
+    if (chunk.features.length >= wanted) continue;
+    // A short page normally means the last one — unless the service flagged the
+    // transfer limit, which means it capped the page below what was asked for.
+    // Adopt its cap and keep going rather than stopping on a partial dataset.
+    if (!chunk.exceededTransferLimit) break;
+    pageSize = chunk.features.length;
+  }
+
+  return { features, truncated: false };
+}
+
+/**
+ * Page by walking the layer's ObjectIDs in sorted chunks.
+ *
+ * The chunks are expressed as an inclusive `>= a AND <= b` range rather than an
+ * `objectIds=` list so the request URL stays short whatever the page size.
+ * Because the range is cut from the service's own complete, sorted ID list, it
+ * selects exactly that chunk.
+ *
+ * @param plan - The resolved paging plan.
+ * @returns The features collected, plus whether the page guard stopped the walk
+ *   with ObjectIDs still unread; `null` when the service would not list its
+ *   ObjectIDs at all (so the caller can fall back).
+ */
+async function fetchArcGISPagesByObjectId(
+  plan: ArcGISPagingPlan,
+): Promise<{ features: Feature[]; truncated: boolean } | null> {
+  const idInfo = await fetchArcGISObjectIds(plan);
+  if (!idInfo || idInfo.objectIds.length === 0) return null;
+
+  const { field, objectIds } = idInfo;
+  const features: Feature[] = [];
+  let pageSize = plan.pageSize;
+  let start = 0;
+
+  for (let page = 0; start < objectIds.length; page += 1) {
+    // Stopping here leaves ObjectIDs unread, so say so: without a `total` to
+    // compare against, that is the only signal the layer is short.
+    if (page >= MAX_ARCGIS_PAGES) return { features, truncated: true };
+
+    const wanted = remainingArcGISFeatures(plan, features.length, pageSize);
+    if (wanted <= 0) break;
+
+    const end = Math.min(start + wanted, objectIds.length);
+    const chunk = await fetchArcGISGeoJson(
+      appendArcGISParams(plan.queryUrl, {
+        ...plan.params,
+        where: `${field} >= ${objectIds[start]} AND ${field} <= ${objectIds[end - 1]}`,
+      }),
+    );
+
+    // The range spans `end - start` ObjectIDs, so a shorter capped page would
+    // silently drop the rest of them — the ids are consumed by advancing past
+    // the range, not by what came back. Reachable whenever the page size
+    // exceeds the service's real cap, which is what happens when the layer
+    // metadata omits `maxRecordCount`. Adopt the cap and redo this range at the
+    // smaller size rather than advancing over the ids that were not returned.
+    if (chunk.exceededTransferLimit && chunk.features.length > 0) {
+      if (chunk.features.length < end - start) {
+        pageSize = chunk.features.length;
+        continue;
+      }
+    }
+
+    features.push(...chunk.features);
+    start = end;
+    plan.onProgress?.(features.length, plan.total ?? objectIds.length);
+  }
+  // Ran to the end of the id list, or stopped on the caller's `maxFeatures`
+  // cap — which `finishArcGISPaging` reports on its own.
+  return { features, truncated: false };
+}
+
+async function fetchArcGISObjectIds(
+  plan: ArcGISPagingPlan,
+): Promise<{ field: string; objectIds: number[] } | null> {
+  try {
+    const response = await fetch(
+      appendArcGISParams(plan.queryUrl, {
+        f: "json",
+        returnIdsOnly: "true",
+        where: "1=1",
+        token: plan.params.token,
+      }),
+    );
+    if (!response.ok) return null;
+    const json = (await response.json()) as {
+      objectIdFieldName?: unknown;
+      objectIds?: unknown;
+    };
+    if (!Array.isArray(json.objectIds)) return null;
+    const objectIds = json.objectIds
+      .filter((id): id is number => typeof id === "number" && Number.isFinite(id))
+      .sort((a, b) => a - b);
+    const field =
+      (typeof json.objectIdFieldName === "string" ? json.objectIdFieldName.trim() : "") ||
+      plan.objectIdField;
+    return field && objectIds.length > 0 ? { field, objectIds } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Features still wanted for this page, honoring the caller's `maxFeatures`. */
+function remainingArcGISFeatures(plan: ArcGISPagingPlan, loaded: number, pageSize: number): number {
+  return plan.maxFeatures === null ? pageSize : Math.min(pageSize, plan.maxFeatures - loaded);
+}
+
+/**
+ * A cheap identity for a page's first feature, used to catch a service that
+ * ignores `resultOffset` and keeps replaying the same page. Prefers the GeoJSON
+ * `id` (which ArcGIS populates from the ObjectID); properties are the fallback
+ * because they are small next to a polygon's coordinates.
+ */
+function arcgisPageSignature(feature: Feature | undefined): string | null {
+  if (!feature) return null;
+  if (feature.id !== undefined && feature.id !== null) return `id:${String(feature.id)}`;
+  if (feature.properties && Object.keys(feature.properties).length > 0) {
+    return `p:${JSON.stringify(feature.properties)}`;
+  }
+  return feature.geometry ? `g:${JSON.stringify(feature.geometry)}` : null;
+}
+
+/**
+ * Wrap the collected features and report anything the user should know about
+ * the result being short of the whole layer. A partial layer still loads — it
+ * is better than nothing, and matches what the single-query path used to do —
+ * but the shortfall is surfaced so a partial attribute table or export is not
+ * mistaken for the complete dataset.
+ *
+ * @param plan - The resolved paging plan.
+ * @param features - The features collected.
+ * @param truncated - Whether the walk gave up with rows still unread.
+ */
+function finishArcGISPaging(
+  plan: ArcGISPagingPlan,
+  features: Feature[],
+  truncated: boolean,
+): FeatureCollection {
+  if (plan.maxFeatures !== null && features.length >= plan.maxFeatures) {
+    console.warn(
+      `[GeoLibre] ArcGIS feature download stopped at the requested maximum of ` +
+        `${plan.maxFeatures} features (partial dataset).`,
+    );
+  } else if (truncated || (plan.total !== null && features.length < plan.total)) {
+    const of = plan.total === null ? "" : ` of ${plan.total}`;
+    console.warn(
+      `[GeoLibre] ArcGIS feature query was truncated: loaded ${features.length}${of} ` +
+        `features (partial dataset).`,
+    );
+  }
+  return { type: "FeatureCollection", features };
 }
 
 /** The JSON error envelope ArcGIS returns, usually with an HTTP 200 status. */
@@ -283,18 +738,18 @@ function arcgisErrorMessage(error: ArcGISErrorEnvelope | undefined, fallback: st
 }
 
 /**
- * Fetch and validate a GeoJSON FeatureCollection from an ArcGIS query URL.
+ * Fetch and validate one page of GeoJSON from an ArcGIS query URL.
  *
  * ArcGIS can answer a `f=geojson` request with a JSON error envelope rather than
- * GeoJSON, so both the transport status and the payload shape are checked. A
- * result truncated at the service's `maxRecordCount` is loaded as-is but warned
- * about, so a partial attribute table or export is not mistaken for the full
- * dataset.
+ * GeoJSON, so both the transport status and the payload shape are checked.
  *
  * @param url - The fully-built `/query?f=geojson` request URL.
- * @returns The parsed FeatureCollection.
+ * @returns The parsed FeatureCollection, with the service's
+ *   `exceededTransferLimit` flag normalized onto it for the paging loop.
  */
-async function fetchArcGISGeoJson(url: string): Promise<FeatureCollection> {
+async function fetchArcGISGeoJson(
+  url: string,
+): Promise<FeatureCollection & { exceededTransferLimit: boolean }> {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`ArcGIS feature query failed with ${response.status}.`);
@@ -312,6 +767,7 @@ async function fetchArcGISGeoJson(url: string): Promise<FeatureCollection> {
   let json: FeatureCollection & {
     error?: ArcGISErrorEnvelope;
     exceededTransferLimit?: boolean;
+    properties?: { exceededTransferLimit?: boolean };
   };
   try {
     json = JSON.parse(text);
@@ -325,16 +781,17 @@ async function fetchArcGISGeoJson(url: string): Promise<FeatureCollection> {
     throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
   }
   // ArcGIS caps a single query at the service's maxRecordCount and flags the
-  // shortfall with `exceededTransferLimit`. The partial data still loads (it is
-  // the same subset the previous URL-source path rendered), but the truncation
-  // is surfaced so the caller knows the layer is not the complete dataset.
-  if (json.exceededTransferLimit) {
-    console.warn(
-      `[GeoLibre] ArcGIS feature query was truncated at the service record ` +
-        `limit; loaded ${json.features.length} features (partial dataset).`,
-    );
-  }
-  return json;
+  // shortfall with `exceededTransferLimit`. In `f=geojson` output that flag is
+  // not always where the `f=json` output puts it — some servers only nest it
+  // under `properties` (GeoJSON has no place for a top-level extension member),
+  // so both are read. The paging loop uses it to tell a capped page from the
+  // genuinely last one.
+  return {
+    ...json,
+    exceededTransferLimit: Boolean(
+      json.exceededTransferLimit || json.properties?.exceededTransferLimit,
+    ),
+  };
 }
 
 async function resolveFeatureLayerUrl(

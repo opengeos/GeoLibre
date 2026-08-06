@@ -1,11 +1,12 @@
 import {
   DUCKDB_VECTOR_FEATURE_WARN_COUNT,
   DUCKDB_VECTOR_ROUTE_BYTES,
+  effectiveLayerRenderState,
   getSpatialExtensionPath,
   hasPathTraversal,
   useAppStore,
 } from "@geolibre/core";
-import type { GeoLibreLayer } from "@geolibre/core";
+import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
 // Imported from the `/errors` subpath, a standalone entry point holding just
 // these helpers. The package root re-exports VectorControl, so importing from
 // there would statically pull the control's module graph in and undo the
@@ -26,6 +27,7 @@ import type {
 import {
   isEmbeddableLocalVectorLayer,
   isVectorControlStoreLayer,
+  rememberControlVectorRenderState,
   resetVectorStoreSyncSuspension,
   resumeVectorStoreSync,
   savedVectorState,
@@ -271,6 +273,9 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
         if (!storeLayerIds.has(info.id)) control.removeLayer(info.id);
       }
 
+      const restoredGroups = new Map(
+        useAppStore.getState().layerGroups.map((group) => [group.id, group] as const),
+      );
       for (const layer of useAppStore.getState().layers) {
         if (!isVectorControlStoreLayer(layer)) continue;
         if (control.getLayer(layer.id)) continue;
@@ -278,7 +283,7 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
         const url =
           typeof layer.source.url === "string" && layer.source.url ? layer.source.url : undefined;
         if (url) {
-          pending.push(replayVectorLayer(control, layer, url));
+          pending.push(replayVectorLayer(control, layer, url, restoredGroups));
           continue;
         }
 
@@ -315,7 +320,7 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
                 const source = file.nativeData
                   ? nativeGeoJsonFile(file.file, file.nativeData)
                   : file.file;
-                return replayVectorLayer(control, layer, source, {
+                return replayVectorLayer(control, layer, source, restoredGroups, {
                   companionFiles: file.nativeData ? undefined : file.companionFiles,
                   localPath,
                 });
@@ -336,7 +341,7 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
         // next save.
         const embedded = readEmbeddedVectorGeoJSON(layer.metadata.embeddedGeoJSON);
         if (embedded) {
-          pending.push(replayVectorLayer(control, layer, embedded));
+          pending.push(replayVectorLayer(control, layer, embedded, restoredGroups));
           continue;
         }
 
@@ -388,15 +393,21 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
  * @param control - The vector control to add the layer to.
  * @param layer - The saved store layer being restored.
  * @param source - The URL, File, or FeatureCollection to load the data from.
+ * @param groups - Restored groups used to compute the layer's effective state.
  * @param options - The shapefile sidecars and/or absolute path of a File source.
  * @returns A promise that settles when the layer has loaded or failed.
  */
-function replayVectorLayer(
+export function replayVectorLayer(
   control: VectorControl,
   layer: GeoLibreLayer,
   source: string | File | FeatureCollection,
+  groups: ReadonlyMap<string, LayerGroup>,
   options: { companionFiles?: File[]; localPath?: string } = {},
 ): Promise<unknown> {
+  const effective = effectiveLayerRenderState(layer, groups);
+  // Record the folded values before addData so its first layer event is treated
+  // as a restore echo rather than as an edit to the child's own state.
+  rememberControlVectorRenderState(layer.id, effective);
   return control
     .addData(source, {
       ...savedVectorState(layer),
@@ -405,8 +416,8 @@ function replayVectorLayer(
       fitBounds: false,
       id: layer.id,
       name: layer.name,
-      opacity: layer.opacity,
-      visible: layer.visible,
+      opacity: effective.opacity,
+      visible: effective.visible,
     })
     .catch((error) => {
       console.error(`[GeoLibre] Failed to restore vector layer "${layer.name}"`, error);

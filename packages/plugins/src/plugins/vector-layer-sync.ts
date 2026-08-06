@@ -1,4 +1,5 @@
 import {
+  applyGroupEffects,
   DEFAULT_LAYER_STYLE,
   extrusionColorValue,
   extrusionHeightValue,
@@ -48,6 +49,46 @@ let syncingLayersToStore = false;
 // control emits layer* events from those calls, and syncing mid-mutation
 // would observe a partially restored layer list.
 let storeSyncSuspended = 0;
+// The last visibility/opacity this module knows each vector to hold in the
+// control. Group-folded values exist only at render time, so this record lets
+// the control-to-store mirror distinguish an echoed fold from a genuine edit.
+const controlRenderState = new Map<string, { visible?: boolean; opacity?: number }>();
+
+/**
+ * Record the effective render state most recently pushed to the vector control.
+ *
+ * @param id - The vector/store layer id.
+ * @param patch - The fields the control now holds.
+ */
+export function rememberControlVectorRenderState(
+  id: string,
+  patch: { visible?: boolean; opacity?: number },
+): void {
+  const existing = controlRenderState.get(id);
+  controlRenderState.set(id, existing ? { ...existing, ...patch } : { ...patch });
+}
+
+/**
+ * Stop treating selected render fields as echoes of a prior control push.
+ *
+ * @param id - The vector/store layer id.
+ * @param fields - The tracked fields to clear.
+ */
+function forgetControlVectorRenderState(
+  id: string,
+  fields: { visible?: boolean; opacity?: boolean },
+): void {
+  const existing = controlRenderState.get(id);
+  if (!existing) return;
+  const next = { ...existing };
+  if (fields.visible) delete next.visible;
+  if (fields.opacity) delete next.opacity;
+  if (next.visible === undefined && next.opacity === undefined) {
+    controlRenderState.delete(id);
+  } else {
+    controlRenderState.set(id, next);
+  }
+}
 
 /**
  * Detects a layer panel entry owned by the maplibre-gl-vector control.
@@ -173,6 +214,12 @@ export function syncVectorLayersToStore(control: VectorSyncableControl): void {
   const infoIds = new Set(infos.map((info) => info.id));
   const panelCollapsed = vectorPanelCollapsedFromControl(control);
 
+  // A removed vector can no longer echo a pushed render state. Clearing it also
+  // prevents a future layer that reuses the id from inheriting stale state.
+  for (const id of controlRenderState.keys()) {
+    if (!infoIds.has(id)) controlRenderState.delete(id);
+  }
+
   syncingLayersToStore = true;
   try {
     for (const storeLayer of useAppStore.getState().layers) {
@@ -191,10 +238,21 @@ export function syncVectorLayersToStore(control: VectorSyncableControl): void {
         continue;
       }
 
+      // A group fold pushed through the control API is reported back in the
+      // next full control snapshot. Keep the child's own values for such echoes
+      // so showing or unfading the group restores them. A different value came
+      // from the control's UI and remains a real layer edit.
+      const known = controlRenderState.get(layer.id);
+      const visibleIsEcho = known?.visible !== undefined && layer.visible === known.visible;
+      const opacityIsEcho =
+        known?.opacity !== undefined && numbersEqual(layer.opacity, known.opacity);
+      const visible = visibleIsEcho ? existing.visible : layer.visible;
+      const opacity = opacityIsEcho ? existing.opacity : layer.opacity;
+
       if (
         existing.type !== layer.type ||
-        existing.visible !== layer.visible ||
-        existing.opacity !== layer.opacity ||
+        existing.visible !== visible ||
+        existing.opacity !== opacity ||
         existing.sourcePath !== layer.sourcePath ||
         !recordsEqual(existing.source, layer.source) ||
         !recordsEqual(existing.metadata, layer.metadata)
@@ -207,13 +265,44 @@ export function syncVectorLayersToStore(control: VectorSyncableControl): void {
           // control (getLayerGeoJSON), so a reopened layer drops its loaded
           // blob here and re-embeds current data on the next save.
           metadata: layer.metadata,
-          opacity: layer.opacity,
+          opacity,
           source: layer.source,
           sourcePath: layer.sourcePath,
           // A render-mode switch in the panel flips geojson <-> vector-tiles.
           type: layer.type,
-          visible: layer.visible,
+          visible,
         });
+      }
+
+      // The control uses one value for both its layer UI and map paint. After a
+      // genuine control-side edit updates the child's own value, immediately
+      // fold the current group chain back over it so a faded or hidden parent
+      // continues to affect the rendered layer.
+      if (!visibleIsEcho || !opacityIsEcho) {
+        const state = useAppStore.getState();
+        const effective = applyGroupEffects(state.layers, state.layerGroups).find(
+          (current) => current.id === layer.id,
+        );
+        if (effective) {
+          runWithVectorStoreSyncSuspended(() => {
+            if (!visibleIsEcho) {
+              if (effective.visible !== layer.visible) {
+                control.setLayerVisibility(layer.id, effective.visible);
+                rememberControlVectorRenderState(layer.id, { visible: effective.visible });
+              } else {
+                forgetControlVectorRenderState(layer.id, { visible: true });
+              }
+            }
+            if (!opacityIsEcho) {
+              if (!numbersEqual(effective.opacity, layer.opacity)) {
+                control.setLayerOpacity(layer.id, effective.opacity);
+                rememberControlVectorRenderState(layer.id, { opacity: effective.opacity });
+              } else {
+                forgetControlVectorRenderState(layer.id, { opacity: true });
+              }
+            }
+          });
+        }
       }
     }
   } finally {
@@ -241,7 +330,7 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
       !activeControl ||
       syncingLayersToStore ||
       isVectorStoreSyncSuspended() ||
-      state.layers === previous.layers
+      (state.layers === previous.layers && state.layerGroups === previous.layerGroups)
     ) {
       return;
     }
@@ -250,22 +339,30 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
     // when the previous snapshot held no control-managed layers at all.
     if (!previous.layers.some(isVectorControlStoreLayer)) return;
 
-    const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
+    // Diff effective render values so edits to a parent or nested group reach
+    // vector layers whose paint is owned by the external control.
+    const currentById = new Map(
+      applyGroupEffects(state.layers, state.layerGroups).map((layer) => [layer.id, layer]),
+    );
+    const previousLayers = applyGroupEffects(previous.layers, previous.layerGroups);
     runWithVectorStoreSyncSuspended(() => {
-      for (const layer of previous.layers) {
+      for (const layer of previousLayers) {
         if (!isVectorControlStoreLayer(layer)) continue;
 
         const current = currentById.get(layer.id);
         if (!current) {
           activeControl.removeLayer(layer.id);
+          controlRenderState.delete(layer.id);
           continue;
         }
 
         if (current.visible !== layer.visible) {
           activeControl.setLayerVisibility(layer.id, current.visible);
+          rememberControlVectorRenderState(layer.id, { visible: current.visible });
         }
         if (current.opacity !== layer.opacity) {
           activeControl.setLayerOpacity(layer.id, current.opacity);
+          rememberControlVectorRenderState(layer.id, { opacity: current.opacity });
         }
         const nextStyle = layerStyleToVectorStyle(current.style);
         if (!vectorStylesEqual(layerStyleToVectorStyle(layer.style), nextStyle)) {
@@ -311,6 +408,7 @@ export function unwireVectorStoreSync(): void {
   storeUnsubscribe?.();
   storeUnsubscribe = null;
   syncedControl = null;
+  controlRenderState.clear();
 }
 
 /**
@@ -836,6 +934,17 @@ function valuesEqual(left: unknown, right: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Compare render opacities while tolerating floating-point group multiplication.
+ *
+ * @param left - The first opacity.
+ * @param right - The second opacity.
+ * @returns True when the values differ only by floating-point noise.
+ */
+function numbersEqual(left: number, right: number): boolean {
+  return Math.abs(left - right) < 1e-9;
 }
 
 function serializableVectorState(info: VectorLayerInfo): Record<string, unknown> {
