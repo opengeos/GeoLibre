@@ -32,7 +32,7 @@ import {
   excludeHiddenFieldsFromGeojson,
   layerGroupDepth,
   layerGroupMoveability,
-  placeUnpositionedGroups,
+  layerPanelGroupHeaders,
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
@@ -920,56 +920,14 @@ export function LayerPanel({
       }),
     [groupById, layerGroups],
   );
-  const firstMemberIdByGroup = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const layer of visibleLayers) {
-      if (layer.groupId && !map.has(layer.groupId)) {
-        map.set(layer.groupId, layer.id);
-      }
-    }
-    return map;
-  }, [visibleLayers]);
-  const descendantLayerAnchorByGroup = useMemo(() => {
-    const result = new Map<string, string>();
-    const displayGroupIds = visibleLayers
-      .map((layer) => layer.groupId)
-      .filter((id): id is string => Boolean(id && groupById.has(id)));
-    for (const group of layerGroups) {
-      if (firstMemberIdByGroup.has(group.id)) continue;
-      const anchor = displayGroupIds.find((candidateId) => {
-        let parentId = groupById.get(candidateId)?.parentId;
-        const visited = new Set<string>();
-        while (parentId && !visited.has(parentId)) {
-          if (parentId === group.id) return true;
-          visited.add(parentId);
-          parentId = groupById.get(parentId)?.parentId;
-        }
-        return false;
-      });
-      if (anchor) result.set(group.id, anchor);
-    }
-    return result;
-  }, [firstMemberIdByGroup, groupById, layerGroups, visibleLayers]);
-  const organizerHeadersByAnchor = useMemo(() => {
-    const result = new Map<string, LayerGroup[]>();
-    for (const group of layerGroups) {
-      const anchor = descendantLayerAnchorByGroup.get(group.id);
-      if (!anchor) continue;
-      const headers = result.get(anchor) ?? [];
-      headers.push(group);
-      result.set(anchor, headers);
-    }
-    for (const headers of result.values()) {
-      headers.sort((a, b) => groupDepth(a) - groupDepth(b));
-    }
-    return result;
-  }, [descendantLayerAnchorByGroup, groupDepth, layerGroups]);
-  // Empty folders have no member to anchor them, so the core places them
-  // against their neighbours in the group order instead: a folder keeps its
-  // spot relative to the other folders when one of them gains a layer, and it
-  // can still be reordered (GeoLibre#1739).
-  const unpositionedGroups = useMemo(
-    () => placeUnpositionedGroups(layers, layerGroups),
+  // Every group header — the group a row belongs to, the organizers above it
+  // whose layers all live in child groups, and the folders holding no layer at
+  // all — comes from one core walk, anchored to the layer row it is drawn
+  // above. Deriving them together is what keeps a nested folder below the
+  // parent it sits in, and lets an empty folder keep its spot relative to its
+  // siblings when one of them gains a layer (GeoLibre#1739).
+  const groupHeaders = useMemo(
+    () => layerPanelGroupHeaders(layers, layerGroups),
     [layers, layerGroups],
   );
   const groupMoveability = useMemo(
@@ -2939,7 +2897,6 @@ export function LayerPanel({
           )}
           {visibleLayers.map((layer, displayIndex) => {
             const group = layer.groupId ? groupById.get(layer.groupId) : undefined;
-            const isFirstOfGroup = group ? firstMemberIdByGroup.get(group.id) === layer.id : false;
             const groupCollapsed = group?.collapsed ?? false;
             const groupAncestorCollapsed = group ? hasCollapsedAncestor(group) : false;
             // When an ancestor group is hidden, a layer whose own visibility
@@ -3102,17 +3059,9 @@ export function LayerPanel({
             const moveIds = selectedMoveIds(layer.id);
             return (
               <Fragment key={layer.id}>
-                {unpositionedGroups.aboveLayer.get(layer.id)?.map((empty) => (
-                  <Fragment key={empty.id}>{renderGroupHeader(empty)}</Fragment>
+                {groupHeaders.aboveLayer.get(layer.id)?.map((header) => (
+                  <Fragment key={header.id}>{renderGroupHeader(header)}</Fragment>
                 ))}
-                {isFirstOfGroup &&
-                  group &&
-                  organizerHeadersByAnchor
-                    .get(group.id)
-                    ?.map((organizer) => (
-                      <Fragment key={organizer.id}>{renderGroupHeader(organizer)}</Fragment>
-                    ))}
-                {isFirstOfGroup && group && renderGroupHeader(group)}
                 {!groupCollapsed && !groupAncestorCollapsed && (
                   <div
                     data-layer-card=""
@@ -4016,9 +3965,9 @@ export function LayerPanel({
               </Fragment>
             );
           })}
-          {/* Folders placed below the last layer row: the panel has no layer
+          {/* Headers placed below the last layer row: the panel has no layer
               left to anchor them above. */}
-          {unpositionedGroups.bottom.map((group) => (
+          {groupHeaders.bottom.map((group) => (
             <Fragment key={group.id}>{renderGroupHeader(group)}</Fragment>
           ))}
           <div

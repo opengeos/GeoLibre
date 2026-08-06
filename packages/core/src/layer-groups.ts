@@ -27,6 +27,21 @@ export type LayerPanelUnit = {
 };
 
 /**
+ * The group a group is really nested under: its `parentId`, or `null` when it
+ * is top-level or its `parentId` points at a group that no longer exists. Every
+ * placement rule reads the parent through here so a dangling reference behaves
+ * like a top-level folder rather than falling into a branch of the tree that is
+ * not there.
+ */
+function effectiveParentId(
+  group: LayerGroup | undefined,
+  groupById: ReadonlyMap<string, LayerGroup>,
+): string | null {
+  const parentId = group?.parentId;
+  return parentId && groupById.has(parentId) ? parentId : null;
+}
+
+/**
  * Panel index range `[first, last]` each group spans, keyed by group id. A
  * group with no unit of its own (an organizer whose layers all live in child
  * groups) spans the union of its descendants' units, so it is absent only when
@@ -47,8 +62,7 @@ function groupUnitRanges(
       else ranges.set(id, [index, index]);
       // A dangling `parentId` ends the walk rather than recording a range for a
       // group that does not exist.
-      const parentId = groupById.get(id)?.parentId;
-      id = parentId && groupById.has(parentId) ? parentId : null;
+      id = effectiveParentId(groupById.get(id), groupById);
     }
   });
   return ranges;
@@ -95,12 +109,19 @@ function parentsFirstOrder(
  *
  * Layers give every populated group a position of its own. A group with no
  * layers under it has none to derive, so it is slotted in next to its
- * neighbours in `groups` order: directly below the nearest group above it in
- * that array, else directly above the nearest one below it, else at the top of
- * the panel. Because the neighbours are read from `groups` rather than from the
- * layer array, a folder keeps its place relative to the other folders when one
- * of them gains its first layer (GeoLibre#1739). A group nested in a positioned
- * parent lands directly below that parent's block regardless of array order.
+ * **siblings** — the groups sharing its parent — in `groups` order: directly
+ * below the nearest sibling above it in that array, else directly above the
+ * nearest one below it. Because the neighbours are read from `groups` rather
+ * than from the layer array, a folder keeps its place relative to its siblings
+ * when one of them gains its first layer (GeoLibre#1739).
+ *
+ * Only a sibling can place it. An ancestor's range already contains the slot
+ * being chosen, and an unrelated group's range covers a different branch of the
+ * tree, so anchoring on either drops the folder into someone else's block —
+ * which is how a nested folder used to land outside its own parent once a
+ * cousin gained a layer (GeoLibre#1739 follow-up). With no sibling positioned
+ * yet, a nested folder falls to the end of its parent's block and a top-level
+ * one to the top of the panel.
  *
  * An *organizer* — a group with no layers of its own but with some beneath it —
  * gets no block here: the panel draws its header against its top-most
@@ -138,16 +159,22 @@ export function buildLayerPanelUnits(
   for (const at of parentsFirstOrder(groups, groupById)) {
     const group = groups[at];
     if (positioned.has(group.id)) continue;
-    const parentRange = group.parentId ? ranges.get(group.parentId) : undefined;
-    let insertAt = parentRange ? parentRange[1] + 1 : undefined;
+    const parentId = effectiveParentId(group, groupById);
+    const isSibling = (other: LayerGroup) => effectiveParentId(other, groupById) === parentId;
+    let insertAt: number | undefined;
     for (let i = at - 1; insertAt === undefined && i >= 0; i--) {
+      if (!isSibling(groups[i])) continue;
       const range = ranges.get(groups[i].id);
       if (range) insertAt = range[1] + 1;
     }
     for (let i = at + 1; insertAt === undefined && i < groups.length; i++) {
+      if (!isSibling(groups[i])) continue;
       const range = ranges.get(groups[i].id);
       if (range) insertAt = range[0];
     }
+    // No sibling to sit beside: stay inside the parent's block rather than
+    // drifting to the top of the panel past groups this one is nested in.
+    if (insertAt === undefined && parentId) insertAt = (ranges.get(parentId)?.[1] ?? -1) + 1;
     units.splice(insertAt ?? 0, 0, { groupId: group.id, layers: [] });
     positioned.add(group.id);
     // Placing this folder shifts the units below it, and makes the folder
@@ -158,49 +185,75 @@ export function buildLayerPanelUnits(
 }
 
 /**
- * Where the layer panel should draw the header of each group that owns no
- * layers, expressed against the layer rows the panel already renders.
+ * Where the layer panel should draw every group header, expressed against the
+ * layer rows the panel already renders.
  */
-export type UnpositionedGroupPlacement = {
-  /** Groups drawn immediately above the keyed layer's row, in panel order. */
+export type LayerPanelGroupHeaders = {
+  /** Headers drawn immediately above the keyed layer's row, in panel order. */
   aboveLayer: Map<string, LayerGroup[]>;
-  /** Groups drawn below every layer row, in panel order. */
+  /** Headers drawn below every layer row, in panel order. */
   bottom: LayerGroup[];
 };
 
 /**
- * Resolve {@link buildLayerPanelUnits} into draw positions for the folders that
- * have no layer of their own, so a panel that renders row-by-row from the flat
- * layer list can place them without rebuilding its whole render as a tree.
+ * Resolve {@link buildLayerPanelUnits} into a draw position for each group
+ * header, so a panel that renders row by row from the flat layer list can place
+ * them without rebuilding its whole render as a tree.
+ *
+ * Every header comes from the one walk: the group a layer belongs to, the
+ * *organizers* above it whose own layers all live in child groups, and the
+ * folders holding no layer at all. Deriving them together is what keeps them in
+ * order — each is emitted the first time the walk reaches its subtree, parents
+ * ahead of children, so a nested folder can never be drawn above the parent it
+ * sits inside (GeoLibre#1739 follow-up).
+ *
+ * A group is emitted once, at its top-most block, so a group whose members are
+ * scattered still gets a single header.
  *
  * @param layers Flat layer list in store (render) order.
  * @param groups Group definitions.
- * @returns The anchor layer (or the panel bottom) each empty folder sits above.
+ * @returns The anchor layer (or the panel bottom) each header sits above.
  */
-export function placeUnpositionedGroups(
+export function layerPanelGroupHeaders(
   layers: GeoLibreLayer[],
   groups: LayerGroup[],
-): UnpositionedGroupPlacement {
+): LayerPanelGroupHeaders {
   const groupById = new Map(groups.map((g) => [g.id, g]));
   const units = buildLayerPanelUnits(layers, groups);
   const aboveLayer = new Map<string, LayerGroup[]>();
   const bottom: LayerGroup[] = [];
+  const drawn = new Set<string>();
   for (let i = 0; i < units.length; i++) {
     const unit = units[i];
-    if (unit.layers.length > 0 || !unit.groupId) continue;
-    const group = groupById.get(unit.groupId);
-    if (!group) continue;
-    let anchorId: string | undefined;
+    if (!unit.groupId) continue;
+    // Walk up to the root and reverse, so an ancestor's header precedes the
+    // headers of everything nested in it. A `parentId` cycle stops the walk
+    // instead of hanging.
+    const chain: LayerGroup[] = [];
+    let id: string | null = unit.groupId;
+    const visited = new Set<string>();
+    while (id && !visited.has(id) && !drawn.has(id)) {
+      visited.add(id);
+      const group = groupById.get(id);
+      if (!group) break;
+      chain.unshift(group);
+      id = effectiveParentId(group, groupById);
+    }
+    if (chain.length === 0) continue;
+    // The block's own first layer anchors it; a folder with none borrows the
+    // first layer below it, and falls to the panel bottom when there is none.
+    let anchorId = unit.layers[0]?.id;
     for (let j = i + 1; anchorId === undefined && j < units.length; j++) {
       anchorId = units[j].layers[0]?.id;
     }
+    for (const group of chain) drawn.add(group.id);
     if (anchorId === undefined) {
-      bottom.push(group);
+      bottom.push(...chain);
       continue;
     }
     const at = aboveLayer.get(anchorId);
-    if (at) at.push(group);
-    else aboveLayer.set(anchorId, [group]);
+    if (at) at.push(...chain);
+    else aboveLayer.set(anchorId, chain);
   }
   return { aboveLayer, bottom };
 }
@@ -380,20 +433,36 @@ export function normalizeGroupContiguity(layers: GeoLibreLayer[]): GeoLibreLayer
   return result;
 }
 
-/** `id` plus every group nested beneath it, however deep. */
-function groupSubtreeIds(groups: LayerGroup[], id: string): Set<string> {
-  const ids = new Set([id]);
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const group of groups) {
-      if (group.parentId && ids.has(group.parentId) && !ids.has(group.id)) {
-        ids.add(group.id);
-        grew = true;
-      }
-    }
+/**
+ * Which of `parentId`'s own blocks a panel unit belongs to, used to move a group
+ * only among the blocks it shares a parent with:
+ *
+ * - the id of the child of `parentId` the unit is nested in, however deep — the
+ *   sibling block a move steps over, or the moving group's own block;
+ * - `parentId` itself when the unit holds that group's own layers, the block a
+ *   first child cannot move above;
+ * - `null` for an ungrouped layer at the root of the panel (`parentId` `null`);
+ * - `undefined` when the unit sits outside `parentId` altogether — a wall,
+ *   since a nested group has no position outside the parent holding it.
+ *
+ * A `parentId` cycle reads as outside rather than looping.
+ */
+function branchUnder(
+  parentId: string | null,
+  groupId: string | null,
+  groupById: ReadonlyMap<string, LayerGroup>,
+): string | null | undefined {
+  if (groupId === null) return parentId === null ? null : undefined;
+  if (groupId === parentId) return groupId;
+  let id = groupId;
+  const visited = new Set([id]);
+  for (;;) {
+    const next = effectiveParentId(groupById.get(id), groupById);
+    if (next === parentId) return id;
+    if (next === null || visited.has(next)) return undefined;
+    visited.add(next);
+    id = next;
   }
-  return ids;
 }
 
 /**
@@ -425,8 +494,13 @@ export function layerGroupDepth(
 }
 
 /**
- * Move a group — with everything nested inside it — one row up or down among
- * the layer panel's top-level blocks.
+ * Move a group — with everything nested inside it — one block up or down among
+ * its siblings, the groups sharing its parent.
+ *
+ * A nested group moves inside its parent only: it steps over a whole sibling
+ * block rather than into it, and the parent's own rows are the end of its
+ * travel, so `null` comes back once it is the first or last child. A top-level
+ * group moves among the other top-level groups and the ungrouped layers.
  *
  * Both arrays carry part of the panel order, so both come back: `layers` holds
  * the order of every populated block, and `groups` holds the order the empty
@@ -472,27 +546,43 @@ function moveGroupThroughUnits(
   id: string,
   direction: "up" | "down",
 ): { layers: GeoLibreLayer[]; groups: LayerGroup[] } | null {
-  if (!groups.some((group) => group.id === id)) return null;
   const groupById = new Map(groups.map((g) => [g.id, g]));
-  const moving = groupSubtreeIds(groups, id);
+  const group = groupById.get(id);
+  if (!group) return null;
+  // Label every unit with the block it occupies among the moving group's own
+  // siblings, so the move steps over a whole neighbouring block and stops at the
+  // edge of the parent instead of stepping one unit at a time into it.
+  const parentId = effectiveParentId(group, groupById);
+  const branches = units.map((unit) => branchUnder(parentId, unit.groupId, groupById));
   const matching = new Set<number>();
-  units.forEach((unit, index) => {
-    if (unit.groupId && moving.has(unit.groupId)) matching.add(index);
+  branches.forEach((branch, index) => {
+    if (branch === id) matching.add(index);
   });
   if (matching.size === 0) return null;
   const indices = [...matching].sort((a, b) => a - b);
-  // Units run top-first, so "up" swaps with the block above the group's first.
+  // Units run top-first, so "up" steps over the block above the group's first.
   const neighbor = direction === "up" ? indices[0] - 1 : indices[indices.length - 1] + 1;
   if (neighbor < 0 || neighbor >= units.length) return null;
-  const neighborUnit = units[neighbor];
-  // These indices need not be contiguous — sibling child groups can straddle an
-  // unrelated block. Gathering them compacts the subtree, which is the point of
-  // moving it as a whole; see the note on `reorderLayerGroupInPanel`.
+  const neighborBranch = branches[neighbor];
+  // Outside the parent: the group is already at that end of its own block.
+  if (neighborBranch === undefined) return null;
+  // A neighbouring group travels whole, so the move clears everything nested in
+  // it; an ungrouped layer is a block of one.
+  const neighborUnits =
+    neighborBranch === null
+      ? [units[neighbor]]
+      : units.filter((_, index) => branches[index] === neighborBranch);
+  // The moving group's own indices need not be contiguous — sibling child groups
+  // can straddle an unrelated block. Gathering them compacts the subtree, which
+  // is the point of moving it as a whole; see `reorderLayerGroupInPanel`.
   const block = units.filter((_, index) => matching.has(index));
   const remaining = units.filter((_, index) => !matching.has(index));
-  const neighborIndex = remaining.indexOf(neighborUnit);
+  const edge =
+    direction === "up"
+      ? remaining.indexOf(neighborUnits[0])
+      : remaining.indexOf(neighborUnits[neighborUnits.length - 1]) + 1;
   const reordered = [...remaining];
-  reordered.splice(direction === "up" ? neighborIndex : neighborIndex + 1, 0, ...block);
+  reordered.splice(edge, 0, ...block);
 
   // Units are top-first and so are the layers inside them; the store keeps the
   // reverse, with the last element drawing on top.
