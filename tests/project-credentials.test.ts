@@ -74,6 +74,30 @@ describe("project credential redaction", () => {
     assert.equal(original.plugins?.settings.external.arbitraryName, "plugin-secret");
   });
 
+  it("keeps the first-party map controls so an export still renders them", () => {
+    const original = credentialProject();
+    original.plugins!.settings = {
+      external: { arbitraryName: "plugin-secret" },
+      "maplibre-gl-components": { legend: { A: "#112233" } },
+      "maplibre-gl-swipe": { position: 50 },
+    };
+    const { project, redactedPaths } = redactProjectCredentials(original);
+    const settings = project.plugins!.settings;
+
+    assert.deepEqual(settings["maplibre-gl-components"], { legend: { A: "#112233" } });
+    assert.deepEqual(settings["maplibre-gl-swipe"], { position: 50 });
+    // An unknown plugin's blob is free-form and can hold a key, so it still goes.
+    assert.ok(!("external" in settings));
+    assert.ok(redactedPaths.includes("plugins.settings"));
+  });
+
+  it("reports nothing redacted when only publishable plugin settings are present", () => {
+    const original = credentialProject();
+    original.plugins!.settings = { "maplibre-gl-swipe": { position: 50 } };
+    const { redactedPaths } = redactProjectCredentials(original);
+    assert.ok(!redactedPaths.includes("plugins.settings"));
+  });
+
   it("provides a stable schema-level credential decision registry", () => {
     assert.deepEqual(PROJECT_CREDENTIAL_FIELDS.preferences, [
       "environmentVariables",

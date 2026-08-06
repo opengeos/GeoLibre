@@ -30,6 +30,23 @@ export const PROJECT_CREDENTIAL_FIELDS = {
   pluginState: ["plugins.settings"],
 } as const;
 
+/**
+ * Plugin ids whose `settings` survive redaction.
+ *
+ * A plugin's settings blob is free-form and an external plugin can persist a
+ * credential there, so the default is to drop all of it. These two are
+ * first-party and hold only map-control composition — legend entries and
+ * colors, the colorbar's range and ramp, the swipe split — which is what a
+ * shared or exported project needs in order to render the map it was built as.
+ * Dropping them silently stripped every legend, colorbar, and swipe from an
+ * export. Mirrored by `PUBLISHABLE_PLUGIN_SETTINGS` in `python/src/geolibre/
+ * project.py`; the two must agree.
+ */
+export const PUBLISHABLE_PLUGIN_SETTINGS: readonly string[] = [
+  "maplibre-gl-swipe",
+  "maplibre-gl-components",
+];
+
 export interface CredentialRedactionResult {
   project: GeoLibreProject;
   /** Stable project paths removed or rewritten by the redaction pass. */
@@ -211,8 +228,12 @@ function countLeafValues(value: unknown): number {
  * configuration is recursively scrubbed for credential fields and credential
  * URL parameters. Plugin settings are omitted wholesale because external
  * plugins can persist arbitrary shapes; retaining unknown state cannot provide
- * a no-secret guarantee. Manifest URLs, activation, and control positions stay
- * intact so recipients can still load and configure the plugin themselves.
+ * a no-secret guarantee. The first-party map controls in
+ * {@link PUBLISHABLE_PLUGIN_SETTINGS} are the exception: their state is known
+ * and carries no credentials, and dropping it stripped the legend, colorbar,
+ * and swipe from the exported map. Manifest URLs, activation, and control
+ * positions stay intact so recipients can still load and configure the plugin
+ * themselves.
  */
 export function redactProjectCredentials(project: GeoLibreProject): CredentialRedactionResult {
   const redactedPaths: string[] = [];
@@ -305,11 +326,18 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
       }
       return redacted;
     });
-    if (Object.keys(plugins.settings ?? {}).length > 0) {
+    const settings = plugins.settings ?? {};
+    const kept = Object.fromEntries(
+      Object.entries(settings).filter(([id]) => PUBLISHABLE_PLUGIN_SETTINGS.includes(id)),
+    );
+    const dropped = Object.fromEntries(
+      Object.entries(settings).filter(([id]) => !PUBLISHABLE_PLUGIN_SETTINGS.includes(id)),
+    );
+    if (Object.keys(dropped).length > 0) {
       redactedPaths.push("plugins.settings");
-      redactedCount.value += countLeafValues(plugins.settings);
+      redactedCount.value += countLeafValues(dropped);
     }
-    plugins = { ...plugins, manifestUrls, settings: {} };
+    plugins = { ...plugins, manifestUrls, settings: kept };
   }
 
   return {

@@ -150,6 +150,15 @@ def test_describe_project_reports_controls(proj):
     assert sorted(described["mapControls"]) == ["colorbar", "legend", "swipe"]
 
 
+def test_describe_project_omits_a_deactivated_swipe(proj):
+    """A settings blob left behind by a deactivated control is not a control."""
+    authoring.add_swipe(proj, left_layers=["__basemap__"], right_layers=[])
+    proj["plugins"]["activePluginIds"] = [
+        plugin for plugin in proj["plugins"]["activePluginIds"] if "swipe" not in plugin
+    ]
+    assert authoring.describe_project(proj)["mapControls"] == []
+
+
 def test_layer_properties_samples_values(proj):
     properties = authoring.layer_properties(proj["layers"][0])
     assert properties["name"] == ["A", "B"]
@@ -165,6 +174,13 @@ def test_layer_properties_requires_inlined_geojson(proj):
 def test_column_values_rejects_a_missing_column(proj):
     with pytest.raises(ValueError, match="not found in any feature"):
         authoring.column_values(proj["layers"][0], "nope")
+
+
+def test_column_values_separates_an_absent_column_from_an_all_null_one(proj):
+    for feature in proj["layers"][0]["geojson"]["features"]:
+        feature["properties"]["empty"] = None
+    with pytest.raises(ValueError, match="is null in every feature"):
+        authoring.column_values(proj["layers"][0], "empty")
 
 
 def test_column_values_tolerates_a_null_properties_member(proj):

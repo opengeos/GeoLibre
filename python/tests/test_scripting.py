@@ -362,6 +362,32 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
     assert m.to_project(keep_credentials=True)["plugins"]["settings"]
 
 
+def test_redact_credentials_keeps_the_first_party_map_controls():
+    """Wiping these stripped the legend/colorbar/swipe from every export."""
+    safe = redact_credentials(
+        {
+            "plugins": {
+                "settings": {
+                    "maplibre-gl-components": {"legend": {"A": "#111"}},
+                    "maplibre-gl-swipe": {"position": 50},
+                    "some-third-party-plugin": {"apiKey": "third-party-secret"},
+                }
+            }
+        }
+    )
+    settings = safe["plugins"]["settings"]
+    assert settings["maplibre-gl-components"] == {"legend": {"A": "#111"}}
+    assert settings["maplibre-gl-swipe"] == {"position": 50}
+    # An unknown plugin's blob is free-form and can hold a key, so it still goes.
+    assert "some-third-party-plugin" not in settings
+
+
+def test_to_html_keeps_the_composed_map_controls(m):
+    """The documented compose-then-export flow must not lose what it composed."""
+    m.add_legend(legend_dict={"A": "#112233"})
+    assert "#112233" in m.to_html()
+
+
 def test_python_credential_field_registry_matches_js():
     """Every object-key spelling the JS registry strips must be stripped here too."""
     safe = redact_credentials(

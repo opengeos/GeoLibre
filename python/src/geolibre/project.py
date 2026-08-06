@@ -162,7 +162,19 @@ def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
             plugins["manifestUrls"] = [
                 _redact_url(url) if isinstance(url, str) else url for url in manifest_urls
             ]
-        plugins["settings"] = {}
+        # Drop every plugin's settings except the first-party map controls; see
+        # PUBLISHABLE_PLUGIN_SETTINGS. Wiping these too silently stripped the
+        # legend, colorbar, and swipe from every exported and saved project.
+        settings = plugins.get("settings")
+        plugins["settings"] = (
+            {
+                plugin_id: value
+                for plugin_id, value in settings.items()
+                if plugin_id in PUBLISHABLE_PLUGIN_SETTINGS
+            }
+            if isinstance(settings, dict)
+            else {}
+        )
     if "metadata" in safe:
         safe["metadata"] = _redact_config(safe["metadata"])
     return safe
@@ -966,6 +978,11 @@ def load_featurecollection(data: Any) -> dict[str, Any]:
                 raise ValueError("GeoJSON response exceeds the 50 MB size limit")
             data = json.loads(raw.decode("utf-8"))
         elif text.startswith(("{", "[")):
+            # Literal text is capped like the URL and file forms. It arrives
+            # already in memory, so this bounds the parse (and the copy the
+            # parse builds), not the read.
+            if len(text.encode("utf-8")) > _MAX_GEOJSON_BYTES:
+                raise ValueError("GeoJSON text exceeds the 50 MB size limit")
             data = json.loads(text)
         else:
             path = Path(text).expanduser()
@@ -1006,6 +1023,14 @@ CONTROL_POSITIONS = frozenset({"top-left", "top-right", "bottom-left", "bottom-r
 # Plugin ids registered in apps/geolibre-desktop/src/hooks/usePlugins.ts.
 SWIPE_PLUGIN_ID = "maplibre-gl-swipe"
 COMPONENTS_PLUGIN_ID = "maplibre-gl-components"
+
+#: Plugin ids whose ``settings`` survive :func:`redact_credentials`. A plugin's
+#: settings blob is free-form and a third-party plugin can keep an API key
+#: there, so the default is to drop all of it. These two are first-party and
+#: hold only map-control *composition* — legend entries and colors, the
+#: colorbar's range and ramp, the swipe split — which is exactly what a saved
+#: or exported project needs in order to render the same map it was built as.
+PUBLISHABLE_PLUGIN_SETTINGS = (SWIPE_PLUGIN_ID, COMPONENTS_PLUGIN_ID)
 
 # Plugins the app activates by default (``activeByDefault: true`` in
 # packages/plugins/src/plugins/*). When a project carries a `plugins` block,

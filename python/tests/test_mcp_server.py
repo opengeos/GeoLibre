@@ -179,6 +179,17 @@ def test_create_project_refuses_a_path_outside_the_workspace(server):
     )
 
 
+def test_create_project_refuses_to_overwrite_a_json_file_that_is_not_a_project(server, tmp_path):
+    """`overwrite` replaces the project there, not whatever happens to be there."""
+    config = tmp_path / "config.json"
+    original = {"name": "app", "settings": {"theme": "dark"}}
+    config.write_text(json.dumps(original), encoding="utf-8")
+    assert "does not look like a GeoLibre project" in call_error(
+        server, "create_project", path="config.json", overwrite=True
+    )
+    assert json.loads(config.read_text(encoding="utf-8")) == original
+
+
 def test_create_project_clamps_the_initial_zoom(server, tmp_path):
     """The starting camera is clamped the same way a later set_view would be."""
     call(server, "create_project", path="map.geolibre.json", zoom=100)
@@ -556,6 +567,25 @@ def test_export_html_embeds_the_project(server, project_path, tmp_path):
     assert "geolibre:load-project" in html
     # The project rides in a JSON script block, so its layer is in the page.
     assert "Cities" in html
+
+
+def test_export_html_keeps_the_composed_map_controls(server, project_path, tmp_path):
+    """The documented flow is compose-then-export; the export must carry both."""
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    call(server, "add_legend", path=project_path, legend_dict={"A": "#112233"})
+    call(server, "add_colorbar", path=project_path, vmin=0, vmax=100, colormap="viridis")
+    call(server, "export_html", path=project_path, out_path="map.html")
+    html = (tmp_path / "map.html").read_text(encoding="utf-8")
+    assert "#112233" in html
+    assert "colorbar" in html
+
+
+def test_add_geojson_layer_caps_literal_text(server, project_path):
+    """The documented 50 MB cap covers literal text, not just URLs and files."""
+    huge = '{"type": "FeatureCollection", "features": [' + " " * (50 * 1024 * 1024) + "]}"
+    assert "exceeds the 50 MB size limit" in call_error(
+        server, "add_geojson_layer", path=project_path, name="Huge", data=huge
+    )
 
 
 def test_export_html_refuses_a_non_html_destination(server, project_path):

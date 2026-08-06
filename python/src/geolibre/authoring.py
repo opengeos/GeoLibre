@@ -236,8 +236,14 @@ def describe_project(project: dict[str, Any]) -> dict[str, Any]:
     controls: list[str] = []
     if isinstance(plugins, dict):
         settings = plugins.get("settings")
+        active = plugins.get("activePluginIds")
+        active_ids = set(active) if isinstance(active, list) else set()
         if isinstance(settings, dict):
-            if _project.SWIPE_PLUGIN_ID in settings:
+            # Swipe renders only while its plugin is active, so a settings blob
+            # left behind by a deactivated control is not a live control. The
+            # legend and colorbar are drawn by the components plugin from their
+            # settings alone, so they are read from settings only.
+            if _project.SWIPE_PLUGIN_ID in settings and _project.SWIPE_PLUGIN_ID in active_ids:
                 controls.append("swipe")
             components = settings.get(_project.COMPONENTS_PLUGIN_ID)
             if isinstance(components, dict):
@@ -300,8 +306,8 @@ def column_values(layer: dict[str, Any], column: str) -> list[Any]:
         The raw values, one per feature (``None`` where the property is absent).
 
     Raises:
-        ValueError: If the layer has no inlined GeoJSON, or no feature carries
-            the property.
+        ValueError: If the layer has no inlined GeoJSON, or the property is
+            absent from every feature, or present but null in all of them.
     """
     geojson = layer.get("geojson")
     if not isinstance(geojson, dict):
@@ -310,13 +316,23 @@ def column_values(layer: dict[str, Any], column: str) -> list[Any]:
             f"{column!r} cannot be read."
         )
     values = []
+    present = False
     for feature in geojson.get("features", []):
         if not isinstance(feature, dict):
             continue
         # GeoJSON permits `"properties": null`, so this cannot assume a dict.
         properties = feature.get("properties")
-        values.append(properties.get(column) if isinstance(properties, dict) else None)
+        if not isinstance(properties, dict):
+            values.append(None)
+            continue
+        present = present or column in properties
+        values.append(properties.get(column))
     if all(value is None for value in values):
+        # A column that exists but is null everywhere is a different problem
+        # from a misspelled one, and only one of the two is worth retrying with
+        # a different name.
+        if present:
+            raise ValueError(f"Column {column!r} is null in every feature")
         raise ValueError(f"Column {column!r} not found in any feature's properties")
     return values
 
