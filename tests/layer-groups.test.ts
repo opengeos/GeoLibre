@@ -151,6 +151,18 @@ describe("buildLayerPanelUnits", () => {
     );
     assert.equal(placement.aboveLayer.size, 0);
   });
+
+  it("terminates on a parentId cycle instead of hanging", () => {
+    // Each group is the other's parent, so the ancestor walk gives both a
+    // position from the one layer and neither is emitted as an empty folder.
+    const groups = [group("g1", { parentId: "g2" }), group("g2", { parentId: "g1" })];
+    assert.deepEqual(panelOrder([layer("a", { groupId: "g1" })], groups), ["group:g1"]);
+  });
+
+  it("ends the ancestor walk at a parentId that names no group", () => {
+    const groups = [group("g1", { parentId: "missing" })];
+    assert.deepEqual(panelOrder([layer("a", { groupId: "g1" })], groups), ["group:g1"]);
+  });
 });
 
 describe("reorderLayerGroupInPanel", () => {
@@ -176,6 +188,31 @@ describe("reorderLayerGroupInPanel", () => {
     const moved = reorderLayerGroupInPanel(layers, groups, "g1", "down");
     assert.ok(moved);
     assert.deepEqual(panelOrder(moved.layers, moved.groups), ["group:g2", "group:g1"]);
+  });
+
+  it("carries a whole subtree past a sibling group as one block", () => {
+    const layers = [layer("c1", { groupId: "childA" }), layer("s1", { groupId: "sib" })];
+    const groups = [
+      group("parent"),
+      group("childA", { parentId: "parent" }),
+      group("childB", { parentId: "parent" }),
+      group("sib"),
+    ];
+    // Panel before: sib, [childA: c1], childB (empty, under its parent).
+    assert.deepEqual(panelOrder(layers, groups), ["group:sib", "group:childA", "group:childB"]);
+
+    const moved = reorderLayerGroupInPanel(layers, groups, "parent", "up");
+    assert.ok(moved);
+    // Both children travel with the parent and stay in its block.
+    assert.deepEqual(panelOrder(moved.layers, moved.groups), [
+      "group:childA",
+      "group:childB",
+      "group:sib",
+    ]);
+    assert.deepEqual(
+      moved.layers.map((l) => l.id),
+      ["s1", "c1"],
+    );
   });
 
   it("returns null at the ends of the panel", () => {

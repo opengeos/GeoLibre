@@ -30,6 +30,7 @@ import {
   supportsBridgedOpacity,
   useAppStore,
   excludeHiddenFieldsFromGeojson,
+  layerGroupDepth,
   layerGroupMoveability,
   placeUnpositionedGroups,
 } from "@geolibre/core";
@@ -886,19 +887,7 @@ export function LayerPanel({
     [layerGroups],
   );
   const groupDepth = useCallback(
-    (group: LayerGroup) => {
-      let depth = 0;
-      let parentId = group.parentId;
-      const visited = new Set([group.id]);
-      while (parentId && !visited.has(parentId)) {
-        visited.add(parentId);
-        const parent = groupById.get(parentId);
-        if (!parent) break;
-        depth += 1;
-        parentId = parent.parentId;
-      }
-      return depth;
-    },
+    (group: LayerGroup) => layerGroupDepth(group, groupById),
     [groupById],
   );
   const hasCollapsedAncestor = useCallback(

@@ -351,8 +351,21 @@ function groupSubtreeIds(groups: LayerGroup[], id: string): Set<string> {
   return ids;
 }
 
-/** Nesting depth of a group, so a re-sort can keep parents ahead of children. */
-function groupDepth(group: LayerGroup, groupById: ReadonlyMap<string, LayerGroup>): number {
+/**
+ * How deeply a group is nested: 0 for a top-level folder, 1 for a child of one,
+ * and so on. Drives the layer panel's indentation and keeps a parent ahead of
+ * its children when a reorder re-sorts the group array. A corrupted `parentId`
+ * cycle stops the walk instead of hanging.
+ *
+ * @param group Group to measure.
+ * @param groupById Group lookup, so a caller folding many groups against the
+ *   same set can pass a memoized map rather than rebuild one per call.
+ * @returns The nesting depth.
+ */
+export function layerGroupDepth(
+  group: LayerGroup,
+  groupById: ReadonlyMap<string, LayerGroup>,
+): number {
   let depth = 0;
   let parentId = group.parentId;
   const visited = new Set([group.id]);
@@ -434,7 +447,9 @@ function moveGroupThroughUnits(
   const ranges = groupUnitRanges(reordered, groupById);
   const nextGroups = [...groups].sort((a, b) => {
     const byPosition = (ranges.get(a.id)?.[0] ?? 0) - (ranges.get(b.id)?.[0] ?? 0);
-    return byPosition !== 0 ? byPosition : groupDepth(a, groupById) - groupDepth(b, groupById);
+    return byPosition !== 0
+      ? byPosition
+      : layerGroupDepth(a, groupById) - layerGroupDepth(b, groupById);
   });
   const layersMoved = nextLayers.some((layer, index) => layer.id !== layers[index]?.id);
   const groupsMoved = nextGroups.some((group, index) => group.id !== groups[index]?.id);
