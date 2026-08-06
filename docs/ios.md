@@ -100,7 +100,9 @@ grep -A2 'deploymentTarget:' src-tauri/gen/apple/project.yml
 
 # What a build actually shipped. `MinimumOSVersion` exists only in the *built*
 # app, since Xcode writes it from the build setting; it is not in the generated
-# source Info.plist.
+# source Info.plist. So this needs an archive, which `init` alone does not
+# produce.
+npx tauri ios build --no-sign
 /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' \
   src-tauri/gen/apple/build/geolibre-desktop_iOS.xcarchive/Products/Applications/GeoLibre.app/Info.plist
 ```
