@@ -66,7 +66,8 @@ merge (see *Build* below).
 
 ## Minimum iOS version
 
-GeoLibre targets **iOS 15.0**, set once in `src-tauri/tauri.ios.conf.json`:
+GeoLibre targets **iOS 15.0**, set once in
+`apps/geolibre-desktop/src-tauri/tauri.ios.conf.json`:
 
 ```json
 "bundle": { "iOS": { "minimumSystemVersion": "15.0" } }
@@ -81,17 +82,27 @@ Xcode writes the plist key from the build setting.
 Leave the key out and the **Tauri CLI's own default applies**, which is `14.0`.
 That is below Apple's floor: starting Spring 2027, App Store Connect refuses any
 upload with a `MinimumOSVersion` under 15.0. Until then it accepts the build and
-sends a warning email afterwards (`ITMS-90068`), which is how version 2.5.0
+sends a warning email afterward (`ITMS-90068`), which is how version 2.5.0
 build 7 was found to have shipped at 14.0.
 
 Because `gen/apple` is generated, a change here only takes effect once the
 project is regenerated. CI regenerates on every run, so it picks the value up
-automatically; locally, delete `src-tauri/gen/apple` and re-run
-`npx tauri ios init`. Confirm what an existing build actually carries with:
+automatically; locally, regenerate it yourself (paths relative to
+`apps/geolibre-desktop`, as everywhere else in this document):
 
 ```bash
+cd apps/geolibre-desktop
+rm -rf src-tauri/gen/apple
+npx tauri ios init
+
+# What init generated:
+grep -A2 'deploymentTarget:' src-tauri/gen/apple/project.yml
+
+# What a build actually shipped. `MinimumOSVersion` exists only in the *built*
+# app, since Xcode writes it from the build setting; it is not in the generated
+# source Info.plist.
 /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' \
-  src-tauri/gen/apple/geolibre-desktop_iOS/Info.plist
+  src-tauri/gen/apple/build/geolibre-desktop_iOS.xcarchive/Products/Applications/GeoLibre.app/Info.plist
 ```
 
 The CI job asserts this in two places (see *Continuous integration*): the
@@ -182,9 +193,10 @@ npx tauri ios build --no-sign          # unsigned .ipa + .xcarchive (no Apple ac
 > *not* appear in `security find-identity -v -p codesigning`. An empty identity
 > list is not evidence the signing failed — check the `.ipa` itself.
 
-- `gen/apple` is generated (git-ignored) and regenerated on demand. `init` also
-  merges `tauri.ios.conf.json` (bundle id, deployment target, drops the Python
-  backend) and `Info.ios.plist` (the location string).
+- `gen/apple` is generated (git-ignored) and regenerated on demand. `init`
+  applies `tauri.ios.conf.json` (bundle id, deployment target, drops the Python
+  backend); `Info.ios.plist` (the location string) is merged later, by
+  `tauri ios build`/`dev`, as noted below.
 - The app is named **GeoLibre** on iOS (the desktop build is "GeoLibre Desktop")
   and uses the bundle id **`org.geolibre.app`**, both set via
   `src-tauri/tauri.ios.conf.json` — the same override pattern and reasoning as

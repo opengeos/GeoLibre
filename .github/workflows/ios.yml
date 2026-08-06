@@ -166,10 +166,20 @@ jobs:
 
           want="$(jq -er '.bundle.iOS.minimumSystemVersion' "$conf")"
 
-          # Dotted-version compare: if 15.0 is not the lower of the two, the
-          # configured target is below Apple's floor.
-          if [ "$(printf '%s\n%s\n' "15.0" "$want" | sort -V | head -1)" != "15.0" ]; then
-            echo "::error::$conf sets bundle.iOS.minimumSystemVersion to '$want', below Apple's 15.0 floor (ITMS-90068)"
+          # Component-wise dotted-version compare, exiting 0 when the configured
+          # target is at or above the floor. Deliberately not `sort -V`: this
+          # runs on macOS, whose sort is BSD rather than GNU, and a `-V` that
+          # errored out would fail the step with the message below no matter what
+          # the config actually says. awk behaves the same on both.
+          floor="15.0"
+          if ! awk -v want="$want" -v floor="$floor" 'BEGIN {
+                n = split(want, a, "."); m = split(floor, b, ".")
+                for (i = 1; i <= (n > m ? n : m); i++) {
+                  if (a[i] + 0 != b[i] + 0) exit (a[i] + 0 < b[i] + 0)
+                }
+                exit 0
+              }'; then
+            echo "::error::$conf sets bundle.iOS.minimumSystemVersion to '$want', below Apple's $floor floor (ITMS-90068)"
             exit 1
           fi
 
