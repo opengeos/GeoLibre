@@ -8,26 +8,30 @@
  * *name* — the name matters as much as the bytes, because it is what that
  * classification runs on.
  *
- * Which endpoint serves the bytes depends on the *credential*, not the build:
+ * Two transports, and which one is available really does depend on the build:
  *
- *  - **No credential** — Drive's public download host, which answers an "anyone
- *    with the link" file with `Access-Control-Allow-Origin: *` and no
- *    redirect, so a plain browser `fetch` reaches it. This is the common case
- *    and it needs no configuration on any platform.
- *  - **A credential** — `www.googleapis.com/drive/v3`, which is also
- *    CORS-enabled and additionally distinguishes 403 from 404, returns
- *    metadata, and reaches private files.
+ *  - **Desktop** fetches through Tauri's native HTTP client. That unlocks
+ *    Drive's public download host, which serves an "anyone with the link" file
+ *    with no credential at all — so on desktop a shared link needs no setup.
+ *  - **Web** must use `www.googleapis.com/drive/v3`, and therefore always needs
+ *    a credential: an API key for a public file, an OAuth token for a private
+ *    one.
  *
- * An earlier revision asserted that the public host sends no CORS headers and
- * therefore confined it to the desktop build's native HTTP client, which made
- * the browser build demand an API key for public data (GeoLibre#1709). That was
- * assumed, never checked, and is wrong: the host answers a shared file with
- * `Access-Control-Allow-Origin: *`, HTTP 200, no redirect, and a
- * `Content-Disposition` carrying the real filename. Nothing here asserts that
- * in CI — it is a third party's live behaviour, so a test would be a network
- * dependency that fails for unrelated reasons — but it is why the `isTauri()`
- * condition is gone from the download path. The desktop build still routes
- * through Tauri's native client, now only as a CORS bypass it does not need.
+ * The reason the public host is desktop-only is worth stating exactly, because
+ * it has been got wrong twice on this branch (GeoLibre#1709). It is *not* that
+ * the host omits CORS headers — a shared file answers `200` with
+ * `Access-Control-Allow-Origin: *`. It is that Google enforces **Fetch
+ * Metadata** there: a request carrying `Sec-Fetch-Site: cross-site` with
+ * `Sec-Fetch-Mode: cors` is answered `403`, and *that* response has no
+ * `Access-Control-Allow-Origin`, which is why the browser reports the failure
+ * as a CORS error naming a missing header. Those `Sec-Fetch-*` headers are
+ * forbidden header names: script cannot set or remove them, and a browser
+ * attaches them to every cross-site fetch. So no amount of client-side work
+ * makes this endpoint reachable from a web page — only a non-browser client
+ * (Tauri's native HTTP, curl, a server-side proxy) can use it.
+ *
+ * Verified by isolating the header: identical request with and without the
+ * `Sec-Fetch-*` trio returns 403-without-ACAO and 200-with-ACAO respectively.
  *
  * The hosts used here must stay listed in the `http:default` capability scope
  * (`src-tauri/capabilities/default.json`) or the desktop transport is refused.
@@ -73,19 +77,27 @@ function assertOk(response: Response): Response {
 /**
  * Whether a credential is present for the calls that require one.
  *
- * Downloading a single shared file does not: the public host serves it to
- * anyone, from any origin. Listing a folder does, because there is no
- * credential-free listing endpoint — the only way to enumerate a folder is
- * `files.list` on the REST API. Naming this after the *operation* rather than
- * "can we reach Drive" is what keeps the two from being conflated again: the
- * previous version answered false for a keyless browser and so blocked the
- * download path that works perfectly well without one.
+ * The Drive REST API always needs one. Only the public download host does not,
+ * and only the desktop build can use it — see the module comment.
  *
  * @param credentials - The credential to check
  * @returns True when the Drive REST API can be called
  */
 export function canQueryDriveApi(credentials: DriveCredentials): boolean {
   return Boolean(credentials.accessToken || credentials.apiKey);
+}
+
+/**
+ * Whether this build can download a shared file with no credential at all.
+ *
+ * Desktop only, because the credential-free endpoint refuses browser fetches
+ * outright (Fetch Metadata; see the module comment). The dialog asks this
+ * before deciding whether it has to demand an API key for a plain file link.
+ *
+ * @returns True when the public download host is reachable
+ */
+export function canDownloadWithoutCredential(): boolean {
+  return isTauri();
 }
 
 /**
@@ -202,11 +214,12 @@ export async function downloadDriveFile(
   }
 
   // No credential: the public host is the only endpoint that serves bytes
-  // without one, and it does so cross-origin, so this is not desktop-only.
+  // without one, and only a non-browser client may ask it (module comment).
   const credentialFree = !credentials.accessToken && !credentials.apiKey;
-  const url = credentialFree
-    ? drivePublicDownloadUrl(file.id)
-    : driveMediaUrl(file.id, credentials);
+  const url =
+    credentialFree && canDownloadWithoutCredential()
+      ? drivePublicDownloadUrl(file.id)
+      : driveMediaUrl(file.id, credentials);
 
   const response = assertOk(await driveFetch(url, credentials));
   const blob = await response.blob();

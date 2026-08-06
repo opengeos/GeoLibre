@@ -87,7 +87,7 @@ There are two ways in:
 
 | Mode | Use it for | Requirements |
 | --- | --- | --- |
-| **Share link or file ID** | A file someone sent you. | The file must be shared with **Anyone with the link**. Nothing else — no API key, no sign-in, on any build. A *folder* link needs an API key (below), because Drive offers no way to list a folder without one. |
+| **Share link or file ID** | A file someone sent you. | The file must be shared with **Anyone with the link**. On the desktop app that is all you need; the browser build needs an API key (below) for any Drive file. A *folder* link needs a key on either build. |
 | **Browse Google Drive** | Your own files, including private ones. | Sign in with Google and pick files in Google's own picker. Needs a deployment configured with its own Google Cloud project (below). Not available in the Mac App Store / iOS builds. |
 
 Paste either a **file** link or a **folder** link. A folder link lists what is inside so you can tick the layers you want — this is how an unzipped shapefile is added, since selecting the `.shp` automatically pulls in its `.dbf`, `.shx`, `.prj`, and `.cpg`. In the picker, select those sidecar files yourself alongside the `.shp`.
@@ -97,12 +97,14 @@ Paste either a **file** link or a **folder** link. A folder link lists what is i
 
 ### API key, and when you actually need one
 
-Opening a link to a file shared with **Anyone with the link** needs no key on any build. Drive's public download host serves that file cross-origin, so the browser reaches it directly.
+The **desktop app** opens a link to a file shared with **Anyone with the link** with no key: it reads Drive's credential-free download host through its native HTTP client.
 
-A key is needed for the two things that host cannot do:
+The **browser build** needs a key for every Drive file, and this cannot be worked around in the app. Google enforces [Fetch Metadata](https://developer.mozilla.org/docs/Glossary/Fetch_metadata_request_header) on that host: a request carrying `Sec-Fetch-Site: cross-site` is answered `403`, and that response omits `Access-Control-Allow-Origin`, so the browser surfaces it as a missing-CORS-header error. Those headers are set by the browser and cannot be changed by script, so only a non-browser client can use the endpoint. Checking the host with `curl` shows a healthy `200` precisely because curl sends no `Sec-Fetch-*` headers.
 
-- **Listing a folder**, which only the Drive REST API can do.
-- **Reaching a private file**, which needs a credential by definition — though the picker is usually the better route there, since it grants access per file without a key at all.
+A key is also needed on **either** build to:
+
+- **List a folder**, which only the Drive REST API can do.
+- **Reach a private file** — though the picker is usually the better route there, since it grants access per file.
 
 Create one in the [Google Cloud console](https://console.cloud.google.com/) with the **Google Drive API** enabled, then paste it into the field in the dialog — it is stored in that browser only. Deployments can supply one for all users at build time via `VITE_GOOGLE_API_KEY` (or a bare `GOOGLE_API_KEY` in the environment or a `.env` file); the field is then hidden.
 

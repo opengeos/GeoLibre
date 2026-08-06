@@ -19,7 +19,10 @@ import {
   pickerOutcome,
   type DriveFile,
 } from "../apps/geolibre-desktop/src/lib/google-drive";
-import { canQueryDriveApi } from "../apps/geolibre-desktop/src/lib/google-drive-client";
+import {
+  canDownloadWithoutCredential,
+  canQueryDriveApi,
+} from "../apps/geolibre-desktop/src/lib/google-drive-client";
 
 describe("parseDriveTarget", () => {
   it("reads the id from every link shape Drive hands out", () => {
@@ -416,14 +419,23 @@ describe("canQueryDriveApi", () => {
   it("is false with no credential, on every platform", () => {
     assert.equal(canQueryDriveApi({}), false);
   });
+
+  it("is a separate question from whether a keyless download is possible", () => {
+    // Under Node, `isTauri()` is false — the web build's answer. Conflating the
+    // two is what shipped a browser build that could not open a public link.
+    assert.equal(canDownloadWithoutCredential(), false);
+  });
 });
 
-describe("the credential-free download path is not gated on the platform", () => {
-  // The regression this PR shipped and a maintainer caught: the browser build
-  // asked for an API key to open publicly shared data, because the public
-  // download host was believed to send no CORS headers and was therefore
-  // restricted to Tauri. It does send them. Nothing may reintroduce a platform
-  // condition on choosing that host.
+describe("the credential-free download host stays desktop-only", () => {
+  // Got wrong twice on this branch. The public download host is not usable from
+  // a web page: Google enforces Fetch Metadata there, answering any request with
+  // `Sec-Fetch-Site: cross-site` + `Sec-Fetch-Mode: cors` with a 403 that carries
+  // no `Access-Control-Allow-Origin` — which is why the browser reports it as a
+  // missing-CORS-header error and why checking the headers with curl (which sends
+  // no `Sec-Fetch-*`) shows a perfectly healthy 200. Those headers are forbidden
+  // header names, so no client-side change can avoid them. Removing this gate
+  // makes every public link fail on the web build.
   const source = readFileSync(
     fileURLToPath(
       new URL("../apps/geolibre-desktop/src/lib/google-drive-client.ts", import.meta.url),
@@ -432,18 +444,19 @@ describe("the credential-free download path is not gated on the platform", () =>
   );
   const flat = source.replace(/\s+/g, " ");
 
-  it("selects the download URL from the credential alone", () => {
-    const choice =
-      /const url = credentialFree \? drivePublicDownloadUrl\(file\.id\) : driveMediaUrl/;
-    assert.match(flat, choice, "the download host must depend on the credential, not isTauri()");
+  it("only reaches for the public host when the platform allows it", () => {
+    assert.match(
+      flat,
+      /credentialFree && canDownloadWithoutCredential\(\) \? drivePublicDownloadUrl/,
+      "the public host must stay behind a platform check",
+    );
   });
 
-  it("never consults isTauri when picking the download host", () => {
-    const between = flat.slice(
-      flat.indexOf("const credentialFree"),
-      flat.indexOf("const response = assertOk"),
+  it("keeps that platform check honest about what it means", () => {
+    assert.match(
+      flat,
+      /export function canDownloadWithoutCredential\(\): boolean \{ return isTauri\(\); \}/,
     );
-    assert.ok(!between.includes("isTauri"), `platform check crept back in: ${between}`);
   });
 });
 

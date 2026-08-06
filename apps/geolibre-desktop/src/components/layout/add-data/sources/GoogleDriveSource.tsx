@@ -39,6 +39,7 @@ import {
   type DriveFile,
 } from "../../../../lib/google-drive";
 import {
+  canDownloadWithoutCredential,
   canQueryDriveApi,
   downloadDriveFile,
   fetchDriveMetadata,
@@ -198,6 +199,14 @@ export function GoogleDriveSource() {
     }
 
     if (!target) throw new DriveError("unrecognizedLink");
+    // A plain file link needs no credential only where the public download host
+    // is reachable, which is desktop alone: Google answers a browser's
+    // cross-site fetch of it with a 403 that carries no CORS header, so the
+    // browser reports a missing-header error naming nothing useful. Saying so
+    // here beats letting that reach the user.
+    if (!canQueryDriveApi(credentials()) && !canDownloadWithoutCredential()) {
+      throw new Error(t("addData.googleDrive.error.apiKeyRequired"));
+    }
 
     if (target.kind === "folder") {
       if (!folderEntries) {
