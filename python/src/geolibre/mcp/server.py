@@ -235,7 +235,8 @@ def build_server(workspace: Workspace) -> MCPServer:
             path: Path to the `.geolibre.json` file.
             name: The layer's display name.
             url: URL of the vector file.
-            render_mode: How the app renders it: `geojson` or `vector-tiles`.
+            render_mode: How the app renders it: `geojson` (load into a GeoJSON
+                source) or `tiles` (tile it in the browser as you pan).
             data_format: Override the format detected from the URL (e.g.
                 `flatgeobuf`, `geoparquet`, `geojson`).
             source_layer: Source layer name, for multi-layer sources.

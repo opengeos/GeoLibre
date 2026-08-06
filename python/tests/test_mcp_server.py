@@ -207,6 +207,152 @@ def test_add_raster_layer_records_its_source(server, project_path):
     assert described["layers"][0]["name"] == "DEM"
 
 
+@pytest.mark.parametrize(
+    ("tool", "arguments", "expected_type"),
+    [
+        # render_mode picks the layer type: "geojson" loads into a GeoJSON
+        # source, "tiles" tiles it in the browser.
+        (
+            "add_vector_layer",
+            {"url": "https://example.com/data.fgb", "data_format": "flatgeobuf"},
+            "geojson",
+        ),
+        (
+            "add_vector_layer",
+            {"url": "https://example.com/data.fgb", "render_mode": "tiles"},
+            "vector-tiles",
+        ),
+        ("add_tile_layer", {"url": "https://example.com/{z}/{x}/{y}.png"}, "xyz"),
+        ("add_3d_tiles_layer", {"url": "https://example.com/tileset.json"}, "3d-tiles"),
+        (
+            "add_tiles_layer",
+            {"url": "https://example.com/a.pmtiles", "kind": "pmtiles"},
+            "pmtiles",
+        ),
+        (
+            "add_tiles_layer",
+            {"url": "https://example.com/{z}/{x}/{y}.pbf", "kind": "vector-tiles"},
+            "vector-tiles",
+        ),
+        (
+            "add_ogc_layer",
+            {"service": "wmts", "endpoint": "https://example.com/wmts/{z}/{x}/{y}.png"},
+            "wmts",
+        ),
+        (
+            "add_ogc_layer",
+            {"service": "wms", "endpoint": "https://example.com/wms", "layers": "topo"},
+            "wms",
+        ),
+    ],
+)
+def test_each_layer_tool_adds_a_layer_of_its_type(
+    server, project_path, tool, arguments, expected_type
+):
+    """Every add_* tool's happy path, since each plumbs a different builder."""
+    result = call(server, tool, path=project_path, name="Added", **arguments)
+    assert result["layerCount"] == 1
+    described = call(server, "describe_project", path=project_path)
+    assert described["layers"][0]["name"] == "Added"
+    assert described["layers"][0]["type"] == expected_type
+
+
+def test_add_vector_layer_rejects_an_undocumented_render_mode(server, project_path):
+    """The tool's docstring names the accepted values; they must be the real ones."""
+    assert "render_mode" in call_error(
+        server,
+        "add_vector_layer",
+        path=project_path,
+        name="Bad",
+        url="https://example.com/data.fgb",
+        render_mode="vector-tiles",
+    )
+
+
+def test_style_layer_merges_into_the_existing_style(server, project_path):
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    call(server, "style_layer", path=project_path, layer="Cities", style={"fillColor": "#ff0000"})
+    result = call(
+        server, "style_layer", path=project_path, layer="Cities", style={"strokeWidth": 4}
+    )
+    # The second call must not drop the first call's key.
+    assert result["style"]["fillColor"] == "#ff0000"
+    assert result["style"]["strokeWidth"] == 4
+
+
+def test_remove_layer_drops_it(server, project_path):
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    result = call(server, "remove_layer", path=project_path, layer="Cities")
+    assert result["layerCount"] == 0
+    assert call(server, "describe_project", path=project_path)["layers"] == []
+
+
+def test_set_basemap_resolves_a_name(server, project_path):
+    result = call(server, "set_basemap", path=project_path, basemap="dark")
+    assert result["basemapStyleUrl"].endswith("/dark")
+
+
+def test_set_basemap_rejects_an_unknown_name(server, project_path):
+    assert call_error(server, "set_basemap", path=project_path, basemap="not-a-basemap")
+
+
+def test_add_legend_from_a_preset(server, project_path):
+    result = call(server, "add_legend", path=project_path, builtin="nlcd", position="top-right")
+    assert result["legend"]["title"] == "NLCD Land Cover"
+    assert result["legend"]["legendPosition"] == "top-right"
+    assert "legend" in call(server, "describe_project", path=project_path)["mapControls"]
+
+
+def test_add_legend_from_paired_labels_and_colors(server, project_path):
+    result = call(
+        server,
+        "add_legend",
+        path=project_path,
+        title="Cover",
+        labels=["Water", "Land"],
+        colors=["#0000ff", "#00ff00"],
+        shape="circle",
+    )
+    assert [item["label"] for item in result["legend"]["items"]] == ["Water", "Land"]
+    assert result["legend"]["items"][0]["shape"] == "circle"
+
+
+def test_add_legend_rejects_mismatched_labels_and_colors(server, project_path):
+    assert "same length" in call_error(
+        server, "add_legend", path=project_path, labels=["a", "b"], colors=["#111"]
+    )
+
+
+def test_add_colorbar_writes_its_range(server, project_path):
+    result = call(
+        server,
+        "add_colorbar",
+        path=project_path,
+        colormap="terrain",
+        vmin=0,
+        vmax=3000,
+        label="Elevation",
+        units="m",
+    )
+    assert result["colorbar"]["vmin"] == 0
+    assert result["colorbar"]["vmax"] == 3000
+    assert "colorbar" in call(server, "describe_project", path=project_path)["mapControls"]
+
+
+def test_add_colorbar_rejects_an_inverted_range(server, project_path):
+    assert "must be less than" in call_error(
+        server, "add_colorbar", path=project_path, vmin=100, vmax=1
+    )
+
+
+def test_a_legend_and_a_colorbar_coexist(server, project_path):
+    """Both ride one settings blob, so adding the second must keep the first."""
+    call(server, "add_legend", path=project_path, legend_dict={"A": "#111"})
+    call(server, "add_colorbar", path=project_path, vmin=0, vmax=10)
+    controls = call(server, "describe_project", path=project_path)["mapControls"]
+    assert sorted(controls) == ["colorbar", "legend"]
+
+
 def test_add_ogc_layer_requires_layers_for_wms(server, project_path):
     assert "'layers' is required" in call_error(
         server,
