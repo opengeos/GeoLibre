@@ -203,3 +203,11 @@ widget that cross-filters the other widgets, and
 [NMEA receiver support](user-guide/map-controls.md#gps-tracking) in GPS Tracking.
 
 The [roadmap](roadmap.md) tracks every release, version by version.
+
+## Support GeoLibre
+
+GeoLibre is free and open source, and stays that way. If it is useful to you or
+your team, [becoming a sponsor](sponsor.md) — through
+[GitHub Sponsors](https://github.com/sponsors/giswqs) or
+[Buy Me a Coffee](https://buymeacoffee.com/giswqs) — is the most direct way to
+keep development, hosting, and app-store distribution going.

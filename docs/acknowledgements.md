@@ -78,3 +78,6 @@ a discussion, or shared GeoLibre with their community.
 Want to see your name here? Contributions of every size are welcome — from
 filing a well-described bug report to writing a plugin. See the
 [Contributing guide](contributing.md) to get started.
+
+If you would rather support the project financially, see
+[Become a Sponsor](sponsor.md).
