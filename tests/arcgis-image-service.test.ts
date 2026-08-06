@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { useAppStore } from "@geolibre/core";
+import {
+  createEmptyProject,
+  redactCredentials,
+  serializeProject,
+  useAppStore,
+} from "@geolibre/core";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 import { addArcGISLayer } from "../packages/plugins/src/plugins/arcgis-layer";
 
@@ -197,6 +202,25 @@ describe("addArcGISLayer (map and image services)", () => {
     assert.match(tileTemplate(id), /\/export\?/);
   });
 
+  it("falls back to /export when the cache origin is off the Web Mercator corner", async () => {
+    respondWith({
+      ...CACHED_MAP_SERVICE,
+      tileInfo: {
+        ...CACHED_MAP_SERVICE.tileInfo,
+        // The left edge is right but the top edge is not: read as XYZ tiles this
+        // renders horizontally aligned and vertically shifted, which looks like
+        // real imagery in the wrong place rather than an obvious break.
+        origin: { x: -20037508.342787, y: 19999999 },
+      },
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "map-service",
+      sourceType: "url",
+      url: MAP_SERVICE_URL,
+    });
+    assert.match(tileTemplate(id), /\/export\?/);
+  });
+
   it("falls back to /export when the cache LODs are not the standard resolutions", async () => {
     respondWith({
       ...CACHED_MAP_SERVICE,
@@ -278,6 +302,30 @@ describe("addArcGISLayer (map and image services)", () => {
     assert.ok(template.includes(encodeURIComponent('{"rasterFunction":"Hillshade"}')), template);
   });
 
+  it("ignores the option that does not belong to the selected service type", async () => {
+    respondWith(CACHED_MAP_SERVICE);
+    const id = await addArcGISLayer(app, {
+      layerType: "map-service",
+      sourceType: "url",
+      url: MAP_SERVICE_URL,
+      // The Add Data form keeps both fields when the layer type is switched, so
+      // a map service can arrive carrying whatever was typed for an image
+      // service. An unparseable leftover must not block the submission, and a
+      // parseable one must not cost the layer its tile cache.
+      renderingRule: "not json at all",
+    });
+    assert.equal(tileTemplate(id), `${MAP_SERVICE_URL}/tile/{z}/{y}/{x}`);
+
+    respondWith({ ...IMAGE_SERVICE, ...CACHED_MAP_SERVICE });
+    const imageId = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+      sublayers: "not an id",
+    });
+    assert.equal(tileTemplate(imageId), `${IMAGE_SERVICE_URL}/tile/{z}/{y}/{x}`);
+  });
+
   it("rejects a rendering rule that is not JSON", async () => {
     respondWith(IMAGE_SERVICE);
     await assert.rejects(
@@ -343,6 +391,26 @@ describe("addArcGISLayer (map and image services)", () => {
       fetchUrls.some((url) => url.includes("token=secret-token-123")),
       "expected the metadata request to carry the token",
     );
+  });
+
+  it("redacts the token from the tile URL when the project leaves the app", async () => {
+    await addArcGISLayer(app, {
+      layerType: "map-service",
+      sourceType: "url",
+      url: MAP_SERVICE_URL,
+      token: "secret-token-123",
+    });
+
+    // The token has to sit in the tile template for the tiles to load, so what
+    // keeps it out of a shared, embedded, or collaborated project is the egress
+    // redaction pass. Assert that here rather than trusting the flag alone.
+    const project = createEmptyProject("ArcGIS");
+    project.layers = useAppStore.getState().layers;
+    const serialized = serializeProject(redactCredentials(project));
+    assert.doesNotMatch(serialized, /secret-token-123/);
+    // The layer is still recognizable as token-protected on the other side, so
+    // a viewer can be told why it will not draw.
+    assert.match(serialized, /"hasAccessToken": true/);
   });
 
   it("resolves a portal item to the service it points at", async () => {

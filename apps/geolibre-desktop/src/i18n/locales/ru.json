@@ -303,7 +303,7 @@
       },
       "arcgis": {
         "label": "Добавить слой ArcGIS",
-        "description": "Добавьте слой ArcGIS FeatureServer, VectorTileServer, MapServer или ImageServer либо элемент портала."
+        "description": "Добавить слой ArcGIS FeatureServer, VectorTileServer, MapServer или ImageServer либо элемент портала."
       },
       "postgres": {
         "label": "Добавить слой PostgreSQL",

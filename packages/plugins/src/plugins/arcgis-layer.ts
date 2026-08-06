@@ -54,6 +54,7 @@ const ARCGIS_EXPORT_TILE_SIZE = 256;
  * tile spanning the whole world).
  */
 const WEB_MERCATOR_ORIGIN_X = -20037508.342787;
+const WEB_MERCATOR_ORIGIN_Y = 20037508.342787;
 const WEB_MERCATOR_LEVEL0_RESOLUTION = 156543.03392800014;
 
 /**
@@ -465,10 +466,21 @@ async function addArcGISImageServiceLayer(
     undefined,
   );
 
-  // A sublayer id read off the pasted URL is a default: the explicit field wins
-  // when the user filled both in.
-  const sublayers = normalizeArcGISSublayers(options.sublayers) ?? resolved.sublayers;
-  const renderingRule = validArcGISRenderingRule(options.renderingRule);
+  // Each option belongs to exactly one of the two service types, and the Add
+  // Data form keeps both field values when the layer type is switched (so the
+  // user's typing survives a change of mind). Reading only the applicable one
+  // keeps a leftover rendering rule from blocking a MapServer submission — or,
+  // when it happens to be valid JSON, from silently costing it its tile cache.
+  const sublayers =
+    options.layerType === "map-service"
+      ? // A sublayer id read off the pasted URL is a default: the explicit field
+        // wins when the user filled both in.
+        (normalizeArcGISSublayers(options.sublayers) ?? resolved.sublayers)
+      : undefined;
+  const renderingRule =
+    options.layerType === "image-service"
+      ? validArcGISRenderingRule(options.renderingRule)
+      : undefined;
   const token = options.token?.trim() || undefined;
 
   // Sublayers and rendering rules are dynamic-only, so the cache is only an
@@ -701,9 +713,14 @@ function arcgisTileScheme(info: ArcGISImageProducingServiceInfo): ArcGISTileSche
   if (typeof tileSize !== "number" || tileSize !== tileInfo.rows) return null;
   if (tileSize !== 256 && tileSize !== 512) return null;
 
+  // Both axes: a cache anchored at the correct left edge but a different top
+  // edge would line up horizontally and be off vertically, which reads as
+  // imagery that is subtly in the wrong place rather than as an obvious break.
+  // One metre of slack, since services round the origin to varying precision.
   const originX = tileInfo.origin?.x;
-  // One metre of slack: services round the origin to a varying number of places.
+  const originY = tileInfo.origin?.y;
   if (typeof originX !== "number" || Math.abs(originX - WEB_MERCATOR_ORIGIN_X) > 1) return null;
+  if (typeof originY !== "number" || Math.abs(originY - WEB_MERCATOR_ORIGIN_Y) > 1) return null;
 
   const levels = (tileInfo.lods ?? []).filter(
     (lod): lod is { level: number; resolution: number } =>

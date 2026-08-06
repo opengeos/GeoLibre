@@ -307,7 +307,7 @@
       },
       "arcgis": {
         "label": "إضافة طبقة ArcGIS",
-        "description": "أضف طبقة ArcGIS من نوع FeatureServer أو VectorTileServer أو MapServer أو ImageServer، أو عنصر بوابة."
+        "description": "إضافة طبقة ArcGIS من نوع FeatureServer أو VectorTileServer أو MapServer أو ImageServer، أو عنصر بوابة."
       },
       "postgres": {
         "label": "إضافة طبقة PostgreSQL",

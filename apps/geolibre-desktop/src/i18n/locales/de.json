@@ -299,7 +299,7 @@
       },
       "arcgis": {
         "label": "ArcGIS-Ebene hinzufügen",
-        "description": "ArcGIS-Ebene von einem FeatureServer, VectorTileServer, MapServer oder ImageServer oder ein Portalelement hinzufügen."
+        "description": "Fügt eine ArcGIS-Ebene von einem FeatureServer, VectorTileServer, MapServer oder ImageServer oder ein Portalelement hinzu."
       },
       "postgres": {
         "label": "PostgreSQL-Ebene hinzufügen",
