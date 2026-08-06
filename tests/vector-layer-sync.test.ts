@@ -744,6 +744,125 @@ describe("wireVectorStoreSync", () => {
   });
 });
 
+describe("wireVectorStoreSync with layer groups", () => {
+  beforeEach(() => {
+    useAppStore.setState({ layers: [], layerGroups: [] });
+  });
+
+  afterEach(() => {
+    unwireVectorStoreSync();
+    resetVectorStoreSyncSuspension();
+    useAppStore.setState({ layerGroups: [] });
+  });
+
+  it("multiplies the layer and parent group opacities", () => {
+    const { control, calls } = fakeControl([vectorInfo({ opacity: 0.5 })]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const groupId = useAppStore.getState().addLayerGroup("Group 1", ["vector-1"]);
+    calls.length = 0;
+    useAppStore.getState().setLayerGroupOpacity(groupId, 0.4);
+
+    assert.deepEqual(calls, [{ method: "setLayerOpacity", args: ["vector-1", 0.2] }]);
+  });
+
+  it("updates the control from both opacity sliders in a nested group chain", () => {
+    const { control, calls } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const childId = useAppStore.getState().addLayerGroup("Child", ["vector-1"]);
+    const parentId = useAppStore.getState().addLayerGroup("Parent");
+    useAppStore.getState().moveLayerGroupToGroup(childId, parentId);
+    calls.length = 0;
+
+    useAppStore.getState().setLayerGroupOpacity(childId, 0.5);
+    assert.deepEqual(calls, [{ method: "setLayerOpacity", args: ["vector-1", 0.5] }]);
+
+    calls.length = 0;
+    useAppStore.getState().setLayerGroupOpacity(parentId, 0.4);
+    assert.deepEqual(calls, [{ method: "setLayerOpacity", args: ["vector-1", 0.2] }]);
+
+    calls.length = 0;
+    useAppStore.getState().setLayerGroupOpacity(childId, 0.25);
+    assert.deepEqual(calls, [{ method: "setLayerOpacity", args: ["vector-1", 0.1] }]);
+  });
+
+  it("keeps the layer opacity when the control echoes a group fold", () => {
+    const { control } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const groupId = useAppStore.getState().addLayerGroup("Group 1", ["vector-1"]);
+    useAppStore.getState().setLayerGroupOpacity(groupId, 0.4);
+
+    syncVectorLayersToStore(fakeControl([vectorInfo({ opacity: 0.4 })]).control);
+
+    assert.equal(useAppStore.getState().layers[0].opacity, 1);
+  });
+
+  it("keeps the layer visibility when the control echoes a group fold", () => {
+    const { control } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const groupId = useAppStore.getState().addLayerGroup("Group 1", ["vector-1"]);
+    useAppStore.getState().setLayerGroupVisibility(groupId, false);
+
+    syncVectorLayersToStore(fakeControl([vectorInfo({ visible: false })]).control);
+
+    assert.equal(useAppStore.getState().layers[0].visible, true);
+  });
+
+  it("records a control-side opacity edit made under a faded group", () => {
+    const { control } = fakeControl([vectorInfo({ opacity: 0.5 })]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const groupId = useAppStore.getState().addLayerGroup("Group 1", ["vector-1"]);
+    useAppStore.getState().setLayerGroupOpacity(groupId, 0.4);
+
+    syncVectorLayersToStore(fakeControl([vectorInfo({ opacity: 0.9 })]).control);
+
+    assert.equal(useAppStore.getState().layers[0].opacity, 0.9);
+  });
+
+  it("records a control-side toggle away from the pushed value and back", () => {
+    const { control } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const groupId = useAppStore.getState().addLayerGroup("Group 1", ["vector-1"]);
+    useAppStore.getState().setLayerGroupVisibility(groupId, false);
+
+    syncVectorLayersToStore(control);
+    assert.equal(useAppStore.getState().layers[0].visible, true);
+
+    syncVectorLayersToStore(fakeControl([vectorInfo({ visible: false })]).control);
+    assert.equal(useAppStore.getState().layers[0].visible, false);
+  });
+
+  it("hides and shows a vector through a nested parent group", () => {
+    const { control, calls } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    const childId = useAppStore.getState().addLayerGroup("Child", ["vector-1"]);
+    const parentId = useAppStore.getState().addLayerGroup("Parent");
+    useAppStore.getState().moveLayerGroupToGroup(childId, parentId);
+    calls.length = 0;
+
+    useAppStore.getState().setLayerGroupVisibility(parentId, false);
+    useAppStore.getState().setLayerGroupVisibility(parentId, true);
+
+    assert.deepEqual(calls, [
+      { method: "setLayerVisibility", args: ["vector-1", false] },
+      { method: "setLayerVisibility", args: ["vector-1", true] },
+    ]);
+  });
+});
+
 describe("removeVectorStoreLayers", () => {
   beforeEach(() => {
     useAppStore.setState({ layers: [] });
