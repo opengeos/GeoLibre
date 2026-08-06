@@ -465,14 +465,15 @@ export function filterProducts(products: SourceCoopProduct[], query: string): So
 }
 
 /**
- * Merges catalog sources field-by-field for a duplicate id: an empty
- * `description`/`tags` is filled from a later record, `featured` is true if any
+ * Merges catalog sources field-by-field for a duplicate id: empty `description`
+ * and `tags` values are filled from a later record, `featured` is true if any
  * source flags it, and every other field keeps the first-seen value. The fill is
- * deliberately one-way — when both sources carry a non-empty value for the same
- * field the later one is dropped rather than unioned, which is safe for the only
- * caller (`fetchCatalog` merges `featured` before `recent`, and the feed never
- * contributes tags) but is worth revisiting before reusing this with two sources
- * that can each populate the same field differently.
+ * deliberately one-way for `description` and `tags` only — when both sources
+ * carry a non-empty value for either, the later one is dropped rather than
+ * unioned (`featured` is unaffected; a later `true` always wins). That is safe
+ * for the only caller (`fetchCatalog` merges `featured` before `recent`, and the
+ * feed never contributes tags) but is worth revisiting before reusing this with
+ * two sources that can each populate the same field differently.
  */
 export function mergeProducts(...groups: SourceCoopProduct[][]): SourceCoopProduct[] {
   const byId = new Map<string, SourceCoopProduct>();
