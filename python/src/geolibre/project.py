@@ -129,6 +129,34 @@ def _redact_config(value: Any, depth: int = 0) -> Any:
     }
 
 
+def _publishable_plugin_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    """Keep only the plugin settings listed in PUBLISHABLE_PLUGIN_SETTINGS.
+
+    What survives is still swept by :func:`_redact_config`, the same pass layer
+    configuration gets, so a credentialed URL or a credential-named field
+    inside a kept blob is scrubbed rather than trusted.
+
+    Args:
+        settings: The project's ``plugins.settings`` mapping.
+
+    Returns:
+        The publishable subset, scrubbed.
+    """
+    kept: dict[str, Any] = {}
+    for plugin_id, value in settings.items():
+        if plugin_id not in PUBLISHABLE_PLUGIN_SETTINGS:
+            continue
+        allowed = PUBLISHABLE_PLUGIN_SETTINGS[plugin_id]
+        if allowed is None:
+            kept[plugin_id] = _redact_config(value)
+        elif isinstance(value, dict):
+            # An unexpected shape is dropped rather than passed through.
+            subset = {key: item for key, item in value.items() if key in allowed}
+            if subset:
+                kept[plugin_id] = _redact_config(subset)
+    return kept
+
+
 def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
     """Return a detached project safe to publish, export, or hand to others."""
     safe = copy.deepcopy(project)
@@ -162,7 +190,13 @@ def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
             plugins["manifestUrls"] = [
                 _redact_url(url) if isinstance(url, str) else url for url in manifest_urls
             ]
-        plugins["settings"] = {}
+        # Drop every plugin's settings except the first-party map controls; see
+        # PUBLISHABLE_PLUGIN_SETTINGS. Wiping these too silently stripped the
+        # legend, colorbar, and swipe from every exported and saved project.
+        settings = plugins.get("settings")
+        plugins["settings"] = (
+            _publishable_plugin_settings(settings) if isinstance(settings, dict) else {}
+        )
     if "metadata" in safe:
         safe["metadata"] = _redact_config(safe["metadata"])
     return safe
@@ -966,6 +1000,11 @@ def load_featurecollection(data: Any) -> dict[str, Any]:
                 raise ValueError("GeoJSON response exceeds the 50 MB size limit")
             data = json.loads(raw.decode("utf-8"))
         elif text.startswith(("{", "[")):
+            # Literal text is capped like the URL and file forms. It arrives
+            # already in memory, so this bounds the parse (and the copy the
+            # parse builds), not the read.
+            if len(text.encode("utf-8")) > _MAX_GEOJSON_BYTES:
+                raise ValueError("GeoJSON text exceeds the 50 MB size limit")
             data = json.loads(text)
         else:
             path = Path(text).expanduser()
@@ -1006,6 +1045,24 @@ CONTROL_POSITIONS = frozenset({"top-left", "top-right", "bottom-left", "bottom-r
 # Plugin ids registered in apps/geolibre-desktop/src/hooks/usePlugins.ts.
 SWIPE_PLUGIN_ID = "maplibre-gl-swipe"
 COMPONENTS_PLUGIN_ID = "maplibre-gl-components"
+
+#: Plugin settings that survive :func:`redact_credentials`, as plugin id to the
+#: sub-keys kept from its blob (``None`` keeps the whole blob). A plugin's
+#: settings are free-form and a third-party plugin can keep an API key there, so
+#: the default is to drop all of it. What is listed here is map-control
+#: *composition* — the swipe split, legend entries and colors, the colorbar's
+#: range and ramp — which is what a saved or exported project needs in order to
+#: render the same map it was built as, and is structured rather than free text.
+#:
+#: The components plugin's ``html`` sub-key is deliberately absent: it holds a
+#: custom HTML panel the user authored by hand, so it can carry anything,
+#: including a URL with a token in it. It is dropped like any unknown blob.
+#: Mirrored by ``PUBLISHABLE_PLUGIN_SETTINGS`` in
+#: ``packages/core/src/credentials.ts``; the two must agree.
+PUBLISHABLE_PLUGIN_SETTINGS: dict[str, tuple[str, ...] | None] = {
+    SWIPE_PLUGIN_ID: None,
+    COMPONENTS_PLUGIN_ID: ("legend", "colorbar"),
+}
 
 # Plugins the app activates by default (``activeByDefault: true`` in
 # packages/plugins/src/plugins/*). When a project carries a `plugins` block,

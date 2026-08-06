@@ -30,6 +30,29 @@ export const PROJECT_CREDENTIAL_FIELDS = {
   pluginState: ["plugins.settings"],
 } as const;
 
+/**
+ * Plugin settings that survive redaction: plugin id to the sub-keys kept from
+ * its blob, or `null` to keep the whole blob.
+ *
+ * A plugin's settings are free-form and an external plugin can persist a
+ * credential there, so the default is to drop all of it. What is listed here is
+ * map-control *composition* — the swipe split, legend entries and colors, the
+ * colorbar's range and ramp — which is what a shared or exported project needs
+ * in order to render the map it was built as, and is structured rather than
+ * free text. Dropping it silently stripped every legend, colorbar, and swipe
+ * from an export.
+ *
+ * The components plugin's `html` sub-key is deliberately absent: it holds a
+ * custom HTML panel the user authored by hand (`ComponentHtmlGuiEntryState`),
+ * so it can carry anything, including a URL with a token in it. It is dropped
+ * like any unknown blob. Mirrored by `PUBLISHABLE_PLUGIN_SETTINGS` in
+ * `python/src/geolibre/project.py`; the two must agree.
+ */
+export const PUBLISHABLE_PLUGIN_SETTINGS: Readonly<Record<string, readonly string[] | null>> = {
+  "maplibre-gl-swipe": null,
+  "maplibre-gl-components": ["legend", "colorbar"],
+};
+
 export interface CredentialRedactionResult {
   project: GeoLibreProject;
   /** Stable project paths removed or rewritten by the redaction pass. */
@@ -211,8 +234,12 @@ function countLeafValues(value: unknown): number {
  * configuration is recursively scrubbed for credential fields and credential
  * URL parameters. Plugin settings are omitted wholesale because external
  * plugins can persist arbitrary shapes; retaining unknown state cannot provide
- * a no-secret guarantee. Manifest URLs, activation, and control positions stay
- * intact so recipients can still load and configure the plugin themselves.
+ * a no-secret guarantee. The first-party map controls in
+ * {@link PUBLISHABLE_PLUGIN_SETTINGS} are the exception: their state is known
+ * and carries no credentials, and dropping it stripped the legend, colorbar,
+ * and swipe from the exported map. Manifest URLs, activation, and control
+ * positions stay intact so recipients can still load and configure the plugin
+ * themselves.
  */
 export function redactProjectCredentials(project: GeoLibreProject): CredentialRedactionResult {
   const redactedPaths: string[] = [];
@@ -305,11 +332,51 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
       }
       return redacted;
     });
-    if (Object.keys(plugins.settings ?? {}).length > 0) {
-      redactedPaths.push("plugins.settings");
-      redactedCount.value += countLeafValues(plugins.settings);
+    const settings = plugins.settings ?? {};
+    const kept: Record<string, unknown> = {};
+    const dropped: Record<string, unknown> = {};
+    for (const [id, value] of Object.entries(settings)) {
+      const allowed = Object.prototype.hasOwnProperty.call(PUBLISHABLE_PLUGIN_SETTINGS, id)
+        ? PUBLISHABLE_PLUGIN_SETTINGS[id]
+        : undefined;
+      if (allowed === undefined) {
+        dropped[id] = value;
+        continue;
+      }
+      if (allowed === null) {
+        kept[id] = value;
+        continue;
+      }
+      // An unexpected shape is dropped rather than passed through.
+      if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        dropped[id] = value;
+        continue;
+      }
+      const subset: Record<string, unknown> = {};
+      const rest: Record<string, unknown> = {};
+      for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+        if (allowed.includes(key)) subset[key] = item;
+        else rest[key] = item;
+      }
+      if (Object.keys(subset).length > 0) kept[id] = subset;
+      if (Object.keys(rest).length > 0) dropped[id] = rest;
     }
-    plugins = { ...plugins, manifestUrls, settings: {} };
+    if (Object.keys(dropped).length > 0) {
+      redactedPaths.push("plugins.settings");
+      redactedCount.value += countLeafValues(dropped);
+    }
+    // What survives is still swept by the same pass layer configuration gets,
+    // so a credentialed URL inside a kept blob is scrubbed rather than trusted.
+    plugins = {
+      ...plugins,
+      manifestUrls,
+      settings: redactConfigurationValue(
+        kept,
+        "plugins.settings",
+        redactedPaths,
+        redactedCount,
+      ) as Record<string, unknown>,
+    };
   }
 
   return {

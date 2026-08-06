@@ -309,6 +309,21 @@ UI edits flow back the same way.
     instead, so those can still point at a local server. Do not load untrusted
     `.geolibre.json` projects or URLs on a shared/multi-tenant kernel.
 
+## MCP server
+
+The same package ships an [MCP](https://modelcontextprotocol.io) server that
+authors `.geolibre.json` projects from an AI client, with no notebook and no
+running app involved:
+
+```bash
+pip install "geolibre[mcp]"
+geolibre-mcp --root ~/maps
+```
+
+It builds projects through the same builders this package uses, so anything it
+writes opens in the widget (and in the desktop and web apps) unchanged. See
+[MCP server](mcp.md) for the tool list and client configuration.
+
 ## Building from source
 
 The package lives in [`python/`](https://github.com/opengeos/GeoLibre/tree/main/python).

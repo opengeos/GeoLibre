@@ -499,9 +499,66 @@ describe("mergeProducts", () => {
     assert.equal(merged[0].description, "Full");
   });
 
+  it("keeps both enrichments when the two records add different fields", () => {
+    const apiEntry = product({ tags: ["pmtiles"], description: "" });
+    const feedEntry = product({ tags: [], description: "A full description" });
+    const merged = mergeProducts([apiEntry], [feedEntry]);
+    assert.deepEqual(merged[0].tags, ["pmtiles"]);
+    assert.equal(merged[0].description, "A full description");
+  });
+
+  it("keeps both enrichments regardless of source order", () => {
+    const apiEntry = product({ tags: ["pmtiles"], description: "" });
+    const feedEntry = product({ tags: [], description: "A full description" });
+    const merged = mergeProducts([feedEntry], [apiEntry]);
+    assert.deepEqual(merged[0].tags, ["pmtiles"]);
+    assert.equal(merged[0].description, "A full description");
+  });
+
   it("keeps distinct ids apart", () => {
     const merged = mergeProducts([product({ productId: "a" })], [product({ productId: "b" })]);
     assert.equal(merged.length, 2);
+  });
+
+  it("keeps the featured flag when a feed record merges in second", () => {
+    const apiEntry = product({ tags: ["pmtiles"], description: "Full", featured: true });
+    const feedEntry = product({ tags: [], description: "" });
+    const merged = mergeProducts([apiEntry], [feedEntry]);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].featured, true);
+    assert.deepEqual(merged[0].tags, ["pmtiles"]);
+    assert.equal(merged[0].description, "Full");
+  });
+
+  it("keeps the first-seen title and url when a thinner record merges in second", () => {
+    const apiEntry = product({ title: "From API", tags: ["pmtiles"] });
+    const feedEntry = product({
+      title: "From feed",
+      tags: [],
+      url: "https://source.coop/acme/feed-buildings",
+    });
+    const merged = mergeProducts([apiEntry], [feedEntry]);
+    assert.equal(merged[0].title, "From API");
+    assert.equal(merged[0].url, "https://source.coop/acme/buildings");
+  });
+
+  it("keeps the first-seen description and tags when both sides are non-empty", () => {
+    const first = product({
+      title: "First",
+      description: "API description",
+      tags: ["pmtiles", "vector"],
+    });
+    const second = product({
+      title: "Second",
+      description: "Feed description",
+      tags: ["geojson"],
+      url: "https://source.coop/acme/other",
+    });
+    const merged = mergeProducts([first], [second]);
+    assert.equal(merged[0].description, "API description");
+    assert.deepEqual(merged[0].tags, ["pmtiles", "vector"]);
+    assert.equal(merged[0].title, "First");
+    assert.equal(merged[0].url, "https://source.coop/acme/buildings");
   });
 });
 

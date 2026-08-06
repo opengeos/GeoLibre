@@ -13,6 +13,7 @@ import os
 import pathlib
 import re
 import time
+import urllib.parse
 import uuid
 import warnings
 from typing import Any, Callable
@@ -21,11 +22,10 @@ from urllib.error import URLError
 import anywidget
 import traitlets
 
+from . import authoring as _authoring
 from . import project as _project
 from ._server import app_port, register_local_file, serve_app
 from .basemaps import resolve_basemap
-from .color_ramp import graduated_stops
-from .legends import get_builtin_legend
 
 _HERE = pathlib.Path(__file__).parent
 _STATIC_APP = _HERE / "static" / "app"
@@ -34,13 +34,6 @@ _STATIC_APP = _HERE / "static" / "app"
 # a typo surfaces immediately instead of silently falling back in the front-end.
 _VALID_LAYOUTS = frozenset({"embed", "full", "maponly"})
 _VALID_THEMES = frozenset({"light", "dark"})
-
-# Accepted values for the split-map / legend / colorbar helpers, validated up
-# front so a typo surfaces in Python instead of silently falling back in the app.
-# Reuse the canonical corner set from project.py so the two cannot drift.
-_VALID_CONTROL_POSITIONS = _project.CONTROL_POSITIONS
-_VALID_ORIENTATIONS = frozenset({"vertical", "horizontal"})
-_VALID_LEGEND_SHAPES = frozenset({"square", "circle", "line"})
 
 # CSV/tabular input is inlined into the project exactly like GeoJSON is, so the
 # same 50 MB ceiling applies to a fetched response or a local file.
@@ -165,7 +158,7 @@ _HTML_EXPORT_TEMPLATE = """<!doctype html>
     loaded = true;
     frame.contentWindow.postMessage(
       {{ type: "geolibre:load-project", project: project, seq: 1 }},
-      "*"
+      {app_origin}
     );
   }}
   // The app posts "geolibre:ready" once mounted; reply with the project. Guard
@@ -180,6 +173,84 @@ _HTML_EXPORT_TEMPLATE = """<!doctype html>
 </body>
 </html>
 """
+
+# Where a standalone export loads the app from by default: the hosted viewer, so
+# the exported file stays portable once the kernel is gone.
+DEFAULT_HTML_APP_URL = "https://web.geolibre.app/"
+
+
+def render_project_html(
+    project: dict[str, Any],
+    *,
+    title: str = "GeoLibre Map",
+    width: str = "100%",
+    height: str = "800px",
+    app_url: str | None = None,
+) -> str:
+    """Render a project dict as a standalone HTML page.
+
+    The page embeds the GeoLibre app in an ``<iframe>`` and injects the project
+    into it over the same ``postMessage`` bridge the widget uses, so it renders
+    the map as configured. Credentials are stripped from the inlined project on
+    the way out, exactly as :meth:`Map.to_html` does.
+
+    This is the widget-free half of :meth:`Map.to_html`; the MCP server calls it
+    to export a project that was never attached to a live map.
+
+    Args:
+        project: The project dict to embed.
+        title: The exported page's ``<title>``.
+        width: CSS width of the embedded map (e.g. ``"100%"`` or ``"800px"``).
+        height: CSS height of the embedded map.
+        app_url: Base URL of the GeoLibre app to embed. Defaults to
+            :data:`DEFAULT_HTML_APP_URL`.
+
+    Returns:
+        The HTML document as a string.
+
+    Raises:
+        ValueError: If ``width`` or ``height`` is not a plain CSS dimension, or
+            ``app_url`` is not an ``http``/``https`` URL.
+    """
+    base_url = app_url or DEFAULT_HTML_APP_URL
+    # The project is posted into the frame, so the app URL decides where it
+    # lands. Pin it to http(s) with a real host, and post to that exact origin
+    # rather than "*": the MCP server takes app_url straight from a tool call,
+    # and a model can pick an argument up from content it is reading. A
+    # redacted project still carries inlined features and layer URLs.
+    origin = urllib.parse.urlsplit(base_url)
+    if origin.scheme not in ("http", "https") or not origin.netloc:
+        raise ValueError(f"to_html: app_url must be an http(s) URL, got {base_url!r}")
+    app_origin = f"{origin.scheme}://{origin.netloc}"
+    # Force the embed bridge on (isEmbedded() honours ?embed=1). Insert the
+    # parameter into the query string *before* any URL fragment: a "#..."
+    # fragment would otherwise swallow a trailing "?embed=1" (browsers read it
+    # as part of the fragment), so the app never sees the flag. partition keeps
+    # the fragment and its "#" intact when present and yields "" when absent.
+    base, hash_sep, fragment = base_url.partition("#")
+    separator = "&" if "?" in base else "?"
+    iframe_src = f"{base}{separator}embed=1{hash_sep}{fragment}"
+    # width/height land inside a <style> rule; _html_escape does not neutralise
+    # CSS metacharacters like "}" or ";", so validate them as plain CSS
+    # dimensions to keep a stray value from closing the rule and injecting CSS.
+    if not _CSS_DIMENSION_RE.match(width):
+        raise ValueError(f"to_html: invalid CSS width value {width!r}")
+    if not _CSS_DIMENSION_RE.match(height):
+        raise ValueError(f"to_html: invalid CSS height value {height!r}")
+    # Inline the project inside a JSON <script> block and escape "<" so a
+    # property value can never break out of the script element; "<" is valid
+    # JSON that JSON.parse restores to "<".
+    project_json = json.dumps(_project.redact_credentials(project)).replace("<", "\\u003c")
+    return _HTML_EXPORT_TEMPLATE.format(
+        title=_html_escape(title),
+        width=_html_escape(width),
+        height=_html_escape(height),
+        iframe_src=_html_escape(iframe_src),
+        project_json=project_json,
+        # json.dumps supplies the surrounding quotes, so the template field is
+        # the whole JS string literal.
+        app_origin=json.dumps(app_origin),
+    )
 
 
 class Map(anywidget.AnyWidget):
@@ -793,11 +864,6 @@ class Map(anywidget.AnyWidget):
             return None
         return png
 
-    # Hosted GeoLibre viewer used as the default to_html() app, so an exported
-    # file is portable (loads the app over the network instead of the
-    # session-bound localhost bundle).
-    _DEFAULT_HTML_APP_URL = "https://web.geolibre.app/"
-
     def to_html(
         self,
         path: str | None = None,
@@ -837,34 +903,12 @@ class Map(anywidget.AnyWidget):
             exported page cannot reach them once the kernel stops. Use hosted
             URLs or tile sources for a fully self-contained export.
         """
-        base_url = app_url or self._DEFAULT_HTML_APP_URL
-        # Force the embed bridge on (isEmbedded() honours ?embed=1). Insert the
-        # parameter into the query string *before* any URL fragment: a "#..."
-        # fragment would otherwise swallow a trailing "?embed=1" (browsers read
-        # it as part of the fragment), so the app never sees the flag. partition
-        # keeps the fragment and its "#" intact when present and yields "" when
-        # absent.
-        base, hash_sep, fragment = base_url.partition("#")
-        separator = "&" if "?" in base else "?"
-        iframe_src = f"{base}{separator}embed=1{hash_sep}{fragment}"
-        # width/height land inside a <style> rule; _html_escape does not neutralise
-        # CSS metacharacters like "}" or ";", so validate them as plain CSS
-        # dimensions to keep a stray value from closing the rule and injecting CSS.
-        frame_height = height or self.height
-        if not _CSS_DIMENSION_RE.match(width):
-            raise ValueError(f"to_html: invalid CSS width value {width!r}")
-        if not _CSS_DIMENSION_RE.match(frame_height):
-            raise ValueError(f"to_html: invalid CSS height value {frame_height!r}")
-        # Inline the project inside a JSON <script> block and escape "<" so a
-        # property value can never break out of the script element; "<" is
-        # valid JSON that JSON.parse restores to "<".
-        project_json = json.dumps(_project.redact_credentials(self.project)).replace("<", "\\u003c")
-        html = _HTML_EXPORT_TEMPLATE.format(
-            title=_html_escape(title),
-            width=_html_escape(width),
-            height=_html_escape(frame_height),
-            iframe_src=_html_escape(iframe_src),
-            project_json=project_json,
+        html = render_project_html(
+            self.project,
+            title=title,
+            width=width,
+            height=height or self.height,
+            app_url=app_url,
         )
         if path is not None:
             out = pathlib.Path(path).expanduser()
@@ -1339,34 +1383,16 @@ class Map(anywidget.AnyWidget):
         ]
         if all(value is None for value in values):
             raise ValueError(f"Column {column!r} not found in any feature's properties")
-
-        def _is_numeric(value: Any) -> bool:
-            try:
-                return math.isfinite(float(value))
-            except (TypeError, ValueError):
-                return False
-
-        # graduated_stops would otherwise fall back to index-based stops for a
-        # non-numeric column, succeeding with misleading symbology; reject it.
-        if not any(_is_numeric(value) for value in values):
-            raise ValueError(
-                f"Column {column!r} must contain at least one numeric value for "
-                "a graduated choropleth"
-            )
-        stops = graduated_stops(
+        # build_choropleth_style rejects a wholly non-numeric column: graduated
+        # stops would otherwise fall back to index-based breaks and succeed with
+        # misleading symbology.
+        choropleth_style = _authoring.build_choropleth_style(
             values,
+            column,
             class_count=class_count,
-            color_ramp=colormap,
-            classification_scheme=scheme,
+            colormap=colormap,
+            scheme=scheme,
         )
-        choropleth_style: dict[str, Any] = {
-            "vectorStyleMode": "graduated",
-            "vectorStyleProperty": column,
-            "vectorStyleClassCount": min(12, max(2, int(class_count))),
-            "vectorStyleColorRamp": colormap,
-            "vectorStyleClassificationScheme": scheme,
-            "vectorStyleStops": stops,
-        }
         # Caller overrides win over the computed symbology.
         choropleth_style.update(style)
         return self._add_layer(
@@ -2005,66 +2031,21 @@ class Map(anywidget.AnyWidget):
             ValueError: If ``orientation``, ``control_position``, or a layer
                 reference is invalid.
         """
-        if orientation not in _VALID_ORIENTATIONS:
-            raise ValueError(
-                f"orientation must be one of {sorted(_VALID_ORIENTATIONS)}, got {orientation!r}"
-            )
-        if control_position not in _VALID_CONTROL_POSITIONS:
-            raise ValueError(
-                "control_position must be one of "
-                f"{sorted(_VALID_CONTROL_POSITIONS)}, got {control_position!r}"
-            )
+        # Layer objects are resolved to ids here (authoring.py works on plain
+        # project dicts and knows nothing about the Layer handle); the rest of
+        # the validation and state building is shared with the MCP server.
         left = self._coerce_layer_ids(left_layers)
         right = self._coerce_layer_ids(right_layers)
-        clamped = min(100.0, max(0.0, float(position)))
-        state = _project.swipe_state(
-            left_layers=left,
-            right_layers=right,
-            orientation=orientation,
-            position=clamped,
+        self._update_project(
+            lambda p: _authoring.add_swipe(
+                p,
+                left_layers=left,
+                right_layers=right,
+                orientation=orientation,
+                position=position,
+                control_position=control_position,
+            )
         )
-
-        def mutate(p: dict[str, Any]) -> None:
-            _project.set_plugin_state(
-                p,
-                _project.SWIPE_PLUGIN_ID,
-                state,
-                position=control_position,
-            )
-
-        self._update_project(mutate)
-
-    def _update_components_state(
-        self, key: str, entry_state_builder: Callable[[Any], dict[str, Any]]
-    ) -> None:
-        """Merge one feature's state into the Components plugin settings.
-
-        The Components plugin (legend / colorbar / html) stores all its features
-        under a single settings blob keyed by feature name, so a new legend must
-        be merged in without dropping an existing colorbar (and vice versa).
-
-        Args:
-            key: The feature key (``"legend"`` or ``"colorbar"``).
-            entry_state_builder: Called with the feature's current state (or
-                ``None``) and returns its new state.
-        """
-
-        def mutate(p: dict[str, Any]) -> None:
-            plugins = _project.ensure_plugins_block(p)
-            current = plugins["settings"].get(_project.COMPONENTS_PLUGIN_ID)
-            components = dict(current) if isinstance(current, dict) else {}
-            components[key] = entry_state_builder(components.get(key))
-            # The legend/colorbar restore from their settings blob alone, so the
-            # plugin is configured but not added to activePluginIds (activating
-            # it would also mount the full Components toolbar).
-            _project.set_plugin_state(
-                p,
-                _project.COMPONENTS_PLUGIN_ID,
-                components,
-                activate=False,
-            )
-
-        self._update_project(mutate)
 
     def add_legend(
         self,
@@ -2102,54 +2083,17 @@ class Map(anywidget.AnyWidget):
             ValueError: If no entries are supplied, ``labels``/``colors`` lengths
                 differ, or ``position``/``shape``/``builtin`` is invalid.
         """
-        if position not in _VALID_CONTROL_POSITIONS:
-            raise ValueError(
-                f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, got {position!r}"
+        self._update_project(
+            lambda p: _authoring.add_legend(
+                p,
+                title,
+                legend_dict=legend_dict,
+                labels=labels,
+                colors=colors,
+                builtin=builtin,
+                position=position,
+                shape=shape,
             )
-        if shape not in _VALID_LEGEND_SHAPES:
-            raise ValueError(f"shape must be one of {sorted(_VALID_LEGEND_SHAPES)}, got {shape!r}")
-
-        # The three ways to supply entries are mutually exclusive; reject a
-        # combination rather than silently letting one win by check order.
-        sources = (
-            builtin is not None,
-            legend_dict is not None,
-            labels is not None or colors is not None,
-        )
-        if sum(sources) > 1:
-            raise ValueError(
-                "Provide legend entries via exactly one of: builtin=, "
-                "legend_dict=, or labels= and colors=."
-            )
-
-        pairs: list[tuple[str, str]]
-        if builtin is not None:
-            preset = get_builtin_legend(builtin)
-            pairs = list(preset["items"])
-            if title is None:
-                title = preset["title"]
-        elif legend_dict is not None:
-            pairs = [(str(label), str(color)) for label, color in legend_dict.items()]
-        elif labels is not None or colors is not None:
-            if labels is None or colors is None:
-                raise ValueError("labels and colors must be provided together")
-            if len(labels) != len(colors):
-                raise ValueError(
-                    f"labels and colors must have the same length ({len(labels)} != {len(colors)})"
-                )
-            pairs = [(str(label), str(color)) for label, color in zip(labels, colors)]
-        else:
-            raise ValueError(
-                "Provide legend entries via builtin=, legend_dict=, or labels= and colors=."
-            )
-        if not pairs:
-            raise ValueError("Legend has no items")
-
-        items = [{"label": label, "color": color, "shape": shape} for label, color in pairs]
-        entry = _project.legend_gui_entry(title or "Legend", items, position)
-        self._update_components_state(
-            "legend",
-            lambda existing: _project.legend_gui_state(entry, existing=existing),
         )
 
     def add_colorbar(
@@ -2188,41 +2132,18 @@ class Map(anywidget.AnyWidget):
                 ``vmin`` is not less than ``vmax``, or ``colors`` is given but
                 empty.
         """
-        if orientation not in _VALID_ORIENTATIONS:
-            raise ValueError(
-                f"orientation must be one of {sorted(_VALID_ORIENTATIONS)}, got {orientation!r}"
+        self._update_project(
+            lambda p: _authoring.add_colorbar(
+                p,
+                colormap=colormap,
+                vmin=vmin,
+                vmax=vmax,
+                label=label,
+                units=units,
+                colors=colors,
+                orientation=orientation,
+                position=position,
             )
-        if position not in _VALID_CONTROL_POSITIONS:
-            raise ValueError(
-                f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, got {position!r}"
-            )
-        vmin_f, vmax_f = float(vmin), float(vmax)
-        # The app's normalizer only fixes vmin == vmax; an inverted range would
-        # otherwise render a reversed gradient, so reject it here.
-        if vmin_f >= vmax_f:
-            raise ValueError(f"vmin ({vmin_f}) must be less than vmax ({vmax_f})")
-        if colors is not None:
-            if not colors:
-                raise ValueError("colors must be a non-empty list when provided")
-            mode = "custom"
-            custom_colors = ", ".join(str(color) for color in colors)
-        else:
-            mode = "named"
-            custom_colors = ""
-        entry = _project.colorbar_gui_entry(
-            mode=mode,
-            colormap=colormap,
-            custom_colors=custom_colors,
-            vmin=vmin_f,
-            vmax=vmax_f,
-            label=label,
-            units=units,
-            orientation=orientation,
-            position=position,
-        )
-        self._update_components_state(
-            "colorbar",
-            lambda existing: _project.colorbar_gui_state(entry, existing=existing),
         )
 
     def add_colormap(

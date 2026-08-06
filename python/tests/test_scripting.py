@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import json
 import sys
 import types
 
@@ -362,6 +363,62 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
     assert m.to_project(keep_credentials=True)["plugins"]["settings"]
 
 
+def test_redact_credentials_keeps_the_first_party_map_controls():
+    """Wiping these stripped the legend/colorbar/swipe from every export."""
+    safe = redact_credentials(
+        {
+            "plugins": {
+                "settings": {
+                    "maplibre-gl-components": {"legend": {"A": "#111"}},
+                    "maplibre-gl-swipe": {"position": 50},
+                    "some-third-party-plugin": {"apiKey": "third-party-secret"},
+                }
+            }
+        }
+    )
+    settings = safe["plugins"]["settings"]
+    assert settings["maplibre-gl-components"] == {"legend": {"A": "#111"}}
+    assert settings["maplibre-gl-swipe"] == {"position": 50}
+    # An unknown plugin's blob is free-form and can hold a key, so it still goes.
+    assert "some-third-party-plugin" not in settings
+
+
+def test_redact_credentials_drops_the_custom_html_panel():
+    """The HTML panel is hand-authored, so it can carry a credentialed URL."""
+    safe = redact_credentials(
+        {
+            "plugins": {
+                "settings": {
+                    "maplibre-gl-components": {
+                        "legend": {"A": "#111"},
+                        "html": {
+                            "htmls": [{"html": '<img src="https://x/y?api_key=html-secret">'}]
+                        },
+                    }
+                }
+            }
+        }
+    )
+    components = safe["plugins"]["settings"]["maplibre-gl-components"]
+    assert components == {"legend": {"A": "#111"}}
+    assert "html-secret" not in json.dumps(safe)
+
+
+def test_redact_credentials_still_sweeps_a_kept_plugin_blob():
+    """A kept blob gets the same scrub layer configuration gets, not a free pass."""
+    safe = redact_credentials(
+        {"plugins": {"settings": {"maplibre-gl-swipe": {"position": 50, "apiKey": "swipe-secret"}}}}
+    )
+    assert "swipe-secret" not in json.dumps(safe)
+    assert safe["plugins"]["settings"]["maplibre-gl-swipe"]["position"] == 50
+
+
+def test_to_html_keeps_the_composed_map_controls(m):
+    """The documented compose-then-export flow must not lose what it composed."""
+    m.add_legend(legend_dict={"A": "#112233"})
+    assert "#112233" in m.to_html()
+
+
 def test_python_credential_field_registry_matches_js():
     """Every object-key spelling the JS registry strips must be stripped here too."""
     safe = redact_credentials(
@@ -448,6 +505,20 @@ def test_to_html_inserts_embed_before_fragment(m):
     # browser folds it into the fragment and the iframe never sees the flag.
     html = m.to_html(app_url="https://example.com/app#section")
     assert "https://example.com/app?embed=1#section" in html
+
+
+def test_to_html_posts_the_project_to_the_app_origin_only(m):
+    # The project is posted into the frame, so a wildcard targetOrigin would
+    # hand it to whatever the app URL redirected to.
+    html = m.to_html(app_url="https://example.com/app?foo=bar")
+    assert '"https://example.com"' in html
+    assert '"*"' not in html
+
+
+def test_to_html_rejects_a_non_http_app_url(m):
+    for bad in ("javascript:alert(1)", "file:///etc/passwd", "not a url"):
+        with pytest.raises(ValueError, match="must be an http\\(s\\) URL"):
+            m.to_html(app_url=bad)
 
 
 def test_to_html_rejects_css_injection_dimensions(m):

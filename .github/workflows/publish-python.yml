@@ -42,8 +42,10 @@ jobs:
 
       # Tests cover the pure-Python builders and do not need the bundled web
       # app, so install only the runtime/test deps and run against the sources.
+      # `mcp` is an optional extra, but tests/test_mcp_server.py skips itself
+      # without it, so install it here or the MCP server ships untested.
       - name: Install test dependencies
-        run: python -m pip install anywidget traitlets pytest
+        run: python -m pip install anywidget traitlets pytest "mcp>=2.0"
 
       - name: Run tests
         run: python -m pytest python/tests

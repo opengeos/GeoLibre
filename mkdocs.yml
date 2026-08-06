@@ -84,6 +84,7 @@ nav:
       - UI Profiles: ui-profiles.md
       - Internationalization: i18n.md
       - Python Package: python.md
+      - MCP Server: mcp.md
       - Notebook Panel: notebook.md
       - Roadmap: roadmap.md
       - Contributing: contributing.md
