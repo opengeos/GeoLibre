@@ -413,12 +413,12 @@ async function fetchArcGISFeaturePages(
     // The service advertised `supportsPagination` but handed back the same rows
     // for a second offset. Walking ObjectIDs does not rely on that promise.
     const byObjectId = await fetchArcGISPagesByObjectId(plan);
-    if (byObjectId) return finishArcGISPaging(plan, byObjectId, false);
+    if (byObjectId) return finishArcGISPaging(plan, byObjectId.features, byObjectId.truncated);
     return finishArcGISPaging(plan, paged.features, true);
   }
 
   const byObjectId = await fetchArcGISPagesByObjectId(plan);
-  if (byObjectId) return finishArcGISPaging(plan, byObjectId, false);
+  if (byObjectId) return finishArcGISPaging(plan, byObjectId.features, byObjectId.truncated);
   // No usable ObjectIDs either. Try offset paging anyway — plenty of services
   // honor it without advertising it — and accept a single page if they do not.
   const paged = await fetchArcGISPagesByOffset(plan);
@@ -574,10 +574,13 @@ async function fetchArcGISPagesByOffset(
  * selects exactly that chunk.
  *
  * @param plan - The resolved paging plan.
- * @returns The features collected, or `null` when the service would not list
- *   its ObjectIDs (so the caller can fall back).
+ * @returns The features collected, plus whether the page guard stopped the walk
+ *   with ObjectIDs still unread; `null` when the service would not list its
+ *   ObjectIDs at all (so the caller can fall back).
  */
-async function fetchArcGISPagesByObjectId(plan: ArcGISPagingPlan): Promise<Feature[] | null> {
+async function fetchArcGISPagesByObjectId(
+  plan: ArcGISPagingPlan,
+): Promise<{ features: Feature[]; truncated: boolean } | null> {
   const idInfo = await fetchArcGISObjectIds(plan);
   if (!idInfo || idInfo.objectIds.length === 0) return null;
 
@@ -587,7 +590,9 @@ async function fetchArcGISPagesByObjectId(plan: ArcGISPagingPlan): Promise<Featu
   let start = 0;
 
   for (let page = 0; start < objectIds.length; page += 1) {
-    if (page >= MAX_ARCGIS_PAGES) break;
+    // Stopping here leaves ObjectIDs unread, so say so: without a `total` to
+    // compare against, that is the only signal the layer is short.
+    if (page >= MAX_ARCGIS_PAGES) return { features, truncated: true };
 
     const wanted = remainingArcGISFeatures(plan, features.length, pageSize);
     if (wanted <= 0) break;
@@ -617,7 +622,9 @@ async function fetchArcGISPagesByObjectId(plan: ArcGISPagingPlan): Promise<Featu
     start = end;
     plan.onProgress?.(features.length, plan.total ?? objectIds.length);
   }
-  return features;
+  // Ran to the end of the id list, or stopped on the caller's `maxFeatures`
+  // cap — which `finishArcGISPaging` reports on its own.
+  return { features, truncated: false };
 }
 
 async function fetchArcGISObjectIds(

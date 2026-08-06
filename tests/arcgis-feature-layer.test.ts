@@ -67,6 +67,11 @@ interface FakeArcGISServiceOptions {
    * the cap the service will honor.
    */
   hideMaxRecordCount?: boolean;
+  /**
+   * Refuse `returnCountOnly`, as a service with statistics disabled does. The
+   * walk then has no total to measure its result against.
+   */
+  hideCount?: boolean;
   /** Whether `resultOffset` is actually honored (false replays page one). */
   honorsOffset?: boolean;
   /** Whether the layer advertises `advancedQueryCapabilities.supportsPagination`. */
@@ -109,7 +114,9 @@ function fakeArcGISService(config: FakeArcGISServiceOptions) {
     if (!url.pathname.endsWith("/query")) return jsonResponse(layerInfo);
 
     const params = url.searchParams;
-    if (params.get("returnCountOnly") === "true") return jsonResponse({ count: total });
+    if (params.get("returnCountOnly") === "true") {
+      return config.hideCount ? jsonResponse({}) : jsonResponse({ count: total });
+    }
     if (params.get("returnIdsOnly") === "true") {
       return jsonResponse({ objectIdFieldName: "OBJECTID", objectIds });
     }
@@ -492,6 +499,37 @@ describe("addArcGISLayer (feature layer)", () => {
       [251, 500],
       [501, 700],
     ]);
+  });
+
+  // The page guard stops the ObjectID walk with ids still unread. A service
+  // that will not answer `returnCountOnly` leaves no total to compare against,
+  // so without the guard reporting truncation the short layer looks complete.
+  it("reports truncation when the page guard stops the ObjectID walk", async () => {
+    // MAX_ARCGIS_PAGES (5000) pages of one id each, against 5001 ids.
+    const service = fakeArcGISService({
+      total: 5001,
+      maxRecordCount: 1,
+      supportsPagination: false,
+      hideCount: true,
+    });
+    globalThis.fetch = service.fetch;
+
+    const warnings = captureWarnings();
+    let id: string;
+    try {
+      id = await addArcGISLayer(app, {
+        layerType: "feature",
+        sourceType: "url",
+        url: SERVICE_URL,
+      });
+    } finally {
+      warnings.restore();
+    }
+
+    const features =
+      useAppStore.getState().layers.find((l) => l.id === id)?.geojson?.features ?? [];
+    assert.equal(features.length, 5000, "expected the walk to stop at the page guard");
+    assert.match(warnings.messages.join("\n"), /truncated: loaded 5000 features/);
   });
 
   it("falls back to ObjectIDs when a service advertises paging it ignores", async () => {
