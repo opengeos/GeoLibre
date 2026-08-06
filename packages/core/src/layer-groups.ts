@@ -435,6 +435,14 @@ export function layerGroupDepth(
  * group past an empty one moves nothing but the group order, so a caller must
  * apply both.
  *
+ * `normalizeGroupContiguity` keeps each *group's* own members together, but not
+ * a whole *subtree*: nesting only rewrites `parentId`, so an unrelated block can
+ * sit between two sibling child groups. The subtree still travels as one block —
+ * "with everything nested inside it" — which means such an in-between block is
+ * left behind on the other side of it, and the move can shift more than one row.
+ * Compacting the subtree is the intended reading of the operation; the in-between
+ * block landing on the far side is the accepted cost.
+ *
  * @param layers Flat layer list in store (render) order.
  * @param groups Group definitions.
  * @param id Group to move.
@@ -477,6 +485,9 @@ function moveGroupThroughUnits(
   const neighbor = direction === "up" ? indices[0] - 1 : indices[indices.length - 1] + 1;
   if (neighbor < 0 || neighbor >= units.length) return null;
   const neighborUnit = units[neighbor];
+  // These indices need not be contiguous — sibling child groups can straddle an
+  // unrelated block. Gathering them compacts the subtree, which is the point of
+  // moving it as a whole; see the note on `reorderLayerGroupInPanel`.
   const block = units.filter((_, index) => matching.has(index));
   const remaining = units.filter((_, index) => !matching.has(index));
   const neighborIndex = remaining.indexOf(neighborUnit);

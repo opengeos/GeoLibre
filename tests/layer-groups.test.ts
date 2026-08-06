@@ -212,6 +212,37 @@ describe("reorderLayerGroupInPanel", () => {
     assert.deepEqual(panelOrder(moved.layers, moved.groups), ["group:g2", "group:g1"]);
   });
 
+  it("compacts a subtree that straddles an unrelated block when moving it", () => {
+    // Nesting only rewrites parentId, so "loose" can sit between two sibling
+    // child groups. Moving the parent gathers the subtree into one block and
+    // leaves "loose" on the far side of it — more than one row shifts.
+    const layers = [
+      layer("bottom"),
+      layer("c1layer", { groupId: "c1" }),
+      layer("loose"),
+      layer("c2layer", { groupId: "c2" }),
+      layer("top"),
+    ];
+    const groups = [group("p"), group("c1", { parentId: "p" }), group("c2", { parentId: "p" })];
+    assert.deepEqual(panelOrder(layers, groups), [
+      "layer:top",
+      "group:c2",
+      "layer:loose",
+      "group:c1",
+      "layer:bottom",
+    ]);
+
+    const moved = reorderLayerGroupInPanel(layers, groups, "p", "down");
+    assert.ok(moved);
+    assert.deepEqual(panelOrder(moved.layers, moved.groups), [
+      "layer:top",
+      "layer:loose",
+      "layer:bottom",
+      "group:c2",
+      "group:c1",
+    ]);
+  });
+
   it("carries a whole subtree past a sibling group as one block", () => {
     const layers = [layer("c1", { groupId: "childA" }), layer("s1", { groupId: "sib" })];
     const groups = [
