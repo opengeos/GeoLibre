@@ -27,9 +27,9 @@ const DRIVE_API_BASE = "https://www.googleapis.com/drive/v3/files";
 
 /**
  * The public download host. Unlike {@link DRIVE_API_BASE} it needs no
- * credential for an "anyone with the link" file, but it sends no CORS headers,
- * so only the desktop build (which fetches through Tauri's native HTTP client)
- * can use it. See `google-drive-client.ts`.
+ * credential for an "anyone with the link" file, and it answers with
+ * `Access-Control-Allow-Origin: *` in a single hop, so a plain browser `fetch`
+ * reaches it on every build. See `google-drive-client.ts`.
  */
 const DRIVE_PUBLIC_DOWNLOAD_BASE = "https://drive.usercontent.google.com/download";
 
@@ -249,9 +249,6 @@ export function driveFolderChildrenUrl(
  * anything over ~100 MB. Without it a large shapefile silently downloads as a
  * few kilobytes of HTML and fails deep inside the vector loader with a parse
  * error that names neither Drive nor the interstitial.
- *
- * Only usable where browser CORS does not apply (the desktop build's native
- * HTTP client); see `google-drive-client.ts`.
  *
  * @param id - The Drive file id
  * @returns The absolute download URL

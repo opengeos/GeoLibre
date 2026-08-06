@@ -19,6 +19,7 @@ import {
   pickerOutcome,
   type DriveFile,
 } from "../apps/geolibre-desktop/src/lib/google-drive";
+import { canQueryDriveApi } from "../apps/geolibre-desktop/src/lib/google-drive-client";
 
 describe("parseDriveTarget", () => {
   it("reads the id from every link shape Drive hands out", () => {
@@ -399,5 +400,69 @@ describe("the picker blocker is wired to the UI", () => {
   it("shows the configuration explanation in place of the normal help text", () => {
     assert.match(flat, /pickerBlocker === "unconfigured"/);
     assert.match(flat, /addData\.googleDrive\.pickerUnconfigured/);
+  });
+});
+
+describe("canQueryDriveApi", () => {
+  // Named after the operation, not the destination. Its predecessor conflated
+  // "can we call the REST API" with "can we reach Drive at all" and answered
+  // false for a keyless browser, which blocked the credential-free download —
+  // the exact path a public share link uses (GeoLibre#1709).
+  it("is true whenever a credential is present", () => {
+    assert.equal(canQueryDriveApi({ apiKey: "AIza" }), true);
+    assert.equal(canQueryDriveApi({ accessToken: "ya29" }), true);
+  });
+
+  it("is false with no credential, on every platform", () => {
+    assert.equal(canQueryDriveApi({}), false);
+  });
+});
+
+describe("the credential-free download path is not gated on the platform", () => {
+  // The regression this PR shipped and a maintainer caught: the browser build
+  // asked for an API key to open publicly shared data, because the public
+  // download host was believed to send no CORS headers and was therefore
+  // restricted to Tauri. It does send them. Nothing may reintroduce a platform
+  // condition on choosing that host.
+  const source = readFileSync(
+    fileURLToPath(
+      new URL("../apps/geolibre-desktop/src/lib/google-drive-client.ts", import.meta.url),
+    ),
+    "utf8",
+  );
+  const flat = source.replace(/\s+/g, " ");
+
+  it("selects the download URL from the credential alone", () => {
+    const choice =
+      /const url = credentialFree \? drivePublicDownloadUrl\(file\.id\) : driveMediaUrl/;
+    assert.match(flat, choice, "the download host must depend on the credential, not isTauri()");
+  });
+
+  it("never consults isTauri when picking the download host", () => {
+    const between = flat.slice(
+      flat.indexOf("const credentialFree"),
+      flat.indexOf("const response = assertOk"),
+    );
+    assert.ok(!between.includes("isTauri"), `platform check crept back in: ${between}`);
+  });
+});
+
+describe("the picker token is scoped to browse mode", () => {
+  // A `drive.file` token only covers files picked in that session, so sending
+  // it with a link request makes Drive answer 403 for a file that is publicly
+  // shared — turning a working keyless link into "access refused".
+  const source = readFileSync(
+    fileURLToPath(
+      new URL(
+        "../apps/geolibre-desktop/src/components/layout/add-data/sources/GoogleDriveSource.tsx",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  );
+  const flat = source.replace(/\s+/g, " ");
+
+  it("only sends the picked token while in browse mode", () => {
+    assert.match(flat, /accessToken: mode === "browse" \? picked\?\.accessToken : undefined/);
   });
 });

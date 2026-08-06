@@ -8,15 +8,26 @@
  * *name* — the name matters as much as the bytes, because it is what that
  * classification runs on.
  *
- * Two transports, chosen by build:
+ * Which endpoint serves the bytes depends on the *credential*, not the build:
  *
- *  - **Desktop** fetches through Tauri's native HTTP client, which is not
- *    subject to the WebView's CORS enforcement. That unlocks Drive's public
- *    download host, which serves an "anyone with the link" file with no
- *    credential at all — the common case, working out of the box.
- *  - **Web** must use `www.googleapis.com/drive/v3`, the one Drive endpoint
- *    that sends CORS headers. It always needs a credential (an API key for a
- *    public file, an OAuth token for a private one).
+ *  - **No credential** — Drive's public download host, which answers an "anyone
+ *    with the link" file with `Access-Control-Allow-Origin: *` and no
+ *    redirect, so a plain browser `fetch` reaches it. This is the common case
+ *    and it needs no configuration on any platform.
+ *  - **A credential** — `www.googleapis.com/drive/v3`, which is also
+ *    CORS-enabled and additionally distinguishes 403 from 404, returns
+ *    metadata, and reaches private files.
+ *
+ * An earlier revision asserted that the public host sends no CORS headers and
+ * therefore confined it to the desktop build's native HTTP client, which made
+ * the browser build demand an API key for public data (GeoLibre#1709). That was
+ * assumed, never checked, and is wrong: the host answers a shared file with
+ * `Access-Control-Allow-Origin: *`, HTTP 200, no redirect, and a
+ * `Content-Disposition` carrying the real filename. Nothing here asserts that
+ * in CI — it is a third party's live behaviour, so a test would be a network
+ * dependency that fails for unrelated reasons — but it is why the `isTauri()`
+ * condition is gone from the download path. The desktop build still routes
+ * through Tauri's native client, now only as a CORS bypass it does not need.
  *
  * The hosts used here must stay listed in the `http:default` capability scope
  * (`src-tauri/capabilities/default.json`) or the desktop transport is refused.
@@ -60,16 +71,21 @@ function assertOk(response: Response): Response {
 }
 
 /**
- * Whether the credentials can reach Drive's REST API at all. The public
- * download host needs none, but it is desktop-only, so a web build with neither
- * a key nor a token has no usable transport and should say so up front rather
- * than issuing a request that is certain to 401.
+ * Whether a credential is present for the calls that require one.
+ *
+ * Downloading a single shared file does not: the public host serves it to
+ * anyone, from any origin. Listing a folder does, because there is no
+ * credential-free listing endpoint — the only way to enumerate a folder is
+ * `files.list` on the REST API. Naming this after the *operation* rather than
+ * "can we reach Drive" is what keeps the two from being conflated again: the
+ * previous version answered false for a keyless browser and so blocked the
+ * download path that works perfectly well without one.
  *
  * @param credentials - The credential to check
- * @returns True when a Drive request can be made
+ * @returns True when the Drive REST API can be called
  */
-export function canReachDrive(credentials: DriveCredentials): boolean {
-  return Boolean(credentials.accessToken || credentials.apiKey) || isTauri();
+export function canQueryDriveApi(credentials: DriveCredentials): boolean {
+  return Boolean(credentials.accessToken || credentials.apiKey);
 }
 
 /**
@@ -111,19 +127,20 @@ export async function fetchDriveMetadata(
  * Capped rather than unbounded: a shared Drive folder can hold tens of
  * thousands of items, and the caller renders every entry as a row. The cap is
  * on *pages* walked, so the returned list is a prefix of the folder in Drive's
- * own order (folders first, then by name) rather than an arbitrary subset.
+ * own order (folders first, then by name) rather than an arbitrary subset —
+ * and `truncated` reports when that prefix is all the caller got.
  *
  * @param folderId - The Drive folder id
  * @param credentials - API key or OAuth token
  * @param maxPages - How many 1000-item pages to walk at most
- * @returns The children found
+ * @returns The children found, and whether the cap cut the listing short
  * @throws DriveError when Drive refuses the request
  */
 export async function listDriveFolder(
   folderId: string,
   credentials: DriveCredentials,
   maxPages = 3,
-): Promise<DriveFile[]> {
+): Promise<{ files: DriveFile[]; truncated: boolean }> {
   const files: DriveFile[] = [];
   let pageToken: string | undefined;
 
@@ -147,7 +164,10 @@ export async function listDriveFolder(
     if (!pageToken) break;
   }
 
-  return files;
+  // A leftover page token means the cap stopped the walk, not the folder
+  // ending. The caller has to say so: a "select all" over a silent prefix
+  // implies a completeness the list does not have.
+  return { files, truncated: Boolean(pageToken) };
 }
 
 /**
@@ -181,14 +201,12 @@ export async function downloadDriveFile(
     throw new DriveError("folderLink");
   }
 
-  // Desktop with no credential at all: the public host is the only endpoint
-  // that serves bytes without one, and native HTTP makes its missing CORS
-  // headers irrelevant.
+  // No credential: the public host is the only endpoint that serves bytes
+  // without one, and it does so cross-origin, so this is not desktop-only.
   const credentialFree = !credentials.accessToken && !credentials.apiKey;
-  const url =
-    credentialFree && isTauri()
-      ? drivePublicDownloadUrl(file.id)
-      : driveMediaUrl(file.id, credentials);
+  const url = credentialFree
+    ? drivePublicDownloadUrl(file.id)
+    : driveMediaUrl(file.id, credentials);
 
   const response = assertOk(await driveFetch(url, credentials));
   const blob = await response.blob();

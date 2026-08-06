@@ -621,7 +621,7 @@
       "modeBrowse": "Browse Google Drive",
       "link": "Google Drive link",
       "linkPlaceholder": "https://drive.google.com/file/d/…",
-      "linkHelp": "Paste a link to a file or a folder, or just its ID. The file must be shared with \"Anyone with the link\". A folder link lets you pick from its contents, which is how an unzipped shapefile is added with its .dbf, .shx and .prj.",
+      "linkHelp": "Paste a link to a file or a folder, or just its ID. A file shared with \"Anyone with the link\" opens with no API key. A folder link lets you pick from its contents — which is how an unzipped shapefile is added with its .dbf, .shx and .prj — and needs a key, because Drive has no way to list a folder without one.",
       "loadFolder": "List folder contents",
       "folderLoaded_one": "Found {{count}} file that can be added.",
       "folderLoaded_other": "Found {{count}} files that can be added.",
@@ -633,7 +633,7 @@
       "noFilesChosen": "No files chosen.",
       "apiKey": "Google API key (optional)",
       "apiKeyPlaceholder": "AIza…",
-      "apiKeyHelp": "Needed to read Drive from the browser build and to open the picker. Create one in the Google Cloud console with the Drive API and Picker API enabled. It is stored in this browser only.",
+      "apiKeyHelp": "Not needed to open a file shared with \"Anyone with the link\" — that works with no setup. Add a key to open a folder link, or to reach a private file. Create one in the Google Cloud console with the Drive API enabled; it is stored in this browser only.",
       "error": {
         "unrecognizedLink": "That does not look like a Google Drive link or file ID.",
         "forbidden": "Google Drive refused access to that file. Share it with \"Anyone with the link\", or use Browse Google Drive to pick it from your own Drive.",
@@ -652,8 +652,10 @@
         "apiKeyRequired": "A Google API key is required for this. Enter one below.",
         "loadFolderFirst": "List the folder contents first, then choose what to add.",
         "noSelection": "Choose at least one file to add.",
-        "noLayers": "Nothing could be read from the selected files."
-      }
+        "noLayers": "Nothing could be read from the selected files.",
+        "apiKeyRequiredForFolder": "Listing a folder needs a Google API key — Drive offers no way to read a folder's contents without one. Enter a key below, or paste a link to a specific file instead, which needs no key."
+      },
+      "folderTruncated": "Showing the first {{count}} files. The folder holds more than this view can list; open a link to a specific file to add anything missing."
     },
     "mbtiles": {
       "defaultName": "MBTiles Layer",

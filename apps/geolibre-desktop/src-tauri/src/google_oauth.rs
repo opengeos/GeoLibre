@@ -669,23 +669,26 @@ fn picker_page(client_id: &str, api_key: &str, state: &str) -> String {
         .setOAuthToken(accessToken)
         .addView(view)
         .setCallback(async (data) => {{
-          if (data.action === google.picker.Action.PICKED) {{
-            const files = (data.docs || []).map((doc) => ({{
-              id: doc.id,
-              name: doc.name,
-              mimeType: doc.mimeType,
-              size: doc.sizeBytes === undefined ? undefined : Number(doc.sizeBytes)
-            }}));
-            await sendResult({{ accessToken, tokenType: "Bearer", files }});
-            status.textContent = "Selection sent to GeoLibre. You can close this window.";
-            window.close();
-          }} else if (data.action === google.picker.Action.CANCEL) {{
-            // An empty list rather than an error, so a closed picker reads as
-            // "nothing chosen" and the app simply stops waiting.
-            await sendResult({{ accessToken, tokenType: "Bearer", files: [] }});
-            status.textContent = "No files chosen. You can close this window.";
-            window.close();
-          }}
+          // LOADED is the only action that leaves the session open; everything
+          // else ends it. Mirrors `pickerOutcome` in google-drive.ts — the
+          // in-page flow this page stands in for. Enumerating terminal actions
+          // instead would mean an unrecognized one posts nothing at all, and the
+          // app sits through its full five-minute poll before giving up.
+          if (data.action === google.picker.Action.LOADED) return;
+          const picked = data.action === google.picker.Action.PICKED;
+          const files = picked
+            ? (data.docs || []).map((doc) => ({{
+                id: doc.id,
+                name: doc.name,
+                mimeType: doc.mimeType,
+                size: doc.sizeBytes === undefined ? undefined : Number(doc.sizeBytes)
+              }}))
+            : [];
+          await sendResult({{ accessToken, tokenType: "Bearer", files }});
+          status.textContent = picked
+            ? "Selection sent to GeoLibre. You can close this window."
+            : "No files chosen. You can close this window.";
+          window.close();
         }})
         .build();
       picker.setVisible(true);

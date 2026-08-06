@@ -65,7 +65,7 @@ There are two ways in:
 
 | Mode | Use it for | Requirements |
 | --- | --- | --- |
-| **Share link or file ID** | A file someone sent you. | The file must be shared with **Anyone with the link**. On the desktop app that is all you need; the browser build also needs an API key (below). |
+| **Share link or file ID** | A file someone sent you. | The file must be shared with **Anyone with the link**. Nothing else — no API key, no sign-in, on any build. A *folder* link needs an API key (below), because Drive offers no way to list a folder without one. |
 | **Browse Google Drive** | Your own files, including private ones. | Sign in with Google and pick files in Google's own picker. Needs a deployment configured with its own Google Cloud project (below). Not available in the Mac App Store / iOS builds. |
 
 Paste either a **file** link or a **folder** link. A folder link lists what is inside so you can tick the layers you want — this is how an unzipped shapefile is added, since selecting the `.shp` automatically pulls in its `.dbf`, `.shx`, `.prj`, and `.cpg`. In the picker, select those sidecar files yourself alongside the `.shp`.
@@ -73,11 +73,16 @@ Paste either a **file** link or a **folder** link. A folder link lists what is i
 !!! note "Why sign-in only ever sees the files you pick"
     GeoLibre requests Google's non-sensitive `drive.file` scope, which grants access to individual files **as the user picks them** and nothing else. It never asks for the restricted `drive.readonly` scope, so the app has no ability to list or read your Drive on its own. That is also why sign-in and choosing files are a single action: a `drive.file` token by itself reaches nothing.
 
-### API key, for opening links in the browser build
+### API key, and when you actually need one
 
-A Google API key ("developer key") lets the browser build read Drive at all. Create one in the [Google Cloud console](https://console.cloud.google.com/) with the **Google Drive API** enabled, then paste it into the field in the dialog — it is stored in that browser only. Deployments can supply one for all users at build time via `VITE_GOOGLE_API_KEY` (or a bare `GOOGLE_API_KEY` in the environment or a `.env` file); the field is then hidden.
+Opening a link to a file shared with **Anyone with the link** needs no key on any build. Drive's public download host serves that file cross-origin, so the browser reaches it directly.
 
-The desktop app needs none of this for a link: it reads Drive's public download host through its native HTTP client, so a shared link works with no configuration at all.
+A key is needed for the two things that host cannot do:
+
+- **Listing a folder**, which only the Drive REST API can do.
+- **Reaching a private file**, which needs a credential by definition — though the picker is usually the better route there, since it grants access per file without a key at all.
+
+Create one in the [Google Cloud console](https://console.cloud.google.com/) with the **Google Drive API** enabled, then paste it into the field in the dialog — it is stored in that browser only. Deployments can supply one for all users at build time via `VITE_GOOGLE_API_KEY` (or a bare `GOOGLE_API_KEY` in the environment or a `.env` file); the field is then hidden.
 
 ### Enabling "Browse Google Drive"
 

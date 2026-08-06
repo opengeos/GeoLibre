@@ -39,7 +39,7 @@ import {
   type DriveFile,
 } from "../../../../lib/google-drive";
 import {
-  canReachDrive,
+  canQueryDriveApi,
   downloadDriveFile,
   fetchDriveMetadata,
   listDriveFolder,
@@ -91,8 +91,19 @@ export function GoogleDriveSource() {
   const target = parseDriveTarget(link);
   const isFolderLink = target?.kind === "folder";
 
+  /**
+   * The credential for the current mode.
+   *
+   * The picker's token is deliberately confined to browse mode. It is a
+   * `drive.file` grant covering only the files picked in that session, so
+   * sending it with a *link* request makes Drive answer 403 for a file that is
+   * publicly shared — turning a link that would have worked keylessly into
+   * "Google Drive refused access". Leaving `picked` set across a mode switch is
+   * still right (the selection should survive toggling back), so the scoping
+   * happens here rather than by clearing it.
+   */
   const credentials = (): DriveCredentials => ({
-    accessToken: picked?.accessToken,
+    accessToken: mode === "browse" ? picked?.accessToken : undefined,
     apiKey: apiKey.trim() || undefined,
   });
 
@@ -142,17 +153,22 @@ export function GoogleDriveSource() {
       if (!target || target.kind !== "folder") {
         throw new DriveError("unrecognizedLink");
       }
-      if (!canReachDrive(credentials())) {
-        throw new Error(t("addData.googleDrive.error.apiKeyRequired"));
+      if (!canQueryDriveApi(credentials())) {
+        // Listing is the one operation with no credential-free endpoint.
+        throw new Error(t("addData.googleDrive.error.apiKeyRequiredForFolder"));
       }
-      const files = await listDriveFolder(target.id, credentials());
+      const { files, truncated } = await listDriveFolder(target.id, credentials());
       const entries = groupFolderVectorFiles(files, isRestorableVectorPath);
       if (entries.length === 0) throw new DriveError("emptyFolder");
       setFolderEntries(entries);
       // Everything ticked by default: a folder link is almost always shared
       // *because* of what is in it, so the common case is one click.
       setSelectedIds(new Set(entries.map((entry) => entry.file.id)));
-      setNotice(t("addData.googleDrive.folderLoaded", { count: entries.length }));
+      setNotice(
+        truncated
+          ? t("addData.googleDrive.folderTruncated", { count: entries.length })
+          : t("addData.googleDrive.folderLoaded", { count: entries.length }),
+      );
     });
 
   /**
@@ -162,9 +178,9 @@ export function GoogleDriveSource() {
    * mean anything together, and a browser opening four Drive downloads at once
    * on a slow connection is more likely to time one out than to finish sooner.
    *
-   * The empty name is the credential-free desktop case, where there was no
-   * metadata call to ask; passing `undefined` lets the download fall back to
-   * Drive's `Content-Disposition`, which is where the real name is.
+   * The empty name is the credential-free case, where there was no metadata
+   * call to ask; passing `undefined` lets the download fall back to Drive's
+   * `Content-Disposition`, which is where the real name is.
    */
   const downloadAll = async (files: DriveFile[]): Promise<File[]> => {
     const downloaded: File[] = [];
@@ -182,9 +198,6 @@ export function GoogleDriveSource() {
     }
 
     if (!target) throw new DriveError("unrecognizedLink");
-    if (!canReachDrive(credentials())) {
-      throw new Error(t("addData.googleDrive.error.apiKeyRequired"));
-    }
 
     if (target.kind === "folder") {
       if (!folderEntries) {
@@ -199,12 +212,14 @@ export function GoogleDriveSource() {
       return chosen.flatMap((entry) => [entry.file, ...entry.sidecars]);
     }
 
-    // A single file: the metadata call is what supplies the *name*, and the
-    // name is what the import pipeline classifies the format on. Without a
-    // credential there is no metadata endpoint, so the download falls back to
-    // the name in Drive's Content-Disposition header instead.
+    // A single file needs no credential: the public host serves an "anyone
+    // with the link" file to any origin. With a credential the metadata call is
+    // still worth making — it names the file up front and distinguishes "not
+    // shared" from "does not exist" — but without one the download reads the
+    // name from Drive's Content-Disposition instead, which is enough for the
+    // import pipeline to classify the format.
     return [
-      credentials().accessToken || credentials().apiKey
+      canQueryDriveApi(credentials())
         ? await fetchDriveMetadata(target.id, credentials())
         : { id: target.id, name: "", mimeType: "" },
     ];
