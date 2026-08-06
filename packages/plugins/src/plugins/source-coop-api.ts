@@ -471,15 +471,21 @@ export function mergeProducts(...groups: SourceCoopProduct[][]): SourceCoopProdu
     for (const product of group) {
       const id = `${product.accountId}/${product.productId}`;
       const existing = byId.get(id);
-      // The feed carries no tags, `/products/*` does; prefer whichever record
-      // actually has them so a merged entry never loses searchable text.
-      if (
-        !existing ||
-        (existing.tags.length === 0 && product.tags.length > 0) ||
-        (!existing.description && product.description)
-      ) {
-        byId.set(id, { ...existing, ...product });
+      if (!existing) {
+        byId.set(id, product);
+        continue;
       }
+      // The feed carries no tags, `/products/*` does; the two sources can
+      // enrich different fields (one adds tags, the other a description), so
+      // prefer whichever record actually has each one rather than replacing
+      // the whole record. A whole-object spread would silently drop a field
+      // the later record happens to leave empty.
+      byId.set(id, {
+        ...existing,
+        ...product,
+        tags: product.tags.length > 0 ? product.tags : existing.tags,
+        description: product.description ? product.description : existing.description,
+      });
     }
   }
   return [...byId.values()];

@@ -499,6 +499,22 @@ describe("mergeProducts", () => {
     assert.equal(merged[0].description, "Full");
   });
 
+  it("keeps both enrichments when the two records add different fields", () => {
+    const apiEntry = product({ tags: ["pmtiles"], description: "" });
+    const feedEntry = product({ tags: [], description: "A full description" });
+    const merged = mergeProducts([apiEntry], [feedEntry]);
+    assert.deepEqual(merged[0].tags, ["pmtiles"]);
+    assert.equal(merged[0].description, "A full description");
+  });
+
+  it("keeps both enrichments regardless of source order", () => {
+    const apiEntry = product({ tags: ["pmtiles"], description: "" });
+    const feedEntry = product({ tags: [], description: "A full description" });
+    const merged = mergeProducts([feedEntry], [apiEntry]);
+    assert.deepEqual(merged[0].tags, ["pmtiles"]);
+    assert.equal(merged[0].description, "A full description");
+  });
+
   it("keeps distinct ids apart", () => {
     const merged = mergeProducts([product({ productId: "a" })], [product({ productId: "b" })]);
     assert.equal(merged.length, 2);
