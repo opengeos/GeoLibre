@@ -2,7 +2,7 @@
 
 GeoLibre is free and open-source software, released under the
 [MIT License](https://github.com/opengeos/GeoLibre/blob/main/LICENSE) and
-developed in the open. There is no paid tier, no seat licence, and no telemetry —
+developed in the open. There is no paid tier, no seat license, and no telemetry —
 everything on this site is available to everyone, forever.
 
 That model only works if the work behind it is sustainable. If GeoLibre saves you
@@ -13,7 +13,7 @@ or your team time, sponsorship is the most direct way to keep it moving.
 
 ## Ways to sponsor
 
-| | What it is | Best for |
+| Option | What it is | Best for |
 | --- | --- | --- |
 | **[GitHub Sponsors](https://github.com/sponsors/giswqs)** | Monthly or one-time sponsorship, billed through your existing GitHub account. | Individuals and organizations that want recurring support, and companies that can expense it alongside other GitHub spend. |
 | **[Buy Me a Coffee](https://buymeacoffee.com/giswqs)** | A quick one-off contribution, no account required. | A small thank-you for a feature or bug fix that helped you. |
