@@ -222,9 +222,15 @@ export function ArcGISSource() {
             <p className="text-xs text-muted-foreground">{t("addData.arcgis.pagingHint")}</p>
           </div>
         ) : null}
-        {progress ? (
-          <p className="text-sm text-muted-foreground" aria-live="polite">
-            {progress.total === null
+        {/* Mounted for the life of the panel, not only while a download runs:
+            several screen readers ignore a live region that appears together
+            with its first text. `sr-only` keeps the empty state out of the
+            visual layout (it is positioned, so it adds no gap) while leaving
+            the region in the accessibility tree. */}
+        <p className={progress ? "text-sm text-muted-foreground" : "sr-only"} aria-live="polite">
+          {progress === null
+            ? ""
+            : progress.total === null
               ? t("addData.arcgis.loadingProgressUnknown", {
                   loaded: progress.loaded.toLocaleString(),
                 })
@@ -232,8 +238,7 @@ export function ArcGISSource() {
                   loaded: progress.loaded.toLocaleString(),
                   total: progress.total.toLocaleString(),
                 })}
-          </p>
-        ) : null}
+        </p>
         <SampleDataSelect
           samples={[
             {

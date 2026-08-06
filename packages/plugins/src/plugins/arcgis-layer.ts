@@ -583,8 +583,13 @@ async function fetchArcGISPagesByObjectId(plan: ArcGISPagingPlan): Promise<Featu
 
   const { field, objectIds } = idInfo;
   const features: Feature[] = [];
-  for (let start = 0; start < objectIds.length; start += plan.pageSize) {
-    const wanted = remainingArcGISFeatures(plan, features.length, plan.pageSize);
+  let pageSize = plan.pageSize;
+  let start = 0;
+
+  for (let page = 0; start < objectIds.length; page += 1) {
+    if (page >= MAX_ARCGIS_PAGES) break;
+
+    const wanted = remainingArcGISFeatures(plan, features.length, pageSize);
     if (wanted <= 0) break;
 
     const end = Math.min(start + wanted, objectIds.length);
@@ -594,7 +599,22 @@ async function fetchArcGISPagesByObjectId(plan: ArcGISPagingPlan): Promise<Featu
         where: `${field} >= ${objectIds[start]} AND ${field} <= ${objectIds[end - 1]}`,
       }),
     );
+
+    // The range spans `end - start` ObjectIDs, so a shorter capped page would
+    // silently drop the rest of them — the ids are consumed by advancing past
+    // the range, not by what came back. Reachable whenever the page size
+    // exceeds the service's real cap, which is what happens when the layer
+    // metadata omits `maxRecordCount`. Adopt the cap and redo this range at the
+    // smaller size rather than advancing over the ids that were not returned.
+    if (chunk.exceededTransferLimit && chunk.features.length > 0) {
+      if (chunk.features.length < end - start) {
+        pageSize = chunk.features.length;
+        continue;
+      }
+    }
+
     features.push(...chunk.features);
+    start = end;
     plan.onProgress?.(features.length, plan.total ?? objectIds.length);
   }
   return features;

@@ -59,8 +59,14 @@ function makeArcGISFetch(): typeof fetch {
 const SERVICE_URL = "https://example.com/arcgis/rest/services/Cities/FeatureServer/0";
 
 interface FakeArcGISServiceOptions {
-  /** The service's advertised per-query ceiling. */
+  /** The per-query ceiling the service actually enforces. */
   maxRecordCount: number;
+  /**
+   * Drop `maxRecordCount` from the layer metadata while still enforcing it.
+   * Real services do this, and it is what lets the caller's page size exceed
+   * the cap the service will honor.
+   */
+  hideMaxRecordCount?: boolean;
   /** Whether `resultOffset` is actually honored (false replays page one). */
   honorsOffset?: boolean;
   /** Whether the layer advertises `advancedQueryCapabilities.supportsPagination`. */
@@ -93,7 +99,7 @@ function fakeArcGISService(config: FakeArcGISServiceOptions) {
 
   const layerInfo = {
     ...LAYER_INFO,
-    maxRecordCount,
+    maxRecordCount: config.hideMaxRecordCount ? undefined : maxRecordCount,
     objectIdField: "OBJECTID",
     advancedQueryCapabilities: { supportsPagination, supportsOrderBy: true },
   };
@@ -449,6 +455,42 @@ describe("addArcGISLayer (feature layer)", () => {
       [1, 100],
       [101, 200],
       [201, 250],
+    ]);
+  });
+
+  // The ObjectID walk consumes ids by advancing past the requested range, so a
+  // page the service caps below that range would drop the ids it did not
+  // return. Reachable whenever the page size exceeds the service's real cap,
+  // which is what happens when the metadata omits `maxRecordCount`.
+  it("re-requests a smaller ObjectID range when the service caps the page", async () => {
+    const service = fakeArcGISService({
+      total: 700,
+      maxRecordCount: 250,
+      hideMaxRecordCount: true,
+      supportsPagination: false,
+    });
+    globalThis.fetch = service.fetch;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+
+    const features =
+      useAppStore.getState().layers.find((l) => l.id === id)?.geojson?.features ?? [];
+    assert.equal(features.length, 700, "expected no ObjectID to be skipped");
+    assert.deepEqual(
+      features.map((feature) => feature.id),
+      service.objectIds,
+    );
+    // The oversized first range is retried at the cap the service revealed,
+    // then the walk proceeds in 250-id steps.
+    assert.deepEqual(service.objectIdRanges, [
+      [1, 700],
+      [1, 250],
+      [251, 500],
+      [501, 700],
     ]);
   });
 
