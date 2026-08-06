@@ -13,6 +13,7 @@ import os
 import pathlib
 import re
 import time
+import urllib.parse
 import uuid
 import warnings
 from typing import Any, Callable
@@ -157,7 +158,7 @@ _HTML_EXPORT_TEMPLATE = """<!doctype html>
     loaded = true;
     frame.contentWindow.postMessage(
       {{ type: "geolibre:load-project", project: project, seq: 1 }},
-      "*"
+      {app_origin}
     );
   }}
   // The app posts "geolibre:ready" once mounted; reply with the project. Guard
@@ -208,9 +209,19 @@ def render_project_html(
         The HTML document as a string.
 
     Raises:
-        ValueError: If ``width`` or ``height`` is not a plain CSS dimension.
+        ValueError: If ``width`` or ``height`` is not a plain CSS dimension, or
+            ``app_url`` is not an ``http``/``https`` URL.
     """
     base_url = app_url or DEFAULT_HTML_APP_URL
+    # The project is posted into the frame, so the app URL decides where it
+    # lands. Pin it to http(s) with a real host, and post to that exact origin
+    # rather than "*": the MCP server takes app_url straight from a tool call,
+    # and a model can pick an argument up from content it is reading. A
+    # redacted project still carries inlined features and layer URLs.
+    origin = urllib.parse.urlsplit(base_url)
+    if origin.scheme not in ("http", "https") or not origin.netloc:
+        raise ValueError(f"to_html: app_url must be an http(s) URL, got {base_url!r}")
+    app_origin = f"{origin.scheme}://{origin.netloc}"
     # Force the embed bridge on (isEmbedded() honours ?embed=1). Insert the
     # parameter into the query string *before* any URL fragment: a "#..."
     # fragment would otherwise swallow a trailing "?embed=1" (browsers read it
@@ -236,6 +247,9 @@ def render_project_html(
         height=_html_escape(height),
         iframe_src=_html_escape(iframe_src),
         project_json=project_json,
+        # json.dumps supplies the surrounding quotes, so the template field is
+        # the whole JS string literal.
+        app_origin=json.dumps(app_origin),
     )
 
 

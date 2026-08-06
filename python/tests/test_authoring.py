@@ -64,6 +64,15 @@ def test_save_project_leaves_no_temporary_file_behind(proj, tmp_path):
     assert [path.name for path in tmp_path.iterdir()] == ["map.geolibre.json"]
 
 
+def test_save_project_preserves_the_destination_mode(proj, tmp_path):
+    """Re-saving must not narrow a project the user made group/world readable."""
+    out = tmp_path / "map.geolibre.json"
+    authoring.save_project(out, proj)
+    out.chmod(0o644)
+    authoring.save_project(out, proj)
+    assert out.stat().st_mode & 0o777 == 0o644
+
+
 def test_load_project_missing_file(tmp_path):
     with pytest.raises(ValueError, match="not found"):
         authoring.load_project(tmp_path / "nope.json")

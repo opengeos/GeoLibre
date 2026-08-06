@@ -450,6 +450,20 @@ def test_to_html_inserts_embed_before_fragment(m):
     assert "https://example.com/app?embed=1#section" in html
 
 
+def test_to_html_posts_the_project_to_the_app_origin_only(m):
+    # The project is posted into the frame, so a wildcard targetOrigin would
+    # hand it to whatever the app URL redirected to.
+    html = m.to_html(app_url="https://example.com/app?foo=bar")
+    assert '"https://example.com"' in html
+    assert '"*"' not in html
+
+
+def test_to_html_rejects_a_non_http_app_url(m):
+    for bad in ("javascript:alert(1)", "file:///etc/passwd", "not a url"):
+        with pytest.raises(ValueError, match="must be an http\\(s\\) URL"):
+            m.to_html(app_url=bad)
+
+
 def test_to_html_rejects_css_injection_dimensions(m):
     with pytest.raises(ValueError, match="invalid CSS width"):
         m.to_html(width="100%; } body { background: red; }")

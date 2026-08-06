@@ -238,7 +238,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         Args:
             path: Path to the `.geolibre.json` file.
             name: The layer's display name.
-            data: An `https://` URL, a file path inside the workspace, or
+            data: An `http(s)://` URL, a file path inside the workspace, or
                 literal GeoJSON text (a FeatureCollection, Feature, or bare
                 geometry). Capped at 50 MB.
             style: Style overrides, e.g. `{"fillColor": "#ff0000",
@@ -248,12 +248,14 @@ def build_server(workspace: Workspace) -> MCPServer:
         Returns:
             The new layer's id and the project's updated layer count.
         """
-        # Check the destination before fetching or reading `data`, so a bad path
-        # fails without first paying for a 50 MB download.
-        workspace.resolve(path, must_exist=True)
-        collection, source_url = load_geojson(data)
-        layer = _project.geojson_layer(name, collection, source_url=source_url, **(style or {}))
-        return add(path, layer, index)
+        # `data` is loaded inside the edit context, so the destination clears
+        # every check `edit` makes — confinement, extension, and that the file
+        # really is a project — before a 50 MB fetch or read is paid for.
+        with edit(path) as (file, project):
+            collection, source_url = load_geojson(data)
+            layer = _project.geojson_layer(name, collection, source_url=source_url, **(style or {}))
+            layer_id = authoring.add_layer(project, layer, index=index)
+        return _summarize(file, project, layerId=layer_id, layerName=layer.get("name"))
 
     @server.tool()
     def add_vector_layer(

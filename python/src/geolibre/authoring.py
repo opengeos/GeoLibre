@@ -105,6 +105,11 @@ def save_project(path: str | Path, project: dict[str, Any]) -> Path:
     try:
         with handle:
             handle.write(json.dumps(project, indent=2) + "\n")
+        # NamedTemporaryFile creates at 0600. Carry the destination's mode over
+        # so re-saving an existing project does not quietly make it private —
+        # the MCP server calls this on every edit, however small.
+        if file.exists():
+            os.chmod(temporary, file.stat().st_mode)
         os.replace(temporary, file)
     except BaseException:
         temporary.unlink(missing_ok=True)

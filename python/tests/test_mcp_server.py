@@ -202,6 +202,19 @@ def test_editing_refuses_a_destination_with_an_unsupported_extension(server, tmp
     assert "Refusing to write" in call_error(server, "set_view", path="notes.txt", zoom=4)
 
 
+def test_add_geojson_layer_checks_the_destination_before_loading_data(server, tmp_path):
+    """A bad destination fails without the fetch or read that would follow."""
+    (tmp_path / "notes.txt").write_text("{}", encoding="utf-8")
+    assert "Refusing to write" in call_error(
+        server,
+        "add_geojson_layer",
+        path="notes.txt",
+        name="Cities",
+        # A URL that would fail loudly if it were ever reached.
+        data="https://nonexistent.invalid/cities.geojson",
+    )
+
+
 def test_add_geojson_layer_inlines_literal_geojson(server, project_path):
     result = call(
         server,
