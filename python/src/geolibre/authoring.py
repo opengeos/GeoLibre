@@ -543,6 +543,10 @@ def set_view(
         bearing: Rotation in degrees.
         pitch: Tilt in degrees, clamped to ``[0, 85]``.
 
+    Note:
+        Setting ``center`` or ``zoom`` clears any ``bbox`` a previous
+        :func:`fit_bounds` recorded, since it no longer describes the camera.
+
     Returns:
         The project's ``mapView`` after the change.
 
@@ -560,6 +564,12 @@ def set_view(
         view["center"] = coords
     if zoom is not None:
         view["zoom"] = min(24.0, max(0.0, float(zoom)))
+    if center is not None or zoom is not None:
+        # `bbox` is recorded by fit_bounds to describe the camera it computed.
+        # Moving the camera by hand leaves it describing a different extent, and
+        # the app reads it (the status bar's BBox readout), so drop it rather
+        # than persist a stale one. Bearing and pitch do not change the extent.
+        view.pop("bbox", None)
     if bearing is not None:
         view["bearing"] = float(bearing)
     if pitch is not None:

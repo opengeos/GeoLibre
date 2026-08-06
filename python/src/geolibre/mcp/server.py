@@ -59,6 +59,9 @@ feature data.
 #: this check an edit tool pointed at an unrelated JSON file inside a root —
 #: ``package.json``, say — would load it, apply the change, and write a project
 #: over it. Every project this package or the app writes carries both keys.
+#: ``layers`` is deliberately not among them: it is neither exclusive to this
+#: format (other map and style configs use a top-level ``layers`` array) nor
+#: reliable, since ``load_project`` normalizes it onto whatever it loaded.
 PROJECT_MARKERS = ("mapView", "basemapStyleUrl")
 
 
@@ -72,7 +75,7 @@ def _require_project(file: Path, project: dict[str, Any]) -> None:
     Raises:
         WorkspaceError: If the object carries no sign of being a project.
     """
-    if any(key in project for key in PROJECT_MARKERS) or project.get("layers"):
+    if any(key in project for key in PROJECT_MARKERS):
         return
     raise WorkspaceError(
         f"{file} does not look like a GeoLibre project (no "
@@ -641,7 +644,9 @@ def build_server(workspace: Workspace) -> MCPServer:
             bearing: Map rotation in degrees; 0 is north-up.
             pitch: Tilt in degrees, 0 (straight down) to 85.
             bbox: `[min_lng, min_lat, max_lng, max_lat]` to frame. Applied
-                before `center`/`zoom`, so those still win if both are given.
+                before `center`/`zoom`, so those still win if both are given
+                (and the framed box is then dropped, not left describing an
+                extent the camera no longer shows).
 
         Returns:
             The project's camera after the change.

@@ -197,6 +197,17 @@ def test_editing_refuses_a_json_file_that_is_not_a_project(server, tmp_path):
     assert json.loads(package.read_text(encoding="utf-8")) == {"name": "app", "version": "1.0.0"}
 
 
+def test_editing_refuses_a_config_that_merely_has_a_layers_array(server, tmp_path):
+    """A top-level `layers` array is not exclusive to this format."""
+    style = tmp_path / "style.json"
+    original = {"name": "Some style", "layers": [{"id": "background", "type": "background"}]}
+    style.write_text(json.dumps(original), encoding="utf-8")
+    assert "does not look like a GeoLibre project" in call_error(
+        server, "set_view", path="style.json", zoom=4
+    )
+    assert json.loads(style.read_text(encoding="utf-8")) == original
+
+
 def test_editing_refuses_a_destination_with_an_unsupported_extension(server, tmp_path):
     (tmp_path / "notes.txt").write_text("{}", encoding="utf-8")
     assert "Refusing to write" in call_error(server, "set_view", path="notes.txt", zoom=4)

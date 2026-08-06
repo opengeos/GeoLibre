@@ -259,6 +259,15 @@ def test_set_view_rejects_a_malformed_center(proj):
         authoring.set_view(proj, center=[1, 2, 3])
 
 
+def test_set_view_drops_a_bbox_the_camera_no_longer_shows(proj):
+    """A stale bbox would keep feeding the app's status-bar extent readout."""
+    authoring.fit_bounds(proj, [-10, -10, 10, 10])
+    assert authoring.set_view(proj, bearing=45)["bbox"] == [-10, -10, 10, 10]
+    assert "bbox" not in authoring.set_view(proj, center=[100, 20])
+    authoring.fit_bounds(proj, [-10, -10, 10, 10])
+    assert "bbox" not in authoring.set_view(proj, zoom=3)
+
+
 def test_fit_bounds_centers_on_the_box(proj):
     view = authoring.fit_bounds(proj, [-10, -10, 10, 10])
     assert view["center"][0] == pytest.approx(0)
