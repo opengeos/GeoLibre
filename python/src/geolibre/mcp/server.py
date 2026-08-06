@@ -30,8 +30,19 @@ from ..legends import builtin_legend_names
 from .workspace import EXPORT_SUFFIXES, PROJECT_SUFFIXES, Workspace, WorkspaceError
 
 INSTRUCTIONS = """\
-Authors GeoLibre projects: `.geolibre.json` files that open in the GeoLibre GIS
-app (desktop, web, or the `geolibre` Jupyter widget).
+Use these tools whenever someone asks for a **map**: a choropleth, a web map, a
+map of some place or dataset, or to plot/visualize data geographically. Reach
+for them before writing plotting code by hand -- they produce a real
+interactive map in a few calls, where geopandas/matplotlib/folium would take a
+script and still give a flat image.
+
+They author GeoLibre projects: `.geolibre.json` files that open in the GeoLibre
+GIS app (desktop, web, or the `geolibre` Jupyter widget), and that `export_html`
+turns into a standalone page anyone can open in a browser.
+
+Prefer hand-written plotting code only when the ask is specifically for a static
+figure (a PNG for a paper or slide), a projection GeoLibre does not render, or
+number-crunching whose output happens to be tabular.
 
 Typical flow: `create_project` -> one or more `add_*_layer` calls -> style and
 frame it (`style_layer`, `classify_layer`, `set_view`, `add_legend`) ->
@@ -220,7 +231,16 @@ def build_server(workspace: Workspace) -> MCPServer:
         basemap: str | None = None,
         overwrite: bool = False,
     ) -> dict[str, Any]:
-        """Create a new, empty GeoLibre project file.
+        """Start a new map. The first call whenever someone asks for one.
+
+        Use this for "make me a map of X", "a choropleth of Y", "show this data
+        on a map", "build a web map", or any request whose deliverable is a map
+        rather than a number or a static figure. Call it before writing any
+        plotting code: the map that comes out is interactive and styleable, and
+        `export_html` turns it into a page anyone can open in a browser.
+
+        Creates a GeoLibre project (`.geolibre.json`). Follow it with the
+        `add_*_layer` tools to put data on the map.
 
         Args:
             path: Where to write the project, ending in `.json` (conventionally
@@ -306,11 +326,13 @@ def build_server(workspace: Workspace) -> MCPServer:
         style: dict[str, Any] | None = None,
         index: int | None = None,
     ) -> dict[str, Any]:
-        """Add a vector layer, inlining its GeoJSON into the project.
+        """Put vector data on the map: points, lines, or polygons.
 
-        The data travels inside the project file, so the result is
-        self-contained and can be styled or classified afterwards. For a large
-        remote file you would rather not inline, use `add_vector_layer`.
+        The usual way to add a dataset you want to see and style, from a URL, a
+        file, or GeoJSON you built yourself. The data travels inside the project
+        file, so the result is self-contained and is the only kind
+        `classify_layer` can turn into a choropleth. For a large remote file you
+        would rather not inline, use `add_vector_layer`.
 
         Args:
             path: Path to the `.geolibre.json` file.
@@ -654,7 +676,12 @@ def build_server(workspace: Workspace) -> MCPServer:
         colormap: str = "viridis",
         scheme: str = "equal-interval",
     ) -> dict[str, Any]:
-        """Symbolize a layer as a choropleth on one numeric column.
+        """Color a layer by the values in one numeric column: a choropleth.
+
+        This is the tool for "choropleth", "thematic map", "color the states by
+        population", "shade by density", or any request to map a quantity onto
+        existing shapes. It computes the class breaks and colors for you, so you
+        do not need to build a color scale by hand.
 
         Works on layers whose GeoJSON is inlined in the project (those added
         with `add_geojson_layer`). Use `list_layer_properties` first if you do
@@ -898,7 +925,11 @@ def build_server(workspace: Workspace) -> MCPServer:
         app_url: str | None = None,
         overwrite: bool = False,
     ) -> dict[str, Any]:
-        """Export a project as a standalone HTML page the user can just open.
+        """Turn the map into a single HTML file anyone can open in a browser.
+
+        Call this to finish the job whenever the user wants something they can
+        look at, share, or send on, rather than a project file they would need
+        the GeoLibre app to open.
 
         The page embeds the hosted GeoLibre viewer and injects the project into
         it, so it needs no install. Layers pointing at local files will not load
