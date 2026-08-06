@@ -18,7 +18,7 @@ import contextlib
 import os
 import sys
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from mcp.server import MCPServer
 
@@ -82,6 +82,52 @@ def _require_project(file: Path, project: dict[str, Any]) -> None:
         f"{' or '.join(PROJECT_MARKERS)} key). Refusing to overwrite it; call "
         "create_project to start a new one."
     )
+
+
+def _build_layer(
+    builder: Callable[..., dict[str, Any]],
+    *args: Any,
+    style: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Call a layer builder, reporting a colliding `style` key as a ValueError.
+
+    Every builder takes ``**style``, so an unrecognized key is simply carried
+    into the layer's style. A key that names one of the builder's own
+    parameters (``source_url``, ``render_mode``, ``colormap``, ...) is
+    different: it arrives as a duplicate keyword and raises ``TypeError``. A
+    model driving these tools sees only "style: object" in the schema, so
+    guessing such a key is realistic, and it should read back as a plain
+    message naming the offending key rather than an unhandled type error.
+
+    Args:
+        builder: The ``geolibre.project`` layer builder to call.
+        *args: Positional arguments for the builder.
+        style: The caller-supplied style dict, merged in last.
+        **kwargs: The tool's own keyword arguments for the builder.
+
+    Returns:
+        The built layer dict.
+
+    Raises:
+        ValueError: If a style key collides with a parameter of the builder.
+    """
+    style = style or {}
+    collisions = sorted(set(style) & set(kwargs))
+    if collisions:
+        raise ValueError(
+            f"style keys {collisions} name parameters of this layer type; pass "
+            "them as their own arguments instead of inside style."
+        )
+    try:
+        return builder(*args, **kwargs, **style)
+    except TypeError as exc:
+        # A style key colliding with one of the builder's *positional*
+        # parameters (name, url, data) lands here rather than above.
+        raise ValueError(
+            f"style contains a key this layer type takes as its own "
+            f"parameter — pass it as that parameter instead ({exc})."
+        ) from exc
 
 
 def _summarize(path: Path, project: dict[str, Any], **extra: Any) -> dict[str, Any]:
@@ -256,7 +302,13 @@ def build_server(workspace: Workspace) -> MCPServer:
         # really is a project — before a 50 MB fetch or read is paid for.
         with edit(path) as (file, project):
             collection, source_url = load_geojson(data)
-            layer = _project.geojson_layer(name, collection, source_url=source_url, **(style or {}))
+            layer = _build_layer(
+                _project.geojson_layer,
+                name,
+                collection,
+                source_url=source_url,
+                style=style,
+            )
             layer_id = authoring.add_layer(project, layer, index=index)
         return _summarize(file, project, layerId=layer_id, layerName=layer.get("name"))
 
@@ -291,13 +343,14 @@ def build_server(workspace: Workspace) -> MCPServer:
         Returns:
             The new layer's id and the project's updated layer count.
         """
-        layer = _project.vector_layer(
+        layer = _build_layer(
+            _project.vector_layer,
             name,
             url,
             render_mode=render_mode,
             data_format=data_format,
             source_layer=source_layer,
-            **(style or {}),
+            style=style,
         )
         return add(path, layer, index)
 
@@ -331,13 +384,14 @@ def build_server(workspace: Workspace) -> MCPServer:
         Returns:
             The new layer's id and the project's updated layer count.
         """
-        layer = _project.cog_layer(
+        layer = _build_layer(
+            _project.cog_layer,
             name,
             url,
             bands=bands,
             colormap=colormap,
             rescale=rescale,
-            **(style or {}),
+            style=style,
         )
         return add(path, layer, index)
 
@@ -451,16 +505,21 @@ def build_server(workspace: Workspace) -> MCPServer:
             The new layer's id and the project's updated layer count.
         """
         if kind == "pmtiles":
-            layer = _project.pmtiles_layer(
+            layer = _build_layer(
+                _project.pmtiles_layer,
                 name,
                 url,
                 tile_type=tile_type,
                 source_layers=source_layers,
-                **(style or {}),
+                style=style,
             )
         elif kind == "vector-tiles":
-            layer = _project.vector_tiles_layer(
-                name, url, source_layers=source_layers, **(style or {})
+            layer = _build_layer(
+                _project.vector_tiles_layer,
+                name,
+                url,
+                source_layers=source_layers,
+                style=style,
             )
         else:
             raise ValueError(f"kind must be 'pmtiles' or 'vector-tiles', got {kind!r}")

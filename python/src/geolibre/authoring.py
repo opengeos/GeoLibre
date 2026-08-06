@@ -386,10 +386,18 @@ def update_layer(
         A summary of the updated layer.
 
     Raises:
-        ValueError: If the reference does not resolve to exactly one layer.
+        ValueError: If the reference does not resolve to exactly one layer, or
+            ``name`` is the reserved basemap pseudo-id.
     """
     layer = find_layer(project, ref)
     if name is not None:
+        # resolve_layer_ids passes this sentinel straight through, so a layer
+        # wearing it as a display name would be unaddressable there — the swipe
+        # control would silently target the basemap instead of the layer.
+        if str(name) == BASEMAP_LAYER_ID:
+            raise ValueError(
+                f"{BASEMAP_LAYER_ID!r} is reserved for the basemap and cannot name a layer"
+            )
         layer["name"] = str(name)
     if visible is not None:
         layer["visible"] = bool(visible)
@@ -602,15 +610,17 @@ def fit_bounds(
 
     Args:
         project: The project dict (mutated in place).
-        bbox: ``[min_lng, min_lat, max_lng, max_lat]``.
+        bbox: ``[min_lng, min_lat, max_lng, max_lat]``. Per RFC 7946 section
+            5.2, ``min_lng > max_lng`` means the box crosses the antimeridian
+            (Fiji is ``[170, -20, -170, -10]``) and is framed as such.
         padding: Pixels of margin to leave around the box.
 
     Returns:
         The project's ``mapView`` after the change.
 
     Raises:
-        ValueError: If the box is not 4 finite numbers, is inverted, or falls
-            outside the Web Mercator latitude limits.
+        ValueError: If the box is not 4 finite numbers, has its latitudes
+            inverted, or falls outside the Web Mercator latitude limits.
     """
     box = [float(value) for value in bbox]
     if len(box) != 4:
@@ -618,16 +628,24 @@ def fit_bounds(
     if not all(math.isfinite(value) for value in box):
         raise ValueError(f"bbox must be finite numbers, got {box}")
     min_lng, min_lat, max_lng, max_lat = box
-    if min_lng > max_lng or min_lat > max_lat:
+    if min_lat > max_lat:
         raise ValueError(f"bbox is inverted: {box}")
     if not (-85.051129 <= min_lat and max_lat <= 85.051129):
         raise ValueError(f"bbox latitudes must lie within +/-85.051129 (Web Mercator), got {box}")
+    # RFC 7946 section 5.2: a box crossing the antimeridian is written with
+    # min_lng > max_lng, so Fiji is [170, -20, -170, -10] rather than an error.
+    # Its longitude span wraps through 180, and the center follows it out past
+    # the meridian and back into [-180, 180].
+    lng_span = (max_lng - min_lng) % 360 if min_lng > max_lng else max_lng - min_lng
+    center_lng = min_lng + lng_span / 2
+    if center_lng > 180:
+        center_lng -= 360
 
     width, height = _FIT_VIEWPORT
     usable_width = max(1, width - 2 * padding)
     usable_height = max(1, height - 2 * padding)
     # Web Mercator world fractions spanned by the box, at zoom 0.
-    lng_fraction = (max_lng - min_lng) / 360
+    lng_fraction = lng_span / 360
     lat_fraction = abs(_mercator_y(max_lat) - _mercator_y(min_lat))
     # A degenerate (point) box has no extent to fit; fall back to a close-in
     # zoom rather than dividing by zero.
@@ -640,7 +658,7 @@ def fit_bounds(
     view = set_view(
         project,
         center=[
-            (min_lng + max_lng) / 2,
+            center_lng,
             _inverse_mercator_y((_mercator_y(min_lat) + _mercator_y(max_lat)) / 2),
         ],
         zoom=zoom,

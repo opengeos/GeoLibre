@@ -209,6 +209,13 @@ def test_update_layer_clamps_opacity(proj):
     assert authoring.update_layer(proj, "Cities", opacity=-5)["opacity"] == 0.0
 
 
+def test_update_layer_refuses_the_reserved_basemap_name(proj):
+    """resolve_layer_ids passes the sentinel through, so a layer must not wear it."""
+    with pytest.raises(ValueError, match="reserved for the basemap"):
+        authoring.update_layer(proj, "Cities", name="__basemap__")
+    assert authoring.resolve_layer_ids(proj, ["Cities"]) == [proj["layers"][0]["id"]]
+
+
 def test_update_layer_reorders(proj):
     second = authoring.add_layer(proj, project.geojson_layer("Second", POINT_FC))
     authoring.update_layer(proj, second, index=0)
@@ -273,6 +280,16 @@ def test_fit_bounds_centers_on_the_box(proj):
     assert view["center"][0] == pytest.approx(0)
     assert view["center"][1] == pytest.approx(0, abs=1e-9)
     assert view["bbox"] == [-10, -10, 10, 10]
+
+
+def test_fit_bounds_frames_a_box_crossing_the_antimeridian(proj):
+    """RFC 7946 5.2 writes such a box with min_lng > max_lng; Fiji, not an error."""
+    view = authoring.fit_bounds(proj, [170, -20, -170, -10])
+    assert view["center"][0] == pytest.approx(180 if view["center"][0] > 0 else -180)
+    # The box spans 20 degrees the short way, not 340 the long way, so the fit
+    # is as close in as the equivalent box that does not cross.
+    plain = authoring.fit_bounds(proj, [10, -20, 30, -10])["zoom"]
+    assert view["zoom"] == pytest.approx(plain)
 
 
 def test_fit_bounds_zooms_further_in_for_a_smaller_box(proj):

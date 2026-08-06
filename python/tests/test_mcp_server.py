@@ -240,6 +240,45 @@ def test_add_geojson_layer_inlines_literal_geojson(server, project_path):
     assert described["layers"][0]["featureCount"] == 2
 
 
+def test_add_geojson_layer_reports_a_colliding_style_key(server, project_path):
+    """A model sees only "style: object", so a guessed builder keyword is likely."""
+    error = call_error(
+        server,
+        "add_geojson_layer",
+        path=project_path,
+        name="Cities",
+        data=json.dumps(POINT_FC),
+        style={"source_url": "https://example.com/cities.geojson"},
+    )
+    assert "style keys ['source_url'] name parameters of this layer type" in error
+
+
+def test_add_geojson_layer_reports_a_style_key_colliding_with_a_positional(server, project_path):
+    """`name` is positional, so the collision surfaces from the builder call."""
+    error = call_error(
+        server,
+        "add_geojson_layer",
+        path=project_path,
+        name="Cities",
+        data=json.dumps(POINT_FC),
+        style={"name": "Other"},
+    )
+    assert "pass it as that parameter instead" in error
+
+
+def test_add_raster_layer_reports_a_colliding_style_key(server, project_path):
+    """The same guard covers every builder the tools splat a style into."""
+    error = call_error(
+        server,
+        "add_raster_layer",
+        path=project_path,
+        name="DEM",
+        url="https://example.com/dem.tif",
+        style={"colormap": "viridis"},
+    )
+    assert "style keys ['colormap'] name parameters of this layer type" in error
+
+
 def test_add_geojson_layer_reads_a_file_inside_the_workspace(server, project_path, tmp_path):
     (tmp_path / "cities.geojson").write_text(json.dumps(POINT_FC), encoding="utf-8")
     result = call(
