@@ -43,7 +43,7 @@ app as a desktop install, an Android app, and a Jupyter widget.
 | **Format breadth** | Wide — DuckDB-WASM Spatial plus in-house readers | **Widest** — everything GDAL/OGR reads | Very wide, plus native Esri formats | Common upload formats | Common upload formats | CSV, GeoJSON, Arrow/Parquet |
 | **Cloud-native vector** | GeoParquet, FlatGeobuf, PMTiles, streamed over HTTP range requests | GeoParquet, FlatGeobuf, PMTiles (recent GDAL) | GeoParquet (recent), no native PMTiles | — | Some cloud sources on higher plans | Arrow/Parquet |
 | **Cloud-native raster** | COG, Zarr, Cloud-Optimized NetCDF/HDF, kerchunk, MBTiles | COG, Zarr (GDAL's built-in driver) | COG; Zarr as a native multidimensional raster type | Hosted imagery layers | GeoTIFF upload | — |
-| **STAC** | Built-in catalog browser + STAC Index discovery | Via plugins | Built-in STAC connections and the Explore STAC pane | Living Atlas (not STAC) | — | — |
+| **STAC** | Built-in catalog browser + STAC Index discovery | Built-in STAC connections (Browser panel and Data Source Manager) | Built-in STAC connections and the Explore STAC pane | Living Atlas (not STAC) | — | — |
 | **OGC services** | XYZ; WMS/WFS/WMTS discovered via GetCapabilities; OGC API Features/Tiles from a landing page, collection, or items URL | Full OGC support | Full OGC support | Yes | Limited | XYZ / vector tiles |
 | **Esri services and geodatabases** | ArcGIS FeatureServer, VectorTileServer, I3S, plus local `.gdb` File Geodatabase folders (desktop) | Yes | Native | Native | Some ArcGIS layers | — |
 | **Databases** | PostGIS browsing, DuckDB, in-browser PGlite/PostGIS | PostGIS, SpatiaLite, Oracle, SQL Server, SAP HANA | Enterprise geodatabases (SDE) | Hosted only | PostGIS / Snowflake connections (higher plans) | — |
