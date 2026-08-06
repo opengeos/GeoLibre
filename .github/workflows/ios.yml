@@ -164,7 +164,14 @@ jobs:
           conf="apps/geolibre-desktop/src-tauri/tauri.ios.conf.json"
           project="apps/geolibre-desktop/src-tauri/gen/apple/project.yml"
 
-          want="$(jq -er '.bundle.iOS.minimumSystemVersion' "$conf")"
+          # `// empty` rather than `jq -e` so a removed or renamed key lands on
+          # the message below instead of jq's bare "Error: null (null)". Invalid
+          # JSON still fails the step through `set -e`, as it should.
+          want="$(jq -r '.bundle.iOS.minimumSystemVersion // empty' "$conf")"
+          if [ -z "$want" ]; then
+            echo "::error::$conf does not set bundle.iOS.minimumSystemVersion, so the Tauri CLI's 14.0 default would apply (ITMS-90068)"
+            exit 1
+          fi
 
           # Component-wise dotted-version compare, exiting 0 when the configured
           # target is at or above the floor. Deliberately not `sort -V`: this
