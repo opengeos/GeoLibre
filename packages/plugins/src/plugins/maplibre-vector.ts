@@ -306,7 +306,13 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
       );
       for (const layer of useAppStore.getState().layers) {
         if (!isVectorControlStoreLayer(layer)) continue;
-        if (control.getLayer(layer.id)) continue;
+        // Project loading can invoke this restore pass more than once before
+        // the first pass finishes. addData does not expose the layer through
+        // getLayer until its async ingest completes, so getLayer alone lets the
+        // second pass replay the same id and race the first when adding its
+        // MapLibre source ("Source ... already exists"). The shared claim also
+        // blocks refresh replays for the same in-flight id.
+        if (control.getLayer(layer.id) || replayingLayerIds.has(layer.id)) continue;
 
         const url =
           typeof layer.source.url === "string" && layer.source.url ? layer.source.url : undefined;
