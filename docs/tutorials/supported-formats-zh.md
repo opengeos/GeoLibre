@@ -1,7 +1,7 @@
 # GeoLibre 支持 GIS 数据格式完整清单
 
 > **摘要**：本文完整梳理 GeoLibre 内置支持的全部 GIS 数据格式，涵盖矢量、栅格、云原生地理空间格式及每种格式的内部解析逻辑，为国内 WebGIS 开发者提供完整的技术参考清单。
-> 
+>
 > **原文来源**："GIS开发手记"，原文链接：<https://mp.weixin.qq.com/s/GrtQzetCBgKtYruEhjsOAw>
 >
 > **本文使用简体中文撰写。**
@@ -360,4 +360,3 @@ GeoLibre 真正的价值在于——不在于它比 QGIS 强（它不强），�
 5. **二次开发** —— npm workspaces 单体仓库，主应用在 `apps/geolibre-desktop`，MIT 许可
 
 最后还是那句：拿它做数据预览和探索，推荐；用于生产环境，再等等，至少等版本迭代节奏趋于稳定。
-

@@ -606,4 +606,3 @@ GeoLibre 接了 STAC、Source Cooperative、Overture Maps、Planetary Computer�
 12. 如果做 Web 应用，按三层策略把 Service Worker 缓存重做一遍
 
 > 这份清单里没有一条需要引入 GeoLibre 的代码。它最大的贡献不是又一个地图应用，而是把「一个跑在浏览器里的空间数据库，足以替代过去必须放在服务端的那些工作」这件事，用一个能跑、能装、能查源码的完整项目证明了一遍。
-
