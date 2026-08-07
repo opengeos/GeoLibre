@@ -534,8 +534,16 @@ export interface GeoLibreAppAPI {
   /**
    * Desktop-native downloader for Add Vector Layer URL sources. The web app
    * leaves this unset so the control uses ordinary browser networking.
+   *
+   * Must resolve to a `File` rather than a bare `Blob`, and to the *same* object
+   * for concurrent callers asking for one URL. The vector control keys its
+   * per-source caches (a KMZ's unzipped KML, a GeoPackage's bytes) on the source
+   * object and wraps a plain `Blob` in a fresh `File` per call, so returning a
+   * `Blob` would make every sibling layer of a multi-layer container re-unzip
+   * and re-register the same archive. The type says `File` so that contract is
+   * enforced rather than only documented.
    */
-  fetchVectorUrl?: (url: string) => Promise<Blob | null>;
+  fetchVectorUrl?: (url: string) => Promise<File | null>;
   /**
    * Read a local vector file back into a File (with any shapefile sidecars) from
    * the absolute path persisted on a layer's `sourcePath`, so the Add Vector

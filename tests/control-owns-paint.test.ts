@@ -130,8 +130,8 @@ describe("controlOwnsPaint external native layers", () => {
 // which floods the Diagnostics panel with entries the user cannot act on.
 describe("external native layers whose map layers are missing", () => {
   it("touches nothing when the native layer is not on the map", () => {
-    // The stub only knows "mub-deliveries", so the layer's id resolves to
-    // undefined from getLayer, standing in for a failed restore.
+    // The stub only knows "some-other-layer", so getLayer("mub-deliveries")
+    // returns undefined, standing in for a failed restore.
     const { map, calls } = makeMapStub("some-other-layer", "circle");
 
     assert.doesNotThrow(() => syncLayer(map as never, externalNativeLayer()));
