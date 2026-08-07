@@ -10,6 +10,7 @@ describe("inbound collaboration project", () => {
     const localPlugins: ProjectPluginState = {
       activePluginIds: ["maplibre-gl-annotate-geocodes"],
       settings: { "maplibre-gl-annotate-geocodes": { collapsed: false } },
+      mapControlPositions: {},
       manifestUrls: [],
     };
     const incoming = {
@@ -20,6 +21,7 @@ describe("inbound collaboration project", () => {
       plugins: {
         activePluginIds: [],
         settings: {},
+        mapControlPositions: {},
         manifestUrls: [],
       },
     } as GeoLibreProject;
@@ -38,6 +40,7 @@ describe("inbound collaboration project", () => {
       plugins: {
         activePluginIds: ["maplibre-gl-annotate-geocodes"],
         settings: {},
+        mapControlPositions: {},
         manifestUrls: [],
       },
     } as GeoLibreProject;

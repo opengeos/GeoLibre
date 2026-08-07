@@ -86,7 +86,12 @@ describe("collaboration projectChanged", () => {
   it("keeps plugin activation and settings local to each participant", () => {
     const before = useAppStore.getState();
     useAppStore.setState({
-      projectPlugins: { manifestUrls: ["https://example.com/plugin.json"] },
+      projectPlugins: {
+        manifestUrls: ["https://example.com/plugin.json"],
+        activePluginIds: [],
+        mapControlPositions: {},
+        settings: {},
+      },
       isDirty: true,
     });
     assert.equal(projectChanged(before, useAppStore.getState()), false);
