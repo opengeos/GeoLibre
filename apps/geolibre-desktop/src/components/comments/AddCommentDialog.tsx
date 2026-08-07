@@ -14,7 +14,9 @@ import { MapPin, Layers, MessageSquare, Send, User } from "lucide-react";
 import type { PendingCommentState } from "./useCommentTool";
 import { formatShortcut, isMacPlatform, matchesShortcut, type Shortcut } from "../../lib/commands";
 
-export const POST_COMMENT_SHORTCUT: Shortcut = { key: "Enter", mod: true };
+// `shift` is explicit: omitting it means "ignored", which would post on
+// Ctrl/⌘+Shift+Enter too, a chord the button never advertises.
+export const POST_COMMENT_SHORTCUT: Shortcut = { key: "Enter", mod: true, shift: false };
 
 interface AddCommentDialogProps {
   pendingComment: PendingCommentState;
