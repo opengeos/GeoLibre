@@ -36,6 +36,8 @@ const ALLOWLIST = new Map([
 const audit = spawnSync("npm", ["audit", "--omit=dev", "--json"], {
   encoding: "utf8",
   maxBuffer: 32 * 1024 * 1024,
+  // npm is npm.cmd on Windows, which Node will not resolve without a shell.
+  shell: process.platform === "win32",
 });
 
 // The gate must fail closed: anything short of a report we can actually read is
