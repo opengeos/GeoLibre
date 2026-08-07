@@ -221,6 +221,57 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.deepEqual(fitBoundsCalls, [[-160, 18, -154, 23]]);
   });
 
+  it("adds an interactive layer immediately and queries the current viewport", async () => {
+    let resolveQuery!: (response: Response) => void;
+    const queryResponse = new Promise<Response>((resolve) => {
+      resolveQuery = resolve;
+    });
+    const requests: URL[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(LAYER_INFO);
+      requests.push(url);
+      return queryResponse;
+    }) as typeof fetch;
+
+    const listeners = new Map<string, () => void>();
+    const map = {
+      getBounds: () => ({
+        getWest: () => 144,
+        getSouth: () => -39,
+        getEast: () => 146,
+        getNorth: () => -37,
+      }),
+      isMoving: () => false,
+      on: (event: string, listener: () => void) => listeners.set(event, listener),
+      off: (event: string) => listeners.delete(event),
+    };
+    app = {
+      getMap: () => map,
+      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+
+    const initial = useAppStore.getState().layers.find((layer) => layer.id === id);
+    assert.equal(initial?.geojson?.features.length, 0);
+    assert.equal(initial?.metadata.viewportLoading, true);
+    assert.ok(listeners.has("moveend"));
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].searchParams.get("geometry"), "144,-39,146,-37");
+    assert.equal(requests[0].searchParams.get("geometryType"), "esriGeometryEnvelope");
+    assert.equal(requests[0].searchParams.get("spatialRel"), "esriSpatialRelIntersects");
+
+    resolveQuery(jsonResponse(QUERY_GEOJSON));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const loaded = useAppStore.getState().layers.find((layer) => layer.id === id);
+    assert.equal(loaded?.geojson?.features.length, 1);
+  });
+
   it("never persists the access token in the refresh URL", async () => {
     const fetchUrls: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {

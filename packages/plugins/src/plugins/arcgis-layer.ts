@@ -231,6 +231,10 @@ interface ArcGISRuntimeLayer {
 let arcgisLayerSequence = 0;
 const arcgisLayerInstances = new Map<string, ArcGISRuntimeLayer>();
 let arcgisStoreUnsubscribe: (() => void) | null = null;
+const arcgisFeatureLoaders = new Map<
+  string,
+  { abort: AbortController | null; map: maplibregl.Map; move: () => void }
+>();
 
 export async function addArcGISLayer(
   app: GeoLibreAppAPI,
@@ -393,14 +397,18 @@ async function addArcGISFeatureLayerAsGeoJson(
     returnGeometry: "true",
     where: "1=1",
   });
-  const geojson = await fetchArcGISFeaturePages(queryUrl, options, layerInfo);
-
   const name =
     options.name?.trim() || layerInfo.name || layerNameFromArcGISInput(layerUrl, "ArcGIS Layer");
   const store = useAppStore.getState();
-  // Persist the GeoJSON query endpoint (not the service-description base URL) as
-  // the source path so the layer's GeoJSON refresh re-fetches valid features.
-  const id = store.addGeoJsonLayer(name, geojson, refreshUrl, options.beforeLayerId ?? null);
+  const map = app.getMap?.();
+  // Headless/API consumers have no viewport to query, so retain the complete
+  // paged download for them. The interactive app takes the bounded path below.
+  const initialData: FeatureCollection = map
+    ? { type: "FeatureCollection", features: [] }
+    : await fetchArcGISFeaturePages(queryUrl, options, layerInfo);
+  // Add the layer before downloading features. Large services must not hold the
+  // Add Data dialog open while hundreds of thousands of records are fetched.
+  const id = store.addGeoJsonLayer(name, initialData, refreshUrl, options.beforeLayerId ?? null);
 
   store.updateLayer(id, {
     source: {
@@ -417,12 +425,90 @@ async function addArcGISFeatureLayerAsGeoJson(
       maxFeatures: options.maxFeatures,
       pageSize: options.pageSize,
     },
-    metadata: { sourceKind: ARCGIS_FEATURE_SOURCE_KIND },
+    metadata: { sourceKind: ARCGIS_FEATURE_SOURCE_KIND, viewportLoading: Boolean(map) },
   });
 
   const bounds = arcgisExtentToBounds(layerInfo.extent);
   if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
+  if (map) startArcGISViewportLoader(id, map, queryUrl, options, layerInfo);
   return id;
+}
+
+/** Keep one FeatureServer layer synchronized with the settled map viewport. */
+function startArcGISViewportLoader(
+  layerId: string,
+  map: maplibregl.Map,
+  queryUrl: string,
+  options: ArcGISLayerOptions,
+  layerInfo: ArcGISFeatureLayerInfo,
+): void {
+  let abort: AbortController | null = null;
+  let requestSequence = 0;
+  const loader: { abort: AbortController | null; map: maplibregl.Map; move: () => void } = {
+    abort: null,
+    map,
+    move: () => undefined,
+  };
+
+  const load = (): void => {
+    abort?.abort();
+    abort = new AbortController();
+    loader.abort = abort;
+    const sequence = ++requestSequence;
+    const bounds = map.getBounds();
+    const bbox: [number, number, number, number] = [
+      Math.max(-180, bounds.getWest()),
+      Math.max(-90, bounds.getSouth()),
+      Math.min(180, bounds.getEast()),
+      Math.min(90, bounds.getNorth()),
+    ];
+    const query = {
+      geometry: bbox.join(","),
+      geometryType: "esriGeometryEnvelope",
+      inSR: "4326",
+      spatialRel: "esriSpatialRelIntersects",
+    };
+    const publish = (features: Feature[]): void => {
+      if (
+        sequence !== requestSequence ||
+        !useAppStore.getState().layers.some((l) => l.id === layerId)
+      ) {
+        return;
+      }
+      useAppStore.getState().updateLayer(layerId, {
+        geojson: { type: "FeatureCollection", features: [...features] },
+      });
+    };
+    void fetchArcGISFeaturePages(queryUrl, options, layerInfo, {
+      params: query,
+      signal: abort.signal,
+      onPage: publish,
+    })
+      .then((data) => publish(data.features))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        console.error("[GeoLibre] ArcGIS viewport query failed", error);
+      });
+  };
+
+  const move = (): void => load();
+  loader.move = move;
+  map.on("moveend", move);
+  const existing = arcgisFeatureLoaders.get(layerId);
+  existing?.abort?.abort();
+  if (existing) existing.map.off("moveend", existing.move);
+  arcgisFeatureLoaders.set(layerId, loader);
+  // fitBounds may still be animating. Its moveend will replace this first query.
+  if (!map.isMoving()) load();
+
+  const unsubscribe = useAppStore.subscribe((state) => {
+    if (state.layers.some((layer) => layer.id === layerId)) return;
+    const loader = arcgisFeatureLoaders.get(layerId);
+    loader?.abort?.abort();
+    loader?.map.off("moveend", loader.move);
+    arcgisFeatureLoaders.delete(layerId);
+    unsubscribe();
+  });
 }
 
 /**
@@ -786,12 +872,14 @@ interface ArcGISPagingPlan {
   /** The layer's ObjectID field, when the service names one. */
   objectIdField: string | undefined;
   onProgress: ArcGISLayerOptions["onProgress"];
+  onPage?: (features: Feature[]) => void;
   /** Features to request per `/query` call. */
   pageSize: number;
   /** Query params every page shares (including the token, if any). */
   params: Record<string, string | undefined>;
   /** The `/query` endpoint, without paging params. */
   queryUrl: string;
+  signal?: AbortSignal;
   /** Whether the service claims to honor `resultOffset`. */
   supportsPagination: boolean;
   /** Whether the service accepts `orderByFields` (needed for stable paging). */
@@ -833,8 +921,13 @@ async function fetchArcGISFeaturePages(
   queryUrl: string,
   options: ArcGISLayerOptions,
   layerInfo: ArcGISFeatureLayerInfo,
+  request: {
+    params?: Record<string, string>;
+    signal?: AbortSignal;
+    onPage?: (features: Feature[]) => void;
+  } = {},
 ): Promise<FeatureCollection> {
-  const plan = await planArcGISPaging(queryUrl, options, layerInfo);
+  const plan = await planArcGISPaging(queryUrl, options, layerInfo, request);
 
   if (plan.supportsPagination) {
     const paged = await fetchArcGISPagesByOffset(plan);
@@ -858,6 +951,11 @@ async function planArcGISPaging(
   queryUrl: string,
   options: ArcGISLayerOptions,
   layerInfo: ArcGISFeatureLayerInfo,
+  request: {
+    params?: Record<string, string>;
+    signal?: AbortSignal;
+    onPage?: (features: Feature[]) => void;
+  },
 ): Promise<ArcGISPagingPlan> {
   const params = {
     f: "geojson",
@@ -865,17 +963,22 @@ async function planArcGISPaging(
     returnGeometry: "true",
     where: "1=1",
     token: options.token?.trim() || undefined,
+    ...request.params,
   };
   return {
     maxFeatures: positiveInteger(options.maxFeatures),
     objectIdField: layerInfo.objectIdField?.trim() || undefined,
     onProgress: options.onProgress,
+    onPage: request.onPage,
     pageSize: resolveArcGISPageSize(options.pageSize, layerInfo.maxRecordCount),
     params,
     queryUrl,
+    signal: request.signal,
     supportsPagination: layerInfo.advancedQueryCapabilities?.supportsPagination === true,
     supportsOrderBy: layerInfo.advancedQueryCapabilities?.supportsOrderBy !== false,
-    total: await fetchArcGISFeatureCount(queryUrl, params.token),
+    // Spatial counts can be as expensive as fetching the first page on large
+    // polygon services. Start rendering immediately for viewport queries.
+    total: request.params ? null : await fetchArcGISFeatureCount(queryUrl, params, request.signal),
   };
 }
 
@@ -914,23 +1017,26 @@ function positiveInteger(value: number | undefined): number | null {
  */
 async function fetchArcGISFeatureCount(
   queryUrl: string,
-  token: string | undefined,
+  params: Record<string, string | undefined>,
+  signal?: AbortSignal,
 ): Promise<number | null> {
   try {
     const response = await fetch(
       appendArcGISParams(queryUrl, {
+        ...params,
         f: "json",
         returnCountOnly: "true",
         where: "1=1",
-        token,
       }),
+      { signal },
     );
     if (!response.ok) return null;
     const json = (await response.json()) as { count?: unknown };
     return typeof json.count === "number" && Number.isFinite(json.count) && json.count >= 0
       ? json.count
       : null;
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw error;
     return null;
   }
 }
@@ -968,6 +1074,7 @@ async function fetchArcGISPagesByOffset(
         resultOffset: String(features.length),
         resultRecordCount: String(wanted),
       }),
+      plan.signal,
     );
     if (chunk.features.length === 0) break;
 
@@ -980,6 +1087,7 @@ async function fetchArcGISPagesByOffset(
     previousSignature = signature;
 
     features.push(...chunk.features);
+    plan.onPage?.(features);
     plan.onProgress?.(features.length, plan.total);
 
     if (plan.total !== null && features.length >= plan.total) break;
@@ -1032,6 +1140,7 @@ async function fetchArcGISPagesByObjectId(
         ...plan.params,
         where: `${field} >= ${objectIds[start]} AND ${field} <= ${objectIds[end - 1]}`,
       }),
+      plan.signal,
     );
 
     // The range spans `end - start` ObjectIDs, so a shorter capped page would
@@ -1048,6 +1157,7 @@ async function fetchArcGISPagesByObjectId(
     }
 
     features.push(...chunk.features);
+    plan.onPage?.(features);
     start = end;
     plan.onProgress?.(features.length, plan.total ?? objectIds.length);
   }
@@ -1062,11 +1172,12 @@ async function fetchArcGISObjectIds(
   try {
     const response = await fetch(
       appendArcGISParams(plan.queryUrl, {
+        ...plan.params,
         f: "json",
         returnIdsOnly: "true",
         where: "1=1",
-        token: plan.params.token,
       }),
+      { signal: plan.signal },
     );
     if (!response.ok) return null;
     const json = (await response.json()) as {
@@ -1081,7 +1192,8 @@ async function fetchArcGISObjectIds(
       (typeof json.objectIdFieldName === "string" ? json.objectIdFieldName.trim() : "") ||
       plan.objectIdField;
     return field && objectIds.length > 0 ? { field, objectIds } : null;
-  } catch {
+  } catch (error) {
+    if (plan.signal?.aborted) throw error;
     return null;
   }
 }
@@ -1178,8 +1290,9 @@ function arcgisErrorMessage(error: ArcGISErrorEnvelope | undefined, fallback: st
  */
 async function fetchArcGISGeoJson(
   url: string,
+  signal?: AbortSignal,
 ): Promise<FeatureCollection & { exceededTransferLimit: boolean }> {
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`ArcGIS feature query failed with ${response.status}.`);
   }
