@@ -206,10 +206,21 @@ export function createVectorStoreLayer(
  * layer panel survive later syncs.
  *
  * @param control - The vector control to mirror.
+ * @param options - `preserveLayerIds` names store layers that must survive this
+ *   diff even though the control does not have them. Restore passes the layers
+ *   whose replay *failed*: their absence means a download or read error, not a
+ *   removal, and pruning them would delete the user's layers from the project
+ *   over a transient network fault (opengeos/GeoLibre discussion #1757). They
+ *   stay in the project, and a refresh replays them (see
+ *   replayVectorControlLayerById).
  */
-export function syncVectorLayersToStore(control: VectorSyncableControl): void {
+export function syncVectorLayersToStore(
+  control: VectorSyncableControl,
+  options: { preserveLayerIds?: ReadonlySet<string> } = {},
+): void {
   if (isVectorStoreSyncSuspended()) return;
 
+  const preserveLayerIds = options.preserveLayerIds;
   const infos = control.getLayers();
   const infoIds = new Set(infos.map((info) => info.id));
   const panelCollapsed = vectorPanelCollapsedFromControl(control);
@@ -224,7 +235,7 @@ export function syncVectorLayersToStore(control: VectorSyncableControl): void {
   try {
     for (const storeLayer of useAppStore.getState().layers) {
       if (!isVectorControlStoreLayer(storeLayer)) continue;
-      if (!infoIds.has(storeLayer.id)) {
+      if (!infoIds.has(storeLayer.id) && !preserveLayerIds?.has(storeLayer.id)) {
         useAppStore.getState().removeLayer(storeLayer.id);
       }
     }

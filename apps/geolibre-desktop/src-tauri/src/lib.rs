@@ -136,6 +136,10 @@ const UV_INSTALL_BASE_URL: &str = "https://astral.sh/uv";
 const REMOTE_TILE_TIMEOUT_SECS: u64 = 8;
 const REMOTE_TILE_CONNECT_TIMEOUT_SECS: u64 = 4;
 const URL_RESOLVE_TIMEOUT_SECS: u64 = 15;
+/// Ceiling for a caller-supplied `fetch_url_bytes` budget. The default suits a
+/// tile; callers that download a whole dataset (Add Vector Layer) ask for more,
+/// but not without bound, so a bad value cannot wedge a request indefinitely.
+const MAX_FETCH_TIMEOUT_SECS: u64 = 600;
 
 #[cfg(all(unix, not(feature = "mas")))]
 const SIGTERM: i32 = 15;
@@ -1035,21 +1039,39 @@ fn build_guarded_http_client() -> Result<reqwest::blocking::Client, String> {
         .map_err(|error| format!("Could not create HTTP client: {error}"))
 }
 
+/// Fetches a URL's bytes, bypassing browser CORS.
+///
+/// `timeout_secs` overrides the tile-sized default for callers that download a
+/// whole dataset rather than a tile; it is clamped to
+/// `[REMOTE_TILE_TIMEOUT_SECS, MAX_FETCH_TIMEOUT_SECS]`, so the budget can only
+/// ever be raised and never removed.
 #[tauri::command]
-async fn fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
-    tauri::async_runtime::spawn_blocking(move || fetch_url_bytes_blocking(url))
+async fn fetch_url_bytes(url: String, timeout_secs: Option<u64>) -> Result<Vec<u8>, String> {
+    tauri::async_runtime::spawn_blocking(move || fetch_url_bytes_blocking(url, timeout_secs))
         .await
         .map_err(|error| format!("Tile fetch task failed: {error}"))?
 }
 
-fn fetch_url_bytes_blocking(url: String) -> Result<Vec<u8>, String> {
+/// Resolves the request budget for a fetch, defaulting to the tile timeout and
+/// clamping a caller-supplied value into `[REMOTE_TILE_TIMEOUT_SECS,
+/// MAX_FETCH_TIMEOUT_SECS]`. A caller can therefore only ever raise the budget,
+/// and never past the ceiling or down to zero (which reqwest reads as "no
+/// timeout" and would let a stalled request hang forever).
+fn resolve_fetch_timeout_secs(timeout_secs: Option<u64>) -> u64 {
+    timeout_secs
+        .unwrap_or(REMOTE_TILE_TIMEOUT_SECS)
+        .clamp(REMOTE_TILE_TIMEOUT_SECS, MAX_FETCH_TIMEOUT_SECS)
+}
+
+fn fetch_url_bytes_blocking(url: String, timeout_secs: Option<u64>) -> Result<Vec<u8>, String> {
     ensure_fetchable_url(&url)?;
 
     let client = guarded_http_client()?;
+    let timeout = resolve_fetch_timeout_secs(timeout_secs);
 
     let response = client
         .get(&url)
-        .timeout(Duration::from_secs(REMOTE_TILE_TIMEOUT_SECS))
+        .timeout(Duration::from_secs(timeout))
         .send()
         .map_err(|error| format!("Request failed: {error}"))?;
     let status = response.status();
@@ -4002,7 +4024,8 @@ mod tests {
     use super::{
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
         is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
-        is_safe_absolute_path, path_is_under, tcp_table_port,
+        is_safe_absolute_path, path_is_under, resolve_fetch_timeout_secs, tcp_table_port,
+        MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS,
     };
     #[cfg(target_os = "linux")]
     use super::{linux_uses_nvidia_renderer, nvidia_is_primary_gpu};
@@ -4659,6 +4682,26 @@ mod tests {
         assert_eq!(tcp_table_port(0x0000_3E22), 8766);
         assert_eq!(tcp_table_port(0xDEAD_3E22), 8766);
         assert_eq!(tcp_table_port(0x0000_223E), 0x3E22);
+    }
+
+    // Add Vector Layer downloads a whole dataset through the same command that
+    // fetches tiles, so it asks for a longer budget. The clamp is what keeps
+    // that override from becoming a way to disable the timeout entirely.
+    #[test]
+    fn clamps_the_fetch_timeout_into_the_allowed_range() {
+        // No override: the tile-sized default.
+        assert_eq!(resolve_fetch_timeout_secs(None), REMOTE_TILE_TIMEOUT_SECS);
+        // A dataset-sized budget is honored as asked.
+        assert_eq!(resolve_fetch_timeout_secs(Some(180)), 180);
+        // Zero would mean "no timeout" to reqwest, so it is raised to the floor
+        // rather than letting a stalled request hang forever.
+        assert_eq!(resolve_fetch_timeout_secs(Some(0)), REMOTE_TILE_TIMEOUT_SECS);
+        // Below the floor is raised; above the ceiling is capped.
+        assert_eq!(resolve_fetch_timeout_secs(Some(1)), REMOTE_TILE_TIMEOUT_SECS);
+        assert_eq!(
+            resolve_fetch_timeout_secs(Some(u64::MAX)),
+            MAX_FETCH_TIMEOUT_SECS
+        );
     }
 
     // The image-path guard is what keeps the reaper from killing a Jupyter the

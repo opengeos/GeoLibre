@@ -244,6 +244,10 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
     );
 
     const pending: Promise<unknown>[] = [];
+    // Layers whose replay failed (a download error, an unreadable source). They
+    // are kept in the project rather than pruned by the closing sync: a feed
+    // that was briefly unreachable must not cost the user their layers.
+    const failedLayerIds = new Set<string>();
     const panelCollapsed = vectorPanelCollapsedFromLayers(useAppStore.getState().layers);
     // Unlike maplibre-gl-raster (whose addRaster registers the raster
     // synchronously before loading), VectorControl.addData only adds a
@@ -283,7 +287,11 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
         const url =
           typeof layer.source.url === "string" && layer.source.url ? layer.source.url : undefined;
         if (url) {
-          pending.push(replayVectorLayer(control, layer, url, restoredGroups));
+          pending.push(
+            replayVectorLayer(control, layer, url, restoredGroups, {
+              onError: () => failedLayerIds.add(layer.id),
+            }),
+          );
           continue;
         }
 
@@ -341,7 +349,11 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
         // next save.
         const embedded = readEmbeddedVectorGeoJSON(layer.metadata.embeddedGeoJSON);
         if (embedded) {
-          pending.push(replayVectorLayer(control, layer, embedded, restoredGroups));
+          pending.push(
+            replayVectorLayer(control, layer, embedded, restoredGroups, {
+              onError: () => failedLayerIds.add(layer.id),
+            }),
+          );
           continue;
         }
 
@@ -372,7 +384,7 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
         // A control torn down mid-restore (map reinitialisation) must not
         // let this stale callback rewrite layers owned by its successor.
         if (control !== vectorControl) return;
-        syncVectorLayersToStore(control);
+        syncVectorLayersToStore(control, { preserveLayerIds: failedLayerIds });
       }, 0);
     });
   })().catch((error) => {
@@ -394,7 +406,9 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
  * @param layer - The saved store layer being restored.
  * @param source - The URL, File, or FeatureCollection to load the data from.
  * @param groups - Restored groups used to compute the layer's effective state.
- * @param options - The shapefile sidecars and/or absolute path of a File source.
+ * @param options - The shapefile sidecars and/or absolute path of a File source,
+ *   plus an optional `onError` hook so a caller can record which layers failed
+ *   without losing the "never rejects" contract this function's callers rely on.
  * @returns A promise that settles when the layer has loaded or failed.
  */
 export function replayVectorLayer(
@@ -402,7 +416,11 @@ export function replayVectorLayer(
   layer: GeoLibreLayer,
   source: string | File | FeatureCollection,
   groups: ReadonlyMap<string, LayerGroup>,
-  options: { companionFiles?: File[]; localPath?: string } = {},
+  options: {
+    companionFiles?: File[];
+    localPath?: string;
+    onError?: (error: unknown) => void;
+  } = {},
 ): Promise<unknown> {
   const effective = effectiveLayerRenderState(layer, groups);
   // Record the folded values before addData so its first layer event is treated
@@ -421,7 +439,74 @@ export function replayVectorLayer(
     })
     .catch((error) => {
       console.error(`[GeoLibre] Failed to restore vector layer "${layer.name}"`, error);
+      options.onError?.(error);
     });
+}
+
+/**
+ * Re-adds a saved vector layer the control does not currently hold, so a layer
+ * whose restore failed can be recovered without the user rebuilding it.
+ *
+ * Restore keeps such a layer in the project (see
+ * {@link syncVectorLayersToStore}'s `preserveLayerIds`) but the control has no
+ * record of it, which is why {@link reloadVectorControlLayer} returns undefined
+ * for it. The layer panel's refresh (the button and the auto-refresh tick)
+ * falls through to this, so the next successful fetch brings the layer back.
+ *
+ * Only URL-backed and embedded layers can be replayed here: a desktop
+ * local-file layer needs the host's filesystem reader, which lives with the
+ * restore path rather than in this module.
+ *
+ * @param id - The store layer id to replay.
+ * @returns The replayed layer info, or undefined when the control is
+ *   unavailable, the layer is unknown, already present, or has no replayable
+ *   source.
+ */
+export async function replayVectorControlLayerById(
+  id: string,
+): Promise<VectorLayerInfo | undefined> {
+  const control = vectorControl;
+  if (!control) return undefined;
+  // Already held by the control: reloadLayer is the right call, not a re-add
+  // (which would throw on the duplicate id).
+  if (control.getLayer(id)) return undefined;
+
+  const state = useAppStore.getState();
+  const layer = state.layers.find((candidate) => candidate.id === id);
+  if (!layer || !isVectorControlStoreLayer(layer)) return undefined;
+
+  const url = typeof layer.source.url === "string" && layer.source.url ? layer.source.url : null;
+  const source: string | FeatureCollection | null =
+    url ?? readEmbeddedVectorGeoJSON(layer.metadata.embeddedGeoJSON);
+  if (!source) return undefined;
+
+  const groups = new Map(state.layerGroups.map((group) => [group.id, group] as const));
+  // Held across the replay for the same reason restore holds it: addData only
+  // registers the layer once loaded, so an intermediate sync would diff a
+  // control that does not yet have it and prune it right back out.
+  suspendVectorStoreSync();
+  try {
+    await replayVectorLayer(control, layer, source, groups);
+  } finally {
+    resumeVectorStoreSync();
+  }
+  // A control torn down mid-replay must not have its successor's layers
+  // rewritten from this stale callback.
+  if (control !== vectorControl) return undefined;
+  // Additive only. Recovering one layer says nothing about the others: the rest
+  // of a multi-layer container may still be waiting for their own replay, and
+  // the plain diff would read their absence from the control as a removal and
+  // delete them, which is the very loss this recovery path exists to undo.
+  const controlIds = new Set(control.getLayers().map((info) => info.id));
+  const stillMissing = new Set(
+    useAppStore
+      .getState()
+      .layers.filter((candidate) => isVectorControlStoreLayer(candidate))
+      .map((candidate) => candidate.id)
+      .filter((candidateId) => !controlIds.has(candidateId)),
+  );
+  syncVectorLayersToStore(control, { preserveLayerIds: stillMissing });
+  return control.getLayer(id);
 }
 
 /**

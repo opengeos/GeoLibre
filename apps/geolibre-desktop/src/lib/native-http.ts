@@ -20,6 +20,13 @@ export type NativeHttpCommand = "fetch_url_bytes" | "resolve_url_redirect";
 interface NativeHttpOptions {
   /** Short feature label (e.g. "WFS GetCapabilities") added to the record. */
   context?: string;
+  /**
+   * Request budget in seconds, overriding the command's tile-sized default.
+   * Set it for calls that carry a whole dataset rather than a tile; the backend
+   * clamps the value, so an out-of-range number degrades to the default rather
+   * than removing the timeout.
+   */
+  timeoutSecs?: number;
 }
 
 function recordSource(command: NativeHttpCommand, context?: string): string {
@@ -83,7 +90,12 @@ async function invokeNativeHttp<T>(
 ): Promise<T> {
   const startedAt = performance.now();
   try {
-    const result = await invoke<T>(command, { url });
+    // `timeoutSecs` is omitted rather than sent as undefined so the Rust side
+    // sees an absent argument and applies its own default.
+    const result = await invoke<T>(command, {
+      url,
+      ...(options?.timeoutSecs === undefined ? {} : { timeoutSecs: options.timeoutSecs }),
+    });
     appendDiagnostic(
       nativeHttpSuccessRecord(
         command,
@@ -112,7 +124,8 @@ async function invokeNativeHttp<T>(
  * subject to browser CORS), recording the request in the diagnostics log.
  *
  * @param url - The absolute HTTP(S) URL to fetch.
- * @param options - Optional context label for the diagnostics record.
+ * @param options - Optional context label for the diagnostics record, and an
+ *   optional request budget for callers downloading more than a tile.
  * @returns The response body bytes (Tauri may hand back a plain number array).
  */
 export function fetchUrlBytes(

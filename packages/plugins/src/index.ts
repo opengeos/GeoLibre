@@ -265,6 +265,7 @@ export {
   materializeEmbeddableVectorLayers,
   openVectorLayerPanel,
   reloadVectorControlLayer,
+  replayVectorControlLayerById,
   restoreVectorLayers,
   setKmlFileImportHandler,
   isKmlFileSelection,

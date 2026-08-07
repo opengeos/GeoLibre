@@ -121,6 +121,7 @@ import { appendDiagnostic } from "../lib/diagnostics";
 import { pickZarrDirectory, zarrDirectoryPickerSupported } from "../lib/zarr-directory-picker";
 import { openExternalLink } from "../lib/open-external";
 import { fetchUrlBytes } from "../lib/native-http";
+import { dedupeVectorUrlFetch, vectorDownloadFileName } from "../lib/vector-url-fetch";
 import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
 import { setTimeSliderOpenedByBinding, shouldCloseTimeSliderDock } from "../lib/time-slider-dock";
 import { createWmsTileUrl, normalizeWmsVersion } from "../components/layout/add-data/helpers";
@@ -1033,35 +1034,47 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     // presence to auto-discover shapefile sidecars instead of forcing the user
     // to select every component, and to capture the file's path for restore.
     pickVectorFilesWithSidecars: isTauriRuntime() ? pickVectorFilesWithSidecars : undefined,
-    fetchVectorUrl: async (url: string) => {
-      if (isTauriRuntime()) {
-        try {
-          const bytes = await fetchUrlBytes(url, { context: "Add Vector Layer" });
-          const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-          return new Blob([array as Uint8Array<ArrayBuffer>]);
-        } catch {
-          // The shared native command has a short, tile-oriented timeout.
-          // Preserve the former browser path for large CORS-enabled datasets.
+    // Shared across the sibling layers of one multi-layer container, which all
+    // carry the container's URL: without this a six-layer KMZ downloaded itself
+    // six times over on every project open and every refresh tick.
+    fetchVectorUrl: (url: string) =>
+      dedupeVectorUrlFetch(url, async () => {
+        const name = vectorDownloadFileName(url);
+        if (isTauriRuntime()) {
           try {
-            const response = await fetch(url);
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status} ${response.statusText}`);
-            }
-            return response.blob();
+            const bytes = await fetchUrlBytes(url, {
+              context: "Add Vector Layer",
+              // The default budget on this command is tile-sized (8s). A vector
+              // dataset is not a tile. A few megabytes from a slow origin
+              // routinely needs longer, and timing out here used to drop the
+              // layer entirely, so ask for a download-sized budget instead.
+              timeoutSecs: VECTOR_DOWNLOAD_TIMEOUT_SECS,
+            });
+            const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+            return new File([array as Uint8Array<ArrayBuffer>], name);
           } catch {
-            // GitHub's /raw route rejects browser CORS, so fall through to the
-            // same guarded proxy used by the web build.
+            // Keep the browser path as a fallback for CORS-enabled origins the
+            // native command could not reach.
+            try {
+              const response = await fetch(url);
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status} ${response.statusText}`);
+              }
+              return new File([await response.blob()], name);
+            } catch {
+              // GitHub's /raw route rejects browser CORS, so fall through to the
+              // same guarded proxy used by the web build.
+            }
           }
         }
-      }
-      const proxyUrl = githubRawVectorProxyUrl(url);
-      if (!proxyUrl) return null;
-      const response = await fetch(proxyUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} ${response.statusText}`);
-      }
-      return response.blob();
-    },
+        const proxyUrl = githubRawVectorProxyUrl(url);
+        if (!proxyUrl) return null;
+        const response = await fetch(proxyUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status} ${response.statusText}`);
+        }
+        return new File([await response.blob()], name);
+      }),
     readLocalVectorFile: readVectorFileWithSidecars,
     exportTextFile: (filename: string, content: string, options?: GeoLibreFileDialogOptions) => {
       const description = options?.description ?? "GeoJSON";
@@ -1332,6 +1345,14 @@ function isTauriRuntime(): boolean {
 }
 
 const GITHUB_RAW_VECTOR_PROXY = "https://tiles.geolibre.app/github-raw";
+
+/**
+ * Budget for a native Add Vector Layer download, in seconds. Deliberately far
+ * above `fetch_url_bytes`'s tile-sized default: this command carries whole
+ * datasets, not 256px tiles, and a timeout here is not a slow tile that resolves
+ * next frame but a layer that fails to restore.
+ */
+const VECTOR_DOWNLOAD_TIMEOUT_SECS = 180;
 
 function githubRawVectorProxyUrl(value: string): string | null {
   let url: URL;
