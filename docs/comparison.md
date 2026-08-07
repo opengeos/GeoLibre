@@ -1,8 +1,8 @@
 # GeoLibre vs. other GIS platforms
 
 How GeoLibre compares to the desktop GIS, cloud GIS, and web-mapping tools people
-most often ask about: **QGIS**, **ArcGIS Pro**, **ArcGIS Online**, **Felt**, and
-**kepler.gl**.
+most often ask about: **QGIS**, **ArcGIS Pro**, **ArcGIS Online**, **CARTO**,
+**Felt**, and **kepler.gl**.
 
 GeoLibre is not trying to replace any of these outright. It occupies a spot none
 of them quite fills: a **free and open-source GIS that runs in a browser tab with
@@ -33,16 +33,16 @@ app as a desktop install, an Android app, and a Jupyter widget.
 | **Mobile** | Native Android app; responsive touch layout | Via QField / Mergin Maps (separate apps) | — | Via ArcGIS Field Maps (separate app) | — | Felt Field App for iOS and Android (separate app) | Responsive web |
 | **In Jupyter** | Full app as an anywidget, two-way sync | Via `qgis` bindings, not the UI | Notebooks drive `arcpy`, not the UI | ArcGIS API for Python | Via `pydeck-carto` | — | Yes (widget) |
 | **Works offline** | Yes — PWA install, offline area download, desktop build | Yes | Yes | Limited (Field Maps offline areas) | No — connected platform by design | Field App offline areas, syncing on reconnect (higher plans) | Client-side, but assets are hosted |
-| **Where your data lives** | Your device — processed client-side in the browser session | Your device | Your device / your enterprise geodatabase | Vendor cloud | Your own governed cloud data warehouse — never copied | Vendor cloud, or a single-tenant instance in your own AWS account (Enterprise) | Your browser |
+| **Where your data lives** | Your device — processed client-side in the browser session | Your device | Your device / your enterprise geodatabase | Vendor cloud | Your own cloud data warehouse — no CARTO-side storage (except cache) or sync; imports write to a warehouse you own | Vendor cloud, or a single-tenant instance in your own AWS account (Enterprise) | Your browser |
 | **Project file** | `.geolibre.json` (open, documented) | `.qgs` / `.qgz` (open) | `.aprx` (proprietary) | Web map JSON (hosted) | Map/Workflow JSON via CLI and MCP | Hosted map (no local file) | Exportable map config JSON |
 
 ## Data and formats
 
 | | **GeoLibre** | **QGIS** | **ArcGIS Pro** | **ArcGIS Online** | **CARTO** | **Felt** | **kepler.gl** |
 |---|---|---|---|---|---|---|---|
-| **Format breadth** | Wide — DuckDB-WASM Spatial plus in-house readers | **Widest** — everything GDAL/OGR reads | Very wide, plus native Esri formats | Common upload formats | Common upload formats + Raquet for raster data | Common upload formats | CSV, GeoJSON, Arrow/Parquet |
+| **Format breadth** | Wide — DuckDB-WASM Spatial plus in-house readers | **Widest** — everything GDAL/OGR reads | Very wide, plus native Esri formats | Common upload formats | Common upload formats + RaQuet for raster data | Common upload formats | CSV, GeoJSON, Arrow/Parquet |
 | **Cloud-native vector** | GeoParquet, FlatGeobuf, PMTiles, streamed over HTTP range requests | GeoParquet, FlatGeobuf, PMTiles (recent GDAL) | GeoParquet (recent), no native PMTiles | — | GeoParquet | Some cloud sources on higher plans | Arrow/Parquet |
-| **Cloud-native raster** | COG, Zarr, Cloud-Optimized NetCDF/HDF, kerchunk, MBTiles | COG, Zarr (GDAL's built-in driver) | COG; Zarr as a native multidimensional raster type | Hosted imagery layers | COG and GeoTIFF, loaded into warehouse tables (Raquet spec) | GeoTIFF upload | — |
+| **Cloud-native raster** | COG, Zarr, Cloud-Optimized NetCDF/HDF, kerchunk, MBTiles | COG, Zarr (GDAL's built-in driver) | COG; Zarr as a native multidimensional raster type | Hosted imagery layers | COG and GeoTIFF, loaded into warehouse tables (RaQuet spec) | GeoTIFF upload | — |
 | **STAC** | Built-in catalog browser + STAC Index discovery | Built-in STAC connections (Browser panel and Data Source Manager) | Built-in STAC connections and the Explore STAC pane | Living Atlas (not STAC) | — | — | — |
 | **OGC services** | XYZ; WMS/WFS/WMTS discovered via GetCapabilities; OGC API Features/Tiles from a landing page, collection, or items URL | Full OGC support | Full OGC support | Yes | Limited | Limited | XYZ / vector tiles |
 | **Esri services and geodatabases** | ArcGIS FeatureServer, VectorTileServer, I3S, plus local `.gdb` File Geodatabase folders (desktop) | Yes | Native | Hosted feature, tile, imagery, and scene layers | One-way ArcGIS Online / Portal migration tooling only | Some ArcGIS layers | — |
@@ -55,7 +55,7 @@ app as a desktop install, an Android app, and a Jupyter widget.
 | | **GeoLibre** | **QGIS** | **ArcGIS Pro** | **ArcGIS Online** | **CARTO** | **Felt** | **kepler.gl** |
 |---|---|---|---|---|---|---|---|
 | **Geoprocessing tools** | **1,000+** (Whitebox suite + GeoLibre's own), running in the browser on WebAssembly | **1,000+** (native, GDAL, GRASS, SAGA) | **Most mature and complete**, plus paid extensions | A useful subset, credit-metered | 200+ Workflows components and 180+ Analytics Toolbox SQL functions, **executed as SQL in your warehouse** | A small set of common tools | No tool catalog — analysis goes through SQL and the AI assistant |
-| **Where analysis runs** | Your browser (WASM), no server required; optional Python sidecar on desktop | Your machine | Your machine, or a server/portal | Vendor cloud | **Your cloud data warehouse** — every query pushed down, no data movement, no CARTO compute tier | Vendor cloud | Your browser |
+| **Where analysis runs** | Your browser (WASM), no server required; optional Python sidecar on desktop | Your machine | Your machine, or a server/portal | Vendor cloud | **Your cloud data warehouse** — every query pushed down live; repeated identical queries are served from CARTO-managed cache | Vendor cloud | Your browser |
 | **Vector analysis** | Buffer, overlay, dissolve, joins, selection, topology checks — Turf.js, or GeoPandas via Pyodide/sidecar | Comprehensive | Comprehensive | Common tools | Buffer, overlay, spatial join, clip, Voronoi/Delaunay, KNN, trade areas — as warehouse SQL | Common tools | Spatial joins via SQL or the AI assistant |
 | **Raster analysis** | Hillshade, slope, contour, zonal/focal stats, raster calculator, reclassify, mosaic — rasterio sidecar with a browser fallback | Comprehensive (GDAL/GRASS/SAGA) | Comprehensive; Spatial Analyst extension | Limited | Narrow — zonal statistics and band value extraction | — | — |
 | **Spatial SQL** | DuckDB Spatial, PGlite/PostGIS, and Apache Sedona — **all in the browser** | Virtual layers, DB Manager, PostGIS connections | SQL against enterprise geodatabases | — | **The native interface** — warehouse SQL everywhere: query sources, SQL parameters, Workflows, SQL API | SQL on connected sources (higher plans) | DuckDB SQL Data Explorer over loaded data and remote URLs |
