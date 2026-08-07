@@ -5,6 +5,8 @@ import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 import {
   addArcGISLayer,
   refreshArcGISFeatureLayer,
+  reloadArcGISViewportLayer,
+  restoreArcGISViewportLayers,
 } from "../packages/plugins/src/plugins/arcgis-layer";
 
 // Minimal ArcGIS FeatureServer layer metadata (the `?f=json` response) with a
@@ -459,6 +461,76 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.deepEqual([...geometries].sort(), ["-180,-20,-170,20", "170,-20,180,20"]);
     const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
     assert.equal(layer?.geojson?.features.length, 1, "the shared feature is published once");
+  });
+
+  it("re-binds a reopened project's layer to the viewport", async () => {
+    const geometries: string[] = [];
+    let metadataFailures = 1;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) {
+        // The first metadata read fails, as a flaky reopen would.
+        if (metadataFailures > 0) {
+          metadataFailures -= 1;
+          throw new Error("Service unavailable");
+        }
+        return jsonResponse(VIEWPORT_LAYER_INFO);
+      }
+      const offset = Number(url.searchParams.get("resultOffset") ?? "0");
+      if (offset > 0) return jsonResponse({ type: "FeatureCollection", features: [] });
+      geometries.push(url.searchParams.get("geometry") ?? "");
+      return jsonResponse({ type: "FeatureCollection", features: [viewportFeature(1)] });
+    }) as typeof fetch;
+
+    // A layer as a saved project restores it: viewport metadata and the stored
+    // query URL, but no live loader.
+    const id = useAppStore
+      .getState()
+      .addGeoJsonLayer("Restored", { type: "FeatureCollection", features: [] }, undefined, null);
+    useAppStore.getState().updateLayer(id, {
+      source: { type: "geojson", arcgisQueryUrl: `${SERVICE_URL}/query` },
+      metadata: { sourceKind: "arcgis-feature-query", viewportLoading: true },
+    });
+    assert.equal(reloadArcGISViewportLayer(id), null, "no loader before the project is restored");
+
+    const view = fakeViewportMap([144, -39, 146, -37]);
+    restoreArcGISViewportLayers({ getMap: () => view.map } as unknown as GeoLibreAppAPI);
+    // Registered before the metadata fetch is even started, so a refresh in
+    // this window never finds the layer unbound.
+    assert.ok(view.listeners.has("moveend"), "the loader binds synchronously");
+    await settle();
+
+    // The first query failed on metadata, which is reported, not swallowed.
+    assert.match(
+      useAppStore.getState().layers.find((layer) => layer.id === id)?.connection?.lastError ?? "",
+      /Service unavailable/,
+    );
+
+    // The next pan retries the metadata rather than staying stuck.
+    view.setBounds([150, -35, 152, -33]);
+    view.listeners.get("moveend")?.();
+    await settle();
+    assert.deepEqual(geometries, ["150,-35,152,-33"]);
+    const restored = useAppStore.getState().layers.find((layer) => layer.id === id);
+    assert.equal(restored?.connection?.lastError, null);
+    assert.equal(restored?.geojson?.features.length, 1);
+
+    // Re-running the restore against a new map rebinds rather than skipping.
+    const remounted = fakeViewportMap([10, 10, 12, 12]);
+    restoreArcGISViewportLayers({ getMap: () => remounted.map } as unknown as GeoLibreAppAPI);
+    await settle();
+    assert.deepEqual(
+      view.offCalls.map(([event]) => event),
+      ["moveend"],
+      "the loader detaches from the old map",
+    );
+    assert.ok(remounted.listeners.has("moveend"));
+    assert.deepEqual(geometries, ["150,-35,152,-33", "10,10,12,12"]);
+
+    // A refresh takes this same bounded path rather than the unbounded replay.
+    const reloaded = await reloadArcGISViewportLayer(id);
+    assert.equal(reloaded?.features.length, 1);
+    assert.deepEqual(geometries, ["150,-35,152,-33", "10,10,12,12", "10,10,12,12"]);
   });
 
   it("holds a split viewport to maxFeatures across both envelopes", async () => {

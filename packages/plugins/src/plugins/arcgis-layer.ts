@@ -445,17 +445,23 @@ async function addArcGISFeatureLayerAsGeoJson(
 
   const bounds = arcgisExtentToBounds(layerInfo.extent);
   if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
-  if (map) startArcGISViewportLoader(id, map, queryUrl, options, layerInfo);
+  if (map) startArcGISViewportLoader(id, map, queryUrl, options, () => Promise.resolve(layerInfo));
   return id;
 }
 
-/** Keep one FeatureServer layer synchronized with the settled map viewport. */
+/**
+ * Keep one FeatureServer layer synchronized with the settled map viewport.
+ *
+ * `resolveLayerInfo` is a thunk rather than a value so the restore path can
+ * register a loader before it has the service metadata: the fetch then happens
+ * on the first query, and a failed one is retried by the next.
+ */
 function startArcGISViewportLoader(
   layerId: string,
   map: maplibregl.Map,
   queryUrl: string,
   options: ArcGISLayerOptions,
-  layerInfo: ArcGISFeatureLayerInfo,
+  resolveLayerInfo: () => Promise<ArcGISFeatureLayerInfo>,
 ): void {
   let abort: AbortController | null = null;
   let requestSequence = 0;
@@ -488,6 +494,13 @@ function startArcGISViewportLoader(
     abort = controller;
     loader.abort = controller;
     const sequence = ++requestSequence;
+    let layerInfo: ArcGISFeatureLayerInfo;
+    try {
+      layerInfo = await resolveLayerInfo();
+    } catch (error) {
+      if (sequence !== requestSequence) return currentArcGISLayerGeojson(layerId);
+      throw error;
+    }
     const envelopes = arcgisViewportEnvelopes(map.getBounds());
     // One bucket per envelope, so a viewport split across the antimeridian
     // publishes both halves together instead of each replacing the other.
@@ -579,6 +592,10 @@ export function reloadArcGISViewportLayer(layerId: string): Promise<FeatureColle
  * view when it was saved: panning fetches nothing, and a refresh falls back to
  * the unbounded download the viewport path exists to avoid.
  *
+ * Loaders are registered synchronously, before the service metadata they need
+ * is fetched, so there is no window in which a refresh finds the layer
+ * unbound.
+ *
  * @param app - The host app API, for the map the loaders bind to.
  */
 export function restoreArcGISViewportLayers(app: GeoLibreAppAPI): void {
@@ -608,21 +625,23 @@ export function restoreArcGISViewportLayers(app: GeoLibreAppAPI): void {
       pageSize: typeof source.pageSize === "number" ? source.pageSize : undefined,
       sourceType: "url",
     };
-    const layerId = layer.id;
     // Re-read the service metadata rather than trusting a stored copy, the same
     // reason refreshArcGISFeatureLayer does: paging capabilities and
-    // `maxRecordCount` are the service's to change between sessions.
-    void fetchArcGISJson<ArcGISFeatureLayerInfo>(
-      trimTrailingSlash(queryUrl).replace(/\/query$/i, ""),
-      options,
-      undefined,
-    )
-      .then((layerInfo) => {
-        // The layer may have been removed while the metadata was in flight.
-        if (!useAppStore.getState().layers.some((entry) => entry.id === layerId)) return;
-        startArcGISViewportLoader(layerId, map, queryUrl, options, layerInfo);
-      })
-      .catch((error: unknown) => handleArcGISViewportError(layerId, error));
+    // `maxRecordCount` are the service's to change between sessions. Fetched
+    // lazily on the first query and memoized, with a failure clearing the
+    // memo — so a blocked or flaky reopen retries on the next pan or refresh
+    // instead of leaving the layer permanently unbound.
+    let pending: Promise<ArcGISFeatureLayerInfo> | null = null;
+    const resolveLayerInfo = (): Promise<ArcGISFeatureLayerInfo> =>
+      (pending ??= fetchArcGISJson<ArcGISFeatureLayerInfo>(
+        trimTrailingSlash(queryUrl).replace(/\/query$/i, ""),
+        options,
+        undefined,
+      ).catch((error: unknown) => {
+        pending = null;
+        throw error;
+      }));
+    startArcGISViewportLoader(layer.id, map, queryUrl, options, resolveLayerInfo);
   }
 }
 
@@ -1241,7 +1260,7 @@ async function planArcGISPaging(
     supportsOrderBy: layerInfo.advancedQueryCapabilities?.supportsOrderBy !== false,
     // Spatial counts can be as expensive as fetching the first page on large
     // polygon services. Start rendering immediately for viewport queries.
-    total: request.params ? null : await fetchArcGISFeatureCount(queryUrl, params, request.signal),
+    total: request.params ? null : await fetchArcGISFeatureCount(queryUrl, params),
   };
 }
 
@@ -1275,13 +1294,16 @@ function positiveInteger(value: number | undefined): number | null {
  * condition. Best-effort: a service that will not answer `returnCountOnly`
  * still pages fine, so any failure resolves to `null` rather than throwing.
  *
+ * Takes no abort signal, and needs none: {@link planArcGISPaging} skips the
+ * count entirely for a viewport query (the only cancellable caller), because a
+ * spatial count can cost as much as the first page.
+ *
  * @param queryUrl - The layer's `/query` endpoint.
- * @param token - The access token to send, if any.
+ * @param params - The query params every request in the plan shares.
  */
 async function fetchArcGISFeatureCount(
   queryUrl: string,
   params: Record<string, string | undefined>,
-  signal?: AbortSignal,
 ): Promise<number | null> {
   try {
     const response = await fetch(
@@ -1291,15 +1313,13 @@ async function fetchArcGISFeatureCount(
         returnCountOnly: "true",
         where: "1=1",
       }),
-      { signal },
     );
     if (!response.ok) return null;
     const json = (await response.json()) as { count?: unknown };
     return typeof json.count === "number" && Number.isFinite(json.count) && json.count >= 0
       ? json.count
       : null;
-  } catch (error) {
-    if (signal?.aborted) throw error;
+  } catch {
     return null;
   }
 }

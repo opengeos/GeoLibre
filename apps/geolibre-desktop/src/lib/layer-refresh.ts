@@ -579,12 +579,12 @@ async function refreshArcGISLayer(layer: GeoLibreLayer): Promise<GeoJsonRefreshR
     await import("@geolibre/plugins");
   if (layer.metadata.viewportLoading === true) {
     const viewport = reloadArcGISViewportLayer(layer.id);
-    // No live loader yet: a just-reopened project is still resolving the
-    // service metadata its loader needs, or that resolve failed. Falling
-    // through to the unbounded replay below would download the entire service
-    // — the cost this layer is loaded by viewport to avoid — so say so instead.
+    // No loader at all: the layer is in a host with no map (`restoreArcGISViewportLayers`
+    // registers one synchronously wherever there is one). Falling through to
+    // the unbounded replay below would download the entire service — the cost
+    // this layer is loaded by viewport to avoid — so say so instead.
     if (!viewport) {
-      throw new Error("This layer is still binding to the map viewport. Try again in a moment.");
+      throw new Error("This layer is not bound to a map viewport, so it cannot be refreshed.");
     }
     const bounded = await viewport;
     return { geojson: bounded, featureCount: bounded.features.length };
