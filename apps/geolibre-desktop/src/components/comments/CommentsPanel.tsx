@@ -15,6 +15,7 @@ import {
   Check,
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
+import { useTranslation } from "react-i18next";
 import { CommentThread } from "./CommentThread";
 import { resolveCommentCoordinates } from "./CommentMapOverlay";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
@@ -66,6 +67,7 @@ export function CommentsPanel({
   selectedCommentId,
   onClearSelectedComment,
 }: CommentsPanelProps) {
+  const { t } = useTranslation();
   const comments = useAppStore((s) => s.comments);
   const replyToComment = useAppStore((s) => s.replyToComment);
   const toggleResolveComment = useAppStore((s) => s.toggleResolveComment);
@@ -342,7 +344,7 @@ export function CommentsPanel({
                 size="sm"
                 onClick={handleCopySessionUrl}
                 className="h-7 px-2 text-[11px] shrink-0"
-                title="Copy session URL"
+                title={t("collaborate.copyLink")}
               >
                 <Copy className="h-3 w-3 me-1" />
                 {copied ? "Copied" : "Copy"}

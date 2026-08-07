@@ -1146,6 +1146,7 @@
     "guest": "Guest",
     "connectFailed": "Could not connect to the collaboration server.",
     "copyFailed": "Could not copy to clipboard.",
+    "shareFailed": "Could not share the latest project changes.",
     "connecting": "Connecting…",
     "reconnecting": "Reconnecting…",
     "connected": "Live session active",

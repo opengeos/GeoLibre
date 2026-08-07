@@ -426,9 +426,12 @@ export function SettingsDialog({
       closeRightPanel(BROWSER_PANEL_ID);
     }
   };
+  // Collapsed for the same reason as Browser above, and to match the state
+  // Comments registers itself in on mount.
   const toggleCommentsPanel = (show: boolean) => {
     if (show) {
       openRightPanel(COMMENTS_PANEL_ID);
+      collapseRightPanel(COMMENTS_PANEL_ID);
     } else {
       closeRightPanel(COMMENTS_PANEL_ID);
     }

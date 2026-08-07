@@ -82,7 +82,19 @@ export function useCollaboration(
   const sendSnapshot = async (): Promise<void> => {
     if (!canEdit() || syncPausedRef.current) return;
     const request = ++snapshotRequestRef.current;
-    const project = await buildCollaborationSnapshot(mapControllerRef);
+    let project: GeoLibreProject;
+    try {
+      project = await buildCollaborationSnapshot(mapControllerRef);
+    } catch {
+      // Materializing control-managed vector data can fail (the plugin chunk
+      // or a DuckDB query). Surface it so the participant knows their edits
+      // stopped propagating, but only for the newest request: a stale failure
+      // must not overwrite the state of the broadcast that superseded it.
+      if (request === snapshotRequestRef.current) {
+        useAppStore.getState().setCollaboration({ error: i18n.t("collaborate.shareFailed") });
+      }
+      return;
+    }
     // Materializing control-managed vector data is asynchronous. Discard an
     // older result if a newer broadcast started while it was being read.
     if (request !== snapshotRequestRef.current || !canEdit() || syncPausedRef.current) return;
