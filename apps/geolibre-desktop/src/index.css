@@ -42,25 +42,26 @@
    keep their own radius, border, shadow and padding; this owns only the surface
    itself.
 
-   Deliberately a plain class rather than an `@utility`: it is applied alongside
-   components that already emit a `bg-*` utility (e.g. MapGrid's
-   `Button variant="outline"`, which carries `bg-background`). As a utility it
-   would land in the same cascade layer, so which one won would depend on
-   Tailwind's internal sort rather than intent. Unlayered CSS beats the utility
-   layer outright, so the surface treatment reliably wins. The trade-off is that
-   `map-glass` takes no variants (`hover:`, `md:`), which nothing needs.
+   Must be an `@utility`, i.e. inside Tailwind's utilities layer — NOT an
+   unlayered plain class. Unlayered CSS beats every layered declaration for the
+   same property, and cascade-layer precedence is resolved *before* specificity,
+   so an unlayered `.map-glass { background-color }` also silently beats
+   `hover:bg-accent`. That killed the hover fill on MapGrid's pane buttons and
+   the CollaborationStatusBadge toggle — verified dead, not theoretical. Inside
+   the layer, `.hover\:bg-accent:hover` (0,2,0) outranks `.map-glass` (0,1,0)
+   and hover works again.
+
+   The @supports fallback is nested so it stays in the layer too; hoisting it
+   out would reintroduce exactly the same bug for browsers without
+   backdrop-filter. Without the blur, 85% over live imagery is unreadable.
 
    The saturate() boost keeps basemap imagery from going muddy under the blur. */
-.map-glass {
+@utility map-glass {
   background-color: hsl(var(--background) / 0.85);
   -webkit-backdrop-filter: blur(12px) saturate(140%);
   backdrop-filter: blur(12px) saturate(140%);
-}
 
-/* Without backdrop-filter the panel is just 85% opaque over live imagery, which
-   is unreadable, so fall back to near-opaque. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .map-glass {
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     background-color: hsl(var(--background) / 0.97);
   }
 }
@@ -68,10 +69,18 @@
 /* Elevation-tied shadow scale, replacing Tailwind's stock one. Each step maps to
    a surface in the ladder rather than being picked by eye:
 
+     shadow-xs   form field — input, textarea, select, colour picker
      shadow-sm   resting control / inline card
      shadow-md   popover, dropdown, tooltip
      shadow-lg   panel floating over the map
      shadow-xl   modal dialog
+
+   shadow-xs matters more than its name suggests: it is what @geolibre/ui's form
+   primitives use, so leaving it on the stock colour would have left every input,
+   textarea, select and colour field in the app on the invisible-in-dark shadow
+   this block exists to fix. Bare `shadow` is defined too (one use, slider.tsx).
+   shadow-2xl and shadow-inner are unused; add them here if that changes,
+   otherwise they silently fall back to Tailwind's 10% black.
 
    Redefining the tokens fixes all ~65 existing shadow sites without touching a
    single component. The colours come from --elev-penumbra/--elev-umbra
@@ -84,7 +93,9 @@
    overrides keep working without spelling the wrapper out (writing it manually
    just nests the fallback twice). */
 @theme {
+  --shadow-xs: 0 1px 1px 0 var(--elev-penumbra);
   --shadow-sm: 0 1px 2px 0 var(--elev-penumbra), 0 1px 3px 0 var(--elev-umbra);
+  --shadow: 0 1px 2px 0 var(--elev-penumbra), 0 1px 3px 0 var(--elev-umbra);
   --shadow-md: 0 2px 4px -1px var(--elev-penumbra), 0 4px 8px -2px var(--elev-umbra);
   --shadow-lg: 0 4px 8px -2px var(--elev-penumbra), 0 12px 20px -4px var(--elev-umbra);
   --shadow-xl: 0 8px 16px -4px var(--elev-penumbra), 0 24px 40px -8px var(--elev-umbra);

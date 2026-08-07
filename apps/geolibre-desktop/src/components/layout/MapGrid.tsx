@@ -215,9 +215,16 @@ function PaneLayerToggle({ viewId, index, is3d }: PaneLayerToggleProps) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          variant="outline"
+          // ghost rather than outline: outline carries its own bg-background,
+          // which sits in the same cascade layer as map-glass at equal
+          // specificity, so this button rendered opaque beside its glass
+          // siblings. ghost sets no base background, leaving map-glass to paint
+          // it, and still supplies hover:bg-accent. The border the outline
+          // variant would have given is restored explicitly to match the
+          // sibling controls.
+          variant="ghost"
           size="sm"
-          className="h-7 gap-1.5 map-glass px-2 shadow-sm"
+          className="h-7 gap-1.5 border border-input map-glass px-2 shadow-sm"
           aria-label={t("mapGrid.layersLabel", { number: index + 2 })}
         >
           <Layers className="h-3.5 w-3.5" />
