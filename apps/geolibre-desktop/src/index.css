@@ -115,6 +115,25 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  /* Indeterminate progress is exempt. The blanket rule above would give a
+     spinner a single 0.01ms iteration and then freeze it mid-rotation, so
+     during a long raster/segmentation/conversion job the UI would look hung —
+     a worse outcome for the same user than the abrupt transitions this guard
+     exists to fix. There are ~70 animate-spin sites and 6 animate-pulse.
+
+     Slowed rather than stopped: the point of the preference is to avoid large
+     vestibular-triggering motion, which a small in-place spinner is not, so
+     halving the speed keeps the "still working" signal while calming it. */
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  .animate-pulse {
+    animation-duration: 3s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 
 html,
