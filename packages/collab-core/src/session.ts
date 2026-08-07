@@ -8,7 +8,11 @@ import type {
 } from "./protocol";
 import { finite, HEX_COLOR_RE } from "./internal/validate";
 
-export const MAX_SNAPSHOT_BYTES = 1_000_000;
+// Large in-memory/plugin datasets are embedded as GeoJSON in collaboration
+// snapshots so peers can render them without the originating plugin or local
+// file. Keep this comfortably below Cloudflare's 32 MiB inbound WebSocket
+// frame ceiling while allowing representative multi-layer datasets.
+export const MAX_SNAPSHOT_BYTES = 10_000_000;
 export const EMPTY_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 export const MAX_CHAT_TEXT_LENGTH = 2000;
 export const CHAT_HISTORY_LIMIT = 50;

@@ -25,6 +25,7 @@ import {
   sessionWsUrl,
 } from "../lib/collab-client";
 import type { CommentMutationAction, ServerMessage } from "../lib/collab-protocol";
+import { mergeInboundCollaborationProject } from "../lib/collaboration-project";
 
 const SNAPSHOT_DEBOUNCE_MS = 250;
 const CURSOR_THROTTLE_MS = 40;
@@ -101,8 +102,9 @@ export function useCollaboration(
   };
 
   const applyRemoteSnapshot = (project: GeoLibreProject, initial: boolean): void => {
-    const localView = mapControllerRef.current?.readView() ?? useAppStore.getState().mapView;
-    const merged: GeoLibreProject = { ...project, mapView: localView };
+    const state = useAppStore.getState();
+    const localView = mapControllerRef.current?.readView() ?? state.mapView;
+    const merged = mergeInboundCollaborationProject(project, localView, state.projectPlugins);
     if (initial) {
       useAppStore
         .getState()
@@ -141,7 +143,16 @@ export function useCollaboration(
             view: entry.view,
           });
         }
-        if (message.snapshot) applyRemoteSnapshot(message.snapshot, true);
+        if (message.snapshot) {
+          applyRemoteSnapshot(message.snapshot, true);
+        } else if (message.role === "host") {
+          // A newly created session has no relay snapshot yet. The store
+          // subscription only observes changes made after attach(), so without
+          // this seed a project (especially external-plugin layers loaded
+          // before starting collaboration) stays invisible to the first guest
+          // until the host happens to edit something.
+          void sendSnapshot();
+        }
         // Guests follow the host by default. Apply the host's latest presence
         // immediately instead of waiting for their next moveend event.
         if (message.role === "guest" && useAppStore.getState().collaboration.followHost) {

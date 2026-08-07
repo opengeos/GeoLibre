@@ -52,6 +52,8 @@ function parseStoredSnapshot(snapshot: string | undefined): unknown {
 
 export interface Env {
   COLLAB_SESSION: DurableObjectNamespace<CollabSession>;
+  /** Optional deployment-specific snapshot ceiling, expressed in bytes. */
+  COLLAB_MAX_SNAPSHOT_BYTES?: string;
 }
 
 // The snapshot cap, empty-session TTL, and chat limits now live in
@@ -89,6 +91,46 @@ type PresenceState = PresenceEntry;
 export class CollabSession extends DurableObject<Env> {
   // Re-established lazily after a hibernation wake; never persisted.
   private presence = new Map<string, PresenceState>();
+
+  private maxSnapshotBytes(): number {
+    const configured = Number(this.env.COLLAB_MAX_SNAPSHOT_BYTES);
+    return Number.isSafeInteger(configured) && configured > 0 ? configured : MAX_SNAPSHOT_BYTES;
+  }
+
+  /**
+   * Snapshots can exceed Durable Objects' 2 MiB key/value entry limit once
+   * portable GeoJSON from local files or external plugins is embedded. The
+   * SQLite-backed class has no such per-value KV ceiling, so keep the project
+   * in a one-row SQL table. Read the legacy KV key as a migration fallback for
+   * sessions created before this table existed.
+   */
+  private readSqlSnapshot(): string | undefined {
+    this.ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS collab_snapshot (id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL)",
+    );
+    // Not `.one()`: that throws unless the result set holds exactly one row,
+    // so a session that has not stored a snapshot yet would fail instead of
+    // falling through to the legacy KV read below.
+    const row = this.ctx.storage.sql
+      .exec<{ value: string }>("SELECT value FROM collab_snapshot WHERE id = 1")
+      .toArray()[0];
+    return row?.value;
+  }
+
+  private async readSnapshot(): Promise<string | undefined> {
+    const sqlSnapshot = this.readSqlSnapshot();
+    if (sqlSnapshot !== undefined) return sqlSnapshot;
+    return this.ctx.storage.get<string>("snapshot");
+  }
+
+  private async writeSnapshot(snapshot: string): Promise<void> {
+    this.ctx.storage.sql.exec(
+      "INSERT INTO collab_snapshot (id, value) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET value = excluded.value",
+      snapshot,
+    );
+    // A migrated session must not retain a second, stale copy.
+    await this.ctx.storage.delete("snapshot");
+  }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -251,7 +293,7 @@ export class CollabSession extends DurableObject<Env> {
       this.ctx.storage.get<string>("hostToken"),
       this.ctx.storage.get<CollaborationMode>("mode"),
       this.ctx.storage.get<number>("rev"),
-      this.ctx.storage.get<string>("snapshot"),
+      this.readSnapshot(),
       this.ctx.storage.get<string>("chat"),
     ]);
 
@@ -307,7 +349,7 @@ export class CollabSession extends DurableObject<Env> {
     // A host-set per-participant override takes precedence over the session
     // default, so a single guest can be pinned to view-only (or granted edit) in
     // an otherwise co-edit (or view-only) session (#754, Part 3).
-    const decision = authorizeSnapshot(attachment, mode, byteLength);
+    const decision = authorizeSnapshot(attachment, mode, byteLength, this.maxSnapshotBytes());
     if (!decision.ok) {
       this.send(ws, {
         type: "error",
@@ -325,16 +367,14 @@ export class CollabSession extends DurableObject<Env> {
     // project below, which heals a sender that had drifted.
     const project = preserveStoredComments(
       message.project ?? null,
-      parseStoredSnapshot(await this.ctx.storage.get<string>("snapshot")),
+      parseStoredSnapshot(await this.readSnapshot()),
     );
     // `rev` is written during /init before any socket can join, so the stored
     // value is always present; the `?? 0` is a defensive floor, never the
     // client's counter (a server-owned monotonic value must not trust input).
     const rev = ((await this.ctx.storage.get<number>("rev")) ?? 0) + 1;
-    await this.ctx.storage.put({
-      snapshot: JSON.stringify(project),
-      rev,
-    });
+    await this.writeSnapshot(JSON.stringify(project));
+    await this.ctx.storage.put("rev", rev);
 
     this.broadcast(
       {
@@ -678,7 +718,7 @@ export class CollabSession extends DurableObject<Env> {
     // Persist even when no full project snapshot has been written yet, so early
     // comments survive late joiners / reconnects. Seed an empty object when
     // storage is empty or corrupt — the relay never inspects other project fields.
-    const rawSnapshot = await this.ctx.storage.get<string>("snapshot");
+    const rawSnapshot = await this.readSnapshot();
     let parsed: Record<string, unknown> = { comments: [] };
     if (rawSnapshot) {
       try {
@@ -763,7 +803,7 @@ export class CollabSession extends DurableObject<Env> {
       // `handleSnapshot` bounds a full project the same way. Check before the
       // put so an oversized value surfaces as an error the sender can see
       // rather than a throw the catch below would have to guess at.
-      if (ENCODER.encode(serialized).length > MAX_SNAPSHOT_BYTES) {
+      if (ENCODER.encode(serialized).length > this.maxSnapshotBytes()) {
         this.send(ws, {
           type: "error",
           code: "bad-message",
@@ -771,7 +811,7 @@ export class CollabSession extends DurableObject<Env> {
         });
         return;
       }
-      await this.ctx.storage.put("snapshot", serialized);
+      await this.writeSnapshot(serialized);
     } catch {
       // The mutation never reached storage, so a late joiner or a reconnect
       // (both of which read from storage) would not see it. Tell the sender and
