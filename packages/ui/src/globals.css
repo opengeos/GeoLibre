@@ -69,8 +69,11 @@
     --destructive-foreground: 210 40% 98%;
     --border: 220 14% 26%;
     --input: 220 12% 38%;
-    /* Matches --primary, as every non-default accent scheme below already does,
-       so the focus ring stays visible against the lifted surfaces. */
+    /* Matches --primary, so the focus ring stays visible against the lifted
+       surfaces (4.98:1 on --background, 4.64:1 on --card). The violet, rose and
+       amber schemes below already pair ring with primary this way; emerald was
+       the one exception and is brought into line there, since the lifted
+       surfaces left its darker ring almost no headroom. */
     --ring: 217.2 91.2% 59.8%;
   }
 
@@ -95,10 +98,17 @@
     --primary-foreground: 355.7 100% 97.3%;
     --ring: 142.1 76.2% 36.3%;
   }
+  /* Unlike violet/rose/amber, emerald's dark ring used to sit well below its
+     primary (142.4 71.8% 29.2%). Against the old near-black canvas that still
+     cleared the 3:1 focus-indicator floor at 3.98:1, but the lifted surfaces in
+     .dark drop it to 3.65:1 on --background and 3.13:1 on --popover — passing
+     by ~4%, so any later surface tweak would break it. Pairing ring with
+     primary restores the headroom (8.04:1 on --background) and makes the
+     ring == primary invariant hold across every scheme. */
   [data-theme="emerald"].dark {
     --primary: 142.1 70.6% 45.3%;
     --primary-foreground: 144.9 80.4% 10%;
-    --ring: 142.4 71.8% 29.2%;
+    --ring: 142.1 70.6% 45.3%;
   }
 
   [data-theme="rose"] {
