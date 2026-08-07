@@ -55,8 +55,18 @@ in CI; add specs under `e2e/`.
 
 Dependencies are watched two ways: **Dependabot** (`.github/dependabot.yml`)
 opens grouped weekly update PRs for npm, pip (backend + `python/`), cargo, and
-Actions, and the CI **`audit` job** runs `npm audit --audit-level=high`
+Actions, and the CI **`audit` job** runs `npm run audit:ci`
 (blocking) plus a non-blocking `pip-audit` of the resolved backend environment.
+`audit:ci` is `scripts/audit-check.mjs`, a thin wrapper over `npm audit
+--omit=dev` that still fails on every high/critical advisory *except* the ones
+listed in its `ALLOWLIST`. The wrapper exists because plain `npm audit` cannot
+accept a single finding, so one unpatchable transitive advisory reddens every PR
+until upstream ships a fix — which for an unmaintained leaf package may be never.
+Only allowlist an advisory when there is **no patched version to upgrade to** and
+the vulnerable code is **unreachable from a GeoLibre runtime path**, and say why
+on both counts in the entry. Anything upgradeable gets upgraded instead. Stale
+entries print a warning rather than failing, since the advisory database is a
+live service and a transient omission must not redden an unrelated PR.
 
 The `python/` package has its own pytest suite (`cd python && pytest`) and is built into a wheel via `npm run build:embed` (produces `apps/geolibre-desktop/dist-embed`, consumed by `python/hatch_build.py`). Its version is dynamic, sourced from `python/src/geolibre/__init__.py`.
 
