@@ -38,15 +38,38 @@ const audit = spawnSync("npm", ["audit", "--omit=dev", "--json"], {
   maxBuffer: 32 * 1024 * 1024,
 });
 
-// npm exits non-zero merely because vulnerabilities exist, so the exit code is
-// not the signal — a missing/unparseable report is.
+// The gate must fail closed: anything short of a report we can actually read is
+// an error, never an implicit "clean". npm's exit code can't carry that, since
+// it also goes non-zero merely because vulnerabilities exist — so the report
+// itself is the signal.
+function unusable(why, detail) {
+  console.error(`npm audit did not return a usable report: ${why}`);
+  if (detail) console.error(detail);
+  process.exit(1);
+}
+
+if (audit.error) unusable("npm could not be run.", audit.error.message);
+if (audit.signal) unusable(`npm was killed by ${audit.signal}.`, audit.stderr);
+
 let report;
 try {
   report = JSON.parse(audit.stdout);
 } catch {
-  console.error("npm audit did not return a JSON report.");
-  console.error(audit.stdout || audit.stderr);
-  process.exit(1);
+  unusable("stdout was not JSON.", audit.stdout || audit.stderr);
+}
+
+// A registry outage, an auth failure or an npm internal error still prints valid
+// JSON — but an `{error, message}` envelope with no `vulnerabilities` key rather
+// than a report. Left unchecked, `report.vulnerabilities ?? {}` would read that
+// as zero advisories and pass the gate exactly when the audit did not run.
+if (report === null || typeof report !== "object" || Array.isArray(report)) {
+  unusable("stdout was JSON but not an object.", audit.stdout);
+}
+if (report.error) {
+  unusable("npm reported an error.", report.error.detail || report.message || audit.stderr);
+}
+if (typeof report.vulnerabilities !== "object" || report.vulnerabilities === null) {
+  unusable("the report has no `vulnerabilities` section.", audit.stdout);
 }
 
 // Flatten the report to one entry per advisory. `via` holds advisory objects for
@@ -54,7 +77,7 @@ try {
 // the dependents that only inherit it — so collecting the objects covers every
 // affected package without counting the same advisory once per dependent.
 const advisories = new Map();
-for (const vuln of Object.values(report.vulnerabilities ?? {})) {
+for (const vuln of Object.values(report.vulnerabilities)) {
   for (const via of vuln.via ?? []) {
     if (typeof via !== "object") continue;
     const id = /(GHSA-[\w-]+)/.exec(via.url ?? "")?.[1];
