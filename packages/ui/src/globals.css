@@ -11,42 +11,67 @@
     --popover-foreground: 222.2 84% 4.9%;
     --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
+    /* Neutrals sit at ~16% saturation rather than the stock 40%, so the chrome
+       reads as grey next to the map instead of tinting blue. --accent is one
+       step darker than --muted so hover fills register on white surfaces. */
+    --secondary: 220 16% 96%;
     --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
+    --muted: 220 16% 96%;
     /* Darkened from 46.9% L so secondary text meets WCAG AA (4.5:1) even on the
        muted/secondary backgrounds it is paired with (e.g. kbd badges). */
     --muted-foreground: 215.4 16.3% 40%;
-    --accent: 210 40% 96.1%;
+    --accent: 220 16% 94%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    /* --border is decorative (dividers, panel edges); --input is a control
+       boundary, so it is deliberately darker. See the note in .dark below. */
+    --border: 220 15% 88%;
+    --input: 220 13% 76%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
   }
 
+  /* Dark mode is built as an explicit elevation ladder. Previously --background,
+     --card and --popover were all 222.2 84% 4.9%, and --border, --input,
+     --muted, --secondary and --accent were all 217.2 32.6% 17.5% — five tokens,
+     one colour — so panels, dialogs and menus were indistinguishable from the
+     app canvas and only a 1px border separated them. Each step below is a
+     distinct surface:
+
+       background  9%   app canvas / base chrome
+       card       12%   toolbar, docked panels
+       popover    15%   menus, tooltips, dialogs
+       muted      20%   inset fills (status bar, wells)
+       accent     22%   hover fill — must read above popover, since menu items
+                        sit on it
+
+     Saturation also drops from 84% to ~22%: the old value was a strongly
+     blue-tinted near-black that clashed with satellite imagery in the map view.
+     Every foreground/surface pair here clears WCAG AA 4.5:1 (lowest is
+     muted-foreground on accent at 4.82:1). */
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 222 24% 9%;
     --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
+    --card: 222 22% 12%;
     --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
+    --popover: 222 21% 15%;
     --popover-foreground: 210 40% 98%;
     --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 220 18% 20%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
+    --muted: 220 18% 20%;
     --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    --accent: 220 18% 22%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --border: 220 14% 26%;
+    --input: 220 12% 38%;
+    /* Matches --primary, as every non-default accent scheme below already does,
+       so the focus ring stays visible against the lifted surfaces. */
+    --ring: 217.2 91.2% 59.8%;
   }
 
   /* Accent color schemes. Each scheme overrides only the accent-bearing tokens

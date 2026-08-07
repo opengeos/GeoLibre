@@ -1,8 +1,31 @@
 @import "@geolibre/ui/globals.css";
+
 /* Supplies the custom-color/border-radius theme that @geolibre/ui's globals.css
    relies on via @apply (background, border, etc.). globals.css is intentionally
    config-agnostic; the consuming app provides the Tailwind config here. */
 @config "../tailwind.config.js";
+
+/* App typeface: IBM Plex Sans for UI, IBM Plex Mono for the numeric/coordinate
+   readouts (StatusBar, code, feature IDs). One matched superfamily, so the mono
+   readouts and the surrounding UI share a voice. The @font-face rules are
+   loaded from main.tsx — see the note there for why they cannot be @imported
+   here. Self-hosted rather than CDN-loaded: the desktop build must render
+   offline, and the Tauri CSP is `default-src 'self'`.
+
+   This block drives both the `font-sans`/`font-mono` utilities and Tailwind's
+   preflight default, so no `font-family` on <body> is needed.
+
+   Plex covers latin, latin-ext, cyrillic, greek and vietnamese only. The
+   locales it does NOT cover (ar, fa, hi, ja, ka, ko, th, zh) rely on per-glyph
+   fallback to the system stack below — which is why that stack must stay a
+   full, ordered list rather than a bare `sans-serif`. */
+@theme {
+  --font-sans:
+    "IBM Plex Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Noto Sans", "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono:
+    "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
 
 html,
 body,
