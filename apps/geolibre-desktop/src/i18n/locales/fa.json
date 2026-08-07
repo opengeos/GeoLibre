@@ -41,7 +41,7 @@
     "deleteLibraryLayer": "حذف «{{name}}» از داده‌های من",
     "desktopOnlyBadge": "دسکتاپ",
     "importLibrary": "وارد کردن لایه‌های ذخیره‌شده",
-    "exportLibrary": "خروجی  لایه‌های ذخیره‌شده",
+    "exportLibrary": "خروجی لایه‌های ذخیره‌شده",
     "libraryFilterName": "فایل JSON کتابخانهٔ لایه",
     "libraryImportFailed": "خواندن این فایل کتابخانهٔ لایه با شکست مواجه شد.",
     "libraryExportFailed": "خطا در خروجی کتابخانه لایه.",
@@ -54,7 +54,7 @@
   "about": {
     "trigger": "درباره",
     "title": "دربارهٔ GeoLibre",
-    "description": "GeoLibre یک پلتفرم GIS شیوهٔ نمایش و مبتنی بر ابر است.",
+    "description": "GeoLibre یک پلتفرم GIS سبک و مبتنی بر ابر است.",
     "version": "نسخه",
     "checkForUpdates": "بررسی به‌روزرسانی‌ها",
     "tryAgain": "تلاش دوباره",
@@ -112,7 +112,7 @@
     "captureStateTooltip": "تنها بر نشانکی که در ادامه ذخیره می‌کنید اثر می‌گذارد، نه به‌عنوان یک تنظیم سراسری. آن را روشن بگذارید تا بعداً دقیقاً همین چیدمان لایه‌ها بازیابی شود.",
     "export": "خروجی",
     "exportSelected": "خروجی از موارد انتخاب‌شده",
-    "exportAll": "خروجی از  همه",
+    "exportAll": "خروجی از همه",
     "newFolder": "پوشهٔ جدید",
     "defaultFolderName": "پوشه"
   },
@@ -351,7 +351,7 @@
       "title": "سرویس‌های ذخیره‌شده",
       "saveCurrent": "ذخیرهٔ مورد فعلی",
       "importLibrary": "وارد کردن کتابخانه از JSON",
-      "exportLibrary": "خروجی از  کتابخانه به JSON",
+      "exportLibrary": "خروجی از کتابخانه به JSON",
       "loadAria": "بارگیری یک سرویس ذخیره‌شده",
       "loadPlaceholder": "بارگیری یک سرویس ذخیره‌شده…",
       "builtin": "{{name}} (توکار)",
@@ -994,15 +994,15 @@
     "resume": "ادامه",
     "discard": "صرف‌نظر کردن",
     "saveTrack": "ذخیره به‌عنوان لایه",
-    "exportGpx": "خروجی  GPX",
-    "exportGeojson": "خروجی  GeoJSON",
+    "exportGpx": "خروجی GPX",
+    "exportGeojson": "خروجی GeoJSON",
     "points_one": "{{count}} نقطه",
     "points_other": "{{count}} نقطه",
     "trackLayerName": "رد GPS",
     "trackSaved": "{{name}} به‌عنوان یک لایه ذخیره شد.",
-    "trackExported": "مسیر ایجاد شد.",
+    "trackExported": "خروجی رد ایجاد شد.",
     "exportCancelled": "خروجی لغو شد.",
-    "exportFailed": "خروجی مسیر با شکست مواجه شد. لطفاً دوباره تلاش کنید.",
+    "exportFailed": "خروجی رد ممکن نشد. لطفاً دوباره تلاش کنید.",
     "capture": "رقومی‌سازی",
     "capturePoint": "ثبت نقطه",
     "captureLayerName": "نقاط GPS",
@@ -1094,7 +1094,7 @@
       "tps": "اسپلاین صفحهٔ نازک"
     },
     "exporting": "در حال خروجی گرفتن GeoTIFF… (بارگیری GDAL در نخستین استفاده)",
-    "exported": "GeoTIFFخروجی ایجاد شد .",
+    "exported": "خروجی GeoTIFF ایجاد شد.",
     "exportFailed": "خروجی GeoTIFF ناموفق بود. برای جزئیات کنسول را ببینید."
   },
   "collaborate": {
@@ -1244,7 +1244,7 @@
   },
   "printLayout": {
     "title": "تنظیمات چاپ",
-    "description": "یک نقشهٔ آمادهٔ چاپ با عنوان، راهنمای نقشه، مقیاس‌نما و فلش شمال بسازید، سپس آن را به صورت  PNG یا PDF خروجی بگیرید.",
+    "description": "یک نقشهٔ آمادهٔ چاپ با عنوان، راهنمای نقشه، مقیاس‌نما و فلش شمال بسازید، سپس آن را به صورت PNG یا PDF خروجی بگیرید.",
     "preview": "پیش‌نمایش",
     "resizeControls": "تغییر اندازهٔ پنل کنترل‌ها",
     "resizeDialog": "تغییر اندازهٔ پنجره",
@@ -1397,7 +1397,7 @@
       "mapNotReady": "نقشه هنوز آماده نیست. لحظه‌ای دیگر دوباره تلاش کنید.",
       "captureFailed": "ثبت تصویر نقشه با شکست مواجه شد.",
       "captureFirst": "پیش از ایجاد کردن، نقشه را ثبت کنید.",
-      "exportFailed": "خروجی  {{format}} ناموفق بود.",
+      "exportFailed": "خروجی {{format}} ناموفق بود.",
       "clipboardFailed": "کپی تنظیمات با شکست مواجه شد.",
       "scaleOutOfRange": "این مقیاس بیرون از بازه‌ای است که نمای کنونی می‌تواند به آن برسد؛ نزدیک‌ترین مقیاس در دسترس نمایش داده می‌شود."
     },
@@ -1453,7 +1453,7 @@
       "exportZip": "خروجی ZIP از PNGها",
       "exportPdfPages_one": "خروجی PDF ({{count}} صفحه)",
       "exportPdfPages_other": "خروجی PDF ({{count}} صفحه)",
-      "exporting": "در حال خروجی گزفتن صفحهٔ {{current}} از {{total}}...",
+      "exporting": "در حال خروجی گرفتن صفحهٔ {{current}} از {{total}}...",
       "tokensHint": "نشانه‌های {atlas.name}، {atlas.pagenumber}، {atlas.total} و {atlas.attr:FIELD} در عنوان، زیرعنوان، پاصفحه و نام فایل صفحه، برای هر صفحه جایگزین می‌شوند.",
       "alongLineHint": "صفحه‌ها هر خط را به‌ترتیب دنبال می‌کنند؛ km_start، km_end، segment و segments به‌عنوان نشانه‌های {atlas.attr:FIELD} در دسترس‌اند."
     }
@@ -1526,7 +1526,7 @@
     "axisAuto": "خودکار",
     "gapNote": "قطعه‌های خط‌چین، تاریخ‌هایی را می‌پوشانند که خوانشی ندارند (بدون‌داده یا بیرون از پوشش).",
     "exportCsv": "خروجی CSV",
-    "exportGeoParquet": "خروجی  GeoParquet"
+    "exportGeoParquet": "خروجی GeoParquet"
   },
   "basemapExtract": {
     "title": "استخراج نقشهٔ پایهٔ برون‌خط",
@@ -2360,7 +2360,7 @@
       "saveAsTemplateEllipsis": "ذخیره به‌عنوان الگو...",
       "shareEllipsis": "هم‌رسانی...",
       "shareHostUnavailable": "در دسترس نیست: نشانی سرور هم‌رسانی این استقرار معتبر نیست.",
-      "exportHtmlEllipsis": "خروجی  به‌صورت HTML...",
+      "exportHtmlEllipsis": "خروجی به‌صورت HTML...",
       "htmlFile": "HTML",
       "collaborateEllipsis": "هم‌کاری...",
       "printEllipsis": "چاپ...",
@@ -4051,7 +4051,7 @@
   },
   "objectDetection": {
     "title": "تشخیص شیء",
-    "description": "یک مدل YOLO ایجادشده به ONNX را روی یک GeoTIFF یا عکس مکان‌دار، تماماً در مرورگر اجرا کنید. هر کلاس تشخیص‌داده‌شده به‌عنوان لایه‌ای جداگانه افزوده می‌شود.",
+    "description": "یک مدل YOLO خروجی‌گرفته‌شده در قالب ONNX را روی یک GeoTIFF یا عکس مکان‌دار، تماماً در مرورگر اجرا کنید. هر کلاس تشخیص‌داده‌شده به‌عنوان لایه‌ای جداگانه افزوده می‌شود.",
     "hint": "از یک مدل توکار COCO (که یک‌بار دانلود و انباشته می‌شود) استفاده کنید یا مدل ONNX خودتان از نوع YOLOv5/v8/v11 را بیاورید. تشخیص‌های GeoTIFF به کادرهای زمین‌مرجع بدل می‌شوند. تشخیص‌های عکس به نقاطی در موقعیت GPS دوربین بدل می‌شوند، چون یک عکس ردپای زمینی تعریف نمی‌کند.",
     "imageLabel": "تصویر (GeoTIFF یا عکس مکان‌دار)",
     "imagePlaceholder": "یک GeoTIFF، JPEG، PNG یا WebP برگزینید…",
@@ -4076,7 +4076,7 @@
     "error": {
       "chooseImage": "برای اجرای تشخیص، یک GeoTIFF یا عکس مکان‌دار برگزینید.",
       "photoLocation": "این عکس مختصات GPS قابل استفاده ندارد. یک عکس مکان‌دار برگزینید.",
-      "chooseModel": "یک مدل YOLO ایجادشده به ONNX (‎.onnx) برگزینید.",
+      "chooseModel": "یک مدل YOLO خروجی‌گرفته‌شده در قالب ONNX (‎.onnx) برگزینید.",
       "downloadModel": "دانلود مدل ممکن نشد. اتصال خود را بررسی کنید و دوباره تلاش کنید.",
       "failed": "تشخیص ناموفق بود."
     }
