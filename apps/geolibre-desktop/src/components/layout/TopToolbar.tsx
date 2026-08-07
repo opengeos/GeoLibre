@@ -1748,8 +1748,9 @@ export function TopToolbar({
   // The shortcut layer is narrowed rather than switched off, because the View
   // menu *does* stay visible in this mode: `view.*` is camera and theme work
   // only, so dropping its keys would leave those items clickable but silently
-  // keyless. Every command carrying a `shortcut` is either `view.*` or
-  // `project.*`, so this is the whole authoring keyboard surface.
+  // keyless. Everything else carrying a `shortcut` authors the project
+  // (`project.*`, `add.comment`), so filtering to `view.*` drops exactly the
+  // authoring keyboard surface.
   const shortcutCommands = useMemo(
     () => (viewer ? commands.filter((command) => command.id.startsWith("view.")) : commands),
     [commands, viewer],

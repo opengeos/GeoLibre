@@ -88,9 +88,11 @@ export function useCollaboration(
     } catch {
       // Materializing control-managed vector data can fail (the plugin chunk
       // or a DuckDB query). Surface it so the participant knows their edits
-      // stopped propagating, but only for the newest request: a stale failure
-      // must not overwrite the state of the broadcast that superseded it.
-      if (request === snapshotRequestRef.current) {
+      // stopped propagating, but only for the newest request that is still
+      // allowed to broadcast: a stale failure, or one racing a relay error
+      // that already paused sync, must not overwrite the message the user
+      // needs to see.
+      if (request === snapshotRequestRef.current && canEdit() && !syncPausedRef.current) {
         useAppStore.getState().setCollaboration({ error: i18n.t("collaborate.shareFailed") });
       }
       return;

@@ -78,17 +78,25 @@ export async function buildCollaborationSnapshot(
   // Keep the plugins barrel out of this module's eager dependency graph: some
   // optional controls load browser-only SDKs at module evaluation time.
   const { materializeEmbeddableVectorLayers } = await import("@geolibre/plugins");
-  // Read the layer array once, after the import, and feed that same array to
-  // both steps. Materializing against one revision and applying the result to
-  // a later one would strip `localFileReloadable` from a layer added during
-  // the await while leaving it without embedded features — a layer that looks
-  // portable and arrives empty. A layer added after this read is simply absent
-  // from this snapshot; the store change that added it schedules the next one.
-  const source = useAppStore.getState().layers;
-  const materialized = await materializeEmbeddableVectorLayers(source);
+  // Materialize against one layer revision and build the snapshot from that
+  // same revision. Mixing two would strip `localFileReloadable` from a layer
+  // added during the await while leaving it without embedded features (a layer
+  // that looks portable and arrives empty), and would let `layerGroups` or
+  // `selectedLayerId` name a layer the broadcast does not carry.
+  let source = useAppStore.getState().layers;
+  let materialized = await materializeEmbeddableVectorLayers(source);
+  // An edit that lands mid-read invalidates the result, so read again rather
+  // than combine revisions. Bounded: a participant editing continuously still
+  // gets a broadcast, at worst one revision behind on group membership.
+  for (let attempt = 0; attempt < 3 && useAppStore.getState().layers !== source; attempt += 1) {
+    source = useAppStore.getState().layers;
+    materialized = await materializeEmbeddableVectorLayers(source);
+  }
   const layers = prepareCollaborationLayers(source, materialized);
   // Pass the prepared layers only when portability actually rewrote one, so an
-  // unaffected project still snapshots straight from the live store.
+  // unaffected project still snapshots straight from the live store. Nothing
+  // below awaits, so the override and every field `buildProjectSnapshot` reads
+  // from the store come from the same instant.
   const changed = layers.some((layer, index) => layer !== source[index]);
   return redactCredentials(buildProjectSnapshot(mapControllerRef, changed ? { layers } : {}));
 }

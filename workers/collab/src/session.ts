@@ -64,6 +64,11 @@ export interface Env {
 // second), so we don't allocate a new encoder per message.
 const ENCODER = new TextEncoder();
 
+// Characters per stored snapshot chunk. A Durable Object caps a SQLite string
+// at 2 MB of UTF-8, and a JS string character can encode to 4 bytes, so this
+// leaves a chunk at half the ceiling even for text that is entirely non-ASCII.
+const SNAPSHOT_CHUNK_CHARS = 256 * 1024;
+
 /**
  * The shared `SessionParticipant` state, serialized onto a hibernatable socket.
  * `editOverride`, `lastChatTs`, and `lastCommentTs` ride on the attachment so
@@ -97,24 +102,27 @@ export class CollabSession extends DurableObject<Env> {
     return Number.isSafeInteger(configured) && configured > 0 ? configured : MAX_SNAPSHOT_BYTES;
   }
 
+  private ensureSnapshotTable(): void {
+    this.ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS collab_snapshot_chunks (seq INTEGER PRIMARY KEY, value TEXT NOT NULL)",
+    );
+  }
+
   /**
-   * Snapshots can exceed Durable Objects' 2 MiB key/value entry limit once
-   * portable GeoJSON from local files or external plugins is embedded. The
-   * SQLite-backed class has no such per-value KV ceiling, so keep the project
-   * in a one-row SQL table. Read the legacy KV key as a migration fallback for
-   * sessions created before this table existed.
+   * Read the stored project, reassembled from its chunks.
+   *
+   * Falls back to the legacy `snapshot` key/value entry so a session created
+   * before this table existed still serves late joiners.
    */
   private readSqlSnapshot(): string | undefined {
-    this.ctx.storage.sql.exec(
-      "CREATE TABLE IF NOT EXISTS collab_snapshot (id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL)",
-    );
+    this.ensureSnapshotTable();
     // Not `.one()`: that throws unless the result set holds exactly one row,
     // so a session that has not stored a snapshot yet would fail instead of
     // falling through to the legacy KV read below.
-    const row = this.ctx.storage.sql
-      .exec<{ value: string }>("SELECT value FROM collab_snapshot WHERE id = 1")
-      .toArray()[0];
-    return row?.value;
+    const rows = this.ctx.storage.sql
+      .exec<{ value: string }>("SELECT value FROM collab_snapshot_chunks ORDER BY seq")
+      .toArray();
+    return rows.length > 0 ? rows.map((row) => row.value).join("") : undefined;
   }
 
   private async readSnapshot(): Promise<string | undefined> {
@@ -123,11 +131,29 @@ export class CollabSession extends DurableObject<Env> {
     return this.ctx.storage.get<string>("snapshot");
   }
 
+  /**
+   * Store the project across as many rows as it needs.
+   *
+   * A snapshot outgrew single-value storage once portable GeoJSON from local
+   * files and external plugins started being embedded: a Durable Object caps a
+   * key/value entry *and* a SQLite string at 2 MB, while `MAX_SNAPSHOT_BYTES`
+   * now admits several times that. Only the per-object total (10 GB) bounds a
+   * run of rows, so the project is split and rejoined on read.
+   */
   private async writeSnapshot(snapshot: string): Promise<void> {
-    this.ctx.storage.sql.exec(
-      "INSERT INTO collab_snapshot (id, value) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET value = excluded.value",
-      snapshot,
-    );
+    this.ensureSnapshotTable();
+    this.ctx.storage.sql.exec("DELETE FROM collab_snapshot_chunks");
+    for (
+      let offset = 0, seq = 0;
+      offset < snapshot.length;
+      offset += SNAPSHOT_CHUNK_CHARS, seq += 1
+    ) {
+      this.ctx.storage.sql.exec(
+        "INSERT INTO collab_snapshot_chunks (seq, value) VALUES (?, ?)",
+        seq,
+        snapshot.slice(offset, offset + SNAPSHOT_CHUNK_CHARS),
+      );
+    }
     // A migrated session must not retain a second, stale copy.
     await this.ctx.storage.delete("snapshot");
   }

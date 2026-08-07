@@ -116,11 +116,13 @@ in-memory / per-socket attachment. Server-side enforcement: a `snapshot` from a
 guest who cannot edit (session `view-only`, or a host-set per-participant
 view-only override) is dropped with an `error: forbidden`; `set-mode` and
 `set-participant-mode` require the host token. Oversized snapshots (> 10 MB by
-default) are rejected with
-`error: too-large`. Hosted snapshots live in the Durable Object's SQLite table
-rather than a single key/value entry, allowing portable GeoJSON from local files
-and external plugins to exceed the storage API's per-entry limit. An empty
-session is reclaimed after a TTL via a storage alarm.
+default) are rejected with `error: too-large`; the cap sits under Cloudflare's
+32 MiB ceiling on a received WebSocket message. Hosted snapshots are stored in
+chunks across rows of a SQLite table, because a Durable Object caps both a
+key/value entry and a single SQLite string at 2 MB — well under what portable
+GeoJSON from local files and external plugins needs. An empty session is
+reclaimed after a TTL via a storage alarm, which drops the chunks with the rest
+of the database.
 
 ## Frontend
 
