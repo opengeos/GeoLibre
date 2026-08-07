@@ -360,12 +360,18 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
                   return replayVectorLayer(control, layer, source, restoredGroups, {
                     companionFiles: file.nativeData ? undefined : file.companionFiles,
                     localPath,
+                    // The file was read, so the layer's source still exists and
+                    // the failure was in the load. Preserve it like the URL and
+                    // embedded branches; reopening the project re-reads the same
+                    // path and can succeed.
+                    onError: () => failedLayerIds.add(layer.id),
                   });
                 })
+                // Only a failed read reaches here: replayVectorLayer settles its
+                // own rejection. A file that cannot be read is genuinely gone,
+                // which is the one case that still drops the layer.
                 .catch((error) => {
-                  console.error(`[GeoLibre] Failed to restore vector layer "${layer.name}"`, error);
-                  // Consistent with the missing-file case above: drop the layer
-                  // rather than leave a zombie panel entry with no map output.
+                  console.error(`[GeoLibre] Failed to read vector layer "${layer.name}"`, error);
                   useAppStore.getState().removeLayer(layer.id);
                 }),
             ),
