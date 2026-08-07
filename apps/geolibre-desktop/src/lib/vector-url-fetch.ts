@@ -107,3 +107,37 @@ function safeDecode(value: string): string {
 export function resetVectorUrlFetchDedupe(): void {
   inFlight.clear();
 }
+
+/**
+ * Phrases the native fetch command rejects a URL with *before* issuing any
+ * request, mirroring `url_is_fetchable` / `ensure_fetchable_url` in
+ * `src-tauri/src/lib.rs` (`SSRF_BLOCKED_MESSAGE` and its siblings). The Rust
+ * strings cannot be imported across the process boundary, so re-check this list
+ * when that guard's messages change; a phrase that drifts fails open into the
+ * browser fallback rather than breaking the build.
+ */
+const URL_POLICY_REJECTIONS = [
+  "Refusing to fetch",
+  "Unsupported URL scheme",
+  "Invalid URL",
+  "URL has no host",
+];
+
+/**
+ * True when the native fetch failed because the URL is one the backend refuses
+ * to reach (a link-local, unspecified, or multicast address, or a non-HTTP
+ * scheme) rather than because the request itself went wrong.
+ *
+ * The browser fallback exists for transport failures the native client cannot
+ * handle, but the webview is not subject to the Rust SSRF guard, so falling back
+ * on a policy rejection would let a crafted project reach exactly the addresses
+ * the guard blocked. Those failures are re-thrown instead.
+ *
+ * @param error - The rejection from the native command.
+ * @returns Whether the URL was refused by policy.
+ */
+export function isBlockedUrlError(error: unknown): boolean {
+  const message =
+    error instanceof Error ? error.message : typeof error === "string" ? error : String(error);
+  return URL_POLICY_REJECTIONS.some((phrase) => message.includes(phrase));
+}

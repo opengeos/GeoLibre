@@ -20,11 +20,20 @@ export type NativeHttpCommand = "fetch_url_bytes" | "resolve_url_redirect";
 interface NativeHttpOptions {
   /** Short feature label (e.g. "WFS GetCapabilities") added to the record. */
   context?: string;
+}
+
+/**
+ * Options for {@link fetchUrlBytes}. `timeoutSecs` lives here rather than on
+ * {@link NativeHttpOptions} because only the `fetch_url_bytes` command accepts
+ * a timeout argument; `resolve_url_redirect` hardcodes its own, so offering the
+ * field there would invite a caller to set it and silently have no effect.
+ */
+interface FetchUrlBytesOptions extends NativeHttpOptions {
   /**
    * Request budget in seconds, overriding the command's tile-sized default.
-   * Set it for calls that carry a whole dataset rather than a tile; the backend
-   * clamps the value, so an out-of-range number degrades to the default rather
-   * than removing the timeout.
+   * Set it for calls that carry a whole dataset rather than a tile. The backend
+   * clamps it into `[8, 600]`, so a smaller value is raised to 8 and a larger
+   * one is capped at 600; the timeout can be raised but never removed.
    */
   timeoutSecs?: number;
 }
@@ -86,7 +95,7 @@ export function nativeHttpFailureRecord(
 async function invokeNativeHttp<T>(
   command: NativeHttpCommand,
   url: string,
-  options?: NativeHttpOptions,
+  options?: FetchUrlBytesOptions,
 ): Promise<T> {
   const startedAt = performance.now();
   try {
@@ -130,7 +139,7 @@ async function invokeNativeHttp<T>(
  */
 export function fetchUrlBytes(
   url: string,
-  options?: NativeHttpOptions,
+  options?: FetchUrlBytesOptions,
 ): Promise<number[] | Uint8Array> {
   return invokeNativeHttp<number[] | Uint8Array>("fetch_url_bytes", url, options);
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
   dedupeVectorUrlFetch,
+  isBlockedUrlError,
   resetVectorUrlFetchDedupe,
   vectorDownloadFileName,
 } from "../apps/geolibre-desktop/src/lib/vector-url-fetch";
@@ -136,5 +137,39 @@ describe("vectorDownloadFileName", () => {
 
   it("falls back on an unparseable URL", () => {
     assert.equal(vectorDownloadFileName("not a url"), "data");
+  });
+});
+
+describe("isBlockedUrlError", () => {
+  // The webview is not subject to the backend SSRF guard, so these must never
+  // fall through to a plain browser fetch of the same URL.
+  it("recognizes the backend's URL-policy rejections", () => {
+    for (const message of [
+      "Refusing to fetch a link-local, unspecified, or multicast address",
+      "Unsupported URL scheme: file",
+      "Invalid URL: relative URL without a base",
+      "URL has no host",
+    ]) {
+      assert.equal(isBlockedUrlError(new Error(message)), true, message);
+    }
+  });
+
+  it("reads a bare string rejection too (Tauri rejects with the raw message)", () => {
+    assert.equal(
+      isBlockedUrlError("Refusing to fetch a link-local, unspecified, or multicast address"),
+      true,
+    );
+  });
+
+  // Transport failures are exactly what the browser fallback is for.
+  it("lets ordinary request failures fall back", () => {
+    for (const message of [
+      "Request failed: error sending request",
+      "Could not read response body: error decoding response body",
+      "Request failed with status 503 Service Unavailable",
+      "Could not resolve host example.com",
+    ]) {
+      assert.equal(isBlockedUrlError(new Error(message)), false, message);
+    }
   });
 });

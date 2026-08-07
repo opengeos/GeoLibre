@@ -121,7 +121,11 @@ import { appendDiagnostic } from "../lib/diagnostics";
 import { pickZarrDirectory, zarrDirectoryPickerSupported } from "../lib/zarr-directory-picker";
 import { openExternalLink } from "../lib/open-external";
 import { fetchUrlBytes } from "../lib/native-http";
-import { dedupeVectorUrlFetch, vectorDownloadFileName } from "../lib/vector-url-fetch";
+import {
+  dedupeVectorUrlFetch,
+  isBlockedUrlError,
+  vectorDownloadFileName,
+} from "../lib/vector-url-fetch";
 import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
 import { setTimeSliderOpenedByBinding, shouldCloseTimeSliderDock } from "../lib/time-slider-dock";
 import { createWmsTileUrl, normalizeWmsVersion } from "../components/layout/add-data/helpers";
@@ -1040,6 +1044,11 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     fetchVectorUrl: (url: string) =>
       dedupeVectorUrlFetch(url, async () => {
         const name = vectorDownloadFileName(url);
+        // Every request here shares one budget. Sibling layers now await a
+        // single download, so a stalled fetch would hold all of them pending
+        // rather than just itself; the browser paths need the same ceiling the
+        // native command is given below.
+        const signal = AbortSignal.timeout(VECTOR_DOWNLOAD_TIMEOUT_SECS * 1000);
         if (isTauriRuntime()) {
           try {
             const bytes = await fetchUrlBytes(url, {
@@ -1052,11 +1061,14 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
             });
             const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
             return new File([array as Uint8Array<ArrayBuffer>], name);
-          } catch {
+          } catch (error) {
+            // The webview is not subject to the backend's SSRF guard, so a URL
+            // the native command refused by policy must not be retried here.
+            if (isBlockedUrlError(error)) throw error;
             // Keep the browser path as a fallback for CORS-enabled origins the
             // native command could not reach.
             try {
-              const response = await fetch(url);
+              const response = await fetch(url, { signal });
               if (!response.ok) {
                 throw new Error(`HTTP ${response.status} ${response.statusText}`);
               }
@@ -1069,7 +1081,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
         }
         const proxyUrl = githubRawVectorProxyUrl(url);
         if (!proxyUrl) return null;
-        const response = await fetch(proxyUrl);
+        const response = await fetch(proxyUrl, { signal });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status} ${response.statusText}`);
         }

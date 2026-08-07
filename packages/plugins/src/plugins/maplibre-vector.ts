@@ -100,6 +100,8 @@ let vectorControl: VectorControl | null = null;
 let vectorControlMounted = false;
 let openPanelTimeout: number | null = null;
 let restorePanelExpandTimeout: number | null = null;
+/** Layer ids currently being re-added by replayVectorControlLayerById. */
+const replayingLayerIds = new Set<string>();
 /** One KML/KMZ file handed to the host importer. */
 export interface KmlFileImport {
   file: File;
@@ -453,14 +455,16 @@ export function replayVectorLayer(
  * for it. The layer panel's refresh (the button and the auto-refresh tick)
  * falls through to this, so the next successful fetch brings the layer back.
  *
- * Only URL-backed and embedded layers can be replayed here: a desktop
- * local-file layer needs the host's filesystem reader, which lives with the
- * restore path rather than in this module.
+ * URL-backed only. A local-file layer needs the host's filesystem reader, which
+ * lives with the restore path rather than in this module, and an embedded-source
+ * layer never reaches here: refresh is gated on `isVectorControlRefreshLayer`,
+ * which requires an HTTP URL. Such a layer is still preserved by restore, it
+ * just has nothing to re-fetch.
  *
  * @param id - The store layer id to replay.
  * @returns The replayed layer info, or undefined when the control is
- *   unavailable, the layer is unknown, already present, or has no replayable
- *   source.
+ *   unavailable, the layer is unknown, already present, already being replayed,
+ *   or has no URL.
  */
 export async function replayVectorControlLayerById(
   id: string,
@@ -470,25 +474,30 @@ export async function replayVectorControlLayerById(
   // Already held by the control: reloadLayer is the right call, not a re-add
   // (which would throw on the duplicate id).
   if (control.getLayer(id)) return undefined;
+  // The getLayer check above cannot hold across the await below, because addData
+  // only registers the layer once its data has loaded. Two concurrent calls for
+  // one id would both pass it and the second would throw on the duplicate id, so
+  // the id is claimed for the whole replay.
+  if (replayingLayerIds.has(id)) return undefined;
 
   const state = useAppStore.getState();
   const layer = state.layers.find((candidate) => candidate.id === id);
   if (!layer || !isVectorControlStoreLayer(layer)) return undefined;
 
   const url = typeof layer.source.url === "string" && layer.source.url ? layer.source.url : null;
-  const source: string | FeatureCollection | null =
-    url ?? readEmbeddedVectorGeoJSON(layer.metadata.embeddedGeoJSON);
-  if (!source) return undefined;
+  if (!url) return undefined;
 
   const groups = new Map(state.layerGroups.map((group) => [group.id, group] as const));
   // Held across the replay for the same reason restore holds it: addData only
   // registers the layer once loaded, so an intermediate sync would diff a
   // control that does not yet have it and prune it right back out.
+  replayingLayerIds.add(id);
   suspendVectorStoreSync();
   try {
-    await replayVectorLayer(control, layer, source, groups);
+    await replayVectorLayer(control, layer, url, groups);
   } finally {
     resumeVectorStoreSync();
+    replayingLayerIds.delete(id);
   }
   // A control torn down mid-replay must not have its successor's layers
   // rewritten from this stale callback.
