@@ -12,6 +12,9 @@ import {
 } from "@geolibre/ui";
 import { MapPin, Layers, MessageSquare, Send, User } from "lucide-react";
 import type { PendingCommentState } from "./useCommentTool";
+import { formatShortcut, isMacPlatform, matchesShortcut, type Shortcut } from "../../lib/commands";
+
+export const POST_COMMENT_SHORTCUT: Shortcut = { key: "Enter", mod: true };
 
 interface AddCommentDialogProps {
   pendingComment: PendingCommentState;
@@ -34,6 +37,8 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
 
   const [text, setText] = useState("");
   const [authorName, setAuthorName] = useState(savedName ?? "");
+  const canSubmit = !!text.trim() && (hasSavedName || !!authorName.trim());
+  const shortcutLabel = formatShortcut(POST_COMMENT_SHORTCUT, isMacPlatform());
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +79,19 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-3.5">
+        <form
+          onSubmit={handleSubmit}
+          onKeyDown={(event) => {
+            if (
+              canSubmit &&
+              matchesShortcut(event.nativeEvent, POST_COMMENT_SHORTCUT, isMacPlatform())
+            ) {
+              event.preventDefault();
+              event.currentTarget.requestSubmit();
+            }
+          }}
+          className="space-y-3.5"
+        >
           <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-md border border-border/60">
             {anchor.type === "feature" ? (
               <>
@@ -163,10 +180,13 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
               variant="default"
               size="sm"
               className="gap-1.5"
-              disabled={!text.trim() || (!hasSavedName && !authorName.trim())}
+              disabled={!canSubmit}
+              title={t("comments.postShortcutTooltip", { shortcut: shortcutLabel })}
+              aria-keyshortcuts="Control+Enter Meta+Enter"
             >
               <Send className="h-3.5 w-3.5" />
-              <span>Post Comment</span>
+              <span>{t("comments.post")}</span>
+              <kbd className="ms-1 text-[10px] font-normal opacity-70">{shortcutLabel}</kbd>
             </Button>
           </div>
         </form>
