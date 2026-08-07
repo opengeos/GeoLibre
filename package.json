@@ -23,6 +23,7 @@
     "test:worker": "npm run typecheck -w geolibre-viewer-worker && npm run typecheck -w geolibre-collab-worker && npm run typecheck -w geolibre-collab-node && npm test -w geolibre-collab-node && npm run typecheck -w geolibre-tiles-worker && npm run typecheck -w geolibre-ai-proxy-worker",
     "test:e2e": "playwright test",
     "check:rust": "cargo check --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml",
+    "audit:ci": "node scripts/audit-check.mjs",
     "ci": "npm run lint && npm run build && npm run test:frontend:coverage && npm run test:worker && npm run test:backend:coverage && npm run check:rust",
     "tauri": "npm run tauri -w geolibre-desktop",
     "tauri:dev": "npm run tauri dev -w geolibre-desktop",

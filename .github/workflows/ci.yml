@@ -36,8 +36,11 @@ jobs:
       # local build/dev tooling (e.g. sharp/libvips via wrangler+miniflare, which
       # never ships in a GeoLibre artifact), while still blocking anything that
       # reaches users. Dependabot bumps the dev toolchain separately.
+      # Wrapped in scripts/audit-check.mjs because plain `npm audit` cannot accept
+      # a single advisory: see the ALLOWLIST there for the unpatchable, unreachable
+      # findings that would otherwise redden every PR indefinitely.
       - name: Audit npm dependencies (high and critical)
-        run: npm audit --omit=dev --audit-level=high
+        run: npm run audit:ci
 
   e2e:
     name: E2E smoke (Playwright)
