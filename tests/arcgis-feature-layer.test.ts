@@ -344,6 +344,51 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.deepEqual(view.offCalls, [["moveend", move]]);
   });
 
+  it("ignores a superseded viewport query that fails for its own reasons", async () => {
+    const rejections: Array<(error: Error) => void> = [];
+    let pan = false;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(VIEWPORT_LAYER_INFO);
+      const offset = Number(url.searchParams.get("resultOffset") ?? "0");
+      if (offset > 0) return jsonResponse({ type: "FeatureCollection", features: [] });
+      // The first query never resolves until the test rejects it by hand; the
+      // replacement answers normally.
+      if (pan) return jsonResponse({ type: "FeatureCollection", features: [viewportFeature(7)] });
+      return new Promise<Response>((_resolve, reject) => rejections.push(reject));
+    }) as typeof fetch;
+
+    const view = fakeViewportMap([144, -39, 146, -37]);
+    app = {
+      getMap: () => view.map,
+      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+    await settle();
+
+    pan = true;
+    view.setBounds([150, -35, 152, -33]);
+    view.listeners.get("moveend")?.();
+    await settle();
+
+    // A plain network failure, not an AbortError, landing after the pan.
+    rejections[0](new Error("Connection reset"));
+    await settle();
+
+    const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
+    assert.equal(
+      layer?.connection?.lastError ?? null,
+      null,
+      "a stale failure must not be reported",
+    );
+    assert.equal(layer?.geojson?.features.length, 1);
+  });
+
   it("records a failed viewport query on the layer connection and clears it", async () => {
     let fail = true;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -414,6 +459,41 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.deepEqual([...geometries].sort(), ["-180,-20,-170,20", "170,-20,180,20"]);
     const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
     assert.equal(layer?.geojson?.features.length, 1, "the shared feature is published once");
+  });
+
+  it("holds a split viewport to maxFeatures across both envelopes", async () => {
+    // Each half answers with the cap's worth of distinct features, so an
+    // uncoordinated limit would leave the layer holding twice the maximum.
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(VIEWPORT_LAYER_INFO);
+      const offset = Number(url.searchParams.get("resultOffset") ?? "0");
+      if (offset > 0) return jsonResponse({ type: "FeatureCollection", features: [] });
+      const west = url.searchParams.get("geometry")?.startsWith("170") === true;
+      return jsonResponse({
+        type: "FeatureCollection",
+        features: west
+          ? [viewportFeature(1), viewportFeature(2)]
+          : [viewportFeature(3), viewportFeature(4)],
+      });
+    }) as typeof fetch;
+
+    const view = fakeViewportMap([170, -20, -170, 20]);
+    app = {
+      getMap: () => view.map,
+      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+      maxFeatures: 2,
+    });
+    await settle();
+
+    const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
+    assert.equal(layer?.geojson?.features.length, 2);
   });
 
   it("never persists the access token in the refresh URL", async () => {

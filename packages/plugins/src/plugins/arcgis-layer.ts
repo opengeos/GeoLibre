@@ -463,6 +463,7 @@ function startArcGISViewportLoader(
   // is unmounted well before the first viewport query lands, so carrying it for
   // the layer's lifetime would keep that closure alive to no purpose.
   const queryOptions: ArcGISLayerOptions = { ...options, onProgress: undefined };
+  const maxFeatures = positiveInteger(options.maxFeatures);
   const loader: ArcGISViewportLoader = {
     abort: null,
     load: () => Promise.resolve({ type: "FeatureCollection", features: [] }),
@@ -473,11 +474,13 @@ function startArcGISViewportLoader(
   /**
    * Query the map's current extent, publishing each page as it lands.
    *
-   * Resolves with whatever the layer holds — never rejects — when a newer
-   * viewport supersedes the call: that abort is bookkeeping, not a failure, and
-   * the replacement is already publishing. A refresh running concurrently with
-   * a pan must not be reported as a failed refresh (and, under an `onFailure`
-   * of `"clear"`, wipe a layer that is perfectly healthy).
+   * Resolves with whatever the layer holds — never rejects, whatever the
+   * error — when a newer viewport supersedes the call: the replacement is
+   * already publishing, so a failure the superseded request happened to hit
+   * (an abort, or a request that failed just before its abort landed) is not
+   * this layer's problem. A refresh running concurrently with a pan must not be
+   * reported as a failed refresh (and, under an `onFailure` of `"clear"`, wipe
+   * a layer that is perfectly healthy).
    */
   const load = async (): Promise<FeatureCollection> => {
     abort?.abort();
@@ -489,10 +492,16 @@ function startArcGISViewportLoader(
     // One bucket per envelope, so a viewport split across the antimeridian
     // publishes both halves together instead of each replacing the other.
     const pages: Feature[][] = envelopes.map(() => []);
-    const collect = (): FeatureCollection => ({
-      type: "FeatureCollection",
-      features: mergeArcGISViewportFeatures(pages, layerInfo.objectIdField),
-    });
+    const collect = (): FeatureCollection => {
+      const features = mergeArcGISViewportFeatures(pages, layerInfo.objectIdField);
+      // A split viewport issues one request per envelope, each honoring
+      // `maxFeatures` on its own, so the merge is trimmed to keep the option a
+      // bound on what the layer holds for one viewport rather than per half.
+      return {
+        type: "FeatureCollection",
+        features: maxFeatures === null ? features : features.slice(0, maxFeatures),
+      };
+    };
     const publish = (): void => {
       if (
         sequence !== requestSequence ||
@@ -502,33 +511,33 @@ function startArcGISViewportLoader(
       }
       useAppStore.getState().updateLayer(layerId, { geojson: collect() });
     };
-    try {
-      await Promise.all(
-        envelopes.map(async (envelope, index) => {
-          const data = await fetchArcGISFeaturePages(queryUrl, queryOptions, layerInfo, {
-            params: {
-              geometry: envelope.join(","),
-              geometryType: "esriGeometryEnvelope",
-              inSR: "4326",
-              spatialRel: "esriSpatialRelIntersects",
-            },
-            signal: controller.signal,
-            onPage: (features) => {
-              pages[index] = features;
-              publish();
-            },
-          });
-          pages[index] = data.features;
-          publish();
-        }),
-      );
-    } catch (error) {
-      if (sequence !== requestSequence && isArcGISAbortError(error)) {
-        return currentArcGISLayerGeojson(layerId);
-      }
-      throw error;
-    }
+    // `allSettled`, not `all`: a split viewport must not report a failure while
+    // its surviving half is still running, or that half's later pages would
+    // publish over an already-reported error with nothing to clear it.
+    const results = await Promise.allSettled(
+      envelopes.map(async (envelope, index) => {
+        const data = await fetchArcGISFeaturePages(queryUrl, queryOptions, layerInfo, {
+          params: {
+            geometry: envelope.join(","),
+            geometryType: "esriGeometryEnvelope",
+            inSR: "4326",
+            spatialRel: "esriSpatialRelIntersects",
+          },
+          signal: controller.signal,
+          onPage: (features) => {
+            pages[index] = features;
+            publish();
+          },
+        });
+        pages[index] = data.features;
+        publish();
+      }),
+    );
     if (sequence !== requestSequence) return currentArcGISLayerGeojson(layerId);
+    // One half failing still leaves the other's features on the map; the error
+    // says the view is incomplete rather than pretending it is whole.
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed) throw failed.reason;
     reportArcGISViewportError(layerId, null);
     return collect();
   };
@@ -576,10 +585,13 @@ export function restoreArcGISViewportLayers(app: GeoLibreAppAPI): void {
   const map = app.getMap?.();
   if (!map) return;
   for (const layer of useAppStore.getState().layers) {
+    // Skip only a loader already bound to *this* map: the restore effect also
+    // runs when the map is reinitialized, and a loader left on the old instance
+    // would listen to a dead map and query its stale bounds.
     if (
       layer.metadata.viewportLoading !== true ||
       layer.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND ||
-      arcgisFeatureLoaders.has(layer.id)
+      arcgisFeatureLoaders.get(layer.id)?.map === map
     ) {
       continue;
     }
