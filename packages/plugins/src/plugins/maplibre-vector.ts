@@ -113,6 +113,22 @@ let restorePanelExpandTimeout: number | null = null;
 const replayingLayerIds = new Set<string>();
 
 /**
+ * Layers whose replay failed (a download error, an unreadable source). They are
+ * kept in the project rather than pruned by the closing sync: a feed that was
+ * briefly unreachable must not cost the user their layers.
+ *
+ * Module-scoped for the same reason `replayingLayerIds` is. Overlapping restore
+ * passes divide the layers between them — the claim above makes each id the
+ * property of exactly one pass — but every pass ends with its own
+ * `syncVectorLayersToStore`, and the *last* one to run has the final say, since
+ * the suspension counter only clears once all of them have resumed. A call-local
+ * set would leave that final sync knowing only its own pass's failures and
+ * pruning its sibling's, which is precisely the loss this restore path exists to
+ * prevent.
+ */
+const failedLayerIds = new Set<string>();
+
+/**
  * Claims `id` for the duration of a replay so nothing else re-adds the same
  * layer while it loads.
  *
@@ -122,6 +138,10 @@ const replayingLayerIds = new Set<string>();
  */
 function trackReplay(id: string, replay: Promise<unknown>): Promise<unknown> {
   replayingLayerIds.add(id);
+  // A fresh attempt supersedes any earlier verdict for this id, so a refresh
+  // that succeeds clears the mark a previous failure left behind. Only this
+  // replay's own onError can put it back.
+  failedLayerIds.delete(id);
   return replay.finally(() => replayingLayerIds.delete(id));
 }
 /** One KML/KMZ file handed to the host importer. */
@@ -268,10 +288,6 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
     );
 
     const pending: Promise<unknown>[] = [];
-    // Layers whose replay failed (a download error, an unreadable source). They
-    // are kept in the project rather than pruned by the closing sync: a feed
-    // that was briefly unreachable must not cost the user their layers.
-    const failedLayerIds = new Set<string>();
     const panelCollapsed = vectorPanelCollapsedFromLayers(useAppStore.getState().layers);
     // Unlike maplibre-gl-raster (whose addRaster registers the raster
     // synchronously before loading), VectorControl.addData only adds a
@@ -430,6 +446,13 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
         // let this stale callback rewrite layers owned by its successor.
         if (control !== vectorControl) return;
         syncVectorLayersToStore(control, { preserveLayerIds: failedLayerIds });
+        // The set outlives this call now, so drop ids the store no longer knows
+        // about (a project closed, a layer the user deleted). Preserving a
+        // stale id is harmless to the sync, but keeping it forever is a leak.
+        const liveIds = new Set(useAppStore.getState().layers.map((layer) => layer.id));
+        for (const id of failedLayerIds) {
+          if (!liveIds.has(id)) failedLayerIds.delete(id);
+        }
       }, 0);
     });
   })().catch((error) => {

@@ -825,6 +825,16 @@ fn ensure_fetchable_url(url: &str) -> Result<(), String> {
 
 /// A redirect policy that re-applies [`url_is_fetchable`] to every hop, so a
 /// public URL that 3xx-redirects to an internal address is not followed.
+///
+/// A blocked hop fails the request via `attempt.error` rather than
+/// `attempt.stop`: stopping makes reqwest hand the 30x response back as `Ok`,
+/// which reaches the frontend as a bland "Request failed with status 302" that
+/// [`is_ssrf_guard_error`] cannot recognise — and an unrecognised failure is
+/// retried by the webview's unguarded `fetch`, which would follow the very
+/// redirect this policy refused. Failing with [`SSRF_BLOCKED_MESSAGE`] in the
+/// error's source chain keeps that fallback closed. The hop cap still uses
+/// `stop`: an over-long but otherwise allowed chain is not an SSRF rejection
+/// and must not be reported as one.
 fn guarded_redirect_policy() -> reqwest::redirect::Policy {
     reqwest::redirect::Policy::custom(|attempt| {
         if attempt.previous().len() >= 10 {
@@ -832,9 +842,40 @@ fn guarded_redirect_policy() -> reqwest::redirect::Policy {
         }
         match url_is_fetchable(attempt.url()) {
             Ok(()) => attempt.follow(),
-            Err(_) => attempt.stop(),
+            Err(_) => attempt.error(SSRF_BLOCKED_MESSAGE),
         }
     })
+}
+
+/// True when a reqwest failure was caused by the SSRF guard rather than by the
+/// network.
+///
+/// Neither guard's rejection is visible in the top-level `Display`: the redirect
+/// policy's error is wrapped in reqwest's "error following redirect", and
+/// [`GuardedDnsResolver`]'s is wrapped by the connector. Both keep
+/// [`SSRF_BLOCKED_MESSAGE`] in the source chain, so walk it.
+fn is_ssrf_guard_error(error: &dyn std::error::Error) -> bool {
+    let mut current = Some(error);
+    while let Some(error) = current {
+        if error.to_string().contains(SSRF_BLOCKED_MESSAGE) {
+            return true;
+        }
+        current = error.source();
+    }
+    false
+}
+
+/// Renders a request failure for the frontend, preserving
+/// [`SSRF_BLOCKED_MESSAGE`] verbatim when the guard was what refused it.
+///
+/// `isBlockedUrlError` in `src/lib/vector-url-fetch.ts` matches on that wording
+/// to decide whether retrying in the webview is safe, so a guard rejection that
+/// reaches it as a generic transport error fails *open* into an unguarded fetch.
+fn request_error_message(error: &reqwest::Error) -> String {
+    if is_ssrf_guard_error(error) {
+        return SSRF_BLOCKED_MESSAGE.to_string();
+    }
+    format!("Request failed: {error}")
 }
 
 /// A DNS resolver that drops any address in a blocked range, so reqwest connects
@@ -1073,7 +1114,7 @@ fn fetch_url_bytes_blocking(url: String, timeout_secs: Option<u64>) -> Result<Ve
         .get(&url)
         .timeout(Duration::from_secs(timeout))
         .send()
-        .map_err(|error| format!("Request failed: {error}"))?;
+        .map_err(|error| request_error_message(&error))?;
     let status = response.status();
     if !status.is_success() {
         return Err(format!("Request failed with status {status}"));
@@ -1574,7 +1615,7 @@ fn resolve_url_redirect_blocking(url: String) -> Result<String, String> {
         .header("accept", "application/json, text/plain;q=0.9, */*;q=0.8")
         .timeout(timeout)
         .send()
-        .map_err(|error| format!("Request failed: {error}"))?;
+        .map_err(|error| request_error_message(&error))?;
     if has_xyz_placeholders(response.url().as_str()) {
         return Ok(response.url().to_string());
     }
@@ -4024,8 +4065,8 @@ mod tests {
     use super::{
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
         is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
-        is_safe_absolute_path, path_is_under, resolve_fetch_timeout_secs, tcp_table_port,
-        MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS,
+        is_safe_absolute_path, is_ssrf_guard_error, path_is_under, resolve_fetch_timeout_secs,
+        tcp_table_port, MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS, SSRF_BLOCKED_MESSAGE,
     };
     #[cfg(target_os = "linux")]
     use super::{linux_uses_nvidia_renderer, nvidia_is_primary_gpu};
@@ -4279,6 +4320,35 @@ mod tests {
         assert!(ensure_fetchable_url("https://1.1.1.1/").is_ok());
         assert!(ensure_fetchable_url("http://127.0.0.1:8081/tiles/0/0/0.png").is_ok());
         assert!(ensure_fetchable_url("http://[::1]:8081/data.pmtiles").is_ok());
+    }
+
+    #[test]
+    fn ssrf_guard_error_is_detected_through_the_source_chain() {
+        use std::error::Error;
+        use std::fmt;
+
+        #[derive(Debug)]
+        struct Wrapper(Box<dyn Error + Send + Sync>);
+        impl fmt::Display for Wrapper {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                // Deliberately hides the cause, the way reqwest's "error
+                // following redirect" / connector errors hide theirs.
+                write!(f, "error following redirect for url (https://example.com/)")
+            }
+        }
+        impl Error for Wrapper {
+            fn source(&self) -> Option<&(dyn Error + 'static)> {
+                Some(self.0.as_ref())
+            }
+        }
+
+        let blocked = Wrapper(SSRF_BLOCKED_MESSAGE.into());
+        assert!(!blocked.to_string().contains(SSRF_BLOCKED_MESSAGE));
+        assert!(is_ssrf_guard_error(&blocked));
+
+        // A genuine transport failure must stay fallback-eligible.
+        let transport = Wrapper("connection reset by peer".into());
+        assert!(!is_ssrf_guard_error(&transport));
     }
 
     #[test]

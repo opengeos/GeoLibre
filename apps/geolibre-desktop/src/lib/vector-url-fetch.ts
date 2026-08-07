@@ -109,12 +109,20 @@ export function resetVectorUrlFetchDedupe(): void {
 }
 
 /**
- * Phrases the native fetch command rejects a URL with *before* issuing any
- * request, mirroring `url_is_fetchable` / `ensure_fetchable_url` in
- * `src-tauri/src/lib.rs` (`SSRF_BLOCKED_MESSAGE` and its siblings). The Rust
- * strings cannot be imported across the process boundary, so re-check this list
- * when that guard's messages change; a phrase that drifts fails open into the
- * browser fallback rather than breaking the build.
+ * Phrases the native fetch command rejects a URL with, mirroring
+ * `url_is_fetchable` / `ensure_fetchable_url` in `src-tauri/src/lib.rs`
+ * (`SSRF_BLOCKED_MESSAGE` and its siblings). The Rust strings cannot be imported
+ * across the process boundary, so re-check this list when that guard's messages
+ * change; a phrase that drifts fails open into the browser fallback rather than
+ * breaking the build.
+ *
+ * "Refusing to fetch" covers more than the pre-request check: the guarded
+ * redirect policy and `GuardedDnsResolver` reject mid-request, and both are
+ * normalised back to `SSRF_BLOCKED_MESSAGE` by `request_error_message` on the
+ * Rust side precisely so they land on this list. Without that normalisation a
+ * URL that passes the initial check and *then* redirects to (or re-resolves to)
+ * a blocked address surfaces as a generic transport failure, and the fallback
+ * below follows it with none of the guard's protections.
  */
 const URL_POLICY_REJECTIONS = [
   "Refusing to fetch",
