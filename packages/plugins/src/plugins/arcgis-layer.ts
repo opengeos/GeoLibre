@@ -459,6 +459,10 @@ function startArcGISViewportLoader(
 ): void {
   let abort: AbortController | null = null;
   let requestSequence = 0;
+  // The Add Data dialog's progress callback belongs to the initial download. It
+  // is unmounted well before the first viewport query lands, so carrying it for
+  // the layer's lifetime would keep that closure alive to no purpose.
+  const queryOptions: ArcGISLayerOptions = { ...options, onProgress: undefined };
   const loader: ArcGISViewportLoader = {
     abort: null,
     load: () => Promise.resolve({ type: "FeatureCollection", features: [] }),
@@ -466,6 +470,15 @@ function startArcGISViewportLoader(
     move: () => undefined,
   };
 
+  /**
+   * Query the map's current extent, publishing each page as it lands.
+   *
+   * Resolves with whatever the layer holds — never rejects — when a newer
+   * viewport supersedes the call: that abort is bookkeeping, not a failure, and
+   * the replacement is already publishing. A refresh running concurrently with
+   * a pan must not be reported as a failed refresh (and, under an `onFailure`
+   * of `"clear"`, wipe a layer that is perfectly healthy).
+   */
   const load = async (): Promise<FeatureCollection> => {
     abort?.abort();
     const controller = new AbortController();
@@ -489,26 +502,34 @@ function startArcGISViewportLoader(
       }
       useAppStore.getState().updateLayer(layerId, { geojson: collect() });
     };
-    await Promise.all(
-      envelopes.map(async (envelope, index) => {
-        const data = await fetchArcGISFeaturePages(queryUrl, options, layerInfo, {
-          params: {
-            geometry: envelope.join(","),
-            geometryType: "esriGeometryEnvelope",
-            inSR: "4326",
-            spatialRel: "esriSpatialRelIntersects",
-          },
-          signal: controller.signal,
-          onPage: (features) => {
-            pages[index] = features;
-            publish();
-          },
-        });
-        pages[index] = data.features;
-        publish();
-      }),
-    );
-    if (sequence === requestSequence) reportArcGISViewportError(layerId, null);
+    try {
+      await Promise.all(
+        envelopes.map(async (envelope, index) => {
+          const data = await fetchArcGISFeaturePages(queryUrl, queryOptions, layerInfo, {
+            params: {
+              geometry: envelope.join(","),
+              geometryType: "esriGeometryEnvelope",
+              inSR: "4326",
+              spatialRel: "esriSpatialRelIntersects",
+            },
+            signal: controller.signal,
+            onPage: (features) => {
+              pages[index] = features;
+              publish();
+            },
+          });
+          pages[index] = data.features;
+          publish();
+        }),
+      );
+    } catch (error) {
+      if (sequence !== requestSequence && isArcGISAbortError(error)) {
+        return currentArcGISLayerGeojson(layerId);
+      }
+      throw error;
+    }
+    if (sequence !== requestSequence) return currentArcGISLayerGeojson(layerId);
+    reportArcGISViewportError(layerId, null);
     return collect();
   };
 
@@ -541,6 +562,59 @@ export function reloadArcGISViewportLayer(layerId: string): Promise<FeatureColle
 }
 
 /**
+ * Re-attach viewport loaders after a project is loaded.
+ *
+ * {@link startArcGISViewportLoader} only runs in the Add Data flow, but
+ * `metadata.viewportLoading` round-trips through the saved project. Without
+ * this, a reopened project's feature layer is frozen on whichever extent was in
+ * view when it was saved: panning fetches nothing, and a refresh falls back to
+ * the unbounded download the viewport path exists to avoid.
+ *
+ * @param app - The host app API, for the map the loaders bind to.
+ */
+export function restoreArcGISViewportLayers(app: GeoLibreAppAPI): void {
+  const map = app.getMap?.();
+  if (!map) return;
+  for (const layer of useAppStore.getState().layers) {
+    if (
+      layer.metadata.viewportLoading !== true ||
+      layer.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND ||
+      arcgisFeatureLoaders.has(layer.id)
+    ) {
+      continue;
+    }
+    const source = layer.source as {
+      arcgisQueryUrl?: unknown;
+      maxFeatures?: unknown;
+      pageSize?: unknown;
+    };
+    const queryUrl = typeof source.arcgisQueryUrl === "string" ? source.arcgisQueryUrl.trim() : "";
+    if (!queryUrl) continue;
+    const options: ArcGISLayerOptions = {
+      layerType: "feature",
+      maxFeatures: typeof source.maxFeatures === "number" ? source.maxFeatures : undefined,
+      pageSize: typeof source.pageSize === "number" ? source.pageSize : undefined,
+      sourceType: "url",
+    };
+    const layerId = layer.id;
+    // Re-read the service metadata rather than trusting a stored copy, the same
+    // reason refreshArcGISFeatureLayer does: paging capabilities and
+    // `maxRecordCount` are the service's to change between sessions.
+    void fetchArcGISJson<ArcGISFeatureLayerInfo>(
+      trimTrailingSlash(queryUrl).replace(/\/query$/i, ""),
+      options,
+      undefined,
+    )
+      .then((layerInfo) => {
+        // The layer may have been removed while the metadata was in flight.
+        if (!useAppStore.getState().layers.some((entry) => entry.id === layerId)) return;
+        startArcGISViewportLoader(layerId, map, queryUrl, options, layerInfo);
+      })
+      .catch((error: unknown) => handleArcGISViewportError(layerId, error));
+  }
+}
+
+/**
  * Tear down viewport loaders for layers that have left the store.
  *
  * One shared subscription for every loader, matching
@@ -569,9 +643,19 @@ function stopArcGISViewportLoader(layerId: string): void {
 }
 
 function handleArcGISViewportError(layerId: string, error: unknown): void {
-  if (error instanceof DOMException && error.name === "AbortError") return;
+  if (isArcGISAbortError(error)) return;
   console.error("[GeoLibre] ArcGIS viewport query failed", error);
   reportArcGISViewportError(layerId, error instanceof Error ? error.message : String(error));
+}
+
+function isArcGISAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+/** The features a layer currently holds, for a query that has nothing newer. */
+function currentArcGISLayerGeojson(layerId: string): FeatureCollection {
+  const layer = useAppStore.getState().layers.find((entry) => entry.id === layerId);
+  return layer?.geojson ?? { type: "FeatureCollection", features: [] };
 }
 
 /**

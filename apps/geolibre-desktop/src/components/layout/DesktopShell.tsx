@@ -27,6 +27,7 @@ import {
   reattachSun,
   reattachRouteAnimation,
   reattachFlightSimulator,
+  restoreArcGISViewportLayers,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
@@ -1150,6 +1151,9 @@ export function DesktopShell({
     restoreRasterLayers(appAPI);
     restorePlanetaryComputerLayers(appAPI);
     restoreVectorLayers(appAPI);
+    // Re-bind saved ArcGIS feature layers to the viewport. Without this a
+    // reopened project's layer stays frozen on the extent it was saved with.
+    restoreArcGISViewportLayers(appAPI);
     // Re-stream saved LiDAR (COPC) point clouds. A `lidar-url` layer restores
     // into the store as inert metadata; the point cloud is loaded by the LiDAR
     // control, not the store, so without this the layer shows in the panel but

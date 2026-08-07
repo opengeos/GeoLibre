@@ -344,6 +344,46 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.deepEqual(view.offCalls, [["moveend", move]]);
   });
 
+  it("records a failed viewport query on the layer connection and clears it", async () => {
+    let fail = true;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(VIEWPORT_LAYER_INFO);
+      if (fail) throw new Error("Network unreachable");
+      const offset = Number(url.searchParams.get("resultOffset") ?? "0");
+      return jsonResponse({
+        type: "FeatureCollection",
+        features: offset > 0 ? [] : [viewportFeature(1)],
+      });
+    }) as typeof fetch;
+
+    const view = fakeViewportMap([144, -39, 146, -37]);
+    app = {
+      getMap: () => view.map,
+      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+    await settle();
+
+    // The Layers panel renders this as its sync-error status line.
+    assert.match(
+      useAppStore.getState().layers.find((layer) => layer.id === id)?.connection?.lastError ?? "",
+      /Network unreachable/,
+    );
+
+    fail = false;
+    view.listeners.get("moveend")?.();
+    await settle();
+    const recovered = useAppStore.getState().layers.find((layer) => layer.id === id);
+    assert.equal(recovered?.connection?.lastError, null);
+    assert.equal(recovered?.geojson?.features.length, 1);
+  });
+
   it("splits an antimeridian-crossing viewport into two envelopes", async () => {
     const geometries: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {

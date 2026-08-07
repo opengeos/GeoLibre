@@ -65,6 +65,7 @@ export {
   parseArcGISLayerType,
   refreshArcGISFeatureLayer,
   reloadArcGISViewportLayer,
+  restoreArcGISViewportLayers,
   type ArcGISLayerOptions,
   type ArcGISLayerType,
   type ArcGISSourceType,
