@@ -100,8 +100,30 @@ let vectorControl: VectorControl | null = null;
 let vectorControlMounted = false;
 let openPanelTimeout: number | null = null;
 let restorePanelExpandTimeout: number | null = null;
-/** Layer ids currently being re-added by replayVectorControlLayerById. */
+/**
+ * Layer ids with an `addData` replay in flight, from project restore or from
+ * replayVectorControlLayerById.
+ *
+ * `control.getLayer(id)` cannot serve as the guard on its own: the control only
+ * registers a layer once its data has loaded, so during that window an id looks
+ * absent to everyone. A refresh tick landing mid-restore would then re-add a
+ * layer restore is already loading, costing a redundant download and a
+ * duplicate-id throw. Claiming the id for the whole replay closes that window.
+ */
 const replayingLayerIds = new Set<string>();
+
+/**
+ * Claims `id` for the duration of a replay so nothing else re-adds the same
+ * layer while it loads.
+ *
+ * @param id - The layer id being replayed.
+ * @param replay - The in-flight replay promise.
+ * @returns The same promise, with the claim released once it settles.
+ */
+function trackReplay(id: string, replay: Promise<unknown>): Promise<unknown> {
+  replayingLayerIds.add(id);
+  return replay.finally(() => replayingLayerIds.delete(id));
+}
 /** One KML/KMZ file handed to the host importer. */
 export interface KmlFileImport {
   file: File;
@@ -290,9 +312,12 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
           typeof layer.source.url === "string" && layer.source.url ? layer.source.url : undefined;
         if (url) {
           pending.push(
-            replayVectorLayer(control, layer, url, restoredGroups, {
-              onError: () => failedLayerIds.add(layer.id),
-            }),
+            trackReplay(
+              layer.id,
+              replayVectorLayer(control, layer, url, restoredGroups, {
+                onError: () => failedLayerIds.add(layer.id),
+              }),
+            ),
           );
           continue;
         }
@@ -316,31 +341,34 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
             : undefined;
         if (localPath && app.readLocalVectorFile) {
           pending.push(
-            app
-              .readLocalVectorFile(localPath)
-              .then((file) => {
-                if (!file) {
-                  // The file moved or was deleted since the project was saved.
-                  console.info(
-                    `[GeoLibre] Vector layer "${layer.name}" could not be re-read from "${localPath}"; removing it.`,
-                  );
+            trackReplay(
+              layer.id,
+              app
+                .readLocalVectorFile(localPath)
+                .then((file) => {
+                  if (!file) {
+                    // The file moved or was deleted since the project was saved.
+                    console.info(
+                      `[GeoLibre] Vector layer "${layer.name}" could not be re-read from "${localPath}"; removing it.`,
+                    );
+                    useAppStore.getState().removeLayer(layer.id);
+                    return undefined;
+                  }
+                  const source = file.nativeData
+                    ? nativeGeoJsonFile(file.file, file.nativeData)
+                    : file.file;
+                  return replayVectorLayer(control, layer, source, restoredGroups, {
+                    companionFiles: file.nativeData ? undefined : file.companionFiles,
+                    localPath,
+                  });
+                })
+                .catch((error) => {
+                  console.error(`[GeoLibre] Failed to restore vector layer "${layer.name}"`, error);
+                  // Consistent with the missing-file case above: drop the layer
+                  // rather than leave a zombie panel entry with no map output.
                   useAppStore.getState().removeLayer(layer.id);
-                  return undefined;
-                }
-                const source = file.nativeData
-                  ? nativeGeoJsonFile(file.file, file.nativeData)
-                  : file.file;
-                return replayVectorLayer(control, layer, source, restoredGroups, {
-                  companionFiles: file.nativeData ? undefined : file.companionFiles,
-                  localPath,
-                });
-              })
-              .catch((error) => {
-                console.error(`[GeoLibre] Failed to restore vector layer "${layer.name}"`, error);
-                // Consistent with the missing-file case above: drop the layer
-                // rather than leave a zombie panel entry with no map output.
-                useAppStore.getState().removeLayer(layer.id);
-              }),
+                }),
+            ),
           );
           continue;
         }
@@ -352,9 +380,12 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
         const embedded = readEmbeddedVectorGeoJSON(layer.metadata.embeddedGeoJSON);
         if (embedded) {
           pending.push(
-            replayVectorLayer(control, layer, embedded, restoredGroups, {
-              onError: () => failedLayerIds.add(layer.id),
-            }),
+            trackReplay(
+              layer.id,
+              replayVectorLayer(control, layer, embedded, restoredGroups, {
+                onError: () => failedLayerIds.add(layer.id),
+              }),
+            ),
           );
           continue;
         }

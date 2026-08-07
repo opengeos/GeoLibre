@@ -1044,11 +1044,13 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     fetchVectorUrl: (url: string) =>
       dedupeVectorUrlFetch(url, async () => {
         const name = vectorDownloadFileName(url);
-        // Every request here shares one budget. Sibling layers now await a
-        // single download, so a stalled fetch would hold all of them pending
-        // rather than just itself; the browser paths need the same ceiling the
-        // native command is given below.
-        const signal = AbortSignal.timeout(VECTOR_DOWNLOAD_TIMEOUT_SECS * 1000);
+        // Each attempt gets its own budget rather than sharing one across all
+        // three. A shared deadline would be spent by the native call in exactly
+        // the case the fallbacks exist for (a slow origin), leaving them to
+        // reject instantly on an already-aborted signal. Sibling layers now
+        // await a single download, so an unbounded fetch would hold all of them
+        // pending, which is why each attempt is bounded at all.
+        const budget = () => AbortSignal.timeout(VECTOR_DOWNLOAD_TIMEOUT_SECS * 1000);
         if (isTauriRuntime()) {
           try {
             const bytes = await fetchUrlBytes(url, {
@@ -1068,7 +1070,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
             // Keep the browser path as a fallback for CORS-enabled origins the
             // native command could not reach.
             try {
-              const response = await fetch(url, { signal });
+              const response = await fetch(url, { signal: budget() });
               if (!response.ok) {
                 throw new Error(`HTTP ${response.status} ${response.statusText}`);
               }
@@ -1081,7 +1083,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
         }
         const proxyUrl = githubRawVectorProxyUrl(url);
         if (!proxyUrl) return null;
-        const response = await fetch(proxyUrl, { signal });
+        const response = await fetch(proxyUrl, { signal: budget() });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status} ${response.statusText}`);
         }
