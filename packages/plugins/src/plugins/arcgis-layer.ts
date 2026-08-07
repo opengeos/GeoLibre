@@ -94,6 +94,11 @@ export interface ArcGISLayerOptions {
    * Only meaningful for `layerType: "feature"`, whose features are pulled into
    * an in-memory GeoJSON source; a cap is the escape hatch for a layer too big
    * to hold in the browser at all.
+   *
+   * In the interactive app a feature layer loads by viewport, so the cap
+   * applies to each viewport query rather than to the layer as a whole: every
+   * pan issues a fresh bounded download of up to this many features. Headless
+   * callers, which download the layer whole, get the total cap.
    */
   maxFeatures?: number;
   name?: string;
@@ -231,10 +236,20 @@ interface ArcGISRuntimeLayer {
 let arcgisLayerSequence = 0;
 const arcgisLayerInstances = new Map<string, ArcGISRuntimeLayer>();
 let arcgisStoreUnsubscribe: (() => void) | null = null;
-const arcgisFeatureLoaders = new Map<
-  string,
-  { abort: AbortController | null; map: maplibregl.Map; move: () => void }
->();
+
+/** A live viewport-bound FeatureServer download for one GeoJSON layer. */
+interface ArcGISViewportLoader {
+  /** The in-flight request, aborted when a newer viewport supersedes it. */
+  abort: AbortController | null;
+  /** Re-run the query for the map's current extent. */
+  load: () => Promise<FeatureCollection>;
+  map: maplibregl.Map;
+  /** The `moveend` handler, kept so it can be detached on removal. */
+  move: () => void;
+}
+
+const arcgisFeatureLoaders = new Map<string, ArcGISViewportLoader>();
+let arcgisFeatureLoaderUnsubscribe: (() => void) | null = null;
 
 export async function addArcGISLayer(
   app: GeoLibreAppAPI,
@@ -444,71 +459,223 @@ function startArcGISViewportLoader(
 ): void {
   let abort: AbortController | null = null;
   let requestSequence = 0;
-  const loader: { abort: AbortController | null; map: maplibregl.Map; move: () => void } = {
+  const loader: ArcGISViewportLoader = {
     abort: null,
+    load: () => Promise.resolve({ type: "FeatureCollection", features: [] }),
     map,
     move: () => undefined,
   };
 
-  const load = (): void => {
+  const load = async (): Promise<FeatureCollection> => {
     abort?.abort();
-    abort = new AbortController();
-    loader.abort = abort;
+    const controller = new AbortController();
+    abort = controller;
+    loader.abort = controller;
     const sequence = ++requestSequence;
-    const bounds = map.getBounds();
-    const bbox: [number, number, number, number] = [
-      Math.max(-180, bounds.getWest()),
-      Math.max(-90, bounds.getSouth()),
-      Math.min(180, bounds.getEast()),
-      Math.min(90, bounds.getNorth()),
-    ];
-    const query = {
-      geometry: bbox.join(","),
-      geometryType: "esriGeometryEnvelope",
-      inSR: "4326",
-      spatialRel: "esriSpatialRelIntersects",
-    };
-    const publish = (features: Feature[]): void => {
+    const envelopes = arcgisViewportEnvelopes(map.getBounds());
+    // One bucket per envelope, so a viewport split across the antimeridian
+    // publishes both halves together instead of each replacing the other.
+    const pages: Feature[][] = envelopes.map(() => []);
+    const collect = (): FeatureCollection => ({
+      type: "FeatureCollection",
+      features: mergeArcGISViewportFeatures(pages, layerInfo.objectIdField),
+    });
+    const publish = (): void => {
       if (
         sequence !== requestSequence ||
         !useAppStore.getState().layers.some((l) => l.id === layerId)
       ) {
         return;
       }
-      useAppStore.getState().updateLayer(layerId, {
-        geojson: { type: "FeatureCollection", features: [...features] },
-      });
+      useAppStore.getState().updateLayer(layerId, { geojson: collect() });
     };
-    void fetchArcGISFeaturePages(queryUrl, options, layerInfo, {
-      params: query,
-      signal: abort.signal,
-      onPage: publish,
-    })
-      .then((data) => publish(data.features))
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        console.error("[GeoLibre] ArcGIS viewport query failed", error);
-      });
+    await Promise.all(
+      envelopes.map(async (envelope, index) => {
+        const data = await fetchArcGISFeaturePages(queryUrl, options, layerInfo, {
+          params: {
+            geometry: envelope.join(","),
+            geometryType: "esriGeometryEnvelope",
+            inSR: "4326",
+            spatialRel: "esriSpatialRelIntersects",
+          },
+          signal: controller.signal,
+          onPage: (features) => {
+            pages[index] = features;
+            publish();
+          },
+        });
+        pages[index] = data.features;
+        publish();
+      }),
+    );
+    if (sequence === requestSequence) reportArcGISViewportError(layerId, null);
+    return collect();
   };
 
-  const move = (): void => load();
+  const move = (): void => {
+    void load().catch((error: unknown) => handleArcGISViewportError(layerId, error));
+  };
+  loader.load = load;
   loader.move = move;
+  stopArcGISViewportLoader(layerId);
   map.on("moveend", move);
-  const existing = arcgisFeatureLoaders.get(layerId);
-  existing?.abort?.abort();
-  if (existing) existing.map.off("moveend", existing.move);
   arcgisFeatureLoaders.set(layerId, loader);
+  ensureArcGISFeatureLoaderCleanup();
   // fitBounds may still be animating. Its moveend will replace this first query.
-  if (!map.isMoving()) load();
+  if (!map.isMoving()) move();
+}
 
-  const unsubscribe = useAppStore.subscribe((state) => {
-    if (state.layers.some((layer) => layer.id === layerId)) return;
-    const loader = arcgisFeatureLoaders.get(layerId);
-    loader?.abort?.abort();
-    loader?.map.off("moveend", loader.move);
-    arcgisFeatureLoaders.delete(layerId);
-    unsubscribe();
+/**
+ * Re-run the viewport query for a layer that loads by extent.
+ *
+ * A refresh must not fall back to the unbounded paged download for these
+ * layers: that would pull the whole service into memory behind the user's
+ * back, which is the very thing viewport loading exists to avoid.
+ *
+ * @param layerId - The layer to reload.
+ * @returns The features for the map's current extent, or `null` when the layer
+ *   has no live loader (a project restored from disk, or a headless host).
+ */
+export function reloadArcGISViewportLayer(layerId: string): Promise<FeatureCollection> | null {
+  return arcgisFeatureLoaders.get(layerId)?.load() ?? null;
+}
+
+/**
+ * Tear down viewport loaders for layers that have left the store.
+ *
+ * One shared subscription for every loader, matching
+ * {@link ensureArcGISStoreCleanup}: a subscription per layer would run a linear
+ * scan of `state.layers` on every unrelated store update for the life of the
+ * app, multiplied by however many such layers are open.
+ */
+function ensureArcGISFeatureLoaderCleanup(): void {
+  arcgisFeatureLoaderUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    if (arcgisFeatureLoaders.size === 0) return;
+    for (const layer of previous.layers) {
+      if (!state.layers.some((current) => current.id === layer.id)) {
+        stopArcGISViewportLoader(layer.id);
+      }
+    }
   });
+}
+
+/** Cancel a layer's viewport loader and detach its `moveend` handler. */
+function stopArcGISViewportLoader(layerId: string): void {
+  const loader = arcgisFeatureLoaders.get(layerId);
+  if (!loader) return;
+  loader.abort?.abort();
+  loader.map.off("moveend", loader.move);
+  arcgisFeatureLoaders.delete(layerId);
+}
+
+function handleArcGISViewportError(layerId: string, error: unknown): void {
+  if (error instanceof DOMException && error.name === "AbortError") return;
+  console.error("[GeoLibre] ArcGIS viewport query failed", error);
+  reportArcGISViewportError(layerId, error instanceof Error ? error.message : String(error));
+}
+
+/**
+ * Record a viewport query's outcome on the layer's connection record, which is
+ * what the Layers panel already reads to show a synchronization error. Without
+ * it a failed pan leaves the previous extent's features on screen with nothing
+ * to say the query for the current one never landed.
+ */
+function reportArcGISViewportError(layerId: string, message: string | null): void {
+  const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
+  // Only written when the state actually changes, so a successful pan over a
+  // healthy layer does not dirty the project on every `moveend`.
+  if (!layer || (layer.connection?.lastError ?? null) === message) return;
+  useAppStore.getState().updateLayer(layerId, {
+    connection: {
+      interval: null,
+      lastSyncedAt: null,
+      onFailure: "keep-last",
+      ...layer.connection,
+      layerId,
+      lastError: message,
+    },
+  });
+}
+
+/** A `[west, south, east, north]` query envelope, in WGS84 degrees. */
+type ArcGISEnvelope = [number, number, number, number];
+
+/**
+ * The ArcGIS query envelopes covering a map viewport.
+ *
+ * MapLibre reports the viewport's raw longitudes, which run outside ±180 as
+ * soon as the view crosses the antimeridian or the user keeps panning around
+ * the globe. Clamping each edge on its own would either invert the envelope
+ * (west 170, east -170) or collapse it to zero width (west 200, east 210), and
+ * ArcGIS answers both with nothing for that part of the screen. So the span is
+ * normalized onto ±180 and, when it straddles the antimeridian, split into the
+ * two envelopes that cover it — the same treatment `splitAntimeridian` gives
+ * the offline tile download.
+ *
+ * @param bounds - The map's current bounds.
+ * @returns One envelope, or two when the viewport crosses the antimeridian.
+ */
+function arcgisViewportEnvelopes(bounds: {
+  getEast(): number;
+  getNorth(): number;
+  getSouth(): number;
+  getWest(): number;
+}): ArcGISEnvelope[] {
+  const south = Math.max(-90, Math.min(90, bounds.getSouth()));
+  const north = Math.min(90, Math.max(-90, bounds.getNorth()));
+  const rawWest = bounds.getWest();
+  const rawEast = bounds.getEast();
+  if (!Number.isFinite(rawWest) || !Number.isFinite(rawEast)) {
+    return [[-180, south, 180, north]];
+  }
+  // A wrapped viewport reports east < west; unwrap it before measuring the span.
+  const span = rawEast >= rawWest ? rawEast - rawWest : rawEast + 360 - rawWest;
+  if (span >= 360) return [[-180, south, 180, north]];
+  const west = wrapLongitude(rawWest);
+  const east = west + span;
+  return east > 180
+    ? [
+        [west, south, 180, north],
+        [-180, south, wrapLongitude(east), north],
+      ]
+    : [[west, south, east, north]];
+}
+
+/** Fold a longitude onto ±180, which the map's raw bounds may run past. */
+function wrapLongitude(longitude: number): number {
+  return ((((longitude + 180) % 360) + 360) % 360) - 180;
+}
+
+/**
+ * Concatenate the per-envelope results of one viewport query, dropping the
+ * duplicate a feature straddling the antimeridian produces by matching both
+ * halves. A feature the service gives no identifier for is kept as-is: showing
+ * it twice is better than guessing at identity by geometry.
+ */
+function mergeArcGISViewportFeatures(
+  pages: Feature[][],
+  objectIdField: string | undefined,
+): Feature[] {
+  if (pages.length === 1) return [...pages[0]];
+  const seen = new Set<string>();
+  const merged: Feature[] = [];
+  for (const page of pages) {
+    for (const feature of page) {
+      const key = arcgisFeatureKey(feature, objectIdField);
+      if (key !== null) {
+        if (seen.has(key)) continue;
+        seen.add(key);
+      }
+      merged.push(feature);
+    }
+  }
+  return merged;
+}
+
+function arcgisFeatureKey(feature: Feature, objectIdField: string | undefined): string | null {
+  if (typeof feature.id === "string" || typeof feature.id === "number") return String(feature.id);
+  const value = objectIdField ? feature.properties?.[objectIdField] : undefined;
+  return typeof value === "string" || typeof value === "number" ? String(value) : null;
 }
 
 /**

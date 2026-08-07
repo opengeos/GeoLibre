@@ -64,6 +64,7 @@ export {
   ARCGIS_MAP_SERVICE_SOURCE_KIND,
   parseArcGISLayerType,
   refreshArcGISFeatureLayer,
+  reloadArcGISViewportLayer,
   type ArcGISLayerOptions,
   type ArcGISLayerType,
   type ArcGISSourceType,
