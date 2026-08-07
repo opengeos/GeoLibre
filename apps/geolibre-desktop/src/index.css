@@ -27,6 +27,85 @@
     "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 
+/* Map-floating chrome, a.k.a. "instrument glass".
+
+   The distinction this encodes: chrome docked BESIDE the map (top toolbar,
+   status bar, side panels) is fully opaque, while panels that hover OVER the
+   map are translucent and blurred so the data reads through them. Translucency
+   is the signal for "this floats above your map" — which is why it must not
+   spread to docked chrome or to dialogs, which sit on a dimmed overlay rather
+   than on the map.
+
+   Codified here because the recipe was already in use across 11 components
+   with drifted values — bg-background/90 vs /95, and backdrop-blur-sm vs -md vs
+   bare backdrop-blur — so tuning the look meant finding every copy. Components
+   keep their own radius, border, shadow and padding; this owns only the surface
+   itself.
+
+   Deliberately a plain class rather than an `@utility`: it is applied alongside
+   components that already emit a `bg-*` utility (e.g. MapGrid's
+   `Button variant="outline"`, which carries `bg-background`). As a utility it
+   would land in the same cascade layer, so which one won would depend on
+   Tailwind's internal sort rather than intent. Unlayered CSS beats the utility
+   layer outright, so the surface treatment reliably wins. The trade-off is that
+   `map-glass` takes no variants (`hover:`, `md:`), which nothing needs.
+
+   The saturate() boost keeps basemap imagery from going muddy under the blur. */
+.map-glass {
+  background-color: hsl(var(--background) / 0.85);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+}
+
+/* Without backdrop-filter the panel is just 85% opaque over live imagery, which
+   is unreadable, so fall back to near-opaque. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .map-glass {
+    background-color: hsl(var(--background) / 0.97);
+  }
+}
+
+/* Elevation-tied shadow scale, replacing Tailwind's stock one. Each step maps to
+   a surface in the ladder rather than being picked by eye:
+
+     shadow-sm   resting control / inline card
+     shadow-md   popover, dropdown, tooltip
+     shadow-lg   panel floating over the map
+     shadow-xl   modal dialog
+
+   Redefining the tokens fixes all ~65 existing shadow sites without touching a
+   single component. The colours come from --elev-penumbra/--elev-umbra
+   (packages/ui/src/globals.css), which are theme-aware — Tailwind's built-in
+   scale hardcodes 10% black, so dark mode previously had no visible shadows at
+   all.
+
+   The colours are written bare here: Tailwind wraps each one in
+   var(--tw-shadow-color, …) when it generates the utility, so `shadow-<color>`
+   overrides keep working without spelling the wrapper out (writing it manually
+   just nests the fallback twice). */
+@theme {
+  --shadow-sm: 0 1px 2px 0 var(--elev-penumbra), 0 1px 3px 0 var(--elev-umbra);
+  --shadow-md: 0 2px 4px -1px var(--elev-penumbra), 0 4px 8px -2px var(--elev-umbra);
+  --shadow-lg: 0 4px 8px -2px var(--elev-penumbra), 0 12px 20px -4px var(--elev-umbra);
+  --shadow-xl: 0 8px 16px -4px var(--elev-penumbra), 0 24px 40px -8px var(--elev-umbra);
+}
+
+/* One global reduced-motion guard. Previously only two components respected the
+   preference while ~53 transition sites ignored it. Motion is reduced to a
+   near-instant cross-fade rather than removed outright, so state changes stay
+   perceptible (an abrupt swap is its own accessibility problem) — and scroll
+   behaviour is pinned to auto so programmatic smooth scrolls stop animating. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 html,
 body,
 #root {

@@ -57,7 +57,7 @@ function PaneLabel({
         onChange={(event) => onChange(event.target.value)}
         aria-label={ariaLabel}
         placeholder={t("mapGrid.labelPlaceholder")}
-        className="pointer-events-auto h-7 w-32 max-w-[40%] rounded-md border border-input bg-background/90 px-2 text-center text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none"
+        className="pointer-events-auto h-7 w-32 max-w-[40%] rounded-md border border-input map-glass px-2 text-center text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none"
       />
     </div>
   );
@@ -165,7 +165,7 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
         {cesiumAvailable ? (
           <button
             type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-input map-glass text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
             aria-label={
               is3d
                 ? t("mapGrid.show2d", { number: index + 2 })
@@ -179,7 +179,7 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
         ) : null}
         <button
           type="button"
-          className="flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-input map-glass text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
           aria-label={t("mapGrid.removePane", { number: index + 2 })}
           onClick={() => removeSecondaryMapView(viewId)}
         >
@@ -217,7 +217,7 @@ function PaneLayerToggle({ viewId, index, is3d }: PaneLayerToggleProps) {
         <Button
           variant="outline"
           size="sm"
-          className="h-7 gap-1.5 bg-background/90 px-2 shadow-sm"
+          className="h-7 gap-1.5 map-glass px-2 shadow-sm"
           aria-label={t("mapGrid.layersLabel", { number: index + 2 })}
         >
           <Layers className="h-3.5 w-3.5" />

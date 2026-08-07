@@ -29,7 +29,24 @@
     --border: 220 15% 88%;
     --input: 220 13% 76%;
     --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    /* 0.375rem rather than shadcn's stock 0.5rem: a dense tool UI reads sharper,
+       and the derived md/sm steps (calc -2px/-4px) stay positive. */
+    --radius: 0.375rem;
+
+    /* Elevation shadow colours, consumed by the --shadow-* scale the app defines
+       in index.css. Two layers: penumbra is the wide soft spread, umbra the
+       tight contact shadow.
+
+       These are plain custom properties precisely so they inherit. Tailwind v4
+       registers its own --tw-shadow-color with `inherits: false`, so retinting
+       shadows by setting that on :root silently does nothing — the value has to
+       reach each element, which ordinary inheritance does and @property-
+       registered custom properties do not.
+
+       Light shadows are a cool near-navy rather than pure black; against the
+       neutral chrome it reads less muddy than #000 at the same alpha. */
+    --elev-penumbra: hsl(220 40% 12% / 0.06);
+    --elev-umbra: hsl(220 40% 12% / 0.1);
   }
 
   /* Dark mode is built as an explicit elevation ladder. Previously --background,
@@ -69,6 +86,14 @@
     --destructive-foreground: 210 40% 98%;
     --border: 220 14% 26%;
     --input: 220 12% 38%;
+    /* Tailwind's built-in shadow scale bakes in a 10%-black colour, which is
+       all but invisible against these surfaces — so before this, every one of
+       the app's ~65 shadow utilities did nothing in dark mode and elevation was
+       carried entirely by the surface ladder above. Pure black at a much higher
+       alpha is what actually reads on a dark UI. */
+    --elev-penumbra: hsl(0 0% 0% / 0.4);
+    --elev-umbra: hsl(0 0% 0% / 0.55);
+
     /* Matches --primary, so the focus ring stays visible against the lifted
        surfaces (4.98:1 on --background, 4.64:1 on --card). The violet, rose and
        amber schemes below already pair ring with primary this way; emerald was
