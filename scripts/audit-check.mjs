@@ -68,7 +68,13 @@ if (report === null || typeof report !== "object" || Array.isArray(report)) {
   unusable("stdout was JSON but not an object.", audit.stdout);
 }
 if (report.error) {
-  unusable("npm reported an error.", report.error.detail || report.message || audit.stderr);
+  // A registry outage fills the top-level `message` and leaves `error.summary`
+  // and `error.detail` empty strings; other npm errors do the reverse. Try all
+  // three so the failure output carries whichever one npm populated.
+  unusable(
+    "npm reported an error.",
+    report.error.detail || report.error.summary || report.message || audit.stderr,
+  );
 }
 // Arrays are typeof "object" too, and an array would yield zero entries below
 // rather than an error — so a malformed report would read as clean.
