@@ -51,6 +51,10 @@ interface CommentsPanelProps {
   /** Called when the resolved-pins visibility should change. Receives `true`
    *  when the "Resolved" or "All" filter is active, `false` for "Open". */
   onShowResolvedChange?: (showResolved: boolean) => void;
+  /** Comment selected from its map marker. The matching card is revealed,
+   * highlighted, and scrolled into view. */
+  selectedCommentId?: string | null;
+  onClearSelectedComment?: () => void;
 }
 
 export function CommentsPanel({
@@ -59,6 +63,8 @@ export function CommentsPanel({
   onActivateCommentTool,
   isCommentToolActive,
   onShowResolvedChange,
+  selectedCommentId,
+  onClearSelectedComment,
 }: CommentsPanelProps) {
   const comments = useAppStore((s) => s.comments);
   const replyToComment = useAppStore((s) => s.replyToComment);
@@ -67,6 +73,36 @@ export function CommentsPanel({
   const collab = useAppStore((s) => s.collaboration);
 
   const [filter, setFilter] = useState<"all" | "open" | "resolved">("open");
+  const commentCardRefs = useRef(new Map<string, HTMLDivElement>());
+  const revealedSelectionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedCommentId) {
+      revealedSelectionRef.current = null;
+      return;
+    }
+    if (revealedSelectionRef.current === selectedCommentId) return;
+    const selected = comments.find((comment) => comment.id === selectedCommentId);
+    if (!selected) return;
+    revealedSelectionRef.current = selectedCommentId;
+
+    // A resolved marker can remain visible after the panel was displaced and
+    // remounted with its default Open filter. Reveal whichever filter contains
+    // the selected card before trying to scroll to it.
+    if ((selected.resolved && filter === "open") || (!selected.resolved && filter === "resolved")) {
+      setFilter(selected.resolved ? "resolved" : "open");
+    }
+  }, [comments, filter, selectedCommentId]);
+
+  useEffect(() => {
+    if (!selectedCommentId) return;
+    const frame = requestAnimationFrame(() => {
+      commentCardRefs.current
+        .get(selectedCommentId)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [filter, selectedCommentId]);
 
   // Notify parent whenever resolved pins should show/hide so the map overlay
   // stays in sync with the sidebar filter.
@@ -112,10 +148,12 @@ export function CommentsPanel({
   // The real session code comes from the store once start() has resolved.
   const activeCode = collab.sessionId ?? "";
 
-  const handleCopyCode = async () => {
+  const handleCopySessionUrl = async () => {
     if (!activeCode) return;
     try {
-      await navigator.clipboard.writeText(activeCode);
+      const sessionUrl = new URL(window.location.href);
+      sessionUrl.searchParams.set("collab", activeCode);
+      await navigator.clipboard.writeText(sessionUrl.toString());
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -225,6 +263,9 @@ export function CommentsPanel({
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Add Comment</span>
+            <kbd className="ms-1 rounded border border-current/25 px-1 font-mono text-[9px] leading-4 opacity-70">
+              C
+            </kbd>
           </Button>
         )}
       </div>
@@ -299,9 +340,9 @@ export function CommentsPanel({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={handleCopyCode}
+                onClick={handleCopySessionUrl}
                 className="h-7 px-2 text-[11px] shrink-0"
-                title="Copy session code"
+                title="Copy session URL"
               >
                 <Copy className="h-3 w-3 me-1" />
                 {copied ? "Copied" : "Copy"}
@@ -392,7 +433,10 @@ export function CommentsPanel({
           <button
             key={f}
             type="button"
-            onClick={() => setFilter(f)}
+            onClick={() => {
+              onClearSelectedComment?.();
+              setFilter(f);
+            }}
             className={cn(
               "flex-1 py-1 px-2 text-[11px] font-medium rounded transition-colors text-center",
               filter === f
@@ -426,17 +470,29 @@ export function CommentsPanel({
           <div className="space-y-3">
             {filteredComments.map((comment) => {
               const originalIndex = comments.findIndex((c) => c.id === comment.id);
+              const selected = comment.id === selectedCommentId;
               return (
-                <CommentThread
+                <div
                   key={comment.id}
-                  comment={comment}
-                  index={originalIndex >= 0 ? originalIndex : 0}
-                  onReply={handleReply}
-                  onToggleResolve={handleToggleResolve}
-                  onDelete={handleDelete}
-                  onZoomTo={handleZoomTo}
-                  readOnly={!canModifyComments}
-                />
+                  ref={(element) => {
+                    if (element) commentCardRefs.current.set(comment.id, element);
+                    else commentCardRefs.current.delete(comment.id);
+                  }}
+                  data-comment-id={comment.id}
+                  data-selected={selected || undefined}
+                  className="rounded-lg"
+                >
+                  <CommentThread
+                    comment={comment}
+                    index={originalIndex >= 0 ? originalIndex : 0}
+                    onReply={handleReply}
+                    onToggleResolve={handleToggleResolve}
+                    onDelete={handleDelete}
+                    onZoomTo={handleZoomTo}
+                    readOnly={!canModifyComments}
+                    selected={selected}
+                  />
+                </div>
               );
             })}
           </div>

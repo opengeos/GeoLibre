@@ -131,10 +131,17 @@ export function CommentMapOverlay({
 
         const pinColor = comment.author?.color || "#3b82f6";
 
+        // MapLibre writes its geographic translate transform onto the marker
+        // element itself. Keep that outer element transform-free and animate a
+        // child instead; a hover transform on `container` would replace
+        // MapLibre's translate and make the marker jump across the viewport.
         const container = document.createElement("div");
-        container.className =
-          "group relative cursor-pointer select-none transition-transform duration-150 ease-out hover:scale-[1.15]";
+        container.className = "relative cursor-pointer select-none";
         container.style.zIndex = comment.resolved ? "9" : "10";
+
+        const hoverTarget = document.createElement("div");
+        hoverTarget.className =
+          "origin-bottom transition-transform duration-150 ease-out hover:scale-[1.15]";
 
         // Build the pin with DOM APIs so the author color is set as a style
         // property, never interpolated into markup — defense-in-depth against
@@ -159,7 +166,8 @@ export function CommentMapOverlay({
           "transform:rotate(45deg);color:#ffffff;font-size:11px;font-weight:700;font-family:system-ui,sans-serif;line-height:1";
         label.textContent = `#${idx + 1}`;
         pin.appendChild(label);
-        container.appendChild(pin);
+        hoverTarget.appendChild(pin);
+        container.appendChild(hoverTarget);
 
         container.addEventListener("click", (e) => {
           e.stopPropagation();

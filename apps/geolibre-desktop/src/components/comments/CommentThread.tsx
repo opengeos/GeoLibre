@@ -21,6 +21,7 @@ interface CommentThreadProps {
   onDelete: (commentId: string) => void;
   onZoomTo: (comment: ProjectComment) => void;
   readOnly?: boolean;
+  selected?: boolean;
 }
 
 export function CommentThread({
@@ -31,6 +32,7 @@ export function CommentThread({
   onDelete,
   onZoomTo,
   readOnly = false,
+  selected = false,
 }: CommentThreadProps) {
   const { t } = useTranslation();
   const [replyText, setReplyText] = useState("");
@@ -51,6 +53,7 @@ export function CommentThread({
         comment.resolved
           ? "bg-muted/30 border-border/40 opacity-70"
           : "bg-card border-border shadow-xs hover:border-border/80",
+        selected && "border-primary ring-1 ring-inset ring-primary",
       )}
     >
       {/* Thread Header */}

@@ -833,6 +833,7 @@ export function DesktopShell({
   const collaboration = useCollaboration(mapControllerRef);
   const commentTool = useCommentTool({ mapControllerRef, collaboration });
   const [showResolvedComments, setShowResolvedComments] = useState(false);
+  const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
   const collaborateDialogOpen = useAppStore((s) => s.ui.collaborateDialogOpen);
   const setCollaborateDialogOpen = useAppStore((s) => s.setCollaborateDialogOpen);
   // When opened via a `?collab=<code>` share link, auto-open the Collaborate
@@ -2142,6 +2143,7 @@ export function DesktopShell({
             }}
             onToggleThemeMode={onToggleThemeMode}
             onOpenBasemapExtract={() => setBasemapExtractOpen(true)}
+            onAddComment={commentTool.toggleTool}
             viewer={layoutOptions.viewer}
           />
         </SectionErrorBoundary>
@@ -2168,6 +2170,8 @@ export function DesktopShell({
                 onActivateCommentTool={commentTool.toggleTool}
                 isCommentToolActive={commentTool.isActive}
                 onShowResolvedChange={setShowResolvedComments}
+                selectedCommentId={selectedCommentId}
+                onClearSelectedComment={() => setSelectedCommentId(null)}
               />,
               commentsContentEl,
             )
@@ -2305,7 +2309,10 @@ export function DesktopShell({
               <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
               <CommentMapOverlay
                 mapControllerRef={mapControllerRef}
-                onSelectComment={() => openRightPanel(COMMENTS_PANEL_ID)}
+                onSelectComment={(commentId) => {
+                  setSelectedCommentId(commentId);
+                  openRightPanel(COMMENTS_PANEL_ID);
+                }}
                 showResolved={showResolvedComments}
               />
               <MapContextMenu

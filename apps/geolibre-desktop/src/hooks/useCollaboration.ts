@@ -13,7 +13,10 @@ import type { RefObject } from "react";
 import type { MapController } from "@geolibre/map";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import i18n from "../i18n";
-import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";
+import {
+  buildCollaborationSnapshot,
+  buildProjectEgressSnapshot,
+} from "../lib/build-project-snapshot";
 import { projectChanged } from "../lib/project-broadcast-changed";
 import {
   CollabConnection,
@@ -49,6 +52,7 @@ export function useCollaboration(
   const teardownRef = useRef<(() => void) | null>(null);
   const lastContentRef = useRef<string | null>(null);
   const revRef = useRef(0);
+  const snapshotRequestRef = useRef(0);
   const selfIdRef = useRef<string | null>(null);
   const syncPausedRef = useRef(false);
   const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -74,9 +78,13 @@ export function useCollaboration(
     return self?.editOverride ?? c.mode === "co-edit";
   };
 
-  const sendSnapshot = (): void => {
+  const sendSnapshot = async (): Promise<void> => {
     if (!canEdit() || syncPausedRef.current) return;
-    const project = buildProjectEgressSnapshot(mapControllerRef);
+    const request = ++snapshotRequestRef.current;
+    const project = await buildCollaborationSnapshot(mapControllerRef);
+    // Materializing control-managed vector data is asynchronous. Discard an
+    // older result if a newer broadcast started while it was being read.
+    if (request !== snapshotRequestRef.current || !canEdit() || syncPausedRef.current) return;
     const content = serializeProject(project);
     if (content === lastContentRef.current) return;
     lastContentRef.current = content;
@@ -134,6 +142,13 @@ export function useCollaboration(
           });
         }
         if (message.snapshot) applyRemoteSnapshot(message.snapshot, true);
+        // Guests follow the host by default. Apply the host's latest presence
+        // immediately instead of waiting for their next moveend event.
+        if (message.role === "guest" && useAppStore.getState().collaboration.followHost) {
+          const host = message.participants.find((participant) => participant.role === "host");
+          const hostView = host ? message.presence[host.clientId]?.view : null;
+          if (hostView) mapControllerRef.current?.applyView(hostView);
+        }
         const pending = pendingConnectRef.current;
         pendingConnectRef.current = null;
         pending?.resolve();
@@ -211,7 +226,7 @@ export function useCollaboration(
       if (debounce) clearTimeout(debounce);
       debounce = setTimeout(() => {
         debounce = null;
-        sendSnapshot();
+        void sendSnapshot();
       }, SNAPSHOT_DEBOUNCE_MS);
     };
 
@@ -293,6 +308,9 @@ export function useCollaboration(
       mode: "co-edit",
       clientId: selfIdRef.current,
       participants: [selfParticipant],
+      // A participant joining an existing session normally wants to arrive at
+      // and stay with the host's viewport. They can turn this off at any time.
+      followHost: !hostToken,
       error: null,
     });
 
@@ -329,6 +347,7 @@ export function useCollaboration(
   };
 
   const disconnect = (): void => {
+    snapshotRequestRef.current += 1;
     teardownRef.current?.();
     teardownRef.current = null;
     if (pendingConnectRef.current) {

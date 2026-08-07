@@ -7,6 +7,7 @@ import {
 import type { RefObject } from "react";
 import type { MapController } from "@geolibre/map";
 import { getPluginManager } from "../hooks/usePlugins";
+import { prepareCollaborationLayers } from "./collaboration-layers";
 
 /**
  * Build a `GeoLibreProject` snapshot from the live store and map controller.
@@ -63,4 +64,48 @@ export function buildProjectEgressSnapshot(
   mapControllerRef: RefObject<MapController | null>,
 ): GeoLibreProject {
   return redactCredentials(buildProjectSnapshot(mapControllerRef));
+}
+
+/** Build a self-contained public snapshot for a remote collaborator. */
+export async function buildCollaborationSnapshot(
+  mapControllerRef: RefObject<MapController | null>,
+): Promise<GeoLibreProject> {
+  const state = useAppStore.getState();
+  // Keep the plugins barrel out of this module's eager dependency graph: some
+  // optional controls load browser-only SDKs at module evaluation time.
+  const { materializeEmbeddableVectorLayers } = await import("@geolibre/plugins");
+  const materialized = await materializeEmbeddableVectorLayers(state.layers);
+  const layers = prepareCollaborationLayers(useAppStore.getState().layers, materialized);
+  const snapshot = buildProjectSnapshot(mapControllerRef);
+  // Rebuild only when portability changed a layer. This keeps the ordinary
+  // snapshot path synchronous for embed consumers.
+  if (layers.every((layer, index) => layer === useAppStore.getState().layers[index])) {
+    return redactCredentials(snapshot);
+  }
+  const current = useAppStore.getState();
+  const portable = projectFromStore({
+    projectName: current.projectName,
+    mapView: mapControllerRef.current?.readView() ?? current.mapView,
+    basemapStyleUrl: current.basemapStyleUrl,
+    basemapVisible: current.basemapVisible,
+    basemapOpacity: current.basemapOpacity,
+    layers,
+    selectedLayerId: current.selectedLayerId,
+    layerGroups: current.layerGroups,
+    preferences: current.preferences,
+    plugins: snapshot.plugins,
+    legend: current.legend,
+    storymap: current.storymap,
+    models: current.models,
+    processingHistory: current.processingHistory,
+    widgets: current.widgets,
+    dashboardColumns: current.dashboardColumns,
+    mapLayout: current.mapLayout,
+    secondaryMapViews: current.secondaryMapViews,
+    primaryMapLabel: current.primaryMapLabel,
+    styleLibrary: current.projectStyleLibrary,
+    comments: current.comments,
+    metadata: current.metadata,
+  });
+  return redactCredentials(portable);
 }

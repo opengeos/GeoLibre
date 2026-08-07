@@ -651,6 +651,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       secondaryMapViews: state.secondaryMapViews,
       primaryMapLabel: state.primaryMapLabel,
       styleLibrary: state.projectStyleLibrary,
+      comments: state.comments,
       metadata: state.metadata,
     });
     return {

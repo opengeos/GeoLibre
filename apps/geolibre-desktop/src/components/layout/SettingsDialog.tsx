@@ -429,7 +429,6 @@ export function SettingsDialog({
   const toggleCommentsPanel = (show: boolean) => {
     if (show) {
       openRightPanel(COMMENTS_PANEL_ID);
-      collapseRightPanel(COMMENTS_PANEL_ID);
     } else {
       closeRightPanel(COMMENTS_PANEL_ID);
     }

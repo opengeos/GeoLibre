@@ -187,6 +187,8 @@ interface TopToolbarProps {
   // Opens the Offline Basemap Extract panel, mounted in DesktopShell over the
   // map so it can stay non-modal (the map is interactive for drawing a bbox).
   onOpenBasemapExtract: () => void;
+  /** Activates the map tool for placing an anchored review comment. */
+  onAddComment: () => void;
   viewer?: boolean;
 }
 
@@ -204,6 +206,7 @@ export function TopToolbar({
   onOpenProjectHistory,
   onToggleThemeMode,
   onOpenBasemapExtract,
+  onAddComment,
   viewer = false,
 }: TopToolbarProps) {
   const { t, i18n } = useTranslation();
@@ -1330,6 +1333,15 @@ export function TopToolbar({
       title: t("toolbar.command.addDuckdbLayer"),
       group: t("toolbar.commandGroup.addData"),
       run: addLayer.duckdb,
+    },
+    {
+      id: "add.comment",
+      title: t("comments.addDialogTitle"),
+      group: t("toolbar.commandGroup.addData"),
+      keywords: "review note feedback",
+      icon: MessageSquare,
+      shortcut: { key: "c", shift: false },
+      run: onAddComment,
     },
     // Processing
     {

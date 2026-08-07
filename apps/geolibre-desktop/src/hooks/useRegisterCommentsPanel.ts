@@ -1,4 +1,4 @@
-import { registerRightPanel } from "@geolibre/plugins";
+import { collapseRightPanel, openRightPanel, registerRightPanel } from "@geolibre/plugins";
 import { useEffect } from "react";
 import i18n from "../i18n";
 
@@ -9,8 +9,8 @@ export const COMMENTS_PANEL_ID = "comments";
  * Registers the Comments panel as a dockable right panel sharing the Style (right)
  * sidebar's rail (`replace-style`).
  *
- * Unlike the Browser panel, Comments is opt-in: opening it on mount would
- * displace Browser because dockable panels share one active registry slot.
+ * Comments is enabled by default but collapsed onto the Style rail, so it is
+ * discoverable without taking map space.
  */
 export function useRegisterCommentsPanel(): void {
   useEffect(() => {
@@ -22,6 +22,8 @@ export function useRegisterCommentsPanel(): void {
       dock: "replace-style",
       render: () => {},
     });
+    openRightPanel(COMMENTS_PANEL_ID);
+    collapseRightPanel(COMMENTS_PANEL_ID);
     return dispose;
   }, []);
 }
