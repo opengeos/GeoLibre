@@ -68,7 +68,13 @@ if (report === null || typeof report !== "object" || Array.isArray(report)) {
 if (report.error) {
   unusable("npm reported an error.", report.error.detail || report.message || audit.stderr);
 }
-if (typeof report.vulnerabilities !== "object" || report.vulnerabilities === null) {
+// Arrays are typeof "object" too, and an array would yield zero entries below
+// rather than an error — so a malformed report would read as clean.
+if (
+  typeof report.vulnerabilities !== "object" ||
+  report.vulnerabilities === null ||
+  Array.isArray(report.vulnerabilities)
+) {
   unusable("the report has no `vulnerabilities` section.", audit.stdout);
 }
 
@@ -80,11 +86,16 @@ const advisories = new Map();
 for (const vuln of Object.values(report.vulnerabilities)) {
   for (const via of vuln.via ?? []) {
     if (typeof via !== "object") continue;
-    const id = /(GHSA-[\w-]+)/.exec(via.url ?? "")?.[1];
-    if (!id) continue;
+    // Fail closed on an advisory we cannot name: fall back to a key built from
+    // whatever npm did give us. It can never match an ALLOWLIST entry (those are
+    // GHSA ids), so a high/critical one still blocks instead of being dropped.
+    const id =
+      /(GHSA-[\w-]+)/.exec(via.url ?? "")?.[1] ??
+      `unidentified advisory (${via.url ?? via.source ?? via.name})`;
     const entry = advisories.get(id) ?? {
       title: via.title,
       severity: via.severity,
+      url: via.url,
       packages: new Set(),
     };
     entry.packages.add(via.name);
@@ -122,7 +133,7 @@ console.error(
 for (const [id, a] of blocking) {
   console.error(`  ${a.severity.padEnd(8)} ${id}  ${[...a.packages].join(", ")}`);
   console.error(`           ${a.title}`);
-  console.error(`           https://github.com/advisories/${id}`);
+  if (a.url) console.error(`           ${a.url}`);
 }
 console.error("\nUpgrade the dependency, or add an entry to ALLOWLIST in scripts/audit-check.mjs.");
 process.exit(1);
