@@ -385,6 +385,10 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           throw new Error(job.error || job.messages.join("\n") || `Whitebox tool ${id} failed`);
         }
         const resultLayerIds: string[] = [];
+        // Byte outputs this API cannot surface as a layer. Reported back in
+        // `logs` rather than dropped, so a caller can tell the tool produced
+        // data it did not receive.
+        const unretrievable: string[] = [];
         for (const [outputName, value] of Object.entries(job.outputs)) {
           const displayName = `${whiteboxToolName(tool)} ${outputName.replace(/_/g, " ")}`;
           if (
@@ -399,7 +403,18 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             tracker.addOutputLayer(displayName);
           } else if (value instanceof Uint8Array) {
             const outputParam = tool.params?.find((item) => item.name === outputName);
-            if (parameterKind(outputParam ?? { name: outputName }) === "raster_out") {
+            const outKind = outputParam ? parameterKind(outputParam) : "";
+            // Mirror ProcessingDialog's rule: any binary output is a raster
+            // unless it is explicitly file_out/vector_out (which the dialog
+            // downloads). Accepting only "raster_out" would drop the
+            // GeoLibre-authored subset extractors, whose produced COG comes back
+            // under a key with no typed param at all (SUBSET_OUTPUT_TOOL_IDS in
+            // wasm-client), so parameterKind falls through to "string".
+            if (outKind === "file_out" || outKind === "vector_out") {
+              unretrievable.push(
+                `Output "${outputName}" (${outKind}, ${value.length} bytes) is a file, not a map layer; run this tool from Processing to download it.`,
+              );
+            } else {
               const layerId = await addWhiteboxRasterOutput(
                 getController,
                 value,
@@ -412,7 +427,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           }
         }
         tracker.finish("success");
-        return { logs: job.messages, resultLayerIds };
+        return { logs: [...job.messages, ...unretrievable], resultLayerIds };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         tracker.finish("error", message);

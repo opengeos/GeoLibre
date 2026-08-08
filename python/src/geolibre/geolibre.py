@@ -859,7 +859,9 @@ class Map(anywidget.AnyWidget):
         """Run a bundled Whitebox tool locally in the browser via WASM.
 
         Dataset parameters may be layer ids or :class:`Layer` handles. Vector
-        and raster outputs are added to the map automatically.
+        and raster outputs are added to the map automatically; a tool that
+        writes a plain file instead (a CSV, GeoParquet, PMTiles, …) reports it
+        in ``logs``, since only the Processing panel can download one.
 
         Args:
             tool_id: An id from :meth:`list_whitebox_tools`, such as ``"slope"``.
