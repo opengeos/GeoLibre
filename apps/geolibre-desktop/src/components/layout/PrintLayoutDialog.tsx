@@ -1227,8 +1227,10 @@ export function PrintLayoutDialog({
       };
       const containMap = Boolean(map.getLayer(GRATICULE_LABEL_LAYER_ID));
       const canvas = map.getCanvas();
-      const viewportWidth = canvas.clientWidth || canvas.width;
-      const viewportHeight = canvas.clientHeight || canvas.height;
+      const mapPixelRatio = map.getPixelRatio();
+      const cssPixelRatio = Number.isFinite(mapPixelRatio) && mapPixelRatio > 0 ? mapPixelRatio : 1;
+      const viewportWidth = canvas.clientWidth || canvas.width / cssPixelRatio;
+      const viewportHeight = canvas.clientHeight || canvas.height / cssPixelRatio;
       const targetAspect = containMap
         ? viewportWidth / Math.max(1, viewportHeight)
         : mapBodyAspectRatio(pageOptions);
