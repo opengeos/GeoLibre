@@ -94,6 +94,11 @@ export interface ArcGISLayerOptions {
    * Only meaningful for `layerType: "feature"`, whose features are pulled into
    * an in-memory GeoJSON source; a cap is the escape hatch for a layer too big
    * to hold in the browser at all.
+   *
+   * In the interactive app a feature layer loads by viewport, so the cap
+   * applies to each viewport query rather than to the layer as a whole: every
+   * pan issues a fresh bounded download of up to this many features. Headless
+   * callers, which download the layer whole, get the total cap.
    */
   maxFeatures?: number;
   name?: string;
@@ -231,6 +236,20 @@ interface ArcGISRuntimeLayer {
 let arcgisLayerSequence = 0;
 const arcgisLayerInstances = new Map<string, ArcGISRuntimeLayer>();
 let arcgisStoreUnsubscribe: (() => void) | null = null;
+
+/** A live viewport-bound FeatureServer download for one GeoJSON layer. */
+interface ArcGISViewportLoader {
+  /** The in-flight request, aborted when a newer viewport supersedes it. */
+  abort: AbortController | null;
+  /** Re-run the query for the map's current extent. */
+  load: () => Promise<FeatureCollection>;
+  map: maplibregl.Map;
+  /** The `moveend` handler, kept so it can be detached on removal. */
+  move: () => void;
+}
+
+const arcgisFeatureLoaders = new Map<string, ArcGISViewportLoader>();
+let arcgisFeatureLoaderUnsubscribe: (() => void) | null = null;
 
 export async function addArcGISLayer(
   app: GeoLibreAppAPI,
@@ -393,14 +412,18 @@ async function addArcGISFeatureLayerAsGeoJson(
     returnGeometry: "true",
     where: "1=1",
   });
-  const geojson = await fetchArcGISFeaturePages(queryUrl, options, layerInfo);
-
   const name =
     options.name?.trim() || layerInfo.name || layerNameFromArcGISInput(layerUrl, "ArcGIS Layer");
   const store = useAppStore.getState();
-  // Persist the GeoJSON query endpoint (not the service-description base URL) as
-  // the source path so the layer's GeoJSON refresh re-fetches valid features.
-  const id = store.addGeoJsonLayer(name, geojson, refreshUrl, options.beforeLayerId ?? null);
+  const map = app.getMap?.();
+  // Headless/API consumers have no viewport to query, so retain the complete
+  // paged download for them. The interactive app takes the bounded path below.
+  const initialData: FeatureCollection = map
+    ? { type: "FeatureCollection", features: [] }
+    : await fetchArcGISFeaturePages(queryUrl, options, layerInfo);
+  // Add the layer before downloading features. Large services must not hold the
+  // Add Data dialog open while hundreds of thousands of records are fetched.
+  const id = store.addGeoJsonLayer(name, initialData, refreshUrl, options.beforeLayerId ?? null);
 
   store.updateLayer(id, {
     source: {
@@ -417,12 +440,406 @@ async function addArcGISFeatureLayerAsGeoJson(
       maxFeatures: options.maxFeatures,
       pageSize: options.pageSize,
     },
-    metadata: { sourceKind: ARCGIS_FEATURE_SOURCE_KIND },
+    metadata: { sourceKind: ARCGIS_FEATURE_SOURCE_KIND, viewportLoading: Boolean(map) },
   });
 
   const bounds = arcgisExtentToBounds(layerInfo.extent);
   if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
+  if (map) startArcGISViewportLoader(id, map, queryUrl, options, () => Promise.resolve(layerInfo));
   return id;
+}
+
+/**
+ * Keep one FeatureServer layer synchronized with the settled map viewport.
+ *
+ * `resolveLayerInfo` is a thunk rather than a value so the restore path can
+ * register a loader before it has the service metadata: the fetch then happens
+ * on the first query, and a failed one is retried by the next.
+ */
+function startArcGISViewportLoader(
+  layerId: string,
+  map: maplibregl.Map,
+  queryUrl: string,
+  options: ArcGISLayerOptions,
+  resolveLayerInfo: () => Promise<ArcGISFeatureLayerInfo>,
+): void {
+  let abort: AbortController | null = null;
+  let requestSequence = 0;
+  // The Add Data dialog's progress callback belongs to the initial download. It
+  // is unmounted well before the first viewport query lands, so carrying it for
+  // the layer's lifetime would keep that closure alive to no purpose.
+  const queryOptions: ArcGISLayerOptions = { ...options, onProgress: undefined };
+  const maxFeatures = positiveInteger(options.maxFeatures);
+  const loader: ArcGISViewportLoader = {
+    abort: null,
+    load: () => Promise.resolve({ type: "FeatureCollection", features: [] }),
+    map,
+    move: () => undefined,
+  };
+
+  /**
+   * Query the map's current extent, publishing each page as it lands.
+   *
+   * Resolves with whatever the layer holds — never rejects, whatever the
+   * error — when a newer viewport supersedes the call: the replacement is
+   * already publishing, so a failure the superseded request happened to hit
+   * (an abort, or a request that failed just before its abort landed) is not
+   * this layer's problem. A refresh running concurrently with a pan must not be
+   * reported as a failed refresh (and, under an `onFailure` of `"clear"`, wipe
+   * a layer that is perfectly healthy).
+   */
+  const load = async (): Promise<FeatureCollection> => {
+    abort?.abort();
+    const controller = new AbortController();
+    abort = controller;
+    loader.abort = controller;
+    const sequence = ++requestSequence;
+    let layerInfo: ArcGISFeatureLayerInfo;
+    try {
+      layerInfo = await resolveLayerInfo();
+    } catch (error) {
+      if (sequence !== requestSequence) return currentArcGISLayerGeojson(layerId);
+      throw error;
+    }
+    const envelopes = arcgisViewportEnvelopes(map.getBounds());
+    // One bucket per envelope, so a viewport split across the antimeridian
+    // publishes both halves together instead of each replacing the other.
+    const pages: Feature[][] = envelopes.map(() => []);
+    const collect = (): FeatureCollection => {
+      const features = mergeArcGISViewportFeatures(pages, layerInfo.objectIdField);
+      // A split viewport issues one request per envelope, each honoring
+      // `maxFeatures` on its own, so the merge is trimmed to keep the option a
+      // bound on what the layer holds for one viewport rather than per half.
+      return {
+        type: "FeatureCollection",
+        features: maxFeatures === null ? features : features.slice(0, maxFeatures),
+      };
+    };
+    const publish = (): void => {
+      if (
+        sequence !== requestSequence ||
+        !useAppStore.getState().layers.some((l) => l.id === layerId)
+      ) {
+        return;
+      }
+      useAppStore.getState().updateLayer(layerId, { geojson: collect() });
+      // Clear as soon as the service answers at all, not when the whole walk
+      // finishes: a dense extent pages for tens of seconds, and leaving a stale
+      // "zoom in" on screen while its features stream in reads as a live error.
+      reportArcGISViewportError(layerId, null);
+    };
+    // `allSettled`, not `all`: a split viewport must not report a failure while
+    // its surviving half is still running, or that half's later pages would
+    // publish over an already-reported error with nothing to clear it.
+    const walk = async (envelope: ArcGISEnvelope, index: number, attempt = 0): Promise<void> => {
+      try {
+        const data = await fetchArcGISFeaturePages(queryUrl, queryOptions, layerInfo, {
+          params: {
+            geometry: envelope.join(","),
+            geometryType: "esriGeometryEnvelope",
+            inSR: "4326",
+            spatialRel: "esriSpatialRelIntersects",
+          },
+          signal: controller.signal,
+          onPage: (features) => {
+            pages[index] = features;
+            publish();
+          },
+        });
+        pages[index] = data.features;
+        publish();
+      } catch (error) {
+        // The service timing out under load is the common failure on a wide
+        // extent, and it clears on a retry far more often than not, so one is
+        // worth the wait rather than leaving the user an empty layer.
+        if (attempt === 0 && !controller.signal.aborted && isArcGISTransientQueryError(error)) {
+          return walk(envelope, index, attempt + 1);
+        }
+        throw error;
+      }
+    };
+    const results = await Promise.allSettled(envelopes.map((e, index) => walk(e, index)));
+    if (sequence !== requestSequence) return currentArcGISLayerGeojson(layerId);
+    // One half failing still leaves the other's features on the map; the error
+    // says the view is incomplete rather than pretending it is whole.
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed) throw failed.reason;
+    reportArcGISViewportError(layerId, null);
+    return collect();
+  };
+
+  const move = (): void => {
+    void load().catch((error: unknown) => {
+      // A timeout that survived its retry gets guidance the user can act on;
+      // ArcGIS's own wording for it blames the query parameters, which are fine.
+      if (isArcGISTransientQueryError(error)) {
+        console.error("[GeoLibre] ArcGIS viewport query timed out", error);
+        reportArcGISViewportError(layerId, ARCGIS_VIEWPORT_TIMEOUT);
+        return;
+      }
+      handleArcGISViewportError(layerId, error);
+    });
+  };
+  loader.load = load;
+  loader.move = move;
+  stopArcGISViewportLoader(layerId);
+  map.on("moveend", move);
+  arcgisFeatureLoaders.set(layerId, loader);
+  ensureArcGISFeatureLoaderCleanup();
+  // fitBounds may still be animating. Its moveend will replace this first query.
+  if (!map.isMoving()) move();
+}
+
+/**
+ * Re-run the viewport query for a layer that loads by extent.
+ *
+ * A refresh must not fall back to the unbounded paged download for these
+ * layers: that would pull the whole service into memory behind the user's
+ * back, which is the very thing viewport loading exists to avoid.
+ *
+ * @param layerId - The layer to reload.
+ * @returns The features for the map's current extent, or `null` when the layer
+ *   has no live loader (a project restored from disk, or a headless host).
+ */
+export function reloadArcGISViewportLayer(layerId: string): Promise<FeatureCollection> | null {
+  return arcgisFeatureLoaders.get(layerId)?.load() ?? null;
+}
+
+/**
+ * Re-attach viewport loaders after a project is loaded.
+ *
+ * {@link startArcGISViewportLoader} only runs in the Add Data flow, but
+ * `metadata.viewportLoading` round-trips through the saved project. Without
+ * this, a reopened project's feature layer is frozen on whichever extent was in
+ * view when it was saved: panning fetches nothing, and a refresh falls back to
+ * the unbounded download the viewport path exists to avoid.
+ *
+ * Loaders are registered synchronously, before the service metadata they need
+ * is fetched, so there is no window in which a refresh finds the layer
+ * unbound.
+ *
+ * @param app - The host app API, for the map the loaders bind to.
+ */
+export function restoreArcGISViewportLayers(app: GeoLibreAppAPI): void {
+  const map = app.getMap?.();
+  if (!map) return;
+  for (const layer of useAppStore.getState().layers) {
+    // Skip only a loader already bound to *this* map: the restore effect also
+    // runs when the map is reinitialized, and a loader left on the old instance
+    // would listen to a dead map and query its stale bounds.
+    if (
+      layer.metadata.viewportLoading !== true ||
+      layer.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND ||
+      arcgisFeatureLoaders.get(layer.id)?.map === map
+    ) {
+      continue;
+    }
+    const source = layer.source as {
+      arcgisQueryUrl?: unknown;
+      maxFeatures?: unknown;
+      pageSize?: unknown;
+    };
+    const queryUrl = typeof source.arcgisQueryUrl === "string" ? source.arcgisQueryUrl.trim() : "";
+    if (!queryUrl) continue;
+    const options: ArcGISLayerOptions = {
+      layerType: "feature",
+      maxFeatures: typeof source.maxFeatures === "number" ? source.maxFeatures : undefined,
+      pageSize: typeof source.pageSize === "number" ? source.pageSize : undefined,
+      sourceType: "url",
+    };
+    // Re-read the service metadata rather than trusting a stored copy, the same
+    // reason refreshArcGISFeatureLayer does: paging capabilities and
+    // `maxRecordCount` are the service's to change between sessions. Fetched
+    // lazily on the first query and memoized, with a failure clearing the
+    // memo — so a blocked or flaky reopen retries on the next pan or refresh
+    // instead of leaving the layer permanently unbound.
+    let pending: Promise<ArcGISFeatureLayerInfo> | null = null;
+    const resolveLayerInfo = (): Promise<ArcGISFeatureLayerInfo> =>
+      (pending ??= fetchArcGISJson<ArcGISFeatureLayerInfo>(
+        trimTrailingSlash(queryUrl).replace(/\/query$/i, ""),
+        options,
+        undefined,
+      ).catch((error: unknown) => {
+        pending = null;
+        throw error;
+      }));
+    startArcGISViewportLoader(layer.id, map, queryUrl, options, resolveLayerInfo);
+  }
+}
+
+/**
+ * Tear down viewport loaders for layers that have left the store.
+ *
+ * One shared subscription for every loader, matching
+ * {@link ensureArcGISStoreCleanup}: a subscription per layer would run a linear
+ * scan of `state.layers` on every unrelated store update for the life of the
+ * app, multiplied by however many such layers are open.
+ */
+function ensureArcGISFeatureLoaderCleanup(): void {
+  arcgisFeatureLoaderUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    if (arcgisFeatureLoaders.size === 0) return;
+    for (const layer of previous.layers) {
+      if (!state.layers.some((current) => current.id === layer.id)) {
+        stopArcGISViewportLoader(layer.id);
+      }
+    }
+  });
+}
+
+/** Cancel a layer's viewport loader and detach its `moveend` handler. */
+function stopArcGISViewportLoader(layerId: string): void {
+  const loader = arcgisFeatureLoaders.get(layerId);
+  if (!loader) return;
+  loader.abort?.abort();
+  loader.map.off("moveend", loader.move);
+  arcgisFeatureLoaders.delete(layerId);
+}
+
+function handleArcGISViewportError(layerId: string, error: unknown): void {
+  if (isArcGISAbortError(error)) return;
+  console.error("[GeoLibre] ArcGIS viewport query failed", error);
+  reportArcGISViewportError(layerId, error instanceof Error ? error.message : String(error));
+}
+
+function isArcGISAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+/**
+ * Shown when the service gave up on a viewport query. Deliberately not the
+ * service's own wording: ArcGIS reports its timeout as a 400 blaming the query
+ * parameters, which are correct — the identical request succeeds on a retry.
+ */
+const ARCGIS_VIEWPORT_TIMEOUT =
+  "The ArcGIS service did not return features for this extent in time. Pan or zoom to try again, or zoom in to request fewer features.";
+
+/**
+ * Whether a failed query is worth retrying rather than reporting verbatim.
+ *
+ * A dense feature service can take tens of seconds to answer a geometry-bearing
+ * query over a wide envelope, and exceeds its own timeout when it is busy. It
+ * reports that either as a gateway/timeout status or — confusingly — as an
+ * error envelope with `code` 400 whose detail reads "Unable to perform query.
+ * Please check your parameters."
+ *
+ * Measured against Vicmap_Parcel (GeoLibre#1756): the same 0.25° envelope that
+ * failed six times running at ~56s later succeeded three times running in
+ * 19-34s. The failure is load, not the request.
+ */
+function isArcGISTransientQueryError(error: unknown): boolean {
+  if (!(error instanceof ArcGISQueryError)) return false;
+  if (error.status !== null) return [408, 429, 500, 502, 503, 504].includes(error.status);
+  return error.code === 400 && /unable to perform query/i.test(error.message);
+}
+
+/** The features a layer currently holds, for a query that has nothing newer. */
+function currentArcGISLayerGeojson(layerId: string): FeatureCollection {
+  const layer = useAppStore.getState().layers.find((entry) => entry.id === layerId);
+  return layer?.geojson ?? { type: "FeatureCollection", features: [] };
+}
+
+/**
+ * Record a viewport query's outcome on the layer's connection record, which is
+ * what the Layers panel already reads to show a synchronization error. Without
+ * it a failed pan leaves the previous extent's features on screen with nothing
+ * to say the query for the current one never landed.
+ */
+function reportArcGISViewportError(layerId: string, message: string | null): void {
+  const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
+  // Only written when the state actually changes, so a successful pan over a
+  // healthy layer does not dirty the project on every `moveend`.
+  if (!layer || (layer.connection?.lastError ?? null) === message) return;
+  useAppStore.getState().updateLayer(layerId, {
+    connection: {
+      interval: null,
+      lastSyncedAt: null,
+      onFailure: "keep-last",
+      ...layer.connection,
+      layerId,
+      lastError: message,
+    },
+  });
+}
+
+/** A `[west, south, east, north]` query envelope, in WGS84 degrees. */
+type ArcGISEnvelope = [number, number, number, number];
+
+/**
+ * The ArcGIS query envelopes covering a map viewport.
+ *
+ * MapLibre reports the viewport's raw longitudes, which run outside ±180 as
+ * soon as the view crosses the antimeridian or the user keeps panning around
+ * the globe. Clamping each edge on its own would either invert the envelope
+ * (west 170, east -170) or collapse it to zero width (west 200, east 210), and
+ * ArcGIS answers both with nothing for that part of the screen. So the span is
+ * normalized onto ±180 and, when it straddles the antimeridian, split into the
+ * two envelopes that cover it — the same treatment `splitAntimeridian` gives
+ * the offline tile download.
+ *
+ * @param bounds - The map's current bounds.
+ * @returns One envelope, or two when the viewport crosses the antimeridian.
+ */
+function arcgisViewportEnvelopes(bounds: {
+  getEast(): number;
+  getNorth(): number;
+  getSouth(): number;
+  getWest(): number;
+}): ArcGISEnvelope[] {
+  const south = Math.max(-90, Math.min(90, bounds.getSouth()));
+  const north = Math.min(90, Math.max(-90, bounds.getNorth()));
+  const rawWest = bounds.getWest();
+  const rawEast = bounds.getEast();
+  if (!Number.isFinite(rawWest) || !Number.isFinite(rawEast)) {
+    return [[-180, south, 180, north]];
+  }
+  // A wrapped viewport reports east < west; unwrap it before measuring the span.
+  const span = rawEast >= rawWest ? rawEast - rawWest : rawEast + 360 - rawWest;
+  if (span >= 360) return [[-180, south, 180, north]];
+  const west = wrapLongitude(rawWest);
+  const east = west + span;
+  return east > 180
+    ? [
+        [west, south, 180, north],
+        [-180, south, wrapLongitude(east), north],
+      ]
+    : [[west, south, east, north]];
+}
+
+/** Fold a longitude onto ±180, which the map's raw bounds may run past. */
+function wrapLongitude(longitude: number): number {
+  return ((((longitude + 180) % 360) + 360) % 360) - 180;
+}
+
+/**
+ * Concatenate the per-envelope results of one viewport query, dropping the
+ * duplicate a feature straddling the antimeridian produces by matching both
+ * halves. A feature the service gives no identifier for is kept as-is: showing
+ * it twice is better than guessing at identity by geometry.
+ */
+function mergeArcGISViewportFeatures(
+  pages: Feature[][],
+  objectIdField: string | undefined,
+): Feature[] {
+  if (pages.length === 1) return [...pages[0]];
+  const seen = new Set<string>();
+  const merged: Feature[] = [];
+  for (const page of pages) {
+    for (const feature of page) {
+      const key = arcgisFeatureKey(feature, objectIdField);
+      if (key !== null) {
+        if (seen.has(key)) continue;
+        seen.add(key);
+      }
+      merged.push(feature);
+    }
+  }
+  return merged;
+}
+
+function arcgisFeatureKey(feature: Feature, objectIdField: string | undefined): string | null {
+  if (typeof feature.id === "string" || typeof feature.id === "number") return String(feature.id);
+  const value = objectIdField ? feature.properties?.[objectIdField] : undefined;
+  return typeof value === "string" || typeof value === "number" ? String(value) : null;
 }
 
 /**
@@ -786,12 +1203,14 @@ interface ArcGISPagingPlan {
   /** The layer's ObjectID field, when the service names one. */
   objectIdField: string | undefined;
   onProgress: ArcGISLayerOptions["onProgress"];
+  onPage?: (features: Feature[]) => void;
   /** Features to request per `/query` call. */
   pageSize: number;
   /** Query params every page shares (including the token, if any). */
   params: Record<string, string | undefined>;
   /** The `/query` endpoint, without paging params. */
   queryUrl: string;
+  signal?: AbortSignal;
   /** Whether the service claims to honor `resultOffset`. */
   supportsPagination: boolean;
   /** Whether the service accepts `orderByFields` (needed for stable paging). */
@@ -833,8 +1252,13 @@ async function fetchArcGISFeaturePages(
   queryUrl: string,
   options: ArcGISLayerOptions,
   layerInfo: ArcGISFeatureLayerInfo,
+  request: {
+    params?: Record<string, string>;
+    signal?: AbortSignal;
+    onPage?: (features: Feature[]) => void;
+  } = {},
 ): Promise<FeatureCollection> {
-  const plan = await planArcGISPaging(queryUrl, options, layerInfo);
+  const plan = await planArcGISPaging(queryUrl, options, layerInfo, request);
 
   if (plan.supportsPagination) {
     const paged = await fetchArcGISPagesByOffset(plan);
@@ -858,6 +1282,11 @@ async function planArcGISPaging(
   queryUrl: string,
   options: ArcGISLayerOptions,
   layerInfo: ArcGISFeatureLayerInfo,
+  request: {
+    params?: Record<string, string>;
+    signal?: AbortSignal;
+    onPage?: (features: Feature[]) => void;
+  },
 ): Promise<ArcGISPagingPlan> {
   const params = {
     f: "geojson",
@@ -865,17 +1294,22 @@ async function planArcGISPaging(
     returnGeometry: "true",
     where: "1=1",
     token: options.token?.trim() || undefined,
+    ...request.params,
   };
   return {
     maxFeatures: positiveInteger(options.maxFeatures),
     objectIdField: layerInfo.objectIdField?.trim() || undefined,
     onProgress: options.onProgress,
+    onPage: request.onPage,
     pageSize: resolveArcGISPageSize(options.pageSize, layerInfo.maxRecordCount),
     params,
     queryUrl,
+    signal: request.signal,
     supportsPagination: layerInfo.advancedQueryCapabilities?.supportsPagination === true,
     supportsOrderBy: layerInfo.advancedQueryCapabilities?.supportsOrderBy !== false,
-    total: await fetchArcGISFeatureCount(queryUrl, params.token),
+    // Spatial counts can be as expensive as fetching the first page on large
+    // polygon services. Start rendering immediately for viewport queries.
+    total: request.params ? null : await fetchArcGISFeatureCount(queryUrl, params),
   };
 }
 
@@ -909,20 +1343,24 @@ function positiveInteger(value: number | undefined): number | null {
  * condition. Best-effort: a service that will not answer `returnCountOnly`
  * still pages fine, so any failure resolves to `null` rather than throwing.
  *
+ * Takes no abort signal, and needs none: {@link planArcGISPaging} skips the
+ * count entirely for a viewport query (the only cancellable caller), because a
+ * spatial count can cost as much as the first page.
+ *
  * @param queryUrl - The layer's `/query` endpoint.
- * @param token - The access token to send, if any.
+ * @param params - The query params every request in the plan shares.
  */
 async function fetchArcGISFeatureCount(
   queryUrl: string,
-  token: string | undefined,
+  params: Record<string, string | undefined>,
 ): Promise<number | null> {
   try {
     const response = await fetch(
       appendArcGISParams(queryUrl, {
+        ...params,
         f: "json",
         returnCountOnly: "true",
         where: "1=1",
-        token,
       }),
     );
     if (!response.ok) return null;
@@ -968,6 +1406,7 @@ async function fetchArcGISPagesByOffset(
         resultOffset: String(features.length),
         resultRecordCount: String(wanted),
       }),
+      plan.signal,
     );
     if (chunk.features.length === 0) break;
 
@@ -980,6 +1419,7 @@ async function fetchArcGISPagesByOffset(
     previousSignature = signature;
 
     features.push(...chunk.features);
+    plan.onPage?.(features);
     plan.onProgress?.(features.length, plan.total);
 
     if (plan.total !== null && features.length >= plan.total) break;
@@ -1032,6 +1472,7 @@ async function fetchArcGISPagesByObjectId(
         ...plan.params,
         where: `${field} >= ${objectIds[start]} AND ${field} <= ${objectIds[end - 1]}`,
       }),
+      plan.signal,
     );
 
     // The range spans `end - start` ObjectIDs, so a shorter capped page would
@@ -1048,6 +1489,7 @@ async function fetchArcGISPagesByObjectId(
     }
 
     features.push(...chunk.features);
+    plan.onPage?.(features);
     start = end;
     plan.onProgress?.(features.length, plan.total ?? objectIds.length);
   }
@@ -1062,11 +1504,12 @@ async function fetchArcGISObjectIds(
   try {
     const response = await fetch(
       appendArcGISParams(plan.queryUrl, {
+        ...plan.params,
         f: "json",
         returnIdsOnly: "true",
         where: "1=1",
-        token: plan.params.token,
       }),
+      { signal: plan.signal },
     );
     if (!response.ok) return null;
     const json = (await response.json()) as {
@@ -1081,7 +1524,8 @@ async function fetchArcGISObjectIds(
       (typeof json.objectIdFieldName === "string" ? json.objectIdFieldName.trim() : "") ||
       plan.objectIdField;
     return field && objectIds.length > 0 ? { field, objectIds } : null;
-  } catch {
+  } catch (error) {
+    if (plan.signal?.aborted) throw error;
     return null;
   }
 }
@@ -1139,8 +1583,30 @@ function finishArcGISPaging(
 
 /** The JSON error envelope ArcGIS returns, usually with an HTTP 200 status. */
 interface ArcGISErrorEnvelope {
+  code?: unknown;
   message?: string;
   details?: unknown;
+}
+
+/**
+ * A `/query` the service answered with a failure, carrying enough of that
+ * failure to tell "this extent is too much for me" apart from a fault the user
+ * could act on differently. ArcGIS reports the former either as a gateway
+ * timeout or — confusingly — as an error envelope whose `code` is 400 and whose
+ * detail blames the parameters, which are in fact fine: the identical query
+ * over a smaller extent succeeds.
+ */
+class ArcGISQueryError extends Error {
+  /** HTTP status, when the transport itself failed. */
+  readonly status: number | null;
+  /** `error.code` from an ArcGIS error envelope returned with HTTP 200. */
+  readonly code: number | null;
+  constructor(message: string, source: { status?: number | null; code?: number | null } = {}) {
+    super(message);
+    this.name = "ArcGISQueryError";
+    this.status = source.status ?? null;
+    this.code = source.code ?? null;
+  }
 }
 
 /**
@@ -1178,10 +1644,13 @@ function arcgisErrorMessage(error: ArcGISErrorEnvelope | undefined, fallback: st
  */
 async function fetchArcGISGeoJson(
   url: string,
+  signal?: AbortSignal,
 ): Promise<FeatureCollection & { exceededTransferLimit: boolean }> {
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) {
-    throw new Error(`ArcGIS feature query failed with ${response.status}.`);
+    throw new ArcGISQueryError(`ArcGIS feature query failed with ${response.status}.`, {
+      status: response.status,
+    });
   }
   // ArcGIS Enterprise (and services behind a WAF) can answer 200 with an HTML
   // login/redirect page when a token is missing or expired. Read the body as
@@ -1204,7 +1673,9 @@ async function fetchArcGISGeoJson(
     throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
   }
   if (json.error) {
-    throw new Error(arcgisErrorMessage(json.error, "ArcGIS feature query failed."));
+    throw new ArcGISQueryError(arcgisErrorMessage(json.error, "ArcGIS feature query failed."), {
+      code: typeof json.error.code === "number" ? json.error.code : null,
+    });
   }
   if (json.type !== "FeatureCollection" || !Array.isArray(json.features)) {
     throw new Error("The ArcGIS feature layer did not return GeoJSON features.");

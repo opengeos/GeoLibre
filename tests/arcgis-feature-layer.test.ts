@@ -5,6 +5,8 @@ import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 import {
   addArcGISLayer,
   refreshArcGISFeatureLayer,
+  reloadArcGISViewportLayer,
+  restoreArcGISViewportLayers,
 } from "../packages/plugins/src/plugins/arcgis-layer";
 
 // Minimal ArcGIS FeatureServer layer metadata (the `?f=json` response) with a
@@ -57,6 +59,62 @@ function makeArcGISFetch(): typeof fetch {
 }
 
 const SERVICE_URL = "https://example.com/arcgis/rest/services/Cities/FeatureServer/0";
+
+// The same layer, advertising offset paging and an ObjectID field, so a viewport
+// query is one page of features followed by an empty one.
+const VIEWPORT_LAYER_INFO = {
+  ...LAYER_INFO,
+  objectIdField: "OBJECTID",
+  advancedQueryCapabilities: { supportsPagination: true, supportsOrderBy: true },
+};
+
+function viewportFeature(objectId: number) {
+  return {
+    type: "Feature",
+    id: objectId,
+    geometry: { type: "Point", coordinates: [-157.8, 21.3] },
+    properties: { OBJECTID: objectId, NAME: `City ${objectId}` },
+  };
+}
+
+/**
+ * A fake interactive map whose bounds the test can move, recording the
+ * listeners the viewport loader attaches and detaches.
+ */
+function fakeViewportMap(initial: [number, number, number, number]) {
+  let [west, south, east, north] = initial;
+  const listeners = new Map<string, () => void>();
+  const offCalls: Array<[string, () => void]> = [];
+  const map = {
+    getBounds: () => ({
+      getWest: () => west,
+      getSouth: () => south,
+      getEast: () => east,
+      getNorth: () => north,
+    }),
+    isMoving: () => false,
+    on: (event: string, listener: () => void) => listeners.set(event, listener),
+    off: (event: string, listener: () => void) => {
+      offCalls.push([event, listener]);
+      listeners.delete(event);
+    },
+  };
+  return {
+    listeners,
+    map,
+    offCalls,
+    setBounds: (next: [number, number, number, number]) => {
+      [west, south, east, north] = next;
+    },
+  };
+}
+
+/** Let the loader's queued fetches and store writes settle. */
+async function settle(): Promise<void> {
+  for (let tick = 0; tick < 4; tick += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
 
 interface FakeArcGISServiceOptions {
   /** The per-query ceiling the service actually enforces. */
@@ -219,6 +277,361 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.equal(layer.source.attribution, "© Example City Data");
     // The geographic extent is fitted directly (no Web Mercator conversion).
     assert.deepEqual(fitBoundsCalls, [[-160, 18, -154, 23]]);
+  });
+
+  it("adds an interactive layer immediately and queries the current viewport", async () => {
+    const requests: URL[] = [];
+    // Only the first page of each viewport query is deferred, so the test can
+    // settle them out of order; the follow-up page is empty and ends the walk.
+    const pages: Array<(response: Response) => void> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(VIEWPORT_LAYER_INFO);
+      if (Number(url.searchParams.get("resultOffset") ?? "0") > 0) {
+        return jsonResponse({ type: "FeatureCollection", features: [] });
+      }
+      requests.push(url);
+      return new Promise<Response>((resolve) => pages.push(resolve));
+    }) as typeof fetch;
+
+    const view = fakeViewportMap([144, -39, 146, -37]);
+    app = {
+      getMap: () => view.map,
+      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+    await settle();
+
+    const initial = useAppStore.getState().layers.find((layer) => layer.id === id);
+    assert.equal(initial?.geojson?.features.length, 0);
+    assert.equal(initial?.metadata.viewportLoading, true);
+    const move = view.listeners.get("moveend");
+    assert.ok(move, "expected a moveend listener");
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].searchParams.get("geometry"), "144,-39,146,-37");
+    assert.equal(requests[0].searchParams.get("geometryType"), "esriGeometryEnvelope");
+    assert.equal(requests[0].searchParams.get("spatialRel"), "esriSpatialRelIntersects");
+
+    // Pan before the first query lands: the replacement must query the new
+    // extent, and the superseded response must not overwrite it.
+    view.setBounds([150, -35, 152, -33]);
+    move();
+    await settle();
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].searchParams.get("geometry"), "150,-35,152,-33");
+
+    pages[0](jsonResponse({ type: "FeatureCollection", features: [viewportFeature(1)] }));
+    await settle();
+    assert.equal(
+      useAppStore.getState().layers.find((layer) => layer.id === id)?.geojson?.features.length,
+      0,
+      "the superseded viewport response must be discarded",
+    );
+
+    pages[1](jsonResponse({ type: "FeatureCollection", features: [viewportFeature(2)] }));
+    await settle();
+    const loaded = useAppStore.getState().layers.find((layer) => layer.id === id);
+    assert.deepEqual(
+      loaded?.geojson?.features.map((feature) => feature.properties?.OBJECTID),
+      [2],
+    );
+
+    // Removing the layer detaches the listener it registered.
+    useAppStore.getState().removeLayer(id);
+    assert.deepEqual(view.offCalls, [["moveend", move]]);
+  });
+
+  it("ignores a superseded viewport query that fails for its own reasons", async () => {
+    const rejections: Array<(error: Error) => void> = [];
+    let pan = false;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(VIEWPORT_LAYER_INFO);
+      const offset = Number(url.searchParams.get("resultOffset") ?? "0");
+      if (offset > 0) return jsonResponse({ type: "FeatureCollection", features: [] });
+      // The first query never resolves until the test rejects it by hand; the
+      // replacement answers normally.
+      if (pan) return jsonResponse({ type: "FeatureCollection", features: [viewportFeature(7)] });
+      return new Promise<Response>((_resolve, reject) => rejections.push(reject));
+    }) as typeof fetch;
+
+    const view = fakeViewportMap([144, -39, 146, -37]);
+    app = {
+      getMap: () => view.map,
+      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+    await settle();
+
+    pan = true;
+    view.setBounds([150, -35, 152, -33]);
+    view.listeners.get("moveend")?.();
+    await settle();
+
+    // A plain network failure, not an AbortError, landing after the pan.
+    rejections[0](new Error("Connection reset"));
+    await settle();
+
+    const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
+    assert.equal(
+      layer?.connection?.lastError ?? null,
+      null,
+      "a stale failure must not be reported",
+    );
+    assert.equal(layer?.geojson?.features.length, 1);
+  });
+
+  it("records a failed viewport query on the layer connection and clears it", async () => {
+    let fail = true;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(VIEWPORT_LAYER_INFO);
+      if (fail) throw new Error("Network unreachable");
+      const offset = Number(url.searchParams.get("resultOffset") ?? "0");
+      return jsonResponse({
+        type: "FeatureCollection",
+        features: offset > 0 ? [] : [viewportFeature(1)],
+      });
+    }) as typeof fetch;
+
+    const view = fakeViewportMap([144, -39, 146, -37]);
+    app = {
+      getMap: () => view.map,
+      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+    await settle();
+
+    // The Layers panel renders this as its sync-error status line.
+    assert.match(
+      useAppStore.getState().layers.find((layer) => layer.id === id)?.connection?.lastError ?? "",
+      /Network unreachable/,
+    );
+
+    fail = false;
+    view.listeners.get("moveend")?.();
+    await settle();
+    const recovered = useAppStore.getState().layers.find((layer) => layer.id === id);
+    assert.equal(recovered?.connection?.lastError, null);
+    assert.equal(recovered?.geojson?.features.length, 1);
+  });
+
+  it("splits an antimeridian-crossing viewport into two envelopes", async () => {
+    const geometries: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(VIEWPORT_LAYER_INFO);
+      const offset = Number(url.searchParams.get("resultOffset") ?? "0");
+      if (offset > 0) return jsonResponse({ type: "FeatureCollection", features: [] });
+      geometries.push(url.searchParams.get("geometry") ?? "");
+      // Both halves return the feature straddling the dateline.
+      return jsonResponse({ type: "FeatureCollection", features: [viewportFeature(1)] });
+    }) as typeof fetch;
+
+    const view = fakeViewportMap([170, -20, -170, 20]);
+    app = {
+      getMap: () => view.map,
+      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+    await settle();
+
+    // Clamping each edge on its own would have inverted this envelope into
+    // `170,-20,-170,20`, which ArcGIS answers with nothing.
+    assert.deepEqual([...geometries].sort(), ["-180,-20,-170,20", "170,-20,180,20"]);
+    const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
+    assert.equal(layer?.geojson?.features.length, 1, "the shared feature is published once");
+  });
+
+  // The exact body Vicmap_Parcel returns (with HTTP 200) when it exceeds its
+  // own query timeout on a wide extent — it blames the parameters, which are
+  // correct: the identical request succeeds on a retry (GeoLibre#1756).
+  const TIMEOUT_ENVELOPE = {
+    error: {
+      code: 400,
+      message: "",
+      details: ["Unable to perform query. Please check your parameters."],
+    },
+  };
+
+  /** Answers the first `failures` viewport queries with a service timeout. */
+  function timingOutService(failures: number) {
+    const state = { attempts: 0 };
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(VIEWPORT_LAYER_INFO);
+      if (Number(url.searchParams.get("resultOffset") ?? "0") > 0) {
+        return jsonResponse({ type: "FeatureCollection", features: [] });
+      }
+      state.attempts += 1;
+      return state.attempts <= failures
+        ? jsonResponse(TIMEOUT_ENVELOPE)
+        : jsonResponse({ type: "FeatureCollection", features: [viewportFeature(1)] });
+    }) as typeof fetch;
+    return state;
+  }
+
+  async function addViewportLayer(): Promise<string> {
+    const view = fakeViewportMap([144, -39, 146, -37]);
+    app = {
+      getMap: () => view.map,
+      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+    await settle();
+    return id;
+  }
+
+  it("retries a viewport query the service timed out on", async () => {
+    const state = timingOutService(1);
+    const id = await addViewportLayer();
+
+    assert.equal(state.attempts, 2, "the timed-out query is retried once");
+    const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
+    assert.equal(layer?.geojson?.features.length, 1, "the retry's features are published");
+    assert.equal(layer?.connection?.lastError ?? null, null, "a recovered query reports no error");
+  });
+
+  it("reports actionable guidance when the retry times out too", async () => {
+    const state = timingOutService(Number.POSITIVE_INFINITY);
+    const id = await addViewportLayer();
+
+    assert.equal(state.attempts, 2, "retried once, not indefinitely");
+    const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
+    // Not ArcGIS's own "check your parameters", which sends the user nowhere.
+    assert.match(
+      layer?.connection?.lastError ?? "",
+      /did not return features for this extent in time/,
+    );
+  });
+
+  it("re-binds a reopened project's layer to the viewport", async () => {
+    const geometries: string[] = [];
+    let metadataFailures = 1;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) {
+        // The first metadata read fails, as a flaky reopen would.
+        if (metadataFailures > 0) {
+          metadataFailures -= 1;
+          throw new Error("Service unavailable");
+        }
+        return jsonResponse(VIEWPORT_LAYER_INFO);
+      }
+      const offset = Number(url.searchParams.get("resultOffset") ?? "0");
+      if (offset > 0) return jsonResponse({ type: "FeatureCollection", features: [] });
+      geometries.push(url.searchParams.get("geometry") ?? "");
+      return jsonResponse({ type: "FeatureCollection", features: [viewportFeature(1)] });
+    }) as typeof fetch;
+
+    // A layer as a saved project restores it: viewport metadata and the stored
+    // query URL, but no live loader.
+    const id = useAppStore
+      .getState()
+      .addGeoJsonLayer("Restored", { type: "FeatureCollection", features: [] }, undefined, null);
+    useAppStore.getState().updateLayer(id, {
+      source: { type: "geojson", arcgisQueryUrl: `${SERVICE_URL}/query` },
+      metadata: { sourceKind: "arcgis-feature-query", viewportLoading: true },
+    });
+    assert.equal(reloadArcGISViewportLayer(id), null, "no loader before the project is restored");
+
+    const view = fakeViewportMap([144, -39, 146, -37]);
+    restoreArcGISViewportLayers({ getMap: () => view.map } as unknown as GeoLibreAppAPI);
+    // Registered before the metadata fetch is even started, so a refresh in
+    // this window never finds the layer unbound.
+    assert.ok(view.listeners.has("moveend"), "the loader binds synchronously");
+    await settle();
+
+    // The first query failed on metadata, which is reported, not swallowed.
+    assert.match(
+      useAppStore.getState().layers.find((layer) => layer.id === id)?.connection?.lastError ?? "",
+      /Service unavailable/,
+    );
+
+    // The next pan retries the metadata rather than staying stuck.
+    view.setBounds([150, -35, 152, -33]);
+    view.listeners.get("moveend")?.();
+    await settle();
+    assert.deepEqual(geometries, ["150,-35,152,-33"]);
+    const restored = useAppStore.getState().layers.find((layer) => layer.id === id);
+    assert.equal(restored?.connection?.lastError, null);
+    assert.equal(restored?.geojson?.features.length, 1);
+
+    // Re-running the restore against a new map rebinds rather than skipping.
+    const remounted = fakeViewportMap([10, 10, 12, 12]);
+    restoreArcGISViewportLayers({ getMap: () => remounted.map } as unknown as GeoLibreAppAPI);
+    await settle();
+    assert.deepEqual(
+      view.offCalls.map(([event]) => event),
+      ["moveend"],
+      "the loader detaches from the old map",
+    );
+    assert.ok(remounted.listeners.has("moveend"));
+    assert.deepEqual(geometries, ["150,-35,152,-33", "10,10,12,12"]);
+
+    // A refresh takes this same bounded path rather than the unbounded replay.
+    const reloaded = await reloadArcGISViewportLayer(id);
+    assert.equal(reloaded?.features.length, 1);
+    assert.deepEqual(geometries, ["150,-35,152,-33", "10,10,12,12", "10,10,12,12"]);
+  });
+
+  it("holds a split viewport to maxFeatures across both envelopes", async () => {
+    // Each half answers with the cap's worth of distinct features, so an
+    // uncoordinated limit would leave the layer holding twice the maximum.
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(VIEWPORT_LAYER_INFO);
+      const offset = Number(url.searchParams.get("resultOffset") ?? "0");
+      if (offset > 0) return jsonResponse({ type: "FeatureCollection", features: [] });
+      const west = url.searchParams.get("geometry")?.startsWith("170") === true;
+      return jsonResponse({
+        type: "FeatureCollection",
+        features: west
+          ? [viewportFeature(1), viewportFeature(2)]
+          : [viewportFeature(3), viewportFeature(4)],
+      });
+    }) as typeof fetch;
+
+    const view = fakeViewportMap([170, -20, -170, 20]);
+    app = {
+      getMap: () => view.map,
+      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+      maxFeatures: 2,
+    });
+    await settle();
+
+    const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
+    assert.equal(layer?.geojson?.features.length, 2);
   });
 
   it("never persists the access token in the refresh URL", async () => {

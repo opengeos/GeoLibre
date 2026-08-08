@@ -1,6 +1,16 @@
 import "./lib/symbol-dispose-polyfill";
 import React from "react";
 import ReactDOM from "react-dom/client";
+/* App typeface — see the --font-sans/--font-mono note in index.css.
+   These must be imported from JS, not via `@import` in index.css: Tailwind v4
+   resolves CSS @imports itself and inlines them before Vite sees them, so the
+   relative `url(./files/*.woff2)` in fontsource's CSS is never rewritten into
+   an asset reference and no font file is emitted into dist/. The result builds
+   clean and 404s at runtime, silently falling back to system fonts. Importing
+   from JS routes the CSS through Vite's asset pipeline instead. */
+import "@fontsource-variable/ibm-plex-sans/wght.css";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/700.css";
 import "@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css";
 import "@maplibre/maplibre-gl-directions/dist/style.css";
 import "maplibre-gl-3d-tiles/style.css";

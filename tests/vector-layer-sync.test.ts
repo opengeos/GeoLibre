@@ -377,6 +377,40 @@ describe("syncVectorLayersToStore", () => {
     assert.equal(useAppStore.getState().layers.length, 0);
   });
 
+  // Restore replays each layer of a multi-layer container independently, so one
+  // unreachable feed used to delete those layers from the project outright
+  // (opengeos/GeoLibre discussion #1757). A failed replay is not a removal.
+  it("keeps preserved layers the control does not have", () => {
+    const { control } = fakeControl([vectorInfo(), vectorInfo({ id: "vector-2", name: "cities" })]);
+    syncVectorLayersToStore(control);
+    assert.equal(useAppStore.getState().layers.length, 2);
+
+    // vector-2 failed to replay: absent from the control, but still the user's.
+    syncVectorLayersToStore(fakeControl([vectorInfo()]).control, {
+      preserveLayerIds: new Set(["vector-2"]),
+    });
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map((layer) => layer.id),
+      ["vector-1", "vector-2"],
+    );
+  });
+
+  it("still prunes layers outside the preserved set", () => {
+    const { control } = fakeControl([vectorInfo(), vectorInfo({ id: "vector-2", name: "cities" })]);
+    syncVectorLayersToStore(control);
+
+    // Only vector-2 failed; vector-1 was genuinely removed at the control.
+    syncVectorLayersToStore(fakeControl([]).control, {
+      preserveLayerIds: new Set(["vector-2"]),
+    });
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map((layer) => layer.id),
+      ["vector-2"],
+    );
+  });
+
   it("refreshes changed fields but preserves panel renames", () => {
     const { control } = fakeControl([vectorInfo()]);
     syncVectorLayersToStore(control);

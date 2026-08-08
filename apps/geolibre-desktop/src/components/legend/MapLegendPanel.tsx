@@ -470,7 +470,7 @@ export function MapLegendPanel({
     // a flex column keeps header/footer fixed while the entry list scrolls.
     <div
       ref={panelRef}
-      className="relative flex w-64 flex-col overflow-hidden rounded-lg border border-border/50 bg-background/95 text-foreground shadow-lg backdrop-blur-md"
+      className="relative flex w-64 flex-col overflow-hidden rounded-lg border border-border/50 map-glass text-foreground shadow-lg"
       style={{
         maxHeight: maxHeight ?? undefined,
         ...(width !== undefined ? { width: clamp(width, MIN_PANEL_WIDTH, MAX_PANEL_WIDTH) } : {}),

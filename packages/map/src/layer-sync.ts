@@ -479,6 +479,15 @@ function syncExternalNativeLayer(
     clearExternalNativeExtrusion(map, layer, nativeLayerIds);
 
     for (const nativeLayerId of nativeLayerIds) {
+      // A store layer can legitimately outlive its map layers: a layer whose
+      // restore failed keeps the `nativeLayerIds` it was saved with, and the
+      // owning control has not (yet) recreated them. Styling a layer that is
+      // not on the map raises "Cannot get style of non-existing layer" on the
+      // map's error channel, which fills the Diagnostics panel with noise the
+      // user can do nothing about, so skip those ids until the control brings
+      // them back.
+      const nativeLayer = map.getLayer(nativeLayerId);
+      if (!nativeLayer) continue;
       moveLayer(map, nativeLayerId, beforeId);
       // The owning control mirrors direct per-layer visibility changes from
       // the store, but effective state such as a hidden parent group never
@@ -492,8 +501,7 @@ function syncExternalNativeLayer(
       // hide-unmatched filter: filtering is independent of the paint the
       // control owns. Native layers without a filter (deck.gl / 3D Tiles
       // custom layers) are skipped by the type guard.
-      const nativeLayer = map.getLayer(nativeLayerId);
-      if (nativeLayer && nativeLayerSupportsFilter(nativeLayer.type)) {
+      if (nativeLayerSupportsFilter(nativeLayer.type)) {
         applyExternalNativeFeatureFilters(map, nativeLayerId, layer);
       }
     }

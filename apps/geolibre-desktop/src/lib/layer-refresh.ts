@@ -559,6 +559,11 @@ function isWfsLayer(layer: GeoLibreLayer): boolean {
  * that case derives the endpoint from the stored URL, which is the same
  * `/query` path with the unbounded parameters that get replaced anyway.
  *
+ * A layer that is loading by viewport is the exception: it only ever holds the
+ * current extent, so replaying the unbounded download here would swap the whole
+ * service in behind the user's back until the next `moveend` — the very cost
+ * viewport loading avoids. Those refresh by re-running the bounded query.
+ *
  * @param layer - The ArcGIS feature layer to reload.
  * @returns The reloaded features and their count.
  */
@@ -568,15 +573,29 @@ async function refreshArcGISLayer(layer: GeoLibreLayer): Promise<GeoJsonRefreshR
     maxFeatures?: unknown;
     pageSize?: unknown;
   };
+  // Imported here rather than at module scope so this module stays light for
+  // the callers that only read refresh metadata.
+  const { refreshArcGISFeatureLayer, reloadArcGISViewportLayer } =
+    await import("@geolibre/plugins");
+  if (layer.metadata.viewportLoading === true) {
+    const viewport = reloadArcGISViewportLayer(layer.id);
+    // No loader at all: the layer is in a host with no map (`restoreArcGISViewportLayers`
+    // registers one synchronously wherever there is one). Falling through to
+    // the unbounded replay below would download the entire service — the cost
+    // this layer is loaded by viewport to avoid — so say so instead.
+    if (!viewport) {
+      throw new Error("This layer is not bound to a map viewport, so it cannot be refreshed.");
+    }
+    const bounded = await viewport;
+    return { geojson: bounded, featureCount: bounded.features.length };
+  }
+
   const stored = typeof source.arcgisQueryUrl === "string" ? source.arcgisQueryUrl.trim() : "";
   // Fall back to the layer's own URL, stripped of its query string: it is the
   // `/query` endpoint the paged fetch wants, just with the parameters attached.
   const queryUrl = stored || (layerHttpUrl(layer) ?? "").split("?")[0];
   if (!queryUrl) throw new Error("This layer does not have a refreshable GeoJSON URL.");
 
-  // Imported here rather than at module scope so this module stays light for
-  // the callers that only read refresh metadata.
-  const { refreshArcGISFeatureLayer } = await import("@geolibre/plugins");
   const data = await refreshArcGISFeatureLayer({
     maxFeatures: typeof source.maxFeatures === "number" ? source.maxFeatures : undefined,
     pageSize: typeof source.pageSize === "number" ? source.pageSize : undefined,

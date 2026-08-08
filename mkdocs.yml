@@ -45,7 +45,9 @@ nav:
   - Demos: demos.md
   - Downloads: downloads.md
   - Sponsor: sponsor.md
-  - Launch GeoLibre Web: /demo/
+  # Keep this deployment-relative: production serves at /, while PR previews
+  # are nested under /pages-preview/GeoLibre/pr-<number>/.
+  - Launch GeoLibre Web: demo/
   - User Guide:
       - Interface Overview: user-guide/interface.md
       - Projects: user-guide/projects.md

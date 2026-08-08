@@ -55,6 +55,7 @@ import {
   materializeEmbeddableVectorLayers,
   RASTER_SOURCE_KIND,
   reloadVectorControlLayer,
+  replayVectorControlLayerById,
   SKETCHES_SOURCE_KIND,
   TIME_SLIDER_PLUGIN_ID,
   type TimePropertyCandidate,
@@ -1376,10 +1377,16 @@ export function LayerPanel({
           return;
         }
         if (isVectorControlRefreshLayer(layer)) {
-          const info = await reloadVectorControlLayer(layer.id);
+          // A layer whose restore failed stays in the project but never made it
+          // into the control, so reloadLayer cannot find it. Replaying it is
+          // what brings such a layer back once the source is reachable again,
+          // which is why refresh (manual and automatic) tries that second.
+          const info =
+            (await reloadVectorControlLayer(layer.id)) ??
+            (await replayVectorControlLayerById(layer.id));
           if (!info) {
             // The control is unavailable (panel never opened, or torn down
-            // and not yet replayed) or no longer knows this layer id.
+            // and not yet replayed) or the replay above did not succeed.
             // Automatic ticks fire on a timer the user didn't initiate, so
             // skip silently and clear the transient note instead of surfacing
             // an error every interval until the control comes back.

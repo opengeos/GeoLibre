@@ -102,7 +102,7 @@ export function StoryMapComposeBar({ mapControllerRef }: StoryMapComposeBarProps
   return (
     <div className="pointer-events-none absolute bottom-6 left-1/2 z-20 flex w-[min(92vw,34rem)] -translate-x-1/2 flex-col">
       <div
-        className="pointer-events-auto flex flex-col gap-2 rounded-md border bg-background/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
+        className="pointer-events-auto flex flex-col gap-2 rounded-md border map-glass px-3 py-2 text-sm shadow-lg"
         role="region"
         aria-label={t("storymap.composeMode.title")}
         data-testid="storymap-compose-bar"
