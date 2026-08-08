@@ -29,7 +29,7 @@ The repository is an npm workspaces monorepo with 7 packages plus a desktop appl
 
 **The key takeaway here is "choose the lightest path for each format."** The source file `packages/plugins/package.json` has over 60 dependencies, yet there is no monolithic "unified read layer" — each format takes its own shortest path.
 
-![Supported formats](../assets/add-data-formats.png)
+![Supported formats](https://assets.geolibre.app/images/add-data-formats.webp)
 
 The KML case is particularly illustrative. `docs/architecture.md:61` states it clearly: KML is handled by a **custom-built parser** to **preserve embedded styling**, outputting simplestyle-spec properties (`fill`, `stroke`, `stroke-width`) so that styled KML looks the same in GeoLibre as it does in Google Earth. Only when the custom parser fails does it fall back to DuckDB Spatial, **at the cost of losing style information**.
 
@@ -69,7 +69,7 @@ The "one codebase, two runtimes" design is documented at `docs/architecture.md:7
 | **`@tanstack/react-virtual`** | Attribute table virtualization |
 | **`cesium`** 1.143 | Optional 3D globe split-view, **lazy-loaded ~4.8 MB in a separate chunk** |
 
-![3D Tiles, vectors, glTF, and Gaussian splats intermixed in a single layer list](../assets/3dtiles.png)
+![3D Tiles, vectors, glTF, and Gaussian splats intermixed in a single layer list](https://assets.geolibre.app/images/3dtiles.webp)
 
 **Many developers don't realize this about the `maplibre-gl-*` family: 3D Tiles, COPC point clouds, and Gaussian splats can all be loaded directly within the MapLibre canvas — no Cesium required.** If your project just needs "a quick look at some 3D Tiles," this path is far lighter than pulling in an entire 3D engine.
 
@@ -88,7 +88,7 @@ This section is the core of this article. **If you only read one thing, read thi
 
 First, let's cover WebAssembly in one sentence: the GeoLibre repository has 315 hits for the `wasm` identifier. **Database, language runtime, native toolchain, codec, and machine learning** — all five capability categories are powered by WASM engines: DuckDB, sql.js (SQLite), PGlite + PostGIS, CereusDB (SedonaDB), Pyodide, `geolibre-wasm` (a WASI build of Whitebox), gdal3.js, `cog-tiler-wasm`, h5wasm, onnxruntime-web. **When you trace the native languages, the picture becomes clear: C, C++, Rust. WASM here is not about accelerating JavaScript — it's about bringing decades of accumulated native GIS ecosystem into the browser wholesale.**
 
-![Processing menu: a row of WASM engines behind it](../assets/processing-tools-menu.png)
+![Processing menu: a row of WASM engines behind it](https://assets.geolibre.app/images/processing-tools-menu.webp)
 
 Among these dozen or so engines, **one stands out as worth trying right now**: `@duckdb/duckdb-wasm` plus its spatial extension. The reason is simple — other engines solve "a particular category of work," but this one is simultaneously a **format driver** and a **compute engine**. One library can take over both "read data" and "compute on data."
 
@@ -122,7 +122,7 @@ DuckDB invocation points in the source code are categorized as follows:
 
 > **Key insight**: Pay attention to the last row. This is an easily underestimated design choice: layers on the map are simultaneously tables in SQL. Users can write `JOIN` and `ST_Intersects` across two layers, and the result becomes a new layer directly. **"Map" and "database" are two views of the same thing.**
 
-![Vector data processing](../assets/vector-data-demo.gif)
+![Vector data processing](https://assets.geolibre.app/images/vector-data-demo.gif)
 
 The SQL Workspace also features three "help the user say what they mean" rewrites. If you're building a SQL console, you can follow this approach directly:
 
@@ -269,7 +269,7 @@ The full pipeline is in `packages/map/src/geojson-vt-protocol.ts`, step by step:
 - Fed to MapLibre via a custom protocol `geolibre-gjvt`
 - `TILE_EXTENT = 4096`, `TILE_MAX_ZOOM = 16` (beyond this, let MapLibre over-zoom)
 
-![Large vector data loading](../assets/vector-data-demo.gif)
+![Large vector data loading](https://assets.geolibre.app/images/vector-data-demo.gif)
 
 Two details worth highlighting individually.
 
@@ -381,7 +381,7 @@ This section is pure web engineering, less GIS-specific, but has the lowest migr
 
 `@geolibre/core` has only four dependencies: `zustand`, `zundo`, `uuid`, `@maplibre/maplibre-gl-style-spec`. **Note that it does not depend on `maplibre-gl` itself** (the style-spec package is only used to evaluate style expressions), so the state layer and the rendering layer are genuinely separated.
 
-![Layer panel: all parameters modify the store](../assets/raster-style-panel.png)
+![Layer panel: all parameters modify the store](https://assets.geolibre.app/images/raster-style-panel.webp)
 
 **Pattern 1: Constant array as single source of truth.** The 20 layer types at `packages/core/src/types.ts:62`:
 
@@ -467,13 +467,13 @@ Traditional pipeline: **Data → ingest into database → publish via GeoServer 
 
 Cloud-native pipeline: **Data → convert to COG / GeoParquet / PMTiles / FlatGeobuf → drop onto any static storage that responds to Range requests → frontend fetches byte ranges on demand**. The server tier disappears entirely; what remains is just object storage traffic costs.
 
-> **The key phrase is HTTP Range.** What these formats share is not "better compression," but **the index is written into the file's own header** — the client reads a few KB of header, calculates which byte ranges it needs, and issues a `Range` request to fetch them. Static storage is sufficient; no "service" is required.
+> **The key phrase is HTTP Range.** What these formats share is not "better compression," but that **each file carries its own layout metadata — a header or footer, tile directory, R-tree index, overviews, row-group statistics** — the client reads a few KB of that metadata, calculates which byte ranges it needs, and issues a `Range` request to fetch them. Static storage is sufficient; no "service" is required.
 
 ### 6.1 What Makes This Good: Five Concrete Benefits
 
 **Benefit 1: Download volume converges on "what you need to see," not "how large the file is."**
 
-This is the most fundamental shift. Traditional formats (GeoJSON, Shapefile, striped GeoTIFF) **have no internal index; the client must fetch the entire file**. Cloud-native formats put the index in the file header, enabling pruning across three dimensions:
+This is the most fundamental shift. Traditional formats (GeoJSON, Shapefile, striped GeoTIFF) **offer no useful partial-range access — even when an index exists it sits in a sidecar file, so the client still has to fetch all of the data**. Cloud-native formats keep that index inside the data file itself, enabling pruning across three dimensions:
 
 | Pruning Dimension | Mechanism | Effect |
 |---|---|---|
@@ -508,7 +508,7 @@ This is especially critical for government dashboards and public service portals
 **But the trade-offs are real — these four points are genuine:**
 
 - **Small data is actually slower.** Reading the header, reading the index, then fetching the data — that's several network round-trips. A few hundred KB of GeoJSON is one request and done; wrapping it in a cloud-native format is counterproductive. **The threshold is roughly "too large for a single request."**
-- **Range request count increases significantly.** HTTP/2 or HTTP/3 is mandatory; otherwise connection overhead will consume the benefits.
+- **Range request count increases significantly.** HTTP/1.1 handles `Range` fine, but HTTP/2 or HTTP/3 is strongly recommended at this request volume; otherwise connection overhead will eat into the benefits.
 - **The server must support `Range` and CORS** (plus `Access-Control-Expose-Headers`) — this trips people up more often than expected; the next sub-section covers it in detail.
 - **Computation moves from server to client.** The decoding, filtering, and stitching that servers used to do now runs in the user's browser, subject to the ~4 GiB memory and single-thread constraints (see Section 2.5). **It's not "got faster" — it's "moved where the computation happens" — and it's only a win when the new location computes more cost-effectively.**
 
@@ -591,17 +591,25 @@ GeoLibre integrates STAC, Source Cooperative, Overture Maps, Planetary Computer,
 
 ### Achievable This Iteration
 
-4. Set a clear threshold for large-data layers; switch to client-side tiling above the line (`@maplibre/geojson-vt` + `@maplibre/vt-pbf`)
-5. Wire `AbortController` into all async pipelines, including non-network long loops
-6. Check whether your undo stack has a memory budget and whether the newest snapshot is always retained; check whether virtual list sorting operates on the full data model
-7. Rewrite enums using `as const` arrays so runtime validation and type definitions share a single source
-8. Pin cross-language / cross-process duplicate constants with a unified `SYNC:` marker
+<ol start="4" markdown>
+
+- Set a clear threshold for large-data layers; switch to client-side tiling above the line (`@maplibre/geojson-vt` + `@maplibre/vt-pbf`)
+- Wire `AbortController` into all async pipelines, including non-network long loops
+- Check whether your undo stack has a memory budget and whether the newest snapshot is always retained; check whether virtual list sorting operates on the full data model
+- Rewrite enums using `as const` arrays so runtime validation and type definitions share a single source
+- Pin cross-language / cross-process duplicate constants with a unified `SYNC:` marker
+
+</ol>
 
 ### Worth Evaluating as a Project
 
-9. Upgrade DuckDB-WASM Spatial **from "format reader" to "query layer"**: let layers simultaneously be SQL tables, so users can write `JOIN` and `ST_Intersects` across two layers
-10. De-framework the computation layer so the browser and server run the same code — never reconcile results again
-11. Move static data pipelines to cloud-native formats, starting with PMTiles; confirm storage supports `Range` and CORS, and clarify which metadata must go through a proxy
-12. If building a web application, rebuild your Service Worker caching using the three-tier strategy
+<ol start="9" markdown>
+
+- Upgrade DuckDB-WASM Spatial **from "format reader" to "query layer"**: let layers simultaneously be SQL tables, so users can write `JOIN` and `ST_Intersects` across two layers
+- De-framework the computation layer so the browser and server run the same code — never reconcile results again
+- Move static data pipelines to cloud-native formats, starting with PMTiles; confirm storage supports `Range` and CORS, and clarify which metadata must go through a proxy
+- If building a web application, rebuild your Service Worker caching using the three-tier strategy
+
+</ol>
 
 > None of the items on this checklist require importing a single line of GeoLibre's code. Its greatest contribution is not yet another mapping application — it's proving, with a complete project you can run, install, and read the source of, that **a spatial database running in the browser is sufficient to replace the half of the work that used to require a server**.

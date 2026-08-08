@@ -8,7 +8,7 @@
 
 ## 前言
 
-本文对照 GeoLibre 仓库源码逐层拆解项目架构，梳理项目依赖选型、DuckDB-WASM 空间计算内核、前端性能优化策略、状态管理设计、离线缓存三层策略与云原生地理数据整套方案，文中标注全部对应源码文件路径，所有技术方案均可直接复用至 WebGIS 项目。）
+本文对照 GeoLibre 仓库源码逐层拆解项目架构，梳理项目依赖选型、DuckDB-WASM 空间计算内核、前端性能优化策略、状态管理设计、离线缓存三层策略与云原生地理数据整套方案，文中标注全部对应源码文件路径，所有技术方案均可直接复用至 WebGIS 项目。
 
 
 ## 一、它的工具箱：值得单独拿出来看的开源库
@@ -32,7 +32,7 @@
 
 **这里最值得借鉴的是「按格式选最轻的路径」。** 源码里 `packages/plugins/package.json` 有 60 多个依赖，但没有一个「大一统读取层」——每种格式各走各的最短路。
 
-![支持格式](../assets/add-data-formats.png)
+![支持格式](https://assets.geolibre.app/images/add-data-formats.webp)
 
 KML 那条尤其能说明取舍。`docs/architecture.md:61` 写得很直白：KML 由**自研解析器**读取，为的是**保留内嵌符号化**，输出 simplestyle-spec 属性（`fill`、`stroke`、`stroke-width`），这样带样式的 KML 在 GeoLibre 里和在 Google Earth 里长得一样；解析器读不了的才退回 DuckDB Spatial，**代价是丢掉样式**。
 
@@ -72,7 +72,7 @@ KML 那条尤其能说明取舍。`docs/architecture.md:61` 写得很直白：KM
 | **`@tanstack/react-virtual`** | 属性表虚拟化 |
 | **`cesium`** 1.143 | 可选的三维球分屏，**懒加载 ~4.8MB 独立 chunk** |
 
-![3D Tiles、矢量、glTF、高斯泼溅混排在同一个图层列表](../assets/3dtiles.png)
+![3D Tiles、矢量、glTF、高斯泼溅混排在同一个图层列表](https://assets.geolibre.app/images/3dtiles.webp)
 
 **`maplibre-gl-*` 这一串是很多人不知道的：3D Tiles、COPC 点云、高斯泼溅，全都能在 MapLibre 画布里加载，不需要引入 Cesium。** 如果项目只是「想看看 3D Tiles」，这条路比上一整套三维引擎轻得多。
 
@@ -91,7 +91,7 @@ KML 那条尤其能说明取舍。`docs/architecture.md:61` 写得很直白：KM
 
 先把 WebAssembly 这件事一句话说完：GeoLibre 仓库里带 `wasm` 的标识符有 315 处命中，**数据库、语言运行时、原生工具链、编解码、机器学习**五类能力全部由 WASM 引擎承担——DuckDB、sql.js（SQLite）、PGlite + PostGIS、CereusDB（SedonaDB）、Pyodide、`geolibre-wasm`（Whitebox 的 WASI 构建）、gdal3.js、`cog-tiler-wasm`、h5wasm、onnxruntime-web。**原生语言连起来看就明白了：C、C++、Rust。WASM 在这里不是给 JS 加速，是把 GIS 领域几十年积累的原生生态整体搬进浏览器。**
 
-![数据处理菜单：背后是一排 WASM 引擎](../assets/processing-tools-menu.png)
+![数据处理菜单：背后是一排 WASM 引擎](https://assets.geolibre.app/images/processing-tools-menu.webp)
 
 这十来个引擎里，**有一个值得当下就该去试的**：`@duckdb/duckdb-wasm` 加上它的 spatial 扩展。原因很简单——其他引擎解决的是「某一类活儿」，而它同时是**格式驱动**和**计算引擎**，一个库就能把「读数据」和「算数据」两件事一起接管。
 
@@ -125,7 +125,7 @@ KML 那条尤其能说明取舍。`docs/architecture.md:61` 写得很直白：KM
 
 > **关键洞察：** 注意最后一行。这是一个很容易被低估的设计：地图上的图层同时是 SQL 里的表，用户可以对着两个图层写 `JOIN`、写 `ST_Intersects`，结果再直接变成新图层。**「地图」和「数据库」在这里是同一份东西的两个视图。**
 
-![矢量数据处理](../assets/vector-data-demo.gif)
+![矢量数据处理](https://assets.geolibre.app/images/vector-data-demo.gif)
 
 SQL 工作区里还有三处「帮用户把话说全」的改写，做 SQL 控制台的可以直接照这个思路来：
 
@@ -270,7 +270,7 @@ compile_error!("the `mas` (Mac App Store) build must not enable `native-duckdb`:
 - 通过自定义协议 `geolibre-gjvt` 喂给 MapLibre
 - `TILE_EXTENT = 4096`，`TILE_MAX_ZOOM = 16`（超过就让 MapLibre over-zoom）
 
-![大数据量矢量加载](../assets/vector-data-demo.gif)
+![大数据量矢量加载](https://assets.geolibre.app/images/vector-data-demo.gif)
 
 两个细节值得单独说。
 
@@ -382,7 +382,7 @@ let total = distinctFeatureCount(pastStates[lastIndex], seen);
 
 `@geolibre/core` 的依赖只有四个：`zustand`、`zundo`、`uuid`、`@maplibre/maplibre-gl-style-spec`。**注意它不依赖 `maplibre-gl` 本体**（那个 style-spec 包只是用来求值样式表达式的），所以状态层和渲染层是真的分开的。
 
-![图层面板：所有参数改的都是 store](../assets/raster-style-panel.png)
+![图层面板：所有参数改的都是 store](https://assets.geolibre.app/images/raster-style-panel.webp)
 
 **模式一，常量数组当单一来源。** `packages/core/src/types.ts:62` 那 20 个图层类型：
 
@@ -468,13 +468,13 @@ Web 构建是一个可安装的 PWA，用 `vite-plugin-pwa` + Workbox。缓存**
 
 云原生链路：**数据转成 COG / GeoParquet / PMTiles / FlatGeobuf → 放到任何能响应 Range 请求的静态存储 → 前端按需取字节区间**。服务器这一环整个消失了，剩下的只是对象存储的流量费。
 
-> **关键词是 HTTP Range。** 这些格式的共同点不是「压缩得更好」，而是**把索引写进了文件自己的头部**——客户端先读几 KB 头部，算出自己要的是哪几段字节，再发一个 `Range` 请求取回来。所以静态存储就够了，不需要任何「服务」。
+> **关键词是 HTTP Range。** 这些格式的共同点不是「压缩得更好」，而是**每个文件都把自己的布局元数据带在身上——头部或尾部、瓦片目录、R 树索引、金字塔概视、行组统计**——客户端先读几 KB 这样的元数据，算出自己要的是哪几段字节，再发一个 `Range` 请求取回来。所以静态存储就够了，不需要任何「服务」。
 
 ### 6.1 它到底好在哪：五条实打实的收益
 
 **收益一，下载量按「要看什么」收敛，而不是按「文件有多大」。**
 
-这是最根本的一条。传统格式（GeoJSON、Shapefile、条带式 GeoTIFF）**没有内部索引，客户端只能整份拿**。云原生格式把索引写进文件头，于是有了三个维度的裁剪：
+这是最根本的一条。传统格式（GeoJSON、Shapefile、条带式 GeoTIFF）**没法按字节区间局部读取——即便有索引也在旁挂的独立文件里，客户端仍然只能把数据整份拿下来**。云原生格式把索引放进数据文件自身，于是有了三个维度的裁剪：
 
 | 裁剪维度 | 靠什么实现 | 效果 |
 |---|---|---|
@@ -509,7 +509,7 @@ Web 构建是一个可安装的 PWA，用 `vite-plugin-pwa` + Workbox。缓存**
 **但也得说清代价，这四条是真的：**
 
 - **小数据反而更慢。** 读头部、读索引、再取数据，是好几个网络往返；几百 KB 的 GeoJSON 一次请求就完事了，套云原生格式并不划算。**阈值大概在「一次请求下不完」的量级。**
-- **Range 请求数量会明显变多。** 必须有 HTTP/2 或 HTTP/3，否则连接开销会把优势吃掉。
+- **Range 请求数量会明显变多。** HTTP/1.1 同样支持 `Range`，但在这个请求量级下强烈建议用 HTTP/2 或 HTTP/3，否则连接开销会把优势吃掉。
 - **服务端必须支持 `Range` 和 CORS**（还要 `Access-Control-Expose-Headers`），这一点比预想中更容易出问题，下一小节专门讲。
 - **算力从服务端挪到了客户端。** 原来服务器干的解码、过滤、拼接，现在在用户的浏览器里跑，受 ~4 GiB 内存和单线程约束（见第二节 2.5）。**不是「变快了」，是「换了个地方算」——只有当那个地方算得更划算时才成立。**
 
@@ -592,17 +592,25 @@ GeoLibre 接了 STAC、Source Cooperative、Overture Maps、Planetary Computer�
 
 ### 这个迭代能做的
 
-4. 给大数据量图层定一个明确阈值，过线换客户端切片（`@maplibre/geojson-vt` + `@maplibre/vt-pbf`）
-5. 给所有异步管线接 `AbortController`，包括非网络的长循环
-6. 检查撤销栈有没有内存预算、有没有永远保留最新快照；检查虚拟列表的排序是不是走完整数据模型
-7. 用 `as const` 数组重写枚举，让运行时校验和类型定义同源
-8. 把跨语言/跨进程的重复常量用统一的 `SYNC:` 标记钉起来
+<ol start="4" markdown>
+
+- 给大数据量图层定一个明确阈值，过线换客户端切片（`@maplibre/geojson-vt` + `@maplibre/vt-pbf`）
+- 给所有异步管线接 `AbortController`，包括非网络的长循环
+- 检查撤销栈有没有内存预算、有没有永远保留最新快照；检查虚拟列表的排序是不是走完整数据模型
+- 用 `as const` 数组重写枚举，让运行时校验和类型定义同源
+- 把跨语言/跨进程的重复常量用统一的 `SYNC:` 标记钉起来
+
+</ol>
 
 ### 值得立项评估的
 
-9. 把 DuckDB-WASM Spatial **从「读格式的工具」升级成「查询层」**：让图层同时是 SQL 表，用户能对着两个图层写 `JOIN` 和 `ST_Intersects`
-10. 把算子层去框架化，让浏览器和服务端跑同一份代码，从此不用再对账
-11. 把静态数据线换成云原生格式，先从 PMTiles 开始；顺手确认存储支持 `Range` 和 CORS，并想清楚哪些元数据必须走代理
-12. 如果做 Web 应用，按三层策略把 Service Worker 缓存重做一遍
+<ol start="9" markdown>
+
+- 把 DuckDB-WASM Spatial **从「读格式的工具」升级成「查询层」**：让图层同时是 SQL 表，用户能对着两个图层写 `JOIN` 和 `ST_Intersects`
+- 把算子层去框架化，让浏览器和服务端跑同一份代码，从此不用再对账
+- 把静态数据线换成云原生格式，先从 PMTiles 开始；顺手确认存储支持 `Range` 和 CORS，并想清楚哪些元数据必须走代理
+- 如果做 Web 应用，按三层策略把 Service Worker 缓存重做一遍
+
+</ol>
 
 > 这份清单里没有一条需要引入 GeoLibre 的代码。它最大的贡献不是又一个地图应用，而是把「一个跑在浏览器里的空间数据库，足以替代过去必须放在服务端的那些工作」这件事，用一个能跑、能装、能查源码的完整项目证明了一遍。

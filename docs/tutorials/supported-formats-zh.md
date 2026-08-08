@@ -8,7 +8,7 @@
 
 ## 前言
 
-本文完整梳理 GeoLibre 内置支持的全部地理空间数据格式，区分矢量、栅格、云原生地理格式，同时说明每种格式对应的解析依赖、读取优先级与适用场景，可供 WebGIS 开发人员快速查阅。）
+本文完整梳理 GeoLibre 内置支持的全部地理空间数据格式，区分矢量、栅格、云原生地理格式，同时说明每种格式对应的解析依赖、读取优先级与适用场景，可供 WebGIS 开发人员快速查阅。
 
 ## 一、运行形态与平台说明
 
@@ -21,7 +21,7 @@
 | 安卓 | Google Play 原生 App | 每 ABI 约 40MB |
 | Jupyter | `pip install geolibre` | 整个应用嵌进 notebook 单元格 |
 
-> **没有账号，没有服务器，没有费用。** 数据默认不出本机。
+> **核心应用没有账号、没有服务器、没有费用。** 本地文件就地读取、不出本机，应用加载完成后本地流程也能离线继续用。例外的是那些可选的远程能力：在线目录（STAC、Source Cooperative、Overture、Planetary Computer）、从 CDN 下载底图与瓦片，以及 Earth Engine、需要鉴权的 ArcGIS 服务等，都需要联网，部分还需要各自的凭据或 OAuth 登录。
 
 ---
 
@@ -29,7 +29,7 @@
 
 矢量数据是 GeoLibre 适配最完善的能力模块，文件选择器内置统一的格式白名单，支持拖拽自动识别，无需手动选择文件类型，覆盖 17 种主流矢量扩展名。
 
-```
+```text
 geojson, json, gpkg, geoparquet, parquet, fgb, flatgeobuf,
 csv, tsv, kml, kmz, gml, gpx, dxf, tab, shp, zip
 ```
@@ -56,7 +56,7 @@ csv, tsv, kml, kmz, gml, gpx, dxf, tab, shp, zip
 | **Esri 文件地理数据库** | `.gdb` **文件夹** | Python sidecar | 桌面端专属，且要 sidecar；Mac App Store 版本里是隐藏的 |
 | **OSM PBF** | `.osm.pbf` `.pbf` | osmix，跑在 Web Worker | 自动拆成点/线/面三层；超 50MB 会提示确认，5 分钟超时保护 |
 | **GeoRSS** | `.xml` `.rss` `.atom` | 纯 JS | RSS 2.0 / Atom / RDF 都吃，GeoRSS Simple + GML 几何 |
-| **地理标记照片** | `.jpg` `.png` `.tif` `.png` `.heic` `.heif` | exifr | **读 EXIF GPS 直接生成点图层**，无人机照片很实用 |
+| **地理标记照片** | `.jpg` `.jpeg` `.png` `.tif` `.tiff` `.webp` `.heic` `.heif` | exifr | **读 EXIF GPS 直接生成点图层**，无人机照片很实用 |
 
 _明确不支持的：`.xlsx` / `.xls`（经全库搜索，零命中）、原始 `.osm` XML（只认 PBF）。要用 Excel 的先另存为 CSV。_
 
@@ -65,9 +65,9 @@ _明确不支持的：`.xlsx` / `.xls`（经全库搜索，零命中）、原始
 
 加载完之后不是「能看见就完事」——符号化、分级配色、图例都是跟着走的：
 
-![一个工程里叠了地铁站点、地铁线路、曼哈顿建筑高度三个矢量图层，右侧图例按建成年代自动分级](../assets/vector-layers-legend.png)
+![一个工程里叠了地铁站点、地铁线路、曼哈顿建筑高度三个矢量图层，右侧图例按建成年代自动分级](https://assets.geolibre.app/images/vector-layers-legend.webp)
 
-![同一份数据拖时间轴：按建成年代逐年过滤建筑，矢量图层是带时间维度的](../assets/vector-data-demo.gif)
+![同一份数据拖时间轴：按建成年代逐年过滤建筑，矢量图层是带时间维度的](https://assets.geolibre.app/images/vector-data-demo.gif)
 
 ---
 
@@ -85,7 +85,7 @@ _明确不支持的：`.xlsx` / `.xls`（经全库搜索，零命中）、原始
 | **转换工具输入（栅格）** | `.tif .tiff .img .vrt .asc .nc .jp2 .hgt` | GDAL / rasterio sidecar | 桌面端；浏览器只收 `.tif/.tiff` |
 | **Whitebox 栅格 I/O** | `.tif .tiff .img .bil .flt .sdat .rdc .asc` | whitebox-wasm | 全平台 |
 
-![Google 影像底图与栅格样式面板](../assets/raster-style-panel.png)
+![Google 影像底图与栅格样式面板](https://assets.geolibre.app/images/raster-style-panel.webp)
 
 _注意这个不对等：`.img`、`.vrt`、`.asc`、`.jp2`、`.hgt` 这些只在**转换工具**里认，不能直接当图层拖进去。直接拖只认 GeoTIFF。_
 
@@ -116,7 +116,7 @@ _LiDAR 图层面板本身的扩展名白名单**不在这个仓库里**，定义
 | **COLLADA `.dae`** | 只能通过 KML `<Model>` 内嵌 | three.js → GLB | — |
 | **高斯泼溅** | URL | `maplibre-gl-splat` | 存储层类型是 `gaussian-splat` |
 
-![3D Tiles 加载面板：左侧图层列表里 3D-TILES、矢量、XYZ、glTF 模型、高斯泼溅混排](../assets/3dtiles.png)
+![3D Tiles 加载面板：左侧图层列表里 3D-TILES、矢量、XYZ、glTF 模型、高斯泼溅混排](https://assets.geolibre.app/images/3dtiles.webp)
 
 上面这张图挺能说明问题：**左侧图层面板里 3D Tiles、矢量、XYZ、glTF 模型、高斯泼溅是叠在同一个列表里的**，右边直接就是渲染结果。「加载 3D Tiles 要起服务器写页面」这件事在这儿就是**粘贴一个 URL**。
 
@@ -128,7 +128,7 @@ _没找到的：`.obj` 完全不支持（零命中）。`.b3dm`/`.pnts`/`.cmpt` 
 
 存储层的图层类型枚举一共 20 种：
 
-```
+```text
 geojson, raster, wms, wmts, xyz, vector-tiles, arcgis, pmtiles,
 mbtiles, zarr, lidar, gaussian-splat, 3d-tiles, cog, flatgeobuf,
 geoparquet, duckdb-query, deckgl-viz, video, image
@@ -151,7 +151,7 @@ geoparquet, duckdb-query, deckgl-viz, video, image
 | **PostgreSQL / PostGIS** | 连接 → 选表 → 出 MVT，靠内置的 Martin 服务。**桌面端专属** |
 | **deck.gl 可视化图层** | 14 种：散点、热力、六边形、格网、屏幕格网、等值线、弧线、线、大圆、GeoJSON、图标、文本、轨迹、场景图 |
 
-![OpenFreeMap 3D 底图与绘制工具](../assets/drawing-tools.png)
+![OpenFreeMap 3D 底图与绘制工具](https://assets.geolibre.app/images/drawing-tools.webp)
 
 ---
 
@@ -183,11 +183,11 @@ geoparquet, duckdb-query, deckgl-viz, video, image
 
 **行星数据**（这是一个超出预期的设计）：**月球、火星来自 OpenPlanetaryMap，水星、金星、伽利略卫星、土卫六、冥王星、卡戎来自 USGS Astrogeology**。关键细节是**每个工程独立的椭球体参数**，所以距离和面积量算跟你测的那颗星球是对得上的。
 
-![月球：底图来自 OpenPlanetaryMap，比例尺是 300 km](../assets/moon-map.png)
+![月球：底图来自 OpenPlanetaryMap，比例尺是 300 km](https://assets.geolibre.app/images/moon-map.webp)
 
-![火星：同一套界面，换个工程就是另一颗星球](../assets/mars.png)
+![火星：同一套界面，换个工程就是另一颗星球](https://assets.geolibre.app/images/mars.webp)
 
-![冥王星：这张来自 USGS Astrogeology，那块「心形」的 Sputnik Planitia 清晰可见](../assets/pluto.png)
+![冥王星：这张来自 USGS Astrogeology，那块「心形」的 Sputnik Planitia 清晰可见](https://assets.geolibre.app/images/pluto.webp)
 
 > **编者注：** 最初以为这只是表面文章，但每个工程独立的椭球体参数这个细节改变了这一看法——项目对坐标系的处理是严谨的，不是简单地贴图了事。
 
@@ -256,8 +256,8 @@ _浏览器端输出格式是子集：geojson / json / csv / parquet / geoparquet
 |---|---|
 | **桌面端（Tauri）专属** | 原生文件/文件夹对话框、本地 MBTiles、本地栅格读取、Shapefile 同名文件自动发现、PostGIS/Martin、文件地理数据库、本地文件监听重载 |
 | **需要 Python sidecar** | 文件地理数据库、桌面端的全部转换工具（首选路径）、栅格工具（rasterio）、AI 分割、PostGIS、Sedona |
-| **Mac App Store 版本** | 隐藏 PostgreSQL 和 GDB 数据源、隐藏 AI 分割；所有转换退回浏览器运行时；Shapefile companion 文件要手动多选 |
-| **安卓 / 移动端** | 隐藏 Whitebox、栅格工具、转换工具、AI 分割、PostgreSQL |
+| **Mac App Store 版本** | 不带 Python sidecar：隐藏 PostgreSQL 和 GDB 数据源、隐藏 AI 分割；Whitebox、转换、栅格、矢量工具全部退回浏览器/WASM 引擎；Shapefile companion 文件要手动多选 |
+| **安卓 / 移动端** | 隐藏栅格工具、转换工具、AI 分割、PostgreSQL——这些都依赖 sidecar。Whitebox 工具箱走 WASM，依然可用 |
 | **浏览器端** | 无本地 MBTiles/GDB/PostGIS；转换输出是子集；矢量转换不收 `.zip`；栅格转 COG 只收 GeoTIFF；Zarr 本地文件夹在 Firefox/Safari 不可用 |
 
 ---
@@ -278,13 +278,13 @@ _浏览器端输出格式是子集：geojson / json / csv / parquet / geoparquet
 - **deck.gl** 不占独立视图，是**交织进 MapLibre 画布内**的 overlay，负责 COG、3D Tiles、I3S、带 Z 值的矢量、可视化图层。这里有个硬约束：所有交织生产者必须共用**同一个** overlay 实例，否则后来的会把前面的图层清掉（作者实际遇到过这个问题）
 - **Cesium** 是分屏里的一个视图模式，不是替换。它只支持 GeoJSON、3D Tiles 和影像类图层，其它类型在面板里标「仅 2D」
 
-![Cesium 视图模式下的三维球，左边还是那套图层面板](../assets/earth-cesium-globe.png)
+![Cesium 视图模式下的三维球，左边还是那套图层面板](https://assets.geolibre.app/images/earth-cesium-globe.webp)
 
 一个值得注意的细节：**Cesium 的相机同步不是按 zoom 级别对齐的，而是按地面分辨率（米/像素）**，所以不同高度的分屏面板能保持同样的屏幕比例尺。
 
 **计算引擎有五套**，都挂在同一套 UI 下：DuckDB-WASM Spatial（主力，跑在独立 Worker 里）、PGlite + PostGIS、Apache Sedona（sidecar 或浏览器 WASM 版）、Pyodide（浏览器里跑 GeoPandas/Shapely）、Whitebox WASM（700+ 工具）。
 
-!["处理"菜单展开的样子：Whitebox、转换、水文、LiDAR、网络、投影、栅格、遥感、地形、矢量，右边是按字母排的工具清单](../assets/processing-tools-menu.png)
+!["处理"菜单展开的样子：Whitebox、转换、水文、LiDAR、网络、投影、栅格、遥感、地形、矢量，右边是按字母排的工具清单](https://assets.geolibre.app/images/processing-tools-menu.webp)
 
 **一个很聪明的做法：矢量算子的 Python 实现是一个「无框架」模块，sidecar 和浏览器 Pyodide 执行的是同一份代码**，所以两条路径结果完全一致，不会出现「本地算和服务器算不一样」。
 
@@ -355,7 +355,7 @@ GeoLibre 真正的价值在于——不在于它比 QGIS 强（它不强），�
 
 1. **只想看看** —— 直接开 `web.geolibre.app`，不用装不用注册
 2. **要真干活** —— GitHub Releases 下桌面版，或走微软商店 / Homebrew / winget，两分钟的事
-3. **Python 用户** —— `pip install geolibre`，要 GeoPandas 支持就 `pip install geolibre[all]`，需要 Python 3.10+
+3. **Python 用户** —— `pip install geolibre`，要 GeoPandas 支持就 `pip install "geolibre[all]"`，需要 Python 3.10+
 4. **内网 / 离线环境** —— `VITE_PYODIDE_INDEX_URL` 和 `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` 可以把 Pyodide 和 DuckDB 空间扩展指到内部镜像，**不用重新构建**；官方也有 Docker 镜像 `ghcr.io/opengeos/geolibre:latest`
 5. **二次开发** —— npm workspaces 单体仓库，主应用在 `apps/geolibre-desktop`，MIT 许可
 

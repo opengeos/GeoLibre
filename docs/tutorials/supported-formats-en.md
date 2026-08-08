@@ -19,7 +19,7 @@ Before listing formats, it's important to clarify "where it runs," since many fo
 | Android | Google Play native app | ~40 MB per ABI |
 | Jupyter | `pip install geolibre` | The entire application embedded in a notebook cell |
 
-> **No accounts, no servers, no fees.** Data stays on your machine by default.
+> **No accounts, no servers, no fees for the core application.** Local files are read in place and stay on your machine, and once the app has loaded, local workflows keep working offline. The optional remote pieces are the exception: online catalogs (STAC, Source Cooperative, Overture, Planetary Computer), basemap and tile downloads from a CDN, and services such as Earth Engine or an authenticated ArcGIS endpoint all need network access, and some need their own credentials or OAuth sign-in.
 
 ---
 
@@ -27,7 +27,7 @@ Before listing formats, it's important to clarify "where it runs," since many fo
 
 Vector data is GeoLibre's most mature capability. The file picker has a built-in unified format allowlist, supports drag-and-drop auto-detection (no manual format selection needed), and covers 17 mainstream vector extensions.
 
-```
+```text
 geojson, json, gpkg, geoparquet, parquet, fgb, flatgeobuf,
 csv, tsv, kml, kmz, gml, gpx, dxf, tab, shp, zip
 ```
@@ -54,7 +54,7 @@ What's truly interesting is **which engine reads each format behind the scenes**
 | **Esri File Geodatabase** | `.gdb` **folder** | Python sidecar | Desktop-only, requires sidecar; hidden in Mac App Store builds |
 | **OSM PBF** | `.osm.pbf` `.pbf` | osmix, runs in Web Worker | Auto-splits into point/line/polygon layers; prompts confirmation above 50 MB; 5-minute timeout protection |
 | **GeoRSS** | `.xml` `.rss` `.atom` | Pure JS | Supports RSS 2.0 / Atom / RDF, GeoRSS Simple + GML geometries |
-| **Geotagged photos** | `.jpg` `.png` `.tif` `.png` `.heic` `.heif` | exifr | **Reads EXIF GPS data to directly generate a point layer** — very practical for UAV/drone photos |
+| **Geotagged photos** | `.jpg` `.jpeg` `.png` `.tif` `.tiff` `.webp` `.heic` `.heif` | exifr | **Reads EXIF GPS data to directly generate a point layer** — very practical for UAV/drone photos |
 
 _Explicitly unsupported: `.xlsx` / `.xls` (zero hits in a full-repo search), raw `.osm` XML (PBF only). If you need Excel data, save as CSV first._
 
@@ -63,9 +63,9 @@ _Explicitly unsupported: `.xlsx` / `.xls` (zero hits in a full-repo search), raw
 
 After loading, it's not just "can you see it" — symbology, graduated coloring, and legends all come along:
 
-![A project with three vector layers stacked — subway stations, subway lines, and Manhattan building heights — with a legend auto-graduated by construction year](../assets/vector-layers-legend.png)
+![A project with three vector layers stacked — subway stations, subway lines, and Manhattan building heights — with a legend auto-graduated by construction year](https://assets.geolibre.app/images/vector-layers-legend.webp)
 
-![The same data on a timeline: buildings filtered year-by-year by construction date; vector layers carry a temporal dimension](../assets/vector-data-demo.gif)
+![The same data on a timeline: buildings filtered year-by-year by construction date; vector layers carry a temporal dimension](https://assets.geolibre.app/images/vector-data-demo.gif)
 
 ---
 
@@ -83,7 +83,7 @@ The raster side is narrower than vector but covers the cloud-native mainline.
 | **Conversion tool inputs (raster)** | `.tif .tiff .img .vrt .asc .nc .jp2 .hgt` | GDAL / rasterio sidecar | Desktop; browser only accepts `.tif/.tiff` |
 | **Whitebox raster I/O** | `.tif .tiff .img .bil .flt .sdat .rdc .asc` | whitebox-wasm | All platforms |
 
-![Google imagery basemap with raster style panel](../assets/raster-style-panel.png)
+![Google imagery basemap with raster style panel](https://assets.geolibre.app/images/raster-style-panel.webp)
 
 _Note the asymmetry: `.img`, `.vrt`, `.asc`, `.jp2`, `.hgt` are only recognized in **conversion tools** — they cannot be directly dragged in as layers. Drag-and-drop only works for GeoTIFF._
 
@@ -114,7 +114,7 @@ The opening scenario — "received some 3D Tiles, just want to take a quick look
 | **COLLADA `.dae`** | Only via KML `<Model>` embedding | three.js → GLB | — |
 | **Gaussian Splats** | URL | `maplibre-gl-splat` | Storage layer type is `gaussian-splat` |
 
-![3D Tiles loading panel: 3D-TILES, vectors, XYZ, glTF models, and Gaussian splats intermixed in the layer list on the left](../assets/3dtiles.png)
+![3D Tiles loading panel: 3D-TILES, vectors, XYZ, glTF models, and Gaussian splats intermixed in the layer list on the left](https://assets.geolibre.app/images/3dtiles.webp)
 
 This screenshot is quite telling: **in the layer panel on the left, 3D Tiles, vectors, XYZ, glTF models, and Gaussian splats are all stacked in the same list** — and the rendering result is right there on the right. "Loading 3D Tiles requires setting up a server and writing a page" becomes **paste a URL** here.
 
@@ -126,7 +126,7 @@ _What's absent: `.obj` is completely unsupported (zero hits). `.b3dm`/`.pnts`/`.
 
 The storage layer type enum has 20 entries:
 
-```
+```text
 geojson, raster, wms, wmts, xyz, vector-tiles, arcgis, pmtiles,
 mbtiles, zarr, lidar, gaussian-splat, 3d-tiles, cog, flatgeobuf,
 geoparquet, duckdb-query, deckgl-viz, video, image
@@ -149,7 +149,7 @@ What you can fill in under "Add Data → Web Services":
 | **PostgreSQL / PostGIS** | Connect → select table → outputs MVT via built-in Martin service. **Desktop-only** |
 | **deck.gl visualization layers** | 14 types: scatterplot, heatmap, hexagon, grid, screen grid, contour, arc, line, great circle, GeoJSON, icon, text, trips, scenegraph |
 
-![OpenFreeMap 3D basemap with drawing tools](../assets/drawing-tools.png)
+![OpenFreeMap 3D basemap with drawing tools](https://assets.geolibre.app/images/drawing-tools.webp)
 
 ---
 
@@ -181,11 +181,11 @@ This section is where GeoLibre pulls ahead of traditional desktop GIS.
 
 **Planetary data** (this exceeds expectations): **the Moon and Mars come from OpenPlanetaryMap; Mercury, Venus, Galilean moons, Titan, Pluto, and Charon come from USGS Astrogeology**. The key detail is **per-project ellipsoid parameters**, so distance and area measurements are accurate for the celestial body you're measuring on.
 
-![Moon: basemap from OpenPlanetaryMap, scale bar at 300 km](../assets/moon-map.png)
+![Moon: basemap from OpenPlanetaryMap, scale bar at 300 km](https://assets.geolibre.app/images/moon-map.webp)
 
-![Mars: same interface, different project — a different planet](../assets/mars.png)
+![Mars: same interface, different project — a different planet](https://assets.geolibre.app/images/mars.webp)
 
-![Pluto: from USGS Astrogeology; the heart-shaped Sputnik Planitia is clearly visible](../assets/pluto.png)
+![Pluto: from USGS Astrogeology; the heart-shaped Sputnik Planitia is clearly visible](https://assets.geolibre.app/images/pluto.webp)
 
 > **Editor's note**: Initially this seemed like a surface-level feature. The per-project ellipsoid parameters changed that impression — the project treats coordinate systems seriously, not as a mere basemap overlay.
 
@@ -254,8 +254,8 @@ Mentioned piecemeal above, consolidated here. **This is where things most easily
 |---|---|
 | **Desktop (Tauri) exclusive** | Native file/folder dialogs, local MBTiles, local raster reads, Shapefile companion file auto-discovery, PostGIS/Martin, file geodatabase, local file watch reload |
 | **Requires Python sidecar** | File geodatabase, all desktop conversion tools (preferred path), raster tools (rasterio), AI segmentation, PostGIS, Sedona |
-| **Mac App Store build** | Hides PostgreSQL and GDB data sources, hides AI segmentation; all conversions fall back to browser runtime; Shapefile companion files must be manually multi-selected |
-| **Android / Mobile** | Hides Whitebox, raster tools, conversion tools, AI segmentation, PostgreSQL |
+| **Mac App Store build** | No Python sidecar: hides PostgreSQL and GDB data sources, hides AI segmentation; Whitebox, conversion, raster, and vector tools all fall back to their browser/WASM engines; Shapefile companion files must be manually multi-selected |
+| **Android / Mobile** | Hides raster tools, conversion tools, AI segmentation, PostgreSQL — all sidecar-backed. The Whitebox toolbox is WASM-backed and stays available |
 | **Browser** | No local MBTiles/GDB/PostGIS; conversion output is subset; vector conversion doesn't accept `.zip`; raster-to-COG only accepts GeoTIFF; Zarr local folders unavailable in Firefox/Safari |
 
 ---
@@ -276,13 +276,13 @@ The dividend of this design: **adding a format is cheap**. As long as a new form
 - **deck.gl** does not occupy a separate view — it is an overlay **interleaved within the MapLibre canvas**, responsible for COG, 3D Tiles, I3S, Z-enabled vectors, and visualization layers. There's a hard constraint: all interleaving producers must share the **same** overlay instance, or later ones will wipe out earlier layers (the author encountered this firsthand)
 - **Cesium** is a view mode within split-screen, not a replacement. It only supports GeoJSON, 3D Tiles, and imagery layers; other types are labeled "2D only" in the panel
 
-![Cesium view mode showing the 3D globe; the same layer panel is on the left](../assets/earth-cesium-globe.png)
+![Cesium view mode showing the 3D globe; the same layer panel is on the left](https://assets.geolibre.app/images/earth-cesium-globe.webp)
 
 A noteworthy detail: **Cesium's camera sync is not aligned by zoom level, but by ground resolution (meters/pixel)**, so split-screen panels at different heights maintain the same on-screen scale.
 
 **Five compute engines**, all under the same UI: DuckDB-WASM Spatial (the workhorse, running in a dedicated Worker), PGlite + PostGIS, Apache Sedona (sidecar or browser WASM version), Pyodide (running GeoPandas/Shapely in the browser), Whitebox WASM (700+ tools).
 
-!["Processing" menu expanded: Whitebox, Conversion, Hydrology, LiDAR, Network, Projection, Raster, Remote Sensing, Terrain, Vector — with an alphabetical tool list on the right](../assets/processing-tools-menu.png)
+!["Processing" menu expanded: Whitebox, Conversion, Hydrology, LiDAR, Network, Projection, Raster, Remote Sensing, Terrain, Vector — with an alphabetical tool list on the right](https://assets.geolibre.app/images/processing-tools-menu.webp)
 
 **A clever approach: the Python implementation of vector operators is a "framework-free" module; the sidecar and the browser Pyodide execute the exact same code**, so results from both paths are completely consistent — no "local computation doesn't match server computation" discrepancies.
 
@@ -353,7 +353,7 @@ Usage paths by scenario:
 
 1. **Just want to take a look** — Open `web.geolibre.app` directly; no installation, no registration
 2. **Need to get real work done** — Download the desktop version from GitHub Releases, or via Microsoft Store / Homebrew / winget; a two-minute process
-3. **Python users** — `pip install geolibre`; for GeoPandas support, `pip install geolibre[all]`; requires Python 3.10+
+3. **Python users** — `pip install geolibre`; for GeoPandas support, `pip install "geolibre[all]"`; requires Python 3.10+
 4. **Intranet / offline environments** — `VITE_PYODIDE_INDEX_URL` and `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` can point Pyodide and the DuckDB spatial extension to internal mirrors, **no rebuild required**; an official Docker image is also available at `ghcr.io/opengeos/geolibre:latest`
 5. **Secondary development** — npm workspaces monorepo; main application in `apps/geolibre-desktop`; MIT licensed
 
