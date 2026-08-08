@@ -173,6 +173,8 @@ function labelOverrideInvalid(
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  /** Incremented when another part of the UI explicitly requests this panel. */
+  openRequest?: number;
   /**
    * When this flips to `true` the panel collapses to its thin rail (it is not
    * unmounted). Used to clear room when the notebook opens beside the map; the
@@ -984,6 +986,7 @@ function RasterStyleSlider({
 export function StylePanel({
   mapControllerRef,
   onResizeStart,
+  openRequest = 0,
   autoCollapse = false,
   collapsed: controlledCollapsed,
   onCollapsedChange,
@@ -998,8 +1001,8 @@ export function StylePanel({
   const updateLayer = useAppStore((s) => s.updateLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const projectName = useAppStore((s) => s.projectName);
-  // Style starts on its rail on every platform. Selecting a real layer below
-  // expands it; selecting the special Background row does not.
+  // Style starts on its rail on every platform and remains there until the
+  // user explicitly expands it.
   const [internalCollapsed, setInternalCollapsed] = useState(true);
   // In the shared right-sidebar mode the parent owns collapse (controlled);
   // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
@@ -1013,23 +1016,12 @@ export function StylePanel({
     },
     [isControlled, onCollapsedChange],
   );
-  // Selecting a real layer expands the panel from its rail. Skipped while
-  // `autoCollapse` holds it closed (the notebook or a story-map presentation
-  // owns the workspace), so a selection made there cannot pop Style back open
-  // over them and defeat the auto-collapse below.
-  const previousSelectedLayerId = useRef(selectedLayerId);
+  const previousOpenRequest = useRef(openRequest);
   useEffect(() => {
-    const previous = previousSelectedLayerId.current;
-    previousSelectedLayerId.current = selectedLayerId;
-    if (
-      !autoCollapse &&
-      selectedLayerId &&
-      selectedLayerId !== previous &&
-      layers.some((candidate) => candidate.id === selectedLayerId)
-    ) {
-      setIsCollapsed(false);
-    }
-  }, [autoCollapse, layers, selectedLayerId, setIsCollapsed]);
+    if (openRequest === previousOpenRequest.current) return;
+    previousOpenRequest.current = openRequest;
+    setIsCollapsed(false);
+  }, [openRequest, setIsCollapsed]);
   // Collapse to the rail when `autoCollapse` flips on (e.g. the notebook opens),
   // and restore the prior expand/collapse state when it flips back off (notebook
   // closes). Both act only on the transition so the user can still toggle the

@@ -866,6 +866,10 @@ export function DesktopShell({
   useNetcdfIdentify(mapControllerRef, mapReadyGeneration);
   const [layerPanelWidth, setLayerPanelWidth] = useState(initialSidePanelWidth);
   const [stylePanelWidth, setStylePanelWidth] = useState(initialSidePanelWidth);
+  const [stylePanelOpenRequest, setStylePanelOpenRequest] = useState(0);
+  const openStylePanel = useCallback(() => {
+    setStylePanelOpenRequest((request) => request + 1);
+  }, []);
   const [notebookPanelWidth, setNotebookPanelWidth] = useState(DEFAULT_NOTEBOOK_PANEL_WIDTH);
   // Opening the notebook (Processing → Jupyter Notebook) splits the workspace
   // 50/50 between the map and the notebook: we size the notebook to half of the
@@ -2245,6 +2249,7 @@ export function DesktopShell({
                       onOpenRasterStylePanel={() =>
                         openRasterLayerPanel(createAppAPI(mapControllerRef))
                       }
+                      onOpenStylePanel={openStylePanel}
                       onOpenRasterSubset={setRasterSubsetLayer}
                       collapsed={collapsed}
                       onCollapsedChange={onCollapsedChange}
@@ -2268,6 +2273,7 @@ export function DesktopShell({
                     onOpenRasterStylePanel={() =>
                       openRasterLayerPanel(createAppAPI(mapControllerRef))
                     }
+                    onOpenStylePanel={openStylePanel}
                     onOpenRasterSubset={setRasterSubsetLayer}
                     autoCollapse={
                       storymapPresenting ||
@@ -2493,6 +2499,7 @@ export function DesktopShell({
                     <StylePanel
                       mapControllerRef={mapControllerRef}
                       onResizeStart={startStylePanelResize}
+                      openRequest={stylePanelOpenRequest}
                       collapsed={collapsed}
                       onCollapsedChange={onCollapsedChange}
                       // Controlled mode ignores autoCollapse for collapsing (the
@@ -2513,6 +2520,7 @@ export function DesktopShell({
                 <StylePanel
                   mapControllerRef={mapControllerRef}
                   onResizeStart={startStylePanelResize}
+                  openRequest={stylePanelOpenRequest}
                   autoCollapse={
                     notebookOpen ||
                     storymapPresenting ||

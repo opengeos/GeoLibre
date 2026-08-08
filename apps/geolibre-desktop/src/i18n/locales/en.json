@@ -4892,6 +4892,7 @@
     "bindWindowCumulative": "Everything up to the current step (cumulative)",
     "bindCancel": "Cancel",
     "bindConfirm": "Bind",
+    "openStylePanel": "Open Style panel",
     "openRasterStylePanel": "Edit raster style…",
     "exportRasterSuccess": "Raster exported.",
     "exportRasterError": "Could not export this raster.",

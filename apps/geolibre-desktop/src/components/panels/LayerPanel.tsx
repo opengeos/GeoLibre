@@ -243,6 +243,8 @@ interface LayerPanelProps {
   onMaterializeDuckDBLayer: (layer: GeoLibreLayer) => void;
   /** Open the floating Add Raster Layer panel for advanced raster styling. */
   onOpenRasterStylePanel: () => void;
+  /** Select the target layer and expand the built-in Style panel. */
+  onOpenStylePanel: () => void;
   /**
    * Open the floating Extract Subset panel for a COG/WMS/XYZ layer, letting the
    * user draw a bounding box and export a clipped GeoTIFF.
@@ -608,6 +610,7 @@ export function LayerPanel({
   onCancelGeometryEdit,
   onMaterializeDuckDBLayer,
   onOpenRasterStylePanel,
+  onOpenStylePanel,
   onOpenRasterSubset,
   autoCollapse = false,
   collapsed: controlledCollapsed,
@@ -3364,6 +3367,15 @@ export function LayerPanel({
                           action item below has no such focus target, so each
                           lets Radix dismiss the menu on select rather than
                           leaving it pinned open. */}
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              selectLayer(layer.id);
+                              onOpenStylePanel();
+                            }}
+                          >
+                            <Palette className="me-2 h-3.5 w-3.5" />
+                            {t("layers.openStylePanel")}
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onSelect={() => {
                               addLayerGroup(undefined, moveIds);
