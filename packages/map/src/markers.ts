@@ -278,7 +278,12 @@ export function markerImageValue(style: LayerStyle): string | unknown[] | null {
 
   const imageFor = (value: unknown): unknown => {
     if (typeof value === "string") {
-      return normalizeHexColor(value) ? (prepareMarker(style, value) ?? baseId) : baseId;
+      // Bake the canonical form: prepareMarker uses the color verbatim for both
+      // the sprite id and the fill, so a bare or shorthand hex ("fff") from a
+      // hand-authored expression would otherwise draw black, and "#FDE725"
+      // would bake a second sprite for a color already registered lowercase.
+      const normalized = normalizeHexColor(value);
+      return normalized ? (prepareMarker(style, normalized) ?? baseId) : baseId;
     }
     if (!Array.isArray(value)) return baseId;
 

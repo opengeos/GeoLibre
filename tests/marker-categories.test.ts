@@ -109,6 +109,42 @@ describe("markerImageValue", () => {
     ]);
   });
 
+  it("selects a marker per class for graduated stops", () => {
+    assert.deepEqual(
+      markerImageValue(
+        categorizedMarker({
+          vectorStyleMode: "graduated",
+          vectorStyleProperty: "pop",
+          vectorStyleStops: [
+            { value: 0, color: "#339084" },
+            { value: 100, color: "#fde725" },
+          ],
+        }),
+      ),
+      [
+        "step",
+        ["to-number", ["get", "pop"], 0],
+        "geolibre-marker-circle-339084-18",
+        100,
+        "geolibre-marker-circle-fde725-18",
+      ],
+    );
+  });
+
+  it("bakes the canonical color for shorthand and upper-case hex outputs", () => {
+    const value = markerImageValue(
+      categorizedMarker({
+        vectorStyleMode: "expression",
+        vectorStyleExpression: '["match",["get","status"],"good","fff","#FDE725"]',
+      }),
+    );
+
+    assert.ok(Array.isArray(value));
+    // "fff" would be handed to fillStyle verbatim and draw black.
+    assert.equal(value[3], "geolibre-marker-circle-ffffff-18");
+    assert.equal(value[4], "geolibre-marker-circle-fde725-18");
+  });
+
   it("bakes the else-rule color when no rule is drawable", () => {
     const value = markerImageValue(
       categorizedMarker({
