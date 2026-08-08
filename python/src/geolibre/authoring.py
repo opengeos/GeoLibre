@@ -220,7 +220,10 @@ def layer_summary(layer: dict[str, Any]) -> dict[str, Any]:
     """Summarize one layer for display, omitting any inlined data.
 
     A GeoJSON layer's ``geojson`` blob can be tens of megabytes, so it is
-    reported as a feature count rather than echoed back.
+    reported as a feature count rather than echoed back. The source URL is
+    reported with its credentials stripped: a summary exists to be shown, and
+    both callers show it somewhere untrusted (a notebook cell that gets
+    committed, an MCP tool result that goes to a model client).
 
     Args:
         layer: A layer dict.
@@ -239,7 +242,7 @@ def layer_summary(layer: dict[str, Any]) -> dict[str, Any]:
     if isinstance(source, dict):
         url = source.get("url") or (source.get("tiles") or [None])[0]
         if url:
-            summary["source"] = url
+            summary["source"] = _project.redact_url(str(url))
     geojson = layer.get("geojson")
     if isinstance(geojson, dict):
         features = geojson.get("features")
@@ -256,6 +259,9 @@ def layer_summary(layer: dict[str, Any]) -> dict[str, Any]:
 
 def describe_project(project: dict[str, Any]) -> dict[str, Any]:
     """Summarize a project: its camera, basemap, layers, and map controls.
+
+    URLs come back with their credentials stripped, as in :func:`layer_summary`;
+    several basemap providers put an API key in the style URL itself.
 
     Args:
         project: The project dict.
@@ -279,11 +285,14 @@ def describe_project(project: dict[str, Any]) -> dict[str, Any]:
             components = settings.get(_project.COMPONENTS_PLUGIN_ID)
             if isinstance(components, dict):
                 controls.extend(key for key in ("legend", "colorbar") if key in components)
+    basemap_url = project.get("basemapStyleUrl")
     return {
         "name": project.get("name"),
         "version": project.get("version"),
         "mapView": project.get("mapView"),
-        "basemapStyleUrl": project.get("basemapStyleUrl"),
+        "basemapStyleUrl": (
+            _project.redact_url(str(basemap_url)) if basemap_url is not None else basemap_url
+        ),
         "layerCount": len(layers_of(project)),
         "layers": [layer_summary(layer) for layer in layers_of(project) if isinstance(layer, dict)],
         "mapControls": controls,

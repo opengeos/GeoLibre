@@ -738,6 +738,15 @@ def test_basemap_property_redacts_an_embedded_key(m):
     assert m.project["basemapStyleUrl"].endswith("key=secret")
 
 
+def test_describe_redacts_credentials_like_its_sibling_accessors(m):
+    m.project = {**m.project, "basemapStyleUrl": "https://api.example.com/style.json?key=secret"}
+    m.add_tile_layer("https://api.example.com/{z}/{x}/{y}.png?key=secret", name="Tiles")
+
+    summary = m.describe()
+    assert summary["basemapStyleUrl"] == "https://api.example.com/style.json"
+    assert "secret" not in json.dumps(summary)
+
+
 def test_move_layer_negative_index_counts_from_the_end(m):
     ids = [
         m.add_geojson({"type": "FeatureCollection", "features": []}, name=name)
