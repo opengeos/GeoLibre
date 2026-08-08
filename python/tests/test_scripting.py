@@ -624,6 +624,77 @@ def test_layer_remove(m):
     assert m.project["layers"] == []
 
 
+def test_map_layer_management_and_introspection(m):
+    first = m.add_geojson(
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {"type": "Feature", "geometry": None, "properties": {"kind": "a", "value": 2}},
+                {"type": "Feature", "geometry": None, "properties": {"kind": "b", "value": 3}},
+            ],
+        },
+        name="First",
+    )
+    second = m.add_geojson({"type": "FeatureCollection", "features": []}, name="Second")
+
+    m.rename_layer(first, "Renamed")
+    m.hide_layer("Renamed")
+    assert m.get_layer(first).name == "Renamed"
+    assert m.get_layer(first).visible is False
+    assert m.layer_properties(first)["kind"] == ["a", "b"]
+    assert m.column_values(first, "value") == [2, 3]
+
+    m.move_layer(second, 0)
+    assert [layer.id for layer in m.layers] == [second, first]
+    copy_id = m.duplicate_layer(first, name="Clone")
+    assert m.get_layer(copy_id).name == "Clone"
+    assert m.get_layer(copy_id).data["geojson"] == m.get_layer(first).data["geojson"]
+    assert m.describe()["layerCount"] == 3
+
+    m.remove_layer("Clone")
+    assert m.find_layer("Clone") is None
+
+
+def test_layer_handle_expanded_helpers(m):
+    layer_id = m.add_geojson(
+        {
+            "type": "FeatureCollection",
+            "features": [{"type": "Feature", "geometry": None, "properties": {"x": 1}}],
+        },
+        name="Data",
+    )
+    layer = m.get_layer(layer_id)
+    assert layer.index == 0
+    assert layer.source == {"type": "geojson"}
+    assert layer.properties() == {"x": [1]}
+    assert layer.column("x") == [1]
+    duplicate = layer.duplicate()
+    assert duplicate.name == "Data copy"
+    duplicate.move(0)
+    assert duplicate.index == 0
+
+
+def test_persisted_camera_and_project_metadata_helpers(m):
+    m.name = "My analysis"
+    m.set_center(-80, 35, zoom=4)
+    m.set_zoom(6)
+    m.set_bearing(370)
+    m.set_pitch(100)
+    assert m.name == "My analysis"
+    assert m.center == (-80.0, 35.0)
+    assert m.zoom == 6
+    assert m.project["mapView"]["bearing"] == 370
+    assert m.project["mapView"]["pitch"] == 85
+    with pytest.raises(ValueError, match="non-empty"):
+        m.name = "  "
+
+
+def test_fit_project_bounds_is_browser_independent(m):
+    m.fit_project_bounds([-10, -5, 10, 5])
+    assert m.center == (0.0, 0.0)
+    assert m.zoom > 0
+
+
 def test_layer_zoom_to_sends_command(m, monkeypatch):
     captured = {}
     monkeypatch.setattr(

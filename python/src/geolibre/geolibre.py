@@ -976,6 +976,54 @@ class Map(anywidget.AnyWidget):
         """Set a layer's opacity in ``[0, 1]``."""
         self._resolve_layer(layer).opacity = opacity
 
+    def rename_layer(self, layer: str | Layer, name: str) -> None:
+        """Rename a layer addressed by id, name, or handle."""
+        handle = self._resolve_layer(layer)
+        self._update_project(lambda p: _authoring.update_layer(p, handle.id, name=name))
+
+    def move_layer(self, layer: str | Layer, index: int) -> None:
+        """Move a layer to ``index`` in the project's draw order.
+
+        Negative indices follow normal Python insertion semantics: ``-1`` moves
+        the layer to the end. Out-of-range indices are clamped.
+        """
+        handle = self._resolve_layer(layer)
+
+        def _move(project: dict[str, Any]) -> None:
+            destination = int(index)
+            if destination < 0:
+                destination = max(0, len(project.get("layers", [])) + destination)
+            _authoring.update_layer(project, handle.id, index=destination)
+
+        self._update_project(_move)
+
+    def duplicate_layer(self, layer: str | Layer, *, name: str | None = None) -> str:
+        """Duplicate a layer, returning the new layer id."""
+        source = copy.deepcopy(self._resolve_layer(layer)._layer())
+        source["id"] = str(uuid.uuid4())
+        source["name"] = name or f"{source.get('name', 'Layer')} copy"
+        return self._add_layer(source)
+
+    def show_layer(self, layer: str | Layer) -> None:
+        """Show a layer."""
+        self.set_layer_visibility(layer, True)
+
+    def hide_layer(self, layer: str | Layer) -> None:
+        """Hide a layer."""
+        self.set_layer_visibility(layer, False)
+
+    def layer_properties(self, layer: str | Layer) -> dict[str, list[Any]]:
+        """Return sampled property values for an inlined GeoJSON layer."""
+        return _authoring.layer_properties(self._resolve_layer(layer)._layer())
+
+    def column_values(self, layer: str | Layer, column: str) -> list[Any]:
+        """Return one property column from an inlined GeoJSON layer."""
+        return _authoring.column_values(self._resolve_layer(layer)._layer(), column)
+
+    def describe(self) -> dict[str, Any]:
+        """Return a compact, JSON-serializable project summary."""
+        return _authoring.describe_project(copy.deepcopy(self.project))
+
     def _mutate_layer(self, layer_id: str, mutate: Callable[[dict[str, Any]], None]) -> None:
         """Apply an in-place mutation to one layer through the project trait."""
 
@@ -1901,17 +1949,15 @@ class Map(anywidget.AnyWidget):
         url_list = [urls] if isinstance(urls, str) else list(urls)
         return self._add_layer(_project.video_layer(name, url_list, coordinates, **style))
 
-    def remove_layer(self, layer_id: str) -> None:
-        """Remove a layer by id.
+    def remove_layer(self, layer_id: str | Layer) -> None:
+        """Remove a layer by id, display name, or handle.
 
         Args:
-            layer_id: The id returned when the layer was added.
+            layer_id: A layer id, display name, or :class:`Layer` handle.
         """
 
-        def _drop(p: dict[str, Any]) -> None:
-            p["layers"] = [layer for layer in p["layers"] if layer.get("id") != layer_id]
-
-        self._update_project(_drop)
+        resolved_id = self._resolve_layer(layer_id).id
+        self._update_project(lambda p: _authoring.remove_layer(p, resolved_id))
 
     def clear_layers(self) -> None:
         """Remove all layers from the map."""
@@ -1955,6 +2001,54 @@ class Map(anywidget.AnyWidget):
 
     # leafmap compatibility alias for set_center
     set_center_zoom = set_center
+
+    def set_zoom(self, zoom: float) -> None:
+        """Set the map zoom while preserving the other camera fields."""
+        self._update_project(lambda p: _authoring.set_view(p, zoom=zoom))
+
+    def set_bearing(self, bearing: float) -> None:
+        """Set clockwise camera bearing in degrees."""
+        self._update_project(lambda p: _authoring.set_view(p, bearing=bearing))
+
+    def set_pitch(self, pitch: float) -> None:
+        """Set camera pitch in degrees (clamped to the supported range)."""
+        self._update_project(lambda p: _authoring.set_view(p, pitch=pitch))
+
+    def fit_project_bounds(self, bounds: list[float] | tuple[float, float, float, float]) -> None:
+        """Persist a fitted camera for ``[west, south, east, north]`` bounds.
+
+        Unlike :meth:`fit_bounds`, this is a pure project mutation and does not
+        require a live browser connection.
+        """
+        self._update_project(lambda p: _authoring.fit_bounds(p, bounds))
+
+    @property
+    def center(self) -> tuple[float, float]:
+        """The persisted ``(longitude, latitude)`` camera center."""
+        center = self.project.get("mapView", {}).get("center", [0, 0])
+        return float(center[0]), float(center[1])
+
+    @property
+    def zoom(self) -> float:
+        """The persisted camera zoom."""
+        return float(self.project.get("mapView", {}).get("zoom", 0))
+
+    @property
+    def basemap(self) -> str | None:
+        """The current basemap style URL."""
+        value = self.project.get("basemapStyleUrl")
+        return str(value) if value is not None else None
+
+    @property
+    def name(self) -> str:
+        """The project name."""
+        return str(self.project.get("name", ""))
+
+    @name.setter
+    def name(self, value: str) -> None:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("name must be a non-empty string")
+        self._update_project(lambda p: p.update(name=value.strip()))
 
     # -- map controls: split map / legend / colorbar --------------------
 
@@ -2333,7 +2427,7 @@ class Layer:
 
     @name.setter
     def name(self, value: str) -> None:
-        self._map._mutate_layer(self._id, lambda layer: layer.update(name=value))
+        self._map.rename_layer(self, value)
 
     @property
     def visible(self) -> bool:
@@ -2361,6 +2455,21 @@ class Layer:
         """A copy of the layer's style object."""
         return copy.deepcopy(self._layer().get("style", {}))
 
+    @property
+    def source(self) -> Any:
+        """A detached copy of the layer source configuration."""
+        return copy.deepcopy(self._layer().get("source"))
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """A detached copy of the complete layer record."""
+        return copy.deepcopy(self._layer())
+
+    @property
+    def index(self) -> int:
+        """The layer's current index in draw order."""
+        return next(i for i, layer in enumerate(self._map.layers) if layer.id == self._id)
+
     def set_style(self, **style: Any) -> None:
         """Merge style overrides into the layer (e.g. ``fillColor="#ff0000"``)."""
 
@@ -2372,6 +2481,22 @@ class Layer:
     def get_features(self, *, timeout: float = 10.0) -> list[Feature]:
         """Return this layer's features (see :meth:`Map.get_features`)."""
         return self._map.get_features(self._id, timeout=timeout)
+
+    def properties(self) -> dict[str, list[Any]]:
+        """Return sampled property values for inlined GeoJSON."""
+        return self._map.layer_properties(self)
+
+    def column(self, name: str) -> list[Any]:
+        """Return a property column from inlined GeoJSON."""
+        return self._map.column_values(self, name)
+
+    def move(self, index: int) -> None:
+        """Move this layer to an index in draw order."""
+        self._map.move_layer(self, index)
+
+    def duplicate(self, *, name: str | None = None) -> Layer:
+        """Duplicate this layer and return its new handle."""
+        return self._map.get_layer(self._map.duplicate_layer(self, name=name))
 
     def zoom_to(self, *, timeout: float = 10.0) -> None:
         """Fit the map camera to this layer's extent."""
