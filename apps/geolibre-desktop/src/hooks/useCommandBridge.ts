@@ -39,7 +39,7 @@ interface CommandMessage {
  */
 export function useCommandBridge(
   mapControllerRef: RefObject<MapController | null>,
-  addRasterOutput?: (bytes: Uint8Array, name: string, fileName: string) => Promise<void>,
+  addRasterOutput?: (bytes: Uint8Array, name: string, fileName: string) => Promise<string>,
 ): void {
   useEffect(() => {
     if (!isEmbedded()) return;

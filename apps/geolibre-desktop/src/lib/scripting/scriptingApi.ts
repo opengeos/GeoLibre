@@ -35,8 +35,8 @@ export type ScriptingHandlers = Record<string, ScriptingHandler>;
 export interface ScriptingDeps {
   /** Lazily resolve the live map controller (it is created asynchronously). */
   getController: () => MapController | null;
-  /** Add an in-browser Whitebox raster result to the map. */
-  addRasterOutput?: (bytes: Uint8Array, name: string, fileName: string) => Promise<void>;
+  /** Add an in-browser Whitebox raster result to the map, returning its layer id. */
+  addRasterOutput?: (bytes: Uint8Array, name: string, fileName: string) => Promise<string>;
 }
 
 function whiteboxToolName(tool: WhiteboxTool): string {
@@ -44,14 +44,24 @@ function whiteboxToolName(tool: WhiteboxTool): string {
 }
 
 async function whiteboxTools(): Promise<WhiteboxTool[]> {
-  const [catalog, manifests] = await Promise.all([
+  // Settled, not all: the catalog snapshot is an HTTP fetch, so an offline or
+  // blocked deployment must not take down the locally bundled WASM manifests
+  // (the GeoLibre-authored tools) with it. Mirrors ProcessingDialog's local mode.
+  const [catalogResult, manifestResult] = await Promise.allSettled([
     fetchRemoteWhiteboxCatalogSnapshot(),
     listWasmToolManifests(),
   ]);
-  return mergeWasmToolManifests(
-    catalog.filter((tool) => !tool.locked),
-    manifests,
-  );
+  if (catalogResult.status === "rejected") {
+    console.warn("[GeoLibre] Could not load Whitebox catalog snapshot:", catalogResult.reason);
+  }
+  if (manifestResult.status === "rejected") {
+    console.warn("[GeoLibre] Could not enumerate WASM tool manifests:", manifestResult.reason);
+  }
+  // Hide locked ("pro"-tier) tools: they cannot run in the browser.
+  const catalog =
+    catalogResult.status === "fulfilled" ? catalogResult.value.filter((tool) => !tool.locked) : [];
+  const manifests = manifestResult.status === "fulfilled" ? manifestResult.value : [];
+  return mergeWasmToolManifests(catalog, manifests);
 }
 
 async function fetchLayerInputBytes(
@@ -373,9 +383,12 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
               if (!addRasterOutput) {
                 throw new Error("This scripting host cannot add Whitebox raster outputs");
               }
-              await addRasterOutput(value, displayName, `${tool.id}_${outputName}.tif`);
-              const added = useAppStore.getState().layers.at(-1);
-              if (added) resultLayerIds.push(added.id);
+              const layerId = await addRasterOutput(
+                value,
+                displayName,
+                `${tool.id}_${outputName}.tif`,
+              );
+              resultLayerIds.push(layerId);
               tracker.addOutputLayer(displayName);
             }
           }

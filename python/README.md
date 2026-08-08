@@ -112,7 +112,7 @@ roads_copy = roads.duplicate(name="Roads (proposed)")
 Run a Whitebox tool against a map layer (the map must be displayed first):
 
 ```python
-dem = m.find_layer("DEM")
+dem = m.get_layer(m.add_raster("https://example.com/dem.tif", name="DEM"))
 result = m.run_whitebox_tool("slope", {"input": dem, "units": "degrees"})
 slope = m.get_layer(result["resultLayerIds"][0])
 ```

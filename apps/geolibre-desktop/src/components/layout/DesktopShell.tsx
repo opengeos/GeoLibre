@@ -852,7 +852,10 @@ export function DesktopShell({
   const addWhiteboxRasterOutput = useCallback(
     async (bytes: Uint8Array, name: string, fileName: string) => {
       const file = new File([bytes as BlobPart], fileName, { type: "image/tiff" });
-      await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
+      // Return the created id rather than letting callers guess it from the
+      // store: raster loading is async, so the newest layer at that point can
+      // belong to an unrelated add that finished in between.
+      return addRasterToMap(createAppAPI(mapControllerRef), file, { name });
     },
     [mapControllerRef],
   );

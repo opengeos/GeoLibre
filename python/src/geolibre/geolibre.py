@@ -872,7 +872,7 @@ class Map(anywidget.AnyWidget):
             ``{"logs": [...], "resultLayerIds": [...]}``.
         """
         resolved = {
-            key: value.id if isinstance(value, Layer) else value
+            key: self._resolve_layer(value).id if isinstance(value, Layer) else value
             for key, value in (parameters or {}).items()
         }
         return self.request(
