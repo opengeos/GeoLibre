@@ -75,10 +75,10 @@ nav:
       - Terrain Analysis: tutorials/terrain-analysis.md
       - Spatial SQL: tutorials/spatial-sql.md
       - Sharing & Embedding: tutorials/sharing-embedding.md
-      - Comprehensive Format Reference (Chinese): tutorials/supported-formats-zh.md
-      - Comprehensive Format Reference (English): tutorials/supported-formats-en.md
-      - Deep Dive — Architecture & Source Code Analysis (Chinese): tutorials/source-code-deep-dive-zh.md
-      - Deep Dive — Architecture & Source Code Analysis (English): tutorials/source-code-deep-dive-en.md
+      - Format Reference: tutorials/supported-formats-en.md
+      - Format Reference (中文): tutorials/supported-formats-zh.md
+      - Source Code Deep Dive: tutorials/source-code-deep-dive-en.md
+      - Source Code Deep Dive (中文): tutorials/source-code-deep-dive-zh.md
   - Reference:
       - Architecture: architecture.md
       - Android: android.md
