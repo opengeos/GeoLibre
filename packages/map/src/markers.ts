@@ -19,7 +19,9 @@ const MARKER_PIXEL_RATIO = 2;
 // enormous canvas; the rendered size is set via the marker image's own pixels.
 const MIN_MARKER_SIZE = 6;
 const MAX_MARKER_SIZE = 96;
+const MAX_SVG_SOURCE_CACHE = 64;
 export const KML_ICON_URL_PROPERTY = "__geolibre_kml_icon_url";
+const svgSourceCache = new Map<string, Promise<string | null>>();
 
 const BUILTIN_SHAPES: ReadonlySet<MarkerShape> = new Set([
   "circle",
@@ -101,10 +103,21 @@ function replaceSvgColorParameters(markup: string, color: string): string {
 async function colorizedSvgSource(markup: string, color: string): Promise<string | null> {
   let sourceMarkup = markup;
   if (/^(?:https?:|data:image\/svg\+xml)/i.test(markup)) {
-    try {
-      const response = await fetch(markup);
-      if (response.ok) sourceMarkup = await response.text();
-    } catch {
+    let pending = svgSourceCache.get(markup);
+    if (!pending) {
+      pending = fetch(markup)
+        .then((response) => (response.ok ? response.text() : null))
+        .catch(() => null);
+      if (svgSourceCache.size >= MAX_SVG_SOURCE_CACHE) {
+        const oldest = svgSourceCache.keys().next().value;
+        if (oldest !== undefined) svgSourceCache.delete(oldest);
+      }
+      svgSourceCache.set(markup, pending);
+    }
+    const fetched = await pending;
+    if (fetched !== null) {
+      sourceMarkup = fetched;
+    } else {
       // Preserve the original source when a remote host blocks CORS. The
       // marker still renders, although its QGIS color parameters cannot be
       // resolved without access to the SVG text.
