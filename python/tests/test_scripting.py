@@ -698,7 +698,28 @@ def test_duplicate_layer_rejects_the_reserved_basemap_name(m):
     layer_id = m.add_geojson({"type": "FeatureCollection", "features": []}, name="Data")
     with pytest.raises(ValueError, match="reserved for the basemap"):
         m.duplicate_layer(layer_id, name="__basemap__")
+    with pytest.raises(ValueError, match="non-empty"):
+        m.duplicate_layer(layer_id, name="  ")
     assert len(m.layers) == 1
+
+
+def test_move_layer_negative_index_counts_from_the_end(m):
+    ids = [
+        m.add_geojson({"type": "FeatureCollection", "features": []}, name=name)
+        for name in ("A", "B", "C")
+    ]
+
+    # -1 lands the layer last, unlike `list.insert(-1, ...)` which would leave
+    # it second to last.
+    m.move_layer(ids[0], -1)
+    assert [layer.id for layer in m.layers] == [ids[1], ids[2], ids[0]]
+
+    m.move_layer(ids[0], -2)
+    assert [layer.id for layer in m.layers] == [ids[1], ids[0], ids[2]]
+
+    # Out-of-range negatives clamp to the front rather than wrapping.
+    m.move_layer(ids[2], -99)
+    assert [layer.id for layer in m.layers] == [ids[2], ids[1], ids[0]]
 
 
 def test_persisted_camera_and_project_metadata_helpers(m):

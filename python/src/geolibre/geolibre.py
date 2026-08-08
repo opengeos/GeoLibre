@@ -1000,17 +1000,22 @@ class Map(anywidget.AnyWidget):
     def duplicate_layer(self, layer: str | Layer, *, name: str | None = None) -> str:
         """Duplicate a layer, returning the new layer id.
 
+        Args:
+            layer: The layer to copy, by id, name, or handle.
+            name: Name for the copy; defaults to the source name plus ``copy``.
+
         Raises:
-            ValueError: If ``name`` is the reserved basemap pseudo-id.
+            ValueError: If ``name`` is blank or the reserved basemap pseudo-id.
         """
-        if name is not None:
-            # `_add_layer` appends straight to the project, so the check
-            # `rename_layer` gets from `update_layer` has to happen here.
-            _authoring._reject_reserved_name(name)
+        if name is not None and not str(name).strip():
+            raise ValueError("name must be a non-empty string")
         source = copy.deepcopy(self._resolve_layer(layer)._layer())
         source["id"] = str(uuid.uuid4())
-        source["name"] = name or f"{source.get('name', 'Layer')} copy"
-        return self._add_layer(source)
+        source["name"] = str(name) if name is not None else f"{source.get('name', 'Layer')} copy"
+        # `_add_layer` appends raw; `authoring.add_layer` is the entry point that
+        # applies the reserved-name check `rename_layer` gets from `update_layer`.
+        self._update_project(lambda p: _authoring.add_layer(p, source))
+        return str(source["id"])
 
     def show_layer(self, layer: str | Layer) -> None:
         """Show a layer."""
@@ -1030,7 +1035,11 @@ class Map(anywidget.AnyWidget):
 
     def describe(self) -> dict[str, Any]:
         """Return a compact, JSON-serializable project summary."""
-        return _authoring.describe_project(copy.deepcopy(self.project))
+        # Copy the summary, not the project: `describe_project` hands back the
+        # live `mapView`, so the result needs detaching, but deep-copying the
+        # project first would duplicate every inlined GeoJSON blob only to
+        # report a feature count.
+        return copy.deepcopy(_authoring.describe_project(self.project))
 
     def _mutate_layer(self, layer_id: str, mutate: Callable[[dict[str, Any]], None]) -> None:
         """Apply an in-place mutation to one layer through the project trait."""
@@ -1962,6 +1971,11 @@ class Map(anywidget.AnyWidget):
 
         Args:
             layer_id: A layer id, display name, or :class:`Layer` handle.
+
+        Raises:
+            ValueError: If the reference matches no layer, or matches a display
+                name several layers share. Removing an unknown layer used to be
+                a silent no-op; it now reports the miss.
         """
 
         resolved_id = self._resolve_layer(layer_id).id
