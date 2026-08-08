@@ -12,7 +12,7 @@
 
 ## 一、运行形态与平台说明
 
-列格式之前先说清楚「在哪儿跑」，因为后面很多格式有平台差异。
+列出格式之前先说清楚「在哪儿跑」，因为后面很多格式有平台差异。
 
 | 形态 | 怎么跑 | 说明 |
 |---|---|---|
@@ -357,6 +357,6 @@ GeoLibre 真正的价值在于——不在于它比 QGIS 强（它不强），�
 2. **要真干活** —— GitHub Releases 下桌面版，或走微软商店 / Homebrew / winget，两分钟的事
 3. **Python 用户** —— `pip install geolibre`，要 GeoPandas 支持就 `pip install "geolibre[all]"`，需要 Python 3.10+
 4. **内网 / 离线环境** —— `VITE_PYODIDE_INDEX_URL` 和 `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` 可以把 Pyodide 和 DuckDB 空间扩展指到内部镜像，**不用重新构建**；官方也有 Docker 镜像 `ghcr.io/opengeos/geolibre:latest`
-5. **二次开发** —— npm workspaces 单体仓库，主应用在 `apps/geolibre-desktop`，MIT 许可
+5. **二次开发** —— npm workspaces 单体仓库，所以要用 **npm**（仓库跟踪 `package-lock.json`）配 **Node 22+**；主应用在 `apps/geolibre-desktop`，MIT 许可
 
 最后还是那句：拿它做数据预览和探索，推荐；用于生产环境，再等等，至少等版本迭代节奏趋于稳定。

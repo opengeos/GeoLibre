@@ -107,7 +107,7 @@ KML 那条尤其能说明取舍。`docs/architecture.md:61` 写得很直白：KM
 
 > **最容易踩的认知误区：** 以为装了 duckdb-wasm 就有空间能力。没有。`ST_Read`、`ST_Transform`、`ST_AsWKB` 这些全在 spatial 扩展里，它是运行时从 CDN 拉下来再加载的第二份 WASM。
 
-而 spatial 扩展的 `ST_Read` 背后，是 **GDAL 的一个子集**。这句话的含义是：在浏览器里发一条 SQL，就能读 GDAL 支持的那些矢量格式。
+而 spatial 扩展的 `ST_Read` 背后，是 **GDAL 的一个子集**。这句话的含义是：在浏览器里发一条 SQL，就能读这个子集覆盖的那些矢量格式。注意它用的是扩展自带的 GDAL，不是机器上装的那份，所以具体能读哪些取决于当前加载的构建——用 `SELECT * FROM ST_Drivers()` 可以列出来。
 
 ### 2.2 GeoLibre 拿它干了什么
 
@@ -151,7 +151,7 @@ export function selectDuckDbBundle() {
 
 **手动列 bundle 而不是用默认 CDN 解析，是为了让 Vite 把 wasm 和 worker 打成带哈希的本地产物**——这样才能被 Service Worker 的 CacheFirst 安全缓存（见第五节）。
 
-**第二，扩展加载必须做成「全局只跑一次」。** `INSTALL spatial` 会走网络，`LOAD` 有状态，并发调用会互相打架。GeoLibre 的做法很值得借鉴：
+**第二，扩展加载必须做成「按实例只跑一次」。** `INSTALL spatial` 会走网络，`LOAD` 有状态，并发调用会互相打架。GeoLibre 的做法很值得借鉴：
 
 ```ts
 // 按实例记忆化：共享库和 SQL 工作区各有自己的 DB，各记各的
@@ -418,7 +418,7 @@ export interface MapViewState {
 
 > SYNC: RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/lib.rs must list the same extensions, or a format added here would be rejected by the Rust restore guard on every project reopen (**the bug this PR fixes**). Grep "SYNC:" to find the partner list.
 
-注意括号里那句「the bug this PR fixes」——他们真的踩过：在 TS 里加了新格式，Rust 侧的守卫没加，于是每次重开工程都被拒。
+注意括号里那句「the bug this PR fixes」——它指的是当初加上这条注释的那个 PR，对后来的读者已经没什么指向性了，但它记录的故障是真的：在 TS 里加了新格式，Rust 侧的守卫没加，于是每次重开工程都被拒。
 
 > **启发：能合并成一份就合并；合并不了（跨语言、跨进程、跨仓库）就用一个统一的可 grep 标记把它们钉在一起，并在注释里写清楚「不同步会出什么事」。** 这比「大家注意保持一致」有用得多。
 
@@ -436,7 +436,7 @@ Web 构建是一个可安装的 PWA，用 `vite-plugin-pwa` + Workbox。缓存**
 | **同源运行时缓存** | CacheFirst | `/assets/` 下的内容哈希产物：MapLibre、**DuckDB-WASM 及其 spatial 扩展**、各插件 chunk | 哈希文件名让 CacheFirst 安全——重新部署会生成新 URL，旧条目不会被当成新的 |
 | **CDN 引擎缓存** | CacheFirst（独立规则 `geolibre-cdn-engines`） | jsDelivr 上的 Pyodide、PGlite/PostGIS、CereusDB、gdal3.js | URL 里嵌了精确版本号，同样不会供旧版；jsDelivr 的 CORS 头让它们是可正常校验和淘汰的 200，不是 opaque 响应 |
 
-**所以这些 CDN 引擎的准确表述是：首次使用需要网络，之后离线可用。**
+**所以这些 CDN 引擎的准确表述是：在 Web PWA 里，首次「成功」取回需要网络——CacheFirst 只有在真的存下了一份响应之后才会走缓存——此后才离线可用。** 桌面端根本不注册 Service Worker，这条对它不成立，见下面的要点。
 
 那为什么不直接全打包进来？往下看这几个细节就明白了。
 
@@ -496,9 +496,9 @@ Web 构建是一个可安装的 PWA，用 `vite-plugin-pwa` + Workbox。缓存**
 
 对比一下动态瓦片服务：切片缓存要自己建、失效策略要自己写、缓存命中率要自己盯。**而 Range 请求命中的是同一个不可变文件的同一段字节，CDN 层面就是一次普通的缓存命中。这篇第五节那套 Workbox 三层缓存策略，之所以能生效，前提就是资源是静态且带内容哈希的。**
 
-**收益四，并发和扩容问题消失了。**
+**收益四，并发瓶颈从你的服务器上挪走了。**
 
-瓦片服务的容量瓶颈在服务端 CPU：同时来 100 个用户就是 100 份渲染开销。**静态存储 + CDN 的扩容曲线是另一回事**——对象存储不关心并发多少，多来的量只体现在流量费上，而且边缘缓存会把绝大部分请求截在离用户最近的节点。
+瓦片服务的容量瓶颈在服务端 CPU：同时来 100 个用户就是 100 份渲染开销。**静态存储 + CDN 的扩容曲线是另一回事**——没有按用户计的渲染要扩，多来的量主要体现在流量费上，而且边缘缓存会把绝大部分请求截在离用户最近的节点。但容量规划并不会因此消失：缓存未命中仍会打到源站，对象存储也有自己的按前缀请求速率上限和出网流量账单。
 
 这条对做政务大屏、公共服务门户这类「平时没人、开会时全省一起看」的场景特别关键：这种流量形状用瓦片服务扛，要么长期为峰值付费，要么峰值时挂掉。
 
@@ -545,7 +545,7 @@ Web 构建是一个可安装的 PWA，用 `vite-plugin-pwa` + Workbox。缓存**
 
 ### 6.4 「转成 COG」不是把后缀改成 `.tif`
 
-COG 能被 range 直读，靠的是**文件内部有瓦片切分和金字塔（overviews）**。一个条带式 GeoTIFF 就算叫 `.tif`，客户端也没法只取其中一小块。
+COG 能被 range 直读，靠的是**文件内部有瓦片切分和金字塔（overviews）**。条带式 GeoTIFF 严格说也能 range 读——条带的偏移和字节数就写在头里——但一个条带横跨整幅影像的宽度，取一小块地图范围要连带拉回远超所需的字节，而且没有 overviews 就没有可供缩小时使用的粗级别。后缀叫不叫 `.tif` 都改变不了这一点，况且 GeoLibre 的客户端读取器直接要求文件内部有瓦片。
 
 GeoLibre 的处理值得借鉴：面板**先用一个 Range 请求把文件头读回来**，判断有没有内部瓦片；没有就提示走客户端转换（gdal3.js 那条路）再加载。**用几 KB 的头部换一个明确判断，而不是让用户等一次必然很慢的加载。**
 

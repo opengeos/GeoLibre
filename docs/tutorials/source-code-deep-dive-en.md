@@ -104,7 +104,7 @@ These three names are often conflated. They are nested:
 
 > **The most common misconception**: thinking that installing duckdb-wasm gives you spatial capabilities. It does not. `ST_Read`, `ST_Transform`, `ST_AsWKB` — these all live in the spatial extension, which is a second WASM artifact fetched from CDN and loaded at runtime.
 
-And behind the spatial extension's `ST_Read` lies **a subset of GDAL**. The implication: issue a single SQL statement in the browser, and you can read any vector format that GDAL supports.
+And behind the spatial extension's `ST_Read` lies **a subset of GDAL**. The implication: issue a single SQL statement in the browser, and you can read the vector formats that subset covers. It is the extension's own bundled GDAL, not whatever GDAL is installed on the machine, so the exact list is whatever the loaded build ships — run `SELECT * FROM ST_Drivers()` to see it.
 
 ### 2.2 What GeoLibre Uses It For
 
@@ -148,7 +148,7 @@ export function selectDuckDbBundle() {
 
 **Manually listing bundles rather than using the default CDN resolution ensures Vite produces content-hashed local artifacts for the WASM and worker** — which in turn enables safe caching by the Service Worker's CacheFirst strategy (see Section 5).
 
-**Second, extension loading must be "global, run-once."** `INSTALL spatial` goes over the network, and `LOAD` has state; concurrent calls will conflict. GeoLibre's approach is worth studying:
+**Second, extension loading must be "per-instance, run-once."** `INSTALL spatial` goes over the network, and `LOAD` has state; concurrent calls will conflict. GeoLibre's approach is worth studying:
 
 ```ts
 // Memoized per-instance: the shared library and the SQL Workspace
@@ -413,11 +413,11 @@ This minimalism is deliberate. The smaller the state, the greater the confidence
 
 **Pattern 3: Cross-language boundaries marked with `SYNC:`.** This was the most surprising discovery from reading through the source.
 
-The 17 vector file extensions exist as `VECTOR_FILE_DIALOG_EXTENSIONS` in TypeScript (`lib/tauri-io.ts:153`) and as `RESTORABLE_VECTOR_EXTENSIONS: [&str; 17]` in Rust (`src-tauri/src/lib.rs:414`) — **two copies, because constants can't be shared across languages**. Their solution is to annotate both sides:
+The 17 vector file extensions exist as `VECTOR_FILE_DIALOG_EXTENSIONS` in TypeScript (`lib/tauri-io.ts:154`) and as `RESTORABLE_VECTOR_EXTENSIONS: [&str; 17]` in Rust (`src-tauri/src/lib.rs:414`) — **two copies, because constants can't be shared across languages**. Their solution is to annotate both sides. Quoted verbatim from `lib/tauri-io.ts:150-153`:
 
 > SYNC: RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/lib.rs must list the same extensions, or a format added here would be rejected by the Rust restore guard on every project reopen (**the bug this PR fixes**). Grep "SYNC:" to find the partner list.
 
-Note the parenthetical "the bug this PR fixes" — they actually encountered this: a new format was added in TypeScript, the Rust-side guard wasn't updated, and every project reopen was rejected.
+Note the parenthetical "the bug this PR fixes" — it refers to the pull request that added the comment, so it will not mean much to a future reader, but the failure it records is real: a new format was added in TypeScript, the Rust-side guard was not updated, and every project reopen was rejected.
 
 > **Takeaway: When you can consolidate into one source, do so. When you can't (cross-language, cross-process, cross-repository), use a unified, grep-able marker to pin them together, and document in the comment exactly what happens if they drift.** This is far more effective than "everyone please remember to keep these in sync."
 
@@ -435,7 +435,7 @@ The web build is an installable PWA using `vite-plugin-pwa` + Workbox. Caching i
 | **Same-origin runtime cache** | CacheFirst | Content-hashed artifacts under `/assets/`: MapLibre, **DuckDB-WASM and its spatial extension**, plugin chunks | Content-hashed filenames make CacheFirst safe — redeployment generates new URLs, old entries won't be served as new |
 | **CDN engine cache** | CacheFirst (separate rule `geolibre-cdn-engines`) | Pyodide, PGlite/PostGIS, CereusDB, gdal3.js on jsDelivr | URLs embed exact version numbers, similarly preventing stale serving; jsDelivr's CORS headers make these properly verifiable and evictable 200 responses, not opaque |
 
-**So the accurate description for these CDN engines is: network required on first use, then available offline thereafter.**
+**So the accurate description for these CDN engines is: in the web PWA, the network is required for the first *successful* fetch — CacheFirst only serves from cache once a matching response has actually been stored — and they are available offline from then on.** Desktop builds install no Service Worker at all, so this does not apply to them; see the bullets below.
 
 Why not just bundle everything? The following details make it clear.
 
@@ -495,9 +495,9 @@ Cloud-native formats are **static files**, so they naturally consume the entire 
 
 Compare with dynamic tile services: tile caches you must build yourself, invalidation strategies you must write yourself, cache hit rates you must monitor yourself. **A Range request hitting the same byte range of the same immutable file is just an ordinary cache hit at the CDN layer. The reason Section 5's Workbox three-tier caching strategy works at all is precisely because the resources are static and content-hashed.**
 
-**Benefit 4: Concurrency and scaling problems disappear.**
+**Benefit 4: The concurrency bottleneck moves off your servers.**
 
-The capacity bottleneck for tile services is server-side CPU: 100 concurrent users means 100 copies of rendering cost. **Static storage + CDN follows a completely different scaling curve** — object storage doesn't care about concurrency; the additional load only shows up in traffic costs. And edge caching intercepts the vast majority of requests at the node closest to the user.
+The capacity bottleneck for tile services is server-side CPU: 100 concurrent users means 100 copies of rendering cost. **Static storage + CDN follows a completely different scaling curve** — there is no per-user rendering to scale, so the additional load shows up mostly as traffic cost. And edge caching intercepts the vast majority of requests at the node closest to the user. What does not disappear is capacity planning: cache misses still reach origin, and object stores have their own per-prefix request-rate limits and egress bills.
 
 This is especially critical for government dashboards and public service portals — the "idle most of the time, but everyone watches simultaneously during meetings" traffic pattern. Handling that shape with a tile service means either overpaying for peak capacity long-term or crashing during the peak.
 
@@ -544,7 +544,7 @@ One more detail worth remembering: Source Cooperative's unknown API paths don't 
 
 ### 6.4 "Convert to COG" Does Not Mean Renaming the Extension to `.tif`
 
-COG's ability to be read via Range requests depends on **internal tiling and pyramid overviews within the file**. A striped GeoTIFF, even if named `.tif`, cannot be partially read by the client.
+COG's ability to be read via Range requests depends on **internal tiling and pyramid overviews within the file**. A striped GeoTIFF can technically be range-read too — its strip offsets and byte counts are in the header — but a strip spans the full image width, so fetching a small map extent drags in far more bytes than it needs, and with no overviews there is no coarse level to zoom out against. Naming it `.tif` changes none of that, and GeoLibre's client-side readers require internal tiles outright.
 
 GeoLibre's handling is instructive: the panel **first reads the file header with a Range request** to determine whether internal tiles exist; if not, it prompts the user to go through client-side conversion (the gdal3.js path) before loading. **A few KB of header for a definitive answer, rather than making the user wait through an inevitably slow load.**
 

@@ -355,6 +355,6 @@ Usage paths by scenario:
 2. **Need to get real work done** — Download the desktop version from GitHub Releases, or via Microsoft Store / Homebrew / winget; a two-minute process
 3. **Python users** — `pip install geolibre`; for GeoPandas support, `pip install "geolibre[all]"`; requires Python 3.10+
 4. **Intranet / offline environments** — `VITE_PYODIDE_INDEX_URL` and `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` can point Pyodide and the DuckDB spatial extension to internal mirrors, **no rebuild required**; an official Docker image is also available at `ghcr.io/opengeos/geolibre:latest`
-5. **Secondary development** — npm workspaces monorepo; main application in `apps/geolibre-desktop`; MIT licensed
+5. **Secondary development** — npm workspaces monorepo, so use **npm** (the repo tracks `package-lock.json`) on **Node 22+**; main application in `apps/geolibre-desktop`; MIT licensed
 
 Final takeaway: for data preview and exploration, highly recommended; for production deployment, wait a bit longer — at least until the version iteration cadence stabilizes.
