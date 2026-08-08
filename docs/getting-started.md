@@ -55,6 +55,20 @@ conda install -c conda-forge geolibre
 
 See the [Python Package](python.md) reference to get started.
 
+### In R
+
+The [`geolibre`](r.md) R package embeds GeoLibre as an interactive HTML widget
+in RStudio, Quarto, R Markdown, and Shiny. Install the development release from
+GitHub:
+
+```r
+install.packages("pak")
+pak::pak("opengeos/geolibre-r")
+```
+
+[Read the R package guide](r.md){ .md-button .md-button--primary }
+[Try the interactive example](https://r.geolibre.app/articles/interactive-map.html){ .md-button }
+
 ### On Android
 
 GeoLibre ships as a native Android app built from the same codebase, with a responsive touch layout for phones. Install it from Google Play and it updates automatically:

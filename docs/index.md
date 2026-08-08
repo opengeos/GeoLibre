@@ -86,6 +86,12 @@ Embed the full GeoLibre app in a Jupyter notebook with the [`geolibre`](python.m
 </div>
 
 <div class="feature-card" markdown>
+### R, Quarto, and Shiny
+
+Build interactive maps in RStudio, Quarto, R Markdown, and Shiny with the [`geolibre`](r.md) R package. Add GeoJSON, `sf` objects, and remote rasters, control the camera, and exchange portable `.geolibre.json` projects with the web and desktop applications.
+</div>
+
+<div class="feature-card" markdown>
 ### AI Assistant
 
 Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) that turns plain-English requests into GeoLibre operations — Spatial SQL, symbology, add or remove data, and map control — applied through the app so they stay auditable and undoable. Provider-pluggable (Google Gemini, Anthropic, OpenAI) with your own API key, disabled until configured.

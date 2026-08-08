@@ -158,6 +158,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Notebook cells drive the map through an auto-loaded `geolibre` client, and external Jupyter frontends attached to that server (VS Code's Jupyter extension, `jupyter console`, nbclient) drive the map too
 - Python package (`geolibre`) that embeds the full app in Jupyter notebooks as an [anywidget](https://anywidget.dev), with two-way project sync. See the [Python package guide](python.md)
     - An expanded leafmap-style API: local raster, marker/cluster, and choropleth layers; `split_map`, `add_legend`, and `add_colorbar` helpers; typed read-back of selected and drawn features; and `to_html` export
+- R package (`geolibre`) for interactive GeoLibre maps in RStudio, Quarto, R Markdown, and Shiny, with GeoJSON, `sf`, remote raster, camera, and project-file support. See the [R package guide](r.md)
 - Optional Python FastAPI sidecar for heavier processing workflows
 
 ## Processing and analysis
