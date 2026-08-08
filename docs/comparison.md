@@ -22,6 +22,33 @@ app as a desktop install, an Android app, and a Jupyter widget.
     [open an issue](https://github.com/opengeos/GeoLibre/issues) — corrections
     are welcome.
 
+## Complementary, not competing
+
+A useful way to think about GeoLibre and QGIS is smartphone cameras versus
+professional cameras. Smartphone cameras did not replace professional cameras,
+and it would not have made sense to pour every advance in photography into
+making professional cameras better. The two serve different people and
+different moments. A professional camera offers tremendous power, flexibility,
+and control. A smartphone camera prioritizes accessibility, convenience, and
+the ability to capture and share something instantly.
+
+QGIS is the professional camera: mature, powerful, feature-rich, and
+extensible. GeoLibre is closer to the smartphone camera: lightweight,
+reachable from a web browser, cross-platform, and designed so that people can
+work with geospatial data without installing complex software or setting up
+servers.
+
+![QGIS and GeoLibre as professional and smartphone cameras](https://assets.geolibre.app/images/QGIS-GeoLibre.webp)
+
+The geospatial community benefits from both. Separate projects can also
+experiment with new architectures and technologies, and the ideas that work out
+can strengthen the broader open-source geospatial ecosystem. The goal of
+GeoLibre is not to replace QGIS, but to make GIS accessible in places, and to
+people, where a traditional desktop GIS may not be the best fit.
+
+The rest of this page is written in that spirit: the tables are there to help
+you pick the right tool for a given job, not to declare a winner.
+
 ## At a glance
 
 | | **GeoLibre** | **QGIS** | **ArcGIS Pro** | **ArcGIS Online** | **CARTO** | **Felt** | **kepler.gl** |
