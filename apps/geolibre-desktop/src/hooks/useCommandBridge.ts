@@ -37,10 +37,7 @@ interface CommandMessage {
  *   useEmbedBridge and MapCanvas share), used to read/drive the camera and query
  *   rendered features.
  */
-export function useCommandBridge(
-  mapControllerRef: RefObject<MapController | null>,
-  addRasterOutput?: (bytes: Uint8Array, name: string, fileName: string) => Promise<string>,
-): void {
+export function useCommandBridge(mapControllerRef: RefObject<MapController | null>): void {
   useEffect(() => {
     if (!isEmbedded()) return;
     const hostChannel = getEmbedHost();
@@ -50,7 +47,7 @@ export function useCommandBridge(
 
     // Command implementations are shared with the in-app Python console. A thrown
     // handler is turned into an `ok:false` reply by the caller below.
-    const handlers = createScriptingHandlers({ getController: controller, addRasterOutput });
+    const handlers = createScriptingHandlers({ getController: controller });
 
     const reply = (requestId: string, ok: boolean, extra: object) => {
       host.postMessage(
@@ -161,5 +158,5 @@ export function useCommandBridge(
       clickMap?.off("click", onMapClick);
     };
     // Mount-only: mapControllerRef is a stable ref read lazily inside handlers.
-  }, [addRasterOutput, mapControllerRef]);
+  }, [mapControllerRef]);
 }

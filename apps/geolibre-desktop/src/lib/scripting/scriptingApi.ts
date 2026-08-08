@@ -13,13 +13,16 @@ import {
   type WhiteboxLayerInput,
   type WhiteboxTool,
 } from "@geolibre/processing";
-import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
+import { SKETCHES_SOURCE_KIND, addRasterToMap } from "@geolibre/plugins";
 import type { Feature, FeatureCollection } from "geojson";
+import type { RefObject } from "react";
 import type { MapController } from "@geolibre/map";
 import { beginProcessingRun } from "../processing-history";
 import { captureMapImage } from "../print-layout-export";
 import { styleParamPatch } from "./style-params";
 import { parameterKind } from "../whitebox-param-kind";
+import { canUseLayerForParameter, fetchLayerBytes } from "../whitebox-layer-inputs";
+import { createAppAPI } from "../../hooks/usePlugins";
 
 // The scripting command surface, shared by every programmatic entry point: the
 // Jupyter widget's postMessage bridge (useCommandBridge) and the in-app Python
@@ -35,8 +38,37 @@ export type ScriptingHandlers = Record<string, ScriptingHandler>;
 export interface ScriptingDeps {
   /** Lazily resolve the live map controller (it is created asynchronously). */
   getController: () => MapController | null;
-  /** Add an in-browser Whitebox raster result to the map, returning its layer id. */
-  addRasterOutput?: (bytes: Uint8Array, name: string, fileName: string) => Promise<string>;
+}
+
+/**
+ * Add a Whitebox raster result to the map and return the created layer id.
+ *
+ * Built from `getController` rather than injected by a transport, so every
+ * scripting host (the widget bridge, the Notebook panel, the Jupyter relay, the
+ * in-app console, the assistant) can add raster outputs identically — the
+ * "one implementation, no drift between transports" invariant above.
+ *
+ * @param getController - Lazy accessor for the live map controller.
+ * @param bytes - The GeoTIFF the WASM runner produced.
+ * @param name - Display name for the new layer.
+ * @param fileName - File name the raster is registered under.
+ * @returns The id of the added layer.
+ */
+function addWhiteboxRasterOutput(
+  getController: () => MapController | null,
+  bytes: Uint8Array,
+  name: string,
+  fileName: string,
+): Promise<string> {
+  // A live view of the controller, since it is created asynchronously and the
+  // app API reads it lazily.
+  const controllerRef = {
+    get current() {
+      return getController();
+    },
+  } as RefObject<MapController | null>;
+  const file = new File([bytes as BlobPart], fileName, { type: "image/tiff" });
+  return addRasterToMap(createAppAPI(controllerRef), file, { name });
 }
 
 function whiteboxToolName(tool: WhiteboxTool): string {
@@ -62,26 +94,6 @@ async function whiteboxTools(): Promise<WhiteboxTool[]> {
     catalogResult.status === "fulfilled" ? catalogResult.value.filter((tool) => !tool.locked) : [];
   const manifests = manifestResult.status === "fulfilled" ? manifestResult.value : [];
   return mergeWasmToolManifests(catalog, manifests);
-}
-
-async function fetchLayerInputBytes(
-  layer: ReturnType<typeof useAppStore.getState>["layers"][number],
-): Promise<Uint8Array | null> {
-  const source = layer.source as Record<string, unknown>;
-  const tiles = Array.isArray(source.tiles) ? source.tiles : [];
-  const candidates = [layer.metadata.localBytesUrl, source.url, tiles[0], layer.sourcePath];
-  for (const candidate of candidates) {
-    if (typeof candidate !== "string" || !/^(https?:|blob:|data:)/i.test(candidate)) continue;
-    try {
-      const response = await fetch(candidate);
-      if (!response.ok) continue;
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.length && bytes[0] !== 0x3c) return bytes;
-    } catch {
-      // Try the next persisted source URL.
-    }
-  }
-  return null;
 }
 
 /**
@@ -110,7 +122,7 @@ function requireLayerId(params: Record<string, unknown>): string {
  * @returns A map of command name to handler.
  */
 export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers {
-  const { getController, addRasterOutput } = deps;
+  const { getController } = deps;
 
   return {
     // -- view / camera ------------------------------------------------------
@@ -330,6 +342,14 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         if (typeof value !== "string") continue;
         const layer = layers.find((item) => item.id === value);
         if (!layer) continue;
+        // Same eligibility rule the Processing dialog filters its layer picker
+        // by, so a wrong-type layer reports that rather than failing later with
+        // a vaguer "not fetchable".
+        if (!canUseLayerForParameter(layer, param)) {
+          throw new Error(
+            `Layer "${layer.name}" (${layer.type}) cannot be used as ${kind} for "${param.name}"`,
+          );
+        }
         delete parameters[param.name];
         if (kind === "vector_in") {
           if (!layer.geojson) {
@@ -337,7 +357,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           }
           layerInputs[param.name] = { name: layer.name, kind, geojson: layer.geojson };
         } else {
-          const bytes = await fetchLayerInputBytes(layer);
+          const bytes = await fetchLayerBytes(layer);
           if (!bytes) {
             throw new Error(`Layer "${layer.name}" is not fetchable for "${param.name}"`);
           }
@@ -380,10 +400,8 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           } else if (value instanceof Uint8Array) {
             const outputParam = tool.params?.find((item) => item.name === outputName);
             if (parameterKind(outputParam ?? { name: outputName }) === "raster_out") {
-              if (!addRasterOutput) {
-                throw new Error("This scripting host cannot add Whitebox raster outputs");
-              }
-              const layerId = await addRasterOutput(
+              const layerId = await addWhiteboxRasterOutput(
+                getController,
                 value,
                 displayName,
                 `${tool.id}_${outputName}.tif`,
