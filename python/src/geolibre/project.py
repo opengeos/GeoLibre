@@ -157,6 +157,33 @@ def _publishable_plugin_settings(settings: dict[str, Any]) -> dict[str, Any]:
     return kept
 
 
+#: The layer fields that can carry credentials: request headers, signed URLs,
+#: and API keys all live under these. ``connection.lastError`` is free-form text
+#: taken from a caught error, which a future refresh path could easily build
+#: from the request URL. Sweeping it costs nothing and keeps the no-secret
+#: guarantee from depending on how an error message is worded.
+_LAYER_CREDENTIAL_FIELDS = ("source", "metadata", "sourcePath", "connection")
+
+
+def _sweep_layer_credentials(layer: dict[str, Any]) -> None:
+    """Redact a layer's credential-bearing config fields in place."""
+    for field in _LAYER_CREDENTIAL_FIELDS:
+        if field in layer:
+            layer[field] = _redact_config(layer[field])
+
+
+def redact_layer(layer: dict[str, Any]) -> dict[str, Any]:
+    """Return a detached copy of one layer, safe to display or hand to others.
+
+    The same sweep :func:`redact_credentials` applies to every layer, for the
+    single-layer reads (:attr:`Layer.source`, :attr:`Layer.data`) that hand a
+    layer record back to a caller rather than writing a whole project out.
+    """
+    safe = copy.deepcopy(layer)
+    _sweep_layer_credentials(safe)
+    return safe
+
+
 def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
     """Return a detached project safe to publish, export, or hand to others."""
     safe = copy.deepcopy(project)
@@ -176,13 +203,7 @@ def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
         for layer in layers:
             if not isinstance(layer, dict):
                 continue
-            # `connection.lastError` is free-form text taken from a caught
-            # error, which a future refresh path could easily build from the
-            # request URL. Sweeping it costs nothing and keeps the no-secret
-            # guarantee from depending on how an error message is worded.
-            for field in ("source", "metadata", "sourcePath", "connection"):
-                if field in layer:
-                    layer[field] = _redact_config(layer[field])
+            _sweep_layer_credentials(layer)
     plugins = safe.get("plugins")
     if isinstance(plugins, dict):
         manifest_urls = plugins.get("manifestUrls")

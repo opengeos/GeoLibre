@@ -706,6 +706,32 @@ def test_duplicate_layer_rejects_the_reserved_basemap_name(m):
     assert m.get_layer(padded).name == "Clone"
 
 
+def test_rename_layer_strips_and_rejects_a_blank_name(m):
+    layer = m.get_layer(m.add_geojson({"type": "FeatureCollection", "features": []}, name="Data"))
+    layer.name = "  Renamed  "
+    assert layer.name == "Renamed"
+    for blank in ("", "   "):
+        with pytest.raises(ValueError, match="non-empty"):
+            m.rename_layer(layer, blank)
+    assert layer.name == "Renamed"
+
+
+def test_layer_data_and_source_redact_credentials(m):
+    layer_id = m.add_3d_tiles(
+        "https://example.com/tileset.json?token=secret",
+        name="Secured",
+        request_headers={"Authorization": "Bearer hunter2"},
+    )
+    layer = m.get_layer(layer_id)
+
+    # The stored record keeps the headers; the reads that hand one back do not.
+    assert "requestHeaders" in m.project["layers"][0]["source"]
+    assert "requestHeaders" not in layer.source
+    assert "requestHeaders" not in layer.data["source"]
+    assert "hunter2" not in json.dumps(layer.data)
+    assert "secret" not in json.dumps(layer.data)
+
+
 def test_move_layer_negative_index_counts_from_the_end(m):
     ids = [
         m.add_geojson({"type": "FeatureCollection", "features": []}, name=name)

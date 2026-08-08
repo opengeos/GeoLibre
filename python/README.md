@@ -89,7 +89,7 @@ m.to_project()["mapView"]["center"]
 | `rename_layer` / `move_layer` / `duplicate_layer` / `show_layer` / `hide_layer` | Manage layers by id, name, or `Layer` handle. |
 | `layer_properties(layer)` / `column_values(layer, column)` / `describe()` | Inspect inlined data and summarize a project without a browser round trip. |
 | `remove_layer(layer)` / `clear_layers()` | Remove one layer by id, name, or handle, or remove all layers. |
-| `center` / `zoom` / `basemap` / `name` | Read persisted project and camera state; `name` is writable. |
+| `center` / `zoom` / `bearing` / `pitch` / `basemap` / `name` | Read persisted project and camera state; `name` is writable. |
 | `set_zoom` / `set_bearing` / `set_pitch` / `fit_project_bounds` | Persist camera changes without requiring the widget to be displayed. |
 | `to_project()` / `load_project(src)` / `save_project(path)` | Project I/O. |
 

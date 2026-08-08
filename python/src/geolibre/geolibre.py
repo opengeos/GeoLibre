@@ -976,9 +976,31 @@ class Map(anywidget.AnyWidget):
         self._resolve_layer(layer).opacity = opacity
 
     def rename_layer(self, layer: str | Layer, name: str) -> None:
-        """Rename a layer addressed by id, name, or handle."""
+        """Rename a layer addressed by id, name, or handle.
+
+        Args:
+            layer: The layer to rename, by id, name, or handle.
+            name: The new display name, surrounding whitespace stripped.
+
+        Raises:
+            ValueError: If ``name`` is blank or the reserved basemap pseudo-id.
+        """
         handle = self._resolve_layer(layer)
-        self._update_project(lambda p: _authoring.update_layer(p, handle.id, name=name))
+        clean = self._clean_layer_name(name)
+        self._update_project(lambda p: _authoring.update_layer(p, handle.id, name=clean))
+
+    @staticmethod
+    def _clean_layer_name(name: str) -> str:
+        """Strip a display name and refuse a blank one.
+
+        `authoring.update_layer` guards only the reserved basemap pseudo-id, so
+        emptiness is checked here, matching the `name` setter. A layer named ""
+        or "   " renders as a blank row that cannot be referenced back by name.
+        """
+        clean = str(name).strip()
+        if not clean:
+            raise ValueError("name must be a non-empty string")
+        return clean
 
     def move_layer(self, layer: str | Layer, index: int) -> None:
         """Move a layer to ``index`` in the project's draw order.
@@ -1013,12 +1035,7 @@ class Map(anywidget.AnyWidget):
             ValueError: If ``name`` is blank or the reserved basemap pseudo-id.
         """
         if name is not None:
-            # Strip before the blank check so `"  "` is rejected, matching the
-            # `name` setter rather than storing a padded name that is awkward to
-            # reference back.
-            name = str(name).strip()
-            if not name:
-                raise ValueError("name must be a non-empty string")
+            name = self._clean_layer_name(name)
         source = copy.deepcopy(self._resolve_layer(layer)._layer())
         source["id"] = str(uuid.uuid4())
         source["name"] = name if name is not None else f"{source.get('name', 'Layer')} copy"
@@ -2495,13 +2512,23 @@ class Layer:
 
     @property
     def source(self) -> Any:
-        """A detached copy of the layer source configuration."""
-        return copy.deepcopy(self._layer().get("source"))
+        """A detached copy of the layer source configuration.
+
+        Credentials are swept the way :meth:`Map.to_project` sweeps them: a
+        notebook auto-displays whatever a cell returns, and a source built with
+        ``request_headers`` or a signed URL would otherwise print its secrets
+        into an output that often gets committed or shared. Read
+        :attr:`Map.project` for the record exactly as stored.
+        """
+        return _project.redact_layer(self._layer()).get("source")
 
     @property
     def data(self) -> dict[str, Any]:
-        """A detached copy of the complete layer record."""
-        return copy.deepcopy(self._layer())
+        """A detached copy of the complete layer record.
+
+        Credentials are swept, as in :attr:`source`.
+        """
+        return _project.redact_layer(self._layer())
 
     @property
     def index(self) -> int:
