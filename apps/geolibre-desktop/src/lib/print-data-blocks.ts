@@ -71,6 +71,16 @@ export function rowsWithinBounds(
   return rows;
 }
 
+/**
+ * Select the attribute row belonging to the current atlas coverage feature.
+ * `AtlasPage.sourceIndex` is stable across filtering and sorting, and the row
+ * array preserves the source collection's order, so the two align directly.
+ */
+export function rowForAtlasFeature(rows: readonly ChartRow[], sourceIndex: number): ChartRow[] {
+  const row = rows[sourceIndex];
+  return row ? [row] : [];
+}
+
 /** Format one attribute value for a table cell (blank for null/undefined). */
 function cellText(value: unknown): string {
   if (value === null || value === undefined) return "";

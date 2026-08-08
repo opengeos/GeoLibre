@@ -1315,7 +1315,9 @@
       "titleLabel": "En-tête",
       "position": "Position",
       "filterToPage": "Seulement les entités dans l'emprise de la page",
-      "filterToPageHint": "S'applique aux pages d'atlas et à une emprise d'impression dessinée ; sinon, la couche entière est utilisée."
+      "filterToPageHint": "S'applique aux pages d'atlas et à une emprise d'impression dessinée ; sinon, la couche entière est utilisée.",
+      "filterToAtlasFeature": "Seulement l’entité courante de l’atlas",
+      "filterToAtlasFeatureHint": "Disponible lorsque la table utilise la couche de couverture de l’atlas. Ce filtre est prioritaire sur l’emprise de la page."
     },
     "dataTable": {
       "columns": "Colonnes",
@@ -1445,6 +1447,8 @@
       "extentMargin": "Marge autour de l'entité",
       "extentScale": "Échelle fixe",
       "marginLabel": "Marge (%)",
+      "maskOutside": "Masquer la zone hors de l’entité courante",
+      "maskOutsideHint": "Applique un remplissage inversé translucide pour mettre en évidence l’entité courante de l’atlas.",
       "scaleLabel": "Échelle",
       "scaleRequired": "Entrez une échelle supérieure à zéro.",
       "sortField": "Trier par",

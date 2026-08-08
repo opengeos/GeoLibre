@@ -11,6 +11,54 @@ import type { FeatureCollection, Geometry, Position } from "geojson";
 /** Geographic bounds as `[west, south, east, north]` in WGS84 degrees. */
 export type AtlasBounds = [number, number, number, number];
 
+/** Symmetric fit padding and matching cover-crop rectangle for an atlas page. */
+export interface AtlasViewportFrame {
+  padding: { top: number; bottom: number; left: number; right: number };
+  crop: { top: number; bottom: number; left: number; right: number };
+}
+
+/**
+ * Fit a target print-frame aspect ratio inside the live map viewport. The
+ * returned padding constrains `fitBounds` to the exact centered rectangle that
+ * the print renderer later keeps when it cover-crops the captured map.
+ *
+ * @param viewportWidth - Live map width in CSS pixels.
+ * @param viewportHeight - Live map height in CSS pixels.
+ * @param frameAspect - Printed map-frame width divided by height.
+ */
+export function atlasViewportFrame(
+  viewportWidth: number,
+  viewportHeight: number,
+  frameAspect: number,
+): AtlasViewportFrame {
+  const width = Math.max(0, viewportWidth);
+  const height = Math.max(0, viewportHeight);
+  let horizontal = 0;
+  let vertical = 0;
+  if (width > 0 && height > 0 && Number.isFinite(frameAspect) && frameAspect > 0) {
+    const viewportAspect = width / height;
+    if (viewportAspect > frameAspect) {
+      horizontal = Math.max(0, (width - height * frameAspect) / 2);
+    } else if (viewportAspect < frameAspect) {
+      vertical = Math.max(0, (height - width / frameAspect) / 2);
+    }
+  }
+  return {
+    padding: {
+      top: vertical,
+      bottom: vertical,
+      left: horizontal,
+      right: horizontal,
+    },
+    crop: {
+      top: vertical,
+      bottom: height - vertical,
+      left: horizontal,
+      right: width - horizontal,
+    },
+  };
+}
+
 /** One page of an atlas: a coverage feature plus its resolved identity. */
 export interface AtlasPage {
   /** 0-based position in the final (filtered + sorted) page order. */

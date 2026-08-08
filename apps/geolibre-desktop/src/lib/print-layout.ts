@@ -52,8 +52,22 @@ export interface PaperSize {
  * {@link LayoutOptions.customSize}.
  */
 export const PAPER_SIZES: PaperSize[] = [
-  { id: "a4", label: "A4 (210 × 297 mm)", width: 210, height: 297, unit: "mm", group: "paper" },
-  { id: "a3", label: "A3 (297 × 420 mm)", width: 297, height: 420, unit: "mm", group: "paper" },
+  {
+    id: "a4",
+    label: "A4 (210 × 297 mm)",
+    width: 210,
+    height: 297,
+    unit: "mm",
+    group: "paper",
+  },
+  {
+    id: "a3",
+    label: "A3 (297 × 420 mm)",
+    width: 297,
+    height: 420,
+    unit: "mm",
+    group: "paper",
+  },
   {
     id: "letter",
     label: "Letter (8.5 × 11 in)",
@@ -86,7 +100,14 @@ export const PAPER_SIZES: PaperSize[] = [
     unit: "px",
     group: "screen",
   },
-  { id: "hd", label: "HD (1280 × 720 px)", width: 720, height: 1280, unit: "px", group: "screen" },
+  {
+    id: "hd",
+    label: "HD (1280 × 720 px)",
+    width: 720,
+    height: 1280,
+    unit: "px",
+    group: "screen",
+  },
   {
     id: "uhd4k",
     label: "4K UHD (3840 × 2160 px)",
@@ -103,7 +124,14 @@ export const PAPER_SIZES: PaperSize[] = [
     unit: "px",
     group: "screen",
   },
-  { id: "custom", label: "Custom…", width: 1280, height: 720, unit: "px", group: "screen" },
+  {
+    id: "custom",
+    label: "Custom…",
+    width: 1280,
+    height: 720,
+    unit: "px",
+    group: "screen",
+  },
 ];
 
 export function getPaperSize(id: PaperSizeId): PaperSize {
@@ -156,7 +184,10 @@ export function pageMm(size: ResolvedPageSize): {
   heightMm: number;
 } {
   if (size.unit === "mm") return { widthMm: size.width, heightMm: size.height };
-  return { widthMm: size.width / PX_PER_MM_96, heightMm: size.height / PX_PER_MM_96 };
+  return {
+    widthMm: size.width / PX_PER_MM_96,
+    heightMm: size.height / PX_PER_MM_96,
+  };
 }
 
 /**
@@ -550,6 +581,19 @@ function computeBodyRect(opts: LayoutOptions, W: number, H: number): BodyRect {
     bodyW: W - margin * 2,
     bodyH: Math.max(unit * 10, bodyBottom - bodyTop),
   };
+}
+
+/**
+ * Aspect ratio of the map frame after page margins, outside titles, and the
+ * footer row reserve their space. Atlas camera fitting uses this ratio so the
+ * feature remains visible after the captured live map is cover-cropped into
+ * the print frame.
+ */
+export function mapBodyAspectRatio(opts: LayoutOptions): number {
+  const page = resolvePageSize(opts);
+  const rect = computeBodyRect(opts, page.width, page.height);
+  const ratio = rect.bodyW / rect.bodyH;
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : page.width / page.height;
 }
 
 /**
@@ -2104,7 +2148,12 @@ function drawLegend(
       });
     } else {
       if (opts.groupByLayer) {
-        rows.push({ entryId: entry.id, color: "", text: entry.name, heading: true });
+        rows.push({
+          entryId: entry.id,
+          color: "",
+          text: entry.name,
+          heading: true,
+        });
       }
       for (const sw of entry.swatches) {
         // Carry the marker so a marker + diagram layer (a multi-swatch entry

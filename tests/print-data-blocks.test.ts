@@ -8,6 +8,7 @@ import {
   DEFAULT_TABLE_ROWS,
   layerRows,
   MAX_TABLE_ROWS,
+  rowForAtlasFeature,
   rowsWithinBounds,
 } from "../apps/geolibre-desktop/src/lib/print-data-blocks";
 import { collectAtlasFeatures } from "../apps/geolibre-desktop/src/lib/print-atlas";
@@ -78,6 +79,14 @@ describe("rowsWithinBounds", () => {
 
   it("returns no rows for a fully disjoint extent", () => {
     assert.equal(rowsWithinBounds(infos, [-30, -30, -20, -20]).length, 0);
+  });
+});
+
+describe("rowForAtlasFeature", () => {
+  it("uses the stable source index and handles an out-of-range page", () => {
+    const source = rows({ name: "a" }, { name: "b" }, { name: "c" });
+    assert.deepEqual(rowForAtlasFeature(source, 1), [source[1]]);
+    assert.deepEqual(rowForAtlasFeature(source, 99), []);
   });
 });
 

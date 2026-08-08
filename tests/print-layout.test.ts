@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   computeScaleRatio,
   drawLayout,
+  mapBodyAspectRatio,
   pageMm,
   pagePx,
   resolvePageSize,
@@ -156,7 +157,11 @@ describe("drawLayout legend rendering", () => {
       canvas,
       baseOptions({
         legend: [
-          { id: "pop", name: "Population", swatches: [{ color: "#00aa00", label: "High" }] },
+          {
+            id: "pop",
+            name: "Population",
+            swatches: [{ color: "#00aa00", label: "High" }],
+          },
         ],
       }),
     );
@@ -278,7 +283,12 @@ describe("drawLayout legend rendering", () => {
           {
             id: "pts",
             name: "Sites",
-            swatches: [{ color: "#00aa55", marker: { shape: "triangle", color: "#00aa55" } }],
+            swatches: [
+              {
+                color: "#00aa55",
+                marker: { shape: "triangle", color: "#00aa55" },
+              },
+            ],
           },
         ],
       }),
@@ -305,7 +315,12 @@ describe("drawLayout legend rendering", () => {
           {
             id: "bees",
             name: "Bees",
-            swatches: [{ color: "#3b82f6", marker: { shape: "custom", color: "#3b82f6", svg } }],
+            swatches: [
+              {
+                color: "#3b82f6",
+                marker: { shape: "custom", color: "#3b82f6", svg },
+              },
+            ],
           },
         ],
         markerIcons: new Map([[svg, image]]),
@@ -433,7 +448,11 @@ describe("drawLayout legend rendering", () => {
         name: "Hives",
         swatches: [{ color: "#3b82f6", label: "9000", size: 900, marker }],
       },
-      { id: "wells", name: "Wells", swatches: [{ color: "#3b82f6", label: "3", size: 8, marker }] },
+      {
+        id: "wells",
+        name: "Wells",
+        swatches: [{ color: "#3b82f6", label: "3", size: 8, marker }],
+      },
     ];
     const rec = recordingCanvas();
     drawLayout(
@@ -462,7 +481,12 @@ describe("drawLayout legend rendering", () => {
           {
             id: "bees",
             name: "Bees",
-            swatches: [{ color: "#3b82f6", marker: { shape: "custom", color: "#3b82f6", svg } }],
+            swatches: [
+              {
+                color: "#3b82f6",
+                marker: { shape: "custom", color: "#3b82f6", svg },
+              },
+            ],
           },
         ],
         // No markerIcons: the icon is unavailable.
@@ -516,7 +540,10 @@ describe("drawLayout legend rendering", () => {
             id: "md",
             name: "Marker+Diagram",
             swatches: [
-              { color: "#00aa55", marker: { shape: "triangle", color: "#00aa55" } },
+              {
+                color: "#00aa55",
+                marker: { shape: "triangle", color: "#00aa55" },
+              },
               { color: "#111111", label: "votes" },
             ],
           },
@@ -548,14 +575,23 @@ describe("drawLayout legend rendering", () => {
 
 describe("resolvePageSize", () => {
   it("swaps width/height for landscape preset paper", () => {
-    const portrait = resolvePageSize({ paperSize: "a4", orientation: "portrait" });
+    const portrait = resolvePageSize({
+      paperSize: "a4",
+      orientation: "portrait",
+    });
     assert.deepEqual(portrait, { width: 210, height: 297, unit: "mm" });
-    const landscape = resolvePageSize({ paperSize: "a4", orientation: "landscape" });
+    const landscape = resolvePageSize({
+      paperSize: "a4",
+      orientation: "landscape",
+    });
     assert.deepEqual(landscape, { width: 297, height: 210, unit: "mm" });
   });
 
   it("resolves a pixel screen preset to its oriented pixel dimensions", () => {
-    const landscape = resolvePageSize({ paperSize: "fullhd", orientation: "landscape" });
+    const landscape = resolvePageSize({
+      paperSize: "fullhd",
+      orientation: "landscape",
+    });
     assert.deepEqual(landscape, { width: 1920, height: 1080, unit: "px" });
   });
 
@@ -575,6 +611,26 @@ describe("resolvePageSize", () => {
       customSize: { width: 0, height: 0, unit: "px" },
     });
     assert.deepEqual(size, { width: 1280, height: 720, unit: "px" });
+  });
+});
+
+describe("mapBodyAspectRatio", () => {
+  it("accounts for an outside title when fitting the atlas camera", () => {
+    const inside = mapBodyAspectRatio(
+      baseOptions({
+        titlePlacement: "inside",
+        showAttribution: false,
+        showDate: false,
+      }),
+    );
+    const outside = mapBodyAspectRatio(
+      baseOptions({
+        titlePlacement: "outside",
+        showAttribution: false,
+        showDate: false,
+      }),
+    );
+    assert.ok(outside > inside);
   });
 });
 
@@ -747,7 +803,12 @@ describe("drawLayout cartographic furniture", () => {
         projectNumber: "PRJ-42",
         crs: "EPSG:28992",
         revision: "Rev 01",
-        infoLabels: { author: "Author", project: "Project", crs: "CRS", revision: "Rev" },
+        infoLabels: {
+          author: "Author",
+          project: "Project",
+          crs: "CRS",
+          revision: "Rev",
+        },
       }),
     );
     for (const v of ["Jane Cartographer", "PRJ-42", "EPSG:28992", "Rev 01"]) {

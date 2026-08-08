@@ -1323,7 +1323,9 @@
       "titleLabel": "Heading",
       "position": "Position",
       "filterToPage": "Only features in the page extent",
-      "filterToPageHint": "Applies to atlas pages and a drawn print extent; otherwise the whole layer is used."
+      "filterToPageHint": "Applies to atlas pages and a drawn print extent; otherwise the whole layer is used.",
+      "filterToAtlasFeature": "Only the current atlas feature",
+      "filterToAtlasFeatureHint": "Available when the table uses the atlas coverage layer. This takes priority over the page extent filter."
     },
     "dataTable": {
       "columns": "Columns",
@@ -1453,6 +1455,8 @@
       "extentMargin": "Margin around feature",
       "extentScale": "Fixed scale",
       "marginLabel": "Margin (%)",
+      "maskOutside": "Mask area outside current feature",
+      "maskOutsideHint": "Applies a translucent inverted fill to emphasize the current atlas feature.",
       "scaleLabel": "Scale",
       "scaleRequired": "Enter a scale greater than zero.",
       "sortField": "Sort by",
