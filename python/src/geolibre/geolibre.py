@@ -2090,9 +2090,14 @@ class Map(anywidget.AnyWidget):
 
     @property
     def basemap(self) -> str | None:
-        """The current basemap style URL."""
+        """The current basemap style URL, embedded credentials redacted.
+
+        MapTiler, Stadia and others put an API key in the style URL itself, so
+        this is swept like :attr:`Layer.source` rather than printed into a
+        notebook cell. Read :attr:`project` for the URL exactly as stored.
+        """
         value = self.project.get("basemapStyleUrl")
-        return str(value) if value is not None else None
+        return _project.redact_url(str(value)) if value is not None else None
 
     @property
     def name(self) -> str:
@@ -2526,7 +2531,10 @@ class Layer:
     def data(self) -> dict[str, Any]:
         """A detached copy of the complete layer record.
 
-        Credentials are swept, as in :attr:`source`.
+        Credentials are swept, as in :attr:`source`. "Complete" is literal: an
+        inlined ``geojson`` blob is copied whole, which for a large layer is
+        tens of megabytes to copy and to display. Use :meth:`properties` or
+        :meth:`Map.describe` when a summary will do.
         """
         return _project.redact_layer(self._layer())
 

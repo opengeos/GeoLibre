@@ -157,6 +157,16 @@ def _publishable_plugin_settings(settings: dict[str, Any]) -> dict[str, Any]:
     return kept
 
 
+def redact_url(url: str) -> str:
+    """Return a URL with its userinfo and credential parameters stripped.
+
+    The public entry point to the sweep :func:`redact_credentials` applies to
+    every URL it finds, for the single-value reads (:attr:`Map.basemap`) that
+    hand one back rather than writing a whole project out.
+    """
+    return _redact_url(url)
+
+
 #: The layer fields that can carry credentials: request headers, signed URLs,
 #: and API keys all live under these. ``connection.lastError`` is free-form text
 #: taken from a caught error, which a future refresh path could easily build
