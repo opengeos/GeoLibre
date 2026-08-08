@@ -115,9 +115,19 @@ def save_project(path: str | Path, project: dict[str, Any]) -> Path:
     can approach ``MAX_PROJECT_BYTES``, and the MCP server rewrites the whole
     file on every edit, so a truncating write is a real way to lose work.
 
+    Note:
+        This writes *verbatim*, credentials included. It is the lossless
+        primitive the MCP server round-trips a user's own project file through,
+        where stripping an API key on every small edit would quietly destroy the
+        file's usefulness. :meth:`geolibre.Map.save_project` is the counterpart
+        for producing a file to share: it redacts unless
+        ``keep_credentials=True``. Run a project through
+        :func:`geolibre.project.redact_credentials` before calling this if the
+        result is going anywhere untrusted.
+
     Args:
         path: Destination path.
-        project: The project dict to serialize.
+        project: The project dict to serialize, written as given.
 
     Returns:
         The resolved path written to.

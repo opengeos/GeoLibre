@@ -253,7 +253,11 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_colormap(colormap, vmin=, vmax=, label=, **kwargs)` | Add a colorbar from a named colormap (leafmap-style alias of `add_colorbar`). |
 | `set_center(lng, lat, zoom=None)` | Center (and optionally zoom) the map. |
 | `set_center_zoom(lng, lat, zoom=None)` | Alias of `set_center` (leafmap compatibility). |
-| `remove_layer(layer_id)` / `clear_layers()` | Remove layers. |
+| `set_zoom(zoom)` / `set_bearing(bearing)` / `set_pitch(pitch)` / `fit_project_bounds(bounds)` | Persist camera changes without requiring the widget to be displayed. |
+| `center` / `zoom` / `bearing` / `pitch` / `basemap` / `name` | Read persisted project and camera state; `name` is writable. |
+| `rename_layer(layer, name)` / `move_layer(layer, index)` / `duplicate_layer(layer, name=)` / `show_layer(layer)` / `hide_layer(layer)` | Manage layers by id, name, or `Layer` handle. |
+| `layer_properties(layer)` / `column_values(layer, column)` / `describe()` | Inspect inlined data and summarize a project without a browser round trip. |
+| `remove_layer(layer_id)` / `clear_layers()` | Remove one layer by id, name, or handle, or remove all layers. |
 | `to_project(keep_credentials=False)` | Return the current project as a dict, credentials redacted unless `keep_credentials=True`. |
 | `load_project(src)` | Replace the project from a dict, JSON string, or `.geolibre.json` path. |
 | `save_project(path, keep_credentials=False)` | Write the current project to a `.geolibre.json` file, credentials redacted unless `keep_credentials=True`. |

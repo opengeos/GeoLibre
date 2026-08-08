@@ -2525,7 +2525,9 @@ class Layer:
         into an output that often gets committed or shared. Read
         :attr:`Map.project` for the record exactly as stored.
         """
-        return _project.redact_layer(self._layer()).get("source")
+        # Sweep the one field rather than the whole layer: `redact_layer` would
+        # copy an inlined geojson blob first, only to discard it here.
+        return _project.redact_layer_field(self._layer().get("source"))
 
     @property
     def data(self) -> dict[str, Any]:

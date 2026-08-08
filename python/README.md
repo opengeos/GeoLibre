@@ -126,6 +126,12 @@ print(describe_project(project))
 save_project("copy.geolibre.json", project)
 ```
 
+These are the lossless file primitives: unlike `Map.save_project`, the top-level
+`save_project` writes the project **verbatim**, credentials included, so that
+editing a project in place cannot strip your own API keys out of it. Pass a
+project through `geolibre.project.redact_credentials` first if the file is going
+anywhere untrusted, or use `Map.save_project`, which redacts by default.
+
 ## Notes
 
 - The bundled app is served from a localhost HTTP server, so the interactive

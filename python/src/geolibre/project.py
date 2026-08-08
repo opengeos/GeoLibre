@@ -182,6 +182,15 @@ def _sweep_layer_credentials(layer: dict[str, Any]) -> None:
             layer[field] = _redact_config(layer[field])
 
 
+def redact_layer_field(value: Any) -> Any:
+    """Return one of a layer's config fields, detached and swept.
+
+    The single-field counterpart to :func:`redact_layer`, for a read that wants
+    only ``source`` and should not pay to copy an inlined GeoJSON blob first.
+    """
+    return _redact_config(value)
+
+
 def redact_layer(layer: dict[str, Any]) -> dict[str, Any]:
     """Return a detached copy of one layer, safe to display or hand to others.
 
