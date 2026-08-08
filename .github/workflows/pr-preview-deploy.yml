@@ -265,8 +265,11 @@ jobs:
       # commit is already on gh-pages, so the very next build publishes it --
       # historically within about a minute. So rather than trusting the action's
       # outcome, wait for a Pages build that both succeeded and started after
-      # this deploy's commit landed (any such build necessarily contains it),
-      # then confirm the URL serves. Only if neither holds is the preview broken.
+      # this deploy's commit landed (any such build necessarily contains it).
+      # That build is authoritative: the public Pages edge can transiently
+      # return 403 after a successful build, so URL availability is reported as
+      # propagation state rather than making an otherwise successful deploy
+      # fail. Only the absence of both a fresh build and a serving URL is fatal.
       #
       # `deployed-commit-sha` is what separates the two failure modes. The
       # action sets it by reading gh-pages HEAD back *after* pushing, in a step
@@ -320,7 +323,7 @@ jobs:
             code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$PREVIEW_URL" || echo 000)
 
             # A 200 alone could still be the previous deploy of this same PR, so
-            # also require a successful Pages build that started after the push.
+            # prefer a successful Pages build that started after the push.
             # per_page=100 because the default page of this shared, frequently
             # built site can fill with other repositories' builds; the list is
             # used rather than /builds/latest because the newest build is often
@@ -343,14 +346,28 @@ jobs:
               echo "Attempt $attempt: HTTP $code, Pages builds API unreadable -- relying on the URL"
             fi
 
-            if [ "$code" = "200" ] && [ "$fresh" != "no" ]; then
+            if [ "$fresh" = "yes" ]; then
               echo "published=true" >> "$GITHUB_OUTPUT"
+              if [ "$code" = "200" ]; then
+                echo "available=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "available=false" >> "$GITHUB_OUTPUT"
+                echo "::warning::GitHub Pages built the preview successfully, but $PREVIEW_URL still returns HTTP $code. Treating the deploy as successful while the serving edge propagates."
+              fi
+              exit 0
+            fi
+
+            # If the builds API is unavailable, retain the URL-only fallback.
+            if [ "$code" = "200" ] && [ "$fresh" = "unknown" ]; then
+              echo "published=true" >> "$GITHUB_OUTPUT"
+              echo "available=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             [ "$(date -u +%s)" -lt "$deadline" ] || break
             sleep 30
           done
           echo "published=false" >> "$GITHUB_OUTPUT"
+          echo "available=false" >> "$GITHUB_OUTPUT"
           echo "::error::The preview at $PREVIEW_URL did not publish within 10 minutes."
           exit 1
 
@@ -369,6 +386,7 @@ jobs:
         env:
           PAGES_URL: ${{ steps.verify.outputs.url }}
           PAGES_OUTCOME: ${{ steps.verify.outputs.published == 'true' && 'success' || 'failure' }}
+          PAGES_AVAILABLE: ${{ steps.verify.outputs.available }}
           PR_NUMBER: ${{ needs.resolve.outputs.number }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         with:
@@ -380,7 +398,10 @@ jobs:
             const demo = succeeded
               ? `${pagesUrl}${pagesUrl.endsWith('/') ? '' : '/'}demo/`
               : 'Unavailable';
-            const body = `${marker}\n### 🔍 GitHub Pages PR preview\n\n| Item | Value |\n| --- | --- |\n| Site | ${site} |\n| Demo app | ${demo} |\n| Commit | \`${process.env.HEAD_SHA.slice(0, 7)}\` |`;
+            const propagation = succeeded && process.env.PAGES_AVAILABLE === 'false'
+              ? '\n\n> [!NOTE]\n> GitHub Pages built this preview successfully, but its serving edge was still propagating when checked. The links may briefly return HTTP 403.'
+              : '';
+            const body = `${marker}\n### 🔍 GitHub Pages PR preview\n\n| Item | Value |\n| --- | --- |\n| Site | ${site} |\n| Demo app | ${demo} |\n| Commit | \`${process.env.HEAD_SHA.slice(0, 7)}\` |${propagation}`;
             const { owner, repo } = context.repo;
             const issue_number = Number(process.env.PR_NUMBER);
             const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
