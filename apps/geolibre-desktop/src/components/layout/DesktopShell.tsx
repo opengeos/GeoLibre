@@ -2249,7 +2249,9 @@ export function DesktopShell({
                       onOpenRasterStylePanel={() =>
                         openRasterLayerPanel(createAppAPI(mapControllerRef))
                       }
-                      onOpenStylePanel={openStylePanel}
+                      onOpenStylePanel={
+                        layoutOptions.stylePanelVisible ? openStylePanel : undefined
+                      }
                       onOpenRasterSubset={setRasterSubsetLayer}
                       collapsed={collapsed}
                       onCollapsedChange={onCollapsedChange}
@@ -2273,7 +2275,7 @@ export function DesktopShell({
                     onOpenRasterStylePanel={() =>
                       openRasterLayerPanel(createAppAPI(mapControllerRef))
                     }
-                    onOpenStylePanel={openStylePanel}
+                    onOpenStylePanel={layoutOptions.stylePanelVisible ? openStylePanel : undefined}
                     onOpenRasterSubset={setRasterSubsetLayer}
                     autoCollapse={
                       storymapPresenting ||

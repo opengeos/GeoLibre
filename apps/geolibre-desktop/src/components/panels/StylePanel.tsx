@@ -1016,12 +1016,19 @@ export function StylePanel({
     },
     [isControlled, onCollapsedChange],
   );
+  // An explicit request (Layers → "Open Style panel") expands the panel from its
+  // rail. Skipped while `autoCollapse` holds it closed (the notebook or a
+  // story-map presentation owns the workspace), so a request made there cannot
+  // pop Style back open over them: the `autoCollapse` effect below acts only on
+  // transitions, so an expand that slipped through would stick until the
+  // notebook was closed and reopened. The request is still consumed so it does
+  // not fire later.
   const previousOpenRequest = useRef(openRequest);
   useEffect(() => {
     if (openRequest === previousOpenRequest.current) return;
     previousOpenRequest.current = openRequest;
-    setIsCollapsed(false);
-  }, [openRequest, setIsCollapsed]);
+    if (!autoCollapse) setIsCollapsed(false);
+  }, [autoCollapse, openRequest, setIsCollapsed]);
   // Collapse to the rail when `autoCollapse` flips on (e.g. the notebook opens),
   // and restore the prior expand/collapse state when it flips back off (notebook
   // closes). Both act only on the transition so the user can still toggle the
