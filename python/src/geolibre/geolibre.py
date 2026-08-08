@@ -960,13 +960,12 @@ class Map(anywidget.AnyWidget):
             # Access verifies that a stale handle has not been removed.
             layer._layer()
             return layer
-        try:
-            return self.get_layer(str(layer))
-        except ValueError:
-            match = self.find_layer(str(layer))
-            if match is not None:
-                return match
-        raise ValueError(f"No layer with id or name {layer!r}")
+        # Share the authoring resolver so scripting and the MCP tools agree on
+        # what a reference means: an id wins outright, then an exact name, then a
+        # case-insensitive one, and a name several layers share is an error rather
+        # than an arbitrary pick. `find_layer` returns the first name match by
+        # design (leafmap compatibility), so it is not the resolver for mutations.
+        return Layer(self, str(_authoring.find_layer(self.project, str(layer))["id"]))
 
     def set_layer_visibility(self, layer: str | Layer, visible: bool = True) -> None:
         """Show or hide a layer addressed by id, name, or layer handle."""
@@ -984,8 +983,9 @@ class Map(anywidget.AnyWidget):
     def move_layer(self, layer: str | Layer, index: int) -> None:
         """Move a layer to ``index`` in the project's draw order.
 
-        Negative indices follow normal Python insertion semantics: ``-1`` moves
-        the layer to the end. Out-of-range indices are clamped.
+        Negative indices count from the end the way sequence *indexing* does, so
+        ``-1`` moves the layer to the last position (not ``list.insert(-1, ...)``,
+        which would leave it second to last). Out-of-range indices are clamped.
         """
         handle = self._resolve_layer(layer)
 
@@ -998,7 +998,15 @@ class Map(anywidget.AnyWidget):
         self._update_project(_move)
 
     def duplicate_layer(self, layer: str | Layer, *, name: str | None = None) -> str:
-        """Duplicate a layer, returning the new layer id."""
+        """Duplicate a layer, returning the new layer id.
+
+        Raises:
+            ValueError: If ``name`` is the reserved basemap pseudo-id.
+        """
+        if name is not None:
+            # `_add_layer` appends straight to the project, so the check
+            # `rename_layer` gets from `update_layer` has to happen here.
+            _authoring._reject_reserved_name(name)
         source = copy.deepcopy(self._resolve_layer(layer)._layer())
         source["id"] = str(uuid.uuid4())
         source["name"] = name or f"{source.get('name', 'Layer')} copy"
@@ -1991,13 +1999,9 @@ class Map(anywidget.AnyWidget):
             lat: Latitude of the new center.
             zoom: Optional zoom level.
         """
-
-        def mutate(p: dict[str, Any]) -> None:
-            p["mapView"]["center"] = [float(lng), float(lat)]
-            if zoom is not None:
-                p["mapView"]["zoom"] = float(zoom)
-
-        self._update_project(mutate)
+        self._update_project(
+            lambda p: _authoring.set_view(p, center=(lng, lat), zoom=zoom),
+        )
 
     # leafmap compatibility alias for set_center
     set_center_zoom = set_center
@@ -2032,6 +2036,16 @@ class Map(anywidget.AnyWidget):
     def zoom(self) -> float:
         """The persisted camera zoom."""
         return float(self.project.get("mapView", {}).get("zoom", 0))
+
+    @property
+    def bearing(self) -> float:
+        """The persisted clockwise camera bearing in degrees."""
+        return float(self.project.get("mapView", {}).get("bearing", 0))
+
+    @property
+    def pitch(self) -> float:
+        """The persisted camera pitch in degrees."""
+        return float(self.project.get("mapView", {}).get("pitch", 0))
 
     @property
     def basemap(self) -> str | None:
@@ -2467,7 +2481,13 @@ class Layer:
 
     @property
     def index(self) -> int:
-        """The layer's current index in draw order."""
+        """The layer's current index in draw order.
+
+        Raises:
+            ValueError: If the layer has been removed, matching the other
+                accessors rather than raising ``StopIteration``.
+        """
+        self._layer()
         return next(i for i, layer in enumerate(self._map.layers) if layer.id == self._id)
 
     def set_style(self, **style: Any) -> None:

@@ -17,13 +17,13 @@ __all__ = [
     "Feature",
     "Layer",
     "Map",
+    "__version__",
     "basemap_catalog",
     "builtin_legend_names",
     "color_ramp_names",
     "describe_project",
     "load_project",
     "save_project",
-    "__version__",
 ]
 
 

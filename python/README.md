@@ -96,14 +96,16 @@ m.to_project()["mapView"]["center"]
 Layer handles provide the same operations in an object-oriented form:
 
 ```python
-roads = m.find_layer("Roads")
+m.add_geojson("https://example.com/roads.geojson", name="Roads")
+
+roads = m.find_layer("Roads")  # None when no layer has that name
 roads.opacity = 0.6
 roads.set_style(lineColor="#e63946", lineWidth=3)
 roads.move(0)
 
-print(roads.properties())       # sampled values for every property
+print(roads.properties())      # sampled values for every property
 print(roads.column("highway")) # one value per feature
-roads_copy = roads.duplicate(name="Roads — proposed")
+roads_copy = roads.duplicate(name="Roads (proposed)")
 ```
 
 For headless authoring and scripts that do not need a widget, commonly used

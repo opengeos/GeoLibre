@@ -673,6 +673,33 @@ def test_layer_handle_expanded_helpers(m):
     duplicate.move(0)
     assert duplicate.index == 0
 
+    duplicate.remove()
+    with pytest.raises(ValueError, match="no longer exists"):
+        duplicate.index
+
+
+def test_layer_reference_matching_is_shared_with_authoring(m):
+    first = m.add_geojson({"type": "FeatureCollection", "features": []}, name="Rivers")
+    m.add_geojson({"type": "FeatureCollection", "features": []}, name="Roads")
+
+    # Case-insensitive name matching, as `authoring.find_layer` defines it.
+    m.set_layer_opacity("rivers", 0.25)
+    assert m.get_layer(first).opacity == 0.25
+
+    # A name several layers share is an error, not an arbitrary pick.
+    m.add_geojson({"type": "FeatureCollection", "features": []}, name="Roads")
+    with pytest.raises(ValueError, match="2 layers are named"):
+        m.remove_layer("Roads")
+    with pytest.raises(ValueError, match="No layer matches"):
+        m.remove_layer("Nothing")
+
+
+def test_duplicate_layer_rejects_the_reserved_basemap_name(m):
+    layer_id = m.add_geojson({"type": "FeatureCollection", "features": []}, name="Data")
+    with pytest.raises(ValueError):
+        m.duplicate_layer(layer_id, name="__basemap__")
+    assert len(m.layers) == 1
+
 
 def test_persisted_camera_and_project_metadata_helpers(m):
     m.name = "My analysis"
@@ -683,8 +710,8 @@ def test_persisted_camera_and_project_metadata_helpers(m):
     assert m.name == "My analysis"
     assert m.center == (-80.0, 35.0)
     assert m.zoom == 6
-    assert m.project["mapView"]["bearing"] == 370
-    assert m.project["mapView"]["pitch"] == 85
+    assert m.bearing == 370
+    assert m.pitch == 85
     with pytest.raises(ValueError, match="non-empty"):
         m.name = "  "
 
@@ -693,6 +720,11 @@ def test_fit_project_bounds_is_browser_independent(m):
     m.fit_project_bounds([-10, -5, 10, 5])
     assert m.center == (0.0, 0.0)
     assert m.zoom > 0
+    assert "bbox" in m.project["mapView"]
+
+    # Recentering by hand leaves the fitted bbox describing a different extent.
+    m.set_center(20, 10)
+    assert "bbox" not in m.project["mapView"]
 
 
 def test_layer_zoom_to_sends_command(m, monkeypatch):
