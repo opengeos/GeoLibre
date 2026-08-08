@@ -1,10 +1,14 @@
 /** Temporary inverted-fill mask for the active Print Layout atlas feature. */
-import { buildInvertedMask } from "@geolibre/map";
+import { buildInvertedMask } from "@geolibre/map/derived-geometry";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 
 const SOURCE_ID = "geolibre-print-atlas-mask";
 const FILL_LAYER_ID = "geolibre-print-atlas-mask-fill";
+const featureCollections = new WeakMap<
+  Feature<Polygon | MultiPolygon>,
+  FeatureCollection<Polygon | MultiPolygon>
+>();
 
 /** Remove the atlas mask source and layer, if present. */
 export function clearAtlasFeatureMask(map: MapLibreMap): void {
@@ -24,10 +28,15 @@ export function showAtlasFeatureMask(map: MapLibreMap, feature: Feature | undefi
     clearAtlasFeatureMask(map);
     return false;
   }
-  const collection: FeatureCollection<Polygon | MultiPolygon> = {
-    type: "FeatureCollection",
-    features: [feature as Feature<Polygon | MultiPolygon>],
-  };
+  const polygonFeature = feature as Feature<Polygon | MultiPolygon>;
+  let collection = featureCollections.get(polygonFeature);
+  if (!collection) {
+    collection = {
+      type: "FeatureCollection",
+      features: [polygonFeature],
+    };
+    featureCollections.set(polygonFeature, collection);
+  }
   const mask = buildInvertedMask(collection);
   if (!mask) {
     clearAtlasFeatureMask(map);

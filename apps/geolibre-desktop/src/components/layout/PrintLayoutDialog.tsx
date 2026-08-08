@@ -1123,8 +1123,10 @@ export function PrintLayoutDialog({
   const displayTableRows = useMemo(
     () =>
       showDataTable
-        ? tableFilterToAtlasFeature && tableUsesAtlasLayer && currentAtlasPage
-          ? rowForAtlasFeature(tableAllRows, currentAtlasPage.sourceIndex)
+        ? tableFilterToAtlasFeature && tableUsesAtlasLayer
+          ? currentAtlasPage
+            ? rowForAtlasFeature(tableAllRows, currentAtlasPage.sourceIndex)
+            : []
           : rowsForBlock(tableFeatureInfos, tableAllRows, tableFilterToPage, displayFilterBounds)
         : [],
     [
