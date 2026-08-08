@@ -2022,6 +2022,11 @@ function drawLegend(
   },
 ): number {
   const pad = unit * 1.4;
+  const titleSize = unit * 2;
+  const labelSize = unit * 1.7;
+  const title = opts.title.trim();
+  const hasTitle = title.length > 0;
+  const chromeH = pad * 2 + (hasTitle ? titleSize + unit : 0);
   // Proportional sizes are MapLibre CSS-pixel radii. Size the legend column and
   // rows around their actual footprint after the captured map is fitted into
   // the page, so the ramp remains 1:1 with the symbols visible behind it.
@@ -2035,12 +2040,23 @@ function drawLegend(
       ),
     0,
   );
-  const swatch = Math.max(unit * 2, maxSizedRadius * 2);
+  const wantedSwatch = Math.max(unit * 2, maxSizedRadius * 2);
+  // A map symbol's size is independent of the page, so 1:1 sizing alone would
+  // let one outlier circle push rowH past the height the caller allows — and
+  // the truncation below then draws *nothing*, blanking unrelated normally
+  // sized entries too. Hold any single row to a quarter of the space left after
+  // chrome, so a layer heading, two class rows and the "+N more" note always
+  // survive: an extreme ramp then merely stops being 1:1 with the map instead
+  // of costing the reader the whole legend.
+  const swatchCap =
+    opts.maxHeight === undefined
+      ? Infinity
+      : Math.max(unit * 2, (opts.maxHeight - chromeH) / 4 - unit * 0.6);
+  const swatch = Math.min(wantedSwatch, swatchCap);
   const rowH = Math.max(unit * 2.6, swatch + unit * 0.6);
-  const titleSize = unit * 2;
-  const labelSize = unit * 1.7;
-  const title = opts.title.trim();
-  const hasTitle = title.length > 0;
+  // Shrink every sized symbol by the same factor when the cap bites, so the
+  // ratios within a ramp survive and nothing overflows its swatch box.
+  const symbolScale = opts.mapSymbolScale * (swatch < wantedSwatch ? swatch / wantedSwatch : 1);
 
   // Flatten entries into drawable rows. Single-swatch entries render inline; a
   // multi-class entry renders a layer heading (when groupByLayer is on) above
@@ -2100,14 +2116,14 @@ function drawLegend(
   let hiddenRows = 0;
   const maxHeight = opts.maxHeight;
   if (maxHeight !== undefined) {
-    const chromeH = pad * 2 + (hasTitle ? titleSize + unit : 0);
     if (chromeH + rows.length * rowH > maxHeight) {
       const fitRows = Math.max(0, Math.floor((maxHeight - chromeH - rowH) / rowH));
       // Not even one row plus its note fits. Drawing anyway would produce a box
       // taller than the caller allotted whose only content is "+N more", so
       // draw nothing and report no height. Defensive: every unit here scales
-      // with the page, so drawLayout's own maxHeight always clears ~24 rows
-      // whatever the paper size. Safe to return early — ctx.save() is below.
+      // with the page — proportional rows included, thanks to swatchCap — so
+      // drawLayout's own maxHeight always clears at least one row plus the
+      // note whatever the paper size. Safe to return early — ctx.save() is below.
       if (fitRows === 0) return 0;
       if (fitRows < rows.length) {
         // A layer heading only means something with class rows under it, so a
@@ -2174,8 +2190,7 @@ function drawLegend(
       // through icon-size, so draw the marker at the same footprint the circle
       // branch below would use (same center, edge = 2 × radius) rather than at
       // the fixed swatch box, which would flatten the whole ramp.
-      const edge =
-        r.size !== undefined ? Math.max(unit * 0.7, r.size * opts.mapSymbolScale * 2) : swatch;
+      const edge = r.size !== undefined ? Math.max(unit * 0.7, r.size * symbolScale * 2) : swatch;
       const inset = (swatch - edge) / 2;
       drawLegendMarker(
         ctx,
@@ -2188,7 +2203,7 @@ function drawLegend(
         r.size === undefined,
       );
     } else if (r.size !== undefined && r.color) {
-      const radius = Math.max(unit * 0.35, r.size * opts.mapSymbolScale);
+      const radius = Math.max(unit * 0.35, r.size * symbolScale);
       const cx = sx + swatch / 2;
       const cyc = sy + swatch / 2;
       ctx.beginPath();

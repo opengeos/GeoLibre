@@ -365,7 +365,7 @@ describe("drawLayout legend rendering", () => {
       {
         id: "ruchers",
         name: "Ruchers",
-        swatches: [{ color: "#3b82f6", label: "86", size: 24, marker }],
+        swatches: [{ color: "#3b82f6", label: "86", size: 16, marker }],
       },
     ];
     const render = (mapImageWidth: number) => {
@@ -385,9 +385,40 @@ describe("drawLayout legend rendering", () => {
     };
 
     // A 400 px square page with normal margins has a 360 px map body. At DPR 2,
-    // a 24 CSS-px radius is a 48 device-px radius before the map fit is applied.
-    assert.equal(render(400), 86.4);
-    assert.equal(render(800), 43.2);
+    // a 16 CSS-px radius is a 32 device-px radius before the map fit is applied.
+    // (Kept under the swatch cap below so this asserts the fit scaling alone.)
+    assert.equal(render(400), 57.6);
+    assert.equal(render(800), 28.8);
+  });
+
+  it("caps an outsized proportional symbol instead of blanking the legend box", () => {
+    // A live-map radius far larger than the page: sized 1:1 it would make one
+    // row taller than the whole map body, and the truncation rule would drop
+    // the entire box — including the unrelated entry below it.
+    const legend: LegendEntry[] = [
+      {
+        id: "hives",
+        name: "Hives",
+        swatches: [
+          { color: "#3b82f6", label: "1", size: 4 },
+          { color: "#3b82f6", label: "9000", size: 900 },
+        ],
+      },
+    ];
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend,
+        mapImage: {} as CanvasImageSource,
+        mapImageWidth: 400,
+        mapImageHeight: 400,
+        mapPixelRatio: 2,
+      }),
+    );
+    const texts = rec.fills.map((f) => f.text);
+    assert.ok(texts.includes("Hives"), `legend was blanked: ${texts.join()}`);
+    assert.ok(texts.includes("1") && texts.includes("9000"), `rows elided: ${texts.join()}`);
   });
 
   it("falls back to a color square when a custom SVG marker icon is not preloaded", () => {
