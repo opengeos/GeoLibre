@@ -17,6 +17,7 @@ class FakeMap {
   sources = new Map<string, FakeSource>();
   addedBeforeLayerId: string | undefined;
   movedBeforeLayerId: string | undefined;
+  moveLayerCallCount = 0;
 
   getLayer(id: string) {
     return this.layers.get(id);
@@ -28,6 +29,7 @@ class FakeMap {
   }
 
   moveLayer(_id: string, beforeLayerId?: string) {
+    this.moveLayerCallCount += 1;
     this.movedBeforeLayerId = beforeLayerId;
   }
 
@@ -116,6 +118,7 @@ describe("atlas feature mask", () => {
     map.layers.set("graticule-labels", {});
 
     showAtlasFeatureMask(map as never, polygon, "graticule-labels");
+    assert.equal(map.moveLayerCallCount, 1);
     assert.equal(map.movedBeforeLayerId, "graticule-labels");
   });
 
@@ -124,7 +127,7 @@ describe("atlas feature mask", () => {
     showAtlasFeatureMask(map as never, polygon);
 
     showAtlasFeatureMask(map as never, polygon, "geolibre-print-atlas-mask-fill");
-    assert.equal(map.movedBeforeLayerId, undefined);
+    assert.equal(map.moveLayerCallCount, 0);
   });
 
   it("rejects a non-polygon feature and removes any previous mask", () => {

@@ -1242,7 +1242,9 @@ export function PrintLayoutDialog({
           coverageFeature,
           containMap ? GRATICULE_LABEL_LAYER_ID : undefined,
         );
-      } else clearAtlasFeatureMask(map);
+      } else {
+        clearAtlasFeatureMask(map);
+      }
       const [w, s, e, n] = expandBounds(page.bounds, atlasFitMarginPct);
       map.fitBounds(
         [
