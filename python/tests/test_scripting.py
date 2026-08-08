@@ -675,7 +675,7 @@ def test_layer_handle_expanded_helpers(m):
 
     duplicate.remove()
     with pytest.raises(ValueError, match="no longer exists"):
-        duplicate.index
+        _ = duplicate.index
 
 
 def test_layer_reference_matching_is_shared_with_authoring(m):
@@ -696,7 +696,7 @@ def test_layer_reference_matching_is_shared_with_authoring(m):
 
 def test_duplicate_layer_rejects_the_reserved_basemap_name(m):
     layer_id = m.add_geojson({"type": "FeatureCollection", "features": []}, name="Data")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="reserved for the basemap"):
         m.duplicate_layer(layer_id, name="__basemap__")
     assert len(m.layers) == 1
 
