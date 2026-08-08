@@ -249,7 +249,7 @@ Threshold constants in the source (all verifiable):
 |---|---|---|---|
 | `LARGE_VECTOR_FEATURE_THRESHOLD` | **50,000** | `core/src/types.ts:670` | Main-thread GeoJSON parsing |
 | `maxHistoryFeatureCount` | 500,000 | `core/src/history.ts:29` | Undo stack memory |
-| `DUCKDB_VECTOR_FEATURE_WARN_COUNT` | 500,000 | `lib/duckdb-vector-guard.ts:19` | Result materialization memory |
+| `DUCKDB_VECTOR_FEATURE_WARN_COUNT` | 100,000 | `core/src/types.ts:1838` | Result materialization memory |
 | `MAX_CEREUS_FEATURES` | 50,000 | `lib/sedona-workspace.ts:25` | WASM heap |
 | `MAX_DERIVED_FEATURES` | 50,000 | `map/src/derived-geometry.ts:37` | Derived geometry computation |
 | `historyCoalesceMs` | 400 ms | `core/src/history.ts:6` | Undo record explosion |
@@ -413,7 +413,7 @@ This minimalism is deliberate. The smaller the state, the greater the confidence
 
 **Pattern 3: Cross-language boundaries marked with `SYNC:`.** This was the most surprising discovery from reading through the source.
 
-The 17 vector file extensions exist as `VECTOR_FILE_DIALOG_EXTENSIONS` in TypeScript (`lib/tauri-io.ts:154`) and as `RESTORABLE_VECTOR_EXTENSIONS: [&str; 17]` in Rust (`src-tauri/src/lib.rs:414`) — **two copies, because constants can't be shared across languages**. Their solution is to annotate both sides. Quoted verbatim from `lib/tauri-io.ts:150-153`:
+The 17 vector file extensions exist as `VECTOR_FILE_DIALOG_EXTENSIONS` in TypeScript (`lib/tauri-io.ts:154`) and as `RESTORABLE_VECTOR_EXTENSIONS: [&str; 17]` in Rust (`src-tauri/src/lib.rs:418`) — **two copies, because constants can't be shared across languages**. Their solution is to annotate both sides. Quoted verbatim from `lib/tauri-io.ts:150-153`:
 
 > SYNC: RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/lib.rs must list the same extensions, or a format added here would be rejected by the Rust restore guard on every project reopen (**the bug this PR fixes**). Grep "SYNC:" to find the partner list.
 

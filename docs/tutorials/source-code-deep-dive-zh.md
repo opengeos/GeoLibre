@@ -250,7 +250,7 @@ compile_error!("the `mas` (Mac App Store) build must not enable `native-duckdb`:
 |---|---|---|---|
 | `LARGE_VECTOR_FEATURE_THRESHOLD` | **50,000** | `core/src/types.ts:670` | 主线程 GeoJSON 解析 |
 | `maxHistoryFeatureCount` | 500,000 | `core/src/history.ts:29` | 撤销栈内存 |
-| `DUCKDB_VECTOR_FEATURE_WARN_COUNT` | 500,000 | `lib/duckdb-vector-guard.ts:19` | 结果物化内存 |
+| `DUCKDB_VECTOR_FEATURE_WARN_COUNT` | 100,000 | `core/src/types.ts:1838` | 结果物化内存 |
 | `MAX_CEREUS_FEATURES` | 50,000 | `lib/sedona-workspace.ts:25` | WASM 堆 |
 | `MAX_DERIVED_FEATURES` | 50,000 | `map/src/derived-geometry.ts:37` | 派生几何计算 |
 | `historyCoalesceMs` | 400 ms | `core/src/history.ts:6` | 撤销记录爆炸 |
@@ -414,7 +414,7 @@ export interface MapViewState {
 
 **模式三，跨语言边界用 `SYNC:` 标记。** 这是翻阅源码过程中最意外的收获。
 
-那 17 个矢量扩展名，在 TS 里是 `VECTOR_FILE_DIALOG_EXTENSIONS`（`lib/tauri-io.ts:153`），在 Rust 里是 `RESTORABLE_VECTOR_EXTENSIONS: [&str; 17]`（`src-tauri/src/lib.rs:414`）——**两份，因为跨语言没法共享常量**。他们的处理是在两边都写注释：
+那 17 个矢量扩展名，在 TS 里是 `VECTOR_FILE_DIALOG_EXTENSIONS`（`lib/tauri-io.ts:154`），在 Rust 里是 `RESTORABLE_VECTOR_EXTENSIONS: [&str; 17]`（`src-tauri/src/lib.rs:418`）——**两份，因为跨语言没法共享常量**。他们的处理是在两边都写注释，下面这段原样引自 `lib/tauri-io.ts:150-153`：
 
 > SYNC: RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/lib.rs must list the same extensions, or a format added here would be rejected by the Rust restore guard on every project reopen (**the bug this PR fixes**). Grep "SYNC:" to find the partner list.
 
