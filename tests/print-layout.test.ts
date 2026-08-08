@@ -357,6 +357,39 @@ describe("drawLayout legend rendering", () => {
     );
   });
 
+  it("matches proportional legend markers to the fitted map image scale", () => {
+    const svg = "<svg/>";
+    const image = {} as unknown as CanvasImageSource;
+    const marker = { shape: "custom", color: "#3b82f6", svg } as const;
+    const legend: LegendEntry[] = [
+      {
+        id: "ruchers",
+        name: "Ruchers",
+        swatches: [{ color: "#3b82f6", label: "86", size: 24, marker }],
+      },
+    ];
+    const render = (mapImageWidth: number) => {
+      const rec = recordingCanvas();
+      drawLayout(
+        rec.canvas,
+        baseOptions({
+          legend,
+          markerIcons: new Map([[svg, image]]),
+          mapImage: {} as CanvasImageSource,
+          mapImageWidth,
+          mapImageHeight: mapImageWidth,
+          mapPixelRatio: 2,
+        }),
+      );
+      return rec.imageBoxes.at(-1)!.w;
+    };
+
+    // A 400 px square page with normal margins has a 360 px map body. At DPR 2,
+    // a 24 CSS-px radius is a 48 device-px radius before the map fit is applied.
+    assert.equal(render(400), 86.4);
+    assert.equal(render(800), 43.2);
+  });
+
   it("falls back to a color square when a custom SVG marker icon is not preloaded", () => {
     const svg = "<svg/>";
     const rec = recordingCanvas();

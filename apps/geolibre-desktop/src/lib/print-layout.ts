@@ -441,6 +441,8 @@ export interface LayoutOptions {
   markerIcons?: ReadonlyMap<string, CanvasImageSource>;
   /** Ground metres per source-image pixel at the map centre. */
   metersPerPixel: number;
+  /** Device pixels per CSS pixel in the captured map image. */
+  mapPixelRatio?: number;
   /** Map bearing in degrees clockwise from north. */
   bearingDeg: number;
   /** The captured map image (already composited). */
@@ -888,6 +890,10 @@ export function drawLayout(canvas: HTMLCanvasElement, opts: LayoutOptions): void
       title: opts.legendTitle,
       groupByLayer: opts.legendGroupByLayer,
       markerIcons: opts.markerIcons,
+      // Legend sizes are stored in MapLibre CSS pixels. The capture is in
+      // device pixels and is then fitted into the page body, so apply both
+      // transforms to make the legend symbols match their map counterparts.
+      mapSymbolScale: Math.max(0, (opts.mapPixelRatio ?? 1) * coverScale),
       maxHeight: bodyH - inset * 2,
       formatNote: opts.legendFormatNote,
     });
@@ -2008,22 +2014,29 @@ function drawLegend(
     title: string;
     groupByLayer: boolean;
     markerIcons?: ReadonlyMap<string, CanvasImageSource>;
+    /** Output pixels per MapLibre CSS pixel in the composed map image. */
+    mapSymbolScale: number;
     /** Vertical space the box may occupy before rows are elided. */
     maxHeight?: number;
     formatNote?: (count: number) => string;
   },
 ): number {
   const pad = unit * 1.4;
-  // Proportional-symbol rows are only as faithful as the box they fit in: a
-  // swatch column sized for a text-height color square crushes a 4 → 24 px ramp
-  // into near-identical dots. When any entry carries sized symbols, the whole
-  // box grows (uniformly, so rows stay evenly spaced) and the ramp reads at
-  // roughly the ratios the map draws.
-  const hasSizedSwatch = entries.some((entry) =>
-    entry.swatches.some((entrySwatch) => entrySwatch.size !== undefined),
+  // Proportional sizes are MapLibre CSS-pixel radii. Size the legend column and
+  // rows around their actual footprint after the captured map is fitted into
+  // the page, so the ramp remains 1:1 with the symbols visible behind it.
+  const maxSizedRadius = entries.reduce(
+    (max, entry) =>
+      Math.max(
+        max,
+        ...entry.swatches.map((entrySwatch) =>
+          entrySwatch.size === undefined ? 0 : entrySwatch.size * opts.mapSymbolScale,
+        ),
+      ),
+    0,
   );
-  const rowH = unit * (hasSizedSwatch ? 3.6 : 2.6);
-  const swatch = unit * (hasSizedSwatch ? 3 : 2);
+  const swatch = Math.max(unit * 2, maxSizedRadius * 2);
+  const rowH = Math.max(unit * 2.6, swatch + unit * 0.6);
   const titleSize = unit * 2;
   const labelSize = unit * 1.7;
   const title = opts.title.trim();
@@ -2112,22 +2125,6 @@ function drawLegend(
   const note = hiddenRows > 0 ? (opts.formatNote?.(hiddenRows) ?? `+${hiddenRows} more`) : "";
   const hasNote = note.length > 0;
 
-  // Cap proportional circles so a huge max radius still fits the legend box,
-  // while keeping ratios within each entry (same idea as the on-map LegendSwatch).
-  const MAX_CIRCLE_R = swatch * 0.55;
-  const entryMaxSize = new Map<string, number>();
-  for (const r of rows) {
-    if (r.size === undefined) continue;
-    entryMaxSize.set(r.entryId, Math.max(entryMaxSize.get(r.entryId) ?? 0, r.size));
-  }
-  const entryScale = new Map<string, number>();
-  for (const [entryId, maxSize] of entryMaxSize) {
-    entryScale.set(entryId, maxSize > MAX_CIRCLE_R ? MAX_CIRCLE_R / maxSize : 1);
-  }
-  const rowScale: number[] = rows.map((r) =>
-    r.size !== undefined ? (entryScale.get(r.entryId) ?? 1) : 1,
-  );
-
   // Measure required width.
   ctx.save();
   ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
@@ -2166,8 +2163,7 @@ function drawLegend(
     cy += unit;
   }
 
-  for (let index = 0; index < rows.length; index++) {
-    const r = rows[index]!;
+  for (const r of rows) {
     cy += rowH;
     const hasSwatch = rowHasSwatch(r);
     const textX = hasSwatch ? x + pad + swatch + unit : x + pad;
@@ -2179,7 +2175,7 @@ function drawLegend(
       // branch below would use (same center, edge = 2 × radius) rather than at
       // the fixed swatch box, which would flatten the whole ramp.
       const edge =
-        r.size !== undefined ? Math.max(unit * 0.7, r.size * rowScale[index]! * 2) : swatch;
+        r.size !== undefined ? Math.max(unit * 0.7, r.size * opts.mapSymbolScale * 2) : swatch;
       const inset = (swatch - edge) / 2;
       drawLegendMarker(
         ctx,
@@ -2192,7 +2188,7 @@ function drawLegend(
         r.size === undefined,
       );
     } else if (r.size !== undefined && r.color) {
-      const radius = Math.max(unit * 0.35, r.size * rowScale[index]!);
+      const radius = Math.max(unit * 0.35, r.size * opts.mapSymbolScale);
       const cx = sx + swatch / 2;
       const cyc = sy + swatch / 2;
       ctx.beginPath();
