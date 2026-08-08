@@ -421,6 +421,37 @@ describe("drawLayout legend rendering", () => {
     assert.ok(texts.includes("1") && texts.includes("9000"), `rows elided: ${texts.join()}`);
   });
 
+  it("scopes the outsized-symbol shrink to the entry that overflowed", () => {
+    const svg = "<svg/>";
+    const image = {} as unknown as CanvasImageSource;
+    const marker = { shape: "custom", color: "#3b82f6", svg } as const;
+    // Two proportional layers sharing one legend: only the first overflows the
+    // swatch column, so the second must still draw 1:1 with the map.
+    const legend: LegendEntry[] = [
+      {
+        id: "hives",
+        name: "Hives",
+        swatches: [{ color: "#3b82f6", label: "9000", size: 900, marker }],
+      },
+      { id: "wells", name: "Wells", swatches: [{ color: "#3b82f6", label: "3", size: 8, marker }] },
+    ];
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend,
+        markerIcons: new Map([[svg, image]]),
+        mapImage: {} as CanvasImageSource,
+        mapImageWidth: 400,
+        mapImageHeight: 400,
+        mapPixelRatio: 2,
+      }),
+    );
+    // mapSymbolScale is 2 (DPR) × 0.9 (map fit), so the modest 8 px radius is a
+    // 14.4 px radius, i.e. a 28.8 px box — untouched by the outlier's shrink.
+    assert.equal(rec.imageBoxes.at(-1)!.w, 28.8);
+  });
+
   it("falls back to a color square when a custom SVG marker icon is not preloaded", () => {
     const svg = "<svg/>";
     const rec = recordingCanvas();

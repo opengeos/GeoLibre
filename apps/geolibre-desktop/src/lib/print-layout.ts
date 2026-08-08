@@ -2054,9 +2054,24 @@ function drawLegend(
       : Math.max(unit * 2, (opts.maxHeight - chromeH) / 4 - unit * 0.6);
   const swatch = Math.min(wantedSwatch, swatchCap);
   const rowH = Math.max(unit * 2.6, swatch + unit * 0.6);
-  // Shrink every sized symbol by the same factor when the cap bites, so the
-  // ratios within a ramp survive and nothing overflows its swatch box.
-  const symbolScale = opts.mapSymbolScale * (swatch < wantedSwatch ? swatch / wantedSwatch : 1);
+  // The swatch column is legend-wide, so the cap above has to be too — but the
+  // shrink it forces is scoped to the entry that overflowed, the same rule the
+  // on-map MapLegendPanel applies. One entry's ramp keeps its ratios, and a
+  // neighbouring layer whose symbols already fit still renders 1:1 with the map.
+  const entryScale = new Map<string, number>();
+  for (const entry of entries) {
+    const entryMax = entry.swatches.reduce(
+      (max, entrySwatch) =>
+        entrySwatch.size === undefined
+          ? max
+          : Math.max(max, entrySwatch.size * opts.mapSymbolScale),
+      0,
+    );
+    entryScale.set(entry.id, entryMax > swatch / 2 ? swatch / 2 / entryMax : 1);
+  }
+  /** A sized row's drawn radius in output pixels, after any per-entry shrink. */
+  const sizedRadius = (entryId: string, size: number): number =>
+    size * opts.mapSymbolScale * (entryScale.get(entryId) ?? 1);
 
   // Flatten entries into drawable rows. Single-swatch entries render inline; a
   // multi-class entry renders a layer heading (when groupByLayer is on) above
@@ -2190,7 +2205,8 @@ function drawLegend(
       // through icon-size, so draw the marker at the same footprint the circle
       // branch below would use (same center, edge = 2 × radius) rather than at
       // the fixed swatch box, which would flatten the whole ramp.
-      const edge = r.size !== undefined ? Math.max(unit * 0.7, r.size * symbolScale * 2) : swatch;
+      const edge =
+        r.size !== undefined ? Math.max(unit * 0.7, sizedRadius(r.entryId, r.size) * 2) : swatch;
       const inset = (swatch - edge) / 2;
       drawLegendMarker(
         ctx,
@@ -2203,7 +2219,7 @@ function drawLegend(
         r.size === undefined,
       );
     } else if (r.size !== undefined && r.color) {
-      const radius = Math.max(unit * 0.35, r.size * symbolScale);
+      const radius = Math.max(unit * 0.35, sizedRadius(r.entryId, r.size));
       const cx = sx + swatch / 2;
       const cyc = sy + swatch / 2;
       ctx.beginPath();
