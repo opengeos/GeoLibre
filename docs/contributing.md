@@ -197,6 +197,42 @@ links and pages left out of the navigation fail the build. Link to other docs
 pages with a relative path (for example `architecture.md`), and link to files
 outside `docs/` with a full GitHub URL.
 
+### Images, demos, and sample data
+
+**Do not commit screenshots, GIFs, videos, or sample datasets to this
+repository.** Binaries are never really deleted from Git history, so every one
+of them permanently enlarges the clone for everyone, including CI.
+
+Put them in [opengeos/geolibre-assets](https://github.com/opengeos/geolibre-assets)
+instead. Anything on that repository's `main` branch is published at the
+matching path under <https://assets.geolibre.app> within about a minute:
+
+| Repository path       | Published URL                                        |
+| --------------------- | ---------------------------------------------------- |
+| `images/my-panel.webp` | `https://assets.geolibre.app/images/my-panel.webp`   |
+| `demos/my-demo.gif`    | `https://assets.geolibre.app/demos/my-demo.gif`      |
+| `data/sample.parquet`  | `https://assets.geolibre.app/data/sample.parquet`    |
+
+Then reference the absolute URL from your Markdown:
+
+```markdown
+![Raster style panel](https://assets.geolibre.app/images/raster-style-panel.webp)
+```
+
+A few things worth knowing:
+
+- Use `images/` for stills, `demos/` for animations and screen recordings,
+  `data/` for sample datasets, and `styles/` or `fonts/` for map resources.
+- Prefer **WebP** or AVIF for stills, and PMTiles or GeoParquet for data. The
+  screenshots on this site are WebP.
+- Published paths are effectively permanent. Renaming or deleting a file breaks
+  every page already pointing at it, so pick the name once.
+- Assets are served with permissive CORS, so the app can fetch them
+  cross-origin.
+
+The only images that belong in this repository are the handful of site chrome
+files under `docs/assets/` (the logo and favicon referenced from `mkdocs.yml`).
+
 ## Plugins and extensions
 
 GeoLibre supports external plugins loaded from a zip, a local directory, or a
