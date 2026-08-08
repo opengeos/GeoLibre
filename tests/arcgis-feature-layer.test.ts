@@ -463,6 +463,72 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.equal(layer?.geojson?.features.length, 1, "the shared feature is published once");
   });
 
+  // The exact body Vicmap_Parcel returns (with HTTP 200) when it exceeds its
+  // own query timeout on a wide extent — it blames the parameters, which are
+  // correct: the identical request succeeds on a retry (GeoLibre#1756).
+  const TIMEOUT_ENVELOPE = {
+    error: {
+      code: 400,
+      message: "",
+      details: ["Unable to perform query. Please check your parameters."],
+    },
+  };
+
+  /** Answers the first `failures` viewport queries with a service timeout. */
+  function timingOutService(failures: number) {
+    const state = { attempts: 0 };
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(VIEWPORT_LAYER_INFO);
+      if (Number(url.searchParams.get("resultOffset") ?? "0") > 0) {
+        return jsonResponse({ type: "FeatureCollection", features: [] });
+      }
+      state.attempts += 1;
+      return state.attempts <= failures
+        ? jsonResponse(TIMEOUT_ENVELOPE)
+        : jsonResponse({ type: "FeatureCollection", features: [viewportFeature(1)] });
+    }) as typeof fetch;
+    return state;
+  }
+
+  async function addViewportLayer(): Promise<string> {
+    const view = fakeViewportMap([144, -39, 146, -37]);
+    app = {
+      getMap: () => view.map,
+      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+    await settle();
+    return id;
+  }
+
+  it("retries a viewport query the service timed out on", async () => {
+    const state = timingOutService(1);
+    const id = await addViewportLayer();
+
+    assert.equal(state.attempts, 2, "the timed-out query is retried once");
+    const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
+    assert.equal(layer?.geojson?.features.length, 1, "the retry's features are published");
+    assert.equal(layer?.connection?.lastError ?? null, null, "a recovered query reports no error");
+  });
+
+  it("reports actionable guidance when the retry times out too", async () => {
+    const state = timingOutService(Number.POSITIVE_INFINITY);
+    const id = await addViewportLayer();
+
+    assert.equal(state.attempts, 2, "retried once, not indefinitely");
+    const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
+    // Not ArcGIS's own "check your parameters", which sends the user nowhere.
+    assert.match(
+      layer?.connection?.lastError ?? "",
+      /did not return features for this extent in time/,
+    );
+  });
+
   it("re-binds a reopened project's layer to the viewport", async () => {
     const geometries: string[] = [];
     let metadataFailures = 1;

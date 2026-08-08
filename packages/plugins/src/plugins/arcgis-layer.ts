@@ -523,12 +523,16 @@ function startArcGISViewportLoader(
         return;
       }
       useAppStore.getState().updateLayer(layerId, { geojson: collect() });
+      // Clear as soon as the service answers at all, not when the whole walk
+      // finishes: a dense extent pages for tens of seconds, and leaving a stale
+      // "zoom in" on screen while its features stream in reads as a live error.
+      reportArcGISViewportError(layerId, null);
     };
     // `allSettled`, not `all`: a split viewport must not report a failure while
     // its surviving half is still running, or that half's later pages would
     // publish over an already-reported error with nothing to clear it.
-    const results = await Promise.allSettled(
-      envelopes.map(async (envelope, index) => {
+    const walk = async (envelope: ArcGISEnvelope, index: number, attempt = 0): Promise<void> => {
+      try {
         const data = await fetchArcGISFeaturePages(queryUrl, queryOptions, layerInfo, {
           params: {
             geometry: envelope.join(","),
@@ -544,8 +548,17 @@ function startArcGISViewportLoader(
         });
         pages[index] = data.features;
         publish();
-      }),
-    );
+      } catch (error) {
+        // The service timing out under load is the common failure on a wide
+        // extent, and it clears on a retry far more often than not, so one is
+        // worth the wait rather than leaving the user an empty layer.
+        if (attempt === 0 && !controller.signal.aborted && isArcGISTransientQueryError(error)) {
+          return walk(envelope, index, attempt + 1);
+        }
+        throw error;
+      }
+    };
+    const results = await Promise.allSettled(envelopes.map((e, index) => walk(e, index)));
     if (sequence !== requestSequence) return currentArcGISLayerGeojson(layerId);
     // One half failing still leaves the other's features on the map; the error
     // says the view is incomplete rather than pretending it is whole.
@@ -556,7 +569,16 @@ function startArcGISViewportLoader(
   };
 
   const move = (): void => {
-    void load().catch((error: unknown) => handleArcGISViewportError(layerId, error));
+    void load().catch((error: unknown) => {
+      // A timeout that survived its retry gets guidance the user can act on;
+      // ArcGIS's own wording for it blames the query parameters, which are fine.
+      if (isArcGISTransientQueryError(error)) {
+        console.error("[GeoLibre] ArcGIS viewport query timed out", error);
+        reportArcGISViewportError(layerId, ARCGIS_VIEWPORT_TIMEOUT);
+        return;
+      }
+      handleArcGISViewportError(layerId, error);
+    });
   };
   loader.load = load;
   loader.move = move;
@@ -681,6 +703,33 @@ function handleArcGISViewportError(layerId: string, error: unknown): void {
 
 function isArcGISAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
+}
+
+/**
+ * Shown when the service gave up on a viewport query. Deliberately not the
+ * service's own wording: ArcGIS reports its timeout as a 400 blaming the query
+ * parameters, which are correct — the identical request succeeds on a retry.
+ */
+const ARCGIS_VIEWPORT_TIMEOUT =
+  "The ArcGIS service did not return features for this extent in time. Pan or zoom to try again, or zoom in to request fewer features.";
+
+/**
+ * Whether a failed query is worth retrying rather than reporting verbatim.
+ *
+ * A dense feature service can take tens of seconds to answer a geometry-bearing
+ * query over a wide envelope, and exceeds its own timeout when it is busy. It
+ * reports that either as a gateway/timeout status or — confusingly — as an
+ * error envelope with `code` 400 whose detail reads "Unable to perform query.
+ * Please check your parameters."
+ *
+ * Measured against Vicmap_Parcel (GeoLibre#1756): the same 0.25° envelope that
+ * failed six times running at ~56s later succeeded three times running in
+ * 19-34s. The failure is load, not the request.
+ */
+function isArcGISTransientQueryError(error: unknown): boolean {
+  if (!(error instanceof ArcGISQueryError)) return false;
+  if (error.status !== null) return [408, 429, 500, 502, 503, 504].includes(error.status);
+  return error.code === 400 && /unable to perform query/i.test(error.message);
 }
 
 /** The features a layer currently holds, for a query that has nothing newer. */
@@ -1534,8 +1583,30 @@ function finishArcGISPaging(
 
 /** The JSON error envelope ArcGIS returns, usually with an HTTP 200 status. */
 interface ArcGISErrorEnvelope {
+  code?: unknown;
   message?: string;
   details?: unknown;
+}
+
+/**
+ * A `/query` the service answered with a failure, carrying enough of that
+ * failure to tell "this extent is too much for me" apart from a fault the user
+ * could act on differently. ArcGIS reports the former either as a gateway
+ * timeout or — confusingly — as an error envelope whose `code` is 400 and whose
+ * detail blames the parameters, which are in fact fine: the identical query
+ * over a smaller extent succeeds.
+ */
+class ArcGISQueryError extends Error {
+  /** HTTP status, when the transport itself failed. */
+  readonly status: number | null;
+  /** `error.code` from an ArcGIS error envelope returned with HTTP 200. */
+  readonly code: number | null;
+  constructor(message: string, source: { status?: number | null; code?: number | null } = {}) {
+    super(message);
+    this.name = "ArcGISQueryError";
+    this.status = source.status ?? null;
+    this.code = source.code ?? null;
+  }
 }
 
 /**
@@ -1577,7 +1648,9 @@ async function fetchArcGISGeoJson(
 ): Promise<FeatureCollection & { exceededTransferLimit: boolean }> {
   const response = await fetch(url, { signal });
   if (!response.ok) {
-    throw new Error(`ArcGIS feature query failed with ${response.status}.`);
+    throw new ArcGISQueryError(`ArcGIS feature query failed with ${response.status}.`, {
+      status: response.status,
+    });
   }
   // ArcGIS Enterprise (and services behind a WAF) can answer 200 with an HTML
   // login/redirect page when a token is missing or expired. Read the body as
@@ -1600,7 +1673,9 @@ async function fetchArcGISGeoJson(
     throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
   }
   if (json.error) {
-    throw new Error(arcgisErrorMessage(json.error, "ArcGIS feature query failed."));
+    throw new ArcGISQueryError(arcgisErrorMessage(json.error, "ArcGIS feature query failed."), {
+      code: typeof json.error.code === "number" ? json.error.code : null,
+    });
   }
   if (json.type !== "FeatureCollection" || !Array.isArray(json.features)) {
     throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
