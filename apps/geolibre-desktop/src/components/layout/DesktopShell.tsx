@@ -2227,7 +2227,9 @@ export function DesktopShell({
                   // On a phone-width viewport both start collapsed (panels overlay
                   // there), matching the mobile "panels default collapsed" behavior.
                   initialBuiltinExpanded={
-                    replaceLayersPanelId === BROWSER_PANEL_ID && !getIsMobileViewport()
+                    replaceLayersPanelId === BROWSER_PANEL_ID &&
+                    !getIsMobileViewport() &&
+                    !layoutOptions.panelsCollapsed
                   }
                   // The story-map presentation is the only standalone Layers
                   // autoCollapse trigger (the notebook collapses Style, not Layers).
@@ -2267,7 +2269,11 @@ export function DesktopShell({
                       openRasterLayerPanel(createAppAPI(mapControllerRef))
                     }
                     onOpenRasterSubset={setRasterSubsetLayer}
-                    autoCollapse={storymapPresenting || autoCollapsedPanel === "layers"}
+                    autoCollapse={
+                      storymapPresenting ||
+                      layoutOptions.panelsCollapsed ||
+                      autoCollapsedPanel === "layers"
+                    }
                   />
                 )}
               </SectionErrorBoundary>
@@ -2508,7 +2514,10 @@ export function DesktopShell({
                   mapControllerRef={mapControllerRef}
                   onResizeStart={startStylePanelResize}
                   autoCollapse={
-                    notebookOpen || storymapPresenting || autoCollapsedPanel === "style"
+                    notebookOpen ||
+                    storymapPresenting ||
+                    layoutOptions.panelsCollapsed ||
+                    autoCollapsedPanel === "style"
                   }
                 />
               </SectionErrorBoundary>

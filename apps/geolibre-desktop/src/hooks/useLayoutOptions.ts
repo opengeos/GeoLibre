@@ -14,6 +14,8 @@ export interface LayoutOptions {
    * shared rail — so a map-only embed shows nothing but the map.
    */
   panelsHidden: boolean;
+  /** Start the Layers and Style panels on their rails without hiding them. */
+  panelsCollapsed: boolean;
   showProjectInfo: boolean;
   statusBarVisible: boolean;
   stylePanelVisible: boolean;
@@ -41,6 +43,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
       attributePanelVisible: true,
       compact: false,
       panelsHidden: false,
+      panelsCollapsed: false,
       statusBarVisible: true,
       toolbarVisible: true,
       viewer: false,
@@ -67,6 +70,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     mapOnly ||
     HIDDEN_PANEL_VALUES.has(panels) ||
     normalizedParam(params.get("hidePanels")) === "true";
+  const panelsCollapsed = !panelsHidden && panels === "collapsed";
   const toolbarLabels =
     !compact && !ICON_TOOLBAR_VALUES.has(toolbar) ? layoutSettings.toolbarLabels : false;
   const showProjectInfo = compact ? false : layoutSettings.showProjectInfo;
@@ -82,6 +86,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     compact,
     layerPanelVisible,
     panelsHidden,
+    panelsCollapsed,
     showProjectInfo,
     statusBarVisible: !mapOnly,
     stylePanelVisible,
