@@ -4,6 +4,7 @@
 [![GeoLibre shared project](https://img.shields.io/badge/GeoLibre-share-green.svg)](https://share.geolibre.app)
 [![GeoLibre plugins](https://img.shields.io/badge/GeoLibre-plugins-green.svg)](https://plugins.geolibre.app)
 [![image](https://img.shields.io/pypi/v/geolibre.svg)](https://pypi.python.org/pypi/geolibre)
+[![R package](https://img.shields.io/badge/R-package-276DC3?logo=r&logoColor=white)](https://r.geolibre.app/)
 [![image](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/opengeos/GeoLibre/blob/main/python/examples/getting-started.ipynb)
 [![image](https://img.shields.io/conda/vn/conda-forge/geolibre.svg)](https://anaconda.org/conda-forge/geolibre)
 [![Conda Recipe](https://img.shields.io/badge/recipe-geolibre-green.svg)](https://github.com/conda-forge/geolibre-feedstock)
@@ -16,7 +17,7 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20785400.svg)](https://doi.org/10.5281/zenodo.20785400)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/opengeos/GeoLibre)
 
-A free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs everywhere you do, in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private.
+A free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs everywhere you do: in the web browser, on the desktop, on mobile, in Jupyter notebooks through its Python package, and in RStudio, Quarto, R Markdown, and Shiny through its R package—all while keeping your data local and private.
 
 It also ships **1,000+ geoprocessing tools** that run *entirely in your browser* on WebAssembly — terrain, hydrology, LiDAR, remote sensing, and vector analysis with no server, no install, and no data ever leaving your machine.
 
@@ -26,6 +27,8 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - **[Download the desktop app](https://geolibre.app/downloads/)** — Windows, macOS, and Linux installers
 - **[Get it on the Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769)** — the sandboxed macOS build
 - **[Get it on Google Play](https://play.google.com/store/apps/details?id=org.geolibre.app)** — the native Android app
+- **[Use the Python package](https://geolibre.app/python/)** — embed and control the full app in Jupyter notebooks
+- **[Use the R package](https://r.geolibre.app/)** — build interactive maps in RStudio, Quarto, R Markdown, and Shiny
 - **[1,000+ geoprocessing tools](https://geolibre.app/user-guide/processing/#geoprocessing-toolbox)** — the full toolbox, in the browser
 - **[Get started](https://geolibre.app/getting-started/)** — install, run from source, and configure
 - **[Features](https://geolibre.app/features/)** — the complete feature list
