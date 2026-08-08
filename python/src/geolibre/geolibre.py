@@ -1000,18 +1000,28 @@ class Map(anywidget.AnyWidget):
     def duplicate_layer(self, layer: str | Layer, *, name: str | None = None) -> str:
         """Duplicate a layer, returning the new layer id.
 
+        The copy is appended to the draw order (drawn on top), the same place a
+        newly added layer lands, rather than next to its source. Use
+        :meth:`move_layer` to put it elsewhere.
+
         Args:
             layer: The layer to copy, by id, name, or handle.
-            name: Name for the copy; defaults to the source name plus ``copy``.
+            name: Name for the copy, surrounding whitespace stripped; defaults
+                to the source name plus ``copy``.
 
         Raises:
             ValueError: If ``name`` is blank or the reserved basemap pseudo-id.
         """
-        if name is not None and not str(name).strip():
-            raise ValueError("name must be a non-empty string")
+        if name is not None:
+            # Strip before the blank check so `"  "` is rejected, matching the
+            # `name` setter rather than storing a padded name that is awkward to
+            # reference back.
+            name = str(name).strip()
+            if not name:
+                raise ValueError("name must be a non-empty string")
         source = copy.deepcopy(self._resolve_layer(layer)._layer())
         source["id"] = str(uuid.uuid4())
-        source["name"] = str(name) if name is not None else f"{source.get('name', 'Layer')} copy"
+        source["name"] = name if name is not None else f"{source.get('name', 'Layer')} copy"
         # `_add_layer` appends raw; `authoring.add_layer` is the entry point that
         # applies the reserved-name check `rename_layer` gets from `update_layer`.
         self._update_project(lambda p: _authoring.add_layer(p, source))

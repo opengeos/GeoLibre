@@ -702,6 +702,9 @@ def test_duplicate_layer_rejects_the_reserved_basemap_name(m):
         m.duplicate_layer(layer_id, name="  ")
     assert len(m.layers) == 1
 
+    padded = m.duplicate_layer(layer_id, name="  Clone  ")
+    assert m.get_layer(padded).name == "Clone"
+
 
 def test_move_layer_negative_index_counts_from_the_end(m):
     ids = [
