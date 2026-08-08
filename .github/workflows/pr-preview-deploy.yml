@@ -32,9 +32,9 @@ name: PR preview deploy
 #   CLOUDFLARE_ACCOUNT_ID
 #   PREVIEW_DEPLOY_TOKEN   - fine-grained PAT scoped to opengeos/pages-preview
 #                            only, with Contents: Read and write + Pages: Read.
-#                            Pages read is required by wait-for-pages-deployment
-#                            below; without it the poll never sees a build and
-#                            the job times out with a misleading error.
+#                            Pages read is required by the publication verifier
+#                            below; without it the poll cannot match a build to
+#                            the deployed commit.
 
 on:
   workflow_run:
@@ -257,7 +257,11 @@ jobs:
           # which is empty here.
           deploy-commit-message: Deploy preview for PR ${{ needs.resolve.outputs.number }} 🛫
           remove-commit-message: Remove preview for PR ${{ needs.resolve.outputs.number }} 🛬
-          wait-for-pages-deployment: true
+          # The action waits for a build of this exact commit. This shared Pages
+          # repository can coalesce pushes, so that exact build may never exist
+          # even though a later descendant build publishes the preview. Our
+          # verifier below handles that case without the redundant wait.
+          wait-for-pages-deployment: false
           comment: false
 
       # Decides whether the deploy really failed. A Pages build that another
