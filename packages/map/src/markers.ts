@@ -22,6 +22,8 @@ const MAX_MARKER_SIZE = 96;
 const MAX_SVG_SOURCE_CACHE = 64;
 export const KML_ICON_URL_PROPERTY = "__geolibre_kml_icon_url";
 const svgSourceCache = new Map<string, Promise<string | null>>();
+// The expression heads whose outputs markerImageValue rewrites into sprite ids.
+const COLOR_BRANCH_HEADS: ReadonlySet<string> = new Set(["match", "step", "case"]);
 
 const BUILTIN_SHAPES: ReadonlySet<MarkerShape> = new Set([
   "circle",
@@ -118,6 +120,12 @@ async function colorizedSvgSource(markup: string, color: string): Promise<string
     if (fetched !== null) {
       sourceMarkup = fetched;
     } else {
+      // Do not keep a failed fetch cached: a transient network error would
+      // otherwise block every later color variant of the same source (and any
+      // styleimagemissing retry) until the entry is evicted. Dropping it only
+      // after the await still lets concurrent callers share the in-flight
+      // promise.
+      if (svgSourceCache.get(markup) === pending) svgSourceCache.delete(markup);
       // Preserve the original source when a remote host blocks CORS. The
       // marker still renders, although its QGIS color parameters cannot be
       // resolved without access to the SVG text.
@@ -268,9 +276,6 @@ export function markerImageValue(style: LayerStyle): string | unknown[] | null {
   const baseId = prepareMarker(style, fallback);
   if (!baseId) return null;
 
-  const colorValue = vectorColorExpression(style, fallback);
-  if (!Array.isArray(colorValue)) return baseId;
-
   const imageFor = (value: unknown): unknown => {
     if (typeof value === "string") {
       return normalizeHexColor(value) ? (prepareMarker(style, value) ?? baseId) : baseId;
@@ -279,7 +284,7 @@ export function markerImageValue(style: LayerStyle): string | unknown[] | null {
 
     const expression = [...value];
     const firstOutput = expression[0] === "match" ? 3 : 2;
-    if (!new Set(["match", "step", "case"]).has(String(expression[0]))) return baseId;
+    if (!COLOR_BRANCH_HEADS.has(String(expression[0]))) return baseId;
     for (let index = firstOutput; index < expression.length; index += 2) {
       expression[index] = imageFor(expression[index]);
     }
@@ -288,7 +293,10 @@ export function markerImageValue(style: LayerStyle): string | unknown[] | null {
     }
     return expression;
   };
-  return imageFor(colorValue) as unknown[];
+  // A flat resolved color still goes through imageFor: rule-based mode with no
+  // drawable rules returns the else rule's color, which need not equal the
+  // layer's markerColor that baseId was baked from.
+  return imageFor(vectorColorExpression(style, fallback)) as string | unknown[];
 }
 
 function loadRasterMarker(url: string): Promise<GeneratedImageResult | null> {

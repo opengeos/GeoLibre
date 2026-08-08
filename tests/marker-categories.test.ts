@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type LayerStyle } from "@geolibre/core";
+import { ensureGeneratedImageHandler } from "../packages/map/src/generated-images";
 import {
   KML_ICON_URL_PROPERTY,
   markerImageValue,
   prepareKmlFeatureIcons,
+  prepareMarker,
 } from "../packages/map/src/markers";
 
 function categorizedMarker(patch: Partial<LayerStyle> = {}): LayerStyle {
@@ -107,6 +109,26 @@ describe("markerImageValue", () => {
     ]);
   });
 
+  it("bakes the else-rule color when no rule is drawable", () => {
+    const value = markerImageValue(
+      categorizedMarker({
+        vectorStyleMode: "rule-based",
+        vectorRules: [
+          {
+            id: "else",
+            label: "Other",
+            filter: "",
+            color: "#fde725",
+            enabled: true,
+            isElse: true,
+          },
+        ],
+      }),
+    );
+
+    assert.equal(value, "geolibre-marker-circle-fde725-18");
+  });
+
   it("keeps categorized marker fallback inside a mixed KML icon expression", () => {
     const markerImage = markerImageValue(categorizedMarker());
     const value = prepareKmlFeatureIcons(
@@ -130,5 +152,64 @@ describe("markerImageValue", () => {
 
     assert.ok(Array.isArray(value));
     assert.deepEqual(value[value.length - 1], markerImage);
+  });
+});
+
+describe("custom SVG marker fetches", () => {
+  it("retries a remote SVG whose first fetch failed", async () => {
+    // Run the registered sprite factory the way styleimagemissing does.
+    let missing: ((event: { id: string }) => void) | undefined;
+    const map = {
+      on: (_event: string, handler: (event: { id: string }) => void) => {
+        missing = handler;
+      },
+      hasImage: () => false,
+      addImage: () => {},
+    };
+    ensureGeneratedImageHandler(map as never);
+
+    // The sprite is rasterized through an Image; erroring out keeps the test
+    // off the canvas APIs while still exercising the fetch path.
+    class StubImage {
+      decoding = "";
+      crossOrigin = "";
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_value: string) {
+        queueMicrotask(() => this.onerror?.());
+      }
+    }
+    const previousImage = globalThis.Image;
+    const previousFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.Image = StubImage as never;
+    globalThis.fetch = (() => {
+      calls += 1;
+      return calls === 1
+        ? Promise.reject(new Error("offline"))
+        : Promise.resolve({ ok: true, text: () => Promise.resolve("<svg/>") });
+    }) as never;
+
+    try {
+      const id = prepareMarker(
+        categorizedMarker({
+          markerShape: "custom",
+          markerSvg: "https://example.com/retry.svg",
+          vectorStyleMode: "single",
+        }),
+      );
+      assert.ok(id);
+      missing?.({ id });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      missing?.({ id });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      globalThis.Image = previousImage;
+      globalThis.fetch = previousFetch;
+    }
+
+    // A failed fetch must not be cached, or the marker stays uncolorized for
+    // the rest of the session.
+    assert.equal(calls, 2);
   });
 });
