@@ -19,17 +19,27 @@ const ALLOWLIST = new Map([
   [
     "GHSA-w3rx-r6r6-pgpr",
     "image-size DoS (ICNS parser infinite loop). No patched version exists — " +
-      "the advisory covers <=2.0.2 and 2.0.2 is the latest release. It reaches " +
+      "the advisory covers <=2.0.2, 2.0.2 is the latest release, and the GitHub " +
+      "advisory API reports first_patched_version: null. Nor can we upgrade past " +
+      "it: the latest @loaders.gl/textures (4.4.4) still depends on " +
+      "texture-compressor@^1.0.2, which pins image-size@^0.7.4. It reaches " +
       "us only as a dependency of texture-compressor, which @loaders.gl/textures " +
       "spawns via `npx` from encodeImageURLToCompressedTextureURL (a Node-only " +
       "encoder). GeoLibre never calls that encoder and it cannot bundle into the " +
-      "browser build, so no attacker-supplied image is ever parsed by it.",
+      "browser build, so no attacker-supplied image is ever parsed by it — " +
+      "confirmed by grepping the production build, which contains no reference " +
+      "to image-size or texture-compressor. Re-verified 2026-08-07.",
   ],
   [
     "GHSA-5p2g-fcmc-qvqq",
     "image-size DoS (JXL/HEIF parser infinite loops). Same package, same lack of " +
       "a patched version, and the same unreachable texture-compressor path as " +
-      "GHSA-w3rx-r6r6-pgpr above.",
+      "GHSA-w3rx-r6r6-pgpr above. Note that plain `npm audit` inflates these two " +
+      "advisories into ~16 high findings by counting them once per package in the " +
+      "chain (texture-compressor → @loaders.gl/textures → gltf/3d-tiles/i3s → " +
+      "deck.gl → the maplibre-gl-* wrappers). There is only ever one copy of " +
+      "image-size in the tree; `npm ls image-size` is the honest count. " +
+      "Re-verified 2026-08-07.",
   ],
 ]);
 
