@@ -907,10 +907,10 @@ export function PrintLayoutDialog({
   // option, atlas, or dialog is turned off instead of waiting for another
   // camera drive that may never happen.
   useEffect(() => {
-    if (open && atlasEnabled && atlasMaskEnabled) return;
+    if (open && atlasActive && atlasMaskEnabled && atlasMaskAvailable) return;
     const map = mapControllerRef.current?.getMap();
     if (map) clearAtlasFeatureMask(map);
-  }, [open, atlasEnabled, atlasMaskEnabled, mapControllerRef]);
+  }, [open, atlasActive, atlasMaskEnabled, atlasMaskAvailable, mapControllerRef]);
   const atlasFilterValid = atlasFilterPredicate !== null;
   const atlasScaleValid = atlasExtentMode !== "scale" || Number(atlasScale) > 0;
   // A floor (not just > 0) keeps a mistyped tiny length from cutting a long
