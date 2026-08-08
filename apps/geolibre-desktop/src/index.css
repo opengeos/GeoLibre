@@ -27,6 +27,13 @@
     "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 
+html:lang(fa) {
+  --font-sans:
+    "Vazirmatn Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Noto Sans Arabic", "Noto Sans", "Helvetica Neue", Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+}
+
 /* Map-floating chrome, a.k.a. "instrument glass".
 
    The distinction this encodes: chrome docked BESIDE the map (top toolbar,
