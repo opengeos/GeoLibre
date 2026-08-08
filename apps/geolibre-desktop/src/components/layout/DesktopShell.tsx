@@ -849,9 +849,16 @@ export function DesktopShell({
   // Sync the project with an embedding host (the GeoLibre Jupyter widget) over
   // postMessage. Inert when the app is not embedded.
   useEmbedBridge(mapControllerRef);
+  const addWhiteboxRasterOutput = useCallback(
+    async (bytes: Uint8Array, name: string, fileName: string) => {
+      const file = new File([bytes as BlobPart], fileName, { type: "image/tiff" });
+      await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
+    },
+    [mapControllerRef],
+  );
   // Request/reply + event channel backing the Python scripting API (live
   // queries, processing, map events). Also inert when not embedded.
-  useCommandBridge(mapControllerRef);
+  useCommandBridge(mapControllerRef, addWhiteboxRasterOutput);
   // Runtime postMessage API for a third-party host page that frames the app
   // (fly to a record, highlight it, open a tool; selection/view/tool events back
   // out). Off unless the deployment configured GEOLIBRE_EMBED_ORIGINS.
@@ -2662,12 +2669,7 @@ export function DesktopShell({
             // `fileName` (when given) becomes the layer's sourcePath while `name`
             // stays the human-readable display name; the control keeps them
             // separate (info.source.fileName vs info.name).
-            const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
-              type: "image/tiff",
-            });
-            await addRasterToMap(createAppAPI(mapControllerRef), file, {
-              name,
-            });
+            await addWhiteboxRasterOutput(bytes, name, fileName ?? `${name}.tif`);
           }}
         />
       </Suspense>

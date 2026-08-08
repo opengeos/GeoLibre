@@ -200,6 +200,46 @@ def test_run_algorithm_builds_params(m, monkeypatch):
     assert captured["params"] == {"id": "buffer", "params": {"distance": 100}}
 
 
+def test_list_whitebox_tools_builds_request(m, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        m,
+        "request",
+        lambda method, params=None, **kwargs: (
+            captured.update(method=method, params=params, kwargs=kwargs) or []
+        ),
+    )
+
+    assert m.list_whitebox_tools(timeout=12) == []
+    assert captured == {
+        "method": "listWhiteboxTools",
+        "params": None,
+        "kwargs": {"timeout": 12},
+    }
+
+
+def test_run_whitebox_tool_resolves_layer_handles(m, monkeypatch):
+    layer = m.get_layer(m.add_geojson({"type": "FeatureCollection", "features": []}, name="Input"))
+    captured = {}
+    monkeypatch.setattr(
+        m,
+        "request",
+        lambda method, params=None, **kwargs: (
+            captured.update(method=method, params=params, kwargs=kwargs)
+            or {"logs": [], "resultLayerIds": []}
+        ),
+    )
+
+    m.run_whitebox_tool("centroids", {"input": layer, "text_output": False}, timeout=45)
+
+    assert captured["method"] == "runWhiteboxTool"
+    assert captured["params"] == {
+        "id": "centroids",
+        "params": {"input": layer.id, "text_output": False},
+    }
+    assert captured["kwargs"] == {"timeout": 45}
+
+
 def test_get_features_wraps_in_feature(m, monkeypatch):
     monkeypatch.setattr(
         m,

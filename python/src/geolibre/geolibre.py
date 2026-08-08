@@ -841,6 +841,46 @@ class Map(anywidget.AnyWidget):
             timeout=timeout,
         )
 
+    def list_whitebox_tools(self, *, timeout: float = 30.0) -> list[dict[str, Any]]:
+        """List the bundled Whitebox/GeoLibre WASM tools and their parameters.
+
+        The catalog is resolved by the displayed app because the same browser
+        runtime executes the tools. Display the map before calling this method.
+        """
+        return self.request("listWhiteboxTools", timeout=timeout)
+
+    def run_whitebox_tool(
+        self,
+        tool_id: str,
+        parameters: dict[str, Any] | None = None,
+        *,
+        timeout: float = 300.0,
+    ) -> dict[str, Any]:
+        """Run a bundled Whitebox tool locally in the browser via WASM.
+
+        Dataset parameters may be layer ids or :class:`Layer` handles. Vector
+        and raster outputs are added to the map automatically.
+
+        Args:
+            tool_id: An id from :meth:`list_whitebox_tools`, such as ``"slope"``.
+            parameters: Tool parameters. Pass a :class:`Layer` handle for an
+                input-layer parameter, or its id as a string.
+            timeout: Seconds to wait; terrain and LiDAR tools may need several
+                minutes for large inputs.
+
+        Returns:
+            ``{"logs": [...], "resultLayerIds": [...]}``.
+        """
+        resolved = {
+            key: value.id if isinstance(value, Layer) else value
+            for key, value in (parameters or {}).items()
+        }
+        return self.request(
+            "runWhiteboxTool",
+            {"id": str(tool_id), "params": resolved},
+            timeout=timeout,
+        )
+
     def to_image(self, path: str | None = None, *, timeout: float = 30.0) -> bytes | None:
         """Capture the current map view as a PNG.
 

@@ -91,6 +91,7 @@ m.to_project()["mapView"]["center"]
 | `remove_layer(layer_id)` / `clear_layers()` | Remove one layer by id, name, or handle, or remove all layers. |
 | `center` / `zoom` / `bearing` / `pitch` / `basemap` / `name` | Read persisted project and camera state; `name` is writable. |
 | `set_zoom` / `set_bearing` / `set_pitch` / `fit_project_bounds` | Persist camera changes without requiring the widget to be displayed. |
+| `list_whitebox_tools()` / `run_whitebox_tool(id, parameters)` | Discover and run bundled Whitebox tools locally via browser WASM. |
 | `to_project()` / `load_project(src)` / `save_project(path)` | Project I/O. |
 
 Layer handles provide the same operations in an object-oriented form:
@@ -106,6 +107,14 @@ roads.move(0)
 print(roads.properties())      # sampled values for every property
 print(roads.column("highway")) # one value per feature
 roads_copy = roads.duplicate(name="Roads (proposed)")
+```
+
+Run a Whitebox tool against a map layer (the map must be displayed first):
+
+```python
+dem = m.find_layer("DEM")
+result = m.run_whitebox_tool("slope", {"input": dem, "units": "degrees"})
+slope = m.get_layer(result["resultLayerIds"][0])
 ```
 
 For headless authoring and scripts that do not need a widget, commonly used
