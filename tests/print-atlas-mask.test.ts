@@ -16,6 +16,7 @@ class FakeMap {
   layers = new Map<string, unknown>();
   sources = new Map<string, FakeSource>();
   addedBeforeLayerId: string | undefined;
+  movedBeforeLayerId: string | undefined;
 
   getLayer(id: string) {
     return this.layers.get(id);
@@ -24,6 +25,10 @@ class FakeMap {
   addLayer(layer: { id: string }, beforeLayerId?: string) {
     this.layers.set(layer.id, layer);
     this.addedBeforeLayerId = beforeLayerId;
+  }
+
+  moveLayer(_id: string, beforeLayerId?: string) {
+    this.movedBeforeLayerId = beforeLayerId;
   }
 
   removeLayer(id: string) {
@@ -96,6 +101,30 @@ describe("atlas feature mask", () => {
 
     showAtlasFeatureMask(map as never, polygon, "graticule-labels");
     assert.equal(map.addedBeforeLayerId, "graticule-labels");
+  });
+
+  it("falls back to the top when the requested label layer is missing", () => {
+    const map = new FakeMap();
+
+    showAtlasFeatureMask(map as never, polygon, "missing-labels");
+    assert.equal(map.addedBeforeLayerId, undefined);
+  });
+
+  it("moves an existing mask below a requested label layer", () => {
+    const map = new FakeMap();
+    showAtlasFeatureMask(map as never, polygon);
+    map.layers.set("graticule-labels", {});
+
+    showAtlasFeatureMask(map as never, polygon, "graticule-labels");
+    assert.equal(map.movedBeforeLayerId, "graticule-labels");
+  });
+
+  it("does not move the mask before itself", () => {
+    const map = new FakeMap();
+    showAtlasFeatureMask(map as never, polygon);
+
+    showAtlasFeatureMask(map as never, polygon, "geolibre-print-atlas-mask-fill");
+    assert.equal(map.movedBeforeLayerId, undefined);
   });
 
   it("rejects a non-polygon feature and removes any previous mask", () => {

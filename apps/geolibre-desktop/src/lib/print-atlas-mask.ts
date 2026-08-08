@@ -50,7 +50,12 @@ export function showAtlasFeatureMask(
   const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
   if (source) source.setData(mask);
   else map.addSource(SOURCE_ID, { type: "geojson", data: mask });
-  if (!map.getLayer(FILL_LAYER_ID)) {
+  const fillLayer = map.getLayer(FILL_LAYER_ID);
+  const targetLayerId =
+    beforeLayerId && beforeLayerId !== FILL_LAYER_ID && map.getLayer(beforeLayerId)
+      ? beforeLayerId
+      : undefined;
+  if (!fillLayer) {
     map.addLayer(
       {
         id: FILL_LAYER_ID,
@@ -63,8 +68,10 @@ export function showAtlasFeatureMask(
           "fill-outline-color": "rgba(0, 0, 0, 0)",
         },
       },
-      beforeLayerId && map.getLayer(beforeLayerId) ? beforeLayerId : undefined,
+      targetLayerId,
     );
+  } else if (targetLayerId) {
+    map.moveLayer(FILL_LAYER_ID, targetLayerId);
   }
   return true;
 }
