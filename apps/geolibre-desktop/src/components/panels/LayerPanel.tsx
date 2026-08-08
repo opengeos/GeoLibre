@@ -160,6 +160,7 @@ import {
   RefreshCw,
   Save,
   Shuffle,
+  SlidersHorizontal,
   Sparkles,
   SquareDashed,
   SquareFunction,
@@ -3379,7 +3380,10 @@ export function LayerPanel({
                                 onOpenStylePanel();
                               }}
                             >
-                              <Palette className="me-2 h-3.5 w-3.5" />
+                              {/* The Style panel's own icon everywhere else (the
+                              shared rail tab, its collapsed rail), and not the
+                              `Palette` this menu already gives Style Manager. */}
+                              <SlidersHorizontal className="me-2 h-3.5 w-3.5" />
                               {t("layers.openStylePanel")}
                             </DropdownMenuItem>
                           )}
