@@ -259,31 +259,23 @@ export function markerImageValue(style: LayerStyle): string | unknown[] | null {
   if (!Array.isArray(colorValue)) return baseId;
 
   const imageFor = (value: unknown): unknown => {
-    if (typeof value !== "string" || !normalizeHexColor(value)) return value;
-    return prepareMarker(style, value) ?? baseId;
+    if (typeof value === "string") {
+      return normalizeHexColor(value) ? (prepareMarker(style, value) ?? baseId) : baseId;
+    }
+    if (!Array.isArray(value)) return baseId;
+
+    const expression = [...value];
+    const firstOutput = expression[0] === "match" ? 3 : 2;
+    if (!new Set(["match", "step", "case"]).has(String(expression[0]))) return baseId;
+    for (let index = firstOutput; index < expression.length; index += 2) {
+      expression[index] = imageFor(expression[index]);
+    }
+    if (expression[0] !== "step") {
+      expression[expression.length - 1] = imageFor(expression[expression.length - 1]);
+    }
+    return expression;
   };
-  const expression = [...colorValue];
-  switch (expression[0]) {
-    case "match":
-      for (let index = 3; index < expression.length; index += 2) {
-        expression[index] = imageFor(expression[index]);
-      }
-      expression[expression.length - 1] = imageFor(expression[expression.length - 1]);
-      return expression;
-    case "step":
-      for (let index = 2; index < expression.length; index += 2) {
-        expression[index] = imageFor(expression[index]);
-      }
-      return expression;
-    case "case":
-      for (let index = 2; index < expression.length; index += 2) {
-        expression[index] = imageFor(expression[index]);
-      }
-      expression[expression.length - 1] = imageFor(expression[expression.length - 1]);
-      return expression;
-    default:
-      return baseId;
-  }
+  return imageFor(colorValue) as unknown[];
 }
 
 function loadRasterMarker(url: string): Promise<GeneratedImageResult | null> {
@@ -303,7 +295,7 @@ function loadRasterMarker(url: string): Promise<GeneratedImageResult | null> {
  */
 export function prepareKmlFeatureIcons(
   collection: GeoJSON.FeatureCollection,
-  fallbackImage = "",
+  fallbackImage: unknown = "",
 ): unknown[] | null {
   const matches: unknown[] = [];
   const seen = new Set<string>();

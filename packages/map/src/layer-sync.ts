@@ -1923,7 +1923,7 @@ function applyVectorDataRenderLayers(
   const fillPatternId = prepareFillPattern(layer.style);
   const markerImageId = prepareMarker(layer.style);
   const markerImage = markerImageValue(layer.style);
-  const kmlIconImage = prepareKmlFeatureIcons(layer.geojson!, markerImageId ?? "");
+  const kmlIconImage = prepareKmlFeatureIcons(layer.geojson!, markerImage ?? markerImageId ?? "");
   // Derived companion symbology (inverted mask, geometry generator, dedup
   // labels) is built from the raw features, so no MapLibre filter applies to
   // it. While a Time Slider window or a rule-based visibility filter is
