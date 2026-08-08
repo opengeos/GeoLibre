@@ -3,6 +3,7 @@ import {
   normalizeHexColor,
   proportionalSizeRange,
   styleValue,
+  vectorColorExpression,
   type LayerStyle,
   type MarkerShape,
 } from "@geolibre/core";
@@ -88,8 +89,36 @@ export function loadMarkerSvgImage(markup: string): Promise<HTMLImageElement | n
   });
 }
 
-function loadSvgMarker(markup: string, size: number): Promise<GeneratedImageResult | null> {
-  const src = resolveSvgSource(markup);
+function replaceSvgColorParameters(markup: string, color: string): string {
+  return markup
+    .replace(/param\(fill\)/gi, color)
+    .replace(/param\(fill-opacity\)/gi, "1")
+    .replace(/param\(outline\)/gi, color)
+    .replace(/param\(outline-opacity\)/gi, "1")
+    .replace(/param\(outline-width\)/gi, "0");
+}
+
+async function colorizedSvgSource(markup: string, color: string): Promise<string | null> {
+  let sourceMarkup = markup;
+  if (/^(?:https?:|data:image\/svg\+xml)/i.test(markup)) {
+    try {
+      const response = await fetch(markup);
+      if (response.ok) sourceMarkup = await response.text();
+    } catch {
+      // Preserve the original source when a remote host blocks CORS. The
+      // marker still renders, although its QGIS color parameters cannot be
+      // resolved without access to the SVG text.
+    }
+  }
+  return resolveSvgSource(replaceSvgColorParameters(sourceMarkup, color));
+}
+
+async function loadSvgMarker(
+  markup: string,
+  color: string,
+  size: number,
+): Promise<GeneratedImageResult | null> {
+  const src = await colorizedSvgSource(markup, color);
   if (!src) return Promise.resolve(null);
   const ratio = MARKER_PIXEL_RATIO;
   const px = size * ratio;
@@ -193,7 +222,7 @@ export function markerIconSizeValue(style: LayerStyle): number | unknown[] {
  * @param style - The layer style.
  * @returns The image id, or `null` when no marker applies.
  */
-export function prepareMarker(style: LayerStyle): string | null {
+export function prepareMarker(style: LayerStyle, colorOverride?: string): string | null {
   if (!styleValue(style, "markerEnabled")) return null;
   const shape = styleValue(style, "markerShape");
   const size = markerBakedSize(style);
@@ -201,18 +230,60 @@ export function prepareMarker(style: LayerStyle): string | null {
   if (shape === "custom") {
     const markup = styleValue(style, "markerSvg").trim();
     if (!markup) return null;
-    const id = `geolibre-marker-svg-${hashText(markup)}-${size}`;
+    const color = colorOverride ?? markerColor(style);
+    const id = `geolibre-marker-svg-${hashText(`${markup}\0${color}`)}-${size}`;
     // Capture the markup in the factory closure so the lazy generator never
     // depends on a separate, evictable cache (which could blank the marker).
-    registerGeneratedImage(id, () => loadSvgMarker(markup, size));
+    registerGeneratedImage(id, () => loadSvgMarker(markup, color, size));
     return id;
   }
 
   if (!BUILTIN_SHAPES.has(shape)) return null;
-  const color = markerColor(style);
+  const color = colorOverride ?? markerColor(style);
   const id = `geolibre-marker-${shape}-${color.replace("#", "")}-${size}`;
   registerGeneratedImage(id, () => drawBuiltinMarker(shape, color, size));
   return id;
+}
+
+/**
+ * Resolve a marker's `icon-image` layout value. Categorized, graduated, and
+ * rule-based color expressions select a separately baked sprite per class,
+ * because ordinary bitmap sprites cannot be tinted per feature by MapLibre.
+ */
+export function markerImageValue(style: LayerStyle): string | unknown[] | null {
+  const fallback = markerColor(style);
+  const baseId = prepareMarker(style, fallback);
+  if (!baseId) return null;
+
+  const colorValue = vectorColorExpression(style, fallback);
+  if (!Array.isArray(colorValue)) return baseId;
+
+  const imageFor = (value: unknown): unknown => {
+    if (typeof value !== "string" || !normalizeHexColor(value)) return value;
+    return prepareMarker(style, value) ?? baseId;
+  };
+  const expression = [...colorValue];
+  switch (expression[0]) {
+    case "match":
+      for (let index = 3; index < expression.length; index += 2) {
+        expression[index] = imageFor(expression[index]);
+      }
+      expression[expression.length - 1] = imageFor(expression[expression.length - 1]);
+      return expression;
+    case "step":
+      for (let index = 2; index < expression.length; index += 2) {
+        expression[index] = imageFor(expression[index]);
+      }
+      return expression;
+    case "case":
+      for (let index = 2; index < expression.length; index += 2) {
+        expression[index] = imageFor(expression[index]);
+      }
+      expression[expression.length - 1] = imageFor(expression[expression.length - 1]);
+      return expression;
+    default:
+      return baseId;
+  }
 }
 
 function loadRasterMarker(url: string): Promise<GeneratedImageResult | null> {

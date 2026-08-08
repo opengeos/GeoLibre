@@ -60,6 +60,7 @@ import { prepareFillPattern } from "./fill-patterns";
 import { prepareLineDecoration } from "./line-decorations";
 import {
   KML_ICON_URL_PROPERTY,
+  markerImageValue,
   markerIconSizeValue,
   prepareKmlFeatureIcons,
   prepareMarker,
@@ -1636,9 +1637,9 @@ function syncVectorControlPointSymbology(
 
   const circleSpec = getStyleLayerSpec(map, circleNativeId);
   ensureGeneratedImageHandler(map);
-  const markerImageId = prepareMarker(layer.style);
+  const markerImage = markerImageValue(layer.style);
 
-  if (markerImageId && circleSpec) {
+  if (markerImage && circleSpec) {
     // Reuse the control's own base filter (the tracked base when Time-Slider /
     // rule extras are active, so they never nest) combined with the current
     // extras, mirroring applyExternalNativeFeatureFilters.
@@ -1662,7 +1663,7 @@ function syncVectorControlPointSymbology(
         // on the update path (ensureLayer only diffs keys that exist).
         filter: filter ?? undefined,
         layout: {
-          "icon-image": markerImageId,
+          "icon-image": markerImage as PropertyValueSpecification<string>,
           "icon-size": markerIconSizeValue(layer.style) as PropertyValueSpecification<number>,
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
@@ -1921,6 +1922,7 @@ function applyVectorDataRenderLayers(
   ensureGeneratedImageHandler(map);
   const fillPatternId = prepareFillPattern(layer.style);
   const markerImageId = prepareMarker(layer.style);
+  const markerImage = markerImageValue(layer.style);
   const kmlIconImage = prepareKmlFeatureIcons(layer.geojson!, markerImageId ?? "");
   // Derived companion symbology (inverted mask, geometry generator, dedup
   // labels) is built from the raw features, so no MapLibre filter applies to
@@ -2213,7 +2215,7 @@ function applyVectorDataRenderLayers(
       layer,
       hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
     );
-    if (markerImageId || kmlIconImage) {
+    if (markerImage || kmlIconImage) {
       removeIfExists(map, circleLayerId(layer.id));
       ensureLayer(
         map,
@@ -2225,7 +2227,7 @@ function applyVectorDataRenderLayers(
           ...styleLayerZoomRange(layer.style),
           filter: pointFilter,
           layout: {
-            "icon-image": (kmlIconImage ?? markerImageId) as string,
+            "icon-image": (kmlIconImage ?? markerImage) as PropertyValueSpecification<string>,
             // The sprite is baked at its display size, so icon-size stays 1
             // unless proportional sizing scales it per feature.
             "icon-size": (kmlIconImage
