@@ -871,9 +871,11 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     getSelectedFeatures: () => readPluginSelection().features,
     getSelectedLayerId: () => useAppStore.getState().selectedLayerId,
     getDrawnFeatures: () =>
-      useAppStore.getState().layers.flatMap((layer) =>
-        layer.metadata.sourceKind === SKETCHES_SOURCE_KIND ? (layer.geojson?.features ?? []) : [],
-      ),
+      useAppStore
+        .getState()
+        .layers.flatMap((layer) =>
+          layer.metadata.sourceKind === SKETCHES_SOURCE_KIND ? (layer.geojson?.features ?? []) : [],
+        ),
     onSelectionChange: (callback: (selection: GeoLibreSelection) => void) =>
       useAppStore.subscribe((state, previous) => {
         if (

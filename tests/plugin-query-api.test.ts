@@ -7,7 +7,8 @@ import { before, beforeEach, describe, it } from "node:test";
 const emptyStorage = { getItem: () => null };
 (globalThis as typeof globalThis & { sessionStorage: typeof emptyStorage }).sessionStorage =
   emptyStorage;
-(globalThis as typeof globalThis & { localStorage: typeof emptyStorage }).localStorage = emptyStorage;
+(globalThis as typeof globalThis & { localStorage: typeof emptyStorage }).localStorage =
+  emptyStorage;
 const maplibreGl = createRequire(`${process.cwd()}/package.json`)("maplibre-gl") as Record<
   string,
   unknown
@@ -176,9 +177,7 @@ describe("external plugin query API", () => {
     const store = useAppStore.getState();
     store.addGeoJsonLayer("Catchments", {
       type: "FeatureCollection",
-      features: [
-        { type: "Feature", id: "ordinary", properties: {}, geometry: null },
-      ],
+      features: [{ type: "Feature", id: "ordinary", properties: {}, geometry: null }],
     });
     const sketchLayerId = store.addGeoJsonLayer("Sketches", {
       type: "FeatureCollection",
