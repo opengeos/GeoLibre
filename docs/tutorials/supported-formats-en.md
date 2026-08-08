@@ -65,7 +65,7 @@ After loading, it's not just "can you see it" — symbology, graduated coloring,
 
 ![A project with three vector layers stacked — subway stations, subway lines, and Manhattan building heights — with a legend auto-graduated by construction year](https://assets.geolibre.app/images/vector-layers-legend.webp)
 
-![The same data on a timeline: buildings filtered year-by-year by construction date; vector layers carry a temporal dimension](https://assets.geolibre.app/images/vector-data-demo.gif)
+![The same data on a timeline: buildings filtered year-by-year by construction date; vector layers carry a temporal dimension](https://assets.geolibre.app/demos/vector-data-demo.gif)
 
 ---
 

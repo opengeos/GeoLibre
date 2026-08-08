@@ -122,7 +122,7 @@ DuckDB invocation points in the source code are categorized as follows:
 
 > **Key insight**: Pay attention to the last row. This is an easily underestimated design choice: layers on the map are simultaneously tables in SQL. Users can write `JOIN` and `ST_Intersects` across two layers, and the result becomes a new layer directly. **"Map" and "database" are two views of the same thing.**
 
-![Vector data processing](https://assets.geolibre.app/images/vector-data-demo.gif)
+![Vector data processing](https://assets.geolibre.app/demos/vector-data-demo.gif)
 
 The SQL Workspace also features three "help the user say what they mean" rewrites. If you're building a SQL console, you can follow this approach directly:
 
@@ -269,7 +269,7 @@ The full pipeline is in `packages/map/src/geojson-vt-protocol.ts`, step by step:
 - Fed to MapLibre via a custom protocol `geolibre-gjvt`
 - `TILE_EXTENT = 4096`, `TILE_MAX_ZOOM = 16` (beyond this, let MapLibre over-zoom)
 
-![Large vector data loading](https://assets.geolibre.app/images/vector-data-demo.gif)
+![Large vector data loading](https://assets.geolibre.app/demos/vector-data-demo.gif)
 
 Two details worth highlighting individually.
 

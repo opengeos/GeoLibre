@@ -125,7 +125,7 @@ KML 那条尤其能说明取舍。`docs/architecture.md:61` 写得很直白：KM
 
 > **关键洞察：** 注意最后一行。这是一个很容易被低估的设计：地图上的图层同时是 SQL 里的表，用户可以对着两个图层写 `JOIN`、写 `ST_Intersects`，结果再直接变成新图层。**「地图」和「数据库」在这里是同一份东西的两个视图。**
 
-![矢量数据处理](https://assets.geolibre.app/images/vector-data-demo.gif)
+![矢量数据处理](https://assets.geolibre.app/demos/vector-data-demo.gif)
 
 SQL 工作区里还有三处「帮用户把话说全」的改写，做 SQL 控制台的可以直接照这个思路来：
 
@@ -270,7 +270,7 @@ compile_error!("the `mas` (Mac App Store) build must not enable `native-duckdb`:
 - 通过自定义协议 `geolibre-gjvt` 喂给 MapLibre
 - `TILE_EXTENT = 4096`，`TILE_MAX_ZOOM = 16`（超过就让 MapLibre over-zoom）
 
-![大数据量矢量加载](https://assets.geolibre.app/images/vector-data-demo.gif)
+![大数据量矢量加载](https://assets.geolibre.app/demos/vector-data-demo.gif)
 
 两个细节值得单独说。
 

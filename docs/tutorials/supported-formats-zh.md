@@ -67,7 +67,7 @@ _明确不支持的：`.xlsx` / `.xls`（经全库搜索，零命中）、原始
 
 ![一个工程里叠了地铁站点、地铁线路、曼哈顿建筑高度三个矢量图层，右侧图例按建成年代自动分级](https://assets.geolibre.app/images/vector-layers-legend.webp)
 
-![同一份数据拖时间轴：按建成年代逐年过滤建筑，矢量图层是带时间维度的](https://assets.geolibre.app/images/vector-data-demo.gif)
+![同一份数据拖时间轴：按建成年代逐年过滤建筑，矢量图层是带时间维度的](https://assets.geolibre.app/demos/vector-data-demo.gif)
 
 ---
 
