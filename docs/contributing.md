@@ -209,11 +209,11 @@ that repository's `main` branch is published by GitHub Pages at the matching
 path under its one hostname, <https://assets.geolibre.app>, usually within a
 minute:
 
-| Repository path       | Published URL                                        |
-| --------------------- | ---------------------------------------------------- |
-| `images/my-panel.webp` | `https://assets.geolibre.app/images/my-panel.webp`   |
-| `demos/my-demo.gif`    | `https://assets.geolibre.app/demos/my-demo.gif`      |
-| `data/sample.parquet`  | `https://assets.geolibre.app/data/sample.parquet`    |
+| Repository path        | Published URL                                      |
+| ---------------------- | -------------------------------------------------- |
+| `images/my-panel.webp` | `https://assets.geolibre.app/images/my-panel.webp` |
+| `demos/my-demo.gif`    | `https://assets.geolibre.app/demos/my-demo.gif`    |
+| `data/sample.parquet`  | `https://assets.geolibre.app/data/sample.parquet`  |
 
 Then reference the published URL from your Markdown:
 
@@ -242,8 +242,10 @@ Some existing pages point at other GeoLibre-operated hosts, mainly
 need rewriting; `geolibre-assets` is simply the one you can open a pull request
 against, so send new assets there.
 
-The only images that belong in this repository are the handful of site chrome
-files under `docs/assets/` (the logo and favicon referenced from `mkdocs.yml`).
+The only images that belong in this repository are the site chrome under
+`docs/assets/` — currently just the icon `mkdocs.yml` uses for the logo and
+favicon. Do not add to that directory; if you find something there that nothing
+references, it is a leftover, not a precedent.
 
 ## Plugins and extensions
 
