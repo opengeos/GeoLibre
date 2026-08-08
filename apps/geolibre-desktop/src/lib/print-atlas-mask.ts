@@ -21,9 +21,14 @@ export function clearAtlasFeatureMask(map: MapLibreMap): void {
  *
  * @param map - MapLibre map used by the Print Layout capture.
  * @param feature - Current coverage feature.
+ * @param beforeLayerId - Optional label layer that should remain above the mask.
  * @returns Whether a polygon mask could be rendered.
  */
-export function showAtlasFeatureMask(map: MapLibreMap, feature: Feature | undefined): boolean {
+export function showAtlasFeatureMask(
+  map: MapLibreMap,
+  feature: Feature | undefined,
+  beforeLayerId?: string,
+): boolean {
   if (feature?.geometry?.type !== "Polygon" && feature?.geometry?.type !== "MultiPolygon") {
     clearAtlasFeatureMask(map);
     return false;
@@ -46,17 +51,20 @@ export function showAtlasFeatureMask(map: MapLibreMap, feature: Feature | undefi
   if (source) source.setData(mask);
   else map.addSource(SOURCE_ID, { type: "geojson", data: mask });
   if (!map.getLayer(FILL_LAYER_ID)) {
-    map.addLayer({
-      id: FILL_LAYER_ID,
-      type: "fill",
-      source: SOURCE_ID,
-      metadata: { "geolibre:internal": true },
-      paint: {
-        "fill-color": "#ffffff",
-        "fill-opacity": 0.7,
-        "fill-outline-color": "rgba(0, 0, 0, 0)",
+    map.addLayer(
+      {
+        id: FILL_LAYER_ID,
+        type: "fill",
+        source: SOURCE_ID,
+        metadata: { "geolibre:internal": true },
+        paint: {
+          "fill-color": "#ffffff",
+          "fill-opacity": 0.7,
+          "fill-outline-color": "rgba(0, 0, 0, 0)",
+        },
       },
-    });
+      beforeLayerId && map.getLayer(beforeLayerId) ? beforeLayerId : undefined,
+    );
   }
   return true;
 }

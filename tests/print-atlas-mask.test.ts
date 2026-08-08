@@ -15,13 +15,15 @@ interface FakeSource {
 class FakeMap {
   layers = new Map<string, unknown>();
   sources = new Map<string, FakeSource>();
+  addedBeforeLayerId: string | undefined;
 
   getLayer(id: string) {
     return this.layers.get(id);
   }
 
-  addLayer(layer: { id: string }) {
+  addLayer(layer: { id: string }, beforeLayerId?: string) {
     this.layers.set(layer.id, layer);
+    this.addedBeforeLayerId = beforeLayerId;
   }
 
   removeLayer(id: string) {
@@ -86,6 +88,14 @@ describe("atlas feature mask", () => {
     assert.strictEqual(source?.data, firstMask);
     assert.equal(map.layers.size, 1);
     assert.equal(map.sources.size, 1);
+  });
+
+  it("places the mask below a requested label layer", () => {
+    const map = new FakeMap();
+    map.layers.set("graticule-labels", {});
+
+    showAtlasFeatureMask(map as never, polygon, "graticule-labels");
+    assert.equal(map.addedBeforeLayerId, "graticule-labels");
   });
 
   it("rejects a non-polygon feature and removes any previous mask", () => {

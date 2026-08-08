@@ -1236,8 +1236,13 @@ export function PrintLayoutDialog({
         : mapBodyAspectRatio(pageOptions);
       const viewportFrame = atlasViewportFrame(viewportWidth, viewportHeight, targetAspect);
       const coverageFeature = atlasLayer?.geojson?.features[page.sourceIndex];
-      if (atlasMaskEnabled) showAtlasFeatureMask(map, coverageFeature);
-      else clearAtlasFeatureMask(map);
+      if (atlasMaskEnabled) {
+        showAtlasFeatureMask(
+          map,
+          coverageFeature,
+          containMap ? GRATICULE_LABEL_LAYER_ID : undefined,
+        );
+      } else clearAtlasFeatureMask(map);
       const [w, s, e, n] = expandBounds(page.bounds, atlasFitMarginPct);
       map.fitBounds(
         [
