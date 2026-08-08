@@ -823,17 +823,6 @@ export function PrintLayoutDialog({
     () => atlasLayers.find((l) => l.id === atlasLayerId) ?? null,
     [atlasLayers, atlasLayerId],
   );
-  const atlasMaskAvailable = useMemo(
-    () =>
-      atlasCoverage === "features" &&
-      Boolean(
-        atlasLayer?.geojson?.features.some(
-          (feature) =>
-            feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon",
-        ),
-      ),
-    [atlasCoverage, atlasLayer],
-  );
   // The per-vertex geometry walk runs once per coverage layer; sort/filter
   // edits below only re-iterate these lightweight per-feature records.
   const atlasFeatureInfos = useMemo(
@@ -903,6 +892,14 @@ export function PrintLayoutDialog({
   const currentAtlasPage = atlasEnabled ? (atlasPages[clampedAtlasIndex] ?? null) : null;
   const atlasActive = atlasEnabled && atlasPageCount > 0;
   atlasActiveRef.current = atlasActive;
+  const currentAtlasFeature = currentAtlasPage
+    ? atlasLayer?.geojson?.features[currentAtlasPage.sourceIndex]
+    : undefined;
+  const atlasMaskAvailable = Boolean(
+    atlasCoverage === "features" &&
+    (currentAtlasFeature?.geometry?.type === "Polygon" ||
+      currentAtlasFeature?.geometry?.type === "MultiPolygon"),
+  );
   // The mask is a temporary live-map layer. Remove it immediately when the
   // option, atlas, or dialog is turned off instead of waiting for another
   // camera drive that may never happen.
@@ -1205,7 +1202,13 @@ export function PrintLayoutDialog({
   // bounds, so data blocks exclude the part of the live map that cover-crop
   // removes from the page.
   const captureAtlasPage = useCallback(
-    async (page: AtlasPage): Promise<{ cap: CapturedMap; viewBounds: AtlasBounds }> => {
+    async (
+      page: AtlasPage,
+    ): Promise<{
+      cap: CapturedMap;
+      viewBounds: AtlasBounds;
+      mapFit: "cover" | "contain";
+    }> => {
       const map = mapControllerRef.current?.getMap();
       if (!map) throw new Error("Map is not ready");
       const ctx: AtlasTokenContext = {
@@ -1243,7 +1246,8 @@ export function PrintLayoutDialog({
       // Mirror recapture: an active graticule draws coordinate labels at the
       // map edges, so fit with "contain" to keep them un-cropped on every
       // atlas page (mapFit is persistent state, so it must be set here too).
-      setMapFit(containMap ? "contain" : "cover");
+      const atlasMapFit = containMap ? "contain" : "cover";
+      setMapFit(atlasMapFit);
       // Hide the drawn print-extent box while reading the buffer, as recapture
       // does, so its outline is never baked into a page.
       const capture = () => {
@@ -1306,6 +1310,7 @@ export function PrintLayoutDialog({
       return {
         cap,
         viewBounds: frameBounds ?? [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+        mapFit: atlasMapFit,
       };
     },
     [
@@ -1694,7 +1699,7 @@ export function PrintLayoutDialog({
         onProgress: (current: number, totalPages: number) =>
           setAtlasProgress({ current, total: totalPages }),
         optionsForPage: async (i: number): Promise<LayoutOptions> => {
-          const { cap, viewBounds } = await captureAtlasPage(pages[i]);
+          const { cap, viewBounds, mapFit: atlasMapFit } = await captureAtlasPage(pages[i]);
           // Mirror progress into the dialog preview as pages are produced.
           setCaptured(cap);
           setAtlasViewBounds({ index: i, bounds: viewBounds });
@@ -1719,6 +1724,7 @@ export function PrintLayoutDialog({
             mapImage: cap.image,
             mapImageWidth: cap.width,
             mapImageHeight: cap.height,
+            mapFit: atlasMapFit,
           };
         },
       };
@@ -1746,8 +1752,16 @@ export function PrintLayoutDialog({
     }
   };
 
+  const handleDialogOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen && (atlasBusy || exporting)) return;
+      onOpenChange(nextOpen);
+    },
+    [atlasBusy, exporting, onOpenChange],
+  );
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         ref={dialogRef}
         className="max-w-5xl"
@@ -3303,7 +3317,11 @@ export function PrintLayoutDialog({
               })}
             </span>
           )}
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="ghost"
+            disabled={atlasBusy || exporting}
+            onClick={() => handleDialogOpenChange(false)}
+          >
             {t("common.close")}
           </Button>
           {/* Copy the composed layout straight to the clipboard (GH #773). */}
