@@ -188,6 +188,28 @@ describe("rowsIntersectingBounds", () => {
     assert.equal(rowsIntersectingBounds(infos, [-180, -1, -178, 1]).length, 1);
     assert.equal(rowsIntersectingBounds(infos, [-10, -1, 10, 1]).length, 0);
   });
+
+  it("matches a page extent several world copies from the canonical range", () => {
+    const infos = collectAtlasFeatures({
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "dateline" },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [179, 0],
+              [-179, 0],
+            ],
+          },
+        },
+      ],
+    });
+    // The map's unwrapped coordinates after panning two world copies east.
+    assert.equal(rowsIntersectingBounds(infos, [898, -1, 900, 1]).length, 1);
+    assert.equal(rowsWithinBounds(infos, [890, -1, 910, 1]).length, 1);
+    assert.equal(rowsIntersectingBounds(infos, [700, -1, 710, 1]).length, 0);
+  });
 });
 
 describe("rowForAtlasFeature", () => {

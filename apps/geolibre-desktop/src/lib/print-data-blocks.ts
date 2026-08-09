@@ -36,6 +36,19 @@ export function layerRows(collection: Pick<FeatureCollection, "features">): Char
 }
 
 /**
+ * The three 360° shifts that can carry a feature's longitude box onto the same
+ * world copy as a page extent centred on `center`. A page extent comes from the
+ * map's unwrapped coordinates, so after panning east it can sit several world
+ * copies away from the canonical [-180, 180] range a feature is stored in;
+ * testing only `0`/`±360` would reject those before the geometry check runs.
+ */
+function worldCopyOffsets(featureBounds: AtlasBounds, center: number): number[] {
+  const featureCenter = (featureBounds[0] + featureBounds[2]) / 2;
+  const nearest = Math.round((center - featureCenter) / 360) * 360;
+  return [nearest - 360, nearest, nearest + 360];
+}
+
+/**
  * The rows of the features whose geometry is fully within `bounds` —
  * the per-page filter for atlas data blocks. Takes {@link AtlasFeatureInfo}s
  * (from `collectAtlasFeatures`) rather than raw features so the per-vertex
@@ -50,10 +63,11 @@ export function rowsWithinBounds(
   features: readonly AtlasFeatureInfo[],
   bounds: AtlasBounds,
 ): ChartRow[] {
+  const center = (bounds[0] + bounds[2]) / 2;
   const rows: ChartRow[] = [];
   for (const info of features) {
     let contained = false;
-    for (const offset of [0, -360, 360]) {
+    for (const offset of worldCopyOffsets(info.bounds, center)) {
       if (
         bounds[0] <= info.bounds[0] + offset &&
         info.bounds[2] + offset <= bounds[2] &&
@@ -109,7 +123,7 @@ export function rowsIntersectingBounds(
   const center = (west + east) / 2;
   return features
     .filter((info) => {
-      const boundsOverlap = [0, -360, 360].some(
+      const boundsOverlap = worldCopyOffsets(info.bounds, center).some(
         (offset) =>
           info.bounds[0] + offset <= east &&
           west <= info.bounds[2] + offset &&
