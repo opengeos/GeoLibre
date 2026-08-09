@@ -258,6 +258,28 @@ describe("rowsIntersectingBounds", () => {
     });
     assert.equal(rowsIntersectingBounds(infos, [-180, -1, -170, 1]).length, 1);
   });
+
+  it("shifts a dateline feature whose unwrapped bounds already overlap the extent", () => {
+    const infos = collectAtlasFeatures({
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "dateline" },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [179, 0],
+              [-179, 0],
+            ],
+          },
+        },
+      ],
+    });
+    // `geometryBounds` unwraps this to [179, 0, 181, 0], so the bbox prefilter
+    // matches at offset 0 — but the raw coordinates still run the other way
+    // around the globe and need the shift before the geometry test.
+    assert.equal(rowsIntersectingBounds(infos, [180.25, -1, 180.75, 1]).length, 1);
+  });
 });
 
 describe("rowForAtlasFeature", () => {

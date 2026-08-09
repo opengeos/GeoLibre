@@ -147,11 +147,21 @@ export function rowsIntersectingBounds(
           south <= info.bounds[3],
       );
       if (overlapOffset === undefined) return false;
-      // The overwhelming common case needs no coordinate walk at all: the
-      // feature already overlaps the extent where both are stored. Only a
-      // match found on another world copy needs a shifted geometry clone.
-      const geometry =
-        overlapOffset === 0 ? info.geometry : geometryNearLongitude(info.geometry, center);
+      // The overwhelming common case needs no coordinate walk at all, but the
+      // shortcut has to prove the *raw* coordinates already sit in the extent's
+      // frame. `info.bounds` is unwrapped by `geometryBounds` (east past 180 for
+      // a dateline feature), so a match at offset 0 says nothing about the
+      // geometry it was derived from — a 179°→-179° line matches [180.25, 180.75]
+      // at offset 0 while its raw coordinates describe the far side of the world.
+      const alreadyInFrame =
+        overlapOffset === 0 &&
+        west >= -180 &&
+        east <= 180 &&
+        info.bounds[0] >= -180 &&
+        info.bounds[2] <= 180;
+      const geometry = alreadyInFrame
+        ? info.geometry
+        : geometryNearLongitude(info.geometry, center);
       return booleanIntersects(feature(geometry), extent);
     })
     .map((info) => ({ properties: info.properties }));
