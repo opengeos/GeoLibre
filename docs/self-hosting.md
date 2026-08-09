@@ -22,9 +22,10 @@ This page answers both. The short version:
     spatial catalog (FastAPI + PostGIS) with accounts, per-dataset permissions,
     and OGC/STAC APIs. Host the **GeoLibre web build** next to it on the *same
     origin*, behind the *same* authentication layer. Then use GeoLibre's built-in
-    **GeoLens plugin** to search the catalog and add datasets to the map. Data
-    never leaves your server, credentials never leave your auth layer, and there
-    is no CORS to configure.
+    **GeoLens plugin** to search the catalog and add datasets to the map. Every
+    byte is served from your own origin to an authenticated browser and to
+    nowhere else, credentials are sent only to that origin, and there is no CORS
+    to configure.
 
 ## Why same-origin matters
 
@@ -36,7 +37,10 @@ apply:
   when the data URL is on the **same origin** as the app, and is **not** sent
   when it is on a different origin. So a cookie-gated dataset works out of the
   box on one origin, and cross-origin it fails whatever the server does, because
-  the request arrives with no cookie for the server to check.
+  the request arrives with no cookie for the server to check. Same-origin is
+  necessary but not sufficient: the cookie's own `Path` still has to cover the
+  URL being requested, so set it to `Path=/` for a layout that spreads the app,
+  the API, and the project files across sibling paths.
 - **CORS.** Same-origin requests need no CORS headers at all. Cross-origin ones
   need the data host to allow your GeoLibre origin explicitly.
 - **Tile requests.** MapLibre issues raster and vector tile requests itself.
@@ -106,9 +110,12 @@ Then set at least these in its `.env` before exposing it (see the
 | `ENVIRONMENT=production` | Hides the API docs endpoints and hardens OAuth cookies. |
 | `JWT_SECRET_KEY` | Signing secret for sessions. |
 
-Upload your datasets, keep them private (GeoLens uses role-based access control
-with per-dataset permissions), and create a per-user API key for programmatic
-access. That key is what the GeoLibre plugin uses to read private datasets.
+Upload your datasets and keep them private: GeoLens uses role-based access
+control with per-dataset permissions. The GeoLibre plugin can then read them two
+ways, and which one applies depends on how your deployment authorizes API
+requests. On a same-origin deployment the plugin's calls carry the visitor's
+GeoLens session automatically. Otherwise, create a per-user API key and paste it
+into the plugin panel.
 
 ## 2. Host the GeoLibre web build next to it
 
@@ -173,8 +180,13 @@ maps.example.org {
         file_server
     }
 
+    # Catch-all: GeoLens's own entry point, which serves its UI and routes
+    # /api to its API service internally, so one upstream covers both. Check
+    # your GeoLens deployment: if it exposes the API on a separate address,
+    # give it its own route above this block, and match on `handle` rather than
+    # `handle_path` so the `/api` prefix survives (the API expects it).
     handle {
-        reverse_proxy geolens-frontend:80
+        reverse_proxy geolens:8080
     }
 }
 ```
@@ -186,7 +198,8 @@ https://maps.example.org/gis/?url=https://maps.example.org/projects/watershed.ge
 ```
 
 opens a private project for an authenticated user and returns the login redirect
-for anyone else. No CORS headers, no tokens in URLs, no data leaving the VM.
+for anyone else. No CORS headers, no tokens in URLs, and nothing served to
+anyone the SSO layer has not admitted.
 
 !!! note "`url=` must be absolute"
     The project deep link is validated as an absolute `http(s)` URL, so
@@ -272,8 +285,9 @@ same SSO layer, as described above.
 | Data or tokens reaching a third party | None |
 | Cost | You run and update one more container |
 
-This is the pattern to choose when the requirement is that the data must not
-leave the server.
+This is the pattern to choose when the requirement is that the data must reach
+nobody but the users your own auth layer admits, and no third-party service
+along the way.
 
 ### Pattern B: hosted GeoLibre, private data elsewhere
 
