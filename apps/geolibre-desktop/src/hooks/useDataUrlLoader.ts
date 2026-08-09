@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { applyMapboxStyleImport, parseMapboxStyle } from "@geolibre/map";
 import { addPMTilesLayerFromUrl, addRasterToMap, addVectorLayerFromUrl } from "@geolibre/plugins";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -19,6 +19,13 @@ import type { ProjectUrlLoadState } from "./useProjectUrlLoader";
  * double-take; a store-added GeoJSON layer moves nothing on its own.
  */
 export type DataUrlLoadState = ProjectUrlLoadState & { fitLayerIds?: string[] };
+
+/** Whether a store layer records the given URL as the data it was loaded from. */
+function layerPointsAt(layer: GeoLibreLayer, url: string): boolean {
+  if (layer.sourcePath === url) return true;
+  const source = layer.source as { url?: unknown };
+  return source.url === url;
+}
 
 export function useDataUrlLoader(
   mapAppAPI: ReturnType<typeof createAppAPI> | null,
@@ -72,21 +79,33 @@ export function useDataUrlLoader(
                   fitBounds: true,
                 });
           if (!added) throw new Error(`Could not add ${remote.name} to the map.`);
-          const addedLayers = useAppStore
+          const synced = useAppStore
             .getState()
             .layers.filter((layer) => !previousIds.has(layer.id));
+          // A concurrent `?url=` project load replaces the whole layer array, so
+          // every project layer would read as new against the snapshot taken
+          // before the await. Prefer the layers that carry this data URL, and
+          // fall back to the plain diff for a loader that records the source
+          // under some other string.
+          const pointingAtData = synced.filter((layer) => layerPointsAt(layer, remote.url));
+          const addedLayers = pointingAtData.length ? pointingAtData : synced;
           if (!addedLayers.length) {
             throw new Error(
               `The ${remote.kind === "pmtiles" ? "PMTiles" : "GeoParquet"} loader did not create a layer.`,
             );
           }
-          for (const layer of addedLayers) {
-            if (remote.kind === "pmtiles" && layer.metadata.tileType === "raster" && styleResult) {
-              throw new Error(
-                "MapLibre vector styles cannot be applied to a raster PMTiles archive.",
-              );
-            }
-            if (styleResult) {
+          // Check every added layer before styling any of them: the archive's
+          // tile type is only known once the control has read it, so a raster
+          // archive paired with a vector style has to be rolled back rather
+          // than left behind by a deep link that reports failure.
+          if (styleResult && addedLayers.some((layer) => layer.metadata.tileType === "raster")) {
+            for (const layer of addedLayers) store.removeLayer(layer.id);
+            throw new Error(
+              "MapLibre vector styles cannot be applied to a raster PMTiles archive.",
+            );
+          }
+          if (styleResult) {
+            for (const layer of addedLayers) {
               store.setLayerStyle(layer.id, applyMapboxStyleImport(layer.style, styleResult));
             }
           }

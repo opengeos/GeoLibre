@@ -41,6 +41,13 @@ describe("GeoLibre URL style export", () => {
     );
   });
 
+  it("decodes a percent-encoded ZIP member path before taking the stem", () => {
+    assert.equal(
+      geoLibreStyleSourceName(layer("https://example.com/export.zip#folder%2Fparks.geojson")),
+      "parks",
+    );
+  });
+
   it("ignores an ordinary URL hash rather than reading it as the filename", () => {
     assert.equal(geoLibreStyleSourceName(layer("https://example.com/data.geojson#view")), "data");
   });

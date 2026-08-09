@@ -103,6 +103,44 @@ async function fetchOk(url: string, signal: AbortSignal | undefined, fetchImpl: 
 }
 
 /**
+ * Buffer the response body, enforcing the ceiling as it streams so a server
+ * that advertises no `Content-Length` (a chunked REST response, or one aimed at
+ * exhausting the tab) is cut off at the limit rather than after the whole
+ * payload has been read. Falls back to `arrayBuffer()` for a response with no
+ * readable stream.
+ */
+async function readCappedBytes(response: Response, url: string): Promise<Uint8Array> {
+  const tooLarge = () => new Error(`${url} is too large to open from a URL.`);
+  const body = response.body;
+  if (!body?.getReader) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length > MAX_DOWNLOAD_BYTES) throw tooLarge();
+    return bytes;
+  }
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.length;
+    if (total > MAX_DOWNLOAD_BYTES) {
+      await reader.cancel();
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return bytes;
+}
+
+/**
  * Unzip the archive's GeoJSON members off the main thread, so a near-ceiling
  * archive does not freeze the UI while it inflates. The size caps stop
  * *selecting* entries instead of throwing: an exception raised inside fflate's
@@ -147,7 +185,7 @@ export async function fetchRemoteData(
     return { kind: "vector", name: remoteName(url), url, format: "geoparquet" };
   }
   const response = await fetchOk(url, options.signal, options.fetchImpl ?? fetch);
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const bytes = await readCappedBytes(response, url);
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   const disposition = response.headers.get("content-disposition")?.toLowerCase() ?? "";
   // REST export endpoints commonly have no filename suffix. Prefer their HTTP

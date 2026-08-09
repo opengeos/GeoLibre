@@ -242,4 +242,30 @@ describe("data URL deep links", () => {
       /too large to open from a URL \(400 MB\)/,
     );
   });
+
+  it("stops reading a chunked response that streams past the ceiling", async () => {
+    const chunk = new Uint8Array(8 * 1024 * 1024);
+    let served = 0;
+    let cancelled = false;
+    const fetchImpl = (async () =>
+      new Response(
+        new ReadableStream({
+          pull(controller) {
+            served += 1;
+            controller.enqueue(chunk);
+          },
+          cancel() {
+            cancelled = true;
+          },
+        }),
+      )) as unknown as typeof fetch;
+    await assert.rejects(
+      fetchRemoteData("https://api.example.com/stream", { fetchImpl }),
+      /too large to open from a URL/,
+    );
+    assert.equal(cancelled, true);
+    // The ceiling is 250 MB, so an endless 8 MB stream is cut off well before
+    // it could have buffered an unbounded body.
+    assert.ok(served <= 34, `read ${served} chunks`);
+  });
 });

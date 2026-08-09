@@ -16,7 +16,7 @@ export function geoLibreStyleSourceName(layer: Pick<GeoLibreLayer, "name" | "sou
   // fragment names the data. Any other fragment is an ordinary URL hash
   // (`data.geojson#view`) and must not be mistaken for the filename.
   const source = layer.sourcePath ?? "";
-  const fragment = source.includes("#") ? source.slice(source.indexOf("#") + 1) : "";
+  const fragment = safeDecode(source.includes("#") ? source.slice(source.indexOf("#") + 1) : "");
   const raw =
     (/\.(?:geojson|json)$/i.test(fragment) ? fragment : source.split("#")[0]) || layer.name;
   let pathname = raw;
@@ -25,7 +25,9 @@ export function geoLibreStyleSourceName(layer: Pick<GeoLibreLayer, "name" | "sou
   } catch {
     pathname = raw.split(/[?#]/)[0] ?? raw;
   }
-  const basename = safeDecode(pathname.replaceAll("\\", "/").split("/").pop() || layer.name);
+  // Decode before splitting: an entry written as `folder%2Fparks.geojson` has to
+  // read as a path, or the stem would come out as `folder/parks`.
+  const basename = safeDecode(pathname).replaceAll("\\", "/").split("/").pop() || layer.name;
   const stem = basename.replace(/\.(?:geojson|json)$/i, "").trim();
   return stem || "layer";
 }
