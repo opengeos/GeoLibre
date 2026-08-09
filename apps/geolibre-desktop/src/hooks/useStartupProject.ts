@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { dataUrlParameters } from "../lib/data-url";
 import { isTauri } from "../lib/is-tauri";
 import { projectUrlFromLocation } from "../lib/project-url";
 import { openRecentProjectFile, RecentProjectGoneError } from "../lib/tauri-io";
@@ -15,15 +16,20 @@ export function useStartupProject(): string | null {
     if (!isTauri()) return;
     // Explicit launch payloads take precedence over the device default. Without
     // this guard, the startup read and a shared project deep link could race,
-    // with whichever request happened to finish last replacing the other. Defer
-    // to `projectUrlFromLocation` rather than naming query keys here, so this
-    // guard and `useProjectUrlLoader` can never disagree about what counts as an
-    // explicit project (it covers every key in `PROJECT_URL_PARAMS` plus a bare
-    // `?https://...` query).
-    const params = new URLSearchParams(window.location.search);
-    if (params.has("data") || projectUrlFromLocation() !== null) return;
+    // with whichever request happened to finish last replacing the other. Ask
+    // the loaders' own parsers rather than naming query keys here, so this guard
+    // can never disagree with them about what counts as an explicit payload:
+    // `projectUrlFromLocation` covers every key in `PROJECT_URL_PARAMS` plus a
+    // bare `?https://...` query, and `dataUrlParameters` only claims a `?data=`
+    // that is an absolute http(s) URL -- a malformed one leaves `useDataUrlLoader`
+    // a no-op, so yielding to it would strand the user on an empty workspace.
+    if (projectUrlFromLocation() !== null) return;
+    if (dataUrlParameters(window.location.search) !== null) return;
     const settings = useDesktopSettingsStore.getState().desktopSettings.startup;
     if (settings.mode === "default") return;
+    // Reads what `useRecentProjectsPersistence` hydrated from localStorage, so
+    // it must stay above this hook in `App.tsx` -- run first, "last project"
+    // mode would see an empty list and silently fall through to no-op.
     const recentProjects = useAppStore.getState().recentProjects;
     const path =
       settings.mode === "specific" ? settings.projectPath : (recentProjects[0]?.path ?? null);
@@ -31,10 +37,13 @@ export function useStartupProject(): string | null {
 
     let cancelled = false;
     let warningTimer: number | undefined;
+    // `cancelled` alone would leave a discarded run's read and XYZ probes in
+    // flight; the signal ends them, matching `useProjectUrlLoader`.
+    const abortController = new AbortController();
     void (async () => {
       try {
-        const result = await openRecentProjectFile(path);
-        const project = await resolveProjectXyzLayers(result.project);
+        const result = await openRecentProjectFile(path, abortController.signal);
+        const project = await resolveProjectXyzLayers(result.project, abortController.signal);
         if (!cancelled) useAppStore.getState().loadProject(project, result.path);
       } catch (error) {
         if (cancelled) return;
@@ -59,6 +68,7 @@ export function useStartupProject(): string | null {
     })();
     return () => {
       cancelled = true;
+      abortController.abort();
       if (warningTimer !== undefined) window.clearTimeout(warningTimer);
     };
     // Startup restoration is intentionally one-shot. In particular, changing
