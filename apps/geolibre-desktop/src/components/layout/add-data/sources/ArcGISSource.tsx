@@ -64,6 +64,7 @@ export function ArcGISSource() {
   const resetSublayerCatalog = (clearSelection = false) => {
     retrieveAbortRef.current?.abort();
     retrieveAbortRef.current = null;
+    retrievedSublayerUrlRef.current = null;
     setSublayerOptions([]);
     setSublayerError(null);
     setIsRetrievingSublayers(false);
@@ -144,7 +145,7 @@ export function ArcGISSource() {
   };
 
   const handleArcgisLayerTypeChange = (nextLayerType: ArcGISLayerType) => {
-    resetSublayerCatalog(true);
+    resetSublayerCatalog();
     const currentUrl = arcgisUrl.trim();
     setArcgisLayerType(nextLayerType);
     // Keep a loaded sample URL in sync with the layer type, but leave an
@@ -223,7 +224,7 @@ export function ArcGISSource() {
               id="arcgis-source-type"
               value={arcgisSourceType}
               onChange={(event) => {
-                resetSublayerCatalog(true);
+                resetSublayerCatalog();
                 setArcgisSourceType(event.target.value as ArcGISSourceType);
               }}
             >
@@ -245,7 +246,6 @@ export function ArcGISSource() {
                   retrievedSublayerUrlRef.current !== null &&
                   nextUrl.trim() !== retrievedSublayerUrlRef.current;
                 resetSublayerCatalog(clearSelection);
-                if (clearSelection) retrievedSublayerUrlRef.current = null;
                 setArcgisUrl(nextUrl);
               }}
             />
