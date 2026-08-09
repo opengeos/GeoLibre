@@ -223,3 +223,26 @@ describe("cross-tab liveness", () => {
     }
   });
 });
+
+describe("announceLiveProjectSession where storage is blocked", () => {
+  it("returns a teardown instead of throwing out of effect setup", () => {
+    // A privacy mode that blocks storage must not take the caller down with
+    // it: this runs during effect setup, before the heartbeat and `pagehide`
+    // listeners are wired up.
+    const original = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
+    Object.defineProperty(globalThis, "sessionStorage", {
+      configurable: true,
+      get() {
+        throw new Error("access denied");
+      },
+    });
+    try {
+      const stopAnnouncing = announceLiveProjectSession();
+      assert.equal(typeof stopAnnouncing, "function");
+      stopAnnouncing();
+    } finally {
+      if (original) Object.defineProperty(globalThis, "sessionStorage", original);
+      else Reflect.deleteProperty(globalThis, "sessionStorage");
+    }
+  });
+});

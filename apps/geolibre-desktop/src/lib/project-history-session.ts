@@ -131,7 +131,18 @@ export function announceLiveProjectSession(): () => void {
   const channel = new BroadcastChannel(LIVE_TAB_CHANNEL);
   // Resolved once: this tab's id is fixed for its lifetime, and answering with
   // whatever `sessionStorage` holds at reply time would be a needless read.
-  const id = currentTabId();
+  // Guarded like every other storage access here, because this one runs during
+  // effect setup: where storage access throws (a privacy mode that blocks it),
+  // an escaping exception would abort the effect before the heartbeat and
+  // `pagehide` listeners are wired up. A tab that cannot identify itself simply
+  // does not answer.
+  let id: string;
+  try {
+    id = currentTabId();
+  } catch (error) {
+    console.error("Could not identify this tab for project recovery.", error);
+    return () => channel.close();
+  }
   channel.onmessage = (event: MessageEvent<{ type?: string } | null>) => {
     if (event.data?.type === "ping") channel.postMessage({ type: "alive", id });
   };
