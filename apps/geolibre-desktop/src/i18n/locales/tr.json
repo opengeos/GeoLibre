@@ -1331,6 +1331,7 @@
       "columns": "Sütunlar",
       "columnsHint": "İlk {{count}} alan varsayılan olarak seçilir. Özelleştirmek için sütunları işaretleyin.",
       "maxRows": "Maks satır",
+      "fitRows": "Satır sayısını sayfaya sığdır",
       "moreRows_one": "+{{count}} daha",
       "moreRows_other": "+{{count}} daha",
       "noRows": "Mevcut ayarlarla gösterilecek satır yok."

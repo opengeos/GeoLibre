@@ -1331,6 +1331,7 @@
       "columns": "Colonnes",
       "columnsHint": "Les {{count}} premiers champs sont sélectionnés par défaut. Cochez des colonnes pour personnaliser.",
       "maxRows": "Lignes max",
+      "fitRows": "Ajuster le nombre de lignes à la page",
       "moreRows_one": "+{{count}} de plus",
       "moreRows_other": "+{{count}} de plus",
       "noRows": "Aucune ligne à afficher avec les paramètres actuels."

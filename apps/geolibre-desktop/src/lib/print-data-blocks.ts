@@ -51,13 +51,14 @@ export function boundsIntersect(a: AtlasBounds, b: AtlasBounds): boolean {
 }
 
 /**
- * The rows of the features whose geometry bounding box intersects `bounds` —
+ * The rows of the features whose geometry is fully within `bounds` —
  * the per-page filter for atlas data blocks. Takes {@link AtlasFeatureInfo}s
  * (from `collectAtlasFeatures`) rather than raw features so the per-vertex
  * geometry walk runs once per layer, not once per atlas page; features
  * without a usable geometry were already dropped there (they are nowhere on
- * the page). A bbox test (not an exact intersection) matches how atlas pages
- * themselves are framed.
+ * the page). Full containment intentionally excludes features that only clip
+ * the page edge, which otherwise produces surprising table rows for geometry
+ * whose visible sliver is easy to miss.
  */
 export function rowsWithinBounds(
   features: readonly AtlasFeatureInfo[],
@@ -65,7 +66,19 @@ export function rowsWithinBounds(
 ): ChartRow[] {
   const rows: ChartRow[] = [];
   for (const info of features) {
-    if (!boundsIntersect(info.bounds, bounds)) continue;
+    let contained = false;
+    for (const offset of [0, -360, 360]) {
+      if (
+        bounds[0] <= info.bounds[0] + offset &&
+        info.bounds[2] + offset <= bounds[2] &&
+        bounds[1] <= info.bounds[1] &&
+        info.bounds[3] <= bounds[3]
+      ) {
+        contained = true;
+        break;
+      }
+    }
+    if (!contained) continue;
     rows.push({ properties: info.properties });
   }
   return rows;

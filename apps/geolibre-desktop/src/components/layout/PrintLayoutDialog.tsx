@@ -290,6 +290,7 @@ export function PrintLayoutDialog({
   const [tableSortField, setTableSortField] = useState("");
   const [tableSortDesc, setTableSortDesc] = useState(false);
   const [tableMaxRows, setTableMaxRows] = useState(DEFAULT_TABLE_ROWS);
+  const [tableFitRows, setTableFitRows] = useState(false);
   const [tablePosition, setTablePosition] = useState<BodyCorner>("bottom-left");
   const [tableFilterToPage, setTableFilterToPage] = useState(true);
   const [tableFilterToAtlasFeature, setTableFilterToAtlasFeature] = useState(false);
@@ -1056,7 +1057,7 @@ export function PrintLayoutDialog({
           columns: effectiveTableColumns,
           sortField: tableSortField || undefined,
           sortDescending: tableSortDesc,
-          maxRows: tableMaxRows,
+          maxRows: tableFitRows ? MAX_TABLE_ROWS : tableMaxRows,
         });
         if (data) {
           dataTable = {
@@ -1096,6 +1097,7 @@ export function PrintLayoutDialog({
       tableSortField,
       tableSortDesc,
       tableMaxRows,
+      tableFitRows,
       tableTitle,
       tablePosition,
       showDataChart,
@@ -2787,6 +2789,7 @@ export function PrintLayoutDialog({
                           min={1}
                           max={MAX_TABLE_ROWS}
                           value={tableMaxRows}
+                          disabled={tableFitRows}
                           onChange={(e) =>
                             setTableMaxRows(
                               Math.max(1, Math.min(MAX_TABLE_ROWS, Number(e.target.value) || 1)),
@@ -2812,6 +2815,12 @@ export function PrintLayoutDialog({
                         </Select>
                       </div>
                     </div>
+                    <ToggleField
+                      id="dt-fit-rows"
+                      label={t("printLayout.dataTable.fitRows")}
+                      checked={tableFitRows}
+                      onChange={setTableFitRows}
+                    />
                     <ToggleField
                       id="dt-filter-page"
                       label={t("printLayout.dataBlocks.filterToPage")}

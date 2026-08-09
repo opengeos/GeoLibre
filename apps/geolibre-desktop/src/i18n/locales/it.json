@@ -1331,6 +1331,7 @@
       "columns": "Colonne",
       "columnsHint": "I primi {{count}} campi sono selezionati per impostazione predefinita. Spunta le colonne per personalizzare.",
       "maxRows": "Righe max",
+      "fitRows": "Adatta il numero di righe alla pagina",
       "moreRows_one": "+{{count}} altra",
       "moreRows_other": "+{{count}} altre",
       "noRows": "Nessuna riga da mostrare con le impostazioni attuali."

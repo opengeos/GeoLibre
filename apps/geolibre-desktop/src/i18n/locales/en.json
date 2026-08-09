@@ -1337,6 +1337,7 @@
       "columns": "Columns",
       "columnsHint": "The first {{count}} fields are selected by default. Check columns to customize.",
       "maxRows": "Max rows",
+      "fitRows": "Adjust number of rows to fit page",
       "moreRows_one": "+{{count}} more",
       "moreRows_other": "+{{count}} more",
       "noRows": "No rows to show with the current settings."

@@ -1295,6 +1295,7 @@
       "columns": "列",
       "columnsHint": "默认选中前 {{count}} 个字段。勾选列以自定义。",
       "maxRows": "最大行数",
+      "fitRows": "调整行数以适应页面",
       "moreRows_other": "还有 {{count}} 行",
       "noRows": "当前设置下没有可显示的行。"
     },

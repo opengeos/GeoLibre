@@ -69,7 +69,7 @@ describe("rowsWithinBounds", () => {
   // pattern) and hands those to the filter.
   const infos = collectAtlasFeatures(collection);
 
-  it("keeps only features whose bounds intersect the extent", () => {
+  it("keeps only features fully within the extent", () => {
     const result = rowsWithinBounds(infos, [0, 0, 10, 10]);
     assert.deepEqual(
       result.map((r) => r.properties.name),
@@ -79,6 +79,32 @@ describe("rowsWithinBounds", () => {
 
   it("returns no rows for a fully disjoint extent", () => {
     assert.equal(rowsWithinBounds(infos, [-30, -30, -20, -20]).length, 0);
+  });
+
+  it("rejects features that only clip the extent edge", () => {
+    const partial = collectAtlasFeatures({
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "partial" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 0],
+                [5, 0],
+                [5, 5],
+                [0, 5],
+                [0, 0],
+              ],
+            ],
+          },
+        },
+      ],
+    });
+    assert.equal(boundsIntersect(partial[0].bounds, [4, 0, 8, 8]), true);
+    assert.equal(rowsWithinBounds(partial, [4, 0, 8, 8]).length, 0);
+    assert.equal(rowsWithinBounds(partial, [-1, -1, 6, 6]).length, 1);
   });
 });
 

@@ -1295,6 +1295,7 @@
       "columns": "Kolom",
       "columnsHint": "{{count}} bidang pertama dipilih secara default. Centang kolom untuk menyesuaikan.",
       "maxRows": "Baris maks",
+      "fitRows": "Sesuaikan jumlah baris agar pas dengan halaman",
       "moreRows_other": "+{{count}} lagi",
       "noRows": "Tidak ada baris untuk ditampilkan dengan pengaturan saat ini."
     },

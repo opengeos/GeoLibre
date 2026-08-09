@@ -1295,6 +1295,7 @@
       "columns": "열",
       "columnsHint": "기본적으로 처음 {{count}}개 필드가 선택됩니다. 열을 선택하여 사용자 지정하세요.",
       "maxRows": "최대 행 수",
+      "fitRows": "페이지에 맞게 행 수 조정",
       "moreRows_other": "+{{count}}개 더",
       "noRows": "현재 설정으로 표시할 행이 없습니다."
     },

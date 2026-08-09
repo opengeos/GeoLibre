@@ -1331,6 +1331,7 @@
       "columns": "Columnas",
       "columnsHint": "Los primeros {{count}} campos se seleccionan de forma predeterminada. Marque columnas para personalizar.",
       "maxRows": "Máx. de filas",
+      "fitRows": "Ajustar el número de filas a la página",
       "moreRows_one": "+{{count}} más",
       "moreRows_other": "+{{count}} más",
       "noRows": "No hay filas que mostrar con la configuración actual."

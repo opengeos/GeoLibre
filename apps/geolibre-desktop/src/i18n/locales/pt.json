@@ -1331,6 +1331,7 @@
       "columns": "Colunas",
       "columnsHint": "Os primeiros {{count}} campos são selecionados por padrão. Marque colunas para personalizar.",
       "maxRows": "Máx. de linhas",
+      "fitRows": "Ajustar o número de linhas à página",
       "moreRows_one": "+{{count}} mais",
       "moreRows_other": "+{{count}} mais",
       "noRows": "Nenhuma linha para mostrar com as configurações atuais."

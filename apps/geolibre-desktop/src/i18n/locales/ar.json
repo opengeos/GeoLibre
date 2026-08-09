@@ -1475,6 +1475,7 @@
       "columns": "الأعمدة",
       "columnsHint": "يتم تحديد أول {{count}} حقل افتراضيًا. حدد الأعمدة للتخصيص.",
       "maxRows": "أقصى عدد صفوف",
+      "fitRows": "ضبط عدد الصفوف لملاءمة الصفحة",
       "moreRows_zero": "+{{count}} صف إضافي",
       "moreRows_one": "+{{count}} صف إضافي",
       "moreRows_two": "+{{count}} صفان إضافيان",
