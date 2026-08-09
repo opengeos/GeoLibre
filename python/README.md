@@ -154,13 +154,19 @@ anywhere untrusted, or use `Map.save_project`, which redacts by default.
   m = Map(center=(-100, 40), zoom=4)
   m._app_url = "https://web.geolibre.app/"
   m.add_basemap("dark")
+  m.add_vector(
+      "https://data.source.coop/giswqs/opengeos/world_cities.geojson",
+      name="World cities",
+  )
   m
   ```
 
   Set `_app_url` before returning `m` from the cell. With the hosted app, use
   hosted URLs for rasters and other browser-loaded sources; it cannot access
   files served from the kernel's temporary localhost server. Local GeoJSON,
-  CSV, and vector files that are read in Python and inlined still work.
+  CSV, and vector files that are read in Python and inlined still work. The
+  example uses `add_vector()` so the browser, rather than Python, fetches the
+  remote GeoJSON URL.
 - The bundled app is served from a localhost HTTP server, so the interactive
   widget works in local Jupyter and VS Code directly. **Google Colab** routes
   through its built-in port proxy automatically. On **JupyterHub** (including

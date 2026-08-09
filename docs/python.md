@@ -279,7 +279,7 @@ from geolibre import Map
 m = Map(center=(-100, 40), zoom=4)
 m._app_url = "https://web.geolibre.app/"
 m.add_basemap("dark")
-m.add_geojson(
+m.add_vector(
     "https://data.source.coop/giswqs/opengeos/world_cities.geojson",
     name="World cities",
 )
@@ -289,6 +289,10 @@ m
 This uses the same project-sync bridge as the regular widget; only the app's
 location changes. Set `_app_url` before returning `m` from the cell so the
 iframe uses the hosted URL on its first render.
+
+The example uses `add_vector()` so the hosted browser app fetches the remote
+GeoJSON directly. `add_geojson(url)` instead downloads and inlines the file in
+Python, which can fail when a data host rejects Python's HTTP client.
 
 Because the hosted app cannot access files exposed by the kernel's temporary
 localhost server, use hosted URLs for rasters and other sources the browser
