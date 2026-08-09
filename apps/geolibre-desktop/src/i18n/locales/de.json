@@ -1322,7 +1322,6 @@
       "layer": "Ebene",
       "titleLabel": "Überschrift",
       "position": "Position",
-      "filterToPage": "Nur Objekte in der Seitenausdehnung",
       "pageFilter": "Filter für Seitenausschnitt",
       "filterAll": "Alle Objekte",
       "filterContained": "Nur vollständig im Seitenausschnitt liegende Objekte",

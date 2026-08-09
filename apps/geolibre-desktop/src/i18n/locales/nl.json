@@ -1322,7 +1322,6 @@
       "layer": "Laag",
       "titleLabel": "Kop",
       "position": "Positie",
-      "filterToPage": "Alleen objecten binnen het pagina-bereik",
       "pageFilter": "Filter voor pagina-bereik",
       "filterAll": "Alle objecten",
       "filterContained": "Alleen objecten die volledig binnen het pagina-bereik liggen",

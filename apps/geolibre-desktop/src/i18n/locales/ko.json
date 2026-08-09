@@ -1286,7 +1286,6 @@
       "layer": "레이어",
       "titleLabel": "제목",
       "position": "위치",
-      "filterToPage": "페이지 범위 내 피처만",
       "pageFilter": "페이지 범위 필터",
       "filterAll": "모든 피처",
       "filterContained": "페이지 범위 안에 완전히 포함된 피처만",

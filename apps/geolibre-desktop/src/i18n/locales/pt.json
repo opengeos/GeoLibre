@@ -1322,7 +1322,6 @@
       "layer": "Camada",
       "titleLabel": "Cabeçalho",
       "position": "Posição",
-      "filterToPage": "Apenas feições na extensão da página",
       "pageFilter": "Filtro da extensão da página",
       "filterAll": "Todas as feições",
       "filterContained": "Apenas feições completamente dentro da extensão da página",

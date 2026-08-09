@@ -1286,7 +1286,6 @@
       "layer": "Layer",
       "titleLabel": "Judul",
       "position": "Posisi",
-      "filterToPage": "Hanya fitur dalam cakupan halaman",
       "pageFilter": "Filter cakupan halaman",
       "filterAll": "Semua fitur",
       "filterContained": "Hanya fitur yang sepenuhnya berada dalam cakupan halaman",

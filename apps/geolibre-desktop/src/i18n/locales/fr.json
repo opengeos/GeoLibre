@@ -1322,7 +1322,6 @@
       "layer": "Couche",
       "titleLabel": "En-tête",
       "position": "Position",
-      "filterToPage": "Seulement les entités dans l'emprise de la page",
       "pageFilter": "Filtre de l’emprise de la page",
       "filterAll": "Toutes les entités",
       "filterContained": "Uniquement les entités complètement dans l’emprise de la page",

@@ -1322,7 +1322,6 @@
       "layer": "Livello",
       "titleLabel": "Intestazione",
       "position": "Posizione",
-      "filterToPage": "Solo gli elementi nell'estensione della pagina",
       "pageFilter": "Filtro dell’estensione della pagina",
       "filterAll": "Tutte le entità",
       "filterContained": "Solo le entità completamente dentro l’estensione della pagina",

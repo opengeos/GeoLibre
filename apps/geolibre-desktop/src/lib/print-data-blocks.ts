@@ -117,7 +117,12 @@ export function rowsIntersectingBounds(
           south <= info.bounds[3],
       );
       if (!boundsOverlap) return false;
-      const geometry = geometryNearLongitude(info.geometry, center);
+      // The overwhelming common case needs no coordinate walk at all. Only
+      // dateline/unwrapped world copies require a shifted geometry clone.
+      const geometry =
+        west >= -180 && east <= 180 && info.bounds[0] >= -180 && info.bounds[2] <= 180
+          ? info.geometry
+          : geometryNearLongitude(info.geometry, center);
       return booleanIntersects(feature(geometry), extent);
     })
     .map((info) => ({ properties: info.properties }));

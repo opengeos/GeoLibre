@@ -1286,7 +1286,6 @@
       "layer": "レイヤー",
       "titleLabel": "見出し",
       "position": "位置",
-      "filterToPage": "ページ範囲内のフィーチャのみ",
       "pageFilter": "ページ範囲フィルター",
       "filterAll": "すべての地物",
       "filterContained": "ページ範囲内に完全に含まれる地物のみ",

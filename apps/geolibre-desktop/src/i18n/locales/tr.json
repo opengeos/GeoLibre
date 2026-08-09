@@ -1322,7 +1322,6 @@
       "layer": "Katman",
       "titleLabel": "Başlık",
       "position": "Konum",
-      "filterToPage": "Yalnızca sayfa kapsamındaki öğeler",
       "pageFilter": "Sayfa kapsamı filtresi",
       "filterAll": "Tüm öğeler",
       "filterContained": "Yalnızca sayfa kapsamının tamamen içindeki öğeler",

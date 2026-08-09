@@ -1322,7 +1322,6 @@
       "layer": "لایه",
       "titleLabel": "سرنویس",
       "position": "جایگاه",
-      "filterToPage": "تنها عوارض درون گسترهٔ صفحه",
       "pageFilter": "فیلتر گستره صفحه",
       "filterAll": "همه عوارض",
       "filterContained": "فقط عوارض کاملاً درون گستره صفحه",

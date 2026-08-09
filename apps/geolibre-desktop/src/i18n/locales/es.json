@@ -1322,7 +1322,6 @@
       "layer": "Capa",
       "titleLabel": "Encabezado",
       "position": "Posición",
-      "filterToPage": "Solo entidades en la extensión de la página",
       "pageFilter": "Filtro de extensión de página",
       "filterAll": "Todas las entidades",
       "filterContained": "Solo entidades completamente dentro de la extensión de página",

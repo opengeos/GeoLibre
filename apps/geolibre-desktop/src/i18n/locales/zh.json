@@ -1286,7 +1286,6 @@
       "layer": "图层",
       "titleLabel": "标题",
       "position": "位置",
-      "filterToPage": "仅显示页面范围内的要素",
       "pageFilter": "页面范围过滤器",
       "filterAll": "所有要素",
       "filterContained": "仅完全位于页面范围内的要素",

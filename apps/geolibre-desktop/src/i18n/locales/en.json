@@ -1328,7 +1328,6 @@
       "layer": "Layer",
       "titleLabel": "Heading",
       "position": "Position",
-      "filterToPage": "Only features in the page extent",
       "pageFilter": "Page extent filter",
       "filterAll": "All features",
       "filterContained": "Only features completely within the page extent",
