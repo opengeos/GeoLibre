@@ -171,7 +171,7 @@ export function CommentsPanel({
     try {
       await collaboration.join(targetCode, selfAuthorName, selfAuthorColor);
     } catch (err: unknown) {
-      setSessionError(err instanceof Error ? err.message : "Failed to join session.");
+      setSessionError(err instanceof Error ? err.message : t("comments.joinFailed"));
     } finally {
       setBusy(false);
     }
@@ -184,7 +184,7 @@ export function CommentsPanel({
     try {
       await collaboration.start(selfAuthorName, selfAuthorColor, "co-edit");
     } catch (err: unknown) {
-      setSessionError(err instanceof Error ? err.message : "Failed to start session.");
+      setSessionError(err instanceof Error ? err.message : t("comments.startFailed"));
     } finally {
       setBusy(false);
     }
@@ -249,7 +249,7 @@ export function CommentsPanel({
       <div className="flex items-center justify-between h-10 px-3 border-b border-border bg-card shrink-0">
         <div className="flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-primary" />
-          <span className="font-semibold text-xs text-foreground">Comments</span>
+          <span className="font-semibold text-xs text-foreground">{t("comments.title")}</span>
           <span className="inline-flex items-center justify-center h-4 px-1.5 text-[10px] font-bold rounded-full bg-muted text-muted-foreground">
             {unresolvedComments.length}
           </span>
@@ -261,10 +261,10 @@ export function CommentsPanel({
             size="sm"
             onClick={onActivateCommentTool}
             className="gap-1 h-7 px-2 text-xs"
-            title="Place a new review comment on the map"
+            title={t("comments.addCommentTooltip")}
           >
             <Plus className="h-3.5 w-3.5" />
-            <span>Add Comment</span>
+            <span>{t("comments.addComment")}</span>
             <kbd className="ms-1 rounded border border-current/25 px-1 font-mono text-[9px] leading-4 opacity-70">
               C
             </kbd>
@@ -284,7 +284,7 @@ export function CommentsPanel({
                 onChange={(e) => setNameInput(e.target.value)}
                 onKeyDown={handleNameKeyDown}
                 onBlur={handleSaveName}
-                placeholder="Your name…"
+                placeholder={t("comments.yourNamePlaceholder")}
                 className="h-6 text-xs flex-1 min-w-0 px-1.5"
               />
               <button
@@ -294,7 +294,7 @@ export function CommentsPanel({
                   handleSaveName();
                 }}
                 className="text-emerald-500 hover:text-emerald-600 shrink-0"
-                title="Save name"
+                title={t("comments.saveName")}
               >
                 <Check className="h-3.5 w-3.5" />
               </button>
@@ -307,14 +307,14 @@ export function CommentsPanel({
                 </span>
               ) : (
                 <span className="text-[11px] text-muted-foreground italic truncate">
-                  No name set — comments will show as "Author"
+                  {t("comments.noNameSet", { name: t("comments.defaultAuthorName") })}
                 </span>
               )}
               <button
                 type="button"
                 onClick={handleEditName}
                 className="text-muted-foreground hover:text-foreground shrink-0 ms-auto"
-                title={selfAuthorName ? "Change name" : "Set your name"}
+                title={selfAuthorName ? t("comments.changeNameTooltip") : t("comments.setYourName")}
               >
                 <Pencil className="h-3 w-3" />
               </button>
@@ -332,7 +332,7 @@ export function CommentsPanel({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                   <KeyRound className="h-3 w-3 text-primary shrink-0" />
-                  <span>Session Code</span>
+                  <span>{t("collaborate.sessionCode")}</span>
                 </div>
                 <div className="font-mono text-xs font-bold text-primary tracking-widest truncate mt-0.5">
                   {activeCode}
@@ -347,7 +347,7 @@ export function CommentsPanel({
                 title={t("collaborate.copyLink")}
               >
                 <Copy className="h-3 w-3 me-1" />
-                {copied ? "Copied" : "Copy"}
+                {copied ? t("collaborate.copied") : t("comments.copy")}
               </Button>
             </div>
           ) : (
@@ -361,7 +361,7 @@ export function CommentsPanel({
               className="w-full h-8 text-xs gap-1.5"
             >
               <Radio className="h-3.5 w-3.5 text-emerald-500" />
-              {busy ? "Starting…" : "Start Live Session"}
+              {busy ? t("comments.starting") : t("comments.startLiveSession")}
             </Button>
           )}
 
@@ -373,7 +373,7 @@ export function CommentsPanel({
                 onChange={(e) =>
                   setJoinCodeInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
                 }
-                placeholder="ENTER SESSION CODE"
+                placeholder={t("comments.sessionCodePlaceholder")}
                 className="h-7 font-mono text-xs uppercase tracking-wider"
                 disabled={busy}
               />
@@ -386,7 +386,7 @@ export function CommentsPanel({
                 className="h-7 px-2.5 text-[11px] gap-1 shrink-0"
               >
                 <Link2 className="h-3 w-3" />
-                <span>{busy ? "Joining…" : "Connect"}</span>
+                <span>{busy ? t("comments.joining") : t("comments.connect")}</span>
               </Button>
             </div>
           )}
@@ -402,10 +402,10 @@ export function CommentsPanel({
               />
               <span className="font-medium text-[11px] truncate">
                 {collab.connecting
-                  ? "Connecting…"
+                  ? t("collaborate.connecting")
                   : collab.isActive
-                    ? `Live Sync (${collab.participants?.length ?? 1} online)`
-                    : "Offline / Private Workspace"}
+                    ? t("comments.liveSync", { count: collab.participants?.length ?? 1 })
+                    : t("comments.offlineWorkspace")}
               </span>
             </div>
             {collab.isActive && (
@@ -416,7 +416,7 @@ export function CommentsPanel({
                 onClick={handleDisconnectSession}
                 className="h-6 px-1.5 text-[10px] text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
               >
-                Disconnect
+                {t("comments.disconnect")}
               </Button>
             )}
           </div>
@@ -447,10 +447,10 @@ export function CommentsPanel({
             )}
           >
             {f === "open"
-              ? `Open (${unresolvedComments.length})`
+              ? t("comments.filterOpen", { count: unresolvedComments.length })
               : f === "resolved"
-                ? `Resolved (${resolvedComments.length})`
-                : `All (${comments.length})`}
+                ? t("comments.filterResolved", { count: resolvedComments.length })
+                : t("comments.filterAll", { count: comments.length })}
           </button>
         ))}
       </div>
@@ -461,11 +461,10 @@ export function CommentsPanel({
           <div className="flex flex-col items-center justify-center min-h-[160px] text-center p-4 border border-dashed border-border/60 rounded-lg bg-card/40 my-2">
             <MessageCircle className="h-8 w-8 text-muted-foreground/50 mb-2" />
             <p className="text-xs font-medium text-foreground mb-1">
-              {filter === "resolved" ? "No resolved comments" : "No open comments"}
+              {filter === "resolved" ? t("comments.emptyResolved") : t("comments.emptyOpen")}
             </p>
             <p className="text-[11px] text-muted-foreground max-w-[200px]">
-              Click &quot;Add Comment&quot; above and select any location or feature on the map to
-              drop a review note.
+              {t("comments.emptyHint")}
             </p>
           </div>
         ) : (

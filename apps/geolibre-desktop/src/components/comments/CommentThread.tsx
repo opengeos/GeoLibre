@@ -64,7 +64,7 @@ export function CommentThread({
             style={{ backgroundColor: comment.author?.color || "#3b82f6" }}
           />
           <span className="font-semibold text-foreground truncate">
-            {comment.author?.name || "Author"}
+            {comment.author?.name || t("comments.defaultAuthorName")}
           </span>
           <span className="text-[10px] text-muted-foreground">
             {new Date(comment.createdAt).toLocaleDateString(undefined, {
@@ -76,7 +76,7 @@ export function CommentThread({
           </span>
           {comment.resolved && (
             <span className="text-[10px] bg-emerald-500/10 text-emerald-500 font-medium px-1.5 py-0.5 rounded border border-emerald-500/20">
-              Resolved
+              {t("comments.resolvedBadge")}
             </span>
           )}
         </div>
@@ -88,7 +88,7 @@ export function CommentThread({
             size="icon"
             className="h-7 w-7 text-muted-foreground hover:text-foreground"
             onClick={() => onZoomTo(comment)}
-            title="Zoom to location"
+            title={t("comments.zoomToLocation")}
           >
             <Navigation className="h-3.5 w-3.5" />
           </Button>
@@ -106,7 +106,7 @@ export function CommentThread({
                     : "text-muted-foreground hover:text-emerald-500",
                 )}
                 onClick={() => onToggleResolve(comment.id, !comment.resolved)}
-                title={comment.resolved ? "Reopen comment thread" : "Mark as resolved"}
+                title={comment.resolved ? t("comments.reopenThread") : t("comments.markResolved")}
               >
                 {comment.resolved ? (
                   <RotateCcw className="h-3.5 w-3.5" />
@@ -128,7 +128,7 @@ export function CommentThread({
                     onDelete(comment.id);
                   }
                 }}
-                title="Delete comment thread"
+                title={t("comments.deleteThread")}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
@@ -143,18 +143,21 @@ export function CommentThread({
           <>
             <Layers className="h-3 w-3 text-sky-400 shrink-0" />
             <span className="truncate">
-              Feature #{String(comment.anchor.featureId)} ({comment.anchor.layerId})
+              {t("comments.anchorFeature", {
+                id: String(comment.anchor.featureId),
+                layer: comment.anchor.layerId,
+              })}
             </span>
           </>
         ) : (
           <>
             <MapPin className="h-3 w-3 text-amber-400 shrink-0" />
             <span>
-              Point (
-              {comment.anchor.lngLat
-                ? `${comment.anchor.lngLat[1].toFixed(4)}, ${comment.anchor.lngLat[0].toFixed(4)}`
-                : "Map"}
-              )
+              {t("comments.anchorPoint", {
+                coords: comment.anchor.lngLat
+                  ? `${comment.anchor.lngLat[1].toFixed(4)}, ${comment.anchor.lngLat[0].toFixed(4)}`
+                  : t("comments.anchorMap"),
+              })}
             </span>
           </>
         )}
@@ -174,7 +177,7 @@ export function CommentThread({
                   style={{ backgroundColor: reply.author?.color || "#3b82f6" }}
                 />
                 <span className="font-semibold text-foreground text-[11px]">
-                  {reply.author?.name || "Author"}
+                  {reply.author?.name || t("comments.defaultAuthorName")}
                 </span>
                 <span className="text-[10px] text-muted-foreground">
                   {new Date(reply.createdAt).toLocaleDateString(undefined, {
@@ -202,14 +205,14 @@ export function CommentThread({
             onClick={() => setIsReplying(true)}
           >
             <CornerDownRight className="h-3 w-3" />
-            <span>Reply</span>
+            <span>{t("comments.reply")}</span>
           </Button>
         ) : (
           <form onSubmit={handleSubmitReply} className="mt-2 space-y-2">
             <Textarea
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
-              placeholder="Write a reply..."
+              placeholder={t("comments.replyPlaceholder")}
               rows={2}
               className="text-xs min-h-14 resize-none"
               autoFocus
@@ -224,11 +227,11 @@ export function CommentThread({
                   setReplyText("");
                 }}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="default" size="sm" className="gap-1">
                 <Send className="h-3 w-3" />
-                <span>Reply</span>
+                <span>{t("comments.reply")}</span>
               </Button>
             </div>
           </form>
