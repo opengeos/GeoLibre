@@ -164,6 +164,51 @@ You do not need to author that JSON by hand. Open the vector layer's **Layer act
 
 The same file can be applied interactively to an existing vector layer through **Layer actions → Styles → Import style (GeoLibre URL / Mapbox GL / SLD / QML)…**. Interactive import ignores the file's query-param `source` binding and applies its supported symbology to the layer you selected, so the data filename does not need to match.
 
+### An "Open in GeoLibre" badge
+
+If you publish a dataset — in a repository README, a data catalog, a paper's
+supplementary material — an **Open in GeoLibre** badge turns it into a one-click
+interactive map. Copy one of these and swap in your own URL:
+
+[![Open in GeoLibre](https://img.shields.io/badge/Open%20in-GeoLibre-green.svg)](https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson)
+
+```markdown
+[![Open in GeoLibre](https://img.shields.io/badge/Open%20in-GeoLibre-green.svg)](https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson)
+```
+
+The same badge can open a shared project instead of a single file, using `url`:
+
+```markdown
+[![Open in GeoLibre](https://img.shields.io/badge/Open%20in-GeoLibre-green.svg)](https://web.geolibre.app/?url=https://share.geolibre.app/you/project.geolibre.json)
+```
+
+In reStructuredText:
+
+```rst
+.. image:: https://img.shields.io/badge/Open%20in-GeoLibre-green.svg
+   :target: https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson
+   :alt: Open in GeoLibre
+```
+
+In HTML:
+
+```html
+<a href="https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson">
+  <img src="https://img.shields.io/badge/Open%20in-GeoLibre-green.svg" alt="Open in GeoLibre" />
+</a>
+```
+
+Add any of the [URL parameters](#url-parameters) to the link to control how the
+map opens — `&style=` for symbology, `&theme=dark`, or `&maponly` for a
+chrome-free view.
+
+One caveat specific to badges: a badge lives in a `README.md` that GitHub, PyPI,
+and docs sites all render, and each of those rewrites links differently. Keep
+the target URL **absolute**, and remember that if your data URL carries its own
+query string it needs the percent-encoding described above — inside a Markdown
+link an unencoded `&` will also end the link at that character in some
+renderers.
+
 ## Talking to the map at runtime
 
 URL parameters configure the app once, at load. To keep talking to a **live**
