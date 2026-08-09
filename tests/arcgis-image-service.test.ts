@@ -7,7 +7,10 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
-import { addArcGISLayer } from "../packages/plugins/src/plugins/arcgis-layer";
+import {
+  addArcGISLayer,
+  fetchArcGISMapServiceSublayers,
+} from "../packages/plugins/src/plugins/arcgis-layer";
 
 const MAP_SERVICE_URL = "https://example.com/arcgis/rest/services/Boundaries/MapServer";
 const IMAGE_SERVICE_URL = "https://example.com/arcgis/rest/services/Elevation/ImageServer";
@@ -442,5 +445,49 @@ describe("addArcGISLayer (map and image services)", () => {
       zoomTo: false,
     });
     assert.deepEqual(fitBoundsCalls, []);
+  });
+});
+
+describe("fetchArcGISMapServiceSublayers", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("retrieves named MapServer layers and carries credentials", async () => {
+    let requestedUrl = "";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requestedUrl = input.toString();
+      return jsonResponse({
+        layers: [
+          {
+            id: 2,
+            name: "Hydrography Lines",
+            parentLayerId: -1,
+            defaultVisibility: true,
+            subLayerIds: null,
+          },
+        ],
+      });
+    }) as typeof fetch;
+
+    const layers = await fetchArcGISMapServiceSublayers({
+      url: `${MAP_SERVICE_URL}/?f=html`,
+      token: "private token",
+    });
+
+    assert.deepEqual(
+      layers.map(({ id, name }) => ({ id, name })),
+      [{ id: 2, name: "Hydrography Lines" }],
+    );
+    assert.match(requestedUrl, /\/MapServer\?f=json&token=private\+token$/);
+  });
+
+  it("rejects URLs that are not MapServer endpoints", async () => {
+    await assert.rejects(
+      fetchArcGISMapServiceSublayers({ url: IMAGE_SERVICE_URL }),
+      /Enter an ArcGIS MapServer URL/,
+    );
   });
 });

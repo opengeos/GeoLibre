@@ -190,6 +190,15 @@ interface ArcGISImageProducingServiceInfo extends ArcGISServiceInfo {
   tileInfo?: ArcGISTileInfo;
 }
 
+/** One selectable layer advertised by an ArcGIS MapServer. */
+export interface ArcGISMapServiceSublayer {
+  id: number;
+  name: string;
+  parentLayerId: number;
+  defaultVisibility: boolean;
+  subLayerIds: number[] | null;
+}
+
 interface ArcGISTileInfo {
   cols?: number;
   lods?: Array<{ level?: number; resolution?: number }>;
@@ -303,6 +312,38 @@ export async function addArcGISLayer(
   store.addLayer(layer, options.beforeLayerId);
   if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
   return id;
+}
+
+/**
+ * Retrieve the named layer catalog exposed by an ArcGIS MapServer.
+ *
+ * Group layers are included because ArcGIS accepts their ids in the dynamic
+ * export `layers=show:` parameter and selecting one is a convenient way to
+ * draw all of its descendants.
+ */
+export async function fetchArcGISMapServiceSublayers(params: {
+  url: string;
+  token?: string;
+  signal?: AbortSignal;
+}): Promise<ArcGISMapServiceSublayer[]> {
+  const { serviceUrl } = resolveArcGISImageServiceUrl(params.url, "map-service");
+  const response = await fetch(
+    appendArcGISParams(serviceUrl, { f: "json", token: params.token?.trim() }),
+    { signal: params.signal },
+  );
+  if (!response.ok) {
+    throw new Error(`ArcGIS service request failed with ${response.status}.`);
+  }
+  const json = (await response.json()) as ArcGISImageProducingServiceInfo & {
+    error?: ArcGISErrorEnvelope;
+    layers?: ArcGISMapServiceSublayer[];
+  };
+  if (json.error) {
+    throw new Error(arcgisErrorMessage(json.error, "ArcGIS service request failed."));
+  }
+  return Array.isArray(json.layers)
+    ? json.layers.filter((layer) => Number.isInteger(layer.id) && typeof layer.name === "string")
+    : [];
 }
 
 function ensureArcGISStoreCleanup(): void {
