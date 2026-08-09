@@ -59,19 +59,16 @@ export function ArcGISSource() {
 
   useEffect(() => () => retrieveAbortRef.current?.abort(), []);
 
-  const resetSublayerCatalog = () => {
+  const resetSublayerCatalog = (clearSelection = false) => {
     retrieveAbortRef.current?.abort();
     retrieveAbortRef.current = null;
     setSublayerOptions([]);
     setSublayerError(null);
     setIsRetrievingSublayers(false);
+    if (clearSelection) setArcgisSublayers("");
   };
 
   const handleRetrieveSublayers = async () => {
-    if (!arcgisUrl.trim()) {
-      setSublayerError(t("addData.arcgis.errorMapServiceUrl"));
-      return;
-    }
     resetSublayerCatalog();
     const controller = new AbortController();
     retrieveAbortRef.current = controller;
@@ -89,7 +86,13 @@ export function ArcGISSource() {
     } catch (error) {
       if (controller.signal.aborted) return;
       setSublayerOptions([]);
-      setSublayerError(error instanceof Error ? error.message : t("addData.arcgis.retrieveError"));
+      setSublayerError(
+        error instanceof Error && /Enter an ArcGIS MapServer URL/.test(error.message)
+          ? t("addData.arcgis.errorMapServiceUrl")
+          : error instanceof Error
+            ? error.message
+            : t("addData.arcgis.retrieveError"),
+      );
     } finally {
       if (!controller.signal.aborted) setIsRetrievingSublayers(false);
     }
@@ -120,7 +123,7 @@ export function ArcGISSource() {
   });
 
   const applyFields = (fields: ServiceFields) => {
-    resetSublayerCatalog();
+    resetSublayerCatalog(true);
     setArcgisLayerType(parseArcGISLayerType(serviceFieldString(fields, "layerType")));
     setArcgisSourceType(
       serviceFieldString(fields, "sourceType") === "portal-item" ? "portal-item" : "url",
@@ -138,7 +141,7 @@ export function ArcGISSource() {
   };
 
   const handleArcgisLayerTypeChange = (nextLayerType: ArcGISLayerType) => {
-    resetSublayerCatalog();
+    resetSublayerCatalog(true);
     const currentUrl = arcgisUrl.trim();
     setArcgisLayerType(nextLayerType);
     // Keep a loaded sample URL in sync with the layer type, but leave an
@@ -217,7 +220,7 @@ export function ArcGISSource() {
               id="arcgis-source-type"
               value={arcgisSourceType}
               onChange={(event) => {
-                resetSublayerCatalog();
+                resetSublayerCatalog(true);
                 setArcgisSourceType(event.target.value as ArcGISSourceType);
               }}
             >
@@ -234,7 +237,7 @@ export function ArcGISSource() {
               placeholder={t(URL_PLACEHOLDER_KEYS[arcgisLayerType])}
               value={arcgisUrl}
               onChange={(event) => {
-                resetSublayerCatalog();
+                resetSublayerCatalog(true);
                 setArcgisUrl(event.target.value);
               }}
             />
@@ -267,7 +270,7 @@ export function ArcGISSource() {
             placeholder={t("addData.common.optional")}
             value={arcgisAccessToken}
             onChange={(event) => {
-              resetSublayerCatalog();
+              resetSublayerCatalog(true);
               setArcgisAccessToken(event.target.value);
             }}
           />
