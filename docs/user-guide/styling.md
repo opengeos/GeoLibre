@@ -41,6 +41,12 @@ The **Style type** control chooses how feature values map to color:
 
 For graduated and categorized styles, GeoLibre generates the class breaks or category stops and shows them in the panel, where you can fine-tune individual colors before applying.
 
+### Style interchange and URL styles
+
+The selected vector layer's **Layer actions → Styles** submenu imports and exports GeoLibre URL style JSON, Mapbox/MapLibre style JSON, OGC SLD, and QGIS QML. A GeoLibre URL style is a compact MapLibre style whose feature data is supplied separately through the `data` URL parameter. Export one when you want to publish the current symbology beside hosted GeoJSON or a ZIP of GeoJSON files; import it when you want to apply that symbology to a layer already open in GeoLibre.
+
+See [Managing Layers](layers.md#importing-and-exporting-styles) for the menu workflow and [Embedding & Sharing](embedding.md#open-remote-data) for the JSON conventions.
+
 !!! tip "Choropleth maps"
     To make a choropleth, select **Graduated**, pick a numeric attribute, choose a colormap, and click **Apply style type**. See the [Your First Map tutorial](../tutorials/first-map.md).
 
@@ -54,6 +60,8 @@ For raster layers the Style panel exposes image adjustments:
 - **Hue rotation** (in degrees)
 
 These let you tune the look of GeoTIFF, COG, and tile-based raster layers without changing the underlying data.
+
+A remote COG opened with the `data` URL parameter can also receive a raster style through `style`. Raster URL styles support band mode and selection, rescale ranges, colormap and reversal, nodata, opacity, gamma, stretch, and normalized-difference index presets. See the [raster style example](embedding.md#open-remote-data).
 
 ## Legends and colorbars
 

@@ -37,6 +37,11 @@ describe("shouldSuppressOnboarding", () => {
     assert.equal(shouldSuppressOnboarding(), true);
   });
 
+  it("suppresses the wizard for a remote data or REST API deep link", () => {
+    withSearch(`?data=${encodeURIComponent("https://api.example.com/features?limit=10")}`);
+    assert.equal(shouldSuppressOnboarding(), true);
+  });
+
   it("suppresses the wizard when a deep-link param key holds an invalid URL", () => {
     // The intent to open a project (a recognized key is present) suppresses
     // onboarding even if the value does not resolve, so the wizard never layers

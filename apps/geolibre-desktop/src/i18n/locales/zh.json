@@ -4512,6 +4512,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "提取子集…",
     "stylesMenu": "样式",
+    "exportGeoLibreStyle": "导出 GeoLibre URL 样式",
     "exportMapboxStyle": "导出为 Mapbox GL 样式",
     "exportSldStyle": "导出为 OGC SLD",
     "exportQmlStyle": "导出为 QGIS QML",

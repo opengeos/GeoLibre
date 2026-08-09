@@ -4779,6 +4779,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "แยกชุดข้อมูลย่อย…",
     "stylesMenu": "สไตล์",
+    "exportGeoLibreStyle": "ส่งออกสไตล์ URL ของ GeoLibre",
     "exportMapboxStyle": "ส่งออกเป็นสไตล์ Mapbox GL",
     "exportSldStyle": "ส่งออกเป็น OGC SLD",
     "exportQmlStyle": "ส่งออกเป็น QGIS QML",

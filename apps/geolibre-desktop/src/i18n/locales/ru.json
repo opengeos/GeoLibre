@@ -4728,6 +4728,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "Извлечь подмножество…",
     "stylesMenu": "Стили",
+    "exportGeoLibreStyle": "Экспортировать URL-стиль GeoLibre",
     "exportMapboxStyle": "Экспортировать как стиль Mapbox GL",
     "exportSldStyle": "Экспортировать как OGC SLD",
     "exportQmlStyle": "Экспортировать как QGIS QML",

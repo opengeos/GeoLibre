@@ -4512,6 +4512,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "サブセットを抽出…",
     "stylesMenu": "スタイル",
+    "exportGeoLibreStyle": "GeoLibre URLスタイルをエクスポート",
     "exportMapboxStyle": "Mapbox GLスタイルとしてエクスポート",
     "exportSldStyle": "OGC SLDとしてエクスポート",
     "exportQmlStyle": "QGIS QMLとしてエクスポート",

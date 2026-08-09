@@ -1,11 +1,13 @@
 import { DirectionProvider } from "@geolibre/ui";
 import { useTranslation } from "react-i18next";
+import { useState } from "react";
 import { DesktopShell } from "./components/layout/DesktopShell";
 import { OnboardingDialog } from "./components/layout/OnboardingDialog";
 import { UpdateNotificationModal } from "./components/layout/UpdateNotificationModal";
 import { useDesktopSettingsPersistence } from "./hooks/useDesktopSettings";
 import { useLayoutOptions } from "./hooks/useLayoutOptions";
 import { useProjectUrlLoader } from "./hooks/useProjectUrlLoader";
+import { useDataUrlLoader } from "./hooks/useDataUrlLoader";
 import { useBeforeUnloadGuard } from "./hooks/useBeforeUnloadGuard";
 import { useRecentProjectsPersistence } from "./hooks/useRecentProjectsPersistence";
 import { useLayerLibraryPersistence } from "./hooks/useLayerLibraryPersistence";
@@ -18,6 +20,7 @@ import { useThemeScheme } from "./hooks/useThemeScheme";
 import { useUiProfileBootstrap } from "./hooks/useUiProfileBootstrap";
 import { useUndoRedoShortcuts } from "./hooks/useUndoRedoShortcuts";
 import { useWhiteboxToolUrl } from "./hooks/useWhiteboxToolUrl";
+import { createAppAPI } from "./hooks/usePlugins";
 import { languageDirection } from "./i18n/languages";
 
 export default function App() {
@@ -26,7 +29,9 @@ export default function App() {
   const { i18n } = useTranslation();
   const layoutOptions = useLayoutOptions();
   const { themeMode, toggleThemeMode } = useThemeMode();
+  const [mapAppAPI, setMapAppAPI] = useState<ReturnType<typeof createAppAPI> | null>(null);
   const projectUrlLoadState = useProjectUrlLoader();
+  const dataUrlLoadState = useDataUrlLoader(mapAppAPI);
   const { showOnboarding, dismissOnboarding } = useUiProfileBootstrap();
   const { pending: pendingUpdate, remindLater, skipVersion } = useStartupUpdateCheck();
 
@@ -45,8 +50,10 @@ export default function App() {
       <DesktopShell
         layoutOptions={layoutOptions}
         projectUrlLoadState={projectUrlLoadState}
+        dataUrlLoadState={dataUrlLoadState}
         themeMode={themeMode}
         onToggleThemeMode={toggleThemeMode}
+        onMapReady={setMapAppAPI}
       />
       <OnboardingDialog open={showOnboarding} onClose={dismissOnboarding} />
       <UpdateNotificationModal

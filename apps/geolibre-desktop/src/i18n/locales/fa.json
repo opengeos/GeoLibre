@@ -4851,6 +4851,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "استخراج زیرمجموعه…",
     "stylesMenu": "شیوهٔ نمایش‌ها",
+    "exportGeoLibreStyle": "خروجی سبک URL ژئولیبر",
     "exportMapboxStyle": "خروجی به‌صورت شیوهٔ نمایش Mapbox GL",
     "exportSldStyle": "خروجی به‌صورت OGC SLD",
     "exportQmlStyle": "خروجی به‌صورت QGIS QML",

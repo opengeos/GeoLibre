@@ -4871,6 +4871,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "استخراج مجموعة فرعية…",
     "stylesMenu": "الأنماط",
+    "exportGeoLibreStyle": "تصدير نمط عنوان URL لـ GeoLibre",
     "exportMapboxStyle": "تصدير كنمط Mapbox GL",
     "exportSldStyle": "تصدير بصيغة OGC SLD",
     "exportQmlStyle": "تصدير بصيغة QGIS QML",

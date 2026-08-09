@@ -42,6 +42,7 @@ kepler.gl, see the [Comparison](comparison.md).
 - Reproject vector layers to EPSG:4326 on load, render vector layers that carry Z coordinates in true 3D rather than flattening them onto the ground plane, and split dragged GPX files into named waypoint, track, and route layers
 - Large local vector layers render through client-side vector tiling, with a warning before loading very large files
 - Add Data menu covering every remote and cloud-native source:
+    - **URL deep links**: open GeoJSON, a REST endpoint returning a GeoJSON FeatureCollection, a COG, or a ZIP/REST response containing multiple GeoJSON files with `?data=`; optionally apply vector or raster style JSON with `?style=`, automatically fit the combined layer extent, and associate per-file ZIP styles by filename stem
     - **Tile and map services**: XYZ tiles; WMS and WFS, with layers and feature types discovered from the service's GetCapabilities so you pick from a populated dropdown; vector tiles, including OGC API - Tiles services; and ArcGIS FeatureServer, VectorTileServer, MapServer, and ImageServer layers, the last two with optional sublayer selection and server-side raster functions
     - **Feature services and feeds**: GeoJSON URLs; GeoRSS feeds from a URL or file; and OGC API - Features collections added as vector layers from whatever URL you have in hand — a landing page, `/collections`, a collection, or a full items URL
     - **Raster**: COG and GeoTIFF; Cloud-Optimized NetCDF/HDF via kerchunk references, plus local HDF5 and NetCDF-4 files; and MBTiles
@@ -86,7 +87,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - **Rule-based renderer**: per-rule symbol properties, scale-dependent visibility, nested rules, and per-rule toggles, and it can hide features matching no rule
     - **Style toolkit**: diagram symbology (pie, donut, and bar charts drawn on features); a symbology pack of inverted-polygon masks, arrow and marker lines, and geometry generators; and data-driven proportional sizing for marker icons
     - **Style Manager**: saves reusable symbol, color-ramp, and label presets to a personal library and applies them across projects
-    - **Interchange**: vector layer symbology imports and exports as OGC SLD, QGIS QML, and Mapbox GL style JSON, so styles round-trip between GeoLibre, QGIS, and the Mapbox/MapLibre ecosystem
+    - **Interchange**: vector layer symbology imports and exports as OGC SLD, QGIS QML, Mapbox GL style JSON, and compact GeoLibre URL style JSON; URL-style exports omit feature data, carry filename-matched sources for ZIP layers, work directly with `?style=`, and can be imported back onto any selected vector layer
 - Data-defined label engine for labeling vector features by any attribute or expression
     - ArcGIS-style placement and styling controls: anchor, X/Y offset, rotation, wrap width, and letter case
     - Expression-driven label properties and placement priority

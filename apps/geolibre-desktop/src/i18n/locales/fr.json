@@ -4584,6 +4584,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "Extraire un sous-ensemble…",
     "stylesMenu": "Styles",
+    "exportGeoLibreStyle": "Exporter le style d’URL GeoLibre",
     "exportMapboxStyle": "Exporter en style Mapbox GL",
     "exportSldStyle": "Exporter en OGC SLD",
     "exportQmlStyle": "Exporter en QGIS QML",

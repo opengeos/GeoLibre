@@ -67,10 +67,12 @@ import {
   applyQmlImport,
   applySldImport,
   buildMapboxStyle,
+  buildGeoLibreQueryStyle,
   buildQml,
   buildSld,
   isPlaceholderLayer,
   mapboxStyleToJson,
+  geoLibreStyleSourceName,
   parseMapboxStyle,
   parseQml,
   parseSld,
@@ -1668,6 +1670,40 @@ export function LayerPanel({
     [exportLayerStyle, t],
   );
 
+  // Export the compact style consumed by `?data=…&style=…`. Its render-layer
+  // source is the original data filename stem, which also lets one style file
+  // target individual GeoJSON members of a ZIP archive.
+  const handleExportGeoLibreStyle = useCallback(
+    (layer: GeoLibreLayer) =>
+      exportLayerStyle(
+        layer,
+        (geojson) => {
+          if (!geojson) {
+            return {
+              error:
+                geojsonVectorSourceId(layer) !== null
+                  ? t("layers.exportStyleDataNotReady")
+                  : t("layers.exportStyleNeedsFeatures"),
+            };
+          }
+          const result = buildGeoLibreQueryStyle(layer, geojson);
+          return { text: mapboxStyleToJson(result), warnings: result.warnings };
+        },
+        {
+          defaultName: `${sanitizeExportFileName(geoLibreStyleSourceName(layer))}.geolibre.style.json`,
+          filters: [{ name: "GeoLibre URL style", extensions: ["json"] }],
+          browserTypes: [
+            {
+              description: "GeoLibre URL style",
+              accept: { "application/json": [".json"] },
+            },
+          ],
+          mimeType: "application/json",
+        },
+      ),
+    [exportLayerStyle, t],
+  );
+
   // Export a vector layer's symbology as an OGC SLD document, the interchange
   // format QGIS, GeoServer, MapServer, and ArcGIS speak. Unlike the Mapbox
   // export, SLD carries no data, so a layer whose features are not readable can
@@ -1721,7 +1757,8 @@ export function LayerPanel({
     [exportLayerStyle],
   );
 
-  // Import a symbology file (Mapbox GL / MapLibre style JSON or an OGC SLD) and
+  // Import a symbology file (including GeoLibre URL and Mapbox/MapLibre style
+  // JSON, or an OGC SLD/QGIS QML) and
   // apply it to a vector layer, so cartography authored elsewhere (QGIS,
   // GeoServer, another map, or a style exported from GeoLibre) can be brought
   // back in instead of being rebuilt by hand. The format is detected from the
@@ -1734,7 +1771,7 @@ export function LayerPanel({
         const picked = await openLocalDataFileWithFallback({
           filters: [
             {
-              name: "Style (Mapbox GL / SLD / QML)",
+              name: "Style (GeoLibre URL / Mapbox GL / SLD / QML)",
               extensions: ["json", "sld", "qml", "xml"],
             },
           ],
@@ -1750,7 +1787,9 @@ export function LayerPanel({
         // Detect the format from the content, which is more reliable than the
         // file extension (a `.xml` can hold either XML dialect): a QGIS QML has
         // a `<qgis>`/`renderer-v2` root, an SLD a `StyledLayerDescriptor` root,
-        // and everything else is parsed as a Mapbox GL style JSON.
+        // and everything else (including a `.geolibre.style.json` export) is
+        // parsed as Mapbox GL style JSON. Its source binding is intentionally
+        // irrelevant here: importing applies symbology to the selected layer.
         const trimmed = picked.text.trimStart();
         const isXml = trimmed.startsWith("<");
         const isQml = isXml && isQmlStyleXml(picked.text);
@@ -3706,6 +3745,14 @@ export function LayerPanel({
                               <DropdownMenuSubContent>
                                 {canExportLayer && (
                                   <>
+                                    <DropdownMenuItem
+                                      onSelect={() => {
+                                        void handleExportGeoLibreStyle(layer);
+                                      }}
+                                    >
+                                      <Download className="me-2 h-3.5 w-3.5" />
+                                      {t("layers.exportGeoLibreStyle")}
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem
                                       onSelect={() => {
                                         void handleExportStyle(layer);

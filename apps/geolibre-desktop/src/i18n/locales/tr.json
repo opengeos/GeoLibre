@@ -4584,6 +4584,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "Alt küme çıkar…",
     "stylesMenu": "Stiller",
+    "exportGeoLibreStyle": "GeoLibre URL stilini dışa aktar",
     "exportMapboxStyle": "Mapbox GL stili olarak dışa aktar",
     "exportSldStyle": "OGC SLD olarak dışa aktar",
     "exportQmlStyle": "QGIS QML olarak dışa aktar",

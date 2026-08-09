@@ -4512,6 +4512,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "Ekstrak subset…",
     "stylesMenu": "Gaya",
+    "exportGeoLibreStyle": "Ekspor gaya URL GeoLibre",
     "exportMapboxStyle": "Ekspor sebagai gaya Mapbox GL",
     "exportSldStyle": "Ekspor sebagai OGC SLD",
     "exportQmlStyle": "Ekspor sebagai QGIS QML",

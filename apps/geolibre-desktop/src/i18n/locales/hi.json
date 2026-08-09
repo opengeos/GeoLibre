@@ -4584,6 +4584,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "उपसमुच्चय निकालें…",
     "stylesMenu": "शैलियां",
+    "exportGeoLibreStyle": "GeoLibre URL शैली निर्यात करें",
     "exportMapboxStyle": "Mapbox GL शैली के रूप में निर्यात करें",
     "exportSldStyle": "OGC SLD के रूप में निर्यात करें",
     "exportQmlStyle": "QGIS QML के रूप में निर्यात करें",

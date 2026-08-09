@@ -4584,6 +4584,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "ქვესიმრავლის ამოღება…",
     "stylesMenu": "სტილები",
+    "exportGeoLibreStyle": "GeoLibre URL სტილის ექსპორტი",
     "exportMapboxStyle": "ექსპორტი Mapbox GL სტილად",
     "exportSldStyle": "ექსპორტი OGC SLD-ად",
     "exportQmlStyle": "ექსპორტი QGIS QML-ად",

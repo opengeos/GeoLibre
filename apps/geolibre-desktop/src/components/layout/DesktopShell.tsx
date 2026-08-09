@@ -2,7 +2,7 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
-import { MapCanvas, setExternalDeckLayerOrderHandler } from "@geolibre/map";
+import { getLayerBounds, MapCanvas, setExternalDeckLayerOrderHandler } from "@geolibre/map";
 import { useTranslation } from "react-i18next";
 import {
   addRasterToMap,
@@ -107,6 +107,7 @@ import {
   useSwipeSplitViewExclusivity,
   useTimeSliderAutoClose,
 } from "../../hooks/usePlugins";
+import type { DataUrlLoadState } from "../../hooks/useDataUrlLoader";
 import { registerKmlSuperOverlayProtocol } from "../../lib/kml-super-overlay";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
@@ -483,8 +484,10 @@ const PythonConsolePanel = lazy(() =>
 interface DesktopShellProps {
   layoutOptions: LayoutOptions;
   projectUrlLoadState?: ProjectUrlLoadState;
+  dataUrlLoadState?: DataUrlLoadState;
   themeMode: ThemeMode;
   onToggleThemeMode: () => void;
+  onMapReady?: (app: ReturnType<typeof createAppAPI>) => void;
 }
 
 function hasDroppedFiles(event: DragEvent<HTMLElement>): boolean {
@@ -536,8 +539,10 @@ type ShellStyle = CSSProperties &
 export function DesktopShell({
   layoutOptions,
   projectUrlLoadState,
+  dataUrlLoadState,
   themeMode,
   onToggleThemeMode,
+  onMapReady,
 }: DesktopShellProps) {
   const { t } = useTranslation();
   const shellRef = useRef<HTMLDivElement>(null);
@@ -600,6 +605,40 @@ export function DesktopShell({
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => activeResizeCleanupRef.current?.(), []);
   const mapControllerRef = useRef<MapController | null>(null);
+
+  // URL-loaded data is added by the app-level hook before this shell owns a
+  // usable map controller. Once the hook publishes the added layer ids, wait
+  // for layer synchronization and frame their combined extent. A single raster
+  // goes through fitLayer so the controller can use renderer/source metadata
+  // that is not represented by an in-memory GeoJSON bounding box.
+  useEffect(() => {
+    const layerIds = dataUrlLoadState?.layerIds;
+    if (dataUrlLoadState?.status !== "loaded" || !layerIds?.length) return;
+    let disposed = false;
+    const timeout = window.setTimeout(() => {
+      if (disposed) return;
+      const controller = mapControllerRef.current;
+      const layers = useAppStore.getState().layers.filter((layer) => layerIds.includes(layer.id));
+      if (!controller || !layers.length) return;
+      if (layers.length === 1) {
+        controller.fitLayer(layers[0]);
+        return;
+      }
+      const bounds = layers.map(getLayerBounds).filter((value) => value !== null);
+      if (!bounds.length) return;
+      controller.fitBounds([
+        Math.min(...bounds.map((value) => value[0])),
+        Math.min(...bounds.map((value) => value[1])),
+        Math.max(...bounds.map((value) => value[2])),
+        Math.max(...bounds.map((value) => value[3])),
+      ]);
+    }, 150);
+    return () => {
+      disposed = true;
+      window.clearTimeout(timeout);
+    };
+  }, [dataUrlLoadState?.layerIds, dataUrlLoadState?.status]);
+
   const projectHistory = useProjectHistory(mapControllerRef);
   const [projectHistoryOpen, setProjectHistoryOpen] = useState(false);
   // The place shown in the Wikipedia knowledge card, or null when it is closed.
@@ -1236,7 +1275,8 @@ export function DesktopShell({
 
   const handleMapControllerReady = useCallback(() => {
     setMapReadyGeneration((generation) => generation + 1);
-  }, []);
+    onMapReady?.(createAppAPI(mapControllerRef));
+  }, [onMapReady]);
 
   // Keep the on-map compass (reset pitch/bearing) control's tooltip translated.
   // Re-runs when the controller (re)initialises (mapReadyGeneration) and on
@@ -2723,6 +2763,14 @@ export function DesktopShell({
           className="pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
         >
           {projectUrlLoadState.error}
+        </div>
+      ) : null}
+      {dataUrlLoadState?.error ? (
+        <div
+          aria-live="assertive"
+          className="pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
+        >
+          {dataUrlLoadState.error}
         </div>
       ) : null}
       {crsWarning ? (

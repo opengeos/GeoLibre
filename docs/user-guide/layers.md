@@ -21,6 +21,23 @@ Each layer exposes a set of actions:
 - **Remove layer**: delete the layer from the project.
 - **Insert before**: control where a new layer is placed in the stack.
 
+### Importing and exporting styles
+
+Vector layers have a **Layer actions → Styles** submenu for symbology interchange:
+
+- **Export GeoLibre URL style** writes a compact `.geolibre.style.json` file designed for the [`data` and `style` URL parameters](embedding.md#open-remote-data). It contains no feature data. Its MapLibre render layers use the original GeoJSON filename stem as `source`, allowing one style document to distinguish GeoJSON members in a ZIP.
+- **Export as Mapbox GL style** writes a self-contained Mapbox/MapLibre style with the layer's GeoJSON embedded.
+- **Export as OGC SLD** and **Export as QGIS QML** produce styles for other desktop and server GIS software.
+- **Import style (GeoLibre URL / Mapbox GL / SLD / QML)…** applies a supported style file to the selected layer. When importing a GeoLibre URL style interactively, the filename-based `source` association is ignored because the selected layer is the target.
+
+To use a GeoLibre URL style, upload it to a CORS-enabled web host and open GeoLibre with both URLs:
+
+```text
+https://web.geolibre.app/?data=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fplaces.geojson&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fsample.style.json
+```
+
+See [Embedding & Sharing](embedding.md#open-remote-data) for ZIP source matching, REST API responses, raster-style JSON, and encoding nested URLs.
+
 ## Layer groups
 
 Groups are folders in the layer stack. They can nest, so a project can carry a real hierarchy rather than one flat list.
