@@ -2196,7 +2196,7 @@
       "rasterShape": "{{width}}×{{height}} raster gelezen met {{bands}} band(en)",
       "wroteCog": "Getegelde COG met overzichten geschreven ({{compression}})",
       "notAGeoTiff": "Dit bestand is geen leesbare GeoTIFF. In de browser leest Raster naar COG alleen GeoTIFF; andere formaten vereisen de desktop-app.",
-      "rasterTooLargeForBrowser": "In de browser decodeert dit het hele raster in WebAssembly, dat beperkt is tot ongeveer 4 GB, dus deze past niet. Converteer het met de GeoLibre-desktop-app, of bouw de COG vooraf met gdal_translate of rio-cogeo.",
+      "rasterTooLargeForBrowser": "In de browser wordt het hele raster in WebAssembly-geheugen gedecodeerd. Dit geheugen is beperkt tot ongeveer 4 GB, waardoor het raster niet past. Converteer het met de GeoLibre-desktop-app, of bouw de COG vooraf met gdal_translate of rio-cogeo.",
       "zoomRangeError": "Zoomniveaus moeten voldoen aan 0 ≤ min ≤ max ≤ {{max}}.",
       "colormap": "Kleurenkaart",
       "resampling": "Herbemonstering",
