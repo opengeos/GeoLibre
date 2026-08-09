@@ -1,6 +1,83 @@
+import { DEFAULT_PROJECT_NAME } from "@geolibre/core";
+
 const SESSION_KEY = "geolibre-project-session";
 const TAB_KEY = "geolibre-project-session-tab";
 const LAST_SAVE_KEY = "geolibre-project-last-explicit-save";
+
+/**
+ * How often a live tab restamps its session entry, and how long an entry
+ * survives without being restamped.
+ *
+ * These exist because the session record is only ever written by the tab it
+ * describes: a tab killed without `pagehide` (crash, OS kill, "Force Reload",
+ * a mobile tab discarded under memory pressure) leaves its entry marked open
+ * with nobody left to close it, and `readProjectSessionState` reports "open"
+ * if *any* entry is. Without an expiry that one dead entry makes every later
+ * visit look like it followed a crash, forever. The heartbeat is what makes a
+ * long-lived tab distinguishable from a dead one: a tab open for hours keeps
+ * restamping, so only the genuinely gone go stale. The gap between the two
+ * values absorbs background-tab timer throttling, which browsers clamp to
+ * roughly one call per minute.
+ */
+export const SESSION_HEARTBEAT_MS = 60_000;
+const STALE_SESSION_MS = 5 * 60_000;
+
+export interface ProjectSessionEntry {
+  state: "open" | "closed";
+  at: string;
+}
+
+export type ProjectSessionRecord = Record<string, ProjectSessionEntry>;
+
+/**
+ * Parse the stored session record, dropping anything unrecognizable.
+ *
+ * Entries written before sessions carried a timestamp (a bare `"open"`, either
+ * as the whole value or per tab) are dropped rather than kept: their age is
+ * unknowable, so treating them as live would preserve exactly the stuck-open
+ * entries this expiry exists to clear.
+ */
+export function parseProjectSessions(stored: string | null): ProjectSessionRecord {
+  if (!stored || stored === "open" || stored === "closed") return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stored);
+  } catch {
+    return {};
+  }
+  if (typeof parsed !== "object" || parsed === null) return {};
+  const sessions: ProjectSessionRecord = {};
+  for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof value !== "object" || value === null) continue;
+    const { state, at } = value as Partial<ProjectSessionEntry>;
+    if ((state === "open" || state === "closed") && typeof at === "string") {
+      sessions[id] = { state, at };
+    }
+  }
+  return sessions;
+}
+
+/** Drop entries no live tab has restamped inside the expiry window. */
+export function pruneStaleProjectSessions(
+  sessions: ProjectSessionRecord,
+  nowMs: number,
+): ProjectSessionRecord {
+  const fresh: ProjectSessionRecord = {};
+  for (const [id, entry] of Object.entries(sessions)) {
+    const at = Date.parse(entry.at);
+    if (Number.isFinite(at) && at <= nowMs && nowMs - at <= STALE_SESSION_MS) fresh[id] = entry;
+  }
+  return fresh;
+}
+
+/** "open" when some tab that was alive recently never closed cleanly. */
+export function projectSessionState(
+  sessions: ProjectSessionRecord,
+  nowMs: number,
+): "open" | "closed" {
+  const live = Object.values(pruneStaleProjectSessions(sessions, nowMs));
+  return live.some((entry) => entry.state === "open") ? "open" : "closed";
+}
 
 function currentTabId(): string {
   let id = sessionStorage.getItem(TAB_KEY);
@@ -13,20 +90,9 @@ function currentTabId(): string {
   return id;
 }
 
-function readSessions(): Record<string, "open" | "closed"> {
-  const stored = localStorage.getItem(SESSION_KEY);
-  if (!stored) return {};
-  if (stored === "open" || stored === "closed") return { legacy: stored };
-  try {
-    return JSON.parse(stored) as Record<string, "open" | "closed">;
-  } catch {
-    return {};
-  }
-}
-
 export function readProjectSessionState(): string | null {
   try {
-    return Object.values(readSessions()).includes("open") ? "open" : "closed";
+    return projectSessionState(parseProjectSessions(localStorage.getItem(SESSION_KEY)), Date.now());
   } catch (error) {
     console.error("Could not read the project session state.", error);
     return null;
@@ -42,15 +108,54 @@ export function readLastExplicitProjectSave(): string | null {
   }
 }
 
+/**
+ * Record this tab's session state, restamped to now.
+ *
+ * Writing also prunes: every other tab's expired entry is dropped here, so the
+ * record cannot grow without bound and a crashed tab stops being counted.
+ */
 export function markProjectSession(state: "open" | "closed"): void {
   try {
-    const sessions = readSessions();
-    delete sessions.legacy;
-    sessions[currentTabId()] = state;
+    const now = Date.now();
+    const sessions = pruneStaleProjectSessions(
+      parseProjectSessions(localStorage.getItem(SESSION_KEY)),
+      now,
+    );
+    sessions[currentTabId()] = { state, at: new Date(now).toISOString() };
     localStorage.setItem(SESSION_KEY, JSON.stringify(sessions));
   } catch (error) {
     console.error("Could not persist the project session state.", error);
   }
+}
+
+/** The snapshot fields the recovery decision looks at. */
+export interface ProjectRecoveryCandidate {
+  createdAt: string;
+  name: string;
+  projectKey?: string;
+}
+
+/**
+ * Whether the crash-recovery prompt should be offered for `candidate`.
+ *
+ * A snapshot only qualifies when the previous session never marked itself
+ * closed, when the snapshot is newer than the last explicit save, and when it
+ * belongs to a project the user has actually claimed: one with a path, or one
+ * they renamed. An autosave of a still-default-named,
+ * never-saved project is throwaway state: on the web build every visit starts
+ * as "Untitled Project", and a `pagehide` that never fires (or a tab whose
+ * session id is gone) leaves the session marked open forever, so recovery
+ * would prompt on every single visit for work nobody asked to keep.
+ */
+export function shouldOfferProjectRecovery(
+  candidate: ProjectRecoveryCandidate | undefined,
+  sessionState: string | null,
+  lastExplicitSave: string | null,
+): boolean {
+  if (!candidate || sessionState !== "open") return false;
+  if (lastExplicitSave && candidate.createdAt <= lastExplicitSave) return false;
+  if (candidate.projectKey?.startsWith("path:")) return true;
+  return candidate.name !== DEFAULT_PROJECT_NAME;
 }
 
 export function recordExplicitProjectSave(): void {
