@@ -63,6 +63,7 @@ export {
   ARCGIS_IMAGE_SERVICE_SOURCE_KIND,
   ARCGIS_LAYER_TYPES,
   ARCGIS_MAP_SERVICE_SOURCE_KIND,
+  ARCGIS_MAP_SERVICE_URL_ERROR,
   parseArcGISLayerType,
   refreshArcGISFeatureLayer,
   reloadArcGISViewportLayer,

@@ -43,6 +43,7 @@ export function parseArcGISLayerType(
  */
 export const ARCGIS_MAP_SERVICE_SOURCE_KIND = "arcgis-map-service";
 export const ARCGIS_IMAGE_SERVICE_SOURCE_KIND = "arcgis-image-service";
+export const ARCGIS_MAP_SERVICE_URL_ERROR = "Enter an ArcGIS MapServer URL.";
 
 /** Tile size requested from `/export` and `/exportImage`, in pixels. */
 const ARCGIS_EXPORT_TILE_SIZE = 256;
@@ -1023,7 +1024,7 @@ function resolveArcGISImageServiceUrl(
 
   const match = /^(.*\/MapServer)(?:\/(\d+))?$/i.exec(url);
   if (!match) {
-    throw new Error("Enter an ArcGIS MapServer URL.");
+    throw new Error(ARCGIS_MAP_SERVICE_URL_ERROR);
   }
   return { serviceUrl: match[1], ...(match[2] ? { sublayers: match[2] } : {}) };
 }

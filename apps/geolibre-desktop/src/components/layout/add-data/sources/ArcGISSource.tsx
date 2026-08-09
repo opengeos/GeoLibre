@@ -1,5 +1,6 @@
 import {
   addArcGISLayer,
+  ARCGIS_MAP_SERVICE_URL_ERROR,
   fetchArcGISMapServiceSublayers,
   parseArcGISLayerType,
   type ArcGISLayerType,
@@ -54,6 +55,7 @@ export function ArcGISSource() {
   const [isRetrievingSublayers, setIsRetrievingSublayers] = useState(false);
   const [sublayerError, setSublayerError] = useState<string | null>(null);
   const retrieveAbortRef = useRef<AbortController | null>(null);
+  const retrievedSublayerUrlRef = useRef<string | null>(null);
   const [arcgisRenderingRule, setArcgisRenderingRule] = useState("");
   const [progress, setProgress] = useState<{ loaded: number; total: number | null } | null>(null);
 
@@ -82,12 +84,13 @@ export function ArcGISSource() {
       });
       if (controller.signal.aborted) return;
       setSublayerOptions(layers);
+      retrievedSublayerUrlRef.current = arcgisUrl.trim();
       if (layers.length === 0) setSublayerError(t("addData.arcgis.noSublayersFound"));
     } catch (error) {
       if (controller.signal.aborted) return;
       setSublayerOptions([]);
       setSublayerError(
-        error instanceof Error && /Enter an ArcGIS MapServer URL/.test(error.message)
+        error instanceof Error && error.message === ARCGIS_MAP_SERVICE_URL_ERROR
           ? t("addData.arcgis.errorMapServiceUrl")
           : error instanceof Error
             ? error.message
@@ -237,8 +240,13 @@ export function ArcGISSource() {
               placeholder={t(URL_PLACEHOLDER_KEYS[arcgisLayerType])}
               value={arcgisUrl}
               onChange={(event) => {
-                resetSublayerCatalog(true);
-                setArcgisUrl(event.target.value);
+                const nextUrl = event.target.value;
+                const clearSelection =
+                  retrievedSublayerUrlRef.current !== null &&
+                  nextUrl.trim() !== retrievedSublayerUrlRef.current;
+                resetSublayerCatalog(clearSelection);
+                if (clearSelection) retrievedSublayerUrlRef.current = null;
+                setArcgisUrl(nextUrl);
               }}
             />
           </div>
@@ -270,7 +278,7 @@ export function ArcGISSource() {
             placeholder={t("addData.common.optional")}
             value={arcgisAccessToken}
             onChange={(event) => {
-              resetSublayerCatalog(true);
+              resetSublayerCatalog();
               setArcgisAccessToken(event.target.value);
             }}
           />
