@@ -2,9 +2,10 @@ import { useAppStore } from "@geolibre/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isTauri } from "../lib/is-tauri";
+import { projectUrlFromLocation } from "../lib/project-url";
 import { openRecentProjectFile, RecentProjectGoneError } from "../lib/tauri-io";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
-import { useDesktopSettingsStore } from "./useDesktopSettings";
+import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopSettings";
 
 export function useStartupProject(): string | null {
   const { t } = useTranslation();
@@ -13,10 +14,14 @@ export function useStartupProject(): string | null {
   useEffect(() => {
     if (!isTauri()) return;
     // Explicit launch payloads take precedence over the device default. Without
-    // this guard, the startup read and a shared ?url= project could race, with
-    // whichever request happened to finish last replacing the other.
+    // this guard, the startup read and a shared project deep link could race,
+    // with whichever request happened to finish last replacing the other. Defer
+    // to `projectUrlFromLocation` rather than naming query keys here, so this
+    // guard and `useProjectUrlLoader` can never disagree about what counts as an
+    // explicit project (it covers every key in `PROJECT_URL_PARAMS` plus a bare
+    // `?https://...` query).
     const params = new URLSearchParams(window.location.search);
-    if (params.has("url") || params.has("data")) return;
+    if (params.has("data") || projectUrlFromLocation() !== null) return;
     const settings = useDesktopSettingsStore.getState().desktopSettings.startup;
     if (settings.mode === "default") return;
     const recentProjects = useAppStore.getState().recentProjects;
@@ -35,11 +40,15 @@ export function useStartupProject(): string | null {
         if (cancelled) return;
         if (error instanceof RecentProjectGoneError) {
           useAppStore.getState().forgetRecentProject(path);
-          if (settings.mode === "specific") {
-            const current = useDesktopSettingsStore.getState().desktopSettings;
+          // Re-read the preference rather than trusting the snapshot taken
+          // before the await: the user may have picked a different startup
+          // project while this load was in flight, and clearing that newer
+          // choice because an older path turned out to be gone would be wrong.
+          const current = useDesktopSettingsStore.getState().desktopSettings;
+          if (current.startup.mode === "specific" && current.startup.projectPath === path) {
             useDesktopSettingsStore.getState().setDesktopSettings({
               ...current,
-              startup: { mode: "default", projectPath: null, projectName: null },
+              startup: DEFAULT_STARTUP_SETTINGS,
             });
           }
         }
