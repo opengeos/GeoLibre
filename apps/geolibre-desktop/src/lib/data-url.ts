@@ -1,5 +1,5 @@
 import type { FeatureCollection } from "geojson";
-import { strFromU8, unzip } from "fflate";
+import { AsyncUnzipInflate, strFromU8, Unzip, UnzipPassThrough, type UnzipFile } from "fflate";
 
 export interface DataUrlParameters {
   dataUrl: string;
@@ -139,6 +139,10 @@ async function readCappedBytes(response: Response, url: string): Promise<Uint8Ar
     }
     chunks.push(value);
   }
+  return concatChunks(chunks, total);
+}
+
+function concatChunks(chunks: Uint8Array[], total: number): Uint8Array {
   const bytes = new Uint8Array(total);
   let offset = 0;
   for (const chunk of chunks) {
@@ -150,41 +154,78 @@ async function readCappedBytes(response: Response, url: string): Promise<Uint8Ar
 
 /**
  * Unzip the archive's GeoJSON members off the main thread, so a near-ceiling
- * archive does not freeze the UI while it inflates. The size caps stop
- * *selecting* entries instead of throwing: an exception raised inside fflate's
- * worker-backed pipeline would not surface through this promise.
+ * archive does not freeze the UI while it inflates.
+ *
+ * The streaming API is used rather than `unzip()` so the ceiling is enforced on
+ * the bytes as they are produced: an entry's declared `originalSize` is the
+ * archive's own claim, and a hostile ZIP is free to understate it, so a check
+ * made only once every entry is materialized would run after the memory it was
+ * meant to prevent had already been allocated. The declared size is still
+ * consulted first, as the cheap way to reject an honestly-large archive before
+ * inflating anything.
  */
 function unzipGeoJsonEntries(bytes: Uint8Array): Promise<Record<string, Uint8Array>> {
-  let total = 0;
-  let tooLarge = false;
   return new Promise((resolve, reject) => {
-    unzip(
-      bytes,
-      {
-        filter(entry) {
-          if (tooLarge) return false;
-          if (entry.name.endsWith("/") || !/\.(?:geojson|json)$/i.test(entry.name)) return false;
-          total += entry.originalSize;
-          if (entry.originalSize > MAX_ZIP_GEOJSON_BYTES || total > MAX_ZIP_GEOJSON_BYTES) {
-            tooLarge = true;
-            return false;
-          }
-          return true;
-        },
-      },
-      (error, files) => {
-        if (tooLarge) reject(new ZipTooLargeError());
-        else if (error) reject(error);
-        else {
-          // `originalSize` is the archive's own claim about an entry, and a
-          // hostile ZIP is free to understate it. Re-check what actually came
-          // out so the ceiling holds against a crafted archive too.
-          const inflated = Object.values(files).reduce((sum, entry) => sum + entry.length, 0);
-          if (inflated > MAX_ZIP_GEOJSON_BYTES) reject(new ZipTooLargeError());
-          else resolve(files);
+    const entries: Record<string, Uint8Array> = {};
+    const reading = new Set<UnzipFile>();
+    let total = 0;
+    let pending = 0;
+    let pushed = false;
+    let settled = false;
+
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      // Stop the workers still inflating the other entries; without this they
+      // keep producing the very bytes the ceiling just refused.
+      for (const file of reading) file.terminate?.();
+      reject(error);
+    };
+    const finishIfDone = () => {
+      if (!settled && pushed && pending === 0) {
+        settled = true;
+        resolve(entries);
+      }
+    };
+
+    const unzipper = new Unzip((file) => {
+      if (file.name.endsWith("/") || !/\.(?:geojson|json)$/i.test(file.name)) return;
+      const declared = file.originalSize ?? 0;
+      if (declared > MAX_ZIP_GEOJSON_BYTES || total + declared > MAX_ZIP_GEOJSON_BYTES) {
+        fail(new ZipTooLargeError());
+        return;
+      }
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      pending += 1;
+      reading.add(file);
+      file.ondata = (error, chunk, final) => {
+        if (settled) return;
+        if (error) {
+          fail(error);
+          return;
         }
-      },
-    );
+        total += chunk.length;
+        if (total > MAX_ZIP_GEOJSON_BYTES) {
+          fail(new ZipTooLargeError());
+          return;
+        }
+        chunks.push(chunk);
+        size += chunk.length;
+        if (final) {
+          reading.delete(file);
+          entries[file.name] = concatChunks(chunks, size);
+          pending -= 1;
+          finishIfDone();
+        }
+      };
+      file.start();
+    });
+    unzipper.register(AsyncUnzipInflate);
+    unzipper.register(UnzipPassThrough);
+    unzipper.push(bytes, true);
+    pushed = true;
+    finishIfDone();
   });
 }
 
