@@ -34,6 +34,14 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | `theme`      | `theme=dark`                                               | Sets the initial color theme, overriding the OS preference. Accepts `dark` or `light`; the in-app toggle still works afterward.       |
 | `tool`       | `tool=adaptive_filter`                                     | Opens the Processing (Whitebox toolbox) dialog on a specific tool by its id. Unknown ids open the dialog without preselecting a tool. |
 
+!!! note "Private projects and data"
+    `url=` and `data=` are fetched by the browser with same-origin credentials,
+    so a project or dataset gated by a session cookie loads only when GeoLibre is
+    served from that same origin. Passing a login-protected URL to the hosted
+    viewer at `web.geolibre.app` fails, because the cookie is not sent
+    cross-origin. Serve the app from your own host, or use a signed, expiring
+    URL. See [Self-Hosting & Private Data](../self-hosting.md).
+
 Parameters combine. For a narrow, chrome-free, dark embed of a shared project:
 
 ```text

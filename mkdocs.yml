@@ -81,6 +81,7 @@ nav:
       - Source Code Deep Dive (中文): tutorials/source-code-deep-dive-zh.md
   - Reference:
       - Architecture: architecture.md
+      - Self-Hosting: self-hosting.md
       - Android: android.md
       - iOS: ios.md
       - Mac App Store: mac-app-store.md

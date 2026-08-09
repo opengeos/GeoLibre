@@ -90,12 +90,11 @@ export interface GeoLensVectorTiles {
  * dataset renders anonymously; a private one renders when the browser carries a
  * GeoLens session cookie or embed token for the same origin.
  *
- * Known limitation: an API-key-only private raster cannot render, because
- * MapLibre issues the tile image requests and does not attach the `X-Api-Key`
- * header, and GeoLens does not (yet) return a URL-signed raster template the
- * way it does for vector tiles. Rendering those would need a signed raster URL
- * from GeoLens or an authenticated tile proxy — a server-side change beyond
- * this client. Public and session/embed-authorized rasters are unaffected.
+ * An API-key-only private raster also renders: MapLibre issues the tile image
+ * requests itself, so the key cannot ride along the way it does on this
+ * module's fetch calls, and `maplibre-geolens.ts` instead attaches `X-Api-Key`
+ * through MapLibre's `transformRequest` hook, scoped to exactly that raster's
+ * tile-URL prefix (see `registerRasterApiKey` there).
  */
 export interface GeoLensRasterTiles {
   /** Absolute `{z}/{x}/{y}.png` XYZ template. */

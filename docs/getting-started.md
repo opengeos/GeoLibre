@@ -127,6 +127,14 @@ Desktop filesystem dialogs, local MBTiles, local raster file reads, project save
 
 ### Run with Docker
 
+!!! tip "Private deployments"
+    If you are deploying GeoLibre so a team can work with data that must stay on
+    your own infrastructure, read
+    [Self-Hosting & Private Data](self-hosting.md) alongside this section: it
+    covers hosting the data (with [GeoLens](https://getgeolens.com)), putting
+    both behind one sign-on layer, and why serving them from the same origin
+    removes the CORS and cookie problems.
+
 The repository includes a Dockerfile for the browser version of GeoLibre. It builds the Vite app and serves the production files with nginx:
 
 ```bash
@@ -245,7 +253,9 @@ manager.
 
 Basic Auth is a single shared credential, not per-user accounts, and sends
 credentials with every request. For multi-user or SSO needs, put an auth proxy
-such as `oauth2-proxy` or Authelia in front of the unmodified image instead.
+such as `oauth2-proxy` or Authelia in front of the unmodified image instead (see
+[Self-Hosting & Private Data](self-hosting.md#putting-both-behind-one-auth-layer)
+for a worked example that also covers the data behind it).
 Also see the note in
 [`docker/nginx.conf`](https://github.com/opengeos/GeoLibre/blob/main/docker/nginx.conf)
 about dropping the `localhost` CSP allowances before exposing the image

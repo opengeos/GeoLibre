@@ -16,6 +16,30 @@ Beyond the [Add Data](adding-data.md) menu, GeoLibre connects to several hosted 
 !!! note "Credentials"
     Earth Engine requires authentication, and some providers expect an API key or token. Set these in **Settings → Environment Variables**. See [Settings & Preferences](settings.md).
 
+## Self-hosted catalogs
+
+| Integration | Where | What it does |
+| --- | --- | --- |
+| **GeoLens** | Plugins menu | Connect to a self-hosted [GeoLens](https://getgeolens.com) catalog, search its datasets, and add them as signed vector tiles, OGC API Features GeoJSON, or server-rendered raster tiles. |
+
+GeoLens is an open-source spatial catalog (FastAPI + PostGIS) that you run on
+your own infrastructure, which makes it the recommended way to keep private data
+private while still working with it in GeoLibre. In the plugin panel, enter your
+server's base URL (for example `https://maps.example.org`) and, for private
+datasets, a GeoLens API key. Each result links back to its metadata page, vector
+tile tokens are refreshed automatically before they expire, and a dataset loaded
+as GeoJSON can be edited and written back to GeoLens feature by feature when the
+server allows it.
+
+The API key is kept in memory for the session only: it is never written to the
+project file or to browser storage, so a saved project records just the server
+URL and dataset id. Layers from public datasets restore automatically; layers
+from private ones stay blank until the recipient reconnects with their own key.
+
+See [Self-Hosting & Private Data](../self-hosting.md) for the full deployment
+guide, including how to serve GeoLibre and GeoLens from one origin behind a
+single sign-on layer.
+
 ## Federal Web Services
 
 The **Web Services** submenu of the [Plugins menu](plugins.md) bundles four United States federal data sources:
