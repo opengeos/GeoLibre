@@ -335,7 +335,8 @@ export async function fetchArcGISMapServiceSublayers(params: {
         (layer): layer is ArcGISMapServiceSublayer =>
           typeof layer === "object" &&
           layer !== null &&
-          Number.isInteger((layer as Partial<ArcGISMapServiceSublayer>).id) &&
+          Number.isSafeInteger((layer as Partial<ArcGISMapServiceSublayer>).id) &&
+          ((layer as Partial<ArcGISMapServiceSublayer>).id ?? -1) >= 0 &&
           typeof (layer as Partial<ArcGISMapServiceSublayer>).name === "string",
       )
     : [];

@@ -463,6 +463,7 @@ describe("fetchArcGISMapServiceSublayers", () => {
         layers: [
           null,
           { name: "Missing id" },
+          { id: -1, name: "Negative id" },
           {
             id: 2,
             name: "Hydrography Lines",
