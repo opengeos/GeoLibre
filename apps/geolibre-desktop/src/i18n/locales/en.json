@@ -1737,7 +1737,8 @@
       "geocoding": "Geocoding",
       "ai": "AI Providers",
       "environment": "Environment",
-      "updates": "Updates"
+      "updates": "Updates",
+      "startup": "Startup"
     },
     "menu": {
       "mapPreferences": "Map Preferences",
@@ -1764,6 +1765,23 @@
         "minor": "Major and minor releases only",
         "major": "Major releases only"
       }
+    },
+    "startup": {
+      "title": "Startup project",
+      "description": "Choose the workspace GeoLibre opens when the native app starts.",
+      "mode": {
+        "default": "Open the default workspace",
+        "last": "Reopen the last project",
+        "specific": "Open a specific project"
+      },
+      "modeHint": {
+        "default": "Start with a new, untitled project.",
+        "last": "Open the most recently used local project."
+      },
+      "chooseProject": "Choose Project",
+      "noProjectSelected": "No project selected",
+      "selectError": "The selected project could not be read.",
+      "loadWarning": "The startup project is unavailable. GeoLibre opened the default workspace instead."
     },
     "map": {
       "constraintsTitle": "Map constraints",

@@ -83,6 +83,16 @@ export interface DesktopSettings {
    * desktop (Tauri) build; on the web these settings are inert.
    */
   updates: UpdateSettings;
+  /** Native-app project restoration policy. Browser builds ignore this setting. */
+  startup: StartupSettings;
+}
+
+export type StartupProjectMode = "default" | "last" | "specific";
+
+export interface StartupSettings {
+  mode: StartupProjectMode;
+  projectPath: string | null;
+  projectName: string | null;
 }
 
 export interface ThemeSettings {
@@ -173,6 +183,12 @@ export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = {
   notificationLevel: "all",
 };
 
+export const DEFAULT_STARTUP_SETTINGS: StartupSettings = {
+  mode: "default",
+  projectPath: null,
+  projectName: null,
+};
+
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   scheme: DEFAULT_THEME_SCHEME,
   customColor: DEFAULT_CUSTOM_COLOR,
@@ -190,6 +206,7 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   theme: DEFAULT_THEME_SETTINGS,
   uiProfile: DEFAULT_UI_PROFILE_SETTINGS,
   updates: DEFAULT_UPDATE_SETTINGS,
+  startup: DEFAULT_STARTUP_SETTINGS,
 };
 
 /** The experience-level presets, in order. Single source of truth. */
@@ -228,6 +245,27 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
     theme: normalizeThemeSettings(candidate.theme),
     uiProfile: normalizeUiProfileSettings(candidate.uiProfile),
     updates: normalizeUpdateSettings(candidate.updates),
+    startup: normalizeStartupSettings(candidate.startup),
+  };
+}
+
+function normalizeStartupSettings(startup: unknown): StartupSettings {
+  if (!startup || typeof startup !== "object") return DEFAULT_STARTUP_SETTINGS;
+  const candidate = startup as Partial<StartupSettings>;
+  const mode: StartupProjectMode =
+    candidate.mode === "last" || candidate.mode === "specific" ? candidate.mode : "default";
+  const projectPath =
+    typeof candidate.projectPath === "string" && candidate.projectPath.trim()
+      ? candidate.projectPath.trim()
+      : null;
+  const projectName =
+    typeof candidate.projectName === "string" && candidate.projectName.trim()
+      ? candidate.projectName.trim()
+      : null;
+  return {
+    mode: mode === "specific" && !projectPath ? "default" : mode,
+    projectPath,
+    projectName,
   };
 }
 

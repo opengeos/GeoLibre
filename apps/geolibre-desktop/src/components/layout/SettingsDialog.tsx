@@ -43,6 +43,7 @@ import {
   Check,
   Crosshair,
   DownloadCloud,
+  FolderOpen,
   ExternalLink,
   Eye,
   EyeOff,
@@ -82,6 +83,7 @@ import {
   type ExperienceLevel,
   type UiProfileSettings,
   type UpdateSettings,
+  type StartupSettings,
 } from "../../hooks/useDesktopSettings";
 import { useLanguage } from "../../hooks/useLanguage";
 import { BROWSER_PANEL_ID } from "../../hooks/useRegisterBrowserPanel";
@@ -93,6 +95,7 @@ import { THEME_SCHEMES, normalizeHexColor, type ThemeScheme } from "../../lib/th
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { resolveShareHost, shareHostLabel } from "../../lib/share-geolibre";
 import { IS_STORE_BUILD, type UpdateNotificationLevel } from "../../lib/updates";
+import { openProjectFile } from "../../lib/tauri-io";
 import {
   DATA_SOURCE_CATALOG,
   DATA_SOURCE_SECTION_LABEL_KEYS,
@@ -130,7 +133,8 @@ export type SettingsSection =
   | "geocoding"
   | "ai"
   | "environment"
-  | "updates";
+  | "updates"
+  | "startup";
 
 /** A field a deep-link can ask Settings to focus once the section renders. */
 export type SettingsFocusTarget = "shareToken" | "accentColor";
@@ -205,6 +209,7 @@ const SECTION_ITEMS: Array<{
     labelKey: "settings.section.updates",
     icon: DownloadCloud,
   },
+  { id: "startup", labelKey: "settings.section.startup", icon: FolderOpen },
 ];
 
 // The menu-item id that gates each Settings section, mirroring the dropdown.
@@ -239,6 +244,7 @@ interface DraftDesktopSettings {
   defaultAiProfileId: string | null;
   uiProfile: UiProfileSettings;
   updates: UpdateSettings;
+  startup: StartupSettings;
 }
 
 function createDraftId(): string {
@@ -279,6 +285,7 @@ function cloneDesktopSettings(settings: DesktopSettings): DraftDesktopSettings {
       hiddenMenuItems: [...settings.uiProfile.hiddenMenuItems],
     },
     updates: { ...settings.updates },
+    startup: { ...settings.startup },
   };
 }
 
@@ -464,6 +471,7 @@ export function SettingsDialog({
     // The Microsoft Store build has no in-app update flow to configure (policy
     // 10.2.5), so its settings section is dropped entirely.
     if (id === "updates" && IS_STORE_BUILD) return false;
+    if (id === "startup" && !isTauri()) return false;
     const gate = SECTION_GATE[id];
     return gate ? showSettingsItem(gate) : true;
   };
@@ -978,6 +986,29 @@ export function SettingsDialog({
     updateDraftUpdateSettings(DEFAULT_UPDATE_SETTINGS);
   };
 
+  const updateDraftStartupSettings = (patch: Partial<StartupSettings>) => {
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      startup: { ...current.startup, ...patch },
+    }));
+    setError(null);
+  };
+
+  const chooseStartupProject = async () => {
+    try {
+      const result = await openProjectFile();
+      if (!result) return;
+      updateDraftStartupSettings({
+        mode: "specific",
+        projectPath: result.path,
+        projectName: result.project.name,
+      });
+    } catch (error) {
+      console.error("Could not select a startup project.", error);
+      setError(t("settings.startup.selectError"));
+    }
+  };
+
   // Live updates from the Settings dropdown's Interface submenu (not the draft,
   // which only the dialog commits on Save). Reads the latest state so rapid
   // toggles do not clobber each other.
@@ -1013,7 +1044,10 @@ export function SettingsDialog({
   const updateCesiumIonToken = (value: string) => {
     // Draft-only until Save, like the share token above (a secret field should
     // not persist on every keystroke).
-    setDraftDesktopSettings((current) => ({ ...current, cesiumIonToken: value }));
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      cesiumIonToken: value,
+    }));
   };
 
   const updateUiProfile = (patch: Partial<UiProfileSettings>) => {
@@ -1171,6 +1205,7 @@ export function SettingsDialog({
       defaultAiProfileId: draftDesktopSettings.defaultAiProfileId,
       uiProfile: committedUiProfile,
       updates: draftDesktopSettings.updates,
+      startup: draftDesktopSettings.startup,
     });
     setOpen(false);
   };
@@ -1362,7 +1397,9 @@ export function SettingsDialog({
                   <span
                     aria-hidden
                     className="me-2 h-3.5 w-3.5 shrink-0 rounded-full border"
-                    style={{ backgroundColor: desktopSettings.theme.customColor }}
+                    style={{
+                      backgroundColor: desktopSettings.theme.customColor,
+                    }}
                   />
                   {t("settings.appearance.custom")}
                 </DropdownMenuRadioItem>
@@ -2473,6 +2510,64 @@ export function SettingsDialog({
                       })}
                     </div>
                   )}
+                </div>
+              ) : null}
+              {effectiveSection === "startup" ? (
+                <div className="space-y-5">
+                  <div>
+                    <h3 className="text-sm font-semibold">{t("settings.startup.title")}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.startup.description")}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {(["default", "last"] as const).map((mode) => (
+                      <label
+                        key={mode}
+                        className="flex items-start gap-3 rounded-md border p-3 text-sm"
+                      >
+                        <input
+                          className="mt-0.5 h-4 w-4"
+                          type="radio"
+                          name="startup-project-mode"
+                          checked={draftDesktopSettings.startup.mode === mode}
+                          onChange={() => updateDraftStartupSettings({ mode })}
+                        />
+                        <span className="space-y-1">
+                          <span className="block">{t(`settings.startup.mode.${mode}`)}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {t(`settings.startup.modeHint.${mode}`)}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                    <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                      <input
+                        className="mt-0.5 h-4 w-4"
+                        type="radio"
+                        name="startup-project-mode"
+                        checked={draftDesktopSettings.startup.mode === "specific"}
+                        disabled={!draftDesktopSettings.startup.projectPath}
+                        onChange={() => updateDraftStartupSettings({ mode: "specific" })}
+                      />
+                      <span className="min-w-0 flex-1 space-y-1">
+                        <span className="block">{t("settings.startup.mode.specific")}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {draftDesktopSettings.startup.projectName ??
+                            t("settings.startup.noProjectSelected")}
+                        </span>
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void chooseStartupProject()}
+                      >
+                        <FolderOpen className="h-3.5 w-3.5" />
+                        {t("settings.startup.chooseProject")}
+                      </Button>
+                    </label>
+                  </div>
                 </div>
               ) : null}
               {effectiveSection === "updates" ? (

@@ -15,6 +15,7 @@ import { useStyleLibraryPersistence } from "./hooks/useStyleLibraryPersistence";
 import { useTemplateLibraryPersistence } from "./hooks/useTemplateLibraryPersistence";
 import { useRuntimeEnvironmentVariables } from "./hooks/useRuntimeEnvironmentVariables";
 import { useStartupUpdateCheck } from "./hooks/useStartupUpdateCheck";
+import { useStartupProject } from "./hooks/useStartupProject";
 import { useThemeMode } from "./hooks/useThemeMode";
 import { useThemeScheme } from "./hooks/useThemeScheme";
 import { useUiProfileBootstrap } from "./hooks/useUiProfileBootstrap";
@@ -42,10 +43,10 @@ export default function App() {
   const dataUrlLoadState = useDataUrlLoader(mapAppAPI);
   const { showOnboarding, dismissOnboarding } = useUiProfileBootstrap();
   const { pending: pendingUpdate, remindLater, skipVersion } = useStartupUpdateCheck();
-
   useDesktopSettingsPersistence();
   useThemeScheme();
   useRecentProjectsPersistence();
+  const startupProjectWarning = useStartupProject();
   useStyleLibraryPersistence();
   useLayerLibraryPersistence();
   useTemplateLibraryPersistence();
@@ -69,6 +70,14 @@ export default function App() {
         onRemindLater={remindLater}
         onSkipVersion={skipVersion}
       />
+      {startupProjectWarning ? (
+        <div
+          role="alert"
+          className="fixed bottom-10 left-1/2 z-50 -translate-x-1/2 rounded-md border bg-background px-4 py-3 text-sm shadow-lg"
+        >
+          {startupProjectWarning}
+        </div>
+      ) : null}
     </DirectionProvider>
   );
 }
