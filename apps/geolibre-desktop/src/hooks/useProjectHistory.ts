@@ -54,14 +54,20 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
     const stopAnnouncing = crashRecoveryEnabled ? announceLiveProjectSession() : null;
     void (async () => {
       try {
-        const entries = await listProjectSnapshots();
+        // Independent work: the liveness probe waits a fixed window for other
+        // tabs to answer, so run it alongside the IndexedDB read rather than
+        // adding its wait to every load.
+        const [entries, liveTabs] = await Promise.all([
+          listProjectSnapshots(),
+          crashRecoveryEnabled ? liveProjectSessionTabs() : Promise.resolve(new Set<string>()),
+        ]);
         setSnapshots(entries.filter((entry) => entry.projectKey === currentProjectKey()));
         if (crashRecoveryEnabled) {
           const latest = entries[0];
           if (
             shouldOfferProjectRecovery(
               latest,
-              readProjectSessionState(await liveProjectSessionTabs()),
+              readProjectSessionState(liveTabs),
               readLastExplicitProjectSave(),
             )
           ) {

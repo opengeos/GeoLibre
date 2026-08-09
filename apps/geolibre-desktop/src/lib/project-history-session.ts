@@ -47,7 +47,9 @@ export function parseProjectSessions(stored: string | null): ProjectSessionRecor
   } catch {
     return {};
   }
-  if (typeof parsed !== "object" || parsed === null) return {};
+  // Arrays are objects, and `Object.entries` would index one into "0", "1", …
+  // tab ids, so a tampered array of session-shaped values would survive.
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
   const sessions: ProjectSessionRecord = {};
   for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
     if (typeof value !== "object" || value === null) continue;
@@ -127,8 +129,11 @@ export function readProjectSessionState(liveTabIds?: ReadonlySet<string>): strin
 export function announceLiveProjectSession(): () => void {
   if (typeof BroadcastChannel === "undefined") return () => {};
   const channel = new BroadcastChannel(LIVE_TAB_CHANNEL);
+  // Resolved once: this tab's id is fixed for its lifetime, and answering with
+  // whatever `sessionStorage` holds at reply time would be a needless read.
+  const id = currentTabId();
   channel.onmessage = (event: MessageEvent<{ type?: string } | null>) => {
-    if (event.data?.type === "ping") channel.postMessage({ type: "alive", id: currentTabId() });
+    if (event.data?.type === "ping") channel.postMessage({ type: "alive", id });
   };
   return () => channel.close();
 }
