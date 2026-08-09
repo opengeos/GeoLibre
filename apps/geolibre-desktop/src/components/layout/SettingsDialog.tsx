@@ -1044,10 +1044,7 @@ export function SettingsDialog({
   const updateCesiumIonToken = (value: string) => {
     // Draft-only until Save, like the share token above (a secret field should
     // not persist on every keystroke).
-    setDraftDesktopSettings((current) => ({
-      ...current,
-      cesiumIonToken: value,
-    }));
+    setDraftDesktopSettings((current) => ({ ...current, cesiumIonToken: value }));
   };
 
   const updateUiProfile = (patch: Partial<UiProfileSettings>) => {
@@ -1397,9 +1394,7 @@ export function SettingsDialog({
                   <span
                     aria-hidden
                     className="me-2 h-3.5 w-3.5 shrink-0 rounded-full border"
-                    style={{
-                      backgroundColor: desktopSettings.theme.customColor,
-                    }}
+                    style={{ backgroundColor: desktopSettings.theme.customColor }}
                   />
                   {t("settings.appearance.custom")}
                 </DropdownMenuRadioItem>
