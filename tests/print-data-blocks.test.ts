@@ -280,6 +280,58 @@ describe("rowsIntersectingBounds", () => {
     // around the globe and need the shift before the geometry test.
     assert.equal(rowsIntersectingBounds(infos, [180.25, -1, 180.75, 1]).length, 1);
   });
+
+  it("handles a GeometryCollection member", () => {
+    const infos = collectAtlasFeatures({
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "collection" },
+          geometry: {
+            type: "GeometryCollection",
+            geometries: [
+              { type: "Point", coordinates: [50, 50] },
+              {
+                type: "LineString",
+                coordinates: [
+                  [1, 1],
+                  [4, 4],
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    });
+    assert.equal(rowsIntersectingBounds(infos, [0, 0, 5, 5]).length, 1);
+    assert.equal(rowsIntersectingBounds(infos, [-20, -20, -10, -10]).length, 0);
+  });
+
+  it("drops a degenerate feature instead of throwing", () => {
+    const infos = collectAtlasFeatures({
+      features: [
+        // A ring with fewer than four positions is not a closed polygon.
+        {
+          type: "Feature",
+          properties: { name: "degenerate" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [1, 1],
+                [4, 4],
+              ],
+            ],
+          },
+        },
+        point(2, 2, { name: "sound" }),
+      ],
+    });
+    assert.deepEqual(
+      rowsIntersectingBounds(infos, [0, 0, 5, 5]).map((row) => row.properties.name),
+      ["sound"],
+    );
+  });
 });
 
 describe("rowForAtlasFeature", () => {

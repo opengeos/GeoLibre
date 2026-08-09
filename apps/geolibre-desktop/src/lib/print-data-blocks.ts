@@ -33,8 +33,8 @@ export type PageFilterMode = "all" | "contained" | "intersecting";
 
 /** Reduce a feature collection to the property-bag rows the builders consume. */
 export function layerRows(collection: Pick<FeatureCollection, "features">): ChartRow[] {
-  return collection.features.map((feature) => ({
-    properties: (feature.properties ?? {}) as Record<string, unknown>,
+  return collection.features.map((f) => ({
+    properties: (f.properties ?? {}) as Record<string, unknown>,
   }));
 }
 
@@ -162,7 +162,16 @@ export function rowsIntersectingBounds(
       const geometry = alreadyInFrame
         ? info.geometry
         : geometryNearLongitude(info.geometry, center);
-      return booleanIntersects(feature(geometry), extent);
+      // Print Layout runs over arbitrary user-supplied vector data, and unlike
+      // the bbox-only filters `booleanIntersects` throws on degenerate geometry
+      // (a ring with fewer than four positions, non-finite coordinates). This
+      // predicate runs in a render-time `useMemo` on every pan/zoom, so one bad
+      // feature must be excluded, not taken down the whole preview.
+      try {
+        return booleanIntersects(feature(geometry), extent);
+      } catch {
+        return false;
+      }
     })
     .map((info) => ({ properties: info.properties }));
 }
