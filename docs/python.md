@@ -265,6 +265,38 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 Style keyword arguments (for example `fillColor`, `strokeColor`, `strokeWidth`,
 `circleRadius`) map to the GeoLibre [layer style fields](project-format.md).
 
+## Use in marimo
+
+[marimo](https://marimo.io/) can render GeoLibre's anywidget, but its browser
+may not be able to reach the random `127.0.0.1` port where GeoLibre normally
+serves the bundled app. The symptom is an iframe displaying
+`127.0.0.1 refused to connect`. Point the widget at GeoLibre's hosted app before
+displaying it:
+
+```python
+from geolibre import Map
+
+m = Map(center=(-100, 40), zoom=4)
+m._app_url = "https://web.geolibre.app/"
+m.add_basemap("dark")
+m.add_geojson(
+    "https://data.source.coop/giswqs/opengeos/world_cities.geojson",
+    name="World cities",
+)
+m
+```
+
+This uses the same project-sync bridge as the regular widget; only the app's
+location changes. Set `_app_url` before returning `m` from the cell so the
+iframe uses the hosted URL on its first render.
+
+Because the hosted app cannot access files exposed by the kernel's temporary
+localhost server, use hosted URLs for rasters and other sources the browser
+loads directly. Local GeoJSON, CSV, and vector files that GeoLibre reads in
+Python and inlines into the project continue to work. The `_app_url` attribute
+is currently an internal compatibility workaround rather than a public
+constructor option.
+
 ## How it works
 
 The wheel bundles the GeoLibre web build. At import time the package starts a
@@ -275,8 +307,8 @@ UI edits flow back the same way.
 
 !!! note "Environment support"
 
-    The interactive widget works in **local Jupyter, VS Code, Google Colab, and
-    JupyterHub / remote servers**:
+    The interactive widget works in **local Jupyter, VS Code, Google Colab,
+    JupyterHub / remote servers, and marimo**:
 
     - **Local Jupyter / VS Code** - the app is served directly from localhost.
     - **Google Colab** - routes through Colab's built-in port proxy
@@ -295,6 +327,9 @@ UI edits flow back the same way.
           wherever `jupyter-server-proxy` is installed.
     - **Other remote servers** (Binder, remote JupyterLab over SSH/network) -
       pass `Map(server_proxy=True)` to use that same dual-route remote path.
+    - **marimo** - use the hosted app URL shown in [Use in
+      marimo](#use-in-marimo); Jupyter's proxy and server-extension routes are
+      not available in marimo.
 
     Set `Map(server_proxy=False)` to force the direct localhost path. If the app
     fails to load on a hub, either install `jupyter-server-proxy`, or confirm the
