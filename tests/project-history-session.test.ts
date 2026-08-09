@@ -95,6 +95,10 @@ describe("parseProjectSessions", () => {
     assert.deepEqual(parseProjectSessions(null), {});
     assert.deepEqual(parseProjectSessions("{not json"), {});
     assert.deepEqual(parseProjectSessions("[1,2]"), {});
+    // A session-shaped array is the case the plain "[1,2]" above cannot catch:
+    // its elements pass entry validation, so only rejecting arrays outright
+    // stops `Object.entries` turning the indexes into "0", "1", ... tab ids.
+    assert.deepEqual(parseProjectSessions(JSON.stringify([{ state: "open", at: stamp(0) }])), {});
     assert.deepEqual(parseProjectSessions(JSON.stringify({ tab: { state: "gone", at: "" } })), {});
   });
 });
