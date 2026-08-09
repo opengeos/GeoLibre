@@ -113,6 +113,17 @@ describe("data URL deep links", () => {
     assert.equal(parsed?.styleUrl, style);
   });
 
+  it("parses raw, unencoded data and style URLs as documented", () => {
+    // The spelling docs/user-guide/embedding.md leads with: `:` and `/` are legal
+    // in a query value, so a plain https URL needs no encodeURIComponent.
+    const parsed = dataUrlParameters(
+      "?data=https://assets.geolibre.app/data/places.geojson" +
+        "&style=https://assets.geolibre.app/data/sample.style.json",
+    );
+    assert.equal(parsed?.dataUrl, "https://assets.geolibre.app/data/places.geojson");
+    assert.equal(parsed?.styleUrl, "https://assets.geolibre.app/data/sample.style.json");
+  });
+
   it("rejects non-http data URLs", () => {
     assert.equal(dataUrlParameters("?data=file:///tmp/private.geojson"), null);
   });

@@ -33,7 +33,7 @@ Vector layers have a **Layer actions → Styles** submenu for symbology intercha
 To use a GeoLibre URL style, upload it to a CORS-enabled web host and open GeoLibre with both URLs:
 
 ```text
-https://web.geolibre.app/?data=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fplaces.geojson&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fsample.style.json
+https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson&style=https://assets.geolibre.app/data/sample.style.json
 ```
 
 See [Embedding & Sharing](embedding.md#open-remote-data) for GeoParquet and PMTiles deep links, ZIP source matching, REST API responses, raster-style JSON, and encoding nested URLs.

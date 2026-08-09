@@ -2,76 +2,6 @@
 
 GeoLibre's browser build can be embedded in any web page and configured through URL query parameters. This is how you turn a shared project into a live, focused map for a website, a report, or a dashboard.
 
-## Open remote data
-
-Use `data` to open public GeoJSON, GeoParquet, PMTiles, Cloud-Optimized GeoTIFF (COG), or a ZIP archive containing one or more `.geojson`/`.json` FeatureCollections. Each GeoJSON file in a ZIP becomes a separate layer. An optional `style` URL applies Mapbox/MapLibre style JSON to vector data:
-
-```text
-https://web.geolibre.app/?data=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fplaces.geojson&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fsample.style.json
-```
-
-`data` may also point to a REST API endpoint that returns either a GeoJSON `FeatureCollection` or a ZIP containing multiple GeoJSON files. ZIP API responses are recognized from their `Content-Type`/`Content-Disposition` headers or their ZIP file signature, so the endpoint does not need a `.zip` suffix. For example:
-
-```text
-https://web.geolibre.app/?data=https%3A%2F%2Fapi.example.com%2Ffeatures%3Fcategory%3Dparks%26limit%3D100
-```
-
-The example API URL is illustrative. Use the hosted `places.geojson` example above for a directly runnable test.
-
-A hosted ZIP with per-file styles can be tested directly:
-
-```text
-https://web.geolibre.app/?data=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fmultiple-layers.zip&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fmultiple-layers.style.json
-```
-
-GeoParquet is loaded through GeoLibre's DuckDB-backed vector reader. PMTiles is streamed with HTTP range requests and may contain either vector or raster tiles. These real vector examples also apply the hosted sample style:
-
-```text
-https://web.geolibre.app/?data=https%3A%2F%2Fdata.source.coop%2Fgiswqs%2Fopengeos%2Fbuilding_count_h3.parquet&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fsample.style.json
-```
-
-```text
-https://web.geolibre.app/?data=https%3A%2F%2Fdata.source.coop%2Fgiswqs%2Fopengeos%2Fbuilding_count_h3.pmtiles&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fsample.style.json
-```
-
-For a vector PMTiles archive, the style is applied to the layer after the archive's source layers are discovered. A raster PMTiles archive can be loaded with `data`, but it does not accept a MapLibre vector style through `style`.
-
-A public DEM COG can be tested directly:
-
-```text
-https://web.geolibre.app/?data=https%3A%2F%2Fdata.source.coop%2Fgiswqs%2Fopengeos%2Fdem.tif
-```
-
-Encode the nested data and style URLs with `encodeURIComponent`, especially when they contain their own query parameters. Remote servers must permit browser cross-origin requests (CORS). COG, GeoParquet, and PMTiles servers should also support HTTP byte-range requests.
-
-For a COG, `style` may point to a raster style JSON object. Supported fields are `mode` (`single`, `rgb`, or `index`), 1-based `bands`, `rescale` ranges, `colormap`, `reversed`, `nodata`, `opacity`, `gamma`, `stretch` (`linear`, `log`, or `sqrt`), and the normalized-difference `index` preset. For example:
-
-```json
-{
-  "mode": "single",
-  "bands": [1],
-  "rescale": [[0, 1000]],
-  "colormap": "viridis",
-  "reversed": false,
-  "nodata": "auto",
-  "opacity": 0.85,
-  "gamma": 1,
-  "stretch": "linear"
-}
-```
-
-After hosting that JSON as `dem.style.json`, pass both encoded URLs:
-
-```text
-https://web.geolibre.app/?data=https%3A%2F%2Fdata.source.coop%2Fgiswqs%2Fopengeos%2Fdem.tif&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fdem.style.json
-```
-
-For a ZIP containing files of the same geometry type, assign different styles by setting each Mapbox style layer's `source` to the corresponding filename stem. For example, `source: "parks"` targets `parks.geojson`, while `source: "counties"` targets `counties.geojson`. Style layers without a `source` are shared by every imported file. GeoLibre validates all filename/style matches before adding any ZIP layers.
-
-You do not need to author that JSON by hand. Open the vector layer's **Layer actions → Styles → Export GeoLibre URL style** menu. The downloaded `.geolibre.style.json` contains only symbology—not feature data—and its render-layer `source` is already set to the original GeoJSON filename stem. Host the file on a CORS-enabled server and pass its URL as `style` alongside the corresponding `data` URL. For a multi-file ZIP, export each layer's GeoLibre URL style and combine their `layers` and `sources` into one style document; layers without `source` can be used for rules shared by every ZIP member.
-
-The same file can be applied interactively to an existing vector layer through **Layer actions → Styles → Import style (GeoLibre URL / Mapbox GL / SLD / QML)…**. Interactive import ignores the file's query-param `source` binding and applies its supported symbology to the layer you selected, so the data filename does not need to match.
-
 ## The live viewer
 
 The browser build is hosted at `https://web.geolibre.app/`. It is a static site deployed on GitHub Pages that runs entirely in your browser: it has no analytics and no server account, and the data you load is processed client-side. Data leaves your browser only when you add a remote URL or explicitly share a project.
@@ -163,6 +93,76 @@ So an embed cannot be steered into authoring by a key press, a drag, or a
 project file. Display plugins (layer control, basemaps, time slider, legend and
 colorbar components) keep working, so the project still looks as it was saved. Use `layout=compact` for the complete authoring
 toolbar in a smaller space, or `maponly` for a pure map.
+
+## Open remote data
+
+Use `data` to open public GeoJSON, GeoParquet, PMTiles, Cloud-Optimized GeoTIFF (COG), or a ZIP archive containing one or more `.geojson`/`.json` FeatureCollections. Each GeoJSON file in a ZIP becomes a separate layer. An optional `style` URL applies Mapbox/MapLibre style JSON to vector data:
+
+```text
+https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson&style=https://assets.geolibre.app/data/sample.style.json
+```
+
+`data` may also point to a REST API endpoint that returns either a GeoJSON `FeatureCollection` or a ZIP containing multiple GeoJSON files. ZIP API responses are recognized from their `Content-Type`/`Content-Disposition` headers or their ZIP file signature, so the endpoint does not need a `.zip` suffix. An endpoint that takes its own query parameters is the case that does need percent-encoding, so its `&` separators are not read as GeoLibre's own:
+
+```text
+https://web.geolibre.app/?data=https%3A%2F%2Fapi.example.com%2Ffeatures%3Fcategory%3Dparks%26limit%3D100
+```
+
+The example API URL is illustrative. Use the hosted `places.geojson` example above for a directly runnable test.
+
+A hosted ZIP with per-file styles can be tested directly:
+
+```text
+https://web.geolibre.app/?data=https://assets.geolibre.app/data/multiple-layers.zip&style=https://assets.geolibre.app/data/multiple-layers.style.json
+```
+
+GeoParquet is loaded through GeoLibre's DuckDB-backed vector reader. PMTiles is streamed with HTTP range requests and may contain either vector or raster tiles. These real vector examples also apply the hosted sample style:
+
+```text
+https://web.geolibre.app/?data=https://data.source.coop/giswqs/opengeos/building_count_h3.parquet&style=https://assets.geolibre.app/data/sample.style.json
+```
+
+```text
+https://web.geolibre.app/?data=https://data.source.coop/giswqs/opengeos/building_count_h3.pmtiles&style=https://assets.geolibre.app/data/sample.style.json
+```
+
+For a vector PMTiles archive, the style is applied to the layer after the archive's source layers are discovered. A raster PMTiles archive can be loaded with `data`, but it does not accept a MapLibre vector style through `style`.
+
+A public DEM COG can be tested directly:
+
+```text
+https://web.geolibre.app/?data=https://data.source.coop/giswqs/opengeos/dem.tif
+```
+
+A plain `https://…` URL can be passed as-is, as above: `:` and `/` are legal in a query value and need no escaping. Encode the nested data and style URLs with `encodeURIComponent` only when they contain a character that would be read as GeoLibre's own query syntax — `&`, `=`, `+`, `%`, or `#`. Remote servers must permit browser cross-origin requests (CORS). COG, GeoParquet, and PMTiles servers should also support HTTP byte-range requests.
+
+For a COG, `style` may point to a raster style JSON object. Supported fields are `mode` (`single`, `rgb`, or `index`), 1-based `bands`, `rescale` ranges, `colormap`, `reversed`, `nodata`, `opacity`, `gamma`, `stretch` (`linear`, `log`, or `sqrt`), and the normalized-difference `index` preset. For example:
+
+```json
+{
+  "mode": "single",
+  "bands": [1],
+  "rescale": [[0, 1000]],
+  "colormap": "viridis",
+  "reversed": false,
+  "nodata": "auto",
+  "opacity": 0.85,
+  "gamma": 1,
+  "stretch": "linear"
+}
+```
+
+After hosting that JSON as `dem.style.json`, pass both URLs:
+
+```text
+https://web.geolibre.app/?data=https://data.source.coop/giswqs/opengeos/dem.tif&style=https://assets.geolibre.app/data/dem.style.json
+```
+
+For a ZIP containing files of the same geometry type, assign different styles by setting each Mapbox style layer's `source` to the corresponding filename stem. For example, `source: "parks"` targets `parks.geojson`, while `source: "counties"` targets `counties.geojson`. Style layers without a `source` are shared by every imported file. GeoLibre validates all filename/style matches before adding any ZIP layers.
+
+You do not need to author that JSON by hand. Open the vector layer's **Layer actions → Styles → Export GeoLibre URL style** menu. The downloaded `.geolibre.style.json` contains only symbology—not feature data—and its render-layer `source` is already set to the original GeoJSON filename stem. Host the file on a CORS-enabled server and pass its URL as `style` alongside the corresponding `data` URL. For a multi-file ZIP, export each layer's GeoLibre URL style and combine their `layers` and `sources` into one style document; layers without `source` can be used for rules shared by every ZIP member.
+
+The same file can be applied interactively to an existing vector layer through **Layer actions → Styles → Import style (GeoLibre URL / Mapbox GL / SLD / QML)…**. Interactive import ignores the file's query-param `source` binding and applies its supported symbology to the layer you selected, so the data filename does not need to match.
 
 ## Talking to the map at runtime
 
