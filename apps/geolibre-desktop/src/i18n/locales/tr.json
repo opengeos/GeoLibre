@@ -1323,6 +1323,10 @@
       "titleLabel": "Başlık",
       "position": "Konum",
       "filterToPage": "Yalnızca sayfa kapsamındaki öğeler",
+      "pageFilter": "Sayfa kapsamı filtresi",
+      "filterAll": "Tüm öğeler",
+      "filterContained": "Yalnızca sayfa kapsamının tamamen içindeki öğeler",
+      "filterIntersecting": "Yalnızca sayfa kapsamıyla kesişen öğeler",
       "filterToPageHint": "Atlas sayfalarına ve çizilen bir yazdırma kapsamına uygulanır; aksi halde tüm katman kullanılır.",
       "filterToAtlasFeature": "Yalnızca geçerli atlas öğesi",
       "filterToAtlasFeatureHint": "Tablo atlas kapsam katmanını kullandığında kullanılabilir. Sayfa kapsamı filtresine göre önceliklidir."

@@ -1323,6 +1323,10 @@
       "titleLabel": "Encabezado",
       "position": "Posición",
       "filterToPage": "Solo entidades en la extensión de la página",
+      "pageFilter": "Filtro de extensión de página",
+      "filterAll": "Todas las entidades",
+      "filterContained": "Solo entidades completamente dentro de la extensión de página",
+      "filterIntersecting": "Solo entidades que intersectan la extensión de página",
       "filterToPageHint": "Se aplica a las páginas de atlas y a una extensión de impresión dibujada; en caso contrario se usa toda la capa.",
       "filterToAtlasFeature": "Solo la entidad actual del atlas",
       "filterToAtlasFeatureHint": "Disponible cuando la tabla usa la capa de cobertura del atlas. Tiene prioridad sobre el filtro de extensión de página."

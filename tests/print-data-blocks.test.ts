@@ -8,6 +8,7 @@ import {
   layerRows,
   MAX_TABLE_ROWS,
   rowForAtlasFeature,
+  rowsIntersectingBounds,
   rowsWithinBounds,
 } from "../apps/geolibre-desktop/src/lib/print-data-blocks";
 import { collectAtlasFeatures } from "../apps/geolibre-desktop/src/lib/print-atlas";
@@ -104,6 +105,88 @@ describe("rowsWithinBounds", () => {
     assert.equal(rowsWithinBounds(dateline, [170, -5, 190, 5]).length, 1);
     assert.equal(rowsWithinBounds(dateline, [-190, -5, -170, 5]).length, 1);
     assert.equal(rowsWithinBounds(dateline, [-10, -5, 10, 5]).length, 0);
+  });
+});
+
+describe("rowsIntersectingBounds", () => {
+  it("includes partially clipped features but excludes disjoint features", () => {
+    const infos = collectAtlasFeatures({
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "partial" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 0],
+                [5, 0],
+                [5, 5],
+                [0, 5],
+                [0, 0],
+              ],
+            ],
+          },
+        },
+        point(20, 20, { name: "outside" }),
+      ],
+    });
+    assert.deepEqual(
+      rowsIntersectingBounds(infos, [4, 0, 8, 8]).map((row) => row.properties.name),
+      ["partial"],
+    );
+  });
+
+  it("uses geometry rather than bounding-box overlap", () => {
+    const infos = collectAtlasFeatures({
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "frame" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 0],
+                [10, 0],
+                [10, 10],
+                [0, 10],
+                [0, 0],
+              ],
+              [
+                [2, 2],
+                [2, 8],
+                [8, 8],
+                [8, 2],
+                [2, 2],
+              ],
+            ],
+          },
+        },
+      ],
+    });
+    assert.equal(rowsIntersectingBounds(infos, [3, 3, 7, 7]).length, 0);
+  });
+
+  it("matches intersecting features across antimeridian longitude conventions", () => {
+    const infos = collectAtlasFeatures({
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "dateline" },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [179, 0],
+              [-179, 0],
+            ],
+          },
+        },
+      ],
+    });
+    assert.equal(rowsIntersectingBounds(infos, [178, -1, 180, 1]).length, 1);
+    assert.equal(rowsIntersectingBounds(infos, [-180, -1, -178, 1]).length, 1);
+    assert.equal(rowsIntersectingBounds(infos, [-10, -1, 10, 1]).length, 0);
   });
 });
 

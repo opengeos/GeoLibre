@@ -1287,6 +1287,10 @@
       "titleLabel": "見出し",
       "position": "位置",
       "filterToPage": "ページ範囲内のフィーチャのみ",
+      "pageFilter": "ページ範囲フィルター",
+      "filterAll": "すべての地物",
+      "filterContained": "ページ範囲内に完全に含まれる地物のみ",
+      "filterIntersecting": "ページ範囲と交差する地物のみ",
       "filterToPageHint": "アトラスページと描画した印刷範囲に適用されます。それ以外の場合はレイヤー全体が使用されます。",
       "filterToAtlasFeature": "現在のアトラスフィーチャのみ",
       "filterToAtlasFeatureHint": "テーブルがアトラスのカバレッジレイヤーを使用している場合に利用できます。ページ範囲フィルターより優先されます。"

@@ -1287,6 +1287,10 @@
       "titleLabel": "제목",
       "position": "위치",
       "filterToPage": "페이지 범위 내 피처만",
+      "pageFilter": "페이지 범위 필터",
+      "filterAll": "모든 피처",
+      "filterContained": "페이지 범위 안에 완전히 포함된 피처만",
+      "filterIntersecting": "페이지 범위와 교차하는 피처만",
       "filterToPageHint": "아틀라스 페이지와 그려진 인쇄 범위에 적용됩니다. 그 외에는 전체 레이어가 사용됩니다.",
       "filterToAtlasFeature": "현재 아틀라스 피처만",
       "filterToAtlasFeatureHint": "테이블이 아틀라스 커버리지 레이어를 사용할 때 사용할 수 있습니다. 페이지 범위 필터보다 우선합니다."

@@ -56,6 +56,8 @@
     "@tauri-apps/plugin-geolocation": "^2.3.2",
     "@tauri-apps/plugin-http": "^2.5.2",
     "@tauri-apps/plugin-opener": "^2.5.4",
+    "@turf/boolean-intersects": "^7.3.5",
+    "@turf/helpers": "^7.3.5",
     "apache-arrow": "^21.2.0",
     "cesium": "^1.143.0",
     "dompurify": "^3.4.12",

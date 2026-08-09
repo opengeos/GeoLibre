@@ -1323,6 +1323,10 @@
       "titleLabel": "Cabeçalho",
       "position": "Posição",
       "filterToPage": "Apenas feições na extensão da página",
+      "pageFilter": "Filtro da extensão da página",
+      "filterAll": "Todas as feições",
+      "filterContained": "Apenas feições completamente dentro da extensão da página",
+      "filterIntersecting": "Apenas feições que intersectam a extensão da página",
       "filterToPageHint": "Aplica-se a páginas de atlas e a uma extensão de impressão desenhada; caso contrário, toda a camada é usada.",
       "filterToAtlasFeature": "Apenas a feição atual do atlas",
       "filterToAtlasFeatureHint": "Disponível quando a tabela usa a camada de cobertura do atlas. Tem prioridade sobre o filtro de extensão da página."

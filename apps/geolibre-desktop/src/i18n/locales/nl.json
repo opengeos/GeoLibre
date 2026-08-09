@@ -1323,6 +1323,10 @@
       "titleLabel": "Kop",
       "position": "Positie",
       "filterToPage": "Alleen objecten binnen het pagina-bereik",
+      "pageFilter": "Filter voor pagina-bereik",
+      "filterAll": "Alle objecten",
+      "filterContained": "Alleen objecten die volledig binnen het pagina-bereik liggen",
+      "filterIntersecting": "Alleen objecten die het pagina-bereik doorsnijden",
       "filterToPageHint": "Geldt voor atlaspagina's en een getekend afdrukbereik; anders wordt de hele laag gebruikt.",
       "filterToAtlasFeature": "Alleen het huidige atlasobject",
       "filterToAtlasFeatureHint": "Beschikbaar wanneer de tabel de dekkingslaag van de atlas gebruikt. Dit heeft voorrang op het filter voor het pagina-bereik."

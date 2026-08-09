@@ -1287,6 +1287,10 @@
       "titleLabel": "标题",
       "position": "位置",
       "filterToPage": "仅显示页面范围内的要素",
+      "pageFilter": "页面范围过滤器",
+      "filterAll": "所有要素",
+      "filterContained": "仅完全位于页面范围内的要素",
+      "filterIntersecting": "仅与页面范围相交的要素",
       "filterToPageHint": "适用于地图集页面和绘制的打印范围；否则使用整个图层。",
       "filterToAtlasFeature": "仅当前地图集要素",
       "filterToAtlasFeatureHint": "当表格使用地图集覆盖图层时可用。此设置优先于页面范围过滤。"

@@ -1329,6 +1329,10 @@
       "titleLabel": "Heading",
       "position": "Position",
       "filterToPage": "Only features in the page extent",
+      "pageFilter": "Page extent filter",
+      "filterAll": "All features",
+      "filterContained": "Only features completely within the page extent",
+      "filterIntersecting": "Only features intersecting the page extent",
       "filterToPageHint": "Applies to atlas pages and a drawn print extent; otherwise the whole layer is used.",
       "filterToAtlasFeature": "Only the current atlas feature",
       "filterToAtlasFeatureHint": "Available when the table uses the atlas coverage layer. This takes priority over the page extent filter."

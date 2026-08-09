@@ -1323,6 +1323,10 @@
       "titleLabel": "En-tête",
       "position": "Position",
       "filterToPage": "Seulement les entités dans l'emprise de la page",
+      "pageFilter": "Filtre de l’emprise de la page",
+      "filterAll": "Toutes les entités",
+      "filterContained": "Uniquement les entités complètement dans l’emprise de la page",
+      "filterIntersecting": "Uniquement les entités intersectant l’emprise de la page",
       "filterToPageHint": "S'applique aux pages d'atlas et à une emprise d'impression dessinée ; sinon, la couche entière est utilisée.",
       "filterToAtlasFeature": "Seulement l’entité courante de l’atlas",
       "filterToAtlasFeatureHint": "Disponible lorsque la table utilise la couche de couverture de l’atlas. Ce filtre est prioritaire sur l’emprise de la page."

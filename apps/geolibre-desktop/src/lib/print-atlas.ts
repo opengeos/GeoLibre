@@ -398,6 +398,8 @@ export interface AtlasFeatureInfo {
   /** 0-based position of the feature in the source collection. */
   sourceIndex: number;
   bounds: AtlasBounds;
+  /** Original geometry, retained for exact page-extent intersection tests. */
+  geometry: GeoJSON.Geometry;
   properties: Record<string, unknown>;
 }
 
@@ -417,6 +419,7 @@ export function collectAtlasFeatures(
     infos.push({
       sourceIndex: i,
       bounds,
+      geometry: feature.geometry!,
       properties: (feature.properties ?? {}) as Record<string, unknown>,
     });
   });

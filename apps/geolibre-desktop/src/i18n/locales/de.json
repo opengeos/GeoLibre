@@ -1323,6 +1323,10 @@
       "titleLabel": "Überschrift",
       "position": "Position",
       "filterToPage": "Nur Objekte in der Seitenausdehnung",
+      "pageFilter": "Filter für Seitenausschnitt",
+      "filterAll": "Alle Objekte",
+      "filterContained": "Nur vollständig im Seitenausschnitt liegende Objekte",
+      "filterIntersecting": "Nur den Seitenausschnitt schneidende Objekte",
       "filterToPageHint": "Gilt für Atlas-Seiten und eine gezeichnete Druckausdehnung; andernfalls wird die gesamte Ebene verwendet.",
       "filterToAtlasFeature": "Nur das aktuelle Atlas-Objekt",
       "filterToAtlasFeatureHint": "Verfügbar, wenn die Tabelle die Abdeckungsebene des Atlas verwendet. Dies hat Vorrang vor dem Filter für die Seitenausdehnung."

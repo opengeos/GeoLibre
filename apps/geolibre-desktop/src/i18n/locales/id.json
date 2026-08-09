@@ -1287,6 +1287,10 @@
       "titleLabel": "Judul",
       "position": "Posisi",
       "filterToPage": "Hanya fitur dalam cakupan halaman",
+      "pageFilter": "Filter cakupan halaman",
+      "filterAll": "Semua fitur",
+      "filterContained": "Hanya fitur yang sepenuhnya berada dalam cakupan halaman",
+      "filterIntersecting": "Hanya fitur yang berpotongan dengan cakupan halaman",
       "filterToPageHint": "Berlaku untuk halaman atlas dan cakupan cetak yang digambar; jika tidak, seluruh layer digunakan.",
       "filterToAtlasFeature": "Hanya fitur atlas saat ini",
       "filterToAtlasFeatureHint": "Tersedia saat tabel memakai layer cakupan atlas. Ini lebih diprioritaskan daripada filter cakupan halaman."

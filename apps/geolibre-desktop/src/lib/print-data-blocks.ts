@@ -6,7 +6,9 @@
  * walk, so the page shows exactly what those features hold. Framework-free and
  * unit-testable; the canvas drawing lives in `print-layout.ts`.
  */
-import type { FeatureCollection } from "geojson";
+import booleanIntersects from "@turf/boolean-intersects";
+import { feature, polygon } from "@turf/helpers";
+import type { FeatureCollection, Geometry, Position } from "geojson";
 import {
   computeBar,
   computeLine,
@@ -66,6 +68,59 @@ export function rowsWithinBounds(
     rows.push({ properties: info.properties });
   }
   return rows;
+}
+
+/** Shift longitudes onto the same world copy as an unwrapped page extent. */
+function geometryNearLongitude(geometry: Geometry, center: number): Geometry {
+  const shiftPosition = (position: Position): Position => {
+    const shifted = [...position];
+    while (shifted[0] - center > 180) shifted[0] -= 360;
+    while (shifted[0] - center < -180) shifted[0] += 360;
+    return shifted;
+  };
+  const shiftCoordinates = (coordinates: unknown): unknown =>
+    Array.isArray(coordinates) && typeof coordinates[0] === "number"
+      ? shiftPosition(coordinates as Position)
+      : (coordinates as unknown[]).map(shiftCoordinates);
+  if (geometry.type === "GeometryCollection") {
+    return {
+      ...geometry,
+      geometries: geometry.geometries.map((part) => geometryNearLongitude(part, center)),
+    };
+  }
+  return { ...geometry, coordinates: shiftCoordinates(geometry.coordinates) } as Geometry;
+}
+
+/** Rows whose geometry has any point in common with the page extent. */
+export function rowsIntersectingBounds(
+  features: readonly AtlasFeatureInfo[],
+  bounds: AtlasBounds,
+): ChartRow[] {
+  const [west, south, east, north] = bounds;
+  const extent = polygon([
+    [
+      [west, south],
+      [east, south],
+      [east, north],
+      [west, north],
+      [west, south],
+    ],
+  ]);
+  const center = (west + east) / 2;
+  return features
+    .filter((info) => {
+      const boundsOverlap = [0, -360, 360].some(
+        (offset) =>
+          info.bounds[0] + offset <= east &&
+          west <= info.bounds[2] + offset &&
+          info.bounds[1] <= north &&
+          south <= info.bounds[3],
+      );
+      if (!boundsOverlap) return false;
+      const geometry = geometryNearLongitude(info.geometry, center);
+      return booleanIntersects(feature(geometry), extent);
+    })
+    .map((info) => ({ properties: info.properties }));
 }
 
 /**

@@ -1323,6 +1323,10 @@
       "titleLabel": "Intestazione",
       "position": "Posizione",
       "filterToPage": "Solo gli elementi nell'estensione della pagina",
+      "pageFilter": "Filtro dell’estensione della pagina",
+      "filterAll": "Tutte le entità",
+      "filterContained": "Solo le entità completamente dentro l’estensione della pagina",
+      "filterIntersecting": "Solo le entità che intersecano l’estensione della pagina",
       "filterToPageHint": "Si applica alle pagine dell'atlante e a un'estensione di stampa disegnata; altrimenti viene usato l'intero livello.",
       "filterToAtlasFeature": "Solo l'elemento corrente dell'atlante",
       "filterToAtlasFeatureHint": "Disponibile quando la tabella usa il livello di copertura dell'atlante. Ha la priorità sul filtro per estensione della pagina."
