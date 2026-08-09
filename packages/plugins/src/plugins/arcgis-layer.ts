@@ -185,6 +185,11 @@ interface ArcGISServiceInfo {
  */
 interface ArcGISImageProducingServiceInfo extends ArcGISServiceInfo {
   copyrightText?: string;
+  layers?: Array<{
+    defaultVisibility?: boolean;
+    id?: number;
+    subLayerIds?: number[] | null;
+  }>;
   mapName?: string;
   name?: string;
   singleFusedMapCache?: boolean;
@@ -950,7 +955,11 @@ async function addArcGISImageServiceLayer(
         token,
       });
 
-  const bounds = arcgisExtentToBounds(info.fullExtent ?? info.initialExtent ?? info.extent);
+  const bounds =
+    arcgisExtentToBounds(info.fullExtent ?? info.initialExtent ?? info.extent) ??
+    (options.layerType === "map-service"
+      ? await resolveArcGISMapServiceBounds(serviceUrl, info, options, sublayers)
+      : undefined);
   const attribution = info.copyrightText?.trim() || undefined;
   const id = createArcGISLayerId();
   const layer: GeoLibreLayer = {
@@ -994,6 +1003,68 @@ async function addArcGISImageServiceLayer(
   useAppStore.getState().addLayer(layer, options.beforeLayerId ?? null);
   if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
   return id;
+}
+
+/**
+ * Ask selected MapServer layers to project their data extents to WGS84.
+ *
+ * ArcGIS services frequently publish in a local projected CRS whose WKID is
+ * not built into the browser. The server already owns the datum transform, so
+ * `/query?returnExtentOnly=true&outSR=4326` is both more reliable and much
+ * cheaper than downloading features merely to derive a camera target.
+ */
+async function resolveArcGISMapServiceBounds(
+  serviceUrl: string,
+  info: ArcGISImageProducingServiceInfo,
+  options: ArcGISLayerOptions,
+  sublayers: string | undefined,
+): Promise<[number, number, number, number] | undefined> {
+  const requestedIds = sublayers?.split(",").map(Number);
+  const ids =
+    requestedIds ??
+    (info.layers ?? [])
+      .filter(
+        (layer) =>
+          layer.defaultVisibility !== false &&
+          (!Array.isArray(layer.subLayerIds) || layer.subLayerIds.length === 0),
+      )
+      .map((layer) => layer.id)
+      .filter((id): id is number => Number.isSafeInteger(id) && (id ?? -1) >= 0);
+  if (ids.length === 0) return undefined;
+
+  const extents: Array<[number, number, number, number]> = [];
+  // Keep request pressure modest for public ArcGIS servers with many layers.
+  for (let index = 0; index < ids.length; index += 6) {
+    const batch = await Promise.allSettled(
+      ids.slice(index, index + 6).map(async (id) => {
+        const queryUrl = appendArcGISParams(`${serviceUrl}/${id}/query`, {
+          f: "json",
+          outSR: "4326",
+          returnExtentOnly: "true",
+          where: "1=1",
+        });
+        const result = await fetchArcGISJson<{ extent?: ArcGISExtent }>(
+          queryUrl,
+          options,
+          undefined,
+        );
+        return arcgisExtentToBounds(result.extent);
+      }),
+    );
+    for (const result of batch) {
+      if (result.status === "fulfilled" && result.value) extents.push(result.value);
+    }
+  }
+  if (extents.length === 0) return undefined;
+  return extents.reduce<[number, number, number, number]>(
+    (union, bounds) => [
+      Math.min(union[0], bounds[0]),
+      Math.min(union[1], bounds[1]),
+      Math.max(union[2], bounds[2]),
+      Math.max(union[3], bounds[3]),
+    ],
+    [...extents[0]],
+  );
 }
 
 /**
