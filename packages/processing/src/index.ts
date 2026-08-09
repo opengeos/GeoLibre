@@ -264,6 +264,7 @@ export {
   outputBaseName,
   fileOutputTargetExtension,
   outputTextFormatHint,
+  prepareGeographicBufferInput,
   isTiff,
 } from "./wasm-client";
 export {

@@ -449,6 +449,76 @@ function isFeatureCollection(value: unknown): value is FeatureCollection {
   );
 }
 
+const WEB_MERCATOR_RADIUS = 6378137;
+const MAX_WEB_MERCATOR_LATITUDE = 85.0511287798066;
+
+/**
+ * Prepare a WGS84 map layer for Whitebox's planar buffer operation.
+ *
+ * `buffer_vector` treats both axes as Cartesian map units. Buffering RFC 7946
+ * longitude/latitude directly therefore creates a circle in degrees which is
+ * stretched into an oval when MapLibre displays it in Web Mercator. Projecting
+ * the input to EPSG:3857 makes the tool operate in the same conformal plane as
+ * the map. The GeoJSON writer sees the attached CRS and reprojects the result
+ * back to WGS84 before GeoLibre imports it.
+ *
+ * The dialog stores the buffer distance in degrees, including values converted
+ * from metres by its explicitly approximate geographic-distance control. Using
+ * the equatorial metres-per-degree scale preserves the old buffer's horizontal
+ * radius while making its vertical radius match.
+ */
+export function prepareGeographicBufferInput(
+  geojson: FeatureCollection,
+  distance: unknown,
+): { geojson: FeatureCollection; distance: number } | null {
+  const degrees = typeof distance === "number" ? distance : Number(distance);
+  if (!Number.isFinite(degrees) || degrees <= 0) return null;
+
+  const projectPosition = (position: number[]): number[] => {
+    const longitude = position[0];
+    const latitude = Math.max(
+      -MAX_WEB_MERCATOR_LATITUDE,
+      Math.min(MAX_WEB_MERCATOR_LATITUDE, position[1]),
+    );
+    const x = WEB_MERCATOR_RADIUS * ((longitude * Math.PI) / 180);
+    const y = WEB_MERCATOR_RADIUS * Math.log(Math.tan(Math.PI / 4 + (latitude * Math.PI) / 360));
+    return [x, y, ...position.slice(2)];
+  };
+
+  const projectCoordinates = (coordinates: unknown): unknown => {
+    if (!Array.isArray(coordinates)) return coordinates;
+    if (
+      coordinates.length >= 2 &&
+      typeof coordinates[0] === "number" &&
+      typeof coordinates[1] === "number"
+    ) {
+      return projectPosition(coordinates as number[]);
+    }
+    return coordinates.map(projectCoordinates);
+  };
+
+  const projected = structuredClone(geojson) as FeatureCollection & {
+    crs?: { type: "name"; properties: { name: string } };
+  };
+  for (const feature of projected.features) {
+    if (feature.geometry && "coordinates" in feature.geometry) {
+      feature.geometry.coordinates = projectCoordinates(feature.geometry.coordinates) as never;
+    } else if (feature.geometry?.type === "GeometryCollection") {
+      for (const geometry of feature.geometry.geometries) {
+        if ("coordinates" in geometry) {
+          geometry.coordinates = projectCoordinates(geometry.coordinates) as never;
+        }
+      }
+    }
+  }
+  projected.crs = { type: "name", properties: { name: "EPSG:3857" } };
+
+  return {
+    geojson: projected,
+    distance: WEB_MERCATOR_RADIUS * ((degrees * Math.PI) / 180),
+  };
+}
+
 /**
  * Whether bytes start with the TIFF signature: "II" (little-endian) or "MM"
  * (big-endian) followed by the version number in the byte order's own
@@ -567,6 +637,7 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
   const encoder = new TextEncoder();
   const input: Record<string, Uint8Array> = {};
   const args: string[] = [];
+  const parameterOverrides: Record<string, unknown> = {};
   // How each output file is turned into a job output: "geojson" is parsed into a
   // FeatureCollection (a map layer); "raster" is normalized to a COG before it
   // reaches the map; "bytes" is returned raw (a file_out blob or a
@@ -591,8 +662,18 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
     const name = param.name;
 
     if (kind === "vector_in") {
-      const geojson = request.layer_inputs?.[name]?.geojson;
+      let geojson = request.layer_inputs?.[name]?.geojson;
       if (!geojson) throw new Error(`Missing vector input for "${name}"`);
+      // A map layer is RFC 7946 WGS84, while Whitebox's buffer is Cartesian.
+      // Run this one operation in Web Mercator so its round buffers stay round
+      // on the map; the EPSG tag makes the tool's GeoJSON writer return WGS84.
+      if (request.tool_id === "buffer_vector" && name === "input") {
+        const prepared = prepareGeographicBufferInput(geojson, request.parameters.distance);
+        if (prepared) {
+          geojson = prepared.geojson;
+          parameterOverrides.distance = prepared.distance;
+        }
+      }
       const file = `${name}.geojson`;
       input[file] = encoder.encode(JSON.stringify(geojson));
       args.push(`--${name}=/work/${file}`);
@@ -659,7 +740,7 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
       outputs.push({ name, file, kind: kind === "raster_out" ? "raster" : "bytes" });
       args.push(`--${name}=/work/${file}`);
     } else {
-      const value = request.parameters[name];
+      const value = parameterOverrides[name] ?? request.parameters[name];
       if (value !== undefined && value !== null && value !== "") {
         args.push(`--${name}=${value}`);
       }
