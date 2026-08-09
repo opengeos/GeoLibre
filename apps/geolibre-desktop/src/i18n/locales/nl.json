@@ -1331,7 +1331,7 @@
       "columns": "Kolommen",
       "columnsHint": "De eerste {{count}} velden zijn standaard geselecteerd. Vink kolommen aan om aan te passen.",
       "maxRows": "Max. rijen",
-      "fitRows": "Aantal rijen aan pagina aanpassen",
+      "fitRows": "Aantal rijen aanpassen aan de pagina",
       "moreRows_one": "+{{count}} meer",
       "moreRows_other": "+{{count}} meer",
       "noRows": "Geen rijen om weer te geven met de huidige instellingen."

@@ -1331,7 +1331,7 @@
       "columns": "Spalten",
       "columnsHint": "Die ersten {{count}} Felder sind standardmäßig ausgewählt. Aktivieren Sie Spalten, um die Auswahl anzupassen.",
       "maxRows": "Max. Zeilen",
-      "fitRows": "Anzahl der Zeilen an Seite anpassen",
+      "fitRows": "Anzahl der Zeilen an die Seite anpassen",
       "moreRows_one": "+{{count}} weitere",
       "moreRows_other": "+{{count}} weitere",
       "noRows": "Mit den aktuellen Einstellungen gibt es keine Zeilen anzuzeigen."

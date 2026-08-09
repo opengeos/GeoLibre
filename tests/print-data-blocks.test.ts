@@ -79,6 +79,32 @@ describe("rowsWithinBounds", () => {
     assert.equal(rowsWithinBounds(partial, [4, 0, 8, 8]).length, 0);
     assert.equal(rowsWithinBounds(partial, [-1, -1, 6, 6]).length, 1);
   });
+
+  it("matches contained features across antimeridian longitude conventions", () => {
+    const dateline = collectAtlasFeatures({
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "dateline" },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [179, -1],
+                [-179, -1],
+                [-179, 1],
+                [179, 1],
+                [179, -1],
+              ],
+            ],
+          },
+        },
+      ],
+    });
+    assert.equal(rowsWithinBounds(dateline, [170, -5, 190, 5]).length, 1);
+    assert.equal(rowsWithinBounds(dateline, [-190, -5, -170, 5]).length, 1);
+    assert.equal(rowsWithinBounds(dateline, [-10, -5, 10, 5]).length, 0);
+  });
 });
 
 describe("rowForAtlasFeature", () => {
