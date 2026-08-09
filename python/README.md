@@ -167,6 +167,11 @@ anywhere untrusted, or use `Map.save_project`, which redacts by default.
   CSV, and vector files that are read in Python and inlined still work. The
   example uses `add_vector()` so the browser, rather than Python, fetches the
   remote GeoJSON URL.
+
+  **Privacy:** The widget sends its synchronized project, including any inlined
+  local data, to the origin in `_app_url` through `window.postMessage`. Use only
+  a trusted app URL, or host the GeoLibre app yourself, when working with
+  sensitive data.
 - The bundled app is served from a localhost HTTP server, so the interactive
   widget works in local Jupyter and VS Code directly. **Google Colab** routes
   through its built-in port proxy automatically. On **JupyterHub** (including

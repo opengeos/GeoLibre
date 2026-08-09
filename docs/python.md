@@ -301,6 +301,11 @@ Python and inlines into the project continue to work. The `_app_url` attribute
 is currently an internal compatibility workaround rather than a public
 constructor option.
 
+**Privacy:** The widget sends its synchronized project, including any inlined
+local data, to the origin in `_app_url` through `window.postMessage`. Use only a
+trusted app URL, or host the GeoLibre app yourself, when working with sensitive
+data.
+
 ## How it works
 
 The wheel bundles the GeoLibre web build. At import time the package starts a
@@ -308,6 +313,8 @@ small localhost static server that serves the bundled app; the widget renders
 that app in an iframe and exchanges the project over `window.postMessage`.
 Adding data from Python rewrites the synced project and pushes it into the app;
 UI edits flow back the same way.
+
+<!-- markdownlint-disable MD046 -->
 
 !!! note "Environment support"
 
@@ -340,6 +347,8 @@ UI edits flow back the same way.
     extension is enabled with `jupyter server extension list` (look for
     `geolibre`; run `jupyter server extension enable geolibre` if absent) and
     **restart** the Jupyter server so the extension loads.
+
+<!-- markdownlint-enable MD046 -->
 
 !!! warning "URL fetching"
 
