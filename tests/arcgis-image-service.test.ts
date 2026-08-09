@@ -461,6 +461,8 @@ describe("fetchArcGISMapServiceSublayers", () => {
       requestedUrl = input.toString();
       return jsonResponse({
         layers: [
+          null,
+          { name: "Missing id" },
           {
             id: 2,
             name: "Hydrography Lines",

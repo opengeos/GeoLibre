@@ -59,12 +59,20 @@ export function ArcGISSource() {
 
   useEffect(() => () => retrieveAbortRef.current?.abort(), []);
 
+  const resetSublayerCatalog = () => {
+    retrieveAbortRef.current?.abort();
+    retrieveAbortRef.current = null;
+    setSublayerOptions([]);
+    setSublayerError(null);
+    setIsRetrievingSublayers(false);
+  };
+
   const handleRetrieveSublayers = async () => {
     if (!arcgisUrl.trim()) {
       setSublayerError(t("addData.arcgis.errorMapServiceUrl"));
       return;
     }
-    retrieveAbortRef.current?.abort();
+    resetSublayerCatalog();
     const controller = new AbortController();
     retrieveAbortRef.current = controller;
     setIsRetrievingSublayers(true);
@@ -112,6 +120,7 @@ export function ArcGISSource() {
   });
 
   const applyFields = (fields: ServiceFields) => {
+    resetSublayerCatalog();
     setArcgisLayerType(parseArcGISLayerType(serviceFieldString(fields, "layerType")));
     setArcgisSourceType(
       serviceFieldString(fields, "sourceType") === "portal-item" ? "portal-item" : "url",
@@ -129,6 +138,7 @@ export function ArcGISSource() {
   };
 
   const handleArcgisLayerTypeChange = (nextLayerType: ArcGISLayerType) => {
+    resetSublayerCatalog();
     const currentUrl = arcgisUrl.trim();
     setArcgisLayerType(nextLayerType);
     // Keep a loaded sample URL in sync with the layer type, but leave an
@@ -206,7 +216,10 @@ export function ArcGISSource() {
             <Select
               id="arcgis-source-type"
               value={arcgisSourceType}
-              onChange={(event) => setArcgisSourceType(event.target.value as ArcGISSourceType)}
+              onChange={(event) => {
+                resetSublayerCatalog();
+                setArcgisSourceType(event.target.value as ArcGISSourceType);
+              }}
             >
               <option value="url">{t("addData.common.serviceUrl")}</option>
               <option value="portal-item">{t("addData.arcgis.portalItemId")}</option>
@@ -221,9 +234,8 @@ export function ArcGISSource() {
               placeholder={t(URL_PLACEHOLDER_KEYS[arcgisLayerType])}
               value={arcgisUrl}
               onChange={(event) => {
+                resetSublayerCatalog();
                 setArcgisUrl(event.target.value);
-                if (sublayerOptions.length > 0) setSublayerOptions([]);
-                if (sublayerError) setSublayerError(null);
               }}
             />
           </div>
@@ -254,7 +266,10 @@ export function ArcGISSource() {
             autoComplete="off"
             placeholder={t("addData.common.optional")}
             value={arcgisAccessToken}
-            onChange={(event) => setArcgisAccessToken(event.target.value)}
+            onChange={(event) => {
+              resetSublayerCatalog();
+              setArcgisAccessToken(event.target.value);
+            }}
           />
         </div>
         {arcgisLayerType === "feature" ? (

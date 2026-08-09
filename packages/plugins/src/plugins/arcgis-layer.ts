@@ -194,9 +194,6 @@ interface ArcGISImageProducingServiceInfo extends ArcGISServiceInfo {
 export interface ArcGISMapServiceSublayer {
   id: number;
   name: string;
-  parentLayerId: number;
-  defaultVisibility: boolean;
-  subLayerIds: number[] | null;
 }
 
 interface ArcGISTileInfo {
@@ -327,22 +324,20 @@ export async function fetchArcGISMapServiceSublayers(params: {
   signal?: AbortSignal;
 }): Promise<ArcGISMapServiceSublayer[]> {
   const { serviceUrl } = resolveArcGISImageServiceUrl(params.url, "map-service");
-  const response = await fetch(
-    appendArcGISParams(serviceUrl, { f: "json", token: params.token?.trim() }),
-    { signal: params.signal },
+  const json = await fetchArcGISJson<{ layers?: unknown[] }>(
+    serviceUrl,
+    { layerType: "map-service", sourceType: "url", token: params.token },
+    undefined,
+    params.signal,
   );
-  if (!response.ok) {
-    throw new Error(`ArcGIS service request failed with ${response.status}.`);
-  }
-  const json = (await response.json()) as ArcGISImageProducingServiceInfo & {
-    error?: ArcGISErrorEnvelope;
-    layers?: ArcGISMapServiceSublayer[];
-  };
-  if (json.error) {
-    throw new Error(arcgisErrorMessage(json.error, "ArcGIS service request failed."));
-  }
   return Array.isArray(json.layers)
-    ? json.layers.filter((layer) => Number.isInteger(layer.id) && typeof layer.name === "string")
+    ? json.layers.filter(
+        (layer): layer is ArcGISMapServiceSublayer =>
+          typeof layer === "object" &&
+          layer !== null &&
+          Number.isInteger((layer as Partial<ArcGISMapServiceSublayer>).id) &&
+          typeof (layer as Partial<ArcGISMapServiceSublayer>).name === "string",
+      )
     : [];
 }
 
@@ -1792,12 +1787,14 @@ async function fetchArcGISJson<T>(
   url: string,
   options: ArcGISLayerOptions,
   cause: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   const response = await fetch(
     appendArcGISParams(url, {
       f: "json",
       token: options.token?.trim(),
     }),
+    { signal },
   );
   if (!response.ok) {
     throw new Error(`ArcGIS service request failed with ${response.status}.`, {
