@@ -18,6 +18,8 @@ import {
   type ProjectHistorySnapshot,
 } from "../lib/project-history-store";
 import {
+  announceLiveProjectSession,
+  liveProjectSessionTabs,
   markProjectSession,
   readLastExplicitProjectSave,
   readProjectSessionState,
@@ -47,6 +49,9 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
 
   useEffect(() => {
     const crashRecoveryEnabled = !isTauri() && !isEmbedded();
+    // Installed before anything awaits, so a sibling tab probing at the same
+    // moment gets an answer from this one.
+    const stopAnnouncing = crashRecoveryEnabled ? announceLiveProjectSession() : null;
     void (async () => {
       try {
         const entries = await listProjectSnapshots();
@@ -56,7 +61,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
           if (
             shouldOfferProjectRecovery(
               latest,
-              readProjectSessionState(),
+              readProjectSessionState(await liveProjectSessionTabs()),
               readLastExplicitProjectSave(),
             )
           ) {
@@ -128,6 +133,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
       unsubscribe();
       if (crashRecoveryEnabled) window.removeEventListener("pagehide", markClean);
       if (heartbeat !== null) window.clearInterval(heartbeat);
+      stopAnnouncing?.();
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     };
   }, [mapControllerRef, refresh]);

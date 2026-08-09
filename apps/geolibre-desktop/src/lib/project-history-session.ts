@@ -3,6 +3,8 @@ import { DEFAULT_PROJECT_NAME } from "@geolibre/core";
 const SESSION_KEY = "geolibre-project-session";
 const TAB_KEY = "geolibre-project-session-tab";
 const LAST_SAVE_KEY = "geolibre-project-last-explicit-save";
+const LIVE_TAB_CHANNEL = "geolibre-project-session-live";
+const LIVE_TAB_REPLY_MS = 250;
 
 /**
  * How often a live tab restamps its session entry, and how long an entry
@@ -70,13 +72,25 @@ export function pruneStaleProjectSessions(
   return fresh;
 }
 
-/** "open" when some tab that was alive recently never closed cleanly. */
+/**
+ * "open" when some tab that was alive recently never closed cleanly.
+ *
+ * `liveTabIds` are tabs that just answered a liveness ping. A second window on
+ * the same origin is the common case: it reads its sibling's perfectly healthy
+ * heartbeat, which is indistinguishable in the record from a tab that stopped
+ * heartbeating a moment ago, and would otherwise greet the user with a
+ * recovery prompt every time they open a second GeoLibre tab. A tab that
+ * answers is by definition not a crashed one, so its entry is discounted.
+ */
 export function projectSessionState(
   sessions: ProjectSessionRecord,
   nowMs: number,
+  liveTabIds: ReadonlySet<string> = new Set(),
 ): "open" | "closed" {
-  const live = Object.values(pruneStaleProjectSessions(sessions, nowMs));
-  return live.some((entry) => entry.state === "open") ? "open" : "closed";
+  const recent = Object.entries(pruneStaleProjectSessions(sessions, nowMs));
+  return recent.some(([id, entry]) => entry.state === "open" && !liveTabIds.has(id))
+    ? "open"
+    : "closed";
 }
 
 function currentTabId(): string {
@@ -90,13 +104,60 @@ function currentTabId(): string {
   return id;
 }
 
-export function readProjectSessionState(): string | null {
+export function readProjectSessionState(liveTabIds?: ReadonlySet<string>): string | null {
   try {
-    return projectSessionState(parseProjectSessions(localStorage.getItem(SESSION_KEY)), Date.now());
+    return projectSessionState(
+      parseProjectSessions(localStorage.getItem(SESSION_KEY)),
+      Date.now(),
+      liveTabIds,
+    );
   } catch (error) {
     console.error("Could not read the project session state.", error);
     return null;
   }
+}
+
+/**
+ * Answer liveness pings from other tabs for as long as this tab is alive.
+ *
+ * Returns the teardown. Nothing is announced where `BroadcastChannel` is
+ * missing; the caller then falls back to the record alone, which is what this
+ * code did before the probe existed.
+ */
+export function announceLiveProjectSession(): () => void {
+  if (typeof BroadcastChannel === "undefined") return () => {};
+  const channel = new BroadcastChannel(LIVE_TAB_CHANNEL);
+  channel.onmessage = (event: MessageEvent<{ type?: string } | null>) => {
+    if (event.data?.type === "ping") channel.postMessage({ type: "alive", id: currentTabId() });
+  };
+  return () => channel.close();
+}
+
+/**
+ * Ids of *other* tabs on this origin that answer a ping inside the reply window.
+ *
+ * This tab is excluded explicitly. A `BroadcastChannel` does not deliver to the
+ * object that posted, but it does deliver to a second object in the same tab,
+ * so the announcer above answers this tab's own ping. Keeping that answer would
+ * be wrong in the one case that matters most: reloading the tab a renderer
+ * crash just killed reuses its `sessionStorage` tab id, and discounting that id
+ * would suppress the very prompt the user needs.
+ */
+export async function liveProjectSessionTabs(): Promise<Set<string>> {
+  const live = new Set<string>();
+  if (typeof BroadcastChannel === "undefined") return live;
+  const channel = new BroadcastChannel(LIVE_TAB_CHANNEL);
+  channel.onmessage = (event: MessageEvent<{ type?: string; id?: string } | null>) => {
+    if (event.data?.type === "alive" && typeof event.data.id === "string") live.add(event.data.id);
+  };
+  try {
+    channel.postMessage({ type: "ping" });
+    await new Promise((resolve) => setTimeout(resolve, LIVE_TAB_REPLY_MS));
+  } finally {
+    channel.close();
+  }
+  live.delete(currentTabId());
+  return live;
 }
 
 export function readLastExplicitProjectSave(): string | null {

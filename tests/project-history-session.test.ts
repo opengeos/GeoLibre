@@ -138,3 +138,20 @@ describe("projectSessionState", () => {
     assert.equal(projectSessionState({}, NOW), "closed");
   });
 });
+
+describe("projectSessionState with live tabs", () => {
+  it("discounts a sibling tab that answered the liveness ping", () => {
+    // Opening a second window is not a crash: the sibling's heartbeat is fresh
+    // and open, and only its answer tells the two cases apart.
+    const sessions = { sibling: { state: "open" as const, at: stamp(0) } };
+    assert.equal(projectSessionState(sessions, NOW, new Set(["sibling"])), "closed");
+  });
+
+  it("still reports open when a different entry went unanswered", () => {
+    const sessions = {
+      sibling: { state: "open" as const, at: stamp(0) },
+      crashed: { state: "open" as const, at: stamp(90_000) },
+    };
+    assert.equal(projectSessionState(sessions, NOW, new Set(["sibling"])), "open");
+  });
+});
