@@ -12,7 +12,13 @@ import {
 import type { createAppAPI } from "./usePlugins";
 import type { ProjectUrlLoadState } from "./useProjectUrlLoader";
 
-export type DataUrlLoadState = ProjectUrlLoadState & { layerIds?: string[] };
+/**
+ * `fitLayerIds` carries only the layers the shell still has to frame. The COG,
+ * PMTiles, and GeoParquet loaders move the camera themselves as part of adding
+ * their layer, so listing those here would fit twice and show a visible
+ * double-take; a store-added GeoJSON layer moves nothing on its own.
+ */
+export type DataUrlLoadState = ProjectUrlLoadState & { fitLayerIds?: string[] };
 
 export function useDataUrlLoader(
   mapAppAPI: ReturnType<typeof createAppAPI> | null,
@@ -39,17 +45,15 @@ export function useDataUrlLoader(
       .then(async ([remote, rawStyle]) => {
         if (controller.signal.aborted) return;
         const store = useAppStore.getState();
-        const layerIds: string[] = [];
+        const fitLayerIds: string[] = [];
         let count = 0;
         if (remote.kind === "cog") {
           const rasterStyle = rawStyle === null ? null : parseRasterUrlStyle(rawStyle);
-          layerIds.push(
-            await addRasterToMap(mapAppAPI, remote.url, {
-              name: remote.name,
-              defaults: { engine: "maplibre-gl-raster" },
-              ...(rasterStyle ? { state: rasterStyle } : {}),
-            }),
-          );
+          await addRasterToMap(mapAppAPI, remote.url, {
+            name: remote.name,
+            defaults: { engine: "maplibre-gl-raster" },
+            ...(rasterStyle ? { state: rasterStyle } : {}),
+          });
           count = 1;
         } else if (remote.kind === "pmtiles" || remote.kind === "vector") {
           // Validate the style before invoking a native loader. Those controls
@@ -82,7 +86,6 @@ export function useDataUrlLoader(
                 "MapLibre vector styles cannot be applied to a raster PMTiles archive.",
               );
             }
-            layerIds.push(layer.id);
             if (styleResult) {
               store.setLayerStyle(layer.id, applyMapboxStyleImport(layer.style, styleResult));
             }
@@ -104,7 +107,7 @@ export function useDataUrlLoader(
           });
           for (const { layer, styleResult } of imports) {
             const id = store.addGeoJsonLayer(layer.name, layer.data, layer.sourcePath);
-            layerIds.push(id);
+            fitLayerIds.push(id);
             if (styleResult) {
               const current = useAppStore
                 .getState()
@@ -117,7 +120,7 @@ export function useDataUrlLoader(
         }
         setState({
           error: null,
-          layerIds,
+          fitLayerIds,
           message: `Loaded ${count} layer${count === 1 ? "" : "s"} from URL`,
           status: "loaded",
         });

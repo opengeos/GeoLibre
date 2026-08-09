@@ -1,6 +1,6 @@
 import { DirectionProvider } from "@geolibre/ui";
 import { useTranslation } from "react-i18next";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { DesktopShell } from "./components/layout/DesktopShell";
 import { OnboardingDialog } from "./components/layout/OnboardingDialog";
 import { UpdateNotificationModal } from "./components/layout/UpdateNotificationModal";
@@ -29,7 +29,15 @@ export default function App() {
   const { i18n } = useTranslation();
   const layoutOptions = useLayoutOptions();
   const { themeMode, toggleThemeMode } = useThemeMode();
+  // `onMapReady` fires again on every basemap swap (MapCanvas re-emits
+  // controller-ready from its `style.load` handler) and hands back a freshly
+  // built API object each time. Keep the first one: the identity feeds the
+  // `?data=` loader's effect deps, and a changing identity would re-run that
+  // one-shot import and duplicate its layers.
   const [mapAppAPI, setMapAppAPI] = useState<ReturnType<typeof createAppAPI> | null>(null);
+  const handleMapReady = useCallback((api: ReturnType<typeof createAppAPI>) => {
+    setMapAppAPI((current) => current ?? api);
+  }, []);
   const projectUrlLoadState = useProjectUrlLoader();
   const dataUrlLoadState = useDataUrlLoader(mapAppAPI);
   const { showOnboarding, dismissOnboarding } = useUiProfileBootstrap();
@@ -53,7 +61,7 @@ export default function App() {
         dataUrlLoadState={dataUrlLoadState}
         themeMode={themeMode}
         onToggleThemeMode={toggleThemeMode}
-        onMapReady={setMapAppAPI}
+        onMapReady={handleMapReady}
       />
       <OnboardingDialog open={showOnboarding} onClose={dismissOnboarding} />
       <UpdateNotificationModal

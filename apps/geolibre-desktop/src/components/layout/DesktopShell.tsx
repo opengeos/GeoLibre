@@ -606,38 +606,28 @@ export function DesktopShell({
   useEffect(() => () => activeResizeCleanupRef.current?.(), []);
   const mapControllerRef = useRef<MapController | null>(null);
 
-  // URL-loaded data is added by the app-level hook before this shell owns a
-  // usable map controller. Once the hook publishes the added layer ids, wait
-  // for layer synchronization and frame their combined extent. A single raster
-  // goes through fitLayer so the controller can use renderer/source metadata
-  // that is not represented by an in-memory GeoJSON bounding box.
+  // Frame the GeoJSON layers a `?data=` deep link added. Only those are listed:
+  // the raster, PMTiles, and GeoParquet loaders move the camera themselves. The
+  // extent comes from the store's own GeoJSON, which is already in memory by the
+  // time the hook publishes the ids, so this needs no wait for layer sync.
   useEffect(() => {
-    const layerIds = dataUrlLoadState?.layerIds;
-    if (dataUrlLoadState?.status !== "loaded" || !layerIds?.length) return;
-    let disposed = false;
-    const timeout = window.setTimeout(() => {
-      if (disposed) return;
-      const controller = mapControllerRef.current;
-      const layers = useAppStore.getState().layers.filter((layer) => layerIds.includes(layer.id));
-      if (!controller || !layers.length) return;
-      if (layers.length === 1) {
-        controller.fitLayer(layers[0]);
-        return;
-      }
-      const bounds = layers.map(getLayerBounds).filter((value) => value !== null);
-      if (!bounds.length) return;
-      controller.fitBounds([
-        Math.min(...bounds.map((value) => value[0])),
-        Math.min(...bounds.map((value) => value[1])),
-        Math.max(...bounds.map((value) => value[2])),
-        Math.max(...bounds.map((value) => value[3])),
-      ]);
-    }, 150);
-    return () => {
-      disposed = true;
-      window.clearTimeout(timeout);
-    };
-  }, [dataUrlLoadState?.layerIds, dataUrlLoadState?.status]);
+    const fitLayerIds = dataUrlLoadState?.fitLayerIds;
+    if (dataUrlLoadState?.status !== "loaded" || !fitLayerIds?.length) return;
+    const controller = mapControllerRef.current;
+    if (!controller) return;
+    const bounds = useAppStore
+      .getState()
+      .layers.filter((layer) => fitLayerIds.includes(layer.id))
+      .map(getLayerBounds)
+      .filter((value) => value !== null);
+    if (!bounds.length) return;
+    controller.fitBounds([
+      Math.min(...bounds.map((value) => value[0])),
+      Math.min(...bounds.map((value) => value[1])),
+      Math.max(...bounds.map((value) => value[2])),
+      Math.max(...bounds.map((value) => value[3])),
+    ]);
+  }, [dataUrlLoadState?.fitLayerIds, dataUrlLoadState?.status]);
 
   const projectHistory = useProjectHistory(mapControllerRef);
   const [projectHistoryOpen, setProjectHistoryOpen] = useState(false);
@@ -2766,9 +2756,13 @@ export function DesktopShell({
         </div>
       ) : null}
       {dataUrlLoadState?.error ? (
+        // A link can carry both `url=` and `data=`, and both loaders can fail.
+        // Drop below the project banner so neither message is covered.
         <div
           aria-live="assertive"
-          className="pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
+          className={`pointer-events-none absolute left-1/2 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg ${
+            projectUrlLoadState?.error ? "top-28" : "top-14"
+          }`}
         >
           {dataUrlLoadState.error}
         </div>

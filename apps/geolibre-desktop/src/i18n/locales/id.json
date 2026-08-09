@@ -4520,7 +4520,7 @@
     "exportStyleDataNotReady": "Data layer belum siap. Coba lagi sesaat lagi.",
     "exportStyleNeedsFeatures": "Ekspor gaya memerlukan layer vektor dengan fitur.",
     "exportStyleError": "Tidak dapat mengekspor gaya layer ini.",
-    "importStyle": "Impor gaya (Mapbox GL / SLD / QML)…",
+    "importStyle": "Impor gaya (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Gaya tersimpan (Pengelola Gaya)…",
     "importStyleSuccess": "Gaya berhasil diimpor.",
     "importStyleInvalid": "File tersebut bukan JSON, SLD, atau QML yang valid.",

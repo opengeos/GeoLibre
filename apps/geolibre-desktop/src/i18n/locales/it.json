@@ -4592,7 +4592,7 @@
     "exportStyleDataNotReady": "I dati del livello non sono ancora pronti. Riprova tra un momento.",
     "exportStyleNeedsFeatures": "L'esportazione dello stile richiede un livello vettoriale con elementi.",
     "exportStyleError": "Impossibile esportare lo stile di questo livello.",
-    "importStyle": "Importa stile (Mapbox GL / SLD / QML)…",
+    "importStyle": "Importa stile (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Stili salvati (Gestione stili)…",
     "importStyleSuccess": "Stile importato.",
     "importStyleInvalid": "Il file non è un JSON, SLD o QML valido.",

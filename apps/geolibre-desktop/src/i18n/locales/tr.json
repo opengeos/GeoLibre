@@ -4592,7 +4592,7 @@
     "exportStyleDataNotReady": "Katman verisi henüz hazır değil. Birazdan tekrar deneyin.",
     "exportStyleNeedsFeatures": "Stil dışa aktarımı öğeleri olan bir vektör katmanı gerektirir.",
     "exportStyleError": "Bu katmanın stili dışa aktarılamadı.",
-    "importStyle": "Stil içe aktar (Mapbox GL / SLD / QML)…",
+    "importStyle": "Stil içe aktar (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Kayıtlı stiller (Stil Yöneticisi)…",
     "importStyleSuccess": "Stil içe aktarıldı.",
     "importStyleInvalid": "Bu dosya geçerli JSON, SLD veya QML değil.",

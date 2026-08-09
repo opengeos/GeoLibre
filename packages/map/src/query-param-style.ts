@@ -12,7 +12,13 @@ function safeDecode(value: string): string {
 
 /** Filename stem the `?style=` loader uses to associate style layers with data. */
 export function geoLibreStyleSourceName(layer: Pick<GeoLibreLayer, "name" | "sourcePath">): string {
-  const raw = layer.sourcePath?.split("#").pop() || layer.name;
+  // A ZIP member is addressed as `archive.zip#folder/parks.geojson`, so that
+  // fragment names the data. Any other fragment is an ordinary URL hash
+  // (`data.geojson#view`) and must not be mistaken for the filename.
+  const source = layer.sourcePath ?? "";
+  const fragment = source.includes("#") ? source.slice(source.indexOf("#") + 1) : "";
+  const raw =
+    (/\.(?:geojson|json)$/i.test(fragment) ? fragment : source.split("#")[0]) || layer.name;
   let pathname = raw;
   try {
     pathname = new URL(raw).pathname;

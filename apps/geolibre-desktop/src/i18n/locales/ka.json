@@ -4592,7 +4592,7 @@
     "exportStyleDataNotReady": "შრის მონაცემები ჯერ არ არის მზად. სცადეთ ცოტა ხანში.",
     "exportStyleNeedsFeatures": "სტილის ექსპორტს სჭირდება ვექტორული შრე ობიექტებით.",
     "exportStyleError": "ამ შრის სტილის ექსპორტი ვერ მოხერხდა.",
-    "importStyle": "სტილის იმპორტი (Mapbox GL / SLD / QML)…",
+    "importStyle": "სტილის იმპორტი (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "შენახული სტილები (სტილის მენეჯერი)…",
     "importStyleSuccess": "სტილი იმპორტირდა.",
     "importStyleInvalid": "ეს ფაილი არ არის სწორი JSON, SLD ან QML.",

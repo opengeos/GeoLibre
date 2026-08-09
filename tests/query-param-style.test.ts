@@ -41,6 +41,10 @@ describe("GeoLibre URL style export", () => {
     );
   });
 
+  it("ignores an ordinary URL hash rather than reading it as the filename", () => {
+    assert.equal(geoLibreStyleSourceName(layer("https://example.com/data.geojson#view")), "data");
+  });
+
   it("falls back to the layer name for an in-memory layer", () => {
     assert.equal(geoLibreStyleSourceName(layer()), "Places display name");
   });

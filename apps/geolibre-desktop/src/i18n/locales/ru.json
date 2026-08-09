@@ -4736,7 +4736,7 @@
     "exportStyleDataNotReady": "Данные слоя ещё не готовы. Повторите попытку через мгновение.",
     "exportStyleNeedsFeatures": "Для экспорта стиля требуется векторный слой с объектами.",
     "exportStyleError": "Не удалось экспортировать стиль этого слоя.",
-    "importStyle": "Импортировать стиль (Mapbox GL / SLD / QML)…",
+    "importStyle": "Импортировать стиль (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Сохранённые стили (Менеджер стилей)…",
     "importStyleSuccess": "Стиль импортирован.",
     "importStyleInvalid": "Этот файл не является допустимым JSON, SLD или QML.",

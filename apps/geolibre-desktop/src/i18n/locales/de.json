@@ -4592,7 +4592,7 @@
     "exportStyleDataNotReady": "Ebenendaten sind noch nicht bereit. Versuchen Sie es gleich noch einmal.",
     "exportStyleNeedsFeatures": "Für den Stilexport ist eine Vektorebene mit Objekten erforderlich.",
     "exportStyleError": "Der Stil dieser Ebene konnte nicht exportiert werden.",
-    "importStyle": "Stil importieren (Mapbox GL / SLD / QML)…",
+    "importStyle": "Stil importieren (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Gespeicherte Stile (Stilverwaltung)…",
     "importStyleSuccess": "Stil importiert.",
     "importStyleInvalid": "Diese Datei ist kein gültiges JSON, SLD oder QML.",

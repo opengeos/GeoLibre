@@ -4592,7 +4592,7 @@
     "exportStyleDataNotReady": "Laaggegevens zijn nog niet gereed. Probeer het straks opnieuw.",
     "exportStyleNeedsFeatures": "Stijlexport vereist een vectorlaag met objecten.",
     "exportStyleError": "De stijl van deze laag kon niet worden geëxporteerd.",
-    "importStyle": "Stijl importeren (Mapbox GL / SLD / QML)…",
+    "importStyle": "Stijl importeren (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Opgeslagen stijlen (Stijlbeheer)…",
     "importStyleSuccess": "Stijl geïmporteerd.",
     "importStyleInvalid": "Dat bestand is geen geldige JSON, SLD of QML.",

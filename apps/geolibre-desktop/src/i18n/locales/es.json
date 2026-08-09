@@ -4592,7 +4592,7 @@
     "exportStyleDataNotReady": "Los datos de la capa aún no están listos. Inténtelo de nuevo en un momento.",
     "exportStyleNeedsFeatures": "La exportación de estilo requiere una capa vectorial con entidades.",
     "exportStyleError": "No se pudo exportar el estilo de esta capa.",
-    "importStyle": "Importar estilo (Mapbox GL / SLD / QML)…",
+    "importStyle": "Importar estilo (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Estilos guardados (Administrador de estilos)…",
     "importStyleSuccess": "Estilo importado.",
     "importStyleInvalid": "Ese archivo no es un JSON, SLD o QML válido.",

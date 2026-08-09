@@ -4787,7 +4787,7 @@
     "exportStyleDataNotReady": "ข้อมูลของเลเยอร์ยังไม่พร้อม กรุณาลองใหม่อีกสักครู่",
     "exportStyleNeedsFeatures": "การส่งออกสไตล์ต้องใช้เลเยอร์เวกเตอร์ที่มีฟีเจอร์",
     "exportStyleError": "ไม่สามารถส่งออกสไตล์ของเลเยอร์นี้ได้",
-    "importStyle": "นำเข้าสไตล์ (Mapbox GL / SLD / QML)…",
+    "importStyle": "นำเข้าสไตล์ (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "สไตล์ที่บันทึกไว้ (ตัวจัดการสไตล์)…",
     "importStyleSuccess": "นำเข้าสไตล์แล้ว",
     "importStyleInvalid": "ไฟล์นั้นไม่ใช่ JSON, SLD หรือ QML ที่ถูกต้อง",

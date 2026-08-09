@@ -4592,7 +4592,7 @@
     "exportStyleDataNotReady": "Les données de la couche ne sont pas encore prêtes. Réessayez dans un instant.",
     "exportStyleNeedsFeatures": "L'exportation de style nécessite une couche vectorielle avec des entités.",
     "exportStyleError": "Impossible d'exporter le style de cette couche.",
-    "importStyle": "Importer un style (Mapbox GL / SLD / QML)…",
+    "importStyle": "Importer un style (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Styles enregistrés (Gestionnaire de styles)…",
     "importStyleSuccess": "Style importé.",
     "importStyleInvalid": "Ce fichier n'est pas un JSON, SLD ou QML valide.",

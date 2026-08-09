@@ -4520,7 +4520,7 @@
     "exportStyleDataNotReady": "레이어 데이터가 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.",
     "exportStyleNeedsFeatures": "스타일 내보내기는 피처가 있는 벡터 레이어가 필요합니다.",
     "exportStyleError": "이 레이어의 스타일을 내보낼 수 없습니다.",
-    "importStyle": "스타일 가져오기(Mapbox GL / SLD / QML)…",
+    "importStyle": "스타일 가져오기(GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "저장된 스타일 (스타일 관리자)…",
     "importStyleSuccess": "스타일을 가져왔습니다.",
     "importStyleInvalid": "해당 파일은 유효한 JSON, SLD, QML이 아닙니다.",

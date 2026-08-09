@@ -4520,7 +4520,7 @@
     "exportStyleDataNotReady": "レイヤーデータの準備がまだ完了していません。しばらくしてから再試行してください。",
     "exportStyleNeedsFeatures": "スタイルのエクスポートにはフィーチャを含むベクターレイヤーが必要です。",
     "exportStyleError": "このレイヤーのスタイルをエクスポートできませんでした。",
-    "importStyle": "スタイルをインポート (Mapbox GL / SLD / QML)…",
+    "importStyle": "スタイルをインポート (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "保存済みスタイル(スタイルマネージャー)…",
     "importStyleSuccess": "スタイルをインポートしました。",
     "importStyleInvalid": "そのファイルは有効なJSON、SLD、またはQMLではありません。",

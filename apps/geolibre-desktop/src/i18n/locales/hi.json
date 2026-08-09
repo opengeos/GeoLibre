@@ -4592,7 +4592,7 @@
     "exportStyleDataNotReady": "लेयर डेटा अभी तैयार नहीं है। कुछ समय बाद पुनः प्रयास करें।",
     "exportStyleNeedsFeatures": "शैली निर्यात के लिए फ़ीचर वाली एक वेक्टर लेयर आवश्यक है।",
     "exportStyleError": "इस लेयर की शैली निर्यात नहीं की जा सकी।",
-    "importStyle": "शैली आयात करें (Mapbox GL / SLD / QML)…",
+    "importStyle": "शैली आयात करें (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "सहेजी गई स्टाइल (स्टाइल मैनेजर)…",
     "importStyleSuccess": "शैली आयात की गई।",
     "importStyleInvalid": "यह फ़ाइल मान्य JSON, SLD, या QML नहीं है।",

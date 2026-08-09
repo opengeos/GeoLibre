@@ -1,5 +1,5 @@
 import type { FeatureCollection } from "geojson";
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, unzip } from "fflate";
 
 export interface DataUrlParameters {
   dataUrl: string;
@@ -17,6 +17,21 @@ export type RemoteData =
   | { kind: "geojson"; layers: RemoteGeoJsonLayer[] };
 
 const MAX_ZIP_GEOJSON_BYTES = 250 * 1024 * 1024;
+
+// A `?data=` link points at an arbitrary third-party endpoint, so the response
+// is buffered whole before anything about it is known. Refuse an advertised
+// length past this ceiling rather than letting a mis-aimed link fill the tab's
+// memory. A server that sends no Content-Length (chunked REST responses) is
+// still bounded afterwards by the per-entry ZIP caps.
+const MAX_DOWNLOAD_BYTES = 250 * 1024 * 1024;
+
+/** Thrown when a ZIP's GeoJSON payload exceeds the import ceiling. */
+export class ZipTooLargeError extends Error {
+  constructor() {
+    super("The ZIP's GeoJSON files are too large to import safely.");
+    this.name = "ZipTooLargeError";
+  }
+}
 
 function httpUrl(value: string | null): string | null {
   if (!value?.trim()) return null;
@@ -78,7 +93,46 @@ async function fetchOk(url: string, signal: AbortSignal | undefined, fetchImpl: 
     });
   }
   if (!response.ok) throw new Error(`Could not fetch ${url}: HTTP ${response.status}.`);
+  const advertised = Number(response.headers.get("content-length"));
+  if (Number.isFinite(advertised) && advertised > MAX_DOWNLOAD_BYTES) {
+    throw new Error(
+      `${url} is too large to open from a URL (${Math.round(advertised / (1024 * 1024))} MB).`,
+    );
+  }
   return response;
+}
+
+/**
+ * Unzip the archive's GeoJSON members off the main thread, so a near-ceiling
+ * archive does not freeze the UI while it inflates. The size caps stop
+ * *selecting* entries instead of throwing: an exception raised inside fflate's
+ * worker-backed pipeline would not surface through this promise.
+ */
+function unzipGeoJsonEntries(bytes: Uint8Array): Promise<Record<string, Uint8Array>> {
+  let total = 0;
+  let tooLarge = false;
+  return new Promise((resolve, reject) => {
+    unzip(
+      bytes,
+      {
+        filter(entry) {
+          if (tooLarge) return false;
+          if (entry.name.endsWith("/") || !/\.(?:geojson|json)$/i.test(entry.name)) return false;
+          total += entry.originalSize;
+          if (entry.originalSize > MAX_ZIP_GEOJSON_BYTES || total > MAX_ZIP_GEOJSON_BYTES) {
+            tooLarge = true;
+            return false;
+          }
+          return true;
+        },
+      },
+      (error, files) => {
+        if (tooLarge) reject(new ZipTooLargeError());
+        else if (error) reject(error);
+        else resolve(files);
+      },
+    );
+  });
 }
 
 /** Classify or fetch a supported data URL into startup-loadable layers. */
@@ -124,20 +178,11 @@ export async function fetchRemoteData(
     };
   }
 
-  let total = 0;
   let entries: Record<string, Uint8Array>;
   try {
-    entries = unzipSync(bytes, {
-      filter(entry) {
-        if (!/\.(?:geojson|json)$/i.test(entry.name) || entry.name.endsWith("/")) return false;
-        total += entry.originalSize;
-        if (entry.originalSize > MAX_ZIP_GEOJSON_BYTES || total > MAX_ZIP_GEOJSON_BYTES)
-          throw new Error("The ZIP's GeoJSON files are too large to import safely.");
-        return true;
-      },
-    });
+    entries = await unzipGeoJsonEntries(bytes);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("too large")) throw error;
+    if (error instanceof ZipTooLargeError) throw error;
     throw new Error("The data URL is not a valid ZIP archive.", { cause: error });
   }
   const layers = Object.entries(entries).map(([name, contents]) => ({

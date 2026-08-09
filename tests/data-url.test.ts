@@ -231,4 +231,15 @@ describe("data URL deep links", () => {
     });
     assert.equal(fetched, false);
   });
+
+  it("refuses a response whose advertised length exceeds the download ceiling", async () => {
+    const fetchImpl = (async () =>
+      new Response(strToU8("{}"), {
+        headers: { "Content-Length": String(400 * 1024 * 1024) },
+      })) as unknown as typeof fetch;
+    await assert.rejects(
+      fetchRemoteData("https://api.example.com/export", { fetchImpl }),
+      /too large to open from a URL \(400 MB\)/,
+    );
+  });
 });

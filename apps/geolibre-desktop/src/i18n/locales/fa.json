@@ -4859,7 +4859,7 @@
     "exportStyleDataNotReady": "دادهٔ لایه هنوز آماده نیست. لحظه‌ای دیگر دوباره تلاش کنید.",
     "exportStyleNeedsFeatures": "صدور شیوهٔ نمایش به یک لایهٔ برداری دارای عارضه نیاز دارد.",
     "exportStyleError": "خروجی شیوهٔ نمایش این لایه ممکن نشد.",
-    "importStyle": "وارد کردن شیوهٔ نمایش (Mapbox GL / SLD / QML)…",
+    "importStyle": "وارد کردن شیوهٔ نمایش (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "شیوهٔ نمایش‌های ذخیره‌شده (مدیر شیوهٔ نمایش)…",
     "importStyleSuccess": "شیوهٔ نمایش وارد شد.",
     "importStyleInvalid": "آن فایل یک JSON، SLD یا QML معتبر نیست.",

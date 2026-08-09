@@ -4879,7 +4879,7 @@
     "exportStyleDataNotReady": "بيانات الطبقة ليست جاهزة بعد. حاول مرة أخرى بعد قليل.",
     "exportStyleNeedsFeatures": "يتطلب تصدير النمط طبقة متجهات تحتوي على معالم.",
     "exportStyleError": "تعذر تصدير نمط هذه الطبقة.",
-    "importStyle": "استيراد نمط (Mapbox GL / SLD / QML)…",
+    "importStyle": "استيراد نمط (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "الأنماط المحفوظة (مدير الأنماط)…",
     "importStyleSuccess": "تم استيراد النمط.",
     "importStyleInvalid": "هذا الملف ليس ملف JSON أو SLD أو QML صالحًا.",

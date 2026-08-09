@@ -4520,7 +4520,7 @@
     "exportStyleDataNotReady": "图层数据尚未准备就绪。请稍后重试。",
     "exportStyleNeedsFeatures": "样式导出需要包含要素的矢量图层。",
     "exportStyleError": "无法导出此图层的样式。",
-    "importStyle": "导入样式（Mapbox GL / SLD / QML）…",
+    "importStyle": "导入样式（GeoLibre URL / Mapbox GL / SLD / QML）…",
     "openStyleManager": "已保存的样式（样式管理器）…",
     "importStyleSuccess": "样式已导入。",
     "importStyleInvalid": "该文件不是有效的 JSON、SLD 或 QML。",

@@ -4592,7 +4592,7 @@
     "exportStyleDataNotReady": "Os dados da camada ainda não estão prontos. Tente novamente em instantes.",
     "exportStyleNeedsFeatures": "A exportação de estilo requer uma camada vetorial com feições.",
     "exportStyleError": "Não foi possível exportar o estilo desta camada.",
-    "importStyle": "Importar estilo (Mapbox GL / SLD / QML)…",
+    "importStyle": "Importar estilo (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Estilos salvos (Gerenciador de estilos)…",
     "importStyleSuccess": "Estilo importado.",
     "importStyleInvalid": "Esse arquivo não é JSON, SLD ou QML válido.",
