@@ -203,11 +203,11 @@ map opens — `&style=` for symbology, `&theme=dark`, or `&maponly` for a
 chrome-free view.
 
 One caveat specific to badges: a badge lives in a `README.md` that GitHub, PyPI,
-and docs sites all render, and each of those rewrites links differently. Keep
-the target URL **absolute**, and remember that if your data URL carries its own
-query string it needs the percent-encoding described above — inside a Markdown
-link an unencoded `&` will also end the link at that character in some
-renderers.
+and docs sites all render, and each of those rewrites relative links
+differently, so keep the target URL **absolute**. The encoding rule above
+applies unchanged — a data URL carrying its own query string still needs
+`encodeURIComponent`, because the `&` is read as GeoLibre's own separator well
+before the browser ever sees it.
 
 ## Talking to the map at runtime
 
