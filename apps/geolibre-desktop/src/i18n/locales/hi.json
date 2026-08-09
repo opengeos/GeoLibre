@@ -2196,7 +2196,7 @@
       "rasterShape": "{{bands}} बैंड के साथ {{width}}×{{height}} रास्टर पढ़ा गया",
       "wroteCog": "ओवरव्यू के साथ एक टाइल्ड COG लिखा ({{compression}})",
       "notAGeoTiff": "यह फ़ाइल एक पठनीय GeoTIFF नहीं है। ब्राउज़र में, रास्टर से COG केवल GeoTIFF पढ़ता है; अन्य फ़ॉर्मैट के लिए डेस्कटॉप ऐप की आवश्यकता है।",
-      "rasterTooLargeForBrowser": "ब्राउज़र में यह पूरे रास्टर को WebAssembly में डिकोड करता है, जो लगभग 4 GB तक सीमित है, इसलिए यह फ़ाइल उसमें नहीं समाती। इसे GeoLibre डेस्कटॉप ऐप से बदलें, या gdal_translate या rio-cogeo से पहले ही COG बना लें।",
+      "rasterTooLargeForBrowser": "ब्राउज़र में यह पूरे रास्टर को WebAssembly में डिकोड करता है, जो लगभग 4 GB तक सीमित है, इसलिए यह फ़ाइल उसमें नहीं समाती। इसे GeoLibre डेस्कटॉप ऐप से रूपांतरित करें, या gdal_translate या rio-cogeo से पहले ही COG बना लें।",
       "zoomRangeError": "ज़ूम स्तर 0 ≤ न्यूनतम ≤ अधिकतम ≤ {{max}} को पूरा करने चाहिए।",
       "colormap": "कलरमैप",
       "resampling": "रीसैंपलिंग",
