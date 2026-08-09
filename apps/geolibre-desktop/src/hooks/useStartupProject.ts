@@ -40,7 +40,11 @@ export function useStartupProject(): string | null {
     // reach the network and the shell is interactive throughout, so the user can
     // open their own project first; `loadProject` swaps the whole store with no
     // unsaved-work prompt, so a restore that lost that race must stand down.
-    const restoringOver = useAppStore.getState().projectPath;
+    // `projectGeneration` is the discriminator rather than `projectPath`, which
+    // File > New resets to the same `null` the app started on -- a restore
+    // landing after that would clobber the new project and look identical to
+    // landing on the untouched startup state.
+    const restoringOver = useAppStore.getState().projectGeneration;
 
     let cancelled = false;
     let warningTimer: number | undefined;
@@ -52,8 +56,10 @@ export function useStartupProject(): string | null {
         const result = await openRecentProjectFile(path, abortController.signal);
         const project = await resolveProjectXyzLayers(result.project, abortController.signal);
         if (cancelled) return;
-        const { projectPath, isDirty } = useAppStore.getState();
-        if (projectPath !== restoringOver || isDirty) return;
+        // `isDirty` too: editing the startup workspace in place (dropping a file
+        // on the map) leaves the generation untouched but is still work to keep.
+        const { projectGeneration, isDirty } = useAppStore.getState();
+        if (projectGeneration !== restoringOver || isDirty) return;
         useAppStore.getState().loadProject(project, result.path);
       } catch (error) {
         if (cancelled) return;
