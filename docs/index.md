@@ -22,9 +22,14 @@ hide:
       <a class="md-button" href="downloads/">Download app</a>
     </div>
   </div>
-  <figure class="hero__media">
-    <img src="https://files.opengeos.org/GeoLibre-demo.webp" alt="GeoLibre map interface showing the GIS workspace">
-  </figure>
+  <div class="hero__media">
+    <figure>
+      <img src="https://assets.geolibre.app/images/GeoLibre-demo.webp" alt="GeoLibre map interface showing the GIS workspace">
+    </figure>
+    <figure>
+      <img src="https://assets.geolibre.app/images/nyc-buildings.webp" alt="Manhattan buildings extruded in 3D and colored by construction era, with MTA subway lines and stations and an auto-generated legend">
+    </figure>
+  </div>
 </section>
 
 ## What GeoLibre does today
