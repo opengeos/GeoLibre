@@ -8,7 +8,7 @@ import { useDesktopSettingsStore } from "./useDesktopSettings";
 
 export function useStartupProject(): string | null {
   const { t } = useTranslation();
-  const [warning, setWarning] = useState<string | null>(null);
+  const [hasWarning, setHasWarning] = useState(false);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -35,17 +35,27 @@ export function useStartupProject(): string | null {
         if (cancelled) return;
         if (error instanceof RecentProjectGoneError) {
           useAppStore.getState().forgetRecentProject(path);
+          if (settings.mode === "specific") {
+            const current = useDesktopSettingsStore.getState().desktopSettings;
+            useDesktopSettingsStore.getState().setDesktopSettings({
+              ...current,
+              startup: { mode: "default", projectPath: null, projectName: null },
+            });
+          }
         }
         console.warn("Could not restore the startup project.", error);
-        setWarning(t("settings.startup.loadWarning"));
-        warningTimer = window.setTimeout(() => setWarning(null), 8000);
+        setHasWarning(true);
+        warningTimer = window.setTimeout(() => setHasWarning(false), 8000);
       }
     })();
     return () => {
       cancelled = true;
       if (warningTimer !== undefined) window.clearTimeout(warningTimer);
     };
-  }, [t]);
+    // Startup restoration is intentionally one-shot. In particular, changing
+    // language must not reopen this project over the user's current workspace.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  return warning;
+  return hasWarning ? t("settings.startup.loadWarning") : null;
 }
