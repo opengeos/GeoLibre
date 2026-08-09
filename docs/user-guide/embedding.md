@@ -134,7 +134,7 @@ A public DEM COG can be tested directly:
 https://web.geolibre.app/?data=https://data.source.coop/giswqs/opengeos/dem.tif
 ```
 
-A plain `https://…` URL can be passed as-is, as above: `:` and `/` are legal in a query value and need no escaping. Encode the nested data and style URLs with `encodeURIComponent` only when they contain a character that would be read as GeoLibre's own query syntax — `&`, `=`, `+`, `%`, or `#`. Remote servers must permit browser cross-origin requests (CORS). COG, GeoParquet, and PMTiles servers should also support HTTP byte-range requests.
+A plain `https://…` URL can be passed as-is, as above: `:` and `/` are legal in a query value and need no escaping. Encode the nested data and style URLs with `encodeURIComponent` only when they contain a character that would be read as GeoLibre's own query syntax — `&`, `+`, `%`, or `#`. A bare `=` inside the value is fine, since only the first `=` in each `&`-delimited pair separates the name from the value. Remote servers must permit browser cross-origin requests (CORS). COG, GeoParquet, and PMTiles servers should also support HTTP byte-range requests.
 
 For a COG, `style` may point to a raster style JSON object. Supported fields are `mode` (`single`, `rgb`, or `index`), 1-based `bands`, `rescale` ranges, `colormap`, `reversed`, `nodata`, `opacity`, `gamma`, `stretch` (`linear`, `log`, or `sqrt`), and the normalized-difference `index` preset. For example:
 

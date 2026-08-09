@@ -122,6 +122,11 @@ describe("data URL deep links", () => {
     );
     assert.equal(parsed?.dataUrl, "https://assets.geolibre.app/data/places.geojson");
     assert.equal(parsed?.styleUrl, "https://assets.geolibre.app/data/sample.style.json");
+
+    // Only the first `=` of each `&`-delimited pair separates name from value,
+    // so a nested `=` survives unencoded — the docs tell readers not to escape it.
+    const nested = dataUrlParameters("?data=https://api.example.com/features?category=parks");
+    assert.equal(nested?.dataUrl, "https://api.example.com/features?category=parks");
   });
 
   it("rejects non-http data URLs", () => {
