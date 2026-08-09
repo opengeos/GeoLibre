@@ -455,6 +455,12 @@
       "sublayers": "子图层",
       "sublayersPlaceholder": "所有可见子图层",
       "sublayersHint": "可选的子图层 ID，以逗号分隔，例如 0,2,5。选择子图层后将动态绘制该服务，而不使用其缓存切片。",
+      "retrieveSublayers": "浏览图层",
+      "retrievingSublayers": "正在获取...",
+      "availableSublayers": "可用子图层",
+      "noSublayersFound": "该地图服务未提供任何图层。",
+      "retrieveError": "无法获取该地图服务的图层。",
+      "errorMapServiceUrl": "请输入 ArcGIS MapServer URL。",
       "renderingRule": "渲染规则",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "可选的栅格函数 JSON，由服务端应用。设置渲染规则后将动态绘制该服务，而不使用其缓存切片。",
@@ -1690,7 +1696,8 @@
       "geocoding": "地理编码",
       "ai": "AI 提供方",
       "environment": "环境",
-      "updates": "更新"
+      "updates": "更新",
+      "startup": "启动"
     },
     "menu": {
       "mapPreferences": "地图首选项",
@@ -1717,6 +1724,23 @@
         "minor": "仅主要及次要版本",
         "major": "仅主要版本"
       }
+    },
+    "startup": {
+      "title": "启动项目",
+      "description": "选择原生应用启动时 GeoLibre 打开的工作区。",
+      "mode": {
+        "default": "打开默认工作区",
+        "last": "重新打开上一个项目",
+        "specific": "打开指定项目"
+      },
+      "modeHint": {
+        "default": "从一个新的未命名项目开始。",
+        "last": "打开最近使用的本地项目。"
+      },
+      "chooseProject": "选择项目",
+      "noProjectSelected": "未选择项目",
+      "selectError": "无法读取所选项目。",
+      "loadWarning": "启动项目不可用。GeoLibre 已改为打开默认工作区。"
     },
     "map": {
       "constraintsTitle": "地图约束",

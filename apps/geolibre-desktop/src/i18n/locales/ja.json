@@ -455,6 +455,12 @@
       "sublayers": "サブレイヤー",
       "sublayersPlaceholder": "表示中のすべてのサブレイヤー",
       "sublayersHint": "任意のサブレイヤー ID をカンマ区切りで指定します(例: 0,2,5)。サブレイヤーを選ぶと、キャッシュされたタイルではなく動的な描画になります。",
+      "retrieveSublayers": "レイヤーを参照",
+      "retrievingSublayers": "取得中...",
+      "availableSublayers": "利用可能なサブレイヤー",
+      "noSublayersFound": "このマップサービスはレイヤーを公開していません。",
+      "retrieveError": "マップサービスのレイヤーを取得できませんでした。",
+      "errorMapServiceUrl": "ArcGIS MapServerのURLを入力してください。",
       "renderingRule": "レンダリング ルール",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "サービスが適用するラスター関数の JSON(任意)。レンダリング ルールを指定すると、キャッシュされたタイルではなく動的な描画になります。",
@@ -1690,7 +1696,8 @@
       "geocoding": "ジオコーディング",
       "ai": "AIプロバイダー",
       "environment": "環境変数",
-      "updates": "アップデート"
+      "updates": "アップデート",
+      "startup": "起動"
     },
     "menu": {
       "mapPreferences": "地図設定",
@@ -1717,6 +1724,23 @@
         "minor": "メジャーおよびマイナーリリースのみ",
         "major": "メジャーリリースのみ"
       }
+    },
+    "startup": {
+      "title": "起動時のプロジェクト",
+      "description": "ネイティブアプリの起動時にGeoLibreが開くワークスペースを選択します。",
+      "mode": {
+        "default": "既定のワークスペースを開く",
+        "last": "最後のプロジェクトを再度開く",
+        "specific": "特定のプロジェクトを開く"
+      },
+      "modeHint": {
+        "default": "新しい無題のプロジェクトで開始します。",
+        "last": "最近使用したローカルプロジェクトを開きます。"
+      },
+      "chooseProject": "プロジェクトを選択",
+      "noProjectSelected": "プロジェクトが選択されていません",
+      "selectError": "選択したプロジェクトを読み取れませんでした。",
+      "loadWarning": "起動時のプロジェクトを利用できません。GeoLibreは代わりに既定のワークスペースを開きました。"
     },
     "map": {
       "constraintsTitle": "地図の制約",

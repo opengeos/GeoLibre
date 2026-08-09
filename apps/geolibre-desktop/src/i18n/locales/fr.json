@@ -461,6 +461,12 @@
       "sublayers": "Sous-couches",
       "sublayersPlaceholder": "Toutes les sous-couches visibles",
       "sublayersHint": "Identifiants de sous-couches facultatifs séparés par des virgules, par exemple 0,2,5. Sélectionner des sous-couches dessine le service dynamiquement au lieu d'utiliser ses tuiles en cache.",
+      "retrieveSublayers": "Parcourir les couches",
+      "retrievingSublayers": "Récupération...",
+      "availableSublayers": "Sous-couches disponibles",
+      "noSublayersFound": "Ce service de carte n'a annoncé aucune couche.",
+      "retrieveError": "Impossible de récupérer les couches du service de carte.",
+      "errorMapServiceUrl": "Entrez une URL ArcGIS MapServer.",
       "renderingRule": "Règle de rendu",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON facultatif d'une fonction raster appliquée par le service. Une règle de rendu dessine le service dynamiquement au lieu d'utiliser ses tuiles en cache.",
@@ -1731,7 +1737,8 @@
       "geocoding": "Géocodage",
       "ai": "Fournisseurs d'IA",
       "environment": "Environnement",
-      "updates": "Mises à jour"
+      "updates": "Mises à jour",
+      "startup": "Démarrage"
     },
     "menu": {
       "mapPreferences": "Préférences de carte",
@@ -1758,6 +1765,23 @@
         "minor": "Versions majeures et mineures uniquement",
         "major": "Versions majeures uniquement"
       }
+    },
+    "startup": {
+      "title": "Projet de démarrage",
+      "description": "Choisissez l'espace de travail que GeoLibre ouvre au démarrage de l'application native.",
+      "mode": {
+        "default": "Ouvrir l'espace de travail par défaut",
+        "last": "Rouvrir le dernier projet",
+        "specific": "Ouvrir un projet spécifique"
+      },
+      "modeHint": {
+        "default": "Démarrer avec un nouveau projet sans titre.",
+        "last": "Ouvrir le projet local le plus récemment utilisé."
+      },
+      "chooseProject": "Choisir un projet",
+      "noProjectSelected": "Aucun projet sélectionné",
+      "selectError": "Impossible de lire le projet sélectionné.",
+      "loadWarning": "Le projet de démarrage est indisponible. GeoLibre a ouvert l'espace de travail par défaut à la place."
     },
     "map": {
       "constraintsTitle": "Contraintes de carte",

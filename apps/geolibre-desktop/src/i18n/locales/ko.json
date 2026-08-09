@@ -455,6 +455,12 @@
       "sublayers": "하위 레이어",
       "sublayersPlaceholder": "표시된 모든 하위 레이어",
       "sublayersHint": "선택 사항인 하위 레이어 ID를 쉼표로 구분해 입력합니다(예: 0,2,5). 하위 레이어를 선택하면 캐시된 타일 대신 서비스를 동적으로 그립니다.",
+      "retrieveSublayers": "레이어 찾아보기",
+      "retrievingSublayers": "조회하는 중...",
+      "availableSublayers": "사용 가능한 하위 레이어",
+      "noSublayersFound": "이 맵 서비스는 레이어를 제공하지 않았습니다.",
+      "retrieveError": "맵 서비스의 레이어를 조회할 수 없습니다.",
+      "errorMapServiceUrl": "ArcGIS MapServer URL을 입력하세요.",
       "renderingRule": "렌더링 규칙",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "서비스가 적용하는 래스터 함수 JSON(선택 사항)입니다. 렌더링 규칙을 지정하면 캐시된 타일 대신 서비스를 동적으로 그립니다.",
@@ -1690,7 +1696,8 @@
       "geocoding": "지오코딩",
       "ai": "AI 제공자",
       "environment": "환경",
-      "updates": "업데이트"
+      "updates": "업데이트",
+      "startup": "시작"
     },
     "menu": {
       "mapPreferences": "지도 환경설정",
@@ -1717,6 +1724,23 @@
         "minor": "주 및 부 버전만",
         "major": "주 버전만"
       }
+    },
+    "startup": {
+      "title": "시작 프로젝트",
+      "description": "네이티브 앱이 시작될 때 GeoLibre가 여는 작업 공간을 선택하세요.",
+      "mode": {
+        "default": "기본 작업 공간 열기",
+        "last": "마지막 프로젝트 다시 열기",
+        "specific": "특정 프로젝트 열기"
+      },
+      "modeHint": {
+        "default": "새 제목 없는 프로젝트로 시작합니다.",
+        "last": "가장 최근에 사용한 로컬 프로젝트를 엽니다."
+      },
+      "chooseProject": "프로젝트 선택",
+      "noProjectSelected": "선택된 프로젝트 없음",
+      "selectError": "선택한 프로젝트를 읽을 수 없습니다.",
+      "loadWarning": "시작 프로젝트를 사용할 수 없습니다. GeoLibre가 대신 기본 작업 공간을 열었습니다."
     },
     "map": {
       "constraintsTitle": "지도 제약 조건",

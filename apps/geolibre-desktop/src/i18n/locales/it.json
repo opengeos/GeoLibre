@@ -461,6 +461,12 @@
       "sublayers": "Sottolivelli",
       "sublayersPlaceholder": "Tutti i sottolivelli visibili",
       "sublayersHint": "Id dei sottolivelli facoltativi separati da virgole, ad esempio 0,2,5. Selezionare i sottolivelli disegna il servizio in modo dinamico anziché usare le sue tile in cache.",
+      "retrieveSublayers": "Sfoglia livelli",
+      "retrievingSublayers": "Recupero in corso...",
+      "availableSublayers": "Sottolivelli disponibili",
+      "noSublayersFound": "Questo servizio mappa non ha dichiarato alcun livello.",
+      "retrieveError": "Impossibile recuperare i livelli del servizio mappa.",
+      "errorMapServiceUrl": "Inserisci un URL ArcGIS MapServer.",
       "renderingRule": "Regola di rendering",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON facoltativo di una funzione raster applicata dal servizio. Una regola di rendering disegna il servizio in modo dinamico anziché usare le sue tile in cache.",
@@ -1731,7 +1737,8 @@
       "geocoding": "Geocodifica",
       "ai": "Provider IA",
       "environment": "Ambiente",
-      "updates": "Aggiornamenti"
+      "updates": "Aggiornamenti",
+      "startup": "Avvio"
     },
     "menu": {
       "mapPreferences": "Preferenze mappa",
@@ -1758,6 +1765,23 @@
         "minor": "Solo release major e minor",
         "major": "Solo release major"
       }
+    },
+    "startup": {
+      "title": "Progetto di avvio",
+      "description": "Scegli l'area di lavoro che GeoLibre apre all'avvio dell'app nativa.",
+      "mode": {
+        "default": "Apri l'area di lavoro predefinita",
+        "last": "Riapri l'ultimo progetto",
+        "specific": "Apri un progetto specifico"
+      },
+      "modeHint": {
+        "default": "Inizia con un nuovo progetto senza titolo.",
+        "last": "Apri il progetto locale usato più di recente."
+      },
+      "chooseProject": "Scegli progetto",
+      "noProjectSelected": "Nessun progetto selezionato",
+      "selectError": "Impossibile leggere il progetto selezionato.",
+      "loadWarning": "Il progetto di avvio non è disponibile. GeoLibre ha aperto l'area di lavoro predefinita."
     },
     "map": {
       "constraintsTitle": "Vincoli della mappa",

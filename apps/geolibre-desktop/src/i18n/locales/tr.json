@@ -461,6 +461,12 @@
       "sublayers": "Alt katmanlar",
       "sublayersPlaceholder": "Görünen tüm alt katmanlar",
       "sublayersHint": "İsteğe bağlı, virgülle ayrılmış alt katman kimlikleri, örneğin 0,2,5. Alt katman seçmek servisi önbelleğe alınmış döşemeler yerine dinamik olarak çizer.",
+      "retrieveSublayers": "Katmanlara göz at",
+      "retrievingSublayers": "Getiriliyor...",
+      "availableSublayers": "Kullanılabilir alt katmanlar",
+      "noSublayersFound": "Bu harita servisi hiçbir katman bildirmedi.",
+      "retrieveError": "Harita servisinin katmanları alınamadı.",
+      "errorMapServiceUrl": "Bir ArcGIS MapServer URL'si girin.",
       "renderingRule": "Görselleştirme kuralı",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "Servisin uyguladığı isteğe bağlı raster işlevi JSON'u. Görselleştirme kuralı, servisi önbelleğe alınmış döşemeler yerine dinamik olarak çizer.",
@@ -1731,7 +1737,8 @@
       "geocoding": "Coğrafi kodlama",
       "ai": "AI Sağlayıcıları",
       "environment": "Ortam",
-      "updates": "Güncellemeler"
+      "updates": "Güncellemeler",
+      "startup": "Başlangıç"
     },
     "menu": {
       "mapPreferences": "Harita Tercihleri",
@@ -1758,6 +1765,23 @@
         "minor": "Yalnızca büyük ve küçük sürümler",
         "major": "Yalnızca büyük sürümler"
       }
+    },
+    "startup": {
+      "title": "Başlangıç projesi",
+      "description": "GeoLibre'nin native uygulama başladığında açacağı çalışma alanını seçin.",
+      "mode": {
+        "default": "Varsayılan çalışma alanını aç",
+        "last": "Son projeyi yeniden aç",
+        "specific": "Belirli bir projeyi aç"
+      },
+      "modeHint": {
+        "default": "Yeni, adsız bir projeyle başla.",
+        "last": "En son kullanılan yerel projeyi aç."
+      },
+      "chooseProject": "Proje Seç",
+      "noProjectSelected": "Proje seçilmedi",
+      "selectError": "Seçilen proje okunamadı.",
+      "loadWarning": "Başlangıç projesi kullanılamıyor. GeoLibre bunun yerine varsayılan çalışma alanını açtı."
     },
     "map": {
       "constraintsTitle": "Harita kısıtlamaları",

@@ -461,6 +461,12 @@
       "sublayers": "Unterebenen",
       "sublayersPlaceholder": "Alle sichtbaren Unterebenen",
       "sublayersHint": "Optionale kommagetrennte IDs der Unterebenen, zum Beispiel 0,2,5. Eine Auswahl zeichnet den Dienst dynamisch statt über seine zwischengespeicherten Kacheln.",
+      "retrieveSublayers": "Ebenen durchsuchen",
+      "retrievingSublayers": "Wird abgerufen …",
+      "availableSublayers": "Verfügbare Unterebenen",
+      "noSublayersFound": "Dieser Kartendienst hat keine Ebenen angegeben.",
+      "retrieveError": "Die Ebenen des Kartendienstes konnten nicht abgerufen werden.",
+      "errorMapServiceUrl": "Geben Sie eine ArcGIS-MapServer-URL ein.",
       "renderingRule": "Rendering-Regel",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "Optionales JSON einer Rasterfunktion, die der Dienst anwendet. Eine Rendering-Regel zeichnet den Dienst dynamisch statt über seine zwischengespeicherten Kacheln.",
@@ -1731,7 +1737,8 @@
       "geocoding": "Geokodierung",
       "ai": "KI-Anbieter",
       "environment": "Umgebung",
-      "updates": "Updates"
+      "updates": "Updates",
+      "startup": "Start"
     },
     "menu": {
       "mapPreferences": "Karteneinstellungen",
@@ -1758,6 +1765,23 @@
         "minor": "Nur Haupt- und Nebenversionen",
         "major": "Nur Hauptversionen"
       }
+    },
+    "startup": {
+      "title": "Startprojekt",
+      "description": "Wählen Sie den Arbeitsbereich, den GeoLibre beim Start der nativen App öffnet.",
+      "mode": {
+        "default": "Standardarbeitsbereich öffnen",
+        "last": "Letztes Projekt erneut öffnen",
+        "specific": "Bestimmtes Projekt öffnen"
+      },
+      "modeHint": {
+        "default": "Mit einem neuen, unbenannten Projekt starten.",
+        "last": "Das zuletzt verwendete lokale Projekt öffnen."
+      },
+      "chooseProject": "Projekt auswählen",
+      "noProjectSelected": "Kein Projekt ausgewählt",
+      "selectError": "Das ausgewählte Projekt konnte nicht gelesen werden.",
+      "loadWarning": "Das Startprojekt ist nicht verfügbar. GeoLibre hat stattdessen den Standardarbeitsbereich geöffnet."
     },
     "map": {
       "constraintsTitle": "Kartenbeschränkungen",

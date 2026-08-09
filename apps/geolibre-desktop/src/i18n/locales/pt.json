@@ -461,6 +461,12 @@
       "sublayers": "Subcamadas",
       "sublayersPlaceholder": "Todas as subcamadas visíveis",
       "sublayersHint": "Ids de subcamadas opcionais separados por vírgulas, por exemplo 0,2,5. Selecionar subcamadas desenha o serviço dinamicamente em vez de usar seus tiles em cache.",
+      "retrieveSublayers": "Explorar camadas",
+      "retrievingSublayers": "Recuperando...",
+      "availableSublayers": "Subcamadas disponíveis",
+      "noSublayersFound": "Este serviço de mapa não anunciou nenhuma camada.",
+      "retrieveError": "Não foi possível recuperar as camadas do serviço de mapa.",
+      "errorMapServiceUrl": "Digite uma URL do ArcGIS MapServer.",
       "renderingRule": "Regra de renderização",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON opcional de uma função raster aplicada pelo serviço. Uma regra de renderização desenha o serviço dinamicamente em vez de usar seus tiles em cache.",
@@ -1731,7 +1737,8 @@
       "geocoding": "Geocodificação",
       "ai": "Provedores de IA",
       "environment": "Ambiente",
-      "updates": "Atualizações"
+      "updates": "Atualizações",
+      "startup": "Inicialização"
     },
     "menu": {
       "mapPreferences": "Preferências do mapa",
@@ -1758,6 +1765,23 @@
         "minor": "Somente versões principais e secundárias",
         "major": "Somente versões principais"
       }
+    },
+    "startup": {
+      "title": "Projeto de inicialização",
+      "description": "Escolha o espaço de trabalho que o GeoLibre abre quando o aplicativo nativo é iniciado.",
+      "mode": {
+        "default": "Abrir o espaço de trabalho padrão",
+        "last": "Reabrir o último projeto",
+        "specific": "Abrir um projeto específico"
+      },
+      "modeHint": {
+        "default": "Começar com um projeto novo, sem título.",
+        "last": "Abrir o projeto local usado mais recentemente."
+      },
+      "chooseProject": "Escolher projeto",
+      "noProjectSelected": "Nenhum projeto selecionado",
+      "selectError": "Não foi possível ler o projeto selecionado.",
+      "loadWarning": "O projeto de inicialização não está disponível. O GeoLibre abriu o espaço de trabalho padrão."
     },
     "map": {
       "constraintsTitle": "Restrições do mapa",

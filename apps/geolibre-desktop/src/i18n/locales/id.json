@@ -455,6 +455,12 @@
       "sublayers": "Sublayer",
       "sublayersPlaceholder": "Semua sublayer yang terlihat",
       "sublayersHint": "Id sublayer opsional dipisahkan koma, misalnya 0,2,5. Memilih sublayer menggambar layanan secara dinamis alih-alih memakai ubin cache-nya.",
+      "retrieveSublayers": "Telusuri layer",
+      "retrievingSublayers": "Mengambil...",
+      "availableSublayers": "Sublayer yang tersedia",
+      "noSublayersFound": "Layanan peta ini tidak mencantumkan layer apa pun.",
+      "retrieveError": "Tidak dapat mengambil layer dari layanan peta.",
+      "errorMapServiceUrl": "Masukkan URL ArcGIS MapServer.",
       "renderingRule": "Aturan render",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON fungsi raster opsional yang diterapkan layanan. Aturan render menggambar layanan secara dinamis alih-alih memakai ubin cache-nya.",
@@ -1690,7 +1696,8 @@
       "geocoding": "Geocoding",
       "ai": "Penyedia AI",
       "environment": "Lingkungan",
-      "updates": "Pembaruan"
+      "updates": "Pembaruan",
+      "startup": "Awal Mula"
     },
     "menu": {
       "mapPreferences": "Preferensi Peta",
@@ -1717,6 +1724,23 @@
         "minor": "Hanya rilis besar dan kecil",
         "major": "Hanya rilis besar"
       }
+    },
+    "startup": {
+      "title": "Proyek saat memulai",
+      "description": "Pilih ruang kerja yang dibuka GeoLibre saat aplikasi native dimulai.",
+      "mode": {
+        "default": "Buka ruang kerja bawaan",
+        "last": "Buka kembali proyek terakhir",
+        "specific": "Buka proyek tertentu"
+      },
+      "modeHint": {
+        "default": "Mulai dengan proyek baru tanpa judul.",
+        "last": "Buka proyek lokal yang terakhir digunakan."
+      },
+      "chooseProject": "Pilih Proyek",
+      "noProjectSelected": "Tidak ada proyek yang dipilih",
+      "selectError": "Proyek yang dipilih tidak dapat dibaca.",
+      "loadWarning": "Proyek saat memulai tidak tersedia. GeoLibre membuka ruang kerja bawaan sebagai gantinya."
     },
     "map": {
       "constraintsTitle": "Batasan peta",

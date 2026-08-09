@@ -461,6 +461,12 @@
       "sublayers": "Sublagen",
       "sublayersPlaceholder": "Alle zichtbare sublagen",
       "sublayersHint": "Optionele sublaag-id's, gescheiden door komma's, bijvoorbeeld 0,2,5. Sublagen kiezen tekent de service dynamisch in plaats van via de tegels in de cache.",
+      "retrieveSublayers": "Lagen doorbladeren",
+      "retrievingSublayers": "Bezig met ophalen...",
+      "availableSublayers": "Beschikbare sublagen",
+      "noSublayersFound": "Deze kaartservice heeft geen lagen opgegeven.",
+      "retrieveError": "Kan de lagen van de kaartservice niet ophalen.",
+      "errorMapServiceUrl": "Voer een ArcGIS MapServer-URL in.",
       "renderingRule": "Renderregel",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "Optionele JSON van een rasterfunctie die de service toepast. Een renderregel tekent de service dynamisch in plaats van via de tegels in de cache.",
@@ -1731,7 +1737,8 @@
       "geocoding": "Geocoderen",
       "ai": "AI-providers",
       "environment": "Omgeving",
-      "updates": "Updates"
+      "updates": "Updates",
+      "startup": "Opstarten"
     },
     "menu": {
       "mapPreferences": "Kaartvoorkeuren",
@@ -1758,6 +1765,23 @@
         "minor": "Alleen major- en minor-releases",
         "major": "Alleen major-releases"
       }
+    },
+    "startup": {
+      "title": "Opstartproject",
+      "description": "Kies de werkruimte die GeoLibre opent wanneer de native app start.",
+      "mode": {
+        "default": "De standaardwerkruimte openen",
+        "last": "Het laatste project opnieuw openen",
+        "specific": "Een specifiek project openen"
+      },
+      "modeHint": {
+        "default": "Beginnen met een nieuw, naamloos project.",
+        "last": "Het meest recent gebruikte lokale project openen."
+      },
+      "chooseProject": "Project kiezen",
+      "noProjectSelected": "Geen project geselecteerd",
+      "selectError": "Het geselecteerde project kon niet worden gelezen.",
+      "loadWarning": "Het opstartproject is niet beschikbaar. GeoLibre heeft in plaats daarvan de standaardwerkruimte geopend."
     },
     "map": {
       "constraintsTitle": "Kaartbeperkingen",
