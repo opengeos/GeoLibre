@@ -4,9 +4,11 @@ import { useTranslation } from "react-i18next";
 import { dataUrlParameters } from "../lib/data-url";
 import { isTauri } from "../lib/is-tauri";
 import { projectUrlFromLocation } from "../lib/project-url";
+import { startupProjectPath } from "../lib/startup-project";
 import { openRecentProjectFile, RecentProjectGoneError } from "../lib/tauri-io";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopSettings";
+import { loadRecentProjects } from "./useRecentProjectsPersistence";
 
 export function useStartupProject(): string | null {
   const { t } = useTranslation();
@@ -26,14 +28,19 @@ export function useStartupProject(): string | null {
     if (projectUrlFromLocation() !== null) return;
     if (dataUrlParameters(window.location.search) !== null) return;
     const settings = useDesktopSettingsStore.getState().desktopSettings.startup;
-    if (settings.mode === "default") return;
-    // Reads what `useRecentProjectsPersistence` hydrated from localStorage, so
-    // it must stay above this hook in `App.tsx` -- run first, "last project"
-    // mode would see an empty list and silently fall through to no-op.
-    const recentProjects = useAppStore.getState().recentProjects;
-    const path =
-      settings.mode === "specific" ? settings.projectPath : (recentProjects[0]?.path ?? null);
+    // `useRecentProjectsPersistence` hydrates the store from localStorage in its
+    // own mount effect. Fall back to reading storage directly when that has not
+    // happened yet, so "last project" mode does not silently no-op if this hook
+    // is ever ordered above it in `App.tsx`.
+    const stored = useAppStore.getState().recentProjects;
+    const path = startupProjectPath(settings, stored.length > 0 ? stored : loadRecentProjects());
     if (!path) return;
+
+    // The workspace this restore is allowed to replace. The XYZ probes below
+    // reach the network and the shell is interactive throughout, so the user can
+    // open their own project first; `loadProject` swaps the whole store with no
+    // unsaved-work prompt, so a restore that lost that race must stand down.
+    const restoringOver = useAppStore.getState().projectPath;
 
     let cancelled = false;
     let warningTimer: number | undefined;
@@ -44,7 +51,10 @@ export function useStartupProject(): string | null {
       try {
         const result = await openRecentProjectFile(path, abortController.signal);
         const project = await resolveProjectXyzLayers(result.project, abortController.signal);
-        if (!cancelled) useAppStore.getState().loadProject(project, result.path);
+        if (cancelled) return;
+        const { projectPath, isDirty } = useAppStore.getState();
+        if (projectPath !== restoringOver || isDirty) return;
+        useAppStore.getState().loadProject(project, result.path);
       } catch (error) {
         if (cancelled) return;
         if (error instanceof RecentProjectGoneError) {
