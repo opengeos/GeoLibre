@@ -490,7 +490,14 @@
       "renderingRuleHint": "JSON اختياري لدالة راستر تطبقها الخدمة. قاعدة العرض ترسم الخدمة ديناميكيًا بدلًا من استخدام بلاطاتها المخزنة.",
       "portalUrl": "عنوان URL للبوابة",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "رمز الوصول"
+      "accessToken": "رمز الوصول",
+      "pageSize": "عدد السجلات لكل طلب",
+      "pageSizePlaceholder": "تلقائي",
+      "maxFeatures": "الحد الأقصى للمعالم",
+      "maxFeaturesPlaceholder": "الكل",
+      "pagingHint": "تُنزَّل طبقات المعالم على صفحات. قلّل عدد السجلات لكل طلب إذا انتهت مهلة الخدمة.",
+      "loadingProgress": "تم تحميل {{loaded}} من أصل {{total}} من المعالم…",
+      "loadingProgressUnknown": "تم تحميل {{loaded}} من المعالم…"
     },
     "gpx": {
       "defaultName": "طبقة GPX",
@@ -1275,6 +1282,7 @@
     "guest": "ضيف",
     "connectFailed": "تعذّر الاتصال بخادم التعاون.",
     "copyFailed": "تعذّر النسخ إلى الحافظة.",
+    "shareFailed": "تعذّرت مشاركة أحدث تغييرات المشروع.",
     "connecting": "جارٍ الاتصال…",
     "reconnecting": "جارٍ إعادة الاتصال…",
     "connected": "الجلسة المباشرة نشطة",
@@ -1459,7 +1467,9 @@
       "titleLabel": "العنوان",
       "position": "الموضع",
       "filterToPage": "المعالم داخل نطاق الصفحة فقط",
-      "filterToPageHint": "ينطبق على صفحات الأطلس ونطاق الطباعة المرسوم؛ وإلا تُستخدم الطبقة بأكملها."
+      "filterToPageHint": "ينطبق على صفحات الأطلس ونطاق الطباعة المرسوم؛ وإلا تُستخدم الطبقة بأكملها.",
+      "filterToAtlasFeature": "معلم الأطلس الحالي فقط",
+      "filterToAtlasFeatureHint": "متاح عندما يستخدم الجدول طبقة تغطية الأطلس. له الأولوية على مرشّح نطاق الصفحة."
     },
     "dataTable": {
       "columns": "الأعمدة",
@@ -1597,6 +1607,8 @@
       "extentMargin": "هامش حول المعلم",
       "extentScale": "مقياس ثابت",
       "marginLabel": "الهامش (٪)",
+      "maskOutside": "إخفاء المنطقة خارج المعلم الحالي",
+      "maskOutsideHint": "يطبّق تعبئة معكوسة شبه شفافة لإبراز معلم الأطلس الحالي.",
       "scaleLabel": "المقياس",
       "scaleRequired": "أدخل مقياسًا أكبر من الصفر.",
       "sortField": "الترتيب حسب",
@@ -2355,6 +2367,7 @@
       "rasterShape": "قراءة راستر {{width}}×{{height}} بعدد {{bands}} نطاق",
       "wroteCog": "تمت كتابة COG مبلّط مع نظرات عامة ({{compression}})",
       "notAGeoTiff": "هذا الملف ليس GeoTIFF قابلًا للقراءة. في المتصفح، يقرأ تحويل راستر إلى COG صيغة GeoTIFF فقط؛ وتتطلب الصيغ الأخرى تطبيق سطح المكتب.",
+      "rasterTooLargeForBrowser": "في المتصفح يفكّ هذا ترميز الراستر بالكامل في WebAssembly، وهي محدودة بنحو 4 غيغابايت، لذا لا يتسع هذا الملف. حوّله باستخدام تطبيق GeoLibre لسطح المكتب، أو أنشئ COG مسبقًا باستخدام gdal_translate أو rio-cogeo.",
       "zoomRangeError": "يجب أن تحقق مستويات التكبير الشرط 0 ≤ الأدنى ≤ الأقصى ≤ {{max}}.",
       "colormap": "خريطة الألوان",
       "resampling": "إعادة المعاينة",
@@ -4903,6 +4916,7 @@
     "bindWindowCumulative": "كل شيء حتى الخطوة الحالية (تراكمي)",
     "bindCancel": "إلغاء",
     "bindConfirm": "ربط",
+    "openStylePanel": "فتح لوحة النمط",
     "openRasterStylePanel": "تحرير نمط البيانات النقطية…",
     "exportRasterSuccess": "تم تصدير البيانات النقطية.",
     "exportRasterError": "تعذر تصدير هذه البيانات النقطية.",
@@ -5409,6 +5423,8 @@
     "authorNamePlaceholder": "مثال: أحمد أو سارة",
     "commentLabel": "تعليق / ملاحظات",
     "commentPlaceholder": "اكتب هنا ملاحظة المراجعة أو تعليقك...",
+    "post": "نشر التعليق",
+    "postShortcutTooltip": "نشر التعليق ({{shortcut}})",
     "confirmDelete": "هل أنت متأكد من حذف سلسلة التعليقات هذه؟",
     "sessionDisconnected": "انقطع اتصال الجلسة.",
     "defaultAuthorName": "المؤلف"

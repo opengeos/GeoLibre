@@ -460,7 +460,14 @@
       "renderingRuleHint": "서비스가 적용하는 래스터 함수 JSON(선택 사항)입니다. 렌더링 규칙을 지정하면 캐시된 타일 대신 서비스를 동적으로 그립니다.",
       "portalUrl": "포털 URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "액세스 토큰"
+      "accessToken": "액세스 토큰",
+      "pageSize": "요청당 레코드 수",
+      "pageSizePlaceholder": "자동",
+      "maxFeatures": "최대 피처 수",
+      "maxFeaturesPlaceholder": "전체",
+      "pagingHint": "피처 레이어는 페이지 단위로 다운로드됩니다. 서비스에서 시간 초과가 발생하면 요청당 레코드 수를 줄이세요.",
+      "loadingProgress": "전체 {{total}}개 중 피처 {{loaded}}개를 불러왔습니다…",
+      "loadingProgressUnknown": "피처 {{loaded}}개를 불러왔습니다…"
     },
     "gpx": {
       "defaultName": "GPX 레이어",
@@ -1105,6 +1112,7 @@
     "guest": "게스트",
     "connectFailed": "공동작업 서버에 연결할 수 없습니다.",
     "copyFailed": "클립보드에 복사할 수 없습니다.",
+    "shareFailed": "최신 프로젝트 변경 사항을 공유할 수 없습니다.",
     "connecting": "연결 중…",
     "reconnecting": "재연결 중…",
     "connected": "실시간 세션 활성화됨",
@@ -1279,7 +1287,9 @@
       "titleLabel": "제목",
       "position": "위치",
       "filterToPage": "페이지 범위 내 피처만",
-      "filterToPageHint": "아틀라스 페이지와 그려진 인쇄 범위에 적용됩니다. 그 외에는 전체 레이어가 사용됩니다."
+      "filterToPageHint": "아틀라스 페이지와 그려진 인쇄 범위에 적용됩니다. 그 외에는 전체 레이어가 사용됩니다.",
+      "filterToAtlasFeature": "현재 아틀라스 피처만",
+      "filterToAtlasFeatureHint": "테이블이 아틀라스 커버리지 레이어를 사용할 때 사용할 수 있습니다. 페이지 범위 필터보다 우선합니다."
     },
     "dataTable": {
       "columns": "열",
@@ -1407,6 +1417,8 @@
       "extentMargin": "피처 주변 여백",
       "extentScale": "고정 축척",
       "marginLabel": "여백 (%)",
+      "maskOutside": "현재 피처 바깥 영역 마스크",
+      "maskOutsideHint": "반투명 반전 채우기를 적용해 현재 아틀라스 피처를 강조합니다.",
       "scaleLabel": "축척",
       "scaleRequired": "0보다 큰 축척을 입력하세요.",
       "sortField": "정렬 기준",
@@ -2141,6 +2153,7 @@
       "rasterShape": "{{bands}}개 밴드의 {{width}}×{{height}} 래스터를 읽음",
       "wroteCog": "오버뷰가 있는 타일 COG를 작성함 ({{compression}})",
       "notAGeoTiff": "이 파일은 읽을 수 있는 GeoTIFF가 아닙니다. 브라우저에서 래스터를 COG로 변환은 GeoTIFF만 읽으며, 다른 형식은 데스크톱 앱이 필요합니다.",
+      "rasterTooLargeForBrowser": "브라우저에서는 래스터 전체를 WebAssembly로 디코딩하는데, WebAssembly는 약 4GB로 제한되므로 이 파일은 처리할 수 없습니다. GeoLibre 데스크톱 앱으로 변환하거나, gdal_translate 또는 rio-cogeo로 COG를 미리 만드세요.",
       "zoomRangeError": "확대/축소 레벨은 0 ≤ 최소 ≤ 최대 ≤ {{max}}을(를) 만족해야 합니다.",
       "colormap": "색상표",
       "resampling": "리샘플링",
@@ -4544,6 +4557,7 @@
     "bindWindowCumulative": "현재 단계까지 전체 (누적)",
     "bindCancel": "취소",
     "bindConfirm": "연결",
+    "openStylePanel": "스타일 패널 열기",
     "openRasterStylePanel": "래스터 스타일 편집…",
     "exportRasterSuccess": "래스터를 내보냈습니다.",
     "exportRasterError": "이 래스터를 내보낼 수 없습니다.",
@@ -5025,6 +5039,8 @@
     "authorNamePlaceholder": "예: 홍길동 또는 김철수",
     "commentLabel": "의견 / 피드백",
     "commentPlaceholder": "여기에 검토 메모나 피드백을 입력하세요...",
+    "post": "댓글 게시",
+    "postShortcutTooltip": "댓글 게시({{shortcut}})",
     "confirmDelete": "이 의견 스레드를 삭제하시겠습니까?",
     "sessionDisconnected": "세션 연결이 끊어졌습니다.",
     "defaultAuthorName": "작성자"

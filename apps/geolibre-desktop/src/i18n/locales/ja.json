@@ -460,7 +460,14 @@
       "renderingRuleHint": "サービスが適用するラスター関数の JSON(任意)。レンダリング ルールを指定すると、キャッシュされたタイルではなく動的な描画になります。",
       "portalUrl": "ポータルURL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "アクセストークン"
+      "accessToken": "アクセストークン",
+      "pageSize": "リクエストあたりのレコード数",
+      "pageSizePlaceholder": "自動",
+      "maxFeatures": "最大フィーチャ数",
+      "maxFeaturesPlaceholder": "すべて",
+      "pagingHint": "フィーチャレイヤーはページ単位でダウンロードされます。サービスがタイムアウトする場合は、リクエストあたりのレコード数を減らしてください。",
+      "loadingProgress": "{{total}}件中{{loaded}}件のフィーチャを読み込みました…",
+      "loadingProgressUnknown": "{{loaded}}件のフィーチャを読み込みました…"
     },
     "gpx": {
       "defaultName": "GPXレイヤー",
@@ -1105,6 +1112,7 @@
     "guest": "ゲスト",
     "connectFailed": "共同編集サーバーに接続できませんでした。",
     "copyFailed": "クリップボードにコピーできませんでした。",
+    "shareFailed": "プロジェクトの最新の変更を共有できませんでした。",
     "connecting": "接続中…",
     "reconnecting": "再接続中…",
     "connected": "ライブセッション接続中",
@@ -1279,7 +1287,9 @@
       "titleLabel": "見出し",
       "position": "位置",
       "filterToPage": "ページ範囲内のフィーチャのみ",
-      "filterToPageHint": "アトラスページと描画した印刷範囲に適用されます。それ以外の場合はレイヤー全体が使用されます。"
+      "filterToPageHint": "アトラスページと描画した印刷範囲に適用されます。それ以外の場合はレイヤー全体が使用されます。",
+      "filterToAtlasFeature": "現在のアトラスフィーチャのみ",
+      "filterToAtlasFeatureHint": "テーブルがアトラスのカバレッジレイヤーを使用している場合に利用できます。ページ範囲フィルターより優先されます。"
     },
     "dataTable": {
       "columns": "列",
@@ -1407,6 +1417,8 @@
       "extentMargin": "フィーチャ周囲の余白",
       "extentScale": "固定縮尺",
       "marginLabel": "余白（%）",
+      "maskOutside": "現在のフィーチャの外側をマスク",
+      "maskOutsideHint": "半透明の反転塗りつぶしを適用して、現在のアトラスフィーチャを強調します。",
       "scaleLabel": "縮尺",
       "scaleRequired": "0より大きい縮尺を入力してください。",
       "sortField": "並べ替え",
@@ -2141,6 +2153,7 @@
       "rasterShape": "{{width}}×{{height}}、{{bands}}バンドのラスターを読み込みました",
       "wroteCog": "オーバービュー付きのタイル化COGを書き出しました（{{compression}}）",
       "notAGeoTiff": "このファイルは読み取り可能なGeoTIFFではありません。ブラウザ版の「ラスターからCOGへ」はGeoTIFFのみ読み取れます。他の形式にはデスクトップアプリが必要です。",
+      "rasterTooLargeForBrowser": "ブラウザではラスター全体を WebAssembly でデコードしますが、WebAssembly は約4GBに制限されているため、このファイルは収まりません。GeoLibre デスクトップアプリで変換するか、gdal_translate または rio-cogeo で事前に COG を作成してください。",
       "zoomRangeError": "ズームレベルは 0 ≤ 最小 ≤ 最大 ≤ {{max}} を満たす必要があります。",
       "colormap": "カラーマップ",
       "resampling": "リサンプリング",
@@ -4544,6 +4557,7 @@
     "bindWindowCumulative": "現在のステップまでのすべて(累積)",
     "bindCancel": "キャンセル",
     "bindConfirm": "連動",
+    "openStylePanel": "スタイルパネルを開く",
     "openRasterStylePanel": "ラスタースタイルを編集…",
     "exportRasterSuccess": "ラスターをエクスポートしました。",
     "exportRasterError": "このラスターをエクスポートできませんでした。",
@@ -5025,6 +5039,8 @@
     "authorNamePlaceholder": "例: 田中 または 佐藤",
     "commentLabel": "コメント / フィードバック",
     "commentPlaceholder": "レビューのメモやフィードバックをここに入力...",
+    "post": "コメントを投稿",
+    "postShortcutTooltip": "コメントを投稿({{shortcut}})",
     "confirmDelete": "このコメントスレッドを削除してもよろしいですか？",
     "sessionDisconnected": "セッションが切断されました。",
     "defaultAuthorName": "作成者"

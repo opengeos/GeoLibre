@@ -466,7 +466,14 @@
       "renderingRuleHint": "JSON facoltativo di una funzione raster applicata dal servizio. Una regola di rendering disegna il servizio in modo dinamico anziché usare le sue tile in cache.",
       "portalUrl": "URL del portale",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Token di accesso"
+      "accessToken": "Token di accesso",
+      "pageSize": "Record per richiesta",
+      "pageSizePlaceholder": "Automatico",
+      "maxFeatures": "Numero massimo di elementi",
+      "maxFeaturesPlaceholder": "Tutti",
+      "pagingHint": "I livelli di elementi vengono scaricati per pagine. Riduci i record per richiesta se il servizio va in timeout.",
+      "loadingProgress": "Caricati {{loaded}} di {{total}} elementi…",
+      "loadingProgressUnknown": "Caricati {{loaded}} elementi…"
     },
     "gpx": {
       "defaultName": "Livello GPX",
@@ -1139,6 +1146,7 @@
     "guest": "Ospite",
     "connectFailed": "Impossibile connettersi al server di collaborazione.",
     "copyFailed": "Impossibile copiare negli appunti.",
+    "shareFailed": "Impossibile condividere le ultime modifiche del progetto.",
     "connecting": "Connessione in corso…",
     "reconnecting": "Riconnessione in corso…",
     "connected": "Sessione live attiva",
@@ -1315,7 +1323,9 @@
       "titleLabel": "Intestazione",
       "position": "Posizione",
       "filterToPage": "Solo gli elementi nell'estensione della pagina",
-      "filterToPageHint": "Si applica alle pagine dell'atlante e a un'estensione di stampa disegnata; altrimenti viene usato l'intero livello."
+      "filterToPageHint": "Si applica alle pagine dell'atlante e a un'estensione di stampa disegnata; altrimenti viene usato l'intero livello.",
+      "filterToAtlasFeature": "Solo l'elemento corrente dell'atlante",
+      "filterToAtlasFeatureHint": "Disponibile quando la tabella usa il livello di copertura dell'atlante. Ha la priorità sul filtro per estensione della pagina."
     },
     "dataTable": {
       "columns": "Colonne",
@@ -1445,6 +1455,8 @@
       "extentMargin": "Margine attorno all'elemento",
       "extentScale": "Scala fissa",
       "marginLabel": "Margine (%)",
+      "maskOutside": "Maschera l'area fuori dall'elemento corrente",
+      "maskOutsideHint": "Applica un riempimento invertito traslucido per evidenziare l'elemento corrente dell'atlante.",
       "scaleLabel": "Scala",
       "scaleRequired": "Inserisci una scala maggiore di zero.",
       "sortField": "Ordina per",
@@ -2184,6 +2196,7 @@
       "rasterShape": "Letto raster {{width}}×{{height}} con {{bands}} banda/e",
       "wroteCog": "Scritto un COG a tasselli con panoramiche ({{compression}})",
       "notAGeoTiff": "Questo file non è un GeoTIFF leggibile. Nel browser, Raster in COG legge solo GeoTIFF; altri formati richiedono l'app desktop.",
+      "rasterTooLargeForBrowser": "Nel browser questa operazione decodifica l'intero raster in WebAssembly, che è limitato a circa 4 GB, quindi questo non ci sta. Convertilo con l'app desktop di GeoLibre, oppure crea il COG in anticipo con gdal_translate o rio-cogeo.",
       "zoomRangeError": "I livelli di zoom devono soddisfare 0 ≤ min ≤ max ≤ {{max}}.",
       "colormap": "Mappa di colori",
       "resampling": "Ricampionamento",
@@ -4616,6 +4629,7 @@
     "bindWindowCumulative": "Tutto fino al passo corrente (cumulativo)",
     "bindCancel": "Annulla",
     "bindConfirm": "Collega",
+    "openStylePanel": "Apri il pannello Stile",
     "openRasterStylePanel": "Modifica stile raster…",
     "exportRasterSuccess": "Raster esportato.",
     "exportRasterError": "Impossibile esportare questo raster.",
@@ -5102,6 +5116,8 @@
     "authorNamePlaceholder": "es. Alex o Sara",
     "commentLabel": "Commento / Feedback",
     "commentPlaceholder": "Scrivi qui la tua nota di revisione o il tuo feedback...",
+    "post": "Pubblica commento",
+    "postShortcutTooltip": "Pubblica commento ({{shortcut}})",
     "confirmDelete": "Vuoi davvero eliminare questa discussione di commenti?",
     "sessionDisconnected": "Sessione disconnessa.",
     "defaultAuthorName": "Autore"

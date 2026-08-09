@@ -460,7 +460,14 @@
       "renderingRuleHint": "可选的栅格函数 JSON，由服务端应用。设置渲染规则后将动态绘制该服务，而不使用其缓存切片。",
       "portalUrl": "门户 URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "访问令牌"
+      "accessToken": "访问令牌",
+      "pageSize": "每次请求的记录数",
+      "pageSizePlaceholder": "自动",
+      "maxFeatures": "最大要素数",
+      "maxFeaturesPlaceholder": "全部",
+      "pagingHint": "要素图层将分页下载。如果服务超时，请降低每次请求的记录数。",
+      "loadingProgress": "已加载 {{loaded}}/{{total}} 个要素…",
+      "loadingProgressUnknown": "已加载 {{loaded}} 个要素…"
     },
     "gpx": {
       "defaultName": "GPX 图层",
@@ -1105,6 +1112,7 @@
     "guest": "访客",
     "connectFailed": "无法连接到协作服务器。",
     "copyFailed": "无法复制到剪贴板。",
+    "shareFailed": "无法共享最新的项目更改。",
     "connecting": "正在连接…",
     "reconnecting": "正在重新连接…",
     "connected": "实时会话已激活",
@@ -1279,7 +1287,9 @@
       "titleLabel": "标题",
       "position": "位置",
       "filterToPage": "仅显示页面范围内的要素",
-      "filterToPageHint": "适用于地图集页面和绘制的打印范围；否则使用整个图层。"
+      "filterToPageHint": "适用于地图集页面和绘制的打印范围；否则使用整个图层。",
+      "filterToAtlasFeature": "仅当前地图集要素",
+      "filterToAtlasFeatureHint": "当表格使用地图集覆盖图层时可用。此设置优先于页面范围过滤。"
     },
     "dataTable": {
       "columns": "列",
@@ -1407,6 +1417,8 @@
       "extentMargin": "要素周围边距",
       "extentScale": "固定比例尺",
       "marginLabel": "边距（%）",
+      "maskOutside": "遮盖当前要素以外的区域",
+      "maskOutsideHint": "应用半透明的反向填充以突出当前地图集要素。",
       "scaleLabel": "比例尺",
       "scaleRequired": "请输入大于零的比例尺。",
       "sortField": "排序依据",
@@ -2141,6 +2153,7 @@
       "rasterShape": "读取 {{width}}×{{height}} 栅格，{{bands}} 个波段",
       "wroteCog": "已写入带概览的分块 COG（{{compression}}）",
       "notAGeoTiff": "此文件不是可读的 GeoTIFF。在浏览器中，栅格转 COG 仅读取 GeoTIFF；其他格式需要桌面应用。",
+      "rasterTooLargeForBrowser": "在浏览器中，此操作会在 WebAssembly 中解码整个栅格，而 WebAssembly 的上限约为 4 GB，因此该文件放不下。请使用 GeoLibre 桌面应用进行转换，或先用 gdal_translate 或 rio-cogeo 构建 COG。",
       "zoomRangeError": "缩放级别必须满足 0 ≤ 最小 ≤ 最大 ≤ {{max}}。",
       "colormap": "颜色映射",
       "resampling": "重采样",
@@ -4544,6 +4557,7 @@
     "bindWindowCumulative": "截至当前步骤的全部内容（累积）",
     "bindCancel": "取消",
     "bindConfirm": "绑定",
+    "openStylePanel": "打开样式面板",
     "openRasterStylePanel": "编辑栅格样式…",
     "exportRasterSuccess": "栅格已导出。",
     "exportRasterError": "无法导出此栅格。",
@@ -5025,6 +5039,8 @@
     "authorNamePlaceholder": "例如 张三或李四",
     "commentLabel": "意见 / 反馈",
     "commentPlaceholder": "在此输入您的审阅意见或反馈...",
+    "post": "发布评论",
+    "postShortcutTooltip": "发布评论（{{shortcut}}）",
     "confirmDelete": "确定要删除此意见讨论串吗？",
     "sessionDisconnected": "会话已断开。",
     "defaultAuthorName": "作者"

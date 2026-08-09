@@ -466,7 +466,14 @@
       "renderingRuleHint": "JSON opcional de una función ráster que aplica el servicio. Una regla de representación dibuja el servicio de forma dinámica en lugar de usar sus teselas en caché.",
       "portalUrl": "URL del portal",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Token de acceso"
+      "accessToken": "Token de acceso",
+      "pageSize": "Registros por solicitud",
+      "pageSizePlaceholder": "Automático",
+      "maxFeatures": "Máximo de entidades",
+      "maxFeaturesPlaceholder": "Todas",
+      "pagingHint": "Las capas de entidades se descargan por páginas. Reduzca los registros por solicitud si el servicio agota el tiempo de espera.",
+      "loadingProgress": "Se cargaron {{loaded}} de {{total}} entidades…",
+      "loadingProgressUnknown": "Se cargaron {{loaded}} entidades…"
     },
     "gpx": {
       "defaultName": "Capa GPX",
@@ -1139,6 +1146,7 @@
     "guest": "Invitado",
     "connectFailed": "No se pudo conectar con el servidor de colaboración.",
     "copyFailed": "No se pudo copiar al portapapeles.",
+    "shareFailed": "No se pudieron compartir los últimos cambios del proyecto.",
     "connecting": "Conectando…",
     "reconnecting": "Reconectando…",
     "connected": "Sesión en vivo activa",
@@ -1315,7 +1323,9 @@
       "titleLabel": "Encabezado",
       "position": "Posición",
       "filterToPage": "Solo entidades en la extensión de la página",
-      "filterToPageHint": "Se aplica a las páginas de atlas y a una extensión de impresión dibujada; en caso contrario se usa toda la capa."
+      "filterToPageHint": "Se aplica a las páginas de atlas y a una extensión de impresión dibujada; en caso contrario se usa toda la capa.",
+      "filterToAtlasFeature": "Solo la entidad actual del atlas",
+      "filterToAtlasFeatureHint": "Disponible cuando la tabla usa la capa de cobertura del atlas. Tiene prioridad sobre el filtro de extensión de página."
     },
     "dataTable": {
       "columns": "Columnas",
@@ -1445,6 +1455,8 @@
       "extentMargin": "Margen alrededor de la entidad",
       "extentScale": "Escala fija",
       "marginLabel": "Margen (%)",
+      "maskOutside": "Enmascarar el área fuera de la entidad actual",
+      "maskOutsideHint": "Aplica un relleno invertido translúcido para resaltar la entidad actual del atlas.",
       "scaleLabel": "Escala",
       "scaleRequired": "Introduzca una escala mayor que cero.",
       "sortField": "Ordenar por",
@@ -2184,6 +2196,7 @@
       "rasterShape": "Se leyó un ráster de {{width}}×{{height}} con {{bands}} banda(s)",
       "wroteCog": "Se escribió un COG teselado con vistas generales ({{compression}})",
       "notAGeoTiff": "Este archivo no es un GeoTIFF legible. En el navegador, Ráster a COG solo lee GeoTIFF; otros formatos necesitan la aplicación de escritorio.",
+      "rasterTooLargeForBrowser": "En el navegador esto descodifica el ráster completo en WebAssembly, que está limitado a unos 4 GB, por lo que este no cabe. Conviértalo con la aplicación de escritorio de GeoLibre, o cree el COG previamente con gdal_translate o rio-cogeo.",
       "zoomRangeError": "Los niveles de zoom deben cumplir 0 ≤ mín ≤ máx ≤ {{max}}.",
       "colormap": "Mapa de colores",
       "resampling": "Remuestreo",
@@ -4616,6 +4629,7 @@
     "bindWindowCumulative": "Todo hasta el paso actual (acumulativo)",
     "bindCancel": "Cancelar",
     "bindConfirm": "Vincular",
+    "openStylePanel": "Abrir panel de estilo",
     "openRasterStylePanel": "Editar estilo ráster…",
     "exportRasterSuccess": "Ráster exportado.",
     "exportRasterError": "No se pudo exportar este ráster.",
@@ -5102,6 +5116,8 @@
     "authorNamePlaceholder": "p. ej., Alex o Sara",
     "commentLabel": "Comentario / Observaciones",
     "commentPlaceholder": "Escriba aquí su nota de revisión u observaciones...",
+    "post": "Publicar comentario",
+    "postShortcutTooltip": "Publicar comentario ({{shortcut}})",
     "confirmDelete": "¿Seguro que desea eliminar este hilo de comentarios?",
     "sessionDisconnected": "Sesión desconectada.",
     "defaultAuthorName": "Autor"

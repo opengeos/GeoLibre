@@ -466,7 +466,14 @@
       "renderingRuleHint": "Optionele JSON van een rasterfunctie die de service toepast. Een renderregel tekent de service dynamisch in plaats van via de tegels in de cache.",
       "portalUrl": "Portal-URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Toegangstoken"
+      "accessToken": "Toegangstoken",
+      "pageSize": "Records per aanvraag",
+      "pageSizePlaceholder": "Automatisch",
+      "maxFeatures": "Maximaal aantal features",
+      "maxFeaturesPlaceholder": "Alle",
+      "pagingHint": "Featurelagen worden per pagina gedownload. Verlaag het aantal records per aanvraag als de service een time-out geeft.",
+      "loadingProgress": "{{loaded}} van {{total}} features geladen…",
+      "loadingProgressUnknown": "{{loaded}} features geladen…"
     },
     "gpx": {
       "defaultName": "GPX-laag",
@@ -1139,6 +1146,7 @@
     "guest": "Gast",
     "connectFailed": "Kan geen verbinding maken met de samenwerkingsserver.",
     "copyFailed": "Kan niet naar het klembord kopiëren.",
+    "shareFailed": "Kan de laatste projectwijzigingen niet delen.",
     "connecting": "Verbinden…",
     "reconnecting": "Opnieuw verbinden…",
     "connected": "Live sessie actief",
@@ -1315,7 +1323,9 @@
       "titleLabel": "Kop",
       "position": "Positie",
       "filterToPage": "Alleen objecten binnen het pagina-bereik",
-      "filterToPageHint": "Geldt voor atlaspagina's en een getekend afdrukbereik; anders wordt de hele laag gebruikt."
+      "filterToPageHint": "Geldt voor atlaspagina's en een getekend afdrukbereik; anders wordt de hele laag gebruikt.",
+      "filterToAtlasFeature": "Alleen het huidige atlasobject",
+      "filterToAtlasFeatureHint": "Beschikbaar wanneer de tabel de dekkingslaag van de atlas gebruikt. Dit heeft voorrang op het filter voor het pagina-bereik."
     },
     "dataTable": {
       "columns": "Kolommen",
@@ -1445,6 +1455,8 @@
       "extentMargin": "Marge rond object",
       "extentScale": "Vaste schaal",
       "marginLabel": "Marge (%)",
+      "maskOutside": "Gebied buiten het huidige object maskeren",
+      "maskOutsideHint": "Past een doorschijnende omgekeerde vulling toe om het huidige atlasobject te benadrukken.",
       "scaleLabel": "Schaal",
       "scaleRequired": "Voer een schaal groter dan nul in.",
       "sortField": "Sorteren op",
@@ -2184,6 +2196,7 @@
       "rasterShape": "{{width}}×{{height}} raster gelezen met {{bands}} band(en)",
       "wroteCog": "Getegelde COG met overzichten geschreven ({{compression}})",
       "notAGeoTiff": "Dit bestand is geen leesbare GeoTIFF. In de browser leest Raster naar COG alleen GeoTIFF; andere formaten vereisen de desktop-app.",
+      "rasterTooLargeForBrowser": "In de browser decodeert dit de hele raster in WebAssembly, dat beperkt is tot ongeveer 4 GB, dus deze past niet. Converteer het met de GeoLibre-desktop-app, of bouw de COG vooraf met gdal_translate of rio-cogeo.",
       "zoomRangeError": "Zoomniveaus moeten voldoen aan 0 ≤ min ≤ max ≤ {{max}}.",
       "colormap": "Kleurenkaart",
       "resampling": "Herbemonstering",
@@ -4616,6 +4629,7 @@
     "bindWindowCumulative": "Alles tot en met de huidige stap (cumulatief)",
     "bindCancel": "Annuleren",
     "bindConfirm": "Koppelen",
+    "openStylePanel": "Paneel Stijl openen",
     "openRasterStylePanel": "Rasterstijl bewerken…",
     "exportRasterSuccess": "Raster geëxporteerd.",
     "exportRasterError": "Dit raster kon niet worden geëxporteerd.",
@@ -5102,6 +5116,8 @@
     "authorNamePlaceholder": "bijv. Alex of Sarah",
     "commentLabel": "Opmerking / Feedback",
     "commentPlaceholder": "Typ hier je revisienotitie of feedback...",
+    "post": "Opmerking plaatsen",
+    "postShortcutTooltip": "Opmerking plaatsen ({{shortcut}})",
     "confirmDelete": "Weet je zeker dat je deze opmerkingenreeks wilt verwijderen?",
     "sessionDisconnected": "Sessie verbroken.",
     "defaultAuthorName": "Auteur"

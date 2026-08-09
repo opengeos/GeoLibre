@@ -466,7 +466,14 @@
       "renderingRuleHint": "Optionales JSON einer Rasterfunktion, die der Dienst anwendet. Eine Rendering-Regel zeichnet den Dienst dynamisch statt über seine zwischengespeicherten Kacheln.",
       "portalUrl": "Portal-URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Zugriffstoken"
+      "accessToken": "Zugriffstoken",
+      "pageSize": "Datensätze pro Anfrage",
+      "pageSizePlaceholder": "Automatisch",
+      "maxFeatures": "Maximale Objektanzahl",
+      "maxFeaturesPlaceholder": "Alle",
+      "pagingHint": "Feature-Ebenen werden seitenweise heruntergeladen. Verringern Sie die Datensätze pro Anfrage, wenn beim Dienst eine Zeitüberschreitung auftritt.",
+      "loadingProgress": "{{loaded}} von {{total}} Objekten geladen…",
+      "loadingProgressUnknown": "{{loaded}} Objekte geladen…"
     },
     "gpx": {
       "defaultName": "GPX-Ebene",
@@ -1139,6 +1146,7 @@
     "guest": "Gast",
     "connectFailed": "Verbindung zum Kollaborationsserver konnte nicht hergestellt werden.",
     "copyFailed": "Kopieren in die Zwischenablage fehlgeschlagen.",
+    "shareFailed": "Die neuesten Projektänderungen konnten nicht geteilt werden.",
     "connecting": "Verbindung wird hergestellt…",
     "reconnecting": "Verbindung wird wiederhergestellt…",
     "connected": "Live-Sitzung aktiv",
@@ -1315,7 +1323,9 @@
       "titleLabel": "Überschrift",
       "position": "Position",
       "filterToPage": "Nur Objekte in der Seitenausdehnung",
-      "filterToPageHint": "Gilt für Atlas-Seiten und eine gezeichnete Druckausdehnung; andernfalls wird die gesamte Ebene verwendet."
+      "filterToPageHint": "Gilt für Atlas-Seiten und eine gezeichnete Druckausdehnung; andernfalls wird die gesamte Ebene verwendet.",
+      "filterToAtlasFeature": "Nur das aktuelle Atlas-Objekt",
+      "filterToAtlasFeatureHint": "Verfügbar, wenn die Tabelle die Abdeckungsebene des Atlas verwendet. Dies hat Vorrang vor dem Filter für die Seitenausdehnung."
     },
     "dataTable": {
       "columns": "Spalten",
@@ -1445,6 +1455,8 @@
       "extentMargin": "Rand um das Objekt",
       "extentScale": "Fester Maßstab",
       "marginLabel": "Rand (%)",
+      "maskOutside": "Bereich außerhalb des aktuellen Objekts maskieren",
+      "maskOutsideHint": "Wendet eine durchscheinende invertierte Füllung an, um das aktuelle Atlas-Objekt hervorzuheben.",
       "scaleLabel": "Maßstab",
       "scaleRequired": "Geben Sie einen Maßstab größer als null ein.",
       "sortField": "Sortieren nach",
@@ -2184,6 +2196,7 @@
       "rasterShape": "Raster {{width}}×{{height}} gelesen; Bänder: {{bands}}",
       "wroteCog": "Gekacheltes COG mit Übersichten geschrieben ({{compression}})",
       "notAGeoTiff": "Diese Datei ist kein lesbares GeoTIFF. Im Browser liest „Raster zu COG“ nur GeoTIFF; andere Formate benötigen die Desktop-App.",
+      "rasterTooLargeForBrowser": "Im Browser wird dabei das gesamte Raster in WebAssembly dekodiert, das auf etwa 4 GB begrenzt ist; dieses passt daher nicht. Konvertieren Sie es mit der GeoLibre-Desktop-App oder erstellen Sie das COG vorab mit gdal_translate oder rio-cogeo.",
       "zoomRangeError": "Zoomstufen müssen 0 ≤ min ≤ max ≤ {{max}} erfüllen.",
       "colormap": "Farbverlauf",
       "resampling": "Neuabtastung",
@@ -4616,6 +4629,7 @@
     "bindWindowCumulative": "Alles bis zum aktuellen Schritt (kumulativ)",
     "bindCancel": "Abbrechen",
     "bindConfirm": "Binden",
+    "openStylePanel": "Stil-Bedienfeld öffnen",
     "openRasterStylePanel": "Rasterstil bearbeiten…",
     "exportRasterSuccess": "Raster exportiert.",
     "exportRasterError": "Dieses Raster konnte nicht exportiert werden.",
@@ -5102,6 +5116,8 @@
     "authorNamePlaceholder": "z. B. Alex oder Sarah",
     "commentLabel": "Kommentar / Rückmeldung",
     "commentPlaceholder": "Geben Sie hier Ihre Prüfnotiz oder Rückmeldung ein...",
+    "post": "Kommentar veröffentlichen",
+    "postShortcutTooltip": "Kommentar veröffentlichen ({{shortcut}})",
     "confirmDelete": "Möchten Sie diesen Kommentar-Thread wirklich löschen?",
     "sessionDisconnected": "Sitzung getrennt.",
     "defaultAuthorName": "Autor"

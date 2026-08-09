@@ -466,7 +466,14 @@
       "renderingRuleHint": "JSON opcional de uma função raster aplicada pelo serviço. Uma regra de renderização desenha o serviço dinamicamente em vez de usar seus tiles em cache.",
       "portalUrl": "URL do portal",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Token de acesso"
+      "accessToken": "Token de acesso",
+      "pageSize": "Registros por requisição",
+      "pageSizePlaceholder": "Automático",
+      "maxFeatures": "Máximo de feições",
+      "maxFeaturesPlaceholder": "Todas",
+      "pagingHint": "As camadas de feições são baixadas em páginas. Reduza os registros por requisição se o serviço atingir o tempo limite.",
+      "loadingProgress": "{{loaded}} de {{total}} feições carregadas…",
+      "loadingProgressUnknown": "{{loaded}} feições carregadas…"
     },
     "gpx": {
       "defaultName": "Camada GPX",
@@ -1139,6 +1146,7 @@
     "guest": "Convidado",
     "connectFailed": "Não foi possível conectar ao servidor de colaboração.",
     "copyFailed": "Não foi possível copiar para a área de transferência.",
+    "shareFailed": "Não foi possível compartilhar as últimas alterações do projeto.",
     "connecting": "Conectando…",
     "reconnecting": "Reconectando…",
     "connected": "Sessão ao vivo ativa",
@@ -1315,7 +1323,9 @@
       "titleLabel": "Cabeçalho",
       "position": "Posição",
       "filterToPage": "Apenas feições na extensão da página",
-      "filterToPageHint": "Aplica-se a páginas de atlas e a uma extensão de impressão desenhada; caso contrário, toda a camada é usada."
+      "filterToPageHint": "Aplica-se a páginas de atlas e a uma extensão de impressão desenhada; caso contrário, toda a camada é usada.",
+      "filterToAtlasFeature": "Apenas a feição atual do atlas",
+      "filterToAtlasFeatureHint": "Disponível quando a tabela usa a camada de cobertura do atlas. Tem prioridade sobre o filtro de extensão da página."
     },
     "dataTable": {
       "columns": "Colunas",
@@ -1445,6 +1455,8 @@
       "extentMargin": "Margem ao redor da feição",
       "extentScale": "Escala fixa",
       "marginLabel": "Margem (%)",
+      "maskOutside": "Mascarar a área fora da feição atual",
+      "maskOutsideHint": "Aplica um preenchimento invertido translúcido para destacar a feição atual do atlas.",
       "scaleLabel": "Escala",
       "scaleRequired": "Digite uma escala maior que zero.",
       "sortField": "Ordenar por",
@@ -2184,6 +2196,7 @@
       "rasterShape": "Raster de {{width}}×{{height}} lido com {{bands}} banda(s)",
       "wroteCog": "Foi gravado um COG em tiles com overviews ({{compression}})",
       "notAGeoTiff": "Este arquivo não é um GeoTIFF legível. No navegador, Raster para COG lê apenas GeoTIFF; outros formatos precisam do aplicativo desktop.",
+      "rasterTooLargeForBrowser": "No navegador isso decodifica o raster inteiro em WebAssembly, que é limitado a cerca de 4 GB, então este não cabe. Converta-o com o aplicativo desktop do GeoLibre, ou gere o COG previamente com gdal_translate ou rio-cogeo.",
       "zoomRangeError": "Os níveis de zoom devem satisfazer 0 ≤ mín ≤ máx ≤ {{max}}.",
       "colormap": "Mapa de cores",
       "resampling": "Reamostragem",
@@ -4616,6 +4629,7 @@
     "bindWindowCumulative": "Tudo até a etapa atual (cumulativo)",
     "bindCancel": "Cancelar",
     "bindConfirm": "Vincular",
+    "openStylePanel": "Abrir painel de estilo",
     "openRasterStylePanel": "Editar estilo raster…",
     "exportRasterSuccess": "Raster exportado.",
     "exportRasterError": "Não foi possível exportar este raster.",
@@ -5102,6 +5116,8 @@
     "authorNamePlaceholder": "ex.: Alex ou Sara",
     "commentLabel": "Comentário / Feedback",
     "commentPlaceholder": "Digite aqui sua nota de revisão ou feedback...",
+    "post": "Publicar comentário",
+    "postShortcutTooltip": "Publicar comentário ({{shortcut}})",
     "confirmDelete": "Tem certeza de que deseja excluir esta discussão de comentários?",
     "sessionDisconnected": "Sessão desconectada.",
     "defaultAuthorName": "Autor"

@@ -466,7 +466,14 @@
       "renderingRuleHint": "सेवा द्वारा लागू किया जाने वाला वैकल्पिक रास्टर फ़ंक्शन JSON. रेंडरिंग नियम देने पर सेवा कैश की गई टाइल्स के बजाय गतिशील रूप से बनाई जाती है।",
       "portalUrl": "पोर्टल URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "एक्सेस टोकन"
+      "accessToken": "एक्सेस टोकन",
+      "pageSize": "प्रति अनुरोध रिकॉर्ड",
+      "pageSizePlaceholder": "स्वचालित",
+      "maxFeatures": "अधिकतम फ़ीचर",
+      "maxFeaturesPlaceholder": "सभी",
+      "pagingHint": "फ़ीचर लेयर पृष्ठों में डाउनलोड होती हैं। यदि सेवा का समय समाप्त हो जाए तो प्रति अनुरोध रिकॉर्ड घटाएँ।",
+      "loadingProgress": "{{total}} में से {{loaded}} फ़ीचर लोड हुए…",
+      "loadingProgressUnknown": "{{loaded}} फ़ीचर लोड हुए…"
     },
     "gpx": {
       "defaultName": "GPX लेयर",
@@ -1139,6 +1146,7 @@
     "guest": "अतिथि",
     "connectFailed": "सहयोग सर्वर से कनेक्ट नहीं हो सका।",
     "copyFailed": "क्लिपबोर्ड पर कॉपी नहीं हो सका।",
+    "shareFailed": "परियोजना के नवीनतम परिवर्तन साझा नहीं किए जा सके।",
     "connecting": "कनेक्ट हो रहा है…",
     "reconnecting": "पुनः कनेक्ट हो रहा है…",
     "connected": "लाइव सत्र सक्रिय है",
@@ -1315,7 +1323,9 @@
       "titleLabel": "शीर्षक",
       "position": "स्थिति",
       "filterToPage": "केवल पेज विस्तार के भीतर की फ़ीचर",
-      "filterToPageHint": "एटलस पेज और खींचे गए प्रिंट विस्तार पर लागू होता है; अन्यथा पूरी लेयर का उपयोग होता है।"
+      "filterToPageHint": "एटलस पेज और खींचे गए प्रिंट विस्तार पर लागू होता है; अन्यथा पूरी लेयर का उपयोग होता है।",
+      "filterToAtlasFeature": "केवल वर्तमान एटलस फ़ीचर",
+      "filterToAtlasFeatureHint": "तब उपलब्ध जब तालिका एटलस कवरेज लेयर का उपयोग करती है। यह पेज विस्तार फ़िल्टर पर प्राथमिकता रखता है।"
     },
     "dataTable": {
       "columns": "कॉलम",
@@ -1445,6 +1455,8 @@
       "extentMargin": "फ़ीचर के चारों ओर मार्जिन",
       "extentScale": "स्थिर स्केल",
       "marginLabel": "मार्जिन (%)",
+      "maskOutside": "वर्तमान फ़ीचर के बाहर का क्षेत्र मास्क करें",
+      "maskOutsideHint": "वर्तमान एटलस फ़ीचर को उभारने के लिए पारभासी उल्टा भराव लागू करता है।",
       "scaleLabel": "स्केल",
       "scaleRequired": "शून्य से बड़ा स्केल दर्ज करें।",
       "sortField": "इसके अनुसार क्रमबद्ध करें",
@@ -2184,6 +2196,7 @@
       "rasterShape": "{{bands}} बैंड के साथ {{width}}×{{height}} रास्टर पढ़ा गया",
       "wroteCog": "ओवरव्यू के साथ एक टाइल्ड COG लिखा ({{compression}})",
       "notAGeoTiff": "यह फ़ाइल एक पठनीय GeoTIFF नहीं है। ब्राउज़र में, रास्टर से COG केवल GeoTIFF पढ़ता है; अन्य फ़ॉर्मैट के लिए डेस्कटॉप ऐप की आवश्यकता है।",
+      "rasterTooLargeForBrowser": "ब्राउज़र में यह पूरे रास्टर को WebAssembly में डिकोड करता है, जो लगभग 4 GB तक सीमित है, इसलिए यह फ़ाइल उसमें नहीं समाती। इसे GeoLibre डेस्कटॉप ऐप से बदलें, या gdal_translate या rio-cogeo से पहले ही COG बना लें।",
       "zoomRangeError": "ज़ूम स्तर 0 ≤ न्यूनतम ≤ अधिकतम ≤ {{max}} को पूरा करने चाहिए।",
       "colormap": "कलरमैप",
       "resampling": "रीसैंपलिंग",
@@ -4616,6 +4629,7 @@
     "bindWindowCumulative": "वर्तमान चरण तक सब कुछ (संचयी)",
     "bindCancel": "रद्द करें",
     "bindConfirm": "बाइंड करें",
+    "openStylePanel": "स्टाइल पैनल खोलें",
     "openRasterStylePanel": "रास्टर शैली संपादित करें…",
     "exportRasterSuccess": "रास्टर निर्यात किया गया।",
     "exportRasterError": "यह रास्टर निर्यात नहीं किया जा सका।",
@@ -5102,6 +5116,8 @@
     "authorNamePlaceholder": "उदा. अमित या सारा",
     "commentLabel": "टिप्पणी / प्रतिक्रिया",
     "commentPlaceholder": "अपना समीक्षा नोट या प्रतिक्रिया यहाँ लिखें...",
+    "post": "टिप्पणी पोस्ट करें",
+    "postShortcutTooltip": "टिप्पणी पोस्ट करें ({{shortcut}})",
     "confirmDelete": "क्या आप वाकई इस टिप्पणी थ्रेड को हटाना चाहते हैं?",
     "sessionDisconnected": "सत्र डिस्कनेक्ट हो गया।",
     "defaultAuthorName": "लेखक"

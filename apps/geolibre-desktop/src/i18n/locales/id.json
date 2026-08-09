@@ -460,7 +460,14 @@
       "renderingRuleHint": "JSON fungsi raster opsional yang diterapkan layanan. Aturan render menggambar layanan secara dinamis alih-alih memakai ubin cache-nya.",
       "portalUrl": "URL portal",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Token akses"
+      "accessToken": "Token akses",
+      "pageSize": "Rekaman per permintaan",
+      "pageSizePlaceholder": "Otomatis",
+      "maxFeatures": "Jumlah fitur maksimum",
+      "maxFeaturesPlaceholder": "Semua",
+      "pagingHint": "Layer fitur diunduh per halaman. Turunkan jumlah rekaman per permintaan jika layanan kehabisan waktu.",
+      "loadingProgress": "Memuat {{loaded}} dari {{total}} fitur…",
+      "loadingProgressUnknown": "Memuat {{loaded}} fitur…"
     },
     "gpx": {
       "defaultName": "Layer GPX",
@@ -1105,6 +1112,7 @@
     "guest": "Tamu",
     "connectFailed": "Tidak dapat terhubung ke server kolaborasi.",
     "copyFailed": "Tidak dapat menyalin ke papan klip.",
+    "shareFailed": "Tidak dapat membagikan perubahan proyek terbaru.",
     "connecting": "Menghubungkan…",
     "reconnecting": "Menghubungkan kembali…",
     "connected": "Sesi langsung aktif",
@@ -1279,7 +1287,9 @@
       "titleLabel": "Judul",
       "position": "Posisi",
       "filterToPage": "Hanya fitur dalam cakupan halaman",
-      "filterToPageHint": "Berlaku untuk halaman atlas dan cakupan cetak yang digambar; jika tidak, seluruh layer digunakan."
+      "filterToPageHint": "Berlaku untuk halaman atlas dan cakupan cetak yang digambar; jika tidak, seluruh layer digunakan.",
+      "filterToAtlasFeature": "Hanya fitur atlas saat ini",
+      "filterToAtlasFeatureHint": "Tersedia saat tabel memakai layer cakupan atlas. Ini lebih diprioritaskan daripada filter cakupan halaman."
     },
     "dataTable": {
       "columns": "Kolom",
@@ -1407,6 +1417,8 @@
       "extentMargin": "Margin di sekitar fitur",
       "extentScale": "Skala tetap",
       "marginLabel": "Margin (%)",
+      "maskOutside": "Mask area di luar fitur saat ini",
+      "maskOutsideHint": "Menerapkan isian terbalik semitransparan untuk menonjolkan fitur atlas saat ini.",
       "scaleLabel": "Skala",
       "scaleRequired": "Masukkan skala yang lebih besar dari nol.",
       "sortField": "Urutkan berdasarkan",
@@ -2141,6 +2153,7 @@
       "rasterShape": "Membaca raster {{width}}×{{height}} dengan {{bands}} band",
       "wroteCog": "Menulis COG berubin dengan overview ({{compression}})",
       "notAGeoTiff": "File ini bukan GeoTIFF yang dapat dibaca. Di browser, Raster ke COG hanya membaca GeoTIFF; format lain memerlukan aplikasi desktop.",
+      "rasterTooLargeForBrowser": "Di browser, ini mendekode seluruh raster di WebAssembly yang dibatasi sekitar 4 GB, sehingga file ini tidak muat. Konversikan dengan aplikasi desktop GeoLibre, atau bangun COG terlebih dahulu dengan gdal_translate atau rio-cogeo.",
       "zoomRangeError": "Tingkat zoom harus memenuhi 0 ≤ min ≤ maks ≤ {{max}}.",
       "colormap": "Peta warna",
       "resampling": "Resampling",
@@ -4544,6 +4557,7 @@
     "bindWindowCumulative": "Semuanya hingga langkah saat ini (kumulatif)",
     "bindCancel": "Batal",
     "bindConfirm": "Ikat",
+    "openStylePanel": "Buka panel Gaya",
     "openRasterStylePanel": "Edit gaya raster…",
     "exportRasterSuccess": "Raster berhasil diekspor.",
     "exportRasterError": "Tidak dapat mengekspor raster ini.",
@@ -5025,6 +5039,8 @@
     "authorNamePlaceholder": "mis. Alex atau Sari",
     "commentLabel": "Komentar / Masukan",
     "commentPlaceholder": "Tulis catatan tinjauan atau masukan Anda di sini...",
+    "post": "Kirim Komentar",
+    "postShortcutTooltip": "Kirim Komentar ({{shortcut}})",
     "confirmDelete": "Yakin ingin menghapus utas komentar ini?",
     "sessionDisconnected": "Sesi terputus.",
     "defaultAuthorName": "Penulis"

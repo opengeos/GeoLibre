@@ -466,7 +466,14 @@
       "renderingRuleHint": "Servisin uyguladığı isteğe bağlı raster işlevi JSON'u. Görselleştirme kuralı, servisi önbelleğe alınmış döşemeler yerine dinamik olarak çizer.",
       "portalUrl": "Portal URL'si",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Erişim belirteci"
+      "accessToken": "Erişim belirteci",
+      "pageSize": "İstek başına kayıt",
+      "pageSizePlaceholder": "Otomatik",
+      "maxFeatures": "Maksimum öğe sayısı",
+      "maxFeaturesPlaceholder": "Tümü",
+      "pagingHint": "Öğe katmanları sayfalar hâlinde indirilir. Servis zaman aşımına uğrarsa istek başına kayıt sayısını azaltın.",
+      "loadingProgress": "{{total}} öğeden {{loaded}} tanesi yüklendi…",
+      "loadingProgressUnknown": "{{loaded}} öğe yüklendi…"
     },
     "gpx": {
       "defaultName": "GPX Katmanı",
@@ -1139,6 +1146,7 @@
     "guest": "Konuk",
     "connectFailed": "İş birliği sunucusuna bağlanılamadı.",
     "copyFailed": "Panoya kopyalanamadı.",
+    "shareFailed": "En son proje değişiklikleri paylaşılamadı.",
     "connecting": "Bağlanıyor…",
     "reconnecting": "Yeniden bağlanıyor…",
     "connected": "Canlı oturum etkin",
@@ -1315,7 +1323,9 @@
       "titleLabel": "Başlık",
       "position": "Konum",
       "filterToPage": "Yalnızca sayfa kapsamındaki öğeler",
-      "filterToPageHint": "Atlas sayfalarına ve çizilen bir yazdırma kapsamına uygulanır; aksi halde tüm katman kullanılır."
+      "filterToPageHint": "Atlas sayfalarına ve çizilen bir yazdırma kapsamına uygulanır; aksi halde tüm katman kullanılır.",
+      "filterToAtlasFeature": "Yalnızca geçerli atlas öğesi",
+      "filterToAtlasFeatureHint": "Tablo atlas kapsam katmanını kullandığında kullanılabilir. Sayfa kapsamı filtresine göre önceliklidir."
     },
     "dataTable": {
       "columns": "Sütunlar",
@@ -1445,6 +1455,8 @@
       "extentMargin": "Öğe çevresindeki boşluk",
       "extentScale": "Sabit ölçek",
       "marginLabel": "Boşluk (%)",
+      "maskOutside": "Geçerli öğenin dışındaki alanı maskele",
+      "maskOutsideHint": "Geçerli atlas öğesini vurgulamak için yarı saydam ters dolgu uygular.",
       "scaleLabel": "Ölçek",
       "scaleRequired": "Sıfırdan büyük bir ölçek girin.",
       "sortField": "Sıralama ölçütü",
@@ -2184,6 +2196,7 @@
       "rasterShape": "{{bands}} bantlı {{width}}×{{height}} raster okundu",
       "wroteCog": "Genel görünümlü, döşenmiş bir COG yazıldı ({{compression}})",
       "notAGeoTiff": "Bu dosya okunabilir bir GeoTIFF değil. Tarayıcıda, Rasterdan COG'a yalnızca GeoTIFF okur; diğer biçimler masaüstü uygulamasını gerektirir.",
+      "rasterTooLargeForBrowser": "Tarayıcıda bu işlem rasterın tamamını WebAssembly içinde çözer; WebAssembly yaklaşık 4 GB ile sınırlı olduğundan bu dosya sığmaz. GeoLibre masaüstü uygulamasıyla dönüştürün ya da COG'u önceden gdal_translate veya rio-cogeo ile oluşturun.",
       "zoomRangeError": "Yakınlaştırma düzeyleri 0 ≤ min ≤ maks ≤ {{max}} koşulunu sağlamalıdır.",
       "colormap": "Renk haritası",
       "resampling": "Yeniden örnekleme",
@@ -4616,6 +4629,7 @@
     "bindWindowCumulative": "Mevcut adıma kadar her şey (kümülatif)",
     "bindCancel": "İptal",
     "bindConfirm": "Bağla",
+    "openStylePanel": "Stil panelini aç",
     "openRasterStylePanel": "Raster stilini düzenle…",
     "exportRasterSuccess": "Raster dışa aktarıldı.",
     "exportRasterError": "Bu raster dışa aktarılamadı.",
@@ -5102,6 +5116,8 @@
     "authorNamePlaceholder": "örn. Ali veya Ayşe",
     "commentLabel": "Yorum / Geri bildirim",
     "commentPlaceholder": "İnceleme notunuzu veya geri bildiriminizi buraya yazın...",
+    "post": "Yorumu Gönder",
+    "postShortcutTooltip": "Yorumu Gönder ({{shortcut}})",
     "confirmDelete": "Bu yorum dizisini silmek istediğinizden emin misiniz?",
     "sessionDisconnected": "Oturum bağlantısı kesildi.",
     "defaultAuthorName": "Yazar"

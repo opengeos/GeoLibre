@@ -466,7 +466,14 @@
       "renderingRuleHint": "JSON facultatif d'une fonction raster appliquée par le service. Une règle de rendu dessine le service dynamiquement au lieu d'utiliser ses tuiles en cache.",
       "portalUrl": "URL du portail",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Jeton d'accès"
+      "accessToken": "Jeton d'accès",
+      "pageSize": "Enregistrements par requête",
+      "pageSizePlaceholder": "Auto",
+      "maxFeatures": "Nombre maximal d'entités",
+      "maxFeaturesPlaceholder": "Toutes",
+      "pagingHint": "Les couches d'entités se téléchargent par pages. Réduisez le nombre d'enregistrements par requête si le service expire.",
+      "loadingProgress": "{{loaded}} entités sur {{total}} chargées…",
+      "loadingProgressUnknown": "{{loaded}} entités chargées…"
     },
     "gpx": {
       "defaultName": "Couche GPX",
@@ -1139,6 +1146,7 @@
     "guest": "Invité",
     "connectFailed": "Impossible de se connecter au serveur de collaboration.",
     "copyFailed": "Impossible de copier dans le presse-papiers.",
+    "shareFailed": "Impossible de partager les dernières modifications du projet.",
     "connecting": "Connexion…",
     "reconnecting": "Reconnexion…",
     "connected": "Session en direct active",
@@ -2188,6 +2196,7 @@
       "rasterShape": "Raster de {{width}}×{{height}} lu avec {{bands}} bande(s)",
       "wroteCog": "COG tuilé avec aperçus écrit ({{compression}})",
       "notAGeoTiff": "Ce fichier n'est pas un GeoTIFF lisible. Dans le navigateur, Raster vers COG ne lit que le GeoTIFF ; les autres formats nécessitent l'application de bureau.",
+      "rasterTooLargeForBrowser": "Dans le navigateur, cette opération décode l'intégralité du raster en WebAssembly, qui est limité à environ 4 Go ; celui-ci ne tient donc pas. Convertissez-le avec l'application de bureau GeoLibre, ou créez le COG au préalable avec gdal_translate ou rio-cogeo.",
       "zoomRangeError": "Les niveaux de zoom doivent satisfaire 0 ≤ min ≤ max ≤ {{max}}.",
       "colormap": "Palette de couleurs",
       "resampling": "Rééchantillonnage",
@@ -4620,6 +4629,7 @@
     "bindWindowCumulative": "Tout jusqu'à l'étape actuelle (cumulatif)",
     "bindCancel": "Annuler",
     "bindConfirm": "Lier",
+    "openStylePanel": "Ouvrir le panneau Style",
     "openRasterStylePanel": "Modifier le style raster…",
     "exportRasterSuccess": "Raster exporté.",
     "exportRasterError": "Impossible d'exporter ce raster.",
@@ -5106,6 +5116,8 @@
     "authorNamePlaceholder": "p. ex. Alex ou Sarah",
     "commentLabel": "Commentaire / Retour",
     "commentPlaceholder": "Saisissez ici votre note de revue ou votre retour...",
+    "post": "Publier le commentaire",
+    "postShortcutTooltip": "Publier le commentaire ({{shortcut}})",
     "confirmDelete": "Voulez-vous vraiment supprimer ce fil de commentaires ?",
     "sessionDisconnected": "Session déconnectée.",
     "defaultAuthorName": "Auteur"
