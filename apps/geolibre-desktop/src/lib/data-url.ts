@@ -12,6 +12,8 @@ export interface RemoteGeoJsonLayer {
 }
 export type RemoteData =
   | { kind: "cog"; name: string; url: string }
+  | { kind: "pmtiles"; name: string; url: string }
+  | { kind: "vector"; name: string; url: string; format: "geoparquet" }
   | { kind: "geojson"; layers: RemoteGeoJsonLayer[] };
 
 const MAX_ZIP_GEOJSON_BYTES = 250 * 1024 * 1024;
@@ -35,7 +37,9 @@ export function dataUrlParameters(search: string): DataUrlParameters | null {
 
 export function remoteName(url: string): string {
   const name = decodeURIComponent(new URL(url).pathname.split("/").pop() || "data");
-  return name.replace(/\.(?:geojson|json|tiff?|cog|zip)$/i, "") || "data";
+  return (
+    name.replace(/\.(?:geojson|json|tiff?|cog|zip|pmtiles|geoparquet|parquet)$/i, "") || "data"
+  );
 }
 
 function extension(url: string): string {
@@ -77,13 +81,17 @@ async function fetchOk(url: string, signal: AbortSignal | undefined, fetchImpl: 
   return response;
 }
 
-/** Fetch a GeoJSON, COG, or ZIP-of-GeoJSON data URL into startup-loadable layers. */
+/** Classify or fetch a supported data URL into startup-loadable layers. */
 export async function fetchRemoteData(
   url: string,
   options: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {},
 ): Promise<RemoteData> {
   const ext = extension(url);
   if (["tif", "tiff", "cog"].includes(ext)) return { kind: "cog", name: remoteName(url), url };
+  if (ext === "pmtiles") return { kind: "pmtiles", name: remoteName(url), url };
+  if (ext === "parquet" || ext === "geoparquet") {
+    return { kind: "vector", name: remoteName(url), url, format: "geoparquet" };
+  }
   const response = await fetchOk(url, options.signal, options.fetchImpl ?? fetch);
   const bytes = new Uint8Array(await response.arrayBuffer());
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";

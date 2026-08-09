@@ -110,6 +110,7 @@ export {
   restoreLidarLayers,
   openMeasurePanel,
   openMinimapPanel,
+  addPMTilesLayerFromUrl,
   openPMTilesLayerPanel,
   openPrintPanel,
   openSearchPlacesPanel,
@@ -265,6 +266,7 @@ export {
 export { colormapColors, normalizeRampColor, warmColormapColors } from "./plugins/colormap-colors";
 export { setTerrainMeasureLabels } from "./plugins/terrain-measure";
 export {
+  addVectorLayerFromUrl,
   closeVectorLayerPanel,
   getVectorLayerPropertyValues,
   materializeEmbeddableVectorLayers,

@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import { applyMapboxStyleImport, parseMapboxStyle } from "@geolibre/map";
-import { addRasterToMap } from "@geolibre/plugins";
+import { addPMTilesLayerFromUrl, addRasterToMap, addVectorLayerFromUrl } from "@geolibre/plugins";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   dataUrlParameters,
@@ -51,6 +51,43 @@ export function useDataUrlLoader(
             }),
           );
           count = 1;
+        } else if (remote.kind === "pmtiles" || remote.kind === "vector") {
+          // Validate the style before invoking a native loader. Those controls
+          // assign their own ids, so collect the newly synchronized store
+          // layers after the awaited add completes.
+          const styleResult = rawStyle === null ? null : parseMapboxStyle(rawStyle);
+          if (styleResult && styleResult.matchedLayerCount === 0) {
+            throw new Error("The remote style has no supported vector style layers.");
+          }
+          const previousIds = new Set(store.layers.map((layer) => layer.id));
+          const added =
+            remote.kind === "pmtiles"
+              ? await addPMTilesLayerFromUrl(mapAppAPI, remote.url)
+              : await addVectorLayerFromUrl(mapAppAPI, remote.url, {
+                  name: remote.name,
+                  fitBounds: true,
+                });
+          if (!added) throw new Error(`Could not add ${remote.name} to the map.`);
+          const addedLayers = useAppStore
+            .getState()
+            .layers.filter((layer) => !previousIds.has(layer.id));
+          if (!addedLayers.length) {
+            throw new Error(
+              `The ${remote.kind === "pmtiles" ? "PMTiles" : "GeoParquet"} loader did not create a layer.`,
+            );
+          }
+          for (const layer of addedLayers) {
+            if (remote.kind === "pmtiles" && layer.metadata.tileType === "raster" && styleResult) {
+              throw new Error(
+                "MapLibre vector styles cannot be applied to a raster PMTiles archive.",
+              );
+            }
+            layerIds.push(layer.id);
+            if (styleResult) {
+              store.setLayerStyle(layer.id, applyMapboxStyleImport(layer.style, styleResult));
+            }
+          }
+          count = addedLayers.length;
         } else {
           // Resolve and validate every per-file style before mutating the store.
           // This keeps a misspelled source name from producing a partial import.

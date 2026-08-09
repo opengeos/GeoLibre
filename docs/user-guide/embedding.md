@@ -4,7 +4,7 @@ GeoLibre's browser build can be embedded in any web page and configured through 
 
 ## Open remote data
 
-Use `data` to open a public GeoJSON file, Cloud-Optimized GeoTIFF (COG), or ZIP archive containing one or more `.geojson`/`.json` FeatureCollections. Each GeoJSON file in a ZIP becomes a separate layer. An optional `style` URL applies Mapbox/MapLibre style JSON to the imported vector layer(s):
+Use `data` to open public GeoJSON, GeoParquet, PMTiles, Cloud-Optimized GeoTIFF (COG), or a ZIP archive containing one or more `.geojson`/`.json` FeatureCollections. Each GeoJSON file in a ZIP becomes a separate layer. An optional `style` URL applies Mapbox/MapLibre style JSON to vector data:
 
 ```text
 https://web.geolibre.app/?data=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fplaces.geojson&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fsample.style.json
@@ -24,13 +24,25 @@ A hosted ZIP with per-file styles can be tested directly:
 https://web.geolibre.app/?data=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fmultiple-layers.zip&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fmultiple-layers.style.json
 ```
 
+GeoParquet is loaded through GeoLibre's DuckDB-backed vector reader. PMTiles is streamed with HTTP range requests and may contain either vector or raster tiles. These real vector examples also apply the hosted sample style:
+
+```text
+https://web.geolibre.app/?data=https%3A%2F%2Fdata.source.coop%2Fgiswqs%2Fopengeos%2Fbuilding_count_h3.parquet&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fsample.style.json
+```
+
+```text
+https://web.geolibre.app/?data=https%3A%2F%2Fdata.source.coop%2Fgiswqs%2Fopengeos%2Fbuilding_count_h3.pmtiles&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fsample.style.json
+```
+
+For a vector PMTiles archive, the style is applied to the layer after the archive's source layers are discovered. A raster PMTiles archive can be loaded with `data`, but it does not accept a MapLibre vector style through `style`.
+
 A public DEM COG can be tested directly:
 
 ```text
 https://web.geolibre.app/?data=https%3A%2F%2Fdata.source.coop%2Fgiswqs%2Fopengeos%2Fdem.tif
 ```
 
-Encode the nested data and style URLs with `encodeURIComponent`, especially when they contain their own query parameters. Remote servers must permit browser cross-origin requests (CORS). COG servers should also support HTTP byte-range requests.
+Encode the nested data and style URLs with `encodeURIComponent`, especially when they contain their own query parameters. Remote servers must permit browser cross-origin requests (CORS). COG, GeoParquet, and PMTiles servers should also support HTTP byte-range requests.
 
 For a COG, `style` may point to a raster style JSON object. Supported fields are `mode` (`single`, `rgb`, or `index`), 1-based `bands`, `rescale` ranges, `colormap`, `reversed`, `nodata`, `opacity`, `gamma`, `stretch` (`linear`, `log`, or `sqrt`), and the normalized-difference `index` preset. For example:
 
@@ -81,7 +93,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | Parameter    | Example                                                    | Description                                                                                                                           |
 | ------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `url`        | `url=https://share.geolibre.app/you/project.geolibre.json` | Loads a `.geolibre.json` project from a public URL.                                                                                   |
-| `data`       | `data=https://assets.geolibre.app/data/places.geojson`     | Loads public GeoJSON, a COG, or a ZIP/REST response containing multiple GeoJSON files.                                                |
+| `data`       | `data=https://assets.geolibre.app/data/places.geojson`     | Loads public GeoJSON, GeoParquet, PMTiles, a COG, or a ZIP/REST response containing multiple GeoJSON files.                           |
 | `style`      | `style=https://assets.geolibre.app/data/sample.style.json` | Applies a GeoLibre/MapLibre vector style or raster-style JSON to the data loaded by `data`.                                            |
 | `layout`     | `layout=viewer`                                            | `viewer` provides read-only chrome: Layers, View, Controls, basemaps, search/identify, and Help, with authoring UI hidden. `compact` is the icon-only full-app layout; `embed` and `iframe` are aliases. |
 | `toolbar`    | `toolbar=icons`                                            | Icon-only toolbar buttons without the full compact layout. `icon` and `icon-only` are aliases.                                        |

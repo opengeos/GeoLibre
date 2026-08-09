@@ -141,7 +141,7 @@ Open a project by passing a public `.geolibre.json` URL with the `url` query par
 https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json
 ```
 
-You can also open hosted data directly. `data` accepts GeoJSON, REST endpoints returning GeoJSON or ZIP, ZIP archives containing multiple GeoJSON files, and COGs. Add `style` to apply hosted vector or raster symbology:
+You can also open hosted data directly. `data` accepts GeoJSON, GeoParquet, PMTiles, REST endpoints returning GeoJSON or ZIP, ZIP archives containing multiple GeoJSON files, and COGs. Add `style` to apply hosted vector or raster symbology:
 
 ```text
 https://web.geolibre.app/?data=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fplaces.geojson&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fsample.style.json

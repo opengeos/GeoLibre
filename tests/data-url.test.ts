@@ -189,4 +189,46 @@ describe("data URL deep links", () => {
     assert.equal(result.kind, "cog");
     assert.equal(fetched, false);
   });
+
+  it("recognizes PMTiles without downloading the archive", async () => {
+    let fetched = false;
+    const fetchImpl = (async () => {
+      fetched = true;
+      throw new Error("unexpected");
+    }) as unknown as typeof fetch;
+    const result = await fetchRemoteData("https://example.com/basemap.pmtiles?token=abc", {
+      fetchImpl,
+    });
+    assert.deepEqual(result, {
+      kind: "pmtiles",
+      name: "basemap",
+      url: "https://example.com/basemap.pmtiles?token=abc",
+    });
+    assert.equal(fetched, false);
+  });
+
+  it("recognizes Parquet and GeoParquet without downloading the file eagerly", async () => {
+    let fetched = false;
+    const fetchImpl = (async () => {
+      fetched = true;
+      throw new Error("unexpected");
+    }) as unknown as typeof fetch;
+    const parquet = await fetchRemoteData("https://example.com/countries.parquet", { fetchImpl });
+    const geoparquet = await fetchRemoteData("https://example.com/roads.geoparquet", {
+      fetchImpl,
+    });
+    assert.deepEqual(parquet, {
+      kind: "vector",
+      name: "countries",
+      url: "https://example.com/countries.parquet",
+      format: "geoparquet",
+    });
+    assert.deepEqual(geoparquet, {
+      kind: "vector",
+      name: "roads",
+      url: "https://example.com/roads.geoparquet",
+      format: "geoparquet",
+    });
+    assert.equal(fetched, false);
+  });
 });

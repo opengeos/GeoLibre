@@ -61,7 +61,7 @@ For raster layers the Style panel exposes image adjustments:
 
 These let you tune the look of GeoTIFF, COG, and tile-based raster layers without changing the underlying data.
 
-A remote COG opened with the `data` URL parameter can also receive a raster style through `style`. Raster URL styles support band mode and selection, rescale ranges, colormap and reversal, nodata, opacity, gamma, stretch, and normalized-difference index presets. See the [raster style example](embedding.md#open-remote-data).
+A remote GeoJSON, GeoParquet, or vector PMTiles layer opened with the `data` URL parameter can receive a GeoLibre/MapLibre vector style through `style`. A remote COG can receive a raster style instead. Raster URL styles support band mode and selection, rescale ranges, colormap and reversal, nodata, opacity, gamma, stretch, and normalized-difference index presets. See the [remote data examples](embedding.md#open-remote-data).
 
 ## Legends and colorbars
 

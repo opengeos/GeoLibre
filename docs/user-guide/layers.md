@@ -36,7 +36,7 @@ To use a GeoLibre URL style, upload it to a CORS-enabled web host and open GeoLi
 https://web.geolibre.app/?data=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fplaces.geojson&style=https%3A%2F%2Fassets.geolibre.app%2Fdata%2Fsample.style.json
 ```
 
-See [Embedding & Sharing](embedding.md#open-remote-data) for ZIP source matching, REST API responses, raster-style JSON, and encoding nested URLs.
+See [Embedding & Sharing](embedding.md#open-remote-data) for GeoParquet and PMTiles deep links, ZIP source matching, REST API responses, raster-style JSON, and encoding nested URLs.
 
 ## Layer groups
 
