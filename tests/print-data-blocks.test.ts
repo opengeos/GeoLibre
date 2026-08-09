@@ -210,6 +210,54 @@ describe("rowsIntersectingBounds", () => {
     assert.equal(rowsWithinBounds(infos, [890, -1, 910, 1]).length, 1);
     assert.equal(rowsIntersectingBounds(infos, [700, -1, 710, 1]).length, 0);
   });
+
+  it("unwraps a raw getBounds() page extent reported as west > east", () => {
+    const infos = collectAtlasFeatures({
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "dateline" },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [179, 0],
+              [-179, 0],
+            ],
+          },
+        },
+        point(0, 0, { name: "greenwich" }),
+      ],
+    });
+    // MapLibre reports a Pacific view as west≈170, east≈-170; read literally
+    // that is the ~340°-wide Eurasian side, which holds "greenwich" instead.
+    assert.deepEqual(
+      rowsIntersectingBounds(infos, [170, -1, -170, 1]).map((row) => row.properties.name),
+      ["dateline"],
+    );
+    assert.deepEqual(
+      rowsWithinBounds(infos, [170, -1, -170, 1]).map((row) => row.properties.name),
+      ["dateline"],
+    );
+  });
+
+  it("shifts a feature touching +180 onto a page extent touching -180", () => {
+    const infos = collectAtlasFeatures({
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "touches" },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [170, 0],
+              [180, 0],
+            ],
+          },
+        },
+      ],
+    });
+    assert.equal(rowsIntersectingBounds(infos, [-180, -1, -170, 1]).length, 1);
+  });
 });
 
 describe("rowForAtlasFeature", () => {

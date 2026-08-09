@@ -63,6 +63,7 @@ import {
   rowsIntersectingBounds,
   rowsWithinBounds,
   type ChartBlockType,
+  type PageFilterMode,
 } from "../../lib/print-data-blocks";
 import {
   categoricalColumns,
@@ -293,9 +294,7 @@ export function PrintLayoutDialog({
   const [tableMaxRows, setTableMaxRows] = useState(DEFAULT_TABLE_ROWS);
   const [tableFitRows, setTableFitRows] = useState(false);
   const [tablePosition, setTablePosition] = useState<BodyCorner>("bottom-left");
-  const [tablePageFilter, setTablePageFilter] = useState<"all" | "contained" | "intersecting">(
-    "contained",
-  );
+  const [tablePageFilter, setTablePageFilter] = useState<PageFilterMode>("contained");
   const [tableFilterToAtlasFeature, setTableFilterToAtlasFeature] = useState(false);
   const [showDataChart, setShowDataChart] = useState(false);
   const [chartLayerId, setChartLayerId] = useState("");
@@ -307,9 +306,7 @@ export function PrintLayoutDialog({
   // Top-right by default: the scale bar + north arrow duo occupies the
   // bottom-right corner out of the box.
   const [chartPosition, setChartPosition] = useState<BodyCorner>("top-right");
-  const [chartPageFilter, setChartPageFilter] = useState<"all" | "contained" | "intersecting">(
-    "contained",
-  );
+  const [chartPageFilter, setChartPageFilter] = useState<PageFilterMode>("contained");
   // Cartographic title block ("stempel") fields (GH #522).
   const [showInfoBlock, setShowInfoBlock] = useState(false);
   const [author, setAuthor] = useState("");
@@ -1041,7 +1038,7 @@ export function PrintLayoutDialog({
     (
       features: readonly AtlasFeatureInfo[],
       allRows: ChartRow[],
-      filterMode: "all" | "contained" | "intersecting",
+      filterMode: PageFilterMode,
       bounds: AtlasBounds | null,
     ): ChartRow[] => {
       if (!bounds || filterMode === "all") return allRows;
@@ -2839,9 +2836,7 @@ export function PrintLayoutDialog({
                         id="dt-filter-page"
                         value={tablePageFilter}
                         disabled={tableFilterToAtlasFeature && tableUsesAtlasLayer}
-                        onChange={(e) =>
-                          setTablePageFilter(e.target.value as "all" | "contained" | "intersecting")
-                        }
+                        onChange={(e) => setTablePageFilter(e.target.value as PageFilterMode)}
                       >
                         <option value="all">{t("printLayout.dataBlocks.filterAll")}</option>
                         <option value="contained">
@@ -3008,9 +3003,7 @@ export function PrintLayoutDialog({
                       <Select
                         id="dc-filter-page"
                         value={chartPageFilter}
-                        onChange={(e) =>
-                          setChartPageFilter(e.target.value as "all" | "contained" | "intersecting")
-                        }
+                        onChange={(e) => setChartPageFilter(e.target.value as PageFilterMode)}
                       >
                         <option value="all">{t("printLayout.dataBlocks.filterAll")}</option>
                         <option value="contained">

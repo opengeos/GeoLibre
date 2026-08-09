@@ -28,6 +28,9 @@ export const DEFAULT_TABLE_ROWS = 10;
 /** Columns shown when the user has not picked any explicitly. */
 export const DEFAULT_TABLE_COLUMNS = 4;
 
+/** How a data block narrows its rows to the current page extent. */
+export type PageFilterMode = "all" | "contained" | "intersecting";
+
 /** Reduce a feature collection to the property-bag rows the builders consume. */
 export function layerRows(collection: Pick<FeatureCollection, "features">): ChartRow[] {
   return collection.features.map((feature) => ({
@@ -49,6 +52,18 @@ function worldCopyOffsets(featureBounds: AtlasBounds, center: number): number[] 
 }
 
 /**
+ * Unwrap a page extent so `west <= east`, the convention `geometryBounds` uses
+ * for feature bounds. A page extent can come straight from `map.getBounds()`,
+ * which reports `west > east` for a view straddling the antimeridian (west≈170,
+ * east≈-170) — taken literally that is the ~340°-wide *other* side of the globe,
+ * so both filters would test the wrong strip and drop every dateline feature.
+ */
+function unwrapBounds(bounds: AtlasBounds): AtlasBounds {
+  const [west, south, east, north] = bounds;
+  return west > east ? [west, south, east + 360, north] : bounds;
+}
+
+/**
  * The rows of the features whose geometry is fully within `bounds` —
  * the per-page filter for atlas data blocks. Takes {@link AtlasFeatureInfo}s
  * (from `collectAtlasFeatures`) rather than raw features so the per-vertex
@@ -61,8 +76,9 @@ function worldCopyOffsets(featureBounds: AtlasBounds, center: number): number[] 
  */
 export function rowsWithinBounds(
   features: readonly AtlasFeatureInfo[],
-  bounds: AtlasBounds,
+  pageBounds: AtlasBounds,
 ): ChartRow[] {
+  const bounds = unwrapBounds(pageBounds);
   const center = (bounds[0] + bounds[2]) / 2;
   const rows: ChartRow[] = [];
   for (const info of features) {
@@ -108,9 +124,9 @@ function geometryNearLongitude(geometry: Geometry, center: number): Geometry {
 /** Rows whose geometry has any point in common with the page extent. */
 export function rowsIntersectingBounds(
   features: readonly AtlasFeatureInfo[],
-  bounds: AtlasBounds,
+  pageBounds: AtlasBounds,
 ): ChartRow[] {
-  const [west, south, east, north] = bounds;
+  const [west, south, east, north] = unwrapBounds(pageBounds);
   const extent = polygon([
     [
       [west, south],
@@ -123,20 +139,19 @@ export function rowsIntersectingBounds(
   const center = (west + east) / 2;
   return features
     .filter((info) => {
-      const boundsOverlap = worldCopyOffsets(info.bounds, center).some(
+      const overlapOffset = worldCopyOffsets(info.bounds, center).find(
         (offset) =>
           info.bounds[0] + offset <= east &&
           west <= info.bounds[2] + offset &&
           info.bounds[1] <= north &&
           south <= info.bounds[3],
       );
-      if (!boundsOverlap) return false;
-      // The overwhelming common case needs no coordinate walk at all. Only
-      // dateline/unwrapped world copies require a shifted geometry clone.
+      if (overlapOffset === undefined) return false;
+      // The overwhelming common case needs no coordinate walk at all: the
+      // feature already overlaps the extent where both are stored. Only a
+      // match found on another world copy needs a shifted geometry clone.
       const geometry =
-        west >= -180 && east <= 180 && info.bounds[0] >= -180 && info.bounds[2] <= 180
-          ? info.geometry
-          : geometryNearLongitude(info.geometry, center);
+        overlapOffset === 0 ? info.geometry : geometryNearLongitude(info.geometry, center);
       return booleanIntersects(feature(geometry), extent);
     })
     .map((info) => ({ properties: info.properties }));
