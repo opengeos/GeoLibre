@@ -500,16 +500,20 @@ export function prepareGeographicBufferInput(
   const projected = structuredClone(geojson) as FeatureCollection & {
     crs?: { type: "name"; properties: { name: string } };
   };
-  for (const feature of projected.features) {
-    if (feature.geometry && "coordinates" in feature.geometry) {
-      feature.geometry.coordinates = projectCoordinates(feature.geometry.coordinates) as never;
-    } else if (feature.geometry?.type === "GeometryCollection") {
-      for (const geometry of feature.geometry.geometries) {
-        if ("coordinates" in geometry) {
-          geometry.coordinates = projectCoordinates(geometry.coordinates) as never;
-        }
+  const projectGeometry = (geometry: (typeof projected.features)[number]["geometry"]): void => {
+    if (!geometry) return;
+    if (geometry.type === "GeometryCollection") {
+      for (const member of geometry.geometries) {
+        projectGeometry(member);
       }
+      return;
     }
+    if ("coordinates" in geometry) {
+      geometry.coordinates = projectCoordinates(geometry.coordinates) as never;
+    }
+  };
+  for (const feature of projected.features) {
+    projectGeometry(feature.geometry);
   }
   projected.crs = { type: "name", properties: { name: "EPSG:3857" } };
 
@@ -638,6 +642,17 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
   const input: Record<string, Uint8Array> = {};
   const args: string[] = [];
   const parameterOverrides: Record<string, unknown> = {};
+  let geographicBufferInput: FeatureCollection | null = null;
+  if (request.tool_id === "buffer_vector") {
+    const geojson = request.layer_inputs?.input?.geojson;
+    const prepared = geojson
+      ? prepareGeographicBufferInput(geojson, request.parameters.distance)
+      : null;
+    if (prepared) {
+      geographicBufferInput = prepared.geojson;
+      parameterOverrides.distance = prepared.distance;
+    }
+  }
   // How each output file is turned into a job output: "geojson" is parsed into a
   // FeatureCollection (a map layer); "raster" is normalized to a COG before it
   // reaches the map; "bytes" is returned raw (a file_out blob or a
@@ -667,13 +682,7 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
       // A map layer is RFC 7946 WGS84, while Whitebox's buffer is Cartesian.
       // Run this one operation in Web Mercator so its round buffers stay round
       // on the map; the EPSG tag makes the tool's GeoJSON writer return WGS84.
-      if (request.tool_id === "buffer_vector" && name === "input") {
-        const prepared = prepareGeographicBufferInput(geojson, request.parameters.distance);
-        if (prepared) {
-          geojson = prepared.geojson;
-          parameterOverrides.distance = prepared.distance;
-        }
-      }
+      if (name === "input" && geographicBufferInput) geojson = geographicBufferInput;
       const file = `${name}.geojson`;
       input[file] = encoder.encode(JSON.stringify(geojson));
       args.push(`--${name}=/work/${file}`);

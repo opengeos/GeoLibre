@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { FeatureCollection, Point } from "geojson";
+import type { FeatureCollection, GeometryCollection, Point } from "geojson";
 import { prepareGeographicBufferInput } from "@geolibre/processing";
 
 const warsaw: FeatureCollection<Point> = {
@@ -33,6 +33,35 @@ describe("prepareGeographicBufferInput", () => {
     const before = structuredClone(warsaw);
     prepareGeographicBufferInput(warsaw, 0.1);
     assert.deepEqual(warsaw, before);
+  });
+
+  it("projects coordinate geometries nested inside geometry collections", () => {
+    const nested: FeatureCollection<GeometryCollection> = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "GeometryCollection",
+            geometries: [
+              {
+                type: "GeometryCollection",
+                geometries: [{ type: "Point", coordinates: [21.0122, 52.2297] }],
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const prepared = prepareGeographicBufferInput(nested, 0.1);
+    assert.ok(prepared);
+    const outer = prepared.geojson.features[0].geometry as GeometryCollection;
+    const inner = outer.geometries[0] as GeometryCollection;
+    const point = inner.geometries[0] as Point;
+    assert.ok(Math.abs(point.coordinates[0] - 2_339_067.4) < 1);
+    assert.ok(Math.abs(point.coordinates[1] - 6_841_765.2) < 1);
   });
 
   it("rejects missing, non-numeric, and non-positive distances", () => {
