@@ -79,19 +79,21 @@ export function useDataUrlLoader(
                   fitBounds: true,
                 });
           if (!added) throw new Error(`Could not add ${remote.name} to the map.`);
-          const synced = useAppStore
+          // These loaders assign their own ids, so the added layers have to be
+          // recovered from the store. Identify them by the data URL they record
+          // and not by an id diff alone: a concurrent `?url=` project load
+          // replaces the whole layer array, which would make every project
+          // layer look new here and hand this branch someone else's layers to
+          // restyle or remove. No match is treated as "could not identify",
+          // never as "take whatever is new".
+          const addedLayers = useAppStore
             .getState()
-            .layers.filter((layer) => !previousIds.has(layer.id));
-          // A concurrent `?url=` project load replaces the whole layer array, so
-          // every project layer would read as new against the snapshot taken
-          // before the await. Prefer the layers that carry this data URL, and
-          // fall back to the plain diff for a loader that records the source
-          // under some other string.
-          const pointingAtData = synced.filter((layer) => layerPointsAt(layer, remote.url));
-          const addedLayers = pointingAtData.length ? pointingAtData : synced;
+            .layers.filter(
+              (layer) => !previousIds.has(layer.id) && layerPointsAt(layer, remote.url),
+            );
           if (!addedLayers.length) {
             throw new Error(
-              `The ${remote.kind === "pmtiles" ? "PMTiles" : "GeoParquet"} loader did not create a layer.`,
+              `The ${remote.kind === "pmtiles" ? "PMTiles" : "GeoParquet"} loader did not create a layer for ${remote.url}.`,
             );
           }
           // Check every added layer before styling any of them: the archive's

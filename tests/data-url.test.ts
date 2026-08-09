@@ -232,6 +232,15 @@ describe("data URL deep links", () => {
     assert.equal(fetched, false);
   });
 
+  it("names a file whose path carries a literal percent sign", async () => {
+    const fetchImpl = (async () => {
+      throw new Error("unexpected");
+    }) as unknown as typeof fetch;
+    const result = await fetchRemoteData("https://example.com/slope-100%.tif", { fetchImpl });
+    assert.equal(result.kind, "cog");
+    if (result.kind === "cog") assert.equal(result.name, "slope-100%");
+  });
+
   it("refuses a response whose advertised length exceeds the download ceiling", async () => {
     const fetchImpl = (async () =>
       new Response(strToU8("{}"), {

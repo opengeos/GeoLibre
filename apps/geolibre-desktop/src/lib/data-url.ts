@@ -51,7 +51,15 @@ export function dataUrlParameters(search: string): DataUrlParameters | null {
 }
 
 export function remoteName(url: string): string {
-  const name = decodeURIComponent(new URL(url).pathname.split("/").pop() || "data");
+  const basename = new URL(url).pathname.split("/").pop() || "data";
+  // A literal `%` in the path (`.../100%.tif`) makes decoding throw, which would
+  // surface as a raw "URI malformed" instead of this file's own errors.
+  let name: string;
+  try {
+    name = decodeURIComponent(basename);
+  } catch {
+    name = basename;
+  }
   return (
     name.replace(/\.(?:geojson|json|tiff?|cog|zip|pmtiles|geoparquet|parquet)$/i, "") || "data"
   );
@@ -167,7 +175,14 @@ function unzipGeoJsonEntries(bytes: Uint8Array): Promise<Record<string, Uint8Arr
       (error, files) => {
         if (tooLarge) reject(new ZipTooLargeError());
         else if (error) reject(error);
-        else resolve(files);
+        else {
+          // `originalSize` is the archive's own claim about an entry, and a
+          // hostile ZIP is free to understate it. Re-check what actually came
+          // out so the ceiling holds against a crafted archive too.
+          const inflated = Object.values(files).reduce((sum, entry) => sum + entry.length, 0);
+          if (inflated > MAX_ZIP_GEOJSON_BYTES) reject(new ZipTooLargeError());
+          else resolve(files);
+        }
       },
     );
   });
@@ -240,8 +255,11 @@ export async function fetchRemoteStyle(
   options: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {},
 ): Promise<unknown> {
   const response = await fetchOk(url, options.signal, options.fetchImpl ?? fetch);
+  // A `?style=` URL is as arbitrary as `?data=`, so it gets the same capped read
+  // rather than buffering whatever the server chooses to stream.
+  const text = strFromU8(await readCappedBytes(response, url));
   try {
-    return JSON.parse(await response.text());
+    return JSON.parse(text);
   } catch (error) {
     throw new Error(`The style at ${url} is not valid JSON.`, { cause: error });
   }
