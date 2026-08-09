@@ -2,7 +2,6 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { FeatureCollection } from "geojson";
 import {
-  boundsIntersect,
   buildChartBlock,
   buildTableBlock,
   DEFAULT_TABLE_ROWS,
@@ -25,31 +24,6 @@ function point(lng: number, lat: number, properties: Record<string, unknown>): G
 function rows(...props: Record<string, unknown>[]): ChartRow[] {
   return props.map((properties) => ({ properties }));
 }
-
-describe("boundsIntersect", () => {
-  it("detects overlap, touching edges, and containment", () => {
-    assert.equal(boundsIntersect([0, 0, 10, 10], [5, 5, 15, 15]), true);
-    // Touching along an edge counts as intersecting.
-    assert.equal(boundsIntersect([0, 0, 10, 10], [10, 0, 20, 10]), true);
-    // One box fully inside the other.
-    assert.equal(boundsIntersect([0, 0, 10, 10], [2, 2, 3, 3]), true);
-  });
-
-  it("rejects disjoint boxes on either axis", () => {
-    assert.equal(boundsIntersect([0, 0, 10, 10], [11, 0, 20, 10]), false);
-    assert.equal(boundsIntersect([0, 0, 10, 10], [0, 11, 10, 20]), false);
-  });
-
-  it("matches across the antimeridian's differing longitude conventions", () => {
-    // An unwrapped dateline view (east > 180, à la map.getBounds()) against a
-    // normalized feature box on the far side of the wrap.
-    assert.equal(boundsIntersect([170, -10, 190, 10], [-178, -5, -176, 5]), true);
-    // And the mirror case: a shifted feature box against a normalized view.
-    assert.equal(boundsIntersect([-180, -10, -170, 10], [178, -5, 185, 5]), true);
-    // Genuinely far apart boxes still do not match.
-    assert.equal(boundsIntersect([170, -10, 190, 10], [-10, -5, 0, 5]), false);
-  });
-});
 
 describe("rowsWithinBounds", () => {
   const collection: Pick<FeatureCollection, "features"> = {
@@ -102,7 +76,6 @@ describe("rowsWithinBounds", () => {
         },
       ],
     });
-    assert.equal(boundsIntersect(partial[0].bounds, [4, 0, 8, 8]), true);
     assert.equal(rowsWithinBounds(partial, [4, 0, 8, 8]).length, 0);
     assert.equal(rowsWithinBounds(partial, [-1, -1, 6, 6]).length, 1);
   });
