@@ -38,6 +38,7 @@ import {
 import type { GeotaggedPhotoResult } from "./geotagged-photos";
 import { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "./geotagged-photos";
 import { projectedGeoJsonCrs } from "./crs-utils";
+import { nativeFileDialogFilters, type FileDialogFilter } from "./file-dialog-filters";
 import { parseGpxLayer } from "./gpx";
 import { isTauri } from "./is-tauri";
 import { SHAPEFILE_COMPANION_EXTENSIONS, shapefileCompanionPathsFromSelection } from "./mas-build";
@@ -71,10 +72,7 @@ function browserSafeFileName(path: string): string {
   return path.split(/[/\\]/).pop() || "project.geolibre.json";
 }
 
-export interface FileDialogFilter {
-  name: string;
-  extensions: string[];
-}
+export type { FileDialogFilter } from "./file-dialog-filters";
 
 interface PickLocalPathOptions {
   accept?: string;
@@ -90,6 +88,7 @@ interface PickSavePathOptions {
 
 interface LocalDataFileOptions {
   filters: FileDialogFilter[];
+  androidFilters?: FileDialogFilter[];
   accept: string;
   readBinary?: boolean;
   readText?: boolean;
@@ -2462,7 +2461,7 @@ export async function openLocalDataFileWithFallback(options: LocalDataFileOption
   if (isTauri()) {
     const selected = await open({
       multiple: false,
-      filters: options.filters,
+      filters: nativeFileDialogFilters(options.filters, options.androidFilters),
     });
     if (!selected || typeof selected !== "string") return null;
     const data = options.readBinary ? toArrayBuffer(await readFile(selected)) : undefined;

@@ -1775,6 +1775,10 @@ export function LayerPanel({
               extensions: ["json", "sld", "qml", "xml"],
             },
           ],
+          // Android filters document pickers by MIME type, but SLD and QML do
+          // not have consistently reported MIME types. Leave the native picker
+          // broad there, then validate the selected file by content below.
+          androidFilters: [],
           accept: ".json,.sld,.qml,.xml,application/json,application/xml,text/xml",
           readText: true,
         });
