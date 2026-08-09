@@ -237,10 +237,10 @@ A few things worth knowing:
 - Assets are served with permissive CORS, so the app can fetch them
   cross-origin.
 
-Some existing pages point at other GeoLibre-operated hosts, mainly
-`data.geolibre.app` and `files.opengeos.org`. Those URLs keep working and do not
-need rewriting; `geolibre-assets` is simply the one you can open a pull request
-against, so send new assets there.
+Sample datasets are still served from another GeoLibre-operated host,
+`data.geolibre.app`. Those URLs keep working and do not need rewriting;
+`geolibre-assets` is simply the one you can open a pull request against, so send
+new assets there.
 
 The only images that belong in this repository are the site chrome under
 `docs/assets/` — currently just the icon `mkdocs.yml` uses for the logo and

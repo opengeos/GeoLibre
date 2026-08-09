@@ -117,7 +117,7 @@ The conversion sidecar is hardened with a path allowlist.
 
 **Processing → Whitebox** opens the geoprocessing toolbox: **1,000+ tools** covering vector, raster, remote sensing, hydrology, terrain, LiDAR, conversion, network, and projection analysis.
 
-![The Whitebox toolbox running locally with WebAssembly, listing the full catalog of 1,000+ tools with the Regularize Building Footprints tool selected](https://files.opengeos.org/whitebox.webp)
+![The Whitebox toolbox running locally with WebAssembly, listing the full catalog of 1,000+ tools with the Regularize Building Footprints tool selected](https://assets.geolibre.app/images/whitebox.webp)
 
 The tools come from the [Whitebox Next Gen](https://github.com/opengeos/Whitebox-Next-Gen-ArcGIS) suite together with GeoLibre's own WASM tools, which the dialog mixes into the same catalog (use the **sources** dropdown to filter to one or the other).
 
