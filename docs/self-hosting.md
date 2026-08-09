@@ -201,6 +201,20 @@ opens a private project for an authenticated user and returns the login redirect
 for anyone else. No CORS headers, no tokens in URLs, and nothing served to
 anyone the SSO layer has not admitted.
 
+!!! important "Two layers of authentication, not one"
+    The forward-auth layer decides who reaches the origin. It does not, by
+    itself, tell GeoLens who the visitor is: GeoLens applies its own accounts and
+    per-dataset permissions, and the GeoLibre plugin sends only what the browser
+    attaches (a same-origin cookie) plus an `X-Api-Key` header if you gave it a
+    key. So the visitor needs a GeoLens identity too. Either configure GeoLens to
+    consume your provider (it supports OAuth 2.0 / OIDC, so point it at the same
+    identity provider and a visitor who signs in gets a GeoLens session cookie on
+    this origin), or have each user paste a per-user API key into the plugin
+    panel. If neither is true, the app loads and public datasets appear while
+    private ones stay invisible, which is a confusing failure worth ruling out
+    first. `/projects` and other static files behind the proxy are unaffected:
+    they are gated by the forward-auth layer alone.
+
 !!! note "`url=` must be absolute"
     The project deep link is validated as an absolute `http(s)` URL, so
     `?url=/projects/watershed.geolibre.json` is ignored. Write the full URL, as
