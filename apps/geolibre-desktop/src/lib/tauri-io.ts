@@ -2729,8 +2729,10 @@ export async function saveProjectFile(
  *
  * @param content - The serialized project to write.
  * @param path - The path the project was opened from or last saved to.
- * @param fallbackName - File name for the save dialog when the in-place write
- *   cannot be done; used only when the path carries no usable name of its own.
+ * @param fallbackName - File name for the save dialog when an attempted
+ *   in-place write is refused, and only when the path carries no usable name of
+ *   its own. The two branches below never attempt one, so they pass the path
+ *   itself as the dialog's name and ignore this.
  * @returns The path actually written, or null if a fallback dialog was
  *   cancelled.
  */
