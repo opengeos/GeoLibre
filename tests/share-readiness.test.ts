@@ -45,6 +45,23 @@ function fakeFetch(routes: Record<string, number | Error>) {
   return { fn, calls };
 }
 
+/**
+ * Answers HEAD with `headStatus` and rejects the ranged GET, recording both
+ * attempts so a test can prove the retry actually ran.
+ */
+function rejectingRangedGet(headStatus: number) {
+  const attempts: { method?: string; range?: string }[] = [];
+  const fn = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    attempts.push({
+      method: init?.method,
+      range: (init?.headers as Record<string, string> | undefined)?.Range,
+    });
+    if (init?.method === "HEAD") return new Response(null, { status: headStatus });
+    throw new TypeError("Failed to fetch");
+  }) as unknown as typeof fetch;
+  return { fn, attempts };
+}
+
 describe("isPrivateHostname", () => {
   it("recognizes loopback, private ranges, and reserved suffixes", () => {
     for (const host of [
@@ -358,12 +375,15 @@ describe("probeShareSources", () => {
     // HEAD answers 405, so the host is up and readable cross-origin; the ranged
     // GET is rejected on its own (an older webview preflighting `Range`). That
     // must not turn a working host into a "blocked" verdict.
-    const fn = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.method === "HEAD") return new Response(null, { status: 405 });
-      throw new TypeError("Failed to fetch");
-    }) as unknown as typeof fetch;
+    const { fn, attempts } = rejectingRangedGet(405);
     const { refs: probed } = await probeShareSources(refs, { fetchImpl: fn });
     assert.equal(probed[0].status, "reachable");
+    // Without this the test would still pass if the retry were dropped
+    // entirely, since a bare HEAD 405 also reads as reachable.
+    assert.deepEqual(attempts, [
+      { method: "HEAD", range: undefined },
+      { method: "GET", range: "bytes=0-0" },
+    ]);
   });
 
   it("keeps a HEAD 403 credentialed when the ranged GET is also rejected", async () => {
@@ -372,13 +392,14 @@ describe("probeShareSources", () => {
         layer({ id: "a", name: "A", type: "cog", source: { url: "https://s3.example.com/a.tif" } }),
       ],
     });
-    const fn = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.method === "HEAD") return new Response(null, { status: 403 });
-      throw new TypeError("Failed to fetch");
-    }) as unknown as typeof fetch;
+    const { fn, attempts } = rejectingRangedGet(403);
     const { refs: probed } = await probeShareSources(refs, { fetchImpl: fn });
     assert.equal(probed[0].status, "credentialed");
     assert.equal(probed[0].reason, "auth-required");
+    assert.deepEqual(attempts, [
+      { method: "HEAD", range: undefined },
+      { method: "GET", range: "bytes=0-0" },
+    ]);
   });
 
   it("reads an opaque browser rejection as browser-blocked", async () => {
