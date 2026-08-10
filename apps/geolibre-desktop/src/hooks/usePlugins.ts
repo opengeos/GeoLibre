@@ -1254,7 +1254,16 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
   return api;
 }
 
-async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {
+/**
+ * The app's CORS/Tauri-aware whole-file fetch: native HTTP on the desktop
+ * (bypassing webview CORS), the dev raster proxy in local development, plain
+ * `fetch` otherwise.
+ *
+ * Exported for readers outside the plugin API that need the same path — the COG
+ * spectral profile falls back to it when geotiff.js's own range requests are
+ * refused (`useCogSpectralIdentify`).
+ */
+export async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {
   if (isTauriRuntime() && isLocalFileReference(url)) {
     return normalizeBytes(await readFile(localPathFromReference(url)));
   }

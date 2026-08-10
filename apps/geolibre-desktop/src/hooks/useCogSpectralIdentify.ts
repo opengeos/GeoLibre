@@ -2,13 +2,15 @@ import { useEffect } from "react";
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import type maplibregl from "maplibre-gl";
-import { readCogSpectralProfile } from "@geolibre/plugins/cog-spectral-profile";
+import { knownCogBandCount, readCogSpectralProfile } from "@geolibre/plugins/cog-spectral-profile";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
 import {
   addNetcdfProfileSample,
   removeNetcdfProfileSample,
   setNetcdfProfileSampleProfile,
 } from "../lib/netcdf-profile-store";
+import { fetchRemoteArrayBuffer } from "./usePlugins";
 
 /**
  * Charts a clicked pixel's values across every band of a multiband COG
@@ -32,26 +34,26 @@ export function useCogSpectralIdentify(
   mapReadyGeneration: number,
 ): void {
   const { t } = useTranslation();
-  // One selector returning a primitive, matching useRasterIdentify: Zustand
-  // re-renders only when the resolved id changes.
-  const activeCogId = useAppStore((s): string | null => {
-    if (!s.identifyLayerId) return null;
-    const layer = s.layers.find((item) => item.id === s.identifyLayerId);
-    return layer?.type === "cog" ? layer.id : null;
-  });
-  const cogUrl = useAppStore((s): string | null => {
-    if (!s.identifyLayerId) return null;
-    const layer = s.layers.find((item) => item.id === s.identifyLayerId);
-    if (layer?.type !== "cog") return null;
-    // `source` is a union across layer kinds, so narrow to the string form
-    // rather than trusting a `url` that is not on every member.
-    const url = (layer.source as { url?: unknown } | undefined)?.url;
-    return typeof url === "string" && url ? url : null;
-  });
-  const cogName = useAppStore((s): string | null => {
-    if (!s.identifyLayerId) return null;
-    return s.layers.find((item) => item.id === s.identifyLayerId)?.name ?? null;
-  });
+  // One selector, one scan of the layer list, like useNetcdfIdentify: the three
+  // fields are read from the same layer, so finding it three times was three
+  // subscriptions and three scans to answer one question. `useShallow` is what
+  // keeps returning an object from being a new reference on every store change.
+  const { activeCogId, cogUrl, cogName } = useAppStore(
+    useShallow((s): { activeCogId: string | null; cogUrl: string | null; cogName: string } => {
+      const layer = s.identifyLayerId
+        ? s.layers.find((item) => item.id === s.identifyLayerId)
+        : undefined;
+      if (layer?.type !== "cog") return { activeCogId: null, cogUrl: null, cogName: "" };
+      // `source` is a union across layer kinds, so narrow to the string form
+      // rather than trusting a `url` that is not on every member.
+      const url = (layer.source as { url?: unknown } | undefined)?.url;
+      return {
+        activeCogId: layer.id,
+        cogUrl: typeof url === "string" && url ? url : null,
+        cogName: layer.name ?? "",
+      };
+    }),
+  );
 
   useEffect(() => {
     const map = mapControllerRef.current?.getMap();
@@ -59,11 +61,22 @@ export function useCogSpectralIdentify(
 
     const handleClick = (event: maplibregl.MapMouseEvent) => {
       const { lng, lat } = event.lngLat;
+      // A single-band raster -- a DEM, a grayscale scene -- has no spectrum, so
+      // every click on one would add a marker and take it away again a moment
+      // later. Once the first read has told us the band count, skip the marker
+      // entirely rather than flashing one per click. The first click on such a
+      // layer still flashes, because the count is not known until something has
+      // read the file.
+      const bandCount = knownCogBandCount(cogUrl);
+      if (bandCount !== null && bandCount < 2) return;
+
       // The marker and list entry go in immediately so the click registers on
       // the map; the profile is attached when the range requests resolve.
       const sampleId = addNetcdfProfileSample({
         layerId: activeCogId,
-        variable: cogName ?? t("netcdfProfile.rasterFallbackName"),
+        // `||`, not `??`: a project authored by hand or by another tool can
+        // carry an empty name, which would leave the chart's title blank.
+        variable: cogName || t("netcdfProfile.rasterFallbackName"),
         lng,
         lat,
       });
@@ -75,7 +88,13 @@ export function useCogSpectralIdentify(
       // is exactly the stuck-load appearance this is trying to avoid. The
       // store's own guards make it safe: both calls below no-op for a sample
       // that has since been cleared or aged off the cap.
-      void readCogSpectralProfile(cogUrl, lng, lat).then((profile) => {
+      void readCogSpectralProfile(cogUrl, lng, lat, {
+        // Only used if geotiff.js's range requests are refused: the desktop app
+        // renders COGs from hosts with no CORS headers at all by going through
+        // the native HTTP path, and without this the layer would display while
+        // every click on it silently produced no profile.
+        fetchBytes: fetchRemoteArrayBuffer,
+      }).then((profile) => {
         if (profile) {
           setNetcdfProfileSampleProfile(sampleId, profile);
           return;

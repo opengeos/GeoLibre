@@ -139,12 +139,24 @@ export function clearNetcdfProfileSamplesForLayer(layerId: string): void {
  * sample that has since been cleared or aged off the cap lands nowhere.
  */
 export function removeNetcdfProfileSample(id: number): void {
-  const kept = samples.filter((item) => item.id !== id);
-  if (kept.length === samples.length) return;
-  samples = kept;
-  if (kept.length === 0) {
+  const removed = samples.find((item) => item.id === id);
+  if (!removed) return;
+  samples = samples.filter((item) => item.id !== id);
+  if (samples.length === 0) {
     orderCounter = 0;
     poppedOut = false;
+  } else if (removed.order === orderCounter) {
+    // Give the number back when the sample being dropped is the newest one,
+    // which is the usual case: the caller adds a marker on click and removes it
+    // when the read comes back with nothing to chart. Without this the next
+    // click is labelled "3" beside a "1", and since the series color is keyed
+    // off the number the chart's colors skip too.
+    //
+    // Only the newest, because `order` is assigned once and never renumbered —
+    // a point keeps its label and color when an older one falls off the cap. So
+    // a failed read that resolves *after* a later click still leaves a gap;
+    // renumbering to close it would move the labels under the user's cursor.
+    orderCounter -= 1;
   }
   emit();
 }

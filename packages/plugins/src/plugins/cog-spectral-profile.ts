@@ -15,7 +15,7 @@
  * clicked pixel is fetched rather than the whole scene.
  */
 
-import { fromUrl } from "geotiff";
+import { fromArrayBuffer, fromUrl } from "geotiff";
 import proj4 from "proj4";
 
 /** One pixel's values across a raster's bands, shaped for the profile chart. */
@@ -77,17 +77,80 @@ async function projectionFor(geoKeys: Record<string, unknown> | undefined): Prom
 }
 
 /**
+ * Per-band wavelengths out of the `GDAL_METADATA` tag.
+ *
+ * This is where GDAL and rasterio actually put them: one `<Item name="…"
+ * sample="N">` per band inside an XML blob, rather than a flat array on the file
+ * directory. A stacked Landsat or Sentinel scene written by either tool is the
+ * target of this feature, so reading only the flat form would have meant the
+ * wavelength axis never appearing for the files it was built for.
+ *
+ * Matched on the item names those tools write (`wavelength`, and the
+ * `central_wavelength` STAC-derived exports use), case-insensitively. Parsed
+ * with a regular expression rather than a DOM parser: this is one well-known
+ * tag shape, `DOMParser` is not available in every runtime this package builds
+ * for, and an XML parser on file-supplied content is a larger surface than the
+ * data warrants.
+ *
+ * @param directory - The image's file directory.
+ * @param bandCount - How many bands the image has.
+ * @returns One wavelength per band in band order, or null when the tag is
+ *   absent, unparseable, or does not cover exactly every band.
+ */
+function gdalMetadataWavelengths(
+  directory: Record<string, unknown> | undefined,
+  bandCount: number,
+): number[] | null {
+  const xml = directory?.["GDAL_METADATA"];
+  if (typeof xml !== "string" || !xml) return null;
+  const bySample = new Map<number, number>();
+  const item = /<Item\b([^>]*)>([^<]*)<\/Item>/gi;
+  for (const match of xml.matchAll(item)) {
+    const [, attributes, text] = match;
+    const name = /\bname\s*=\s*"([^"]*)"/i.exec(attributes)?.[1]?.toLowerCase();
+    if (name !== "wavelength" && name !== "central_wavelength") continue;
+    // A wavelength with no `sample` is a dataset-level item, not a per-band one,
+    // so it says nothing about which band it belongs to.
+    const sample = Number.parseInt(/\bsample\s*=\s*"(\d+)"/i.exec(attributes)?.[1] ?? "", 10);
+    const value = Number.parseFloat(text.trim());
+    if (!Number.isInteger(sample) || !Number.isFinite(value)) continue;
+    // First writer wins, so a file carrying both names does not have one
+    // silently override the other halfway down the list.
+    if (!bySample.has(sample)) bySample.set(sample, value);
+  }
+  // `sample` is 0-based, and every band has to be covered: a partial list would
+  // put the bands it does cover at the wrong place on the axis.
+  if (bySample.size !== bandCount) return null;
+  const values: number[] = [];
+  for (let band = 0; band < bandCount; band += 1) {
+    const value = bySample.get(band);
+    if (value === undefined) return null;
+    values.push(value);
+  }
+  return values;
+}
+
+/**
  * Wavelengths for each band, when the file declares them.
  *
- * Landsat/Sentinel products written by common tooling put a per-band
- * `wavelength` in the GDAL metadata; ENVI-style headers use `wavelength` on the
- * file directory. Neither is guaranteed, so a file without them charts against
+ * Two shapes, because two toolchains: GDAL/rasterio write per-band items into
+ * `GDAL_METADATA`, while ENVI-style headers put a flat `wavelength` list on the
+ * file directory. Neither is guaranteed, so a file with neither charts against
  * band number instead — which is still the useful axis, just less physical.
  */
 function wavelengthsFor(image: ImageLike, bandCount: number): number[] | null {
   const directory = image.getFileDirectory();
+  const fromGdal = gdalMetadataWavelengths(directory, bandCount);
+  if (fromGdal) return fromGdal;
   const raw = directory?.["wavelength"] ?? directory?.["Wavelength"];
-  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(/[,\s]+/) : null;
+  // Trimmed before splitting: a leading space on " 443, 560, 665" would
+  // otherwise produce an empty first element, fail the band-count match, and
+  // drop a perfectly good wavelength list for being loosely formatted.
+  const list = Array.isArray(raw)
+    ? raw
+    : typeof raw === "string"
+      ? raw.trim().split(/[,\s]+/)
+      : null;
   if (!list || list.length !== bandCount) return null;
   const values = list.map((entry) => Number.parseFloat(String(entry)));
   // Every entry must parse. Filtering the bad ones out instead would let a list
@@ -97,14 +160,14 @@ function wavelengthsFor(image: ImageLike, bandCount: number): number[] | null {
 }
 
 /**
- * Read one pixel's value in every band of a multiband GeoTIFF.
+ * Fetches a whole file's bytes, for the fallback path below.
  *
- * @param url - The COG/GeoTIFF URL. Range requests fetch only what is needed.
- * @param lng - Longitude of the clicked point, in WGS84 degrees.
- * @param lat - Latitude of the clicked point, in WGS84 degrees.
- * @returns The profile, or null when the file has a single band, the point
- *   falls outside the raster, or the file cannot be read.
+ * The app's CORS/Tauri-aware fetch has this shape (`app.fetchArrayBuffer`); the
+ * reader takes it as an argument rather than importing it, since this package
+ * cannot depend on the desktop app.
  */
+export type CogByteLoader = (url: string) => Promise<ArrayBuffer>;
+
 /**
  * Opened images, keyed by URL.
  *
@@ -117,15 +180,56 @@ function wavelengthsFor(image: ImageLike, bandCount: number): number[] | null {
 const openedImages = new Map<string, Promise<ImageLike | null>>();
 const MAX_OPEN_IMAGES = 8;
 
-async function openImage(url: string): Promise<ImageLike | null> {
+/**
+ * Band counts of images opened this session, keyed by URL.
+ *
+ * Outlives `openedImages` deliberately: it is two numbers, and its only reader
+ * wants to know "can this layer ever chart?" without holding the image open.
+ */
+const bandCounts = new Map<string, number>();
+
+/**
+ * The band count for a URL already read this session, if any.
+ *
+ * Lets a caller skip the work — and the map marker — for a raster it has already
+ * learned has a single band, which can never produce a profile. Null when this
+ * URL has not been read yet, which is not the same as "unknown band count": the
+ * first read is what fills it in.
+ */
+export function knownCogBandCount(url: string): number | null {
+  return bandCounts.get(url) ?? null;
+}
+
+async function openImage(url: string, fetchBytes?: CogByteLoader): Promise<ImageLike | null> {
   const cached = openedImages.get(url);
-  if (cached) return cached;
+  // Re-inserted on a hit so eviction is least-recently-used: without this the
+  // map evicts whatever was opened first, which on a long session is as likely
+  // to be the scene being clicked as a stale one.
+  if (cached) {
+    openedImages.delete(url);
+    openedImages.set(url, cached);
+    return cached;
+  }
   const opened = (async () => {
     try {
       const tiff = await fromUrl(url);
       return (await tiff.getImage()) as unknown as ImageLike;
     } catch {
-      return null;
+      // Range requests through the raw fetch geotiff.js uses are the fast path,
+      // not the only one: a host without permissive CORS headers refuses them
+      // outright, and in the desktop app that is exactly the file the map is
+      // *displaying*, because rendering went through the native HTTP bypass (or
+      // the dev raster proxy) instead. Falling back to the caller's fetch costs
+      // the whole file rather than one tile, which is the same download the
+      // layer already made to render, and the cache above means one click pays
+      // it rather than every click.
+      if (!fetchBytes) return null;
+      try {
+        const tiff = await fromArrayBuffer(await fetchBytes(url));
+        return (await tiff.getImage()) as unknown as ImageLike;
+      } catch {
+        return null;
+      }
     }
   })();
   if (openedImages.size >= MAX_OPEN_IMAGES) {
@@ -140,14 +244,28 @@ async function openImage(url: string): Promise<ImageLike | null> {
   return image;
 }
 
+/**
+ * Read one pixel's value in every band of a multiband GeoTIFF.
+ *
+ * @param url - The COG/GeoTIFF URL. Range requests fetch only what is needed.
+ * @param lng - Longitude of the clicked point, in WGS84 degrees.
+ * @param lat - Latitude of the clicked point, in WGS84 degrees.
+ * @param options.fetchBytes - Whole-file fetch used only when the range
+ *   requests fail, for hosts the browser will not let this read directly.
+ * @returns The profile, or null when the file has a single band, the point
+ *   falls outside the raster, or the file cannot be read.
+ */
 export async function readCogSpectralProfile(
   url: string,
   lng: number,
   lat: number,
+  options?: { fetchBytes?: CogByteLoader },
 ): Promise<CogSpectralProfile | null> {
-  const image = await openImage(url);
+  const image = await openImage(url, options?.fetchBytes);
   if (!image) return null;
   try {
+    const bandCount = image.getSamplesPerPixel();
+    if (Number.isFinite(bandCount)) bandCounts.set(url, bandCount);
     return await readProfileFromImage(image, lng, lat);
   } catch {
     // Metadata accessors throw on a malformed file -- getBoundingBox does so

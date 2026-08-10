@@ -84,6 +84,91 @@ describe("readProfileFromImage", () => {
     assert.equal(profile.axis.units, "nm");
   });
 
+  it("charts against wavelengths written into GDAL_METADATA", async () => {
+    // Where GDAL and rasterio actually put them, and so where a real Landsat or
+    // Sentinel stack carries them — the flat directory field is the ENVI shape.
+    const profile = await readProfileFromImage(
+      stubImage({
+        bands: 3,
+        directory: {
+          GDAL_METADATA:
+            "<GDALMetadata>" +
+            '<Item name="wavelength" sample="0" role="wavelength">443</Item>' +
+            '<Item name="wavelength" sample="1" role="wavelength">560</Item>' +
+            '<Item name="wavelength" sample="2" role="wavelength">665</Item>' +
+            "</GDALMetadata>",
+        },
+      }),
+      0,
+      0,
+    );
+    assert.ok(profile);
+    assert.equal(profile.axis.name, "wavelength");
+    assert.deepEqual(profile.axis.values, [443, 560, 665]);
+  });
+
+  it("orders GDAL_METADATA wavelengths by sample, not by document order", async () => {
+    const profile = await readProfileFromImage(
+      stubImage({
+        bands: 3,
+        directory: {
+          GDAL_METADATA:
+            '<Item name="wavelength" sample="2">665</Item>' +
+            '<Item name="wavelength" sample="0">443</Item>' +
+            '<Item name="wavelength" sample="1">560</Item>',
+        },
+      }),
+      0,
+      0,
+    );
+    assert.ok(profile);
+    assert.deepEqual(profile.axis.values, [443, 560, 665]);
+  });
+
+  it("ignores a GDAL_METADATA list that does not cover every band", async () => {
+    // A partial list would put the bands it does cover at the wrong place on
+    // the axis, which is worse than plotting against band number.
+    const profile = await readProfileFromImage(
+      stubImage({
+        bands: 4,
+        directory: {
+          GDAL_METADATA:
+            '<Item name="wavelength" sample="0">443</Item>' +
+            '<Item name="wavelength" sample="1">560</Item>',
+        },
+      }),
+      0,
+      0,
+    );
+    assert.ok(profile);
+    assert.equal(profile.axis.name, "band");
+  });
+
+  it("ignores a dataset-level wavelength that names no band", async () => {
+    const profile = await readProfileFromImage(
+      stubImage({
+        bands: 2,
+        directory: { GDAL_METADATA: '<Item name="wavelength">443</Item>' },
+      }),
+      0,
+      0,
+    );
+    assert.ok(profile);
+    assert.equal(profile.axis.name, "band");
+  });
+
+  it("reads a loosely formatted ENVI wavelength list", async () => {
+    // Leading whitespace would otherwise split into an empty first element,
+    // fail the band-count match, and drop a perfectly good list.
+    const profile = await readProfileFromImage(
+      stubImage({ bands: 3, directory: { wavelength: " 443, 560, 665 " } }),
+      0,
+      0,
+    );
+    assert.ok(profile);
+    assert.deepEqual(profile.axis.values, [443, 560, 665]);
+  });
+
   it("ignores a wavelength list that does not match the band count", async () => {
     // A mismatched list is more likely stale metadata than a shorter spectrum;
     // plotting against it would mislabel every point.
