@@ -182,7 +182,9 @@
     "elevationRange": "Elevasi min / maks",
     "meanSlope": "Kemiringan rata-rata",
     "computing": "Menghitung medan…",
-    "partialData": "Beberapa sampel tidak memiliki data medan"
+    "partialData": "Beberapa sampel tidak memiliki data medan",
+    "heading": "Arah",
+    "finalHeading": "Arah akhir"
   },
   "statusBar": {
     "elevation": "Elev",

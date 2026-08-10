@@ -184,7 +184,9 @@
     "elevationRange": "न्यूनतम / अधिकतम ऊँचाई",
     "meanSlope": "औसत ढलान",
     "computing": "भू-भाग की गणना हो रही है…",
-    "partialData": "कुछ नमूनों में भू-भाग डेटा नहीं था"
+    "partialData": "कुछ नमूनों में भू-भाग डेटा नहीं था",
+    "heading": "दिशा",
+    "finalHeading": "अंतिम दिशा"
   },
   "statusBar": {
     "elevation": "ऊँचाई",

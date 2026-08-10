@@ -572,6 +572,8 @@ export function DesktopShell({
       meanSlope: t("terrainMeasure.meanSlope"),
       computing: t("terrainMeasure.computing"),
       partialData: t("terrainMeasure.partialData"),
+      heading: t("terrainMeasure.heading"),
+      finalHeading: t("terrainMeasure.finalHeading"),
     });
   }, [t]);
   // The map's Fullscreen control maximizes the map *canvas* (it calls

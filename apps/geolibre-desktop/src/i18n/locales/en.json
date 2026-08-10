@@ -184,7 +184,9 @@
     "elevationRange": "Min / max elevation",
     "meanSlope": "Mean slope",
     "computing": "Computing terrain…",
-    "partialData": "Some samples had no terrain data"
+    "partialData": "Some samples had no terrain data",
+    "heading": "Heading",
+    "finalHeading": "Final heading"
   },
   "statusBar": {
     "elevation": "Elev",

@@ -184,7 +184,9 @@
     "elevationRange": "Min. / max. hoogte",
     "meanSlope": "Gemiddelde helling",
     "computing": "Terrein berekenen…",
-    "partialData": "Sommige meetpunten hadden geen terreingegevens"
+    "partialData": "Sommige meetpunten hadden geen terreingegevens",
+    "heading": "Koers",
+    "finalHeading": "Eindkoers"
   },
   "statusBar": {
     "elevation": "Hoogte",

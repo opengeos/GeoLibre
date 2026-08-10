@@ -184,7 +184,9 @@
     "elevationRange": "کمینه / بیشینهٔ ارتفاع",
     "meanSlope": "شیب میانگین",
     "computing": "در حال محاسبهٔ زمین…",
-    "partialData": "برخی نمونه‌ها دادهٔ زمین نداشتند"
+    "partialData": "برخی نمونه‌ها دادهٔ زمین نداشتند",
+    "heading": "راستا",
+    "finalHeading": "راستای نهایی"
   },
   "statusBar": {
     "elevation": "ارتفاع",

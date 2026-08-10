@@ -182,7 +182,9 @@
     "elevationRange": "最低 / 最高標高",
     "meanSlope": "平均勾配",
     "computing": "地形を計算しています…",
-    "partialData": "一部のサンプルに地形データがありませんでした"
+    "partialData": "一部のサンプルに地形データがありませんでした",
+    "heading": "方位",
+    "finalHeading": "最終方位"
   },
   "statusBar": {
     "elevation": "標高",

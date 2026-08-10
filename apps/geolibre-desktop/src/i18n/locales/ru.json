@@ -188,7 +188,9 @@
     "elevationRange": "Мин. / макс. высота",
     "meanSlope": "Средний уклон",
     "computing": "Расчёт рельефа…",
-    "partialData": "Для части точек нет данных рельефа"
+    "partialData": "Для части точек нет данных рельефа",
+    "heading": "Азимут",
+    "finalHeading": "Конечный азимут"
   },
   "statusBar": {
     "elevation": "Выс",

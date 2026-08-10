@@ -346,3 +346,59 @@ function gradient(
   if (before !== null) return (here - before) / spacingMeters;
   return null;
 }
+
+/**
+ * Initial (forward) great-circle azimuth from `a` to `b`, in degrees clockwise
+ * from true north, normalised to [0, 360).
+ *
+ * This is the *initial* bearing: on a sphere a great-circle path's heading
+ * changes as you travel it, so a long line's arrival bearing differs from its
+ * departure bearing. {@link finalAzimuthDegrees} gives the other end.
+ *
+ * Radius-independent, so it needs no ellipsoid — the bearing between two
+ * coordinates is the same on any sphere.
+ */
+export function forwardAzimuthDegrees(a: LngLat, b: LngLat): number {
+  const toRad = Math.PI / 180;
+  const lat1 = a[1] * toRad;
+  const lat2 = b[1] * toRad;
+  const dLon = (b[0] - a[0]) * toRad;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  const degrees = Math.atan2(y, x) / toRad;
+  return (degrees + 360) % 360;
+}
+
+/**
+ * Final great-circle azimuth arriving at `b` from `a`, in degrees clockwise
+ * from true north. Derived by reversing the leg and flipping 180°.
+ */
+export function finalAzimuthDegrees(a: LngLat, b: LngLat): number {
+  return (forwardAzimuthDegrees(b, a) + 180) % 360;
+}
+
+/** The 16-point compass rose, indexed by `round(azimuth / 22.5) % 16`. */
+const COMPASS_POINTS = [
+  "N",
+  "NNE",
+  "NE",
+  "ENE",
+  "E",
+  "ESE",
+  "SE",
+  "SSE",
+  "S",
+  "SSW",
+  "SW",
+  "WSW",
+  "W",
+  "WNW",
+  "NW",
+  "NNW",
+] as const;
+
+/** Nearest 16-point compass label for an azimuth in degrees (e.g. 310 -> "NW"). */
+export function compassPoint(azimuthDegrees: number): string {
+  const normalised = ((azimuthDegrees % 360) + 360) % 360;
+  return COMPASS_POINTS[Math.round(normalised / 22.5) % 16];
+}

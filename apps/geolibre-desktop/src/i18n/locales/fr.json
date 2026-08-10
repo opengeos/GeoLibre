@@ -184,7 +184,9 @@
     "elevationRange": "Altitude min / max",
     "meanSlope": "Pente moyenne",
     "computing": "Calcul du terrain…",
-    "partialData": "Certains échantillons n'avaient pas de données de terrain"
+    "partialData": "Certains échantillons n'avaient pas de données de terrain",
+    "heading": "Cap",
+    "finalHeading": "Cap final"
   },
   "statusBar": {
     "elevation": "Alt",

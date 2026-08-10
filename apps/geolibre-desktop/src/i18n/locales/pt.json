@@ -184,7 +184,9 @@
     "elevationRange": "Elevação mín. / máx.",
     "meanSlope": "Declividade média",
     "computing": "Calculando terreno…",
-    "partialData": "Algumas amostras não tinham dados de terreno"
+    "partialData": "Algumas amostras não tinham dados de terreno",
+    "heading": "Rumo",
+    "finalHeading": "Rumo final"
   },
   "statusBar": {
     "elevation": "Elev",

@@ -182,7 +182,9 @@
     "elevationRange": "最低 / 最高海拔",
     "meanSlope": "平均坡度",
     "computing": "正在计算地形…",
-    "partialData": "部分采样点无地形数据"
+    "partialData": "部分采样点无地形数据",
+    "heading": "方位角",
+    "finalHeading": "终点方位角"
   },
   "statusBar": {
     "elevation": "高程",

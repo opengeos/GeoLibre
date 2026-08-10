@@ -184,7 +184,9 @@
     "elevationRange": "Min. / max. Höhe",
     "meanSlope": "Mittlere Neigung",
     "computing": "Gelände wird berechnet…",
-    "partialData": "Für einige Messpunkte lagen keine Geländedaten vor"
+    "partialData": "Für einige Messpunkte lagen keine Geländedaten vor",
+    "heading": "Kurs",
+    "finalHeading": "Endkurs"
   },
   "statusBar": {
     "elevation": "Höhe",

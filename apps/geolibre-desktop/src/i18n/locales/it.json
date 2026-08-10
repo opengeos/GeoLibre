@@ -184,7 +184,9 @@
     "elevationRange": "Quota min / max",
     "meanSlope": "Pendenza media",
     "computing": "Calcolo del terreno…",
-    "partialData": "Alcuni campioni non avevano dati del terreno"
+    "partialData": "Alcuni campioni non avevano dati del terreno",
+    "heading": "Rotta",
+    "finalHeading": "Rotta finale"
   },
   "statusBar": {
     "elevation": "Quota",

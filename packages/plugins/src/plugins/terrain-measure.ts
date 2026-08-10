@@ -32,7 +32,10 @@ import {
 import type { MeasureControl, Measurement } from "maplibre-gl-components";
 import {
   buildAreaGrid,
+  compassPoint,
   densifyLine,
+  finalAzimuthDegrees,
+  forwardAzimuthDegrees,
   surfaceArea,
   surfaceDistance,
   type LngLat,
@@ -109,6 +112,8 @@ const terrainMeasureLabels = {
   meanSlope: "Mean slope",
   computing: "Computing terrain…",
   partialData: "Some samples had no terrain data",
+  heading: "Heading",
+  finalHeading: "Final heading",
 };
 
 /** Override the terrain-measure labels with translated text. */
@@ -272,6 +277,46 @@ export function terrainReadoutRows(
   ];
 }
 
+/**
+ * Bearing rows for a measured line, as label/value pairs — empty for anything
+ * that is not a line of at least two points.
+ *
+ * Deliberately independent of the terrain readout: a bearing is pure geometry
+ * on the measured coordinates, so it must not disappear when terrain data is
+ * unavailable (off-Earth, no DEM tiles, no network), which is exactly when the
+ * terrain section hides itself.
+ *
+ * For a multi-point path this reports the overall first-to-last bearing rather
+ * than one row per segment: a twenty-point path would otherwise bury the panel.
+ * The final bearing is added only when it differs from the initial one by a
+ * degree or more, which on a short line it never does — it is a long-geodesic
+ * concern, and showing "310 deg / 310 deg" everywhere would be noise.
+ */
+export function bearingRows(measurement: {
+  mode: string;
+  points: Array<{ lng: number; lat: number }>;
+}): Array<[string, string]> {
+  if (measurement.mode !== "distance" || measurement.points.length < 2) return [];
+  const first = measurement.points[0];
+  const last = measurement.points[measurement.points.length - 1];
+  const a: LngLat = [first.lng, first.lat];
+  const b: LngLat = [last.lng, last.lat];
+  if (a[0] === b[0] && a[1] === b[1]) return [];
+
+  const initial = forwardAzimuthDegrees(a, b);
+  const rows: Array<[string, string]> = [
+    [terrainMeasureLabels.heading, `${initial.toFixed(0)}\u00b0 ${compassPoint(initial)}`],
+  ];
+  const final = finalAzimuthDegrees(a, b);
+  if (Math.abs(((final - initial + 540) % 360) - 180) >= 1) {
+    rows.push([
+      terrainMeasureLabels.finalHeading,
+      `${final.toFixed(0)}\u00b0 ${compassPoint(final)}`,
+    ]);
+  }
+  return rows;
+}
+
 /** Whether the readout should carry the partial-data footnote. */
 export function terrainReadoutIsPartial(readout: TerrainReadout): boolean {
   return readout.result.missingCount > 0;
@@ -302,6 +347,49 @@ export function attachTerrainMeasure(
   section.style.fontSize = "12px";
   panel.appendChild(section);
 
+  // Bearing lives in its own section above the terrain one. It resolves
+  // synchronously from the measured coordinates, so it appears the instant the
+  // line is drawn and stays visible when the terrain section hides itself for
+  // want of elevation data.
+  const bearingSection = document.createElement("div");
+  bearingSection.className = "geolibre-measure-bearing";
+  bearingSection.style.margin = "8px 12px 0";
+  bearingSection.style.display = "none";
+  bearingSection.style.fontSize = "12px";
+  panel.insertBefore(bearingSection, section);
+
+  const readoutRow = (label: string, value: string): HTMLElement => {
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.justifyContent = "space-between";
+    row.style.gap = "8px";
+    row.style.marginTop = "2px";
+    const labelEl = document.createElement("span");
+    labelEl.style.opacity = "0.75";
+    labelEl.textContent = label;
+    const valueEl = document.createElement("span");
+    valueEl.style.fontWeight = "600";
+    valueEl.textContent = value;
+    row.append(labelEl, valueEl);
+    return row;
+  };
+
+  // Which measurement the bearing rows currently describe, so removing *that*
+  // measurement clears them (and removing a different one leaves them alone).
+  let bearingMeasurementId: string | null = null;
+
+  const renderBearing = (measurement: Measurement | null): void => {
+    const rows = measurement ? bearingRows(measurement) : [];
+    bearingMeasurementId = rows.length > 0 ? (measurement?.id ?? null) : null;
+    bearingSection.replaceChildren();
+    if (rows.length === 0) {
+      bearingSection.style.display = "none";
+      return;
+    }
+    bearingSection.style.display = "block";
+    for (const [label, value] of rows) bearingSection.appendChild(readoutRow(label, value));
+  };
+
   let current: TerrainReadout | null = null;
   // The measurement whose computation is still in flight; tracked separately
   // from `current` (which stays null until the promise resolves) so a removal
@@ -325,19 +413,7 @@ export function attachTerrainMeasure(
     section.style.display = "block";
     section.appendChild(sectionTitle());
     for (const [label, value] of terrainReadoutRows(current, units)) {
-      const row = document.createElement("div");
-      row.style.display = "flex";
-      row.style.justifyContent = "space-between";
-      row.style.gap = "8px";
-      row.style.marginTop = "2px";
-      const labelEl = document.createElement("span");
-      labelEl.style.opacity = "0.75";
-      labelEl.textContent = label;
-      const valueEl = document.createElement("span");
-      valueEl.style.fontWeight = "600";
-      valueEl.textContent = value;
-      row.append(labelEl, valueEl);
-      section.appendChild(row);
+      section.appendChild(readoutRow(label, value));
     }
     if (terrainReadoutIsPartial(current)) {
       const note = document.createElement("div");
@@ -361,6 +437,7 @@ export function attachTerrainMeasure(
   const onDrawEnd = (event: { measurement?: Measurement }): void => {
     const measurement = event.measurement;
     if (!measurement) return;
+    renderBearing(measurement);
     const token = ++requestToken;
     pendingMeasurementId = measurement.id;
     // Drop the previous readout now: it no longer matches what the section
@@ -385,12 +462,14 @@ export function attachTerrainMeasure(
   const onClear = (): void => {
     requestToken += 1;
     pendingMeasurementId = null;
+    renderBearing(null);
     hide();
   };
 
   const onMeasurementRemove = (event: { measurement?: Measurement }): void => {
     const removedId = event.measurement?.id;
     if (!removedId) return;
+    if (bearingMeasurementId === removedId) renderBearing(null);
     if (current?.measurementId === removedId || pendingMeasurementId === removedId) {
       requestToken += 1;
       pendingMeasurementId = null;
@@ -413,6 +492,7 @@ export function attachTerrainMeasure(
     control.off("clear", onClear);
     control.off("measurementremove", onMeasurementRemove);
     control.off("unitchange", onUnitChange);
+    bearingSection.remove();
     section.remove();
   };
 }

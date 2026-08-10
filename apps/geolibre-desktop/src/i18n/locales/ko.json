@@ -182,7 +182,9 @@
     "elevationRange": "최소 / 최대 고도",
     "meanSlope": "평균 경사",
     "computing": "지형 계산 중…",
-    "partialData": "일부 샘플에 지형 데이터가 없습니다"
+    "partialData": "일부 샘플에 지형 데이터가 없습니다",
+    "heading": "방위",
+    "finalHeading": "최종 방위"
   },
   "statusBar": {
     "elevation": "고도",

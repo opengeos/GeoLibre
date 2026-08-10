@@ -184,7 +184,9 @@
     "elevationRange": "Min / maks yükseklik",
     "meanSlope": "Ortalama eğim",
     "computing": "Arazi hesaplanıyor…",
-    "partialData": "Bazı örneklemlerde arazi verisi yoktu"
+    "partialData": "Bazı örneklemlerde arazi verisi yoktu",
+    "heading": "Yön",
+    "finalHeading": "Son yön"
   },
   "statusBar": {
     "elevation": "Rakım",
