@@ -149,7 +149,7 @@ export type PickerMode = "document" | "media" | "image" | "video";
  * - `copy`: copy/move the picked file to the app sandbox; no scoped access required.
  * - `scoped`: keep file in place; security-scoped access is automatically managed.
  *
- * **Note:** This option is only supported on iOS 14 and above. This parameter is ignored on iOS 13 and below.
+ * **Note:** GeoLibre's patch supports scoped document access on Android. On iOS, this option is supported on iOS 14 and above and ignored on iOS 13 and below.
  */
 export type FileAccessMode = "copy" | "scoped";
 
