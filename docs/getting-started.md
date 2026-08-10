@@ -234,6 +234,12 @@ inference calls to `ai.geolibre.app` without the token return `401`. If
 `GEOLIBRE_AI_URL` is unset, the image leaves the managed proxy disabled. Use
 HTTPS and prefer an `--env-file` or secrets manager.
 
+The NASA OPERA disaster workflow also uses this same `/ai` route for Tavily
+news searches. Store `TAVILY_API_KEY` as a secret on the `geolibre-ai-proxy`
+Worker, not in the Docker container. If you run a separate compatible news
+Worker, set its public URL with
+`GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT=https://news.example.org`.
+
 Enabling the proxy does not by itself restrict who may use it: whoever can
 reach `/ai` on the container spends against your Cloudflare account. Set
 `GEOLIBRE_AUTH_USER`/`GEOLIBRE_AUTH_PASSWORD` as above, or put your own

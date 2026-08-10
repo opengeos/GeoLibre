@@ -73,13 +73,18 @@ docker run --rm -p 8080:80 \
 If `GEOLIBRE_AI_URL` is unset, the Docker entrypoint leaves the managed proxy
 disabled and does not inject any AI proxy URL into the application.
 
+For news search in the NASA OPERA disaster workflow, add `TAVILY_API_KEY` as a
+secret on the `geolibre-ai-proxy` Worker. Do not pass that key to the Docker
+container. The browser uses the same authenticated `/ai` route, and nginx keeps
+both the Worker token and Tavily key out of frontend configuration.
+
 Optional variables:
 
 | Variable | Purpose |
 | --- | --- |
 | `GEOLIBRE_ASSISTANT_PROVIDER` | Force a provider (`google` / `anthropic` / `openai`) when several keys are set. |
 | `GEOLIBRE_ASSISTANT_MODEL` | Pin a specific model id, overriding the default and the picker. |
-| `TAVILY_API_KEY` | Enable reliable [web search](#what-it-can-do) (the keyless fallback is best-effort and may be blocked by the browser). |
+| `TAVILY_API_KEY` | Enable reliable [web search](#what-it-can-do) with local provider configuration. For managed Docker, configure this as a `geolibre-ai-proxy` Worker secret, not a container variable. |
 
 When more than one provider key is configured, a **provider** dropdown appears in
 the panel header; a **model** dropdown lets you switch models for the selected

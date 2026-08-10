@@ -14,7 +14,8 @@
     "required": [
       "CF_AI_GATEWAY_TOKEN",
       "CLOUDFLARE_ACCOUNT_ID",
-      "GEOLIBRE_AI_PROXY_TOKEN"
+      "GEOLIBRE_AI_PROXY_TOKEN",
+      "TAVILY_API_KEY"
     ]
   },
   "vars": {

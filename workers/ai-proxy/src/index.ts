@@ -2,6 +2,8 @@
 // slow non-streaming generation, and below the 600s nginx read timeout that a
 // self-hosted deployment puts in front of this worker.
 const UPSTREAM_HEADER_TIMEOUT_MS = 300_000;
+const SEARCH_HEADER_TIMEOUT_MS = 30_000;
+const TAVILY_ENDPOINT = "https://api.tavily.com/search";
 
 function jsonError(message: string, status: number, headers?: HeadersInit): Response {
   return Response.json({ error: { message, type: "geolibre_proxy_error" } }, { status, headers });
@@ -107,17 +109,25 @@ function clampOutputTokens(body: Record<string, unknown>, limit: number): void {
   if (!capped) body.max_completion_tokens = limit;
 }
 
-async function proxyChat(request: Request, env: Env, origin: string | null): Promise<Response> {
-  // Check the limit before buffering: otherwise a throttled client can still
-  // make the worker hold MAX_BODY_BYTES in memory on every rejected request.
+async function rateLimit(request: Request, env: Env): Promise<Response | null> {
   const instanceClient = request.headers.get("X-GeoLibre-Client-IP")?.trim();
   const actor = instanceClient || request.headers.get("CF-Connecting-IP") || "unidentified";
   const { success } = await env.AI_RATE_LIMITER.limit({ key: actor });
-  if (!success) {
-    return jsonError("Rate limit exceeded", 429, {
-      ...Object.fromEntries(responseHeaders(origin)),
-      "Retry-After": "60",
-    });
+  return success
+    ? null
+    : jsonError("Rate limit exceeded", 429, {
+        "Retry-After": "60",
+      });
+}
+
+async function proxyChat(request: Request, env: Env, origin: string | null): Promise<Response> {
+  // Check the limit before buffering: otherwise a throttled client can still
+  // make the worker hold MAX_BODY_BYTES in memory on every rejected request.
+  const limited = await rateLimit(request, env);
+  if (limited) {
+    const headers = new Headers(limited.headers);
+    for (const [name, value] of responseHeaders(origin)) headers.set(name, value);
+    return new Response(limited.body, { status: limited.status, headers });
   }
 
   const maximumBytes = positiveInteger(env.MAX_BODY_BYTES, 1_048_576);
@@ -193,6 +203,97 @@ async function proxyChat(request: Request, env: Env, origin: string | null): Pro
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
+async function proxyTavily(request: Request, env: Env, origin: string | null): Promise<Response> {
+  if (!env.TAVILY_API_KEY?.trim()) {
+    return jsonError("Search is not configured", 503, responseHeaders(origin));
+  }
+  const limited = await rateLimit(request, env);
+  if (limited) {
+    const headers = new Headers(limited.headers);
+    for (const [name, value] of responseHeaders(origin)) headers.set(name, value);
+    return new Response(limited.body, { status: limited.status, headers });
+  }
+
+  const maximumBytes = Math.min(positiveInteger(env.MAX_BODY_BYTES, 1_048_576), 65_536);
+  let body: Record<string, unknown>;
+  try {
+    body = await readBoundedJson(request, maximumBytes);
+  } catch (error) {
+    const status = error instanceof RangeError ? 413 : 400;
+    return jsonError(
+      error instanceof Error ? error.message : "Invalid request body",
+      status,
+      responseHeaders(origin),
+    );
+  }
+
+  const query = typeof body.query === "string" ? body.query.trim() : "";
+  if (!query || query.length > 1_000) {
+    return jsonError(
+      "query must be a non-empty string of at most 1,000 characters",
+      400,
+      responseHeaders(origin),
+    );
+  }
+  const requestedMaxResults =
+    typeof body.max_results === "number" && Number.isFinite(body.max_results)
+      ? Math.floor(body.max_results)
+      : 6;
+  const maxResults = Math.min(Math.max(requestedMaxResults, 1), 20);
+  const topic = body.topic === "news" ? "news" : "general";
+  const tavilyBody: Record<string, unknown> = {
+    query,
+    max_results: maxResults,
+    topic,
+    search_depth: "advanced",
+    include_answer: true,
+  };
+  if (topic === "news") {
+    const requestedDays =
+      typeof body.days === "number" && Number.isFinite(body.days) ? Math.floor(body.days) : 3650;
+    tavilyBody.days = Math.min(Math.max(requestedDays, 1), 3650);
+  }
+
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), SEARCH_HEADER_TIMEOUT_MS);
+  let upstream: Response;
+  try {
+    upstream = await fetch(TAVILY_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.TAVILY_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(tavilyBody),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return jsonError("Search request timed out", 504, responseHeaders(origin));
+    }
+    throw error;
+  } finally {
+    clearTimeout(deadline);
+  }
+
+  const headers = responseHeaders(origin);
+  headers.set(
+    "Content-Type",
+    upstream.headers.get("Content-Type") ?? "application/json; charset=utf-8",
+  );
+  headers.set("Cache-Control", "no-store");
+  console.log(
+    JSON.stringify({
+      message: "Tavily proxy request",
+      status: upstream.status,
+      topic,
+      resultLimit: maxResults,
+      colo: request.cf?.colo,
+    }),
+  );
+  return new Response(upstream.body, { status: upstream.status, headers });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -205,9 +306,12 @@ export default {
       return jsonError("Unauthorized", 401, responseHeaders(origin));
     }
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: responseHeaders(origin) });
+      return new Response(null, {
+        status: 204,
+        headers: responseHeaders(origin),
+      });
     }
-    if (url.pathname !== "/v1/chat/completions") {
+    if (url.pathname !== "/v1/chat/completions" && url.pathname !== "/tavily") {
       return jsonError("Not found", 404, responseHeaders(origin));
     }
     if (request.method !== "POST") {
@@ -215,7 +319,9 @@ export default {
     }
 
     try {
-      return await proxyChat(request, env, origin);
+      return url.pathname === "/tavily"
+        ? await proxyTavily(request, env, origin)
+        : await proxyChat(request, env, origin);
     } catch (error) {
       console.error(
         JSON.stringify({

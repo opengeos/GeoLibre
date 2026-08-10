@@ -213,6 +213,23 @@ def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
     return value
 
 
+# The NASA OPERA plugin can share the authenticated /ai route when the managed
+# Worker exposes /tavily. Operators using a separate news Worker can override
+# this with its public HTTPS URL. Only the endpoint reaches the browser; the
+# Tavily key remains a Worker secret.
+news_url = os.environ.get("GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT", "").strip()
+if news_url:
+    deployment["VITE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = service_url(
+        "GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT",
+        news_url,
+        ("https",),
+        ("http",),
+        ("localhost", "127.0.0.1", "::1"),
+    )
+elif os.environ.get("GEOLIBRE_AI_URL"):
+    deployment["VITE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = os.environ["GEOLIBRE_AI_URL"]
+
+
 # Project sharing server. Unset means the public hosted service; "off" removes
 # Share and the Project Gallery from the UI entirely.
 share_url = os.environ.get("GEOLIBRE_SHARE_URL", "").strip()
@@ -256,6 +273,12 @@ fi
 
 if [ -n "$(trim "${GEOLIBRE_COLLAB_URL:-}")" ]; then
   echo "Collaboration relay: $(trim "$GEOLIBRE_COLLAB_URL")"
+fi
+
+if [ -n "$(trim "${GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT:-}")" ]; then
+  echo "NASA OPERA news proxy: $(trim "$GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT")"
+elif [ -n "${GEOLIBRE_AI_URL:-}" ]; then
+  echo "NASA OPERA news search enabled through $GEOLIBRE_AI_URL."
 fi
 
 if [ -n "${GEOLIBRE_EMBED_ORIGINS:-}" ]; then
