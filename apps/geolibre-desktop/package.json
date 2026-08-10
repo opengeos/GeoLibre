@@ -19,6 +19,7 @@
     "@anthropic-ai/sdk": "^0.115.0",
     "@carbonplan/zarr-layer": "^0.7.0",
     "@cereusdb/standard": "^0.2.0",
+    "@clerk/react": "^6.14.1",
     "@deck.gl/aggregation-layers": "9.3.7",
     "@deck.gl/core": "^9.3.7",
     "@deck.gl/geo-layers": "^9.3.7",

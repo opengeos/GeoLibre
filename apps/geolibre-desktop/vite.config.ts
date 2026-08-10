@@ -710,6 +710,10 @@ function pwaPlugin(): Plugin[] {
     // is auto-named `i18n-<hash>` and must stay precached, so this must NOT match
     // it. English is bundled there, so it stays precached and works offline.
     "**/i18n-locale-*.js",
+    // Optional hosted-web authentication. This chunk is requested only when a
+    // Clerk publishable key is configured, so public deployments should not
+    // download it during service-worker installation.
+    "**/ClerkGate-*.js",
   ];
   // Note: the 4 KB public/pyodide/pyodide-worker.js shim is intentionally left
   // in the precache (revisioned, so no stale-after-deploy risk). The heavy

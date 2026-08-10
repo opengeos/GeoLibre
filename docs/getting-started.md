@@ -261,6 +261,30 @@ Also see the note in
 about dropping the `localhost` CSP allowances before exposing the image
 publicly.
 
+#### Clerk sign-in gate (optional)
+
+For individual user accounts instead of one shared password, configure a Clerk
+application for the deployment domain and pass its publishable key:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_CLERK_PUBLISHABLE_KEY='pk_live_...' \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+When the variable is unset, Clerk is not loaded and GeoLibre behaves exactly as
+before. The gate applies only to the hosted web application; Tauri, mobile, and
+embedded/Jupyter builds remain available offline. Control who may register or
+sign in through the Clerk Dashboard. Configure TLS and the deployment domain in
+Clerk before using a production key.
+
+This client-side gate controls access to the GeoLibre interface but is not a
+server authorization boundary by itself. Keep `/sidecar`, `/ai`, and any other
+sensitive upstream service behind nginx authentication, Cloudflare Access, or a
+backend that verifies Clerk session tokens on every request. Use the existing
+`GEOLIBRE_AUTH_USER` and `GEOLIBRE_AUTH_PASSWORD` variables as well when the
+whole container must be protected before its assets are served.
+
 #### Subpath and onboarding build arguments
 
 For deployments under a URL subpath, pass the app base at build time:

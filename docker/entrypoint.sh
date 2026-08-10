@@ -132,12 +132,29 @@ python -c '
 import json
 import os
 import re
+import base64
 from urllib.parse import urlsplit
 
 deployment = {}
 if os.environ.get("GEOLIBRE_AI_URL"):
     deployment["VITE_GEOLIBRE_AI_URL"] = os.environ["GEOLIBRE_AI_URL"]
     deployment["VITE_GEOLIBRE_AI_MODEL"] = os.environ["GEOLIBRE_AI_MODEL"]
+
+# Optional Clerk sign-in gate. The publishable key is intentionally public and
+# is all the browser needs; Clerk secrets never enter the image or runtime
+# config. Decode and validate the embedded Frontend API hostname now so an
+# invalid key fails at container startup instead of leaving a blank login page.
+clerk_key = os.environ.get("GEOLIBRE_CLERK_PUBLISHABLE_KEY", "").strip()
+if clerk_key:
+    try:
+        encoded = clerk_key.split("_", 2)[2]
+        encoded += "=" * (-len(encoded) % 4)
+        clerk_fapi = base64.urlsafe_b64decode(encoded).decode().rstrip("$")
+    except (IndexError, ValueError, UnicodeDecodeError) as error:
+        raise SystemExit("ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY is invalid.") from error
+    if not re.fullmatch(r"[A-Za-z0-9.-]+", clerk_fapi) or "." not in clerk_fapi:
+        raise SystemExit("ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY contains an invalid Frontend API host.")
+    deployment["VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY"] = clerk_key
 
 # Origins allowed to drive a framed app over the embed postMessage API. Unset
 # means the API stays off, so a public deployment can never be driven by the
@@ -262,6 +279,10 @@ if [ -n "${GEOLIBRE_EMBED_ORIGINS:-}" ]; then
   echo "Embed postMessage API enabled for: $GEOLIBRE_EMBED_ORIGINS"
 fi
 
+if [ -n "$(trim "${GEOLIBRE_CLERK_PUBLISHABLE_KEY:-}")" ]; then
+  echo "Clerk sign-in gate enabled."
+fi
+
 # Render the nginx config from the immutable image template on every boot. The
 # template is never mutated, so a container *restart* (which re-runs this script
 # with a freshly generated token but keeps the writable layer) always writes a
@@ -271,6 +292,7 @@ fi
 python -c '
 import os
 import re
+import base64
 from urllib.parse import urlsplit
 
 token = os.environ["GEOLIBRE_SIDECAR_TOKEN"]
@@ -292,10 +314,29 @@ if collab:
         raise SystemExit(f"ERROR: GEOLIBRE_COLLAB_URL is not a plain origin: {collab!r}.")
     collab_src = f" {origin}"
 
+# Clerk loads its browser SDK from the Frontend API hostname encoded in the
+# publishable key. Add only that exact hostname to script-src. The remaining
+# documented Clerk requirements are fixed origins in the nginx template.
+clerk_src = ""
+clerk_frame_src = ""
+clerk_key = os.environ.get("GEOLIBRE_CLERK_PUBLISHABLE_KEY", "").strip()
+if clerk_key:
+    encoded = clerk_key.split("_", 2)[2]
+    encoded += "=" * (-len(encoded) % 4)
+    clerk_fapi = base64.urlsafe_b64decode(encoded).decode().rstrip("$")
+    if not re.fullmatch(r"[A-Za-z0-9.-]+", clerk_fapi) or "." not in clerk_fapi:
+        raise SystemExit("ERROR: Clerk Frontend API host is invalid.")
+    clerk_src = f" https://{clerk_fapi} https://challenges.cloudflare.com https://*.protect.clerk.com"
+    clerk_frame_src = " https://challenges.cloudflare.com https://*.protect.clerk.com"
+
 src = open("/etc/nginx/nginx.conf.template").read()
 open("/etc/nginx/conf.d/default.conf", "w").write(
     src.replace("__GEOLIBRE_SIDECAR_TOKEN__", token).replace(
         "__GEOLIBRE_COLLAB_CONNECT_SRC__", collab_src
+    ).replace(
+        "__GEOLIBRE_CLERK_SCRIPT_SRC__", clerk_src
+    ).replace(
+        "__GEOLIBRE_CLERK_FRAME_SRC__", clerk_frame_src
     )
 )
 '

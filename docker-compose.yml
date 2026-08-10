@@ -13,6 +13,7 @@ services:
       # them with the public TLS origins when deploying behind an ingress.
       GEOLIBRE_SHARE_URL: "${GEOLIBRE_SHARE_URL:-http://localhost:8000}"
       GEOLIBRE_COLLAB_URL: "${GEOLIBRE_COLLAB_URL:-ws://localhost:8787}"
+      GEOLIBRE_CLERK_PUBLISHABLE_KEY: "${GEOLIBRE_CLERK_PUBLISHABLE_KEY:-}"
     depends_on:
       geolibre-server:
         condition: service_healthy
