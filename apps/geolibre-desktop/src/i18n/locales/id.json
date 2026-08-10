@@ -5420,7 +5420,7 @@
       "dd": "Derajat desimal",
       "dms": "Derajat, menit, detik",
       "ddm": "Derajat, menit desimal",
-      "utm": "UTM (zona, easting/northing)"
+      "utm": "UTM (zona, timur/utara)"
     },
     "coordinateFormatHint": "Format koordinat: {{format}}. Klik untuk mengganti."
   }

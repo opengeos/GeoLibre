@@ -73,7 +73,11 @@ export function formatCoordinate(lng: number, lat: number, format: CoordinateFor
       // readout and the grid labels round and suffix identically.
       return `${utm.zone}${utm.band} ${formatEasting(utm.easting)} ${formatNorthing(utm.northing)}`;
     }
+    case "dd":
     default:
+      // `default` also catches a value that bypassed normalizeCoordinateFormat;
+      // the explicit case keeps the switch self-documenting so a fifth format
+      // added without a branch reads as a gap rather than as intended.
       return `${lng.toFixed(5)}, ${lat.toFixed(5)}`;
   }
 }
