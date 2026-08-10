@@ -4599,6 +4599,13 @@ export function StylePanel({
             {layer.metadata.sourceKind === TIME_SLIDER_SOURCE_KIND && (
               <TimeSliderSymbologySection layer={layer} />
             )}
+            {/* The same section the NetCDF branch renders below: a multiband COG
+                identified with the pixel inspector samples into the same store
+                (see useCogSpectralIdentify), so its spectra need a home on the
+                branch a raster layer actually lands on. The section renders null
+                until this layer has a sampled pixel, so it costs nothing for the
+                single-band and tile rasters that also come through here. */}
+            <NetcdfProfilePanel layerId={layer.id} />
             <Separator />
             <Button
               type="button"
