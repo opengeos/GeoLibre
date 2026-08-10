@@ -83,6 +83,9 @@ pub struct SaveDialogOptions {
     default_path: Option<PathBuf>,
     /// Whether to allow creating directories in the dialog **macOS Only**
     can_create_directories: Option<bool>,
+    /// The file access mode of the dialog.
+    #[serde(default)]
+    file_access_mode: Option<FileAccessMode>,
 }
 
 #[cfg(mobile)]
@@ -138,15 +141,15 @@ pub(crate) async fn open<R: Runtime>(
     if let Some(can) = options.can_create_directories {
         dialog_builder = dialog_builder.set_can_create_directories(can);
     }
+    if let Some(file_access_mode) = options.file_access_mode {
+        dialog_builder = dialog_builder.set_file_access_mode(file_access_mode);
+    }
     if let Some(picker_mode) = options.picker_mode {
         dialog_builder = dialog_builder.set_picker_mode(picker_mode);
     }
     for filter in options.filters {
         let extensions: Vec<&str> = filter.extensions.iter().map(|s| &**s).collect();
         dialog_builder = dialog_builder.add_filter(filter.name, &extensions);
-    }
-    if let Some(file_access_mode) = options.file_access_mode {
-        dialog_builder = dialog_builder.set_file_access_mode(file_access_mode);
     }
 
     let res = if options.directory {
@@ -237,6 +240,9 @@ pub(crate) async fn save<R: Runtime>(
     }
     if let Some(can) = options.can_create_directories {
         dialog_builder = dialog_builder.set_can_create_directories(can);
+    }
+    if let Some(file_access_mode) = options.file_access_mode {
+        dialog_builder = dialog_builder.set_file_access_mode(file_access_mode);
     }
     for filter in options.filters {
         let extensions: Vec<&str> = filter.extensions.iter().map(|s| &**s).collect();

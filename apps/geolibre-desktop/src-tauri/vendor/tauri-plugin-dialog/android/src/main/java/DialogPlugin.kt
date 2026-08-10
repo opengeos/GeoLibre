@@ -48,12 +48,11 @@ class MessageOptions {
 class SaveFileDialogOptions {
   var fileName: String? = null
   lateinit var filters: Array<Filter>
+  var fileAccessMode: String? = null
 }
 
 @TauriPlugin
 class DialogPlugin(private val activity: Activity): Plugin(activity) {
-  var filePickerOptions: FilePickerOptions? = null
-
   private val documentPermissionFlags =
     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
 
@@ -235,6 +234,9 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
       intent.addCategory(Intent.CATEGORY_OPENABLE)
       intent.putExtra(Intent.EXTRA_TITLE, args.fileName ?: "")
       intent.type = "*/*"
+      if (args.fileAccessMode == "scoped") {
+        intent.addFlags(documentPermissionFlags or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+      }
 
       if (parsedTypes.isNotEmpty()) {
         intent.putExtra(Intent.EXTRA_MIME_TYPES, parsedTypes)
@@ -253,6 +255,7 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
     try {
       when (result.resultCode) {
         Activity.RESULT_OK -> {
+          persistDocumentPermissions(result.data)
           val callResult = JSObject()
           val intent: Intent? = result.data
           if (intent != null) {

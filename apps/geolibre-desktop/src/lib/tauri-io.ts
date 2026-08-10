@@ -2717,6 +2717,7 @@ export async function saveProjectFile(
   const path = await save({
     filters: [{ name: "GeoLibre Project", extensions: ["geolibre", "json"] }],
     defaultPath: defaultName ?? "project.geolibre.json",
+    ...(isAndroid() ? { fileAccessMode: "scoped" as const } : {}),
   });
   if (!path) return null;
   await writeTextFile(path, content);

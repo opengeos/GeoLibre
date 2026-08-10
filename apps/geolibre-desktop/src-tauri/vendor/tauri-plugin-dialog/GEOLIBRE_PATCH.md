@@ -9,12 +9,18 @@ write.
 The GeoLibre-specific runtime delta is intentionally limited to
 `android/src/main/java/DialogPlugin.kt`:
 
-- honor the existing `fileAccessMode: "scoped"` option on Android;
+- honor `fileAccessMode: "scoped"` for Android open and save dialogs;
 - use `ACTION_OPEN_DOCUMENT` for scoped open dialogs;
 - request read, write, and persistable URI grants for scoped dialogs; and
 - retain the read/write grants returned by the document provider.
 
-`src/lib.rs` also documents that the option is supported by this Android patch.
+`src/commands.rs` passes the access mode through save-dialog calls, and
+`src/lib.rs` documents that the option is supported by this Android patch.
+
+Android limits how many URI grants an app may retain. GeoLibre requests scoped
+access only for project documents whose paths remain in the recent-project
+store. If a native release bridge is added later, removing a recent project
+should also release its persisted URI permission.
 
 When upgrading, compare the new upstream release against this directory,
 reapply and test the Android picker changes above, update the version noted
