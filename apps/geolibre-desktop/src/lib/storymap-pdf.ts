@@ -82,11 +82,13 @@ const PIN_HEIGHT_MM = 8;
 /** Radius of the pin's round head. */
 const PIN_HEAD_RADIUS_MM = 2.5;
 /**
- * How much larger the white pin drawn behind the coloured one is, so the marker
- * keeps a halo and stays legible over dark or busy imagery. Both pins share the
- * same tip, so only the head and shoulders grow.
+ * Width of the white outline drawn around the pin, so the marker stays legible
+ * over dark or busy imagery. It is a constant outset in every direction (a
+ * uniform scale would push the head off the tip and read as a white blob above
+ * the pin rather than as an outline around it), so the white shows as an even
+ * ring however large the pin is.
  */
-const PIN_HALO_SCALE = 1.18;
+const PIN_OUTLINE_MM = 0.4;
 /** Extra hit area around the pin for the PDF link annotation, per side. */
 const PIN_LINK_PADDING_MM = 1;
 /** Fallback pin colour (MapLibre's default marker blue) for an unparseable one. */
@@ -318,12 +320,15 @@ export function hexToRgb(hex: string): [number, number, number] {
 }
 
 /**
- * Fill one map-pin silhouette: a round head with a tapering tail down to `tipY`.
- * The tail's top edge is a chord of the head circle, so the two shapes join
- * without a seam and the pair reads as a single teardrop.
+ * Fill one map-pin silhouette: a round head centred on `headCy` with a tapering
+ * tail down to `tipY`. The tail's top edge is a chord of the head circle, so the
+ * two shapes join without a seam and the pair reads as a single teardrop.
+ *
+ * The head centre and the tip are passed separately (rather than deriving both
+ * from an overall height) so the outline pass can outset the radius and the tip
+ * while keeping the head where the coloured pin's head is.
  */
-function fillPinShape(pdf: jsPDF, cx: number, tipY: number, height: number, radius: number): void {
-  const headCy = tipY - height + radius;
+function fillPinShape(pdf: jsPDF, cx: number, headCy: number, radius: number, tipY: number): void {
   // Take the chord below the head's centre so the tail leaves the circle at its
   // widest usable point; the offset and half-width satisfy the circle equation.
   const chordOffset = radius * 0.6;
@@ -338,23 +343,29 @@ function fillPinShape(pdf: jsPDF, cx: number, tipY: number, height: number, radi
  * marker's URL to it as a PDF link annotation (#1839).
  */
 function drawMarkerPin(pdf: jsPDF, marker: HandoutMarker, cx: number, tipY: number): void {
-  const haloHeight = PIN_HEIGHT_MM * PIN_HALO_SCALE;
-  const haloRadius = PIN_HEAD_RADIUS_MM * PIN_HALO_SCALE;
+  const headCy = tipY - PIN_HEIGHT_MM + PIN_HEAD_RADIUS_MM;
+  // The outline keeps the coloured pin's head centre and grows outward by the
+  // same margin all round, so it reads as a ring rather than a white pin
+  // peeking out from behind the coloured one.
   pdf.setFillColor(255, 255, 255);
-  fillPinShape(pdf, cx, tipY, haloHeight, haloRadius);
+  fillPinShape(pdf, cx, headCy, PIN_HEAD_RADIUS_MM + PIN_OUTLINE_MM, tipY + PIN_OUTLINE_MM);
   const [r, g, b] = hexToRgb(marker.color);
   pdf.setFillColor(r, g, b);
-  fillPinShape(pdf, cx, tipY, PIN_HEIGHT_MM, PIN_HEAD_RADIUS_MM);
+  fillPinShape(pdf, cx, headCy, PIN_HEAD_RADIUS_MM, tipY);
   // A hollow centre, like MapLibre's own marker, so the pin reads as a pin
   // rather than a blob at print size.
   pdf.setFillColor(255, 255, 255);
-  pdf.circle(cx, tipY - PIN_HEIGHT_MM + PIN_HEAD_RADIUS_MM, PIN_HEAD_RADIUS_MM * 0.36, "F");
+  pdf.circle(cx, headCy, PIN_HEAD_RADIUS_MM * 0.36, "F");
 
-  const linkW = haloRadius * 2 + PIN_LINK_PADDING_MM * 2;
-  const linkH = haloHeight + PIN_LINK_PADDING_MM * 2;
-  pdf.link(cx - linkW / 2, tipY - haloHeight - PIN_LINK_PADDING_MM, linkW, linkH, {
-    url: marker.url,
-  });
+  const linkW = (PIN_HEAD_RADIUS_MM + PIN_OUTLINE_MM) * 2 + PIN_LINK_PADDING_MM * 2;
+  const linkH = PIN_HEIGHT_MM + PIN_OUTLINE_MM * 2 + PIN_LINK_PADDING_MM * 2;
+  pdf.link(
+    cx - linkW / 2,
+    tipY - PIN_HEIGHT_MM - PIN_OUTLINE_MM - PIN_LINK_PADDING_MM,
+    linkW,
+    linkH,
+    { url: marker.url },
+  );
 }
 
 /**
@@ -454,13 +465,13 @@ function drawChapterPage(
     // The capture is centered on the chapter camera, so the chapter coordinate
     // is the middle of the drawn map image. Skip the pin when the image is too
     // small to hold it, rather than letting it spill over the title (#1839).
-    // The bounds measure the halo pin, which is the widest and tallest ink
-    // drawn; the tip sits at the image's midpoint, so the halo needs half the
+    // The bounds measure the outlined pin, which is the widest and tallest ink
+    // drawn; the tip sits at the image's midpoint, so the pin needs half the
     // image height above it to stay inside.
     if (
       chapter.marker &&
-      mapRect.height >= PIN_HEIGHT_MM * PIN_HALO_SCALE * 2 &&
-      mapRect.width >= PIN_HEAD_RADIUS_MM * PIN_HALO_SCALE * 2
+      mapRect.height >= (PIN_HEIGHT_MM + PIN_OUTLINE_MM) * 2 &&
+      mapRect.width >= (PIN_HEAD_RADIUS_MM + PIN_OUTLINE_MM) * 2
     ) {
       drawMarkerPin(
         pdf,
