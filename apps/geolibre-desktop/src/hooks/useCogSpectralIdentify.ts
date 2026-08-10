@@ -3,9 +3,10 @@ import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import type maplibregl from "maplibre-gl";
 import { readCogSpectralProfile } from "@geolibre/plugins/cog-spectral-profile";
+import { useTranslation } from "react-i18next";
 import {
   addNetcdfProfileSample,
-  clearNetcdfProfileSamplesForLayer,
+  removeNetcdfProfileSample,
   setNetcdfProfileSampleProfile,
 } from "../lib/netcdf-profile-store";
 
@@ -30,6 +31,7 @@ export function useCogSpectralIdentify(
   mapControllerRef: React.RefObject<MapController | null>,
   mapReadyGeneration: number,
 ): void {
+  const { t } = useTranslation();
   // One selector returning a primitive, matching useRasterIdentify: Zustand
   // re-renders only when the resolved id changes.
   const activeCogId = useAppStore((s): string | null => {
@@ -55,41 +57,44 @@ export function useCogSpectralIdentify(
     const map = mapControllerRef.current?.getMap();
     if (!map || !activeCogId || !cogUrl) return;
 
-    // Reads in flight when the hook tears down (identify switched off, layer
-    // removed) must not attach to whatever the store holds by then.
-    let disposed = false;
-
     const handleClick = (event: maplibregl.MapMouseEvent) => {
       const { lng, lat } = event.lngLat;
       // The marker and list entry go in immediately so the click registers on
       // the map; the profile is attached when the range requests resolve.
       const sampleId = addNetcdfProfileSample({
         layerId: activeCogId,
-        variable: cogName ?? "Raster",
+        variable: cogName ?? t("netcdfProfile.rasterFallbackName"),
         lng,
         lat,
       });
 
+      // Deliberately not discarded on teardown, matching useNetcdfIdentify: the
+      // effect tears down whenever the identify target *or the layer's name*
+      // changes, and short-circuiting here would leave the marker already in the
+      // store permanently profile-less -- a numbered point with no line, which
+      // is exactly the stuck-load appearance this is trying to avoid. The
+      // store's own guards make it safe: both calls below no-op for a sample
+      // that has since been cleared or aged off the cap.
       void readCogSpectralProfile(cogUrl, lng, lat).then((profile) => {
-        if (disposed) return;
         if (profile) {
           setNetcdfProfileSampleProfile(sampleId, profile);
           return;
         }
-        // Single-band rasters and clicks outside the raster have nothing to
-        // chart. Leaving a permanently profile-less marker in the list would
-        // read as a stuck load, so drop the layer's samples instead.
-        clearNetcdfProfileSamplesForLayer(activeCogId);
+        // Nothing to chart here: a single-band raster, a click outside the
+        // raster, an all-nodata pixel, or a failed read. Drop only this sample,
+        // not the layer's whole session -- an all-nodata pixel sits right beside
+        // valid data on any cloud-masked or rotated scene, and wiping the
+        // comparison the user just built would be a poor answer to one stray click.
+        removeNetcdfProfileSample(sampleId);
       });
     };
 
     map.on("click", handleClick);
     return () => {
-      disposed = true;
       map.off("click", handleClick);
     };
     // mapReadyGeneration re-runs this once the map exists, matching the other
     // identify hooks — the ref is empty on the first render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapControllerRef, mapReadyGeneration, activeCogId, cogUrl, cogName]);
+  }, [mapControllerRef, mapReadyGeneration, activeCogId, cogUrl, cogName, t]);
 }

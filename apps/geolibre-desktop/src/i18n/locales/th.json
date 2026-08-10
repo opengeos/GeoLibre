@@ -5113,7 +5113,8 @@
     "noValues": "ไม่มีค่าที่จะพล็อตสำหรับพิกเซลเหล่านี้",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "ไม่สามารถส่งออกแผนภูมิได้"
+    "exportError": "ไม่สามารถส่งออกแผนภูมิได้",
+    "rasterFallbackName": "แรสเตอร์"
   },
   "netcdfIdentify": {
     "noData": "ไม่มีข้อมูล",

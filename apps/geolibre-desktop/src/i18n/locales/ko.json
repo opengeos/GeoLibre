@@ -5113,7 +5113,8 @@
     "noValues": "이 픽셀들에는 차트로 그릴 값이 없습니다.",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "차트를 내보낼 수 없습니다."
+    "exportError": "차트를 내보낼 수 없습니다.",
+    "rasterFallbackName": "래스터"
   },
   "netcdfIdentify": {
     "noData": "데이터 없음",

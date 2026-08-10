@@ -126,6 +126,29 @@ export function clearNetcdfProfileSamplesForLayer(layerId: string): void {
   emit();
 }
 
+/**
+ * Drop one sample by id.
+ *
+ * Used when a click turns out to have nothing to chart (a single-band raster, a
+ * point outside the raster, an all-nodata pixel, a failed read). Clearing the
+ * whole layer for those would discard the comparison the user has been
+ * building — and an all-nodata pixel sits right beside valid data on any
+ * cloud-masked or rotated scene, so it is a click they will make often.
+ *
+ * A no-op for an id that is no longer in the list, so a late result for a
+ * sample that has since been cleared or aged off the cap lands nowhere.
+ */
+export function removeNetcdfProfileSample(id: number): void {
+  const kept = samples.filter((item) => item.id !== id);
+  if (kept.length === samples.length) return;
+  samples = kept;
+  if (kept.length === 0) {
+    orderCounter = 0;
+    poppedOut = false;
+  }
+  emit();
+}
+
 /** The current samples, for `useSyncExternalStore`. */
 export function getNetcdfProfileSamples(): NetcdfProfileSample[] {
   return samples;

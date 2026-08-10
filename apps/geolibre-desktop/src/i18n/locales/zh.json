@@ -5113,7 +5113,8 @@
     "noValues": "这些像素没有可绘制的数值。",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "无法导出该图表。"
+    "exportError": "无法导出该图表。",
+    "rasterFallbackName": "栅格"
   },
   "netcdfIdentify": {
     "noData": "无数据",

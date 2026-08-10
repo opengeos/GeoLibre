@@ -21,6 +21,7 @@ interface StubOptions {
   height?: number;
   nodata?: number | null;
   directory?: Record<string, unknown>;
+  geoKeys?: Record<string, unknown>;
   /** Values returned per band; defaults to band index + 1. */
   valueFor?: (band: number, column: number, row: number) => number;
   onRead?: (window: number[]) => void;
@@ -35,6 +36,7 @@ function stubImage(options: StubOptions = {}): ImageLike {
     height = 100,
     nodata = null,
     directory = {},
+    geoKeys,
     valueFor = (band) => band + 1,
     onRead,
   } = options;
@@ -43,7 +45,7 @@ function stubImage(options: StubOptions = {}): ImageLike {
     getWidth: () => width,
     getHeight: () => height,
     getSamplesPerPixel: () => bands,
-    getGeoKeys: () => undefined,
+    getGeoKeys: () => geoKeys,
     getGDALNoData: () => nodata,
     getFileDirectory: () => directory,
     readRasters: async ({ window }) => {
@@ -148,6 +150,36 @@ describe("readProfileFromImage", () => {
       0,
     );
     assert.equal(profile, null);
+  });
+
+  it("rejects a wavelength list containing a junk entry", async () => {
+    // Filtering the bad entry out would leave a list that still matches the band
+    // count, shifting every following wavelength onto the wrong band.
+    const profile = await readProfileFromImage(
+      stubImage({ bands: 3, directory: { wavelength: [443, "n/a", 560, 665] } }),
+      0,
+      0,
+    );
+    assert.ok(profile);
+    assert.equal(profile.axis.name, "band", "a junk entry must invalidate the whole list");
+  });
+
+  it("still reads a file with no CRS metadata as geographic", async () => {
+    const profile = await readProfileFromImage(stubImage({ geoKeys: undefined }), 0, 0);
+    assert.ok(profile, "a file without geokeys keeps the geographic fallback");
+  });
+
+  it("survives a metadata accessor that throws", async () => {
+    // getBoundingBox throws when the image carries no affine transform.
+    const image: ImageLike = {
+      ...stubImage(),
+      getBoundingBox: () => {
+        throw new Error("no affine transformation");
+      },
+    };
+    await assert.rejects(async () => {
+      await readProfileFromImage(image, 0, 0);
+    }, /affine/);
   });
 
   it("survives a read failure without throwing", async () => {

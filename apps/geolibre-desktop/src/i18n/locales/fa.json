@@ -5187,7 +5187,8 @@
     "noValues": "برای این پیکسل‌ها مقداری برای نمودار نیست.",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "خروجی نمودار ممکن نشد."
+    "exportError": "خروجی نمودار ممکن نشد.",
+    "rasterFallbackName": "رستر"
   },
   "netcdfIdentify": {
     "noData": "بدون‌داده",

@@ -5187,7 +5187,8 @@
     "noValues": "Bu pikseller için grafiğe dökülecek değer yok.",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "Grafik dışa aktarılamadı."
+    "exportError": "Grafik dışa aktarılamadı.",
+    "rasterFallbackName": "Raster"
   },
   "netcdfIdentify": {
     "noData": "veri yok",

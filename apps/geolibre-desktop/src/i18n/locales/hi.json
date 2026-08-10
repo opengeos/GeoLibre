@@ -5187,7 +5187,8 @@
     "noValues": "इन पिक्सेल के लिए चार्ट बनाने योग्य कोई मान नहीं है।",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "चार्ट निर्यात नहीं किया जा सका।"
+    "exportError": "चार्ट निर्यात नहीं किया जा सका।",
+    "rasterFallbackName": "रास्टर"
   },
   "netcdfIdentify": {
     "noData": "कोई डेटा नहीं",

@@ -5187,7 +5187,8 @@
     "noValues": "Geen waarden om weer te geven voor deze pixels.",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "Kon het diagram niet exporteren."
+    "exportError": "Kon het diagram niet exporteren.",
+    "rasterFallbackName": "Raster"
   },
   "netcdfIdentify": {
     "noData": "geen gegevens",

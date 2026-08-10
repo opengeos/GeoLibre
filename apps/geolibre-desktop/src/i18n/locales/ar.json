@@ -5482,7 +5482,8 @@
     "noValues": "لا توجد قيم لرسمها لهذه البكسلات.",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "تعذّر تصدير المخطط."
+    "exportError": "تعذّر تصدير المخطط.",
+    "rasterFallbackName": "طبقة نقطية"
   },
   "netcdfIdentify": {
     "noData": "لا توجد بيانات",

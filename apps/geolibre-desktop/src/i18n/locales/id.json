@@ -5113,7 +5113,8 @@
     "noValues": "Tidak ada nilai yang bisa dibagankan untuk piksel ini.",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "Tidak dapat mengekspor bagan."
+    "exportError": "Tidak dapat mengekspor bagan.",
+    "rasterFallbackName": "Raster"
   },
   "netcdfIdentify": {
     "noData": "tanpa data",

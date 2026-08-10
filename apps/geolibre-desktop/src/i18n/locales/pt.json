@@ -5187,7 +5187,8 @@
     "noValues": "Nenhum valor para representar nestes pixels.",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "Não foi possível exportar o gráfico."
+    "exportError": "Não foi possível exportar o gráfico.",
+    "rasterFallbackName": "Raster"
   },
   "netcdfIdentify": {
     "noData": "sem dados",

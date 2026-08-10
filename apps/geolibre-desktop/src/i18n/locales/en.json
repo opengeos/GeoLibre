@@ -5187,7 +5187,8 @@
     "noValues": "No values to chart for these pixels.",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "Could not export the chart."
+    "exportError": "Could not export the chart.",
+    "rasterFallbackName": "Raster"
   },
   "netcdfIdentify": {
     "noData": "no data",

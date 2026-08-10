@@ -5187,7 +5187,8 @@
     "noValues": "ამ პიქსელებისთვის დიაგრამაზე გამოსატანი მნიშვნელობები არ არის.",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "დიაგრამის ექსპორტი ვერ მოხერხდა."
+    "exportError": "დიაგრამის ექსპორტი ვერ მოხერხდა.",
+    "rasterFallbackName": "რასტრი"
   },
   "netcdfIdentify": {
     "noData": "მონაცემები არ არის",

@@ -88,11 +88,12 @@ function wavelengthsFor(image: ImageLike, bandCount: number): number[] | null {
   const directory = image.getFileDirectory();
   const raw = directory?.["wavelength"] ?? directory?.["Wavelength"];
   const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(/[,\s]+/) : null;
-  if (!list) return null;
-  const values = list
-    .map((entry) => Number.parseFloat(String(entry)))
-    .filter((value) => Number.isFinite(value));
-  return values.length === bandCount ? values : null;
+  if (!list || list.length !== bandCount) return null;
+  const values = list.map((entry) => Number.parseFloat(String(entry)));
+  // Every entry must parse. Filtering the bad ones out instead would let a list
+  // with one junk extra entry still match the band count, silently shifting
+  // every following wavelength onto the wrong band.
+  return values.every((value) => Number.isFinite(value)) ? values : null;
 }
 
 /**
@@ -104,19 +105,56 @@ function wavelengthsFor(image: ImageLike, bandCount: number): number[] | null {
  * @returns The profile, or null when the file has a single band, the point
  *   falls outside the raster, or the file cannot be read.
  */
+/**
+ * Opened images, keyed by URL.
+ *
+ * The workflow this exists for is repeated clicks on one scene ("click water,
+ * click vegetation, click asphalt"), and `fromUrl` + `getImage` re-fetches the
+ * header and IFD every time. Caching the promise means only the first click
+ * pays for it. Bounded because a session realistically touches a handful of
+ * rasters; the entries hold headers, not pixels.
+ */
+const openedImages = new Map<string, Promise<ImageLike | null>>();
+const MAX_OPEN_IMAGES = 8;
+
+async function openImage(url: string): Promise<ImageLike | null> {
+  const cached = openedImages.get(url);
+  if (cached) return cached;
+  const opened = (async () => {
+    try {
+      const tiff = await fromUrl(url);
+      return (await tiff.getImage()) as unknown as ImageLike;
+    } catch {
+      return null;
+    }
+  })();
+  if (openedImages.size >= MAX_OPEN_IMAGES) {
+    const oldest = openedImages.keys().next();
+    if (!oldest.done) openedImages.delete(oldest.value);
+  }
+  openedImages.set(url, opened);
+  const image = await opened;
+  // A failed open is not worth remembering: the next click should retry rather
+  // than inherit a transient network error for the rest of the session.
+  if (!image) openedImages.delete(url);
+  return image;
+}
+
 export async function readCogSpectralProfile(
   url: string,
   lng: number,
   lat: number,
 ): Promise<CogSpectralProfile | null> {
-  let image: ImageLike;
+  const image = await openImage(url);
+  if (!image) return null;
   try {
-    const tiff = await fromUrl(url);
-    image = (await tiff.getImage()) as unknown as ImageLike;
+    return await readProfileFromImage(image, lng, lat);
   } catch {
+    // Metadata accessors throw on a malformed file -- getBoundingBox does so
+    // when the image carries no affine transform -- and the caller treats a
+    // rejection as an unresolved sample rather than a missing one.
     return null;
   }
-  return readProfileFromImage(image, lng, lat);
 }
 
 /**
@@ -140,13 +178,26 @@ export async function readProfileFromImage(
   // Project the click into the raster's own CRS before indexing into it.
   let x = lng;
   let y = lat;
-  const definition = await projectionFor(image.getGeoKeys());
+  const geoKeys = image.getGeoKeys();
+  const hasGeoKeys = Boolean(geoKeys && Object.keys(geoKeys).length > 0);
+  const definition = await projectionFor(geoKeys);
   if (definition) {
     try {
       [x, y] = proj4("EPSG:4326", definition, [lng, lat]) as [number, number];
     } catch {
       return null;
     }
+  } else if (hasGeoKeys) {
+    // The file declares a CRS but no proj4 definition came back. Falling
+    // through would index the raster with degrees as if they were its own
+    // units, producing a confident reading of the wrong pixel.
+    //
+    // Unreachable through geotiff-geokeys-to-proj4's own output today -- it
+    // returns a definition (falling back to longlat) even for user-defined and
+    // unsupported keys, reporting the problem in a separate errors object. The
+    // reachable case is the dynamic import itself failing, where treating the
+    // file as geographic would be a guess.
+    return null;
   }
 
   const [minX, minY, maxX, maxY] = bbox as [number, number, number, number];
