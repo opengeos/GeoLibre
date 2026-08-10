@@ -109,6 +109,33 @@ function clampOutputTokens(body: Record<string, unknown>, limit: number): void {
   if (!capped) body.max_completion_tokens = limit;
 }
 
+export function buildTavilySearchRequest(
+  body: Record<string, unknown>,
+  query: string,
+  now = new Date(),
+): Record<string, unknown> {
+  const requestedMaxResults =
+    typeof body.max_results === "number" && Number.isFinite(body.max_results)
+      ? Math.floor(body.max_results)
+      : 6;
+  const maxResults = Math.min(Math.max(requestedMaxResults, 1), 20);
+  const topic = body.topic === "news" ? "news" : "general";
+  const request: Record<string, unknown> = {
+    query,
+    max_results: maxResults,
+    topic,
+    search_depth: "advanced",
+    include_answer: true,
+  };
+  if (topic === "news" && typeof body.days === "number" && Number.isFinite(body.days)) {
+    const days = Math.min(Math.max(Math.floor(body.days), 1), 3650);
+    const startDate = new Date(now);
+    startDate.setUTCDate(startDate.getUTCDate() - days);
+    request.start_date = startDate.toISOString().slice(0, 10);
+  }
+  return request;
+}
+
 async function rateLimit(request: Request, env: Env): Promise<Response | null> {
   const instanceClient = request.headers.get("X-GeoLibre-Client-IP")?.trim();
   const actor = instanceClient || request.headers.get("CF-Connecting-IP") || "unidentified";
@@ -204,7 +231,8 @@ async function proxyChat(request: Request, env: Env, origin: string | null): Pro
 }
 
 async function proxyTavily(request: Request, env: Env, origin: string | null): Promise<Response> {
-  if (!env.TAVILY_API_KEY?.trim()) {
+  const apiKey = env.TAVILY_API_KEY?.trim();
+  if (!apiKey) {
     return jsonError("Search is not configured", 503, responseHeaders(origin));
   }
   const limited = await rateLimit(request, env);
@@ -235,24 +263,7 @@ async function proxyTavily(request: Request, env: Env, origin: string | null): P
       responseHeaders(origin),
     );
   }
-  const requestedMaxResults =
-    typeof body.max_results === "number" && Number.isFinite(body.max_results)
-      ? Math.floor(body.max_results)
-      : 6;
-  const maxResults = Math.min(Math.max(requestedMaxResults, 1), 20);
-  const topic = body.topic === "news" ? "news" : "general";
-  const tavilyBody: Record<string, unknown> = {
-    query,
-    max_results: maxResults,
-    topic,
-    search_depth: "advanced",
-    include_answer: true,
-  };
-  if (topic === "news") {
-    const requestedDays =
-      typeof body.days === "number" && Number.isFinite(body.days) ? Math.floor(body.days) : 3650;
-    tavilyBody.days = Math.min(Math.max(requestedDays, 1), 3650);
-  }
+  const tavilyBody = buildTavilySearchRequest(body, query);
 
   const controller = new AbortController();
   const deadline = setTimeout(() => controller.abort(), SEARCH_HEADER_TIMEOUT_MS);
@@ -261,7 +272,7 @@ async function proxyTavily(request: Request, env: Env, origin: string | null): P
     upstream = await fetch(TAVILY_ENDPOINT, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${env.TAVILY_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(tavilyBody),
@@ -286,8 +297,8 @@ async function proxyTavily(request: Request, env: Env, origin: string | null): P
     JSON.stringify({
       message: "Tavily proxy request",
       status: upstream.status,
-      topic,
-      resultLimit: maxResults,
+      topic: tavilyBody.topic,
+      resultLimit: tavilyBody.max_results,
       colo: request.cf?.colo,
     }),
   );
