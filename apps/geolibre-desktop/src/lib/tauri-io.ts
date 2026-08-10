@@ -28,6 +28,7 @@ import {
   parseDelimitedTextLayer,
 } from "./delimited-text";
 import { IS_MAS_BUILD } from "./build-flags";
+import { isAndroid } from "./is-mobile";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import {
   confirmLargeDataset,
@@ -2588,6 +2589,7 @@ export async function openProjectFile(): Promise<{
 
   const selected = await open({
     multiple: false,
+    fileAccessMode: isAndroid() ? "scoped" : undefined,
     filters: [{ name: "GeoLibre Project", extensions: ["geolibre", "json"] }],
   });
   if (!selected || typeof selected !== "string") return null;

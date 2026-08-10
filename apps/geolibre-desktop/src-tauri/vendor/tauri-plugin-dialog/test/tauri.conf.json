@@ -1,0 +1,21 @@
+{
+  "identifier": "app.tauri.example",
+  "build": {
+    "frontendDist": ".",
+    "devUrl": "http://localhost:4000"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Tauri App"
+      }
+    ],
+    "security": {
+      "csp": "default-src blob: data: filesystem: ws: wss: http: https: tauri: http://tauri.localhost 'unsafe-eval' 'unsafe-inline' 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": ["../../../examples/api/src-tauri/icons/icon.png"]
+  }
+}

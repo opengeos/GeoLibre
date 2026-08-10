@@ -1,0 +1,14 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = """
+This permission set configures the types of dialogs
+available from the dialog plugin.
+
+#### Granted Permissions
+
+All dialog types are enabled.
+
+
+"""
+permissions = ["allow-message", "allow-save", "allow-open"]

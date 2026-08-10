@@ -1,0 +1,50 @@
+[package]
+name = "tauri-plugin-dialog"
+version = "2.7.2"
+description = "Native system dialogs for opening and saving files along with message dialogs on your Tauri application."
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+rust-version = { workspace = true }
+repository = { workspace = true }
+links = "tauri-plugin-dialog"
+
+[features]
+default = ["gtk3"]
+xdg-portal = ["rfd/xdg-portal", "rfd/tokio", "rfd/wayland"]
+gtk3 = ["rfd/gtk3"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu", "x86_64-linux-android"]
+
+[package.metadata.platforms.support]
+windows = { level = "full", notes = "" }
+linux = { level = "full", notes = "" }
+macos = { level = "full", notes = "" }
+android = { level = "partial", notes = "Does not support folder picker" }
+ios = { level = "partial", notes = "Does not support folder picker" }
+
+[build-dependencies]
+tauri-plugin = { workspace = true, features = ["build"] }
+
+[dev-dependencies]
+tauri = { workspace = true, features = ["wry"] }
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri = { workspace = true }
+log = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+tauri-plugin-fs = { path = "../fs", version = "2.5.1" }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+tauri = { workspace = true, features = ["wry"] }
+
+[target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))".dependencies]
+rfd = { version = "0.16", default-features = false, features = [
+  "common-controls-v6",
+] }
+
+raw-window-handle = "0.6"

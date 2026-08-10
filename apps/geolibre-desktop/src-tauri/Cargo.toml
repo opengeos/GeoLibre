@@ -35,7 +35,10 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
-tauri-plugin-dialog = "2"
+# Patched Android document picker: requests and persists read/write access so a
+# project opened from a content URI can be saved in place. See the vendor
+# directory's GEOLIBRE_PATCH.md before upgrading.
+tauri-plugin-dialog = { path = "vendor/tauri-plugin-dialog" }
 tauri-plugin-fs = { version = "2", features = ["watch"] }
 # Native geolocation on Android/iOS: ships the location manifest permissions and
 # drives the OS permission dialog for Field Collection / GPS Tracking, which the
