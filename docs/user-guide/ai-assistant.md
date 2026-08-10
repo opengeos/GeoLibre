@@ -84,7 +84,12 @@ Optional variables:
 | --- | --- |
 | `GEOLIBRE_ASSISTANT_PROVIDER` | Force a provider (`google` / `anthropic` / `openai`) when several keys are set. |
 | `GEOLIBRE_ASSISTANT_MODEL` | Pin a specific model id, overriding the default and the picker. |
-| `TAVILY_API_KEY` | Enable reliable [web search](#what-it-can-do) with local provider configuration. For managed Docker, configure this as a `geolibre-ai-proxy` Worker secret, not a container variable. |
+| `TAVILY_API_KEY` (desktop only) | Enable direct [web search](#what-it-can-do) when the desktop app reads local provider configuration from the operating system environment. |
+
+Managed Docker uses a separate server-side mechanism for NASA OPERA news
+search. Store a secret with the same `TAVILY_API_KEY` name on the
+`geolibre-ai-proxy` Cloudflare Worker. Do not pass it with `docker run -e`; the
+container does not read it.
 
 When more than one provider key is configured, a **provider** dropdown appears in
 the panel header; a **model** dropdown lets you switch models for the selected

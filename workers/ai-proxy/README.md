@@ -27,6 +27,17 @@ output-token cap, and per-client rate limit.
    value in the Docker deployment's secret environment; never add it to source
    control or a frontend build.
 
+   To enable the optional `/tavily` search route used by the external NASA
+   OPERA plugin, also store the Tavily key on the Worker:
+
+   ```sh
+   npx wrangler secret put TAVILY_API_KEY
+   ```
+
+   The Worker can be deployed without this optional secret. Chat remains
+   available, and `/tavily` returns `503 Search is not configured` until the
+   secret is added.
+
 3. Validate and deploy:
 
    ```sh
