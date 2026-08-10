@@ -185,8 +185,8 @@
     "meanSlope": "Pendenza media",
     "computing": "Calcolo del terreno…",
     "partialData": "Alcuni campioni non avevano dati del terreno",
-    "heading": "Rotta",
-    "finalHeading": "Rotta finale"
+    "heading": "Azimut",
+    "finalHeading": "Azimut finale"
   },
   "statusBar": {
     "elevation": "Quota",
