@@ -1271,6 +1271,15 @@ export const MapCanvas = memo(function MapCanvas({
       onControllerReadyRef.current?.();
     });
     controller.current?.setStyle(basemapStyleUrl);
+    // Switching the active body without moving the camera -- the planet switcher
+    // or a different planetary basemap -- changes the radius the altitude is
+    // scaled by, but fires no moveend, so the readout would keep the previous
+    // body's number until the next pan. Mirrors how setStyle refreshes the
+    // scale bar for the same reason.
+    setCameraAltitude(controller.current?.readCameraAltitude() ?? null);
+    // setCameraAltitude is a stable store action; the effect is keyed on the
+    // basemap alone so it does not re-run on unrelated store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basemapStyleUrl]);
 
   useEffect(() => {

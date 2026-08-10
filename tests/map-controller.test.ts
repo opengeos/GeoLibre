@@ -769,6 +769,21 @@ describe("MapController camera and query helpers", () => {
     assert.equal(controller.readCameraAltitude(), null);
   });
 
+  it("rescales a held altitude when only the body changes", () => {
+    // The planet switcher changes the active body without moving the camera, so
+    // the same MapLibre altitude must read differently for the new radius.
+    const { map } = makeFakeMap();
+    (map as { transform?: unknown }).transform = { getCameraAltitude: () => 10000 };
+    const controller = controllerWith(map);
+    setActiveEllipsoidId("earth");
+    const onEarth = controller.readCameraAltitude();
+    setActiveEllipsoidId("mars");
+    const onMars = controller.readCameraAltitude();
+    setActiveEllipsoidId("earth");
+    assert.ok(onEarth !== null && onMars !== null);
+    assert.ok(onMars < onEarth, `Mars altitude should be smaller: ${onMars} vs ${onEarth}`);
+  });
+
   it("reads the current view from the map", () => {
     const { map } = makeFakeMap();
     const controller = controllerWith(map);
