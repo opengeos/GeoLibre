@@ -60,11 +60,7 @@ function formatDdm(value: number, axis: "lat" | "lon"): string {
  * 84) — the poles have no UTM coordinate, and printing one anyway would be a
  * confident lie. The same fallback covers a projection failure.
  */
-export function formatCoordinate(
-  rawLng: number,
-  lat: number,
-  format: CoordinateFormat,
-): string {
+export function formatCoordinate(rawLng: number, lat: number, format: CoordinateFormat): string {
   // MapLibre does not wrap `lngLat.lng` after the user pans past the
   // antimeridian, so it can arrive as 190 or -190. Decimal degrees tolerate
   // that, but DMS would render "190°0'0\"E" and UTM would resolve a zone that
