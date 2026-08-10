@@ -1218,7 +1218,7 @@
     "readinessAllReachable_other": "सभी {{count}} डेटा स्रोत प्राप्तकर्ताओं के लिए पहुँच योग्य लगते हैं।",
     "readinessTitle": "कुछ डेटा प्राप्तकर्ताओं के लिए लोड नहीं हो सकता",
     "readinessNote": "इससे साझा करना नहीं रुकता। प्राप्तकर्ता प्रोजेक्ट को ब्राउज़र में खोलते हैं, जहाँ ये स्रोत आपके यहाँ से अलग व्यवहार कर सकते हैं।",
-    "readinessTruncated_one": "केवल पहला {{count}} स्रोत ही जाँचा गया।",
+    "readinessTruncated_one": "केवल {{count}} स्रोत ही जाँचा गया।",
     "readinessTruncated_other": "केवल पहले {{count}} स्रोत ही जाँचे गए।",
     "readinessBasemapLabel": "बेसमैप",
     "readinessPluginLabel": "प्लगइन",

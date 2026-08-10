@@ -1218,7 +1218,7 @@
     "readinessAllReachable_other": "{{count}} veri kaynağının tümü alıcılar için erişilebilir görünüyor.",
     "readinessTitle": "Bazı veriler alıcılarda yüklenmeyebilir",
     "readinessNote": "Bu, paylaşmayı engellemez. Alıcılar projeyi bir tarayıcıda açar ve bu kaynaklar orada sizdekinden farklı davranabilir.",
-    "readinessTruncated_one": "Yalnızca ilk {{count}} kaynak denetlendi.",
+    "readinessTruncated_one": "Yalnızca {{count}} kaynak denetlendi.",
     "readinessTruncated_other": "Yalnızca ilk {{count}} kaynak denetlendi.",
     "readinessBasemapLabel": "Temel harita",
     "readinessPluginLabel": "Eklenti",

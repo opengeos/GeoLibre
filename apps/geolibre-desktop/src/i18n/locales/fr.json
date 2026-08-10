@@ -1217,7 +1217,7 @@
     "readinessAllReachable_one": "{{count}} source de données semble accessible pour les destinataires.",
     "readinessAllReachable_other": "Les {{count}} sources de données semblent accessibles pour les destinataires.",
     "readinessTitle": "Certaines données pourraient ne pas se charger pour les destinataires",
-    "readinessNote": "Cela n'empêche pas le partage. Les destinataires ouvrent le projet dans un navigateur, où ces sources peuvent se comporter différemment que chez vous.",
+    "readinessNote": "Cela n'empêche pas le partage. Les destinataires ouvrent le projet dans un navigateur, où ces sources peuvent se comporter différemment de ce qu'elles font chez vous.",
     "readinessTruncated_one": "Seule {{count}} source a été vérifiée.",
     "readinessTruncated_other": "Seules les {{count}} premières sources ont été vérifiées.",
     "readinessBasemapLabel": "Fond de carte",

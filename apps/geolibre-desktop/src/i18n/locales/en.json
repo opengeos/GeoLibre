@@ -1218,7 +1218,7 @@
     "readinessAllReachable_other": "All {{count}} data sources look reachable for recipients.",
     "readinessTitle": "Some data may not load for recipients",
     "readinessNote": "This does not block sharing. Recipients open the project in a browser, where these sources can behave differently than they do for you.",
-    "readinessTruncated_one": "Only the first {{count}} source was checked.",
+    "readinessTruncated_one": "Only {{count}} source was checked.",
     "readinessTruncated_other": "Only the first {{count}} sources were checked.",
     "readinessBasemapLabel": "Basemap",
     "readinessPluginLabel": "Plugin",

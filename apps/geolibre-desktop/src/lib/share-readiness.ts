@@ -65,6 +65,9 @@ export type ShareSourceReason =
   /** The layer has no reference a recipient could resolve at all. */
   | "no-source"
   | "timeout"
+  /** The caller cancelled, e.g. the dialog closed mid-check. */
+  | "aborted"
+  /** Never requested: past the probe cap, or no `fetch` to request with. */
   | "probe-budget";
 
 /** One reference found in the project, before or after probing. */
@@ -117,6 +120,15 @@ export interface ShareReadinessInput {
    * Layers whose data the publish path embeds, so their local origin is not a
    * problem for a recipient. Supplied by the caller from the same predicate the
    * publish path uses, rather than re-derived here.
+   *
+   * Known limitation: the predicate says the layer *can* be embedded, not that
+   * the upload's `materializeEmbeddableVectorLayers` will succeed in reading it
+   * back. Data it cannot read (a streamed GeoParquet, or a control that has not
+   * been created yet) is dropped from the upload, and such a layer would ship
+   * with neither a URL nor features while this check has already cleared it.
+   * Settling that would mean exporting every local vector layer through DuckDB
+   * on dialog open, which is the cost the check is designed to avoid, so the
+   * narrow unreadable-local-data case is accepted as a false negative.
    */
   embeddedLayerIds?: ReadonlySet<string>;
   /** Label for the basemap row. Passed in so this module stays i18n-free. */
@@ -197,10 +209,11 @@ function hasCredentialField(value: unknown, depth = 0): boolean {
 /**
  * Whether a hostname only resolves on the author's machine or network.
  *
- * Covers loopback, the RFC 1918 and link-local ranges, IPv6 unique-local and
- * link-local literals, the reserved intranet suffixes, and a bare single-label
- * hostname (`gis-server`), which by definition needs the author's search
- * domain to resolve.
+ * Covers loopback, the RFC 1918 and link-local ranges, the RFC 6598
+ * carrier-grade NAT range that some corporate networks use for internal
+ * addressing, IPv6 unique-local and link-local literals, the reserved intranet
+ * suffixes, and a bare single-label hostname (`gis-server`), which by
+ * definition needs the author's search domain to resolve.
  */
 export function isPrivateHostname(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[/, "").replace(/\]$/, "");
@@ -223,6 +236,8 @@ export function isPrivateHostname(hostname: string): boolean {
     if (first === 172 && second >= 16 && second <= 31) return true;
     if (first === 192 && second === 168) return true;
     if (first === 169 && second === 254) return true;
+    // RFC 6598, 100.64.0.0/10.
+    if (first === 100 && second >= 64 && second <= 127) return true;
     return false;
   }
   // Only an IPv6 literal can carry these prefixes; a registered domain may
@@ -497,7 +512,7 @@ async function probeTarget(
     return outcomeForStatus(ranged.status);
   } catch (error) {
     const failure = classifyFetchFailure(error);
-    if (failure.kind === "abort") return { status: "unchecked", reason: "probe-budget" };
+    if (failure.kind === "abort") return { status: "unchecked", reason: "aborted" };
     if (failure.kind === "timeout") return { status: "unchecked", reason: "timeout" };
     // The browser collapses a cross-origin rejection, a TLS failure, and an
     // unreachable host into one opaque error. All three mean the recipient's

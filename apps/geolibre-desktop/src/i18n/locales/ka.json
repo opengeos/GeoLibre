@@ -1218,7 +1218,7 @@
     "readinessAllReachable_other": "ყველა {{count}} მონაცემთა წყარო მიმღებებისთვის ხელმისაწვდომად გამოიყურება.",
     "readinessTitle": "ზოგიერთი მონაცემი შესაძლოა მიმღებებთან არ ჩაიტვირთოს",
     "readinessNote": "ეს არ აბრკოლებს გაზიარებას. მიმღებები პროექტს ბრაუზერში ხსნიან, სადაც ეს წყაროები შეიძლება თქვენთან შედარებით სხვაგვარად მოიქცნენ.",
-    "readinessTruncated_one": "შემოწმდა მხოლოდ პირველი {{count}} წყარო.",
+    "readinessTruncated_one": "შემოწმდა მხოლოდ {{count}} წყარო.",
     "readinessTruncated_other": "შემოწმდა მხოლოდ პირველი {{count}} წყარო.",
     "readinessBasemapLabel": "ბაზური რუკა",
     "readinessPluginLabel": "პლაგინი",

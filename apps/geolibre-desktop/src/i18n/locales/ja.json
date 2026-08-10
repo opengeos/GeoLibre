@@ -1179,7 +1179,7 @@
     "openAccountSettings": "アカウント設定を開く",
     "readinessChecking": "受信者があなたのデータを読み込めるか確認しています…",
     "readinessUnavailable": "データソースの確認を実行できませんでした。",
-    "readinessAllReachable_other": "{{count}} 個のデータソースはすべて受信者から到達できるようです。",
+    "readinessAllReachable_other": "{{count}} 個のデータソースに受信者がアクセスできるようです。",
     "readinessTitle": "一部のデータは受信者側で読み込めない可能性があります",
     "readinessNote": "これによって共有がブロックされることはありません。受信者はブラウザでプロジェクトを開くため、これらのソースの動作はお手元とは異なる場合があります。",
     "readinessTruncated_other": "最初の {{count}} 個のソースのみを確認しました。",

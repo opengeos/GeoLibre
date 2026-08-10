@@ -56,6 +56,9 @@ describe("isPrivateHostname", () => {
       "172.31.255.1",
       "192.168.1.10",
       "169.254.10.1",
+      // RFC 6598 carrier-grade NAT.
+      "100.64.0.1",
+      "100.127.255.254",
       "::1",
       "fd00::1",
       "fe80::1",
@@ -74,6 +77,9 @@ describe("isPrivateHostname", () => {
       "172.15.0.1",
       "11.0.0.1",
       "192.169.1.1",
+      // Just outside 100.64.0.0/10 on either side.
+      "100.63.255.255",
+      "100.128.0.1",
       // A registered domain may start with the IPv6 unique-local prefix.
       "fd-services.com",
       "fe80.example.com",

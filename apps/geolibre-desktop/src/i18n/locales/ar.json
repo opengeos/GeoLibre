@@ -1362,7 +1362,7 @@
     "readinessAllReachable_other": "تبدو جميع مصادر البيانات البالغ عددها {{count}} قابلة للوصول من قِبل المستلمين.",
     "readinessTitle": "قد لا تُحمَّل بعض البيانات لدى المستلمين",
     "readinessNote": "لا يمنع هذا المشاركة. يفتح المستلمون المشروع في متصفح، حيث قد تتصرف هذه المصادر على نحو مختلف عمّا تفعله لديك.",
-    "readinessTruncated_one": "لم يُفحص سوى أول {{count}} مصدر.",
+    "readinessTruncated_one": "لم يُفحص سوى {{count}} مصدر.",
     "readinessTruncated_zero": "لم يُفحص سوى أول {{count}} من المصادر.",
     "readinessTruncated_two": "لم يُفحص سوى أول {{count}} من المصادر.",
     "readinessTruncated_few": "لم تُفحص سوى أول {{count}} مصادر.",
