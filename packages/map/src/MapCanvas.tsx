@@ -47,8 +47,12 @@ export interface MapCanvasProps {
   /**
    * Whether the status bar's elevation readout may fall back to the public
    * Open-Meteo service. Supplied by the app, which owns the persisted consent
-   * flag; `@geolibre/map` has no opinion about consent storage. Omitted means
-   * allowed, so embedders that never enable the readout need not pass it.
+   * flag; `@geolibre/map` has no opinion about consent storage.
+   *
+   * **Omitting it denies the remote lookup.** A privacy gate that fails open
+   * would send coordinates off-device for any embedder that simply did not know
+   * to pass a predicate. The terrain path is unaffected either way, since it
+   * sends nothing anywhere.
    */
   canUseRemoteElevation?: () => boolean;
 }
@@ -1067,7 +1071,7 @@ export const MapCanvas = memo(function MapCanvas({
   // Held in a ref so the once-only init effect can read the current predicate
   // without re-creating the map when the consent flag changes.
   const canUseRemoteElevationRef = useRef<() => boolean>(() => true);
-  canUseRemoteElevationRef.current = canUseRemoteElevation ?? (() => true);
+  canUseRemoteElevationRef.current = canUseRemoteElevation ?? (() => false);
 
   // loadProject resets the readout, but a lookup already in flight for the
   // previous project would repaint it a moment later -- including Earth to
