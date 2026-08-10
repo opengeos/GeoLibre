@@ -188,7 +188,9 @@
   },
   "statusBar": {
     "elevation": "Hoogte",
-    "elevationLong": "Hoogte"
+    "elevationLong": "Hoogte",
+    "cameraAltitude": "Camerahoogte",
+    "cameraAltitudeLong": "Camerahoogte boven zeeniveau"
   },
   "fileNamePrompt": {
     "title": "Bestand opslaan als",

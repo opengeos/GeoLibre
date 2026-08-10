@@ -188,7 +188,9 @@
   },
   "statusBar": {
     "elevation": "ऊँचाई",
-    "elevationLong": "ऊँचाई"
+    "elevationLong": "ऊँचाई",
+    "cameraAltitude": "दृष्टि ऊँचाई",
+    "cameraAltitudeLong": "समुद्र तल से कैमरे की ऊँचाई"
   },
   "fileNamePrompt": {
     "title": "फ़ाइल को इस रूप में सहेजें",

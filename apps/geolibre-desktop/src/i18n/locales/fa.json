@@ -188,7 +188,9 @@
   },
   "statusBar": {
     "elevation": "ارتفاع",
-    "elevationLong": "ارتفاع"
+    "elevationLong": "ارتفاع",
+    "cameraAltitude": "ارتفاع دید",
+    "cameraAltitudeLong": "ارتفاع دوربین از سطح دریا"
   },
   "fileNamePrompt": {
     "title": "ذخیرهٔ فایل با نام",

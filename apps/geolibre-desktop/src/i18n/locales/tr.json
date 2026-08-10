@@ -188,7 +188,9 @@
   },
   "statusBar": {
     "elevation": "Rakım",
-    "elevationLong": "Yükseklik"
+    "elevationLong": "Yükseklik",
+    "cameraAltitude": "Kamera rakımı",
+    "cameraAltitudeLong": "Deniz seviyesinden kamera yüksekliği"
   },
   "fileNamePrompt": {
     "title": "Dosyayı farklı kaydet",

@@ -188,7 +188,9 @@
   },
   "statusBar": {
     "elevation": "Höhe",
-    "elevationLong": "Höhe"
+    "elevationLong": "Höhe",
+    "cameraAltitude": "Kamerahöhe",
+    "cameraAltitudeLong": "Kamerahöhe über dem Meeresspiegel"
   },
   "fileNamePrompt": {
     "title": "Datei speichern unter",

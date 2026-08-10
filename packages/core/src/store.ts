@@ -270,6 +270,14 @@ export interface AppState {
    * which owns the map instance the terrain sample comes from.
    */
   pointerElevation: number | null;
+  /**
+   * Camera height above sea level in metres — Google Earth Pro's "Eye alt"
+   * (issue #1816). Derived from the camera, so deliberately *not* part of
+   * `mapView`: that shape is persisted into the project file, and a stored
+   * altitude could only drift from the center/zoom/pitch it is computed from.
+   * Null before the map loads, or when MapLibre cannot report it.
+   */
+  cameraAltitude: number | null;
   /** Live GPS fix for the status bar, or null while GPS tracking is off. */
   gpsStatus: GpsStatusFix | null;
   /** Anchored review comments on map points or features (issue #1518). */
@@ -351,6 +359,7 @@ export interface AppState {
 
   setPointerCoords: (coords: [number, number] | null) => void;
   setPointerElevation: (elevation: number | null) => void;
+  setCameraAltitude: (altitude: number | null) => void;
   setGpsStatus: (fix: GpsStatusFix | null) => void;
   setCollaboration: (patch: Partial<CollaborationState>) => void;
   updateCollaborationPresence: (clientId: string, presence: CollaborationPresence | null) => void;
@@ -990,6 +999,7 @@ export const useAppStore = create<AppState>()(
       identifyLayerId: null,
       pointerCoords: null,
       pointerElevation: null,
+      cameraAltitude: null,
       gpsStatus: null,
       comments: [],
       metadata: {},
@@ -1036,6 +1046,7 @@ export const useAppStore = create<AppState>()(
       setPointerCoords: (coords) =>
         set(coords ? { pointerCoords: coords } : { pointerCoords: null, pointerElevation: null }),
       setPointerElevation: (elevation) => set({ pointerElevation: elevation }),
+      setCameraAltitude: (altitude) => set({ cameraAltitude: altitude }),
       setGpsStatus: (fix) => set({ gpsStatus: fix }),
 
       addComment: (comment) =>
@@ -2162,6 +2173,7 @@ export const useAppStore = create<AppState>()(
           copiedLayerStyle: null,
           pointerCoords: null,
           pointerElevation: null,
+          cameraAltitude: null,
           attributeFilter: "",
           // Don't carry an active story presentation into a different project.
           ui: {

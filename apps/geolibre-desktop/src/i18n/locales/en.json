@@ -188,7 +188,9 @@
   },
   "statusBar": {
     "elevation": "Elev",
-    "elevationLong": "Elevation"
+    "elevationLong": "Elevation",
+    "cameraAltitude": "Eye alt",
+    "cameraAltitudeLong": "Camera altitude above sea level"
   },
   "fileNamePrompt": {
     "title": "Save file as",

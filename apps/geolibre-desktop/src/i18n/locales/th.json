@@ -186,7 +186,9 @@
   },
   "statusBar": {
     "elevation": "ระดับ",
-    "elevationLong": "ระดับความสูง"
+    "elevationLong": "ระดับความสูง",
+    "cameraAltitude": "ระดับมุมมอง",
+    "cameraAltitudeLong": "ระดับความสูงของกล้องเหนือระดับน้ำทะเล"
   },
   "fileNamePrompt": {
     "title": "บันทึกไฟล์เป็น",

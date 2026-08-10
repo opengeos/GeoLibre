@@ -186,7 +186,9 @@
   },
   "statusBar": {
     "elevation": "標高",
-    "elevationLong": "標高"
+    "elevationLong": "標高",
+    "cameraAltitude": "視点高度",
+    "cameraAltitudeLong": "海面からのカメラ高度"
   },
   "fileNamePrompt": {
     "title": "名前を付けて保存",

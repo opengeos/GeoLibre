@@ -1065,6 +1065,7 @@ export const MapCanvas = memo(function MapCanvas({
   const setMapView = useAppStore((s) => s.setMapView);
   const setPointerCoords = useAppStore((s) => s.setPointerCoords);
   const setPointerElevation = useAppStore((s) => s.setPointerElevation);
+  const setCameraAltitude = useAppStore((s) => s.setCameraAltitude);
   const showPointerElevation = useAppStore((s) => s.preferences.map.showPointerElevation);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const pointerElevationRef = useRef<PointerElevationResolver | null>(null);
@@ -1161,6 +1162,9 @@ export const MapCanvas = memo(function MapCanvas({
       // overwrite the project's saved view ~60 times a second.
       if (event?.flightCameraToken !== undefined) return;
       setMapView(mc.readView(), Boolean(event?.originalEvent));
+      // Same moveend cadence as zoom/bearing/pitch: a bar where one number is
+      // live and the rest lag during a drag reads as broken.
+      setCameraAltitude(mc.readCameraAltitude());
     };
     map.on("moveend", updateView);
 

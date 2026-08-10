@@ -192,7 +192,9 @@
   },
   "statusBar": {
     "elevation": "Выс",
-    "elevationLong": "Высота"
+    "elevationLong": "Высота",
+    "cameraAltitude": "Выс. камеры",
+    "cameraAltitudeLong": "Высота камеры над уровнем моря"
   },
   "fileNamePrompt": {
     "title": "Сохранить файл как",

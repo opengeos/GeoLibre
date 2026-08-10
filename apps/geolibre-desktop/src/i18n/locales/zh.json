@@ -186,7 +186,9 @@
   },
   "statusBar": {
     "elevation": "高程",
-    "elevationLong": "高程"
+    "elevationLong": "高程",
+    "cameraAltitude": "视点高度",
+    "cameraAltitudeLong": "相机海拔高度"
   },
   "fileNamePrompt": {
     "title": "文件另存为",

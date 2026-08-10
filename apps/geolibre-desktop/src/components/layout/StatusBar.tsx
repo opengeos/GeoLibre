@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { FEET_PER_METER, useAppStore, type MapScaleUnit } from "@geolibre/core";
+import {
+  FEET_PER_METER,
+  formatCameraAltitude,
+  useAppStore,
+  type MapScaleUnit,
+} from "@geolibre/core";
 import { cn } from "@geolibre/ui";
 import { Bug } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -34,6 +39,7 @@ export function StatusBar({
   const { t } = useTranslation();
   const pointerCoords = useAppStore((s) => s.pointerCoords);
   const pointerElevation = useAppStore((s) => s.pointerElevation);
+  const cameraAltitude = useAppStore((s) => s.cameraAltitude);
   const scaleUnit = useAppStore((s) => s.preferences.map.scaleUnit);
   const gpsStatus = useAppStore((s) => s.gpsStatus);
   const mapView = useAppStore((s) => s.mapView);
@@ -75,6 +81,12 @@ export function StatusBar({
   const elevationText =
     pointerElevation !== null ? formatPointerElevation(pointerElevation, scaleUnit) : null;
 
+  // Google Earth Pro's "Eye alt": how high the camera is, as opposed to how
+  // high the ground under the cursor is. Sits beside Zoom because it answers
+  // the same question in a unit a person can actually reason about.
+  const altitudeText =
+    cameraAltitude !== null ? formatCameraAltitude(cameraAltitude, scaleUnit) : null;
+
   const bboxText = mapView.bbox ? mapView.bbox.map((n) => n.toFixed(4)).join(", ") : "—";
 
   return (
@@ -94,6 +106,11 @@ export function StatusBar({
       )}
       {gpsText && <span className="shrink-0">GPS: {gpsText}</span>}
       <span className="shrink-0">Zoom: {mapView.zoom.toFixed(2)}</span>
+      {altitudeText && (
+        <span className="shrink-0" title={t("statusBar.cameraAltitudeLong")}>
+          {t("statusBar.cameraAltitude")}: {altitudeText}
+        </span>
+      )}
       <span className="shrink-0">Bearing: {mapView.bearing.toFixed(1)}°</span>
       <span className="shrink-0">Pitch: {mapView.pitch.toFixed(1)}°</span>
       {compact ? null : <span className="min-w-0 flex-1 truncate">BBox: {bboxText}</span>}

@@ -196,7 +196,9 @@
   },
   "statusBar": {
     "elevation": "ارتفاع",
-    "elevationLong": "الارتفاع"
+    "elevationLong": "الارتفاع",
+    "cameraAltitude": "ارتفاع الرؤية",
+    "cameraAltitudeLong": "ارتفاع الكاميرا فوق مستوى سطح البحر"
   },
   "fileNamePrompt": {
     "title": "حفظ الملف باسم",

@@ -17,6 +17,7 @@ export * from "./virtual-fields";
 export * from "./selection";
 export * from "./scale-units";
 export * from "./elevation";
+export * from "./camera-altitude";
 export * from "./project";
 export * from "./style-library";
 export * from "./layer-library";

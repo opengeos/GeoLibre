@@ -186,7 +186,9 @@
   },
   "statusBar": {
     "elevation": "Elev",
-    "elevationLong": "Elevasi"
+    "elevationLong": "Elevasi",
+    "cameraAltitude": "Alt. kamera",
+    "cameraAltitudeLong": "Ketinggian kamera di atas permukaan laut"
   },
   "fileNamePrompt": {
     "title": "Simpan file sebagai",

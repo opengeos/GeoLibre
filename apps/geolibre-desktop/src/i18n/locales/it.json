@@ -188,7 +188,9 @@
   },
   "statusBar": {
     "elevation": "Quota",
-    "elevationLong": "Quota"
+    "elevationLong": "Quota",
+    "cameraAltitude": "Quota vista",
+    "cameraAltitudeLong": "Quota della camera sul livello del mare"
   },
   "fileNamePrompt": {
     "title": "Salva file con nome",

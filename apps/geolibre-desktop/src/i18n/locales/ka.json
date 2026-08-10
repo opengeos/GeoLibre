@@ -188,7 +188,9 @@
   },
   "statusBar": {
     "elevation": "სიმაღლე",
-    "elevationLong": "სიმაღლე"
+    "elevationLong": "სიმაღლე",
+    "cameraAltitude": "კამერის სიმაღლე",
+    "cameraAltitudeLong": "კამერის სიმაღლე ზღვის დონიდან"
   },
   "fileNamePrompt": {
     "title": "ფაილის შენახვა როგორც",

@@ -4,6 +4,7 @@ import {
   DEFAULT_PROJECT_PREFERENCES,
   getPlanetaryBasemapByStyleUrl,
   PLANETARY_BASEMAP_SENTINEL_PREFIX,
+  scaleAltitudeToActiveBody,
   useAppStore,
 } from "@geolibre/core";
 import type {
@@ -1069,6 +1070,25 @@ export class MapController {
       pitch: this.map.getPitch(),
       bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
     };
+  }
+
+  /**
+   * The camera's height above sea level in metres — Google Earth Pro's
+   * "Eye alt" (issue #1816). Corrected for the active body, since MapLibre
+   * computes it from the Earth-based Mercator scale.
+   *
+   * `transform` is public on the Map but `getCameraAltitude` is a newer
+   * addition, so it is probed defensively: a MapLibre bump that drops or
+   * renames it should blank the readout, not throw inside a `moveend` handler.
+   */
+  readCameraAltitude(): number | null {
+    const transform = this.map?.transform as { getCameraAltitude?: () => number } | undefined;
+    if (typeof transform?.getCameraAltitude !== "function") return null;
+    try {
+      return scaleAltitudeToActiveBody(transform.getCameraAltitude());
+    } catch {
+      return null;
+    }
   }
 
   syncLayers(layers: GeoLibreLayer[]): void {

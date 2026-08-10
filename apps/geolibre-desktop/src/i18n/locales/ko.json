@@ -186,7 +186,9 @@
   },
   "statusBar": {
     "elevation": "고도",
-    "elevationLong": "고도"
+    "elevationLong": "고도",
+    "cameraAltitude": "시점 고도",
+    "cameraAltitudeLong": "해수면 기준 카메라 고도"
   },
   "fileNamePrompt": {
     "title": "다른 이름으로 저장",
