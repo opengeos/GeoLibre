@@ -307,9 +307,15 @@ export function bearingRows(measurement: {
   // infinitely many great circles, so neither has a bearing worth reporting.
   if (isDegenerateSegment(a, b) || isAntipodal(a, b)) return [];
 
+  // Rounded modulo 360, not toFixed(0): an azimuth of 359.6 renders as "360" on
+  // its own, which is not a bearing anyone writes and disagrees with the "N"
+  // the compass label gives it.
+  const renderAzimuth = (degrees: number): string =>
+    `${Math.round(degrees) % 360}\u00b0 ${compassPoint(degrees)}`;
+
   const initial = forwardAzimuthDegrees(a, b);
   const rows: Array<[string, string]> = [
-    [terrainMeasureLabels.heading, `${initial.toFixed(0)}\u00b0 ${compassPoint(initial)}`],
+    [terrainMeasureLabels.heading, renderAzimuth(initial)],
   ];
   // Both conditions are needed, and they guard opposite failures: the rendered
   // values must differ (or the second row repeats the first verbatim), *and*
@@ -317,11 +323,8 @@ export function bearingRows(measurement: {
   // straddle a rounding boundary, say 45.4 and 45.6, earn a row for nothing).
   const final = finalAzimuthDegrees(a, b);
   const convergence = Math.abs(((final - initial + 540) % 360) - 180);
-  if (convergence >= 1 && final.toFixed(0) !== initial.toFixed(0)) {
-    rows.push([
-      terrainMeasureLabels.finalHeading,
-      `${final.toFixed(0)}\u00b0 ${compassPoint(final)}`,
-    ]);
+  if (convergence >= 1 && renderAzimuth(final) !== renderAzimuth(initial)) {
+    rows.push([terrainMeasureLabels.finalHeading, renderAzimuth(final)]);
   }
   return rows;
 }

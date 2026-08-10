@@ -125,6 +125,14 @@ describe("bearingRows", () => {
     assert.deepEqual(bearingRows({ mode: "area", points: [pt(0, 0), pt(1, 0), pt(1, 1)] }), []);
   });
 
+  it("never renders a heading as 360 degrees", () => {
+    // An azimuth just under 360 rounds up; "360°" is not a bearing anyone
+    // writes, and it disagrees with the "N" the compass label gives it.
+    const rows = bearingRows({ mode: "distance", points: [pt(0, 0), pt(-0.0001, 10)] });
+    assert.equal(rows.length, 1);
+    assert.match(rows[0][1], /^0° N$/, `expected 0 rather than 360: ${rows[0][1]}`);
+  });
+
   it("stays empty for antipodal endpoints", () => {
     // Antipodal points lie on infinitely many great circles, so atan2 still
     // returns a number but it is floating-point noise, not a heading.
