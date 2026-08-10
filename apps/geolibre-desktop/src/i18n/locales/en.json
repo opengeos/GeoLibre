@@ -192,7 +192,14 @@
     "elevation": "Elev",
     "elevationLong": "Elevation",
     "cameraAltitude": "Eye alt",
-    "cameraAltitudeLong": "Camera altitude above sea level"
+    "cameraAltitudeLong": "Camera altitude above sea level",
+    "coordinateFormat": {
+      "dd": "Decimal degrees",
+      "dms": "Degrees, minutes, seconds",
+      "ddm": "Degrees, decimal minutes",
+      "utm": "UTM (zone, easting/northing)"
+    },
+    "coordinateFormatHint": "Coordinate format: {{format}}. Click to switch."
   },
   "fileNamePrompt": {
     "title": "Save file as",
@@ -5493,14 +5500,5 @@
     "mapPoint": "Map Point",
     "reply": "Reply",
     "replyPlaceholder": "Write a reply..."
-  },
-  "statusBar": {
-    "coordinateFormat": {
-      "dd": "Decimal degrees",
-      "dms": "Degrees, minutes, seconds",
-      "ddm": "Degrees, decimal minutes",
-      "utm": "UTM (zone, easting/northing)"
-    },
-    "coordinateFormatHint": "Coordinate format: {{format}}. Click to switch."
   }
 }

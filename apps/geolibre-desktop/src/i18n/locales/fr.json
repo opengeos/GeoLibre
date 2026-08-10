@@ -192,7 +192,14 @@
     "elevation": "Alt",
     "elevationLong": "Altitude",
     "cameraAltitude": "Alt. caméra",
-    "cameraAltitudeLong": "Altitude de la caméra au-dessus du niveau de la mer"
+    "cameraAltitudeLong": "Altitude de la caméra au-dessus du niveau de la mer",
+    "coordinateFormat": {
+      "dd": "Degrés décimaux",
+      "dms": "Degrés, minutes, secondes",
+      "ddm": "Degrés, minutes décimales",
+      "utm": "UTM (fuseau, est/nord)"
+    },
+    "coordinateFormatHint": "Format de coordonnées : {{format}}. Cliquez pour changer."
   },
   "fileNamePrompt": {
     "title": "Enregistrer le fichier sous",
@@ -5493,14 +5500,5 @@
     "mapPoint": "Point de la carte",
     "reply": "Répondre",
     "replyPlaceholder": "Écrire une réponse..."
-  },
-  "statusBar": {
-    "coordinateFormat": {
-      "dd": "Degrés décimaux",
-      "dms": "Degrés, minutes, secondes",
-      "ddm": "Degrés, minutes décimales",
-      "utm": "UTM (fuseau, est/nord)"
-    },
-    "coordinateFormatHint": "Format de coordonnées : {{format}}. Cliquez pour changer."
   }
 }

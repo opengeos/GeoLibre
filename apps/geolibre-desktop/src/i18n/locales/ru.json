@@ -196,7 +196,14 @@
     "elevation": "Выс",
     "elevationLong": "Высота",
     "cameraAltitude": "Выс. камеры",
-    "cameraAltitudeLong": "Высота камеры над уровнем моря"
+    "cameraAltitudeLong": "Высота камеры над уровнем моря",
+    "coordinateFormat": {
+      "dd": "Десятичные градусы",
+      "dms": "Градусы, минуты, секунды",
+      "ddm": "Градусы, десятичные минуты",
+      "utm": "UTM (зона, восток/север)"
+    },
+    "coordinateFormatHint": "Формат координат: {{format}}. Нажмите для смены."
   },
   "fileNamePrompt": {
     "title": "Сохранить файл как",
@@ -5651,14 +5658,5 @@
     "mapPoint": "Точка на карте",
     "reply": "Ответить",
     "replyPlaceholder": "Напишите ответ..."
-  },
-  "statusBar": {
-    "coordinateFormat": {
-      "dd": "Десятичные градусы",
-      "dms": "Градусы, минуты, секунды",
-      "ddm": "Градусы, десятичные минуты",
-      "utm": "UTM (зона, восток/север)"
-    },
-    "coordinateFormatHint": "Формат координат: {{format}}. Нажмите для смены."
   }
 }

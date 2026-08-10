@@ -1193,6 +1193,7 @@ export interface MapPreferences {
    * from Controls -> Elevation.
    */
   showPointerElevation: boolean;
+  /**
    * Notation the status bar reports the pointer coordinate in: `"dd"` decimal
    * degrees (default), `"dms"` degrees/minutes/seconds, `"ddm"` degrees and
    * decimal minutes, or `"utm"` zone easting/northing. Stored as a string

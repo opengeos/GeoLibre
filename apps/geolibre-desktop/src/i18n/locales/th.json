@@ -190,7 +190,14 @@
     "elevation": "ระดับ",
     "elevationLong": "ระดับความสูง",
     "cameraAltitude": "ระดับมุมมอง",
-    "cameraAltitudeLong": "ระดับความสูงของกล้องเหนือระดับน้ำทะเล"
+    "cameraAltitudeLong": "ระดับความสูงของกล้องเหนือระดับน้ำทะเล",
+    "coordinateFormat": {
+      "dd": "องศาทศนิยม",
+      "dms": "องศา ลิปดา ฟิลิปดา",
+      "ddm": "องศา ลิปดาทศนิยม",
+      "utm": "UTM (โซน, ตะวันออก/เหนือ)"
+    },
+    "coordinateFormatHint": "รูปแบบพิกัด: {{format}} คลิกเพื่อสลับ"
   },
   "fileNamePrompt": {
     "title": "บันทึกไฟล์เป็น",
@@ -5414,14 +5421,5 @@
     "mapPoint": "จุดบนแผนที่",
     "reply": "ตอบกลับ",
     "replyPlaceholder": "เขียนคำตอบ..."
-  },
-  "statusBar": {
-    "coordinateFormat": {
-      "dd": "องศาทศนิยม",
-      "dms": "องศา ลิปดา ฟิลิปดา",
-      "ddm": "องศา ลิปดาทศนิยม",
-      "utm": "UTM (โซน, ตะวันออก/เหนือ)"
-    },
-    "coordinateFormatHint": "รูปแบบพิกัด: {{format}} คลิกเพื่อสลับ"
   }
 }

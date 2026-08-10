@@ -190,7 +190,14 @@
     "elevation": "高程",
     "elevationLong": "高程",
     "cameraAltitude": "视点高度",
-    "cameraAltitudeLong": "相机海拔高度"
+    "cameraAltitudeLong": "相机海拔高度",
+    "coordinateFormat": {
+      "dd": "十进制度",
+      "dms": "度分秒",
+      "ddm": "度和十进制分",
+      "utm": "UTM（带号、东距/北距）"
+    },
+    "coordinateFormatHint": "坐标格式：{{format}}。点击切换。"
   },
   "fileNamePrompt": {
     "title": "文件另存为",
@@ -5414,14 +5421,5 @@
     "mapPoint": "地图点",
     "reply": "回复",
     "replyPlaceholder": "写下回复..."
-  },
-  "statusBar": {
-    "coordinateFormat": {
-      "dd": "十进制度",
-      "dms": "度分秒",
-      "ddm": "度和十进制分",
-      "utm": "UTM（带号、东距/北距）"
-    },
-    "coordinateFormatHint": "坐标格式：{{format}}。点击切换。"
   }
 }

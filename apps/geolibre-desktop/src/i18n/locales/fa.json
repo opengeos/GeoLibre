@@ -192,7 +192,14 @@
     "elevation": "ارتفاع",
     "elevationLong": "ارتفاع",
     "cameraAltitude": "ارتفاع دید",
-    "cameraAltitudeLong": "ارتفاع دوربین از سطح دریا"
+    "cameraAltitudeLong": "ارتفاع دوربین از سطح دریا",
+    "coordinateFormat": {
+      "dd": "درجه اعشاری",
+      "dms": "درجه، دقیقه، ثانیه",
+      "ddm": "درجه، دقیقه اعشاری",
+      "utm": "UTM (زون، شرق/شمال)"
+    },
+    "coordinateFormatHint": "قالب مختصات: {{format}}. برای تغییر کلیک کنید."
   },
   "fileNamePrompt": {
     "title": "ذخیرهٔ فایل با نام",
@@ -5493,14 +5500,5 @@
     "mapPoint": "نقطهٔ نقشه",
     "reply": "پاسخ",
     "replyPlaceholder": "پاسخی بنویسید..."
-  },
-  "statusBar": {
-    "coordinateFormat": {
-      "dd": "درجه اعشاری",
-      "dms": "درجه، دقیقه، ثانیه",
-      "ddm": "درجه، دقیقه اعشاری",
-      "utm": "UTM (زون، شرق/شمال)"
-    },
-    "coordinateFormatHint": "قالب مختصات: {{format}}. برای تغییر کلیک کنید."
   }
 }

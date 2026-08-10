@@ -192,7 +192,14 @@
     "elevation": "Quota",
     "elevationLong": "Quota",
     "cameraAltitude": "Quota vista",
-    "cameraAltitudeLong": "Quota della camera sul livello del mare"
+    "cameraAltitudeLong": "Quota della camera sul livello del mare",
+    "coordinateFormat": {
+      "dd": "Gradi decimali",
+      "dms": "Gradi, primi, secondi",
+      "ddm": "Gradi, primi decimali",
+      "utm": "UTM (fuso, est/nord)"
+    },
+    "coordinateFormatHint": "Formato coordinate: {{format}}. Fare clic per cambiare."
   },
   "fileNamePrompt": {
     "title": "Salva file con nome",
@@ -5493,14 +5500,5 @@
     "mapPoint": "Punto sulla mappa",
     "reply": "Rispondi",
     "replyPlaceholder": "Scrivi una risposta..."
-  },
-  "statusBar": {
-    "coordinateFormat": {
-      "dd": "Gradi decimali",
-      "dms": "Gradi, primi, secondi",
-      "ddm": "Gradi, primi decimali",
-      "utm": "UTM (fuso, est/nord)"
-    },
-    "coordinateFormatHint": "Formato coordinate: {{format}}. Fare clic per cambiare."
   }
 }

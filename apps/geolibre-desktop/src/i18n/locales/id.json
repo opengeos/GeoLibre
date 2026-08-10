@@ -190,7 +190,14 @@
     "elevation": "Elev",
     "elevationLong": "Elevasi",
     "cameraAltitude": "Alt. kamera",
-    "cameraAltitudeLong": "Ketinggian kamera di atas permukaan laut"
+    "cameraAltitudeLong": "Ketinggian kamera di atas permukaan laut",
+    "coordinateFormat": {
+      "dd": "Derajat desimal",
+      "dms": "Derajat, menit, detik",
+      "ddm": "Derajat, menit desimal",
+      "utm": "UTM (zona, timur/utara)"
+    },
+    "coordinateFormatHint": "Format koordinat: {{format}}. Klik untuk mengganti."
   },
   "fileNamePrompt": {
     "title": "Simpan file sebagai",
@@ -5414,14 +5421,5 @@
     "mapPoint": "Titik Peta",
     "reply": "Balas",
     "replyPlaceholder": "Tulis balasan..."
-  },
-  "statusBar": {
-    "coordinateFormat": {
-      "dd": "Derajat desimal",
-      "dms": "Derajat, menit, detik",
-      "ddm": "Derajat, menit desimal",
-      "utm": "UTM (zona, timur/utara)"
-    },
-    "coordinateFormatHint": "Format koordinat: {{format}}. Klik untuk mengganti."
   }
 }

@@ -190,7 +190,14 @@
     "elevation": "標高",
     "elevationLong": "標高",
     "cameraAltitude": "視点高度",
-    "cameraAltitudeLong": "海面からのカメラ高度"
+    "cameraAltitudeLong": "海面からのカメラ高度",
+    "coordinateFormat": {
+      "dd": "十進度",
+      "dms": "度分秒",
+      "ddm": "度・十進分",
+      "utm": "UTM（ゾーン、東距/北距）"
+    },
+    "coordinateFormatHint": "座標形式: {{format}}。クリックで切り替え。"
   },
   "fileNamePrompt": {
     "title": "名前を付けて保存",
@@ -5414,14 +5421,5 @@
     "mapPoint": "地図上のポイント",
     "reply": "返信",
     "replyPlaceholder": "返信を入力..."
-  },
-  "statusBar": {
-    "coordinateFormat": {
-      "dd": "十進度",
-      "dms": "度分秒",
-      "ddm": "度・十進分",
-      "utm": "UTM（ゾーン、東距/北距）"
-    },
-    "coordinateFormatHint": "座標形式: {{format}}。クリックで切り替え。"
   }
 }

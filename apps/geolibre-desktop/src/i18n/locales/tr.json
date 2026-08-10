@@ -192,7 +192,14 @@
     "elevation": "Rakım",
     "elevationLong": "Yükseklik",
     "cameraAltitude": "Kamera rakımı",
-    "cameraAltitudeLong": "Deniz seviyesinden kamera yüksekliği"
+    "cameraAltitudeLong": "Deniz seviyesinden kamera yüksekliği",
+    "coordinateFormat": {
+      "dd": "Ondalık derece",
+      "dms": "Derece, dakika, saniye",
+      "ddm": "Derece, ondalık dakika",
+      "utm": "UTM (dilim, doğu/kuzey)"
+    },
+    "coordinateFormatHint": "Koordinat biçimi: {{format}}. Değiştirmek için tıklayın."
   },
   "fileNamePrompt": {
     "title": "Dosyayı farklı kaydet",
@@ -5493,14 +5500,5 @@
     "mapPoint": "Harita Noktası",
     "reply": "Yanıtla",
     "replyPlaceholder": "Bir yanıt yazın..."
-  },
-  "statusBar": {
-    "coordinateFormat": {
-      "dd": "Ondalık derece",
-      "dms": "Derece, dakika, saniye",
-      "ddm": "Derece, ondalık dakika",
-      "utm": "UTM (dilim, doğu/kuzey)"
-    },
-    "coordinateFormatHint": "Koordinat biçimi: {{format}}. Değiştirmek için tıklayın."
   }
 }

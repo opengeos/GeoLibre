@@ -192,7 +192,14 @@
     "elevation": "Hoogte",
     "elevationLong": "Hoogte",
     "cameraAltitude": "Camerahoogte",
-    "cameraAltitudeLong": "Camerahoogte boven zeeniveau"
+    "cameraAltitudeLong": "Camerahoogte boven zeeniveau",
+    "coordinateFormat": {
+      "dd": "Decimale graden",
+      "dms": "Graden, minuten, seconden",
+      "ddm": "Graden, decimale minuten",
+      "utm": "UTM (zone, oost/noord)"
+    },
+    "coordinateFormatHint": "Coördinaatformaat: {{format}}. Klik om te wisselen."
   },
   "fileNamePrompt": {
     "title": "Bestand opslaan als",
@@ -5493,14 +5500,5 @@
     "mapPoint": "Kaartpunt",
     "reply": "Beantwoorden",
     "replyPlaceholder": "Schrijf een antwoord..."
-  },
-  "statusBar": {
-    "coordinateFormat": {
-      "dd": "Decimale graden",
-      "dms": "Graden, minuten, seconden",
-      "ddm": "Graden, decimale minuten",
-      "utm": "UTM (zone, oost/noord)"
-    },
-    "coordinateFormatHint": "Coördinaatformaat: {{format}}. Klik om te wisselen."
   }
 }

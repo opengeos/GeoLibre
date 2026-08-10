@@ -192,7 +192,14 @@
     "elevation": "ऊँचाई",
     "elevationLong": "ऊँचाई",
     "cameraAltitude": "दृष्टि ऊँचाई",
-    "cameraAltitudeLong": "समुद्र तल से कैमरे की ऊँचाई"
+    "cameraAltitudeLong": "समुद्र तल से कैमरे की ऊँचाई",
+    "coordinateFormat": {
+      "dd": "दशमलव अंश",
+      "dms": "अंश, मिनट, सेकंड",
+      "ddm": "अंश, दशमलव मिनट",
+      "utm": "UTM (ज़ोन, पूर्वी/उत्तरी)"
+    },
+    "coordinateFormatHint": "निर्देशांक प्रारूप: {{format}}। बदलने के लिए क्लिक करें।"
   },
   "fileNamePrompt": {
     "title": "फ़ाइल को इस रूप में सहेजें",
@@ -5493,14 +5500,5 @@
     "mapPoint": "मानचित्र बिंदु",
     "reply": "उत्तर दें",
     "replyPlaceholder": "उत्तर लिखें..."
-  },
-  "statusBar": {
-    "coordinateFormat": {
-      "dd": "दशमलव अंश",
-      "dms": "अंश, मिनट, सेकंड",
-      "ddm": "अंश, दशमलव मिनट",
-      "utm": "UTM (ज़ोन, पूर्वी/उत्तरी)"
-    },
-    "coordinateFormatHint": "निर्देशांक प्रारूप: {{format}}। बदलने के लिए क्लिक करें।"
   }
 }
