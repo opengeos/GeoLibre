@@ -85,3 +85,49 @@ export function isUriWritePermissionError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return URI_WRITE_PERMISSION_PATTERN.test(message);
 }
+
+/** The two I/O calls {@link writeInPlaceWithAndroidFallback} needs. */
+export interface InPlaceWriteHandlers {
+  /** Write the content to an already-known path. Rejects if it cannot. */
+  write: (path: string, content: string) => Promise<void>;
+  /** Open the native save dialog and write there. Null if cancelled. */
+  saveAs: (content: string, defaultName?: string) => Promise<string | null>;
+}
+
+/**
+ * Write to an already-known path, falling back to the save dialog when Android
+ * refuses a read-only `content://` grant (GeoLibre#1833).
+ *
+ * The handlers are injected so the fallback rule can be tested without mocking
+ * the Tauri modules: this is the behaviour that keeps Save working on Android,
+ * so a dependency bump that changes how a refusal is reported should fail a
+ * test rather than silently drop the user back to a broken Save.
+ *
+ * Falling back is safe because Android rejects the request when the output
+ * stream is opened, before the document is truncated, so a refused write leaves
+ * the original file untouched.
+ *
+ * @param content - The text to write.
+ * @param path - The path or content URI the file was opened from.
+ * @param fallbackName - Save-dialog file name, used only when the path carries
+ *   no usable name of its own.
+ * @param handlers - The write and save-as implementations.
+ * @returns The path actually written, or null if a fallback dialog was
+ *   cancelled.
+ */
+export async function writeInPlaceWithAndroidFallback(
+  content: string,
+  path: string,
+  fallbackName: string | undefined,
+  handlers: InPlaceWriteHandlers,
+): Promise<string | null> {
+  try {
+    await handlers.write(path, content);
+  } catch (error) {
+    if (isAndroidContentUri(path) && isUriWritePermissionError(error)) {
+      return handlers.saveAs(content, androidContentUriFileName(path) ?? fallbackName);
+    }
+    throw error;
+  }
+  return path;
+}

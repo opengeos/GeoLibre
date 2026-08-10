@@ -5,6 +5,7 @@ import {
   androidContentUriFileName,
   isAndroidContentUri,
   isUriWritePermissionError,
+  writeInPlaceWithAndroidFallback,
 } from "../apps/geolibre-desktop/src/lib/android-content-uri";
 
 // The URI from GeoLibre#1833: a project opened from Documents/json through the
@@ -93,5 +94,125 @@ describe("isUriWritePermissionError", () => {
       false,
     );
     assert.equal(isUriWritePermissionError(new Error("Failed to serialize project")), false);
+  });
+});
+
+// The message Android returns for a read-only `content://` grant, verbatim from
+// the issue's diagnostic log.
+const DENIAL = new Error(
+  "failed to open file: Permission Denial: writing com.android.externalstorage.ExternalStorageProvider uri " +
+    `${EXTERNAL_STORAGE_URI} from pid=7564, uid=10393 requires android.permission.MANAGE_DOCUMENTS, ` +
+    "or grantUriPermission()",
+);
+
+// A save-dialog URI is writable, so the fallback's own write succeeds; only the
+// in-place write to the read-only URI is refused, as on a device.
+const CREATED_URI =
+  "content://com.android.externalstorage.documents/document/primary%3ADocuments%2Fjson%2FGeneral_Project(1).geolibre.json";
+
+function makeHandlers(options: { writeError?: unknown; saveAsResult?: string | null } = {}) {
+  const writes: Array<{ path: string; content: string }> = [];
+  const saveAsCalls: Array<{ content: string; defaultName?: string }> = [];
+  return {
+    writes,
+    saveAsCalls,
+    handlers: {
+      write: async (path: string, content: string) => {
+        if (options.writeError && path !== CREATED_URI) throw options.writeError;
+        writes.push({ path, content });
+      },
+      saveAs: async (content: string, defaultName?: string) => {
+        saveAsCalls.push({ content, defaultName });
+        const created = options.saveAsResult === undefined ? CREATED_URI : options.saveAsResult;
+        if (created !== null) writes.push({ path: created, content });
+        return created;
+      },
+    },
+  };
+}
+
+describe("writeInPlaceWithAndroidFallback", () => {
+  it("writes in place and never opens a dialog when the write succeeds", async () => {
+    const { handlers, writes, saveAsCalls } = makeHandlers();
+    const path = await writeInPlaceWithAndroidFallback(
+      "{}",
+      "/home/user/a.geolibre.json",
+      "a.geolibre.json",
+      handlers,
+    );
+    assert.equal(path, "/home/user/a.geolibre.json");
+    assert.deepEqual(writes, [{ path: "/home/user/a.geolibre.json", content: "{}" }]);
+    assert.equal(saveAsCalls.length, 0);
+  });
+
+  it("falls back to the save dialog when Android refuses a content URI", async () => {
+    const { handlers, writes, saveAsCalls } = makeHandlers({ writeError: DENIAL });
+    const path = await writeInPlaceWithAndroidFallback(
+      "{}",
+      EXTERNAL_STORAGE_URI,
+      "Untitled Project.geolibre.json",
+      handlers,
+    );
+    // The dialog is pre-filled with the name recovered from the URI, not the
+    // generic project name, so the user can save over the file they opened.
+    assert.deepEqual(saveAsCalls, [
+      { content: "{}", defaultName: "General_Project.geolibre.json" },
+    ]);
+    // The refused write touched nothing; only the created document was written.
+    assert.deepEqual(writes, [{ path: CREATED_URI, content: "{}" }]);
+    // The writable URI becomes the project path, so later saves go in place.
+    assert.equal(path, CREATED_URI);
+  });
+
+  it("falls back to the caller's name when the URI has no usable one", async () => {
+    const { handlers, saveAsCalls } = makeHandlers({ writeError: DENIAL });
+    await writeInPlaceWithAndroidFallback(
+      "{}",
+      "content://com.android.providers.downloads.documents/document/msf%3A1000000123",
+      "Untitled Project.geolibre.json",
+      handlers,
+    );
+    assert.equal(saveAsCalls[0]?.defaultName, "Untitled Project.geolibre.json");
+  });
+
+  it("reports a cancelled fallback dialog as no save", async () => {
+    const { handlers, writes } = makeHandlers({ writeError: DENIAL, saveAsResult: null });
+    const path = await writeInPlaceWithAndroidFallback(
+      "{}",
+      EXTERNAL_STORAGE_URI,
+      "Untitled Project.geolibre.json",
+      handlers,
+    );
+    assert.equal(path, null);
+    assert.deepEqual(writes, []);
+  });
+
+  it("rethrows an ordinary write failure instead of reopening a dialog", async () => {
+    const { handlers, saveAsCalls } = makeHandlers({
+      writeError: new Error("No space left on device"),
+    });
+    await assert.rejects(
+      () =>
+        writeInPlaceWithAndroidFallback(
+          "{}",
+          EXTERNAL_STORAGE_URI,
+          "Untitled Project.geolibre.json",
+          handlers,
+        ),
+      /No space left/,
+    );
+    assert.equal(saveAsCalls.length, 0);
+  });
+
+  it("rethrows a permission error on a plain filesystem path", async () => {
+    const { handlers, saveAsCalls } = makeHandlers({
+      writeError: new Error("EACCES: permission denied, open '/etc/a.geolibre.json'"),
+    });
+    await assert.rejects(
+      () =>
+        writeInPlaceWithAndroidFallback("{}", "/etc/a.geolibre.json", "a.geolibre.json", handlers),
+      /EACCES/,
+    );
+    assert.equal(saveAsCalls.length, 0);
   });
 });

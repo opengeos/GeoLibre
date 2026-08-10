@@ -27,11 +27,7 @@ import {
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "./delimited-text";
-import {
-  androidContentUriFileName,
-  isAndroidContentUri,
-  isUriWritePermissionError,
-} from "./android-content-uri";
+import { writeInPlaceWithAndroidFallback } from "./android-content-uri";
 import { IS_MAS_BUILD } from "./build-flags";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import {
@@ -2746,23 +2742,15 @@ export async function saveProjectFileToPath(
   if (!isTauri() || isHttpUrl(path)) {
     return saveProjectFile(content, path);
   }
-  try {
-    await writeTextFile(path, content);
-  } catch (error) {
-    // On Android a project opened through the document picker carries a
-    // read-only `content://` grant, so writing back to it is refused and Save
-    // fails outright (GeoLibre#1833). Android rejects the request when the
-    // output stream is opened, before the document is touched, so nothing has
-    // been written yet and falling back to the save dialog loses nothing: that
-    // dialog asks Android to *create* the document, which does grant write. The
-    // returned URI is writable, so later saves in the same session go through
-    // in place with no further prompt.
-    if (isAndroidContentUri(path) && isUriWritePermissionError(error)) {
-      return saveProjectFile(content, androidContentUriFileName(path) ?? fallbackName);
-    }
-    throw error;
-  }
-  return path;
+  // On Android a project opened through the document picker carries a read-only
+  // `content://` grant, so writing back to it is refused and Save fails outright
+  // (GeoLibre#1833). The save dialog asks Android to *create* the document,
+  // which does grant write, so the fallback below recovers; see
+  // `writeInPlaceWithAndroidFallback` for why it cannot lose data.
+  return writeInPlaceWithAndroidFallback(content, path, fallbackName, {
+    write: writeTextFile,
+    saveAs: saveProjectFile,
+  });
 }
 
 /**
