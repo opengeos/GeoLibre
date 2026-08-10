@@ -355,7 +355,7 @@ if clerk_key:
         raise SystemExit("ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY is invalid.")
     clerk_fapi = clerk_fapi[:-1]
     if not re.fullmatch(r"[A-Za-z0-9.-]+", clerk_fapi) or "." not in clerk_fapi:
-        raise SystemExit("ERROR: Clerk Frontend API host is invalid.")
+        raise SystemExit("ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY contains an invalid Frontend API host.")
     clerk_src = f" https://{clerk_fapi} https://challenges.cloudflare.com https://*.protect.clerk.com"
     clerk_frame_src = " https://challenges.cloudflare.com https://*.protect.clerk.com"
 
