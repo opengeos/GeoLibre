@@ -936,7 +936,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     try {
       path =
         !options?.saveAs && existingLocalPath
-          ? await saveProjectFileToPath(contentToSave, existingLocalPath)
+          ? await saveProjectFileToPath(contentToSave, existingLocalPath, saveName)
           : await saveProjectFile(
               contentToSave,
               promptForName ? saveName : (existingLocalPath ?? saveName),

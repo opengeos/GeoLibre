@@ -27,6 +27,11 @@ import {
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "./delimited-text";
+import {
+  androidContentUriFileName,
+  isAndroidContentUri,
+  isUriWritePermissionError,
+} from "./android-content-uri";
 import { IS_MAS_BUILD } from "./build-flags";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import {
@@ -2725,12 +2730,38 @@ export async function saveProjectFile(
  * Save a project directly to an already-known local path without prompting.
  * Falls back to the save dialog when not running in Tauri (the browser never
  * has a writable filesystem path) or when the path is an HTTP(S) URL.
+ *
+ * @param content - The serialized project to write.
+ * @param path - The path the project was opened from or last saved to.
+ * @param fallbackName - File name for the save dialog when the in-place write
+ *   cannot be done; used only when the path carries no usable name of its own.
+ * @returns The path actually written, or null if a fallback dialog was
+ *   cancelled.
  */
-export async function saveProjectFileToPath(content: string, path: string): Promise<string | null> {
+export async function saveProjectFileToPath(
+  content: string,
+  path: string,
+  fallbackName?: string,
+): Promise<string | null> {
   if (!isTauri() || isHttpUrl(path)) {
     return saveProjectFile(content, path);
   }
-  await writeTextFile(path, content);
+  try {
+    await writeTextFile(path, content);
+  } catch (error) {
+    // On Android a project opened through the document picker carries a
+    // read-only `content://` grant, so writing back to it is refused and Save
+    // fails outright (GeoLibre#1833). Android rejects the request when the
+    // output stream is opened, before the document is touched, so nothing has
+    // been written yet and falling back to the save dialog loses nothing: that
+    // dialog asks Android to *create* the document, which does grant write. The
+    // returned URI is writable, so later saves in the same session go through
+    // in place with no further prompt.
+    if (isAndroidContentUri(path) && isUriWritePermissionError(error)) {
+      return saveProjectFile(content, androidContentUriFileName(path) ?? fallbackName);
+    }
+    throw error;
+  }
   return path;
 }
 
