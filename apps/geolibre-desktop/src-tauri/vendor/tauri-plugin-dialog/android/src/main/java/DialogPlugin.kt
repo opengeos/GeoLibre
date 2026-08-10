@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.webkit.MimeTypeMap
+import android.widget.Toast
 import androidx.activity.result.ActivityResult
 import app.tauri.Logger
 import app.tauri.annotation.ActivityCallback
@@ -108,6 +109,11 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
         Activity.RESULT_CANCELED -> invoke.reject("File picker cancelled")
         else -> invoke.reject("Failed to pick files")
       }
+    } catch (ex: SecurityException) {
+      val message = ex.message ?: "Failed to retain project file access"
+      Logger.error(message, ex)
+      showScopedAccessError("Could not keep read and write access to this project file.")
+      invoke.reject(message)
     } catch (ex: java.lang.Exception) {
       val message = ex.message ?: "Failed to read file pick result"
       Logger.error(message)
@@ -140,6 +146,21 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
       if (permission == null || !permission.isReadPermission || !permission.isWritePermission) {
         throw SecurityException("Document permission was not retained for $uri")
       }
+    }
+  }
+
+  private fun showScopedAccessError(message: String) {
+    Handler(Looper.getMainLooper()).post {
+      Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
+    }
+  }
+
+  private fun removeCreatedDocument(data: Intent?) {
+    val uri = data?.data ?: return
+    try {
+      activity.contentResolver.delete(uri, null, null)
+    } catch (ex: java.lang.Exception) {
+      Logger.error("Failed to remove document after permission denial for $uri", ex)
     }
   }
 
@@ -279,6 +300,12 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
         Activity.RESULT_CANCELED -> invoke.reject("File picker cancelled")
         else -> invoke.reject("Failed to pick files")
       }
+    } catch (ex: SecurityException) {
+      val message = ex.message ?: "Failed to retain project file access"
+      Logger.error(message, ex)
+      removeCreatedDocument(result.data)
+      showScopedAccessError("Could not keep write access to this project location.")
+      invoke.reject(message)
     } catch (ex: java.lang.Exception) {
       val message = ex.message ?: "Failed to read file pick result"
       Logger.error(message)

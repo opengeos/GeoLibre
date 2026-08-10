@@ -6,21 +6,20 @@ GeoLibre vendors it because the upstream Android open dialog uses
 GeoLibre later saves an opened project back to that URI, so Android denies the
 write.
 
-The GeoLibre-specific runtime delta is intentionally limited to
-`android/src/main/java/DialogPlugin.kt`:
+The GeoLibre-specific runtime delta is limited to these files:
 
-- honor `fileAccessMode: "scoped"` for Android open and save dialogs;
-- use `ACTION_OPEN_DOCUMENT` for scoped open dialogs;
-- request read, write, and persistable URI grants for scoped dialogs; and
-- retain and verify the read/write grants returned by the document provider.
+- `android/src/main/java/DialogPlugin.kt` honors scoped Android open and save
+  dialogs, retains and verifies grants, shows native permission errors, and
+  removes a newly created document when Save As cannot retain access;
+- `src/commands.rs` passes the access mode through save-dialog calls; and
+- `src/mobile.rs` logs native picker failures before returning no selection.
 
 Scoped project selection deliberately fails unless both grants can be retained.
 GeoLibre does not expose a read-only project state, and accepting a temporary or
 read-only URI would defer the failure until the user next saves the project.
 
-`src/commands.rs` passes the access mode through save-dialog calls. The API
-documentation in `guest-js/index.ts` and `src/lib.rs` describes Android support,
-and `src/mobile.rs` logs native picker failures before returning no selection.
+The API documentation in `guest-js/index.ts` and `src/lib.rs` also describes
+Android support.
 
 Android limits how many URI grants an app may retain. GeoLibre requests scoped
 access only for project documents whose paths remain in the recent-project
@@ -30,4 +29,5 @@ should also release its persisted URI permission.
 When upgrading, compare the new upstream release against this directory,
 reapply and test the Android picker changes above, update the version noted
 here, and rebuild an Android APK. Because Cargo sees a path dependency,
-Dependabot will not propose upstream version updates automatically.
+Dependabot will not propose upstream version updates automatically. Keep the
+exact `@tauri-apps/plugin-dialog` npm version aligned with this vendored crate.
