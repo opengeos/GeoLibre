@@ -508,16 +508,23 @@ export function availableProviders(env: RuntimeEnv = readRuntimeEnv()): Assistan
  * Dropping them leaves the preflight asking only for headers such a gateway
  * already allows. `User-Agent` is included because the browser supplies its own
  * once the SDK's override is gone.
+ *
+ * This is exactly the set the client attaches to *every* request. The SDK's
+ * remaining `X-Stainless-*` names (`Helper-Method`, `Poll-Helper`,
+ * `Custom-Poll-Interval`) are deliberately absent: they are set per request by
+ * the assistants/vector-store polling helpers, whose per-request headers are
+ * merged *after* `defaultHeaders` and so cannot be stripped here anyway. The
+ * assistant reaches the API through plain `chat.completions.create`, which never
+ * uses those helpers. The `openAiCompatibleHeaders` test asserts the header
+ * names actually put on the wire, so an SDK bump that adds one to every request
+ * fails there rather than in a user's gateway.
  */
 export const OPENAI_COMPATIBLE_STRIPPED_HEADERS: readonly string[] = [
   "User-Agent",
   "X-Stainless-Arch",
-  "X-Stainless-Custom-Poll-Interval",
-  "X-Stainless-Helper-Method",
   "X-Stainless-Lang",
   "X-Stainless-OS",
   "X-Stainless-Package-Version",
-  "X-Stainless-Poll-Helper",
   "X-Stainless-Retry-Count",
   "X-Stainless-Runtime",
   "X-Stainless-Runtime-Version",
@@ -529,10 +536,11 @@ export const OPENAI_COMPATIBLE_STRIPPED_HEADERS: readonly string[] = [
  * (`ollama` / `custom`).
  *
  * A `null` value tells the SDK to *remove* that header rather than send an empty
- * one, and `defaultHeaders` is merged after the SDK's own block, so every name in
- * {@link OPENAI_COMPATIBLE_STRIPPED_HEADERS} is dropped before the request is
- * built. `Authorization` joins them when the endpoint is the managed same-origin
- * proxy, which is authenticated by the browser session instead of a Bearer token.
+ * one, and `defaultHeaders` is merged after the block where the client sets its
+ * own, so every name in {@link OPENAI_COMPATIBLE_STRIPPED_HEADERS} is dropped
+ * before the request is built. `Authorization` joins them when the endpoint is
+ * the managed same-origin proxy, which is authenticated by the browser session
+ * instead of a Bearer token.
  *
  * @param suppressAuthorizationHeader Also drop `Authorization` (managed proxy).
  * @returns A header map whose every value is `null`.
