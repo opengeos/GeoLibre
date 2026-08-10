@@ -272,8 +272,10 @@ docker run --rm -p 8080:80 \
   ghcr.io/opengeos/geolibre:latest
 ```
 
-When the variable is unset, Clerk is not loaded and GeoLibre behaves exactly as
-before. The gate applies only to the hosted web application; the separately built
+Clerk is not loaded and GeoLibre behaves exactly as before when neither this
+variable nor the build-time `VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY` is set; the
+runtime variable wins when both are.
+The gate applies only to the hosted web application; the separately built
 Tauri, mobile, and embedded/Jupyter builds remain available offline. It is a
 property of the build, not of the request, so framing the gated deployment or
 loading it with `?embed=1` still requires sign-in. Control who may register or

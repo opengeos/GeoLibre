@@ -142,16 +142,29 @@ if os.environ.get("GEOLIBRE_AI_URL"):
 
 # Optional Clerk sign-in gate. The publishable key is intentionally public and
 # is all the browser needs; Clerk secrets never enter the image or runtime
-# config. Decode and validate the embedded Frontend API hostname now so an
-# invalid key fails at container startup instead of leaving a blank login page.
+# config. A publishable key is `pk_test_`/`pk_live_` + base64url of the Frontend
+# API hostname with a trailing "$" delimiter, so check the whole shape now: the
+# prefix rejects a secret key pasted into this variable (which would otherwise be
+# published to every visitor in the runtime config), and decoding the hostname
+# makes an invalid key fail at container startup instead of leaving a blank
+# login page.
 clerk_key = os.environ.get("GEOLIBRE_CLERK_PUBLISHABLE_KEY", "").strip()
 if clerk_key:
+    if not clerk_key.startswith(("pk_test_", "pk_live_")):
+        raise SystemExit(
+            "ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY must be a Clerk publishable key (pk_test_... or pk_live_...)."
+        )
     try:
         encoded = clerk_key.split("_", 2)[2]
         encoded += "=" * (-len(encoded) % 4)
-        clerk_fapi = base64.urlsafe_b64decode(encoded).decode().rstrip("$")
+        # validate=True so stray characters are an error rather than silently
+        # discarded, which would decode a malformed key into a plausible host.
+        clerk_fapi = base64.b64decode(encoded, altchars="-_", validate=True).decode()
     except (IndexError, ValueError, UnicodeDecodeError) as error:
         raise SystemExit("ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY is invalid.") from error
+    if not clerk_fapi.endswith("$"):
+        raise SystemExit("ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY is invalid.")
+    clerk_fapi = clerk_fapi[:-1]
     if not re.fullmatch(r"[A-Za-z0-9.-]+", clerk_fapi) or "." not in clerk_fapi:
         raise SystemExit("ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY contains an invalid Frontend API host.")
     deployment["VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY"] = clerk_key
@@ -328,12 +341,19 @@ clerk_src = ""
 clerk_frame_src = ""
 clerk_key = os.environ.get("GEOLIBRE_CLERK_PUBLISHABLE_KEY", "").strip()
 if clerk_key:
+    if not clerk_key.startswith(("pk_test_", "pk_live_")):
+        raise SystemExit(
+            "ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY must be a Clerk publishable key (pk_test_... or pk_live_...)."
+        )
     try:
         encoded = clerk_key.split("_", 2)[2]
         encoded += "=" * (-len(encoded) % 4)
-        clerk_fapi = base64.urlsafe_b64decode(encoded).decode().rstrip("$")
+        clerk_fapi = base64.b64decode(encoded, altchars="-_", validate=True).decode()
     except (IndexError, ValueError, UnicodeDecodeError) as error:
         raise SystemExit("ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY is invalid.") from error
+    if not clerk_fapi.endswith("$"):
+        raise SystemExit("ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY is invalid.")
+    clerk_fapi = clerk_fapi[:-1]
     if not re.fullmatch(r"[A-Za-z0-9.-]+", clerk_fapi) or "." not in clerk_fapi:
         raise SystemExit("ERROR: Clerk Frontend API host is invalid.")
     clerk_src = f" https://{clerk_fapi} https://challenges.cloudflare.com https://*.protect.clerk.com"

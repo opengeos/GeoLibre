@@ -11,6 +11,11 @@ interface ClerkGateProps {
  *
  * This module is dynamically imported only when a Clerk key is configured, so
  * normal web, Tauri, mobile, and embedded builds do not initialize Clerk.
+ *
+ * It gates *rendering* only, and is not a server authorization boundary: the
+ * deployment must still validate Clerk sessions (or another credential) at the
+ * reverse proxy for `/sidecar`, `/ai`, and any other upstream service. See the
+ * Clerk section of docs/getting-started.md.
  */
 export function ClerkGate({ publishableKey, children }: ClerkGateProps) {
   return (
