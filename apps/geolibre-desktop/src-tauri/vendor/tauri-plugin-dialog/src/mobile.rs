@@ -63,10 +63,12 @@ pub fn pick_file<R: Runtime, F: FnOnce(Option<FilePath>) + Send + 'static>(
             .dialog
             .0
             .run_mobile_plugin::<FilePickerResponse>("showFilePicker", dialog.payload(false));
-        if let Ok(response) = res {
-            f(Some(response.files.into_iter().next().unwrap()))
-        } else {
-            f(None)
+        match res {
+            Ok(response) => f(response.files.into_iter().next()),
+            Err(error) => {
+                log::error!("failed to pick file: {error}");
+                f(None)
+            }
         }
     });
 }
@@ -80,10 +82,12 @@ pub fn pick_files<R: Runtime, F: FnOnce(Option<Vec<FilePath>>) + Send + 'static>
             .dialog
             .0
             .run_mobile_plugin::<FilePickerResponse>("showFilePicker", dialog.payload(true));
-        if let Ok(response) = res {
-            f(Some(response.files))
-        } else {
-            f(None)
+        match res {
+            Ok(response) => f(Some(response.files)),
+            Err(error) => {
+                log::error!("failed to pick files: {error}");
+                f(None)
+            }
         }
     });
 }
@@ -97,10 +101,12 @@ pub fn save_file<R: Runtime, F: FnOnce(Option<FilePath>) + Send + 'static>(
             .dialog
             .0
             .run_mobile_plugin::<SaveFileResponse>("saveFileDialog", dialog.payload(false));
-        if let Ok(response) = res {
-            f(Some(response.file))
-        } else {
-            f(None)
+        match res {
+            Ok(response) => f(Some(response.file)),
+            Err(error) => {
+                log::error!("failed to pick save file: {error}");
+                f(None)
+            }
         }
     });
 }

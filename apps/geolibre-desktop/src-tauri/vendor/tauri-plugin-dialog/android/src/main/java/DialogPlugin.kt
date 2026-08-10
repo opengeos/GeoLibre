@@ -98,9 +98,10 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
   @ActivityCallback
   fun filePickerResult(invoke: Invoke, result: ActivityResult) {
     try {
+      val args = invoke.parseArgs(FilePickerOptions::class.java)
       when (result.resultCode) {
         Activity.RESULT_OK -> {
-          persistDocumentPermissions(result.data)
+          persistDocumentPermissions(result.data, args.fileAccessMode == "scoped")
           val callResult = createPickFilesResult(result.data)
           invoke.resolve(callResult)
         }
@@ -114,22 +115,30 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
     }
   }
 
-  private fun persistDocumentPermissions(data: Intent?) {
-    if (data == null) return
-    if ((data.flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) == 0) return
+  private fun persistDocumentPermissions(data: Intent?, required: Boolean) {
+    if (!required) return
+    if (data == null) throw SecurityException("Document picker returned no permission data")
+    if ((data.flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) == 0) {
+      throw SecurityException("Document provider did not return a persistable permission")
+    }
     val takeFlags = data.flags and documentPermissionFlags
-    if (takeFlags == 0) return
+    if (takeFlags != documentPermissionFlags) {
+      throw SecurityException("Document provider did not grant read and write access")
+    }
 
     val uris = if (data.clipData == null) {
       listOfNotNull(data.data)
     } else {
       (0 until data.clipData!!.itemCount).map { data.clipData!!.getItemAt(it).uri }
     }
+    if (uris.isEmpty()) throw SecurityException("Document picker returned no URI")
     for (uri in uris) {
-      try {
-        activity.contentResolver.takePersistableUriPermission(uri, takeFlags)
-      } catch (ex: SecurityException) {
-        Logger.error("Failed to persist document permission for $uri", ex)
+      activity.contentResolver.takePersistableUriPermission(uri, takeFlags)
+      val permission = activity.contentResolver.persistedUriPermissions.firstOrNull {
+        it.uri == uri
+      }
+      if (permission == null || !permission.isReadPermission || !permission.isWritePermission) {
+        throw SecurityException("Document permission was not retained for $uri")
       }
     }
   }
@@ -253,9 +262,10 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
   @ActivityCallback
   fun saveFileDialogResult(invoke: Invoke, result: ActivityResult) {
     try {
+      val args = invoke.parseArgs(SaveFileDialogOptions::class.java)
       when (result.resultCode) {
         Activity.RESULT_OK -> {
-          persistDocumentPermissions(result.data)
+          persistDocumentPermissions(result.data, args.fileAccessMode == "scoped")
           val callResult = JSObject()
           val intent: Intent? = result.data
           if (intent != null) {

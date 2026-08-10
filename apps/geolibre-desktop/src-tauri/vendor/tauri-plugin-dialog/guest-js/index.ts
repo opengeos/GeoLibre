@@ -87,11 +87,13 @@ interface OpenDialogOptions {
    * This also means that the caller has responsibility of deleting the file if this file is not meant to be retained
    * in the app sandbox.
    *
-   * If a file is opened with {@linkcode fileAccessMode: 'scoped'}, the file will remain in its original location
-   * and security-scoped access will be automatically managed by the system.
+   * If a file is opened with {@linkcode fileAccessMode: 'scoped'}, the file will remain in its original location.
+   * On Android, read and write access to its content URI is retained across app restarts. On Apple platforms,
+   * security-scoped access is automatically managed by the system.
    *
    * **Note**
-   * This is specifically meant for document pickers on iOS or MacOS, in conjunction with [security scoped resources](https://developer.apple.com/documentation/foundation/nsurl/startaccessingsecurityscopedresource()).
+   * This is specifically meant for document pickers on Android, iOS, or macOS. Apple platforms use
+   * [security scoped resources](https://developer.apple.com/documentation/foundation/nsurl/startaccessingsecurityscopedresource()).
    *
    * Why only document pickers, and not image or video pickers?
    * The image and video pickers on iOS behave differently from the document pickers, and return [NSItemProvider](https://developer.apple.com/documentation/foundation/nsitemprovider) objects instead of file URLs.
@@ -122,6 +124,11 @@ interface SaveDialogOptions {
    * If not provided, Android uses `(invalid).txt` as default file name.
    */
   defaultPath?: string;
+  /**
+   * The file access mode of the dialog.
+   * GeoLibre's Android patch retains read and write access when `scoped` is used.
+   */
+  fileAccessMode?: FileAccessMode;
   /** Whether to allow creating directories in the dialog. Enabled by default. **macOS Only** */
   canCreateDirectories?: boolean;
 }

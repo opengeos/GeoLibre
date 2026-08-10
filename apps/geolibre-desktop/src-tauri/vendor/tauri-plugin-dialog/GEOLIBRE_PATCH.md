@@ -12,10 +12,11 @@ The GeoLibre-specific runtime delta is intentionally limited to
 - honor `fileAccessMode: "scoped"` for Android open and save dialogs;
 - use `ACTION_OPEN_DOCUMENT` for scoped open dialogs;
 - request read, write, and persistable URI grants for scoped dialogs; and
-- retain the read/write grants returned by the document provider.
+- retain and verify the read/write grants returned by the document provider.
 
-`src/commands.rs` passes the access mode through save-dialog calls, and
-`src/lib.rs` documents that the option is supported by this Android patch.
+`src/commands.rs` passes the access mode through save-dialog calls. The API
+documentation in `guest-js/index.ts` and `src/lib.rs` describes Android support,
+and `src/mobile.rs` logs native picker failures before returning no selection.
 
 Android limits how many URI grants an app may retain. GeoLibre requests scoped
 access only for project documents whose paths remain in the recent-project
