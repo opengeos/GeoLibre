@@ -4,6 +4,8 @@ import {
   availableProviders,
   configForProvider,
   hasManagedAssistantProxy,
+  openAiCompatibleHeaders,
+  OPENAI_COMPATIBLE_STRIPPED_HEADERS,
   readBuildTimeAssistantEnv,
   readDeploymentAssistantEnv,
   readRuntimeEnv,
@@ -304,6 +306,66 @@ describe("resolveProviderConfig", () => {
       })?.suppressAuthorizationHeader,
       false,
     );
+  });
+});
+
+describe("openAiCompatibleHeaders", () => {
+  /**
+   * Drive a real OpenAI client through a stub `fetch` and return the header
+   * names it actually put on the wire. Using the installed SDK rather than a
+   * hand-written expectation is the point: it is the SDK's own header set that
+   * has to end up small enough for a third-party gateway's CORS preflight.
+   */
+  async function sentHeaderNames(defaultHeaders?: Record<string, null>): Promise<string[]> {
+    const { default: OpenAI } = await import("openai");
+    let names: string[] = [];
+    const client = new OpenAI({
+      apiKey: "test-key",
+      baseURL: "https://gateway.example.com/v1",
+      defaultHeaders,
+      fetch: async (_url, init) => {
+        names = [...new Headers(init?.headers).keys()].sort();
+        return new Response('{"id":"x","object":"chat.completion","choices":[]}', {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    await client.chat.completions.create({
+      model: "test-model",
+      messages: [{ role: "user", content: "show countries with pop over 50 million" }],
+    });
+    return names;
+  }
+
+  it("leaves only headers a third-party gateway's CORS preflight allows", async () => {
+    // Baseline: the SDK's own telemetry headers are what break the preflight
+    // against an OpenAI-compatible gateway that allows just the standard trio.
+    const baseline = await sentHeaderNames();
+    assert.ok(baseline.some((name) => name.startsWith("x-stainless-")));
+    assert.ok(baseline.includes("user-agent"));
+
+    // With the suppression map, nothing outside the trio is requested, so the
+    // preflight asks only for headers such a gateway already allows (#1834).
+    assert.deepEqual(await sentHeaderNames(openAiCompatibleHeaders(false)), [
+      "accept",
+      "authorization",
+      "content-type",
+    ]);
+  });
+
+  it("keeps Authorization unless the managed same-origin proxy asked to drop it", async () => {
+    assert.ok((await sentHeaderNames(openAiCompatibleHeaders(false))).includes("authorization"));
+    assert.deepEqual(await sentHeaderNames(openAiCompatibleHeaders(true)), [
+      "accept",
+      "content-type",
+    ]);
+  });
+
+  it("maps every stripped header to null so the SDK removes rather than blanks it", () => {
+    const headers = openAiCompatibleHeaders(false);
+    assert.deepEqual(Object.keys(headers).sort(), [...OPENAI_COMPATIBLE_STRIPPED_HEADERS].sort());
+    assert.ok(Object.values(headers).every((value) => value === null));
   });
 });
 
