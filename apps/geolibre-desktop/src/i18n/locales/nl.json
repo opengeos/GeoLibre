@@ -186,6 +186,10 @@
     "computing": "Terrein berekenen…",
     "partialData": "Sommige meetpunten hadden geen terreingegevens"
   },
+  "statusBar": {
+    "elevation": "Hoogte",
+    "elevationLong": "Hoogte"
+  },
   "fileNamePrompt": {
     "title": "Bestand opslaan als",
     "description": "Voer een bestandsnaam in. Het bestand wordt gedownload naar de downloadmap van uw browser.",

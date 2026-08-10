@@ -184,6 +184,10 @@
     "computing": "지형 계산 중…",
     "partialData": "일부 샘플에 지형 데이터가 없습니다"
   },
+  "statusBar": {
+    "elevation": "고도",
+    "elevationLong": "고도"
+  },
   "fileNamePrompt": {
     "title": "다른 이름으로 저장",
     "description": "파일 이름을 입력하세요. 파일은 브라우저의 다운로드 폴더에 저장됩니다.",

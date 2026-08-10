@@ -186,6 +186,10 @@
     "computing": "Calcolo del terreno…",
     "partialData": "Alcuni campioni non avevano dati del terreno"
   },
+  "statusBar": {
+    "elevation": "Quota",
+    "elevationLong": "Quota"
+  },
   "fileNamePrompt": {
     "title": "Salva file con nome",
     "description": "Inserisci un nome file. Il file verrà scaricato nella cartella dei download del browser.",

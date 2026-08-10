@@ -21,13 +21,15 @@
  * Measure tool behaves exactly as before.
  */
 
-import { getActiveEllipsoid, getActiveMeanRadiusMeters } from "@geolibre/core";
-import type { MeasureControl, Measurement } from "maplibre-gl-components";
 import {
-  fetchElevations,
-  MAX_POINTS_PER_REQUEST,
+  getActiveEllipsoid,
+  getActiveMeanRadiusMeters,
+  sampleMapTerrain,
+  sampleRemoteElevations,
   type FetchLike,
-} from "./elevation-profile/elevation/client";
+  type TerrainMapLike,
+} from "@geolibre/core";
+import type { MeasureControl, Measurement } from "maplibre-gl-components";
 import {
   buildAreaGrid,
   densifyLine,
@@ -118,61 +120,11 @@ export function setTerrainMeasureLabels(labels: Partial<typeof terrainMeasureLab
   }
 }
 
-/** The slice of the MapLibre map the samplers need (stubbed in tests). */
-export interface TerrainMapLike {
-  getTerrain?: () => { exaggeration?: number } | null | undefined;
-  queryTerrainElevation?: (lngLat: [number, number]) => number | null;
-}
-
-/**
- * Sample elevations from the map's enabled 3D terrain, in true meters
- * (MapLibre's `queryTerrainElevation` bakes the exaggeration in, so it is
- * divided back out). Returns null when terrain is not enabled.
- */
-export function sampleMapTerrain(
-  map: TerrainMapLike | null | undefined,
-  points: LngLat[],
-): (number | null)[] | null {
-  if (!map?.getTerrain || !map.queryTerrainElevation) return null;
-  const terrain = map.getTerrain();
-  if (!terrain) return null;
-  const exaggeration =
-    typeof terrain.exaggeration === "number" && terrain.exaggeration > 0 ? terrain.exaggeration : 1;
-  return points.map((point) => {
-    const elevation = map.queryTerrainElevation!(point);
-    return typeof elevation === "number" && Number.isFinite(elevation)
-      ? elevation / exaggeration
-      : null;
-  });
-}
-
-/**
- * Sample elevations from the Open-Meteo API, chunked to its 100-point request
- * limit. A failed chunk yields nulls for its points rather than throwing, so a
- * flaky network degrades the readout instead of breaking the Measure tool.
- */
-export async function sampleRemoteElevations(
-  points: LngLat[],
-  fetchImpl?: FetchLike,
-): Promise<(number | null)[]> {
-  const chunks: LngLat[][] = [];
-  for (let i = 0; i < points.length; i += MAX_POINTS_PER_REQUEST) {
-    chunks.push(points.slice(i, i + MAX_POINTS_PER_REQUEST));
-  }
-  // The chunks are independent, so fire them concurrently; Promise.all
-  // preserves their order for reassembly.
-  const chunkResults = await Promise.all(
-    chunks.map(async (chunk) => {
-      try {
-        const elevations = await fetchElevations(chunk, fetchImpl);
-        return elevations.map((elevation) => (Number.isFinite(elevation) ? elevation : null));
-      } catch {
-        return chunk.map(() => null);
-      }
-    }),
-  );
-  return chunkResults.flat();
-}
+// The two elevation samplers now live in `@geolibre/core` so the status bar's
+// pointer readout can share them (see core/src/elevation.ts). Re-exported here
+// because this module was their original home and `tests/terrain-measure.test.ts`
+// exercises them alongside the readout logic they feed.
+export { sampleMapTerrain, sampleRemoteElevations, type TerrainMapLike };
 
 /** The computed terrain readout for the most recent measurement. */
 type TerrainReadout =

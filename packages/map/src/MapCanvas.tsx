@@ -1,5 +1,7 @@
 import {
   applyGroupEffects,
+  createPointerElevationResolver,
+  getActiveEllipsoid,
   isDuckDBQueryLayer,
   NETCDF_IMAGE_SOURCE_KIND,
   PHOTO_FULL_PROPERTY,
@@ -1049,6 +1051,7 @@ export const MapCanvas = memo(function MapCanvas({
   const selectFeature = useAppStore((s) => s.selectFeature);
   const setMapView = useAppStore((s) => s.setMapView);
   const setPointerCoords = useAppStore((s) => s.setPointerCoords);
+  const setPointerElevation = useAppStore((s) => s.setPointerElevation);
   const previousSelectedFeatureKey = useRef<string | null>(null);
   const previousDuckDBSelectionLayerId = useRef<string | null>(null);
   const identifyPopup = useRef<maplibregl.Popup | null>(null);
@@ -1066,10 +1069,26 @@ export const MapCanvas = memo(function MapCanvas({
     controller.current = mc;
     if (controllerRef) controllerRef.current = mc;
 
-    map.on("mousemove", (e) => {
-      setPointerCoords([e.lngLat.lng, e.lngLat.lat]);
+    // Ground elevation under the cursor for the status bar (issue #1813).
+    // Terrain sampling is synchronous so the readout tracks the pointer live;
+    // the resolver only falls back to the network once the pointer settles.
+    const pointerElevation = createPointerElevationResolver({
+      getMap: () => map,
+      isEarth: () => getActiveEllipsoid().id === "earth",
+      emit: setPointerElevation,
     });
-    map.on("mouseout", () => setPointerCoords(null));
+
+    map.on("mousemove", (e) => {
+      const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+      setPointerCoords(point);
+      pointerElevation.update(point);
+    });
+    map.on("mouseout", () => {
+      // setPointerCoords(null) clears the stored elevation too; this just
+      // cancels a lookup that would otherwise land after the pointer left.
+      pointerElevation.update(null);
+      setPointerCoords(null);
+    });
     map.on("error", (event) => {
       // Cancelled tile fetches are already surfaced (as info) by the
       // network capture; logging them here would double-count aborts.
@@ -1170,6 +1189,7 @@ export const MapCanvas = memo(function MapCanvas({
       if (resizeFrame !== null) {
         window.cancelAnimationFrame(resizeFrame);
       }
+      pointerElevation.dispose();
       mc.destroy();
       controller.current = null;
       if (controllerRef) controllerRef.current = null;

@@ -186,6 +186,10 @@
     "computing": "Calculando terreno…",
     "partialData": "Algumas amostras não tinham dados de terreno"
   },
+  "statusBar": {
+    "elevation": "Elev",
+    "elevationLong": "Elevação"
+  },
   "fileNamePrompt": {
     "title": "Salvar arquivo como",
     "description": "Digite um nome de arquivo. O arquivo será baixado para a pasta de downloads do seu navegador.",

@@ -1,9 +1,22 @@
 import { useEffect, useState } from "react";
-import { useAppStore } from "@geolibre/core";
+import { FEET_PER_METER, useAppStore } from "@geolibre/core";
 import { cn } from "@geolibre/ui";
 import { Bug } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatAccuracy, formatSpeedKmh } from "../../lib/gps-tracking";
+
+/**
+ * Ground elevation for the readout, in the scale bar's unit family: feet for
+ * imperial, metres otherwise (nautical miles are a horizontal unit only, so
+ * nautical falls through to metres). Rounded to the metre/foot because neither
+ * source — terrain tiles or Open-Meteo — is meaningfully precise beyond that.
+ * Matches the Measure tool's terrain rows so the two never disagree.
+ */
+export function formatPointerElevation(meters: number, unit: string): string {
+  return unit === "imperial"
+    ? `${Math.round(meters * FEET_PER_METER).toLocaleString()} ft`
+    : `${Math.round(meters).toLocaleString()} m`;
+}
 
 interface StatusBarProps {
   compact?: boolean;
@@ -20,6 +33,8 @@ export function StatusBar({
 }: StatusBarProps) {
   const { t } = useTranslation();
   const pointerCoords = useAppStore((s) => s.pointerCoords);
+  const pointerElevation = useAppStore((s) => s.pointerElevation);
+  const scaleUnit = useAppStore((s) => s.preferences.map.scaleUnit);
   const gpsStatus = useAppStore((s) => s.gpsStatus);
   const mapView = useAppStore((s) => s.mapView);
   const diagnosticsCount = diagnosticsErrorCount + diagnosticsWarningCount;
@@ -54,6 +69,12 @@ export function StatusBar({
     ? `${pointerCoords[0].toFixed(5)}, ${pointerCoords[1].toFixed(5)}`
     : "—";
 
+  // Only shown once a value resolves: an "Elev: —" that is empty most of the
+  // time (terrain off, mid-lookup, off-Earth) would read as broken rather than
+  // as "not applicable here".
+  const elevationText =
+    pointerElevation !== null ? formatPointerElevation(pointerElevation, scaleUnit) : null;
+
   const bboxText = mapView.bbox ? mapView.bbox.map((n) => n.toFixed(4)).join(", ") : "—";
 
   return (
@@ -66,6 +87,11 @@ export function StatusBar({
       <span className="shrink-0">
         {compact ? "XY" : "Coords"}: {coordText}
       </span>
+      {elevationText && (
+        <span className="shrink-0" title={t("statusBar.elevationLong")}>
+          {t("statusBar.elevation")}: {elevationText}
+        </span>
+      )}
       {gpsText && <span className="shrink-0">GPS: {gpsText}</span>}
       <span className="shrink-0">Zoom: {mapView.zoom.toFixed(2)}</span>
       <span className="shrink-0">Bearing: {mapView.bearing.toFixed(1)}°</span>

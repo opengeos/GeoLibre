@@ -186,6 +186,10 @@
     "computing": "Calcul du terrain…",
     "partialData": "Certains échantillons n'avaient pas de données de terrain"
   },
+  "statusBar": {
+    "elevation": "Alt",
+    "elevationLong": "Altitude"
+  },
   "fileNamePrompt": {
     "title": "Enregistrer le fichier sous",
     "description": "Entrez un nom de fichier. Le fichier est téléchargé dans le dossier de téléchargements de votre navigateur.",

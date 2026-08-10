@@ -184,6 +184,10 @@
     "computing": "地形を計算しています…",
     "partialData": "一部のサンプルに地形データがありませんでした"
   },
+  "statusBar": {
+    "elevation": "標高",
+    "elevationLong": "標高"
+  },
   "fileNamePrompt": {
     "title": "名前を付けて保存",
     "description": "ファイル名を入力してください。ファイルはブラウザのダウンロードフォルダに保存されます。",

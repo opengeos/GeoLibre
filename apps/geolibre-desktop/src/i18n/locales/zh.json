@@ -184,6 +184,10 @@
     "computing": "正在计算地形…",
     "partialData": "部分采样点无地形数据"
   },
+  "statusBar": {
+    "elevation": "高程",
+    "elevationLong": "高程"
+  },
   "fileNamePrompt": {
     "title": "文件另存为",
     "description": "请输入文件名。文件将下载到您浏览器的下载文件夹。",

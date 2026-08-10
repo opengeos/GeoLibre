@@ -186,6 +186,10 @@
     "computing": "Gelände wird berechnet…",
     "partialData": "Für einige Messpunkte lagen keine Geländedaten vor"
   },
+  "statusBar": {
+    "elevation": "Höhe",
+    "elevationLong": "Höhe"
+  },
   "fileNamePrompt": {
     "title": "Datei speichern unter",
     "description": "Geben Sie einen Dateinamen ein. Die Datei wird in den Downloads-Ordner Ihres Browsers heruntergeladen.",

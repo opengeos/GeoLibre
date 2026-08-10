@@ -186,6 +186,10 @@
     "computing": "Arazi hesaplanıyor…",
     "partialData": "Bazı örneklemlerde arazi verisi yoktu"
   },
+  "statusBar": {
+    "elevation": "Yük",
+    "elevationLong": "Yükseklik"
+  },
   "fileNamePrompt": {
     "title": "Dosyayı farklı kaydet",
     "description": "Bir dosya adı girin. Dosya, tarayıcınızın indirilenler klasörüne indirilir.",

@@ -186,6 +186,10 @@
     "computing": "Computing terrain…",
     "partialData": "Some samples had no terrain data"
   },
+  "statusBar": {
+    "elevation": "Elev",
+    "elevationLong": "Elevation"
+  },
   "fileNamePrompt": {
     "title": "Save file as",
     "description": "Enter a file name. The file downloads to your browser's downloads folder.",
