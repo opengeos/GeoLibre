@@ -71,6 +71,23 @@ export interface CredentialStripPrompt {
 export const LARGE_EMBED_WARNING_BYTES = 50 * 1024 * 1024;
 
 /**
+ * Messages engines raise when a string passes their maximum length, which is
+ * how "this project is too large to serialize" surfaces.
+ *
+ * Matched by text rather than by error class because there is no typed signal:
+ * V8 (Chromium, WebView2) throws `RangeError: Invalid string length`,
+ * JavaScriptCore (the macOS and Linux Tauri webviews) reports an out-of-memory
+ * error, and SpiderMonkey says "allocation size overflow". Matching only V8's
+ * wording would leave desktop users on every other webview with the generic
+ * failure message instead of the guidance this exists to give.
+ *
+ * Deliberately narrow: a genuine serialization bug (a cycle, say, which reads
+ * "Converting circular structure to JSON") must not be filed under size.
+ */
+const SERIALIZATION_TOO_LARGE_PATTERN =
+  /invalid string length|out of memory|allocation size overflow|string too long/i;
+
+/**
  * A pending "embed local vector data?" prompt, shown on the web when saving a
  * project that has local-file Add Vector Layer layers whose data would
  * otherwise be lost on reopen (the browser exposes no path to re-read them).
@@ -696,7 +713,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       // and pointing that at PMTiles/FlatGeobuf would send the user chasing a
       // size problem they do not have.
       setActionError(
-        error instanceof RangeError && error.message.includes("Invalid string length")
+        error instanceof Error && SERIALIZATION_TOO_LARGE_PATTERN.test(error.message)
           ? t("toolbar.error.projectTooLargeToSave")
           : t("toolbar.error.couldNotSaveProject"),
       );
