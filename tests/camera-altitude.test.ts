@@ -12,8 +12,8 @@ import { afterEach, describe, it } from "node:test";
 import {
   formatCameraAltitude,
   scaleAltitudeToActiveBody,
-} from "../packages/core/src/camera-altitude";
-import { setActiveEllipsoidId } from "../packages/core/src/ellipsoids";
+  setActiveEllipsoidId,
+} from "@geolibre/core";
 
 afterEach(() => setActiveEllipsoidId("earth"));
 
