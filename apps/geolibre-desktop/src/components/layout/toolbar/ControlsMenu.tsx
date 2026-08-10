@@ -78,6 +78,7 @@ interface ControlsMenuProps {
   onToggleDirections: () => void;
   onToggleReverseGeocode: () => void;
   onToggleGraticule: () => void;
+  onTogglePointerElevation: () => void;
   onToggleClouds: () => void;
   onTogglePrecipitation: () => void;
   onOpenFieldCollection: () => void;
@@ -106,6 +107,7 @@ export function ControlsMenu({
   onToggleDirections,
   onToggleReverseGeocode,
   onToggleGraticule,
+  onTogglePointerElevation,
   onToggleClouds,
   onTogglePrecipitation,
   onOpenFieldCollection,
@@ -128,15 +130,6 @@ export function ControlsMenu({
   // default: without 3D terrain the lookup goes to a public elevation service,
   // so it stays an explicit opt-in rather than something hovering triggers.
   const pointerElevationActive = useAppStore((s) => s.preferences.map.showPointerElevation);
-  const togglePointerElevation = () => {
-    // Read live state at click time so a concurrent preference change is not
-    // clobbered by a stale snapshot, matching the other toggles here.
-    const current = useAppStore.getState().preferences;
-    setPreferences({
-      ...current,
-      map: { ...current.map, showPointerElevation: !current.map.showPointerElevation },
-    });
-  };
   // The globe cannot spin while the map bounds are locked, so enabling spin
   // while they are locked opens a dialog that unlocks the bounds first (#723).
   const [spinGlobeNoticeOpen, setSpinGlobeNoticeOpen] = useState(false);
@@ -277,7 +270,7 @@ export function ControlsMenu({
           )}
           {show("controls.pointerElevation") && (
             <DropdownMenuItem
-              onClick={togglePointerElevation}
+              onClick={onTogglePointerElevation}
               title={t("toolbar.item.pointerElevationHint")}
             >
               {t("toolbar.item.pointerElevation")}

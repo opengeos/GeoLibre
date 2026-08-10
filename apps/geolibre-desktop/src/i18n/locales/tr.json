@@ -2654,7 +2654,9 @@
       "loadingOsmPbfDesc": "Dosya ayrıştırılıyor ve öğeler GeoJSON'a dönüştürülüyor. Bu arka planda çalışır; büyük dosyalar için biraz zaman alabilir.",
       "loadingOsmPbfProgress": "Öğeler GeoJSON'a dönüştürülüyor… {{total}} OSM varlığından {{processed}} tanesi işlendi.",
       "projectName": "Proje adı",
-      "storymapEllipsis": "Hikaye Haritası..."
+      "storymapEllipsis": "Hikaye Haritası...",
+      "pointerElevationNoticeTitle": "Rakım genel bir servis kullanır",
+      "pointerElevationNoticeDesc": "3B arazi açıkken rakım haritanın kendisinden hesaplanır ve hiçbir veri gönderilmez. 3B arazi yokken genel Open-Meteo API'si sorgulanır ve imlecin altındaki koordinatlar cihazınızdan çıkar."
     },
     "plugin": {
       "maplibre-gl-annotations": "Ek açıklamalar",

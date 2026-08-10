@@ -166,9 +166,16 @@ describe("pointer elevation resolver", () => {
     // still emitted after MapCanvas teardown, writing into a torn-down map.
     const emitted: (number | null)[] = [];
     let release: ((r: Response) => void) | null = null;
+    // Resolved by fetchImpl itself, so the test proves the request really is in
+    // flight before disposing rather than trusting a fixed delay.
+    let notifyStarted: (() => void) | null = null;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
     const fetchImpl: FetchLike = () =>
       new Promise<Response>((resolve) => {
         release = resolve;
+        notifyStarted?.();
       });
 
     const resolver = createPointerElevationResolver({
@@ -180,7 +187,7 @@ describe("pointer elevation resolver", () => {
     });
 
     resolver.update([3, 3]);
-    await tick(20); // debounce elapsed, request in flight
+    await started;
     resolver.dispose();
     release?.(new Response(JSON.stringify({ elevation: [815] }), { status: 200 }));
     await tick(20);
@@ -270,6 +277,89 @@ describe("pointer elevation resolver", () => {
     resolver.update(first); // still cached -> served without a request
     await tick(10);
     assert.equal(calls(), before, "the most recently used cell was evicted");
+    resolver.dispose();
+  });
+
+  it("uses terrain but never the network when remote lookups are not consented", async () => {
+    const emitted: (number | null)[] = [];
+    const { fetch, calls } = stubFetch(1);
+    const resolver = createPointerElevationResolver({
+      getMap: () => terrainMap(640),
+      isEarth: () => true,
+      canUseRemote: () => false,
+      emit: (v) => emitted.push(v),
+      fetchImpl: fetch,
+      debounceMs: 5,
+    });
+
+    resolver.update([1, 1]);
+    await tick(30);
+    assert.equal(emitted.at(-1), 640, "the terrain path sends nothing, so it stays available");
+    assert.equal(calls(), 0, "no request without consent");
+    resolver.dispose();
+  });
+
+  it("makes no request at all without consent when terrain is off", async () => {
+    const emitted: (number | null)[] = [];
+    const { fetch, calls } = stubFetch(1);
+    const resolver = createPointerElevationResolver({
+      getMap: () => ({ getTerrain: () => null }),
+      isEarth: () => true,
+      canUseRemote: () => false,
+      emit: (v) => emitted.push(v),
+      fetchImpl: fetch,
+      debounceMs: 5,
+    });
+
+    resolver.update([1, 1]);
+    await tick(30);
+    assert.equal(calls(), 0);
+    assert.deepEqual(emitted, [null]);
+    resolver.dispose();
+  });
+
+  it("drops an in-flight result after invalidate, and stays usable", async () => {
+    // Loading another project resets the readout; a response for the previous
+    // project must not repaint it, including Earth-to-Earth switches where
+    // neither the body nor the pointer changed.
+    const emitted: (number | null)[] = [];
+    let release: ((r: Response) => void) | null = null;
+    let notifyStarted: (() => void) | null = null;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
+    const fetchImpl: FetchLike = () =>
+      new Promise<Response>((resolve) => {
+        release = resolve;
+        notifyStarted?.();
+      });
+
+    const resolver = createPointerElevationResolver({
+      getMap: () => ({ getTerrain: () => null }),
+      isEarth: () => true,
+      emit: (v) => emitted.push(v),
+      fetchImpl,
+      debounceMs: 5,
+    });
+
+    resolver.update([4, 4]);
+    await started;
+    resolver.invalidate();
+    release?.(new Response(JSON.stringify({ elevation: [404] }), { status: 200 }));
+    await tick(20);
+    assert.ok(!emitted.includes(404), `stale project result leaked: ${emitted.join(",")}`);
+
+    // Unlike a teardown, invalidate leaves the resolver working.
+    const after = createPointerElevationResolver({
+      getMap: () => terrainMap(120),
+      isEarth: () => true,
+      emit: (v) => emitted.push(v),
+      debounceMs: 5,
+    });
+    resolver.update([4, 4]);
+    after.update([4, 4]);
+    assert.equal(emitted.at(-1), 120);
+    after.dispose();
     resolver.dispose();
   });
 

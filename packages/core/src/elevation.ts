@@ -203,6 +203,13 @@ export interface PointerElevationResolverOptions {
    * one on screen. Defaults to always-on for callers that do not gate it.
    */
   isEnabled?: () => boolean;
+  /**
+   * Whether the *remote* Open-Meteo fallback may run. The terrain path sends
+   * nothing anywhere, so it is deliberately not gated by this — a user who has
+   * declined the network lookup still gets a live readout wherever 3D terrain
+   * is on. Defaults to allowed for callers that do not gate it.
+   */
+  canUseRemote?: () => boolean;
   /** Whether the active body is Earth — Open-Meteo has no data for anything else. */
   isEarth: () => boolean;
   /** Called with the resolved elevation in true metres, or null when unknown. */
@@ -214,6 +221,13 @@ export interface PointerElevationResolverOptions {
 export interface PointerElevationResolver {
   /** Report a new pointer position, or null when the pointer leaves the map. */
   update: (point: LngLat | null) => void;
+  /**
+   * Drop any pending *and* in-flight lookup without tearing the resolver down.
+   * Used when the map's context changes under it — loading another project
+   * resets the readout, and a response for the previous project must not
+   * repaint it.
+   */
+  invalidate: () => void;
   /** Cancel any pending lookup. */
   dispose: () => void;
 }
@@ -240,6 +254,7 @@ export function createPointerElevationResolver(
 ): PointerElevationResolver {
   const { getMap, isEarth, emit, fetchImpl } = options;
   const isEnabled = options.isEnabled ?? (() => true);
+  const canUseRemote = options.canUseRemote ?? (() => true);
   const debounceMs = options.debounceMs ?? POINTER_ELEVATION_DEBOUNCE_MS;
   const cache = new Map<string, number | null>();
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -269,7 +284,8 @@ export function createPointerElevationResolver(
       return;
     }
 
-    if (!isEarth()) {
+    // Open-Meteo has no data off Earth, and the remote path needs consent.
+    if (!isEarth() || !canUseRemote()) {
       emit(null);
       return;
     }
@@ -310,20 +326,19 @@ export function createPointerElevationResolver(
         // The pointer moved, left, or the resolver was disposed while the
         // request was in flight. Also recheck the body: a switch to a planetary
         // basemap mid-request must not publish an Earth elevation over it.
-        if (requested !== generation || !isEarth() || !isEnabled()) return;
+        if (requested !== generation || !isEarth() || !isEnabled() || !canUseRemote()) return;
         emit(value);
       })();
     }, debounceMs);
   };
 
-  return {
-    update,
-    // Bumping the generation is what actually invalidates an *in-flight*
-    // request; cancelPending alone only clears a timer that has not fired yet,
-    // so a fetch already in progress would still emit into a torn-down map.
-    dispose: () => {
-      generation += 1;
-      cancelPending();
-    },
+  // Bumping the generation is what actually invalidates an *in-flight*
+  // request; cancelPending alone only clears a timer that has not fired yet, so
+  // a fetch already in progress would still emit into a torn-down map.
+  const invalidate = (): void => {
+    generation += 1;
+    cancelPending();
   };
+
+  return { update, invalidate, dispose: invalidate };
 }

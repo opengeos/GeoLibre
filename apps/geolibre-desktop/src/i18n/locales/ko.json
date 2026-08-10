@@ -2607,7 +2607,9 @@
       "loadingOsmPbfDesc": "파일을 파싱하고 피처를 GeoJSON으로 변환하는 중입니다. 백그라운드에서 실행되며 대용량 추출 파일의 경우 시간이 걸릴 수 있습니다.",
       "loadingOsmPbfProgress": "피처를 GeoJSON으로 변환하는 중… OSM 엔티티 {{total}}개 중 {{processed}}개 처리됨.",
       "projectName": "프로젝트 이름",
-      "storymapEllipsis": "스토리 맵..."
+      "storymapEllipsis": "스토리 맵...",
+      "pointerElevationNoticeTitle": "고도는 공개 서비스를 사용합니다",
+      "pointerElevationNoticeDesc": "3D 지형이 켜져 있으면 고도는 지도 자체에서 계산되며 아무것도 전송되지 않습니다. 3D 지형이 없으면 공개 Open-Meteo API를 조회하며 포인터 아래 좌표가 기기를 벗어납니다."
     },
     "plugin": {
       "maplibre-gl-annotations": "주석",

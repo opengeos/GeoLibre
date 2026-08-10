@@ -8,6 +8,7 @@ import {
   PHOTO_PROPERTY,
   useAppStore,
   type GeoLibreLayer,
+  type PointerElevationResolver,
 } from "@geolibre/core";
 import maplibregl from "maplibre-gl";
 import { memo, useEffect, useMemo, useRef } from "react";
@@ -43,6 +44,13 @@ export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   onControllerReady?: () => void;
+  /**
+   * Whether the status bar's elevation readout may fall back to the public
+   * Open-Meteo service. Supplied by the app, which owns the persisted consent
+   * flag; `@geolibre/map` has no opinion about consent storage. Omitted means
+   * allowed, so embedders that never enable the readout need not pass it.
+   */
+  canUseRemoteElevation?: () => boolean;
 }
 
 export interface MapDiagnosticEvent {
@@ -1024,6 +1032,7 @@ export const MapCanvas = memo(function MapCanvas({
   controllerRef,
   onMapDiagnosticEvent,
   onControllerReady,
+  canUseRemoteElevation,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -1053,6 +1062,19 @@ export const MapCanvas = memo(function MapCanvas({
   const setPointerCoords = useAppStore((s) => s.setPointerCoords);
   const setPointerElevation = useAppStore((s) => s.setPointerElevation);
   const showPointerElevation = useAppStore((s) => s.preferences.map.showPointerElevation);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
+  const pointerElevationRef = useRef<PointerElevationResolver | null>(null);
+  // Held in a ref so the once-only init effect can read the current predicate
+  // without re-creating the map when the consent flag changes.
+  const canUseRemoteElevationRef = useRef<() => boolean>(() => true);
+  canUseRemoteElevationRef.current = canUseRemoteElevation ?? (() => true);
+
+  // loadProject resets the readout, but a lookup already in flight for the
+  // previous project would repaint it a moment later -- including Earth to
+  // Earth, where neither the body nor the pointer changed.
+  useEffect(() => {
+    pointerElevationRef.current?.invalidate();
+  }, [projectGeneration]);
 
   // The resolver consults the preference, but only when a pointer event asks it
   // to. Switching the toggle off with the cursor resting motionless over the
@@ -1087,8 +1109,14 @@ export const MapCanvas = memo(function MapCanvas({
       // Read per call, not captured: the map is initialised once, so a captured
       // value would freeze at whatever the toggle was at mount.
       isEnabled: () => useAppStore.getState().preferences.map.showPointerElevation,
+      // Only the Open-Meteo fallback is gated; the terrain path sends nothing
+      // anywhere. Checked here rather than by scrubbing the stored preference,
+      // so a project that arrives with the readout switched on still cannot
+      // reach the network without local consent.
+      canUseRemote: () => canUseRemoteElevationRef.current(),
       emit: setPointerElevation,
     });
+    pointerElevationRef.current = pointerElevation;
 
     map.on("mousemove", (e) => {
       const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];

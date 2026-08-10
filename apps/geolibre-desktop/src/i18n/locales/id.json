@@ -2607,7 +2607,9 @@
       "loadingOsmPbfDesc": "Menguraikan file dan mengonversi fitur ke GeoJSON. Ini berjalan di latar belakang dan mungkin memakan waktu untuk ekstrak besar.",
       "loadingOsmPbfProgress": "Mengonversi fitur ke GeoJSON… {{processed}} dari {{total}} entitas OSM diproses.",
       "projectName": "Nama proyek",
-      "storymapEllipsis": "Peta Cerita..."
+      "storymapEllipsis": "Peta Cerita...",
+      "pointerElevationNoticeTitle": "Elevasi memakai layanan publik",
+      "pointerElevationNoticeDesc": "Elevasi dihitung dari medan 3D peta bila aktif, tanpa mengirim apa pun. Tanpa medan 3D, API publik Open-Meteo dikueri dan koordinat di bawah penunjuk meninggalkan perangkat Anda."
     },
     "plugin": {
       "maplibre-gl-annotations": "Anotasi",

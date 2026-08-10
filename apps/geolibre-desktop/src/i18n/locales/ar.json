@@ -2841,7 +2841,9 @@
       "loadingOsmPbfDesc": "يجري تحليل الملف وتحويل المعالم إلى GeoJSON. يعمل ذلك في الخلفية وقد يستغرق بعض الوقت مع المقتطفات الكبيرة.",
       "loadingOsmPbfProgress": "جارٍ تحويل المعالم إلى GeoJSON… تمت معالجة {{processed}} من أصل {{total}} من كيانات OSM.",
       "projectName": "اسم المشروع",
-      "storymapEllipsis": "خريطة قصصية..."
+      "storymapEllipsis": "خريطة قصصية...",
+      "pointerElevationNoticeTitle": "الارتفاع يستخدم خدمة ارتفاعات عامة",
+      "pointerElevationNoticeDesc": "يُحسب الارتفاع من تضاريس الخريطة ثلاثية الأبعاد عند تفعيلها دون إرسال أي بيانات. وبدونها يُستخدم واجهة Open-Meteo العامة، فتغادر إحداثيات المؤشر جهازك."
     },
     "plugin": {
       "maplibre-gl-annotations": "التعليقات التوضيحية",

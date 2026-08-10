@@ -2654,7 +2654,9 @@
       "loadingOsmPbfDesc": "Parsing the file and converting features to GeoJSON. This runs in the background and may take a moment for large extracts.",
       "loadingOsmPbfProgress": "Converting features to GeoJSON… {{processed}} of {{total}} OSM entities processed.",
       "projectName": "Project name",
-      "storymapEllipsis": "Story Map..."
+      "storymapEllipsis": "Story Map...",
+      "pointerElevationNoticeTitle": "Elevation uses a public elevation service",
+      "pointerElevationNoticeDesc": "The status bar's elevation readout is resolved from the map's own 3D terrain when that is enabled, which sends nothing anywhere. Without 3D terrain it falls back to the public Open-Meteo elevation API, and the coordinates under your pointer leave your device for those requests."
     },
     "plugin": {
       "maplibre-gl-annotations": "Annotations",

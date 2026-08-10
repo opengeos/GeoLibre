@@ -2654,7 +2654,9 @@
       "loadingOsmPbfDesc": "Analyse du fichier et conversion des entités en GeoJSON. Cela s'exécute en arrière-plan et peut prendre un moment pour les grands extraits.",
       "loadingOsmPbfProgress": "Conversion des entités en GeoJSON… {{processed}} sur {{total}} entités OSM traitées.",
       "projectName": "Nom du projet",
-      "storymapEllipsis": "Story Map..."
+      "storymapEllipsis": "Story Map...",
+      "pointerElevationNoticeTitle": "L'altitude utilise un service public",
+      "pointerElevationNoticeDesc": "L'altitude est calculée à partir du relief 3D de la carte lorsqu'il est actif, sans rien envoyer. Sans relief 3D, l'API publique Open-Meteo est interrogée et les coordonnées sous le pointeur quittent votre appareil."
     },
     "plugin": {
       "maplibre-gl-annotations": "Annotations",

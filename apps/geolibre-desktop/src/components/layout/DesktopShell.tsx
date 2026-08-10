@@ -134,6 +134,7 @@ import { NetcdfSampleMarkers } from "./NetcdfSampleMarkers";
 import { NetcdfCubeSetupDialog } from "./NetcdfCubeSetupDialog";
 import { NetcdfCubeWindow } from "./NetcdfCubeWindow";
 import { NetcdfProfileWindow } from "./NetcdfProfileWindow";
+import { hasElevationConsent } from "../../lib/elevation-consent";
 import { MapLegendPanel } from "../legend/MapLegendPanel";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
@@ -2350,6 +2351,7 @@ export function DesktopShell({
           >
             <MapGrid>
               <MapCanvas
+                canUseRemoteElevation={hasElevationConsent}
                 controllerRef={mapControllerRef}
                 onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 onControllerReady={handleMapControllerReady}

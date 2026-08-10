@@ -2654,7 +2654,9 @@
       "loadingOsmPbfDesc": "Analisi del file e conversione degli elementi in GeoJSON in corso. Questa operazione viene eseguita in background e può richiedere qualche istante per estratti di grandi dimensioni.",
       "loadingOsmPbfProgress": "Conversione degli elementi in GeoJSON… {{processed}} di {{total}} entità OSM elaborate.",
       "projectName": "Nome del progetto",
-      "storymapEllipsis": "Mappa narrativa..."
+      "storymapEllipsis": "Mappa narrativa...",
+      "pointerElevationNoticeTitle": "La quota usa un servizio pubblico",
+      "pointerElevationNoticeDesc": "La quota è ricavata dal terreno 3D della mappa quando è attivo, senza inviare nulla. Senza terreno 3D viene interrogata l'API pubblica Open-Meteo e le coordinate sotto il puntatore lasciano il dispositivo."
     },
     "plugin": {
       "maplibre-gl-annotations": "Annotazioni",

@@ -2607,7 +2607,9 @@
       "loadingOsmPbfDesc": "กำลังแปลงไฟล์และเปลี่ยนฟีเจอร์เป็น GeoJSON กระบวนการนี้ทำงานเบื้องหลังและอาจใช้เวลาสักครู่สำหรับข้อมูลขนาดใหญ่",
       "loadingOsmPbfProgress": "กำลังแปลงฟีเจอร์เป็น GeoJSON… ประมวลผลแล้ว {{processed}} จาก {{total}} รายการ OSM",
       "projectName": "ชื่อโปรเจกต์",
-      "storymapEllipsis": "แผนที่เล่าเรื่อง..."
+      "storymapEllipsis": "แผนที่เล่าเรื่อง...",
+      "pointerElevationNoticeTitle": "ระดับความสูงใช้บริการสาธารณะ",
+      "pointerElevationNoticeDesc": "เมื่อเปิดภูมิประเทศ 3 มิติ ระดับความสูงจะคำนวณจากแผนที่เองโดยไม่ส่งข้อมูลใด ๆ หากไม่มีภูมิประเทศ 3 มิติ จะสอบถาม Open-Meteo API สาธารณะ และพิกัดใต้ตัวชี้จะออกจากอุปกรณ์ของคุณ"
     },
     "plugin": {
       "maplibre-gl-annotations": "คำอธิบายประกอบ",

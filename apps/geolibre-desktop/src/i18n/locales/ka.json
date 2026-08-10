@@ -2654,7 +2654,9 @@
       "loadingOsmPbfDesc": "მიმდინარეობს ფაილის დამუშავება და ობიექტების GeoJSON-ად გარდაქმნა. ეს ფონურად სრულდება და დიდი ამონაწერებისთვის შეიძლება ცოტა ხანი დასჭირდეს.",
       "loadingOsmPbfProgress": "ობიექტების GeoJSON-ად გარდაქმნა… დამუშავდა {{processed}} / {{total}} OSM ერთეული.",
       "projectName": "პროექტის სახელი",
-      "storymapEllipsis": "Story Map..."
+      "storymapEllipsis": "Story Map...",
+      "pointerElevationNoticeTitle": "სიმაღლე იყენებს საჯარო სერვისს",
+      "pointerElevationNoticeDesc": "3D რელიეფის ჩართვისას სიმაღლე გამოითვლება თავად რუკიდან და არაფერი იგზავნება. მის გარეშე გამოიყენება საჯარო Open-Meteo API და კურსორის კოორდინატები ტოვებს თქვენს მოწყობილობას."
     },
     "plugin": {
       "maplibre-gl-annotations": "ანოტაციები",

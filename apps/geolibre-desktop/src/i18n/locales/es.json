@@ -2654,7 +2654,9 @@
       "loadingOsmPbfDesc": "Analizando el archivo y convirtiendo entidades a GeoJSON. Esto se ejecuta en segundo plano y puede tardar un momento en extractos grandes.",
       "loadingOsmPbfProgress": "Convirtiendo entidades a GeoJSON… {{processed}} de {{total}} entidades OSM procesadas.",
       "projectName": "Nombre del proyecto",
-      "storymapEllipsis": "Mapa narrativo..."
+      "storymapEllipsis": "Mapa narrativo...",
+      "pointerElevationNoticeTitle": "La elevación usa un servicio público",
+      "pointerElevationNoticeDesc": "La elevación se obtiene del relieve 3D del mapa cuando está activo, sin enviar nada. Sin relieve 3D se consulta la API pública de Open-Meteo y las coordenadas bajo el puntero salen de su dispositivo."
     },
     "plugin": {
       "maplibre-gl-annotations": "Anotaciones",

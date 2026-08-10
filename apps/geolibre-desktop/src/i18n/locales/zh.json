@@ -2607,7 +2607,9 @@
       "loadingOsmPbfDesc": "正在解析文件并将要素转换为 GeoJSON。此过程在后台运行，对于大型提取数据可能需要一些时间。",
       "loadingOsmPbfProgress": "正在将要素转换为 GeoJSON… 已处理 {{processed}} / {{total}} 个 OSM 实体。",
       "projectName": "项目名称",
-      "storymapEllipsis": "故事地图..."
+      "storymapEllipsis": "故事地图...",
+      "pointerElevationNoticeTitle": "高程会使用公共服务",
+      "pointerElevationNoticeDesc": "启用三维地形时，高程直接由地图计算，不会发送任何数据。未启用时将查询公共 Open-Meteo API，指针下方的坐标会离开您的设备。"
     },
     "plugin": {
       "maplibre-gl-annotations": "注释",

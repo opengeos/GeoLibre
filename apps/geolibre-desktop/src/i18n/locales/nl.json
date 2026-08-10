@@ -2654,7 +2654,9 @@
       "loadingOsmPbfDesc": "Het bestand wordt verwerkt en de features worden geconverteerd naar GeoJSON. Dit gebeurt op de achtergrond en kan voor grote extracten even duren.",
       "loadingOsmPbfProgress": "Features converteren naar GeoJSON… {{processed}} van {{total}} OSM-entiteiten verwerkt.",
       "projectName": "Projectnaam",
-      "storymapEllipsis": "Story Map..."
+      "storymapEllipsis": "Story Map...",
+      "pointerElevationNoticeTitle": "Hoogte gebruikt een openbare dienst",
+      "pointerElevationNoticeDesc": "De hoogte wordt uit het 3D-terrein van de kaart bepaald als dat aanstaat; er wordt dan niets verzonden. Zonder 3D-terrein wordt de openbare Open-Meteo-API geraadpleegd en verlaten de coördinaten onder de aanwijzer uw apparaat."
     },
     "plugin": {
       "maplibre-gl-annotations": "Annotaties",

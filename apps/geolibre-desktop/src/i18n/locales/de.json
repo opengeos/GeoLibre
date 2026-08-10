@@ -2654,7 +2654,9 @@
       "loadingOsmPbfDesc": "Die Datei wird geparst und die Objekte werden in GeoJSON umgewandelt. Dies läuft im Hintergrund und kann bei großen Auszügen einen Moment dauern.",
       "loadingOsmPbfProgress": "Objekte werden in GeoJSON umgewandelt… {{processed}} von {{total}} OSM-Entitäten verarbeitet.",
       "projectName": "Projektname",
-      "storymapEllipsis": "Story Map..."
+      "storymapEllipsis": "Story Map...",
+      "pointerElevationNoticeTitle": "Höhe nutzt einen öffentlichen Höhendienst",
+      "pointerElevationNoticeDesc": "Die Höhenanzeige wird aus dem 3D-Gelände der Karte berechnet, wenn dieses aktiv ist – dabei werden keine Daten gesendet. Ohne 3D-Gelände wird die öffentliche Open-Meteo-API abgefragt, und die Koordinaten unter dem Zeiger verlassen Ihr Gerät."
     },
     "plugin": {
       "maplibre-gl-annotations": "Anmerkungen",
