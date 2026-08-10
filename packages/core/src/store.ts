@@ -2225,11 +2225,13 @@ export const useAppStore = create<AppState>()(
           // The copied style names a layer from the previous project, so a
           // paste in the loaded one would apply an orphaned entry.
           copiedLayerStyle: null,
-          // Ephemeral pointer readouts describe the previous project's map. The
-          // elevation especially: a project that switches to a planetary body
-          // would otherwise keep showing an Earth height until the next hover.
+          // Ephemeral readouts describe the previous project's map. The
+          // elevation and altitude especially: a project that switches to a
+          // planetary body would otherwise keep showing Earth-scaled values
+          // until the next hover or camera move.
           pointerCoords: null,
           pointerElevation: null,
+          cameraAltitude: null,
           // Present a bundled story on load; otherwise drop any presentation
           // carried over from the previous project.
           ui: {
