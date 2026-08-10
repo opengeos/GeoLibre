@@ -90,6 +90,16 @@ describe("formatCoordinate", () => {
     assert.match(fiji, /^60K /, `unexpected zone: ${fiji}`);
   });
 
+  it("wraps a longitude that has run past the antimeridian", () => {
+    // MapLibre does not wrap lngLat.lng after panning, so it can arrive as 190.
+    // Unwrapped, DMS would render 190 degrees east and UTM would pick a zone
+    // that does not exist.
+    assert.equal(formatCoordinate(190, 10, "dd"), formatCoordinate(-170, 10, "dd"));
+    assert.equal(formatCoordinate(190, 10, "dms"), formatCoordinate(-170, 10, "dms"));
+    assert.equal(formatCoordinate(-190, 10, "utm"), formatCoordinate(170, 10, "utm"));
+    assert.match(formatCoordinate(190, 10, "dms"), /W/, "190E is 170W");
+  });
+
   it("treats an unknown format as decimal degrees", () => {
     // @ts-expect-error deliberately passing an unsupported notation
     assert.equal(formatCoordinate(WH_LNG, WH_LAT, "mgrs"), formatCoordinate(WH_LNG, WH_LAT, "dd"));
