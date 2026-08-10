@@ -125,6 +125,36 @@ describe("bearingRows", () => {
     assert.deepEqual(bearingRows({ mode: "area", points: [pt(0, 0), pt(1, 0), pt(1, 1)] }), []);
   });
 
+  it("stays empty for antipodal endpoints", () => {
+    // Antipodal points lie on infinitely many great circles, so atan2 still
+    // returns a number but it is floating-point noise, not a heading.
+    assert.deepEqual(bearingRows({ mode: "distance", points: [pt(0, 0), pt(180, 0)] }), []);
+    assert.deepEqual(bearingRows({ mode: "distance", points: [pt(30, 45), pt(-150, -45)] }), []);
+  });
+
+  it("does not add a final-heading row that renders identically", () => {
+    // The gate compares rendered values, so a raw difference that rounds to the
+    // same degree must not produce a second row saying the same thing.
+    for (const [lng, lat] of [
+      [0.4, 0.1],
+      [1, 0.05],
+      [-0.6, 0.2],
+    ] as [number, number][]) {
+      const rows = bearingRows({ mode: "distance", points: [pt(0, 0), pt(lng, lat)] });
+      if (rows.length === 2) {
+        assert.notEqual(rows[0][1], rows[1][1], `duplicate heading rows for ${lng},${lat}`);
+      }
+    }
+  });
+
+  it("stays empty for endpoints separated only by floating-point dust", () => {
+    const rows = bearingRows({
+      mode: "distance",
+      points: [pt(5, 5), pt(5 + Number.EPSILON, 5 - Number.EPSILON)],
+    });
+    assert.deepEqual(rows, []);
+  });
+
   it("stays empty for a degenerate or unfinished line", () => {
     assert.deepEqual(bearingRows({ mode: "distance", points: [pt(0, 0)] }), []);
     // Both ends on the same coordinate has no defined bearing.

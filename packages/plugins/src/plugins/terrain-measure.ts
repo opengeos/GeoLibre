@@ -36,6 +36,8 @@ import {
   densifyLine,
   finalAzimuthDegrees,
   forwardAzimuthDegrees,
+  isAntipodal,
+  isDegenerateSegment,
   surfaceArea,
   surfaceDistance,
   type LngLat,
@@ -301,14 +303,19 @@ export function bearingRows(measurement: {
   const last = measurement.points[measurement.points.length - 1];
   const a: LngLat = [first.lng, first.lat];
   const b: LngLat = [last.lng, last.lat];
-  if (a[0] === b[0] && a[1] === b[1]) return [];
+  // Coincident endpoints have no direction, and antipodal ones lie on
+  // infinitely many great circles, so neither has a bearing worth reporting.
+  if (isDegenerateSegment(a, b) || isAntipodal(a, b)) return [];
 
   const initial = forwardAzimuthDegrees(a, b);
   const rows: Array<[string, string]> = [
     [terrainMeasureLabels.heading, `${initial.toFixed(0)}\u00b0 ${compassPoint(initial)}`],
   ];
+  // Compared on the *rendered* values, not the raw ones: a raw gap of just over
+  // a degree either side of a rounding boundary would otherwise add a second row
+  // showing the same number as the first.
   const final = finalAzimuthDegrees(a, b);
-  if (Math.abs(((final - initial + 540) % 360) - 180) >= 1) {
+  if (final.toFixed(0) !== initial.toFixed(0)) {
     rows.push([
       terrainMeasureLabels.finalHeading,
       `${final.toFixed(0)}\u00b0 ${compassPoint(final)}`,

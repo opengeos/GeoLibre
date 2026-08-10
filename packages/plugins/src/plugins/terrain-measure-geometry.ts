@@ -377,6 +377,36 @@ export function finalAzimuthDegrees(a: LngLat, b: LngLat): number {
   return (forwardAzimuthDegrees(b, a) + 180) % 360;
 }
 
+/**
+ * Whether two points are (near enough) antipodal.
+ *
+ * Antipodal endpoints lie on infinitely many great circles, so there is no
+ * defined initial bearing between them — `atan2` still returns a number, but it
+ * is an artefact of floating-point noise rather than a heading. Callers should
+ * report no bearing instead.
+ *
+ * The tolerance is generous (0.01 degrees, roughly a kilometre) because a
+ * bearing that close to antipodal is already meaningless.
+ */
+export function isAntipodal(a: LngLat, b: LngLat, toleranceDegrees = 0.01): boolean {
+  if (Math.abs(a[1] + b[1]) > toleranceDegrees) return false;
+  // Longitudes must differ by 180 degrees. Normalised into [0, 360) first so
+  // the comparison works across the antimeridian (e.g. -150 and 30).
+  const separation = (((b[0] - a[0]) % 360) + 360) % 360;
+  return Math.abs(separation - 180) <= toleranceDegrees;
+}
+
+/**
+ * Whether two points are close enough that the bearing between them is noise.
+ *
+ * An exact coordinate comparison misses points that differ only by
+ * floating-point dust, which still produce a mathematically valid but
+ * essentially arbitrary heading.
+ */
+export function isDegenerateSegment(a: LngLat, b: LngLat, toleranceDegrees = 1e-9): boolean {
+  return Math.abs(a[0] - b[0]) <= toleranceDegrees && Math.abs(a[1] - b[1]) <= toleranceDegrees;
+}
+
 /** The 16-point compass rose, indexed by `round(azimuth / 22.5) % 16`. */
 const COMPASS_POINTS = [
   "N",
