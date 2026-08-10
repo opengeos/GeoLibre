@@ -125,6 +125,13 @@ export async function writeInPlaceWithAndroidFallback(
     await handlers.write(path, content);
   } catch (error) {
     if (isAndroidContentUri(path) && isUriWritePermissionError(error)) {
+      // The refusal is matched by wording, and OEM storage providers phrase
+      // their failures differently, so a provider could in principle report an
+      // unrelated error that reads like a permission denial and land here. That
+      // shows up as an unexplained "why is it asking me to save again?", so
+      // record the original error: `console.warn` is captured by the
+      // Diagnostics panel, which is where a user reporting this would look.
+      console.warn(`Falling back to the save dialog; cannot write ${path} in place`, error);
       return handlers.saveAs(content, androidContentUriFileName(path) ?? fallbackName);
     }
     throw error;

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 
 import {
   androidContentUriFileName,
@@ -132,6 +132,22 @@ function makeHandlers(options: { writeError?: unknown; saveAsResult?: string | n
 }
 
 describe("writeInPlaceWithAndroidFallback", () => {
+  // The fallback logs the original refusal to the Diagnostics panel, so collect
+  // `console.warn` rather than letting it scribble over the test output.
+  const warnings: unknown[][] = [];
+  const originalWarn = console.warn;
+
+  beforeEach(() => {
+    warnings.length = 0;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args);
+    };
+  });
+
+  afterEach(() => {
+    console.warn = originalWarn;
+  });
+
   it("writes in place and never opens a dialog when the write succeeds", async () => {
     const { handlers, writes, saveAsCalls } = makeHandlers();
     const path = await writeInPlaceWithAndroidFallback(
@@ -162,6 +178,11 @@ describe("writeInPlaceWithAndroidFallback", () => {
     assert.deepEqual(writes, [{ path: CREATED_URI, content: "{}" }]);
     // The writable URI becomes the project path, so later saves go in place.
     assert.equal(path, CREATED_URI);
+    // The original refusal reaches the Diagnostics panel, so an unexpected
+    // fallback on some other provider can be diagnosed from a user's report.
+    assert.equal(warnings.length, 1);
+    assert.match(String(warnings[0]?.[0]), /cannot write .* in place/);
+    assert.equal(warnings[0]?.[1], DENIAL);
   });
 
   it("falls back to the caller's name when the URI has no usable one", async () => {
