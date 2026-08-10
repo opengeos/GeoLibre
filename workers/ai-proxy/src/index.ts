@@ -147,15 +147,18 @@ async function rateLimit(request: Request, env: Env): Promise<Response | null> {
       });
 }
 
+function withOrigin(response: Response | null, origin: string | null): Response | null {
+  if (!response) return null;
+  const headers = new Headers(response.headers);
+  for (const [name, value] of responseHeaders(origin)) headers.set(name, value);
+  return new Response(response.body, { status: response.status, headers });
+}
+
 async function proxyChat(request: Request, env: Env, origin: string | null): Promise<Response> {
   // Check the limit before buffering: otherwise a throttled client can still
   // make the worker hold MAX_BODY_BYTES in memory on every rejected request.
-  const limited = await rateLimit(request, env);
-  if (limited) {
-    const headers = new Headers(limited.headers);
-    for (const [name, value] of responseHeaders(origin)) headers.set(name, value);
-    return new Response(limited.body, { status: limited.status, headers });
-  }
+  const limited = withOrigin(await rateLimit(request, env), origin);
+  if (limited) return limited;
 
   const maximumBytes = positiveInteger(env.MAX_BODY_BYTES, 1_048_576);
   let body: Record<string, unknown>;
@@ -235,12 +238,8 @@ async function proxyTavily(request: Request, env: Env, origin: string | null): P
   if (!apiKey) {
     return jsonError("Search is not configured", 503, responseHeaders(origin));
   }
-  const limited = await rateLimit(request, env);
-  if (limited) {
-    const headers = new Headers(limited.headers);
-    for (const [name, value] of responseHeaders(origin)) headers.set(name, value);
-    return new Response(limited.body, { status: limited.status, headers });
-  }
+  const limited = withOrigin(await rateLimit(request, env), origin);
+  if (limited) return limited;
 
   const maximumBytes = Math.min(positiveInteger(env.MAX_BODY_BYTES, 1_048_576), 65_536);
   let body: Record<string, unknown>;

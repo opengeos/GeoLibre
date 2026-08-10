@@ -219,7 +219,7 @@ def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
 # the browser; the Tavily key remains a Worker secret.
 news_url = os.environ.get("GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT", "").strip()
 if news_url:
-    deployment["GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = service_url(
+    news_endpoint = service_url(
         "GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT",
         news_url,
         ("https",),
@@ -227,7 +227,14 @@ if news_url:
         ("localhost", "127.0.0.1", "::1"),
     )
 elif os.environ.get("GEOLIBRE_AI_URL"):
-    deployment["GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = os.environ["GEOLIBRE_AI_URL"]
+    news_endpoint = os.environ["GEOLIBRE_AI_URL"]
+else:
+    news_endpoint = ""
+if news_endpoint:
+    # The exact key matches the external plugin contract. The VITE-prefixed alias
+    # also follows the GeoLibre deployment-env convention and supports older builds.
+    deployment["GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = news_endpoint
+    deployment["VITE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = news_endpoint
 
 
 # Project sharing server. Unset means the public hosted service; "off" removes
