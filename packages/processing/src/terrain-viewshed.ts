@@ -42,6 +42,26 @@ export function decodeTerrariumElevation(r: number, g: number, b: number): numbe
   return r * 256 + g + b / 256 - 32768;
 }
 
+/**
+ * Decode a tile's RGBA bytes into elevations.
+ *
+ * Takes the dimensions as arguments rather than reading them from the source
+ * image, so a caller cannot accidentally size the output from an ImageBitmap it
+ * has already closed.
+ */
+export function decodeTerrariumRgba(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+): Float32Array {
+  const elevations = new Float32Array(width * height);
+  for (let i = 0; i < elevations.length; i += 1) {
+    const offset = i * 4;
+    elevations[i] = decodeTerrariumElevation(data[offset], data[offset + 1], data[offset + 2]);
+  }
+  return elevations;
+}
+
 /** An elevation grid in EPSG:4326, row 0 at the north edge. */
 export interface TerrainDem {
   width: number;
@@ -275,14 +295,16 @@ async function decodeTile(
     const context = canvas.getContext("2d");
     if (!context) return null;
     context.drawImage(bitmap, 0, 0);
-    const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+    // Dimensions are read before close(), which zeroes them. Passing them into
+    // decodeTerrariumRgba rather than reading bitmap.width again afterwards is
+    // what keeps that ordering hazard from returning -- a 0x0 tile decodes
+    // without error and is then silently discarded by the assembly loop as the
+    // wrong size, which is how it broke the first time.
+    const width = bitmap.width;
+    const height = bitmap.height;
+    const { data } = context.getImageData(0, 0, width, height);
     bitmap.close();
-    const elevations = new Float32Array(bitmap.width * bitmap.height);
-    for (let i = 0; i < elevations.length; i += 1) {
-      const offset = i * 4;
-      elevations[i] = decodeTerrariumElevation(data[offset], data[offset + 1], data[offset + 2]);
-    }
-    return { width: bitmap.width, height: bitmap.height, values: elevations };
+    return { width, height, values: decodeTerrariumRgba(data, width, height) };
   } catch {
     return null;
   } finally {

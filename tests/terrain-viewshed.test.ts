@@ -14,6 +14,7 @@ import {
   computeViewshed,
   computeViewshedAsync,
   decodeTerrariumElevation,
+  decodeTerrariumRgba,
   metersToLatDegrees,
   tileForLngLat,
   viewshedToRgba,
@@ -50,6 +51,26 @@ describe("decodeTerrariumElevation", () => {
 
   it("uses the blue channel for sub-metre precision", () => {
     assert.equal(decodeTerrariumElevation(128, 0, 128), 0.5);
+  });
+});
+
+describe("decodeTerrariumRgba", () => {
+  it("decodes every pixel of a tile", () => {
+    // Two pixels: sea level, then 100m. RGBA, so 4 bytes each.
+    const data = new Uint8ClampedArray([128, 0, 0, 255, 128, 100, 0, 255]);
+    assert.deepEqual(Array.from(decodeTerrariumRgba(data, 2, 1)), [0, 100]);
+  });
+
+  it("sizes the output from the dimensions it is given", () => {
+    // Regression for a real failure: decodeTile read bitmap.width *after*
+    // bitmap.close(), which zeroes it, so every tile decoded to 0x0 and was
+    // then silently discarded by the assembly loop as the wrong size -- the
+    // viewshed reported "no visible area" for every click. Taking the
+    // dimensions as arguments is what makes that ordering hazard impossible.
+    const data = new Uint8ClampedArray(4 * 4);
+    data.fill(0);
+    assert.equal(decodeTerrariumRgba(data, 0, 0).length, 0);
+    assert.equal(decodeTerrariumRgba(data, 2, 2).length, 4);
   });
 });
 
