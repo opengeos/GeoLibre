@@ -2532,6 +2532,8 @@
       "atmosphereEnabled": "Attivato",
       "spinGlobe": "Globo rotante",
       "graticule": "Reticolo",
+      "pointerElevation": "Quota",
+      "pointerElevationHint": "Mostra la quota del terreno sotto il puntatore nella barra di stato. Senza terreno 3D viene interrogato un servizio pubblico di quote.",
       "weather": "Meteo",
       "weatherTooltip": "Sovrapponi livelli meteo quasi in tempo reale che puoi animare.",
       "weatherPlay": "Riproduci animazione",

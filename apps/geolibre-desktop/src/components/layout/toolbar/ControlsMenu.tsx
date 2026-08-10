@@ -124,6 +124,19 @@ export function ControlsMenu({
   const globeActive = useAppStore((s) => s.preferences.map.projection === "globe");
   const restrictBounds = useAppStore((s) => s.preferences.map.restrictBounds);
   const setPreferences = useAppStore((s) => s.setPreferences);
+  // Ground elevation under the pointer in the status bar (#1813). Off by
+  // default: without 3D terrain the lookup goes to a public elevation service,
+  // so it stays an explicit opt-in rather than something hovering triggers.
+  const pointerElevationActive = useAppStore((s) => s.preferences.map.showPointerElevation);
+  const togglePointerElevation = () => {
+    // Read live state at click time so a concurrent preference change is not
+    // clobbered by a stale snapshot, matching the other toggles here.
+    const current = useAppStore.getState().preferences;
+    setPreferences({
+      ...current,
+      map: { ...current.map, showPointerElevation: !current.map.showPointerElevation },
+    });
+  };
   // The globe cannot spin while the map bounds are locked, so enabling spin
   // while they are locked opens a dialog that unlocks the bounds first (#723).
   const [spinGlobeNoticeOpen, setSpinGlobeNoticeOpen] = useState(false);
@@ -155,6 +168,7 @@ export function ControlsMenu({
     show("controls.clouds") ||
     show("controls.spinGlobe") ||
     show("controls.graticule") ||
+    show("controls.pointerElevation") ||
     show("controls.sun") ||
     show("controls.routeAnimation") ||
     show("controls.flightSimulator") ||
@@ -259,6 +273,15 @@ export function ControlsMenu({
             <DropdownMenuItem onClick={onToggleGraticule}>
               {t("toolbar.item.graticule")}
               {graticuleActive ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.pointerElevation") && (
+            <DropdownMenuItem
+              onClick={togglePointerElevation}
+              title={t("toolbar.item.pointerElevationHint")}
+            >
+              {t("toolbar.item.pointerElevation")}
+              {pointerElevationActive ? " ✓" : ""}
             </DropdownMenuItem>
           )}
           {show("controls.directions") && (

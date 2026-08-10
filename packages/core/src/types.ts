@@ -1185,6 +1185,14 @@ export interface MapPreferences {
    * `"imperial"` for feet/miles or `"nautical"` for nautical miles.
    */
   scaleUnit: MapScaleUnit;
+  /**
+   * Whether the status bar resolves and shows the ground elevation under the
+   * pointer (issue #1813). **Defaults to `false`**: with 3D terrain off the
+   * lookup falls back to the public Open-Meteo service, so hovering would send
+   * coordinates off the device for a readout the user never asked for. Toggled
+   * from Controls -> Elevation.
+   */
+  showPointerElevation: boolean;
 }
 
 export interface RuntimeEnvironmentVariable {
@@ -1249,6 +1257,9 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     projection: "globe",
     ellipsoidId: "earth",
     scaleUnit: "metric",
+    // Off by default: turning it on can send pointer coordinates to a public
+    // elevation service, which should be an explicit choice.
+    showPointerElevation: false,
   },
   environmentVariables: [],
   geocoding: {

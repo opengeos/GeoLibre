@@ -2532,6 +2532,8 @@
       "atmosphereEnabled": "Activado",
       "spinGlobe": "Globo giratorio",
       "graticule": "Cuadrícula",
+      "pointerElevation": "Elevación",
+      "pointerElevationHint": "Mostrar la elevación del terreno bajo el puntero en la barra de estado. Sin terreno 3D se consulta un servicio público de elevación.",
       "weather": "Clima",
       "weatherTooltip": "Superponga capas meteorológicas casi en tiempo real que puede animar.",
       "weatherPlay": "Reproducir animación",

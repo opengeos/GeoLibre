@@ -196,6 +196,13 @@ const POINTER_ELEVATION_CACHE_LIMIT = 500;
 export interface PointerElevationResolverOptions {
   /** The live map, for the terrain sample. May return null before init. */
   getMap: () => TerrainMapLike | null | undefined;
+  /**
+   * Whether the readout is switched on (Controls -> Elevation). Read per call
+   * rather than captured, and rechecked before publishing a remote result, so
+   * turning it off mid-request neither shows a late value nor leaves the last
+   * one on screen. Defaults to always-on for callers that do not gate it.
+   */
+  isEnabled?: () => boolean;
   /** Whether the active body is Earth — Open-Meteo has no data for anything else. */
   isEarth: () => boolean;
   /** Called with the resolved elevation in true metres, or null when unknown. */
@@ -232,6 +239,7 @@ export function createPointerElevationResolver(
   options: PointerElevationResolverOptions,
 ): PointerElevationResolver {
   const { getMap, isEarth, emit, fetchImpl } = options;
+  const isEnabled = options.isEnabled ?? (() => true);
   const debounceMs = options.debounceMs ?? POINTER_ELEVATION_DEBOUNCE_MS;
   const cache = new Map<string, number | null>();
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -250,7 +258,7 @@ export function createPointerElevationResolver(
     generation += 1;
     cancelPending();
 
-    if (!point) {
+    if (!point || !isEnabled()) {
       emit(null);
       return;
     }
@@ -279,14 +287,32 @@ export function createPointerElevationResolver(
       void (async () => {
         const [elevation] = await sampleRemoteElevations([point], fetchImpl);
         const value = elevation ?? null;
-        if (cache.size >= POINTER_ELEVATION_CACHE_LIMIT) cache.clear();
-        cache.set(key, value);
-        // The pointer moved (or left) while the request was in flight.
-        if (requested !== generation) return;
+        // `sampleRemoteElevations` turns a fetch failure into a null, which is
+        // indistinguishable here from "no data for this cell". Caching that
+        // would blackhole the readout for this ~11 m cell for the rest of the
+        // session, so only successes are remembered and a transient network
+        // blip gets another chance on the next hover.
+        if (value !== null) {
+          if (cache.size >= POINTER_ELEVATION_CACHE_LIMIT) cache.clear();
+          cache.set(key, value);
+        }
+        // The pointer moved, left, or the resolver was disposed while the
+        // request was in flight. Also recheck the body: a switch to a planetary
+        // basemap mid-request must not publish an Earth elevation over it.
+        if (requested !== generation || !isEarth() || !isEnabled()) return;
         emit(value);
       })();
     }, debounceMs);
   };
 
-  return { update, dispose: cancelPending };
+  return {
+    update,
+    // Bumping the generation is what actually invalidates an *in-flight*
+    // request; cancelPending alone only clears a timer that has not fired yet,
+    // so a fetch already in progress would still emit into a torn-down map.
+    dispose: () => {
+      generation += 1;
+      cancelPending();
+    },
+  };
 }

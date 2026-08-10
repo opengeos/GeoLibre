@@ -1075,6 +1075,9 @@ export const MapCanvas = memo(function MapCanvas({
     const pointerElevation = createPointerElevationResolver({
       getMap: () => map,
       isEarth: () => getActiveEllipsoid().id === "earth",
+      // Read per call, not captured: the map is initialised once, so a captured
+      // value would freeze at whatever the toggle was at mount.
+      isEnabled: () => useAppStore.getState().preferences.map.showPointerElevation,
       emit: setPointerElevation,
     });
 

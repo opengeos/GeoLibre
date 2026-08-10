@@ -187,7 +187,7 @@
     "partialData": "Bazı örneklemlerde arazi verisi yoktu"
   },
   "statusBar": {
-    "elevation": "Yük",
+    "elevation": "Rakım",
     "elevationLong": "Yükseklik"
   },
   "fileNamePrompt": {
@@ -2532,6 +2532,8 @@
       "atmosphereEnabled": "Etkin",
       "spinGlobe": "Dönen Küre",
       "graticule": "Kılavuz Çizgileri",
+      "pointerElevation": "Rakım",
+      "pointerElevationHint": "Durum çubuğunda imlecin altındaki arazi rakımını göster. 3B arazi yokken genel bir rakım servisi sorgulanır.",
       "weather": "Hava durumu",
       "weatherTooltip": "Neredeyse gerçek zamanlı, canlandırılabilir hava durumu katmanlarını üst üste bindirin.",
       "weatherPlay": "Animasyonu oynat",

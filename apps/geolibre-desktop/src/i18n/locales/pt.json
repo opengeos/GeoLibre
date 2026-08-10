@@ -2532,6 +2532,8 @@
       "atmosphereEnabled": "Ativado",
       "spinGlobe": "Globo giratório",
       "graticule": "Linhas de grade",
+      "pointerElevation": "Elevação",
+      "pointerElevationHint": "Mostrar a elevação do terreno sob o ponteiro na barra de estado. Sem relevo 3D é consultado um serviço público de elevação.",
       "weather": "Clima",
       "weatherTooltip": "Sobreponha camadas de clima quase em tempo real que você pode animar.",
       "weatherPlay": "Reproduzir animação",

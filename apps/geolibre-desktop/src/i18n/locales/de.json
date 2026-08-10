@@ -2532,6 +2532,8 @@
       "atmosphereEnabled": "Aktiviert",
       "spinGlobe": "Rotierender Globus",
       "graticule": "Gitternetzlinien",
+      "pointerElevation": "Höhe",
+      "pointerElevationHint": "Geländehöhe unter dem Zeiger in der Statusleiste anzeigen. Ohne 3D-Gelände wird ein öffentlicher Höhendienst abgefragt.",
       "weather": "Wetter",
       "weatherTooltip": "Überlagern Sie animierbare Wetterebenen nahezu in Echtzeit.",
       "weatherPlay": "Animation abspielen",

@@ -2487,6 +2487,8 @@
       "atmosphereEnabled": "有効",
       "spinGlobe": "地球儀を回転",
       "graticule": "グリッド線",
+      "pointerElevation": "標高",
+      "pointerElevationHint": "ステータスバーにポインター位置の地表標高を表示します。3D地形がない場合は公開標高サービスに問い合わせます。",
       "weather": "天気",
       "weatherTooltip": "アニメーション可能なほぼリアルタイムの気象レイヤーを重ねて表示します。",
       "weatherPlay": "アニメーションを再生",

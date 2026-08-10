@@ -2487,6 +2487,8 @@
       "atmosphereEnabled": "Diaktifkan",
       "spinGlobe": "Bola Dunia Berputar",
       "graticule": "Garis Kisi",
+      "pointerElevation": "Elevasi",
+      "pointerElevationHint": "Tampilkan elevasi tanah di bawah penunjuk pada bilah status. Tanpa medan 3D, layanan elevasi publik akan dikueri.",
       "weather": "Cuaca",
       "weatherTooltip": "Tampilkan lapisan cuaca hampir real-time yang dapat dianimasikan.",
       "weatherPlay": "Putar animasi",

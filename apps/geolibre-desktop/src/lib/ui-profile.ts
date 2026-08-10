@@ -622,6 +622,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     labelKey: "toolbar.item.graticule",
     tier: "intermediate",
   },
+  {
+    id: "controls.pointerElevation",
+    menuId: "controls",
+    labelKey: "toolbar.item.pointerElevation",
+    tier: "intermediate",
+  },
   // Id kept as `controls.clouds` (not renamed to `controls.weather`) so a
   // persisted `hiddenMenuItems: ["controls.clouds"]` from before the Clouds →
   // Weather rename keeps hiding this (now Weather) submenu instead of silently

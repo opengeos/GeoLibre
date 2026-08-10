@@ -2532,6 +2532,8 @@
       "atmosphereEnabled": "Enabled",
       "spinGlobe": "Spinning Globe",
       "graticule": "Gridlines",
+      "pointerElevation": "Elevation",
+      "pointerElevationHint": "Show ground elevation under the pointer in the status bar. Without 3D terrain this looks up a public elevation service.",
       "weather": "Weather",
       "weatherTooltip": "Overlay near-realtime weather layers you can animate.",
       "weatherPlay": "Play animation",

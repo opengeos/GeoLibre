@@ -2532,6 +2532,8 @@
       "atmosphereEnabled": "Activé",
       "spinGlobe": "Globe rotatif",
       "graticule": "Quadrillage",
+      "pointerElevation": "Altitude",
+      "pointerElevationHint": "Afficher l'altitude du terrain sous le pointeur dans la barre d'état. Sans relief 3D, un service d'altitude public est interrogé.",
       "weather": "Météo",
       "weatherTooltip": "Superposez des couches météo en quasi-temps réel que vous pouvez animer.",
       "weatherPlay": "Lire l'animation",

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FEET_PER_METER, useAppStore } from "@geolibre/core";
+import { FEET_PER_METER, useAppStore, type MapScaleUnit } from "@geolibre/core";
 import { cn } from "@geolibre/ui";
 import { Bug } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -12,7 +12,7 @@ import { formatAccuracy, formatSpeedKmh } from "../../lib/gps-tracking";
  * source — terrain tiles or Open-Meteo — is meaningfully precise beyond that.
  * Matches the Measure tool's terrain rows so the two never disagree.
  */
-export function formatPointerElevation(meters: number, unit: string): string {
+export function formatPointerElevation(meters: number, unit: MapScaleUnit): string {
   return unit === "imperial"
     ? `${Math.round(meters * FEET_PER_METER).toLocaleString()} ft`
     : `${Math.round(meters).toLocaleString()} m`;

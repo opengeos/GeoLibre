@@ -2487,6 +2487,8 @@
       "atmosphereEnabled": "사용",
       "spinGlobe": "회전하는 지구본",
       "graticule": "격자선",
+      "pointerElevation": "고도",
+      "pointerElevationHint": "상태 표시줄에 포인터 아래 지면 고도를 표시합니다. 3D 지형이 없으면 공개 고도 서비스를 조회합니다.",
       "weather": "날씨",
       "weatherTooltip": "애니메이션할 수 있는 거의 실시간 날씨 레이어를 오버레이합니다.",
       "weatherPlay": "애니메이션 재생",

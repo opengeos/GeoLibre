@@ -159,6 +159,88 @@ describe("pointer elevation resolver", () => {
     resolver.dispose();
   });
 
+  it("drops an in-flight result when the resolver is disposed", async () => {
+    // Regression for review feedback on #1820: dispose only cleared an unstarted
+    // timer, so a fetch already in flight (500ms debounce + up to 15s network)
+    // still emitted after MapCanvas teardown, writing into a torn-down map.
+    const emitted: (number | null)[] = [];
+    let release: ((r: Response) => void) | null = null;
+    const fetchImpl: FetchLike = () =>
+      new Promise<Response>((resolve) => {
+        release = resolve;
+      });
+
+    const resolver = createPointerElevationResolver({
+      getMap: () => ({ getTerrain: () => null }),
+      isEarth: () => true,
+      emit: (v) => emitted.push(v),
+      fetchImpl,
+      debounceMs: 5,
+    });
+
+    resolver.update([3, 3]);
+    await tick(20); // debounce elapsed, request in flight
+    resolver.dispose();
+    release?.(new Response(JSON.stringify({ elevation: [815] }), { status: 200 }));
+    await tick(20);
+
+    assert.ok(!emitted.includes(815), `a disposed resolver still emitted: ${emitted.join(",")}`);
+  });
+
+  it("retries a cell whose lookup failed instead of caching the failure", async () => {
+    // A transient network error surfaces as null, which is indistinguishable
+    // from "no data". Caching it would blackhole that ~11m cell for the session.
+    const emitted: (number | null)[] = [];
+    let calls = 0;
+    const fetchImpl: FetchLike = async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("network blip");
+      return new Response(JSON.stringify({ elevation: [640] }), { status: 200 });
+    };
+
+    const resolver = createPointerElevationResolver({
+      getMap: () => ({ getTerrain: () => null }),
+      isEarth: () => true,
+      emit: (v) => emitted.push(v),
+      fetchImpl,
+      debounceMs: 5,
+    });
+
+    resolver.update([7, 7]);
+    await tick(30);
+    assert.equal(emitted.at(-1), null, "a failed lookup reads as unknown");
+
+    resolver.update([7, 7]); // hover the same cell again
+    await tick(30);
+    assert.equal(calls, 2, "the failure must not have been cached");
+    assert.equal(emitted.at(-1), 640);
+    resolver.dispose();
+  });
+
+  it("does nothing at all while the readout is switched off", async () => {
+    const emitted: (number | null)[] = [];
+    const { fetch, calls } = stubFetch(1234);
+    let enabled = false;
+    const resolver = createPointerElevationResolver({
+      getMap: () => terrainMap(900), // terrain available, but toggle is off
+      isEarth: () => true,
+      isEnabled: () => enabled,
+      emit: (v) => emitted.push(v),
+      fetchImpl: fetch,
+      debounceMs: 5,
+    });
+
+    resolver.update([2, 2]);
+    await tick(30);
+    assert.deepEqual(emitted, [null], "no terrain sample while switched off");
+    assert.equal(calls(), 0, "no request while switched off");
+
+    enabled = true;
+    resolver.update([2, 2]);
+    assert.equal(emitted.at(-1), 900, "switching it on resumes the readout");
+    resolver.dispose();
+  });
+
   it("clears the readout and cancels a pending lookup when the pointer leaves", async () => {
     const emitted: (number | null)[] = [];
     const { fetch, calls } = stubFetch(300);

@@ -972,6 +972,12 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
       // Coerce unknown/missing bodies to Earth so measurements never break.
       ellipsoidId: getEllipsoid((map as Partial<ProjectPreferences["map"]>).ellipsoidId).id,
       scaleUnit: normalizeScaleUnit((map as Partial<ProjectPreferences["map"]>).scaleUnit),
+      // Absent in every project written before #1813, and the default is off,
+      // so an older project opens without the elevation lookup enabled.
+      showPointerElevation: normalizeBoolean(
+        (map as Partial<ProjectPreferences["map"]>).showPointerElevation,
+        DEFAULT_PROJECT_PREFERENCES.map.showPointerElevation,
+      ),
     },
     environmentVariables: Array.isArray(candidate.environmentVariables)
       ? candidate.environmentVariables

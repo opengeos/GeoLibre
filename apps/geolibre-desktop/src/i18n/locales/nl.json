@@ -2532,6 +2532,8 @@
       "atmosphereEnabled": "Ingeschakeld",
       "spinGlobe": "Draaiende globe",
       "graticule": "Rasterlijnen",
+      "pointerElevation": "Hoogte",
+      "pointerElevationHint": "Toon de terreinhoogte onder de aanwijzer in de statusbalk. Zonder 3D-terrein wordt een openbare hoogtedienst geraadpleegd.",
       "weather": "Weer",
       "weatherTooltip": "Leg bijna realtime weerlagen over elkaar die je kunt animeren.",
       "weatherPlay": "Animatie afspelen",

@@ -2487,6 +2487,8 @@
       "atmosphereEnabled": "已启用",
       "spinGlobe": "旋转地球",
       "graticule": "经纬网",
+      "pointerElevation": "高程",
+      "pointerElevationHint": "在状态栏显示指针下方的地面高程。未启用三维地形时会查询公共高程服务。",
       "weather": "天气",
       "weatherTooltip": "叠加可播放动画的近实时天气图层。",
       "weatherPlay": "播放动画",
