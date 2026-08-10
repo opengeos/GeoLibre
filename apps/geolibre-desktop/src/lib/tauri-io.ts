@@ -38,6 +38,7 @@ import {
 } from "./duckdb-vector-guard";
 import type { GeotaggedPhotoResult } from "./geotagged-photos";
 import { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "./geotagged-photos";
+import { shouldUseTauriFsForRecentProject } from "./project-file-routing";
 import { projectedGeoJsonCrs } from "./crs-utils";
 import { nativeFileDialogFilters, type FileDialogFilter } from "./file-dialog-filters";
 import { parseGpxLayer } from "./gpx";
@@ -2695,7 +2696,9 @@ export async function openRecentProjectFile(
 
   let text: string;
   try {
-    text = await invoke<string>("read_project_file", { path });
+    text = shouldUseTauriFsForRecentProject(path, isAndroid())
+      ? await readTextFile(path)
+      : await invoke<string>("read_project_file", { path });
   } catch (error) {
     if (isFileMissingError(error)) {
       throw new RecentProjectGoneError(`Project file no longer exists: ${path}`);
