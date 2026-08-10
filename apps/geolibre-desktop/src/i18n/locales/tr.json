@@ -1834,7 +1834,9 @@
       "scaleUnitImperial": "İngiliz (ft / mi)",
       "scaleUnitNautical": "Deniz (nmi)",
       "scaleUnitHint": "Haritanın altındaki ölçek çubuğunda gösterilen birimleri seçin.",
-      "errorBoundsUnavailable": "Harita sınırları henüz kullanılamıyor."
+      "errorBoundsUnavailable": "Harita sınırları henüz kullanılamıyor.",
+      "coordinateFormat": "Koordinat biçimi",
+      "coordinateFormatHint": "Durum çubuğunun imleç koordinatını gösterdiği biçim. Gösterimi değiştirmek için durum çubuğundaki koordinatlara tıklayın."
     },
     "layout": {
       "title": "Düzen",
@@ -5491,5 +5493,14 @@
     "mapPoint": "Harita Noktası",
     "reply": "Yanıtla",
     "replyPlaceholder": "Bir yanıt yazın..."
+  },
+  "statusBar": {
+    "coordinateFormat": {
+      "dd": "Ondalık derece",
+      "dms": "Derece, dakika, saniye",
+      "ddm": "Derece, ondalık dakika",
+      "utm": "UTM (dilim, doğu/kuzey)"
+    },
+    "coordinateFormatHint": "Koordinat biçimi: {{format}}. Değiştirmek için tıklayın."
   }
 }

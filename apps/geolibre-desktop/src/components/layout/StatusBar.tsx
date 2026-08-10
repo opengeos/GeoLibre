@@ -5,6 +5,11 @@ import {
   useAppStore,
   type MapScaleUnit,
 } from "@geolibre/core";
+import {
+  formatCoordinate,
+  nextCoordinateFormat,
+  normalizeCoordinateFormat,
+} from "../../lib/coordinate-format";
 import { cn } from "@geolibre/ui";
 import { Bug } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -41,6 +46,10 @@ export function StatusBar({
   const pointerElevation = useAppStore((s) => s.pointerElevation);
   const cameraAltitude = useAppStore((s) => s.cameraAltitude);
   const scaleUnit = useAppStore((s) => s.preferences.map.scaleUnit);
+  const coordinateFormat = normalizeCoordinateFormat(
+    useAppStore((s) => s.preferences.map.coordinateFormat),
+  );
+  const setPreferences = useAppStore((s) => s.setPreferences);
   const gpsStatus = useAppStore((s) => s.gpsStatus);
   const mapView = useAppStore((s) => s.mapView);
   const diagnosticsCount = diagnosticsErrorCount + diagnosticsWarningCount;
@@ -72,7 +81,7 @@ export function StatusBar({
     : null;
 
   const coordText = pointerCoords
-    ? `${pointerCoords[0].toFixed(5)}, ${pointerCoords[1].toFixed(5)}`
+    ? formatCoordinate(pointerCoords[0], pointerCoords[1], coordinateFormat)
     : "—";
 
   // Only shown once a value resolves: an "Elev: —" that is empty most of the
@@ -80,6 +89,15 @@ export function StatusBar({
   // as "not applicable here".
   const elevationText =
     pointerElevation !== null ? formatPointerElevation(pointerElevation, scaleUnit) : null;
+  // Clicking the readout cycles DD -> DMS -> DDM -> UTM. The same choice lives
+  // in Settings; this is the shortcut for someone switching notations while
+  // reading a map, which is when it actually comes up. Read live state at click
+  // time so a concurrent preference change is not clobbered.
+  const cycleCoordinateFormat = () => {
+    const current = useAppStore.getState().preferences;
+    const next = nextCoordinateFormat(normalizeCoordinateFormat(current.map.coordinateFormat));
+    setPreferences({ ...current, map: { ...current.map, coordinateFormat: next } });
+  };
 
   // Google Earth Pro's "Eye alt": how high the camera is, as opposed to how
   // high the ground under the cursor is. Sits beside Zoom because it answers
@@ -96,9 +114,16 @@ export function StatusBar({
         compact ? "overflow-hidden" : "overflow-x-auto",
       )}
     >
-      <span className="shrink-0">
+      <button
+        type="button"
+        className="shrink-0 rounded px-1 hover:bg-accent hover:text-accent-foreground"
+        onClick={cycleCoordinateFormat}
+        title={t("statusBar.coordinateFormatHint", {
+          format: t(`statusBar.coordinateFormat.${coordinateFormat}`),
+        })}
+      >
         {compact ? "XY" : "Coords"}: {coordText}
-      </span>
+      </button>
       {elevationText && (
         <span className="shrink-0" title={t("statusBar.elevationLong")}>
           {t("statusBar.elevation")}: {elevationText}

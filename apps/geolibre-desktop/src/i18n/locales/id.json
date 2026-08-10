@@ -1791,7 +1791,9 @@
       "scaleUnitImperial": "Imperial (ft / mi)",
       "scaleUnitNautical": "Nautikal (nmi)",
       "scaleUnitHint": "Pilih satuan yang ditampilkan pada bilah skala di bagian bawah peta.",
-      "errorBoundsUnavailable": "Batas peta belum tersedia."
+      "errorBoundsUnavailable": "Batas peta belum tersedia.",
+      "coordinateFormat": "Format koordinat",
+      "coordinateFormatHint": "Notasi yang digunakan bilah status untuk koordinat penunjuk. Klik koordinat di bilah status untuk mengganti notasi."
     },
     "layout": {
       "title": "Tata Letak",
@@ -5412,5 +5414,14 @@
     "mapPoint": "Titik Peta",
     "reply": "Balas",
     "replyPlaceholder": "Tulis balasan..."
+  },
+  "statusBar": {
+    "coordinateFormat": {
+      "dd": "Derajat desimal",
+      "dms": "Derajat, menit, detik",
+      "ddm": "Derajat, menit desimal",
+      "utm": "UTM (zona, easting/northing)"
+    },
+    "coordinateFormatHint": "Format koordinat: {{format}}. Klik untuk mengganti."
   }
 }

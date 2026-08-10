@@ -91,6 +91,7 @@ import { COMMENTS_PANEL_ID } from "../../hooks/useRegisterCommentsPanel";
 import { useRightPanelState } from "../../hooks/useRightPanels";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/is-tauri";
+import { COORDINATE_FORMATS, normalizeCoordinateFormat } from "../../lib/coordinate-format";
 import { THEME_SCHEMES, normalizeHexColor, type ThemeScheme } from "../../lib/theme-schemes";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { resolveShareHost, shareHostLabel } from "../../lib/share-geolibre";
@@ -1718,6 +1719,27 @@ export function SettingsDialog({
                     </Select>
                     <p className="text-xs text-muted-foreground">
                       {t("settings.map.scaleUnitHint")}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settings-coordinate-format">
+                      {t("settings.map.coordinateFormat")}
+                    </Label>
+                    <Select
+                      id="settings-coordinate-format"
+                      value={normalizeCoordinateFormat(draftPreferences.map.coordinateFormat)}
+                      onChange={(event) =>
+                        updateMapPreferences({ coordinateFormat: event.target.value })
+                      }
+                    >
+                      {COORDINATE_FORMATS.map((format) => (
+                        <option key={format} value={format}>
+                          {t(`statusBar.coordinateFormat.${format}`)}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.map.coordinateFormatHint")}
                     </p>
                   </div>
                 </div>

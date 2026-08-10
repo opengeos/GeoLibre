@@ -1791,7 +1791,9 @@
       "scaleUnitImperial": "อิมพีเรียล (ft / mi)",
       "scaleUnitNautical": "หน่วยเดินเรือ (nmi)",
       "scaleUnitHint": "เลือกหน่วยที่แสดงบนมาตราส่วนแบบแท่งที่ด้านล่างของแผนที่",
-      "errorBoundsUnavailable": "ยังไม่มีข้อมูลขอบเขตของแผนที่"
+      "errorBoundsUnavailable": "ยังไม่มีข้อมูลขอบเขตของแผนที่",
+      "coordinateFormat": "รูปแบบพิกัด",
+      "coordinateFormatHint": "รูปแบบที่แถบสถานะใช้แสดงพิกัดของตัวชี้ คลิกพิกัดในแถบสถานะเพื่อสลับรูปแบบ"
     },
     "layout": {
       "title": "เลย์เอาต์",
@@ -5412,5 +5414,14 @@
     "mapPoint": "จุดบนแผนที่",
     "reply": "ตอบกลับ",
     "replyPlaceholder": "เขียนคำตอบ..."
+  },
+  "statusBar": {
+    "coordinateFormat": {
+      "dd": "องศาทศนิยม",
+      "dms": "องศา ลิปดา ฟิลิปดา",
+      "ddm": "องศา ลิปดาทศนิยม",
+      "utm": "UTM (โซน, ตะวันออก/เหนือ)"
+    },
+    "coordinateFormatHint": "รูปแบบพิกัด: {{format}} คลิกเพื่อสลับ"
   }
 }

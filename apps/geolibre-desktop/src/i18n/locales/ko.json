@@ -1791,7 +1791,9 @@
       "scaleUnitImperial": "야드파운드법 (ft / mi)",
       "scaleUnitNautical": "해상 (nmi)",
       "scaleUnitHint": "지도 하단의 축척 막대에 표시할 단위를 선택하세요.",
-      "errorBoundsUnavailable": "지도 경계를 아직 사용할 수 없습니다."
+      "errorBoundsUnavailable": "지도 경계를 아직 사용할 수 없습니다.",
+      "coordinateFormat": "좌표 형식",
+      "coordinateFormatHint": "상태 표시줄이 포인터 좌표를 표시하는 표기법입니다. 상태 표시줄의 좌표를 클릭하면 표기법이 전환됩니다."
     },
     "layout": {
       "title": "레이아웃",
@@ -5412,5 +5414,14 @@
     "mapPoint": "지도 지점",
     "reply": "답글",
     "replyPlaceholder": "답글을 입력하세요..."
+  },
+  "statusBar": {
+    "coordinateFormat": {
+      "dd": "십진 도",
+      "dms": "도, 분, 초",
+      "ddm": "도, 십진 분",
+      "utm": "UTM (구역, 동거/북거)"
+    },
+    "coordinateFormatHint": "좌표 형식: {{format}}. 클릭하여 전환."
   }
 }

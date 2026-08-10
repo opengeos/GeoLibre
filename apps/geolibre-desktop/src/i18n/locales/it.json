@@ -1834,7 +1834,9 @@
       "scaleUnitImperial": "Imperiale (ft / mi)",
       "scaleUnitNautical": "Nautico (nmi)",
       "scaleUnitHint": "Scegli le unità mostrate sulla barra di scala in fondo alla mappa.",
-      "errorBoundsUnavailable": "L'estensione della mappa non è ancora disponibile."
+      "errorBoundsUnavailable": "L'estensione della mappa non è ancora disponibile.",
+      "coordinateFormat": "Formato coordinate",
+      "coordinateFormatHint": "Notazione con cui la barra di stato mostra la coordinata del puntatore. Fare clic sulle coordinate nella barra di stato per cambiare notazione."
     },
     "layout": {
       "title": "Layout",
@@ -5491,5 +5493,14 @@
     "mapPoint": "Punto sulla mappa",
     "reply": "Rispondi",
     "replyPlaceholder": "Scrivi una risposta..."
+  },
+  "statusBar": {
+    "coordinateFormat": {
+      "dd": "Gradi decimali",
+      "dms": "Gradi, primi, secondi",
+      "ddm": "Gradi, primi decimali",
+      "utm": "UTM (fuso, est/nord)"
+    },
+    "coordinateFormatHint": "Formato coordinate: {{format}}. Fare clic per cambiare."
   }
 }

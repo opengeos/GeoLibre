@@ -2005,7 +2005,9 @@
       "scaleUnitImperial": "إمبراطوري (ft / mi)",
       "scaleUnitNautical": "بحري (nmi)",
       "scaleUnitHint": "اختر الوحدات المعروضة على شريط المقياس أسفل الخريطة.",
-      "errorBoundsUnavailable": "حدود الخريطة غير متاحة بعد."
+      "errorBoundsUnavailable": "حدود الخريطة غير متاحة بعد.",
+      "coordinateFormat": "صيغة الإحداثيات",
+      "coordinateFormatHint": "الصيغة التي يعرض بها شريط الحالة إحداثيات المؤشر. انقر على الإحداثيات في شريط الحالة لتغيير الصيغة."
     },
     "layout": {
       "title": "التخطيط",
@@ -5806,5 +5808,14 @@
     "mapPoint": "نقطة على الخريطة",
     "reply": "رد",
     "replyPlaceholder": "اكتب ردًا..."
+  },
+  "statusBar": {
+    "coordinateFormat": {
+      "dd": "درجات عشرية",
+      "dms": "درجات ودقائق وثوانٍ",
+      "ddm": "درجات ودقائق عشرية",
+      "utm": "UTM (نطاق، شرق/شمال)"
+    },
+    "coordinateFormatHint": "صيغة الإحداثيات: {{format}}. انقر للتبديل."
   }
 }

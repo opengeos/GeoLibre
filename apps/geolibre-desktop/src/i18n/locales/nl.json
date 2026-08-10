@@ -1834,7 +1834,9 @@
       "scaleUnitImperial": "Imperiaal (ft / mi)",
       "scaleUnitNautical": "Nautisch (nmi)",
       "scaleUnitHint": "Kies de eenheden die op de schaalbalk onderaan de kaart worden weergegeven.",
-      "errorBoundsUnavailable": "De kaartgrenzen zijn nog niet beschikbaar."
+      "errorBoundsUnavailable": "De kaartgrenzen zijn nog niet beschikbaar.",
+      "coordinateFormat": "Coördinaatformaat",
+      "coordinateFormatHint": "Notatie waarin de statusbalk de aanwijzercoördinaat toont. Klik op de coördinaten in de statusbalk om van notatie te wisselen."
     },
     "layout": {
       "title": "Lay-out",
@@ -5491,5 +5493,14 @@
     "mapPoint": "Kaartpunt",
     "reply": "Beantwoorden",
     "replyPlaceholder": "Schrijf een antwoord..."
+  },
+  "statusBar": {
+    "coordinateFormat": {
+      "dd": "Decimale graden",
+      "dms": "Graden, minuten, seconden",
+      "ddm": "Graden, decimale minuten",
+      "utm": "UTM (zone, oost/noord)"
+    },
+    "coordinateFormatHint": "Coördinaatformaat: {{format}}. Klik om te wisselen."
   }
 }

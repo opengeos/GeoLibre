@@ -580,6 +580,9 @@ export {
   type GraticuleLabels,
   type GraticuleLabelFormat,
   type GraticuleLabelEdges,
+  lngLatToUtm,
+  utmZoneDesignation,
+  type UtmCoordinate,
 } from "./plugins/maplibre-graticule";
 export {
   maplibreH3Plugin,

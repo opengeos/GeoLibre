@@ -1834,7 +1834,9 @@
       "scaleUnitImperial": "Imperial (ft / mi)",
       "scaleUnitNautical": "Nautical (nmi)",
       "scaleUnitHint": "Choose the units shown on the scale bar at the bottom of the map.",
-      "errorBoundsUnavailable": "The map bounds are not available yet."
+      "errorBoundsUnavailable": "The map bounds are not available yet.",
+      "coordinateFormat": "Coordinate format",
+      "coordinateFormatHint": "Notation the status bar reports the pointer coordinate in. Click the coordinates in the status bar to switch notation."
     },
     "layout": {
       "title": "Layout",
@@ -5491,5 +5493,14 @@
     "mapPoint": "Map Point",
     "reply": "Reply",
     "replyPlaceholder": "Write a reply..."
+  },
+  "statusBar": {
+    "coordinateFormat": {
+      "dd": "Decimal degrees",
+      "dms": "Degrees, minutes, seconds",
+      "ddm": "Degrees, decimal minutes",
+      "utm": "UTM (zone, easting/northing)"
+    },
+    "coordinateFormatHint": "Coordinate format: {{format}}. Click to switch."
   }
 }

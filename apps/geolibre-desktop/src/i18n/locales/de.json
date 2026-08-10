@@ -1834,7 +1834,9 @@
       "scaleUnitImperial": "Imperial (ft / mi)",
       "scaleUnitNautical": "Nautisch (nmi)",
       "scaleUnitHint": "Wählen Sie die Einheiten, die auf der Maßstabsleiste am unteren Kartenrand angezeigt werden.",
-      "errorBoundsUnavailable": "Die Kartengrenzen sind noch nicht verfügbar."
+      "errorBoundsUnavailable": "Die Kartengrenzen sind noch nicht verfügbar.",
+      "coordinateFormat": "Koordinatenformat",
+      "coordinateFormatHint": "Notation, in der die Statusleiste die Zeigerkoordinate anzeigt. Klicken Sie auf die Koordinaten in der Statusleiste, um die Notation zu wechseln."
     },
     "layout": {
       "title": "Layout",
@@ -5491,5 +5493,14 @@
     "mapPoint": "Kartenpunkt",
     "reply": "Antworten",
     "replyPlaceholder": "Antwort schreiben..."
+  },
+  "statusBar": {
+    "coordinateFormat": {
+      "dd": "Dezimalgrad",
+      "dms": "Grad, Minuten, Sekunden",
+      "ddm": "Grad, Dezimalminuten",
+      "utm": "UTM (Zone, Ost-/Nordwert)"
+    },
+    "coordinateFormatHint": "Koordinatenformat: {{format}}. Zum Wechseln klicken."
   }
 }

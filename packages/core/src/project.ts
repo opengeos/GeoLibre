@@ -978,6 +978,13 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
         (map as Partial<ProjectPreferences["map"]>).showPointerElevation,
         DEFAULT_PROJECT_PREFERENCES.map.showPointerElevation,
       ),
+      // Kept as a free string here; the app coerces an unknown notation to
+      // decimal degrees when it renders, so a hand-edited project cannot break
+      // the readout.
+      coordinateFormat:
+        typeof (map as Partial<ProjectPreferences["map"]>).coordinateFormat === "string"
+          ? ((map as Partial<ProjectPreferences["map"]>).coordinateFormat as string)
+          : DEFAULT_PROJECT_PREFERENCES.map.coordinateFormat,
     },
     environmentVariables: Array.isArray(candidate.environmentVariables)
       ? candidate.environmentVariables

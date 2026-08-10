@@ -1834,7 +1834,9 @@
       "scaleUnitImperial": "Imperial (ft / mi)",
       "scaleUnitNautical": "Náutico (nmi)",
       "scaleUnitHint": "Escolha as unidades mostradas na barra de escala na parte inferior do mapa.",
-      "errorBoundsUnavailable": "Os limites do mapa ainda não estão disponíveis."
+      "errorBoundsUnavailable": "Os limites do mapa ainda não estão disponíveis.",
+      "coordinateFormat": "Formato de coordenadas",
+      "coordinateFormatHint": "Notação em que a barra de estado apresenta a coordenada do ponteiro. Clique nas coordenadas na barra de estado para mudar de notação."
     },
     "layout": {
       "title": "Layout",
@@ -5491,5 +5493,14 @@
     "mapPoint": "Ponto do mapa",
     "reply": "Responder",
     "replyPlaceholder": "Escreva uma resposta..."
+  },
+  "statusBar": {
+    "coordinateFormat": {
+      "dd": "Graus decimais",
+      "dms": "Graus, minutos, segundos",
+      "ddm": "Graus, minutos decimais",
+      "utm": "UTM (fuso, este/norte)"
+    },
+    "coordinateFormatHint": "Formato de coordenadas: {{format}}. Clique para mudar."
   }
 }
