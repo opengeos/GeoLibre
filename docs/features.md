@@ -200,6 +200,7 @@ kepler.gl, see the [Comparison](comparison.md).
 ## Projects and sharing
 
 - Project menu to create, open, save, and Save As `.geolibre.json` projects, export a project to a single standalone interactive HTML file that runs offline with no server, and a project gallery for browsing and opening shared projects with one click
+- Share-readiness check in the Share dialog: before the upload, every data source the project references is classified and probed anonymously from the browser, and the ones a recipient could not load are listed with a plain-language reason and a fix, covering credential-gated services, hosts with no cross-origin headers, expired or moved links, and local or private-network sources. It informs rather than blocks. See [Projects](user-guide/projects.md#share-readiness-check)
 - Autosave with a browsable project history. See [Projects](user-guide/projects.md#project-history-and-crash-recovery)
     - Snapshots are written to local device storage a few seconds after each change settles, and listed newest first with their layer count and zoom
     - Restoring a snapshot is an undoable step

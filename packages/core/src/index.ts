@@ -126,6 +126,7 @@ export {
   stripGoogleMapsApiKeyHeader,
 } from "./three-d-tiles";
 export {
+  isCredentialFieldName,
   PROJECT_CREDENTIAL_FIELDS,
   PUBLISHABLE_PLUGIN_SETTINGS,
   redactCredentials,

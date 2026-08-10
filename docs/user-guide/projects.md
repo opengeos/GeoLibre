@@ -66,6 +66,17 @@ An ArcGIS Pro project can contain several maps; GeoLibre imports its first 2D ma
 
 **Project → Share...** uploads the current project to `share.geolibre.app` and returns a public URL you can send to anyone or open in the live viewer. Sharing uses a personal API token, which you set once as the **Share.GeoLibre API token** in **Settings → Environment Variables**. The shared file is the same `.geolibre.json` the app saves locally, so anyone who opens the link sees the same layers, styles, and map view. See the [Sharing & Embedding tutorial](../tutorials/sharing-embedding.md).
 
+### Share-readiness check
+
+A project file is mostly references, so a project can upload cleanly and still draw nothing for the person you sent it to. When the Share dialog opens it checks the data sources the project points at and lists the ones a recipient will not be able to load, with the reason and what to do about it:
+
+- **Uses a credential that is removed when sharing.** Tokens and API keys are stripped from the upload, so the recipient gets the URL without the secret. Make the service public, or tell them to supply their own key.
+- **A browser cannot fetch this host.** The host sends no cross-origin (CORS) headers, or it did not answer. Layers like this keep working in the desktop app, which is not subject to browser CORS, but stay empty in the browser viewer.
+- **The service answered not found.** A signed URL that has expired, or a file that moved.
+- **Points at a file on your machine, or at a private network address.** Local vector data is embedded in the upload automatically, but a local raster, an intranet service, or a database-backed layer only resolves where you authored it.
+
+The check runs in the browser, without your credentials attached, so it sees what a recipient sees. It never blocks the upload: sharing an intranet map with intranet colleagues is a normal thing to do, and the list is there to inform you, not to stop you.
+
 ## Export as HTML
 
 **Project → Export as HTML...** writes the whole project to a single standalone HTML file that runs offline with no server. Host it anywhere, or open it straight from disk.
