@@ -234,12 +234,16 @@ describe("collectShareSources", () => {
         "https://plugins.example.com/p/plugin.json",
         "/plugins/local/plugin.json",
       ],
-      basemapLabel: "Basemap",
-      pluginLabel: "Plugin",
     });
     assert.deepEqual(
       refs.map((ref) => ref.field),
       ["basemapStyleUrl", "plugins.manifestUrls[0]"],
+    );
+    // Project-level rows carry no label: the dialog translates one from `field`,
+    // so the check never needs the translation function.
+    assert.deepEqual(
+      refs.map((ref) => ref.label),
+      ["", ""],
     );
   });
 

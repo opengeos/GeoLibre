@@ -11,6 +11,7 @@ import {
   Label,
   Select,
 } from "@geolibre/ui";
+import type { TFunction } from "i18next";
 import {
   Check,
   CircleCheck,
@@ -68,6 +69,19 @@ interface ShareProjectDialogProps {
 function accountSettingsUrl(): string | null {
   const base = resolveShareBaseUrl();
   return base ? `${base}/settings` : null;
+}
+
+/**
+ * The row's heading: a layer's own name, or a translated label for the two
+ * project-level references (the basemap style and a plugin manifest), which the
+ * check reports without a name of their own so it never has to be handed the
+ * translation function.
+ */
+function readinessLabel(item: ShareReadinessItem, t: TFunction): string {
+  if (item.label) return item.label;
+  return item.field === "basemapStyleUrl"
+    ? t("share.readinessBasemapLabel")
+    : t("share.readinessPluginLabel");
 }
 
 /**
@@ -193,8 +207,6 @@ export function ShareProjectDialog({
         embeddedLayerIds: new Set(
           state.layers.filter(isEmbeddableLocalVectorLayer).map((layer) => layer.id),
         ),
-        basemapLabel: t("share.readinessBasemapLabel"),
-        pluginLabel: t("share.readinessPluginLabel"),
       },
       { signal: controller.signal },
     )
@@ -208,7 +220,7 @@ export function ShareProjectDialog({
         setReadinessState("failed");
       });
     return () => controller.abort();
-  }, [open, hasToken, t]);
+  }, [open, hasToken]);
 
   // Cancel a pending "copied" reset if the dialog unmounts mid-window.
   useEffect(
@@ -428,9 +440,9 @@ export function ShareProjectDialog({
                   {readiness.problems.map((item) => {
                     const copy = readinessCopyKeys(item);
                     return (
-                      <li key={`${item.layerId ?? item.label}:${item.url}`} className="space-y-0.5">
-                        <p className="truncate font-medium" title={item.url || item.label}>
-                          {item.label}
+                      <li key={`${item.layerId ?? item.field}:${item.url}`} className="space-y-0.5">
+                        <p className="truncate font-medium" title={item.url || undefined}>
+                          {readinessLabel(item, t)}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {t(copy.reason)}

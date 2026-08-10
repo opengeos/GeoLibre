@@ -31,6 +31,7 @@ import {
   isAbsoluteFilesystemPath,
   isCredentialFieldName,
   isGooglePhotorealisticTilesetUrl,
+  MAX_REDACT_DEPTH,
   redactUrlCredentials,
   type GeoLibreLayer,
 } from "@geolibre/core";
@@ -74,7 +75,12 @@ export type ShareSourceReason =
 export interface ShareSourceRef {
   /** Owning layer id, or null for a project-level reference. */
   layerId: string | null;
-  /** Display name for the row: the layer name, or a project-level label. */
+  /**
+   * The layer's name, or empty for a project-level reference, whose label the
+   * UI derives from {@link ShareSourceRef.field}. Keeping the localized strings
+   * out of here is what lets the check run without depending on the translation
+   * function, so switching language never re-issues the probes.
+   */
   label: string;
   /** Where in the project the reference sits, e.g. `source.tiles[0]`. */
   field: string;
@@ -93,7 +99,10 @@ export interface ShareSourceRef {
 /** One row in the dialog: a layer (or project field) and its worst verdict. */
 export interface ShareReadinessItem {
   layerId: string | null;
+  /** Empty for a project-level row; see {@link ShareSourceRef.label}. */
   label: string;
+  /** Where the reference sits, so the UI can label a project-level row. */
+  field: string;
   status: ShareSourceStatus;
   reason: ShareSourceReason;
   /** The reference that produced the verdict, for the detail line. */
@@ -131,10 +140,6 @@ export interface ShareReadinessInput {
    * narrow unreadable-local-data case is accepted as a false negative.
    */
   embeddedLayerIds?: ReadonlySet<string>;
-  /** Label for the basemap row. Passed in so this module stays i18n-free. */
-  basemapLabel?: string;
-  /** Label prefix for plugin manifest rows. */
-  pluginLabel?: string;
 }
 
 export interface ShareProbeOptions {
@@ -170,8 +175,6 @@ const STATUS_SEVERITY: Record<ShareSourceStatus, number> = {
   reachable: 0,
 };
 
-const MAX_FIELD_SCAN_DEPTH = 6;
-
 function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
 }
@@ -196,7 +199,9 @@ function isPopulated(value: unknown): boolean {
  * unlocks nothing, and warning about it would be noise.
  */
 function hasCredentialField(value: unknown, depth = 0): boolean {
-  if (depth >= MAX_FIELD_SCAN_DEPTH) return false;
+  // Exactly as deep as the redaction pass descends, so a credential nested
+  // deeply enough to escape this scan but not that one cannot exist.
+  if (depth >= MAX_REDACT_DEPTH) return false;
   if (Array.isArray(value)) return value.some((item) => hasCredentialField(item, depth + 1));
   if (!isPlainObject(value)) return false;
   for (const [key, nested] of Object.entries(value)) {
@@ -431,7 +436,7 @@ export function collectShareSources(input: ShareReadinessInput): ShareSourceRef[
     if (classified) {
       refs.push({
         layerId: null,
-        label: input.basemapLabel ?? "Basemap",
+        label: "",
         field: "basemapStyleUrl",
         url: input.basemapStyleUrl.trim(),
         ...classified,
@@ -447,7 +452,7 @@ export function collectShareSources(input: ShareReadinessInput): ShareSourceRef[
     if (!classified) continue;
     refs.push({
       layerId: null,
-      label: input.pluginLabel ?? "Plugin",
+      label: "",
       field: `plugins.manifestUrls[${index}]`,
       url: manifestUrl.trim(),
       ...classified,
@@ -578,6 +583,7 @@ export function summarizeShareSources(refs: readonly ShareSourceRef[]): ShareRea
     const candidate: ShareReadinessItem = {
       layerId: ref.layerId,
       label: ref.label,
+      field: ref.field,
       status: ref.status,
       reason: ref.reason,
       url: ref.url,

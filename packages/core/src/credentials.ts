@@ -95,7 +95,13 @@ const URL_CREDENTIAL_PARAMS = new Set(
     "skoid",
   ].map(normalizeCredentialName),
 );
-const MAX_REDACT_DEPTH = 12;
+/**
+ * Depth at which the redaction pass stops descending and fails closed.
+ * Exported so a caller that predicts what redaction will remove (the Share
+ * dialog's readiness check) scans exactly as deep as this pass does, instead of
+ * keeping a second, shallower cap that would silently disagree.
+ */
+export const MAX_REDACT_DEPTH = 12;
 
 /** Whether an object key in layer/plugin configuration holds a credential. */
 export function isCredentialFieldName(name: string): boolean {
