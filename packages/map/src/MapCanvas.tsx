@@ -1052,6 +1052,15 @@ export const MapCanvas = memo(function MapCanvas({
   const setMapView = useAppStore((s) => s.setMapView);
   const setPointerCoords = useAppStore((s) => s.setPointerCoords);
   const setPointerElevation = useAppStore((s) => s.setPointerElevation);
+  const showPointerElevation = useAppStore((s) => s.preferences.map.showPointerElevation);
+
+  // The resolver consults the preference, but only when a pointer event asks it
+  // to. Switching the toggle off with the cursor resting motionless over the
+  // map (a keyboard-only toggle) would otherwise leave the last resolved value
+  // on screen until the next mousemove.
+  useEffect(() => {
+    if (!showPointerElevation) setPointerElevation(null);
+  }, [showPointerElevation, setPointerElevation]);
   const previousSelectedFeatureKey = useRef<string | null>(null);
   const previousDuckDBSelectionLayerId = useRef<string | null>(null);
   const identifyPopup = useRef<maplibregl.Popup | null>(null);

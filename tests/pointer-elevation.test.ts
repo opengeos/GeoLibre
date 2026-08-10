@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   createPointerElevationResolver,
+  POINTER_ELEVATION_CACHE_LIMIT,
   sampleMapTerrainPoint,
   type FetchLike,
   type TerrainMapLike,
@@ -238,6 +239,37 @@ describe("pointer elevation resolver", () => {
     enabled = true;
     resolver.update([2, 2]);
     assert.equal(emitted.at(-1), 900, "switching it on resumes the readout");
+    resolver.dispose();
+  });
+
+  it("evicts only the oldest entry at the cache cap", async () => {
+    // Clearing the whole cache at the cap made every 500th distinct cell
+    // trigger a burst of re-fetches for cells still under active hovering.
+    const { fetch, calls } = stubFetch(1);
+    const resolver = createPointerElevationResolver({
+      getMap: () => ({ getTerrain: () => null }),
+      isEarth: () => true,
+      emit: () => {},
+      fetchImpl: fetch,
+      debounceMs: 1,
+    });
+
+    // Fill past the cap, touching the first cell again partway through so it is
+    // the most recently used and must survive eviction.
+    const first: [number, number] = [0, 0];
+    for (let i = 0; i < POINTER_ELEVATION_CACHE_LIMIT + 5; i += 1) {
+      resolver.update([i * 0.01, i * 0.01]);
+      await tick(4);
+      if (i === 10) {
+        resolver.update(first);
+        await tick(4);
+      }
+    }
+
+    const before = calls();
+    resolver.update(first); // still cached -> served without a request
+    await tick(10);
+    assert.equal(calls(), before, "the most recently used cell was evicted");
     resolver.dispose();
   });
 

@@ -191,7 +191,7 @@ function cacheKey(point: LngLat): string {
 export const POINTER_ELEVATION_DEBOUNCE_MS = 500;
 
 /** Remote results kept per resolver; bounded so a long session cannot grow it without limit. */
-const POINTER_ELEVATION_CACHE_LIMIT = 500;
+export const POINTER_ELEVATION_CACHE_LIMIT = 500;
 
 export interface PointerElevationResolverOptions {
   /** The live map, for the terrain sample. May return null before init. */
@@ -276,7 +276,12 @@ export function createPointerElevationResolver(
 
     const key = cacheKey(point);
     if (cache.has(key)) {
-      emit(cache.get(key) ?? null);
+      const cached = cache.get(key) ?? null;
+      // Re-insert to move this entry to the end: Map iterates in insertion
+      // order, so the first key is always the least recently used.
+      cache.delete(key);
+      cache.set(key, cached);
+      emit(cached);
       return;
     }
 
@@ -293,7 +298,13 @@ export function createPointerElevationResolver(
         // session, so only successes are remembered and a transient network
         // blip gets another chance on the next hover.
         if (value !== null) {
-          if (cache.size >= POINTER_ELEVATION_CACHE_LIMIT) cache.clear();
+          // Evict just the oldest entry. Clearing the whole cache at the cap
+          // would make every 500th distinct cell trigger a burst of re-fetches
+          // for cells that may still be under active hovering.
+          if (cache.size >= POINTER_ELEVATION_CACHE_LIMIT) {
+            const oldest = cache.keys().next();
+            if (!oldest.done) cache.delete(oldest.value);
+          }
           cache.set(key, value);
         }
         // The pointer moved, left, or the resolver was disposed while the
