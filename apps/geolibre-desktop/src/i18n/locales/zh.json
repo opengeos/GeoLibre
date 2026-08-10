@@ -1676,7 +1676,9 @@
       "meters": "米",
       "kilometers": "千米",
       "miles": "英里"
-    }
+    },
+    "viewshedHere": "从此处的可视域 ({{radius}})",
+    "viewshedLayerName": "可视域 ({{radius}})"
   },
   "knowledgeCard": {
     "title": "地点信息",

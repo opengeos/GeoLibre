@@ -1719,7 +1719,9 @@
       "meters": "მ",
       "kilometers": "კმ",
       "miles": "მილი"
-    }
+    },
+    "viewshedHere": "ხედვის არე აქედან ({{radius}})",
+    "viewshedLayerName": "ხედვის არე ({{radius}})"
   },
   "knowledgeCard": {
     "title": "ადგილის ინფორმაცია",

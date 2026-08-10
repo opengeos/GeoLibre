@@ -1719,7 +1719,9 @@
       "meters": "m",
       "kilometers": "km",
       "miles": "mi"
-    }
+    },
+    "viewshedHere": "Bacia visual daqui ({{radius}})",
+    "viewshedLayerName": "Bacia visual ({{radius}})"
   },
   "knowledgeCard": {
     "title": "Informações do lugar",

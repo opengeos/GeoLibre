@@ -1719,7 +1719,9 @@
       "meters": "मी",
       "kilometers": "किमी",
       "miles": "मील"
-    }
+    },
+    "viewshedHere": "यहाँ से दृश्यक्षेत्र ({{radius}})",
+    "viewshedLayerName": "दृश्यक्षेत्र ({{radius}})"
   },
   "knowledgeCard": {
     "title": "स्थान जानकारी",

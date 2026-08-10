@@ -1719,7 +1719,9 @@
       "meters": "m",
       "kilometers": "km",
       "miles": "mi"
-    }
+    },
+    "viewshedHere": "Sichtfeld von hier ({{radius}})",
+    "viewshedLayerName": "Sichtfeld ({{radius}})"
   },
   "knowledgeCard": {
     "title": "Ortsinformationen",

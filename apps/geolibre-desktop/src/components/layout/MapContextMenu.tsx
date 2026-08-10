@@ -16,6 +16,7 @@ import {
   BookOpen,
   Braces,
   Circle,
+  Eye,
   Crosshair,
   Earth,
   MapIcon,
@@ -38,6 +39,7 @@ import {
   type QuickBufferPreset,
 } from "../../lib/quick-analysis";
 import { hasRoutingConsent, recordRoutingConsent } from "../../lib/routing-consent";
+import { runViewshed } from "../../lib/run-viewshed";
 import { RoutingConsentDialog } from "./RoutingConsentDialog";
 
 interface ContextMenuState {
@@ -197,9 +199,37 @@ export function MapContextMenu({
   const bufferPresets = useMemo(() => bufferPresetsFor(scaleUnit), [scaleUnit]);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
 
+  /** Radius label for the viewshed entries: metres below a km, else km. */
+  const formatViewshedRadius = (meters: number): string =>
+    meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
+
   const formatDistance = useCallback(
     (preset: QuickBufferPreset) => formatBufferDistance(preset, i18n.language, t),
     [i18n.language, t],
+  );
+
+  // Viewshed radii. Small enough that the tile fetch and the line-of-sight walk
+  // stay interactive; the 50km cap in the processing module is the hard limit.
+  const VIEWSHED_RADII_METERS = [2000, 5000, 15000];
+
+  const [viewshedBusy, setViewshedBusy] = useState(false);
+  const viewshedHere = useCallback(
+    (radiusMeters: number) => {
+      if (!menu || viewshedBusy) return;
+      const { lng, lat } = menu;
+      setViewshedBusy(true);
+      void runViewshed({
+        lng,
+        lat,
+        radiusMeters,
+        layerName: t("quickAnalysis.viewshedLayerName", {
+          radius: formatViewshedRadius(radiusMeters),
+        }),
+      })
+        .catch(() => null)
+        .finally(() => setViewshedBusy(false));
+    },
+    [menu, viewshedBusy, t],
   );
 
   const bufferHere = useCallback(
@@ -360,6 +390,20 @@ export function MapContextMenu({
                 <Route className="h-4 w-4 shrink-0 text-muted-foreground" />
                 {t("quickAnalysis.walkTimeHere", { contours: QUICK_TRAVEL_CONTOURS_LABEL })}
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {VIEWSHED_RADII_METERS.map((radiusMeters) => (
+                <DropdownMenuItem
+                  key={`viewshed-${radiusMeters}`}
+                  onSelect={() => viewshedHere(radiusMeters)}
+                  disabled={viewshedBusy}
+                  className="gap-2"
+                >
+                  <Eye className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {t("quickAnalysis.viewshedHere", {
+                    radius: formatViewshedRadius(radiusMeters),
+                  })}
+                </DropdownMenuItem>
+              ))}
               <DropdownMenuSeparator />
               {/* Escape hatch when the presets aren't what was wanted: the full
                 dialog, preselected on the same tool. */}

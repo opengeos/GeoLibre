@@ -1676,7 +1676,9 @@
       "meters": "m",
       "kilometers": "km",
       "miles": "マイル"
-    }
+    },
+    "viewshedHere": "ここからの可視領域 ({{radius}})",
+    "viewshedLayerName": "可視領域 ({{radius}})"
   },
   "knowledgeCard": {
     "title": "場所の情報",

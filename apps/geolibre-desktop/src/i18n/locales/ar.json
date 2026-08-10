@@ -1890,7 +1890,9 @@
       "meters": "م",
       "kilometers": "كم",
       "miles": "ميل"
-    }
+    },
+    "viewshedHere": "مجال الرؤية من هنا ({{radius}})",
+    "viewshedLayerName": "مجال الرؤية ({{radius}})"
   },
   "knowledgeCard": {
     "title": "معلومات المكان",

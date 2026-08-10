@@ -1676,7 +1676,9 @@
       "meters": "m",
       "kilometers": "km",
       "miles": "마일"
-    }
+    },
+    "viewshedHere": "여기서 본 가시권 ({{radius}})",
+    "viewshedLayerName": "가시권 ({{radius}})"
   },
   "knowledgeCard": {
     "title": "장소 정보",
