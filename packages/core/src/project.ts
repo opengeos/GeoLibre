@@ -126,7 +126,16 @@ const GEOJSON_TYPES = new Set([
 /** One level of indentation in a serialized project. */
 const PROJECT_INDENT = "  ";
 
-/** Whether a value is a GeoJSON feature, geometry, or collection. */
+/**
+ * Whether a value is a GeoJSON feature, geometry, or collection.
+ *
+ * Decided from the `type` string alone, so this is an implicit contract on the
+ * project schema: no field may store a non-GeoJSON object under a `type` of one
+ * of the nine {@link GEOJSON_TYPES} names, or it would silently be written
+ * compact as if it were feature data. Nothing in `types.ts` does today; a new
+ * field that wants one of those names (a drawing-tool or geometry-filter config,
+ * say) needs a different discriminator.
+ */
 function isGeoJsonValue(value: object): boolean {
   const type = (value as { type?: unknown }).type;
   return typeof type === "string" && GEOJSON_TYPES.has(type);
@@ -169,6 +178,11 @@ function serializeProjectValue(
     }
   }
   if (value === null || typeof value !== "object") return JSON.stringify(value);
+  // A boxed Number/String/Boolean writes as its primitive rather than as an
+  // object, the way JSON.stringify unwraps it.
+  if (value instanceof Number || value instanceof String || value instanceof Boolean) {
+    return JSON.stringify(value);
+  }
   // Feature data: hand the whole subtree to JSON.stringify with no spacing.
   if (isGeoJsonValue(value)) return JSON.stringify(value);
 

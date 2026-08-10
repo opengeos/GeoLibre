@@ -667,6 +667,25 @@ describe("project serialization", () => {
     assert.deepEqual(parsed.metadata.list, ["saw:0"]);
   });
 
+  it("unwraps boxed primitives the way JSON.stringify does", () => {
+    const project = createEmptyProject("Boxed");
+    project.metadata = {
+      // eslint-disable-next-line no-new-wrappers
+      count: new Number(7),
+      // eslint-disable-next-line no-new-wrappers
+      label: new String("x"),
+      // eslint-disable-next-line no-new-wrappers
+      flag: new Boolean(true),
+    };
+    const text = serializeProject(project);
+    assert.equal(text, JSON.stringify(project, null, 2));
+    assert.deepEqual((JSON.parse(text) as typeof project).metadata, {
+      count: 7,
+      label: "x",
+      flag: true,
+    });
+  });
+
   it("throws on a circular reference instead of overflowing the stack", () => {
     const project = createEmptyProject("Cyclic");
     const cycle: Record<string, unknown> = {};
