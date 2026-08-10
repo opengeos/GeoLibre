@@ -2655,7 +2655,7 @@
       "loadingOsmPbfProgress": "در حال تبدیل عوارض به GeoJSON… {{processed}} از {{total}} موجودیت OSM پردازش شد.",
       "projectName": "نام پروژه",
       "storymapEllipsis": "نقشهٔ روایی...",
-      "pointerElevationNoticeTitle": "ارتفاع از سرویس عمومی استفاده می‌کند",
+      "pointerElevationNoticeTitle": "ارتفاع از یک سرویس عمومی گرفته می‌شود",
       "pointerElevationNoticeDesc": "وقتی زمین سه‌بعدی فعال باشد ارتفاع از خود نقشه محاسبه می‌شود و چیزی ارسال نمی‌گردد. در نبود زمین سه‌بعدی از Open-Meteo عمومی استفاده می‌شود و مختصات زیر نشانگر از دستگاه شما خارج می‌شود."
     },
     "plugin": {

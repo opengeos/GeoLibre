@@ -334,8 +334,11 @@ describe("pointer elevation resolver", () => {
         notifyStarted?.();
       });
 
+    // Flipped after the invalidation so the same resolver has a live source to
+    // read from, without swapping the resolver out.
+    let terrainAvailable = false;
     const resolver = createPointerElevationResolver({
-      getMap: () => ({ getTerrain: () => null }),
+      getMap: () => (terrainAvailable ? terrainMap(120) : { getTerrain: () => null }),
       isEarth: () => true,
       emit: (v) => emitted.push(v),
       fetchImpl,
@@ -349,17 +352,11 @@ describe("pointer elevation resolver", () => {
     await tick(20);
     assert.ok(!emitted.includes(404), `stale project result leaked: ${emitted.join(",")}`);
 
-    // Unlike a teardown, invalidate leaves the resolver working.
-    const after = createPointerElevationResolver({
-      getMap: () => terrainMap(120),
-      isEarth: () => true,
-      emit: (v) => emitted.push(v),
-      debounceMs: 5,
-    });
+    // Unlike a teardown, invalidate leaves *this* resolver working: terrain is
+    // now available, so the next update emits from it rather than staying dead.
+    terrainAvailable = true;
     resolver.update([4, 4]);
-    after.update([4, 4]);
-    assert.equal(emitted.at(-1), 120);
-    after.dispose();
+    assert.equal(emitted.at(-1), 120, "the invalidated resolver must still work");
     resolver.dispose();
   });
 

@@ -1081,7 +1081,13 @@ export const MapCanvas = memo(function MapCanvas({
   // map (a keyboard-only toggle) would otherwise leave the last resolved value
   // on screen until the next mousemove.
   useEffect(() => {
-    if (!showPointerElevation) setPointerElevation(null);
+    if (showPointerElevation) return;
+    // invalidate() before clearing: a lookup scheduled inside the 500ms debounce
+    // window would otherwise still fire the request, and only be suppressed
+    // afterwards by the isEnabled() re-check. Cancelling the timer means the
+    // request is never made at all.
+    pointerElevationRef.current?.invalidate();
+    setPointerElevation(null);
   }, [showPointerElevation, setPointerElevation]);
   const previousSelectedFeatureKey = useRef<string | null>(null);
   const previousDuckDBSelectionLayerId = useRef<string | null>(null);
@@ -1124,9 +1130,11 @@ export const MapCanvas = memo(function MapCanvas({
       pointerElevation.update(point);
     });
     map.on("mouseout", () => {
-      // setPointerCoords(null) clears the stored elevation too; this just
-      // cancels a lookup that would otherwise land after the pointer left.
-      pointerElevation.update(null);
+      // invalidate() rather than update(null): both cancel a pending lookup, but
+      // update(null) also emits null, and setPointerCoords(null) already clears
+      // the stored elevation — so emitting here would be a second store write
+      // and re-render saying the same thing.
+      pointerElevation.invalidate();
       setPointerCoords(null);
     });
     map.on("error", (event) => {
