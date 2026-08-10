@@ -691,9 +691,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     } catch (error) {
       console.error("Failed to serialize project", error);
       // Only the string-length cap means "too large"; anything else is a real
-      // serialization bug and must not be filed under a size problem.
+      // serialization bug and must not be filed under a size problem. Matching
+      // on `RangeError` alone was too broad — a stack overflow raises one too,
+      // and pointing that at PMTiles/FlatGeobuf would send the user chasing a
+      // size problem they do not have.
       setActionError(
-        error instanceof RangeError
+        error instanceof RangeError && error.message.includes("Invalid string length")
           ? t("toolbar.error.projectTooLargeToSave")
           : t("toolbar.error.couldNotSaveProject"),
       );

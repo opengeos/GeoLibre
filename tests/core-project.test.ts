@@ -648,6 +648,42 @@ describe("project serialization", () => {
     assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
   });
 
+  it("writes a sparse array's holes as null, matching JSON.stringify", () => {
+    const project = createEmptyProject("Sparse");
+    // eslint-disable-next-line no-sparse-arrays
+    project.metadata = { gappy: [1, , 2] };
+    const text = serializeProject(project);
+    assert.equal(text, JSON.stringify(project, null, 2));
+    assert.deepEqual((JSON.parse(text) as typeof project).metadata.gappy, [1, null, 2]);
+  });
+
+  it("passes the property key to a custom toJSON, as JSON.stringify does", () => {
+    const project = createEmptyProject("Keys");
+    const probe = { toJSON: (key: string) => `saw:${key}` };
+    project.metadata = { named: probe, list: [probe] };
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+    const parsed = JSON.parse(serializeProject(project)) as typeof project;
+    assert.equal(parsed.metadata.named, "saw:named");
+    assert.deepEqual(parsed.metadata.list, ["saw:0"]);
+  });
+
+  it("throws on a circular reference instead of overflowing the stack", () => {
+    const project = createEmptyProject("Cyclic");
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    project.metadata = { cycle };
+    // A RangeError here would be read as "project too large to save" by the
+    // save path, sending the user after a size problem they do not have.
+    assert.throws(() => serializeProject(project), TypeError);
+  });
+
+  it("serializes a value referenced twice side by side without calling it a cycle", () => {
+    const project = createEmptyProject("Shared");
+    const shared = { shared: true };
+    project.metadata = { first: shared, second: shared };
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+  });
+
   it("round-trips a feature-heavy project through parseProject", () => {
     const project = createEmptyProject("Round trip");
     project.layers = [featureRichLayer()];

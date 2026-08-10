@@ -146,39 +146,65 @@ function isGeoJsonValue(value: object): boolean {
  *
  * @param value Value to serialize.
  * @param depth Current nesting depth, driving the indent width.
+ * @param key Property name (or stringified array index) this value sits under,
+ *   `""` at the root — the argument `JSON.stringify` passes to `toJSON`.
+ * @param ancestors Containers currently open on the recursion stack, used to
+ *   detect cycles.
  * @returns The serialized text, or undefined for values `JSON.stringify` also
  *   drops (undefined, functions, symbols).
  */
-function serializeProjectValue(value: unknown, depth: number): string | undefined {
+function serializeProjectValue(
+  value: unknown,
+  depth: number,
+  key: string,
+  ancestors: Set<object>,
+): string | undefined {
   if (value !== null && typeof value === "object") {
     // Honor the toJSON hook the way JSON.stringify does, so a value that
-    // replaces itself is inspected in its replaced form.
+    // replaces itself is inspected in its replaced form. It receives the same
+    // key JSON.stringify would pass, since a custom hook may branch on it.
     const toJSON = (value as { toJSON?: unknown }).toJSON;
     if (typeof toJSON === "function") {
-      value = (toJSON as (key: string) => unknown).call(value, "");
+      value = (toJSON as (key: string) => unknown).call(value, key);
     }
   }
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   // Feature data: hand the whole subtree to JSON.stringify with no spacing.
   if (isGeoJsonValue(value)) return JSON.stringify(value);
 
-  const pad = PROJECT_INDENT.repeat(depth + 1);
-  const closePad = PROJECT_INDENT.repeat(depth);
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "[]";
-    // An unserializable array entry becomes null, matching JSON.stringify.
-    const entries = value.map((entry) => serializeProjectValue(entry, depth + 1) ?? "null");
-    return `[\n${pad}${entries.join(`,\n${pad}`)}\n${closePad}]`;
+  // A cycle would recurse until the stack overflowed, and the RangeError that
+  // raises is indistinguishable from the string-length cap the save path reads
+  // as "project too large". Fail the way JSON.stringify does instead. Only the
+  // open ancestors are tracked, so a value referenced twice side by side (not a
+  // cycle) still serializes.
+  if (ancestors.has(value)) throw new TypeError("Converting circular structure to JSON");
+  ancestors.add(value);
+  try {
+    const pad = PROJECT_INDENT.repeat(depth + 1);
+    const closePad = PROJECT_INDENT.repeat(depth);
+    if (Array.isArray(value)) {
+      if (value.length === 0) return "[]";
+      // Indexed rather than mapped so a sparse array's holes are visited: like
+      // an unserializable entry, a hole becomes null, matching JSON.stringify.
+      const entries = Array.from(
+        { length: value.length },
+        (_unused, index) =>
+          serializeProjectValue(value[index], depth + 1, String(index), ancestors) ?? "null",
+      );
+      return `[\n${pad}${entries.join(`,\n${pad}`)}\n${closePad}]`;
+    }
+    const entries: string[] = [];
+    for (const [entryKey, entry] of Object.entries(value)) {
+      const serialized = serializeProjectValue(entry, depth + 1, entryKey, ancestors);
+      // An unserializable object value is omitted, matching JSON.stringify.
+      if (serialized === undefined) continue;
+      entries.push(`${JSON.stringify(entryKey)}: ${serialized}`);
+    }
+    if (entries.length === 0) return "{}";
+    return `{\n${pad}${entries.join(`,\n${pad}`)}\n${closePad}}`;
+  } finally {
+    ancestors.delete(value);
   }
-  const entries: string[] = [];
-  for (const [key, entry] of Object.entries(value)) {
-    const serialized = serializeProjectValue(entry, depth + 1);
-    // An unserializable object value is omitted, matching JSON.stringify.
-    if (serialized === undefined) continue;
-    entries.push(`${JSON.stringify(key)}: ${serialized}`);
-  }
-  if (entries.length === 0) return "{}";
-  return `{\n${pad}${entries.join(`,\n${pad}`)}\n${closePad}}`;
 }
 
 /**
@@ -190,7 +216,7 @@ function serializeProjectValue(value: unknown, depth: number): string | undefine
  * @returns The file contents to write.
  */
 export function serializeProject(project: GeoLibreProject): string {
-  return serializeProjectValue(project, 0) ?? "null";
+  return serializeProjectValue(project, 0, "", new Set()) ?? "null";
 }
 
 export function parseProject(json: string): GeoLibreProject {
