@@ -1804,7 +1804,8 @@
     "unit": {
       "meters": "м",
       "kilometers": "км",
-      "miles": "ми"
+      "miles": "ми",
+      "feet": "фут"
     },
     "viewshedHere": "Зона видимости отсюда ({{radius}})",
     "viewshedLayerName": "Зона видимости ({{radius}})",

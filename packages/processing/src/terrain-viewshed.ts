@@ -153,6 +153,12 @@ export interface ViewshedResult {
  * — exact per ray, and simple enough to reason about, at the cost of resampling
  * the same near-observer cells for many rays.
  *
+ * The grid is treated as uniform in latitude, while its rows come from tiles
+ * uniform in Web Mercator Y. The crop compensates when locating the window
+ * (see `rowOf`), but the cell height used here is still a single constant for
+ * the whole grid, so a tall square at high latitude carries a small north-south
+ * stretch. At the radii this is capped to it stays well under a cell.
+ *
  * Earth curvature and refraction are **not** modelled. Over the radii this is
  * capped to (50 km) curvature drop reaches ~180 m, which matters for a
  * long-range radio study but not for the "what can I see from this overlook"
@@ -312,6 +318,16 @@ async function decodeTile(
   }
 }
 
+/**
+ * Web Mercator Y for a latitude, normalised so 0 is the north edge of the world
+ * and 1 the south — the space tile rows are uniformly spaced in.
+ */
+function mercatorY(lat: number): number {
+  const clamped = Math.max(-85.051129, Math.min(85.051129, lat));
+  const rad = (clamped * Math.PI) / 180;
+  return (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2;
+}
+
 /** Longitude/latitude of a tile's north-west corner. */
 function tileNorthWest(x: number, y: number, zoom: number): [number, number] {
   const n = Math.pow(2, zoom);
@@ -414,8 +430,14 @@ export async function assembleTerrainDem(
   const [mosaicEast, mosaicSouth] = tileNorthWest(bottomRight.x + 1, bottomRight.y + 1, zoom);
   const colOf = (x: number) =>
     Math.round(((x - mosaicWest) / (mosaicEast - mosaicWest)) * (mosaicWidth - 1));
-  const rowOf = (y: number) =>
-    Math.round(((mosaicNorth - y) / (mosaicNorth - mosaicSouth)) * (mosaicHeight - 1));
+  // Tile rows are uniformly spaced in Web Mercator Y, not in latitude, so the
+  // row lookup interpolates in mercator space. Interpolating in latitude
+  // instead skews the crop north-south, and the error grows with latitude.
+  const rowOf = (y: number) => {
+    const top = mercatorY(mosaicNorth);
+    const bottom = mercatorY(mosaicSouth);
+    return Math.round(((mercatorY(y) - top) / (bottom - top)) * (mosaicHeight - 1));
+  };
 
   const cropLeft = Math.max(0, colOf(west));
   const cropRight = Math.min(mosaicWidth - 1, colOf(east));

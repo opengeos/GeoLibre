@@ -1,4 +1,5 @@
-import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
+import type { MapController } from "@geolibre/map";
 import {
   assembleTerrainDem,
   computeViewshedAsync,
@@ -24,9 +25,14 @@ import {
 /** Default eye height above ground — a standing person. */
 export const DEFAULT_OBSERVER_HEIGHT_METERS = 1.8;
 
+/** Marks the layer as a viewshed result, for panels that gate on provenance. */
+export const VIEWSHED_SOURCE_KIND = "viewshed";
+
 export interface RunViewshedOptions {
   lng: number;
   lat: number;
+  /** Frames the result after adding it, as the sibling quick actions do. */
+  mapControllerRef?: React.RefObject<MapController | null>;
   radiusMeters: number;
   observerHeightMeters?: number;
   /** Layer name; callers pass a translated string. */
@@ -106,14 +112,12 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
   if (!url) return null;
 
   const [west, south, east, north] = result.bbox;
-  const layer: GeoLibreLayer = {
-    id: `viewshed-${Date.now().toString(36)}`,
-    name: options.layerName,
-    type: "image",
-    visible: true,
-    opacity: 1,
-    style: { ...DEFAULT_LAYER_STYLE },
-    source: {
+  // The store's own image-overlay action rather than a hand-rolled layer: it
+  // owns id generation, the default style, `source.type`, and the metadata
+  // merge, and is what the KML ground-overlay and Georeferencer paths use.
+  const layerId = useAppStore.getState().addImageOverlayLayer(
+    options.layerName,
+    {
       url,
       // Top-left, top-right, bottom-right, bottom-left, matching the image
       // source contract in layer-sync.
@@ -124,27 +128,33 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
         [west, south],
       ],
     },
-    metadata: {
-      // fitLayer resolves an extent from geojson, then source.bounds /
-      // metadata.bounds, then the live source's bounds. An ImageSource exposes
-      // only coordinates, so without this the Layers panel's zoom-to button
-      // silently does nothing -- the Georeferencer's overlays set it for the
-      // same reason.
+    {
+      // fitLayer resolves an extent from geojson, then source/metadata bounds,
+      // then the live source's bounds. An ImageSource exposes only coordinates,
+      // so without this the Layers panel's zoom-to button does nothing.
       bounds: result.bbox,
-      viewshed: {
-        lng: options.lng,
-        lat: options.lat,
-        radiusMeters,
-        observerHeightMeters: options.observerHeightMeters ?? DEFAULT_OBSERVER_HEIGHT_METERS,
-        observerGroundMeters: result.observerGroundMeters,
+      sourceKind: VIEWSHED_SOURCE_KIND,
+      metadata: {
+        viewshed: {
+          lng: options.lng,
+          lat: options.lat,
+          radiusMeters,
+          observerHeightMeters: options.observerHeightMeters ?? DEFAULT_OBSERVER_HEIGHT_METERS,
+          observerGroundMeters: result.observerGroundMeters,
+        },
       },
     },
-  };
+  );
 
-  useAppStore.getState().addLayer(layer);
+  // Frame the result, like every sibling quick action does after adding its
+  // layer. At the larger radii the square can fall outside the viewport even
+  // though the clicked point was on screen, and a banner that flashes and
+  // clears with nothing visible reads as "nothing happened".
+  const added = useAppStore.getState().layers.find((entry) => entry.id === layerId);
+  if (added) options.mapControllerRef?.current?.fitLayer(added);
 
   return {
-    layerId: layer.id,
+    layerId,
     visibleFraction: result.visibleCells / (result.width * result.height),
     observerGroundMeters: result.observerGroundMeters,
   };

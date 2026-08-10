@@ -1675,7 +1675,8 @@
     "unit": {
       "meters": "米",
       "kilometers": "千米",
-      "miles": "英里"
+      "miles": "英里",
+      "feet": "英尺"
     },
     "viewshedHere": "从此处的可视域 ({{radius}})",
     "viewshedLayerName": "可视域 ({{radius}})",

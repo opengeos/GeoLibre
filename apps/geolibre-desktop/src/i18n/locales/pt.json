@@ -1718,7 +1718,8 @@
     "unit": {
       "meters": "m",
       "kilometers": "km",
-      "miles": "mi"
+      "miles": "mi",
+      "feet": "pés"
     },
     "viewshedHere": "Bacia visual daqui ({{radius}})",
     "viewshedLayerName": "Bacia visual ({{radius}})",

@@ -1675,7 +1675,8 @@
     "unit": {
       "meters": "m",
       "kilometers": "km",
-      "miles": "mi"
+      "miles": "mi",
+      "feet": "ฟุต"
     },
     "viewshedHere": "พื้นที่มองเห็นจากจุดนี้ ({{radius}})",
     "viewshedLayerName": "พื้นที่มองเห็น ({{radius}})",

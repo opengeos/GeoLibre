@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, FEET_PER_METER, METERS_PER_MILE } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   DropdownMenu,
@@ -201,17 +201,34 @@ export function MapContextMenu({
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
 
   /**
-   * Radius label for the viewshed entries. Formats the number for the active
-   * locale and takes the unit abbreviation from the catalog, matching how
-   * formatBufferDistance labels the buffer presets in this same menu.
+   * Radius label for the viewshed entries.
+   *
+   * Follows the scale bar's unit system like the buffer ladder above, so an
+   * imperial-preference user does not get miles for buffers and kilometres for
+   * viewsheds in the same submenu. The radii themselves stay metric constants —
+   * they size the analysis, not the label — so an imperial reading is a
+   * conversion of the same distance rather than a different one.
    */
-  const formatViewshedRadius = (meters: number): string => {
-    const useKm = meters >= 1000;
-    const value = useKm ? meters / 1000 : meters;
-    const formatted = new Intl.NumberFormat(i18n.language).format(value);
-    // Same unit catalog formatBufferDistance uses for the buffer presets below.
-    return `${formatted} ${useKm ? t("quickAnalysis.unit.kilometers") : t("quickAnalysis.unit.meters")}`;
-  };
+  const formatViewshedRadius = useCallback(
+    (meters: number): string => {
+      const imperial = scaleUnit === "imperial";
+      const perUnit = imperial ? METERS_PER_MILE : 1000;
+      const large = meters >= perUnit;
+      const value = large ? meters / perUnit : imperial ? meters * FEET_PER_METER : meters;
+      const formatted = new Intl.NumberFormat(i18n.language, {
+        maximumFractionDigits: large ? 1 : 0,
+      }).format(value);
+      const unit = large
+        ? imperial
+          ? t("quickAnalysis.unit.miles")
+          : t("quickAnalysis.unit.kilometers")
+        : imperial
+          ? t("quickAnalysis.unit.feet")
+          : t("quickAnalysis.unit.meters");
+      return `${formatted} ${unit}`;
+    },
+    [scaleUnit, i18n.language, t],
+  );
 
   const formatDistance = useCallback(
     (preset: QuickBufferPreset) => formatBufferDistance(preset, i18n.language, t),
@@ -239,6 +256,7 @@ export function MapContextMenu({
         lng,
         lat,
         radiusMeters,
+        mapControllerRef,
         layerName: t("quickAnalysis.viewshedLayerName", {
           radius: formatViewshedRadius(radiusMeters),
         }),
@@ -259,7 +277,7 @@ export function MapContextMenu({
         })
         .finally(() => setViewshedBusy(false));
     },
-    [menu, viewshedBusy, t],
+    [menu, viewshedBusy, t, formatViewshedRadius, mapControllerRef],
   );
 
   const bufferHere = useCallback(

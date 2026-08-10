@@ -1718,7 +1718,8 @@
     "unit": {
       "meters": "मी",
       "kilometers": "किमी",
-      "miles": "मील"
+      "miles": "मील",
+      "feet": "फ़ुट"
     },
     "viewshedHere": "यहाँ से दृश्यक्षेत्र ({{radius}})",
     "viewshedLayerName": "दृश्यक्षेत्र ({{radius}})",

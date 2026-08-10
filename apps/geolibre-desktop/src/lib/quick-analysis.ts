@@ -148,6 +148,12 @@ let latestRun = 0;
  * tool -- so it can report running and failed like every other entry in that
  * menu instead of failing silently.
  *
+ * Unlike `runQuickAnalysis` this records **no Processing History entry**: the
+ * caller is not a registry tool, so there is no algorithm id and parameter set
+ * to replay or copy as Python. The module docstring's claim that every quick
+ * action lands in the History covers the registry-tool actions; this is the
+ * exception, so History is not a complete audit trail of the menu.
+ *
  * Returns a setter bound to this run's id, so it goes through the same
  * {@link latestRun} guard `runQuickAnalysis` uses. Without that, a slow
  * viewshed resolving after the user has fired a quick buffer would clobber the

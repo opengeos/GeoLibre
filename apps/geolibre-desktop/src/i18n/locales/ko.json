@@ -1675,7 +1675,8 @@
     "unit": {
       "meters": "m",
       "kilometers": "km",
-      "miles": "마일"
+      "miles": "마일",
+      "feet": "ft"
     },
     "viewshedHere": "여기서 본 가시권 ({{radius}})",
     "viewshedLayerName": "가시권 ({{radius}})",

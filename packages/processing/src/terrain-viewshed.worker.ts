@@ -1,5 +1,10 @@
 /// <reference lib="webworker" />
-import { computeViewshed, type TerrainDem, type ViewshedObserver } from "./terrain-viewshed";
+import {
+  computeViewshed,
+  type TerrainDem,
+  type ViewshedObserver,
+  type ViewshedResult,
+} from "./terrain-viewshed";
 
 // Runs one viewshed off the main thread. The line-of-sight walk is O(n³) in the
 // grid's side length with no yield points, so on the main thread it freezes the
@@ -19,16 +24,10 @@ export interface ViewshedWorkerRequest {
 
 /** The single message this worker posts back. */
 export type ViewshedWorkerResponse =
-  | {
-      ok: true;
-      width: number;
-      height: number;
-      visible: Uint8Array;
-      bbox: [number, number, number, number];
-      observerGroundMeters: number;
-      visibleCells: number;
-    }
-  | { ok: false; error: string };
+  // Spread from ViewshedResult rather than restated: a field added there must
+  // travel back with it, and the rest-spread in computeViewshedAsync would
+  // otherwise drop it with no type error.
+  ({ ok: true } & ViewshedResult) | { ok: false; error: string };
 
 worker.addEventListener("message", (event: MessageEvent<ViewshedWorkerRequest>) => {
   const { dem, observer, radiusMeters } = event.data;

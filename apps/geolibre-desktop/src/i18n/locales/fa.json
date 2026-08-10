@@ -1718,7 +1718,8 @@
     "unit": {
       "meters": "متر",
       "kilometers": "کیلومتر",
-      "miles": "مایل"
+      "miles": "مایل",
+      "feet": "فوت"
     },
     "viewshedHere": "حوزه دید از اینجا ({{radius}})",
     "viewshedLayerName": "حوزه دید ({{radius}})",

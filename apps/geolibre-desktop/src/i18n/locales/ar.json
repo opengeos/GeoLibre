@@ -1889,7 +1889,8 @@
     "unit": {
       "meters": "م",
       "kilometers": "كم",
-      "miles": "ميل"
+      "miles": "ميل",
+      "feet": "قدم"
     },
     "viewshedHere": "مجال الرؤية من هنا ({{radius}})",
     "viewshedLayerName": "مجال الرؤية ({{radius}})",

@@ -1718,7 +1718,8 @@
     "unit": {
       "meters": "m",
       "kilometers": "km",
-      "miles": "mil"
+      "miles": "mil",
+      "feet": "ft"
     },
     "viewshedHere": "Buradan görüş alanı ({{radius}})",
     "viewshedLayerName": "Görüş alanı ({{radius}})",

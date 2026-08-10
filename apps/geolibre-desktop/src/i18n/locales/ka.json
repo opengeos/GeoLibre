@@ -1718,7 +1718,8 @@
     "unit": {
       "meters": "მ",
       "kilometers": "კმ",
-      "miles": "მილი"
+      "miles": "მილი",
+      "feet": "ფუტი"
     },
     "viewshedHere": "ხედვის არე აქედან ({{radius}})",
     "viewshedLayerName": "ხედვის არე ({{radius}})",

@@ -1718,7 +1718,8 @@
     "unit": {
       "meters": "m",
       "kilometers": "km",
-      "miles": "mi"
+      "miles": "mi",
+      "feet": "ft"
     },
     "viewshedHere": "Bacino visivo da qui ({{radius}})",
     "viewshedLayerName": "Bacino visivo ({{radius}})",
