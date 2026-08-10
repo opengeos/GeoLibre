@@ -377,7 +377,12 @@ function carriesOwnData(layer: GeoLibreLayer, embeddedLayerIds?: ReadonlySet<str
   if (layer.geojson) return true;
   const metadata = layer.metadata ?? {};
   if (metadata.embeddedGeoJSON) return true;
-  return isPlainObject((layer.source ?? {}).data);
+  const data = (layer.source ?? {}).data;
+  // An object is an inline GeoJSON payload; an array is the row set a
+  // non-GeoJSON deck.gl visualization (arc, heatmap, hexagon built from a CSV)
+  // keeps in `source.data`. Both travel inside the project file. Only a *string*
+  // `data` is a URL, and that is a reference like any other.
+  return isPlainObject(data) || Array.isArray(data);
 }
 
 /**
@@ -513,8 +518,22 @@ async function probeTarget(
     if (!RETRY_WITH_RANGED_GET.has(head.status)) return outcomeForStatus(head.status);
     // Plenty of object stores and CDNs refuse HEAD while serving GET happily,
     // so a one-byte ranged GET decides it rather than a false "needs a login".
-    const ranged = await request("GET");
-    return outcomeForStatus(ranged.status);
+    try {
+      const ranged = await request("GET");
+      return outcomeForStatus(ranged.status);
+    } catch (error) {
+      const failure = classifyFetchFailure(error);
+      if (failure.kind === "abort") return { status: "unchecked", reason: "aborted" };
+      if (failure.kind === "timeout") return { status: "unchecked", reason: "timeout" };
+      // The HEAD already proved the host answers and lets this origin read the
+      // response, so a rejection here is about the ranged request rather than
+      // the host. `Range` is CORS-safelisted only for a simple byte range, and
+      // an older webview may preflight it and get no matching
+      // `Access-Control-Allow-Headers` back, even though the plain GET a
+      // renderer issues would succeed. Fall back to what HEAD said instead of
+      // reporting a working host as unreachable.
+      return outcomeForStatus(head.status);
+    }
   } catch (error) {
     const failure = classifyFetchFailure(error);
     if (failure.kind === "abort") return { status: "unchecked", reason: "aborted" };

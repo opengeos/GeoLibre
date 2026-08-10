@@ -194,6 +194,23 @@ describe("collectShareSources", () => {
     assert.equal(refs[0].probeUrl, "https://tiles.example.com/tileset.json");
   });
 
+  it("skips a deck.gl visualization whose rows are inlined as an array", () => {
+    const refs = collectShareSources({
+      layers: [
+        layer({
+          id: "a",
+          name: "Arcs from CSV",
+          type: "deckgl-viz",
+          source: { type: "deckgl-viz", data: [{ lat: 1, lon: 2 }] },
+          // Set when the layer is built from a local file, and not a reference
+          // a recipient needs: the rows travel in `source.data`.
+          sourcePath: "/home/me/flows.csv",
+        }),
+      ],
+    });
+    assert.deepEqual(refs, []);
+  });
+
   it("reports a query-backed layer that names no reference at all", () => {
     const refs = collectShareSources({
       layers: [
@@ -330,6 +347,38 @@ describe("probeShareSources", () => {
       { method: "HEAD", range: undefined },
       { method: "GET", range: "bytes=0-0" },
     ]);
+  });
+
+  it("falls back to the HEAD verdict when only the ranged GET is rejected", async () => {
+    const refs = collectShareSources({
+      layers: [
+        layer({ id: "a", name: "A", type: "cog", source: { url: "https://s3.example.com/a.tif" } }),
+      ],
+    });
+    // HEAD answers 405, so the host is up and readable cross-origin; the ranged
+    // GET is rejected on its own (an older webview preflighting `Range`). That
+    // must not turn a working host into a "blocked" verdict.
+    const fn = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "HEAD") return new Response(null, { status: 405 });
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+    const { refs: probed } = await probeShareSources(refs, { fetchImpl: fn });
+    assert.equal(probed[0].status, "reachable");
+  });
+
+  it("keeps a HEAD 403 credentialed when the ranged GET is also rejected", async () => {
+    const refs = collectShareSources({
+      layers: [
+        layer({ id: "a", name: "A", type: "cog", source: { url: "https://s3.example.com/a.tif" } }),
+      ],
+    });
+    const fn = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "HEAD") return new Response(null, { status: 403 });
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+    const { refs: probed } = await probeShareSources(refs, { fetchImpl: fn });
+    assert.equal(probed[0].status, "credentialed");
+    assert.equal(probed[0].reason, "auth-required");
   });
 
   it("reads an opaque browser rejection as browser-blocked", async () => {
