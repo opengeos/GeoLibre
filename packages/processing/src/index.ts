@@ -328,6 +328,7 @@ export {
   viewshedToRgba,
   MAX_VIEWSHED_RADIUS_METERS,
   MIN_VIEWSHED_RADIUS_METERS,
+  type AssembleTerrainDemOptions,
   type TerrainDem,
   type ViewshedObserver,
   type ViewshedResult,

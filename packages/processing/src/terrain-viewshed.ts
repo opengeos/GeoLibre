@@ -94,6 +94,9 @@ export function tileForLngLat(lng: number, lat: number, zoom: number): { x: numb
   return { x, y };
 }
 
+/** Abort a terrain tile request that has not responded within this window. */
+export const TILE_FETCH_TIMEOUT_MS = 15000;
+
 /** Bounds a viewshed request is clamped to, so one click cannot fetch a continent. */
 export const MAX_VIEWSHED_RADIUS_METERS = 50_000;
 export const MIN_VIEWSHED_RADIUS_METERS = 100;
@@ -240,9 +243,27 @@ export function viewshedToRgba(
 // --- Tile assembly (browser) -----------------------------------------------
 
 /** Decode one Terrarium PNG tile to elevations via an offscreen canvas. */
-async function decodeTile(url: string, signal?: AbortSignal): Promise<Float32Array | null> {
+interface DecodedTile {
+  width: number;
+  height: number;
+  values: Float32Array;
+}
+
+async function decodeTile(
+  url: string,
+  signal?: AbortSignal,
+  timeoutMs = TILE_FETCH_TIMEOUT_MS,
+): Promise<DecodedTile | null> {
+  // A hung tile request would otherwise stall the whole assembly behind
+  // Promise.all with no recovery, since fetch has no default timeout.
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(), timeoutMs);
+  const composed =
+    signal && typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function"
+      ? AbortSignal.any([signal, timeout.signal])
+      : (signal ?? timeout.signal);
   try {
-    const response = await fetch(url, { signal });
+    const response = await fetch(url, { signal: composed });
     if (!response.ok) return null;
     const blob = await response.blob();
     const bitmap = await createImageBitmap(blob);
@@ -257,9 +278,11 @@ async function decodeTile(url: string, signal?: AbortSignal): Promise<Float32Arr
       const offset = i * 4;
       elevations[i] = decodeTerrariumElevation(data[offset], data[offset + 1], data[offset + 2]);
     }
-    return elevations;
+    return { width: bitmap.width, height: bitmap.height, values: elevations };
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -309,8 +332,18 @@ export async function assembleTerrainDem(
   const south = lat - dLat;
   const north = lat + dLat;
 
+  // Web Mercator (and therefore the tile grid) is undefined beyond ~85 degrees,
+  // and a square straddling the antimeridian would produce a negative tile x.
+  // Both are rejected up front rather than left to fail as 404s partway through.
+  if (!Number.isFinite(lat) || north > 85 || south < -85) return null;
+  if (west < -180 || east > 180) return null;
+
   const topLeft = tileForLngLat(west, north, zoom);
   const bottomRight = tileForLngLat(east, south, zoom);
+  const tileCount = Math.pow(2, zoom);
+  if (topLeft.x < 0 || topLeft.y < 0 || bottomRight.x >= tileCount || bottomRight.y >= tileCount) {
+    return null;
+  }
   const tilesWide = bottomRight.x - topLeft.x + 1;
   const tilesTall = bottomRight.y - topLeft.y + 1;
   if (tilesWide <= 0 || tilesTall <= 0) return null;
@@ -330,12 +363,16 @@ export async function assembleTerrainDem(
       requests.push(
         decodeTile(url, signal).then((tile) => {
           if (!tile) return;
+          // A tile served at a size other than the mosaic assumes would be
+          // copied at the wrong stride, shearing the elevations. Skipping it
+          // degrades that patch instead.
+          if (tile.width !== TERRARIUM_TILE_SIZE || tile.height !== TERRARIUM_TILE_SIZE) return;
           loaded += 1;
           for (let row = 0; row < TERRARIUM_TILE_SIZE; row += 1) {
             const target =
               (ty * TERRARIUM_TILE_SIZE + row) * mosaicWidth + tx * TERRARIUM_TILE_SIZE;
             mosaic.set(
-              tile.subarray(row * TERRARIUM_TILE_SIZE, (row + 1) * TERRARIUM_TILE_SIZE),
+              tile.values.subarray(row * TERRARIUM_TILE_SIZE, (row + 1) * TERRARIUM_TILE_SIZE),
               target,
             );
           }

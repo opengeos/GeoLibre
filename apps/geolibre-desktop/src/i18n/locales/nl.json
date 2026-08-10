@@ -1721,7 +1721,9 @@
       "miles": "mi"
     },
     "viewshedHere": "Zichtveld vanaf hier ({{radius}})",
-    "viewshedLayerName": "Zichtveld ({{radius}})"
+    "viewshedLayerName": "Zichtveld ({{radius}})",
+    "unitKilometers": "km",
+    "unitMeters": "m"
   },
   "knowledgeCard": {
     "title": "Plaatsinfo",

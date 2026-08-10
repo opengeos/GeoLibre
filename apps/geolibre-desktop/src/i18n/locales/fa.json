@@ -1721,7 +1721,9 @@
       "miles": "مایل"
     },
     "viewshedHere": "حوزه دید از اینجا ({{radius}})",
-    "viewshedLayerName": "حوزه دید ({{radius}})"
+    "viewshedLayerName": "حوزه دید ({{radius}})",
+    "unitKilometers": "کیلومتر",
+    "unitMeters": "متر"
   },
   "knowledgeCard": {
     "title": "اطلاعات مکان",

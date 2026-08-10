@@ -1807,7 +1807,9 @@
       "miles": "ми"
     },
     "viewshedHere": "Зона видимости отсюда ({{radius}})",
-    "viewshedLayerName": "Зона видимости ({{radius}})"
+    "viewshedLayerName": "Зона видимости ({{radius}})",
+    "unitKilometers": "км",
+    "unitMeters": "м"
   },
   "knowledgeCard": {
     "title": "О месте",

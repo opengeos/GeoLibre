@@ -71,7 +71,7 @@ async function rgbaToPngDataUrl(
  * Compute a viewshed and add it to the map.
  *
  * @returns The new layer and coverage stats, or null when the terrain could not
- *   be fetched or nothing proved visible.
+ *   be fetched or the result could not be encoded.
  */
 export async function runViewshed(options: RunViewshedOptions): Promise<ViewshedRunResult | null> {
   const radiusMeters = Math.min(options.radiusMeters, MAX_VIEWSHED_RADIUS_METERS);
@@ -91,7 +91,8 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
     },
     radiusMeters,
   );
-  if (result.visibleCells === 0) return null;
+  // Not checked for zero: computeViewshed always marks the observer's own cell,
+  // so visibleCells is at least 1 by construction.
 
   const url = await rgbaToPngDataUrl(viewshedToRgba(result), result.width, result.height);
   if (!url) return null;

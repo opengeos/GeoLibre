@@ -1892,7 +1892,9 @@
       "miles": "ميل"
     },
     "viewshedHere": "مجال الرؤية من هنا ({{radius}})",
-    "viewshedLayerName": "مجال الرؤية ({{radius}})"
+    "viewshedLayerName": "مجال الرؤية ({{radius}})",
+    "unitKilometers": "كم",
+    "unitMeters": "م"
   },
   "knowledgeCard": {
     "title": "معلومات المكان",

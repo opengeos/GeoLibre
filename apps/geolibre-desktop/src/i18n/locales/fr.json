@@ -1721,7 +1721,9 @@
       "miles": "mi"
     },
     "viewshedHere": "Bassin de visibilité d'ici ({{radius}})",
-    "viewshedLayerName": "Bassin de visibilité ({{radius}})"
+    "viewshedLayerName": "Bassin de visibilité ({{radius}})",
+    "unitKilometers": "km",
+    "unitMeters": "m"
   },
   "knowledgeCard": {
     "title": "Infos sur le lieu",

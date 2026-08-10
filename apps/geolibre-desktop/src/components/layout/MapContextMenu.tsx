@@ -199,9 +199,17 @@ export function MapContextMenu({
   const bufferPresets = useMemo(() => bufferPresetsFor(scaleUnit), [scaleUnit]);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
 
-  /** Radius label for the viewshed entries: metres below a km, else km. */
-  const formatViewshedRadius = (meters: number): string =>
-    meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
+  /**
+   * Radius label for the viewshed entries. Formats the number for the active
+   * locale and takes the unit abbreviation from the catalog, matching how
+   * formatBufferDistance labels the buffer presets in this same menu.
+   */
+  const formatViewshedRadius = (meters: number): string => {
+    const useKm = meters >= 1000;
+    const value = useKm ? meters / 1000 : meters;
+    const formatted = new Intl.NumberFormat(i18n.language).format(value);
+    return `${formatted} ${useKm ? t("quickAnalysis.unitKilometers") : t("quickAnalysis.unitMeters")}`;
+  };
 
   const formatDistance = useCallback(
     (preset: QuickBufferPreset) => formatBufferDistance(preset, i18n.language, t),

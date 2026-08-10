@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  assembleTerrainDem,
   computeViewshed,
   decodeTerrariumElevation,
   metersToLatDegrees,
@@ -134,6 +135,34 @@ describe("computeViewshed", () => {
     const dem = demOf(11, 11, (col, row) => (col === 5 && row === 5 ? 0 : 900));
     const result = computeViewshed(dem, CENTRE);
     assert.equal(result.visible[5 * 11 + 5], 1);
+  });
+});
+
+describe("assembleTerrainDem bounds", () => {
+  it("rejects positions beyond the Web Mercator limit", async () => {
+    // The tile grid is undefined past ~85 degrees; a request there would
+    // otherwise be left to fail as 404s partway through the assembly.
+    assert.equal(
+      await assembleTerrainDem({ lng: 0, lat: 89, radiusMeters: 2000, tileUrl: "x/{z}/{x}/{y}" }),
+      null,
+    );
+    assert.equal(
+      await assembleTerrainDem({ lng: 0, lat: -89, radiusMeters: 2000, tileUrl: "x/{z}/{x}/{y}" }),
+      null,
+    );
+  });
+
+  it("rejects a square straddling the antimeridian", async () => {
+    // Wrapping would produce a negative tile x.
+    assert.equal(
+      await assembleTerrainDem({
+        lng: 179.99,
+        lat: 0,
+        radiusMeters: 50000,
+        tileUrl: "x/{z}/{x}/{y}",
+      }),
+      null,
+    );
   });
 });
 
