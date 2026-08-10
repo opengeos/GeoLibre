@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import maplibregl from "maplibre-gl";
 import {
   DEFAULT_LAYER_STYLE,
@@ -734,6 +734,11 @@ describe("MapController basemap controls", () => {
 });
 
 describe("MapController camera and query helpers", () => {
+  // setActiveEllipsoidId writes a module-level singleton, so reset it here
+  // rather than inline: an inline reset after an assertion never runs when that
+  // assertion fails, silently leaving a non-Earth body active for later tests.
+  afterEach(() => setActiveEllipsoidId("earth"));
+
   // The defensive probe in readCameraAltitude exists precisely because a
   // MapLibre bump could drop or rename transform.getCameraAltitude; without
   // these cases that fallback was never exercised (the fake map has no
@@ -755,7 +760,6 @@ describe("MapController camera and query helpers", () => {
     setActiveEllipsoidId("moon");
     const onMoon = controller.readCameraAltitude();
     assert.ok(onMoon !== null && onMoon < 3000, `expected a scaled altitude, got ${onMoon}`);
-    setActiveEllipsoidId("earth");
   });
 
   it("returns no camera altitude when MapLibre throws", () => {
@@ -779,7 +783,6 @@ describe("MapController camera and query helpers", () => {
     const onEarth = controller.readCameraAltitude();
     setActiveEllipsoidId("mars");
     const onMars = controller.readCameraAltitude();
-    setActiveEllipsoidId("earth");
     assert.ok(onEarth !== null && onMars !== null);
     assert.ok(onMars < onEarth, `Mars altitude should be smaller: ${onMars} vs ${onEarth}`);
   });
