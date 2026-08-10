@@ -311,11 +311,13 @@ export function bearingRows(measurement: {
   const rows: Array<[string, string]> = [
     [terrainMeasureLabels.heading, `${initial.toFixed(0)}\u00b0 ${compassPoint(initial)}`],
   ];
-  // Compared on the *rendered* values, not the raw ones: a raw gap of just over
-  // a degree either side of a rounding boundary would otherwise add a second row
-  // showing the same number as the first.
+  // Both conditions are needed, and they guard opposite failures: the rendered
+  // values must differ (or the second row repeats the first verbatim), *and*
+  // the true convergence must be at least a degree (or bearings 0.2 apart that
+  // straddle a rounding boundary, say 45.4 and 45.6, earn a row for nothing).
   const final = finalAzimuthDegrees(a, b);
-  if (final.toFixed(0) !== initial.toFixed(0)) {
+  const convergence = Math.abs(((final - initial + 540) % 360) - 180);
+  if (convergence >= 1 && final.toFixed(0) !== initial.toFixed(0)) {
     rows.push([
       terrainMeasureLabels.finalHeading,
       `${final.toFixed(0)}\u00b0 ${compassPoint(final)}`,

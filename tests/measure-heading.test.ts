@@ -141,18 +141,21 @@ describe("bearingRows", () => {
       [-0.6, 0.2],
     ] as [number, number][]) {
       const rows = bearingRows({ mode: "distance", points: [pt(0, 0), pt(lng, lat)] });
-      if (rows.length === 2) {
-        assert.notEqual(rows[0][1], rows[1][1], `duplicate heading rows for ${lng},${lat}`);
-      }
+      assert.equal(rows.length, 1, `expected a single heading row for ${lng},${lat}`);
     }
   });
 
   it("stays empty for endpoints separated only by floating-point dust", () => {
-    const rows = bearingRows({
-      mode: "distance",
-      points: [pt(5, 5), pt(5 + Number.EPSILON, 5 - Number.EPSILON)],
-    });
-    assert.deepEqual(rows, []);
+    // Number.EPSILON is below the representable step at 5, so 5 + EPSILON === 5
+    // and that fixture would only re-test exact equality. 1e-12 is genuinely a
+    // different double while still far under the degeneracy tolerance.
+    const nudged = 5 + 1e-12;
+    assert.notEqual(nudged, 5, "fixture must be a representably distinct value");
+    assert.deepEqual(bearingRows({ mode: "distance", points: [pt(5, 5), pt(nudged, 5)] }), []);
+  });
+
+  it("treats the antimeridian written both ways as the same point", () => {
+    assert.deepEqual(bearingRows({ mode: "distance", points: [pt(180, 5), pt(-180, 5)] }), []);
   });
 
   it("stays empty for a degenerate or unfinished line", () => {

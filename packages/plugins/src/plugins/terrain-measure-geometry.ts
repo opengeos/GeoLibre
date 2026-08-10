@@ -13,6 +13,7 @@
  */
 
 import type { LngLat } from "./elevation-profile/elevation/geometry";
+import { bearingBetween } from "./route-animation-geometry";
 
 export type { LngLat };
 
@@ -359,14 +360,10 @@ function gradient(
  * coordinates is the same on any sphere.
  */
 export function forwardAzimuthDegrees(a: LngLat, b: LngLat): number {
-  const toRad = Math.PI / 180;
-  const lat1 = a[1] * toRad;
-  const lat2 = b[1] * toRad;
-  const dLon = (b[0] - a[0]) * toRad;
-  const y = Math.sin(dLon) * Math.cos(lat2);
-  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-  const degrees = Math.atan2(y, x) / toRad;
-  return (degrees + 360) % 360;
+  // Delegates to the Route Animation plugin's implementation rather than
+  // re-deriving the same atan2 formula: two copies of a bearing that must agree
+  // is exactly the kind of drift this file's neighbours already avoid.
+  return bearingBetween(a, b);
 }
 
 /**
@@ -404,7 +401,11 @@ export function isAntipodal(a: LngLat, b: LngLat, toleranceDegrees = 0.01): bool
  * essentially arbitrary heading.
  */
 export function isDegenerateSegment(a: LngLat, b: LngLat, toleranceDegrees = 1e-9): boolean {
-  return Math.abs(a[0] - b[0]) <= toleranceDegrees && Math.abs(a[1] - b[1]) <= toleranceDegrees;
+  if (Math.abs(a[1] - b[1]) > toleranceDegrees) return false;
+  // Wrapped onto the circle, so [180, 5] and [-180, 5] -- the same meridian
+  // written two ways -- separate by 0 rather than 360.
+  const lonGap = Math.abs(((b[0] - a[0] + 540) % 360) - 180);
+  return lonGap <= toleranceDegrees;
 }
 
 /** The 16-point compass rose, indexed by `round(azimuth / 22.5) % 16`. */
