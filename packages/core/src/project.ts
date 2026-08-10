@@ -106,8 +106,91 @@ export function createEmptyProject(
   };
 }
 
+/**
+ * GeoJSON `type` values that mark a subtree as feature data rather than project
+ * structure. Everything under one of these is written compactly by
+ * {@link serializeProject}.
+ */
+const GEOJSON_TYPES = new Set([
+  "FeatureCollection",
+  "Feature",
+  "GeometryCollection",
+  "Point",
+  "MultiPoint",
+  "LineString",
+  "MultiLineString",
+  "Polygon",
+  "MultiPolygon",
+]);
+
+/** One level of indentation in a serialized project. */
+const PROJECT_INDENT = "  ";
+
+/** Whether a value is a GeoJSON feature, geometry, or collection. */
+function isGeoJsonValue(value: object): boolean {
+  const type = (value as { type?: unknown }).type;
+  return typeof type === "string" && GEOJSON_TYPES.has(type);
+}
+
+/**
+ * Serialize a value exactly as `JSON.stringify(value, null, 2)` would, except
+ * that GeoJSON features, geometries and collections are written compactly on a
+ * single line.
+ *
+ * Coordinate arrays are never hand-edited, but indenting them costs roughly
+ * three bytes of whitespace for every one byte of data: a project embedding
+ * 13,000 features weighed 179 MB pretty-printed and 54 MB compact
+ * (GeoLibre#1829), which is the difference between reopening and running the
+ * tab out of memory. The surrounding project structure stays indented so the
+ * file is still readable and diffs still make sense.
+ *
+ * @param value Value to serialize.
+ * @param depth Current nesting depth, driving the indent width.
+ * @returns The serialized text, or undefined for values `JSON.stringify` also
+ *   drops (undefined, functions, symbols).
+ */
+function serializeProjectValue(value: unknown, depth: number): string | undefined {
+  if (value !== null && typeof value === "object") {
+    // Honor the toJSON hook the way JSON.stringify does, so a value that
+    // replaces itself is inspected in its replaced form.
+    const toJSON = (value as { toJSON?: unknown }).toJSON;
+    if (typeof toJSON === "function") {
+      value = (toJSON as (key: string) => unknown).call(value, "");
+    }
+  }
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  // Feature data: hand the whole subtree to JSON.stringify with no spacing.
+  if (isGeoJsonValue(value)) return JSON.stringify(value);
+
+  const pad = PROJECT_INDENT.repeat(depth + 1);
+  const closePad = PROJECT_INDENT.repeat(depth);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    // An unserializable array entry becomes null, matching JSON.stringify.
+    const entries = value.map((entry) => serializeProjectValue(entry, depth + 1) ?? "null");
+    return `[\n${pad}${entries.join(`,\n${pad}`)}\n${closePad}]`;
+  }
+  const entries: string[] = [];
+  for (const [key, entry] of Object.entries(value)) {
+    const serialized = serializeProjectValue(entry, depth + 1);
+    // An unserializable object value is omitted, matching JSON.stringify.
+    if (serialized === undefined) continue;
+    entries.push(`${JSON.stringify(key)}: ${serialized}`);
+  }
+  if (entries.length === 0) return "{}";
+  return `{\n${pad}${entries.join(`,\n${pad}`)}\n${closePad}}`;
+}
+
+/**
+ * Serialize a project to `.geolibre.json` text: indented project structure with
+ * compact (unindented) embedded GeoJSON. See {@link serializeProjectValue} for
+ * why the two halves are formatted differently.
+ *
+ * @param project Project to serialize.
+ * @returns The file contents to write.
+ */
 export function serializeProject(project: GeoLibreProject): string {
-  return JSON.stringify(project, null, 2);
+  return serializeProjectValue(project, 0) ?? "null";
 }
 
 export function parseProject(json: string): GeoLibreProject {

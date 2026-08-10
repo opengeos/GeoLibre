@@ -7,6 +7,7 @@ import {
   serializeProject,
   useAppStore,
   type GeoLibreLayer,
+  type GeoLibreProject,
 } from "@geolibre/core";
 import {
   addArcGISLayer,
@@ -57,6 +58,17 @@ export interface CredentialStripPrompt {
   count: number;
   resolve: (choice: "strip" | "keep" | "cancel") => void;
 }
+
+/**
+ * Embedded-data size above which the save prompt warns that the project will be
+ * slow (or impossible) to reopen and points at PMTiles/FlatGeobuf instead.
+ *
+ * Embedded GeoJSON is parsed and held in memory in full when the project is
+ * reopened, so a browser tab can run out of memory and drop the layers with no
+ * error (GeoLibre#1829). 50 MB is well under that cliff while leaving ordinary
+ * projects unbothered.
+ */
+export const LARGE_EMBED_WARNING_BYTES = 50 * 1024 * 1024;
 
 /**
  * A pending "embed local vector data?" prompt, shown on the web when saving a
@@ -654,14 +666,39 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       comments: state.comments,
       metadata: state.metadata,
     });
+    // The serialized text is deliberately not returned: every caller
+    // re-serializes after redacting credentials, so producing it here doubled
+    // the peak memory of a save for a project embedding large vector layers
+    // (GeoLibre#1829).
     return {
       project,
       defaultProjectName,
-      content: serializeProject(project),
       // Expose the path read from this same snapshot so callers don't take a
       // second `getState()` read that could be misread as a separate instant.
       projectPath: state.projectPath,
     };
+  };
+
+  // Serializing a project runs synchronously and throws `RangeError: Invalid
+  // string length` once the text passes V8's ~536 MB string cap, which a
+  // project embedding large vector layers can still reach. Unguarded, that
+  // throw escaped `void handleSave()` as an unhandled rejection and Save
+  // silently did nothing (GeoLibre#1829), so report it instead of returning
+  // text. Returns null when the project could not be serialized.
+  const serializeForSave = (project: GeoLibreProject): string | null => {
+    try {
+      return serializeProject(project);
+    } catch (error) {
+      console.error("Failed to serialize project", error);
+      // Only the string-length cap means "too large"; anything else is a real
+      // serialization bug and must not be filed under a size problem.
+      setActionError(
+        error instanceof RangeError
+          ? t("toolbar.error.projectTooLargeToSave")
+          : t("toolbar.error.couldNotSaveProject"),
+      );
+      return null;
+    }
   };
 
   // Ask whether to strip credentials (environment variables, geocoder keys,
@@ -837,27 +874,24 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // first, so the serialized content below reflects the user's choice.
     const layersForSave = await resolveLayersForSave();
     if (layersForSave === "cancel") return false;
-    const { project, defaultProjectName, content, projectPath } = buildCurrentProject(
+    const { project, defaultProjectName, projectPath } = buildCurrentProject(
       undefined,
       layersForSave.layers,
     );
     // Credentials are serialized in plain text for a local project that needs
     // them. Make keeping them an explicit choice and use the same central
     // redaction pass as every external egress.
-    let contentToSave = content;
+    let contentToSave: string | null;
     const projectToEgress = excludeHiddenFieldsFromProject(project);
     const redacted = redactProjectCredentials(projectToEgress);
     if (redacted.redactedPaths.length > 0) {
       const choice = await askStripCredentials(redacted.redactedCount);
       if (choice === "cancel") return false;
-      if (choice === "strip") {
-        contentToSave = serializeProject(redacted.project);
-      } else {
-        contentToSave = serializeProject(projectToEgress);
-      }
+      contentToSave = serializeForSave(choice === "strip" ? redacted.project : projectToEgress);
     } else {
-      contentToSave = serializeProject(projectToEgress);
+      contentToSave = serializeForSave(projectToEgress);
     }
+    if (contentToSave === null) return false;
     // Projects opened from a URL have no writable path, so both Save and
     // Save As fall back to the save dialog for them.
     const existingLocalPath = projectPath && !isHttpUrl(projectPath) ? projectPath : null;

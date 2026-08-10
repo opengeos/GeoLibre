@@ -567,6 +567,97 @@ describe("project parsing", () => {
   });
 });
 
+describe("project serialization", () => {
+  /** A layer whose features carry enough coordinates to show the whitespace cost. */
+  const featureRichLayer = () =>
+    geojsonLayer({
+      id: "cities",
+      geojson: {
+        type: "FeatureCollection",
+        features: Array.from({ length: 200 }, (_, index) => ({
+          type: "Feature" as const,
+          properties: { name: `City ${index}` },
+          geometry: {
+            type: "LineString" as const,
+            coordinates: Array.from(
+              { length: 20 },
+              (_, point) => [index / 10 + point, point / 10] as [number, number],
+            ),
+          },
+        })),
+      },
+    });
+
+  it("writes embedded GeoJSON compactly while indenting the project structure", () => {
+    const project = createEmptyProject("Compact");
+    project.layers = [featureRichLayer()];
+    const text = serializeProject(project);
+
+    // The structure stays readable...
+    assert.match(text, /^\{\n {2}"version":/);
+    assert.match(text, /\n {2}"layers": \[\n {4}\{\n {6}"id": "cities",/);
+    // ...but the whole feature collection sits on one line, so no coordinate
+    // ever gets its own line of indentation (GeoLibre#1829).
+    assert.match(
+      text,
+      /\n {6}"geojson": \{"type":"FeatureCollection","features":\[\{"type":"Feature"/,
+    );
+    assert.ok(!text.includes('"coordinates": ['), "coordinate arrays must not be pretty-printed");
+  });
+
+  it("compacts an embedded GeoJSON copy held in layer metadata", () => {
+    const project = createEmptyProject("Embedded");
+    const { geojson, ...layer } = featureRichLayer();
+    project.layers = [{ ...layer, metadata: { embeddedGeoJSON: geojson } }];
+    const text = serializeProject(project);
+
+    assert.match(text, /"embeddedGeoJSON": \{"type":"FeatureCollection"/);
+    assert.ok(!text.includes('"coordinates": ['));
+  });
+
+  it("keeps a feature-heavy project within a few percent of a fully minified file", () => {
+    const project = createEmptyProject("Sized");
+    project.layers = [featureRichLayer()];
+    const minified = JSON.stringify(project).length;
+
+    // Pretty-printing every coordinate used to cost more than 3x; the structure
+    // that stays indented is a rounding error next to the feature data.
+    assert.ok(
+      serializeProject(project).length < minified * 1.05,
+      "serialized project should be close to the minified size",
+    );
+  });
+
+  it("formats a project without GeoJSON exactly as JSON.stringify does", () => {
+    const project = createEmptyProject("Plain");
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+  });
+
+  it("matches JSON.stringify for values it drops, empty containers, and toJSON", () => {
+    const project = createEmptyProject("Edges");
+    project.metadata = {
+      dropped: undefined,
+      inArray: [undefined, () => "fn", 1],
+      notFinite: Number.NaN,
+      emptyObject: {},
+      emptyArray: [],
+      nested: { deep: { deeper: [1, { two: 2 }] } },
+      date: new Date("2026-08-10T00:00:00.000Z"),
+      quote: 'a "quoted" \\ value\n',
+    };
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+  });
+
+  it("round-trips a feature-heavy project through parseProject", () => {
+    const project = createEmptyProject("Round trip");
+    project.layers = [featureRichLayer()];
+    assert.deepEqual(
+      parseProject(serializeProject(project)).layers[0].geojson,
+      project.layers[0].geojson,
+    );
+  });
+});
+
 describe("multi-map grid persistence", () => {
   it("omits the grid keys for a default single-map project", () => {
     const project = projectFromStore({
