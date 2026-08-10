@@ -36,7 +36,7 @@ import {
   QUICK_TRAVEL_CONTOURS,
   QUICK_TRAVEL_CONTOURS_LABEL,
   runQuickAnalysis,
-  setQuickAnalysisStatus,
+  beginQuickAnalysisRun,
   type QuickBufferPreset,
 } from "../../lib/quick-analysis";
 import { hasRoutingConsent, recordRoutingConsent } from "../../lib/routing-consent";
@@ -232,8 +232,9 @@ export function MapContextMenu({
       // Reported through the Quick Analysis banner like every other action in
       // this menu rather than failing silently: the terrain fetch takes seconds
       // and can fail, and a click with no feedback either way reads as a broken
-      // menu item.
-      setQuickAnalysisStatus({ phase: "running", toolName });
+      // menu item. The returned setter is bound to this run, so a slow viewshed
+      // cannot overwrite the status of a faster action started after it.
+      const reportStatus = beginQuickAnalysisRun(toolName);
       void runViewshed({
         lng,
         lat,
@@ -243,14 +244,14 @@ export function MapContextMenu({
         }),
       })
         .then((result) => {
-          setQuickAnalysisStatus(
+          reportStatus(
             result
               ? { phase: "idle" }
               : { phase: "error", toolName, message: t("quickAnalysis.viewshedNoResult") },
           );
         })
         .catch((error: unknown) => {
-          setQuickAnalysisStatus({
+          reportStatus({
             phase: "error",
             toolName,
             message: error instanceof Error ? error.message : t("quickAnalysis.viewshedNoResult"),

@@ -324,6 +324,7 @@ export {
 export {
   assembleTerrainDem,
   computeViewshed,
+  computeViewshedAsync,
   decodeTerrariumElevation,
   viewshedToRgba,
   MAX_VIEWSHED_RADIUS_METERS,

@@ -143,15 +143,23 @@ const listeners = new Set<() => void>();
 let latestRun = 0;
 
 /**
- * Publish a status for the Quick Analysis banner.
+ * Claim the banner for a quick action that is not a registry tool -- the
+ * viewshed, which computes a raster rather than running a registered vector
+ * tool -- so it can report running and failed like every other entry in that
+ * menu instead of failing silently.
  *
- * Exported so a quick action that is not a registry tool -- the viewshed, which
- * computes a raster rather than running a registered vector tool -- can report
- * running and failed through the same banner as every other entry in that menu,
- * instead of failing silently.
+ * Returns a setter bound to this run's id, so it goes through the same
+ * {@link latestRun} guard `runQuickAnalysis` uses. Without that, a slow
+ * viewshed resolving after the user has fired a quick buffer would clobber the
+ * buffer's status with its own -- exactly the "resurrect a banner for a run the
+ * user has moved on from" case the counter exists to prevent.
  */
-export function setQuickAnalysisStatus(next: QuickAnalysisStatus): void {
-  setStatus(next);
+export function beginQuickAnalysisRun(toolName: string): (next: QuickAnalysisStatus) => void {
+  const run = ++latestRun;
+  setStatus({ phase: "running", toolName });
+  return (next) => {
+    if (run === latestRun) setStatus(next);
+  };
 }
 
 function setStatus(next: QuickAnalysisStatus): void {

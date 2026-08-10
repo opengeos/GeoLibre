@@ -22,6 +22,8 @@
  * geometry can be tested without a network.
  */
 
+import type { ViewshedWorkerRequest, ViewshedWorkerResponse } from "./terrain-viewshed.worker";
+
 /** The Terrarium terrain tiles the map's terrain control already uses. */
 export const TERRARIUM_TILE_URL =
   "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
@@ -408,4 +410,74 @@ export async function assembleTerrainDem(
   }
 
   return { width, height, values, bbox: [west, south, east, north] };
+}
+
+// --- Off-main-thread execution ---------------------------------------------
+
+/**
+ * Compute a viewshed on a Web Worker, falling back to this thread where Workers
+ * are unavailable (SSR, a test runner, a locked-down webview).
+ *
+ * The walk is O(n³) in the grid's side length with no yield points, so running
+ * it inline freezes the tab until it finishes — several seconds at the largest
+ * radius preset on modest hardware. The DEM and the visibility grid are both
+ * plain typed arrays, so the round trip costs one structured clone in and one
+ * transfer out.
+ *
+ * Mirrors `runToolOnWorker` in `wasm-convert.ts`: one job per worker,
+ * terminated on the terminal message, and no timeout — how long this takes is
+ * bounded by the grid, not the clock, and cutting off work that would have
+ * finished is worse than waiting.
+ */
+export function computeViewshedAsync(
+  dem: TerrainDem,
+  observer: ViewshedObserver,
+  radiusMeters = 0,
+): Promise<ViewshedResult> {
+  if (typeof Worker === "undefined") {
+    return Promise.resolve(computeViewshed(dem, observer, radiusMeters));
+  }
+  return new Promise((resolve, reject) => {
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL("./terrain-viewshed.worker.ts", import.meta.url), {
+        type: "module",
+      });
+    } catch {
+      // A bundler or runtime that cannot construct the worker should still
+      // produce a viewshed rather than an error.
+      resolve(computeViewshed(dem, observer, radiusMeters));
+      return;
+    }
+    const settle = (fn: () => void): void => {
+      worker.terminate();
+      fn();
+    };
+    worker.addEventListener("message", (event: MessageEvent<ViewshedWorkerResponse>) => {
+      const data = event.data;
+      settle(() => {
+        if (!data.ok) {
+          reject(new Error(data.error || "The viewshed worker failed."));
+          return;
+        }
+        const { ok: _ok, ...result } = data;
+        resolve(result);
+      });
+    });
+    worker.addEventListener("error", (event) => {
+      settle(() => reject(new Error(event.message || "The viewshed worker failed.")));
+    });
+    // `error` does not fire when a posted message cannot be deserialized, which
+    // would otherwise leave this promise pending forever.
+    worker.addEventListener("messageerror", () => {
+      settle(() => reject(new Error("The viewshed worker posted an undeserializable message.")));
+    });
+    try {
+      // The DEM is cloned rather than transferred: the caller still owns it (it
+      // is reused for the result's bbox), and a neutered input would be a trap.
+      worker.postMessage({ dem, observer, radiusMeters } satisfies ViewshedWorkerRequest);
+    } catch (error) {
+      settle(() => reject(error instanceof Error ? error : new Error(String(error))));
+    }
+  });
 }

@@ -12,6 +12,7 @@ import { describe, it } from "node:test";
 import {
   assembleTerrainDem,
   computeViewshed,
+  computeViewshedAsync,
   decodeTerrariumElevation,
   metersToLatDegrees,
   tileForLngLat,
@@ -163,6 +164,28 @@ describe("assembleTerrainDem bounds", () => {
       }),
       null,
     );
+  });
+});
+
+describe("computeViewshedAsync", () => {
+  it("falls back to this thread where Workers are unavailable", async () => {
+    // node:test has no Worker global, which is also the SSR / locked-down
+    // webview case: the fallback must produce a real viewshed, not an error.
+    const dem = demOf(11, 11, () => 0);
+    const [sync, viaAsync] = [
+      computeViewshed(dem, CENTRE),
+      await computeViewshedAsync(dem, CENTRE),
+    ];
+    assert.equal(viaAsync.visibleCells, sync.visibleCells);
+    assert.deepEqual(Array.from(viaAsync.visible), Array.from(sync.visible));
+    assert.equal(viaAsync.observerGroundMeters, sync.observerGroundMeters);
+  });
+
+  it("honours the radius through the async path", async () => {
+    const dem = demOf(41, 41, () => 0);
+    const limited = await computeViewshedAsync(dem, CENTRE, 100);
+    const unlimited = await computeViewshedAsync(dem, CENTRE);
+    assert.ok(limited.visibleCells < unlimited.visibleCells);
   });
 });
 

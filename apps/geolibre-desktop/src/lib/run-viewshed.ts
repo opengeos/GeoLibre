@@ -1,7 +1,7 @@
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   assembleTerrainDem,
-  computeViewshed,
+  computeViewshedAsync,
   viewshedToRgba,
   MAX_VIEWSHED_RADIUS_METERS,
   MIN_VIEWSHED_RADIUS_METERS,
@@ -90,7 +90,7 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
   });
   if (!dem) return null;
 
-  const result = computeViewshed(
+  const result = await computeViewshedAsync(
     dem,
     {
       lng: options.lng,
