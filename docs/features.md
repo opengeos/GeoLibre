@@ -145,7 +145,7 @@ kepler.gl, see the [Comparison](comparison.md).
 
 ## Storytelling and collaboration
 
-- Story map builder that composes its chapters directly on the live map, with a presenter view, dedicated start and closing slides, an optional hide-itinerary toggle, a printable PDF handout generator (with subtitle and byline fields), and standalone HTML export
+- Story map builder that composes its chapters directly on the live map, with a presenter view, dedicated start and closing slides, an optional hide-itinerary toggle, a printable PDF handout generator (with subtitle and byline fields, and optional location pins that open each chapter coordinate in Google Maps), and standalone HTML export
 - Real-time multi-user collaboration (MVP; see [Collaboration](collaboration.md)) so several people can edit the same project together
     - Per-participant permissions and an in-app chat panel
     - An on-canvas session-status badge and roster — a live dot, a connected-participant count, and an expandable client list — while a session is active

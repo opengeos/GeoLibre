@@ -3889,6 +3889,8 @@
       "bylinePlaceholder": "Auteur ou crédit",
       "footerText": "Texte de pied de page",
       "footerPlaceholder": "Pied de page affiché en bas de chaque page",
+      "markers": "Marqueurs de lieu cliquables",
+      "markersHint": "Dessine une épingle à l'emplacement de chaque chapitre. Un clic sur l'épingle dans un lecteur PDF ouvre cette coordonnée dans Google Maps.",
       "startSlide": "Diapositive de départ",
       "endSlide": "Diapositive de clôture",
       "generate": "Générer le PDF",

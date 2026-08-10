@@ -3824,6 +3824,8 @@
       "bylinePlaceholder": "Baris penulis atau kredit",
       "footerText": "Teks footer",
       "footerPlaceholder": "Footer yang ditampilkan di bawah setiap halaman",
+      "markers": "Penanda lokasi yang dapat diklik",
+      "markersHint": "Menggambar pin di lokasi setiap bab. Mengeklik pin di penampil PDF akan membuka koordinat tersebut di Google Maps.",
       "startSlide": "Slide awal",
       "endSlide": "Slide penutup",
       "generate": "Buat PDF",

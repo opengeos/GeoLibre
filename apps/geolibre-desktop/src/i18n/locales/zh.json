@@ -3824,6 +3824,8 @@
       "bylinePlaceholder": "作者或署名信息",
       "footerText": "页脚文本",
       "footerPlaceholder": "显示在每页底部的页脚",
+      "markers": "可点击的位置标记",
+      "markersHint": "在每个章节的位置绘制一个图钉。在 PDF 阅读器中点击图钉会在 Google 地图中打开该坐标。",
       "startSlide": "起始画面",
       "endSlide": "结束画面",
       "generate": "生成 PDF",

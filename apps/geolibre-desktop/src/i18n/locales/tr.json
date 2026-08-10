@@ -3889,6 +3889,8 @@
       "bylinePlaceholder": "Yazar veya emek satırı",
       "footerText": "Alt bilgi metni",
       "footerPlaceholder": "Her sayfanın altında gösterilen alt bilgi",
+      "markers": "Tıklanabilir konum işaretleyicileri",
+      "markersHint": "Her bölümün konumuna bir iğne çizer. PDF görüntüleyicide iğneye tıklamak o koordinatı Google Haritalar'da açar.",
       "startSlide": "Başlangıç slaydı",
       "endSlide": "Kapanış slaydı",
       "generate": "PDF Oluştur",
