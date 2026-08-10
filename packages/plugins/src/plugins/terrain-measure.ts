@@ -314,9 +314,7 @@ export function bearingRows(measurement: {
     `${Math.round(degrees) % 360}\u00b0 ${compassPoint(degrees)}`;
 
   const initial = forwardAzimuthDegrees(a, b);
-  const rows: Array<[string, string]> = [
-    [terrainMeasureLabels.heading, renderAzimuth(initial)],
-  ];
+  const rows: Array<[string, string]> = [[terrainMeasureLabels.heading, renderAzimuth(initial)]];
   // Both conditions are needed, and they guard opposite failures: the rendered
   // values must differ (or the second row repeats the first verbatim), *and*
   // the true convergence must be at least a degree (or bearings 0.2 apart that
