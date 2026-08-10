@@ -114,10 +114,10 @@ The UTM readout uses the same projection that draws the [Gridlines](map-controls
 
 **Controls → Elevation** turns on the **Elev** readout. It is **off by default**, and it resolves the height under the pointer from one of two sources:
 
-- **With 3D terrain enabled** the height is read straight from the terrain the map has already loaded. This is instant, tracks the cursor live, and sends nothing off your device.
-- **Without 3D terrain** GeoLibre falls back to the public [Open-Meteo](https://open-meteo.com/) elevation API, and only after the pointer has been still for half a second. Results are cached per roughly 11 m cell, and the lookup runs only on Earth — never on a planetary basemap.
+- **From the map's own 3D terrain**, whenever a usable sample is available there. This is instant, tracks the cursor live, and sends nothing off your device.
+- **From the public [Open-Meteo](https://open-meteo.com/) elevation API** when terrain returns no value for that point — because 3D terrain is off, but also when it is on and the terrain has no sample to give. The lookup waits until the pointer has been still for half a second, caches results per roughly 11 m cell, and runs only on Earth, never on a planetary basemap.
 
-Because the fallback sends the coordinates under your pointer to a third-party service, GeoLibre asks for consent the first time you enable the readout. Decline and the readout still works over 3D terrain, but never reaches the network. While a lookup is in flight the readout is blank rather than showing the previous point's height.
+Because that fallback sends the coordinates under your pointer to a third-party service, GeoLibre asks for consent the first time you enable the readout. **Declining is what guarantees the readout never reaches the network** — turning 3D terrain on makes the remote lookup rare, but does not by itself rule it out. Decline and the readout still works wherever terrain can answer. While a lookup is in flight the readout is blank rather than showing the previous point's height.
 
 !!! tip "Reading elevation along a line"
     For a profile rather than a single point, use the Elevation Profile plugin, or the [Measure tool](map-controls.md#component-tools), which reports terrain-aware 3D distances.

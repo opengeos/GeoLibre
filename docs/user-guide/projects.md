@@ -24,7 +24,7 @@ A GeoLibre project captures your whole workspace in a single `.geolibre.json` fi
 !!! note "Loading a project at startup"
     You can open a project directly by passing its URL with the `url` query parameter, for example `?url=https://share.geolibre.app/you/project.geolibre.json`. See [Embedding & Sharing](embedding.md).
 
-    On the desktop app you can also have GeoLibre reopen the last project — or one specific project — every time it launches. See [Settings → Startup](settings.md#startup). A project URL in the address bar always takes precedence over that preference.
+    On the desktop app you can also have GeoLibre reopen the last local project — or one specific local project — every time it launches; remote share links are never replayed on launch. See [Settings → Startup](settings.md#startup). A project URL in the address bar always takes precedence over that preference.
 
 ## Save and Save As
 
