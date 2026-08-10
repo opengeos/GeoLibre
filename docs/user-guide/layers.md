@@ -15,7 +15,7 @@ The **Layers panel** on the left lists every layer in the project, from the topm
 Each layer exposes a set of actions:
 
 - **Zoom to layer**: fit the map to the layer's extent (for layers whose bounds are known).
-- **Identify features**: click features on the map to see their attributes in a popup.
+- **Identify features**: click features on the map to see their attributes in a popup. On a raster layer this reads the pixel value instead, and on a multiband raster it also builds a [spectral profile](styling.md#spectral-profile).
 - **Labels**: toggle text labels for vector layers that have a label field.
 - **Metadata / Properties**: inspect the layer's source and configuration.
 - **Remove layer**: delete the layer from the project.

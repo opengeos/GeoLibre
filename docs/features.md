@@ -28,7 +28,10 @@ kepler.gl, see the [Comparison](comparison.md).
     - **Basemaps**: OpenFreeMap, Protomaps, EOX Sentinel-2 cloudless, and Openbasiskaart, with stacking of multiple raster basemaps, blank background support, and double-click to swap the core basemap from the layer panel
     - **Planetary basemaps**: Mars and the Moon (OpenPlanetaryMap), plus Mercury, Venus, the Galilean moons (Io, Europa, Ganymede, Callisto), Titan, Pluto, and Charon (USGS Astrogeology, reprojected to Web Mercator by the tiles Worker). A per-project ellipsoid drives distance, area, and scale measurements from that body's radius, and a planet switcher sits in the Layers panel
     - **Toggleable controls**: navigation, fullscreen, geolocation, globe, terrain, scale (metric, imperial, or nautical), attribution, and logo, plus a double-click terrain control for setting vertical exaggeration
-    - **On-map helpers**: a right-click context menu for reading coordinates and quick actions, and a Gridlines coordinate-grid overlay with edge labels and a UTM easting/northing grid mode
+    - **On-map helpers**: a right-click context menu that reads out and copies the clicked coordinate, opens it in Google Maps or Google Earth, and carries a **Quick analysis** submenu — buffers, drive- and walk-time isochrones, and a viewshed, each run on the clicked point with no dialog and no point layer to create first (the same submenu on a layer row runs buffers, centroids, convex hull, and bounding box over the whole layer) — plus a Gridlines coordinate-grid overlay with edge labels and a UTM easting/northing grid mode
+    - **Interactive viewshed**: right-click anywhere and get what is visible from that spot within 2, 5, or 15 km, computed from the same public terrain tiles the map already renders — no DEM to find, download, or load, and 3D terrain need not even be on. The result is an ordinary image overlay layer, so it gets opacity, ordering, zoom-to, and project save for free. Earth curvature and refraction are not modelled; the Whitebox **Viewshed** tool remains the rigorous DEM-in-hand option
+    - **Status bar readouts**: the pointer coordinate in decimal degrees, DMS, DDM, or UTM (click to cycle, or set it in Settings; UTM reuses the projection that draws the Gridlines grid, and falls back to degrees outside its valid latitude band), the ground elevation under the pointer, camera altitude above sea level as Google Earth-style **Eye alt** — scaled to the active celestial body, so it stays right on a Mars or Moon basemap — plus zoom, bearing, pitch, and the view bounding box
+    - **Pointer elevation** resolved from the map's own 3D terrain when it is enabled (instant, offline, nothing leaves the device) and otherwise from a public elevation API after the pointer settles, cached per cell, Earth-only, off by default, and gated behind an explicit consent notice
     - **View menu**: viewport history navigation, a reset pitch and bearing control, a distinct north arrow, and View in Google Maps and View in Google Earth actions
 - Multi-map grid that splits the workspace into a grid of synchronized map views, so you can compare basemaps, layers, or time steps side by side, with any **secondary** pane switchable to an optional CesiumJS 3D globe via its 2D/3D toggle — the primary map is always MapLibre (camera-synced with the 2D maps; requires a Cesium Ion token — see [Optional 3D globe credentials](getting-started.md#optional-3d-globe-credentials-cesium-ion))
 - Timelapse mode that animates annual cloudless basemaps — EOX Sentinel-2 and NASA GIBS providers (Landsat/WELD and MODIS land cover) — with a provider picker and legend
@@ -97,6 +100,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Local grids are colormapped in the browser from the same colormap catalog the Style panel uses, added as image overlays, and fitted to the camera on add, so Zoom to layer has a real extent to fly to
     - A hyperspectral cube gains an RGB band combination picked by wavelength
     - Identify reads a pixel's value off the map and, for a cube, walks the band axis to chart a spectral signature against wavelength — up to six sampled points, each drawn as a numbered dot in its chart color, compared in a draggable and resizable window over the map and exported as PNG or CSV
+    - The same spectral profile works on any **multiband GeoTIFF or COG**, not just NetCDF/HDF — click a stacked Landsat or Sentinel scene to compare the response of water, vegetation, and asphalt across every band. Reads are range requests for the tile containing the pixel rather than the whole scene, the click is reprojected into the raster's own CRS, and the chart plots against wavelength when the file declares one per band and against band number otherwise
     - A **3D image cube** view renders the scene as its six exterior faces with draggable slice cuts, reading windowed and strided so a full EMIT reflectance variable stays within what the browser can hold
 
 ## Attribute data and expressions
@@ -122,7 +126,7 @@ kepler.gl, see the [Comparison](comparison.md).
 ## Map tools, printing, and media
 
 - Controls menu
-    - Measure (including terrain-aware 3D measurements), Bookmark, Minimap, View State, and a Search panel
+    - Measure (including terrain-aware 3D measurements and a heading readout — a true great-circle initial bearing with a 16-point compass label, plus a final bearing on lines long enough for the great circle to converge), Bookmark, Minimap, View State, and a Search panel
     - Map annotation tools that draw text, arrows, and highlights on the map, saved with the project
     - Persistent mode banners for the Directions and Reverse Geocode tools
     - A Camera Tour recorder that captures an animated keyframe tour to video, with per-keyframe recapture, per-keyframe hold and transition duration controls, and saving or loading a named tour setup as JSON
@@ -209,6 +213,7 @@ kepler.gl, see the [Comparison](comparison.md).
 - QGIS project import (`.qgs` and `.qgz`) that rebuilds layers, nested layer groups, group visibility, layer order, styling, and the saved map view, reporting per-layer why anything was skipped rather than failing the whole import. See [Projects](user-guide/projects.md#importing-a-qgis-project)
 - ArcGIS Pro project import (`.aprx` and `.mapx`) that reads CIM JSON without ArcPy and restores the first 2D map's extent, local vector and GeoTIFF layers, nested groups, visibility, simple symbols, field labels, vector-tile portal items, and cached map services, with per-layer warnings for unsupported sources. See [Projects](user-guide/projects.md#importing-an-arcgis-pro-project)
 - Reusable project templates saved to a personal library, with an option to keep the basemap, groups, styles, legend, widgets, and layout while stripping the data layer content
+- Startup project preference on the desktop app: open the default workspace, reopen the last local project, or always open one chosen project. Remote share links are never replayed on launch, a project URL in the address bar takes precedence, and a startup project that has gone missing falls back to the default workspace with an explanation instead of an error. See [Settings](user-guide/settings.md#startup)
 
 ## Plugins
 

@@ -61,6 +61,18 @@ For raster layers the Style panel exposes image adjustments:
 
 These let you tune the look of GeoTIFF, COG, and tile-based raster layers without changing the underlying data.
 
+### Spectral profile
+
+For a **multiband** raster — a stacked Landsat or Sentinel scene, a NetCDF/HDF cube, or any COG with more than one band — the Style panel adds a **Spectral profile** chart of one pixel's value across every band.
+
+Turn on **Identify** for the layer in the [Layers panel](layers.md), then click the map. Each click adds a numbered dot on the map and a matching curve in the chart, so you can click water, vegetation, and asphalt and compare the three responses side by side. Up to six points are compared at once; older points age off as you add more.
+
+- The chart plots against **wavelength** when the file declares one wavelength per band, and against **band number** otherwise. A wavelength list that doesn't match the band count is ignored rather than trusted, so a stale one can't mislabel the axis.
+- Only the tile containing the clicked pixel is fetched, not the whole scene, so profiling a large remote COG stays fast.
+- **Pop out** floats the chart in a draggable, resizable window over the map; **PNG** and **CSV** export it.
+
+Single-band rasters produce no profile — use Identify on its own to read the pixel value. Clicks outside the raster, or on a pixel that is nodata in every band, are dropped without disturbing the points you have already collected.
+
 A remote GeoJSON, GeoParquet, or vector PMTiles layer opened with the `data` URL parameter can receive a GeoLibre/MapLibre vector style through `style`. A remote COG can receive a raster style instead. Raster URL styles support band mode and selection, rescale ranges, colormap and reversal, nodata, opacity, gamma, stretch, and normalized-difference index presets. See the [remote data examples](embedding.md#open-remote-data).
 
 ## Legends and colorbars

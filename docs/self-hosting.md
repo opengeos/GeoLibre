@@ -367,6 +367,8 @@ the public internet:
 | --- | --- | --- |
 | Basemaps | OpenFreeMap / CARTO tiles | Use the Basemaps plugin's **custom style URL** and serve your own style plus a PMTiles basemap from your server, or use a blank background. Add the host to the CSP if it is not your own origin. |
 | Geocoding | Public Nominatim | Point it at a self-hosted Nominatim or Pelias (see [Data Integrations](user-guide/data-integrations.md#geocoding)). |
+| Routing and isochrones | Public FOSSGIS Valhalla (`valhalla1.openstreetmap.de`) | Set `VITE_ROUTING_ENDPOINT` to your own Valhalla server. This covers Processing → Network and the **Drive time** / **Walk time** [quick actions](user-guide/map-controls.md#quick-analysis-from-a-clicked-point). Add the host to the CSP. |
+| Pointer elevation readout | Public Open-Meteo elevation API, and only when 3D terrain is off | Leave the readout off (it is off by default), or keep 3D terrain enabled so the height is read from tiles the map already has. GeoLibre asks for consent before the first remote lookup. |
 | Python (Pyodide) vector engine | Loads Pyodide from jsDelivr | Set `VITE_PYODIDE_INDEX_URL` to a mirrored copy of the Pyodide distribution. |
 | AI assistant | Off unless configured | Leave `GEOLIBRE_AI_URL` unset, or route it through your own proxy. |
 | Project sharing | `share.geolibre.app` | `GEOLIBRE_SHARE_URL=off`, or your own [projects server](server-api.md). |
