@@ -4,6 +4,7 @@ import {
   computeViewshed,
   viewshedToRgba,
   MAX_VIEWSHED_RADIUS_METERS,
+  MIN_VIEWSHED_RADIUS_METERS,
 } from "@geolibre/processing";
 
 /**
@@ -74,7 +75,14 @@ async function rgbaToPngDataUrl(
  *   be fetched or the result could not be encoded.
  */
 export async function runViewshed(options: RunViewshedOptions): Promise<ViewshedRunResult | null> {
-  const radiusMeters = Math.min(options.radiusMeters, MAX_VIEWSHED_RADIUS_METERS);
+  // Clamped on both bounds here, not just the max: assembleTerrainDem floors to
+  // MIN_VIEWSHED_RADIUS_METERS internally, so clamping only the ceiling would
+  // let computeViewshed cull against a smaller radius than the DEM was built
+  // for -- the analysed square and the visibility limit would disagree.
+  const radiusMeters = Math.min(
+    MAX_VIEWSHED_RADIUS_METERS,
+    Math.max(MIN_VIEWSHED_RADIUS_METERS, options.radiusMeters),
+  );
   const dem = await assembleTerrainDem({
     lng: options.lng,
     lat: options.lat,
