@@ -273,8 +273,10 @@ docker run --rm -p 8080:80 \
 ```
 
 When the variable is unset, Clerk is not loaded and GeoLibre behaves exactly as
-before. The gate applies only to the hosted web application; Tauri, mobile, and
-embedded/Jupyter builds remain available offline. Control who may register or
+before. The gate applies only to the hosted web application; the separately built
+Tauri, mobile, and embedded/Jupyter builds remain available offline. It is a
+property of the build, not of the request, so framing the gated deployment or
+loading it with `?embed=1` still requires sign-in. Control who may register or
 sign in through the Clerk Dashboard. Configure TLS and the deployment domain in
 Clerk before using a production key.
 

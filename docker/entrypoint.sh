@@ -317,13 +317,23 @@ if collab:
 # Clerk loads its browser SDK from the Frontend API hostname encoded in the
 # publishable key. Add only that exact hostname to script-src. The remaining
 # documented Clerk requirements are fixed origins in the nginx template.
+#
+# The runtime-config block above already decoded and validated this same key
+# (`set -e` means we never get here if it rejected one), but the decode is
+# repeated with its own try/except rather than relying on that ordering: this is
+# a separate `python -c` process, so an edit that reorders, extracts, or drops
+# the earlier block would otherwise turn an invalid key into a raw traceback
+# instead of the clean ERROR message.
 clerk_src = ""
 clerk_frame_src = ""
 clerk_key = os.environ.get("GEOLIBRE_CLERK_PUBLISHABLE_KEY", "").strip()
 if clerk_key:
-    encoded = clerk_key.split("_", 2)[2]
-    encoded += "=" * (-len(encoded) % 4)
-    clerk_fapi = base64.urlsafe_b64decode(encoded).decode().rstrip("$")
+    try:
+        encoded = clerk_key.split("_", 2)[2]
+        encoded += "=" * (-len(encoded) % 4)
+        clerk_fapi = base64.urlsafe_b64decode(encoded).decode().rstrip("$")
+    except (IndexError, ValueError, UnicodeDecodeError) as error:
+        raise SystemExit("ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY is invalid.") from error
     if not re.fullmatch(r"[A-Za-z0-9.-]+", clerk_fapi) or "." not in clerk_fapi:
         raise SystemExit("ERROR: Clerk Frontend API host is invalid.")
     clerk_src = f" https://{clerk_fapi} https://challenges.cloudflare.com https://*.protect.clerk.com"

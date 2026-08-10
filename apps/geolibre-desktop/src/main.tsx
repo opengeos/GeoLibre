@@ -56,7 +56,6 @@ import { installDiagnosticsCapture } from "./lib/diagnostics";
 import { isTauri } from "./lib/is-tauri";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
 import { resolveClerkPublishableKey } from "./lib/clerk-auth";
-import { isEmbedded } from "./hooks/embedHost";
 
 installDiagnosticsCapture();
 // In the desktop build, route geocoding (place search / reverse geocode)
@@ -97,7 +96,12 @@ if (isTauri()) {
 // Recover from chunks orphaned by a web redeploy (stale lazy import → 404). A
 // no-op in the desktop build, whose chunks are bundled locally.
 installStaleChunkReload();
-const clerkPublishableKey = resolveClerkPublishableKey(!isTauri() && !isEmbedded());
+// "Web app" here means the *build*, never anything the visitor controls: the
+// desktop shell and the Jupyter embed wheel are compiled without the gate, but a
+// hosted deployment gates every request. In particular this must NOT consult
+// `isEmbedded()` — that returns true for a plain `?embed=1` query parameter, so
+// any visitor could disable a configured sign-in wall by typing a URL.
+const clerkPublishableKey = resolveClerkPublishableKey(!isTauri() && !__GEOLIBRE_EMBED_BUILD__);
 // Register the offline/PWA service worker (web build only). `registerSW` is a
 // no-op stub in the Tauri desktop and embedded Jupyter builds, where the plugin
 // is disabled (see vite.config.ts pwaPlugin).
