@@ -17,8 +17,8 @@ import {
   Braces,
   Circle,
   Crosshair,
-  Eye,
   Earth,
+  Eye,
   MapIcon,
   MapPin,
   Route,
@@ -36,6 +36,7 @@ import {
   QUICK_TRAVEL_CONTOURS,
   QUICK_TRAVEL_CONTOURS_LABEL,
   runQuickAnalysis,
+  setQuickAnalysisStatus,
   type QuickBufferPreset,
 } from "../../lib/quick-analysis";
 import { hasRoutingConsent, recordRoutingConsent } from "../../lib/routing-consent";
@@ -227,6 +228,12 @@ export function MapContextMenu({
       if (!menu || viewshedBusy) return;
       const { lng, lat } = menu;
       setViewshedBusy(true);
+      const toolName = t("quickAnalysis.viewshedToolName");
+      // Reported through the Quick Analysis banner like every other action in
+      // this menu rather than failing silently: the terrain fetch takes seconds
+      // and can fail, and a click with no feedback either way reads as a broken
+      // menu item.
+      setQuickAnalysisStatus({ phase: "running", toolName });
       void runViewshed({
         lng,
         lat,
@@ -235,7 +242,20 @@ export function MapContextMenu({
           radius: formatViewshedRadius(radiusMeters),
         }),
       })
-        .catch(() => null)
+        .then((result) => {
+          setQuickAnalysisStatus(
+            result
+              ? { phase: "idle" }
+              : { phase: "error", toolName, message: t("quickAnalysis.viewshedNoResult") },
+          );
+        })
+        .catch((error: unknown) => {
+          setQuickAnalysisStatus({
+            phase: "error",
+            toolName,
+            message: error instanceof Error ? error.message : t("quickAnalysis.viewshedNoResult"),
+          });
+        })
         .finally(() => setViewshedBusy(false));
     },
     [menu, viewshedBusy, t],

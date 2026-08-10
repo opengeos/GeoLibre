@@ -1807,7 +1807,9 @@
       "miles": "ми"
     },
     "viewshedHere": "Зона видимости отсюда ({{radius}})",
-    "viewshedLayerName": "Зона видимости ({{radius}})"
+    "viewshedLayerName": "Зона видимости ({{radius}})",
+    "viewshedToolName": "Зона видимости",
+    "viewshedNoResult": "Здесь не удалось вычислить зону видимости."
   },
   "knowledgeCard": {
     "title": "О месте",

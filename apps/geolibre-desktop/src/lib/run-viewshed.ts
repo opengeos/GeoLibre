@@ -125,6 +125,12 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
       ],
     },
     metadata: {
+      // fitLayer resolves an extent from geojson, then source.bounds /
+      // metadata.bounds, then the live source's bounds. An ImageSource exposes
+      // only coordinates, so without this the Layers panel's zoom-to button
+      // silently does nothing -- the Georeferencer's overlays set it for the
+      // same reason.
+      bounds: result.bbox,
       viewshed: {
         lng: options.lng,
         lat: options.lat,

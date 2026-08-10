@@ -1721,7 +1721,9 @@
       "miles": "mi"
     },
     "viewshedHere": "Zichtveld vanaf hier ({{radius}})",
-    "viewshedLayerName": "Zichtveld ({{radius}})"
+    "viewshedLayerName": "Zichtveld ({{radius}})",
+    "viewshedToolName": "Zichtveld",
+    "viewshedNoResult": "Hier kon geen zichtbaar gebied worden berekend."
   },
   "knowledgeCard": {
     "title": "Plaatsinfo",

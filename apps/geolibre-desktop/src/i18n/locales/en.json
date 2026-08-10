@@ -1721,7 +1721,9 @@
       "miles": "mi"
     },
     "viewshedHere": "Viewshed from here ({{radius}})",
-    "viewshedLayerName": "Viewshed ({{radius}})"
+    "viewshedLayerName": "Viewshed ({{radius}})",
+    "viewshedToolName": "Viewshed",
+    "viewshedNoResult": "No visible area could be computed here."
   },
   "knowledgeCard": {
     "title": "Place info",

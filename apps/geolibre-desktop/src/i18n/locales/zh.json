@@ -1678,7 +1678,9 @@
       "miles": "英里"
     },
     "viewshedHere": "从此处的可视域 ({{radius}})",
-    "viewshedLayerName": "可视域 ({{radius}})"
+    "viewshedLayerName": "可视域 ({{radius}})",
+    "viewshedToolName": "可视域",
+    "viewshedNoResult": "无法在此处计算可视区域。"
   },
   "knowledgeCard": {
     "title": "地点信息",

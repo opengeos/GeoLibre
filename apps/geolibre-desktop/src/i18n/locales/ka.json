@@ -1721,7 +1721,9 @@
       "miles": "მილი"
     },
     "viewshedHere": "ხედვის არე აქედან ({{radius}})",
-    "viewshedLayerName": "ხედვის არე ({{radius}})"
+    "viewshedLayerName": "ხედვის არე ({{radius}})",
+    "viewshedToolName": "ხედვის არე",
+    "viewshedNoResult": "აქ ხილული არეს გამოთვლა ვერ მოხერხდა."
   },
   "knowledgeCard": {
     "title": "ადგილის ინფორმაცია",

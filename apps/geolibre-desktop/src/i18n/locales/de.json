@@ -1721,7 +1721,9 @@
       "miles": "mi"
     },
     "viewshedHere": "Sichtfeld von hier ({{radius}})",
-    "viewshedLayerName": "Sichtfeld ({{radius}})"
+    "viewshedLayerName": "Sichtfeld ({{radius}})",
+    "viewshedToolName": "Sichtfeld",
+    "viewshedNoResult": "Hier konnte kein Sichtbereich berechnet werden."
   },
   "knowledgeCard": {
     "title": "Ortsinformationen",

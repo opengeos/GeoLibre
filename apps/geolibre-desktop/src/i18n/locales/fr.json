@@ -1721,7 +1721,9 @@
       "miles": "mi"
     },
     "viewshedHere": "Bassin de visibilité d'ici ({{radius}})",
-    "viewshedLayerName": "Bassin de visibilité ({{radius}})"
+    "viewshedLayerName": "Bassin de visibilité ({{radius}})",
+    "viewshedToolName": "Bassin de visibilité",
+    "viewshedNoResult": "Aucune zone visible n'a pu être calculée ici."
   },
   "knowledgeCard": {
     "title": "Infos sur le lieu",

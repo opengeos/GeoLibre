@@ -1721,7 +1721,9 @@
       "miles": "مایل"
     },
     "viewshedHere": "حوزه دید از اینجا ({{radius}})",
-    "viewshedLayerName": "حوزه دید ({{radius}})"
+    "viewshedLayerName": "حوزه دید ({{radius}})",
+    "viewshedToolName": "حوزه دید",
+    "viewshedNoResult": "محاسبه ناحیه قابل مشاهده در اینجا ممکن نشد."
   },
   "knowledgeCard": {
     "title": "اطلاعات مکان",

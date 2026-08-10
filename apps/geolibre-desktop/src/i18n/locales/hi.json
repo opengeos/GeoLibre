@@ -1721,7 +1721,9 @@
       "miles": "मील"
     },
     "viewshedHere": "यहाँ से दृश्यक्षेत्र ({{radius}})",
-    "viewshedLayerName": "दृश्यक्षेत्र ({{radius}})"
+    "viewshedLayerName": "दृश्यक्षेत्र ({{radius}})",
+    "viewshedToolName": "दृश्यक्षेत्र",
+    "viewshedNoResult": "यहाँ कोई दृश्य क्षेत्र नहीं निकाला जा सका।"
   },
   "knowledgeCard": {
     "title": "स्थान जानकारी",

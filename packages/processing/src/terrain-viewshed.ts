@@ -70,7 +70,9 @@ export function metersToLatDegrees(meters: number): number {
  *
  * Aims for roughly {@link TARGET_GRID_SPAN} pixels across the analysed square:
  * enough detail for a ridge to block a line of sight, small enough that both
- * the tile fetch and the O(n²·√n) line walk stay interactive.
+ * the tile fetch and the line walk stay interactive. The walk is O(n³) in the
+ * grid's side length -- a ray of up to n steps for each of n² cells -- so the
+ * span, not the requested radius, is what bounds the cost.
  */
 export const TARGET_GRID_SPAN = 512;
 

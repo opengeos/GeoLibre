@@ -1721,7 +1721,9 @@
       "miles": "mi"
     },
     "viewshedHere": "Bacia visual daqui ({{radius}})",
-    "viewshedLayerName": "Bacia visual ({{radius}})"
+    "viewshedLayerName": "Bacia visual ({{radius}})",
+    "viewshedToolName": "Bacia visual",
+    "viewshedNoResult": "Não foi possível calcular uma área visível aqui."
   },
   "knowledgeCard": {
     "title": "Informações do lugar",

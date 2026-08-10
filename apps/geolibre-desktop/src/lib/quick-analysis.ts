@@ -142,6 +142,18 @@ const listeners = new Set<() => void>();
  */
 let latestRun = 0;
 
+/**
+ * Publish a status for the Quick Analysis banner.
+ *
+ * Exported so a quick action that is not a registry tool -- the viewshed, which
+ * computes a raster rather than running a registered vector tool -- can report
+ * running and failed through the same banner as every other entry in that menu,
+ * instead of failing silently.
+ */
+export function setQuickAnalysisStatus(next: QuickAnalysisStatus): void {
+  setStatus(next);
+}
+
 function setStatus(next: QuickAnalysisStatus): void {
   status = next;
   for (const listener of listeners) listener();
