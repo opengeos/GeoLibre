@@ -17,7 +17,7 @@
 // Imported from the plugin's own subpath rather than the package barrel: the
 // barrel pulls in every plugin (Earth Engine among them), which a small
 // formatter has no business loading.
-import { lngLatToUtm } from "@geolibre/plugins/maplibre-graticule";
+import { formatEasting, formatNorthing, lngLatToUtm } from "@geolibre/plugins/maplibre-graticule";
 import { decimalToDdmAxis, decimalToDmsAxis } from "./dms";
 
 /** Coordinate notations the status bar can display. */
@@ -69,7 +69,9 @@ export function formatCoordinate(lng: number, lat: number, format: CoordinateFor
     case "utm": {
       const utm = lngLatToUtm(lng, lat);
       if (!utm) return formatCoordinate(lng, lat, "dd");
-      return `${utm.zone}${utm.band} ${Math.round(utm.easting)}mE ${Math.round(utm.northing)}mN`;
+      // Reuses the grid overlay's own easting/northing formatters, so the
+      // readout and the grid labels round and suffix identically.
+      return `${utm.zone}${utm.band} ${formatEasting(utm.easting)} ${formatNorthing(utm.northing)}`;
     }
     default:
       return `${lng.toFixed(5)}, ${lat.toFixed(5)}`;
