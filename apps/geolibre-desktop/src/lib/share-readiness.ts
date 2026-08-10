@@ -470,19 +470,23 @@ async function probeTarget(
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<ProbeOutcome> {
-  const request = async (method: "HEAD" | "GET"): Promise<Response> => {
-    const timeout = AbortSignal.timeout(timeoutMs);
-    return fetchImpl(target, {
+  // One deadline for the whole target rather than one per attempt, so a slow
+  // host that refuses HEAD cannot spend the budget twice over.
+  const timeout = AbortSignal.timeout(timeoutMs);
+  const deadline = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  const request = async (method: "HEAD" | "GET"): Promise<Response> =>
+    fetchImpl(target, {
       method,
       // Withhold the author's ambient authority: the check must see what a
       // recipient sees, not what the author's cookies unlock.
       credentials: "omit",
       cache: "no-store",
       redirect: "follow",
+      // One byte is enough to learn the status. Without the range, a
+      // HEAD-refusing host would have a whole multi-gigabyte COG pulled down.
       ...(method === "GET" ? { headers: { Range: "bytes=0-0" } } : {}),
-      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      signal: deadline,
     });
-  };
 
   try {
     const head = await request("HEAD");

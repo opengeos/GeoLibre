@@ -299,8 +299,13 @@ describe("probeShareSources", () => {
       ],
     });
     let first = true;
+    const attempts: { method?: string; range?: string }[] = [];
     const fn = (async (input: RequestInfo | URL, init?: RequestInit) => {
       void input;
+      attempts.push({
+        method: init?.method,
+        range: (init?.headers as Record<string, string> | undefined)?.Range,
+      });
       if (first && init?.method === "HEAD") {
         first = false;
         return new Response(null, { status: 403 });
@@ -309,6 +314,12 @@ describe("probeShareSources", () => {
     }) as unknown as typeof fetch;
     const { refs: probed } = await probeShareSources(refs, { fetchImpl: fn });
     assert.equal(probed[0].status, "reachable");
+    // The range matters as much as the method: without it, every HEAD-refusing
+    // host would have its whole object downloaded by the readiness check.
+    assert.deepEqual(attempts, [
+      { method: "HEAD", range: undefined },
+      { method: "GET", range: "bytes=0-0" },
+    ]);
   });
 
   it("reads an opaque browser rejection as browser-blocked", async () => {
