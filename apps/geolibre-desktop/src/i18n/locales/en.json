@@ -1721,9 +1721,7 @@
       "miles": "mi"
     },
     "viewshedHere": "Viewshed from here ({{radius}})",
-    "viewshedLayerName": "Viewshed ({{radius}})",
-    "unitKilometers": "km",
-    "unitMeters": "m"
+    "viewshedLayerName": "Viewshed ({{radius}})"
   },
   "knowledgeCard": {
     "title": "Place info",

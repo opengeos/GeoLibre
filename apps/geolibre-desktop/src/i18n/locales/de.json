@@ -1721,9 +1721,7 @@
       "miles": "mi"
     },
     "viewshedHere": "Sichtfeld von hier ({{radius}})",
-    "viewshedLayerName": "Sichtfeld ({{radius}})",
-    "unitKilometers": "km",
-    "unitMeters": "m"
+    "viewshedLayerName": "Sichtfeld ({{radius}})"
   },
   "knowledgeCard": {
     "title": "Ortsinformationen",

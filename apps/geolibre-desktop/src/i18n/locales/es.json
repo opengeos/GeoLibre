@@ -1721,9 +1721,7 @@
       "miles": "mi"
     },
     "viewshedHere": "Cuenca visual desde aquí ({{radius}})",
-    "viewshedLayerName": "Cuenca visual ({{radius}})",
-    "unitKilometers": "km",
-    "unitMeters": "m"
+    "viewshedLayerName": "Cuenca visual ({{radius}})"
   },
   "knowledgeCard": {
     "title": "Información del lugar",

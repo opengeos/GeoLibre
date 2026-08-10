@@ -1678,9 +1678,7 @@
       "miles": "mi"
     },
     "viewshedHere": "Area pandang dari sini ({{radius}})",
-    "viewshedLayerName": "Area pandang ({{radius}})",
-    "unitKilometers": "km",
-    "unitMeters": "m"
+    "viewshedLayerName": "Area pandang ({{radius}})"
   },
   "knowledgeCard": {
     "title": "Info tempat",

@@ -16,8 +16,8 @@ import {
   BookOpen,
   Braces,
   Circle,
-  Eye,
   Crosshair,
+  Eye,
   Earth,
   MapIcon,
   MapPin,
@@ -208,7 +208,8 @@ export function MapContextMenu({
     const useKm = meters >= 1000;
     const value = useKm ? meters / 1000 : meters;
     const formatted = new Intl.NumberFormat(i18n.language).format(value);
-    return `${formatted} ${useKm ? t("quickAnalysis.unitKilometers") : t("quickAnalysis.unitMeters")}`;
+    // Same unit catalog formatBufferDistance uses for the buffer presets below.
+    return `${formatted} ${useKm ? t("quickAnalysis.unit.kilometers") : t("quickAnalysis.unit.meters")}`;
   };
 
   const formatDistance = useCallback(

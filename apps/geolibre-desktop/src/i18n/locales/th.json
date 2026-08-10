@@ -1678,9 +1678,7 @@
       "miles": "mi"
     },
     "viewshedHere": "พื้นที่มองเห็นจากจุดนี้ ({{radius}})",
-    "viewshedLayerName": "พื้นที่มองเห็น ({{radius}})",
-    "unitKilometers": "กม.",
-    "unitMeters": "ม."
+    "viewshedLayerName": "พื้นที่มองเห็น ({{radius}})"
   },
   "knowledgeCard": {
     "title": "ข้อมูลสถานที่",

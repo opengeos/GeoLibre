@@ -1721,9 +1721,7 @@
       "miles": "mil"
     },
     "viewshedHere": "Buradan görüş alanı ({{radius}})",
-    "viewshedLayerName": "Görüş alanı ({{radius}})",
-    "unitKilometers": "km",
-    "unitMeters": "m"
+    "viewshedLayerName": "Görüş alanı ({{radius}})"
   },
   "knowledgeCard": {
     "title": "Yer bilgisi",
