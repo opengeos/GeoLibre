@@ -3890,7 +3890,7 @@
       "footerText": "Texto de pie de página",
       "footerPlaceholder": "Pie de página mostrado en la parte inferior de cada página",
       "markers": "Marcadores de ubicación en los que se puede hacer clic",
-      "markersHint": "Dibuja una chincheta en la ubicación de cada capítulo. Al hacer clic en ella en un visor de PDF se abre esa coordenada en Google Maps.",
+      "markersHint": "Se dibuja un marcador en la ubicación de cada capítulo. Al hacer clic en el marcador en un visor de PDF se abre esa coordenada en Google Maps.",
       "startSlide": "Diapositiva inicial",
       "endSlide": "Diapositiva de cierre",
       "generate": "Generar PDF",

@@ -3890,7 +3890,7 @@
       "footerText": "Fußzeilentext",
       "footerPlaceholder": "Fußzeile, die unten auf jeder Seite angezeigt wird",
       "markers": "Anklickbare Standortmarker",
-      "markersHint": "Zeichnet an jedem Kapitelstandort eine Stecknadel. Ein Klick darauf im PDF-Betrachter öffnet diese Koordinate in Google Maps.",
+      "markersHint": "An jedem Kapitelstandort wird ein Marker gezeichnet. Ein Klick auf den Marker im PDF-Betrachter öffnet diese Koordinate in Google Maps.",
       "startSlide": "Startfolie",
       "endSlide": "Abschlussfolie",
       "generate": "PDF erstellen",

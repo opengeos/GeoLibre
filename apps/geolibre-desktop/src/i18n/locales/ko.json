@@ -3825,7 +3825,7 @@
       "footerText": "바닥글 텍스트",
       "footerPlaceholder": "각 페이지 하단에 표시되는 바닥글",
       "markers": "클릭 가능한 위치 마커",
-      "markersHint": "각 챕터 위치에 핀을 그립니다. PDF 뷰어에서 핀을 클릭하면 해당 좌표가 Google 지도에서 열립니다.",
+      "markersHint": "각 챕터 위치에 마커를 그립니다. PDF 뷰어에서 마커를 클릭하면 해당 좌표가 Google 지도에서 열립니다.",
       "startSlide": "시작 슬라이드",
       "endSlide": "마무리 슬라이드",
       "generate": "PDF 생성",

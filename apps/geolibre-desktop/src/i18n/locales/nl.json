@@ -3890,7 +3890,7 @@
       "footerText": "Voettekst",
       "footerPlaceholder": "Voettekst weergegeven onderaan elke pagina",
       "markers": "Klikbare locatiemarkeringen",
-      "markersHint": "Tekent een speld op de locatie van elk hoofdstuk. Klikken op de speld in een pdf-viewer opent die coördinaat in Google Maps.",
+      "markersHint": "Er wordt een markering getekend op de locatie van elk hoofdstuk. Klikken op de markering in een pdf-viewer opent die coördinaat in Google Maps.",
       "startSlide": "Startdia",
       "endSlide": "Slotdia",
       "generate": "PDF genereren",

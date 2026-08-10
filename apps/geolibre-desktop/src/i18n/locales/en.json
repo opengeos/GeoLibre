@@ -3890,7 +3890,7 @@
       "footerText": "Footer text",
       "footerPlaceholder": "Footer shown at the bottom of each page",
       "markers": "Clickable location markers",
-      "markersHint": "Draw a pin at each chapter's location. In a PDF viewer, clicking a pin opens that coordinate in Google Maps.",
+      "markersHint": "Draws a marker at each chapter's location. In a PDF viewer, clicking a marker opens that coordinate in Google Maps.",
       "startSlide": "Start slide",
       "endSlide": "Closing slide",
       "generate": "Generate PDF",

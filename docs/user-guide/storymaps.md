@@ -89,11 +89,11 @@ document title, subtitle, byline, and footer text drawn on every page. Each
 chapter page shows the captured map view, the chapter photo beside it when the
 chapter has one, and the chapter description.
 
-**Clickable location markers** draws a pin at each chapter's location, tip on
-the chapter coordinate. Opened in a PDF viewer, clicking a pin opens that
-coordinate in Google Maps, so a reader can navigate to the place. The pin takes
-the story's **Marker color**, and the option starts on when **Show markers** is
-enabled for the story.
+**Clickable location markers** draws a marker at each chapter's location, its
+tip on the chapter coordinate. Opened in a PDF viewer, clicking a marker opens
+that coordinate in Google Maps, so a reader can navigate to the place. The
+marker takes the story's **Marker color**, and the option starts on when **Show
+markers** is enabled for the story.
 
 ## Export to HTML
 

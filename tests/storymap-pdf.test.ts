@@ -211,6 +211,24 @@ describe("buildStoryMapHandoutPdf", () => {
     assert.ok(!text.includes("/S /URI"));
   });
 
+  it("skips a marker whose map image cannot hold the pin's halo", () => {
+    // 8000x500 fits to a band about 17mm tall on A4 landscape: taller than the
+    // coloured pin (8mm) but shorter than twice the halo (18.9mm), so half the
+    // image height is not enough to keep the halo inside the map. Drawing it
+    // would bleed white ink above the image, into the chapter title.
+    const bytes = buildStoryMapHandoutPdf(
+      [
+        chapter({
+          map: { data: PNG_2X2, width: 8000, height: 500 },
+          marker: { url: "https://example.com/place", color: "#3fb1ce" },
+        }),
+      ],
+      opts(),
+    );
+    const text = Buffer.from(bytes).toString("latin1");
+    assert.ok(!text.includes("/S /URI"));
+  });
+
   it("renders a full-bleed slide page", () => {
     // A full-bleed slide (start/closing screen) has no title or description and
     // still produces a valid one-page document.

@@ -3825,7 +3825,7 @@
       "footerText": "フッターテキスト",
       "footerPlaceholder": "各ページの下部に表示されるフッター",
       "markers": "クリックできる位置マーカー",
-      "markersHint": "各チャプターの位置にピンを描画します。PDF ビューアーでピンをクリックすると、その座標が Google マップで開きます。",
+      "markersHint": "各チャプターの位置にマーカーを描画します。PDF ビューアーでマーカーをクリックすると、その座標が Google マップで開きます。",
       "startSlide": "開始スライド",
       "endSlide": "終了スライド",
       "generate": "PDFを生成",

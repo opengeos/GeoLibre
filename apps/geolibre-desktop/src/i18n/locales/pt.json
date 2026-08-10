@@ -3890,7 +3890,7 @@
       "footerText": "Texto de rodapé",
       "footerPlaceholder": "Rodapé mostrado na parte inferior de cada página",
       "markers": "Marcadores de local clicáveis",
-      "markersHint": "Desenha um pino na localização de cada capítulo. Clicar no pino num leitor de PDF abre essa coordenada no Google Maps.",
+      "markersHint": "É desenhado um marcador na localização de cada capítulo. Clicar no marcador num leitor de PDF abre essa coordenada no Google Maps.",
       "startSlide": "Slide inicial",
       "endSlide": "Slide de encerramento",
       "generate": "Gerar PDF",

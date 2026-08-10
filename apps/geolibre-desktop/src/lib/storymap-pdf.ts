@@ -454,10 +454,13 @@ function drawChapterPage(
     // The capture is centered on the chapter camera, so the chapter coordinate
     // is the middle of the drawn map image. Skip the pin when the image is too
     // small to hold it, rather than letting it spill over the title (#1839).
+    // The bounds measure the halo pin, which is the widest and tallest ink
+    // drawn; the tip sits at the image's midpoint, so the halo needs half the
+    // image height above it to stay inside.
     if (
       chapter.marker &&
-      mapRect.height >= PIN_HEIGHT_MM * 2 &&
-      mapRect.width >= PIN_HEAD_RADIUS_MM * 4
+      mapRect.height >= PIN_HEIGHT_MM * PIN_HALO_SCALE * 2 &&
+      mapRect.width >= PIN_HEAD_RADIUS_MM * PIN_HALO_SCALE * 2
     ) {
       drawMarkerPin(
         pdf,
