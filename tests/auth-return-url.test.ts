@@ -3,7 +3,51 @@ import { describe, it } from "node:test";
 import {
   isSignInCallback,
   mergeStashedQuery,
+  stripCallbackParams,
 } from "../apps/geolibre-desktop/src/lib/auth-return-url";
+
+describe("keeping one login attempt out of the next", () => {
+  it("drops Auth0's parameters, keeping the app's", () => {
+    assert.equal(
+      stripCallbackParams("?code=abc&state=xyz&project=p1&locale=fr"),
+      "?project=p1&locale=fr",
+    );
+  });
+
+  it("drops the parameters a refusal leaves behind", () => {
+    // The error screen keeps these: auth0-react cleans the URL only after a
+    // callback it accepted. Signing in again from there must not carry them.
+    assert.equal(
+      stripCallbackParams("?error=access_denied&error_description=Nope&state=xyz&locale=fr"),
+      "?locale=fr",
+    );
+  });
+
+  it("returns an empty string when only Auth0's parameters were present", () => {
+    assert.equal(stripCallbackParams("?code=abc&state=xyz"), "");
+    assert.equal(stripCallbackParams(""), "");
+  });
+
+  it("survives a retry round trip without re-arming the error", () => {
+    // Deep link → refused → "Try again" stashes the error screen's URL → a
+    // successful callback merges it back. `error` must not reappear, or the SDK
+    // rejects the login that just succeeded and every retry does it again.
+    const deepLink = "?project=p1&locale=fr";
+    const refused = mergeStashedQuery(
+      "?error=access_denied&error_description=Nope&state=s1",
+      stripCallbackParams(deepLink),
+    );
+    const retryStash = stripCallbackParams(refused);
+    const accepted = mergeStashedQuery("?code=c2&state=s2", retryStash);
+    const params = new URLSearchParams(accepted);
+    assert.equal(params.has("error"), false, accepted);
+    assert.equal(params.has("error_description"), false, accepted);
+    assert.equal(params.get("code"), "c2");
+    assert.equal(params.get("state"), "s2");
+    assert.equal(params.get("project"), "p1");
+    assert.equal(params.get("locale"), "fr");
+  });
+});
 
 describe("recognizing a return from Auth0", () => {
   it("matches a successful login", () => {

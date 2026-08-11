@@ -12,7 +12,7 @@ import { AlertTriangle, LogOut, User } from "lucide-react";
 import { useCallback, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useBeforeUnloadGuard } from "../../hooks/useBeforeUnloadGuard";
-import { stashAuthReturnQuery } from "../../lib/auth-return-url";
+import { CALLBACK_PARAMS, stashAuthReturnQuery } from "../../lib/auth-return-url";
 
 interface Auth0GateProps {
   /** Tenant (or custom) domain, already normalized to a bare hostname. */
@@ -46,7 +46,7 @@ function redirectUri(): string {
  */
 function onRedirectCallback(appState?: AppState): void {
   const url = new URL(appState?.returnTo ?? window.location.href, window.location.href);
-  for (const param of ["code", "state", "error", "error_description"]) {
+  for (const param of CALLBACK_PARAMS) {
     url.searchParams.delete(param);
   }
   window.history.replaceState({}, "", url.toString());
@@ -220,10 +220,12 @@ export function Auth0Gate({ domain, clientId, children }: Auth0GateProps) {
       //
       // The trade is that the cached entry outlives the tab and is readable by
       // anything running on this origin, plugins included. What it holds is
-      // bounded on purpose: no API audience is requested and `useRefreshTokens`
-      // is left off, so it is a short-lived identity assertion that cannot be
-      // renewed and opens no upstream service on its own. Documented for
-      // operators in the Auth0 section of docs/getting-started.md.
+      // bounded on purpose: no API audience is requested, so it is an identity
+      // assertion that opens no upstream service on its own, and
+      // `useRefreshTokens` is left off, so no refresh token is stored — renewal
+      // goes back through silent authentication against the tenant, which only
+      // succeeds while the Auth0 session cookie is there to answer it.
+      // Documented for operators in the Auth0 section of docs/getting-started.md.
       cacheLocation="localstorage"
     >
       <Auth0Screens>{children}</Auth0Screens>

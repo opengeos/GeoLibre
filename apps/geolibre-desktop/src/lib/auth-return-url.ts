@@ -19,6 +19,30 @@
 const STASH_KEY = "geolibre.auth.returnQuery";
 
 /**
+ * The parameters Auth0 appends to the callback URL, which belong to one attempt.
+ *
+ * They must never be carried into the next one. A refused login leaves `error`
+ * in the address bar — auth0-react only cleans the URL after a callback it
+ * *accepted*, so the error screen keeps them — and stashing that URL for the
+ * retry would put `error` back on the next, successful callback, where the SDK
+ * rejects the whole login. That is a permanent lockout: every retry re-arms it.
+ */
+export const CALLBACK_PARAMS = ["code", "state", "error", "error_description"] as const;
+
+/**
+ * Drop Auth0's callback parameters from a query string.
+ *
+ * @param search - A query string, with or without its leading `?`.
+ * @returns A `?`-prefixed query string, or `""` when nothing is left.
+ */
+export function stripCallbackParams(search: string): string {
+  const params = new URLSearchParams(search);
+  for (const key of CALLBACK_PARAMS) params.delete(key);
+  const remaining = params.toString();
+  return remaining ? `?${remaining}` : "";
+}
+
+/**
  * Merge stashed query parameters into the callback URL's own.
  *
  * The callback's parameters win, so the single-use `code`/`state` Auth0 appended
@@ -43,13 +67,18 @@ export function mergeStashedQuery(currentSearch: string, stashedSearch: string):
 /**
  * Remember the current query and hash before a sign-in redirect leaves the page.
  *
+ * Only the app's own parameters are kept: signing in again from the error screen
+ * would otherwise stash that screen's `error`, and hand it to the next attempt.
+ * See {@link CALLBACK_PARAMS}.
+ *
  * A no-op when sessionStorage is unavailable (private-mode restrictions, storage
  * disabled): the deep link is then lost on the round trip exactly as it was
  * before, which is a cosmetic loss and never a reason to block signing in.
  */
 export function stashAuthReturnQuery(): void {
   try {
-    sessionStorage.setItem(STASH_KEY, window.location.search + window.location.hash);
+    const search = stripCallbackParams(window.location.search);
+    sessionStorage.setItem(STASH_KEY, search + window.location.hash);
   } catch {
     // Storage blocked — see above.
   }

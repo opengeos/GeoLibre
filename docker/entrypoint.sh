@@ -420,7 +420,16 @@ if [ -n "$(trim "${GEOLIBRE_CLERK_PUBLISHABLE_KEY:-}")" ]; then
 fi
 
 if [ -n "$(trim "${GEOLIBRE_AUTH0_DOMAIN:-}")" ]; then
-  echo "Auth0 sign-in gate enabled for $(trim "$GEOLIBRE_AUTH0_DOMAIN")."
+  # Normalized the same way the Python blocks above do, so an operator diffing
+  # this line against the generated runtime config and CSP sees the one host all
+  # three actually use — pasting "https://tenant.us.auth0.com/" is expected, and
+  # echoing it back verbatim would not match either generated file. Two
+  # scheme-specific expressions rather than one case-insensitive match, which is
+  # a GNU sed extension.
+  echo "Auth0 sign-in gate enabled for $(trim "$GEOLIBRE_AUTH0_DOMAIN" |
+    tr '[:upper:]' '[:lower:]' |
+    sed -e 's#^http://##' -e 's#^https://##' |
+    cut -d/ -f1)."
 fi
 
 # Render the nginx config from the immutable image template on every boot. The
