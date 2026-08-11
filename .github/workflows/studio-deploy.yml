@@ -1,0 +1,141 @@
+name: Deploy studio.geolibre.app
+
+# Publishes the gated instance at https://studio.geolibre.app on every push to
+# main.
+#
+# studio.geolibre.app is a *separate* private repository that only hosts the
+# built site, so this cannot use actions/deploy-pages — that action deploys the
+# Pages site of the repository it runs in. Instead the build is force-pushed as
+# a single orphan commit to that repository's `gh-pages` branch, which its Pages
+# site serves. Keeping the workflow here means the deployment is versioned
+# alongside the code it ships.
+#
+# This is the same app as web.geolibre.app with the Clerk sign-in gate switched
+# on. It is a client-side gate, not a server boundary: see docs/getting-started.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Ref to build and publish (branch, tag, or SHA)
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never let two deploys race for the same force-pushed branch.
+  group: studio-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and publish
+    # Forks have neither the deploy token nor a reason to publish.
+    if: github.repository == 'opengeos/GeoLibre'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build the gated web app
+        run: npm run build -w geolibre-desktop
+        env:
+          # No GEOLIBRE_APP_BASE: this site is served from the root of its own
+          # domain, unlike the /demo/ subpath pages.yml publishes.
+          #
+          # The Clerk publishable key, which turns the sign-in gate on. It is
+          # public by design (it encodes only the Frontend API hostname), so a
+          # repository variable would do; a secret keeps rotation in one place.
+          # Unset means no gate, so a missing secret publishes an open app —
+          # the guard step below fails the run instead.
+          VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY }}
+          # Clerk's waitlist form, for an instance whose sign-up mode is
+          # Waitlist. Drop this for an invite-only (Restricted) instance.
+          VITE_GEOLIBRE_CLERK_WAITLIST: "1"
+          # The AI assistant and the NASA OPERA disaster-news lookup. Pages
+          # cannot proxy, so these are cross-origin calls to the Worker and
+          # https://studio.geolibre.app must be in its ALLOWED_ORIGINS.
+          VITE_GEOLIBRE_AI_URL: https://ai.geolibre.app
+          VITE_GEOLIBRE_AI_MODEL: ${{ vars.VITE_GEOLIBRE_AI_MODEL }}
+          # Optional third-party keys, as in pages.yml. Each is baked into the
+          # bundle and readable by any signed-in visitor; the matching features
+          # hide themselves when unset.
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+          VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_MAPILLARY_ACCESS_TOKEN: ${{ secrets.VITE_MAPILLARY_ACCESS_TOKEN || vars.VITE_MAPILLARY_ACCESS_TOKEN }}
+          VITE_GEOLIBRE_COLLAB_URL: wss://collab.geolibre.app
+
+      - name: Verify the gate is in the bundle
+        # The point of this deployment is that it is gated. A missing or
+        # misspelled key builds cleanly and publishes an *open* instance, so
+        # confirm the configured key reached the bundle before anything is
+        # pushed.
+        #
+        # Matches the key's exact value, not its `pk_test_`/`pk_live_` prefix:
+        # @clerk/shared ships those prefixes as literals in its own key
+        # validation, so they appear in the bundle whether or not a key is
+        # configured, and a prefix check would pass on an ungated build.
+        env:
+          CLERK_KEY: ${{ secrets.VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY }}
+        run: |
+          if [ -z "$CLERK_KEY" ]; then
+            echo "::error::VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY is unset — refusing to publish an ungated studio.geolibre.app."
+            exit 1
+          fi
+          if ! grep -rqsF -- "$CLERK_KEY" apps/geolibre-desktop/dist/assets; then
+            echo "::error::The configured Clerk key is not in the build — refusing to publish an ungated studio.geolibre.app."
+            exit 1
+          fi
+
+      - name: Prepare the site for GitHub Pages
+        run: |
+          cd apps/geolibre-desktop/dist
+          # Pages serves this branch through its legacy (Jekyll) pipeline, which
+          # silently drops files and directories beginning with an underscore.
+          touch .nojekyll
+          # Keeps the custom domain if the Pages settings are ever reset.
+          echo "studio.geolibre.app" > CNAME
+          # Published Pages sites may be no larger than 1 GB. The build is
+          # ~200 MB today, most of it the two DuckDB-WASM binaries; fail early
+          # rather than publish a site Pages will reject.
+          size=$(du -sm . | cut -f1)
+          echo "Built site: ${size} MB"
+          if [ "$size" -gt 900 ]; then
+            echo "::error::Site is ${size} MB, at the 1 GB GitHub Pages limit."
+            exit 1
+          fi
+
+      - name: Publish to opengeos/studio.geolibre.app
+        env:
+          # Fine-grained PAT with Contents: write on opengeos/studio.geolibre.app.
+          STUDIO_DEPLOY_TOKEN: ${{ secrets.STUDIO_DEPLOY_TOKEN }}
+        run: |
+          cd apps/geolibre-desktop/dist
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Deploy ${GITHUB_SHA} from ${GITHUB_REPOSITORY}"
+          # A fresh orphan commit force-pushed each time, so the hosting
+          # repository stays the size of one build rather than accumulating a
+          # ~200 MB commit per merge to main.
+          git push -q --force \
+            "https://x-access-token:${STUDIO_DEPLOY_TOKEN}@github.com/opengeos/studio.geolibre.app.git" \
+            gh-pages
+          echo "Published ${GITHUB_SHA} to https://studio.geolibre.app"
