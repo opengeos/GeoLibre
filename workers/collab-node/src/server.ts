@@ -302,7 +302,10 @@ export function createRelay(options: RelayOptions = {}): {
           const parsed = JSON.parse(message.identityToken) as ParticipantIdentity;
           if (parsed && typeof parsed.userId === "string" && typeof parsed.username === "string") {
             identity = {
-              provider: typeof parsed.provider === "string" && parsed.provider ? parsed.provider : "geolibre",
+              provider:
+                typeof parsed.provider === "string" && parsed.provider
+                  ? parsed.provider
+                  : "geolibre",
               userId: parsed.userId,
               username: sanitizeDisplayName(parsed.username),
             };
