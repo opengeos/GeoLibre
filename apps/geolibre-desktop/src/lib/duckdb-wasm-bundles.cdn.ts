@@ -39,7 +39,12 @@ export function selectDuckDbBundle(): Promise<duckdb.DuckDBBundle> {
  * `duckdb-browser-*.worker.js` is a plain IIFE rather than an ES module.
  *
  * CSP: this needs `worker-src blob:` and the CDN in `script-src`, both already
- * present in docker/nginx.conf for jsDelivr's `/npm/` path.
+ * present in docker/nginx.conf for jsDelivr's `/npm/` path. The nested
+ * `importScripts` is matched against `script-src`, not `worker-src` -- verified
+ * against that exact policy in Chromium and Firefox, the latter because it has
+ * historically checked worker sub-resources against `worker-src`/`child-src`
+ * instead. A regression here is invisible at build time and looks like a network
+ * failure at runtime, so re-test both if that policy ever changes.
  */
 export function createDuckDbWorker(bundle: duckdb.DuckDBBundle): Worker {
   // `mainWorker` is optional on the type. If it were ever absent, interpolating
@@ -65,11 +70,19 @@ export function createDuckDbWorker(bundle: duckdb.DuckDBBundle): Worker {
       { type: "text/javascript" },
     ),
   );
+  let worker: Worker;
   try {
-    return new Worker(shim);
+    worker = new Worker(shim);
   } catch (error) {
-    // Construction failed, so nothing will ever run the self-revoke above.
+    // Construction threw, so nothing will ever run the self-revoke above.
     URL.revokeObjectURL(shim);
     throw error;
   }
+  // The other path where the self-revoke never runs: construction succeeds but
+  // the script never executes -- a blocked blob worker, or an `importScripts`
+  // that cannot reach the CDN -- which surfaces as an error event rather than a
+  // throw. Revoking an already-revoked url is a no-op, so this is also harmless
+  // on the ordinary path where the script did load and failed later.
+  worker.addEventListener("error", () => URL.revokeObjectURL(shim), { once: true });
+  return worker;
 }
