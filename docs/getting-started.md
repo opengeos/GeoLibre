@@ -349,12 +349,18 @@ request, so `?embed=1` cannot switch it off. The build-time equivalents are
 `VITE_GEOLIBRE_AUTH0_DOMAIN` and `VITE_GEOLIBRE_AUTH0_CLIENT_ID`; the runtime
 variables win when both are present.
 
-In the Auth0 application's settings, add the deployment URL **with its trailing
-slash** to all three of **Allowed Callback URLs**, **Allowed Logout URLs**, and
-**Allowed Web Origins** — for example `https://gis.example.com/`, or
-`https://gis.example.com/geolibre/` for a [subpath
-deployment](#subpath-and-onboarding-build-arguments). Auth0 matches those
-exactly, and a missing entry surfaces as a callback error instead of a login.
+In the Auth0 application's settings, these three fields do not take the same
+value:
+
+- **Allowed Callback URLs** and **Allowed Logout URLs** take the deployment URL
+  **with its trailing slash** — `https://gis.example.com/`, or
+  `https://gis.example.com/geolibre/` for a [subpath
+  deployment](#subpath-and-onboarding-build-arguments). Auth0 matches these
+  exactly, and a missing entry surfaces as a callback error instead of a login.
+- **Allowed Web Origins** takes the **origin only** — no trailing slash and no
+  path, so `https://gis.example.com` even for a subpath deployment. A path here
+  is not matched and breaks the silent-authentication request that restores an
+  existing session.
 
 Auth0 has no embedded sign-in card, so GeoLibre uses **Universal Login**: the
 visitor clicks *Sign in*, is redirected to your tenant's hosted login page, and

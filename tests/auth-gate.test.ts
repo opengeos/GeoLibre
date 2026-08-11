@@ -71,6 +71,17 @@ describe("sign-in gate selection", () => {
     });
   });
 
+  it("counts either half of a split Auth0 pair as naming Auth0 at runtime", () => {
+    // Only the client ID is set at runtime; the domain and a Clerk key come
+    // from the build. Auth0 is still the provider the deployment asked for.
+    const gate = resolveAuthGate(
+      true,
+      { [AUTH0_CLIENT_ID_ENV]: AUTH0.clientId },
+      { ...clerkEnv(), [AUTH0_DOMAIN_ENV]: AUTH0.domain },
+    );
+    assert.deepEqual(gate, { provider: "auth0", ...AUTH0 });
+  });
+
   it("completes a split Auth0 configuration across both levels", () => {
     const gate = resolveAuthGate(
       true,

@@ -74,8 +74,18 @@ describe("optional Auth0 authentication", () => {
     }
   });
 
-  it("stays disabled — loudly — on a half configuration", () => {
-    for (const record of [env("tenant.us.auth0.com", undefined), env(undefined, CLIENT_ID)]) {
+  it("stays disabled — loudly — on a half or malformed configuration", () => {
+    const records = [
+      env("tenant.us.auth0.com", undefined),
+      env(undefined, CLIENT_ID),
+      // One malformed value alongside a good one...
+      env("localhost", CLIENT_ID),
+      env("tenant.us.auth0.com", "not a client id"),
+      // ...and both malformed, which normalizes to the same shape as "unset"
+      // and so is the case most at risk of failing silently.
+      env("localhost", "not a client id"),
+    ];
+    for (const record of records) {
       const messages: unknown[] = [];
       const original = console.error;
       console.error = (message: unknown) => messages.push(message);
@@ -84,7 +94,7 @@ describe("optional Auth0 authentication", () => {
       } finally {
         console.error = original;
       }
-      assert.equal(messages.length, 1);
+      assert.equal(messages.length, 1, JSON.stringify(record));
     }
   });
 

@@ -79,14 +79,17 @@ export function resolveAuth0Config(
   buildEnv?: EnvRecord,
 ): Auth0Config | undefined {
   if (!webApp) return undefined;
-  const domain = normalizeDomain(readDeploymentEnvValue(AUTH0_DOMAIN_ENV, deploymentEnv, buildEnv));
-  const clientId = normalizeClientId(
-    readDeploymentEnvValue(AUTH0_CLIENT_ID_ENV, deploymentEnv, buildEnv),
-  );
+  const rawDomain = readDeploymentEnvValue(AUTH0_DOMAIN_ENV, deploymentEnv, buildEnv);
+  const rawClientId = readDeploymentEnvValue(AUTH0_CLIENT_ID_ENV, deploymentEnv, buildEnv);
+  const domain = normalizeDomain(rawDomain);
+  const clientId = normalizeClientId(rawClientId);
   if (!domain || !clientId) {
     // Only complain when something was configured: an unset gate is the normal
-    // case for every public deployment and must stay silent.
-    if (domain || clientId) {
+    // case for every public deployment and must stay silent. Tested on the raw
+    // values, not the normalized ones — two malformed values normalize to
+    // undefined, and reading those would turn the loudest misconfiguration
+    // (nothing usable at all) into the one that says nothing.
+    if (rawDomain || rawClientId) {
       console.error(
         `[GeoLibre] Ignoring an incomplete Auth0 configuration: ${AUTH0_DOMAIN_ENV} and ` +
           `${AUTH0_CLIENT_ID_ENV} must both be set to valid values. The sign-in gate is OFF.`,

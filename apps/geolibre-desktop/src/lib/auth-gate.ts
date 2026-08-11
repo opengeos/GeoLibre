@@ -1,4 +1,4 @@
-import { AUTH0_DOMAIN_ENV, resolveAuth0Config } from "./auth0-auth";
+import { AUTH0_CLIENT_ID_ENV, AUTH0_DOMAIN_ENV, resolveAuth0Config } from "./auth0-auth";
 import {
   CLERK_PUBLISHABLE_KEY_ENV,
   resolveClerkPublishableKey,
@@ -57,7 +57,12 @@ export function resolveAuthGate(
     const clerkNamedAtRuntime = Boolean(
       readDeploymentEnvValue(CLERK_PUBLISHABLE_KEY_ENV, deployment, {}),
     );
-    const auth0NamedAtRuntime = Boolean(readDeploymentEnvValue(AUTH0_DOMAIN_ENV, deployment, {}));
+    // Either half counts: the pair can be split across the two tiers, so a
+    // deployment that supplies only the client ID at runtime has still named
+    // Auth0 there, and checking the domain alone would hand it back to Clerk.
+    const auth0NamedAtRuntime =
+      Boolean(readDeploymentEnvValue(AUTH0_DOMAIN_ENV, deployment, {})) ||
+      Boolean(readDeploymentEnvValue(AUTH0_CLIENT_ID_ENV, deployment, {}));
     if (auth0NamedAtRuntime && !clerkNamedAtRuntime) return { provider: "auth0", ...auth0 };
     return clerk();
   }
