@@ -1602,7 +1602,12 @@
   "auth": {
     "unavailableTitle": "Sign-in is unavailable",
     "unavailableDescription": "GeoLibre could not reach the sign-in service, so it cannot tell whether you are signed in. This is usually temporary; if it persists, this deployment's authentication settings may need attention.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "signInTitle": "Sign in to GeoLibre",
+    "signInDescription": "This deployment requires an account. You will be taken to a secure sign-in page and returned here.",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "account": "Account"
   },
   "basemapExtract": {
     "title": "Extract Offline Basemap",

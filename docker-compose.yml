@@ -13,8 +13,11 @@ services:
       # them with the public TLS origins when deploying behind an ingress.
       GEOLIBRE_SHARE_URL: "${GEOLIBRE_SHARE_URL:-http://localhost:8000}"
       GEOLIBRE_COLLAB_URL: "${GEOLIBRE_COLLAB_URL:-ws://localhost:8787}"
+      # Optional sign-in gate: configure either Clerk or Auth0, not both.
       GEOLIBRE_CLERK_PUBLISHABLE_KEY: "${GEOLIBRE_CLERK_PUBLISHABLE_KEY:-}"
       GEOLIBRE_CLERK_WAITLIST: "${GEOLIBRE_CLERK_WAITLIST:-}"
+      GEOLIBRE_AUTH0_DOMAIN: "${GEOLIBRE_AUTH0_DOMAIN:-}"
+      GEOLIBRE_AUTH0_CLIENT_ID: "${GEOLIBRE_AUTH0_CLIENT_ID:-}"
     depends_on:
       geolibre-server:
         condition: service_healthy

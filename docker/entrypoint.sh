@@ -192,6 +192,39 @@ if clerk_waitlist in ("1", "true"):
 elif clerk_waitlist not in ("", "0", "false"):
     raise SystemExit("ERROR: GEOLIBRE_CLERK_WAITLIST must be 1/true or 0/false.")
 
+# Optional Auth0 sign-in gate, the alternative to Clerk above. Both values are
+# public by design (they end up in the runtime config every visitor downloads);
+# an Auth0 client *secret* is not used by a single-page application and must
+# never be passed here. The pair is validated together so a half configuration
+# fails at container startup rather than silently serving an ungated app.
+auth0_domain = os.environ.get("GEOLIBRE_AUTH0_DOMAIN", "").strip()
+auth0_client_id = os.environ.get("GEOLIBRE_AUTH0_CLIENT_ID", "").strip()
+if auth0_domain or auth0_client_id:
+    if clerk_key:
+        raise SystemExit(
+            "ERROR: configure either Clerk or Auth0, not both. Unset "
+            "GEOLIBRE_CLERK_PUBLISHABLE_KEY or the GEOLIBRE_AUTH0_* variables."
+        )
+    if not auth0_domain or not auth0_client_id:
+        raise SystemExit(
+            "ERROR: GEOLIBRE_AUTH0_DOMAIN and GEOLIBRE_AUTH0_CLIENT_ID must be set together."
+        )
+    # The dashboard shows the domain without a scheme, but "https://tenant..."
+    # is the natural thing to paste; the SDK builds its URLs by concatenation,
+    # so a scheme left in place yields https://https://... and a login that
+    # fails with no useful error. Normalize here and reject anything that is not
+    # a plain hostname (a port, credentials, a path).
+    auth0_host = re.sub(r"^https?://", "", auth0_domain, flags=re.IGNORECASE).split("/")[0].lower()
+    if not re.fullmatch(r"[a-z0-9.-]+", auth0_host) or "." not in auth0_host:
+        raise SystemExit(
+            "ERROR: GEOLIBRE_AUTH0_DOMAIN must be a tenant hostname such as example.us.auth0.com."
+        )
+    # Auth0 issues base62 client IDs, so anything else is a paste error.
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", auth0_client_id):
+        raise SystemExit("ERROR: GEOLIBRE_AUTH0_CLIENT_ID is not a valid Auth0 client ID.")
+    deployment["VITE_GEOLIBRE_AUTH0_DOMAIN"] = auth0_host
+    deployment["VITE_GEOLIBRE_AUTH0_CLIENT_ID"] = auth0_client_id
+
 # Origins allowed to drive a framed app over the embed postMessage API. Unset
 # means the API stays off, so a public deployment can never be driven by the
 # page that frames it. "*" allows any origin: private networks only.
@@ -386,6 +419,10 @@ if [ -n "$(trim "${GEOLIBRE_CLERK_PUBLISHABLE_KEY:-}")" ]; then
   esac
 fi
 
+if [ -n "$(trim "${GEOLIBRE_AUTH0_DOMAIN:-}")" ]; then
+  echo "Auth0 sign-in gate enabled for $(trim "$GEOLIBRE_AUTH0_DOMAIN")."
+fi
+
 # Render the nginx config from the immutable image template on every boot. The
 # template is never mutated, so a container *restart* (which re-runs this script
 # with a freshly generated token but keeps the writable layer) always writes a
@@ -449,6 +486,23 @@ if clerk_key:
     clerk_src = f" https://{clerk_fapi} https://challenges.cloudflare.com https://*.protect.clerk.com"
     clerk_frame_src = " https://challenges.cloudflare.com https://*.protect.clerk.com"
 
+# Auth0 needs no script-src entry -- its SDK is bundled into the app -- and its
+# token endpoint is already covered by the bare `https:` in connect-src. What it
+# does need is frame-src for the hidden silent-authentication iframe the SDK
+# opens against the tenant to restore a session. Validated independently of the
+# runtime-config block above for the same reason the Clerk decode is: this is a
+# separate `python -c` process, so an edit that reorders or drops that block must
+# not turn a bad value into a raw traceback here.
+auth0_frame_src = ""
+auth0_domain = os.environ.get("GEOLIBRE_AUTH0_DOMAIN", "").strip()
+if auth0_domain:
+    auth0_host = re.sub(r"^https?://", "", auth0_domain, flags=re.IGNORECASE).split("/")[0].lower()
+    if not re.fullmatch(r"[a-z0-9.-]+", auth0_host) or "." not in auth0_host:
+        raise SystemExit(
+            "ERROR: GEOLIBRE_AUTH0_DOMAIN must be a tenant hostname such as example.us.auth0.com."
+        )
+    auth0_frame_src = f" https://{auth0_host}"
+
 src = open("/etc/nginx/nginx.conf.template").read()
 open("/etc/nginx/conf.d/default.conf", "w").write(
     src.replace("__GEOLIBRE_SIDECAR_TOKEN__", token).replace(
@@ -457,6 +511,8 @@ open("/etc/nginx/conf.d/default.conf", "w").write(
         "__GEOLIBRE_CLERK_SCRIPT_SRC__", clerk_src
     ).replace(
         "__GEOLIBRE_CLERK_FRAME_SRC__", clerk_frame_src
+    ).replace(
+        "__GEOLIBRE_AUTH0_FRAME_SRC__", auth0_frame_src
     )
 )
 '

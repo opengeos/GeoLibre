@@ -270,7 +270,10 @@ publicly.
 #### Clerk sign-in gate (optional)
 
 For individual user accounts instead of one shared password, configure a Clerk
-application for the deployment domain and pass its publishable key:
+application for the deployment domain and pass its publishable key. (If you
+already use Auth0, skip to [the Auth0 gate](#auth0-sign-in-gate-optional) —
+it is the same feature with a different provider, and you configure one or the
+other, never both.)
 
 ```bash
 docker run --rm -p 8080:80 \
@@ -322,6 +325,67 @@ sensitive upstream service behind nginx authentication, Cloudflare Access, or a
 backend that verifies Clerk session tokens on every request. Use the existing
 `GEOLIBRE_AUTH_USER` and `GEOLIBRE_AUTH_PASSWORD` variables as well when the
 whole container must be protected before its assets are served.
+
+#### Auth0 sign-in gate (optional)
+
+The same whole-app sign-in gate, for deployments that already use Auth0. Create
+a **Single Page Application** in the Auth0 Dashboard and pass its domain and
+client ID — both are public values, and an Auth0 client *secret* is neither
+needed nor accepted here:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_AUTH0_DOMAIN='example.us.auth0.com' \
+  -e GEOLIBRE_AUTH0_CLIENT_ID='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+Both variables are required together, and configuring Auth0 *and* Clerk at once
+is refused at startup rather than resolved silently — pick one provider. As with
+Clerk, neither SDK is loaded when nothing is configured, the gate applies only
+to the hosted web application (the Tauri, mobile, and embedded/Jupyter builds
+are compiled without it), and it is a property of the build rather than the
+request, so `?embed=1` cannot switch it off. The build-time equivalents are
+`VITE_GEOLIBRE_AUTH0_DOMAIN` and `VITE_GEOLIBRE_AUTH0_CLIENT_ID`; the runtime
+variables win when both are present.
+
+In the Auth0 application's settings, add the deployment URL **with its trailing
+slash** to all three of **Allowed Callback URLs**, **Allowed Logout URLs**, and
+**Allowed Web Origins** — for example `https://gis.example.com/`, or
+`https://gis.example.com/geolibre/` for a [subpath
+deployment](#subpath-and-onboarding-build-arguments). Auth0 matches those
+exactly, and a missing entry surfaces as a callback error instead of a login.
+
+Auth0 has no embedded sign-in card, so GeoLibre uses **Universal Login**: the
+visitor clicks *Sign in*, is redirected to your tenant's hosted login page, and
+is returned to the app. The URL they arrived on is carried through the round
+trip, so a shared `?project=…` link still opens its project after signing in.
+
+##### Approving users
+
+Who may sign in is decided in the Auth0 Dashboard, not by GeoLibre:
+
+- **Authentication → Database → Sign Ups** — turning off self-service sign-up
+  makes the deployment invite-only; you then add people from **User Management
+  → Users** or through an enterprise connection.
+- **Actions** — a post-login Action that calls `api.access.deny()` for anyone
+  outside your organization or role. GeoLibre shows the denial on its own error
+  screen with a way to try another account, rather than a blank page.
+
+There is no equivalent of Clerk's waitlist form, so `GEOLIBRE_CLERK_WAITLIST`
+has no Auth0 counterpart.
+
+The session is cached in the browser so a page reload does not bounce through
+the login page again. Nothing here requests an API audience, so that cached
+token is an identity assertion only and grants no access to any upstream
+service by itself.
+
+Like the Clerk gate, this controls access to the GeoLibre interface but is not a
+server authorization boundary. Keep `/sidecar`, `/ai`, and any other sensitive
+upstream service behind nginx authentication, Cloudflare Access, or a backend
+that verifies Auth0 tokens on every request, and use `GEOLIBRE_AUTH_USER` /
+`GEOLIBRE_AUTH_PASSWORD` as well when the whole container must be protected
+before its assets are served.
 
 #### Subpath and onboarding build arguments
 

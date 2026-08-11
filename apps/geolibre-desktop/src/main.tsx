@@ -46,6 +46,7 @@ import "./lib/swipe-style";
 import { registerSW } from "virtual:pwa-register";
 import { TooltipProvider } from "@geolibre/ui";
 import { I18nextProvider } from "react-i18next";
+import type { ReactNode } from "react";
 // Initializes i18next (resolves the UI language from the `?locale`/`?lang` query
 // param, stored settings, or the browser) before React renders, so the first
 // paint is already in the right language. English is bundled; other locales are
@@ -55,7 +56,8 @@ import i18n, { i18nReady } from "./i18n";
 import { installDiagnosticsCapture } from "./lib/diagnostics";
 import { isTauri } from "./lib/is-tauri";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
-import { resolveClerkPublishableKey, resolveClerkWaitlistEnabled } from "./lib/clerk-auth";
+import { resolveAuthGate, type AuthGateConfig } from "./lib/auth-gate";
+import { getInitialThemeMode } from "./hooks/useThemeMode";
 
 installDiagnosticsCapture();
 // In the desktop build, route geocoding (place search / reverse geocode)
@@ -102,8 +104,44 @@ installStaleChunkReload();
 // `isEmbedded()` — that returns true for a plain `?embed=1` query parameter, so
 // any visitor could disable a configured sign-in wall by typing a URL.
 const isHostedWebApp = !isTauri() && !__GEOLIBRE_EMBED_BUILD__;
-const clerkPublishableKey = resolveClerkPublishableKey(isHostedWebApp);
-const clerkWaitlistEnabled = resolveClerkWaitlistEnabled(isHostedWebApp);
+// Clerk or Auth0, whichever this deployment configured (neither, normally).
+const authGate = resolveAuthGate(isHostedWebApp);
+if (authGate) {
+  // Apply the initial theme now rather than leaving it to <App />. A gate paints
+  // a full-screen signed-out page *before* App mounts, and App is where
+  // useThemeMode adds the `dark` class — so without this a dark-mode visitor
+  // gets a white sign-in screen that flips to dark only after signing in. This
+  // sets exactly what useThemeMode's layout effect will set a moment later
+  // (same helper, same `?theme=` handling), so it is a no-op once App mounts.
+  const initialTheme = getInitialThemeMode();
+  document.documentElement.classList.toggle("dark", initialTheme === "dark");
+  document.documentElement.style.colorScheme = initialTheme;
+}
+
+/**
+ * Load the configured gate's chunk and return a wrapper for the app tree.
+ *
+ * Each provider lives in its own dynamically imported module, so a deployment
+ * downloads only the SDK it actually uses — and an ungated build downloads
+ * neither. Returns null when no gate is configured.
+ */
+function loadAuthGate(
+  config: AuthGateConfig | undefined,
+): Promise<((children: ReactNode) => ReactNode) | null> {
+  if (!config) return Promise.resolve(null);
+  if (config.provider === "clerk") {
+    return import("./components/auth/ClerkGate").then(({ ClerkGate }) => (children: ReactNode) => (
+      <ClerkGate publishableKey={config.publishableKey} waitlist={config.waitlist}>
+        {children}
+      </ClerkGate>
+    ));
+  }
+  return import("./components/auth/Auth0Gate").then(({ Auth0Gate }) => (children: ReactNode) => (
+    <Auth0Gate domain={config.domain} clientId={config.clientId}>
+      {children}
+    </Auth0Gate>
+  ));
+}
 // Register the offline/PWA service worker (web build only). `registerSW` is a
 // no-op stub in the Tauri desktop and embedded Jupyter builds, where the plugin
 // is disabled (see vite.config.ts pwaPlugin).
@@ -147,21 +185,14 @@ registerSW({
 void Promise.all([
   import("./App"),
   import("./components/common/error-boundaries"),
-  clerkPublishableKey ? import("./components/auth/ClerkGate") : Promise.resolve(null),
+  loadAuthGate(authGate),
   // Gate the first render on i18next being initialized with the active locale's
   // (lazily loaded) catalog, so the UI never paints raw translation keys.
   i18nReady,
 ])
-  .then(([{ default: App }, { AppErrorBoundary }, clerkModule]) => {
+  .then(([{ default: App }, { AppErrorBoundary }, withAuthGate]) => {
     const app = <App />;
-    const authenticatedApp =
-      clerkPublishableKey && clerkModule ? (
-        <clerkModule.ClerkGate publishableKey={clerkPublishableKey} waitlist={clerkWaitlistEnabled}>
-          {app}
-        </clerkModule.ClerkGate>
-      ) : (
-        app
-      );
+    const authenticatedApp = withAuthGate ? withAuthGate(app) : app;
     ReactDOM.createRoot(document.getElementById("root")!).render(
       <React.StrictMode>
         <I18nextProvider i18n={i18n}>
