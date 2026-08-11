@@ -88,6 +88,11 @@ function isAllowedOrigin(
 
 function checkRateLimit(key: string, maxRequests = 10, windowMs = 60_000): boolean {
   const now = Date.now();
+  if (rateLimitMap.size > 5000) {
+    for (const [k, rec] of rateLimitMap.entries()) {
+      if (now > rec.resetAt) rateLimitMap.delete(k);
+    }
+  }
   const record = rateLimitMap.get(key);
   if (!record || now > record.resetAt) {
     rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
@@ -307,15 +312,16 @@ export function createRelay(options: RelayOptions = {}): {
         return;
       }
 
-      const tempParticipant: SessionParticipant = {
-        clientId: "temp",
+      const socketClientId = randomUUID();
+      const joiningParticipant: SessionParticipant = {
+        clientId: socketClientId,
         displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
         color: sanitizeColor(message.color),
         role: role as CollaborationRole,
         identity,
         inviteToken,
       };
-      const participantKey = getParticipantKey(tempParticipant);
+      const participantKey = getParticipantKey(joiningParticipant);
 
       if (store.isBlockedKey(id, participantKey)) {
         send(peer, {
@@ -327,13 +333,22 @@ export function createRelay(options: RelayOptions = {}): {
       }
 
       const durableOverride = store.getDurableOverride(id, participantKey);
+      let initialOverride: boolean | undefined = undefined;
+      if (durableOverride !== undefined) {
+        initialOverride = durableOverride;
+      } else if (inviteToken) {
+        const inv = store.getInvites(id).find((i) => i.token === inviteToken && !i.revoked);
+        if (inv) {
+          initialOverride = inv.role === "co-edit";
+        }
+      }
 
       peer.participant = {
-        clientId: randomUUID(),
+        clientId: socketClientId,
         displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
         color: sanitizeColor(message.color),
         role: role as CollaborationRole,
-        ...(durableOverride !== undefined ? { editOverride: durableOverride } : {}),
+        ...(initialOverride !== undefined ? { editOverride: initialOverride } : {}),
         identity,
         inviteToken,
       };
@@ -387,8 +402,10 @@ export function createRelay(options: RelayOptions = {}): {
         return;
       }
       const project = preserveStoredComments(message.project ?? null, persisted.snapshot);
-      const rev = store.saveSnapshot(id, project);
-      broadcast(session, { type: "snapshot", project, origin: participant.clientId, rev }, peer);
+      const nextRev = (persisted.rev ?? 0) + 1;
+      store.saveSnapshot(id, project, nextRev);
+      persisted.rev = nextRev;
+      broadcast(session, { type: "snapshot", project, origin: participant.clientId, rev: nextRev }, peer);
       return;
     }
 
@@ -442,17 +459,22 @@ export function createRelay(options: RelayOptions = {}): {
         return;
       }
       const role: CollaborationMode = message.role === "view-only" ? "view-only" : "co-edit";
-      const token = randomUUID().slice(0, 16);
+      const token = randomUUID();
+      const maxUses = Number.isSafeInteger(message.maxUses) && (message.maxUses as number) > 0 ? (message.maxUses as number) : undefined;
       const invite: CollabInvite = {
         token,
         role,
         createdAt: Date.now(),
-        ...(message.maxUses ? { maxUses: message.maxUses } : {}),
+        ...(maxUses !== undefined ? { maxUses } : {}),
         useCount: 0,
         revoked: false,
       };
-      store.createInvite(id, invite);
-      send(peer, { type: "invite-created", invite });
+      store.saveInvite(id, invite);
+      for (const p of session.peers) {
+        if (p.participant?.role === "host") {
+          send(p, { type: "invite-created", invite });
+        }
+      }
       return;
     }
 

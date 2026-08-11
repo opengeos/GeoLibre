@@ -1127,8 +1127,6 @@ export interface CollaborationParticipant {
   editOverride: boolean | null;
   /** Optional account identity when signed-in identity binding is enabled. */
   identity?: ParticipantIdentity | null;
-  /** Optional invite token used to join the session. */
-  inviteToken?: string | null;
 }
 
 /** A remote participant's live cursor + viewport, used to render presence. */

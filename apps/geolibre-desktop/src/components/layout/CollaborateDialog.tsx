@@ -287,7 +287,7 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
                       disabled={busy}
                       className="h-3.5 w-3.5 rounded border"
                     />
-                    Require signed-in account to join
+                    {(t as (key: string) => string)("collaborate.requireIdentityLabel")}
                   </label>
                   <Button
                     type="button"
@@ -404,7 +404,7 @@ function ActiveSession({
             onChange={(e) => onSetSessionConfig?.({ requireIdentity: e.target.checked })}
             className="h-3.5 w-3.5 rounded border"
           />
-          Require signed-in account to join
+          {(t as (key: string) => string)("collaborate.requireIdentityLabel")}
         </label>
       )}
 

@@ -123,7 +123,8 @@ export class CollabSession extends DurableObject<Env> {
     );
   }
 
-  private readDurableOverride(participantKey: string): boolean | undefined {
+  private readDurableOverride(participantKey: string | null): boolean | undefined {
+    if (!participantKey) return undefined;
     this.ensureTables();
     const rows = this.ctx.storage.sql
       .exec<{ edit_override: number }>(
@@ -134,7 +135,8 @@ export class CollabSession extends DurableObject<Env> {
     return rows.length > 0 ? rows[0].edit_override === 1 : undefined;
   }
 
-  private writeDurableOverride(participantKey: string, editOverride: boolean | undefined): void {
+  private writeDurableOverride(participantKey: string | null, editOverride: boolean | undefined): void {
+    if (!participantKey) return;
     this.ensureTables();
     if (editOverride === undefined) {
       this.ctx.storage.sql.exec(
@@ -150,7 +152,8 @@ export class CollabSession extends DurableObject<Env> {
     }
   }
 
-  private isBlockedKey(participantKey: string): boolean {
+  private isBlockedKey(participantKey: string | null): boolean {
+    if (!participantKey) return false;
     this.ensureTables();
     const rows = this.ctx.storage.sql
       .exec<{ participant_key: string }>(
@@ -161,7 +164,8 @@ export class CollabSession extends DurableObject<Env> {
     return rows.length > 0;
   }
 
-  private blockKey(participantKey: string): void {
+  private blockKey(participantKey: string | null): void {
+    if (!participantKey) return;
     this.ensureTables();
     this.ctx.storage.sql.exec(
       "INSERT OR REPLACE INTO collab_blocked_keys (participant_key, blocked_at) VALUES (?, ?)",
@@ -494,15 +498,16 @@ export class CollabSession extends DurableObject<Env> {
       return;
     }
 
-    const tempParticipant: SessionParticipant = {
-      clientId: "temp",
+    const socketClientId = crypto.randomUUID();
+    const joiningParticipant: SessionParticipant = {
+      clientId: socketClientId,
       displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
       color: sanitizeColor(message.color),
       role,
       identity,
       inviteToken,
     };
-    const participantKey = getParticipantKey(tempParticipant);
+    const participantKey = getParticipantKey(joiningParticipant);
 
     if (this.isBlockedKey(participantKey)) {
       this.send(ws, {
@@ -514,13 +519,23 @@ export class CollabSession extends DurableObject<Env> {
     }
 
     const durableOverride = this.readDurableOverride(participantKey);
+    let initialOverride: boolean | undefined = undefined;
+    if (durableOverride !== undefined) {
+      initialOverride = durableOverride;
+    } else if (inviteToken) {
+      const invites = this.readInvites();
+      const inv = invites.find((i) => i.token === inviteToken && !i.revoked);
+      if (inv) {
+        initialOverride = inv.role === "co-edit";
+      }
+    }
 
     const attachment: SocketAttachment = {
-      clientId: crypto.randomUUID(),
+      clientId: socketClientId,
       displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
       color: sanitizeColor(message.color),
       role,
-      ...(durableOverride !== undefined ? { editOverride: durableOverride } : {}),
+      ...(initialOverride !== undefined ? { editOverride: initialOverride } : {}),
       identity,
       inviteToken,
     };
@@ -686,12 +701,12 @@ export class CollabSession extends DurableObject<Env> {
       message.canEdit,
     );
     if (!changed) return;
-    // `changed` implies the entry is in this same snapshot -- setParticipantOverride
-    // found and mutated it, with no await in between -- so this always resolves.
     const target = socketsWithAttachments.find(
       (entry) => entry.attachment.clientId === message.clientId,
     );
     if (!target) return;
+    const targetKey = getParticipantKey(target.attachment);
+    this.writeDurableOverride(targetKey, target.attachment.editOverride);
     target.socket.serializeAttachment(target.attachment);
     // Everyone re-derives effective permission from the participants list (the
     // affected guest learns its own change here too), so a single broadcast

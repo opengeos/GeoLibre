@@ -89,9 +89,10 @@ export function CollaborationParticipantRow({
                     type="button"
                     onClick={() => onKickParticipant(p.clientId)}
                     title={(t as (key: string) => string)("collaborate.kick")}
+                    aria-label={(t as (key: string) => string)("collaborate.kick")}
                     className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   >
-                    <UserX className="h-3 w-3" />
+                    <UserX className="h-3 w-3" aria-hidden="true" />
                   </button>
                 )}
                 {onBlockParticipant && (
@@ -99,9 +100,10 @@ export function CollaborationParticipantRow({
                     type="button"
                     onClick={() => onBlockParticipant(p.clientId)}
                     title={(t as (key: string) => string)("collaborate.block")}
+                    aria-label={(t as (key: string) => string)("collaborate.block")}
                     className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   >
-                    <Ban className="h-3 w-3" />
+                    <Ban className="h-3 w-3" aria-hidden="true" />
                   </button>
                 )}
               </>

@@ -40,8 +40,6 @@ export interface CollabParticipant {
   editOverride: boolean | null;
   /** Optional account identity when signed-in identity binding is enabled. */
   identity?: ParticipantIdentity | null;
-  /** Optional invite token used to join the session. */
-  inviteToken?: string | null;
 }
 
 export interface CollabCursor {

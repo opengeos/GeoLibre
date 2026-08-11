@@ -106,8 +106,17 @@ describe("Collaboration Upgrade Proposals", () => {
     }
   });
 
-  it("executes relay end-to-end flow for invites, moderation, and config", async () => {
+  it("executes relay end-to-end flow for invites, moderation, and config", async (t) => {
     const relay = createRelay({ port: 0, dbPath: ":memory:" });
+    let hostWs: WebSocket | null = null;
+    let guestWs: WebSocket | null = null;
+
+    t.after(async () => {
+      hostWs?.close();
+      guestWs?.close();
+      await relay.close();
+    });
+
     await new Promise<void>((res) => relay.server.listen(0, "127.0.0.1", () => res()));
     const address = relay.server.address() as { port: number };
     const baseUrl = `http://127.0.0.1:${address.port}`;
@@ -123,11 +132,12 @@ describe("Collaboration Upgrade Proposals", () => {
     const sessionInfo = (await res.json()) as { sessionId: string; hostToken: string };
 
     // Host connects
-    const hostWs = new WebSocket(`${wsBaseUrl}/sessions/${sessionInfo.sessionId}/ws`);
+    hostWs = new WebSocket(`${wsBaseUrl}/sessions/${sessionInfo.sessionId}/ws`);
     let hostWelcome: any = null;
-    await new Promise<void>((res) => {
-      hostWs.on("open", () => {
-        hostWs.send(
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Host connect timeout")), 5000);
+      hostWs!.on("open", () => {
+        hostWs!.send(
           JSON.stringify({
             type: "join",
             displayName: "HostUser",
@@ -136,11 +146,12 @@ describe("Collaboration Upgrade Proposals", () => {
           }),
         );
       });
-      hostWs.on("message", (raw) => {
+      hostWs!.on("message", (raw) => {
         const msg = JSON.parse(raw.toString());
         if (msg.type === "welcome") {
           hostWelcome = msg;
-          res();
+          clearTimeout(timer);
+          resolve();
         }
       });
     });
@@ -148,32 +159,36 @@ describe("Collaboration Upgrade Proposals", () => {
 
     // Mint invite token
     let inviteToken = "";
-    await new Promise<void>((res) => {
-      hostWs.on("message", (raw) => {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Mint invite timeout")), 5000);
+      hostWs!.on("message", (raw) => {
         const msg = JSON.parse(raw.toString());
         if (msg.type === "invite-created") {
           inviteToken = msg.invite.token;
-          res();
+          clearTimeout(timer);
+          resolve();
         }
       });
-      hostWs.send(JSON.stringify({ type: "mint-invite", role: "view-only", maxUses: 1 }));
+      hostWs!.send(JSON.stringify({ type: "mint-invite", role: "view-only", maxUses: 1 }));
     });
     assert.ok(inviteToken);
 
     // Guest joins using invite token
-    const guestWs = new WebSocket(`${wsBaseUrl}/sessions/${sessionInfo.sessionId}/ws`);
+    guestWs = new WebSocket(`${wsBaseUrl}/sessions/${sessionInfo.sessionId}/ws`);
     let guestWelcome: any = null;
-    await new Promise<void>((res) => {
-      guestWs.on("open", () => {
-        guestWs.send(
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Guest join timeout")), 5000);
+      guestWs!.on("open", () => {
+        guestWs!.send(
           JSON.stringify({ type: "join", displayName: "GuestUser", color: "#dc2626", inviteToken }),
         );
       });
-      guestWs.on("message", (raw) => {
+      guestWs!.on("message", (raw) => {
         const msg = JSON.parse(raw.toString());
         if (msg.type === "welcome") {
           guestWelcome = msg;
-          res();
+          clearTimeout(timer);
+          resolve();
         }
       });
     });
@@ -181,17 +196,19 @@ describe("Collaboration Upgrade Proposals", () => {
 
     // Host kicks guest
     let guestKicked = false;
-    await new Promise<void>((res) => {
-      guestWs.on("message", (raw) => {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Kick guest timeout")), 5000);
+      guestWs!.on("message", (raw) => {
         const msg = JSON.parse(raw.toString());
         if (msg.type === "kicked") {
           guestKicked = true;
         }
       });
-      guestWs.on("close", () => {
-        res();
+      guestWs!.on("close", () => {
+        clearTimeout(timer);
+        resolve();
       });
-      hostWs.send(
+      hostWs!.send(
         JSON.stringify({
           type: "kick-participant",
           clientId: guestWelcome.clientId,
@@ -200,8 +217,5 @@ describe("Collaboration Upgrade Proposals", () => {
       );
     });
     assert.equal(guestKicked, true);
-
-    hostWs.close();
-    await relay.close();
   });
 });

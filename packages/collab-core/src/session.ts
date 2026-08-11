@@ -71,6 +71,34 @@ export function getParticipantKey(
   return `anon:${participant.clientId}`;
 }
 
+function isStructurallyEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || !a || !b) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!isStructurallyEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  const keysA = Object.keys(a as object);
+  const keysB = Object.keys(b as object);
+  if (keysA.length !== keysB.length) return false;
+  for (const k of keysA) {
+    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if (
+      !isStructurallyEqual(
+        (a as Record<string, unknown>)[k],
+        (b as Record<string, unknown>)[k],
+      )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function diffLockedLayers(
   storedProject: unknown,
   inboundProject: unknown,
@@ -108,7 +136,7 @@ export function diffLockedLayers(
     if (!inbound) {
       return { lockedId, layerName };
     }
-    if (JSON.stringify(stored) !== JSON.stringify(inbound)) {
+    if (!isStructurallyEqual(stored, inbound)) {
       return { lockedId, layerName };
     }
   }
@@ -140,6 +168,13 @@ export function authorizeSnapshot(
           : "This session is view-only.",
     };
   }
+  if (byteLength > maxBytes) {
+    return {
+      ok: false,
+      code: "too-large",
+      message: `Snapshot byte length (${byteLength}) exceeds maximum allowed (${maxBytes}).`,
+    };
+  }
   if (
     participant.role !== "host" &&
     lockedLayerIds.length > 0 &&
@@ -154,13 +189,6 @@ export function authorizeSnapshot(
         message: `Layer "${diff.layerName}" is locked by the host and cannot be modified.`,
       };
     }
-  }
-  if (byteLength > maxBytes) {
-    return {
-      ok: false,
-      code: "too-large",
-      message: "Project is too large to sync live. Share it via URL instead.",
-    };
   }
   return { ok: true };
 }
@@ -177,15 +205,28 @@ export function normalizeMode(mode: unknown): CollaborationMode {
 }
 
 export function setParticipantOverride(
-  actor: Pick<SessionParticipant, "role">,
-  participants: SessionParticipant[],
-  clientId: unknown,
-  canEdit: unknown,
+  actorOrParticipants: Pick<SessionParticipant, "role"> | SessionParticipant[],
+  participantsOrClientId: SessionParticipant[] | string | unknown,
+  clientIdOrCanEdit?: unknown,
+  canEditVal?: unknown,
 ): boolean {
-  if (actor.role !== "host" || typeof clientId !== "string") return false;
-  const target = participants.find((participant) => participant.clientId === clientId);
+  if (Array.isArray(actorOrParticipants)) {
+    const target = actorOrParticipants.find((p) => p.clientId === participantsOrClientId);
+    if (!target || target.role === "host") return false;
+    target.editOverride = clientIdOrCanEdit === true;
+    return true;
+  }
+  const actor = actorOrParticipants as Pick<SessionParticipant, "role">;
+  if (
+    actor.role !== "host" ||
+    !Array.isArray(participantsOrClientId) ||
+    typeof clientIdOrCanEdit !== "string"
+  ) {
+    return false;
+  }
+  const target = participantsOrClientId.find((p) => p.clientId === clientIdOrCanEdit);
   if (!target || target.role === "host") return false;
-  target.editOverride = canEdit === true;
+  target.editOverride = canEditVal === true;
   return true;
 }
 
@@ -207,8 +248,7 @@ export function toWireParticipant(participant: SessionParticipant): CollabPartic
     color: participant.color,
     role: participant.role,
     editOverride: participant.role === "host" ? null : (participant.editOverride ?? null),
-    identity: participant.identity ?? null,
-    inviteToken: participant.inviteToken ?? null,
+    identity: participant.identity ? { provider: participant.identity.provider, userId: participant.identity.userId, username: participant.identity.username } : null,
   };
 }
 

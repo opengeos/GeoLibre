@@ -260,10 +260,19 @@ export function useCollaboration(
           .setCollaboration({ error: message.reason ?? "Removed from session." });
         break;
       }
-      case "error":
+      case "error": {
+        if (pendingConnectRef.current) {
+          const pending = pendingConnectRef.current;
+          pendingConnectRef.current = null;
+          disconnect();
+          store.setCollaboration({ connecting: false, error: message.message });
+          pending.reject(new Error(message.message));
+          return;
+        }
         store.setCollaboration({ error: message.message });
         if (message.code === "too-large") syncPausedRef.current = true;
         break;
+      }
     }
   };
 

@@ -58,13 +58,15 @@ export class SessionStore {
       );
       CREATE TABLE IF NOT EXISTS collab_invites (
         session_id TEXT NOT NULL,
-        token TEXT PRIMARY KEY,
+        token TEXT NOT NULL,
         role TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         max_uses INTEGER,
         use_count INTEGER NOT NULL DEFAULT 0,
-        revoked INTEGER NOT NULL DEFAULT 0
+        revoked INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (session_id, token)
       );
+      CREATE INDEX IF NOT EXISTS idx_collab_invites_session_id ON collab_invites(session_id);
       CREATE TABLE IF NOT EXISTS collab_durable_overrides (
         session_id TEXT NOT NULL,
         participant_key TEXT NOT NULL,
@@ -78,6 +80,18 @@ export class SessionStore {
         PRIMARY KEY (session_id, participant_key)
       );
     `);
+
+    // Schema migrations for existing databases created before these columns existed
+    const columns = (this.db.prepare("PRAGMA table_info(collab_sessions)").all() as { name: string }[]).map((c) => c.name);
+    if (!columns.includes("require_identity")) {
+      this.db.exec("ALTER TABLE collab_sessions ADD COLUMN require_identity INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!columns.includes("locked_layer_ids")) {
+      this.db.exec("ALTER TABLE collab_sessions ADD COLUMN locked_layer_ids TEXT NOT NULL DEFAULT '[]'");
+    }
+    if (!columns.includes("rev")) {
+      this.db.exec("ALTER TABLE collab_sessions ADD COLUMN rev INTEGER NOT NULL DEFAULT 0");
+    }
   }
 
   create(id: string, hostToken: string, mode: CollaborationMode, requireIdentity = false): boolean {
@@ -101,24 +115,18 @@ export class SessionStore {
       hostToken: row.host_token,
       mode: normalizeMode(row.mode),
       requireIdentity: row.require_identity === 1,
-      lockedLayerIds: parseJson(row.locked_layer_ids ?? "[]", []),
-      rev: row.rev,
-      snapshot: parseJson(row.snapshot, null),
+      lockedLayerIds: parseJson<string[]>(row.locked_layer_ids ?? null, []),
+      rev: row.rev ?? 0,
+      snapshot: parseJson<unknown | null>(row.snapshot, null),
       chat: parseStoredChat(row.chat),
       updatedAt: row.updated_at,
     };
   }
 
-  saveSnapshot(id: string, project: unknown): number {
-    const row = this.db
-      .prepare(
-        `UPDATE collab_sessions
-         SET snapshot = ?, rev = rev + 1, updated_at = ?
-         WHERE id = ?
-         RETURNING rev`,
-      )
-      .get(JSON.stringify(project), Date.now(), id) as { rev: number } | undefined;
-    return row?.rev ?? 0;
+  saveSnapshot(id: string, snapshot: unknown, rev: number): void {
+    this.db
+      .prepare("UPDATE collab_sessions SET snapshot = ?, rev = ?, updated_at = ? WHERE id = ?")
+      .run(JSON.stringify(snapshot), rev, Date.now(), id);
   }
 
   saveProjectState(id: string, project: unknown): void {
@@ -133,10 +141,12 @@ export class SessionStore {
       .run(mode, Date.now(), id);
   }
 
-  saveSessionConfig(id: string, requireIdentity: boolean): void {
-    this.db
-      .prepare("UPDATE collab_sessions SET require_identity = ?, updated_at = ? WHERE id = ?")
-      .run(requireIdentity ? 1 : 0, Date.now(), id);
+  saveSessionConfig(id: string, requireIdentity?: boolean): void {
+    if (requireIdentity !== undefined) {
+      this.db
+        .prepare("UPDATE collab_sessions SET require_identity = ?, updated_at = ? WHERE id = ?")
+        .run(requireIdentity ? 1 : 0, Date.now(), id);
+    }
   }
 
   saveLayerLocks(id: string, lockedLayerIds: string[]): void {
@@ -151,7 +161,7 @@ export class SessionStore {
       .run(JSON.stringify(chat), Date.now(), id);
   }
 
-  createInvite(sessionId: string, invite: CollabInvite): void {
+  saveInvite(sessionId: string, invite: CollabInvite): void {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO collab_invites (session_id, token, role, created_at, max_uses, use_count, revoked)
@@ -166,6 +176,10 @@ export class SessionStore {
         invite.useCount,
         invite.revoked ? 1 : 0,
       );
+  }
+
+  createInvite(sessionId: string, invite: CollabInvite): void {
+    this.saveInvite(sessionId, invite);
   }
 
   getInvites(sessionId: string): CollabInvite[] {
@@ -195,7 +209,8 @@ export class SessionStore {
       .run(sessionId, token);
   }
 
-  getDurableOverride(sessionId: string, participantKey: string): boolean | undefined {
+  getDurableOverride(sessionId: string, participantKey: string | null): boolean | undefined {
+    if (!participantKey) return undefined;
     const row = this.db
       .prepare(
         "SELECT edit_override FROM collab_durable_overrides WHERE session_id = ? AND participant_key = ?",
@@ -206,9 +221,10 @@ export class SessionStore {
 
   saveDurableOverride(
     sessionId: string,
-    participantKey: string,
+    participantKey: string | null,
     canEdit: boolean | undefined,
   ): void {
+    if (!participantKey) return;
     if (canEdit === undefined) {
       this.db
         .prepare(
@@ -224,7 +240,8 @@ export class SessionStore {
     }
   }
 
-  isBlockedKey(sessionId: string, participantKey: string): boolean {
+  isBlockedKey(sessionId: string, participantKey: string | null): boolean {
+    if (!participantKey) return false;
     const row = this.db
       .prepare(
         "SELECT participant_key FROM collab_blocked_keys WHERE session_id = ? AND participant_key = ?",
@@ -233,7 +250,8 @@ export class SessionStore {
     return row !== undefined;
   }
 
-  blockKey(sessionId: string, participantKey: string): void {
+  blockKey(sessionId: string, participantKey: string | null): void {
+    if (!participantKey) return;
     this.db
       .prepare(
         "INSERT OR REPLACE INTO collab_blocked_keys (session_id, participant_key, blocked_at) VALUES (?, ?, ?)",
@@ -242,10 +260,17 @@ export class SessionStore {
   }
 
   delete(id: string): void {
-    this.db.prepare("DELETE FROM collab_sessions WHERE id = ?").run(id);
-    this.db.prepare("DELETE FROM collab_invites WHERE session_id = ?").run(id);
-    this.db.prepare("DELETE FROM collab_durable_overrides WHERE session_id = ?").run(id);
-    this.db.prepare("DELETE FROM collab_blocked_keys WHERE session_id = ?").run(id);
+    this.db.exec("BEGIN TRANSACTION");
+    try {
+      this.db.prepare("DELETE FROM collab_sessions WHERE id = ?").run(id);
+      this.db.prepare("DELETE FROM collab_invites WHERE session_id = ?").run(id);
+      this.db.prepare("DELETE FROM collab_durable_overrides WHERE session_id = ?").run(id);
+      this.db.prepare("DELETE FROM collab_blocked_keys WHERE session_id = ?").run(id);
+      this.db.exec("COMMIT");
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
+    }
   }
 
   deleteStaleBefore(cutoff: number, keep: Iterable<string>): void {
@@ -253,10 +278,20 @@ export class SessionStore {
     const rows = this.db
       .prepare("SELECT id FROM collab_sessions WHERE updated_at < ?")
       .all(cutoff) as { id: string }[];
-    for (const row of rows) {
-      if (!keepSet.has(row.id)) {
-        this.delete(row.id);
+    this.db.exec("BEGIN TRANSACTION");
+    try {
+      for (const row of rows) {
+        if (!keepSet.has(row.id)) {
+          this.db.prepare("DELETE FROM collab_sessions WHERE id = ?").run(row.id);
+          this.db.prepare("DELETE FROM collab_invites WHERE session_id = ?").run(row.id);
+          this.db.prepare("DELETE FROM collab_durable_overrides WHERE session_id = ?").run(row.id);
+          this.db.prepare("DELETE FROM collab_blocked_keys WHERE session_id = ?").run(row.id);
+        }
       }
+      this.db.exec("COMMIT");
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
     }
   }
 
