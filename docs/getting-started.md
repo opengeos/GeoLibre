@@ -381,10 +381,15 @@ Who may sign in is decided in the Auth0 Dashboard, not by GeoLibre:
 There is no equivalent of Clerk's waitlist form, so `GEOLIBRE_CLERK_WAITLIST`
 has no Auth0 counterpart.
 
-The session is cached in the browser so a page reload does not bounce through
-the login page again. Nothing here requests an API audience, so that cached
-token is an identity assertion only and grants no access to any upstream
-service by itself.
+The session is cached in the browser's local storage so a page reload does not
+bounce through the login page again. Two things follow from that, worth knowing
+before you enable the gate. Nothing here requests an API audience or a refresh
+token, so what is cached is a short-lived identity assertion that cannot be
+renewed and grants no access to any upstream service by itself. But it does
+outlive the tab, and GeoLibre runs plugins on the same origin as the app — a
+plugin you install can read it, as it could any other same-origin storage.
+Install plugins you trust, and keep the server-side protections below in place
+regardless.
 
 Like the Clerk gate, this controls access to the GeoLibre interface but is not a
 server authorization boundary. Keep `/sidecar`, `/ai`, and any other sensitive

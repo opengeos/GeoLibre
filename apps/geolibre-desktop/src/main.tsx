@@ -47,6 +47,13 @@ import { registerSW } from "virtual:pwa-register";
 import { TooltipProvider } from "@geolibre/ui";
 import { I18nextProvider } from "react-i18next";
 import type { ReactNode } from "react";
+// Puts a deep link's query back after a sign-in redirect dropped it. This import
+// MUST stay above `./i18n` below: it does its work while loading, and `./i18n`
+// resolves the UI language from the query string while *it* loads, so a later
+// position would restore the parameters after they had already been read. Same
+// for the theme, resolved further down this file. A no-op when no sign-in
+// redirect is in flight, so every other build just pays for an empty module.
+import "./lib/auth-return-url-boot";
 // Initializes i18next (resolves the UI language from the `?locale`/`?lang` query
 // param, stored settings, or the browser) before React renders, so the first
 // paint is already in the right language. English is bundled; other locales are

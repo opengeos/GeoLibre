@@ -12,6 +12,7 @@ import { AlertTriangle, LogOut, User } from "lucide-react";
 import { useCallback, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useBeforeUnloadGuard } from "../../hooks/useBeforeUnloadGuard";
+import { stashAuthReturnQuery } from "../../lib/auth-return-url";
 
 interface Auth0GateProps {
   /** Tenant (or custom) domain, already normalized to a bare hostname. */
@@ -123,7 +124,12 @@ function Auth0Screens({ children }: { children: ReactNode }) {
 
   // Preserve the URL the visitor arrived on — Auth0 returns to the registered
   // callback URL, which would otherwise drop a shared `?project=…` link.
+  // `returnTo` restores the address bar once the SDK has processed the callback;
+  // the stash additionally puts the query back *before* the next load reads it,
+  // for the settings resolved during boot (`?locale=`, `?theme=`). See
+  // lib/auth-return-url.ts.
   const signIn = useCallback(() => {
+    stashAuthReturnQuery();
     void loginWithRedirect({ appState: { returnTo: window.location.href } });
   }, [loginWithRedirect]);
 
@@ -210,9 +216,14 @@ export function Auth0Gate({ domain, clientId, children }: Auth0GateProps) {
       // Persist the session across reloads. The default in-memory cache would
       // restore it through a hidden silent-authentication iframe, which fails
       // wherever third-party cookies are blocked (Safari by default), sending
-      // the visitor back to the sign-in card after every refresh. Nothing here
-      // requests an API audience, so the cached token is an identity assertion
-      // and grants no access to any upstream service on its own.
+      // the visitor back to the sign-in card after every refresh.
+      //
+      // The trade is that the cached entry outlives the tab and is readable by
+      // anything running on this origin, plugins included. What it holds is
+      // bounded on purpose: no API audience is requested and `useRefreshTokens`
+      // is left off, so it is a short-lived identity assertion that cannot be
+      // renewed and opens no upstream service on its own. Documented for
+      // operators in the Auth0 section of docs/getting-started.md.
       cacheLocation="localstorage"
     >
       <Auth0Screens>{children}</Auth0Screens>
