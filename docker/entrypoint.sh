@@ -241,9 +241,12 @@ else:
     news_endpoint = ""
 if news_endpoint:
     # Three spellings of one value, because the reader is a plugin loaded from
-    # outside this repo and the app itself never reads any of them:
-    #   - the bare key is the plugin's own contract name;
-    #   - VITE_NASA_OPERA_… is that plugin's build-env spelling, which drops the
+    # outside this repo and the app itself never reads any of them. No apostrophes
+    # below: this whole program is one single-quoted `python -c` argument, and a
+    # literal apostrophe in a comment ends it just as surely as one in code (see
+    # the allowed_hosts note in service_url above).
+    #   - the bare key is the contract name owned by the plugin;
+    #   - VITE_NASA_OPERA_… is the plugin-owned build-env spelling, which drops the
     #     GEOLIBRE_ segment because the variable belongs to the plugin, not here;
     #   - VITE_GEOLIBRE_NASA_OPERA_… is the VITE_GEOLIBRE_<NAME> alias every other
     #     entry in this dict uses, readable through readDeploymentEnvValue().
