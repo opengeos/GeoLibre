@@ -228,9 +228,14 @@ def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
 # service_url() would in fact reject a bare path, having no scheme or netloc.
 news_url = os.environ.get("GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT", "").strip()
 if news_url:
+    # rstrip the trailing slash the way GEOLIBRE_AI_PROXY_URL is handled above. A
+    # base ending in "/" would become ".../tavily" with a doubled slash under a
+    # plain string join, and the plugin doing that join is out of this repo, so
+    # this is the only place that can rule it out. Stripping before service_url()
+    # keeps a slashes-only value an error rather than silently unsetting it.
     news_endpoint = service_url(
         "GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT",
-        news_url,
+        news_url.rstrip("/"),
         ("https",),
         ("http",),
         ("localhost", "127.0.0.1", "::1"),
