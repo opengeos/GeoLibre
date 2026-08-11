@@ -8,6 +8,7 @@ import {
   Waitlist,
 } from "@clerk/react";
 import { useSyncExternalStore, type ReactNode } from "react";
+import { useBeforeUnloadGuard } from "../../hooks/useBeforeUnloadGuard";
 
 interface ClerkGateProps {
   publishableKey: string;
@@ -65,6 +66,15 @@ export function ClerkGate({ publishableKey, waitlist = false, children }: ClerkG
   // Read unconditionally: hooks cannot be called behind a prop check, and the
   // subscription is inert when the waitlist is off.
   const onWaitlistRoute = useOnWaitlistRoute();
+  // Keep the unsaved-work prompt alive across the signed-out screens. <App />
+  // mounts the same guard, but it unmounts the moment the session ends — on an
+  // expiry or revocation as much as on a sign-out click. The project itself
+  // survives that (useAppStore is module-scope, so signing back in re-renders
+  // the same state), but without this the tab could then be closed or reloaded
+  // with unsaved changes and no "Leave site?" prompt, which is where the work
+  // would actually be lost. Duplicated while signed in, where both listeners
+  // read the same isDirty and the browser shows one prompt.
+  useBeforeUnloadGuard();
   return (
     <ClerkProvider publishableKey={publishableKey}>
       <ClerkLoading>
