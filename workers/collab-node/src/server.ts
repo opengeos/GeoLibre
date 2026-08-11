@@ -50,20 +50,6 @@ const ENCODER = new TextEncoder();
 
 const MAX_RATE_LIMIT_KEYS = 10_000;
 const SWEEP_INTERVAL_MS = 60_000;
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-let lastRateLimitSweep = 0;
-
-function cleanupRateLimitMap(now: number): void {
-  for (const [k, rec] of rateLimitMap.entries()) {
-    if (now > rec.resetAt) rateLimitMap.delete(k);
-  }
-  while (rateLimitMap.size >= MAX_RATE_LIMIT_KEYS) {
-    const oldestKey = rateLimitMap.keys().next().value;
-    if (oldestKey === undefined) break;
-    rateLimitMap.delete(oldestKey);
-  }
-  lastRateLimitSweep = now;
-}
 
 function isAllowedOrigin(
   originHeader: string | undefined,
@@ -99,23 +85,6 @@ function isAllowedOrigin(
   } catch {
     return false;
   }
-}
-
-function checkRateLimit(key: string, maxRequests = 10, windowMs = 60_000): boolean {
-  const now = Date.now();
-  if (now - lastRateLimitSweep > SWEEP_INTERVAL_MS || rateLimitMap.size >= MAX_RATE_LIMIT_KEYS) {
-    cleanupRateLimitMap(now);
-  }
-  const record = rateLimitMap.get(key);
-  if (!record || now > record.resetAt) {
-    rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
-    return true;
-  }
-  if (record.count >= maxRequests) {
-    return false;
-  }
-  record.count += 1;
-  return true;
 }
 
 interface Peer {
@@ -180,6 +149,33 @@ export function createRelay(options: RelayOptions = {}): {
     options.trustProxy ?? (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1");
   const store = new SessionStore(dbPath);
   const sessions = new Map<string, LiveSession>();
+  const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+  let lastRateLimitSweep = 0;
+
+  function checkRateLimit(key: string, maxRequests = 10, windowMs = 60_000): boolean {
+    const now = Date.now();
+    if (now - lastRateLimitSweep > SWEEP_INTERVAL_MS || rateLimitMap.size >= MAX_RATE_LIMIT_KEYS) {
+      for (const [k, rec] of rateLimitMap.entries()) {
+        if (now > rec.resetAt) rateLimitMap.delete(k);
+      }
+      while (rateLimitMap.size >= MAX_RATE_LIMIT_KEYS) {
+        const oldestKey = rateLimitMap.keys().next().value;
+        if (oldestKey === undefined) break;
+        rateLimitMap.delete(oldestKey);
+      }
+      lastRateLimitSweep = now;
+    }
+    const record = rateLimitMap.get(key);
+    if (!record || now > record.resetAt) {
+      rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
+      return true;
+    }
+    if (record.count >= maxRequests) {
+      return false;
+    }
+    record.count += 1;
+    return true;
+  }
   const wss = new WebSocketServer({ noServer: true, maxPayload: maxSnapshotBytes + 64_000 });
 
   const sweep = (): void => store.deleteStaleBefore(Date.now() - idleTtlMs, sessions.keys());
@@ -290,16 +286,16 @@ export function createRelay(options: RelayOptions = {}): {
           : "guest";
 
       let inviteToken: string | undefined = undefined;
+      let matchedInvite: CollabInvite | undefined = undefined;
       if (message.inviteToken && typeof message.inviteToken === "string") {
         const invites = store.getInvites(id);
         const inv = invites.find((i) => i.token === message.inviteToken && !i.revoked);
         if (inv && (!inv.maxUses || inv.useCount < inv.maxUses)) {
           inviteToken = inv.token;
+          matchedInvite = inv;
           if (role !== "host") {
             role = "guest";
           }
-          inv.useCount += 1;
-          store.saveInvite(id, inv);
         }
       }
 
@@ -352,11 +348,13 @@ export function createRelay(options: RelayOptions = {}): {
       let initialOverride: boolean | undefined = undefined;
       if (durableOverride !== undefined) {
         initialOverride = durableOverride;
-      } else if (inviteToken) {
-        const inv = store.getInvites(id).find((i) => i.token === inviteToken && !i.revoked);
-        if (inv) {
-          initialOverride = inv.role === "co-edit";
-        }
+      } else if (matchedInvite) {
+        initialOverride = matchedInvite.role === "co-edit";
+      }
+
+      if (matchedInvite) {
+        matchedInvite.useCount += 1;
+        store.saveInvite(id, matchedInvite);
       }
 
       peer.participant = {

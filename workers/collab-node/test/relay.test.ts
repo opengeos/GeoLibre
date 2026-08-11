@@ -313,19 +313,82 @@ describe("Node collaboration relay", () => {
 
   it("only honors X-Forwarded-For when trustProxy is enabled", async () => {
     const untrusted = await start({ trustProxy: false });
-    const res1 = await fetch(`${untrusted.http}/sessions`, {
+    for (let i = 1; i <= 10; i++) {
+      const res = await fetch(`${untrusted.http}/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": `10.0.0.${i}` },
+        body: JSON.stringify({ mode: "co-edit" }),
+      });
+      assert.equal(res.status, 200);
+    }
+    const res11Untrusted = await fetch(`${untrusted.http}/sessions`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-forwarded-for": "1.2.3.4" },
+      headers: { "content-type": "application/json", "x-forwarded-for": "10.0.0.11" },
       body: JSON.stringify({ mode: "co-edit" }),
     });
-    assert.equal(res1.status, 200);
+    assert.equal(res11Untrusted.status, 429);
 
     const trusted = await start({ trustProxy: true });
-    const res2 = await fetch(`${trusted.http}/sessions`, {
+    for (let i = 1; i <= 11; i++) {
+      const res = await fetch(`${trusted.http}/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": `10.0.1.${i}` },
+        body: JSON.stringify({ mode: "co-edit" }),
+      });
+      assert.equal(res.status, 200);
+    }
+  });
+
+  it("defers invite consumption until after authorization checks succeed", async () => {
+    const { http } = await start();
+    const createdRes = await fetch(`${http}/sessions`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-forwarded-for": "1.2.3.4" },
-      body: JSON.stringify({ mode: "co-edit" }),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "co-edit", requireIdentity: true }),
     });
-    assert.equal(res2.status, 200);
+    const created = (await createdRes.json()) as { sessionId: string; hostToken: string };
+
+    const host = await connect(http, created.sessionId);
+    await joinSession(host, created.hostToken);
+
+    host.send(
+      JSON.stringify({
+        type: "mint-invite",
+        role: "co-edit",
+        maxUses: 1,
+      }),
+    );
+    const inviteMsg = await next(host, "invite-created");
+    const inviteToken = (inviteMsg.invite as { token: string }).token;
+
+    const unauthGuest = await connect(http, created.sessionId);
+    unauthGuest.send(
+      JSON.stringify({
+        type: "join",
+        clientId: "client1",
+        displayName: "Guest",
+        color: "#ffffff",
+        inviteToken,
+      }),
+    );
+    const err = await next(unauthGuest, "error");
+    assert.equal(err.code, "identity-required");
+    unauthGuest.close();
+
+    const authGuest = await connect(http, created.sessionId);
+    authGuest.send(
+      JSON.stringify({
+        type: "join",
+        clientId: "client2",
+        displayName: "Alice",
+        color: "#00ff00",
+        inviteToken,
+        identityToken: JSON.stringify({ provider: "geolibre", userId: "user1", username: "Alice" }),
+      }),
+    );
+    const welcome = await next(authGuest, "welcome");
+    assert.equal(welcome.type, "welcome");
+    authGuest.close();
+    host.close();
   });
 });

@@ -468,16 +468,16 @@ export class CollabSession extends DurableObject<Env> {
       message.hostToken && storedToken && message.hostToken === storedToken ? "host" : "guest";
 
     let inviteToken: string | undefined = undefined;
+    let matchedInvite: CollabInvite | undefined = undefined;
     if (message.inviteToken && typeof message.inviteToken === "string") {
       const invites = this.readInvites();
       const inv = invites.find((i) => i.token === message.inviteToken && !i.revoked);
       if (inv && (!inv.maxUses || inv.useCount < inv.maxUses)) {
         inviteToken = inv.token;
+        matchedInvite = inv;
         if (role !== "host") {
           role = "guest";
         }
-        inv.useCount += 1;
-        this.writeInvite(inv);
       }
     }
 
@@ -530,12 +530,13 @@ export class CollabSession extends DurableObject<Env> {
     let initialOverride: boolean | undefined = undefined;
     if (durableOverride !== undefined) {
       initialOverride = durableOverride;
-    } else if (inviteToken) {
-      const invites = this.readInvites();
-      const inv = invites.find((i) => i.token === inviteToken && !i.revoked);
-      if (inv) {
-        initialOverride = inv.role === "co-edit";
-      }
+    } else if (matchedInvite) {
+      initialOverride = matchedInvite.role === "co-edit";
+    }
+
+    if (matchedInvite) {
+      matchedInvite.useCount += 1;
+      this.writeInvite(matchedInvite);
     }
 
     const attachment: SocketAttachment = {
