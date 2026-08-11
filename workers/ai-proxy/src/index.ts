@@ -2,11 +2,11 @@
 // slow non-streaming generation, and below the 600s nginx read timeout that a
 // self-hosted deployment puts in front of this worker.
 const UPSTREAM_HEADER_TIMEOUT_MS = 300_000;
-// Search answers in one shot rather than streaming, so its bound covers the whole
-// call. Roomy because every request is `search_depth: "advanced"` with
-// `include_answer`, which adds extra ranking plus an answer-synthesis step on
-// Tavily's side — a 30s bound turns a merely slow news query during a live
-// disaster event into a 504.
+// Search answers in one shot rather than streaming, so this bound covers the
+// whole call. Twice the 30s it started at, because every request is
+// `search_depth: "advanced"` with `include_answer`, which adds extra ranking
+// plus an answer-synthesis step on Tavily's side; 30s was tight enough to turn
+// a merely slow news query during a live disaster event into a 504.
 const SEARCH_HEADER_TIMEOUT_MS = 60_000;
 const TAVILY_ENDPOINT = "https://api.tavily.com/search";
 
