@@ -344,13 +344,14 @@ describe("Node collaboration relay", () => {
     const createdRes = await fetch(`${http}/sessions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode: "co-edit", requireIdentity: true }),
+      body: JSON.stringify({ mode: "view-only", requireIdentity: true }),
     });
     const created = (await createdRes.json()) as { sessionId: string; hostToken: string };
 
     const host = await connect(http, created.sessionId);
     await joinSession(host, created.hostToken);
 
+    // Host join with hostToken AND inviteToken should not consume the invite.
     host.send(
       JSON.stringify({
         type: "mint-invite",
@@ -361,6 +362,23 @@ describe("Node collaboration relay", () => {
     const inviteMsg = await next(host, "invite-created");
     const inviteToken = (inviteMsg.invite as { token: string }).token;
 
+    // 1. Host reconnects supplying hostToken AND inviteToken; should join as host without burning invite.
+    const hostReconnect = await connect(http, created.sessionId);
+    hostReconnect.send(
+      JSON.stringify({
+        type: "join",
+        clientId: "host2",
+        displayName: "HostReconnect",
+        color: "#000000",
+        hostToken: created.hostToken,
+        inviteToken,
+      }),
+    );
+    const hostWelcome = await next(hostReconnect, "welcome");
+    assert.equal(hostWelcome.role, "host");
+    hostReconnect.close();
+
+    // 2. Unauthenticated guest attempts to join with inviteToken (fails identity check).
     const unauthGuest = await connect(http, created.sessionId);
     unauthGuest.send(
       JSON.stringify({
@@ -375,6 +393,7 @@ describe("Node collaboration relay", () => {
     assert.equal(err.code, "identity-required");
     unauthGuest.close();
 
+    // 3. First authenticated guest joins with inviteToken; succeeds and claims the 1-use co-edit invite.
     const authGuest = await connect(http, created.sessionId);
     authGuest.send(
       JSON.stringify({
@@ -389,6 +408,29 @@ describe("Node collaboration relay", () => {
     const welcome = await next(authGuest, "welcome");
     assert.equal(welcome.type, "welcome");
     authGuest.close();
+
+    // 4. Second authenticated guest attempts to join using the same maxUses: 1 inviteToken.
+    // The invite was consumed by Alice, so authGuest2 does NOT get co-edit override.
+    const authGuest2 = await connect(http, created.sessionId);
+    authGuest2.send(
+      JSON.stringify({
+        type: "join",
+        clientId: "client3",
+        displayName: "Bob",
+        color: "#ff0000",
+        inviteToken,
+        identityToken: JSON.stringify({ provider: "geolibre", userId: "user2", username: "Bob" }),
+      }),
+    );
+    const welcome2 = await next(authGuest2, "welcome");
+    assert.equal(welcome2.type, "welcome");
+
+    // Since the co-edit invite was maxed out, Bob is a view-only guest in this view-only session.
+    authGuest2.send(JSON.stringify({ type: "snapshot", project: { name: "bob" }, rev: 0 }));
+    const editErr = await next(authGuest2, "error");
+    assert.equal(editErr.code, "forbidden");
+
+    authGuest2.close();
     host.close();
   });
 });

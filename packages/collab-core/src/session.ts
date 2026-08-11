@@ -169,7 +169,7 @@ export function authorizeSnapshot(
     return {
       ok: false,
       code: "too-large",
-      message: `Snapshot byte length (${byteLength}) exceeds maximum allowed (${maxBytes}).`,
+      message: "Project is too large to sync live. Share it via URL instead.",
     };
   }
   if (
@@ -202,28 +202,15 @@ export function normalizeMode(mode: unknown): CollaborationMode {
 }
 
 export function setParticipantOverride(
-  actorOrParticipants: Pick<SessionParticipant, "role"> | SessionParticipant[],
-  participantsOrClientId: SessionParticipant[] | string | unknown,
-  clientIdOrCanEdit?: unknown,
-  canEditVal?: unknown,
+  actor: Pick<SessionParticipant, "role">,
+  participants: SessionParticipant[],
+  clientId: unknown,
+  canEdit: unknown,
 ): boolean {
-  if (Array.isArray(actorOrParticipants)) {
-    const target = actorOrParticipants.find((p) => p.clientId === participantsOrClientId);
-    if (!target || target.role === "host") return false;
-    target.editOverride = clientIdOrCanEdit === true;
-    return true;
-  }
-  const actor = actorOrParticipants as Pick<SessionParticipant, "role">;
-  if (
-    actor.role !== "host" ||
-    !Array.isArray(participantsOrClientId) ||
-    typeof clientIdOrCanEdit !== "string"
-  ) {
-    return false;
-  }
-  const target = participantsOrClientId.find((p) => p.clientId === clientIdOrCanEdit);
+  if (actor.role !== "host" || typeof clientId !== "string") return false;
+  const target = participants.find((p) => p.clientId === clientId);
   if (!target || target.role === "host") return false;
-  target.editOverride = canEditVal === true;
+  target.editOverride = canEdit === true;
   return true;
 }
 

@@ -469,15 +469,12 @@ export class CollabSession extends DurableObject<Env> {
 
     let inviteToken: string | undefined = undefined;
     let matchedInvite: CollabInvite | undefined = undefined;
-    if (message.inviteToken && typeof message.inviteToken === "string") {
+    if (role === "guest" && message.inviteToken && typeof message.inviteToken === "string") {
       const invites = this.readInvites();
       const inv = invites.find((i) => i.token === message.inviteToken && !i.revoked);
       if (inv && (!inv.maxUses || inv.useCount < inv.maxUses)) {
         inviteToken = inv.token;
         matchedInvite = inv;
-        if (role !== "host") {
-          role = "guest";
-        }
       }
     }
 
@@ -487,7 +484,7 @@ export class CollabSession extends DurableObject<Env> {
         const parsed = JSON.parse(message.identityToken) as ParticipantIdentity;
         if (parsed && typeof parsed.userId === "string" && typeof parsed.username === "string") {
           identity = {
-            provider: parsed.provider || "geolibre",
+            provider: typeof parsed.provider === "string" && parsed.provider ? parsed.provider : "geolibre",
             userId: parsed.userId,
             username: sanitizeDisplayName(parsed.username),
           };
