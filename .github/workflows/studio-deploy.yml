@@ -62,6 +62,19 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Set up Python for the JupyterLite build
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install the JupyterLite build dependencies
+        # Without these the Vite build prints "`jupyter lite` is not available --
+        # skipping the JupyterLite build" and carries on, so the site publishes
+        # with its Notebook panel unable to load and nothing failing. That is what
+        # studio.geolibre.app shipped until this step existed: /jupyterlite/
+        # returned 404 while the rest of the site served normally.
+        run: pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt
+
       - name: Install frontend dependencies
         run: npm ci
 
@@ -118,6 +131,13 @@ jobs:
           fi
           if ! grep -rqsF -- "$CLERK_KEY" apps/geolibre-desktop/dist/assets; then
             echo "::error::The configured Clerk key is not in the build — refusing to publish an ungated studio.geolibre.app."
+            exit 1
+          fi
+          # The JupyterLite build only warns when its Python deps are missing, so
+          # a break in the install step above would publish a site whose Notebook
+          # panel cannot load, with no failing step to show for it.
+          if [ ! -f apps/geolibre-desktop/dist/jupyterlite/index.html ]; then
+            echo "::error::The JupyterLite site is not in the build — the Notebook panel would not load. Check the 'Install the JupyterLite build dependencies' step."
             exit 1
           fi
 
