@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createRequire, registerHooks } from "node:module";
 import { before, beforeEach, describe, it } from "node:test";
+import type { GeoLibreSelection } from "@geolibre/plugins";
 
 (globalThis as typeof globalThis & { window: typeof globalThis }).window = globalThis;
 (globalThis as typeof globalThis & { location: { search: string } }).location = { search: "" };
@@ -131,6 +132,55 @@ describe("external plugin query API", () => {
     app.getDrawnFeatures?.();
 
     assert.equal(JSON.stringify(useAppStore.getState()), before);
+  });
+
+  it("returns detached features from every plugin query boundary", () => {
+    const store = useAppStore.getState();
+    const layerId = store.addGeoJsonLayer("Sketches", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: "A",
+          properties: { metadata: { label: "Original" } },
+          geometry: { type: "Point", coordinates: [101.7, 3.1] },
+        },
+      ],
+    });
+    store.updateLayer(layerId, {
+      metadata: { sourceKind: SKETCHES_SOURCE_KIND },
+    });
+    store.selectLayer(layerId);
+
+    const app = createAppAPI();
+    let callbackSelection: GeoLibreSelection | undefined;
+    const unsubscribe = app.onSelectionChange?.((selection) => {
+      callbackSelection = selection;
+    });
+    assert.ok(unsubscribe);
+    store.selectFeatures(["A"]);
+    assert.ok(callbackSelection);
+
+    const returnedFeatures = [
+      app.getLayerFeatures?.(layerId)[0],
+      app.getSelectedFeatures?.()[0],
+      app.getDrawnFeatures?.()[0],
+      callbackSelection.features[0],
+    ];
+    for (const feature of returnedFeatures) {
+      assert.ok(feature);
+      const properties = feature.properties as { metadata: { label: string } };
+      properties.metadata.label = "Mutated by plugin";
+      assert.equal(feature.geometry?.type, "Point");
+      feature.geometry.coordinates[0] = 0;
+    }
+    unsubscribe();
+
+    const storedFeature = useAppStore.getState().layers.find((layer) => layer.id === layerId)
+      ?.geojson?.features[0];
+    assert.ok(storedFeature);
+    assert.deepEqual(storedFeature.properties, { metadata: { label: "Original" } });
+    assert.deepEqual(storedFeature.geometry, { type: "Point", coordinates: [101.7, 3.1] });
   });
 
   it("throws when a requested layer does not exist", () => {

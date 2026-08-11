@@ -3,7 +3,7 @@
 ## Interface
 
 ```typescript
-import type { Feature, FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { IControl } from "maplibre-gl";
 
 export type GeoLibreMapControlPosition =
@@ -65,7 +65,7 @@ export interface GeoLibreLayerSummary {
 
 export interface GeoLibreSelection {
   layerId: string | null;
-  features: Feature[];
+  features: Feature<Geometry | null>[];
 }
 
 export interface GeoLibreAppAPI {
@@ -76,10 +76,10 @@ export interface GeoLibreAppAPI {
     sourcePath?: string,
   ) => string;
   listLayers?: () => GeoLibreLayerSummary[];
-  getLayerFeatures?: (layerId: string) => Feature[];
-  getSelectedFeatures?: () => Feature[];
+  getLayerFeatures?: (layerId: string) => Feature<Geometry | null>[];
+  getSelectedFeatures?: () => Feature<Geometry | null>[];
   getSelectedLayerId?: () => string | null;
-  getDrawnFeatures?: () => Feature[];
+  getDrawnFeatures?: () => Feature<Geometry | null>[];
   onSelectionChange?: (
     callback: (selection: GeoLibreSelection) => void,
   ) => () => void;

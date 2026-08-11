@@ -838,8 +838,10 @@ function readPluginSelection(): GeoLibreSelection {
     return { layerId: state.selectedLayerId, features: [] };
   }
   const selected = new Set(state.selectedFeatureIds);
-  const features = (layer.geojson?.features ?? []).filter((feature, index) =>
-    selected.has(String(feature.id ?? index)),
+  const features = structuredClone(
+    (layer.geojson?.features ?? []).filter((feature, index) =>
+      selected.has(String(feature.id ?? index)),
+    ),
   );
   return { layerId: state.selectedLayerId, features };
 }
@@ -866,16 +868,20 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     getLayerFeatures: (layerId: string) => {
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (!layer) throw new Error(`No layer with id "${layerId}"`);
-      return layer.geojson?.features ?? [];
+      return structuredClone(layer.geojson?.features ?? []);
     },
     getSelectedFeatures: () => readPluginSelection().features,
     getSelectedLayerId: () => useAppStore.getState().selectedLayerId,
     getDrawnFeatures: () =>
-      useAppStore
-        .getState()
-        .layers.flatMap((layer) =>
-          layer.metadata.sourceKind === SKETCHES_SOURCE_KIND ? (layer.geojson?.features ?? []) : [],
-        ),
+      structuredClone(
+        useAppStore
+          .getState()
+          .layers.flatMap((layer) =>
+            layer.metadata.sourceKind === SKETCHES_SOURCE_KIND
+              ? (layer.geojson?.features ?? [])
+              : [],
+          ),
+      ),
     onSelectionChange: (callback: (selection: GeoLibreSelection) => void) =>
       useAppStore.subscribe((state, previous) => {
         if (
