@@ -308,7 +308,10 @@ fi
 if [ -n "$(trim "${GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT:-}")" ]; then
   echo "NASA OPERA news proxy: $(trim "$GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT")"
 elif [ -n "${GEOLIBRE_AI_URL:-}" ]; then
-  echo "NASA OPERA news search enabled through $GEOLIBRE_AI_URL."
+  # "routed through", not "enabled": whether search actually works depends on the
+  # Worker holding TAVILY_API_KEY, which this container has no way to see. Without
+  # it the route answers 503 to every request.
+  echo "NASA OPERA news search routed through $GEOLIBRE_AI_URL (requires TAVILY_API_KEY on the Worker)."
 fi
 
 if [ -n "${GEOLIBRE_EMBED_ORIGINS:-}" ]; then
