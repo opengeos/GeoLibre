@@ -24,7 +24,22 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Max-Age": "86400",
 };
 
+const MAX_RATE_LIMIT_KEYS = 10_000;
+const SWEEP_INTERVAL_MS = 60_000;
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+let lastRateLimitSweep = 0;
+
+function cleanupRateLimitMap(now: number): void {
+  for (const [k, rec] of rateLimitMap.entries()) {
+    if (now > rec.resetAt) rateLimitMap.delete(k);
+  }
+  while (rateLimitMap.size >= MAX_RATE_LIMIT_KEYS) {
+    const oldestKey = rateLimitMap.keys().next().value;
+    if (oldestKey === undefined) break;
+    rateLimitMap.delete(oldestKey);
+  }
+  lastRateLimitSweep = now;
+}
 
 function isAllowedOrigin(originHeader: string | null, envAllowed?: string): boolean {
   if (!originHeader) return true;
@@ -61,12 +76,8 @@ function isAllowedOrigin(originHeader: string | null, envAllowed?: string): bool
 
 function checkRateLimit(key: string, maxRequests = 10, windowMs = 60_000): boolean {
   const now = Date.now();
-  // Evict expired entries when the map grows past a threshold so varying keys
-  // (e.g. per-IP) cannot grow the map indefinitely within an isolate's lifetime.
-  if (rateLimitMap.size > 5000) {
-    for (const [k, rec] of rateLimitMap.entries()) {
-      if (now > rec.resetAt) rateLimitMap.delete(k);
-    }
+  if (now - lastRateLimitSweep > SWEEP_INTERVAL_MS || rateLimitMap.size >= MAX_RATE_LIMIT_KEYS) {
+    cleanupRateLimitMap(now);
   }
   const record = rateLimitMap.get(key);
   if (!record || now > record.resetAt) {

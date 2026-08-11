@@ -207,12 +207,14 @@ ephemeral and never written to a project file.
 
 > **Operator note:** `POST /sessions` validates the request `Origin` (or
 > `Referer`) against `ALLOWED_ORIGINS` via `isAllowedOrigin` (defaults to the
-> app's own domains plus `localhost` for development) and enforces a per-IP
-> `checkRateLimit` (10 requests / 60 s). `Access-Control-Allow-Origin: *` is
+> app's own domains plus `localhost` for development) as browser-origin filtering
+> and defense-in-depth (not authentication or a general server-side access gate)
+> and enforces a per-IP `checkRateLimit` (10 requests / 60 s). `Access-Control-Allow-Origin: *` is
 > still sent on responses so non-browser clients (e.g. Tauri) are not blocked by
-> CORS; the origin allowlist is the server-side gate. Configure
-> `ALLOWED_ORIGINS` (comma-separated list) to restrict which pages may create
-> sessions in production.
+> CORS; non-browser clients may omit these headers and remain supported, unless a
+> verifiable credential requirement is added. Configure `ALLOWED_ORIGINS`
+> (comma-separated list) to restrict which browser origins may create sessions in
+> production.
 
 ## Feature flag
 

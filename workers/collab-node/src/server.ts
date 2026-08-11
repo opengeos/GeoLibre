@@ -48,7 +48,22 @@ const MAX_SESSION_BODY_BYTES = 16_384;
 const DEFAULT_IDLE_TTL_MS = 2 * 60 * 60 * 1000;
 const ENCODER = new TextEncoder();
 
+const MAX_RATE_LIMIT_KEYS = 10_000;
+const SWEEP_INTERVAL_MS = 60_000;
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+let lastRateLimitSweep = 0;
+
+function cleanupRateLimitMap(now: number): void {
+  for (const [k, rec] of rateLimitMap.entries()) {
+    if (now > rec.resetAt) rateLimitMap.delete(k);
+  }
+  while (rateLimitMap.size >= MAX_RATE_LIMIT_KEYS) {
+    const oldestKey = rateLimitMap.keys().next().value;
+    if (oldestKey === undefined) break;
+    rateLimitMap.delete(oldestKey);
+  }
+  lastRateLimitSweep = now;
+}
 
 function isAllowedOrigin(
   originHeader: string | undefined,
@@ -88,10 +103,8 @@ function isAllowedOrigin(
 
 function checkRateLimit(key: string, maxRequests = 10, windowMs = 60_000): boolean {
   const now = Date.now();
-  if (rateLimitMap.size > 5000) {
-    for (const [k, rec] of rateLimitMap.entries()) {
-      if (now > rec.resetAt) rateLimitMap.delete(k);
-    }
+  if (now - lastRateLimitSweep > SWEEP_INTERVAL_MS || rateLimitMap.size >= MAX_RATE_LIMIT_KEYS) {
+    cleanupRateLimitMap(now);
   }
   const record = rateLimitMap.get(key);
   if (!record || now > record.resetAt) {
@@ -122,6 +135,7 @@ export interface RelayOptions {
   dbPath?: string;
   maxSnapshotBytes?: number;
   idleTtlMs?: number;
+  trustProxy?: boolean;
 }
 
 function positive(value: string | undefined, fallback: number): number {
@@ -162,6 +176,9 @@ export function createRelay(options: RelayOptions = {}): {
     options.maxSnapshotBytes ?? positive(process.env.COLLAB_MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_BYTES);
   const idleTtlMs =
     options.idleTtlMs ?? positive(process.env.COLLAB_IDLE_TTL_MS, DEFAULT_IDLE_TTL_MS);
+  const trustProxy =
+    options.trustProxy ??
+    (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1");
   const store = new SessionStore(dbPath);
   const sessions = new Map<string, LiveSession>();
   const wss = new WebSocketServer({ noServer: true, maxPayload: maxSnapshotBytes + 64_000 });
@@ -768,8 +785,9 @@ export function createRelay(options: RelayOptions = {}): {
         return json(response, 403, { error: "Forbidden origin" });
       }
 
+      const rawXff = trustProxy ? (request.headers["x-forwarded-for"] as string | undefined) : undefined;
       const clientIp =
-        (request.headers["x-forwarded-for"] as string | undefined)?.split(",")[0].trim() ||
+        rawXff?.split(",")[0].trim() ||
         request.socket.remoteAddress ||
         "unknown";
       if (!checkRateLimit(clientIp, 10, 60_000)) {

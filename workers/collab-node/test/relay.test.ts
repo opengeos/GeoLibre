@@ -310,4 +310,22 @@ describe("Node collaboration relay", () => {
     assert.equal(welcome.rev, 1);
     rejoined.close();
   });
+
+  it("only honors X-Forwarded-For when trustProxy is enabled", async () => {
+    const untrusted = await start({ trustProxy: false });
+    const res1 = await fetch(`${untrusted.http}/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "1.2.3.4" },
+      body: JSON.stringify({ mode: "co-edit" }),
+    });
+    assert.equal(res1.status, 200);
+
+    const trusted = await start({ trustProxy: true });
+    const res2 = await fetch(`${trusted.http}/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "1.2.3.4" },
+      body: JSON.stringify({ mode: "co-edit" }),
+    });
+    assert.equal(res2.status, 200);
+  });
 });
