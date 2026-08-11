@@ -127,6 +127,25 @@ const IS_TAURI_BUILD = !!process.env.TAURI_ENV_PLATFORM;
 // worker and still fetches these per the same first-use rule.)
 const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN !== "0";
 
+// DuckDB-WASM from jsDelivr instead of the build output. Opt-IN, the reverse of
+// PGLITE_CDN above, because DuckDB is on the critical path for opening a local
+// vector file — making that need the network is a real behaviour change, so only
+// a deployment that cannot serve the binaries asks for it.
+//
+// The one that cannot: `duckdb-mvp.wasm` (~40 MB) and `duckdb-eh.wasm` (~35 MB)
+// both exceed the 25 MiB per-asset limit on Cloudflare Pages and Workers static
+// assets, which rejects the upload outright. Nothing else in the build is close
+// (the next largest is ~22 MB), so this single flag is what decides whether the
+// app can be hosted there at all. GitHub Pages allows 100 MB per file and needs
+// none of this.
+//
+// jsDelivr is already an allowed script-src in the web (docker/nginx.conf) and
+// desktop CSPs, and maplibre-gl-duckdb already loads its own DuckDB from there,
+// so this adds no new external origin. The web build's service worker
+// runtime-caches it after first use (the "geolibre-cdn-engines" rule below).
+// Ignored for a Tauri build, which must stay offline-capable.
+const DUCKDB_WASM_CDN = !IS_TAURI_BUILD && process.env.GEOLIBRE_DUCKDB_WASM_CDN === "1";
+
 // PWA/offline support targets the standalone web build only. The Tauri desktop
 // shell already works offline (assets are bundled in the binary), and the
 // embedded Jupyter wheel (GEOLIBRE_EMBED=1) is served from inside a notebook
@@ -563,10 +582,15 @@ function cereusCdnLoaderPlugin(): Plugin {
 }
 
 function duckdbWasmBundlesPlugin(): Plugin {
-  const modulePath = path.resolve(
-    __dirname,
-    IS_TAURI_BUILD ? "src/lib/duckdb-wasm-bundles.tauri.ts" : "src/lib/duckdb-wasm-bundles.ts",
-  );
+  // Tauri first: DUCKDB_WASM_CDN is already false for a desktop build, but the
+  // ordering keeps that guarantee local to this decision rather than resting on
+  // a condition set 400 lines up.
+  const variant = IS_TAURI_BUILD
+    ? "src/lib/duckdb-wasm-bundles.tauri.ts"
+    : DUCKDB_WASM_CDN
+      ? "src/lib/duckdb-wasm-bundles.cdn.ts"
+      : "src/lib/duckdb-wasm-bundles.ts";
+  const modulePath = path.resolve(__dirname, variant);
   return {
     name: "geolibre-duckdb-wasm-bundles",
     enforce: "pre",
@@ -813,6 +837,10 @@ function pwaPlugin(): Plugin[] {
             (url.pathname.startsWith("/pyodide/") ||
               url.pathname.startsWith("/npm/@electric-sql/") ||
               url.pathname.startsWith("/npm/@cereusdb/") ||
+              // Only populated when GEOLIBRE_DUCKDB_WASM_CDN=1 moves the engine
+              // off the origin; harmless otherwise. maplibre-gl-duckdb fetches
+              // its own DuckDB from here regardless, so this caches that too.
+              url.pathname.startsWith("/npm/@duckdb/") ||
               url.pathname.startsWith("/npm/gdal3.js")),
           handler: "CacheFirst",
           options: {

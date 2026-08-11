@@ -18,7 +18,7 @@ import { confirmLargeDataset, type DuckDbVectorLoadOptions } from "./duckdb-vect
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
 import { prjSidecarCrs } from "./prj-sidecar";
-import { selectDuckDbBundle } from "./duckdb-wasm-bundles";
+import { createDuckDbWorker, selectDuckDbBundle } from "./duckdb-wasm-bundles";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
 
 // Re-exported for existing importers (sql-workspace, duckdb-processing, etc.)
@@ -282,7 +282,9 @@ export const ensureDuckDggsExtension = createCommunityExtensionLoader("duck_dggs
 
 async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
   const bundle = await selectDuckDbBundle();
-  const worker = new Worker(bundle.mainWorker!, { type: "module" });
+  // Not `new Worker(bundle.mainWorker)`: a CDN-loaded bundle needs a same-origin
+  // blob shim, so each bundles variant supplies its own worker factory.
+  const worker = createDuckDbWorker(bundle);
   const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
   const db = new duckdb.AsyncDuckDB(logger, worker);
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
