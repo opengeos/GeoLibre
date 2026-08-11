@@ -64,9 +64,14 @@ jobs:
           # Unset means no gate, so a missing secret publishes an open app —
           # the guard step below fails the run instead.
           VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY }}
-          # Clerk's waitlist form, for an instance whose sign-up mode is
-          # Waitlist. Drop this for an invite-only (Restricted) instance.
-          VITE_GEOLIBRE_CLERK_WAITLIST: "1"
+          # Clerk's waitlist form. Off unless the repository variable
+          # GEOLIBRE_CLERK_WAITLIST is set to 1, because the instance is
+          # invite-only (Clerk sign-up mode "Restricted") by default and a
+          # waitlist form there would collect requests nobody can approve. An
+          # unset variable expands to "", which the app reads as unset. Flip it
+          # in Settings → Variables — no code change, and set the Clerk
+          # instance's sign-up mode to Waitlist to match.
+          VITE_GEOLIBRE_CLERK_WAITLIST: ${{ vars.GEOLIBRE_CLERK_WAITLIST }}
           # The AI assistant and the NASA OPERA disaster-news lookup. Pages
           # cannot proxy, so these are cross-origin calls to the Worker and
           # https://studio.geolibre.app must be in its ALLOWED_ORIGINS.
