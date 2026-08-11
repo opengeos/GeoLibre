@@ -1099,6 +1099,21 @@ export type CollaborationRole = "host" | "guest";
 /** Whether guests may edit (`co-edit`) or only watch (`view-only`). */
 export type CollaborationMode = "view-only" | "co-edit";
 
+export interface ParticipantIdentity {
+  provider: string;
+  userId: string;
+  username: string;
+}
+
+export interface CollabInvite {
+  token: string;
+  role: CollaborationMode;
+  createdAt: number;
+  maxUses?: number;
+  useCount: number;
+  revoked: boolean;
+}
+
 export interface CollaborationParticipant {
   clientId: string;
   displayName: string;
@@ -1110,6 +1125,10 @@ export interface CollaborationParticipant {
    * `null` for the host (the host can always edit).
    */
   editOverride: boolean | null;
+  /** Optional account identity when signed-in identity binding is enabled. */
+  identity?: ParticipantIdentity | null;
+  /** Optional invite token used to join the session. */
+  inviteToken?: string | null;
 }
 
 /** A remote participant's live cursor + viewport, used to render presence. */
@@ -1153,6 +1172,12 @@ export interface CollaborationState {
   followHost: boolean;
   /** Recent session chat, oldest first, capped to a bounded window (#754). */
   chat: CollaborationChatMessage[];
+  /** Session flag requiring participants to be signed in. */
+  requireIdentity: boolean;
+  /** Layer IDs marked locked by the host. */
+  lockedLayerIds: string[];
+  /** Active session invites minted by host. */
+  invites: CollabInvite[];
   /** Last human-readable error, surfaced in the Collaborate dialog. */
   error: string | null;
 }

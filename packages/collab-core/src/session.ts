@@ -1,10 +1,12 @@
 import type {
   CollabChatMessage,
   CollabCursor,
+  CollabInvite,
   CollabParticipant,
   CollabView,
   CollaborationMode,
   CollaborationRole,
+  ParticipantIdentity,
 } from "./protocol";
 import { finite, HEX_COLOR_RE } from "./internal/validate";
 
@@ -31,6 +33,8 @@ export interface SessionParticipant {
   color: string;
   role: CollaborationRole;
   editOverride?: boolean;
+  identity?: ParticipantIdentity | null;
+  inviteToken?: string | null;
   lastChatTs?: number;
   lastCommentTs?: number;
 }
@@ -44,9 +48,77 @@ export function participantCanEdit(
   return mode === "co-edit";
 }
 
+export function participantCanEditLayer(
+  participant: Pick<SessionParticipant, "role" | "editOverride">,
+  mode: CollaborationMode,
+  layerId: string,
+  lockedLayerIds: string[] = [],
+): boolean {
+  if (!participantCanEdit(participant, mode)) return false;
+  if (participant.role === "host") return true;
+  return !lockedLayerIds.includes(layerId);
+}
+
+export function getParticipantKey(
+  participant: Pick<SessionParticipant, "clientId" | "identity" | "inviteToken">,
+): string {
+  if (participant.identity?.userId) {
+    return `user:${participant.identity.userId}`;
+  }
+  if (participant.inviteToken) {
+    return `invite:${participant.inviteToken}`;
+  }
+  return `anon:${participant.clientId}`;
+}
+
+export function diffLockedLayers(
+  storedProject: unknown,
+  inboundProject: unknown,
+  lockedLayerIds: string[] = [],
+): { lockedId: string; layerName: string } | null {
+  if (!lockedLayerIds.length || !storedProject || !inboundProject) return null;
+  if (typeof storedProject !== "object" || typeof inboundProject !== "object") return null;
+
+  const storedLayers = Array.isArray((storedProject as { layers?: unknown }).layers)
+    ? ((storedProject as { layers: Record<string, unknown>[] }).layers)
+    : [];
+  const inboundLayers = Array.isArray((inboundProject as { layers?: unknown }).layers)
+    ? ((inboundProject as { layers: Record<string, unknown>[] }).layers)
+    : [];
+
+  const storedMap = new Map<string, Record<string, unknown>>();
+  for (const layer of storedLayers) {
+    if (layer && typeof layer === "object" && typeof layer.id === "string") {
+      storedMap.set(layer.id, layer);
+    }
+  }
+
+  const inboundMap = new Map<string, Record<string, unknown>>();
+  for (const layer of inboundLayers) {
+    if (layer && typeof layer === "object" && typeof layer.id === "string") {
+      inboundMap.set(layer.id, layer);
+    }
+  }
+
+  for (const lockedId of lockedLayerIds) {
+    const stored = storedMap.get(lockedId);
+    if (!stored) continue;
+    const inbound = inboundMap.get(lockedId);
+    const layerName = typeof stored.name === "string" ? stored.name : lockedId;
+    if (!inbound) {
+      return { lockedId, layerName };
+    }
+    if (JSON.stringify(stored) !== JSON.stringify(inbound)) {
+      return { lockedId, layerName };
+    }
+  }
+
+  return null;
+}
+
 export type SnapshotDecision =
   | { ok: true }
-  | { ok: false; code: "forbidden" | "too-large"; message: string };
+  | { ok: false; code: "forbidden" | "too-large" | "layer-locked"; message: string };
 
 /** Shared authorization/size gate used by every relay implementation. */
 export function authorizeSnapshot(
@@ -54,6 +126,9 @@ export function authorizeSnapshot(
   mode: CollaborationMode,
   byteLength: number,
   maxBytes = MAX_SNAPSHOT_BYTES,
+  storedSnapshot?: unknown,
+  inboundSnapshot?: unknown,
+  lockedLayerIds: string[] = [],
 ): SnapshotDecision {
   if (!participantCanEdit(participant, mode)) {
     return {
@@ -64,6 +139,16 @@ export function authorizeSnapshot(
           ? "The host has set you to view-only."
           : "This session is view-only.",
     };
+  }
+  if (participant.role !== "host" && lockedLayerIds.length > 0 && storedSnapshot && inboundSnapshot) {
+    const diff = diffLockedLayers(storedSnapshot, inboundSnapshot, lockedLayerIds);
+    if (diff) {
+      return {
+        ok: false,
+        code: "layer-locked",
+        message: `Layer "${diff.layerName}" is locked by the host and cannot be modified.`,
+      };
+    }
   }
   if (byteLength > maxBytes) {
     return {
@@ -77,7 +162,7 @@ export function authorizeSnapshot(
 
 export function authorizeHostAction(
   participant: Pick<SessionParticipant, "role">,
-  action: "session mode" | "participant permissions",
+  action: string,
 ): string | null {
   return participant.role === "host" ? null : `Only the host can change ${action}.`;
 }
@@ -117,6 +202,8 @@ export function toWireParticipant(participant: SessionParticipant): CollabPartic
     color: participant.color,
     role: participant.role,
     editOverride: participant.role === "host" ? null : (participant.editOverride ?? null),
+    identity: participant.identity ?? null,
+    inviteToken: participant.inviteToken ?? null,
   };
 }
 
@@ -195,3 +282,4 @@ export function parseStoredChat(raw: unknown): CollabChatMessage[] {
   }
   return Array.isArray(raw) ? raw.filter(isValidChatMessage) : [];
 }
+

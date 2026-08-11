@@ -79,21 +79,28 @@ export function sessionWsUrl(wsBase: string, sessionId: string): string {
   return `${wsBase}/sessions/${encodeURIComponent(sessionId)}/ws`;
 }
 
+export interface CreateSessionOptions {
+  mode?: CollaborationMode;
+  requireIdentity?: boolean;
+}
+
 export async function createSession(
-  mode: CollaborationMode,
+  options: CollaborationMode | CreateSessionOptions = "co-edit",
   baseUrl: string | null = resolveCollabBaseUrl(),
   fetchImpl: typeof fetch = fetch,
 ): Promise<CreateSessionResult> {
   if (!baseUrl) {
     throw new Error("Collaboration is not configured. Set VITE_GEOLIBRE_COLLAB_URL.");
   }
+  const mode = typeof options === "string" ? options : options.mode ?? "co-edit";
+  const requireIdentity = typeof options === "object" ? options.requireIdentity === true : false;
   const httpBase = httpBaseFromWs(baseUrl);
   let response: Response;
   try {
     response = await fetchImpl(`${httpBase}/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({ mode, requireIdentity }),
       signal: AbortSignal.timeout(CREATE_TIMEOUT_MS),
     });
   } catch (error) {

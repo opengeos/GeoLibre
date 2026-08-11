@@ -63,24 +63,35 @@ Client → server:
 
 | type | payload | notes |
 | --- | --- | --- |
-| `join` | `displayName, color, hostToken?` | first frame after connect; the relay assigns the `clientId` (returned in `welcome`) |
+| `join` | `displayName, color, hostToken?, inviteToken?, identityToken?` | first frame after connect; the relay assigns the `clientId` (returned in `welcome`) |
 | `snapshot` | `project, rev` | a debounced project push; co-editors only |
 | `presence` | `cursor?, view?` | throttled cursor / viewport |
 | `set-mode` | `mode` | host only |
-| `set-participant-mode` | `clientId, canEdit` | host only; pin one guest to can-edit / view-only (#754) |
+| `set-participant-mode` | `clientId, canEdit` | host only; pin one guest to can-edit / view-only (#754, durable across reconnect) |
+| `mint-invite` | `role, maxUses?` | host only; mint a co-edit or view-only invite link |
+| `revoke-invite` | `token` | host only; invalidate an active invite link |
+| `set-session-config` | `requireIdentity` | host only; mandate signed-in identity to join |
+| `set-layer-locks` | `lockedLayerIds` | host only; mark specific layer IDs read-only |
+| `kick-participant` | `clientId, reason?` | host only; disconnect a participant |
+| `block-participant` | `clientId, reason?` | host only; disconnect and ban participant/identity from rejoining |
 | `chat` | `text, coordinate?` | a chat message, with an optional attached map coordinate (#754) |
 
 Server → client:
 
 | type | payload | notes |
 | --- | --- | --- |
-| `welcome` | `clientId, role, mode, participants[], snapshot \| null, presence, chat[], rev` | sent once on join; the late-joiner bootstrap |
+| `welcome` | `clientId, role, mode, participants[], snapshot \| null, presence, chat[], rev, requireIdentity, lockedLayerIds, invites[]` | sent once on join; the late-joiner bootstrap |
 | `snapshot` | `project, origin, rev` | fan-out of a peer's snapshot |
 | `presence` | `clientId, cursor?, view?` | fan-out of a peer's presence |
-| `participants` | `participants[]` | on join / leave / role / permission change; each carries `editOverride` |
+| `participants` | `participants[]` | on join / leave / role / permission change; each carries `editOverride` and `identity` |
 | `mode` | `mode` | host changed the session mode |
+| `invite-created` | `invite` | fan-out of a new invite link created by host |
+| `invite-revoked` | `token` | fan-out when host revokes an invite link |
+| `session-config` | `requireIdentity` | broadcast when session identity policy changes |
+| `layer-locks` | `lockedLayerIds` | broadcast when host locks/unlocks layer IDs |
+| `kicked` | `reason` | sent to a participant who was kicked or blocked by the host |
 | `chat` | `message` | fan-out of a chat message (echoed to the sender, so order is server-authoritative) (#754) |
-| `error` | `code, message` | e.g. `forbidden`, `too-large` |
+| `error` | `code, message` | e.g. `forbidden`, `too-large`, `identity-required`, `layer-locked` |
 
 ### Echo / feedback-loop prevention
 

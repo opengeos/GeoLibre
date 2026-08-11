@@ -24,6 +24,52 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Max-Age": "86400",
 };
 
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function isAllowedOrigin(originHeader: string | null, envAllowed?: string): boolean {
+  if (!originHeader) return true;
+  const allowedList = envAllowed
+    ? envAllowed.split(",").map((s) => s.trim()).filter(Boolean)
+    : [
+        "https://geolibre.app",
+        "https://collab.geolibre.app",
+        "http://localhost",
+        "http://127.0.0.1",
+        "tauri://localhost",
+      ];
+
+  try {
+    const originUrl = new URL(originHeader);
+    const host = originUrl.hostname;
+    if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost")) return true;
+    return allowedList.some((allowed) => {
+      if (allowed === "*") return true;
+      try {
+        const allowedUrl = new URL(allowed);
+        return originUrl.origin === allowedUrl.origin;
+      } catch {
+        return originHeader === allowed || host === allowed;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
+function checkRateLimit(key: string, maxRequests = 10, windowMs = 60_000): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(key);
+  if (!record || now > record.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (record.count >= maxRequests) {
+    return false;
+  }
+  record.count += 1;
+  return true;
+}
+
 function randomCode(): string {
   const bytes = new Uint8Array(CODE_LENGTH);
   crypto.getRandomValues(bytes);
@@ -57,10 +103,22 @@ export default {
 
     // Create a session.
     if (url.pathname === "/sessions" && request.method === "POST") {
+      const origin = request.headers.get("Origin") ?? request.headers.get("Referer");
+      if (!isAllowedOrigin(origin, env.ALLOWED_ORIGINS)) {
+        return json({ error: "Origin not allowed to create sessions." }, 403);
+      }
+
+      const clientKey = origin ?? request.headers.get("CF-Connecting-IP") ?? "anonymous";
+      if (!checkRateLimit(clientKey)) {
+        return json({ error: "Too many session creation requests. Please try again later." }, 429);
+      }
+
       const body = (await request.json().catch(() => ({}))) as {
         mode?: string;
+        requireIdentity?: boolean;
       };
       const mode = body.mode === "view-only" ? "view-only" : "co-edit";
+      const requireIdentity = body.requireIdentity === true;
       // Retry on the (rare) collision with an existing active session: /init
       // is a no-op when the code is already taken, so without this the caller
       // would receive a hostToken that doesn't match the stored one and be
@@ -71,13 +129,13 @@ export default {
         const stub = env.COLLAB_SESSION.get(env.COLLAB_SESSION.idFromName(sessionId));
         const initRes = await stub.fetch("https://collab/init", {
           method: "POST",
-          body: JSON.stringify({ mode, hostToken }),
+          body: JSON.stringify({ mode, hostToken, requireIdentity }),
         });
         const initBody = (await initRes.json().catch(() => ({}))) as {
           alreadyInitialized?: boolean;
         };
         if (!initBody.alreadyInitialized) {
-          return json({ sessionId, hostToken, mode });
+          return json({ sessionId, hostToken, mode, requireIdentity });
         }
       }
       return json({ error: "Could not allocate a session code. Please try again." }, 503);
@@ -100,3 +158,4 @@ export default {
     return json({ error: "Not found" }, 404);
   },
 };
+
