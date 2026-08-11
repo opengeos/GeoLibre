@@ -170,11 +170,14 @@ if origins:
 def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
     """Validate a self-hosted service URL, or exit with an explanation.
 
-    Both of these carry a Bearer token, so a plaintext scheme is only allowed on
-    loopback (development). The app applies the same rule and *refuses* a value it
-    rejects rather than falling back to the public hosted service — so a value
-    that reaches the app unvalidated becomes a silently disabled feature. Failing
-    the boot instead puts the error where an operator will actually see it.
+    Every caller sends a credential to the value it is given -- the share and
+    collab URLs carry a Bearer token, and a news proxy fronting a Tavily key is
+    only worth pointing at over TLS whatever it asks for -- so a plaintext scheme
+    is only allowed on loopback (development). The app applies the same rule and
+    *refuses* a value it rejects rather than falling back to the public hosted
+    service — so a value that reaches the app unvalidated becomes a silently
+    disabled feature. Failing the boot instead puts the error where an operator
+    will actually see it.
     """
     parsed = urlsplit(value)
     # Both checks below run before the loopback shortcut, so their guarantees hold
