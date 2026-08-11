@@ -150,9 +150,10 @@ Both `npm run dev` and `npm run build` run this automatically:
 
 Both **skip with a warning** when `jupyter lite` is not installed, so a Node-only
 build still succeeds. Be aware of what that produces: the panel does *not* show a
-"not built" message. Its iframe asks for `/jupyterlite/lab/index.html`, and both
-nginx (`try_files $uri /index.html`) and Tauri's asset resolver answer an unknown
-path with `index.html`, so the panel renders **a second copy of GeoLibre**
+"not built" message. Its iframe asks for `/jupyterlite/lab/index.html`, and
+anything that answers an unknown path with `index.html` — Tauri's asset
+resolver, or a static host with an SPA fallback such as
+`try_files $uri /index.html` — hands the panel **a second copy of GeoLibre**
 instead (GeoLibre#1851, GeoLibre#1658). Install the deps above and rebuild.
 
 Two builds therefore treat a missing CLI as fatal rather than skippable, because
@@ -162,8 +163,16 @@ that sets `GEOLIBRE_JUPYTERLITE_REQUIRED=1` (the Docker image does). The desktop
 server), so the static site never bloats the installer.
 
 The Docker image builds and serves the site, and gives `/jupyterlite/` its own
-CSP: JupyterLab bootstraps from an inline `<script>`, which the app's policy
-forbids, so under the app policy the site loads its HTML and then never boots.
+block in `docker/nginx.conf`:
+
+- Its own CSP — JupyterLab bootstraps from an inline `<script>`, which the app's
+  policy forbids, so under the app policy the site loads its HTML and then never
+  boots.
+- No SPA fallback (`try_files $uri $uri/ =404`), so in this image the failure
+  above surfaces as a plain **404** rather than as the duplicated app. The
+  duplicate remains what Tauri and SPA-fallback hosts produce.
+- The long-lived immutable cache policy for the content-hashed assets, which the
+  prefix match would otherwise take away from them.
 
 Build config lives in `apps/geolibre-desktop/jupyterlite/` (a
 `jupyter_lite_config.json`, the build `requirements.txt`, and a starter
