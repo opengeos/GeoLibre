@@ -205,10 +205,14 @@ clickable coordinate that recenters the recipient's map. Chat lives on the
 on-canvas status badge so it is reachable while working on the map; it is
 ephemeral and never written to a project file.
 
-> **Operator note:** `POST /sessions` is unauthenticated and currently responds
-> with `Access-Control-Allow-Origin: *`, so any page can create sessions. This is
-> acceptable for the experimental MVP but should be restricted to the app's own
-> origin(s) before a wider rollout to avoid capacity abuse.
+> **Operator note:** `POST /sessions` validates the request `Origin` (or
+> `Referer`) against `ALLOWED_ORIGINS` via `isAllowedOrigin` (defaults to the
+> app's own domains plus `localhost` for development) and enforces a per-IP
+> `checkRateLimit` (10 requests / 60 s). `Access-Control-Allow-Origin: *` is
+> still sent on responses so non-browser clients (e.g. Tauri) are not blocked by
+> CORS; the origin allowlist is the server-side gate. Configure
+> `ALLOWED_ORIGINS` (comma-separated list) to restrict which pages may create
+> sessions in production.
 
 ## Feature flag
 

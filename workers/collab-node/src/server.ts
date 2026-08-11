@@ -268,7 +268,7 @@ export function createRelay(options: RelayOptions = {}): {
 
     if (message.type === "join") {
       if (peer.participant) return;
-      let role =
+      let role: CollaborationRole =
         message.hostToken && persisted.hostToken && message.hostToken === persisted.hostToken
           ? "host"
           : "guest";
@@ -283,7 +283,7 @@ export function createRelay(options: RelayOptions = {}): {
             role = "guest";
           }
           inv.useCount += 1;
-          store.createInvite(id, inv);
+          store.saveInvite(id, inv);
         }
       }
 
@@ -317,7 +317,7 @@ export function createRelay(options: RelayOptions = {}): {
         clientId: socketClientId,
         displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
         color: sanitizeColor(message.color),
-        role: role as CollaborationRole,
+        role,
         identity,
         inviteToken,
       };
@@ -347,7 +347,7 @@ export function createRelay(options: RelayOptions = {}): {
         clientId: socketClientId,
         displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
         color: sanitizeColor(message.color),
-        role: role as CollaborationRole,
+        role,
         ...(initialOverride !== undefined ? { editOverride: initialOverride } : {}),
         identity,
         inviteToken,
@@ -358,7 +358,7 @@ export function createRelay(options: RelayOptions = {}): {
       send(peer, {
         type: "welcome",
         clientId: peer.participant.clientId,
-        role: role as CollaborationRole,
+        role,
         mode: persisted.mode,
         participants: participants(session).map(toWireParticipant),
         snapshot: persisted.snapshot,
@@ -425,6 +425,9 @@ export function createRelay(options: RelayOptions = {}): {
       store.saveMode(id, mode);
       const list = participants(session);
       if (clearParticipantOverrides(list)) broadcastParticipants(session);
+      // Also clear persisted durable overrides so disconnected participants
+      // don't reconnect with a stale override that contradicts the new mode.
+      store.clearDurableOverrides(id);
       broadcast(session, { type: "mode", mode });
       return;
     }

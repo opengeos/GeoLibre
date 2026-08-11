@@ -61,6 +61,13 @@ function isAllowedOrigin(originHeader: string | null, envAllowed?: string): bool
 
 function checkRateLimit(key: string, maxRequests = 10, windowMs = 60_000): boolean {
   const now = Date.now();
+  // Evict expired entries when the map grows past a threshold so varying keys
+  // (e.g. per-IP) cannot grow the map indefinitely within an isolate's lifetime.
+  if (rateLimitMap.size > 5000) {
+    for (const [k, rec] of rateLimitMap.entries()) {
+      if (now > rec.resetAt) rateLimitMap.delete(k);
+    }
+  }
   const record = rateLimitMap.get(key);
   if (!record || now > record.resetAt) {
     rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
@@ -111,7 +118,7 @@ export default {
         return json({ error: "Origin not allowed to create sessions." }, 403);
       }
 
-      const clientKey = origin ?? request.headers.get("CF-Connecting-IP") ?? "anonymous";
+      const clientKey = request.headers.get("CF-Connecting-IP") ?? origin ?? "anonymous";
       if (!checkRateLimit(clientKey)) {
         return json({ error: "Too many session creation requests. Please try again later." }, 429);
       }

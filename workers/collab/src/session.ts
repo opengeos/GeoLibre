@@ -155,6 +155,11 @@ export class CollabSession extends DurableObject<Env> {
     }
   }
 
+  private clearAllDurableOverrides(): void {
+    this.ensureTables();
+    this.ctx.storage.sql.exec("DELETE FROM collab_durable_overrides");
+  }
+
   private isBlockedKey(participantKey: string | null): boolean {
     if (!participantKey) return false;
     this.ensureTables();
@@ -671,6 +676,10 @@ export class CollabSession extends DurableObject<Env> {
         socket.serializeAttachment(attachment);
       }
     }
+    // Also clear persisted durable overrides so disconnected participants
+    // don't reconnect with a stale override that contradicts the new mode.
+    this.ensureTables();
+    this.ctx.storage.sql.exec("DELETE FROM collab_durable_overrides");
     // Broadcast the cleared roster first, then the new mode, so clients have
     // dropped the stale `editOverride`s by the time they apply the mode change
     // (the two frames are sent back-to-back with no await between them).
@@ -1075,17 +1084,21 @@ export class CollabSession extends DurableObject<Env> {
       return;
     }
     const role: CollaborationMode = message.role === "view-only" ? "view-only" : "co-edit";
-    const token = crypto.randomUUID().slice(0, 16);
+    const token = crypto.randomUUID();
+    const maxUses =
+      Number.isSafeInteger(message.maxUses) && (message.maxUses as number) > 0
+        ? (message.maxUses as number)
+        : undefined;
     const invite: CollabInvite = {
       token,
       role,
       createdAt: Date.now(),
-      ...(message.maxUses ? { maxUses: message.maxUses } : {}),
+      ...(maxUses !== undefined ? { maxUses } : {}),
       useCount: 0,
       revoked: false,
     };
     this.writeInvite(invite);
-    this.send(ws, { type: "invite-created", invite });
+    this.broadcastHostOnly({ type: "invite-created", invite });
   }
 
   private handleRevokeInvite(

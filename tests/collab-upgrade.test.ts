@@ -112,8 +112,8 @@ describe("Collaboration Upgrade Proposals", () => {
     let guestWs: WebSocket | null = null;
 
     t.after(async () => {
-      hostWs?.close();
-      guestWs?.close();
+      hostWs?.terminate();
+      guestWs?.terminate();
       await relay.close();
     });
 
@@ -136,6 +136,24 @@ describe("Collaboration Upgrade Proposals", () => {
     let hostWelcome: any = null;
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("Host connect timeout")), 5000);
+      const cleanup = () => {
+        clearTimeout(timer);
+        hostWs!.removeListener("message", onMessage);
+        hostWs!.removeListener("error", onError);
+      };
+      const onError = (err: Error) => {
+        cleanup();
+        reject(err);
+      };
+      const onMessage = (raw: WebSocket.RawData) => {
+        const msg = JSON.parse(raw.toString());
+        if (msg.type === "welcome") {
+          hostWelcome = msg;
+          cleanup();
+          resolve();
+        }
+      };
+      hostWs!.on("error", onError);
       hostWs!.on("open", () => {
         hostWs!.send(
           JSON.stringify({
@@ -146,14 +164,7 @@ describe("Collaboration Upgrade Proposals", () => {
           }),
         );
       });
-      hostWs!.on("message", (raw) => {
-        const msg = JSON.parse(raw.toString());
-        if (msg.type === "welcome") {
-          hostWelcome = msg;
-          clearTimeout(timer);
-          resolve();
-        }
-      });
+      hostWs!.on("message", onMessage);
     });
     assert.equal(hostWelcome.role, "host");
 
@@ -161,14 +172,25 @@ describe("Collaboration Upgrade Proposals", () => {
     let inviteToken = "";
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("Mint invite timeout")), 5000);
-      hostWs!.on("message", (raw) => {
+      const cleanup = () => {
+        clearTimeout(timer);
+        hostWs!.removeListener("message", onMessage);
+        hostWs!.removeListener("error", onError);
+      };
+      const onError = (err: Error) => {
+        cleanup();
+        reject(err);
+      };
+      const onMessage = (raw: WebSocket.RawData) => {
         const msg = JSON.parse(raw.toString());
         if (msg.type === "invite-created") {
           inviteToken = msg.invite.token;
-          clearTimeout(timer);
+          cleanup();
           resolve();
         }
-      });
+      };
+      hostWs!.on("error", onError);
+      hostWs!.on("message", onMessage);
       hostWs!.send(JSON.stringify({ type: "mint-invite", role: "view-only", maxUses: 1 }));
     });
     assert.ok(inviteToken);
@@ -178,36 +200,71 @@ describe("Collaboration Upgrade Proposals", () => {
     let guestWelcome: any = null;
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("Guest join timeout")), 5000);
+      const cleanup = () => {
+        clearTimeout(timer);
+        guestWs!.removeListener("message", onMessage);
+        guestWs!.removeListener("error", onError);
+      };
+      const onError = (err: Error) => {
+        cleanup();
+        reject(err);
+      };
+      const onMessage = (raw: WebSocket.RawData) => {
+        const msg = JSON.parse(raw.toString());
+        if (msg.type === "welcome") {
+          guestWelcome = msg;
+          cleanup();
+          resolve();
+        }
+      };
+      guestWs!.on("error", onError);
       guestWs!.on("open", () => {
         guestWs!.send(
           JSON.stringify({ type: "join", displayName: "GuestUser", color: "#dc2626", inviteToken }),
         );
       });
-      guestWs!.on("message", (raw) => {
-        const msg = JSON.parse(raw.toString());
-        if (msg.type === "welcome") {
-          guestWelcome = msg;
-          clearTimeout(timer);
-          resolve();
-        }
-      });
+      guestWs!.on("message", onMessage);
     });
     assert.equal(guestWelcome.role, "guest");
+
+    // Verify the invited guest's editOverride is false (view-only invite)
+    const guestParticipant = guestWelcome.participants.find(
+      (p: any) => p.displayName === "GuestUser",
+    );
+    assert.ok(guestParticipant, "Invited guest should appear in welcome.participants");
+    assert.equal(
+      guestParticipant.editOverride,
+      false,
+      "A view-only invite should set editOverride to false",
+    );
 
     // Host kicks guest
     let guestKicked = false;
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("Kick guest timeout")), 5000);
-      guestWs!.on("message", (raw) => {
+      const cleanup = () => {
+        clearTimeout(timer);
+        guestWs!.removeListener("message", onMessage);
+        guestWs!.removeListener("error", onError);
+        guestWs!.removeListener("close", onClose);
+      };
+      const onError = (err: Error) => {
+        cleanup();
+        reject(err);
+      };
+      const onMessage = (raw: WebSocket.RawData) => {
         const msg = JSON.parse(raw.toString());
         if (msg.type === "kicked") {
           guestKicked = true;
         }
-      });
-      guestWs!.on("close", () => {
-        clearTimeout(timer);
+      };
+      const onClose = () => {
+        cleanup();
         resolve();
-      });
+      };
+      guestWs!.on("error", onError);
+      guestWs!.on("message", onMessage);
+      guestWs!.on("close", onClose);
       hostWs!.send(
         JSON.stringify({
           type: "kick-participant",
