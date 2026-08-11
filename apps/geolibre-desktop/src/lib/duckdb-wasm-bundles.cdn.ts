@@ -42,17 +42,34 @@ export function selectDuckDbBundle(): Promise<duckdb.DuckDBBundle> {
  * present in docker/nginx.conf for jsDelivr's `/npm/` path.
  */
 export function createDuckDbWorker(bundle: duckdb.DuckDBBundle): Worker {
+  // `mainWorker` is optional on the type. If it were ever absent, interpolating
+  // it would emit `importScripts(null)` and the failure would surface as a
+  // worker that never answers, so say what actually went wrong instead.
+  if (!bundle.mainWorker) {
+    throw new Error("The DuckDB bundle has no worker URL, so the engine cannot be loaded.");
+  }
+  // The blob revokes its OWN url as its first statement rather than the caller
+  // doing it after `new Worker`. Per the HTML spec the constructor returns before
+  // the worker fetches its script, so revoking from here is a race: the fetch can
+  // land after the revoke and the worker then silently never loads. Revoking
+  // inside the script is safe by construction -- it cannot run until the fetch
+  // has already succeeded -- and it still frees the url exactly once per worker.
+  // `importScripts` then fetches a *different* (CDN) url, so the dead blob url
+  // does not affect it.
   const shim = URL.createObjectURL(
-    new Blob([`importScripts(${JSON.stringify(bundle.mainWorker)});`], {
-      type: "text/javascript",
-    }),
+    new Blob(
+      [
+        `URL.revokeObjectURL(self.location.href);`,
+        `importScripts(${JSON.stringify(bundle.mainWorker)});`,
+      ],
+      { type: "text/javascript" },
+    ),
   );
   try {
     return new Worker(shim);
-  } finally {
-    // The constructor has already resolved the URL, so the worker keeps loading
-    // after this. Releasing it here keeps a session that opens several databases
-    // from leaking one object URL per engine.
+  } catch (error) {
+    // Construction failed, so nothing will ever run the self-revoke above.
     URL.revokeObjectURL(shim);
+    throw error;
   }
 }

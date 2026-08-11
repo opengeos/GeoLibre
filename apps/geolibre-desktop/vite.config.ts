@@ -127,6 +127,15 @@ const IS_TAURI_BUILD = !!process.env.TAURI_ENV_PLATFORM;
 // worker and still fetches these per the same first-use rule.)
 const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN !== "0";
 
+// PWA/offline support targets the standalone web build only. The Tauri desktop
+// shell already works offline (assets are bundled in the binary), and the
+// embedded Jupyter wheel (GEOLIBRE_EMBED=1) is served from inside a notebook
+// where a service worker is meaningless and could even hijack the host page's
+// scope. This is deliberately independent of PGLITE_CDN: the web build CDN-loads
+// PGlite yet still ships a service worker.
+const IS_EMBED = process.env.GEOLIBRE_EMBED === "1";
+const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
+
 // DuckDB-WASM from jsDelivr instead of the build output. Opt-IN, the reverse of
 // PGLITE_CDN above, because DuckDB is on the critical path for opening a local
 // vector file — making that need the network is a real behaviour change, so only
@@ -143,17 +152,13 @@ const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN !== "0";
 // desktop CSPs, and maplibre-gl-duckdb already loads its own DuckDB from there,
 // so this adds no new external origin. The web build's service worker
 // runtime-caches it after first use (the "geolibre-cdn-engines" rule below).
-// Ignored for a Tauri build, which must stay offline-capable.
-const DUCKDB_WASM_CDN = !IS_TAURI_BUILD && process.env.GEOLIBRE_DUCKDB_WASM_CDN === "1";
-
-// PWA/offline support targets the standalone web build only. The Tauri desktop
-// shell already works offline (assets are bundled in the binary), and the
-// embedded Jupyter wheel (GEOLIBRE_EMBED=1) is served from inside a notebook
-// where a service worker is meaningless and could even hijack the host page's
-// scope. This is deliberately independent of PGLITE_CDN: the web build CDN-loads
-// PGlite yet still ships a service worker.
-const IS_EMBED = process.env.GEOLIBRE_EMBED === "1";
-const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
+// Ignored for the two targets that would be made worse by it, which is why this
+// sits below PWA_DISABLED rather than beside PGLITE_CDN: a Tauri build must stay
+// offline-capable, and an embed build ships no service worker, so there the
+// engine would be refetched every notebook session with no runtime cache behind
+// it. Neither target has the size ceiling this exists for -- a wheel and a
+// binary are not uploaded to Cloudflare.
+const DUCKDB_WASM_CDN = !PWA_DISABLED && process.env.GEOLIBRE_DUCKDB_WASM_CDN === "1";
 
 // Microsoft Store MSIX build. Strips the in-app "Check for updates" flow (Help
 // menu, command palette, About dialog, and the automated startup check) so the
