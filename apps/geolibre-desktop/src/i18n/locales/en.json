@@ -1599,6 +1599,11 @@
     "exportCsv": "Export CSV",
     "exportGeoParquet": "Export GeoParquet"
   },
+  "auth": {
+    "unavailableTitle": "Sign-in is unavailable",
+    "unavailableDescription": "GeoLibre could not reach the sign-in service, so it cannot tell whether you are signed in. This is usually temporary; if it persists, this deployment's authentication settings may need attention.",
+    "retry": "Try again"
+  },
   "basemapExtract": {
     "title": "Extract Offline Basemap",
     "url": "Basemap URL",

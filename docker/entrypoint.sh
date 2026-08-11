@@ -310,8 +310,11 @@ if [ -n "${GEOLIBRE_EMBED_ORIGINS:-}" ]; then
 fi
 
 if [ -n "$(trim "${GEOLIBRE_CLERK_PUBLISHABLE_KEY:-}")" ]; then
-  case "$(trim "${GEOLIBRE_CLERK_WAITLIST:-}")" in
-    1 | true | TRUE | True) echo "Clerk sign-in gate enabled, with the waitlist screen." ;;
+  # Lower-cased to match the Python validator above, which compares after
+  # `.lower()` — so a spelling like `TRue` enables the screen and must not then
+  # be logged as a plain sign-in gate.
+  case "$(trim "${GEOLIBRE_CLERK_WAITLIST:-}" | tr '[:upper:]' '[:lower:]')" in
+    1 | true) echo "Clerk sign-in gate enabled, with the waitlist screen." ;;
     *) echo "Clerk sign-in gate enabled." ;;
   esac
 fi

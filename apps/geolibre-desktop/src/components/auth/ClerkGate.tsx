@@ -1,4 +1,5 @@
 import {
+  ClerkFailed,
   ClerkLoaded,
   ClerkLoading,
   ClerkProvider,
@@ -7,7 +8,10 @@ import {
   UserButton,
   Waitlist,
 } from "@clerk/react";
+import { Button } from "@geolibre/ui";
+import { AlertTriangle } from "lucide-react";
 import { useSyncExternalStore, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { useBeforeUnloadGuard } from "../../hooks/useBeforeUnloadGuard";
 
 interface ClerkGateProps {
@@ -63,6 +67,7 @@ function useOnWaitlistRoute(): boolean {
  * who can reach the APIs behind it.
  */
 export function ClerkGate({ publishableKey, waitlist = false, children }: ClerkGateProps) {
+  const { t } = useTranslation();
   // Read unconditionally: hooks cannot be called behind a prop check, and the
   // subscription is inert when the waitlist is off.
   const onWaitlistRoute = useOnWaitlistRoute();
@@ -85,6 +90,26 @@ export function ClerkGate({ publishableKey, waitlist = false, children }: ClerkG
           />
         </div>
       </ClerkLoading>
+      {/* Clerk reports a distinct "error" status (a key that no longer resolves,
+          an unreachable Frontend API, an outage). Both ClerkLoading and
+          ClerkLoaded render null in that state, so without this branch the gate
+          leaves a blank page with no way to tell a stuck deployment from a slow
+          one. */}
+      <ClerkFailed>
+        <main
+          role="alert"
+          className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center"
+        >
+          <AlertTriangle className="h-10 w-10 text-destructive" />
+          <div className="space-y-1">
+            <h1 className="text-lg font-semibold">{t("auth.unavailableTitle")}</h1>
+            <p className="max-w-md text-sm text-muted-foreground">
+              {t("auth.unavailableDescription")}
+            </p>
+          </div>
+          <Button onClick={() => window.location.reload()}>{t("auth.retry")}</Button>
+        </main>
+      </ClerkFailed>
       <ClerkLoaded>
         <Show when="signed-out">
           <main className="flex min-h-screen items-center justify-center bg-background p-4">
