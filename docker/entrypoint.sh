@@ -169,6 +169,23 @@ if clerk_key:
         raise SystemExit("ERROR: GEOLIBRE_CLERK_PUBLISHABLE_KEY contains an invalid Frontend API host.")
     deployment["VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY"] = clerk_key
 
+# Optional waitlist screen, for a Clerk instance whose sign-up mode is
+# "Waitlist": visitors request access and an admin approves each one from the
+# Clerk Dashboard. Off by default, because on a "Restricted" (invite-only)
+# instance the form would take submissions nobody can approve.
+clerk_waitlist = os.environ.get("GEOLIBRE_CLERK_WAITLIST", "").strip().lower()
+if clerk_waitlist in ("1", "true"):
+    # Refuse rather than ignore: an operator who set this expects visitors to be
+    # able to request access, and silently serving a public app instead would be
+    # the opposite of what they asked for.
+    if not clerk_key:
+        raise SystemExit(
+            "ERROR: GEOLIBRE_CLERK_WAITLIST needs GEOLIBRE_CLERK_PUBLISHABLE_KEY; the waitlist is part of the Clerk sign-in gate."
+        )
+    deployment["VITE_GEOLIBRE_CLERK_WAITLIST"] = "1"
+elif clerk_waitlist not in ("", "0", "false"):
+    raise SystemExit("ERROR: GEOLIBRE_CLERK_WAITLIST must be 1/true or 0/false.")
+
 # Origins allowed to drive a framed app over the embed postMessage API. Unset
 # means the API stays off, so a public deployment can never be driven by the
 # page that frames it. "*" allows any origin: private networks only.
@@ -293,7 +310,10 @@ if [ -n "${GEOLIBRE_EMBED_ORIGINS:-}" ]; then
 fi
 
 if [ -n "$(trim "${GEOLIBRE_CLERK_PUBLISHABLE_KEY:-}")" ]; then
-  echo "Clerk sign-in gate enabled."
+  case "$(trim "${GEOLIBRE_CLERK_WAITLIST:-}")" in
+    1 | true | TRUE | True) echo "Clerk sign-in gate enabled, with the waitlist screen." ;;
+    *) echo "Clerk sign-in gate enabled." ;;
+  esac
 fi
 
 # Render the nginx config from the immutable image template on every boot. The

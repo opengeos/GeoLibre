@@ -282,6 +282,34 @@ loading it with `?embed=1` still requires sign-in. Control who may register or
 sign in through the Clerk Dashboard. Configure TLS and the deployment domain in
 Clerk before using a production key.
 
+##### Approving users
+
+Who may sign in is decided in the Clerk Dashboard, not by GeoLibre:
+
+- **Restrictions → Restricted** turns off self-service sign-up. You add people
+  by invitation, through an enterprise connection, or by creating the user
+  manually. This needs no extra configuration here.
+- **Waitlist** lets visitors request access, which you approve one at a time
+  (**Waitlist** page → the menu next to a person → **Invite**, or **Revoke** to
+  decline). Enable the matching screen in GeoLibre so the sign-in card offers a
+  "Join the waitlist" link instead of a dead end:
+
+  ```bash
+  docker run --rm -p 8080:80 \
+    -e GEOLIBRE_CLERK_PUBLISHABLE_KEY='pk_live_...' \
+    -e GEOLIBRE_CLERK_WAITLIST=1 \
+    ghcr.io/opengeos/geolibre:latest
+  ```
+
+  The waitlist form lives at the `#/waitlist` fragment of the same page, so
+  moving between it and the sign-in card never reloads the app. It is off
+  unless you set this variable, because on a restricted instance the form would
+  collect requests that cannot be approved. Set the Clerk instance's sign-up
+  mode to **Waitlist** as well — the variable adds the screen, the Dashboard
+  decides whether Clerk accepts submissions to it. Setting it without
+  `GEOLIBRE_CLERK_PUBLISHABLE_KEY` is an error rather than a silently public
+  app.
+
 This client-side gate controls access to the GeoLibre interface but is not a
 server authorization boundary by itself. Keep `/sidecar`, `/ai`, and any other
 sensitive upstream service behind nginx authentication, Cloudflare Access, or a

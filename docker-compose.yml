@@ -14,6 +14,7 @@ services:
       GEOLIBRE_SHARE_URL: "${GEOLIBRE_SHARE_URL:-http://localhost:8000}"
       GEOLIBRE_COLLAB_URL: "${GEOLIBRE_COLLAB_URL:-ws://localhost:8787}"
       GEOLIBRE_CLERK_PUBLISHABLE_KEY: "${GEOLIBRE_CLERK_PUBLISHABLE_KEY:-}"
+      GEOLIBRE_CLERK_WAITLIST: "${GEOLIBRE_CLERK_WAITLIST:-}"
     depends_on:
       geolibre-server:
         condition: service_healthy
