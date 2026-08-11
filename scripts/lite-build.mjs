@@ -25,10 +25,27 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 // Forward extra args (e.g. `-- --outDir dist-lite`) the way build-embed does, and
 // track the chosen directory so the guards below check what was actually built.
+//
+// Both spellings, because Vite's parser (cac) accepts either and reading only the
+// space-separated one is worse than not reading it at all: `--outDir=x` would
+// leave the guard checking `dist`, which on any machine with a previous build in
+// it passes while saying nothing about what was just written. Last occurrence
+// wins, matching how cac resolves a repeated flag.
+function resolveOutDirName(args) {
+  let name = "dist";
+  for (const [index, arg] of args.entries()) {
+    // Both arms ignore an empty value (`--outDir=` from an unset shell var), which
+    // would otherwise resolve to the app directory and walk node_modules.
+    if (arg === "--outDir" && args[index + 1]) name = args[index + 1];
+    else if (arg.startsWith("--outDir=") && arg.length > "--outDir=".length) {
+      name = arg.slice("--outDir=".length);
+    }
+  }
+  return name;
+}
+
 const passthrough = process.argv.slice(2);
-const outDirFlag = passthrough.indexOf("--outDir");
-const outDirName = outDirFlag === -1 ? "dist" : (passthrough[outDirFlag + 1] ?? "dist");
-const distDir = resolve(repoRoot, "apps/geolibre-desktop", outDirName);
+const distDir = resolve(repoRoot, "apps/geolibre-desktop", resolveOutDirName(passthrough));
 
 const result = spawnSync(
   "npm",
