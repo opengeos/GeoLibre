@@ -36,7 +36,9 @@ output-token cap, and per-client rate limit.
 
    The Worker can be deployed without this optional secret. Chat remains
    available, and `/tavily` returns `503 Search is not configured` until the
-   secret is added.
+   secret is added. Both routes share the one `AI_RATE_LIMITER` budget per
+   client, so the configured limit is what a single user may cost you in total
+   rather than a separate allowance each for chat and search.
 
 3. Validate and deploy:
 

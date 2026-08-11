@@ -2,7 +2,12 @@
 // slow non-streaming generation, and below the 600s nginx read timeout that a
 // self-hosted deployment puts in front of this worker.
 const UPSTREAM_HEADER_TIMEOUT_MS = 300_000;
-const SEARCH_HEADER_TIMEOUT_MS = 30_000;
+// Search answers in one shot rather than streaming, so its bound covers the whole
+// call. Roomy because every request is `search_depth: "advanced"` with
+// `include_answer`, which adds extra ranking plus an answer-synthesis step on
+// Tavily's side — a 30s bound turns a merely slow news query during a live
+// disaster event into a 504.
+const SEARCH_HEADER_TIMEOUT_MS = 60_000;
 const TAVILY_ENDPOINT = "https://api.tavily.com/search";
 
 function jsonError(message: string, status: number, headers?: HeadersInit): Response {
@@ -136,6 +141,10 @@ export function buildTavilySearchRequest(
   return request;
 }
 
+// Chat and search deliberately draw down one budget per client: both spend the
+// same operator's account, so the limit an operator configures is the total an
+// individual user may cost them, not a per-route allowance that a client can
+// double by alternating routes.
 async function rateLimit(request: Request, env: Env): Promise<Response | null> {
   const instanceClient = request.headers.get("X-GeoLibre-Client-IP")?.trim();
   const actor = instanceClient || request.headers.get("CF-Connecting-IP") || "unidentified";

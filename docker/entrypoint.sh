@@ -217,6 +217,12 @@ def service_url(name, value, schemes, loopback_schemes, loopback_hosts):
 # when the managed Worker exposes /tavily. Operators using a separate news
 # Worker can override this with its public HTTPS URL. Only the endpoint reaches
 # the browser; the Tavily key remains a Worker secret.
+#
+# Either way the published value is the proxy *base* the plugin appends its own
+# /tavily path to, which is why the same-origin fallback is "/ai" and not
+# "/ai/tavily". That fallback needs no service_url() check: the shell block above
+# already pins GEOLIBRE_AI_URL to exactly "/ai" and exits otherwise, and
+# service_url() would in fact reject a bare path, having no scheme or netloc.
 news_url = os.environ.get("GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT", "").strip()
 if news_url:
     news_endpoint = service_url(
@@ -231,10 +237,16 @@ elif os.environ.get("GEOLIBRE_AI_URL"):
 else:
     news_endpoint = ""
 if news_endpoint:
-    # The exact key matches the external plugin contract. The VITE-prefixed alias
-    # also follows the GeoLibre deployment-env convention and supports older builds.
+    # Three spellings of one value, because the reader is a plugin loaded from
+    # outside this repo and the app itself never reads any of them:
+    #   - the bare key is the plugin's own contract name;
+    #   - VITE_NASA_OPERA_… is that plugin's build-env spelling, which drops the
+    #     GEOLIBRE_ segment because the variable belongs to the plugin, not here;
+    #   - VITE_GEOLIBRE_NASA_OPERA_… is the VITE_GEOLIBRE_<NAME> alias every other
+    #     entry in this dict uses, readable through readDeploymentEnvValue().
     deployment["GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = news_endpoint
     deployment["VITE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = news_endpoint
+    deployment["VITE_GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = news_endpoint
 
 
 # Project sharing server. Unset means the public hosted service; "off" removes
