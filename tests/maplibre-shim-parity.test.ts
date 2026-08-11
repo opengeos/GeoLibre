@@ -11,9 +11,10 @@ import { SHIMMED_PACKAGES } from "./hooks/maplibre-default-import-shim.mjs";
  * must cover the same packages — a package shimmed in only one place fails in
  * whichever environment was missed, and only there.
  *
- * Both are temporary. When `@esri/maplibre-arcgis` or
- * `@geoman-io/maplibre-geoman-free` ship v6-compatible builds, drop the package
- * from both lists together. See opengeos/GeoLibre#1489 (blocker 1).
+ * Both are temporary and the list only shrinks: `@esri/maplibre-arcgis` came off
+ * it in 1.3.1. When `@geoman-io/maplibre-geoman-free` ships a v6-compatible
+ * build too, drop it from both lists together and delete the shims outright.
+ * See opengeos/GeoLibre#1489 (blocker 1).
  */
 const VITE_PLUGIN = fileURLToPath(
   new URL("../apps/geolibre-desktop/vite-plugins/maplibre-default-import-shim.ts", import.meta.url),
@@ -31,19 +32,21 @@ describe("maplibre default-import shims", () => {
     assert.deepEqual(shimmedPackagesInVitePlugin(), [...SHIMMED_PACKAGES]);
   });
 
-  it("rewrites the default import forms both packages actually publish", async () => {
+  it("rewrites the default import forms the shimmed bundles actually publish", async () => {
     const { rewriteDefaultImports } = await import("./hooks/maplibre-default-import-shim.mjs");
 
-    // @esri/maplibre-arcgis (minified, no space before the specifier — the
-    // rewrite normalizes that to one space, which is still valid ESM).
-    assert.equal(
-      rewriteDefaultImports('import Zt from"maplibre-gl"'),
-      'import * as Zt from "maplibre-gl"',
-    );
     // @geoman-io/maplibre-geoman-free (spaced).
     assert.equal(
       rewriteDefaultImports('import e from "maplibre-gl"'),
       'import * as e from "maplibre-gl"',
+    );
+    // Minified, no space before the specifier — the rewrite normalizes that to
+    // one space, which is still valid ESM. Kept after @esri/maplibre-arcgis
+    // (which published this form) left the list, since any bundle may be
+    // minified this way and the regex has to keep handling it.
+    assert.equal(
+      rewriteDefaultImports('import Zt from"maplibre-gl"'),
+      'import * as Zt from "maplibre-gl"',
     );
     // Named and namespace imports are already v6-safe and must be left alone.
     assert.equal(

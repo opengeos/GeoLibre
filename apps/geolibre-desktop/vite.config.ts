@@ -1000,12 +1000,11 @@ export default defineConfig({
       // asset reference, so serve it as-is. Only reached through the lazy
       // dynamic import in local-netcdf.ts when a user opens a local file.
       "h5wasm",
-      // These two still default-import maplibre-gl, which v6 does not provide.
+      // This still default-imports maplibre-gl, which v6 does not provide.
       // `maplibreDefaultImportShim` rewrites that, but the dependency optimizer
       // runs outside the plugin pipeline and would fail before the shim is ever
-      // consulted, so serve them unbundled and let the shim transform them.
-      // Remove alongside their entries in the shim. See opengeos/GeoLibre#1489.
-      "@esri/maplibre-arcgis",
+      // consulted, so serve it unbundled and let the shim transform it.
+      // Remove alongside its entry in the shim. See opengeos/GeoLibre#1489.
       "@geoman-io/maplibre-geoman-free",
     ],
   },

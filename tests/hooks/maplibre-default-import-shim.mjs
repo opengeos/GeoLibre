@@ -17,7 +17,7 @@
  */
 
 /** Packages whose published ESM still default-imports maplibre-gl. */
-export const SHIMMED_PACKAGES = ["@esri/maplibre-arcgis", "@geoman-io/maplibre-geoman-free"];
+export const SHIMMED_PACKAGES = ["@geoman-io/maplibre-geoman-free"];
 
 // Matches a default import of maplibre-gl in minified or unminified ESM:
 //   import Zt from"maplibre-gl"     import e from "maplibre-gl"

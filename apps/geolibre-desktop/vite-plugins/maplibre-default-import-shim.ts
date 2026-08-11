@@ -20,7 +20,7 @@ import type { Plugin } from "vite";
  * either shipped a fix (delete the entry) or changed its bundle shape (revisit),
  * and silently shimming nothing would hide both.
  */
-const SHIMMED_PACKAGES = ["@esri/maplibre-arcgis", "@geoman-io/maplibre-geoman-free"] as const;
+const SHIMMED_PACKAGES = ["@geoman-io/maplibre-geoman-free"] as const;
 
 // Matches a default import of maplibre-gl in minified or unminified ESM:
 //   import Zt from"maplibre-gl"     import e from "maplibre-gl"
