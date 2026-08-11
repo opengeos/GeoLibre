@@ -177,8 +177,7 @@ export function createRelay(options: RelayOptions = {}): {
   const idleTtlMs =
     options.idleTtlMs ?? positive(process.env.COLLAB_IDLE_TTL_MS, DEFAULT_IDLE_TTL_MS);
   const trustProxy =
-    options.trustProxy ??
-    (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1");
+    options.trustProxy ?? (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1");
   const store = new SessionStore(dbPath);
   const sessions = new Map<string, LiveSession>();
   const wss = new WebSocketServer({ noServer: true, maxPayload: maxSnapshotBytes + 64_000 });
@@ -785,11 +784,10 @@ export function createRelay(options: RelayOptions = {}): {
         return json(response, 403, { error: "Forbidden origin" });
       }
 
-      const rawXff = trustProxy ? (request.headers["x-forwarded-for"] as string | undefined) : undefined;
-      const clientIp =
-        rawXff?.split(",")[0].trim() ||
-        request.socket.remoteAddress ||
-        "unknown";
+      const rawXff = trustProxy
+        ? (request.headers["x-forwarded-for"] as string | undefined)
+        : undefined;
+      const clientIp = rawXff?.split(",")[0].trim() || request.socket.remoteAddress || "unknown";
       if (!checkRateLimit(clientIp, 10, 60_000)) {
         return json(response, 429, { error: "Too many session creation requests" });
       }
