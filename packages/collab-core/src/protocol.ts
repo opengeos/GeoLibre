@@ -260,7 +260,13 @@ export interface KickedMessage {
 
 export interface ErrorMessage {
   type: "error";
-  code: "forbidden" | "too-large" | "bad-message" | "not-found" | "identity-required" | "layer-locked";
+  code:
+    | "forbidden"
+    | "too-large"
+    | "bad-message"
+    | "not-found"
+    | "identity-required"
+    | "layer-locked";
   message: string;
 }
 
@@ -278,4 +284,3 @@ export type ServerMessage =
   | LayerLocksMessage
   | KickedMessage
   | ErrorMessage;
-

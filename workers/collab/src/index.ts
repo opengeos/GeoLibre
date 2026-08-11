@@ -29,7 +29,10 @@ const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 function isAllowedOrigin(originHeader: string | null, envAllowed?: string): boolean {
   if (!originHeader) return true;
   const allowedList = envAllowed
-    ? envAllowed.split(",").map((s) => s.trim()).filter(Boolean)
+    ? envAllowed
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [
         "https://geolibre.app",
         "https://collab.geolibre.app",
@@ -158,4 +161,3 @@ export default {
     return json({ error: "Not found" }, 404);
   },
 };
-

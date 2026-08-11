@@ -197,15 +197,23 @@ export class SessionStore {
 
   getDurableOverride(sessionId: string, participantKey: string): boolean | undefined {
     const row = this.db
-      .prepare("SELECT edit_override FROM collab_durable_overrides WHERE session_id = ? AND participant_key = ?")
+      .prepare(
+        "SELECT edit_override FROM collab_durable_overrides WHERE session_id = ? AND participant_key = ?",
+      )
       .get(sessionId, participantKey) as { edit_override: number } | undefined;
     return row ? row.edit_override === 1 : undefined;
   }
 
-  saveDurableOverride(sessionId: string, participantKey: string, canEdit: boolean | undefined): void {
+  saveDurableOverride(
+    sessionId: string,
+    participantKey: string,
+    canEdit: boolean | undefined,
+  ): void {
     if (canEdit === undefined) {
       this.db
-        .prepare("DELETE FROM collab_durable_overrides WHERE session_id = ? AND participant_key = ?")
+        .prepare(
+          "DELETE FROM collab_durable_overrides WHERE session_id = ? AND participant_key = ?",
+        )
         .run(sessionId, participantKey);
     } else {
       this.db
@@ -218,14 +226,18 @@ export class SessionStore {
 
   isBlockedKey(sessionId: string, participantKey: string): boolean {
     const row = this.db
-      .prepare("SELECT participant_key FROM collab_blocked_keys WHERE session_id = ? AND participant_key = ?")
+      .prepare(
+        "SELECT participant_key FROM collab_blocked_keys WHERE session_id = ? AND participant_key = ?",
+      )
       .get(sessionId, participantKey);
     return row !== undefined;
   }
 
   blockKey(sessionId: string, participantKey: string): void {
     this.db
-      .prepare("INSERT OR REPLACE INTO collab_blocked_keys (session_id, participant_key, blocked_at) VALUES (?, ?, ?)")
+      .prepare(
+        "INSERT OR REPLACE INTO collab_blocked_keys (session_id, participant_key, blocked_at) VALUES (?, ?, ?)",
+      )
       .run(sessionId, participantKey, Date.now());
   }
 
@@ -252,4 +264,3 @@ export class SessionStore {
     this.db.close();
   }
 }
-

@@ -80,10 +80,10 @@ export function diffLockedLayers(
   if (typeof storedProject !== "object" || typeof inboundProject !== "object") return null;
 
   const storedLayers = Array.isArray((storedProject as { layers?: unknown }).layers)
-    ? ((storedProject as { layers: Record<string, unknown>[] }).layers)
+    ? (storedProject as { layers: Record<string, unknown>[] }).layers
     : [];
   const inboundLayers = Array.isArray((inboundProject as { layers?: unknown }).layers)
-    ? ((inboundProject as { layers: Record<string, unknown>[] }).layers)
+    ? (inboundProject as { layers: Record<string, unknown>[] }).layers
     : [];
 
   const storedMap = new Map<string, Record<string, unknown>>();
@@ -140,7 +140,12 @@ export function authorizeSnapshot(
           : "This session is view-only.",
     };
   }
-  if (participant.role !== "host" && lockedLayerIds.length > 0 && storedSnapshot && inboundSnapshot) {
+  if (
+    participant.role !== "host" &&
+    lockedLayerIds.length > 0 &&
+    storedSnapshot &&
+    inboundSnapshot
+  ) {
     const diff = diffLockedLayers(storedSnapshot, inboundSnapshot, lockedLayerIds);
     if (diff) {
       return {
@@ -282,4 +287,3 @@ export function parseStoredChat(raw: unknown): CollabChatMessage[] {
   }
   return Array.isArray(raw) ? raw.filter(isValidChatMessage) : [];
 }
-

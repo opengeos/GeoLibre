@@ -180,7 +180,9 @@ export class CollabSession extends DurableObject<Env> {
         max_uses: number | null;
         use_count: number;
         revoked: number;
-      }>("SELECT token, role, created_at, max_uses, use_count, revoked FROM collab_invites ORDER BY created_at DESC")
+      }>(
+        "SELECT token, role, created_at, max_uses, use_count, revoked FROM collab_invites ORDER BY created_at DESC",
+      )
       .toArray();
     return rows.map((r) => ({
       token: r.token,
@@ -207,10 +209,7 @@ export class CollabSession extends DurableObject<Env> {
 
   private revokeInviteToken(token: string): boolean {
     this.ensureTables();
-    this.ctx.storage.sql.exec(
-      "UPDATE collab_invites SET revoked = 1 WHERE token = ?",
-      token,
-    );
+    this.ctx.storage.sql.exec("UPDATE collab_invites SET revoked = 1 WHERE token = ?", token);
     return true;
   }
 
@@ -442,15 +441,16 @@ export class CollabSession extends DurableObject<Env> {
     // close handler only deletes the current clientId).
     if (ws.deserializeAttachment()) return;
 
-    const [storedToken, mode, rev, snapshot, chat, requireIdentity, lockedLayerIds] = await Promise.all([
-      this.ctx.storage.get<string>("hostToken"),
-      this.ctx.storage.get<CollaborationMode>("mode"),
-      this.ctx.storage.get<number>("rev"),
-      this.readSnapshot(),
-      this.ctx.storage.get<string>("chat"),
-      this.ctx.storage.get<boolean>("requireIdentity"),
-      this.ctx.storage.get<string[]>("lockedLayerIds"),
-    ]);
+    const [storedToken, mode, rev, snapshot, chat, requireIdentity, lockedLayerIds] =
+      await Promise.all([
+        this.ctx.storage.get<string>("hostToken"),
+        this.ctx.storage.get<CollaborationMode>("mode"),
+        this.ctx.storage.get<number>("rev"),
+        this.readSnapshot(),
+        this.ctx.storage.get<string>("chat"),
+        this.ctx.storage.get<boolean>("requireIdentity"),
+        this.ctx.storage.get<string[]>("lockedLayerIds"),
+      ]);
 
     let role: CollaborationRole =
       message.hostToken && storedToken && message.hostToken === storedToken ? "host" : "guest";
@@ -1131,7 +1131,9 @@ export class CollabSession extends DurableObject<Env> {
       return;
     }
     if (typeof message.clientId !== "string") return;
-    const target = this.attachedSockets().find((entry) => entry.attachment.clientId === message.clientId);
+    const target = this.attachedSockets().find(
+      (entry) => entry.attachment.clientId === message.clientId,
+    );
     if (!target || target.attachment.role === "host") return;
 
     this.send(target.socket, {
@@ -1156,7 +1158,9 @@ export class CollabSession extends DurableObject<Env> {
       return;
     }
     if (typeof message.clientId !== "string") return;
-    const target = this.attachedSockets().find((entry) => entry.attachment.clientId === message.clientId);
+    const target = this.attachedSockets().find(
+      (entry) => entry.attachment.clientId === message.clientId,
+    );
     if (!target || target.attachment.role === "host") return;
 
     const targetKey = getParticipantKey(target.attachment);

@@ -66,8 +66,18 @@ describe("Collaboration Upgrade Proposals", () => {
   });
 
   it("evaluates layer edit permissions with participantCanEditLayer", () => {
-    const host: SessionParticipant = { clientId: "h", displayName: "Host", color: "#000", role: "host" };
-    const guest: SessionParticipant = { clientId: "g", displayName: "Guest", color: "#000", role: "guest" };
+    const host: SessionParticipant = {
+      clientId: "h",
+      displayName: "Host",
+      color: "#000",
+      role: "host",
+    };
+    const guest: SessionParticipant = {
+      clientId: "g",
+      displayName: "Guest",
+      color: "#000",
+      role: "guest",
+    };
 
     const lockedLayerIds = ["layer-locked"];
 
@@ -80,7 +90,12 @@ describe("Collaboration Upgrade Proposals", () => {
   });
 
   it("authorizes snapshot rejecting layer-locked edits from guests", () => {
-    const guest: SessionParticipant = { clientId: "g", displayName: "Guest", color: "#000", role: "guest" };
+    const guest: SessionParticipant = {
+      clientId: "g",
+      displayName: "Guest",
+      color: "#000",
+      role: "guest",
+    };
     const stored = { layers: [{ id: "l1", name: "Old" }] };
     const inbound = { layers: [{ id: "l1", name: "New" }] };
 
@@ -112,7 +127,14 @@ describe("Collaboration Upgrade Proposals", () => {
     let hostWelcome: any = null;
     await new Promise<void>((res) => {
       hostWs.on("open", () => {
-        hostWs.send(JSON.stringify({ type: "join", displayName: "HostUser", color: "#2563eb", hostToken: sessionInfo.hostToken }));
+        hostWs.send(
+          JSON.stringify({
+            type: "join",
+            displayName: "HostUser",
+            color: "#2563eb",
+            hostToken: sessionInfo.hostToken,
+          }),
+        );
       });
       hostWs.on("message", (raw) => {
         const msg = JSON.parse(raw.toString());
@@ -143,7 +165,9 @@ describe("Collaboration Upgrade Proposals", () => {
     let guestWelcome: any = null;
     await new Promise<void>((res) => {
       guestWs.on("open", () => {
-        guestWs.send(JSON.stringify({ type: "join", displayName: "GuestUser", color: "#dc2626", inviteToken }));
+        guestWs.send(
+          JSON.stringify({ type: "join", displayName: "GuestUser", color: "#dc2626", inviteToken }),
+        );
       });
       guestWs.on("message", (raw) => {
         const msg = JSON.parse(raw.toString());
@@ -167,7 +191,13 @@ describe("Collaboration Upgrade Proposals", () => {
       guestWs.on("close", () => {
         res();
       });
-      hostWs.send(JSON.stringify({ type: "kick-participant", clientId: guestWelcome.clientId, reason: "Testing kick" }));
+      hostWs.send(
+        JSON.stringify({
+          type: "kick-participant",
+          clientId: guestWelcome.clientId,
+          reason: "Testing kick",
+        }),
+      );
     });
     assert.equal(guestKicked, true);
 

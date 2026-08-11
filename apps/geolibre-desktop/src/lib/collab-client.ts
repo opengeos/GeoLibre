@@ -92,7 +92,7 @@ export async function createSession(
   if (!baseUrl) {
     throw new Error("Collaboration is not configured. Set VITE_GEOLIBRE_COLLAB_URL.");
   }
-  const mode = typeof options === "string" ? options : options.mode ?? "co-edit";
+  const mode = typeof options === "string" ? options : (options.mode ?? "co-edit");
   const requireIdentity = typeof options === "object" ? options.requireIdentity === true : false;
   const httpBase = httpBaseFromWs(baseUrl);
   let response: Response;

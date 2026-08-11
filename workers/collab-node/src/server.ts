@@ -50,10 +50,16 @@ const ENCODER = new TextEncoder();
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
-function isAllowedOrigin(originHeader: string | undefined, envAllowed = process.env.ALLOWED_ORIGINS): boolean {
+function isAllowedOrigin(
+  originHeader: string | undefined,
+  envAllowed = process.env.ALLOWED_ORIGINS,
+): boolean {
   if (!originHeader) return true;
   const allowedList = envAllowed
-    ? envAllowed.split(",").map((s) => s.trim()).filter(Boolean)
+    ? envAllowed
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [
         "https://geolibre.app",
         "https://collab.geolibre.app",

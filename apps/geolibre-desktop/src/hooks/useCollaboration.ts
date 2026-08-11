@@ -255,7 +255,9 @@ export function useCollaboration(
       case "kicked": {
         disconnect();
         useAppStore.getState().resetCollaboration();
-        useAppStore.getState().setCollaboration({ error: message.reason ?? "Removed from session." });
+        useAppStore
+          .getState()
+          .setCollaboration({ error: message.reason ?? "Removed from session." });
         break;
       }
       case "error":
