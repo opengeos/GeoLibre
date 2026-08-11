@@ -148,11 +148,22 @@ Both `npm run dev` and `npm run build` run this automatically:
 - `npm run build` always rebuilds it (via `prebuild`) so a changed client/config
   is picked up.
 
-Both **skip gracefully** when `jupyter lite` is not installed — a Node-only build
-still succeeds and the web Notebook panel shows a "not built" message until the
-site is generated (install the deps above and re-run). The desktop (Tauri) dev
-and build paths skip it entirely (they use the real JupyterLab server), so the
-static site never bloats the installer.
+Both **skip with a warning** when `jupyter lite` is not installed, so a Node-only
+build still succeeds. Be aware of what that produces: the panel does *not* show a
+"not built" message. Its iframe asks for `/jupyterlite/lab/index.html`, and both
+nginx (`try_files $uri /index.html`) and Tauri's asset resolver answer an unknown
+path with `index.html`, so the panel renders **a second copy of GeoLibre**
+instead (GeoLibre#1851, GeoLibre#1658). Install the deps above and rebuild.
+
+Two builds therefore treat a missing CLI as fatal rather than skippable, because
+they serve the site and cannot degrade: the Mac App Store build, and any build
+that sets `GEOLIBRE_JUPYTERLITE_REQUIRED=1` (the Docker image does). The desktop
+(Tauri) dev and build paths skip it entirely (they use the real JupyterLab
+server), so the static site never bloats the installer.
+
+The Docker image builds and serves the site, and gives `/jupyterlite/` its own
+CSP: JupyterLab bootstraps from an inline `<script>`, which the app's policy
+forbids, so under the app policy the site loads its HTML and then never boots.
 
 Build config lives in `apps/geolibre-desktop/jupyterlite/` (a
 `jupyter_lite_config.json`, the build `requirements.txt`, and a starter
