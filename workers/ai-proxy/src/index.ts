@@ -2,8 +2,11 @@
 // slow non-streaming generation, and below the 600s nginx read timeout that a
 // self-hosted deployment puts in front of this worker.
 const UPSTREAM_HEADER_TIMEOUT_MS = 300_000;
-// Search answers in one shot rather than streaming, so this bound covers the
-// whole call. Twice the 30s it started at, because every request is
+// Bounds the wait for Tavily's response *headers*, exactly as
+// UPSTREAM_HEADER_TIMEOUT_MS does for chat: the timer is cleared once fetch()
+// resolves, and the (small, single-chunk) JSON body then streams through
+// unbounded, with nginx's proxy_read_timeout as the outer bound on the
+// Docker-fronted path. Twice the 30s it started at, because every request is
 // `search_depth: "advanced"` with `include_answer`, which adds extra ranking
 // plus an answer-synthesis step on Tavily's side; 30s was tight enough to turn
 // a merely slow news query during a live disaster event into a 504.
