@@ -41,6 +41,19 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
+          # Nothing here uses the checkout's token — npm ci fetches from the
+          # registry and the publish step carries its own credentials — so do
+          # not leave it behind in .git/config.
+          persist-credentials: false
+
+      - name: Record the commit that was built
+        id: built
+        # $GITHUB_SHA is the SHA of the ref chosen in the "Run workflow"
+        # dropdown, not the `ref` input typed into the form, so on a manual
+        # rollback it names main's tip while the build is of something older.
+        # Resolve what was actually checked out — `ref` may also be a branch or
+        # tag name rather than a SHA — and label the deployment with that.
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -130,17 +143,18 @@ jobs:
         env:
           # Fine-grained PAT with Contents: write on opengeos/studio.geolibre.app.
           STUDIO_DEPLOY_TOKEN: ${{ secrets.STUDIO_DEPLOY_TOKEN }}
+          BUILT_SHA: ${{ steps.built.outputs.sha }}
         run: |
           cd apps/geolibre-desktop/dist
           git init -q -b gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -q -m "Deploy ${GITHUB_SHA} from ${GITHUB_REPOSITORY}"
+          git commit -q -m "Deploy ${BUILT_SHA} from ${GITHUB_REPOSITORY}"
           # A fresh orphan commit force-pushed each time, so the hosting
           # repository stays the size of one build rather than accumulating a
           # ~200 MB commit per merge to main.
           git push -q --force \
             "https://x-access-token:${STUDIO_DEPLOY_TOKEN}@github.com/opengeos/studio.geolibre.app.git" \
             gh-pages
-          echo "Published ${GITHUB_SHA} to https://studio.geolibre.app"
+          echo "Published ${BUILT_SHA} to https://studio.geolibre.app"
