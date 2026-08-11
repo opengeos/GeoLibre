@@ -357,6 +357,27 @@ export function buildOgcFeaturesLayer(params: OgcFeaturesLayerParams): GeoLibreL
 
 // --- ArcGIS ----------------------------------------------------------------
 
+/**
+ * The known ArcGIS layer types, as a runtime lookup.
+ *
+ * `@geolibre/plugins` exports the same list, but importing it here would be a
+ * *runtime* import of that package (which loads maplibre-gl), and this module's
+ * pure exports are deliberately importable under Node for the unit tests. The
+ * `satisfies` clause is what keeps the two from drifting: adding a layer type to
+ * the union without adding it here fails the type-check.
+ */
+const ARCGIS_LAYER_TYPE_KEYS = {
+  feature: true,
+  "vector-tile": true,
+  "map-service": true,
+  "image-service": true,
+} satisfies Record<ArcGISLayerType, true>;
+
+/** Narrows a stored `layerType` field, defaulting to the feature layer. */
+function arcgisLayerTypeFromField(value: string): ArcGISLayerType {
+  return value in ARCGIS_LAYER_TYPE_KEYS ? (value as ArcGISLayerType) : "feature";
+}
+
 export interface ArcGISOptions {
   name: string;
   layerType: ArcGISLayerType;
@@ -364,6 +385,12 @@ export interface ArcGISOptions {
   url: string | undefined;
   itemId: string | undefined;
   portalUrl: string | undefined;
+  pageSize: number | undefined;
+  maxFeatures: number | undefined;
+  /** MapServer sublayer ids (`0,2,5`), for a `map-service` entry. */
+  sublayers: string | undefined;
+  /** ImageServer rendering rule JSON, for an `image-service` entry. */
+  renderingRule: string | undefined;
 }
 
 /** Reads the ArcGIS fields from a saved entry, mirroring `ArcGISSource`. */
@@ -371,13 +398,25 @@ export function arcgisFieldsToOptions(entry: ServiceLibraryEntry): ArcGISOptions
   const { fields } = entry;
   return {
     name: entry.name,
-    layerType:
-      serviceFieldString(fields, "layerType") === "vector-tile" ? "vector-tile" : "feature",
+    layerType: arcgisLayerTypeFromField(serviceFieldString(fields, "layerType")),
     sourceType: serviceFieldString(fields, "sourceType") === "portal-item" ? "portal-item" : "url",
     url: serviceFieldString(fields, "url").trim() || undefined,
     itemId: serviceFieldString(fields, "itemId").trim() || undefined,
     portalUrl: serviceFieldString(fields, "portalUrl").trim() || undefined,
+    pageSize: serviceFieldCount(fields, "pageSize"),
+    maxFeatures: serviceFieldCount(fields, "maxFeatures"),
+    sublayers: serviceFieldString(fields, "sublayers").trim() || undefined,
+    renderingRule: serviceFieldString(fields, "renderingRule").trim() || undefined,
   };
+}
+
+/**
+ * Reads an optional whole-number field, mirroring `ArcGISSource`'s
+ * `positiveCount`: blank/zero/unparseable all mean "use the default".
+ */
+function serviceFieldCount(fields: ServiceFields, key: string): number | undefined {
+  const parsed = Number(serviceFieldString(fields, key).trim());
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : undefined;
 }
 
 // --- Dispatcher ------------------------------------------------------------
@@ -460,9 +499,13 @@ export async function applyServiceEntry(
         beforeLayerId,
         itemId: options.itemId,
         layerType: options.layerType,
+        maxFeatures: options.maxFeatures,
         name: options.name,
+        pageSize: options.pageSize,
         portalUrl: options.portalUrl,
+        renderingRule: options.renderingRule,
         sourceType: options.sourceType,
+        sublayers: options.sublayers,
         // Tokens are never persisted to the service library, so none is sent.
         token: undefined,
         url: options.url,

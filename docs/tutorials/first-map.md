@@ -21,7 +21,7 @@ See [Adding Data](../user-guide/adding-data.md) for every supported source.
 
 ## 3. Style the layer
 
-1. Select the `countries` layer in the Layers panel. The [Style panel](../user-guide/styling.md) opens on the right.
+1. Select the `countries` layer in the Layers panel, then expand the [Style panel](../user-guide/styling.md) on the right if it is collapsed.
 2. Adjust the **Fill color**, **Outline color**, and **Fill opacity** to taste.
 3. To make a choropleth, set **Style type** to **Graduated**, pick a numeric field (for example a population or GDP column), choose a **Colormap**, and click **Apply style type**.
 

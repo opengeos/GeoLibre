@@ -2,12 +2,13 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
-import { MapCanvas, setExternalDeckLayerOrderHandler } from "@geolibre/map";
+import { getLayerBounds, MapCanvas, setExternalDeckLayerOrderHandler } from "@geolibre/map";
 import { useTranslation } from "react-i18next";
 import {
   addRasterToMap,
   prepareRasterControl,
   applyRasterLayerOrder,
+  applyStacSearchLayerOrder,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
@@ -26,6 +27,7 @@ import {
   reattachSun,
   reattachRouteAnimation,
   reattachFlightSimulator,
+  restoreArcGISViewportLayers,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
@@ -84,6 +86,7 @@ import {
 import { buildKmlModelLayer } from "../../lib/kml-model-layer";
 import { isPhotoDropFileName, type GeotaggedPhotoResult } from "../../lib/geotagged-photos";
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
+import { detectNonGeographicCoordinates } from "@geolibre/core";
 import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
 import i18n from "../../i18n";
 import {
@@ -104,6 +107,7 @@ import {
   useSwipeSplitViewExclusivity,
   useTimeSliderAutoClose,
 } from "../../hooks/usePlugins";
+import type { DataUrlLoadState } from "../../hooks/useDataUrlLoader";
 import { registerKmlSuperOverlayProtocol } from "../../lib/kml-super-overlay";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
@@ -112,6 +116,8 @@ import { wikipediaLang } from "../../lib/knowledge";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
+import { useNetcdfIdentify } from "../../hooks/useNetcdfIdentify";
+import { useCogSpectralIdentify } from "../../hooks/useCogSpectralIdentify";
 import {
   useAutoCollapsedPanel,
   useReplaceLayersPanelId,
@@ -125,6 +131,11 @@ import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
 import { QuickAnalysisBanner } from "./QuickAnalysisBanner";
 import { PixelTimeSeriesControl } from "./PixelTimeSeriesControl";
+import { NetcdfSampleMarkers } from "./NetcdfSampleMarkers";
+import { NetcdfCubeSetupDialog } from "./NetcdfCubeSetupDialog";
+import { NetcdfCubeWindow } from "./NetcdfCubeWindow";
+import { NetcdfProfileWindow } from "./NetcdfProfileWindow";
+import { hasElevationConsent } from "../../lib/elevation-consent";
 import { MapLegendPanel } from "../legend/MapLegendPanel";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
@@ -475,8 +486,10 @@ const PythonConsolePanel = lazy(() =>
 interface DesktopShellProps {
   layoutOptions: LayoutOptions;
   projectUrlLoadState?: ProjectUrlLoadState;
+  dataUrlLoadState?: DataUrlLoadState;
   themeMode: ThemeMode;
   onToggleThemeMode: () => void;
+  onMapReady?: (app: ReturnType<typeof createAppAPI>) => void;
 }
 
 function hasDroppedFiles(event: DragEvent<HTMLElement>): boolean {
@@ -528,8 +541,10 @@ type ShellStyle = CSSProperties &
 export function DesktopShell({
   layoutOptions,
   projectUrlLoadState,
+  dataUrlLoadState,
   themeMode,
   onToggleThemeMode,
+  onMapReady,
 }: DesktopShellProps) {
   const { t } = useTranslation();
   const shellRef = useRef<HTMLDivElement>(null);
@@ -558,6 +573,8 @@ export function DesktopShell({
       meanSlope: t("terrainMeasure.meanSlope"),
       computing: t("terrainMeasure.computing"),
       partialData: t("terrainMeasure.partialData"),
+      heading: t("terrainMeasure.heading"),
+      finalHeading: t("terrainMeasure.finalHeading"),
     });
   }, [t]);
   // The map's Fullscreen control maximizes the map *canvas* (it calls
@@ -592,6 +609,30 @@ export function DesktopShell({
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => activeResizeCleanupRef.current?.(), []);
   const mapControllerRef = useRef<MapController | null>(null);
+
+  // Frame the GeoJSON layers a `?data=` deep link added. Only those are listed:
+  // the raster, PMTiles, and GeoParquet loaders move the camera themselves. The
+  // extent comes from the store's own GeoJSON, which is already in memory by the
+  // time the hook publishes the ids, so this needs no wait for layer sync.
+  useEffect(() => {
+    const fitLayerIds = dataUrlLoadState?.fitLayerIds;
+    if (dataUrlLoadState?.status !== "loaded" || !fitLayerIds?.length) return;
+    const controller = mapControllerRef.current;
+    if (!controller) return;
+    const bounds = useAppStore
+      .getState()
+      .layers.filter((layer) => fitLayerIds.includes(layer.id))
+      .map(getLayerBounds)
+      .filter((value) => value !== null);
+    if (!bounds.length) return;
+    controller.fitBounds([
+      Math.min(...bounds.map((value) => value[0])),
+      Math.min(...bounds.map((value) => value[1])),
+      Math.max(...bounds.map((value) => value[2])),
+      Math.max(...bounds.map((value) => value[3])),
+    ]);
+  }, [dataUrlLoadState?.fitLayerIds, dataUrlLoadState?.status]);
+
   const projectHistory = useProjectHistory(mapControllerRef);
   const [projectHistoryOpen, setProjectHistoryOpen] = useState(false);
   // The place shown in the Wikipedia knowledge card, or null when it is closed.
@@ -803,6 +844,11 @@ export function DesktopShell({
   const [mapReadyGeneration, setMapReadyGeneration] = useState(0);
   const [dropMessage, setDropMessage] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
+  // Kept out of `dropError` because the drop handler sets its own success
+  // message after `addImportedVectorLayers` returns, which would clobber this
+  // one. A mislabelled-CRS layer loads *successfully* and still renders
+  // nowhere, so both messages are true at once and need separate slots.
+  const [crsWarning, setCrsWarning] = useState<string | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
@@ -821,6 +867,7 @@ export function DesktopShell({
   const collaboration = useCollaboration(mapControllerRef);
   const commentTool = useCommentTool({ mapControllerRef, collaboration });
   const [showResolvedComments, setShowResolvedComments] = useState(false);
+  const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
   const collaborateDialogOpen = useAppStore((s) => s.ui.collaborateDialogOpen);
   const setCollaborateDialogOpen = useAppStore((s) => s.setCollaborateDialogOpen);
   // When opened via a `?collab=<code>` share link, auto-open the Collaborate
@@ -849,8 +896,14 @@ export function DesktopShell({
   // Routes the Layers-panel Identify action to the raster pixel inspector for
   // COG layers (read band values on click). Inert until a COG is identified.
   useRasterIdentify();
+  useNetcdfIdentify(mapControllerRef, mapReadyGeneration);
+  useCogSpectralIdentify(mapControllerRef, mapReadyGeneration);
   const [layerPanelWidth, setLayerPanelWidth] = useState(initialSidePanelWidth);
   const [stylePanelWidth, setStylePanelWidth] = useState(initialSidePanelWidth);
+  const [stylePanelOpenRequest, setStylePanelOpenRequest] = useState(0);
+  const openStylePanel = useCallback(() => {
+    setStylePanelOpenRequest((request) => request + 1);
+  }, []);
   const [notebookPanelWidth, setNotebookPanelWidth] = useState(DEFAULT_NOTEBOOK_PANEL_WIDTH);
   // Opening the notebook (Processing → Jupyter Notebook) splits the workspace
   // 50/50 between the map and the notebook: we size the notebook to half of the
@@ -1136,6 +1189,9 @@ export function DesktopShell({
     restoreRasterLayers(appAPI);
     restorePlanetaryComputerLayers(appAPI);
     restoreVectorLayers(appAPI);
+    // Re-bind saved ArcGIS feature layers to the viewport. Without this a
+    // reopened project's layer stays frozen on the extent it was saved with.
+    restoreArcGISViewportLayers(appAPI);
     // Re-stream saved LiDAR (COPC) point clouds. A `lidar-url` layer restores
     // into the store as inert metadata; the point cloud is loaded by the LiDAR
     // control, not the store, so without this the layer shows in the panel but
@@ -1146,10 +1202,15 @@ export function DesktopShell({
     // Re-read drag-dropped / Add Data local-file GeoJSON layers from disk
     // (their data was saved as a path, not embedded).
     void restoreLocalFileLayers();
-    // Let layer-sync push the store-derived beforeId into the raster control so
-    // deck.gl COG rasters interleave with vector layers instead of always
-    // drawing on top.
-    setExternalDeckLayerOrderHandler(applyRasterLayerOrder);
+    // Let layer-sync push the store-derived beforeId into the control that owns
+    // each deck.gl COG raster so it interleaves with vector layers instead of
+    // always drawing on top. Two controls render such layers: the raster
+    // control and the STAC Search control (#1718). The STAC one claims only its
+    // own layer ids, so ask it first and fall through for everything else.
+    setExternalDeckLayerOrderHandler((layerId, beforeId) => {
+      if (applyStacSearchLayerOrder(layerId, beforeId)) return;
+      applyRasterLayerOrder(layerId, beforeId);
+    });
     // activeByDefault plugins are marked active without activate() being
     // called, so the effects engine must be kicked explicitly to match the
     // restored active state (idempotent).
@@ -1209,7 +1270,8 @@ export function DesktopShell({
 
   const handleMapControllerReady = useCallback(() => {
     setMapReadyGeneration((generation) => generation + 1);
-  }, []);
+    onMapReady?.(createAppAPI(mapControllerRef));
+  }, [onMapReady]);
 
   // Keep the on-map compass (reset pitch/bearing) control's tooltip translated.
   // Re-runs when the controller (re)initialises (mapReadyGeneration) and on
@@ -1247,6 +1309,9 @@ export function DesktopShell({
   const addImportedVectorLayers = useCallback(
     (importedLayers: ImportedVectorLayer[]) => {
       let lastLayerId: string | null = null;
+      // Layers whose coordinates cannot be WGS84; surfaced together after the
+      // loop so a multi-file drop reports once rather than per file.
+      const nonGeographic: string[] = [];
       // Frame ids for each time-animated overlay sequence (keyed by the loader's
       // group marker), so they can be gathered into one layer group afterward.
       const frameGroups = new Map<string, string[]>();
@@ -1297,12 +1362,29 @@ export function DesktopShell({
         }
         // `||` (not `??`) so an empty-string name falls back to the path, and
         // matches the name shown in the drop confirmation toast.
-        lastLayerId = addGeoJsonLayer(
-          layer.name || layerNameFromPath(layer.path),
-          layer.data,
-          layer.path,
-        );
+        const layerName = layer.name || layerNameFromPath(layer.path);
+        // A file that declares WGS84 but holds projected coordinates loads
+        // cleanly, lists in the Layers panel, and renders nowhere — the map
+        // simply never moves. Warn rather than fail: the data is readable and
+        // only the user knows its true CRS.
+        const offRange = detectNonGeographicCoordinates(layer.data);
+        if (offRange) {
+          nonGeographic.push(layerName);
+          console.warn(
+            `[GeoLibre] "${layerName}" declares geographic coordinates but its values are out of range ` +
+              `(max |x| ${Math.round(offRange.maxAbsX).toLocaleString()}, max |y| ${Math.round(offRange.maxAbsY).toLocaleString()} ` +
+              `over ${offRange.sampled.toLocaleString()} sampled coordinates). The file's CRS is almost certainly ` +
+              `mislabelled — reproject it, or correct its .prj/crs, and load it again.`,
+          );
+        }
+        lastLayerId = addGeoJsonLayer(layerName, layer.data, layer.path);
       }
+
+      setCrsWarning(
+        nonGeographic.length > 0
+          ? t("addData.nonGeographicCoordinates", { names: nonGeographic.join(", ") })
+          : null,
+      );
 
       // Gather each time-animated overlay's frames into one collapsible group so
       // the sequence reads as a single timeline entry, not N stacked layers.
@@ -1359,6 +1441,10 @@ export function DesktopShell({
   useEffect(() => {
     setKmlFileImportHandler(async (imports) => {
       setDropError(null);
+      // Matches the drop handlers: the catch below sets `dropError` without
+      // reaching `addImportedVectorLayers`, so without this a previous file's
+      // banner would sit beside the new error.
+      setCrsWarning(null);
       try {
         const paths = imports
           .map(({ sourcePath }) => sourcePath)
@@ -1368,12 +1454,12 @@ export function DesktopShell({
         // pyramid, which a path-less browser File cannot support.
         const layers =
           paths.length === imports.length
-            ? await loadDroppedVectorPaths(paths, {
-                onLargeDataset: confirmLargeVectorDataset,
-              })
+            ? await loadDroppedVectorPaths(paths, { onLargeDataset: confirmLargeVectorDataset })
             : await loadDroppedVectorFiles(
                 imports.map(({ file }) => file),
-                { onLargeDataset: confirmLargeVectorDataset },
+                {
+                  onLargeDataset: confirmLargeVectorDataset,
+                },
               );
         addImportedVectorLayers(layers);
       } catch (error) {
@@ -1381,7 +1467,7 @@ export function DesktopShell({
       }
     });
     return () => setKmlFileImportHandler(null);
-  }, [addImportedVectorLayers, confirmLargeVectorDataset, t]);
+  }, [addImportedVectorLayers, t]);
 
   const addDroppedPhotos = useCallback(
     (result: GeotaggedPhotoResult | null): number => {
@@ -1535,6 +1621,9 @@ export function DesktopShell({
 
           setIsDraggingFiles(false);
           setDropError(null);
+          // Matches the browser drop handler: a warning about a previous file
+          // must not linger over an unrelated drop.
+          setCrsWarning(null);
           setDropMessage("Importing data...");
 
           try {
@@ -1704,6 +1793,10 @@ export function DesktopShell({
       dragDepthRef.current = 0;
       setIsDraggingFiles(false);
       setDropError(null);
+      // Not auto-dismissed on the status timeout (it has its own Close button),
+      // so it is cleared here instead: a warning about a previous file must not
+      // linger over an unrelated drop.
+      setCrsWarning(null);
       setDropMessage("Importing data...");
 
       try {
@@ -2093,6 +2186,7 @@ export function DesktopShell({
             }}
             onToggleThemeMode={onToggleThemeMode}
             onOpenBasemapExtract={() => setBasemapExtractOpen(true)}
+            onAddComment={commentTool.toggleTool}
             viewer={layoutOptions.viewer}
           />
         </SectionErrorBoundary>
@@ -2119,6 +2213,8 @@ export function DesktopShell({
                 onActivateCommentTool={commentTool.toggleTool}
                 isCommentToolActive={commentTool.isActive}
                 onShowResolvedChange={setShowResolvedComments}
+                selectedCommentId={selectedCommentId}
+                onClearSelectedComment={() => setSelectedCommentId(null)}
               />,
               commentsContentEl,
             )
@@ -2170,7 +2266,9 @@ export function DesktopShell({
                   // On a phone-width viewport both start collapsed (panels overlay
                   // there), matching the mobile "panels default collapsed" behavior.
                   initialBuiltinExpanded={
-                    replaceLayersPanelId === BROWSER_PANEL_ID && !getIsMobileViewport()
+                    replaceLayersPanelId === BROWSER_PANEL_ID &&
+                    !getIsMobileViewport() &&
+                    !layoutOptions.panelsCollapsed
                   }
                   // The story-map presentation is the only standalone Layers
                   // autoCollapse trigger (the notebook collapses Style, not Layers).
@@ -2185,6 +2283,9 @@ export function DesktopShell({
                       onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
                       onOpenRasterStylePanel={() =>
                         openRasterLayerPanel(createAppAPI(mapControllerRef))
+                      }
+                      onOpenStylePanel={
+                        layoutOptions.stylePanelVisible ? openStylePanel : undefined
                       }
                       onOpenRasterSubset={setRasterSubsetLayer}
                       collapsed={collapsed}
@@ -2209,8 +2310,13 @@ export function DesktopShell({
                     onOpenRasterStylePanel={() =>
                       openRasterLayerPanel(createAppAPI(mapControllerRef))
                     }
+                    onOpenStylePanel={layoutOptions.stylePanelVisible ? openStylePanel : undefined}
                     onOpenRasterSubset={setRasterSubsetLayer}
-                    autoCollapse={storymapPresenting || autoCollapsedPanel === "layers"}
+                    autoCollapse={
+                      storymapPresenting ||
+                      layoutOptions.panelsCollapsed ||
+                      autoCollapsedPanel === "layers"
+                    }
                   />
                 )}
               </SectionErrorBoundary>
@@ -2249,6 +2355,7 @@ export function DesktopShell({
           >
             <MapGrid>
               <MapCanvas
+                canUseRemoteElevation={hasElevationConsent}
                 controllerRef={mapControllerRef}
                 onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 onControllerReady={handleMapControllerReady}
@@ -2256,7 +2363,10 @@ export function DesktopShell({
               <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
               <CommentMapOverlay
                 mapControllerRef={mapControllerRef}
-                onSelectComment={() => openRightPanel(COMMENTS_PANEL_ID)}
+                onSelectComment={(commentId) => {
+                  setSelectedCommentId(commentId);
+                  openRightPanel(COMMENTS_PANEL_ID);
+                }}
                 showResolved={showResolvedComments}
               />
               <MapContextMenu
@@ -2280,6 +2390,19 @@ export function DesktopShell({
               <MapModeBanner mapControllerRef={mapControllerRef} />
               <QuickAnalysisBanner />
               <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
+              <NetcdfSampleMarkers
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
+              <NetcdfProfileWindow />
+              {/* Its own boundary: the cube window builds a `WebGLRenderer`,
+                  whose constructor throws outright when the browser or driver
+                  gives it no context. Sharing the map's boundary would turn a
+                  failure to draw one panel into the loss of the whole map. */}
+              <SilentErrorBoundary label="NetCDF 3D cube">
+                <NetcdfCubeWindow mapControllerRef={mapControllerRef} />
+              </SilentErrorBoundary>
+              <NetcdfCubeSetupDialog mapControllerRef={mapControllerRef} />
               <MapLegendPanel
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}
@@ -2414,6 +2537,7 @@ export function DesktopShell({
                     <StylePanel
                       mapControllerRef={mapControllerRef}
                       onResizeStart={startStylePanelResize}
+                      openRequest={stylePanelOpenRequest}
                       collapsed={collapsed}
                       onCollapsedChange={onCollapsedChange}
                       // Controlled mode ignores autoCollapse for collapsing (the
@@ -2434,8 +2558,12 @@ export function DesktopShell({
                 <StylePanel
                   mapControllerRef={mapControllerRef}
                   onResizeStart={startStylePanelResize}
+                  openRequest={stylePanelOpenRequest}
                   autoCollapse={
-                    notebookOpen || storymapPresenting || autoCollapsedPanel === "style"
+                    notebookOpen ||
+                    storymapPresenting ||
+                    layoutOptions.panelsCollapsed ||
+                    autoCollapsedPanel === "style"
                   }
                 />
               </SectionErrorBoundary>
@@ -2631,6 +2759,35 @@ export function DesktopShell({
           className="pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
         >
           {projectUrlLoadState.error}
+        </div>
+      ) : null}
+      {dataUrlLoadState?.error ? (
+        // A link can carry both `url=` and `data=`, and both loaders can fail.
+        // Drop below the project banner so neither message is covered.
+        <div
+          aria-live="assertive"
+          className={`pointer-events-none absolute left-1/2 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg ${
+            projectUrlLoadState?.error ? "top-28" : "top-14"
+          }`}
+        >
+          {dataUrlLoadState.error}
+        </div>
+      ) : null}
+      {crsWarning ? (
+        <div
+          data-testid="crs-warning"
+          role="status"
+          aria-live="polite"
+          className="absolute bottom-24 left-1/2 z-50 max-w-[min(90vw,36rem)] -translate-x-1/2 rounded-md border border-destructive/40 bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
+        >
+          {crsWarning}
+          <button
+            type="button"
+            onClick={() => setCrsWarning(null)}
+            className="ms-2 underline underline-offset-2"
+          >
+            {t("common.close")}
+          </button>
         </div>
       ) : null}
       {dropMessage || dropError ? (

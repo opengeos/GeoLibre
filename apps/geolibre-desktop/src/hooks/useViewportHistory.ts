@@ -1,5 +1,6 @@
 import type { MapViewState } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
+import type { MapLibreEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
@@ -117,7 +118,12 @@ export function useViewportHistory(
       syncNav();
     };
 
-    const onMoveEnd = (event: { storyCameraToken?: number; flightCameraToken?: number }) => {
+    // Both tokens ride along as `eventData` on the camera calls that set them,
+    // so they are extra fields on a real `moveend` event rather than a
+    // standalone shape — v6's listener types reject the latter.
+    const onMoveEnd = (
+      event: MapLibreEvent & { storyCameraToken?: number; flightCameraToken?: number },
+    ) => {
       // Story presenter / chapter-preview camera moves carry a storyCameraToken
       // in their event data. Those are scripted playback, not user navigation,
       // so don't record them (checked before the restore counter so a story

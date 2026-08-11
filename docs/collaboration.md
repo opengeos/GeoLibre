@@ -115,9 +115,14 @@ via `ws.serializeAttachment()` (survives hibernation). Durable storage holds the
 in-memory / per-socket attachment. Server-side enforcement: a `snapshot` from a
 guest who cannot edit (session `view-only`, or a host-set per-participant
 view-only override) is dropped with an `error: forbidden`; `set-mode` and
-`set-participant-mode` require the host token. Oversized snapshots (> ~1 MiB, the
-Cloudflare frame cap) are rejected with `error: too-large`. An empty session is
-reclaimed after a TTL via a storage alarm.
+`set-participant-mode` require the host token. Oversized snapshots (> 10 MB by
+default) are rejected with `error: too-large`; the cap sits under Cloudflare's
+32 MiB ceiling on a received WebSocket message. Hosted snapshots are stored in
+chunks across rows of a SQLite table, because a Durable Object caps both a
+key/value entry and a single SQLite string at 2 MB — well under what portable
+GeoJSON from local files and external plugins needs. An empty session is
+reclaimed after a TTL via a storage alarm, which drops the chunks with the rest
+of the database.
 
 ## Frontend
 
@@ -230,7 +235,19 @@ core:
 - `workers/collab-node` is the self-hostable Node/SQLite relay. It is included
   as `geolibre-collab` in the root `docker-compose.yml`; its persistent database
   is mounted at `/data/collab.sqlite`. Configure `COLLAB_MAX_SNAPSHOT_BYTES`
-  (default 1,000,000) and `COLLAB_IDLE_TTL_MS` (default two hours) when needed.
+  (default 10,000,000) and `COLLAB_IDLE_TTL_MS` (default two hours) when needed.
+
+Both relay implementations accept `COLLAB_MAX_SNAPSHOT_BYTES` as a positive
+integer number of bytes. For the Cloudflare relay, set it as a Worker variable,
+for example:
+
+```toml
+[vars]
+COLLAB_MAX_SNAPSHOT_BYTES = "10000000"
+```
+
+The configured value must remain below the deployment platform's WebSocket
+message-size limit.
 
 The hosted relay deploys to Cloudflare Workers the same way as `workers/viewer`:
 

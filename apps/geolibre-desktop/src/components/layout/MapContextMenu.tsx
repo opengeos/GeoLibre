@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, FEET_PER_METER, METERS_PER_MILE } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   DropdownMenu,
@@ -18,6 +18,7 @@ import {
   Circle,
   Crosshair,
   Earth,
+  Eye,
   MapIcon,
   MapPin,
   Route,
@@ -35,9 +36,11 @@ import {
   QUICK_TRAVEL_CONTOURS,
   QUICK_TRAVEL_CONTOURS_LABEL,
   runQuickAnalysis,
+  beginQuickAnalysisRun,
   type QuickBufferPreset,
 } from "../../lib/quick-analysis";
 import { hasRoutingConsent, recordRoutingConsent } from "../../lib/routing-consent";
+import { runViewshed } from "../../lib/run-viewshed";
 import { RoutingConsentDialog } from "./RoutingConsentDialog";
 
 interface ContextMenuState {
@@ -197,9 +200,84 @@ export function MapContextMenu({
   const bufferPresets = useMemo(() => bufferPresetsFor(scaleUnit), [scaleUnit]);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
 
+  /**
+   * Radius label for the viewshed entries.
+   *
+   * Follows the scale bar's unit system like the buffer ladder above, so an
+   * imperial-preference user does not get miles for buffers and kilometres for
+   * viewsheds in the same submenu. The radii themselves stay metric constants —
+   * they size the analysis, not the label — so an imperial reading is a
+   * conversion of the same distance rather than a different one.
+   */
+  const formatViewshedRadius = useCallback(
+    (meters: number): string => {
+      const imperial = scaleUnit === "imperial";
+      const perUnit = imperial ? METERS_PER_MILE : 1000;
+      const large = meters >= perUnit;
+      const value = large ? meters / perUnit : imperial ? meters * FEET_PER_METER : meters;
+      const formatted = new Intl.NumberFormat(i18n.language, {
+        maximumFractionDigits: large ? 1 : 0,
+      }).format(value);
+      const unit = large
+        ? imperial
+          ? t("quickAnalysis.unit.miles")
+          : t("quickAnalysis.unit.kilometers")
+        : imperial
+          ? t("quickAnalysis.unit.feet")
+          : t("quickAnalysis.unit.meters");
+      return `${formatted} ${unit}`;
+    },
+    [scaleUnit, i18n.language, t],
+  );
+
   const formatDistance = useCallback(
     (preset: QuickBufferPreset) => formatBufferDistance(preset, i18n.language, t),
     [i18n.language, t],
+  );
+
+  // Viewshed radii. Small enough that the tile fetch and the line-of-sight walk
+  // stay interactive; the 50km cap in the processing module is the hard limit.
+  const VIEWSHED_RADII_METERS = [2000, 5000, 15000];
+
+  const [viewshedBusy, setViewshedBusy] = useState(false);
+  const viewshedHere = useCallback(
+    (radiusMeters: number) => {
+      if (!menu || viewshedBusy) return;
+      const { lng, lat } = menu;
+      setViewshedBusy(true);
+      const toolName = t("quickAnalysis.viewshedToolName");
+      // Reported through the Quick Analysis banner like every other action in
+      // this menu rather than failing silently: the terrain fetch takes seconds
+      // and can fail, and a click with no feedback either way reads as a broken
+      // menu item. The returned setter is bound to this run, so a slow viewshed
+      // cannot overwrite the status of a faster action started after it.
+      const reportStatus = beginQuickAnalysisRun(toolName);
+      void runViewshed({
+        lng,
+        lat,
+        radiusMeters,
+        mapControllerRef,
+        layerName: t("quickAnalysis.viewshedLayerName", {
+          radius: formatViewshedRadius(radiusMeters),
+        }),
+      })
+        .then((result) => {
+          reportStatus(
+            result
+              ? { phase: "idle" }
+              : { phase: "error", toolName, message: t("quickAnalysis.viewshedNoResult") },
+          );
+        })
+        .catch((error: unknown) => {
+          reportStatus({
+            phase: "error",
+            toolName,
+            message: error instanceof Error ? error.message : t("quickAnalysis.viewshedNoResult"),
+          });
+        })
+        .finally(() => setViewshedBusy(false));
+    },
+    [menu, viewshedBusy, t, formatViewshedRadius, mapControllerRef],
   );
 
   const bufferHere = useCallback(
@@ -360,6 +438,20 @@ export function MapContextMenu({
                 <Route className="h-4 w-4 shrink-0 text-muted-foreground" />
                 {t("quickAnalysis.walkTimeHere", { contours: QUICK_TRAVEL_CONTOURS_LABEL })}
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {VIEWSHED_RADII_METERS.map((radiusMeters) => (
+                <DropdownMenuItem
+                  key={`viewshed-${radiusMeters}`}
+                  onSelect={() => viewshedHere(radiusMeters)}
+                  disabled={viewshedBusy}
+                  className="gap-2"
+                >
+                  <Eye className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {t("quickAnalysis.viewshedHere", {
+                    radius: formatViewshedRadius(radiusMeters),
+                  })}
+                </DropdownMenuItem>
+              ))}
               <DropdownMenuSeparator />
               {/* Escape hatch when the presets aren't what was wanted: the full
                 dialog, preselected on the same tool. */}

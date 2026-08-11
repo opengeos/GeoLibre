@@ -106,8 +106,131 @@ export function createEmptyProject(
   };
 }
 
+/**
+ * GeoJSON `type` values that mark a subtree as feature data rather than project
+ * structure. Everything under one of these is written compactly by
+ * {@link serializeProject}.
+ */
+const GEOJSON_TYPES = new Set([
+  "FeatureCollection",
+  "Feature",
+  "GeometryCollection",
+  "Point",
+  "MultiPoint",
+  "LineString",
+  "MultiLineString",
+  "Polygon",
+  "MultiPolygon",
+]);
+
+/** One level of indentation in a serialized project. */
+const PROJECT_INDENT = "  ";
+
+/**
+ * Whether a value is a GeoJSON feature, geometry, or collection.
+ *
+ * Decided from the `type` string alone, so this is an implicit contract on the
+ * project schema: no field may store a non-GeoJSON object under a `type` of one
+ * of the nine {@link GEOJSON_TYPES} names, or it would silently be written
+ * compact as if it were feature data. Nothing in `types.ts` does today; a new
+ * field that wants one of those names (a drawing-tool or geometry-filter config,
+ * say) needs a different discriminator.
+ */
+function isGeoJsonValue(value: object): boolean {
+  const type = (value as { type?: unknown }).type;
+  return typeof type === "string" && GEOJSON_TYPES.has(type);
+}
+
+/**
+ * Serialize a value exactly as `JSON.stringify(value, null, 2)` would, except
+ * that GeoJSON features, geometries and collections are written compactly on a
+ * single line.
+ *
+ * Coordinate arrays are never hand-edited, but indenting them costs roughly
+ * three bytes of whitespace for every one byte of data: a project embedding
+ * 13,000 features weighed 179 MB pretty-printed and 54 MB compact
+ * (GeoLibre#1829), which is the difference between reopening and running the
+ * tab out of memory. The surrounding project structure stays indented so the
+ * file is still readable and diffs still make sense.
+ *
+ * @param value Value to serialize.
+ * @param depth Current nesting depth, driving the indent width.
+ * @param key Property name (or stringified array index) this value sits under,
+ *   `""` at the root — the argument `JSON.stringify` passes to `toJSON`.
+ * @param ancestors Containers currently open on the recursion stack, used to
+ *   detect cycles.
+ * @returns The serialized text, or undefined for values `JSON.stringify` also
+ *   drops (undefined, functions, symbols).
+ */
+function serializeProjectValue(
+  value: unknown,
+  depth: number,
+  key: string,
+  ancestors: Set<object>,
+): string | undefined {
+  if (value !== null && typeof value === "object") {
+    // Honor the toJSON hook the way JSON.stringify does, so a value that
+    // replaces itself is inspected in its replaced form. It receives the same
+    // key JSON.stringify would pass, since a custom hook may branch on it.
+    const toJSON = (value as { toJSON?: unknown }).toJSON;
+    if (typeof toJSON === "function") {
+      value = (toJSON as (key: string) => unknown).call(value, key);
+    }
+  }
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  // A boxed Number/String/Boolean writes as its primitive rather than as an
+  // object, the way JSON.stringify unwraps it.
+  if (value instanceof Number || value instanceof String || value instanceof Boolean) {
+    return JSON.stringify(value);
+  }
+  // Feature data: hand the whole subtree to JSON.stringify with no spacing.
+  if (isGeoJsonValue(value)) return JSON.stringify(value);
+
+  // A cycle would recurse until the stack overflowed, and the RangeError that
+  // raises is indistinguishable from the string-length cap the save path reads
+  // as "project too large". Fail the way JSON.stringify does instead. Only the
+  // open ancestors are tracked, so a value referenced twice side by side (not a
+  // cycle) still serializes.
+  if (ancestors.has(value)) throw new TypeError("Converting circular structure to JSON");
+  ancestors.add(value);
+  try {
+    const pad = PROJECT_INDENT.repeat(depth + 1);
+    const closePad = PROJECT_INDENT.repeat(depth);
+    if (Array.isArray(value)) {
+      if (value.length === 0) return "[]";
+      // Indexed rather than mapped so a sparse array's holes are visited: like
+      // an unserializable entry, a hole becomes null, matching JSON.stringify.
+      const entries = Array.from(
+        { length: value.length },
+        (_unused, index) =>
+          serializeProjectValue(value[index], depth + 1, String(index), ancestors) ?? "null",
+      );
+      return `[\n${pad}${entries.join(`,\n${pad}`)}\n${closePad}]`;
+    }
+    const entries: string[] = [];
+    for (const [entryKey, entry] of Object.entries(value)) {
+      const serialized = serializeProjectValue(entry, depth + 1, entryKey, ancestors);
+      // An unserializable object value is omitted, matching JSON.stringify.
+      if (serialized === undefined) continue;
+      entries.push(`${JSON.stringify(entryKey)}: ${serialized}`);
+    }
+    if (entries.length === 0) return "{}";
+    return `{\n${pad}${entries.join(`,\n${pad}`)}\n${closePad}}`;
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
+/**
+ * Serialize a project to `.geolibre.json` text: indented project structure with
+ * compact (unindented) embedded GeoJSON. See {@link serializeProjectValue} for
+ * why the two halves are formatted differently.
+ *
+ * @param project Project to serialize.
+ * @returns The file contents to write.
+ */
 export function serializeProject(project: GeoLibreProject): string {
-  return JSON.stringify(project, null, 2);
+  return serializeProjectValue(project, 0, "", new Set()) ?? "null";
 }
 
 export function parseProject(json: string): GeoLibreProject {
@@ -553,6 +676,15 @@ const PROCESSING_RUN_KINDS = new Set<ProcessingRunKind>([
 ]);
 
 /**
+ * Old H3 vector-tool IDs from projects saved before the DGGS rename.
+ * Mapped onto current tool ids during project load.
+ */
+const LEGACY_H3_PROCESSING_TOOL_IDS: Readonly<Record<string, string>> = {
+  "h3-grid": "dggs-grid",
+  "h3-bin-points": "dggs-bin",
+};
+
+/**
  * Coerce an untrusted (possibly hand-edited) `processingHistory` array into
  * valid {@link ProcessingRun} records. Drops entries without a usable id, tool
  * id, or known kind, de-duplicates by id, keeps `parameters` as a plain object,
@@ -576,7 +708,7 @@ export function normalizeProcessingHistory(value: unknown): ProcessingRun[] | nu
     if (!entry || typeof entry !== "object") continue;
     const candidate = entry as Partial<ProcessingRun>;
     const id = normalizeString(candidate.id).trim();
-    const toolId = normalizeString(candidate.toolId).trim();
+    let toolId = normalizeString(candidate.toolId).trim();
     const kind = candidate.kind;
     if (!id || !toolId || seen.has(id)) continue;
     if (!kind || !PROCESSING_RUN_KINDS.has(kind)) continue;
@@ -592,16 +724,22 @@ export function normalizeProcessingHistory(value: unknown): ProcessingRun[] | nu
     const outputLayerNames = Array.isArray(candidate.outputLayerNames)
       ? candidate.outputLayerNames.filter((name): name is string => typeof name === "string")
       : undefined;
+    let parameters: Record<string, unknown> =
+      candidate.parameters && typeof candidate.parameters === "object"
+        ? { ...(candidate.parameters as Record<string, unknown>) }
+        : {};
+    const migrated = LEGACY_H3_PROCESSING_TOOL_IDS[toolId];
+    if (migrated) {
+      toolId = migrated;
+      if (parameters.dggsType == null) parameters = { ...parameters, dggsType: "h3" };
+    }
     runs.push({
       id,
       kind,
       toolId,
       toolName: normalizeString(candidate.toolName) || toolId,
       engine: normalizeString(candidate.engine),
-      parameters:
-        candidate.parameters && typeof candidate.parameters === "object"
-          ? (candidate.parameters as Record<string, unknown>)
-          : {},
+      parameters,
       ...(inputLayerNames && Object.keys(inputLayerNames).length > 0 ? { inputLayerNames } : {}),
       ...(outputLayerNames?.length ? { outputLayerNames } : {}),
       ...(normalizeString(candidate.inputPath)
@@ -957,6 +1095,19 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
       // Coerce unknown/missing bodies to Earth so measurements never break.
       ellipsoidId: getEllipsoid((map as Partial<ProjectPreferences["map"]>).ellipsoidId).id,
       scaleUnit: normalizeScaleUnit((map as Partial<ProjectPreferences["map"]>).scaleUnit),
+      // Absent in every project written before #1813, and the default is off,
+      // so an older project opens without the elevation lookup enabled.
+      showPointerElevation: normalizeBoolean(
+        (map as Partial<ProjectPreferences["map"]>).showPointerElevation,
+        DEFAULT_PROJECT_PREFERENCES.map.showPointerElevation,
+      ),
+      // Kept as a free string here; the app coerces an unknown notation to
+      // decimal degrees when it renders, so a hand-edited project cannot break
+      // the readout.
+      coordinateFormat:
+        typeof (map as Partial<ProjectPreferences["map"]>).coordinateFormat === "string"
+          ? ((map as Partial<ProjectPreferences["map"]>).coordinateFormat as string)
+          : DEFAULT_PROJECT_PREFERENCES.map.coordinateFormat,
     },
     environmentVariables: Array.isArray(candidate.environmentVariables)
       ? candidate.environmentVariables

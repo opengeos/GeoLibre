@@ -74,6 +74,7 @@ import type { GaussianSplatControl, GaussianSplatLayerAdapter } from "maplibre-g
 import type { LidarControlEventHandler, PointCloudInfo } from "maplibre-gl-lidar";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
+import { ensureSharedDeckOverlay, setSharedDeckLayers } from "./shared-deck-overlay";
 import { attachTerrainMeasure, measurePanelElement, type TerrainMapLike } from "./terrain-measure";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
@@ -732,6 +733,12 @@ let bookmarkControl: BookmarkControl | null = null;
 let minimapControl: MinimapControl | null = null;
 let viewStateControl: ViewStateControl | null = null;
 let stacSearchControl: StacSearchControl | null = null;
+// The host API the STAC Search control was opened with, kept so its deck.gl COG
+// layers can reach the shared interleaved overlay from the patched hooks below.
+let stacSearchApp: GeoLibreAppAPI | null = null;
+// Store-derived `beforeId` per STAC Search deck layer id, pushed in by
+// `applyStacSearchLayerOrder`. See `renderStacSearchDeckLayers`.
+const stacSearchBeforeIds = new Map<string, string | undefined>();
 let zarrControl: ZarrLayerControl | null = null;
 let colorbarControl: ColorbarGuiControl | null = null;
 let legendControl: LegendGuiControl | null = null;
@@ -2158,10 +2165,21 @@ export interface CloudNetcdfLayerOptions {
   selector?: Record<string, number | string>;
   /** Color limits `[min, max]`. */
   clim?: [number, number];
-  /** Colormap (array of hex colors). */
-  colormap?: string[];
+  /**
+   * A named GeoLibre ramp (e.g. `"viridis"`) or an explicit list of hex colors,
+   * matching {@link ZarrRasterLayerOptions.colormap}. An unrecognized name falls
+   * back to the renderer's default ramp.
+   */
+  colormap?: string | string[];
   /** Layer opacity (0-1). */
   opacity?: number;
+  /**
+   * Explicit spatial bounds `[west, south, east, north]`. Recorded on the layer
+   * so "Zoom to layer" and the Metadata panel know where the grid is: the
+   * renderer resolves the extent internally and never reports it back, so
+   * without this the layer has no bounds the host can fly to.
+   */
+  bounds?: [number, number, number, number];
   /** Optional request headers (e.g. for authenticated stores). */
   headers?: Record<string, string>;
 }
@@ -2192,6 +2210,11 @@ export async function addCloudNetcdfLayer(
       throw new Error("Could not add the Zarr control to the map.");
     }
     zarrControlMounted = true;
+    // Mounted only to borrow its render path, exactly as addZarrRasterLayer
+    // does. ZARR_OPTIONS sets `collapsed: false` for the "open the Zarr panel"
+    // flow, so without this the panel unfolds over the map the moment a dialog
+    // add lands — on top of the extent the camera has just been flown to.
+    zarrControl.hide();
   }
 
   // The untiled Zarr renderer draws in Web Mercator; switch off globe first
@@ -2231,8 +2254,9 @@ export async function addCloudNetcdfLayer(
         zarrVersion: 2,
         selector: options.selector,
         clim: options.clim,
-        colormap: options.colormap,
+        colormap: resolveZarrColormap(options.colormap),
         opacity: options.opacity,
+        bounds: options.bounds,
       });
     } finally {
       control.off("layeradd", captureLayerId);
@@ -2244,6 +2268,11 @@ export async function addCloudNetcdfLayer(
     // manifest, not a Zarr store whose metadata documents could be walked.
     if (addedLayerId) {
       registerZarrTemporalAdapter(addedLayerId, options.url, { refs, headers: options.headers });
+      // Record the extent on the layer itself. The control accepts `bounds` as a
+      // render hint but does not always carry it back on the "layeradd" event,
+      // and the renderer never reports the extent it resolved — so without this
+      // write the Layers panel's "Zoom to layer" has nothing to fly to.
+      if (options.bounds) applyZarrLayerBounds(addedLayerId, options.bounds);
     }
   });
 
@@ -2251,6 +2280,23 @@ export async function addCloudNetcdfLayer(
   // Zarr control collapsed/hidden: the layer is managed from the layer and
   // style panels. Users can still open the Zarr panel from the menu to tweak
   // colormap/clim.
+}
+
+/**
+ * Write a layer's spatial extent onto its store record, so the Layers panel's
+ * "Zoom to layer" and the Metadata panel can read it back.
+ *
+ * @param layerId The layer added by the Zarr control.
+ * @param bounds `[west, south, east, north]`.
+ */
+function applyZarrLayerBounds(layerId: string, bounds: [number, number, number, number]): void {
+  const store = useAppStore.getState();
+  const layer = store.layers.find((item) => item.id === layerId);
+  if (!layer) return;
+  store.updateLayer(layerId, {
+    source: { ...layer.source, bounds },
+    metadata: { ...layer.metadata, bounds },
+  });
 }
 
 /** Options for {@link addZarrRasterLayer}. */
@@ -3085,6 +3131,7 @@ async function openStandaloneViewStateControl(app: GeoLibreAppAPI): Promise<bool
 async function openStandaloneStacSearchControl(app: GeoLibreAppAPI): Promise<boolean> {
   const { StacSearchControl: StacSearchControlClass } = await getComponentsConstructors();
 
+  stacSearchApp = app;
   stacSearchControl ??= createStacSearchControl(StacSearchControlClass);
 
   if (!stacSearchControlMounted) {
@@ -4281,6 +4328,10 @@ function teardownStacSearchControl(app: GeoLibreAppAPI): void {
   }
   stacSearchControl = null;
   stacSearchControlMounted = false;
+  stacSearchApp = null;
+  // Its deck layers live in the shared overlay, which outlives this control.
+  stacSearchBeforeIds.clear();
+  setSharedDeckLayers("stac-search", []);
 }
 
 function hideSearchControl(): void {
@@ -5393,6 +5444,11 @@ function createStacSearchStoreLayer(
     metadata: {
       collectionId,
       customLayerType: "raster",
+      // The COG variant renders as a deck.gl layer with no MapLibre style layer
+      // to move, so layer-sync must hand its computed `beforeId` to the control
+      // instead of calling `moveLayer` (#1718). The raster-tile variant is a
+      // real style layer and reorders normally.
+      ...(rasterLayerInfo ? {} : { externalDeckLayer: true }),
       externalNativeLayer: true,
       identifiable: false,
       nativeLayerIds,
@@ -5558,6 +5614,10 @@ function patchStacSearchRemoveLayer(control: StacSearchControl): void {
   mutableControl._removeLayer = (id?: string) => {
     const layerIds = id ? [id] : Array.from(mutableControl._cogLayers?.keys() ?? []);
     removeLayer(id);
+    // Upstream repaints its own overlay, which GeoLibre bypasses, so drop the
+    // removed layers from the shared interleaved overlay here (#1718).
+    for (const layerId of layerIds) stacSearchBeforeIds.delete(layerId);
+    renderStacSearchDeckLayers();
     const store = useAppStore.getState();
     for (const layerId of layerIds) {
       const layer = store.layers.find((item) => item.id === layerId);
@@ -5589,7 +5649,10 @@ function patchStacSearchCogLayer(control: StacSearchControl): void {
 
   mutableControl._addCogLayer = async (url: string, item: StacSearchItem, assetKey: string) => {
     ensureMercatorProjection(mutableControl._map);
-    await mutableControl._ensureOverlay?.();
+    // Deliberately NOT `_ensureOverlay()`: that builds the control's own
+    // non-interleaved overlay, which can never be ordered against the style.
+    // The shared interleaved overlay renders these layers instead (#1718).
+    if (stacSearchApp) await ensureSharedDeckOverlay(stacSearchApp);
     const selectedAsset = getStacSearchSelectedAsset(mutableControl, item, {
       key: assetKey,
       url,
@@ -5616,9 +5679,7 @@ function patchStacSearchCogLayer(control: StacSearchControl): void {
       ...renderProps,
     });
     mutableControl._cogLayers?.set(id, layer as unknown as Layer);
-    mutableControl._deckOverlay?.setProps({
-      layers: Array.from(mutableControl._cogLayers?.values() ?? []) as Layer[],
-    });
+    renderStacSearchDeckLayers();
     if (mutableControl._state) {
       mutableControl._state.hasLayer = true;
       mutableControl._state.layerCount = mutableControl._cogLayers?.size ?? 0;
@@ -5969,15 +6030,57 @@ function setStacSearchControlLayerState(id: string, visible: boolean, opacity: n
     id,
     layer.clone({ opacity: appliedOpacity }) as StacSearchRenderableLayer,
   );
-  mutableControl?._deckOverlay?.setProps({
-    layers: getStacSearchDeckLayers(mutableControl),
-  });
+  renderStacSearchDeckLayers();
 }
 
 function getStacSearchDeckLayers(control: MutableStacSearchControl): Layer[] {
   return Array.from(control._cogLayers?.values() ?? []).filter(
     (layer): layer is Layer => !getStacSearchRasterLayerInfo(layer),
   );
+}
+
+/**
+ * Pushes the STAC Search control's deck.gl COG layers into GeoLibre's shared
+ * interleaved overlay, each carrying the `beforeId` derived from the store's
+ * layer order.
+ *
+ * Upstream renders them through the control's own non-interleaved
+ * `MapboxOverlay`, which owns a separate canvas stacked above the entire
+ * MapLibre style — so STAC imagery covered every vector layer no matter where
+ * the user placed it in the Layers panel (opengeos/GeoLibre#1718). Interleaved
+ * layers are drawn inside the style instead, at the depth their `beforeId`
+ * selects, which is what makes panel order mean anything for them.
+ */
+function renderStacSearchDeckLayers(): void {
+  const control = stacSearchControl as unknown as MutableStacSearchControl | null;
+  if (!control) return;
+  const layers = getStacSearchDeckLayers(control).map((layer) => {
+    const beforeId = stacSearchBeforeIds.get(layer.id);
+    if ((layer.props as { beforeId?: string }).beforeId === beforeId) return layer;
+    return layer.clone({ beforeId } as unknown as Partial<Layer["props"]>);
+  });
+  setSharedDeckLayers("stac-search", layers);
+}
+
+/**
+ * Applies a store-derived draw order to a STAC Search deck.gl COG layer.
+ *
+ * Registered by the app shell as part of the external deck-layer order handler:
+ * such a layer is not a real MapLibre style layer, so `moveLayer` cannot reorder
+ * it and layer-sync forwards the computed `beforeId` here instead.
+ *
+ * @param layerId - The store layer id, which doubles as the deck layer id.
+ * @param beforeId - The style layer to draw beneath, or undefined for the top.
+ * @returns True when the id belongs to the STAC Search control.
+ */
+export function applyStacSearchLayerOrder(layerId: string, beforeId: string | undefined): boolean {
+  const control = stacSearchControl as unknown as MutableStacSearchControl | null;
+  const layer = control?._cogLayers?.get(layerId);
+  if (!layer || getStacSearchRasterLayerInfo(layer)) return false;
+  if (stacSearchBeforeIds.get(layerId) === beforeId) return true;
+  stacSearchBeforeIds.set(layerId, beforeId);
+  renderStacSearchDeckLayers();
+  return true;
 }
 
 function getStacSearchRasterLayerInfo(

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { createEmptyProject, serializeProject } from "@geolibre/core";
 import {
   DEFAULT_PROJECT_TITLE,
   DEFAULT_SHARE_BASE_URL,
@@ -40,7 +41,7 @@ function fakeFetch(
 const baseArgs = {
   token: "glb_secrettoken",
   filename: "my-map.geolibre.json",
-  content: '{"version":"1.0.0"}',
+  content: serializeProject(createEmptyProject("My Map")),
   visibility: "unlisted" as const,
   baseUrl: "https://share.geolibre.app",
 };
@@ -200,6 +201,38 @@ describe("shareHostLabel", () => {
 });
 
 describe("uploadProjectToShare", () => {
+  it("redacts credentials before the share request leaves the app", async () => {
+    const { fn, calls } = fakeFetch(201, { project: PROJECT_DTO });
+    const project = createEmptyProject("Secret map");
+    project.preferences.geocoding.apiKeys.mapbox = "share-egress-secret";
+    project.layers.push({
+      id: "auth",
+      name: "Authenticated tiles",
+      type: "3d-tiles",
+      source: {
+        url: "https://example.com/tileset.json?token=share-egress-secret",
+        requestHeaders: { Authorization: "Bearer share-egress-secret" },
+      },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: {},
+    });
+
+    await uploadProjectToShare({
+      ...baseArgs,
+      content: serializeProject(project),
+      fetchImpl: fn,
+    });
+
+    const body = String(calls[0].init.body);
+    assert.ok(!body.includes("share-egress-secret"));
+    const envelope = JSON.parse(body) as { content: string };
+    const shared = JSON.parse(envelope.content) as typeof project;
+    assert.deepEqual(shared.preferences.geocoding.apiKeys, {});
+    assert.ok(!("requestHeaders" in shared.layers[0].source));
+  });
+
   it("rejects when no token is provided", async () => {
     await assert.rejects(() => uploadProjectToShare({ ...baseArgs, token: "  " }), /token/i);
   });
@@ -214,11 +247,14 @@ describe("uploadProjectToShare", () => {
     const headers = calls[0].init.headers as Record<string, string>;
     assert.equal(headers.Authorization, "Bearer glb_secrettoken");
     assert.equal(headers["Content-Type"], "application/json");
-    assert.deepEqual(JSON.parse(calls[0].init.body as string), {
-      filename: "my-map.geolibre.json",
-      content: '{"version":"1.0.0"}',
-      visibility: "unlisted",
-    });
+    const body = JSON.parse(calls[0].init.body as string) as {
+      filename: string;
+      content: string;
+      visibility: string;
+    };
+    assert.equal(body.filename, "my-map.geolibre.json");
+    assert.equal(body.visibility, "unlisted");
+    assert.equal((JSON.parse(body.content) as { name: string }).name, "My Map");
     assert.equal(result.projectUrl, PROJECT_DTO.projectUrl);
     assert.equal(result.viewerUrl, PROJECT_DTO.viewerUrl);
     assert.equal(result.rawJsonUrl, PROJECT_DTO.rawJsonUrl);

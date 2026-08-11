@@ -927,6 +927,7 @@ describe("serializeLayerLibrary / parseLayerLibrary", () => {
         source: {
           url: "https://example.com/tileset.json",
           requestHeaders: { Authorization: "Bearer super-secret" },
+          apiKey: "direct-api-secret",
         },
         opacity: 1,
         metadata: {},
@@ -935,8 +936,10 @@ describe("serializeLayerLibrary / parseLayerLibrary", () => {
     assert.deepEqual(withToken.source.requestHeaders, { Authorization: "Bearer super-secret" });
     const exported = serializeLayerLibrary([withToken]);
     assert.equal(exported.includes("super-secret"), false);
+    assert.equal(exported.includes("direct-api-secret"), false);
     const [reimported] = parseLayerLibrary(exported);
     assert.equal("requestHeaders" in reimported.source, false);
+    assert.equal("apiKey" in reimported.source, false);
     // The rest of the source survives, so the recipient only re-enters the token.
     assert.equal(reimported.source.url, "https://example.com/tileset.json");
   });
@@ -1037,6 +1040,26 @@ describe("serializeLayerLibrary / parseLayerLibrary", () => {
     assert.deepEqual((store.options as { mirrors: string[] }).mirrors, [
       "https://mirror.example.com/a",
     ]);
+  });
+
+  it("drops configuration nested past the export sweep's depth cap", () => {
+    // Fail closed like the project-egress sweep: a source nested deeper than the
+    // cap is not re-addable configuration, so returning it unswept would let a
+    // credential leave in the bundle just by sitting out of reach.
+    let nested: Record<string, unknown> = { apiKey: "SECRET_TOO_DEEP" };
+    for (let index = 0; index < 6; index += 1) nested = { child: nested };
+    const [entry] = normalizeLayerLibraryEntries([
+      {
+        id: "e-deep",
+        name: "Deep config",
+        addedAt: "",
+        layerType: "zarr",
+        source: { url: "https://example.com/store.zarr", store: nested },
+        opacity: 1,
+        metadata: {},
+      },
+    ]);
+    assert.equal(serializeLayerLibrary([entry]).includes("SECRET_TOO_DEEP"), false);
   });
 
   it("redacts password-style query parameters", () => {

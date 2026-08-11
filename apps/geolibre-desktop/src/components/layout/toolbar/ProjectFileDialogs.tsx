@@ -11,7 +11,10 @@ import {
 } from "@geolibre/ui";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
+import {
+  LARGE_EMBED_WARNING_BYTES,
+  type ProjectFileActions,
+} from "../../../hooks/useProjectFileActions";
 import { SaveTemplateDialog } from "../SaveTemplateDialog";
 
 interface ProjectFileDialogsProps {
@@ -196,9 +199,9 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
         </DialogContent>
       </Dialog>
       <Dialog
-        open={projectFiles.envStripPrompt !== null}
+        open={projectFiles.credentialStripPrompt !== null}
         onOpenChange={(open: boolean) => {
-          if (!open) projectFiles.resolveEnvStripPrompt("cancel");
+          if (!open) projectFiles.resolveCredentialStripPrompt("cancel");
         }}
       >
         <DialogContent className="max-w-lg">
@@ -206,18 +209,24 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             <DialogTitle>{t("settings.env.stripPromptTitle")}</DialogTitle>
             <DialogDescription>
               {t("settings.env.stripPromptDesc", {
-                count: projectFiles.envStripPrompt?.count ?? 0,
+                count: projectFiles.credentialStripPrompt?.count ?? 0,
               })}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => projectFiles.resolveEnvStripPrompt("cancel")}>
+            <Button
+              variant="outline"
+              onClick={() => projectFiles.resolveCredentialStripPrompt("cancel")}
+            >
               {t("common.cancel")}
             </Button>
-            <Button variant="outline" onClick={() => projectFiles.resolveEnvStripPrompt("keep")}>
+            <Button
+              variant="outline"
+              onClick={() => projectFiles.resolveCredentialStripPrompt("keep")}
+            >
               {t("settings.env.keepButton")}
             </Button>
-            <Button onClick={() => projectFiles.resolveEnvStripPrompt("strip")}>
+            <Button onClick={() => projectFiles.resolveCredentialStripPrompt("strip")}>
               {t("settings.env.stripButton")}
             </Button>
           </div>
@@ -244,6 +253,16 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               )}
             </DialogDescription>
           </DialogHeader>
+          {(projectFiles.embedVectorDataPrompt?.bytes ?? 0) >= LARGE_EMBED_WARNING_BYTES ? (
+            <p
+              role="alert"
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            >
+              {t("toolbar.item.embedVectorLargeWarning", {
+                size: formatByteSize(projectFiles.embedVectorDataPrompt?.bytes ?? 0),
+              })}
+            </p>
+          ) : null}
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"

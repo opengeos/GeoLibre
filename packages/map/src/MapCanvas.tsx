@@ -1,10 +1,14 @@
 import {
   applyGroupEffects,
+  createPointerElevationResolver,
+  getActiveEllipsoid,
   isDuckDBQueryLayer,
+  NETCDF_IMAGE_SOURCE_KIND,
   PHOTO_FULL_PROPERTY,
   PHOTO_PROPERTY,
   useAppStore,
   type GeoLibreLayer,
+  type PointerElevationResolver,
 } from "@geolibre/core";
 import * as maplibregl from "maplibre-gl";
 import { memo, useEffect, useMemo, useRef } from "react";
@@ -40,6 +44,17 @@ export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   onControllerReady?: () => void;
+  /**
+   * Whether the status bar's elevation readout may fall back to the public
+   * Open-Meteo service. Supplied by the app, which owns the persisted consent
+   * flag; `@geolibre/map` has no opinion about consent storage.
+   *
+   * **Omitting it denies the remote lookup.** A privacy gate that fails open
+   * would send coordinates off-device for any embedder that simply did not know
+   * to pass a predicate. The terrain path is unaffected either way, since it
+   * sends nothing anywhere.
+   */
+  canUseRemoteElevation?: () => boolean;
 }
 
 export interface MapDiagnosticEvent {
@@ -1021,6 +1036,7 @@ export const MapCanvas = memo(function MapCanvas({
   controllerRef,
   onMapDiagnosticEvent,
   onControllerReady,
+  canUseRemoteElevation,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -1048,6 +1064,43 @@ export const MapCanvas = memo(function MapCanvas({
   const selectFeature = useAppStore((s) => s.selectFeature);
   const setMapView = useAppStore((s) => s.setMapView);
   const setPointerCoords = useAppStore((s) => s.setPointerCoords);
+  const setPointerElevation = useAppStore((s) => s.setPointerElevation);
+  const setCameraAltitude = useAppStore((s) => s.setCameraAltitude);
+  const showPointerElevation = useAppStore((s) => s.preferences.map.showPointerElevation);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
+  const pointerElevationRef = useRef<PointerElevationResolver | null>(null);
+  // Held in a ref so the once-only init effect can read the current predicate
+  // without re-creating the map when the consent flag changes.
+  const canUseRemoteElevationRef = useRef<() => boolean>(() => true);
+  canUseRemoteElevationRef.current = canUseRemoteElevation ?? (() => false);
+
+  // loadProject resets the readout, but a lookup already in flight for the
+  // previous project would repaint it a moment later -- including Earth to
+  // Earth, where neither the body nor the pointer changed.
+  useEffect(() => {
+    pointerElevationRef.current?.invalidate();
+  }, [projectGeneration]);
+
+  // The resolver consults the preference, but only when a pointer event asks it
+  // to. Switching the toggle off with the cursor resting motionless over the
+  // map (a keyboard-only toggle) would otherwise leave the last resolved value
+  // on screen until the next mousemove.
+  useEffect(() => {
+    if (!showPointerElevation) {
+      // invalidate() before clearing: a lookup scheduled inside the 500ms
+      // debounce window would otherwise still fire the request, and only be
+      // suppressed afterwards by the isEnabled() re-check. Cancelling the timer
+      // means the request is never made at all.
+      pointerElevationRef.current?.invalidate();
+      setPointerElevation(null);
+      return;
+    }
+    // Symmetrically, switching it *on* while the cursor sits still would show
+    // nothing until the next mousemove. Resolve once for wherever the pointer
+    // already is, so the readout appears with the toggle.
+    const coords = useAppStore.getState().pointerCoords;
+    if (coords) pointerElevationRef.current?.update(coords);
+  }, [showPointerElevation, setPointerElevation]);
   const previousSelectedFeatureKey = useRef<string | null>(null);
   const previousDuckDBSelectionLayerId = useRef<string | null>(null);
   const identifyPopup = useRef<maplibregl.Popup | null>(null);
@@ -1065,10 +1118,37 @@ export const MapCanvas = memo(function MapCanvas({
     controller.current = mc;
     if (controllerRef) controllerRef.current = mc;
 
-    map.on("mousemove", (e) => {
-      setPointerCoords([e.lngLat.lng, e.lngLat.lat]);
+    // Ground elevation under the cursor for the status bar (issue #1813).
+    // Terrain sampling is synchronous so the readout tracks the pointer live;
+    // the resolver only falls back to the network once the pointer settles.
+    const pointerElevation = createPointerElevationResolver({
+      getMap: () => map,
+      isEarth: () => getActiveEllipsoid().id === "earth",
+      // Read per call, not captured: the map is initialised once, so a captured
+      // value would freeze at whatever the toggle was at mount.
+      isEnabled: () => useAppStore.getState().preferences.map.showPointerElevation,
+      // Only the Open-Meteo fallback is gated; the terrain path sends nothing
+      // anywhere. Checked here rather than by scrubbing the stored preference,
+      // so a project that arrives with the readout switched on still cannot
+      // reach the network without local consent.
+      canUseRemote: () => canUseRemoteElevationRef.current(),
+      emit: setPointerElevation,
     });
-    map.on("mouseout", () => setPointerCoords(null));
+    pointerElevationRef.current = pointerElevation;
+
+    map.on("mousemove", (e) => {
+      const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+      setPointerCoords(point);
+      pointerElevation.update(point);
+    });
+    map.on("mouseout", () => {
+      // invalidate() rather than update(null): both cancel a pending lookup, but
+      // update(null) also emits null, and setPointerCoords(null) already clears
+      // the stored elevation — so emitting here would be a second store write
+      // and re-render saying the same thing.
+      pointerElevation.invalidate();
+      setPointerCoords(null);
+    });
     map.on("error", (event) => {
       // Cancelled tile fetches are already surfaced (as info) by the
       // network capture; logging them here would double-count aborts.
@@ -1089,6 +1169,9 @@ export const MapCanvas = memo(function MapCanvas({
       // overwrite the project's saved view ~60 times a second.
       if (event?.flightCameraToken !== undefined) return;
       setMapView(mc.readView(), Boolean(event?.originalEvent));
+      // Same moveend cadence as zoom/bearing/pitch: a bar where one number is
+      // live and the rest lag during a drag reads as broken.
+      setCameraAltitude(mc.readCameraAltitude());
     };
     map.on("moveend", updateView);
 
@@ -1169,6 +1252,7 @@ export const MapCanvas = memo(function MapCanvas({
       if (resizeFrame !== null) {
         window.cancelAnimationFrame(resizeFrame);
       }
+      pointerElevation.dispose();
       mc.destroy();
       controller.current = null;
       if (controllerRef) controllerRef.current = null;
@@ -1194,6 +1278,15 @@ export const MapCanvas = memo(function MapCanvas({
       onControllerReadyRef.current?.();
     });
     controller.current?.setStyle(basemapStyleUrl);
+    // Switching the active body without moving the camera -- the planet switcher
+    // or a different planetary basemap -- changes the radius the altitude is
+    // scaled by, but fires no moveend, so the readout would keep the previous
+    // body's number until the next pan. Mirrors how setStyle refreshes the
+    // scale bar for the same reason.
+    setCameraAltitude(controller.current?.readCameraAltitude() ?? null);
+    // setCameraAltitude is a stable store action; the effect is keyed on the
+    // basemap alone so it does not re-run on unrelated store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basemapStyleUrl]);
 
   useEffect(() => {
@@ -1281,6 +1374,10 @@ export const MapCanvas = memo(function MapCanvas({
     // query. Bail so the two don't both register a map-click handler. (Only
     // "cog" is identify-enabled; plain "raster" never reaches here.)
     if (layer.type === "cog") return;
+
+    // Likewise for a NetCDF grid baked to pixels: useNetcdfIdentify reads its
+    // retained grid directly, and the image layer has no features to query.
+    if (layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) return;
 
     map.getCanvas().style.cursor = "crosshair";
 

@@ -184,7 +184,22 @@
     "elevationRange": "Min / max elevation",
     "meanSlope": "Mean slope",
     "computing": "Computing terrain…",
-    "partialData": "Some samples had no terrain data"
+    "partialData": "Some samples had no terrain data",
+    "heading": "Heading",
+    "finalHeading": "Final heading"
+  },
+  "statusBar": {
+    "elevation": "Elev",
+    "elevationLong": "Elevation",
+    "cameraAltitude": "Eye alt",
+    "cameraAltitudeLong": "Camera altitude above sea level",
+    "coordinateFormat": {
+      "dd": "Decimal degrees",
+      "dms": "Degrees, minutes, seconds",
+      "ddm": "Degrees, decimal minutes",
+      "utm": "UTM (zone, easting/northing)"
+    },
+    "coordinateFormatHint": "Coordinate format: {{format}}. Click to switch."
   },
   "fileNamePrompt": {
     "title": "Save file as",
@@ -303,7 +318,7 @@
       },
       "arcgis": {
         "label": "Add ArcGIS Layer",
-        "description": "Add an ArcGIS FeatureServer layer, VectorTileServer layer, or portal item."
+        "description": "Add an ArcGIS FeatureServer, VectorTileServer, MapServer, or ImageServer layer, or a portal item."
       },
       "postgres": {
         "label": "Add PostgreSQL Layer",
@@ -469,14 +484,39 @@
       "defaultName": "ArcGIS Layer",
       "sampleFeatureLabel": "US major cities (feature)",
       "sampleVectorTileLabel": "Santa Monica parcels (vector tiles)",
+      "sampleMapServiceLabel": "US boundaries (map service)",
+      "sampleImageServiceLabel": "USGS 3DEP hillshade (image service)",
       "featureLayer": "Feature layer",
       "vectorTileLayer": "Vector tile layer",
+      "mapServiceLayer": "Map service",
+      "imageServiceLayer": "Image service",
       "portalItemId": "Portal item ID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Sublayers",
+      "sublayersPlaceholder": "All visible sublayers",
+      "sublayersHint": "Optional comma-separated sublayer ids, for example 0,2,5. Selecting sublayers draws the service dynamically instead of using its cached tiles.",
+      "retrieveSublayers": "Browse layers",
+      "retrievingSublayers": "Retrieving…",
+      "availableSublayers": "Available sublayers",
+      "noSublayersFound": "This map service did not advertise any layers.",
+      "retrieveError": "Could not retrieve the map service layers.",
+      "errorMapServiceUrl": "Enter an ArcGIS MapServer URL.",
+      "renderingRule": "Rendering rule",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "Optional raster function JSON applied by the service. A rendering rule draws the service dynamically instead of using its cached tiles.",
       "portalUrl": "Portal URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Access token"
+      "accessToken": "Access token",
+      "pageSize": "Records per request",
+      "pageSizePlaceholder": "Auto",
+      "maxFeatures": "Maximum features",
+      "maxFeaturesPlaceholder": "All",
+      "pagingHint": "Feature layers download in pages. Lower the records per request if the service times out.",
+      "loadingProgress": "Loaded {{loaded}} of {{total}} features…",
+      "loadingProgressUnknown": "Loaded {{loaded}} features…"
     },
     "gpx": {
       "defaultName": "GPX Layer",
@@ -694,15 +734,26 @@
       "localFileLabel": "Local file",
       "chooseDifferentFile": "Choose a different file",
       "readingFile": "Reading...",
+      "readingRemote": "Reading the file's metadata over HTTP...",
       "localFileHelp": "Select a local NetCDF or HDF5 file (.nc, .nc4, .cdf, .h5, or .hdf5); classic NetCDF-3 and NetCDF-4/HDF5 are both supported. It is decoded in your browser; large files use more memory.",
       "errorNoVariables": "No renderable (2-D or higher) variables found in the file.",
       "errorNoFile": "No file loaded.",
-      "kerchunkUrlLabel": "Kerchunk reference URL",
-      "kerchunkUrlHelp": "Choose a sample dataset above, or paste your own kerchunk reference URL, then click Load variables.",
+      "kerchunkUrlLabel": "Kerchunk reference or NetCDF/HDF file URL",
+      "kerchunkUrlHelp": "Paste a kerchunk reference URL, or a direct NetCDF/HDF file URL (.nc, .nc4, .h5). A direct file is read by range request, so only the parts you view are downloaded; the server must allow cross-origin range requests.",
       "loading": "Loading...",
       "loadVariables": "Load variables",
       "variableLabel": "Variable",
       "dimIndexLabel": "{{dim}} index",
+      "colormapLabel": "Colormap",
+      "bandCombinationLabel": "Band combination",
+      "bandCombinationHelp": "A single band is color-mapped; an RGB composite draws three bands of this variable as the red, green, and blue channels, each stretched to its own 2-98% range.",
+      "modeSingleBand": "Single band (color-mapped)",
+      "modeRgb": "RGB composite (three bands)",
+      "channel": {
+        "red": "Red band",
+        "green": "Green band",
+        "blue": "Blue band"
+      },
       "colorMin": "Color min (optional)",
       "colorMax": "Color max (optional)",
       "adding": "Adding...",
@@ -743,7 +794,8 @@
       "lineWidth": "Line width",
       "extrusion": "3D extrusion",
       "modelUrlPlaceholder": "https://example.com/model.glb"
-    }
+    },
+    "nonGeographicCoordinates": "Coordinates in {{names}} are not longitude/latitude, so nothing will be drawn on the map. The CRS is mislabelled — reproject the data (or fix its .prj) and load it again."
   },
   "offline": {
     "title": "Download Offline Area",
@@ -1115,6 +1167,7 @@
     "guest": "Guest",
     "connectFailed": "Could not connect to the collaboration server.",
     "copyFailed": "Could not copy to clipboard.",
+    "shareFailed": "Could not share the latest project changes.",
     "connecting": "Connecting…",
     "reconnecting": "Reconnecting…",
     "connected": "Live session active",
@@ -1158,6 +1211,7 @@
     "step2Description": "Paste the token into Settings → Environment Variables on this device.",
     "configureToken": "Configure local token",
     "liveAt": "Your project is live at:",
+    "credentialsRemoved": "{{count}} credential field(s) were not included. Recipients must provide their own credentials or use a brokered reference.",
     "copyLink": "Copy link",
     "open": "Open",
     "done": "Done",
@@ -1172,7 +1226,29 @@
     "sharing": "Sharing…",
     "errorFallback": "Could not share the project.",
     "usernameRequired": "Set a username on your {{shareHost}} account before sharing. Open your account settings to choose one, then try again.",
-    "openAccountSettings": "Open account settings"
+    "openAccountSettings": "Open account settings",
+    "readinessChecking": "Checking whether recipients can load your data…",
+    "readinessUnavailable": "The data source check could not run.",
+    "readinessAllReachable_one": "{{count}} data source looks reachable for recipients.",
+    "readinessAllReachable_other": "All {{count}} data sources look reachable for recipients.",
+    "readinessTitle": "Some data may not load for recipients",
+    "readinessNote": "This does not block sharing. Recipients open the project in a browser, where these sources can behave differently than they do for you.",
+    "readinessTruncated_one": "Only {{count}} source was checked.",
+    "readinessTruncated_other": "Only the first {{count}} sources were checked.",
+    "readinessBasemapLabel": "Basemap",
+    "readinessPluginLabel": "Plugin",
+    "readinessReasonCredentialStripped": "Uses a credential that is removed when sharing.",
+    "readinessReasonAuthRequired": "The service refused a request without credentials.",
+    "readinessReasonCors": "A browser cannot fetch this host: it sends no cross-origin headers, or it is unreachable.",
+    "readinessReasonNotFound": "The service answered not found, so the link may have expired or moved.",
+    "readinessReasonLocalFile": "Points at a file on your machine.",
+    "readinessReasonPrivateHost": "Points at a private or local network address.",
+    "readinessReasonNoSource": "Has no source a recipient could open.",
+    "readinessReasonUnchecked": "Could not be checked.",
+    "readinessAdviceCredential": "Make the service public, or tell recipients to supply their own credential.",
+    "readinessAdviceCors": "It still loads in the desktop app, but not in the browser viewer.",
+    "readinessAdviceNotFound": "Update or replace this layer's source before sharing.",
+    "readinessAdviceLocal": "Convert it to a hosted source, or expect recipients to see an empty layer."
   },
   "gallery": {
     "title": "Project gallery",
@@ -1289,13 +1365,19 @@
       "layer": "Layer",
       "titleLabel": "Heading",
       "position": "Position",
-      "filterToPage": "Only features in the page extent",
-      "filterToPageHint": "Applies to atlas pages and a drawn print extent; otherwise the whole layer is used."
+      "pageFilter": "Page extent filter",
+      "filterAll": "All features",
+      "filterContained": "Only features completely within the page extent",
+      "filterIntersecting": "Only features intersecting the page extent",
+      "filterToPageHint": "Applies to atlas pages and a drawn print extent; otherwise the whole layer is used.",
+      "filterToAtlasFeature": "Only the current atlas feature",
+      "filterToAtlasFeatureHint": "Available when the table uses the atlas coverage layer. This takes priority over the page extent filter."
     },
     "dataTable": {
       "columns": "Columns",
       "columnsHint": "The first {{count}} fields are selected by default. Check columns to customize.",
       "maxRows": "Max rows",
+      "fitRows": "Adjust number of rows to fit page",
       "moreRows_one": "+{{count}} more",
       "moreRows_other": "+{{count}} more",
       "noRows": "No rows to show with the current settings."
@@ -1398,7 +1480,9 @@
       "moveUp": "Move entry up",
       "moveDown": "Move entry down",
       "showEntry": "Show entry",
-      "hideEntry": "Hide entry"
+      "hideEntry": "Hide entry",
+      "moreItems_one": "+{{count}} more",
+      "moreItems_other": "+{{count}} more"
     },
     "atlas": {
       "section": "Atlas (map series)",
@@ -1418,6 +1502,8 @@
       "extentMargin": "Margin around feature",
       "extentScale": "Fixed scale",
       "marginLabel": "Margin (%)",
+      "maskOutside": "Mask area outside current feature",
+      "maskOutsideHint": "Applies a translucent inverted fill to emphasize the current atlas feature.",
       "scaleLabel": "Scale",
       "scaleRequired": "Enter a scale greater than zero.",
       "sortField": "Sort by",
@@ -1512,6 +1598,16 @@
     "gapNote": "Dashed segments span dates with no reading (nodata or outside coverage).",
     "exportCsv": "Export CSV",
     "exportGeoParquet": "Export GeoParquet"
+  },
+  "auth": {
+    "unavailableTitle": "Sign-in is unavailable",
+    "unavailableDescription": "GeoLibre could not reach the sign-in service, so it cannot tell whether you are signed in. This is usually temporary; if it persists, this deployment's authentication settings may need attention.",
+    "retry": "Try again",
+    "signInTitle": "Sign in to GeoLibre",
+    "signInDescription": "This deployment requires an account. You will be taken to a secure sign-in page and returned here.",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "account": "Account"
   },
   "basemapExtract": {
     "title": "Extract Offline Basemap",
@@ -1643,8 +1739,13 @@
     "unit": {
       "meters": "m",
       "kilometers": "km",
-      "miles": "mi"
-    }
+      "miles": "mi",
+      "feet": "ft"
+    },
+    "viewshedHere": "Viewshed from here ({{radius}})",
+    "viewshedLayerName": "Viewshed ({{radius}})",
+    "viewshedToolName": "Viewshed",
+    "viewshedNoResult": "No visible area could be computed here."
   },
   "knowledgeCard": {
     "title": "Place info",
@@ -1688,7 +1789,8 @@
       "geocoding": "Geocoding",
       "ai": "AI Providers",
       "environment": "Environment",
-      "updates": "Updates"
+      "updates": "Updates",
+      "startup": "Startup"
     },
     "menu": {
       "mapPreferences": "Map Preferences",
@@ -1716,6 +1818,23 @@
         "major": "Major releases only"
       }
     },
+    "startup": {
+      "title": "Startup project",
+      "description": "Choose the workspace GeoLibre opens when the native app starts.",
+      "mode": {
+        "default": "Open the default workspace",
+        "last": "Reopen the last project",
+        "specific": "Open a specific project"
+      },
+      "modeHint": {
+        "default": "Start with a new, untitled project.",
+        "last": "Open the most recently used local project."
+      },
+      "chooseProject": "Choose Project",
+      "noProjectSelected": "No project selected",
+      "selectError": "The selected project could not be read.",
+      "loadWarning": "The startup project is unavailable. GeoLibre opened the default workspace instead."
+    },
     "map": {
       "constraintsTitle": "Map constraints",
       "restrictBounds": "Restrict map bounds",
@@ -1737,7 +1856,9 @@
       "scaleUnitImperial": "Imperial (ft / mi)",
       "scaleUnitNautical": "Nautical (nmi)",
       "scaleUnitHint": "Choose the units shown on the scale bar at the bottom of the map.",
-      "errorBoundsUnavailable": "The map bounds are not available yet."
+      "errorBoundsUnavailable": "The map bounds are not available yet.",
+      "coordinateFormat": "Coordinate format",
+      "coordinateFormatHint": "Notation the status bar reports the pointer coordinate in. Click the coordinates in the status bar to switch notation."
     },
     "layout": {
       "title": "Layout",
@@ -1817,9 +1938,9 @@
       "removeAria": "Remove {{name}}",
       "errorNamePattern": "Environment variable names must start with a letter or underscore and contain only letters, numbers, and underscores.",
       "errorDuplicate": "Environment variable \"{{name}}\" is duplicated.",
-      "stripPromptTitle": "Strip environment variables?",
-      "stripPromptDesc": "This project has {{count}} environment variable(s) (which may include API keys). They are stored in plain text in the project file and could be exposed if you share it. Remove them from the saved file? Your Settings keep them on this device either way.",
-      "stripButton": "Strip from file",
+      "stripPromptTitle": "Strip credentials?",
+      "stripPromptDesc": "This project has {{count}} credential-bearing field(s), such as API keys, request headers, or plugin settings. Remove them from the saved file? The current workspace keeps them either way.",
+      "stripButton": "Strip credentials",
       "keepButton": "Keep in file"
     },
     "geocoding": {
@@ -2157,6 +2278,7 @@
       "rasterShape": "Read {{width}}×{{height}} raster with {{bands}} band(s)",
       "wroteCog": "Wrote a tiled COG with overviews ({{compression}})",
       "notAGeoTiff": "This file is not a readable GeoTIFF. In the browser, Raster to COG reads GeoTIFF only; other formats need the desktop app.",
+      "rasterTooLargeForBrowser": "In the browser this decodes the whole raster in WebAssembly, which is limited to about 4 GB, so this one does not fit. Convert it with the GeoLibre desktop app, or build the COG beforehand with gdal_translate or rio-cogeo.",
       "zoomRangeError": "Zoom levels must satisfy 0 ≤ min ≤ max ≤ {{max}}.",
       "colormap": "Colormap",
       "resampling": "Resampling",
@@ -2232,8 +2354,9 @@
       "grid": "Regular grid",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Cell-site coverage",
-      "h3Grid": "Create H3 grid",
-      "h3BinPoints": "Bin points to H3",
+      "dggsGenerator": "DGGS Generator",
+      "dggsBinning": "DGGS Binning",
+      "dggsCompact": "DGGS Compact",
       "trajectorySpeed": "Trajectory speed",
       "detectStops": "Detect stops",
       "spaceTimeProximity": "Space-time proximity",
@@ -2418,7 +2541,8 @@
       "subGroupOverlay": "Overlay",
       "subGroupJoin": "Join",
       "subGroupSelect": "Select",
-      "subGroupH3": "H3",
+      "subGroupDggs": "DGGS",
+      "subGroupH3": "DGGS",
       "subGroupMovement": "Movement & time",
       "subGroupDataQuality": "Data quality",
       "subGroupTerrain": "Terrain",
@@ -2436,6 +2560,8 @@
       "atmosphereEnabled": "Enabled",
       "spinGlobe": "Spinning Globe",
       "graticule": "Gridlines",
+      "pointerElevation": "Elevation",
+      "pointerElevationHint": "Show ground elevation under the pointer in the status bar. Without 3D terrain this looks up a public elevation service.",
       "weather": "Weather",
       "weatherTooltip": "Overlay near-realtime weather layers you can animate.",
       "weatherPlay": "Play animation",
@@ -2517,6 +2643,7 @@
       "embedVectorTitle": "Embed local vector data?",
       "embedVectorDesc": "This project has {{count}} local vector layer(s) loaded from your computer. The browser cannot re-read them when the project is reopened, so their data must be embedded in the project file to be restored. Embedding adds about {{size}} to the file.",
       "embedVectorDescDesktop": "This project has {{count}} local vector layer(s) loaded from your computer. Embed their data to make the project self-contained (adds about {{size}}), or save file references that reload from disk when the project is reopened. References keep the file small but break if a source file is later moved or deleted.",
+      "embedVectorLargeWarning": "Embedding about {{size}} makes a very large project file. Reopening it may be slow or fail outright, because every feature has to be parsed and held in memory at once. For data this size, convert the layers to PMTiles or FlatGeobuf and add them as remote layers instead of embedding them.",
       "embedVectorEmbedButton": "Embed data",
       "embedVectorReferenceButton": "Save file references",
       "embedVectorSkipButton": "Save without data",
@@ -2556,7 +2683,9 @@
       "loadingOsmPbfDesc": "Parsing the file and converting features to GeoJSON. This runs in the background and may take a moment for large extracts.",
       "loadingOsmPbfProgress": "Converting features to GeoJSON… {{processed}} of {{total}} OSM entities processed.",
       "projectName": "Project name",
-      "storymapEllipsis": "Story Map..."
+      "storymapEllipsis": "Story Map...",
+      "pointerElevationNoticeTitle": "Elevation uses a public elevation service",
+      "pointerElevationNoticeDesc": "The status bar's elevation readout is resolved from the map's own 3D terrain when that is enabled, which sends nothing anywhere. Without 3D terrain it falls back to the public Open-Meteo elevation API, and the coordinates under your pointer leave your device for those requests."
     },
     "plugin": {
       "maplibre-gl-annotations": "Annotations",
@@ -2630,6 +2759,7 @@
       "couldNotOpenRecentProject": "Could not open the recent project.",
       "couldNotLoadRecentProject": "Could not load the recent project.",
       "couldNotSaveProject": "Could not save the project.",
+      "projectTooLargeToSave": "This project is too large to save. Convert its embedded vector data to PMTiles or FlatGeobuf and add those as remote layers instead of embedding the features.",
       "couldNotExportHtml": "Could not export the project to HTML.",
       "osmPbfNoFeatures": "No point, line, or polygon features were found in this OSM PBF file.",
       "couldNotLoadOsmPbf": "Could not load the OSM PBF file.",
@@ -2999,9 +3129,9 @@
     "title": "OLC",
     "controlTitle": "OLC settings",
     "autoResolution": "Automatic resolution",
-    "resolution": "Code length",
+    "resolution": "Resolution",
     "cellCount": "{{count}} cells in view",
-    "tooManyCells": "This view exceeds the {{limit}} cell limit. Zoom in or lower the code length.",
+    "tooManyCells": "This view exceeds the {{limit}} cell limit. Zoom in or lower the resolution.",
     "fillColor": "Fill color",
     "fillOpacity": "Fill opacity",
     "lineColor": "Outline color",
@@ -3026,9 +3156,9 @@
     "title": "Geohash",
     "controlTitle": "Geohash settings",
     "autoResolution": "Automatic resolution",
-    "resolution": "Precision",
+    "resolution": "Resolution",
     "cellCount": "{{count}} cells in view",
-    "tooManyCells": "This view exceeds the {{limit}} cell limit. Zoom in or lower the precision.",
+    "tooManyCells": "This view exceeds the {{limit}} cell limit. Zoom in or lower the resolution.",
     "fillColor": "Fill color",
     "fillOpacity": "Fill opacity",
     "lineColor": "Outline color",
@@ -3053,9 +3183,9 @@
     "title": "Tilecode",
     "controlTitle": "Tilecode settings",
     "autoResolution": "Automatic resolution",
-    "resolution": "Zoom level",
+    "resolution": "Resolution",
     "cellCount": "{{count}} tiles in view",
-    "tooManyCells": "This view exceeds the {{limit}} tile limit. Zoom in or lower the zoom level.",
+    "tooManyCells": "This view exceeds the {{limit}} tile limit. Zoom in or lower the resolution.",
     "fillColor": "Fill color",
     "fillOpacity": "Fill opacity",
     "lineColor": "Outline color",
@@ -3769,6 +3899,8 @@
       "bylinePlaceholder": "Author or credit line",
       "footerText": "Footer text",
       "footerPlaceholder": "Footer shown at the bottom of each page",
+      "markers": "Clickable location markers",
+      "markersHint": "Draws a marker at each chapter's location. In a PDF viewer, clicking a marker opens that coordinate in Google Maps.",
       "startSlide": "Start slide",
       "endSlide": "Closing slide",
       "generate": "Generate PDF",
@@ -3990,7 +4122,8 @@
       "sidecarUnavailablePyodide": "The GeoPandas sidecar is not available. Start the sidecar with the vector extra, or switch to Python (Pyodide).",
       "pyodideNote": "Runs GeoPandas in your browser. The first run downloads the Python runtime (one-time, needs an internet connection).",
       "run": "Run",
-      "outputPlaceholder": "Output will appear here."
+      "outputPlaceholder": "Output will appear here.",
+      "resolutionRange": "Resolution (0-{{max}})"
     }
   },
   "segmentation": {
@@ -4204,6 +4337,8 @@
     "manageFieldAria": "Manage field {{name}}",
     "renameField": "Rename field",
     "hideField": "Hide field",
+    "excludeField": "Exclude field on export",
+    "includeField": "Include field on export",
     "moveLeft": "Move left",
     "moveRight": "Move right",
     "deleteField": "Delete field",
@@ -4805,6 +4940,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "Extract subset…",
     "stylesMenu": "Styles",
+    "exportGeoLibreStyle": "Export GeoLibre URL style",
     "exportMapboxStyle": "Export as Mapbox GL style",
     "exportSldStyle": "Export as OGC SLD",
     "exportQmlStyle": "Export as QGIS QML",
@@ -4812,7 +4948,7 @@
     "exportStyleDataNotReady": "Layer data is not ready yet. Try again in a moment.",
     "exportStyleNeedsFeatures": "Style export requires a vector layer with features.",
     "exportStyleError": "Could not export this layer's style.",
-    "importStyle": "Import style (Mapbox GL / SLD / QML)…",
+    "importStyle": "Import style (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Saved styles (Style Manager)…",
     "importStyleSuccess": "Style imported.",
     "importStyleInvalid": "That file is not valid JSON, SLD, or QML.",
@@ -4851,6 +4987,7 @@
     "bindWindowCumulative": "Everything up to the current step (cumulative)",
     "bindCancel": "Cancel",
     "bindConfirm": "Bind",
+    "openStylePanel": "Open Style panel",
     "openRasterStylePanel": "Edit raster style…",
     "exportRasterSuccess": "Raster exported.",
     "exportRasterError": "Could not export this raster.",
@@ -5017,6 +5154,78 @@
     "nodataAuto": "Auto (from file)",
     "nodataOff": "Render all pixels",
     "nodataCustom": "Custom value"
+  },
+  "netcdfSymbology": {
+    "heading": "NetCDF symbology",
+    "colorRampLabel": "Colormap",
+    "reverse": "Reverse colormap",
+    "colorMin": "Color min",
+    "colorMax": "Color max",
+    "resetRange": "Reset to data range",
+    "openCube": "3D cube"
+  },
+  "netcdfCube": {
+    "heading": "3D image cube",
+    "close": "Close",
+    "settings": "Settings",
+    "setupTitle": "3D image cube",
+    "setupDescription": "Choose what to read before building the cube. Every band is a separate read, so the extent and band count decide how long it takes.",
+    "extent": "Extent",
+    "extentView": "Current map view",
+    "extentDraw": "Draw on map",
+    "extentFull": "Full layer extent",
+    "viewHint": "Reads whatever the map is showing when the cube is built.",
+    "fullHint": "Reads the whole grid. Slow for a scene-sized cube.",
+    "drawBbox": "Draw on map",
+    "drawing": "Drag a box on the map to set the cube's extent",
+    "drawHint": "Drag a box on the map to set the extent.",
+    "drawnExtent": "W {{west}}, S {{south}}, E {{east}}, N {{north}}",
+    "detail": "Detail",
+    "detailOption": "{{size}} cells per side",
+    "bands": "Bands",
+    "allBands": "All ({{count}})",
+    "rgbOverlay": "RGB image on top",
+    "rgbHint": "Composes three bands into a color image laid over the top face, so the cube is recognizable as a place.",
+    "red": "Red",
+    "green": "Green",
+    "blue": "Blue",
+    "planeEstimate": "{{count}} band reads",
+    "create": "Create cube",
+    "colorRampLabel": "Colormap",
+    "reverse": "Reverse",
+    "showRgb": "RGB top",
+    "rgbBands": "RGB bands",
+    "recomposing": "reading...",
+    "zScale": "Height",
+    "slice": "Slice",
+    "sliceAt": "cut at {{band}} {{units}}",
+    "reading": "Reading band {{done}} of {{total}}...",
+    "summary": "{{nx}} x {{ny}} cells, {{nz}} bands along {{axis}}",
+    "errorNoCube": "This layer's source file is no longer open, so a cube cannot be read.",
+    "error": {
+      "shapeMismatch": "The variable's band planes do not share one shape, so they cannot be stacked into a cube.",
+      "rgbShapeMismatch": "The chosen RGB bands do not match the cube's shape.",
+      "noBands": "This variable has no bands to read.",
+      "noReadWindow": "This cube cannot be updated in place. Rebuild it from Settings."
+    }
+  },
+  "netcdfProfile": {
+    "heading": "Spectral profile",
+    "clear": "Clear",
+    "chartAria": "Sampled pixel values along the band axis",
+    "popOut": "Pop out",
+    "dock": "Dock",
+    "poppedOutHint": "The chart is open in a window on the map.",
+    "noValues": "No values to chart for these pixels.",
+    "exportPng": "PNG",
+    "exportCsv": "CSV",
+    "exportError": "Could not export the chart.",
+    "rasterFallbackName": "Raster"
+  },
+  "netcdfIdentify": {
+    "noData": "no data",
+    "coordinates": "lon, lat",
+    "cell": "row, col"
   },
   "rasterAttributeTable": {
     "title": "Raster attribute table",
@@ -5267,8 +5476,49 @@
     "authorNamePlaceholder": "e.g. Alex or Sarah",
     "commentLabel": "Comment / Feedback",
     "commentPlaceholder": "Type your review note or feedback here...",
+    "post": "Post Comment",
+    "postShortcutTooltip": "Post Comment ({{shortcut}})",
     "confirmDelete": "Are you sure you want to delete this comment thread?",
     "sessionDisconnected": "Session disconnected.",
-    "defaultAuthorName": "Author"
+    "defaultAuthorName": "Author",
+    "addComment": "Add Comment",
+    "addCommentTooltip": "Place a new review comment on the map",
+    "yourNamePlaceholder": "Your name…",
+    "saveName": "Save name",
+    "noNameSet": "No name set — comments will show as \"{{name}}\"",
+    "changeNameTooltip": "Change name",
+    "setYourName": "Set your name",
+    "changeName": "Change Name",
+    "postingAs": "Posting as <strong>{{name}}</strong>",
+    "copy": "Copy",
+    "startLiveSession": "Start Live Session",
+    "starting": "Starting…",
+    "sessionCodePlaceholder": "ENTER SESSION CODE",
+    "connect": "Connect",
+    "joining": "Joining…",
+    "liveSync": "Live Sync ({{count}} online)",
+    "offlineWorkspace": "Offline / Private Workspace",
+    "disconnect": "Disconnect",
+    "joinFailed": "Failed to join session.",
+    "startFailed": "Failed to start session.",
+    "filterOpen": "Open ({{count}})",
+    "filterResolved": "Resolved ({{count}})",
+    "filterAll": "All ({{count}})",
+    "emptyOpen": "No open comments",
+    "emptyResolved": "No resolved comments",
+    "emptyHint": "Click \"Add Comment\" above and select any location or feature on the map to drop a review note.",
+    "resolvedBadge": "Resolved",
+    "zoomToLocation": "Zoom to location",
+    "markResolved": "Mark as resolved",
+    "reopenThread": "Reopen comment thread",
+    "deleteThread": "Delete comment thread",
+    "anchorFeature": "Feature #{{id}} ({{layer}})",
+    "anchorPoint": "Point ({{coords}})",
+    "anchorMap": "Map",
+    "anchoredToFeature": "Anchored to Feature #{{id}} ({{layer}})",
+    "anchoredToPoint": "Anchored to ({{coords}})",
+    "mapPoint": "Map Point",
+    "reply": "Reply",
+    "replyPlaceholder": "Write a reply..."
   }
 }

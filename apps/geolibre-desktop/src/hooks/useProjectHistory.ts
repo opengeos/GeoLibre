@@ -18,9 +18,13 @@ import {
   type ProjectHistorySnapshot,
 } from "../lib/project-history-store";
 import {
+  announceLiveProjectSession,
+  liveProjectSessionTabs,
   markProjectSession,
   readLastExplicitProjectSave,
   readProjectSessionState,
+  SESSION_HEARTBEAT_MS,
+  shouldOfferProjectRecovery,
 } from "../lib/project-history-session";
 const AUTOSAVE_DELAY_MS = 3_000;
 
@@ -45,15 +49,29 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
 
   useEffect(() => {
     const crashRecoveryEnabled = !isTauri() && !isEmbedded();
+    // Installed before anything awaits, so a sibling tab probing at the same
+    // moment gets an answer from this one.
+    const stopAnnouncing = crashRecoveryEnabled ? announceLiveProjectSession() : null;
     void (async () => {
       try {
+        // The liveness probe waits a fixed window for other tabs to answer, so
+        // it is started first and awaited last: its wait overlaps the IndexedDB
+        // read instead of being added to it, and the history list still renders
+        // the moment the snapshots arrive rather than trailing the probe.
+        const liveTabs = crashRecoveryEnabled
+          ? liveProjectSessionTabs().catch(() => new Set<string>())
+          : Promise.resolve(new Set<string>());
         const entries = await listProjectSnapshots();
         setSnapshots(entries.filter((entry) => entry.projectKey === currentProjectKey()));
         if (crashRecoveryEnabled) {
-          const previousSession = readProjectSessionState();
-          const lastSave = readLastExplicitProjectSave();
           const latest = entries[0];
-          if (previousSession === "open" && latest && (!lastSave || latest.createdAt > lastSave)) {
+          if (
+            shouldOfferProjectRecovery(
+              latest,
+              readProjectSessionState(await liveTabs),
+              readLastExplicitProjectSave(),
+            )
+          ) {
             setRecoverySnapshot(latest);
           }
         }
@@ -65,7 +83,13 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
     })();
 
     const markClean = () => markProjectSession("closed");
-    if (crashRecoveryEnabled) window.addEventListener("pagehide", markClean);
+    // A tab open for hours has to stay distinguishable from one that died, so
+    // it restamps its own entry while it lives; see SESSION_HEARTBEAT_MS.
+    let heartbeat: number | null = null;
+    if (crashRecoveryEnabled) {
+      window.addEventListener("pagehide", markClean);
+      heartbeat = window.setInterval(() => markProjectSession("open"), SESSION_HEARTBEAT_MS);
+    }
     const unsubscribe = useAppStore.subscribe((state, previous) => {
       if (
         !state.isDirty ||
@@ -76,7 +100,37 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;
-        const content = serializeProject(buildProjectSnapshot(mapControllerRef));
+        // `serializeProject` runs synchronously, so its failure cannot be caught
+        // by the promise chain below. A project embedding a large vector layer
+        // serializes to more than V8's 536,870,888-byte string cap and throws
+        // `RangeError: Invalid string length`, which previously escaped as an
+        // unhandled error on every autosave tick. Autosave is best-effort — a
+        // project too large to snapshot must degrade to "no crash recovery",
+        // never to a crash.
+        // Built and serialized in separate steps so the two failures are not
+        // conflated: a snapshot that cannot be constructed is a genuine error,
+        // while one too large to stringify is an expected limit.
+        let snapshot: ReturnType<typeof buildProjectSnapshot>;
+        try {
+          snapshot = buildProjectSnapshot(mapControllerRef);
+        } catch (error) {
+          console.error("Could not autosave the project.", error);
+          return;
+        }
+        let content: string;
+        try {
+          content = serializeProject(snapshot);
+        } catch (error) {
+          // Only the string-length cap means "too large"; anything else is a
+          // real serialization bug and must not be filed under a size problem,
+          // or that class of failure becomes invisible in the wild.
+          if (error instanceof RangeError) {
+            console.warn("Project autosave skipped: the project is too large to serialize.", error);
+          } else {
+            console.error("Could not autosave the project.", error);
+          }
+          return;
+        }
         void addProjectSnapshot(content, currentProjectKey()).catch((error) =>
           console.error("Could not autosave the project.", error),
         );
@@ -85,6 +139,8 @@ export function useProjectHistory(mapControllerRef: RefObject<MapController | nu
     return () => {
       unsubscribe();
       if (crashRecoveryEnabled) window.removeEventListener("pagehide", markClean);
+      if (heartbeat !== null) window.clearInterval(heartbeat);
+      stopAnnouncing?.();
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     };
   }, [mapControllerRef, refresh]);

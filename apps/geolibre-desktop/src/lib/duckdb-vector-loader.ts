@@ -18,7 +18,7 @@ import { confirmLargeDataset, type DuckDbVectorLoadOptions } from "./duckdb-vect
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
 import { prjSidecarCrs } from "./prj-sidecar";
-import { selectDuckDbBundle } from "./duckdb-wasm-bundles";
+import { createDuckDbWorker, selectDuckDbBundle } from "./duckdb-wasm-bundles";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
 
 // Re-exported for existing importers (sql-workspace, duckdb-processing, etc.)
@@ -238,34 +238,53 @@ export async function ensureSpatialExtension(
   }
 }
 
-let h3ExtensionPromise: Promise<void> | null = null;
+/**
+ * Memoized INSTALL/LOAD for a DuckDB community extension. `name` must stay a
+ * module-internal literal — never accept caller-supplied SQL identifiers.
+ */
+function createCommunityExtensionLoader(
+  name: "h3" | "a5" | "duck_dggs",
+): (connection: duckdb.AsyncDuckDBConnection) => Promise<void> {
+  let promise: Promise<void> | null = null;
+  return async (connection) => {
+    promise ??= (async () => {
+      await connection.query(`INSTALL ${name} FROM community`);
+      await connection.query(`LOAD ${name}`);
+    })();
+    try {
+      await promise;
+    } catch (error) {
+      promise = null;
+      throw error;
+    }
+  };
+}
 
 /**
  * Install and load the DuckDB `h3` community extension once per database
- * instance. Mirrors {@link ensureSpatialExtension}: memoized as a promise so
- * concurrent callers share one INSTALL/LOAD, and cleared on failure so a later
- * call can retry. `h3` is published for the bundled DuckDB version (v1.5.1) on
- * all WASM platforms.
+ * instance. Concurrent callers share one INSTALL/LOAD; failures clear the
+ * memo so a later call can retry. `h3` is published for the bundled DuckDB
+ * version (v1.5.1) on all WASM platforms.
  */
-export async function ensureH3Extension(connection: duckdb.AsyncDuckDBConnection): Promise<void> {
-  h3ExtensionPromise ??= (async () => {
-    // Unlike `ensureSpatialExtension`, no `beforeLoad` warm-up is needed here:
-    // the duckdb-wasm v1.33.1-dev45 remote-read bug only affects `spatial`. If a
-    // similar issue ever surfaces for `h3`, add a `beforeLoad` hook to match.
-    await connection.query("INSTALL h3 FROM community");
-    await connection.query("LOAD h3");
-  })();
-  try {
-    await h3ExtensionPromise;
-  } catch (error) {
-    h3ExtensionPromise = null;
-    throw error;
-  }
-}
+export const ensureH3Extension = createCommunityExtensionLoader("h3");
+
+/**
+ * Install and load the DuckDB `a5` community extension once per database
+ * instance. Mirrors {@link ensureH3Extension}.
+ */
+export const ensureA5Extension = createCommunityExtensionLoader("a5");
+
+/**
+ * Install and load the DuckDB `duck_dggs` community extension (DGGRID v8)
+ * once per database instance. Mirrors {@link ensureH3Extension}.
+ */
+export const ensureDuckDggsExtension = createCommunityExtensionLoader("duck_dggs");
 
 async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
   const bundle = await selectDuckDbBundle();
-  const worker = new Worker(bundle.mainWorker!, { type: "module" });
+  // Not `new Worker(bundle.mainWorker)`: a CDN-loaded bundle needs a same-origin
+  // blob shim, so each bundles variant supplies its own worker factory.
+  const worker = createDuckDbWorker(bundle);
   const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
   const db = new duckdb.AsyncDuckDB(logger, worker);
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);

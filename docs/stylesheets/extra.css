@@ -85,6 +85,12 @@
 }
 
 .hero__media {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+}
+
+.hero__media figure {
   margin: 0;
 }
 

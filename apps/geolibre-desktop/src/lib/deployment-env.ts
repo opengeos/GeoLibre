@@ -7,6 +7,12 @@
 // operator repoints a *prebuilt* image with `-e GEOLIBRE_…=…` instead of
 // rebuilding it.
 //
+// One exception to the `VITE_*` rule: the entrypoint also writes the bare
+// `GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT`, whose reader is a plugin loaded from
+// outside this repo and so is not bound by our naming. It is published alongside
+// the `VITE_*` aliases this module reads, not instead of them, so nothing here
+// needs to handle it.
+//
 // Precedence for anything configurable both ways is deployment env first, then
 // the build-time Vite env — the deployment is the more specific statement, and
 // the published image is built with the defaults. `readDeploymentAssistantEnv`

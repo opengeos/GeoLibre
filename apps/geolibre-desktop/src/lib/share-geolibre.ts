@@ -6,7 +6,12 @@
 // `resolveShareHost` for the precedence and for why a rejected value disables
 // sharing instead of falling back to the hosted service.
 
-import { DEFAULT_PROJECT_NAME } from "@geolibre/core";
+import {
+  DEFAULT_PROJECT_NAME,
+  parseProject,
+  redactCredentials,
+  serializeProject,
+} from "@geolibre/core";
 import { readDeploymentEnvValue, type EnvRecord } from "./deployment-env";
 import { getShareFetch } from "./share-fetch";
 
@@ -261,6 +266,13 @@ export async function uploadProjectToShare(
   const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
 
+  let safeContent: string;
+  try {
+    safeContent = serializeProject(redactCredentials(parseProject(options.content)));
+  } catch {
+    throw new Error("The project could not be validated before sharing.");
+  }
+
   let response: Response;
   try {
     response = await fetchImpl(`${base}/api/projects`, {
@@ -271,7 +283,7 @@ export async function uploadProjectToShare(
       },
       body: JSON.stringify({
         filename: options.filename,
-        content: options.content,
+        content: safeContent,
         visibility: options.visibility,
       }),
       signal,

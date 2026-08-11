@@ -13,6 +13,14 @@ declare const __GEOLIBRE_STORE_BUILD__: boolean;
 // UI compiles them out. false in every other build. See vite.config.ts.
 declare const __GEOLIBRE_MAS_BUILD__: boolean;
 
+// True only in the Jupyter embed wheel build (GEOLIBRE_EMBED=1), which is served
+// from inside a notebook and must never render a hosted deployment's sign-in
+// gate. false in every other build. Deliberately a *build* flag: the runtime
+// `isEmbedded()` heuristic accepts a `?embed=1` query parameter, which a visitor
+// controls and so cannot decide whether authentication applies. See
+// vite.config.ts.
+declare const __GEOLIBRE_EMBED_BUILD__: boolean;
+
 // jsDelivr URLs for the PGlite engine and its PostGIS extension, injected by
 // vite.config.ts. Only the embed (Jupyter wheel) build reads them, from
 // pglite-loader.cdn.ts; web/desktop builds bundle PGlite and never reference

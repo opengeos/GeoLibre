@@ -354,6 +354,9 @@ export function StyleManagerPanel() {
             extensions: ["json", "qml", "sld", "xml"],
           },
         ],
+        // Android cannot reliably map the SLD/QML extensions to MIME types.
+        // Accept any document there and validate its contents after selection.
+        androidFilters: [],
         accept: ".json,.qml,.sld,.xml,application/json,application/xml,text/xml",
         readText: true,
       });

@@ -4,6 +4,7 @@ import {
   DEFAULT_PROJECT_PREFERENCES,
   getPlanetaryBasemapByStyleUrl,
   PLANETARY_BASEMAP_SENTINEL_PREFIX,
+  scaleAltitudeToActiveBody,
   useAppStore,
 } from "@geolibre/core";
 import type {
@@ -1083,6 +1084,33 @@ export class MapController {
     };
   }
 
+  /**
+   * The camera's height above sea level in metres — Google Earth Pro's
+   * "Eye alt" (issue #1816). Corrected for the active body, since MapLibre
+   * computes it from the Earth-based Mercator scale.
+   *
+   * v6 split `Camera` out of `Map`, moving the transform to `_camera`; v5
+   * exposed it on the map itself. Both are read because `getCameraAltitude` is
+   * also a newer addition, so the whole chain is probed defensively: a MapLibre
+   * bump that drops or renames either should blank the readout, not throw
+   * inside a `moveend` handler.
+   */
+  readCameraAltitude(): number | null {
+    const host = this.map as
+      | {
+          _camera?: { transform?: { getCameraAltitude?: () => number } };
+          transform?: { getCameraAltitude?: () => number };
+        }
+      | undefined;
+    const transform = host?._camera?.transform ?? host?.transform;
+    if (typeof transform?.getCameraAltitude !== "function") return null;
+    try {
+      return scaleAltitudeToActiveBody(transform.getCameraAltitude());
+    } catch {
+      return null;
+    }
+  }
+
   syncLayers(layers: GeoLibreLayer[]): void {
     if (!this.isStyleReady() || !this.map) return;
     const map = this.map;
@@ -2153,11 +2181,17 @@ export class MapController {
   private getBeforeStyleLayerId(layers: GeoLibreLayer[], layerIndex: number): string | undefined {
     if (!this.map) return undefined;
 
+    const styleLayerIds =
+      this.map.getLayersOrder?.() ?? (this.map.getStyle().layers ?? []).map(({ id }) => id);
     for (const layer of layers.slice(layerIndex + 1)) {
-      const beforeLayer = this.getCandidateStyleLayers(layer).find(({ id }) =>
-        this.map?.getLayer(id),
-      );
-      if (beforeLayer) return beforeLayer.id;
+      const candidateIds = new Set(this.getCandidateStyleLayers(layer).map(({ id }) => id));
+      // A logical layer can render through several MapLibre style layers. KML
+      // icon points, for example, use a symbol companion plus a fallback
+      // circle for features without icons. Anchor beneath whichever companion
+      // is currently lowest in the real style order so the inserted layer
+      // cannot split that logical layer in two.
+      const bottommostId = styleLayerIds.find((id) => candidateIds.has(id));
+      if (bottommostId) return bottommostId;
     }
 
     if (layerIndex >= 0) {

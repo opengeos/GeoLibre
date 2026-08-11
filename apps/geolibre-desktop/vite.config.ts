@@ -137,6 +137,30 @@ const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN !== "0";
 const IS_EMBED = process.env.GEOLIBRE_EMBED === "1";
 const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
 
+// DuckDB-WASM from jsDelivr instead of the build output. Opt-IN, the reverse of
+// PGLITE_CDN above, because DuckDB is on the critical path for opening a local
+// vector file — making that need the network is a real behaviour change, so only
+// a deployment that cannot serve the binaries asks for it.
+//
+// The one that cannot: `duckdb-mvp.wasm` (~40 MB) and `duckdb-eh.wasm` (~35 MB)
+// both exceed the 25 MiB per-asset limit on Cloudflare Pages and Workers static
+// assets, which rejects the upload outright. Nothing else in the build is close
+// (the next largest is ~22 MB), so this single flag is what decides whether the
+// app can be hosted there at all. GitHub Pages allows 100 MB per file and needs
+// none of this.
+//
+// jsDelivr is already an allowed script-src in the web (docker/nginx.conf) and
+// desktop CSPs, and maplibre-gl-duckdb already loads its own DuckDB from there,
+// so this adds no new external origin. The web build's service worker
+// runtime-caches it after first use (the "geolibre-cdn-engines" rule below).
+// Ignored for the two targets that would be made worse by it, which is why this
+// sits below PWA_DISABLED rather than beside PGLITE_CDN: a Tauri build must stay
+// offline-capable, and an embed build ships no service worker, so there the
+// engine would be refetched every notebook session with no runtime cache behind
+// it. Neither target has the size ceiling this exists for -- a wheel and a
+// binary are not uploaded to Cloudflare.
+const DUCKDB_WASM_CDN = !PWA_DISABLED && process.env.GEOLIBRE_DUCKDB_WASM_CDN === "1";
+
 // Microsoft Store MSIX build. Strips the in-app "Check for updates" flow (Help
 // menu, command palette, About dialog, and the automated startup check) so the
 // Store package updates only through the Store — Microsoft policy 10.2.5 rejects
@@ -564,10 +588,15 @@ function cereusCdnLoaderPlugin(): Plugin {
 }
 
 function duckdbWasmBundlesPlugin(): Plugin {
-  const modulePath = path.resolve(
-    __dirname,
-    IS_TAURI_BUILD ? "src/lib/duckdb-wasm-bundles.tauri.ts" : "src/lib/duckdb-wasm-bundles.ts",
-  );
+  // Tauri first: DUCKDB_WASM_CDN is already false for a desktop build, but the
+  // ordering keeps that guarantee local to this decision rather than resting on
+  // a condition set 400 lines up.
+  const variant = IS_TAURI_BUILD
+    ? "src/lib/duckdb-wasm-bundles.tauri.ts"
+    : DUCKDB_WASM_CDN
+      ? "src/lib/duckdb-wasm-bundles.cdn.ts"
+      : "src/lib/duckdb-wasm-bundles.ts";
+  const modulePath = path.resolve(__dirname, variant);
   return {
     name: "geolibre-duckdb-wasm-bundles",
     enforce: "pre",
@@ -711,6 +740,11 @@ function pwaPlugin(): Plugin[] {
     // is auto-named `i18n-<hash>` and must stay precached, so this must NOT match
     // it. English is bundled there, so it stays precached and works offline.
     "**/i18n-locale-*.js",
+    // Optional hosted-web authentication. These chunks are requested only when
+    // the matching provider is configured, so public deployments should not
+    // download either during service-worker installation.
+    "**/ClerkGate-*.js",
+    "**/Auth0Gate-*.js",
   ];
   // Note: the 4 KB public/pyodide/pyodide-worker.js shim is intentionally left
   // in the precache (revisioned, so no stale-after-deploy risk). The heavy
@@ -810,6 +844,10 @@ function pwaPlugin(): Plugin[] {
             (url.pathname.startsWith("/pyodide/") ||
               url.pathname.startsWith("/npm/@electric-sql/") ||
               url.pathname.startsWith("/npm/@cereusdb/") ||
+              // Only populated when GEOLIBRE_DUCKDB_WASM_CDN=1 moves the engine
+              // off the origin; harmless otherwise. maplibre-gl-duckdb fetches
+              // its own DuckDB from here regardless, so this caches that too.
+              url.pathname.startsWith("/npm/@duckdb/") ||
               url.pathname.startsWith("/npm/gdal3.js")),
           handler: "CacheFirst",
           options: {
@@ -871,6 +909,7 @@ export default defineConfig({
     __GEOLIBRE_VERSION__: JSON.stringify(APP_VERSION),
     __GEOLIBRE_STORE_BUILD__: JSON.stringify(IS_STORE_BUILD),
     __GEOLIBRE_MAS_BUILD__: JSON.stringify(IS_MAS_BUILD),
+    __GEOLIBRE_EMBED_BUILD__: JSON.stringify(IS_EMBED),
     __PGLITE_CDN_URL__: JSON.stringify(PGLITE_CDN_URL),
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),

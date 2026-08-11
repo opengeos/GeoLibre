@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import * as maplibregl from "maplibre-gl";
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  setActiveEllipsoidId,
+  type GeoLibreLayer,
+  type LayerStyle,
+} from "@geolibre/core";
 import {
   createMapController,
   geolocateControlFactory,
@@ -45,6 +50,7 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
   const order: string[] = [];
   const calls: { method: string; args: unknown[] }[] = [];
   const setDataCalls: { id: string; data: unknown }[] = [];
+  const images = new Set<string>();
   let pendingRenderedFeatures: unknown[] = [];
 
   for (const id of initialBasemapLayers) {
@@ -72,6 +78,7 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
       layers: order.map((id) => ({ id, ...layers.get(id) })),
       sources: Object.fromEntries(sources),
     }),
+    getLayersOrder: () => [...order],
     getSource: (id: string) => {
       if (!sources.has(id)) return undefined;
       if (!sourceHandles.has(id)) {
@@ -101,6 +108,9 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
       calls.push({ method: "removeSource", args: [id] });
     },
     getLayer: (id: string) => (layers.has(id) ? { id, ...layers.get(id) } : undefined),
+    hasImage: (id: string) => images.has(id),
+    addImage: (id: string) => images.add(id),
+    removeImage: (id: string) => images.delete(id),
     addLayer: (spec: Record<string, unknown>, beforeId?: string) => {
       layers.set(spec.id as string, spec);
       insertBefore(spec.id as string, beforeId);
@@ -280,6 +290,38 @@ const rasterId = (id: string) => `layer-${id}-raster`;
 const srcId = (id: string) => `source-${id}`;
 
 describe("MapController.syncLayers reconciliation", () => {
+  it("keeps a lower raster beneath every companion of a mixed KML point layer", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const kml = pointLayer("kml", {
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {
+              __geolibre_kml_icon_url:
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ",
+            },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Point", coordinates: [1, 1] },
+          },
+        ],
+      },
+    });
+
+    controller.syncLayers([rasterLayer("imagery"), kml]);
+
+    const imageryIndex = fake.order.indexOf(rasterId("imagery"));
+    assert.ok(imageryIndex >= 0);
+    assert.ok(imageryIndex < fake.order.indexOf(markerId("kml")));
+    assert.ok(imageryIndex < fake.order.indexOf(circleId("kml")));
+  });
+
   it("runs the initial sync once and restores layers after a style reload", () => {
     const { map, fake } = makeFakeMap();
     const listeners = new Map<string, Set<() => void>>();
@@ -696,6 +738,59 @@ describe("MapController basemap controls", () => {
 });
 
 describe("MapController camera and query helpers", () => {
+  // setActiveEllipsoidId writes a module-level singleton, so reset it here
+  // rather than inline: an inline reset after an assertion never runs when that
+  // assertion fails, silently leaving a non-Earth body active for later tests.
+  afterEach(() => setActiveEllipsoidId("earth"));
+
+  // The defensive probe in readCameraAltitude exists precisely because a
+  // MapLibre bump could drop or rename transform.getCameraAltitude; without
+  // these cases that fallback was never exercised (the fake map has no
+  // transform at all, so every other test hit the null path by accident).
+  it("returns no camera altitude when MapLibre does not expose one", () => {
+    const { map } = makeFakeMap();
+    const controller = controllerWith(map);
+    assert.equal(controller.readCameraAltitude(), null);
+  });
+
+  it("reads and body-scales the camera altitude when MapLibre exposes it", () => {
+    const { map } = makeFakeMap();
+    (map as { transform?: unknown }).transform = { getCameraAltitude: () => 8000 };
+    const controller = controllerWith(map);
+    setActiveEllipsoidId("earth");
+    assert.equal(controller.readCameraAltitude(), 8000);
+
+    // On a smaller body the Mercator-derived altitude must scale down.
+    setActiveEllipsoidId("moon");
+    const onMoon = controller.readCameraAltitude();
+    assert.ok(onMoon !== null && onMoon < 3000, `expected a scaled altitude, got ${onMoon}`);
+  });
+
+  it("returns no camera altitude when MapLibre throws", () => {
+    const { map } = makeFakeMap();
+    (map as { transform?: unknown }).transform = {
+      getCameraAltitude: () => {
+        throw new Error("degenerate transform");
+      },
+    };
+    const controller = controllerWith(map);
+    assert.equal(controller.readCameraAltitude(), null);
+  });
+
+  it("rescales a held altitude when only the body changes", () => {
+    // The planet switcher changes the active body without moving the camera, so
+    // the same MapLibre altitude must read differently for the new radius.
+    const { map } = makeFakeMap();
+    (map as { transform?: unknown }).transform = { getCameraAltitude: () => 10000 };
+    const controller = controllerWith(map);
+    setActiveEllipsoidId("earth");
+    const onEarth = controller.readCameraAltitude();
+    setActiveEllipsoidId("mars");
+    const onMars = controller.readCameraAltitude();
+    assert.ok(onEarth !== null && onMars !== null);
+    assert.ok(onMars < onEarth, `Mars altitude should be smaller: ${onMars} vs ${onEarth}`);
+  });
+
   it("reads the current view from the map", () => {
     const { map } = makeFakeMap();
     const controller = controllerWith(map);

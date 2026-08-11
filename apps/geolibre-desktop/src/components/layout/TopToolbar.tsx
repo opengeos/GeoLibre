@@ -1,4 +1,10 @@
-import { DEFAULT_PROJECT_NAME, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_PROJECT_NAME,
+  excludeHiddenFieldsFromProject,
+  redactProjectCredentials,
+  serializeProject,
+  useAppStore,
+} from "@geolibre/core";
 import { DEFAULT_BUILT_IN_CONTROL_VISIBILITY, type MapController } from "@geolibre/map";
 import {
   closeDuckDBLayerPanel,
@@ -181,6 +187,8 @@ interface TopToolbarProps {
   // Opens the Offline Basemap Extract panel, mounted in DesktopShell over the
   // map so it can stay non-modal (the map is interactive for drawing a bbox).
   onOpenBasemapExtract: () => void;
+  /** Activates the map tool for placing an anchored review comment. */
+  onAddComment: () => void;
   viewer?: boolean;
 }
 
@@ -198,6 +206,7 @@ export function TopToolbar({
   onOpenProjectHistory,
   onToggleThemeMode,
   onOpenBasemapExtract,
+  onAddComment,
   viewer = false,
 }: TopToolbarProps) {
   const { t, i18n } = useTranslation();
@@ -1325,6 +1334,15 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.addData"),
       run: addLayer.duckdb,
     },
+    {
+      id: "add.comment",
+      title: t("comments.addDialogTitle"),
+      group: t("toolbar.commandGroup.addData"),
+      keywords: "review note feedback",
+      icon: MessageSquare,
+      shortcut: { key: "c", shift: false },
+      run: onAddComment,
+    },
     // Processing
     {
       id: "proc.whitebox",
@@ -1730,8 +1748,9 @@ export function TopToolbar({
   // The shortcut layer is narrowed rather than switched off, because the View
   // menu *does* stay visible in this mode: `view.*` is camera and theme work
   // only, so dropping its keys would leave those items clickable but silently
-  // keyless. Every command carrying a `shortcut` is either `view.*` or
-  // `project.*`, so this is the whole authoring keyboard surface.
+  // keyless. Everything else carrying a `shortcut` authors the project
+  // (`project.*`, `add.comment`), so filtering to `view.*` drops exactly the
+  // authoring keyboard surface.
   const shortcutCommands = useMemo(
     () => (viewer ? commands.filter((command) => command.id.startsWith("view.")) : commands),
     [commands, viewer],
@@ -1893,6 +1912,7 @@ export function TopToolbar({
           onToggleDirections={consent.handleToggleDirections}
           onToggleReverseGeocode={consent.handleToggleReverseGeocode}
           onToggleGraticule={() => toggle(GRATICULE_PLUGIN_ID, appApi)}
+          onTogglePointerElevation={consent.handleTogglePointerElevation}
           onToggleClouds={() => toggle(CLOUDS_PLUGIN_ID, appApi)}
           onTogglePrecipitation={() => toggle(PRECIPITATION_PLUGIN_ID, appApi)}
           onOpenFieldCollection={() => setFieldCollectionOpen(true)}
@@ -1996,7 +2016,8 @@ export function TopToolbar({
         getProject={async (title) => {
           // Shared projects are opened on another machine where the local files
           // don't exist, so always embed the vector data (never file references).
-          const { content, defaultProjectName } = await projectFiles.buildEmbeddedProject(title);
+          const { project, defaultProjectName } = await projectFiles.buildEmbeddedProject(title);
+          const redacted = redactProjectCredentials(excludeHiddenFieldsFromProject(project));
           // Strip path separators, control chars, and other characters that are
           // illegal in filenames so the server gets a predictable name.
           const safeName = defaultProjectName.replace(
@@ -2006,7 +2027,11 @@ export function TopToolbar({
             /[\u0000-\u001f\u007f/\\:*?"<>|]/g,
             "_",
           );
-          return { content, filename: `${safeName}.geolibre.json` };
+          return {
+            content: serializeProject(redacted.project),
+            filename: `${safeName}.geolibre.json`,
+            redactedCount: redacted.redactedCount,
+          };
         }}
       />
       <ProjectGalleryDialog

@@ -1,6 +1,6 @@
 {
   "name": "geolibre",
-  "version": "2.4.1",
+  "version": "2.5.0",
   "private": true,
   "description": "GeoLibre: a free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private",
   "workspaces": [
@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "npm run dev -w geolibre-desktop",
     "build": "npm run build -w geolibre-desktop",
+    "lite:build": "node scripts/lite-build.mjs",
     "build:jupyterlite": "node scripts/build-jupyterlite.mjs",
     "build:embed": "node scripts/build-embed.mjs",
     "typecheck": "npm run build",
@@ -23,6 +24,7 @@
     "test:worker": "npm run typecheck -w geolibre-viewer-worker && npm run typecheck -w geolibre-collab-worker && npm run typecheck -w geolibre-collab-node && npm test -w geolibre-collab-node && npm run typecheck -w geolibre-tiles-worker && npm run typecheck -w geolibre-ai-proxy-worker",
     "test:e2e": "playwright test",
     "check:rust": "cargo check --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml",
+    "audit:ci": "node scripts/audit-check.mjs",
     "ci": "npm run lint && npm run build && npm run test:frontend:coverage && npm run test:worker && npm run test:backend:coverage && npm run check:rust",
     "tauri": "npm run tauri -w geolibre-desktop",
     "tauri:dev": "npm run tauri dev -w geolibre-desktop",
@@ -35,18 +37,21 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.62.1",
-    "@types/node": "^26.1.2",
-    "eslint": "^10.8.0",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.8.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "linkedom": "^0.18.13",
-    "tsx": "^4.23.1",
-    "typescript-eslint": "^8.65.0"
+    "tsx": "^4.23.11",
+    "typescript-eslint": "^8.66.0"
   },
   "overrides": {
-    "brace-expansion": "^5.0.8",
+    "brace-expansion": "^5.0.9",
     "fast-uri": "^3.1.5",
     "filelist": "^2.0.2",
     "maplibre-gl": "^6.1.0",
+    "miniflare": {
+      "undici": "^7.29.0"
+    },
     "sweepline-intersections": "^1.5.0",
     "uuid": "^14.0.0"
   },

@@ -14,6 +14,7 @@ The same React app ships three ways: native desktop via **Tauri v2** (`apps/geol
 npm run dev            # web dev server → http://localhost:5173
 npm run tauri:dev      # desktop app (required for filesystem dialogs, local MBTiles, local raster reads)
 npm run build          # production web build → apps/geolibre-desktop/dist/
+npm run lite:build     # same, but DuckDB-WASM from jsDelivr — for hosts with a per-asset size cap
 npm run tauri:build    # desktop installers → apps/geolibre-desktop/src-tauri/target/release/bundle/
 npm run typecheck      # alias for the full build (tsc -b && vite build) — writes to dist/, not a pure type-check
 npm run ci             # full local gate: build + frontend + worker + backend + rust check
@@ -55,8 +56,18 @@ in CI; add specs under `e2e/`.
 
 Dependencies are watched two ways: **Dependabot** (`.github/dependabot.yml`)
 opens grouped weekly update PRs for npm, pip (backend + `python/`), cargo, and
-Actions, and the CI **`audit` job** runs `npm audit --audit-level=high`
+Actions, and the CI **`audit` job** runs `npm run audit:ci`
 (blocking) plus a non-blocking `pip-audit` of the resolved backend environment.
+`audit:ci` is `scripts/audit-check.mjs`, a thin wrapper over `npm audit
+--omit=dev` that still fails on every high/critical advisory *except* the ones
+listed in its `ALLOWLIST`. The wrapper exists because plain `npm audit` cannot
+accept a single finding, so one unpatchable transitive advisory reddens every PR
+until upstream ships a fix — which for an unmaintained leaf package may be never.
+Only allowlist an advisory when there is **no patched version to upgrade to** and
+the vulnerable code is **unreachable from a GeoLibre runtime path**, and say why
+on both counts in the entry. Anything upgradeable gets upgraded instead. Stale
+entries print a warning rather than failing, since the advisory database is a
+live service and a transient omission must not redden an unrelated PR.
 
 The `python/` package has its own pytest suite (`cd python && pytest`) and is built into a wheel via `npm run build:embed` (produces `apps/geolibre-desktop/dist-embed`, consumed by `python/hatch_build.py`). Its version is dynamic, sourced from `python/src/geolibre/__init__.py`.
 
@@ -83,6 +94,8 @@ Rendering is MapLibre GL JS in the webview, with **deck.gl** for raster/point-cl
 
 The browser build proxies the sidecar at `/sidecar` (same-origin, no CORS); confined to `GEOLIBRE_CONVERSION_ROOTS` (default `/data`). Local MBTiles use a custom MapLibre protocol backed by Tauri commands.
 
+**MCP server** (`python/src/geolibre/mcp/`, the `geolibre-mcp` console script): a headless stdio MCP server that authors `.geolibre.json` files. It is layered so nothing duplicates: `project.py` *builds* pieces (a layer, a plugin-state blob), `authoring.py` *applies* them to a whole project (add/remove/restyle a layer, move the camera, compose the legend/colorbar/swipe controls), and both `Map` and the MCP tools delegate to `authoring.py` — so a change to how a control is composed lands in one place. `server.py` is the only module that imports the `mcp` SDK (optional extra `geolibre[mcp]`), and `workspace.py` confines every path to `GEOLIBRE_MCP_ROOTS`/`--root` the way the sidecar confines to `GEOLIBRE_CONVERSION_ROOTS`. `python/tests/test_mcp_server.py` skips itself without the SDK, so `publish-python.yml` installs `mcp` explicitly — drop it and the server ships untested.
+
 ## Conventions
 
 - Never commit directly to `main`; branch and open a PR.
@@ -97,4 +110,4 @@ The browser build proxies the sidecar at `/sidecar` (same-origin, no CORS); conf
 - `propertySpecFor` (`packages/core/src/expressions.ts`) fabricates the **unexported** `StylePropertySpecification` shape that `@maplibre/maplibre-gl-style-spec`'s `createExpression` uses for expected-result-type enforcement (the Expression Builder's filter → boolean / color checks). The cast hides any contract change from the compiler, so whenever `@maplibre/maplibre-gl-style-spec` is bumped (including Dependabot PRs) run the frontend suite — the "enforces an expected result type" test in `tests/expressions.test.ts` fails if the shape stops being honored.
 - `DISTANCE_SEGMENTS` / `NON_DISTANCE_NAMES` (`apps/geolibre-desktop/src/lib/whitebox-distance-params.ts`) decide, by parameter *name*, which Whitebox parameters are ground distances and so get the Processing dialog's metric unit picker (GeoLibre#1540). The segments are generic (`tolerance`, `radius`, `length`, `resolution`), so a tool can carry a matching name that is not a length — `corridor_tolerance` is a 0-1 fraction. Those are safe today only because the picker is confined to tools whose every dataset input is a vector layer, and the colliding names happen to sit on imagery/LiDAR tools; that is a coincidence, not a guarantee. So whenever `geolibre-wasm` is bumped (in `packages/processing/package.json`) — including Dependabot PRs — scan the new catalog for a `double` matching the rule whose description reads as a fraction, ratio, angle or weight, and add it to `NON_DISTANCE_NAMES`. If one is missed, that tool's field offers metres and silently converts a dimensionless number as if it were a distance, with no build error.
 - UI strings are translatable via **react-i18next**; catalogs live in `apps/geolibre-desktop/src/i18n/locales/*.json` (`en.json` is the source of truth, typed by `i18next.d.ts`). Use `t()` for new user-facing strings; a `?locale`/`?lang` query param sets the embed language. The UI mirrors for right-to-left locales (Arabic), so style new components with Tailwind's logical utilities (`ms-`/`me-`/`ps-`/`pe-`/`text-start`/`border-s`/`start-`…), not the physical `ml-`/`left-` forms. See `docs/i18n.md`.
-- Reference docs: `docs/architecture.md`, `docs/project-format.md`, `docs/plugin-api.md`, `docs/python.md`, `docs/i18n.md`, `docs/contributing.md`.
+- Reference docs: `docs/architecture.md`, `docs/project-format.md`, `docs/plugin-api.md`, `docs/python.md`, `docs/mcp.md`, `docs/i18n.md`, `docs/contributing.md`.

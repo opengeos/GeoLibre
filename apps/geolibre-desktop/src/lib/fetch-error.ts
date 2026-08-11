@@ -11,6 +11,8 @@
  * carry a descriptive message, so its errors can be narrowed further by keyword.
  */
 
+import { isTauri } from "./is-tauri";
+
 export type FetchFailureKind = "abort" | "timeout" | "network" | "unknown";
 
 export interface FetchFailure {
@@ -46,11 +48,30 @@ const NATIVE_NETWORK_KEYWORDS = [
   "os error",
 ];
 
-// Shown for a browser fetch failure: the browser cannot say which of these
-// happened, and the desktop app bypasses browser CORS, so "try the desktop app"
-// is genuinely useful advice here.
-const BROWSER_NETWORK_HINT =
-  "The request could not be completed. In the browser this is usually a CORS rejection (the server sent no Access-Control-Allow-Origin header for this origin), a TLS/certificate error, blocked mixed content, or an unreachable host. Try the desktop app, which is not subject to browser CORS, or check the host's certificate, firewall, and proxy rules.";
+// Shown for a `fetch()` failure, which the browser cannot narrow further. The
+// desktop app runs this same code in a WebView, so its plain `fetch()` is
+// subject to CORS too and the causes listed here all still apply (issue #1834).
+// Only the closing advice differs, see `browserNetworkHint`.
+const BROWSER_NETWORK_CAUSES =
+  "The request could not be completed. This is usually a CORS rejection (the server sent no Access-Control-Allow-Origin header for this origin, or rejected the preflight because of a request header), a TLS/certificate error, blocked mixed content, or an unreachable host.";
+
+// Appended on the web, where switching to the desktop app is a real option: its
+// native HTTP paths (geocoding, share, GeoLens) are not subject to browser CORS.
+const BROWSER_NETWORK_ADVICE =
+  "Try the desktop app, whose native requests are not subject to browser CORS, or check the host's certificate, firewall, and proxy rules.";
+
+// Appended in the desktop app instead: the user is already there, so telling
+// them to "try the desktop app" is a dead end.
+const DESKTOP_BROWSER_NETWORK_ADVICE =
+  "Check the server's CORS policy (including which request headers it allows), its certificate, and any firewall or proxy rules.";
+
+/**
+ * The hint for a browser `fetch()` failure, tailored to where the app is running
+ * so the desktop app never advises the user to switch to the desktop app.
+ */
+function browserNetworkHint(): string {
+  return `${BROWSER_NETWORK_CAUSES} ${isTauri() ? DESKTOP_BROWSER_NETWORK_ADVICE : BROWSER_NETWORK_ADVICE}`;
+}
 
 // Shown for a native (Tauri/reqwest) failure: this path already runs in the
 // desktop app and is not subject to browser CORS, so the CORS / "try the desktop
@@ -106,7 +127,7 @@ export function classifyFetchFailure(error: unknown): FetchFailure {
     return {
       kind: "network",
       label: "network/TLS/CORS",
-      hint: BROWSER_NETWORK_HINT,
+      hint: browserNetworkHint(),
     };
   }
   // A native reqwest error embeds the full request URL (usually in parens);

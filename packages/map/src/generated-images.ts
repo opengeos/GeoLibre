@@ -34,45 +34,10 @@ export function hashText(text: string): string {
   return (h2 >>> 0).toString(16).padStart(8, "0") + (h1 >>> 0).toString(16).padStart(8, "0");
 }
 
-// Remote SVG sources we have already warned about, so the console message below
-// fires once per distinct URL instead of on every image regeneration.
-const warnedRemoteSvgSources = new Set<string>();
-
-/**
- * Resolve user-supplied SVG input to an `Image.src`: inline markup (starting
- * with `<`) is encoded as a data URL; otherwise only `data:` and `http(s):`
- * URLs are accepted. Returns null for empty input or an unsupported scheme
- * (e.g. `file:`), which the caller treats as "no image" rather than letting an
- * arbitrary URL be loaded.
- *
- * Remote `http(s):` URLs are supported intentionally (custom marker/pattern
- * SVGs) but trigger a cross-origin request when rendered. Because a shared
- * `.geolibre.json` can carry such a URL, we log a one-time warning so the
- * outbound request is visible; prefer inline `<svg>` or `data:` in shared
- * projects.
- */
-export function resolveSvgSource(markup: string): string | null {
-  const trimmed = markup.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith("<")) {
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(trimmed)}`;
-  }
-  if (/^https?:\/\//i.test(trimmed)) {
-    if (!warnedRemoteSvgSources.has(trimmed)) {
-      warnedRemoteSvgSources.add(trimmed);
-      console.warn(
-        `[geolibre] Loading a custom SVG from a remote URL triggers a ` +
-          `cross-origin request: ${trimmed}. Prefer inline <svg> markup or a ` +
-          `data: URL in shared projects.`,
-      );
-    }
-    return trimmed;
-  }
-  if (trimmed.startsWith("data:")) {
-    return trimmed;
-  }
-  return null;
-}
+// The custom-SVG source resolver lives in @geolibre/core so the map's sprite
+// baker and the two legend renderers cannot disagree about what a marker's
+// `markerSvg` means; re-exported here for the existing call sites.
+export { resolveSvgSource } from "@geolibre/core";
 
 /** A bitmap accepted by `map.addImage`. */
 export type GeneratedImage = Parameters<maplibregl.Map["addImage"]>[1];

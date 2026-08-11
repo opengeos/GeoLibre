@@ -2,7 +2,22 @@
 # arch-independent static files, so emulating arm64 with QEMU here only
 # slows down multi-arch builds without changing the result.
 # ($BUILDPLATFORM is a Docker-provided automatic ARG, set by BuildKit.)
-FROM --platform=$BUILDPLATFORM node:22-alpine AS build
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS build
+
+# Debian rather than Alpine because this stage now also runs the JupyterLite
+# build, whose Python dependency tree (jupyterlab, notebook, jupyterlite-core)
+# resolves to prebuilt manylinux wheels here instead of compiling against musl.
+# Only apps/geolibre-desktop/dist is copied into the runtime image, so the larger
+# builder costs nothing in the shipped image.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 python3-venv \
+  && rm -rf /var/lib/apt/lists/*
+
+# A venv keeps pip off the Debian-managed interpreter, which refuses installs
+# under PEP 668.
+ENV VIRTUAL_ENV=/opt/jupyterlite
+RUN python3 -m venv "$VIRTUAL_ENV"
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 WORKDIR /app
 
@@ -19,6 +34,11 @@ COPY packages/processing/package.json packages/processing/package.json
 COPY packages/ui/package.json packages/ui/package.json
 
 RUN npm ci
+
+# Its own layer, keyed only on the requirements file, so touching app source does
+# not reinstall the Python tree.
+COPY apps/geolibre-desktop/jupyterlite/requirements.txt apps/geolibre-desktop/jupyterlite/requirements.txt
+RUN pip install --no-cache-dir -r apps/geolibre-desktop/jupyterlite/requirements.txt
 
 COPY . .
 
@@ -48,7 +68,21 @@ ENV VITE_GEOLIBRE_EMBED_ORIGINS=${VITE_GEOLIBRE_EMBED_ORIGINS}
 ENV VITE_GEOLIBRE_SHARE_URL=${VITE_GEOLIBRE_SHARE_URL}
 ENV VITE_GEOLIBRE_COLLAB_URL=${VITE_GEOLIBRE_COLLAB_URL}
 
+# The `prebuild` hook of apps/geolibre-desktop runs scripts/build-jupyterlite.mjs,
+# which generates the site the Notebook panel embeds. That script is best-effort
+# by default: without the `jupyter lite` CLI it warns and exits 0, and the build
+# still succeeds. nginx then answers the panel's iframe URL with index.html
+# through its SPA fallback, so the panel renders a second copy of GeoLibre
+# instead of a notebook, which is how this image shipped for so long
+# (GeoLibre#1851). Make the absence fatal here rather than silent.
+ENV GEOLIBRE_JUPYTERLITE_REQUIRED=1
+
 RUN npm run build
+
+# The site is generated, not committed (public/jupyterlite/ is git-ignored), so
+# assert it reached the output rather than trusting the step above.
+RUN test -f apps/geolibre-desktop/dist/jupyterlite/lab/index.html \
+  || (echo "ERROR: dist/jupyterlite is missing; the Notebook panel would render a second copy of the app." && exit 1)
 
 # Runtime image bundles the static web app (served by nginx) and the optional
 # Python conversion/Whitebox sidecar (uvicorn), reverse-proxied at /sidecar.

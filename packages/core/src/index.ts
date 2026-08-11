@@ -16,6 +16,8 @@ export * from "./joins";
 export * from "./virtual-fields";
 export * from "./selection";
 export * from "./scale-units";
+export * from "./elevation";
+export * from "./camera-altitude";
 export * from "./project";
 export * from "./style-library";
 export * from "./layer-library";
@@ -65,6 +67,8 @@ export {
   DEFAULT_REVERSE_GEOCODE_ENDPOINT,
   NOMINATIM_PUBLIC_HOST,
   NOMINATIM_MIN_INTERVAL_MS,
+  CARTOCIUDAD_PUBLIC_HOST,
+  CARTOCIUDAD_MIN_INTERVAL_MS,
   PUBLIC_GEOCODE_ROW_CAP,
   GEOCODE_LAT_KEY,
   GEOCODE_LON_KEY,
@@ -123,3 +127,14 @@ export {
   resolveThreeDTilesRequestHeaders,
   stripGoogleMapsApiKeyHeader,
 } from "./three-d-tiles";
+export {
+  isCredentialFieldName,
+  MAX_REDACT_DEPTH,
+  PROJECT_CREDENTIAL_FIELDS,
+  PUBLISHABLE_PLUGIN_SETTINGS,
+  redactCredentials,
+  redactProjectCredentials,
+  redactUrlCredentials,
+  type CredentialRedactionResult,
+} from "./credentials";
+export { excludeHiddenFieldsFromGeojson, excludeHiddenFieldsFromProject } from "./visibility";

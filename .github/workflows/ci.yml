@@ -36,8 +36,11 @@ jobs:
       # local build/dev tooling (e.g. sharp/libvips via wrangler+miniflare, which
       # never ships in a GeoLibre artifact), while still blocking anything that
       # reaches users. Dependabot bumps the dev toolchain separately.
+      # Wrapped in scripts/audit-check.mjs because plain `npm audit` cannot accept
+      # a single advisory: see the ALLOWLIST there for the unpatchable, unreachable
+      # findings that would otherwise redden every PR indefinitely.
       - name: Audit npm dependencies (high and critical)
-        run: npm audit --omit=dev --audit-level=high
+        run: npm run audit:ci
 
   e2e:
     name: E2E smoke (Playwright)
@@ -154,7 +157,7 @@ jobs:
           toolchain: stable
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: apps/geolibre-desktop/src-tauri -> target
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import {
   Button,
   Dialog,
@@ -12,6 +12,11 @@ import {
 } from "@geolibre/ui";
 import { MapPin, Layers, MessageSquare, Send, User } from "lucide-react";
 import type { PendingCommentState } from "./useCommentTool";
+import { formatShortcut, isMacPlatform, matchesShortcut, type Shortcut } from "../../lib/commands";
+
+// `shift` is explicit: omitting it means "ignored", which would post on
+// Ctrl/⌘+Shift+Enter too, a chord the button never advertises.
+export const POST_COMMENT_SHORTCUT: Shortcut = { key: "Enter", mod: true, shift: false };
 
 interface AddCommentDialogProps {
   pendingComment: PendingCommentState;
@@ -34,12 +39,14 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
 
   const [text, setText] = useState("");
   const [authorName, setAuthorName] = useState(savedName ?? "");
+  const canSubmit = !!text.trim() && (hasSavedName || !!authorName.trim());
+  const shortcutLabel = formatShortcut(POST_COMMENT_SHORTCUT, isMacPlatform());
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!text.trim()) return;
 
-    const finalName = authorName.trim() || savedName?.trim() || "Author";
+    const finalName = authorName.trim() || savedName?.trim() || t("comments.defaultAuthorName");
     if (typeof localStorage !== "undefined" && finalName) {
       try {
         localStorage.setItem("geolibre_author_name", finalName);
@@ -74,21 +81,39 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-3.5">
+        <form
+          onSubmit={handleSubmit}
+          onKeyDown={(event) => {
+            if (
+              canSubmit &&
+              matchesShortcut(event.nativeEvent, POST_COMMENT_SHORTCUT, isMacPlatform())
+            ) {
+              event.preventDefault();
+              event.currentTarget.requestSubmit();
+            }
+          }}
+          className="space-y-3.5"
+        >
           <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-md border border-border/60">
             {anchor.type === "feature" ? (
               <>
                 <Layers className="h-3.5 w-3.5 text-sky-400 shrink-0" />
                 <span className="truncate font-medium text-foreground">
-                  Anchored to Feature #{String(anchor.featureId)} ({anchor.layerId})
+                  {t("comments.anchoredToFeature", {
+                    id: String(anchor.featureId),
+                    layer: anchor.layerId,
+                  })}
                 </span>
               </>
             ) : (
               <>
                 <MapPin className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                 <span className="font-medium text-foreground">
-                  Anchored to (
-                  {lngLat ? `${lngLat[1].toFixed(4)}, ${lngLat[0].toFixed(4)}` : "Map Point"})
+                  {t("comments.anchoredToPoint", {
+                    coords: lngLat
+                      ? `${lngLat[1].toFixed(4)}, ${lngLat[0].toFixed(4)}`
+                      : t("comments.mapPoint"),
+                  })}
                 </span>
               </>
             )}
@@ -116,7 +141,11 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
           ) : (
             <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
               <span>
-                Posting as <strong className="text-foreground">{savedName}</strong>
+                <Trans
+                  i18nKey="comments.postingAs"
+                  values={{ name: savedName }}
+                  components={{ strong: <strong className="text-foreground" /> }}
+                />
               </span>
               <button
                 type="button"
@@ -131,7 +160,7 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
                 }}
                 className="text-primary hover:underline text-[10px]"
               >
-                Change Name
+                {t("comments.changeName")}
               </button>
             </div>
           )}
@@ -156,17 +185,20 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
 
           <div className="flex items-center justify-end gap-2 pt-1">
             <Button type="button" variant="outline" size="sm" onClick={onCancel}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="submit"
               variant="default"
               size="sm"
               className="gap-1.5"
-              disabled={!text.trim() || (!hasSavedName && !authorName.trim())}
+              disabled={!canSubmit}
+              title={t("comments.postShortcutTooltip", { shortcut: shortcutLabel })}
+              aria-keyshortcuts="Control+Enter Meta+Enter"
             >
               <Send className="h-3.5 w-3.5" />
-              <span>Post Comment</span>
+              <span>{t("comments.post")}</span>
+              <kbd className="ms-1 text-[10px] font-normal opacity-70">{shortcutLabel}</kbd>
             </Button>
           </div>
         </form>

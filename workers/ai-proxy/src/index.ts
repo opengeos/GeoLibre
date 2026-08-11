@@ -2,6 +2,16 @@
 // slow non-streaming generation, and below the 600s nginx read timeout that a
 // self-hosted deployment puts in front of this worker.
 const UPSTREAM_HEADER_TIMEOUT_MS = 300_000;
+// Bounds the wait for Tavily's response *headers*, exactly as
+// UPSTREAM_HEADER_TIMEOUT_MS does for chat: the timer is cleared once fetch()
+// resolves, and the (small, single-chunk) JSON body then streams through
+// unbounded, with nginx's proxy_read_timeout as the outer bound on the
+// Docker-fronted path. Twice the 30s it started at, because every request is
+// `search_depth: "advanced"` with `include_answer`, which adds extra ranking
+// plus an answer-synthesis step on Tavily's side; 30s was tight enough to turn
+// a merely slow news query during a live disaster event into a 504.
+const SEARCH_HEADER_TIMEOUT_MS = 60_000;
+const TAVILY_ENDPOINT = "https://api.tavily.com/search";
 
 function jsonError(message: string, status: number, headers?: HeadersInit): Response {
   return Response.json({ error: { message, type: "geolibre_proxy_error" } }, { status, headers });
@@ -107,18 +117,60 @@ function clampOutputTokens(body: Record<string, unknown>, limit: number): void {
   if (!capped) body.max_completion_tokens = limit;
 }
 
-async function proxyChat(request: Request, env: Env, origin: string | null): Promise<Response> {
-  // Check the limit before buffering: otherwise a throttled client can still
-  // make the worker hold MAX_BODY_BYTES in memory on every rejected request.
+export function buildTavilySearchRequest(
+  body: Record<string, unknown>,
+  query: string,
+  now = new Date(),
+): Record<string, unknown> {
+  const requestedMaxResults =
+    typeof body.max_results === "number" && Number.isFinite(body.max_results)
+      ? Math.floor(body.max_results)
+      : 6;
+  const maxResults = Math.min(Math.max(requestedMaxResults, 1), 20);
+  const topic = body.topic === "news" ? "news" : "general";
+  const request: Record<string, unknown> = {
+    query,
+    max_results: maxResults,
+    topic,
+    search_depth: "advanced",
+    include_answer: true,
+  };
+  if (topic === "news" && typeof body.days === "number" && Number.isFinite(body.days)) {
+    const days = Math.min(Math.max(Math.floor(body.days), 1), 3650);
+    const startDate = new Date(now);
+    startDate.setUTCDate(startDate.getUTCDate() - days);
+    request.start_date = startDate.toISOString().slice(0, 10);
+  }
+  return request;
+}
+
+// Chat and search deliberately draw down one budget per client: both spend the
+// same operator's account, so the limit an operator configures is the total an
+// individual user may cost them, not a per-route allowance that a client can
+// double by alternating routes.
+async function rateLimit(request: Request, env: Env): Promise<Response | null> {
   const instanceClient = request.headers.get("X-GeoLibre-Client-IP")?.trim();
   const actor = instanceClient || request.headers.get("CF-Connecting-IP") || "unidentified";
   const { success } = await env.AI_RATE_LIMITER.limit({ key: actor });
-  if (!success) {
-    return jsonError("Rate limit exceeded", 429, {
-      ...Object.fromEntries(responseHeaders(origin)),
-      "Retry-After": "60",
-    });
-  }
+  return success
+    ? null
+    : jsonError("Rate limit exceeded", 429, {
+        "Retry-After": "60",
+      });
+}
+
+function withOrigin(response: Response | null, origin: string | null): Response | null {
+  if (!response) return null;
+  const headers = new Headers(response.headers);
+  for (const [name, value] of responseHeaders(origin)) headers.set(name, value);
+  return new Response(response.body, { status: response.status, headers });
+}
+
+async function proxyChat(request: Request, env: Env, origin: string | null): Promise<Response> {
+  // Check the limit before buffering: otherwise a throttled client can still
+  // make the worker hold MAX_BODY_BYTES in memory on every rejected request.
+  const limited = withOrigin(await rateLimit(request, env), origin);
+  if (limited) return limited;
 
   const maximumBytes = positiveInteger(env.MAX_BODY_BYTES, 1_048_576);
   let body: Record<string, unknown>;
@@ -193,6 +245,80 @@ async function proxyChat(request: Request, env: Env, origin: string | null): Pro
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
+async function proxyTavily(request: Request, env: Env, origin: string | null): Promise<Response> {
+  // Limit first, as proxyChat does, so an unconfigured Worker cannot be probed
+  // without bound: the 503 below is cheap, but "cheap" is not "free".
+  const limited = withOrigin(await rateLimit(request, env), origin);
+  if (limited) return limited;
+
+  const apiKey = env.TAVILY_API_KEY?.trim();
+  if (!apiKey) {
+    return jsonError("Search is not configured", 503, responseHeaders(origin));
+  }
+
+  const maximumBytes = Math.min(positiveInteger(env.MAX_BODY_BYTES, 1_048_576), 65_536);
+  let body: Record<string, unknown>;
+  try {
+    body = await readBoundedJson(request, maximumBytes);
+  } catch (error) {
+    const status = error instanceof RangeError ? 413 : 400;
+    return jsonError(
+      error instanceof Error ? error.message : "Invalid request body",
+      status,
+      responseHeaders(origin),
+    );
+  }
+
+  const query = typeof body.query === "string" ? body.query.trim() : "";
+  if (!query || query.length > 1_000) {
+    return jsonError(
+      "query must be a non-empty string of at most 1,000 characters",
+      400,
+      responseHeaders(origin),
+    );
+  }
+  const tavilyBody = buildTavilySearchRequest(body, query);
+
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), SEARCH_HEADER_TIMEOUT_MS);
+  let upstream: Response;
+  try {
+    upstream = await fetch(TAVILY_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(tavilyBody),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return jsonError("Search request timed out", 504, responseHeaders(origin));
+    }
+    throw error;
+  } finally {
+    clearTimeout(deadline);
+  }
+
+  const headers = responseHeaders(origin);
+  headers.set(
+    "Content-Type",
+    upstream.headers.get("Content-Type") ?? "application/json; charset=utf-8",
+  );
+  headers.set("Cache-Control", "no-store");
+  console.log(
+    JSON.stringify({
+      message: "Tavily proxy request",
+      status: upstream.status,
+      topic: tavilyBody.topic,
+      resultLimit: tavilyBody.max_results,
+      colo: request.cf?.colo,
+    }),
+  );
+  return new Response(upstream.body, { status: upstream.status, headers });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -205,9 +331,12 @@ export default {
       return jsonError("Unauthorized", 401, responseHeaders(origin));
     }
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: responseHeaders(origin) });
+      return new Response(null, {
+        status: 204,
+        headers: responseHeaders(origin),
+      });
     }
-    if (url.pathname !== "/v1/chat/completions") {
+    if (url.pathname !== "/v1/chat/completions" && url.pathname !== "/tavily") {
       return jsonError("Not found", 404, responseHeaders(origin));
     }
     if (request.method !== "POST") {
@@ -215,7 +344,9 @@ export default {
     }
 
     try {
-      return await proxyChat(request, env, origin);
+      return url.pathname === "/tavily"
+        ? await proxyTavily(request, env, origin)
+        : await proxyChat(request, env, origin);
     } catch (error) {
       console.error(
         JSON.stringify({

@@ -2,6 +2,20 @@
 
 The **Settings** menu holds the workspace preferences: how the map behaves, which panels are visible, runtime environment variables, project settings, and the entry point to [Manage Plugins](plugins.md).
 
+The Settings dialog is organized into these sections:
+
+| Section | What it covers |
+| --- | --- |
+| **Map** | Navigation constraints, celestial body, scale units, and coordinate format. See [Map Preferences](#map-preferences). |
+| **Layout** | Which panels and toolbar labels are shown. See [Layout](#layout). |
+| **Appearance** | Light or dark mode and the accent color applied on top of it. |
+| **Interface** | The [UI profile](../ui-profiles.md) — an experience level (Beginner, Intermediate, Advanced, or Custom) that simplifies the menus, data sources, and plugins on offer. Nothing is removed permanently; you can switch levels at any time. |
+| **Geocoding** | The address-search provider. See [Data Integrations](data-integrations.md#geocoding). |
+| **AI Providers** | Model and credentials for the [AI Assistant](ai-assistant.md). |
+| **Environment** | The share token and runtime key-value pairs. See [Environment Variables](#environment-variables). |
+| **Updates** | Update checks (desktop only). See [Updates](#updates). |
+| **Startup** | Which project the app opens with (desktop only). See [Startup](#startup). |
+
 ## Map Preferences
 
 **Settings → Map Preferences** controls how the map can be navigated:
@@ -15,8 +29,14 @@ The **Settings** menu holds the workspace preferences: how the map behaves, whic
 | **Min zoom / Max zoom** | The allowed zoom range (0 to 24). |
 | **Max pitch** | The maximum tilt angle (0 to 85 degrees). |
 | **Render world copies** | Show repeated copies of the world when zoomed out. |
+| **Celestial body** | The body whose radius drives distance, area, and scale measurements. Pick the one matching your planetary basemap under [Add Data](adding-data.md). |
+| **Scale bar units** | Metric (m / km), Imperial (ft / mi), or Nautical (nmi). This also sets the units used by the status bar's **Elev** and **Eye alt** readouts and by the quick-analysis buffer presets. |
+| **Coordinate format** | The notation the status bar reports the pointer coordinate in: decimal degrees, DMS, DDM, or UTM. See [the status bar](interface.md#coordinate-format). |
 
 Use **Use Current View** to set the bounds from where the map is now, or **Reset** to restore the defaults. These preferences are saved in the project file.
+
+!!! tip "Capturing bounds on the globe"
+    **Use Current View** is most accurate in the Mercator projection. In the Globe projection the map can still drift slightly beyond the captured bounds, and the dialog says so.
 
 ## Layout
 
@@ -44,13 +64,33 @@ Panels also auto-hide on small screens for a responsive layout.
 !!! tip "Protomaps basemaps"
     To use the [Protomaps](https://protomaps.com) basemaps in the **New map** dialog, add an environment variable named `VITE_PROTOMAPS_API_KEY` with your own Protomaps API key. The Protomaps options appear in the dialog as soon as the key is enabled — no restart needed. When no key is set, the Protomaps section is hidden. See [Getting Started](../getting-started.md#optional-basemap-credentials) for setting the key at build time for a self-hosted deployment.
 
-## Project Settings
+## Project name and file
 
-**Settings → Project Settings** (the **Project** tab) holds project-level options saved with the `.geolibre.json` file:
+The project name is edited in place on the right of the toolbar, and it is saved into the `.geolibre.json` file. To also see the file path the project was opened from or last saved to, turn on **Show project info** under [Layout](#layout). See [Projects](projects.md) for the rest of the project lifecycle and [Project Format](../project-format.md) for what the file contains.
 
-- **Project name**: the name shown in the toolbar and saved in the project file.
-- **Project file**: the read-only path the project was opened from or last saved to.
-- **Project format**: the read-only project format version.
+## Startup
+
+**Settings → Startup** chooses the workspace the desktop app opens with:
+
+| Mode | Behavior |
+| --- | --- |
+| **Open the default workspace** (default) | Start with a new, untitled project. |
+| **Reopen the last project** | Open the most recently used *local* project. |
+| **Open a specific project** | Always open one chosen project. Use **Choose Project** to pick the file; the mode stays unavailable until you have. |
+
+If the startup project has been moved or deleted, GeoLibre opens the default workspace instead, says so in a banner, and drops the missing file from the recent-projects list.
+
+!!! note "Desktop only"
+    This section appears only in the installed desktop app. The browser build has no persistent local file to reopen.
+
+Two deliberate limits are worth knowing:
+
+- **Only local projects are reopened.** Opening a share link records it in your recent projects by its `https://` URL, so *Reopen the last project* skips remote entries rather than fetching a third-party host on every launch.
+- **A URL always wins.** Launching with a project or `?data=` parameter in the URL skips the startup restore entirely, and so does opening your own project before the restore finishes.
+
+## Updates
+
+**Settings → Updates** (desktop only) controls the update check: whether GeoLibre checks for a newer version at startup, and which kinds of releases raise a notification. Turn the check off for a fully offline workflow.
 
 ## Manage Plugins
 

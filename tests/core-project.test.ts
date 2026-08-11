@@ -567,6 +567,152 @@ describe("project parsing", () => {
   });
 });
 
+describe("project serialization", () => {
+  /** A layer whose features carry enough coordinates to show the whitespace cost. */
+  const featureRichLayer = () =>
+    geojsonLayer({
+      id: "cities",
+      geojson: {
+        type: "FeatureCollection",
+        features: Array.from({ length: 200 }, (_, index) => ({
+          type: "Feature" as const,
+          properties: { name: `City ${index}` },
+          geometry: {
+            type: "LineString" as const,
+            coordinates: Array.from(
+              { length: 20 },
+              (_, point) => [index / 10 + point, point / 10] as [number, number],
+            ),
+          },
+        })),
+      },
+    });
+
+  it("writes embedded GeoJSON compactly while indenting the project structure", () => {
+    const project = createEmptyProject("Compact");
+    project.layers = [featureRichLayer()];
+    const text = serializeProject(project);
+
+    // The structure stays readable...
+    assert.match(text, /^\{\n {2}"version":/);
+    assert.match(text, /\n {2}"layers": \[\n {4}\{\n {6}"id": "cities",/);
+    // ...but the whole feature collection sits on one line, so no coordinate
+    // ever gets its own line of indentation (GeoLibre#1829).
+    assert.match(
+      text,
+      /\n {6}"geojson": \{"type":"FeatureCollection","features":\[\{"type":"Feature"/,
+    );
+    assert.ok(!text.includes('"coordinates": ['), "coordinate arrays must not be pretty-printed");
+  });
+
+  it("compacts an embedded GeoJSON copy held in layer metadata", () => {
+    const project = createEmptyProject("Embedded");
+    const { geojson, ...layer } = featureRichLayer();
+    project.layers = [{ ...layer, metadata: { embeddedGeoJSON: geojson } }];
+    const text = serializeProject(project);
+
+    assert.match(text, /"embeddedGeoJSON": \{"type":"FeatureCollection"/);
+    assert.ok(!text.includes('"coordinates": ['));
+  });
+
+  it("keeps a feature-heavy project within a few percent of a fully minified file", () => {
+    const project = createEmptyProject("Sized");
+    project.layers = [featureRichLayer()];
+    const minified = JSON.stringify(project).length;
+
+    // Pretty-printing every coordinate used to cost more than 3x; the structure
+    // that stays indented is a rounding error next to the feature data.
+    assert.ok(
+      serializeProject(project).length < minified * 1.05,
+      "serialized project should be close to the minified size",
+    );
+  });
+
+  it("formats a project without GeoJSON exactly as JSON.stringify does", () => {
+    const project = createEmptyProject("Plain");
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+  });
+
+  it("matches JSON.stringify for values it drops, empty containers, and toJSON", () => {
+    const project = createEmptyProject("Edges");
+    project.metadata = {
+      dropped: undefined,
+      inArray: [undefined, () => "fn", 1],
+      notFinite: Number.NaN,
+      emptyObject: {},
+      emptyArray: [],
+      nested: { deep: { deeper: [1, { two: 2 }] } },
+      date: new Date("2026-08-10T00:00:00.000Z"),
+      quote: 'a "quoted" \\ value\n',
+    };
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+  });
+
+  it("writes a sparse array's holes as null, matching JSON.stringify", () => {
+    const project = createEmptyProject("Sparse");
+    // eslint-disable-next-line no-sparse-arrays
+    project.metadata = { gappy: [1, , 2] };
+    const text = serializeProject(project);
+    assert.equal(text, JSON.stringify(project, null, 2));
+    assert.deepEqual((JSON.parse(text) as typeof project).metadata.gappy, [1, null, 2]);
+  });
+
+  it("passes the property key to a custom toJSON, as JSON.stringify does", () => {
+    const project = createEmptyProject("Keys");
+    const probe = { toJSON: (key: string) => `saw:${key}` };
+    project.metadata = { named: probe, list: [probe] };
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+    const parsed = JSON.parse(serializeProject(project)) as typeof project;
+    assert.equal(parsed.metadata.named, "saw:named");
+    assert.deepEqual(parsed.metadata.list, ["saw:0"]);
+  });
+
+  it("unwraps boxed primitives the way JSON.stringify does", () => {
+    const project = createEmptyProject("Boxed");
+    project.metadata = {
+      // eslint-disable-next-line no-new-wrappers
+      count: new Number(7),
+      // eslint-disable-next-line no-new-wrappers
+      label: new String("x"),
+      // eslint-disable-next-line no-new-wrappers
+      flag: new Boolean(true),
+    };
+    const text = serializeProject(project);
+    assert.equal(text, JSON.stringify(project, null, 2));
+    assert.deepEqual((JSON.parse(text) as typeof project).metadata, {
+      count: 7,
+      label: "x",
+      flag: true,
+    });
+  });
+
+  it("throws on a circular reference instead of overflowing the stack", () => {
+    const project = createEmptyProject("Cyclic");
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    project.metadata = { cycle };
+    // A RangeError here would be read as "project too large to save" by the
+    // save path, sending the user after a size problem they do not have.
+    assert.throws(() => serializeProject(project), TypeError);
+  });
+
+  it("serializes a value referenced twice side by side without calling it a cycle", () => {
+    const project = createEmptyProject("Shared");
+    const shared = { shared: true };
+    project.metadata = { first: shared, second: shared };
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+  });
+
+  it("round-trips a feature-heavy project through parseProject", () => {
+    const project = createEmptyProject("Round trip");
+    project.layers = [featureRichLayer()];
+    assert.deepEqual(
+      parseProject(serializeProject(project)).layers[0].geojson,
+      project.layers[0].geojson,
+    );
+  });
+});
+
 describe("multi-map grid persistence", () => {
   it("omits the grid keys for a default single-map project", () => {
     const project = projectFromStore({

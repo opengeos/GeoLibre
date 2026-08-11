@@ -48,14 +48,12 @@ returns one matching layer or raises `ValueError`. The id can be passed directly
 `set_visibility`, `set_opacity`, `set_style`, `remove_layer`, or
 `zoom_to_layer`.
 
-These three are also the only commands that do **not** fan out: a correlated
-request/reply can have exactly one authoritative responder, so `add_geojson`,
-`list_layers`, and `get_layer` run in a single app window (the one that
-connected first) and consistently keep using it, which is what makes an id
-returned by `add_geojson` resolvable by a later `get_layer`. Every
-fire-and-forget command — including `add_marker`/`add_markers` — still reaches
-every connected window. This is only visible if you attach two GeoLibre windows
-to one Jupyter server.
+All commands fan out to every GeoLibre window connected to the same Jupyter
+server. For `add_geojson`, `list_layers`, and `get_layer`, the first correlated
+reply is returned to the notebook and later replies are ignored. Because each
+window maintains its own map state, use one connected window when chaining a
+returned layer id into later read-back calls. This behavior is only visible if
+you attach multiple GeoLibre windows to one Jupyter server.
 
 `add_geojson` returns `None` instead of an id in two situations, and never
 fails outright in either:
@@ -150,11 +148,31 @@ Both `npm run dev` and `npm run build` run this automatically:
 - `npm run build` always rebuilds it (via `prebuild`) so a changed client/config
   is picked up.
 
-Both **skip gracefully** when `jupyter lite` is not installed — a Node-only build
-still succeeds and the web Notebook panel shows a "not built" message until the
-site is generated (install the deps above and re-run). The desktop (Tauri) dev
-and build paths skip it entirely (they use the real JupyterLab server), so the
-static site never bloats the installer.
+Both **skip with a warning** when `jupyter lite` is not installed, so a Node-only
+build still succeeds. Be aware of what that produces: the panel does *not* show a
+"not built" message. Its iframe asks for `/jupyterlite/lab/index.html`, and
+anything that answers an unknown path with `index.html` — Tauri's asset
+resolver, or a static host with an SPA fallback such as
+`try_files $uri /index.html` — hands the panel **a second copy of GeoLibre**
+instead (GeoLibre#1851, GeoLibre#1658). Install the deps above and rebuild.
+
+Two builds therefore treat a missing CLI as fatal rather than skippable, because
+they serve the site and cannot degrade: the Mac App Store build, and any build
+that sets `GEOLIBRE_JUPYTERLITE_REQUIRED=1` (the Docker image does). The desktop
+(Tauri) dev and build paths skip it entirely (they use the real JupyterLab
+server), so the static site never bloats the installer.
+
+The Docker image builds and serves the site, and gives `/jupyterlite/` its own
+block in `docker/nginx.conf`:
+
+- Its own CSP — JupyterLab bootstraps from an inline `<script>`, which the app's
+  policy forbids, so under the app policy the site loads its HTML and then never
+  boots.
+- No SPA fallback (`try_files $uri $uri/ =404`), so in this image the failure
+  above surfaces as a plain **404** rather than as the duplicated app. The
+  duplicate remains what Tauri and SPA-fallback hosts produce.
+- The long-lived immutable cache policy for the content-hashed assets, which the
+  prefix match would otherwise take away from them.
 
 Build config lives in `apps/geolibre-desktop/jupyterlite/` (a
 `jupyter_lite_config.json`, the build `requirements.txt`, and a starter

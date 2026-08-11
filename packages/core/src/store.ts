@@ -17,7 +17,11 @@ import {
   DEFAULT_PROJECT_NAME,
 } from "./project";
 import { initialLayerStyle } from "./layer-defaults";
-import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
+import {
+  DEFAULT_LAYER_GROUP_OPACITY,
+  normalizeGroupContiguity,
+  reorderLayerGroupInPanel,
+} from "./layer-groups";
 import {
   DEFAULT_BASEMAP,
   DEFAULT_DASHBOARD_COLUMNS,
@@ -123,8 +127,9 @@ export type VectorToolKind =
   | "grid"
   | "voronoi"
   | "cell-sectors"
-  | "h3-grid"
-  | "h3-bin-points"
+  | "dggs-grid"
+  | "dggs-bin"
+  | "dggs-compact"
   | "trajectory-speed"
   | "detect-stops"
   | "space-time-proximity"
@@ -257,6 +262,22 @@ export interface AppState {
   selectedFeatureIds: string[];
   identifyLayerId: string | null;
   pointerCoords: [number, number] | null;
+  /**
+   * Ground elevation in true metres under the pointer, for the status bar
+   * (issue #1813). Null when it cannot be resolved — the pointer is off the
+   * map, terrain is off and the remote lookup has not answered (or failed), or
+   * the active body is not Earth. Set alongside `pointerCoords` by MapCanvas,
+   * which owns the map instance the terrain sample comes from.
+   */
+  pointerElevation: number | null;
+  /**
+   * Camera height above sea level in metres — Google Earth Pro's "Eye alt"
+   * (issue #1816). Derived from the camera, so deliberately *not* part of
+   * `mapView`: that shape is persisted into the project file, and a stored
+   * altitude could only drift from the center/zoom/pitch it is computed from.
+   * Null before the map loads, or when MapLibre cannot report it.
+   */
+  cameraAltitude: number | null;
   /** Live GPS fix for the status bar, or null while GPS tracking is off. */
   gpsStatus: GpsStatusFix | null;
   /** Anchored review comments on map points or features (issue #1518). */
@@ -337,6 +358,8 @@ export interface AppState {
   };
 
   setPointerCoords: (coords: [number, number] | null) => void;
+  setPointerElevation: (elevation: number | null) => void;
+  setCameraAltitude: (altitude: number | null) => void;
   setGpsStatus: (fix: GpsStatusFix | null) => void;
   setCollaboration: (patch: Partial<CollaborationState>) => void;
   updateCollaborationPresence: (clientId: string, presence: CollaborationPresence | null) => void;
@@ -610,6 +633,14 @@ export interface AppState {
       /** Epoch-ms time bounds of a KML `<TimeSpan>`/`<TimeStamp>` frame; the
        * Time Slider toggles this frame's visibility by the current date. */
       timeSpan?: { begin: number | null; end: number | null };
+      /**
+       * What produced the overlay, e.g. a NetCDF grid baked to pixels. Defaults
+       * to the KML ground overlay this was first written for; panels gate their
+       * per-source controls on it.
+       */
+      sourceKind?: string;
+      /** Extra metadata merged onto the layer (e.g. a symbology record). */
+      metadata?: Record<string, unknown>;
     },
     beforeLayerId?: string | null,
   ) => string;
@@ -967,6 +998,8 @@ export const useAppStore = create<AppState>()(
       selectedFeatureIds: [],
       identifyLayerId: null,
       pointerCoords: null,
+      pointerElevation: null,
+      cameraAltitude: null,
       gpsStatus: null,
       comments: [],
       metadata: {},
@@ -1010,7 +1043,10 @@ export const useAppStore = create<AppState>()(
         collaborateDialogOpen: false,
       },
 
-      setPointerCoords: (coords) => set({ pointerCoords: coords }),
+      setPointerCoords: (coords) =>
+        set(coords ? { pointerCoords: coords } : { pointerCoords: null, pointerElevation: null }),
+      setPointerElevation: (elevation) => set({ pointerElevation: elevation }),
+      setCameraAltitude: (altitude) => set({ cameraAltitude: altitude }),
       setGpsStatus: (fix) => set({ gpsStatus: fix }),
 
       addComment: (comment) =>
@@ -1265,7 +1301,19 @@ export const useAppStore = create<AppState>()(
       setProcessingInitialTool: (toolId) =>
         set((s) => ({ ui: { ...s.ui, processingInitialTool: toolId } })),
       setConversionOpen: (kind) => set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
-      setVectorToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, vectorToolOpen: kind } })),
+      setVectorToolOpen: (kind) =>
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            // Pre-DGGS projects / callers may still pass h3-grid / h3-bin-points.
+            vectorToolOpen:
+              (kind as string | null) === "h3-grid"
+                ? "dggs-grid"
+                : (kind as string | null) === "h3-bin-points"
+                  ? "dggs-bin"
+                  : kind,
+          },
+        })),
       setNetworkToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, networkToolOpen: kind } })),
       setStatisticsToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, statisticsToolOpen: kind } })),
       setRasterToolOpen: (kind) => set((s) => ({ ui: { ...s.ui, rasterToolOpen: kind } })),
@@ -1827,9 +1875,10 @@ export const useAppStore = create<AppState>()(
           opacity: options?.opacity ?? 1,
           style: { ...DEFAULT_LAYER_STYLE },
           metadata: {
-            sourceKind: "kml-ground-overlay",
+            sourceKind: options?.sourceKind ?? "kml-ground-overlay",
             ...(options?.bounds ? { bounds: options.bounds } : {}),
             ...(options?.timeSpan ? { timeSpan: options.timeSpan } : {}),
+            ...(options?.metadata ?? {}),
           },
           ...(options?.sourcePath ? { sourcePath: options.sourcePath } : {}),
         };
@@ -2097,45 +2146,14 @@ export const useAppStore = create<AppState>()(
           };
         }),
 
+      // A folder that owns no layers has no position in `layers` to move, so
+      // the panel order it takes part in lives across both arrays and the move
+      // writes both (GeoLibre#1739).
       reorderLayerGroup: (id, direction) =>
         set((s) => {
-          const groupIds = new Set([id]);
-          let foundDescendant = true;
-          while (foundDescendant) {
-            foundDescendant = false;
-            for (const group of s.layerGroups) {
-              if (group.parentId && groupIds.has(group.parentId) && !groupIds.has(group.id)) {
-                groupIds.add(group.id);
-                foundDescendant = true;
-              }
-            }
-          }
-          // Build the top-level units in store (render) order: each ungrouped
-          // layer is its own unit, and a group's contiguous members form one
-          // unit. A nested organizer group may have no direct layers, so its
-          // block includes every unit belonging to a descendant group.
-          const units: { key: string; layers: GeoLibreLayer[] }[] = [];
-          for (const layer of s.layers) {
-            const key = layer.groupId ?? `layer:${layer.id}`;
-            const last = units[units.length - 1];
-            if (last && last.key === key) last.layers.push(layer);
-            else units.push({ key, layers: [layer] });
-          }
-          const matching = units
-            .map((unit, index) => (groupIds.has(unit.key) ? index : -1))
-            .filter((index) => index >= 0);
-          if (matching.length === 0) return s;
-          const first = matching[0];
-          const last = matching[matching.length - 1];
-          const neighbor = direction === "up" ? last + 1 : first - 1;
-          if (neighbor < 0 || neighbor >= units.length) return s;
-          const block = units.filter((unit) => groupIds.has(unit.key));
-          const remaining = units.filter((unit) => !groupIds.has(unit.key));
-          const neighborKey = units[neighbor].key;
-          const neighborIndex = remaining.findIndex((unit) => unit.key === neighborKey);
-          const insertAt = direction === "up" ? neighborIndex + 1 : neighborIndex;
-          remaining.splice(insertAt, 0, ...block);
-          return { layers: remaining.flatMap((u) => u.layers), isDirty: true };
+          const moved = reorderLayerGroupInPanel(s.layers, s.layerGroups, id, direction);
+          if (!moved) return s;
+          return { layers: moved.layers, layerGroups: moved.groups, isDirty: true };
         }),
 
       newProject: (options = {}) => {
@@ -2154,6 +2172,8 @@ export const useAppStore = create<AppState>()(
           // paste in the new one would apply an orphaned entry.
           copiedLayerStyle: null,
           pointerCoords: null,
+          pointerElevation: null,
+          cameraAltitude: null,
           attributeFilter: "",
           // Don't carry an active story presentation into a different project.
           ui: {
@@ -2205,6 +2225,13 @@ export const useAppStore = create<AppState>()(
           // The copied style names a layer from the previous project, so a
           // paste in the loaded one would apply an orphaned entry.
           copiedLayerStyle: null,
+          // Ephemeral readouts describe the previous project's map. The
+          // elevation and altitude especially: a project that switches to a
+          // planetary body would otherwise keep showing Earth-scaled values
+          // until the next hover or camera move.
+          pointerCoords: null,
+          pointerElevation: null,
+          cameraAltitude: null,
           // Present a bundled story on load; otherwise drop any presentation
           // carried over from the previous project.
           ui: {

@@ -78,6 +78,7 @@ export {
   type MapboxStyleExportOptions,
   type MapboxStyleExportResult,
 } from "./mapbox-style-export";
+export { buildGeoLibreQueryStyle, geoLibreStyleSourceName } from "./query-param-style";
 export {
   applyMapboxStyleImport,
   parseMapboxStyle,

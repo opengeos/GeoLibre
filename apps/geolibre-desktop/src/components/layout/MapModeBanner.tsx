@@ -110,7 +110,7 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
     <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex w-[min(92vw,30rem)] -translate-x-1/2 flex-col gap-2">
       {directionsActive ? (
         <div
-          className="pointer-events-auto flex flex-col gap-2 rounded-md border bg-background/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
+          className="pointer-events-auto flex flex-col gap-2 rounded-md border map-glass px-3 py-2 text-sm shadow-lg"
           role="region"
           aria-label={t("map.directionsMode.title")}
           data-testid="directions-mode-banner"
@@ -231,7 +231,7 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
 
       {reverseGeocodeActive ? (
         <div
-          className="pointer-events-auto flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
+          className="pointer-events-auto flex items-center gap-2 rounded-md border map-glass px-3 py-2 text-sm shadow-lg"
           role="region"
           aria-label={t("map.reverseGeocodeMode.title")}
           data-testid="reverse-geocode-mode-banner"

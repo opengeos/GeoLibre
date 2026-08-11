@@ -2,9 +2,12 @@ import {
   DEFAULT_PROJECT_NAME,
   detachProjectCopy,
   projectFromStore,
+  redactProjectCredentials,
+  excludeHiddenFieldsFromProject,
   serializeProject,
   useAppStore,
   type GeoLibreLayer,
+  type GeoLibreProject,
 } from "@geolibre/core";
 import {
   addArcGISLayer,
@@ -50,11 +53,39 @@ import {
 import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 
-/** A pending "strip env vars before saving?" prompt. */
-export interface EnvStripPrompt {
+/** A pending "strip credentials before saving?" prompt. */
+export interface CredentialStripPrompt {
   count: number;
   resolve: (choice: "strip" | "keep" | "cancel") => void;
 }
+
+/**
+ * Embedded-data size above which the save prompt warns that the project will be
+ * slow (or impossible) to reopen and points at PMTiles/FlatGeobuf instead.
+ *
+ * Embedded GeoJSON is parsed and held in memory in full when the project is
+ * reopened, so a browser tab can run out of memory and drop the layers with no
+ * error (GeoLibre#1829). 50 MB is well under that cliff while leaving ordinary
+ * projects unbothered.
+ */
+export const LARGE_EMBED_WARNING_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Messages engines raise when a string passes their maximum length, which is
+ * how "this project is too large to serialize" surfaces.
+ *
+ * Matched by text rather than by error class because there is no typed signal:
+ * V8 (Chromium, WebView2) throws `RangeError: Invalid string length`,
+ * JavaScriptCore (the macOS and Linux Tauri webviews) reports an out-of-memory
+ * error, and SpiderMonkey says "allocation size overflow". Matching only V8's
+ * wording would leave desktop users on every other webview with the generic
+ * failure message instead of the guidance this exists to give.
+ *
+ * Deliberately narrow: a genuine serialization bug (a cycle, say, which reads
+ * "Converting circular structure to JSON") must not be filed under size.
+ */
+const SERIALIZATION_TOO_LARGE_PATTERN =
+  /invalid string length|out of memory|allocation size overflow|string too long/i;
 
 /**
  * A pending "embed local vector data?" prompt, shown on the web when saving a
@@ -220,7 +251,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
-  const [envStripPrompt, setEnvStripPrompt] = useState<EnvStripPrompt | null>(null);
+  const [credentialStripPrompt, setCredentialStripPrompt] = useState<CredentialStripPrompt | null>(
+    null,
+  );
   const [embedVectorDataPrompt, setEmbedVectorDataPrompt] = useState<EmbedVectorDataPrompt | null>(
     null,
   );
@@ -647,29 +680,59 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       secondaryMapViews: state.secondaryMapViews,
       primaryMapLabel: state.primaryMapLabel,
       styleLibrary: state.projectStyleLibrary,
+      comments: state.comments,
       metadata: state.metadata,
     });
+    // The serialized text is deliberately not returned: every caller
+    // re-serializes after redacting credentials, so producing it here doubled
+    // the peak memory of a save for a project embedding large vector layers
+    // (GeoLibre#1829).
     return {
       project,
       defaultProjectName,
-      content: serializeProject(project),
       // Expose the path read from this same snapshot so callers don't take a
       // second `getState()` read that could be misread as a separate instant.
       projectPath: state.projectPath,
     };
   };
 
-  // Ask whether to strip environment variables before writing the file. The
-  // promise resolves when the user picks an option in the dialog.
-  const askStripEnvVars = (count: number) =>
+  // Serializing a project runs synchronously and throws `RangeError: Invalid
+  // string length` once the text passes V8's ~536 MB string cap, which a
+  // project embedding large vector layers can still reach. Unguarded, that
+  // throw escaped `void handleSave()` as an unhandled rejection and Save
+  // silently did nothing (GeoLibre#1829), so report it instead of returning
+  // text. Returns null when the project could not be serialized.
+  const serializeForSave = (project: GeoLibreProject): string | null => {
+    try {
+      return serializeProject(project);
+    } catch (error) {
+      console.error("Failed to serialize project", error);
+      // Only the string-length cap means "too large"; anything else is a real
+      // serialization bug and must not be filed under a size problem. Matching
+      // on `RangeError` alone was too broad — a stack overflow raises one too,
+      // and pointing that at PMTiles/FlatGeobuf would send the user chasing a
+      // size problem they do not have.
+      setActionError(
+        error instanceof Error && SERIALIZATION_TOO_LARGE_PATTERN.test(error.message)
+          ? t("toolbar.error.projectTooLargeToSave")
+          : t("toolbar.error.couldNotSaveProject"),
+      );
+      return null;
+    }
+  };
+
+  // Ask whether to strip credentials (environment variables, geocoder keys,
+  // layer tokens) before writing the file. The promise resolves when the user
+  // picks an option in the dialog.
+  const askStripCredentials = (count: number) =>
     new Promise<"strip" | "keep" | "cancel">((resolve) => {
-      setEnvStripPrompt({ count, resolve });
+      setCredentialStripPrompt({ count, resolve });
     });
 
-  const resolveEnvStripPrompt = (choice: "strip" | "keep" | "cancel") => {
+  const resolveCredentialStripPrompt = (choice: "strip" | "keep" | "cancel") => {
     // Resolve outside the state updater (updaters must be side-effect free).
-    envStripPrompt?.resolve(choice);
-    setEnvStripPrompt(null);
+    credentialStripPrompt?.resolve(choice);
+    setCredentialStripPrompt(null);
   };
 
   // Ask whether to embed local vector layers' data in the saved file. Resolves
@@ -831,26 +894,24 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // first, so the serialized content below reflects the user's choice.
     const layersForSave = await resolveLayersForSave();
     if (layersForSave === "cancel") return false;
-    const { project, defaultProjectName, content, projectPath } = buildCurrentProject(
+    const { project, defaultProjectName, projectPath } = buildCurrentProject(
       undefined,
       layersForSave.layers,
     );
-    // Env vars (possibly API keys) are serialized in plain text. If any are set,
-    // offer to strip them from the saved file before writing.
-    let contentToSave = content;
-    const envVarCount = (project.preferences.environmentVariables ?? []).filter((variable) =>
-      variable.key.trim(),
-    ).length;
-    if (envVarCount > 0) {
-      const choice = await askStripEnvVars(envVarCount);
+    // Credentials are serialized in plain text for a local project that needs
+    // them. Make keeping them an explicit choice and use the same central
+    // redaction pass as every external egress.
+    let contentToSave: string | null;
+    const projectToEgress = excludeHiddenFieldsFromProject(project);
+    const redacted = redactProjectCredentials(projectToEgress);
+    if (redacted.redactedPaths.length > 0) {
+      const choice = await askStripCredentials(redacted.redactedCount);
       if (choice === "cancel") return false;
-      if (choice === "strip") {
-        contentToSave = serializeProject({
-          ...project,
-          preferences: { ...project.preferences, environmentVariables: [] },
-        });
-      }
+      contentToSave = serializeForSave(choice === "strip" ? redacted.project : projectToEgress);
+    } else {
+      contentToSave = serializeForSave(projectToEgress);
     }
+    if (contentToSave === null) return false;
     // Projects opened from a URL have no writable path, so both Save and
     // Save As fall back to the save dialog for them.
     const existingLocalPath = projectPath && !isHttpUrl(projectPath) ? projectPath : null;
@@ -875,7 +936,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     try {
       path =
         !options?.saveAs && existingLocalPath
-          ? await saveProjectFileToPath(contentToSave, existingLocalPath)
+          ? await saveProjectFileToPath(contentToSave, existingLocalPath, saveName)
           : await saveProjectFile(
               contentToSave,
               promptForName ? saveName : (existingLocalPath ?? saveName),
@@ -947,18 +1008,15 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         if (chosen === null) return false;
         defaultName = ensureHtmlFileName(chosen, slug);
       }
-      // Only now embed local vector data (self-contained, like Share) and strip
-      // env vars (secrets serve no purpose in a static viewer): this can be
-      // costly on a project with many local layers, so it runs after the user
+      // Only now embed local vector data (self-contained, like Share): this can
+      // be costly on a project with many local layers, so it runs after the user
       // has committed to the export rather than before the prompt. Reuse the
-      // name snapshot so the title matches the slug computed above.
+      // name snapshot so the title matches the slug computed above. Credentials
+      // serve no purpose in a static viewer and are removed inside
+      // buildProjectHtml, which runs the central redaction pass.
       const { project, defaultProjectName } = await buildEmbeddedProject(projectName);
-      const safeProject = {
-        ...project,
-        preferences: { ...project.preferences, environmentVariables: [] },
-      };
       const html = buildProjectHtml({
-        project: safeProject,
+        project,
         title: defaultProjectName,
       });
       // Returns null when the user cancels the save dialog; report that as a
@@ -1024,8 +1082,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setSaveTemplateDialogOpen,
     handleDuplicate,
     handleSaveAsTemplate: () => setSaveTemplateDialogOpen(true),
-    envStripPrompt,
-    resolveEnvStripPrompt,
+    credentialStripPrompt,
+    resolveCredentialStripPrompt,
     embedVectorDataPrompt,
     resolveEmbedVectorDataPrompt,
     saveNamePrompt,

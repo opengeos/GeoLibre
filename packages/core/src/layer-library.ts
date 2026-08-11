@@ -24,6 +24,7 @@ import {
 } from "./types";
 import { sanitizeLayerStylePatch } from "./style-library";
 import { hasPathTraversal, isAbsoluteFilesystemPath } from "./paths";
+import { isCredentialFieldName, redactUrlCredentials } from "./credentials";
 
 /** `type` discriminator of an exported Layer Library bundle file. */
 export const LAYER_LIBRARY_BUNDLE_TYPE = "geolibre-layer-library";
@@ -653,8 +654,10 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
 }
 
 /**
- * `source` fields that can hold a per-user credential and are therefore removed
- * on export. `requestHeaders` carries the bearer token / API key an
+ * Copy of an entry with per-user credentials removed from its source.
+ *
+ * `source` fields that can hold a per-user credential are removed on export.
+ * `requestHeaders`, for example, carries the bearer token / API key an
  * authenticated 3D Tiles layer was added with (see
  * `persistedThreeDTilesRequestHeaders`, which keeps non-Google auth headers when
  * persisting into a project file).
@@ -664,115 +667,15 @@ export function normalizeLayerLibraryEntries(value: unknown): LayerLibraryEntry[
  * your team" action, which makes it a far more direct exposure path than handing
  * someone a whole project file. A recipient re-enters their own credentials,
  * which is the correct outcome.
- */
-const EXPORT_REDACTED_SOURCE_KEYS = ["requestHeaders"] as const;
-
-/**
- * Query-parameter names removed from a source URL on export. Plenty of tile and
- * web services authenticate in the URL rather than a header — an XYZ template
- * with `?api_key=`, a Google `key=`, a Mapbox `access_token=`, an S3 presigned
- * link (`X-Amz-*`), an Azure SAS token (`sig`/`se`/`sp`/…) — so redacting only
- * `requestHeaders` would still ship a credential in a shared bundle.
  *
- * Matched case-insensitively, plus any `x-amz-*` parameter. Erring toward
- * redaction is deliberate for a share action: a stripped parameter leaves the
- * recipient re-entering their own key, while a missed one leaks yours. Every
- * other part of the URL is preserved, so the entry stays recognizable and
- * re-usable once the recipient supplies their credential.
+ * The names come from `isCredentialFieldName`, so this path and project export
+ * share one registry instead of drifting apart.
  */
-const EXPORT_REDACTED_URL_PARAMS = new Set([
-  "access_token",
-  "accesstoken",
-  "api_key",
-  "apikey",
-  "key",
-  "token",
-  "subscription-key",
-  "subscriptionkey",
-  "password",
-  "pwd",
-  "client_secret",
-  "clientsecret",
-  "signature",
-  "sig",
-  "se",
-  "sp",
-  "sv",
-  "sr",
-  "st",
-  "skoid",
-]);
-
-/** True when a query-parameter name is treated as a credential on export. */
-function isRedactedUrlParam(name: string): boolean {
-  const lower = name.toLowerCase();
-  return EXPORT_REDACTED_URL_PARAMS.has(lower) || lower.startsWith("x-amz-");
-}
-
-/** Drop `user:pass@` userinfo from a URL's authority, keeping the rest. */
-function redactUrlUserInfo(base: string): string {
-  // Only look inside the authority (between `://` and the next `/`), so a `@`
-  // in a path segment is untouched.
-  const schemeEnd = base.indexOf("://");
-  if (schemeEnd === -1) return base;
-  const authorityStart = schemeEnd + 3;
-  const authorityEnd = base.indexOf("/", authorityStart);
-  const authority = base.slice(authorityStart, authorityEnd === -1 ? undefined : authorityEnd);
-  const at = authority.lastIndexOf("@");
-  if (at === -1) return base;
-  return (
-    base.slice(0, authorityStart) +
-    authority.slice(at + 1) +
-    (authorityEnd === -1 ? "" : base.slice(authorityEnd))
-  );
-}
-
-/** Remove credential parameters from an `&`-joined `name=value` string. */
-function redactParamString(params: string): string {
-  return params
-    .split("&")
-    .filter((pair) => pair !== "" && !isRedactedUrlParam(pair.split("=", 1)[0]))
-    .join("&");
-}
-
-/**
- * Strip credentials from a URL, leaving everything else intact: named query
- * parameters, the same names in a `#`-fragment (an OAuth implicit-flow token
- * arrives as `#access_token=…`, the same `name=value` shape), and any
- * `user:pass@` userinfo in the authority.
- *
- * Parsed by hand rather than through `URL`/`URLSearchParams`, which re-encode the
- * `{z}/{x}/{y}` placeholders a tile template depends on — and which would throw
- * on the relative or `pmtiles://`-style values a source can also hold. Anything
- * without a query, fragment, or userinfo is returned unchanged.
- */
-function redactUrlCredentials(value: string): string {
-  const hash = value.indexOf("#");
-  const beforeHash = hash === -1 ? value : value.slice(0, hash);
-  const fragment = hash === -1 ? undefined : value.slice(hash + 1);
-  const separator = beforeHash.indexOf("?");
-  const base = separator === -1 ? beforeHash : beforeHash.slice(0, separator);
-  const query = separator === -1 ? undefined : beforeHash.slice(separator + 1);
-
-  const keptQuery = query === undefined ? undefined : redactParamString(query);
-  // A fragment is only treated as parameters when it looks like them; a plain
-  // `#section` anchor is preserved as-is.
-  const keptFragment =
-    fragment === undefined || !fragment.includes("=") ? fragment : redactParamString(fragment);
-
-  return (
-    redactUrlUserInfo(base) +
-    (keptQuery ? `?${keptQuery}` : "") +
-    (keptFragment ? `#${keptFragment}` : "")
-  );
-}
-
-/** Copy of an entry with per-user credentials removed from its source. */
 function redactEntryForExport(entry: LayerLibraryEntry): LayerLibraryEntry {
   const source = { ...entry.source };
   let changed = false;
-  for (const key of EXPORT_REDACTED_SOURCE_KEYS) {
-    if (key in source) {
+  for (const key of Object.keys(source)) {
+    if (isCredentialFieldName(key)) {
       delete source[key];
       changed = true;
     }
@@ -836,7 +739,14 @@ function isGeoJsonPayload(value: Record<string, unknown>): boolean {
  */
 function redactSourceValue(value: unknown, depth = 0): unknown {
   if (typeof value === "string") return redactUrlCredentials(value);
-  if (depth >= MAX_REDACT_DEPTH) return value;
+  if (depth >= MAX_REDACT_DEPTH) {
+    // Fail closed, matching `redactConfigurationValue` in credentials.ts: no
+    // built-in layer needs configuration nested this deep to be re-addable, and
+    // handing the value back unswept would let a credential ride out of the
+    // bundle merely by sitting past the traversal cap. Only the exported bundle
+    // loses it; the local IndexedDB entry is untouched.
+    return undefined;
+  }
   if (Array.isArray(value)) {
     const redacted = value.map((item) => redactSourceValue(item, depth + 1));
     return redacted.some((item, index) => item !== value[index]) ? redacted : value;
@@ -846,7 +756,7 @@ function redactSourceValue(value: unknown, depth = 0): unknown {
   let changed = false;
   const out: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(object)) {
-    if (EXPORT_REDACTED_SOURCE_KEYS.includes(key as (typeof EXPORT_REDACTED_SOURCE_KEYS)[number])) {
+    if (isCredentialFieldName(key)) {
       changed = true;
       continue;
     }

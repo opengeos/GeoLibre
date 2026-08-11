@@ -11,6 +11,9 @@ The **Processing** menu collects GeoLibre's analysis and conversion tools: vecto
 
 **Processing → Vector** opens the Vector tools dialog. Pick a tool from the list, choose the input layer and parameters, select an engine, then **Run**. Output appears as a new layer.
 
+!!! tip "Skipping the dialog"
+    Several of these are also one click away from the **Quick analysis** submenu. Right-clicking the map runs a buffer or a drive- or walk-time isochrone on the clicked point; the submenu on a layer row runs a buffer, centroids, convex hull, or bounding box over the whole layer. See [Right-click quick actions](map-controls.md#right-click-quick-actions).
+
 **Geometry**
 
 | Tool | Description |
@@ -117,7 +120,7 @@ The conversion sidecar is hardened with a path allowlist.
 
 **Processing → Whitebox** opens the geoprocessing toolbox: **1,000+ tools** covering vector, raster, remote sensing, hydrology, terrain, LiDAR, conversion, network, and projection analysis.
 
-![The Whitebox toolbox running locally with WebAssembly, listing the full catalog of 1,000+ tools with the Regularize Building Footprints tool selected](https://files.opengeos.org/whitebox.webp)
+![The Whitebox toolbox running locally with WebAssembly, listing the full catalog of 1,000+ tools with the Regularize Building Footprints tool selected](https://assets.geolibre.app/images/whitebox.webp)
 
 The tools come from the [Whitebox Next Gen](https://github.com/opengeos/Whitebox-Next-Gen-ArcGIS) suite together with GeoLibre's own WASM tools, which the dialog mixes into the same catalog (use the **sources** dropdown to filter to one or the other).
 

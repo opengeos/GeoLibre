@@ -28,6 +28,8 @@ export interface CapturedMap {
   height: number;
   /** Ground metres per device pixel of the captured image, at map centre. */
   metersPerPixel: number;
+  /** Device pixels per CSS pixel in the captured map canvas. */
+  pixelRatio: number;
   bearingDeg: number;
 }
 
@@ -209,6 +211,7 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
     width: image.width,
     height: image.height,
     metersPerPixel,
+    pixelRatio: dpr,
     bearingDeg: map.getBearing(),
   };
 }

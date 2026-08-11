@@ -56,6 +56,9 @@ import { useTranslation } from "react-i18next";
 import { AttributeFormSection } from "./AttributeFormSection";
 import { LayerJoinsSection } from "./LayerJoinsSection";
 import { VirtualFieldsSection } from "./VirtualFieldsSection";
+import { getNetcdfLayerState, NETCDF_IMAGE_SOURCE_KIND } from "../../lib/netcdf-image-symbology";
+import { NetcdfProfilePanel } from "./NetcdfProfilePanel";
+import { NetcdfSymbologySection } from "./NetcdfSymbologySection";
 import { RasterSymbologySection } from "./RasterSymbologySection";
 import { TimeSliderSymbologySection } from "./TimeSliderSymbologySection";
 import { ExpressionBuilderDialog } from "../expressions/ExpressionBuilderDialog";
@@ -170,6 +173,8 @@ function labelOverrideInvalid(
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  /** Incremented when another part of the UI explicitly requests this panel. */
+  openRequest?: number;
   /**
    * When this flips to `true` the panel collapses to its thin rail (it is not
    * unmounted). Used to clear room when the notebook opens beside the map; the
@@ -706,9 +711,11 @@ function validateExpressionJson(value: string, label: string, t: TFunction): str
 }
 
 // Shared shell classes for every expanded StylePanel return branch. On phones
-// (max-md) it overlays the map as a bottom sheet instead of squeezing it.
+// (max-md) it overlays the map as a bottom sheet instead of squeezing it. The
+// sheet needs a definite height so the Radix ScrollArea viewport can resolve
+// its percentage height and scroll instead of growing to the content height.
 const STYLE_PANEL_ASIDE_CLASS =
-  "relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--style-panel-width)] md:border-s md:border-t-0";
+  "relative flex h-[min(24rem,42vh)] supports-[height:1dvh]:h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:shadow-xl md:h-auto md:w-[var(--style-panel-width)] md:border-s md:border-t-0";
 
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
@@ -981,6 +988,7 @@ function RasterStyleSlider({
 export function StylePanel({
   mapControllerRef,
   onResizeStart,
+  openRequest = 0,
   autoCollapse = false,
   collapsed: controlledCollapsed,
   onCollapsedChange,
@@ -995,8 +1003,8 @@ export function StylePanel({
   const updateLayer = useAppStore((s) => s.updateLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const projectName = useAppStore((s) => s.projectName);
-  // Style starts on its rail on every platform. Selecting a real layer below
-  // expands it; selecting the special Background row does not.
+  // Style starts on its rail on every platform and remains there until the
+  // user explicitly expands it.
   const [internalCollapsed, setInternalCollapsed] = useState(true);
   // In the shared right-sidebar mode the parent owns collapse (controlled);
   // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
@@ -1010,23 +1018,19 @@ export function StylePanel({
     },
     [isControlled, onCollapsedChange],
   );
-  // Selecting a real layer expands the panel from its rail. Skipped while
-  // `autoCollapse` holds it closed (the notebook or a story-map presentation
-  // owns the workspace), so a selection made there cannot pop Style back open
-  // over them and defeat the auto-collapse below.
-  const previousSelectedLayerId = useRef(selectedLayerId);
+  // An explicit request (Layers → "Open Style panel") expands the panel from its
+  // rail. Skipped while `autoCollapse` holds it closed (the notebook or a
+  // story-map presentation owns the workspace), so a request made there cannot
+  // pop Style back open over them: the `autoCollapse` effect below acts only on
+  // transitions, so an expand that slipped through would stick until the
+  // notebook was closed and reopened. The request is still consumed so it does
+  // not fire later.
+  const previousOpenRequest = useRef(openRequest);
   useEffect(() => {
-    const previous = previousSelectedLayerId.current;
-    previousSelectedLayerId.current = selectedLayerId;
-    if (
-      !autoCollapse &&
-      selectedLayerId &&
-      selectedLayerId !== previous &&
-      layers.some((candidate) => candidate.id === selectedLayerId)
-    ) {
-      setIsCollapsed(false);
-    }
-  }, [autoCollapse, layers, selectedLayerId, setIsCollapsed]);
+    if (openRequest === previousOpenRequest.current) return;
+    previousOpenRequest.current = openRequest;
+    if (!autoCollapse) setIsCollapsed(false);
+  }, [autoCollapse, openRequest, setIsCollapsed]);
   // Collapse to the rail when `autoCollapse` flips on (e.g. the notebook opens),
   // and restore the prior expand/collapse state when it flips back off (notebook
   // closes). Both act only on the transition so the user can still toggle the
@@ -4595,6 +4599,13 @@ export function StylePanel({
             {layer.metadata.sourceKind === TIME_SLIDER_SOURCE_KIND && (
               <TimeSliderSymbologySection layer={layer} />
             )}
+            {/* The same section the NetCDF branch renders below: a multiband COG
+                identified with the pixel inspector samples into the same store
+                (see useCogSpectralIdentify), so its spectra need a home on the
+                branch a raster layer actually lands on. The section renders null
+                until this layer has a sampled pixel, so it costs nothing for the
+                single-band and tile rasters that also come through here. */}
+            <NetcdfProfilePanel layerId={layer.id} />
             <Separator />
             <Button
               type="button"
@@ -4628,6 +4639,14 @@ export function StylePanel({
   }
 
   if (!hasVectorPaintControls) {
+    // The section renders nothing without retained grids, so ask here too, or
+    // the panel would suppress the fallback message and show an empty body.
+    // The layer state rather than `getNetcdfImageSource`, which is null for an
+    // RGB composite: that one has no colormap to re-apply, but it does have a
+    // band summary to show and pixels to sample.
+    const hasNetcdfSymbology =
+      layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND &&
+      getNetcdfLayerState(layer.id) !== null;
     return (
       <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
@@ -4646,8 +4665,22 @@ export function StylePanel({
             <PanelRightClose className="h-4 w-4" />
           </Button>
         </div>
-        <div className="space-y-4 p-3">{beforeIdControl}</div>
-        <p className="p-4 text-xs text-muted-foreground">{t("style.noControls")}</p>
+        <ScrollArea className="flex-1">
+          <div className="space-y-4 p-3 pe-5">
+            {beforeIdControl}
+            {/* A NetCDF grid baked to pixels has no MapLibre paint properties,
+                so it lands in this branch; its colormap/limits are re-applied
+                by re-baking the image rather than by a style property. The
+                grids are dropped on a project reload, so the generic message
+                still has to appear for a layer restored from one. */}
+            {hasNetcdfSymbology ? (
+              <NetcdfSymbologySection layer={layer} />
+            ) : (
+              <p className="text-xs text-muted-foreground">{t("style.noControls")}</p>
+            )}
+            {hasNetcdfSymbology && <NetcdfProfilePanel layerId={layer.id} />}
+          </div>
+        </ScrollArea>
         <Separator />
         <p className="p-2 text-[10px] text-muted-foreground">
           {t("style.selectedLayerType", { type: layer.type })}

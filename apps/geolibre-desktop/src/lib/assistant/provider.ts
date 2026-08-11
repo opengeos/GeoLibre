@@ -491,6 +491,70 @@ export function availableProviders(env: RuntimeEnv = readRuntimeEnv()): Assistan
 }
 
 /**
+ * Headers the OpenAI SDK attaches to every request that carry no meaning for a
+ * third-party OpenAI-compatible endpoint: its own telemetry (`X-Stainless-*`)
+ * and a `User-Agent` override.
+ *
+ * They are harmless against `api.openai.com`, but they break OpenAI-compatible
+ * gateways in the browser (issue #1834). Any of them makes the request
+ * non-simple, so the browser sends a CORS preflight listing every one of them in
+ * `Access-Control-Request-Headers`. A gateway that allows only the standard
+ * `Authorization`/`Content-Type`/`Accept` trio answers that preflight without an
+ * `Access-Control-Allow-Origin` header, the browser rejects it, and the SDK sees
+ * the opaque `TypeError: Failed to fetch`, reported as "Connection error" with
+ * three identical network diagnostics (one per SDK retry) even though the
+ * endpoint's CORS policy is otherwise fine and the credentials are valid.
+ *
+ * Dropping them leaves the preflight asking only for headers such a gateway
+ * already allows. `User-Agent` is included because the browser supplies its own
+ * once the SDK's override is gone.
+ *
+ * This is exactly the set the client attaches to *every* request. The SDK's
+ * remaining `X-Stainless-*` names (`Helper-Method`, `Poll-Helper`,
+ * `Custom-Poll-Interval`) are deliberately absent: they are set per request by
+ * the assistants/vector-store polling helpers, whose per-request headers are
+ * merged *after* `defaultHeaders` and so cannot be stripped here anyway. The
+ * assistant reaches the API through plain `chat.completions.create`, which never
+ * uses those helpers. The `openAiCompatibleHeaders` test asserts the header
+ * names actually put on the wire, so an SDK bump that adds one to every request
+ * fails there rather than in a user's gateway.
+ */
+export const OPENAI_COMPATIBLE_STRIPPED_HEADERS: readonly string[] = [
+  "User-Agent",
+  "X-Stainless-Arch",
+  "X-Stainless-Lang",
+  "X-Stainless-OS",
+  "X-Stainless-Package-Version",
+  "X-Stainless-Retry-Count",
+  "X-Stainless-Runtime",
+  "X-Stainless-Runtime-Version",
+  "X-Stainless-Timeout",
+];
+
+/**
+ * The `defaultHeaders` to hand the OpenAI SDK for an OpenAI-compatible endpoint
+ * (`ollama` / `custom`).
+ *
+ * A `null` value tells the SDK to *remove* that header rather than send an empty
+ * one, and `defaultHeaders` is merged after the block where the client sets its
+ * own, so every name in {@link OPENAI_COMPATIBLE_STRIPPED_HEADERS} is dropped
+ * before the request is built. `Authorization` joins them when the endpoint is
+ * the managed same-origin proxy, which is authenticated by the browser session
+ * instead of a Bearer token.
+ *
+ * @param suppressAuthorizationHeader Also drop `Authorization` (managed proxy).
+ * @returns A header map whose every value is `null`.
+ */
+export function openAiCompatibleHeaders(
+  suppressAuthorizationHeader: boolean,
+): Record<string, null> {
+  const headers: Record<string, null> = {};
+  for (const name of OPENAI_COMPATIBLE_STRIPPED_HEADERS) headers[name] = null;
+  if (suppressAuthorizationHeader) headers.Authorization = null;
+  return headers;
+}
+
+/**
  * Build a Strands {@link Model} for the resolved provider. The provider SDK is
  * dynamically imported so unused providers never enter the initial bundle.
  *
@@ -537,7 +601,7 @@ export async function createModel(config: AssistantProviderConfig): Promise<Mode
         modelId: config.modelId,
         clientConfig: {
           baseURL: config.baseURL,
-          defaultHeaders: config.suppressAuthorizationHeader ? { Authorization: null } : undefined,
+          defaultHeaders: openAiCompatibleHeaders(Boolean(config.suppressAuthorizationHeader)),
           dangerouslyAllowBrowser: true,
         },
       }) as unknown as Model;

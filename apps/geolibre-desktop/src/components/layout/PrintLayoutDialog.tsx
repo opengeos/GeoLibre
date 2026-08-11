@@ -42,6 +42,7 @@ import {
 import {
   computeScaleRatio,
   drawLayout,
+  mapBodyAspectRatio,
   PAPER_SIZES,
   resolvePageSize,
   type BodyCorner,
@@ -58,8 +59,11 @@ import {
   DEFAULT_TABLE_ROWS,
   layerRows,
   MAX_TABLE_ROWS,
+  rowForAtlasFeature,
+  rowsIntersectingBounds,
   rowsWithinBounds,
   type ChartBlockType,
+  type PageFilterMode,
 } from "../../lib/print-data-blocks";
 import {
   categoricalColumns,
@@ -91,9 +95,11 @@ import {
 } from "../../lib/print-layout-export";
 import {
   atlasEntryName,
+  atlasViewportFrame,
   buildAtlasPages,
   buildLineAtlasPages,
   collectAtlasFeatures,
+  geometryBounds,
   hasLineGeometry,
   MAX_LINE_ATLAS_PAGES,
   expandBounds,
@@ -106,6 +112,7 @@ import {
   type AtlasPage,
   type AtlasTokenContext,
 } from "../../lib/print-atlas";
+import { clearAtlasFeatureMask, showAtlasFeatureMask } from "../../lib/print-atlas-mask";
 
 interface PrintLayoutDialogProps {
   open: boolean;
@@ -285,8 +292,10 @@ export function PrintLayoutDialog({
   const [tableSortField, setTableSortField] = useState("");
   const [tableSortDesc, setTableSortDesc] = useState(false);
   const [tableMaxRows, setTableMaxRows] = useState(DEFAULT_TABLE_ROWS);
+  const [tableFitRows, setTableFitRows] = useState(false);
   const [tablePosition, setTablePosition] = useState<BodyCorner>("bottom-left");
-  const [tableFilterToPage, setTableFilterToPage] = useState(true);
+  const [tablePageFilter, setTablePageFilter] = useState<PageFilterMode>("contained");
+  const [tableFilterToAtlasFeature, setTableFilterToAtlasFeature] = useState(false);
   const [showDataChart, setShowDataChart] = useState(false);
   const [chartLayerId, setChartLayerId] = useState("");
   const [chartTitle, setChartTitle] = useState("");
@@ -297,7 +306,7 @@ export function PrintLayoutDialog({
   // Top-right by default: the scale bar + north arrow duo occupies the
   // bottom-right corner out of the box.
   const [chartPosition, setChartPosition] = useState<BodyCorner>("top-right");
-  const [chartFilterToPage, setChartFilterToPage] = useState(true);
+  const [chartPageFilter, setChartPageFilter] = useState<PageFilterMode>("contained");
   // Cartographic title block ("stempel") fields (GH #522).
   const [showInfoBlock, setShowInfoBlock] = useState(false);
   const [author, setAuthor] = useState("");
@@ -318,6 +327,7 @@ export function PrintLayoutDialog({
   const [atlasNameField, setAtlasNameField] = useState("");
   const [atlasExtentMode, setAtlasExtentMode] = useState<"margin" | "scale">("margin");
   const [atlasMarginPct, setAtlasMarginPct] = useState(10);
+  const [atlasMaskEnabled, setAtlasMaskEnabled] = useState(false);
   const [atlasScale, setAtlasScale] = useState("50000");
   const [atlasSortField, setAtlasSortField] = useState("");
   const [atlasSortDescending, setAtlasSortDescending] = useState(false);
@@ -629,7 +639,10 @@ export function PrintLayoutDialog({
       if (!atlasActiveRef.current) recapture();
     } else if (!open && wasOpenRef.current && !drawingRef.current) {
       // Closing for good (not to draw): take the extent box off the map.
-      if (map) clearPrintExtent(map);
+      if (map) {
+        clearPrintExtent(map);
+        clearAtlasFeatureMask(map);
+      }
     }
     wasOpenRef.current = open;
   }, [open, projectName, recapture, mapControllerRef, extentBbox]);
@@ -657,6 +670,7 @@ export function PrintLayoutDialog({
           idleRecaptureRef.current = null;
         }
         clearPrintExtent(map);
+        clearAtlasFeatureMask(map);
       }
     },
     [mapControllerRef],
@@ -733,8 +747,10 @@ export function PrintLayoutDialog({
       legend,
       legendTitle: legendConfig.title,
       legendGroupByLayer: legendConfig.groupByLayer,
+      legendFormatNote: (count: number) => t("printLayout.legend.moreItems", { count }),
       markerIcons,
       metersPerPixel: captured?.metersPerPixel ?? 0,
+      mapPixelRatio: captured?.pixelRatio ?? 1,
       bearingDeg: captured?.bearingDeg ?? 0,
       mapImage: captured?.image ?? null,
       mapImageWidth: captured?.width ?? 0,
@@ -879,6 +895,22 @@ export function PrintLayoutDialog({
   const currentAtlasPage = atlasEnabled ? (atlasPages[clampedAtlasIndex] ?? null) : null;
   const atlasActive = atlasEnabled && atlasPageCount > 0;
   atlasActiveRef.current = atlasActive;
+  const currentAtlasFeature = currentAtlasPage
+    ? atlasLayer?.geojson?.features[currentAtlasPage.sourceIndex]
+    : undefined;
+  const atlasMaskAvailable = Boolean(
+    atlasCoverage === "features" &&
+    (currentAtlasFeature?.geometry?.type === "Polygon" ||
+      currentAtlasFeature?.geometry?.type === "MultiPolygon"),
+  );
+  // The mask is a temporary live-map layer. Remove it immediately when the
+  // option, atlas, or dialog is turned off instead of waiting for another
+  // camera drive that may never happen.
+  useEffect(() => {
+    if (open && atlasActive && atlasMaskEnabled && atlasMaskAvailable) return;
+    const map = mapControllerRef.current?.getMap();
+    if (map) clearAtlasFeatureMask(map);
+  }, [open, atlasActive, atlasMaskEnabled, atlasMaskAvailable, mapControllerRef]);
   const atlasFilterValid = atlasFilterPredicate !== null;
   const atlasScaleValid = atlasExtentMode !== "scale" || Number(atlasScale) > 0;
   // A floor (not just > 0) keeps a mistyped tiny length from cutting a long
@@ -918,6 +950,9 @@ export function PrintLayoutDialog({
   const chartLayer = useMemo(
     () => atlasLayers.find((l) => l.id === chartLayerId) ?? null,
     [atlasLayers, chartLayerId],
+  );
+  const tableUsesAtlasLayer = Boolean(
+    atlasEnabled && atlasLayer && tableLayer?.id === atlasLayer.id,
   );
   const tableFields = useMemo(
     () => (tableLayer?.geojson ? listAtlasFields(tableLayer.geojson.features) : []),
@@ -1003,9 +1038,14 @@ export function PrintLayoutDialog({
     (
       features: readonly AtlasFeatureInfo[],
       allRows: ChartRow[],
-      filterOn: boolean,
+      filterMode: PageFilterMode,
       bounds: AtlasBounds | null,
-    ): ChartRow[] => (filterOn && bounds ? rowsWithinBounds(features, bounds) : allRows),
+    ): ChartRow[] => {
+      if (!bounds || filterMode === "all") return allRows;
+      return filterMode === "contained"
+        ? rowsWithinBounds(features, bounds)
+        : rowsIntersectingBounds(features, bounds);
+    },
     [],
   );
 
@@ -1024,7 +1064,7 @@ export function PrintLayoutDialog({
           columns: effectiveTableColumns,
           sortField: tableSortField || undefined,
           sortDescending: tableSortDesc,
-          maxRows: tableMaxRows,
+          maxRows: tableFitRows ? MAX_TABLE_ROWS : tableMaxRows,
         });
         if (data) {
           dataTable = {
@@ -1064,6 +1104,7 @@ export function PrintLayoutDialog({
       tableSortField,
       tableSortDesc,
       tableMaxRows,
+      tableFitRows,
       tableTitle,
       tablePosition,
       showDataChart,
@@ -1091,28 +1132,35 @@ export function PrintLayoutDialog({
   const displayTableRows = useMemo(
     () =>
       showDataTable
-        ? rowsForBlock(tableFeatureInfos, tableAllRows, tableFilterToPage, displayFilterBounds)
+        ? tableFilterToAtlasFeature && tableUsesAtlasLayer
+          ? currentAtlasPage
+            ? rowForAtlasFeature(tableAllRows, currentAtlasPage.sourceIndex)
+            : []
+          : rowsForBlock(tableFeatureInfos, tableAllRows, tablePageFilter, displayFilterBounds)
         : [],
     [
       showDataTable,
       rowsForBlock,
       tableFeatureInfos,
       tableAllRows,
-      tableFilterToPage,
+      tablePageFilter,
+      tableFilterToAtlasFeature,
+      tableUsesAtlasLayer,
+      currentAtlasPage,
       displayFilterBounds,
     ],
   );
   const displayChartRows = useMemo(
     () =>
       showDataChart
-        ? rowsForBlock(chartFeatureInfos, chartAllRows, chartFilterToPage, displayFilterBounds)
+        ? rowsForBlock(chartFeatureInfos, chartAllRows, chartPageFilter, displayFilterBounds)
         : [],
     [
       showDataChart,
       rowsForBlock,
       chartFeatureInfos,
       chartAllRows,
-      chartFilterToPage,
+      chartPageFilter,
       displayFilterBounds,
     ],
   );
@@ -1161,25 +1209,65 @@ export function PrintLayoutDialog({
   // Drive the live map to one atlas page's extent and capture it. Margin mode
   // grows the feature's box before fitting; fixed-scale mode fits first, then
   // corrects the zoom by the log2 ratio difference (like applyScale) and
-  // recaptures. Returns the capture plus the map's final visible bounds, so
-  // the data blocks can filter to what the page actually shows.
+  // recaptures. Returns the capture plus the print frame's final visible
+  // bounds, so data blocks exclude the part of the live map that cover-crop
+  // removes from the page.
   const captureAtlasPage = useCallback(
-    async (page: AtlasPage): Promise<{ cap: CapturedMap; viewBounds: AtlasBounds }> => {
+    async (
+      page: AtlasPage,
+    ): Promise<{
+      cap: CapturedMap;
+      viewBounds: AtlasBounds;
+      mapFit: "cover" | "contain";
+    }> => {
       const map = mapControllerRef.current?.getMap();
       if (!map) throw new Error("Map is not ready");
+      const ctx: AtlasTokenContext = {
+        name: page.name,
+        pageNumber: page.index + 1,
+        total: atlasPageCount,
+        properties: page.properties,
+      };
+      const pageOptions: LayoutOptions = {
+        ...options,
+        title: substituteAtlasTokens(options.title, ctx),
+        subtitle: substituteAtlasTokens(options.subtitle, ctx),
+        footerText: substituteAtlasTokens(options.footerText, ctx),
+      };
+      const containMap = Boolean(map.getLayer(GRATICULE_LABEL_LAYER_ID));
+      const canvas = map.getCanvas();
+      const mapPixelRatio = map.getPixelRatio();
+      const cssPixelRatio = Number.isFinite(mapPixelRatio) && mapPixelRatio > 0 ? mapPixelRatio : 1;
+      const viewportWidth = canvas.clientWidth || canvas.width / cssPixelRatio;
+      const viewportHeight = canvas.clientHeight || canvas.height / cssPixelRatio;
+      const targetAspect = containMap
+        ? viewportWidth / Math.max(1, viewportHeight)
+        : mapBodyAspectRatio(pageOptions);
+      const viewportFrame = atlasViewportFrame(viewportWidth, viewportHeight, targetAspect);
+      const coverageFeature = atlasLayer?.geojson?.features[page.sourceIndex];
+      if (atlasMaskEnabled) {
+        showAtlasFeatureMask(
+          map,
+          coverageFeature,
+          containMap ? GRATICULE_LABEL_LAYER_ID : undefined,
+        );
+      } else {
+        clearAtlasFeatureMask(map);
+      }
       const [w, s, e, n] = expandBounds(page.bounds, atlasFitMarginPct);
       map.fitBounds(
         [
           [w, s],
           [e, n],
         ],
-        { animate: false, padding: 0 },
+        { animate: false, padding: viewportFrame.padding },
       );
       await waitForAtlasSettle(map);
       // Mirror recapture: an active graticule draws coordinate labels at the
       // map edges, so fit with "contain" to keep them un-cropped on every
       // atlas page (mapFit is persistent state, so it must be set here too).
-      setMapFit(map.getLayer(GRATICULE_LABEL_LAYER_ID) ? "contain" : "cover");
+      const atlasMapFit = containMap ? "contain" : "cover";
+      setMapFit(atlasMapFit);
       // Hide the drawn print-extent box while reading the buffer, as recapture
       // does, so its outline is never baked into a page.
       const capture = () => {
@@ -1197,18 +1285,10 @@ export function PrintLayoutDialog({
         // a title/footer made purely of tokens can resolve to empty for a
         // given feature, which collapses that row and changes the body height
         // the scale is computed from.
-        const ctx: AtlasTokenContext = {
-          name: page.name,
-          pageNumber: page.index + 1,
-          total: atlasPageCount,
-          properties: page.properties,
-        };
         const ratio = computeScaleRatio({
-          ...options,
-          title: substituteAtlasTokens(options.title, ctx),
-          subtitle: substituteAtlasTokens(options.subtitle, ctx),
-          footerText: substituteAtlasTokens(options.footerText, ctx),
+          ...pageOptions,
           metersPerPixel: cap.metersPerPixel,
+          mapPixelRatio: cap.pixelRatio,
           bearingDeg: cap.bearingDeg,
           mapImage: cap.image,
           mapImageWidth: cap.width,
@@ -1232,10 +1312,25 @@ export function PrintLayoutDialog({
       } else {
         setAtlasScaleNotice(null);
       }
+      const frameBounds = containMap
+        ? null
+        : geometryBounds({
+            type: "MultiPoint",
+            coordinates: [
+              [viewportFrame.crop.left, viewportFrame.crop.top],
+              [viewportFrame.crop.right, viewportFrame.crop.top],
+              [viewportFrame.crop.right, viewportFrame.crop.bottom],
+              [viewportFrame.crop.left, viewportFrame.crop.bottom],
+            ].map(([x, y]) => {
+              const point = map.unproject([x, y]);
+              return [point.lng, point.lat];
+            }),
+          });
       const b = map.getBounds();
       return {
         cap,
-        viewBounds: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+        viewBounds: frameBounds ?? [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+        mapFit: atlasMapFit,
       };
     },
     [
@@ -1244,6 +1339,8 @@ export function PrintLayoutDialog({
       atlasFitMarginPct,
       atlasScale,
       atlasPageCount,
+      atlasLayer,
+      atlasMaskEnabled,
       waitForAtlasSettle,
       options,
       t,
@@ -1337,6 +1434,7 @@ export function PrintLayoutDialog({
     atlasExtentMode,
     atlasMarginPct,
     atlasScale,
+    atlasMaskEnabled,
     // Along-a-line coverage: a new segment length can keep the same page
     // count (sourceIndex signature unchanged) while every extent moved.
     atlasCoverage,
@@ -1621,7 +1719,7 @@ export function PrintLayoutDialog({
         onProgress: (current: number, totalPages: number) =>
           setAtlasProgress({ current, total: totalPages }),
         optionsForPage: async (i: number): Promise<LayoutOptions> => {
-          const { cap, viewBounds } = await captureAtlasPage(pages[i]);
+          const { cap, viewBounds, mapFit: atlasMapFit } = await captureAtlasPage(pages[i]);
           // Mirror progress into the dialog preview as pages are produced.
           setCaptured(cap);
           setAtlasViewBounds({ index: i, bounds: viewBounds });
@@ -1632,17 +1730,21 @@ export function PrintLayoutDialog({
             // Each page's table/chart re-filters to the extent the page's
             // capture actually shows (not just the nominal feature bounds).
             ...buildBlocksFromRows(
-              rowsForBlock(tableFeatureInfos, tableAllRows, tableFilterToPage, viewBounds),
-              rowsForBlock(chartFeatureInfos, chartAllRows, chartFilterToPage, viewBounds),
+              tableFilterToAtlasFeature && tableUsesAtlasLayer
+                ? rowForAtlasFeature(tableAllRows, pages[i].sourceIndex)
+                : rowsForBlock(tableFeatureInfos, tableAllRows, tablePageFilter, viewBounds),
+              rowsForBlock(chartFeatureInfos, chartAllRows, chartPageFilter, viewBounds),
             ),
             title: substituteAtlasTokens(options.title, ctx),
             subtitle: substituteAtlasTokens(options.subtitle, ctx),
             footerText: substituteAtlasTokens(options.footerText, ctx),
             metersPerPixel: cap.metersPerPixel,
+            mapPixelRatio: cap.pixelRatio,
             bearingDeg: cap.bearingDeg,
             mapImage: cap.image,
             mapImageWidth: cap.width,
             mapImageHeight: cap.height,
+            mapFit: atlasMapFit,
           };
         },
       };
@@ -1670,8 +1772,16 @@ export function PrintLayoutDialog({
     }
   };
 
+  const handleDialogOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen && (atlasBusy || exporting)) return;
+      onOpenChange(nextOpen);
+    },
+    [atlasBusy, exporting, onOpenChange],
+  );
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         ref={dialogRef}
         className="max-w-5xl"
@@ -2187,6 +2297,20 @@ export function PrintLayoutDialog({
                           )}
                         </div>
                       )}
+                      {atlasMaskAvailable && (
+                        <div className="space-y-1.5">
+                          <ToggleField
+                            id="atlas-mask-outside"
+                            label={t("printLayout.atlas.maskOutside")}
+                            checked={atlasMaskEnabled}
+                            disabled={atlasBusy}
+                            onChange={setAtlasMaskEnabled}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            {t("printLayout.atlas.maskOutsideHint")}
+                          </p>
+                        </div>
+                      )}
                       {/* Along-a-line pages follow the line's own chainage,
                           so ordering controls only apply per-feature mode. */}
                       {atlasCoverage === "features" && (
@@ -2672,6 +2796,7 @@ export function PrintLayoutDialog({
                           min={1}
                           max={MAX_TABLE_ROWS}
                           value={tableMaxRows}
+                          disabled={tableFitRows}
                           onChange={(e) =>
                             setTableMaxRows(
                               Math.max(1, Math.min(MAX_TABLE_ROWS, Number(e.target.value) || 1)),
@@ -2698,14 +2823,47 @@ export function PrintLayoutDialog({
                       </div>
                     </div>
                     <ToggleField
-                      id="dt-filter-page"
-                      label={t("printLayout.dataBlocks.filterToPage")}
-                      checked={tableFilterToPage}
-                      onChange={setTableFilterToPage}
+                      id="dt-fit-rows"
+                      label={t("printLayout.dataTable.fitRows")}
+                      checked={tableFitRows}
+                      onChange={setTableFitRows}
                     />
+                    <div className="space-y-1.5">
+                      <Label htmlFor="dt-filter-page">
+                        {t("printLayout.dataBlocks.pageFilter")}
+                      </Label>
+                      <Select
+                        id="dt-filter-page"
+                        value={tablePageFilter}
+                        disabled={tableFilterToAtlasFeature && tableUsesAtlasLayer}
+                        onChange={(e) => setTablePageFilter(e.target.value as PageFilterMode)}
+                      >
+                        <option value="all">{t("printLayout.dataBlocks.filterAll")}</option>
+                        <option value="contained">
+                          {t("printLayout.dataBlocks.filterContained")}
+                        </option>
+                        <option value="intersecting">
+                          {t("printLayout.dataBlocks.filterIntersecting")}
+                        </option>
+                      </Select>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {t("printLayout.dataBlocks.filterToPageHint")}
                     </p>
+                    {atlasEnabled && (
+                      <>
+                        <ToggleField
+                          id="dt-filter-atlas-feature"
+                          label={t("printLayout.dataBlocks.filterToAtlasFeature")}
+                          checked={tableFilterToAtlasFeature}
+                          disabled={!tableUsesAtlasLayer}
+                          onChange={setTableFilterToAtlasFeature}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {t("printLayout.dataBlocks.filterToAtlasFeatureHint")}
+                        </p>
+                      </>
+                    )}
                     {!displayDataBlocks.dataTable && (
                       <p className="text-xs text-muted-foreground">
                         {t("printLayout.dataTable.noRows")}
@@ -2838,12 +2996,24 @@ export function PrintLayoutDialog({
                         onChange={(e) => setChartTitle(e.target.value)}
                       />
                     </div>
-                    <ToggleField
-                      id="dc-filter-page"
-                      label={t("printLayout.dataBlocks.filterToPage")}
-                      checked={chartFilterToPage}
-                      onChange={setChartFilterToPage}
-                    />
+                    <div className="space-y-1.5">
+                      <Label htmlFor="dc-filter-page">
+                        {t("printLayout.dataBlocks.pageFilter")}
+                      </Label>
+                      <Select
+                        id="dc-filter-page"
+                        value={chartPageFilter}
+                        onChange={(e) => setChartPageFilter(e.target.value as PageFilterMode)}
+                      >
+                        <option value="all">{t("printLayout.dataBlocks.filterAll")}</option>
+                        <option value="contained">
+                          {t("printLayout.dataBlocks.filterContained")}
+                        </option>
+                        <option value="intersecting">
+                          {t("printLayout.dataBlocks.filterIntersecting")}
+                        </option>
+                      </Select>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {t("printLayout.dataBlocks.filterToPageHint")}
                     </p>
@@ -3024,7 +3194,9 @@ export function PrintLayoutDialog({
                                     // encodeURIComponent, which leaves ( ) unescaped, and an
                                     // unquoted ) (common in SVG: translate(), rgba(), url(#id))
                                     // would prematurely close the CSS url() token.
-                                    style={{ backgroundImage: `url("${svgSrc}")` }}
+                                    style={{
+                                      backgroundImage: `url("${svgSrc}")`,
+                                    }}
                                   />
                                 );
                               }
@@ -3196,7 +3368,11 @@ export function PrintLayoutDialog({
               })}
             </span>
           )}
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="ghost"
+            disabled={atlasBusy || exporting}
+            onClick={() => handleDialogOpenChange(false)}
+          >
             {t("common.close")}
           </Button>
           {/* Copy the composed layout straight to the clipboard (GH #773). */}

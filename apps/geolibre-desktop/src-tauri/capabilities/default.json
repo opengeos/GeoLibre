@@ -37,6 +37,7 @@
         { "url": "https://geocode.arcgis.com/*" },
         { "url": "https://api.mapbox.com/*" },
         { "url": "https://maps.googleapis.com/*" },
+        { "url": "https://www.cartociudad.es/*" },
         { "url": "https://share.geolibre.app/*" },
         { "url": "https://datasets.geolibre.app/*" }
       ]

@@ -52,8 +52,22 @@ export interface PaperSize {
  * {@link LayoutOptions.customSize}.
  */
 export const PAPER_SIZES: PaperSize[] = [
-  { id: "a4", label: "A4 (210 × 297 mm)", width: 210, height: 297, unit: "mm", group: "paper" },
-  { id: "a3", label: "A3 (297 × 420 mm)", width: 297, height: 420, unit: "mm", group: "paper" },
+  {
+    id: "a4",
+    label: "A4 (210 × 297 mm)",
+    width: 210,
+    height: 297,
+    unit: "mm",
+    group: "paper",
+  },
+  {
+    id: "a3",
+    label: "A3 (297 × 420 mm)",
+    width: 297,
+    height: 420,
+    unit: "mm",
+    group: "paper",
+  },
   {
     id: "letter",
     label: "Letter (8.5 × 11 in)",
@@ -86,7 +100,14 @@ export const PAPER_SIZES: PaperSize[] = [
     unit: "px",
     group: "screen",
   },
-  { id: "hd", label: "HD (1280 × 720 px)", width: 720, height: 1280, unit: "px", group: "screen" },
+  {
+    id: "hd",
+    label: "HD (1280 × 720 px)",
+    width: 720,
+    height: 1280,
+    unit: "px",
+    group: "screen",
+  },
   {
     id: "uhd4k",
     label: "4K UHD (3840 × 2160 px)",
@@ -103,7 +124,14 @@ export const PAPER_SIZES: PaperSize[] = [
     unit: "px",
     group: "screen",
   },
-  { id: "custom", label: "Custom…", width: 1280, height: 720, unit: "px", group: "screen" },
+  {
+    id: "custom",
+    label: "Custom…",
+    width: 1280,
+    height: 720,
+    unit: "px",
+    group: "screen",
+  },
 ];
 
 export function getPaperSize(id: PaperSizeId): PaperSize {
@@ -156,7 +184,10 @@ export function pageMm(size: ResolvedPageSize): {
   heightMm: number;
 } {
   if (size.unit === "mm") return { widthMm: size.width, heightMm: size.height };
-  return { widthMm: size.width / PX_PER_MM_96, heightMm: size.height / PX_PER_MM_96 };
+  return {
+    widthMm: size.width / PX_PER_MM_96,
+    heightMm: size.height / PX_PER_MM_96,
+  };
 }
 
 /**
@@ -426,6 +457,12 @@ export interface LayoutOptions {
    */
   legendGroupByLayer: boolean;
   /**
+   * Translated formatter for the legend's "+N more" note, drawn when the class
+   * rows do not fit the map body; falls back to English when omitted (like the
+   * table's and chart's formatters).
+   */
+  legendFormatNote?: (count: number) => string;
+  /**
    * Preloaded custom-SVG marker icons for legend swatches, keyed by the
    * swatch marker's `svg` string ({@link LegendMarker.svg}). Loading SVGs is
    * async, but {@link drawLayout} is synchronous, so the caller resolves them
@@ -435,6 +472,8 @@ export interface LayoutOptions {
   markerIcons?: ReadonlyMap<string, CanvasImageSource>;
   /** Ground metres per source-image pixel at the map centre. */
   metersPerPixel: number;
+  /** Device pixels per CSS pixel in the captured map image. */
+  mapPixelRatio?: number;
   /** Map bearing in degrees clockwise from north. */
   bearingDeg: number;
   /** The captured map image (already composited). */
@@ -542,6 +581,19 @@ function computeBodyRect(opts: LayoutOptions, W: number, H: number): BodyRect {
     bodyW: W - margin * 2,
     bodyH: Math.max(unit * 10, bodyBottom - bodyTop),
   };
+}
+
+/**
+ * Aspect ratio of the map frame after page margins, outside titles, and the
+ * footer row reserve their space. Atlas camera fitting uses this ratio so the
+ * feature remains visible after the captured live map is cover-cropped into
+ * the print frame.
+ */
+export function mapBodyAspectRatio(opts: LayoutOptions): number {
+  const page = resolvePageSize(opts);
+  const rect = computeBodyRect(opts, page.width, page.height);
+  const ratio = rect.bodyW / rect.bodyH;
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : page.width / page.height;
 }
 
 /**
@@ -882,6 +934,12 @@ export function drawLayout(canvas: HTMLCanvasElement, opts: LayoutOptions): void
       title: opts.legendTitle,
       groupByLayer: opts.legendGroupByLayer,
       markerIcons: opts.markerIcons,
+      // Legend sizes are stored in MapLibre CSS pixels. The capture is in
+      // device pixels and is then fitted into the page body, so apply both
+      // transforms to make the legend symbols match their map counterparts.
+      mapSymbolScale: Math.max(0, (opts.mapPixelRatio ?? 1) * coverScale),
+      maxHeight: bodyH - inset * 2,
+      formatNote: opts.legendFormatNote,
     });
     ctx.restore();
   }
@@ -1927,6 +1985,11 @@ function drawDataChart(
  * built-in shape recolored to the marker color. Falls back to a plain
  * `fallbackColor` square when a custom SVG has not been (or could not be)
  * preloaded, so the swatch is never blank.
+ *
+ * `boxed` frames a custom SVG so a light or transparent-edged icon still reads
+ * as a bounded swatch. A proportional size ramp passes false: there the varying
+ * icon size IS the information, and a frame around each step makes the rows read
+ * as nested squares instead of one growing symbol.
  */
 function drawLegendMarker(
   ctx: CanvasRenderingContext2D,
@@ -1936,22 +1999,35 @@ function drawLegendMarker(
   size: number,
   fallbackColor: string,
   markerIcons?: ReadonlyMap<string, CanvasImageSource>,
+  boxed = true,
 ): void {
   if (marker.shape === "custom") {
     const icon = marker.svg ? markerIcons?.get(marker.svg) : undefined;
     if (icon) {
       ctx.drawImage(icon, sx, sy, size, size);
-      // Border for parity with every other swatch (built-in shapes, the
-      // fallback square, fill/ramp squares), so a light or transparent-edged
-      // SVG still reads as a bounded swatch.
-      ctx.strokeStyle = BORDER;
-      ctx.strokeRect(sx, sy, size, size);
+      if (boxed) {
+        // Border for parity with every other swatch (built-in shapes, the
+        // fallback square, fill/ramp squares).
+        ctx.strokeStyle = BORDER;
+        ctx.strokeRect(sx, sy, size, size);
+      }
       return;
     }
-    // SVG not available: fall back to a neutral color square.
+    // SVG not available (still loading, or the load failed): fall back to a
+    // neutral shape. A proportional row falls back to the same circle the
+    // markerless ramp draws, so an entry mid-load still reads as one growing
+    // symbol; the outline stays either way, since a pale fallback color would
+    // otherwise vanish against the legend box.
     ctx.fillStyle = fallbackColor || "#999999";
-    ctx.fillRect(sx, sy, size, size);
     ctx.strokeStyle = BORDER;
+    if (!boxed) {
+      ctx.beginPath();
+      ctx.arc(sx + size / 2, sy + size / 2, size / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      return;
+    }
+    ctx.fillRect(sx, sy, size, size);
     ctx.strokeRect(sx, sy, size, size);
     return;
   }
@@ -1982,15 +2058,64 @@ function drawLegend(
     title: string;
     groupByLayer: boolean;
     markerIcons?: ReadonlyMap<string, CanvasImageSource>;
+    /** Output pixels per MapLibre CSS pixel in the composed map image. */
+    mapSymbolScale: number;
+    /** Vertical space the box may occupy before rows are elided. */
+    maxHeight?: number;
+    formatNote?: (count: number) => string;
   },
 ): number {
   const pad = unit * 1.4;
-  const rowH = unit * 2.6;
-  const swatch = unit * 2;
   const titleSize = unit * 2;
   const labelSize = unit * 1.7;
   const title = opts.title.trim();
   const hasTitle = title.length > 0;
+  const chromeH = pad * 2 + (hasTitle ? titleSize + unit : 0);
+  // Proportional sizes are MapLibre CSS-pixel radii. Size the legend column and
+  // rows around their actual footprint after the captured map is fitted into
+  // the page, so the ramp remains 1:1 with the symbols visible behind it.
+  const maxSizedRadius = entries.reduce(
+    (max, entry) =>
+      Math.max(
+        max,
+        ...entry.swatches.map((entrySwatch) =>
+          entrySwatch.size === undefined ? 0 : entrySwatch.size * opts.mapSymbolScale,
+        ),
+      ),
+    0,
+  );
+  const wantedSwatch = Math.max(unit * 2, maxSizedRadius * 2);
+  // A map symbol's size is independent of the page, so 1:1 sizing alone would
+  // let one outlier circle push rowH past the height the caller allows — and
+  // the truncation below then draws *nothing*, blanking unrelated normally
+  // sized entries too. Hold any single row to a quarter of the space left after
+  // chrome, so a layer heading, two class rows and the "+N more" note always
+  // survive: an extreme ramp then merely stops being 1:1 with the map instead
+  // of costing the reader the whole legend.
+  const swatchCap =
+    opts.maxHeight === undefined
+      ? Infinity
+      : Math.max(unit * 2, (opts.maxHeight - chromeH) / 4 - unit * 0.6);
+  const swatch = Math.min(wantedSwatch, swatchCap);
+  const rowH = Math.max(unit * 2.6, swatch + unit * 0.6);
+  // The swatch column is legend-wide, so the cap above has to be too — but the
+  // shrink it forces is scoped to the entry that overflowed, the same rule the
+  // on-map MapLegendPanel applies. One entry's ramp keeps its ratios, and a
+  // neighbouring layer whose symbols already fit still renders 1:1 with the map.
+  const entryScale = new Map<string, number>();
+  for (const entry of entries) {
+    const entryMax = entry.swatches.reduce(
+      (max, entrySwatch) =>
+        entrySwatch.size === undefined
+          ? max
+          : Math.max(max, entrySwatch.size * opts.mapSymbolScale),
+      0,
+    );
+    entryScale.set(entry.id, entryMax > swatch / 2 ? swatch / 2 / entryMax : 1);
+  }
+  /** A sized row's drawn radius in output pixels, after any per-entry shrink. */
+  const sizedRadius = (entryId: string, size: number): number =>
+    size * opts.mapSymbolScale * (entryScale.get(entryId) ?? 1);
 
   // Flatten entries into drawable rows. Single-swatch entries render inline; a
   // multi-class entry renders a layer heading (when groupByLayer is on) above
@@ -2004,6 +2129,8 @@ function drawLegend(
     text: string;
     marker?: LegendMarker;
     size?: number;
+    /** True for a groupByLayer layer heading: scaffolding, not a legend item. */
+    heading?: boolean;
   }[] = [];
   for (const entry of entries) {
     if (entry.swatches.length <= 1) {
@@ -2021,7 +2148,12 @@ function drawLegend(
       });
     } else {
       if (opts.groupByLayer) {
-        rows.push({ entryId: entry.id, color: "", text: entry.name });
+        rows.push({
+          entryId: entry.id,
+          color: "",
+          text: entry.name,
+          heading: true,
+        });
       }
       for (const sw of entry.swatches) {
         // Carry the marker so a marker + diagram layer (a multi-swatch entry
@@ -2040,21 +2172,38 @@ function drawLegend(
   const rowHasSwatch = (r: { color: string; marker?: LegendMarker }): boolean =>
     Boolean(r.color) || Boolean(r.marker);
 
-  // Cap proportional circles so a huge max radius still fits the legend box,
-  // while keeping ratios within each entry (same idea as the on-map LegendSwatch).
-  const MAX_CIRCLE_R = swatch * 0.55;
-  const entryMaxSize = new Map<string, number>();
-  for (const r of rows) {
-    if (r.size === undefined) continue;
-    entryMaxSize.set(r.entryId, Math.max(entryMaxSize.get(r.entryId) ?? 0, r.size));
+  // Fit the rows to the space the caller allows. A categorized layer can carry
+  // dozens of classes, and the legend is clipped to the map body, so without
+  // this the tail would vanish at the body edge with nothing to say it had
+  // (GH #1608). Reserve one row for the note the truncation produces, the same
+  // budget rule the attribute-table panel uses.
+  let hiddenRows = 0;
+  const maxHeight = opts.maxHeight;
+  if (maxHeight !== undefined) {
+    if (chromeH + rows.length * rowH > maxHeight) {
+      const fitRows = Math.max(0, Math.floor((maxHeight - chromeH - rowH) / rowH));
+      // Not even one row plus its note fits. Drawing anyway would produce a box
+      // taller than the caller allotted whose only content is "+N more", so
+      // draw nothing and report no height. Defensive: every unit here scales
+      // with the page — proportional rows included, thanks to swatchCap — so
+      // drawLayout's own maxHeight always clears at least one row plus the
+      // note whatever the paper size. Safe to return early — ctx.save() is below.
+      if (fitRows === 0) return 0;
+      if (fitRows < rows.length) {
+        // A layer heading only means something with class rows under it, so a
+        // cut that lands right after one drops it too rather than printing a
+        // section title that describes nothing.
+        let kept = fitRows;
+        while (kept > 0 && rows[kept - 1]!.heading) kept -= 1;
+        // Headings are scaffolding, so the note counts elided class rows only;
+        // counting the headings too would overstate what the reader is missing.
+        hiddenRows = rows.slice(kept).filter((r) => !r.heading).length;
+        rows.length = kept;
+      }
+    }
   }
-  const entryScale = new Map<string, number>();
-  for (const [entryId, maxSize] of entryMaxSize) {
-    entryScale.set(entryId, maxSize > MAX_CIRCLE_R ? MAX_CIRCLE_R / maxSize : 1);
-  }
-  const rowScale: number[] = rows.map((r) =>
-    r.size !== undefined ? (entryScale.get(r.entryId) ?? 1) : 1,
-  );
+  const note = hiddenRows > 0 ? (opts.formatNote?.(hiddenRows) ?? `+${hiddenRows} more`) : "";
+  const hasNote = note.length > 0;
 
   // Measure required width.
   ctx.save();
@@ -2065,10 +2214,11 @@ function drawLegend(
     const w = ctx.measureText(r.text).width + (rowHasSwatch(r) ? swatch + unit : 0);
     if (w > maxText) maxText = w;
   }
+  if (hasNote) maxText = Math.max(maxText, ctx.measureText(note).width);
 
   const boxW = maxText + pad * 2;
   const titleBlock = hasTitle ? titleSize + unit : 0;
-  const boxH = pad * 2 + titleBlock + rows.length * rowH;
+  const boxH = pad * 2 + titleBlock + (rows.length + (hasNote ? 1 : 0)) * rowH;
 
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.strokeStyle = BORDER;
@@ -2093,17 +2243,32 @@ function drawLegend(
     cy += unit;
   }
 
-  for (let index = 0; index < rows.length; index++) {
-    const r = rows[index]!;
+  for (const r of rows) {
     cy += rowH;
     const hasSwatch = rowHasSwatch(r);
     const textX = hasSwatch ? x + pad + swatch + unit : x + pad;
     const sx = x + pad;
     const sy = cy - swatch * 0.85;
     if (r.marker) {
-      drawLegendMarker(ctx, r.marker, sx, sy, swatch, r.color, opts.markerIcons);
+      // A sized marker row is a proportional symbol: the map scales the sprite
+      // through icon-size, so draw the marker at the same footprint the circle
+      // branch below would use (same center, edge = 2 × radius) rather than at
+      // the fixed swatch box, which would flatten the whole ramp.
+      const edge =
+        r.size !== undefined ? Math.max(unit * 0.7, sizedRadius(r.entryId, r.size) * 2) : swatch;
+      const inset = (swatch - edge) / 2;
+      drawLegendMarker(
+        ctx,
+        r.marker,
+        sx + inset,
+        sy + inset,
+        edge,
+        r.color,
+        opts.markerIcons,
+        r.size === undefined,
+      );
     } else if (r.size !== undefined && r.color) {
-      const radius = Math.max(unit * 0.35, r.size * rowScale[index]!);
+      const radius = Math.max(unit * 0.35, sizedRadius(r.entryId, r.size));
       const cx = sx + swatch / 2;
       const cyc = sy + swatch / 2;
       ctx.beginPath();
@@ -2122,6 +2287,12 @@ function drawLegend(
     ctx.fillStyle = hasSwatch ? INK : MUTED;
     ctx.font = `${hasSwatch ? 400 : 600} ${labelSize}px system-ui, sans-serif`;
     ctx.fillText(r.text, textX, cy);
+  }
+  if (hasNote) {
+    cy += rowH;
+    ctx.fillStyle = MUTED;
+    ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+    ctx.fillText(note, x + pad, cy);
   }
   ctx.restore();
   return boxH;

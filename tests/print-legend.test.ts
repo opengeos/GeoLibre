@@ -10,10 +10,12 @@ import {
   applyLegendConfig,
   buildLegend,
   legendEditorRows,
+  MAX_CATEGORY_SWATCHES,
   reorderLegendEntry,
   setLegendItemLabel,
   toggleLegendItemHidden,
 } from "../apps/geolibre-desktop/src/lib/print-legend";
+import { MAX_LEGEND_ROWS } from "../apps/geolibre-desktop/src/lib/auto-legend";
 
 function config(overrides: Partial<LegendConfig> = {}): LegendConfig {
   return { ...DEFAULT_LEGEND_CONFIG, order: [], overrides: {}, ...overrides };
@@ -195,6 +197,64 @@ describe("buildLegend", () => {
     ]);
     assert.equal(legend[0].swatches[0].color, "#112233");
     assert.equal(legend[0].swatches[0].marker, undefined);
+  });
+
+  it("draws a marker layer's proportional size ramp with the marker", () => {
+    const svg = "https://example.com/bee.svg";
+    const legend = buildLegend([
+      makeLayer({
+        name: "Ruchers",
+        metadata: { geometryType: "point" },
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#3388ff",
+          markerEnabled: true,
+          markerShape: "custom",
+          markerColor: "#3b82f6",
+          markerSvg: svg,
+          proportionalSizeEnabled: true,
+          proportionalSizeProperty: "nb_ruches",
+          proportionalSizeMinValue: 1,
+          proportionalSizeMaxValue: 86,
+          proportionalSizeMinRadius: 4,
+          proportionalSizeMaxRadius: 24,
+        } as LayerStyle,
+      }),
+    ]);
+    // Three sized rows, each carrying the marker the map scales through
+    // icon-size, rather than a plain circle (GH discussion #1711).
+    assert.deepEqual(
+      legend[0].swatches.map((swatch) => [swatch.size, swatch.marker?.shape, swatch.marker?.svg]),
+      [
+        [4, "custom", svg],
+        [14, "custom", svg],
+        [24, "custom", svg],
+      ],
+    );
+  });
+
+  it("keeps a line layer's proportional stroke ramp markerless", () => {
+    const legend = buildLegend([
+      makeLayer({
+        name: "Rivers",
+        metadata: { geometryType: "line" },
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#3388ff",
+          markerEnabled: true,
+          markerShape: "star",
+          markerColor: "#ff8800",
+          proportionalSizeEnabled: true,
+          proportionalSizeProperty: "flow",
+          proportionalSizeMinValue: 0,
+          proportionalSizeMaxValue: 100,
+          proportionalSizeMinRadius: 1,
+          proportionalSizeMaxRadius: 8,
+        } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches.length, 3);
+    assert.ok(legend[0].swatches.every((swatch) => swatch.marker === undefined));
   });
 
   it("leaves non-marker layers with a plain fill swatch and no marker", () => {
@@ -425,9 +485,28 @@ describe("buildLegend", () => {
     });
   });
 
-  it("caps ramp swatches at six samples", () => {
+  it("caps graduated ramp swatches at six samples", () => {
     const stops = Array.from({ length: 12 }, (_, i) => ({
       value: i,
+      color: `#0000${(i % 10).toString()}0`,
+    }));
+    const legend = buildLegend([
+      makeLayer({
+        name: "Many",
+        style: {
+          vectorStyleMode: "graduated",
+          vectorStyleStops: stops,
+        } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches.length, 6);
+  });
+
+  it("lists every categorized class rather than sampling six (GH #1608)", () => {
+    // Categories are nominal, so a sampled subset silently drops values the
+    // reader has no way to infer from the rows that survive.
+    const stops = Array.from({ length: 14 }, (_, i) => ({
+      value: `class-${i.toString()}`,
       color: `#0000${(i % 10).toString()}0`,
     }));
     const legend = buildLegend([
@@ -439,7 +518,37 @@ describe("buildLegend", () => {
         } as LayerStyle,
       }),
     ]);
-    assert.equal(legend[0].swatches.length, 6);
+    assert.equal(legend[0].swatches.length, 14);
+    assert.deepEqual(
+      legend[0].swatches.map((s) => s.label),
+      stops.map((s) => s.value),
+    );
+  });
+
+  it("elides categorized classes at the same point as the on-map auto legend", () => {
+    // print-legend cannot import auto-legend (auto-legend imports print-legend),
+    // so the cap is a hand-kept copy. If the two drift, the printed legend and
+    // the on-map legend silently disagree about where a long class list stops.
+    assert.equal(MAX_CATEGORY_SWATCHES, MAX_LEGEND_ROWS);
+  });
+
+  it("elides the tail of a runaway categorized class list", () => {
+    const stops = Array.from({ length: 140 }, (_, i) => ({
+      value: `class-${i.toString()}`,
+      color: "#000000",
+    }));
+    const legend = buildLegend([
+      makeLayer({
+        name: "Runaway",
+        style: {
+          vectorStyleMode: "categorized",
+          vectorStyleStops: stops,
+        } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches.length, 100);
+    assert.equal(legend[0].swatches[0].label, "class-0");
+    assert.equal(legend[0].swatches[99].label, "class-99");
   });
 
   it("gives raster and service layers a single neutral swatch", () => {
