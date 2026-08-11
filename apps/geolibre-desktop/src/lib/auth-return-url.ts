@@ -56,6 +56,25 @@ export function stashAuthReturnQuery(): void {
 }
 
 /**
+ * Whether a query string is Auth0 returning from a login attempt.
+ *
+ * `state` is Auth0's CSRF token and rides on every return, successful or not.
+ * What follows it differs: `code` on success, `error`/`error_description` when
+ * the tenant refused — an Action calling `api.access.deny()`, a rejected
+ * consent. Both are returns from the redirect this module compensates for, and
+ * the refusal is if anything the more important one to cover: it is the screen
+ * that has something to say, so it is the screen that most needs the visitor's
+ * own language.
+ *
+ * @param search - `location.search` of the current load.
+ */
+export function isSignInCallback(search: string): boolean {
+  const params = new URLSearchParams(search);
+  if (!params.has("state")) return false;
+  return params.has("code") || params.has("error");
+}
+
+/**
  * Put a stashed deep link back, if this load is a sign-in callback.
  *
  * Must run before anything reads `location.search` for a startup setting — see
@@ -71,10 +90,9 @@ export function restoreAuthReturnQuery(): void {
     return;
   }
   if (!stashed) return;
-  const params = new URLSearchParams(window.location.search);
-  // Only an authorization-code callback gets its query rewritten. Any other load
-  // reaching a leftover stash (a new tab, an abandoned login) keeps its own URL.
-  if (!params.has("code") || !params.has("state")) return;
+  // Only a return from Auth0 gets its query rewritten. Any other load reaching a
+  // leftover stash (a new tab, an abandoned login) keeps its own URL.
+  if (!isSignInCallback(window.location.search)) return;
   const hashAt = stashed.indexOf("#");
   const stashedSearch = hashAt === -1 ? stashed : stashed.slice(0, hashAt);
   const stashedHash = hashAt === -1 ? "" : stashed.slice(hashAt);
