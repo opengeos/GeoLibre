@@ -243,12 +243,15 @@ async function proxyChat(request: Request, env: Env, origin: string | null): Pro
 }
 
 async function proxyTavily(request: Request, env: Env, origin: string | null): Promise<Response> {
+  // Limit first, as proxyChat does, so an unconfigured Worker cannot be probed
+  // without bound: the 503 below is cheap, but "cheap" is not "free".
+  const limited = withOrigin(await rateLimit(request, env), origin);
+  if (limited) return limited;
+
   const apiKey = env.TAVILY_API_KEY?.trim();
   if (!apiKey) {
     return jsonError("Search is not configured", 503, responseHeaders(origin));
   }
-  const limited = withOrigin(await rateLimit(request, env), origin);
-  if (limited) return limited;
 
   const maximumBytes = Math.min(positiveInteger(env.MAX_BODY_BYTES, 1_048_576), 65_536);
   let body: Record<string, unknown>;
