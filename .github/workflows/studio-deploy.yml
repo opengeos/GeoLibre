@@ -129,6 +129,24 @@ jobs:
           touch .nojekyll
           # Keeps the custom domain if the Pages settings are ever reset.
           echo "studio.geolibre.app" > CNAME
+          # Keep the gated instance out of search results. Nothing here is
+          # useful to a crawler — every route renders the sign-in card until a
+          # session exists — and the deployment is meant to be reached by
+          # invitation, not found.
+          printf 'User-agent: *\nDisallow: /\n' > robots.txt
+          # A second signal for crawlers that ignore robots.txt. Note the two
+          # do not compose: a crawler that honours the Disallow above never
+          # fetches this page and so never reads the noindex, which is why a
+          # URL linked from elsewhere can still be listed (bare, no title). If
+          # studio is ever linked publicly and that matters, relax robots.txt
+          # to "Allow: /" so the noindex is the rule that applies.
+          # Appended to the end of <head> rather than the start, so the charset
+          # declaration keeps its place as the first thing in the document.
+          sed -i '0,/<\/head>/s//    <meta name="robots" content="noindex, nofollow" \/>\n  <\/head>/' index.html
+          # The tag is injected into generated markup, so fail loudly if a
+          # future index.html no longer matches rather than publishing an
+          # indexable page.
+          grep -q 'name="robots"' index.html
           # Published Pages sites may be no larger than 1 GB. The build is
           # ~200 MB today, most of it the two DuckDB-WASM binaries; fail early
           # rather than publish a site Pages will reject.
