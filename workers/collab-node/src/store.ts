@@ -247,9 +247,7 @@ export class SessionStore {
   }
 
   clearDurableOverrides(sessionId: string): void {
-    this.db
-      .prepare("DELETE FROM collab_durable_overrides WHERE session_id = ?")
-      .run(sessionId);
+    this.db.prepare("DELETE FROM collab_durable_overrides WHERE session_id = ?").run(sessionId);
   }
 
   isBlockedKey(sessionId: string, participantKey: string | null): boolean {
