@@ -136,6 +136,12 @@ import base64
 from urllib.parse import urlsplit
 
 deployment = {}
+# Values published as bare globals rather than inside __GEOLIBRE_DEPLOYMENT_ENV__.
+# That object is a GeoLibre convention (see deployment-env.ts); a plugin from
+# outside this repo answers to its own contract, and some of them read a plain
+# global. Keys here are literals from this file, never operator input, so they
+# cannot inject anything into the generated script.
+browser_globals = {}
 if os.environ.get("GEOLIBRE_AI_URL"):
     deployment["VITE_GEOLIBRE_AI_URL"] = os.environ["GEOLIBRE_AI_URL"]
     deployment["VITE_GEOLIBRE_AI_MODEL"] = os.environ["GEOLIBRE_AI_MODEL"]
@@ -292,19 +298,20 @@ elif os.environ.get("GEOLIBRE_AI_URL"):
 else:
     news_endpoint = ""
 if news_endpoint:
-    # Three spellings of one value, because the reader is a plugin loaded from
-    # outside this repo and the app itself never reads any of them. No apostrophes
-    # below: this whole program is one single-quoted `python -c` argument, and a
-    # literal apostrophe in a comment ends it just as surely as one in code (see
-    # the allowed_hosts note in service_url above).
-    #   - the bare key is the contract name owned by the plugin;
-    #   - VITE_NASA_OPERA_… is the plugin-owned build-env spelling, which drops the
-    #     GEOLIBRE_ segment because the variable belongs to the plugin, not here;
-    #   - VITE_GEOLIBRE_NASA_OPERA_… is the VITE_GEOLIBRE_<NAME> alias every other
-    #     entry in this dict uses, readable through readDeploymentEnvValue().
-    deployment["GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = news_endpoint
-    deployment["VITE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = news_endpoint
-    deployment["VITE_GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = news_endpoint
+    # A TOP-LEVEL global, not a key in the deployment env object, because the
+    # reader is a plugin loaded from outside this repo and its contract is its
+    # own. geolibre-nasa-opera resolves this in src/lib/opera/news.ts as
+    # globalThis[GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT], falling back to its own
+    # build-time VITE_NEWS_PROXY_ENDPOINT; across the whole history of that repo it has
+    # never read window.__GEOLIBRE_DEPLOYMENT_ENV__ for this value. Publishing it
+    # only inside that object, as this block did before, therefore configured
+    # nothing: the plugin looked for a global that was not there, found nothing,
+    # and reported the news proxy as unconfigured.
+    #
+    # No apostrophes below: this whole program is one single-quoted `python -c`
+    # argument, and a literal apostrophe in a comment ends it just as surely as one
+    # in code (see the allowed_hosts note in service_url above).
+    browser_globals["GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT"] = news_endpoint
 
 
 # Project sharing server. Unset means the public hosted service; "off" removes
@@ -329,6 +336,10 @@ with open("/usr/share/nginx/html/geolibre-runtime-config.js", "w") as output:
     output.write("window.__GEOLIBRE_DEPLOYMENT_ENV__ = ")
     json.dump(deployment, output, separators=(",", ":"))
     output.write(";\n")
+    for global_name, global_value in browser_globals.items():
+        output.write("window." + global_name + " = ")
+        json.dump(global_value, output)
+        output.write(";\n")
 '
 
 # Strip surrounding whitespace exactly as the Python block above does, so the boot
