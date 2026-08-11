@@ -135,7 +135,10 @@ export class CollabSession extends DurableObject<Env> {
     return rows.length > 0 ? rows[0].edit_override === 1 : undefined;
   }
 
-  private writeDurableOverride(participantKey: string | null, editOverride: boolean | undefined): void {
+  private writeDurableOverride(
+    participantKey: string | null,
+    editOverride: boolean | undefined,
+  ): void {
     if (!participantKey) return;
     this.ensureTables();
     if (editOverride === undefined) {

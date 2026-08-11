@@ -405,7 +405,11 @@ export function createRelay(options: RelayOptions = {}): {
       const nextRev = (persisted.rev ?? 0) + 1;
       store.saveSnapshot(id, project, nextRev);
       persisted.rev = nextRev;
-      broadcast(session, { type: "snapshot", project, origin: participant.clientId, rev: nextRev }, peer);
+      broadcast(
+        session,
+        { type: "snapshot", project, origin: participant.clientId, rev: nextRev },
+        peer,
+      );
       return;
     }
 
@@ -460,7 +464,10 @@ export function createRelay(options: RelayOptions = {}): {
       }
       const role: CollaborationMode = message.role === "view-only" ? "view-only" : "co-edit";
       const token = randomUUID();
-      const maxUses = Number.isSafeInteger(message.maxUses) && (message.maxUses as number) > 0 ? (message.maxUses as number) : undefined;
+      const maxUses =
+        Number.isSafeInteger(message.maxUses) && (message.maxUses as number) > 0
+          ? (message.maxUses as number)
+          : undefined;
       const invite: CollabInvite = {
         token,
         role,

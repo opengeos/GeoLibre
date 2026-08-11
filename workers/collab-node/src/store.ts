@@ -82,12 +82,18 @@ export class SessionStore {
     `);
 
     // Schema migrations for existing databases created before these columns existed
-    const columns = (this.db.prepare("PRAGMA table_info(collab_sessions)").all() as { name: string }[]).map((c) => c.name);
+    const columns = (
+      this.db.prepare("PRAGMA table_info(collab_sessions)").all() as { name: string }[]
+    ).map((c) => c.name);
     if (!columns.includes("require_identity")) {
-      this.db.exec("ALTER TABLE collab_sessions ADD COLUMN require_identity INTEGER NOT NULL DEFAULT 0");
+      this.db.exec(
+        "ALTER TABLE collab_sessions ADD COLUMN require_identity INTEGER NOT NULL DEFAULT 0",
+      );
     }
     if (!columns.includes("locked_layer_ids")) {
-      this.db.exec("ALTER TABLE collab_sessions ADD COLUMN locked_layer_ids TEXT NOT NULL DEFAULT '[]'");
+      this.db.exec(
+        "ALTER TABLE collab_sessions ADD COLUMN locked_layer_ids TEXT NOT NULL DEFAULT '[]'",
+      );
     }
     if (!columns.includes("rev")) {
       this.db.exec("ALTER TABLE collab_sessions ADD COLUMN rev INTEGER NOT NULL DEFAULT 0");

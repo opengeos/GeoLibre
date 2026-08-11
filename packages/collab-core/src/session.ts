@@ -88,10 +88,7 @@ function isStructurallyEqual(a: unknown, b: unknown): boolean {
   for (const k of keysA) {
     if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
     if (
-      !isStructurallyEqual(
-        (a as Record<string, unknown>)[k],
-        (b as Record<string, unknown>)[k],
-      )
+      !isStructurallyEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])
     ) {
       return false;
     }
@@ -248,7 +245,13 @@ export function toWireParticipant(participant: SessionParticipant): CollabPartic
     color: participant.color,
     role: participant.role,
     editOverride: participant.role === "host" ? null : (participant.editOverride ?? null),
-    identity: participant.identity ? { provider: participant.identity.provider, userId: participant.identity.userId, username: participant.identity.username } : null,
+    identity: participant.identity
+      ? {
+          provider: participant.identity.provider,
+          userId: participant.identity.userId,
+          username: participant.identity.username,
+        }
+      : null,
   };
 }
 
