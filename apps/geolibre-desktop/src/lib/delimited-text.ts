@@ -35,7 +35,7 @@ export function parseDelimitedTextFields(text: string, delimiter: string): strin
   if (!delimiter) throw new Error("Enter a delimiter.");
 
   // Only the header is needed, so stop at the first non-blank row instead of
-  // parsing the whole file — callers pass entire multi-hundred-MB files here.
+  // parsing the whole file; callers pass entire multi-hundred-MB files here.
   for (const row of iterateDelimitedRows(text, delimiter)) {
     if (!row.some((value) => value.trim())) continue;
     return uniqueFieldNames(row.map((field) => field.trim()));
@@ -231,7 +231,7 @@ function* iterateDelimitedRows(text: string, delimiter: string): Generator<strin
 
   let row: string[] = [];
   // The field being read is `text.slice(fieldStart, index)`, unless a quote
-  // interrupted it \u2014 then the earlier pieces are held in `segments` and
+  // interrupted it; then the earlier pieces are held in `segments` and
   // `segmentsLength` counts the characters already in them.
   let segments: string[] | null = null;
   let segmentsLength = 0;
@@ -279,7 +279,7 @@ function* iterateDelimitedRows(text: string, delimiter: string): Generator<strin
         inQuotes = !inQuotes;
       }
       // A bare quote inside an unquoted field is literal, and already covered
-      // by the slice in progress \u2014 nothing to do.
+      // by the slice in progress, so there is nothing to do.
       continue;
     }
 
@@ -345,14 +345,35 @@ function readDelimitedTextBody(text: string, delimiter: string): DelimitedTextBo
   };
 }
 
+/** Character codes the scanners compare against. */
+const QUOTE_CODE = 34;
+const LINE_FEED_CODE = 10;
+const CARRIAGE_RETURN_CODE = 13;
+
+/**
+ * Whether a character is one `String.prototype.trim` would strip, which is what
+ * decides whether a row counts as blank. ASCII is settled by code alone; only a
+ * non-ASCII character needs the regex, whose set is exactly trim's.
+ */
+function isTrimmableCode(code: number, text: string, index: number): boolean {
+  if (code === 32 || (code >= 9 && code <= 13)) return true;
+  if (code < 127) return false;
+  return /\s/.test(text[index]);
+}
+
 /**
  * Counts the data rows (header and blank rows excluded) without building any
  * features, so a caller can warn about an oversized import before paying for
  * the GeoJSON materialization. Quoting is respected, so a newline inside a
  * quoted field does not inflate the count.
  *
- * This is a second full scan of the text, so call it only when the answer will
- * be acted on \u2014 for a small file the parse itself is cheaper than the check.
+ * This mirrors {@link iterateDelimitedRows}' row rules, but deliberately does
+ * not reuse it: it compares character codes and allocates nothing at all, where
+ * the iterator allocates an array and a slice per field. That keeps the count
+ * cheap enough to run on every guarded import rather than only on files past
+ * some size, which is what lets the guard key on rows rather than on bytes.
+ * The blank-row test stops as soon as a row is known to have content, so it
+ * runs on a handful of characters per row rather than on all of them.
  *
  * @param text - The delimited text, optionally starting with a BOM.
  * @param delimiter - The field delimiter.
@@ -360,37 +381,106 @@ function readDelimitedTextBody(text: string, delimiter: string): DelimitedTextBo
  */
 export function countDelimitedTextRows(text: string, delimiter: string): number {
   if (!delimiter) return 0;
-  let count = 0;
-  let sawHeader = false;
-  for (const row of iterateDelimitedRows(text, delimiter)) {
-    if (!row.some((value) => value.trim())) continue;
-    if (!sawHeader) {
-      sawHeader = true;
+  const start = contentStart(text);
+  const delimiterHead = delimiter.charCodeAt(0);
+  const multiCharDelimiter = delimiter.length > 1;
+
+  let rows = 0;
+  let rowHasContent = false;
+  // Counts the characters materialized into the current field, standing in for
+  // the iterator's `field === ""` test that decides whether a quote opens.
+  let fieldLength = 0;
+  let inQuotes = false;
+
+  for (let index = start; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+
+    if (code === QUOTE_CODE) {
+      if (inQuotes && text.charCodeAt(index + 1) === QUOTE_CODE) {
+        fieldLength += 1;
+        rowHasContent = true;
+        index += 1;
+      } else if (inQuotes || fieldLength === 0) {
+        inQuotes = !inQuotes;
+      } else {
+        fieldLength += 1;
+        rowHasContent = true;
+      }
       continue;
     }
-    count += 1;
+
+    if (
+      !inQuotes &&
+      code === delimiterHead &&
+      (!multiCharDelimiter || text.startsWith(delimiter, index))
+    ) {
+      fieldLength = 0;
+      index += delimiter.length - 1;
+      continue;
+    }
+
+    if (!inQuotes && (code === LINE_FEED_CODE || code === CARRIAGE_RETURN_CODE)) {
+      if (rowHasContent) rows += 1;
+      rowHasContent = false;
+      fieldLength = 0;
+      if (code === CARRIAGE_RETURN_CODE && text.charCodeAt(index + 1) === LINE_FEED_CODE) {
+        index += 1;
+      }
+      continue;
+    }
+
+    fieldLength += 1;
+    if (!rowHasContent && !isTrimmableCode(code, text, index)) rowHasContent = true;
   }
-  return count;
+
+  if (rowHasContent) rows += 1;
+  // The first non-blank row is the header, not data.
+  return rows > 0 ? rows - 1 : 0;
 }
 
 /**
- * Returns the first line of delimited text (the header, for a well-formed
- * file), skipping a leading BOM. Slices rather than splitting, so reading the
- * header of a large file does not copy it.
+ * Returns the header line of delimited text, skipping a leading BOM and any
+ * blank lines before it. Slices rather than splitting, so reading the header of
+ * a large file does not copy it.
+ *
+ * Leading blank lines are skipped because the row parsers drop blank rows and
+ * treat the first non-blank one as the header; taking the first *physical* line
+ * instead would report a file that merely starts with a newline as empty, and
+ * would hand delimiter detection a blank line to guess from.
  *
  * Line breaks are `\n` or `\r\n`, matching the rest of this module; a quoted
- * newline is not honored, since a header row containing one cannot be read
+ * newline is not honored, since a header row containing one cannot be found
  * without parsing the whole file.
  *
  * @param text - The delimited text, optionally starting with a BOM.
- * @returns The first line, without its terminator.
+ * @returns The header line without its terminator, or `""` when every line is
+ *   blank.
  */
 export function firstDelimitedTextLine(text: string): string {
-  const start = contentStart(text);
-  const newline = text.indexOf("\n", start);
-  if (newline < 0) return text.slice(start);
-  const end = newline > start && text.charCodeAt(newline - 1) === 13 ? newline - 1 : newline;
-  return text.slice(start, end);
+  let start = contentStart(text);
+  while (start < text.length) {
+    const newline = text.indexOf("\n", start);
+    const lineEnd = newline < 0 ? text.length : newline;
+    const end =
+      lineEnd > start && text.charCodeAt(lineEnd - 1) === CARRIAGE_RETURN_CODE
+        ? lineEnd - 1
+        : lineEnd;
+    // Tested over the range rather than on a slice, so skipping past blank
+    // lines never copies, and neither does reaching the end of a file that has
+    // no line break at all.
+    if (!isBlankRange(text, start, end)) return text.slice(start, end);
+    if (newline < 0) return "";
+    start = newline + 1;
+  }
+  return "";
+}
+
+/** Whether every character in `[start, end)` is one `trim` would strip. */
+function isBlankRange(text: string, start: number, end: number): boolean {
+  for (let index = start; index < end; index += 1) {
+    if (!isTrimmableCode(text.charCodeAt(index), text, index)) return false;
+  }
+  return true;
 }
 
 /**

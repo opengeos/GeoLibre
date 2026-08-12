@@ -361,11 +361,20 @@ describe("delimited text row counting and header slicing", () => {
     assert.equal(countDelimitedTextRows("name,note\nAlice,hello", ""), 0);
   });
 
-  it("returns the first line without its terminator, skipping a BOM", () => {
+  it("returns the header line without its terminator, skipping a BOM", () => {
     assert.equal(firstDelimitedTextLine("a,b\r\n1,2"), "a,b");
     assert.equal(firstDelimitedTextLine("﻿a,b\n1,2"), "a,b");
     assert.equal(firstDelimitedTextLine("a,b"), "a,b");
-    assert.equal(firstDelimitedTextLine("\na,b"), "");
+  });
+
+  it("skips blank lines before the header, matching the row parsers", () => {
+    // Taking the first physical line would report these as empty files and
+    // hand delimiter detection a blank line to guess from.
+    assert.equal(firstDelimitedTextLine("\na,b\n1,2"), "a,b");
+    assert.equal(firstDelimitedTextLine("\r\n  \r\na;b\r\n1;2"), "a;b");
+    assert.equal(firstDelimitedTextLine("﻿\n\na,b"), "a,b");
+    assert.equal(firstDelimitedTextLine("\n \n\t\n"), "");
+    assert.equal(firstDelimitedTextLine(""), "");
   });
 });
 

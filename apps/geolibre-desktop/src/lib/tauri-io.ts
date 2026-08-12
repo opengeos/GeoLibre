@@ -636,6 +636,28 @@ function isDelimitedTextFileName(path: string): boolean {
 }
 
 /**
+ * How much of a delimited file to decode when only its header is wanted. Large
+ * enough for any realistic header (the widest seen in the wild are a few tens
+ * of KB), and the read falls back to the whole file if no line break turns up
+ * within it, so an unusual file loses efficiency rather than correctness.
+ */
+const DELIMITED_TEXT_HEADER_PROBE_BYTES = 1024 * 1024;
+
+/**
+ * Reads enough of a delimited file to contain its header row. Decoding a slice
+ * can split a multi-byte character at the cut, but the damage is confined to
+ * the truncated tail, which is past the header the caller reads.
+ *
+ * @param file - The delimited file.
+ * @returns Text guaranteed to contain the first line break, or the whole file.
+ */
+async function readDelimitedHeaderText(file: File): Promise<string> {
+  if (file.size <= DELIMITED_TEXT_HEADER_PROBE_BYTES) return file.text();
+  const probe = await file.slice(0, DELIMITED_TEXT_HEADER_PROBE_BYTES).text();
+  return probe.includes("\n") ? probe : file.text();
+}
+
+/**
  * Parses dropped/opened delimited text into a point FeatureCollection by
  * auto-detecting the delimiter and the longitude/latitude columns.
  *
@@ -645,37 +667,43 @@ function isDelimitedTextFileName(path: string): boolean {
  * the Add Data dialog) when the file is empty or the auto-detected columns hold
  * no usable WGS84 coordinates (e.g. a CSV whose `x`/`y` columns are projected).
  *
- * @param text - The file's full text.
+ * @param source - `headerText` needs only to reach the end of the header row;
+ *   `readFullText` is called solely once coordinate columns are confirmed, so a
+ *   CSV bound for the DuckDB fallback is never materialized as text first.
  * @param path - The file name or path, used in the messages.
- * @param context - `options` carries the caller's large-dataset guard;
- *   `largeFile` marks a file big enough to be worth counting its rows first.
+ * @param options - Carries the caller's large-dataset guard.
  */
 async function parseDelimitedTextFile(
-  text: string,
+  source: { headerText: string; readFullText: () => Promise<string> },
   path: string,
-  context?: { options?: DuckDbVectorLoadOptions; largeFile?: boolean },
+  options?: DuckDbVectorLoadOptions,
 ): Promise<FeatureCollection | null> {
   const name = browserSafeFileName(path);
   const pickColumns = `Use Add Data → Delimited Text to choose the coordinate columns for ${name}.`;
-  const delimiter = detectDelimitedTextDelimiter(text);
-  // Detect the coordinate columns from the header slice only;
-  // parseDelimitedTextLayer re-reads the header internally, so parsing the
-  // whole file here just to recover the column names would double the work.
-  const headerLine = firstDelimitedTextLine(text);
-  if (!headerLine.trim()) {
+  // Detect the delimiter and the coordinate columns from the header alone, so
+  // this preflight neither parses nor even reads the body. parseDelimitedText-
+  // Layer re-reads the header internally, so recovering the column names by
+  // parsing the whole file here would double the work.
+  const headerLine = firstDelimitedTextLine(source.headerText);
+  if (!headerLine) {
     throw new Error(`${name} appears to be empty. ${pickColumns}`);
   }
+  const delimiter = detectDelimitedTextDelimiter(headerLine);
   const fields = parseDelimitedTextFields(headerLine, delimiter);
   const coordinateFields = detectCoordinateFields(fields);
   if (!coordinateFields) return null;
+
+  const text = await source.readFullText();
   // Delimited text is the one vector path that never reaches the DuckDB loader
   // (which has no lon/lat column detection), so it was also the one path with
-  // no oversized-import guard at all. The count is a second scan of the text,
-  // so it only runs for a file already large enough for the answer to matter.
-  if (context?.largeFile) {
+  // no oversized-import guard at all. Counting is a scan that allocates
+  // nothing, unlike the materialization it guards, so it runs for every file
+  // rather than only past some size: a CSV of short rows can clear the warn
+  // threshold on row count while staying far below any byte threshold.
+  if (options?.onLargeDataset) {
     await confirmLargeDataset(
       { name, featureCount: countDelimitedTextRows(text, delimiter) },
-      context.options?.onLargeDataset,
+      options.onLargeDataset,
     );
   }
   try {
@@ -1927,14 +1955,20 @@ async function loadBrowserVectorFile(
   // longitude/latitude column detection (that lives only in the GeoParquet
   // conversion path), so routing a plain lon/lat CSV to DuckDB fails with
   // "DuckDB did not find a geometry column in this file." A big CSV therefore
-  // has to be parsed here rather than routed away, so `largeFile` passes the
-  // routing decision down as the trigger for the oversized-import guard
-  // instead.
+  // has to be parsed here rather than routed away, and carries its own
+  // oversized-import guard instead.
   if (isDelimitedTextFileName(file.name)) {
-    const points = await parseDelimitedTextFile(await file.text(), file.name, {
+    const points = await parseDelimitedTextFile(
+      {
+        // Only the header decides whether this is a lon/lat CSV, and a `File`
+        // can be read in part, so a CSV headed for the DuckDB fallback below is
+        // never decoded as text in full first.
+        headerText: await readDelimitedHeaderText(file),
+        readFullText: () => file.text(),
+      },
+      file.name,
       options,
-      largeFile: streamViaDuckDb,
-    });
+    );
     // No lon/lat columns: fall through to DuckDB so spatial CSV variants
     // (e.g. a WKT geometry column) still load.
     if (points) {
@@ -2218,10 +2252,14 @@ async function loadTauriVectorFile(
   // Not gated on `streamViaDuckDb` — see the note in `loadBrowserVectorFile`:
   // the DuckDB reader cannot build points from lon/lat columns.
   if (isDelimitedTextFileName(path)) {
-    const points = await parseDelimitedTextFile(await readLocalFileText(path), path, {
+    // Unlike the browser path there is no ranged read here, so the text is read
+    // once and serves as both the header probe and the body.
+    const text = await readLocalFileText(path);
+    const points = await parseDelimitedTextFile(
+      { headerText: text, readFullText: async () => text },
+      path,
       options,
-      largeFile: streamViaDuckDb,
-    });
+    );
     // No lon/lat columns: fall through to DuckDB so spatial CSV variants
     // (e.g. a WKT geometry column) still load.
     if (points) {
