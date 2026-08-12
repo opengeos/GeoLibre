@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { encodeTerrariumDem, normalizeNoData } from "../packages/map/src/cog-dem-source";
+import {
+  encodeTerrariumDem,
+  isDemOverviewIfd,
+  normalizeNoData,
+} from "../packages/map/src/cog-dem-source";
 
 describe("COG DEM terrain encoding", () => {
   it("encodes metre and sub-metre elevations as Terrarium RGB", () => {
@@ -40,5 +44,22 @@ describe("GDAL_NODATA parsing", () => {
     assert.equal(normalizeNoData(undefined), null);
     assert.equal(normalizeNoData("nan"), null);
     assert.equal(normalizeNoData(Number.NaN), null);
+  });
+});
+
+describe("overview IFD selection", () => {
+  it("keeps only reduced-resolution IFDs after the base image", () => {
+    // A second full-resolution IFD (0) must not pass as an overview (1).
+    assert.deepEqual([0, 0, 1].map(isDemOverviewIfd), [false, false, true]);
+  });
+
+  it("rejects transparency masks, including reduced-resolution ones", () => {
+    assert.equal(isDemOverviewIfd(0b100), false);
+    assert.equal(isDemOverviewIfd(0b101), false);
+  });
+
+  it("treats an absent or unreadable tag as not an overview", () => {
+    assert.equal(isDemOverviewIfd(undefined), false);
+    assert.equal(isDemOverviewIfd("overview"), false);
   });
 });

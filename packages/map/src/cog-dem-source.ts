@@ -5,6 +5,8 @@ const PROTOCOL = "cog-dem";
 const TILE_SIZE = 256;
 const WEB_MERCATOR_HALF_WORLD = 20_037_508.342789244;
 const MAX_MERCATOR_LATITUDE = 85.0511287798066;
+/** TIFF NewSubfileType bit 0: the IFD is a reduced-resolution overview. */
+const REDUCED_RESOLUTION_SUBFILE_TYPE = 0b001;
 /** TIFF NewSubfileType bit 2: the IFD is a transparency mask, not imagery. */
 const MASK_SUBFILE_TYPE = 0b100;
 
@@ -33,6 +35,20 @@ export interface CogDemSourceRegistration {
 const datasets = new Map<string, CogDemDataset>();
 let datasetSequence = 0;
 let protocolRegistered = false;
+
+/**
+ * Whether a NewSubfileType tag marks an IFD readTile may use as an overview.
+ * getImageCount() counts every IFD, and a COG can also carry transparency masks
+ * and further full-resolution images; either would be picked by the
+ * resolution-based selection and read as elevations. COG requires an overview
+ * to set the reduced-resolution bit, so that is the mark to look for.
+ * Exported for tests.
+ */
+export function isDemOverviewIfd(subfileType: unknown): boolean {
+  const flags = Number(subfileType ?? 0);
+  if (!Number.isFinite(flags)) return false;
+  return (flags & REDUCED_RESOLUTION_SUBFILE_TYPE) !== 0 && (flags & MASK_SUBFILE_TYPE) === 0;
+}
 
 function isMissing(value: number, nodata: number | null): boolean {
   return !Number.isFinite(value) || (nodata !== null && value === nodata);
@@ -364,17 +380,15 @@ export async function registerCogDemSource(
     const allImages = await Promise.all(
       Array.from({ length: imageCount }, (_, index) => tiff.getImage(index)),
     );
-    // getImageCount() counts every IFD, transparency masks included. A mask IFD
-    // left in this list can win the overview selection in readTile and have its
-    // mask samples read as elevations, so keep only the full-resolution image
-    // and the reduced-resolution overviews.
-    images = allImages.filter((candidate, index) => {
-      if (index === 0) return true;
-      const subfileType = Number(
-        (candidate.getFileDirectory() as unknown as Record<string, unknown>).NewSubfileType ?? 0,
-      );
-      return (subfileType & MASK_SUBFILE_TYPE) === 0;
-    });
+    // Keep the base image plus the reduced-resolution overviews; see
+    // isDemOverviewIfd for why the other IFDs have to go.
+    images = allImages.filter(
+      (candidate, index) =>
+        index === 0 ||
+        isDemOverviewIfd(
+          (candidate.getFileDirectory() as unknown as Record<string, unknown>).NewSubfileType,
+        ),
+    );
   } catch (error) {
     // A truncated or corrupt overview IFD must not leak the open reader.
     await tiff.close();
