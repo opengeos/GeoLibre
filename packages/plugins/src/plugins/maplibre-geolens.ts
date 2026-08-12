@@ -584,21 +584,52 @@ function stringArray(value: unknown): string[] {
 }
 
 /**
+ * Feature properties a MapLibre expression reads, i.e. the string-literal
+ * argument of every `["get", …]` / `["has", …]` in it.
+ *
+ * Only the two-argument forms count: `["get", key, object]` reads from a
+ * supplied object rather than the feature, and a computed key
+ * (`["get", ["concat", …]]`) names a column that is not knowable until render
+ * time. An unparseable expression yields nothing, matching the renderer, which
+ * ignores it.
+ */
+function expressionPropertyRefs(expression: string): string[] {
+  const parsed = parseJsonExpression(expression);
+  if (!parsed) return [];
+  const refs: string[] = [];
+  const walk = (node: unknown): void => {
+    if (!Array.isArray(node)) return;
+    if (
+      node.length === 2 &&
+      (node[0] === "get" || node[0] === "has") &&
+      typeof node[1] === "string"
+    ) {
+      refs.push(node[1]);
+    }
+    for (const child of node) walk(child);
+  };
+  walk(parsed);
+  return refs;
+}
+
+/**
  * The attribute names a layer's own state points at: its classification
  * property, label field, proportional-size and extrusion fields, diagram
- * fields, and the Time Slider binding. Each is read only when the feature that
- * uses it is switched on, so a default style contributes nothing.
- *
- * Rule filters and free-form expressions are deliberately not parsed — the
- * columns they reference are recovered by the dataset-wide opt-in above, and
- * for a table too wide for that, an expression the user wrote against a column
- * they could not see is not the case worth carrying a parser for.
+ * fields, the Time Slider binding, and the properties read by whichever of its
+ * expressions are in effect (the expression renderer, rule filters, label
+ * overrides, advanced extrusion). Each is read only when the feature that uses
+ * it is switched on, so a default style contributes nothing.
  */
 function attributePropertiesInUse(layer: GeoLibreLayer): string[] {
   const style = layer.style;
   const names: string[] = [];
   const add = (value: unknown): void => {
     if (typeof value === "string" && value.trim()) names.push(value.trim());
+  };
+  /** Add every feature property an in-effect expression reads. */
+  const addRefs = (expression: unknown): void => {
+    if (typeof expression === "string")
+      for (const ref of expressionPropertyRefs(expression)) add(ref);
   };
 
   const mode = styleValue(style, "vectorStyleMode");
@@ -607,20 +638,35 @@ function attributePropertiesInUse(layer: GeoLibreLayer): string[] {
   // their own expressions), so an ungated read would keep requesting a column
   // nothing paints from.
   if (mode === "categorized" || mode === "graduated") add(styleValue(style, "vectorStyleProperty"));
+  if (mode === "expression") addRefs(styleValue(style, "vectorStyleExpression"));
+  if (mode === "rule-based") {
+    for (const rule of styleValue(style, "vectorRules")) addRefs(rule?.filter);
+  }
   const labels = styleValue(style, "labels");
-  if (labels?.enabled) add(labels.field);
+  if (labels?.enabled) {
+    add(labels.field);
+    // The text expression and the data-defined overrides all read attributes.
+    addRefs(labels.expression);
+    addRefs(labels.sizeExpression);
+    addRefs(labels.colorExpression);
+    addRefs(labels.opacityExpression);
+    addRefs(labels.visibilityExpression);
+    addRefs(labels.priorityExpression);
+  }
   if (styleValue(style, "proportionalSizeEnabled")) {
     add(styleValue(style, "proportionalSizeProperty"));
   }
   if (styleValue(style, "extrusionEnabled")) {
-    // Advanced mode's height expression wins over the property, but only when
-    // it parses — a blank or invalid one falls back to the property (see
-    // `extrusionHeightValue`), so gating on the flag alone would drop a column
-    // the renderer still reads.
-    const advancedHeight = styleValue(style, "extrusionAdvancedStyleEnabled")
-      ? parseJsonExpression(styleValue(style, "extrusionHeightExpression"))
-      : null;
-    if (!advancedHeight) add(styleValue(style, "extrusionHeightProperty"));
+    const advanced = styleValue(style, "extrusionAdvancedStyleEnabled");
+    const heightExpression = advanced ? styleValue(style, "extrusionHeightExpression") : "";
+    if (advanced) {
+      addRefs(heightExpression);
+      addRefs(styleValue(style, "extrusionColorExpression"));
+    }
+    // The height expression wins over the property, but only when it parses: a
+    // blank or half-typed one falls back to the property (`extrusionHeightValue`),
+    // so gating on the advanced flag alone would drop a column still being read.
+    if (!parseJsonExpression(heightExpression)) add(styleValue(style, "extrusionHeightProperty"));
   }
   if (styleValue(style, "diagramType") !== "none") {
     for (const field of styleValue(style, "diagramFields")) add(field?.property);

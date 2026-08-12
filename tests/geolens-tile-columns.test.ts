@@ -117,17 +117,48 @@ describe("desiredTileColumns", () => {
     useAppStore.getState().setLayerStyle(id, { extrusionEnabled: true });
     assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_1"]);
 
-    // An advanced height expression replaces the property outright...
+    // An advanced height expression replaces the property, and the column it
+    // reads is requested in its place.
     useAppStore.getState().setLayerStyle(id, {
       extrusionAdvancedStyleEnabled: true,
       extrusionHeightExpression: '["get", "col_9"]',
     });
-    assert.deepEqual(desiredTileColumns(storedLayer(id)), []);
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_9"]);
 
-    // ...but only while it parses; an unfinished one still renders from the
-    // property, so the column has to come back.
+    // ...but it only wins while it parses; an unfinished one still renders from
+    // the property, so that column has to come back.
     useAppStore.getState().setLayerStyle(id, { extrusionHeightExpression: "[" });
     assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_1"]);
+  });
+
+  it("follows the properties an in-effect expression reads", () => {
+    const wide = Array.from({ length: MAX_GEOLENS_TILE_COLUMNS + 1 }, (_, i) => `col_${i}`);
+    const id = addTileLayer({}, wide);
+    useAppStore.getState().setLayerStyle(id, {
+      vectorStyleMode: "expression",
+      vectorStyleExpression:
+        '["case", ["<", ["get", "col_2"], 10], "#111111", ["has", "col_6"], "#222222", "#333333"]',
+    });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_2", "col_6"]);
+
+    // Rule filters drive the paint the same way in rule-based mode.
+    useAppStore.getState().setLayerStyle(id, {
+      vectorStyleMode: "rule-based",
+      vectorRules: [
+        { id: "r1", label: "a", filter: '["==", ["get", "col_4"], "x"]', color: "#2563eb" },
+        { id: "r2", label: "else", filter: "", color: "#dc2626", isElse: true },
+      ],
+    });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_4"]);
+
+    // A key computed at render time names no column, and `["get", key, object]`
+    // reads from a supplied object rather than the feature.
+    useAppStore.getState().setLayerStyle(id, {
+      vectorStyleMode: "expression",
+      vectorStyleExpression:
+        '["case", ["==", ["get", ["concat", "col", "_1"]], 1], "#111111", ["get", "k", ["literal", {"k": "#222222"}]]]',
+    });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), []);
   });
 
   it("drops the classification property when nothing paints from it", () => {
