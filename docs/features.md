@@ -173,7 +173,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - The desktop app prefers the Python sidecar, whose GDAL/rio-cogeo stack reads more input formats and tiles deeper
 - **1,000+ geoprocessing tools** in the Whitebox toolbox, running entirely in the browser through a WebAssembly runtime with raster and vector I/O — no Python sidecar required, so the full set works on the web, desktop, and Android
     - Surfaces both the Whitebox Next Gen suite and GeoLibre's own WASM tools, filterable by source
-    - Nine categories: vector (~280 tools), raster (~230), remote sensing (~150), hydrology (~100), terrain (~100), LiDAR (~65), conversion (~50), network (~25), and projection (4)
+    - Nine categories: vector (~315 tools), raster (~255), remote sensing (~155), hydrology (~100), terrain (~100), LiDAR (~65), conversion (~50), network (~25), and projection (4)
     - Browsable by category directly in the Processing menu, with nested subcategory submenus and an offline-bundled tool catalog
     - A **Run locally (WASM)** toggle switches any tool between the in-browser runtime and the Python sidecar, which reads native file paths for batch runs over a directory
     - Deep-linkable through a `?tool=` URL parameter that preselects a tool and pre-fills its form, with a Copy link button that builds the shareable link

@@ -117,8 +117,8 @@ the Processing menu:
 
 | Category | Tools | Examples |
 | --- | --- | --- |
-| **Vector** | 280 | overlays, buffers, joins, cleaning, topology, generalization |
-| **Raster** | 232 | algebra, filters, reclassification, zonal and focal statistics |
+| **Vector** | 313 | overlays, buffers, joins, cleaning, topology, generalization |
+| **Raster** | 256 | algebra, filters, reclassification, zonal and focal statistics |
 | **Remote sensing** | 154 | spectral indices, band math, classification, change detection |
 | **Hydrology** | 100 | flow accumulation, watersheds, stream networks, depression filling |
 | **Terrain** | 99 | slope, aspect, hillshade, curvature, ruggedness, viewsheds |
