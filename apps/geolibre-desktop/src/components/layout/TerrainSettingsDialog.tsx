@@ -41,6 +41,9 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [exaggeration, setExaggeration] = useState(DEFAULT_EXAGGERATION);
+  const [terrainUrl, setTerrainUrl] = useState("");
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceError, setSourceError] = useState<string | null>(null);
   // Free-text draft for the number input so a fractional value like "2.5" can be
   // typed without the controlled numeric value snapping the field mid-keystroke.
   // Committed (parsed/clamped) on blur or Enter; kept in sync when the value
@@ -61,6 +64,8 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       );
       setExaggeration(value);
       setDraft(String(value));
+      setTerrainUrl(mapControllerRef.current?.getTerrainCogSource() ?? "");
+      setSourceError(null);
       setOpen(true);
     };
     // Close if the terrain control is removed (e.g. hidden from the Controls
@@ -114,6 +119,47 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
     setDraft(String(clamped));
   };
 
+  const applyCogSource = async () => {
+    setSourceLoading(true);
+    setSourceError(null);
+    try {
+      await mapControllerRef.current?.setTerrainCogSource(terrainUrl);
+    } catch (error) {
+      setSourceError(error instanceof Error ? error.message : t("terrainSettings.sourceError"));
+    } finally {
+      setSourceLoading(false);
+    }
+  };
+
+  const applyLocalCogSource = async (file: File) => {
+    setSourceLoading(true);
+    setSourceError(null);
+    try {
+      await mapControllerRef.current?.setTerrainCogSource(file);
+      // Keep the URL input empty: a local filename is not a fetchable URL, and
+      // leaving it in this field would let a later "Use COG DEM" click try to
+      // open it as an HTTP source.
+      setTerrainUrl("");
+    } catch (error) {
+      setSourceError(error instanceof Error ? error.message : t("terrainSettings.sourceError"));
+    } finally {
+      setSourceLoading(false);
+    }
+  };
+
+  const restoreDefaultSource = async () => {
+    setSourceLoading(true);
+    setSourceError(null);
+    try {
+      await mapControllerRef.current?.setTerrainCogSource(null);
+      setTerrainUrl("");
+    } catch (error) {
+      setSourceError(error instanceof Error ? error.message : t("terrainSettings.sourceError"));
+    } finally {
+      setSourceLoading(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-md">
@@ -149,6 +195,64 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
               value={[exaggeration]}
               onValueChange={(value: number[]) => applyExaggeration(value[0])}
             />
+          </div>
+          <div className="space-y-2 border-t pt-4">
+            <Label htmlFor="terrain-cog-url">{t("terrainSettings.sourceLabel")}</Label>
+            <p className="text-muted-foreground text-sm">
+              {t("terrainSettings.sourceDescription")}
+            </p>
+            <Input
+              id="terrain-cog-url"
+              type="url"
+              inputMode="url"
+              placeholder={t("terrainSettings.sourcePlaceholder")}
+              value={terrainUrl}
+              disabled={sourceLoading}
+              onChange={(event) => setTerrainUrl(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && terrainUrl.trim()) void applyCogSource();
+              }}
+            />
+            <div className="space-y-1">
+              <Label htmlFor="terrain-cog-file">{t("terrainSettings.localSourceLabel")}</Label>
+              <Input
+                id="terrain-cog-file"
+                type="file"
+                accept=".tif,.tiff,image/tiff"
+                disabled={sourceLoading}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void applyLocalCogSource(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <p className="text-muted-foreground text-xs">
+                {t("terrainSettings.localSourceDescription")}
+              </p>
+            </div>
+            {sourceError ? (
+              <p className="text-destructive text-sm" role="alert">
+                {sourceError}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={sourceLoading || !terrainUrl.trim()}
+                onClick={() => void applyCogSource()}
+              >
+                {sourceLoading ? t("terrainSettings.sourceLoading") : t("terrainSettings.useCog")}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={sourceLoading || !mapControllerRef.current?.hasCustomTerrainSource()}
+                onClick={() => void restoreDefaultSource()}
+              >
+                {t("terrainSettings.restoreDefaultSource")}
+              </Button>
+            </div>
           </div>
           <div className="flex justify-between gap-2">
             <Button
