@@ -1580,7 +1580,7 @@
     "sourceLoading": "Opening COG…",
     "restoreDefaultSource": "Use global terrain",
     "sourceError": "Could not open the COG DEM.",
-    "sourceErrorEmpty": "Choose a local COG DEM or enter its URL.",
+    "sourceErrorEmpty": "That file is empty. Choose a COG DEM file.",
     "sourceErrorBand": "The requested band does not exist in this COG.",
     "sourceErrorProjection": "COG terrain supports EPSG:3857 and EPSG:4326 DEMs only.",
     "sourceErrorDetail": "Could not open the COG DEM. ({{detail}})",

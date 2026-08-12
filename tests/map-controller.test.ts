@@ -1743,22 +1743,33 @@ describe("COG DEM terrain source", () => {
     terrainSource: { tiles?: string[] };
   }
 
+  const TERRAIN_SOURCE_ID = "geolibre-terrain-dem";
+
   /** Minimal map: setTerrainCogSource only touches the terrain source. */
-  function terrainController(): MapController {
+  function terrainController(): {
+    controller: MapController;
+    sources: Map<string, unknown>;
+    terrain: () => { source: string } | null;
+  } {
     const sources = new Map<string, unknown>();
+    let terrain: { source: string } | null = null;
     const controller = createMapController();
     const internal = controller as unknown as TerrainInternals;
     internal.map = {
       getSource: (id: string) => sources.get(id),
       addSource: (id: string, spec: unknown) => sources.set(id, spec),
       removeSource: (id: string) => sources.delete(id),
-      getTerrain: () => null,
+      getTerrain: () => terrain,
+      setTerrain: (next: { source: string } | null) => {
+        terrain = next;
+      },
+      setCenterClampedToGround: () => {},
       remove: () => {},
       on: () => {},
       off: () => {},
     };
     internal.styleReady = true;
-    return controller;
+    return { controller, sources, terrain: () => terrain };
   }
 
   /** A stand-in registration that records whether it was disposed. */
@@ -1776,7 +1787,7 @@ describe("COG DEM terrain source", () => {
   }
 
   it("discards a slow open that a newer selection has already superseded", async () => {
-    const controller = terrainController();
+    const { controller } = terrainController();
     const internal = controller as unknown as TerrainInternals;
     const slow = fakeRegistration("slow");
     const fast = fakeRegistration("fast");
@@ -1808,7 +1819,7 @@ describe("COG DEM terrain source", () => {
   });
 
   it("leaves the working source in place when an open fails", async () => {
-    const controller = terrainController();
+    const { controller } = terrainController();
     const internal = controller as unknown as TerrainInternals;
     const working = fakeRegistration("working");
 
@@ -1829,7 +1840,7 @@ describe("COG DEM terrain source", () => {
   });
 
   it("restores the built-in terrain and releases the COG when set to null", async () => {
-    const controller = terrainController();
+    const { controller } = terrainController();
     const internal = controller as unknown as TerrainInternals;
     const registration = fakeRegistration("custom");
 
@@ -1841,6 +1852,31 @@ describe("COG DEM terrain source", () => {
     assert.equal(controller.hasCustomTerrainSource(), false);
     assert.equal(controller.getTerrainCogSource(), null);
     assert.ok(internal.terrainSource.tiles?.[0].includes("elevation-tiles-prod"));
+    controller.destroy();
+  });
+
+  it("keeps terrain switched on across a source swap", async () => {
+    const { controller, sources, terrain } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const first = fakeRegistration("first");
+    const second = fakeRegistration("second");
+
+    internal.openCogDem = async () => first;
+    await controller.setTerrainCogSource("first.tif");
+    controller.setTerrainEnabled(true);
+    assert.equal(controller.isTerrainEnabled(), true);
+
+    internal.openCogDem = async () => second;
+    await controller.setTerrainCogSource("second.tif");
+
+    // Terrain stays on, now reading from the newly selected COG.
+    assert.equal(controller.isTerrainEnabled(), true);
+    assert.equal(terrain()?.source, TERRAIN_SOURCE_ID);
+    assert.deepEqual(
+      (sources.get(TERRAIN_SOURCE_ID) as { tiles?: string[] } | undefined)?.tiles,
+      second.tiles,
+    );
+    assert.equal(first.disposed, true);
     controller.destroy();
   });
 });

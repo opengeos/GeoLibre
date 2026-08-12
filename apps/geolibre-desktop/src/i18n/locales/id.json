@@ -1537,7 +1537,7 @@
     "sourceLoading": "Membuka COG…",
     "restoreDefaultSource": "Gunakan medan global",
     "sourceError": "DEM COG tidak dapat dibuka.",
-    "sourceErrorEmpty": "Pilih DEM COG lokal atau masukkan URL-nya.",
+    "sourceErrorEmpty": "Berkas itu kosong. Pilih berkas DEM COG.",
     "sourceErrorBand": "Band yang diminta tidak ada dalam COG ini.",
     "sourceErrorProjection": "Terrain COG hanya mendukung DEM EPSG:3857 dan EPSG:4326.",
     "sourceErrorDetail": "DEM COG tidak dapat dibuka. ({{detail}})",

@@ -1751,7 +1751,7 @@
     "sourceLoading": "جارٍ فتح COG…",
     "restoreDefaultSource": "استخدام التضاريس العالمية",
     "sourceError": "تعذر فتح نموذج ارتفاعات COG.",
-    "sourceErrorEmpty": "اختر نموذج ارتفاعات COG محلي أو أدخل عنوان URL الخاص به.",
+    "sourceErrorEmpty": "هذا الملف فارغ. اختر ملف نموذج ارتفاعات COG.",
     "sourceErrorBand": "النطاق المطلوب غير موجود في ملف COG هذا.",
     "sourceErrorProjection": "يدعم تضاريس COG نماذج الارتفاعات بنظام EPSG:3857 وEPSG:4326 فقط.",
     "sourceErrorDetail": "تعذر فتح نموذج ارتفاعات COG. ({{detail}})",

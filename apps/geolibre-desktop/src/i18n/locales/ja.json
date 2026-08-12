@@ -1537,7 +1537,7 @@
     "sourceLoading": "COG を開いています…",
     "restoreDefaultSource": "全球地形を使用",
     "sourceError": "COG DEM を開けませんでした。",
-    "sourceErrorEmpty": "ローカルの COG DEM を選択するか、URL を入力してください。",
+    "sourceErrorEmpty": "このファイルは空です。COG DEM ファイルを選択してください。",
     "sourceErrorBand": "要求されたバンドはこの COG に存在しません。",
     "sourceErrorProjection": "COG 地形は EPSG:3857 と EPSG:4326 の DEM のみに対応しています。",
     "sourceErrorDetail": "COG DEM を開けませんでした。({{detail}})",

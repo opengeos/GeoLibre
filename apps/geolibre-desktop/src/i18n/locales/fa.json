@@ -1580,7 +1580,7 @@
     "sourceLoading": "در حال باز کردن COG…",
     "restoreDefaultSource": "استفاده از زمین جهانی",
     "sourceError": "باز کردن DEM نوع COG ممکن نشد.",
-    "sourceErrorEmpty": "یک DEM نوع COG محلی انتخاب کنید یا نشانی آن را وارد کنید.",
+    "sourceErrorEmpty": "این فایل خالی است. یک فایل DEM نوع COG انتخاب کنید.",
     "sourceErrorBand": "باند درخواست‌شده در این COG وجود ندارد.",
     "sourceErrorProjection": "ناهمواری COG فقط از DEM با EPSG:3857 و EPSG:4326 پشتیبانی می‌کند.",
     "sourceErrorDetail": "باز کردن DEM نوع COG ممکن نشد. ({{detail}})",

@@ -454,7 +454,14 @@ export async function registerCogDemSource(
     typeof normalizedSource === "string"
       ? await fromUrl(normalizedSource)
       : await fromBlob(normalizedSource);
-  const image = await tiff.getImage();
+  let image: GeoTIFFImage;
+  try {
+    image = await tiff.getImage();
+  } catch (error) {
+    // Same invariant as the checks below: no failure leaves the reader open.
+    closeQuietly(tiff);
+    throw error;
+  }
   if (band < 1 || band > image.getSamplesPerPixel()) {
     closeQuietly(tiff);
     throw new CogDemError("unsupported-band", `Band ${band} does not exist in this COG.`);

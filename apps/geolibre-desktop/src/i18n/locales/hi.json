@@ -1580,7 +1580,7 @@
     "sourceLoading": "COG खोला जा रहा है…",
     "restoreDefaultSource": "वैश्विक भूभाग उपयोग करें",
     "sourceError": "COG DEM नहीं खोला जा सका।",
-    "sourceErrorEmpty": "स्थानीय COG DEM चुनें या उसका URL दर्ज करें।",
+    "sourceErrorEmpty": "यह फ़ाइल खाली है। कोई COG DEM फ़ाइल चुनें।",
     "sourceErrorBand": "अनुरोधित बैंड इस COG में मौजूद नहीं है।",
     "sourceErrorProjection": "COG भूभाग केवल EPSG:3857 और EPSG:4326 DEM का समर्थन करता है।",
     "sourceErrorDetail": "COG DEM नहीं खोला जा सका। ({{detail}})",

@@ -1580,7 +1580,7 @@
     "sourceLoading": "Apertura del COG…",
     "restoreDefaultSource": "Usa terreno globale",
     "sourceError": "Impossibile aprire il DEM COG.",
-    "sourceErrorEmpty": "Scegli un DEM COG locale o inserisci il suo URL.",
+    "sourceErrorEmpty": "Questo file è vuoto. Scegli un file DEM COG.",
     "sourceErrorBand": "La banda richiesta non esiste in questo COG.",
     "sourceErrorProjection": "Il rilievo COG supporta solo DEM in EPSG:3857 ed EPSG:4326.",
     "sourceErrorDetail": "Impossibile aprire il DEM COG. ({{detail}})",
