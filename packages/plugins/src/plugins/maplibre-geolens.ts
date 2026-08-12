@@ -624,6 +624,12 @@ function attributePropertiesInUse(layer: GeoLibreLayer): string[] {
   }
   if (styleValue(style, "diagramType") !== "none") {
     for (const field of styleValue(style, "diagramFields")) add(field?.property);
+    // Attribute sizing reads its own property alongside the slice fields
+    // (`collectDiagramData`); without it every diagram would size from a value
+    // that is not in the tile and collapse to the floor.
+    if (styleValue(style, "diagramSizeMode") === "attribute") {
+      add(styleValue(style, "diagramSizeProperty"));
+    }
   }
   const timeBinding = layer.metadata.timeBinding;
   if (timeBinding && typeof timeBinding === "object") {

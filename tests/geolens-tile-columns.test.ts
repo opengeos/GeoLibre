@@ -144,6 +144,22 @@ describe("desiredTileColumns", () => {
     assert.deepEqual(desiredTileColumns(storedLayer(id)), []);
   });
 
+  it("includes a diagram's slice fields and its attribute size property", () => {
+    const wide = Array.from({ length: MAX_GEOLENS_TILE_COLUMNS + 1 }, (_, i) => `col_${i}`);
+    const id = addTileLayer({}, wide);
+    useAppStore.getState().setLayerStyle(id, {
+      diagramType: "pie",
+      diagramFields: [{ property: "col_2", color: "#2563eb" }],
+      diagramSizeMode: "attribute",
+      diagramSizeProperty: "col_8",
+    });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_2", "col_8"]);
+
+    // Sizing from the slice total reads no extra column.
+    useAppStore.getState().setLayerStyle(id, { diagramSizeMode: "sum" });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_2"]);
+  });
+
   it("includes the Time Slider binding's property", () => {
     const wide = Array.from({ length: MAX_GEOLENS_TILE_COLUMNS + 1 }, (_, i) => `col_${i}`);
     const id = addTileLayer({}, wide);
