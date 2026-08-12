@@ -2528,15 +2528,21 @@ export class MapController {
    * Passing null restores the default AWS Terrarium source. The COG is opened
    * and validated before the active terrain is disturbed, so a bad URL leaves
    * the currently working source in place.
+   *
+   * Resolves true once the source is applied, and false when a later call has
+   * already superseded this one — including when that later call failed, since
+   * the source the user asked for most recently is the one that decides what
+   * happens, and quietly loading an earlier pick behind a visible error would
+   * be the greater surprise. Concurrent callers can tell the two apart.
    */
-  async setTerrainCogSource(source: string | Blob | null, band = 1): Promise<void> {
+  async setTerrainCogSource(source: string | Blob | null, band = 1): Promise<boolean> {
     const normalizedSource = typeof source === "string" ? source.trim() || null : source;
     const generation = ++this.cogDemGeneration;
     const registration = normalizedSource ? await this.openCogDem(normalizedSource, band) : null;
     // A slower, older request must not replace a source selected after it.
     if (generation !== this.cogDemGeneration) {
       registration?.dispose();
-      return;
+      return false;
     }
 
     const wasEnabled = this.isTerrainEnabled();
@@ -2564,6 +2570,7 @@ export class MapController {
 
     if (this.map && this.isStyleReady()) this.addTerrainSource();
     if (wasEnabled) this.setTerrainEnabled(true);
+    return true;
   }
 
   /**

@@ -289,8 +289,16 @@ function remapGeographicRows(
   for (let row = 0; row < TILE_SIZE; row += 1) {
     const mercatorY = maxY - ((row + 0.5) / TILE_SIZE) * (maxY - minY);
     const latitude = mercatorYToLatitude(mercatorY);
-    const sourceY = ((north - latitude) / latitudeSpan) * (TILE_SIZE - 1);
-    const y0 = Math.max(0, Math.min(TILE_SIZE - 1, Math.floor(sourceY)));
+    // Both this row and the source rows are pixel centres, so the source index
+    // is centre-to-centre: scale by TILE_SIZE and step back half a pixel.
+    // Scaling by TILE_SIZE - 1 would mix a corner convention into a buffer
+    // built with a centre one and shift the sample by up to half a row, worst
+    // at the tile edges where the seam with the next tile shows.
+    const sourceY = Math.max(
+      0,
+      Math.min(TILE_SIZE - 1, ((north - latitude) / latitudeSpan) * TILE_SIZE - 0.5),
+    );
+    const y0 = Math.floor(sourceY);
     const y1 = Math.min(TILE_SIZE - 1, y0 + 1);
     const fraction = sourceY - y0;
     for (let column = 0; column < TILE_SIZE; column += 1) {

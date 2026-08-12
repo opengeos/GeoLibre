@@ -1805,9 +1805,11 @@ describe("COG DEM terrain source", () => {
     };
 
     const first = controller.setTerrainCogSource("slow.tif");
-    await controller.setTerrainCogSource("fast.tif");
+    assert.equal(await controller.setTerrainCogSource("fast.tif"), true);
     releaseSlow();
-    await first;
+    // The superseded call reports that it did not apply, rather than resolving
+    // as though it had.
+    assert.equal(await first, false);
 
     // The user's latest choice wins, and the superseded open is released.
     assert.equal(slow.disposed, true);
