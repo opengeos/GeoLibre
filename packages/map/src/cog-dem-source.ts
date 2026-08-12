@@ -5,6 +5,8 @@ const PROTOCOL = "cog-dem";
 const TILE_SIZE = 256;
 const WEB_MERCATOR_HALF_WORLD = 20_037_508.342789244;
 const MAX_MERCATOR_LATITUDE = 85.0511287798066;
+/** TIFF NewSubfileType bit 2: the IFD is a transparency mask, not imagery. */
+const MASK_SUBFILE_TYPE = 0b100;
 
 type DemProjection = "EPSG:3857" | "EPSG:4326";
 
@@ -191,11 +193,34 @@ async function readTile(
   }
   const width = image.getWidth();
   const height = image.getHeight();
-  const window = [
+  // On a coarse overview a thin clipped extent can floor and ceil onto the same
+  // pixel boundary, which would hand readRasters an empty window. Keep the
+  // window at least one pixel wide and tall.
+  const left = Math.min(
+    width - 1,
     Math.max(0, Math.floor(((clipped[0] - sourceMinX) / (sourceMaxX - sourceMinX)) * width)),
+  );
+  const top = Math.min(
+    height - 1,
     Math.max(0, Math.floor(((sourceMaxY - clipped[3]) / (sourceMaxY - sourceMinY)) * height)),
-    Math.min(width, Math.ceil(((clipped[2] - sourceMinX) / (sourceMaxX - sourceMinX)) * width)),
-    Math.min(height, Math.ceil(((sourceMaxY - clipped[1]) / (sourceMaxY - sourceMinY)) * height)),
+  );
+  const window = [
+    left,
+    top,
+    Math.min(
+      width,
+      Math.max(
+        left + 1,
+        Math.ceil(((clipped[2] - sourceMinX) / (sourceMaxX - sourceMinX)) * width),
+      ),
+    ),
+    Math.min(
+      height,
+      Math.max(
+        top + 1,
+        Math.ceil(((sourceMaxY - clipped[1]) / (sourceMaxY - sourceMinY)) * height),
+      ),
+    ),
   ];
   const rasters = await image.readRasters({
     window,
@@ -302,9 +327,20 @@ export async function registerCogDemSource(
   }
   ensureCogDemProtocol();
   const imageCount = await tiff.getImageCount();
-  const images = await Promise.all(
+  const allImages = await Promise.all(
     Array.from({ length: imageCount }, (_, index) => tiff.getImage(index)),
   );
+  // getImageCount() counts every IFD, transparency masks included. A mask IFD
+  // left in this list can win the overview selection in readTile and have its
+  // mask samples read as elevations, so keep only the full-resolution image and
+  // the reduced-resolution overviews.
+  const images = allImages.filter((candidate, index) => {
+    if (index === 0) return true;
+    const subfileType = Number(
+      (candidate.getFileDirectory() as unknown as Record<string, unknown>).NewSubfileType ?? 0,
+    );
+    return (subfileType & MASK_SUBFILE_TYPE) === 0;
+  });
   const key = String(++datasetSequence);
   const directory = image.getFileDirectory() as unknown as Record<string, unknown>;
   datasets.set(key, {
