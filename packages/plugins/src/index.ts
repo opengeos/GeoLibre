@@ -60,6 +60,27 @@ export {
   type AisPositionFeature,
   type AisPositionProperties,
 } from "./plugins/aisstream-api";
+export {
+  maplibreImageryDetectionWorkbenchPlugin,
+} from "./plugins/maplibre-imagery-detection-workbench";
+export {
+  ANNOTATION_SOURCE_KIND,
+  IMAGERY_DETECTION_WORKBENCH_ID,
+  VESSEL_CLASSES,
+  classifyDetection,
+  createDetectionFeature,
+  exportAnnotationsCsv,
+  exportCoco,
+  exportManifestCsv,
+  exportYoloObb,
+  geographicToPixel,
+  vesselClassForKey,
+  type DetectionFeature,
+  type DetectionProperties,
+  type ImageBounds,
+  type ImageryMetadata,
+  type VesselClassId,
+} from "./plugins/imagery-detection-workbench";
 export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";
 export {

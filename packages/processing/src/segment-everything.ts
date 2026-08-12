@@ -45,6 +45,47 @@ export interface SegmentEverythingOptions {
   onProgress?: (done: number, total: number) => void;
   /** Abort signal; checked between decoder batches. */
   signal?: AbortSignal;
+  /** Reusable model sessions for tiled/batch runs. Omit for a one-shot run. */
+  sessions?: SegmentEverythingSessions;
+}
+
+export interface SegmentEverythingSessions {
+  ort: Awaited<ReturnType<typeof loadOrt>>;
+  encoder: import("onnxruntime-web/wasm").InferenceSession;
+  decoder: import("onnxruntime-web/wasm").InferenceSession;
+  release: () => Promise<void>;
+}
+
+/** Load SlimSAM once for a multi-tile run. The caller must release it. */
+export async function createSegmentEverythingSessions(
+  encoderBytes: ArrayBuffer,
+  decoderBytes: ArrayBuffer
+): Promise<SegmentEverythingSessions> {
+  const ort = await loadOrt();
+  const encoder = await ort.InferenceSession.create(
+    new Uint8Array(encoderBytes),
+    {
+      executionProviders: ["wasm"],
+    }
+  );
+  let decoder: import("onnxruntime-web/wasm").InferenceSession;
+  try {
+    decoder = await ort.InferenceSession.create(new Uint8Array(decoderBytes), {
+      executionProviders: ["wasm"],
+    });
+  } catch (error) {
+    await encoder.release().catch(() => {});
+    throw error;
+  }
+  return {
+    ort,
+    encoder,
+    decoder,
+    release: async () => {
+      await encoder.release().catch(() => {});
+      await decoder.release().catch(() => {});
+    },
+  };
 }
 
 const SAM_INPUT = 1024;
@@ -70,7 +111,7 @@ function sampleBilinear(
   height: number,
   x: number,
   y: number,
-  nodata: number | null,
+  nodata: number | null
 ): number {
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);
@@ -156,7 +197,11 @@ function preprocess(raster: RasterData): Preprocessed {
 
 /** Trace the exterior boundary of the mask's first component (Moore-neighbour,
  * 8-connected). Returns a pixel ring in mask (256) coordinates, or null. */
-function traceContour(mask: Uint8Array, w: number, h: number): [number, number][] | null {
+function traceContour(
+  mask: Uint8Array,
+  w: number,
+  h: number
+): [number, number][] | null {
   const at = (x: number, y: number): number =>
     x < 0 || y < 0 || x >= w || y >= h ? 0 : mask[y * w + x];
   let sx = -1;
@@ -211,7 +256,11 @@ function traceContour(mask: Uint8Array, w: number, h: number): [number, number][
 }
 
 /** Perpendicular distance of point p from the line a→b. */
-function perpDist(p: [number, number], a: [number, number], b: [number, number]): number {
+function perpDist(
+  p: [number, number],
+  a: [number, number],
+  b: [number, number]
+): number {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const len = Math.hypot(dx, dy);
@@ -220,7 +269,10 @@ function perpDist(p: [number, number], a: [number, number], b: [number, number])
 }
 
 /** Douglas–Peucker ring simplification (open polyline; caller re-closes). */
-function simplifyRing(ring: [number, number][], epsilon: number): [number, number][] {
+function simplifyRing(
+  ring: [number, number][],
+  epsilon: number
+): [number, number][] {
   if (ring.length < 3) return ring;
   let maxDist = 0;
   let index = 0;
@@ -255,7 +307,10 @@ function polygonArea(ring: [number, number][]): number {
 }
 
 /** IoU of two `[minX, minY, maxX, maxY]` boxes. */
-function boxIou(a: [number, number, number, number], b: [number, number, number, number]): number {
+function boxIou(
+  a: [number, number, number, number],
+  b: [number, number, number, number]
+): number {
   const ix1 = Math.max(a[0], b[0]);
   const iy1 = Math.max(a[1], b[1]);
   const ix2 = Math.min(a[2], b[2]);
@@ -305,11 +360,12 @@ export async function segmentEverything(
   raster: RasterData,
   encoderBytes: ArrayBuffer,
   decoderBytes: ArrayBuffer,
-  options: SegmentEverythingOptions = {},
+  options: SegmentEverythingOptions = {}
 ): Promise<SegmentMask[]> {
   const pointsPerSide = options.pointsPerSide ?? DEFAULT_POINTS_PER_SIDE;
   const predIou = options.predIouThreshold ?? DEFAULT_PRED_IOU;
-  const stabilityThreshold = options.stabilityScoreThreshold ?? DEFAULT_STABILITY;
+  const stabilityThreshold =
+    options.stabilityScoreThreshold ?? DEFAULT_STABILITY;
   const minAreaFraction = options.minAreaFraction ?? DEFAULT_MIN_AREA_FRACTION;
   const boxNmsThreshold = options.boxNmsThreshold ?? DEFAULT_BOX_NMS;
   const pointBatch = options.pointBatchSize ?? DEFAULT_POINT_BATCH;
@@ -319,29 +375,26 @@ export async function segmentEverything(
     pointsPerSide < 2 ||
     pointsPerSide > MAX_POINTS_PER_SIDE
   ) {
-    throw new Error(`pointsPerSide must be an integer between 2 and ${MAX_POINTS_PER_SIDE}.`);
+    throw new Error(
+      `pointsPerSide must be an integer between 2 and ${MAX_POINTS_PER_SIDE}.`
+    );
   }
 
-  const ort = await loadOrt();
-  const encoder = await ort.InferenceSession.create(new Uint8Array(encoderBytes), {
-    executionProviders: ["wasm"],
-  });
-  let decoder: import("onnxruntime-web/wasm").InferenceSession;
-  try {
-    decoder = await ort.InferenceSession.create(new Uint8Array(decoderBytes), {
-      executionProviders: ["wasm"],
-    });
-  } catch (err) {
-    // Release the already-created encoder so its WASM heap doesn't leak when
-    // decoder creation fails (both sessions live outside the finally below).
-    await encoder.release().catch(() => {});
-    throw err;
-  }
+  const ownedSessions = options.sessions
+    ? null
+    : await createSegmentEverythingSessions(encoderBytes, decoderBytes);
+  const sessions = options.sessions ?? ownedSessions!;
+  const { ort, encoder, decoder } = sessions;
 
   try {
     const { width, height } = raster;
     const { pixelValues, scale, newW, newH } = preprocess(raster);
-    const tensor = new ort.Tensor("float32", pixelValues, [1, 3, SAM_INPUT, SAM_INPUT]);
+    const tensor = new ort.Tensor("float32", pixelValues, [
+      1,
+      3,
+      SAM_INPUT,
+      SAM_INPUT,
+    ]);
     const embeds = await encoder.run({ pixel_values: tensor });
     const imageEmbeddings = embeds.image_embeddings;
     const imagePositional = embeds.image_positional_embeddings;
@@ -424,7 +477,10 @@ export async function segmentEverything(
 
         const ring = traceContour(bin, MASK_SIZE, MASK_SIZE);
         if (!ring) continue;
-        const simplified = simplifyRing(ring, simplifyEps / (MASK_UPSCALE / scale));
+        const simplified = simplifyRing(
+          ring,
+          simplifyEps / (MASK_UPSCALE / scale)
+        );
         if (simplified.length < 3) continue;
 
         // Map ring vertices from mask (256) space to source pixels and close.
@@ -466,7 +522,6 @@ export async function segmentEverything(
   } finally {
     // Swallow cleanup failures so a release() error can never mask the primary
     // error from the try above.
-    await encoder.release().catch(() => {});
-    await decoder.release().catch(() => {});
+    await ownedSessions?.release();
   }
 }

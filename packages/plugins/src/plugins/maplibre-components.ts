@@ -4657,6 +4657,13 @@ function createStacSearchStoreLayer(
   const url = rasterLayerInfo?.tileUrl ?? getDeckLayerSourceUrl(snapshot.layer);
   const nativeLayerIds = rasterLayerInfo ? [rasterLayerInfo.layerId] : [snapshot.id];
   const sourceId = rasterLayerInfo?.sourceId ?? snapshot.id;
+  const properties = item?.properties;
+  const assetHrefs = Object.fromEntries(
+    Object.entries(item?.assets ?? {})
+      .filter((entry): entry is [string, { href: string }] => typeof entry[1]?.href === "string")
+      .map(([key, asset]) => [key, asset.href]),
+  );
+  const selectedAsset = stacAssetFromLayerId(snapshot.id);
 
   return {
     id: snapshot.id,
@@ -4689,6 +4696,18 @@ function createStacSearchStoreLayer(
       stacAsset: stacAssetFromLayerId(snapshot.id),
       stacCatalogUrl: catalogUrl,
       stacItemId: item?.id,
+      ...(item?.datetime || properties?.datetime
+        ? { datetime: item?.datetime ?? properties?.datetime }
+        : {}),
+      ...(properties?.platform ? { platform: properties.platform } : {}),
+      ...(properties?.constellation ? { constellation: properties.constellation } : {}),
+      ...(properties?.instruments ? { sensor: properties.instruments } : {}),
+      ...(properties?.gsd ? { gsd: properties.gsd } : {}),
+      ...(properties?.["processing:level"] ? { processingLevel: properties["processing:level"] } : {}),
+      ...(item?.assets ? { bandNames: Object.keys(item.assets) } : {}),
+      ...(selectedAsset && assetHrefs[selectedAsset]
+        ? { primaryAssetUrl: assetHrefs[selectedAsset], assetHrefs }
+        : {}),
       tileType: "raster",
       ...(item?.bbox ? { bounds: item.bbox } : {}),
       ...(deckLayerProps && typeof deckLayerProps === "object" && "_colormap" in deckLayerProps

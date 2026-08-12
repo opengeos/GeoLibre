@@ -9,7 +9,7 @@
     "workers/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w geolibre-desktop",
+    "dev": "npm run dev -w geolibre-desktop -- --open",
     "build": "npm run build -w geolibre-desktop",
     "build:jupyterlite": "node scripts/build-jupyterlite.mjs",
     "build:embed": "node scripts/build-embed.mjs",

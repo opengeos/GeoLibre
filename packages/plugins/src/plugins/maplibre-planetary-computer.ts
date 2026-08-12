@@ -225,6 +225,15 @@ function syncPlanetaryComputerLayersToStore(event: PlanetaryComputerEventData): 
 function createPlanetaryComputerStoreLayer(activeLayer: ActiveLayer): GeoLibreLayer {
   const bbox = activeLayer.item?.bbox ?? activeLayer.collection?.extent?.spatial?.bbox?.[0];
   const collectionId = activeLayer.item?.collection ?? activeLayer.collection?.id ?? "";
+  const properties = activeLayer.item?.properties;
+  const assetNames = activeLayer.item ? Object.keys(activeLayer.item.assets) : activeLayer.assets;
+  const assetHrefs = Object.fromEntries(
+    Object.entries(activeLayer.item?.assets ?? {})
+      .filter((entry): entry is [string, { href: string }] => typeof entry[1]?.href === "string")
+      .map(([key, asset]) => [key, asset.href]),
+  );
+  const preferredAsset = ["visual", "rendered_preview", ...(activeLayer.assets ?? []), ...assetNames]
+    .find((key) => assetHrefs[key]);
 
   return {
     id: activeLayer.id,
@@ -251,6 +260,14 @@ function createPlanetaryComputerStoreLayer(activeLayer: ActiveLayer): GeoLibreLa
       sourceKind: "planetary-computer-raster",
       stacCollectionId: collectionId,
       stacItemId: activeLayer.item?.id,
+      ...(properties?.datetime ? { datetime: properties.datetime } : {}),
+      ...(properties?.platform ? { platform: properties.platform } : {}),
+      ...(properties?.constellation ? { constellation: properties.constellation } : {}),
+      ...(properties?.instruments ? { sensor: properties.instruments } : {}),
+      ...(properties?.gsd ? { gsd: properties.gsd } : {}),
+      ...(properties?.["processing:level"] ? { processingLevel: properties["processing:level"] } : {}),
+      ...(assetNames?.length ? { bandNames: assetNames } : {}),
+      ...(preferredAsset ? { primaryAssetUrl: assetHrefs[preferredAsset], assetHrefs } : {}),
       tileType: "raster",
       ...(bbox ? { bounds: bbox } : {}),
     },

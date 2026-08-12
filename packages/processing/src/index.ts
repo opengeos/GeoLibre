@@ -33,7 +33,11 @@ export {
   type ModelStepResult,
   type RunModelOptions,
 } from "./runner";
-export { NETWORK_TOOLS, getNetworkTool, layerToSequencedPoints } from "./network-tools";
+export {
+  NETWORK_TOOLS,
+  getNetworkTool,
+  layerToSequencedPoints,
+} from "./network-tools";
 export {
   STATISTICS_TOOLS,
   getStatisticsTool,
@@ -45,7 +49,12 @@ export {
   emergingHotSpotTool,
   emergingPattern,
 } from "./statistics-tools";
-export { H3_TOOLS, getH3Tool, createH3GridTool, binPointsTool } from "./h3-tools";
+export {
+  H3_TOOLS,
+  getH3Tool,
+  createH3GridTool,
+  binPointsTool,
+} from "./h3-tools";
 export {
   RASTER_TOOLS,
   getRasterTool,
@@ -214,11 +223,17 @@ export {
   type PmtilesExtractResult,
   type PmtilesSourceInfo,
 } from "./pmtiles-extract";
-export { detectObjects, type Detection, type DetectionOptions } from "./object-detection";
+export {
+  detectObjects,
+  type Detection,
+  type DetectionOptions,
+} from "./object-detection";
 export {
   segmentEverything,
+  createSegmentEverythingSessions,
   type SegmentMask,
   type SegmentEverythingOptions,
+  type SegmentEverythingSessions,
 } from "./segment-everything";
 export {
   extractCogSubset,

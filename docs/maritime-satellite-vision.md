@@ -70,16 +70,16 @@ The resulting workspace should show:
 
 The platform should understand the job being performed because data sufficiency depends on the analytical objective.
 
-| Job | Preferred source characteristics |
-| --- | --- |
-| Port traffic analysis | High-frequency terrestrial historical AIS, port calls, and relevant optical imagery |
-| Open-ocean vessel tracking | Confirmed satellite AIS with documented latency and coverage |
-| Dark-vessel investigation | SAR imagery combined with satellite AIS and clear gap/provenance reporting |
-| Incident reconstruction | High-frequency historical AIS, weather/ocean conditions, and contemporaneous imagery |
-| Fishing activity analysis | AIS history, Sentinel-1 SAR, and appropriately licensed fishing-activity data |
-| Coastal environmental analysis | AIS, Sentinel-2, NOAA CoastWatch, and weather/ocean products |
-| Vessel-specific due diligence | Vessel tracks, identities, ownership, port calls, inspections, and sanctions data |
-| General situational awareness | Live AIS, recent imagery, and environmental layers |
+| Job                            | Preferred source characteristics                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------ |
+| Port traffic analysis          | High-frequency terrestrial historical AIS, port calls, and relevant optical imagery  |
+| Open-ocean vessel tracking     | Confirmed satellite AIS with documented latency and coverage                         |
+| Dark-vessel investigation      | SAR imagery combined with satellite AIS and clear gap/provenance reporting           |
+| Incident reconstruction        | High-frequency historical AIS, weather/ocean conditions, and contemporaneous imagery |
+| Fishing activity analysis      | AIS history, Sentinel-1 SAR, and appropriately licensed fishing-activity data        |
+| Coastal environmental analysis | AIS, Sentinel-2, NOAA CoastWatch, and weather/ocean products                         |
+| Vessel-specific due diligence  | Vessel tracks, identities, ownership, port calls, inspections, and sanctions data    |
+| General situational awareness  | Live AIS, recent imagery, and environmental layers                                   |
 
 Job definitions should be configurable rather than hard-coded assumptions. Each definition can express minimum temporal resolution, acceptable latency, required sensor modalities, geographic scope, licensing needs, and evidentiary standards.
 
@@ -432,6 +432,8 @@ The following decisions should be made during discovery and prototyping:
 
 ## Near-term direction
 
-The next step is a short provider and workflow discovery phase. It should produce a prioritized API inventory, representative response samples, authentication requirements, temporal semantics, expected data volumes, and a thin end-to-end prototype using one maritime source and one imagery source.
+The first implementation step is the [Imagery Detection Workbench](user-guide/imagery-detection-workbench.md): a sensor-aware annotation surface that accepts raster imagery already loaded in GeoLibre, creates oriented vessel boxes, records analyst classifications and source provenance, and exports GeoJSON, CSV, COCO, and YOLO OBB labels. Its generic annotation contract is intentionally separate from sensor-specific model compatibility.
+
+The next step is to add reproducible source-pixel chipping for local and fetchable GeoTIFF/COG assets, then connect model proposals and SAM-assisted refinement to the same reviewed annotation schema. In parallel, provider discovery should continue to produce representative response samples, authentication requirements, temporal semantics, and expected data volumes for the free-source planner.
 
 That prototype should validate the architecture before the provider catalog expands.

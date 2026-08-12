@@ -2,6 +2,7 @@ import { useAppStore } from "@geolibre/core";
 import {
   addCogRasterLayer,
   maplibreAisStreamPlugin,
+  maplibreImageryDetectionWorkbenchPlugin,
   maplibreAnnotationsPlugin,
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
@@ -136,6 +137,7 @@ const manager = new PluginManager();
 manager.registerAll([
   maplibreLayerControlPlugin,
   maplibreAisStreamPlugin,
+  maplibreImageryDetectionWorkbenchPlugin,
   maplibreGeoEditorPlugin,
   maplibreAnnotationsPlugin,
   maplibreBasemapControlPlugin,
