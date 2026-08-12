@@ -215,6 +215,20 @@ describe("desiredTileColumns", () => {
     assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_7"]);
   });
 
+  it("resolves a layer once and re-resolves when it changes", () => {
+    // The sync runs on every store update that replaces the layers array — an
+    // opacity drag on another layer included — so an untouched layer must not
+    // re-parse its expressions.
+    const id = addTileLayer();
+    const first = desiredTileColumns(storedLayer(id));
+    assert.equal(desiredTileColumns(storedLayer(id)), first, "same layer object, same result");
+
+    useAppStore.getState().setLayerStyle(id, { vectorStyleMode: "categorized" });
+    const after = desiredTileColumns(storedLayer(id));
+    assert.notEqual(after, first, "a patched layer is a new object, so it resolves again");
+    assert.deepEqual(after, first);
+  });
+
   it("falls back to the columns in use when the field list is unknown", () => {
     // A project saved before the field list was recorded still styles by name.
     const id = addTileLayer({}, []);

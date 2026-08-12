@@ -688,6 +688,18 @@ function attributePropertiesInUse(layer: GeoLibreLayer): string[] {
 }
 
 /**
+ * Resolved column sets, keyed by the layer object.
+ *
+ * The sync below runs on every store update that replaces the `layers` array —
+ * an opacity drag on an *unrelated* layer fires it per frame — and resolving a
+ * set re-parses the layer's expressions. `updateLayer` keeps the identity of
+ * every layer it did not patch, so keying on the object skips that work with
+ * no invalidation to get wrong: a layer that changed is a different object.
+ * (`layer-sync.ts` memoizes its own label overrides for the same reason.)
+ */
+const tileColumnsByLayer = new WeakMap<GeoLibreLayer, string[]>();
+
+/**
  * The `cols=` set a GeoLens vector-tile layer should be requesting right now:
  * the dataset's fields when the table is narrow enough for the whole-table
  * opt-in, plus whatever the layer's style and bindings currently point at.
@@ -701,13 +713,17 @@ function attributePropertiesInUse(layer: GeoLibreLayer): string[] {
  *   dataset is too wide and the layer uses no attributes yet.
  */
 export function desiredTileColumns(layer: GeoLibreLayer): string[] {
+  const memoized = tileColumnsByLayer.get(layer);
+  if (memoized) return memoized;
   const datasetId = layer.metadata.geolensDatasetId;
-  return tileColumnsFor(
+  const columns = tileColumnsFor(
     stringArray(layer.metadata.fields),
     attributePropertiesInUse(layer),
     typeof datasetId === "string" ? datasetId : layer.id,
     layer.name,
   );
+  tileColumnsByLayer.set(layer, columns);
+  return columns;
 }
 
 /**
