@@ -645,20 +645,34 @@ function isDelimitedTextFileName(path: string): boolean {
 const DELIMITED_TEXT_HEADER_PROBE_BYTES = 1024 * 1024;
 
 /**
- * Reads enough of a delimited file to contain its header row. Decoding a slice
- * can split a multi-byte character at the cut, but the damage is confined to
- * the truncated tail, which is past the header the caller reads.
+ * Reads enough of a delimited file to contain its header row, paired with a
+ * reader for the file's whole text.
+ *
+ * Only a genuine partial probe leaves a full read still to do. Whenever the
+ * header text *is* the whole file, which is every file under the probe size,
+ * it is handed back for reuse rather than decoded a second time.
+ *
+ * Decoding a slice can split a multi-byte character at the cut, but the damage
+ * is confined to the truncated tail, past the header the caller reads.
  *
  * @param file - The delimited file.
- * @returns Text guaranteed to contain the first line break, or the whole file.
+ * @returns The header text and a reader for the full text.
  */
-async function readDelimitedHeaderText(file: File): Promise<string> {
-  if (file.size <= DELIMITED_TEXT_HEADER_PROBE_BYTES) return file.text();
+async function readDelimitedTextSource(file: File): Promise<{
+  headerText: string;
+  readFullText: () => Promise<string>;
+}> {
+  const alreadyWhole = (text: string) => ({
+    headerText: text,
+    readFullText: async () => text,
+  });
+  if (file.size <= DELIMITED_TEXT_HEADER_PROBE_BYTES) return alreadyWhole(await file.text());
   const probe = await file.slice(0, DELIMITED_TEXT_HEADER_PROBE_BYTES).text();
   // Deliberately not "does the probe contain a line break": blank lines before
   // the header contribute breaks of their own, so a header that overruns the
   // probe would still look terminated and be handed back truncated.
-  return hasCompleteHeaderLine(probe) ? probe : file.text();
+  if (hasCompleteHeaderLine(probe)) return { headerText: probe, readFullText: () => file.text() };
+  return alreadyWhole(await file.text());
 }
 
 /**
@@ -673,7 +687,8 @@ async function readDelimitedHeaderText(file: File): Promise<string> {
  *
  * @param source - `headerText` needs only to reach the end of the header row;
  *   `readFullText` is called solely once coordinate columns are confirmed, so a
- *   CSV bound for the DuckDB fallback is never materialized as text first.
+ *   CSV large enough to have been probed rather than read whole is never
+ *   materialized as text just to be handed to the DuckDB fallback.
  * @param path - The file name or path, used in the messages.
  * @param options - Carries the caller's large-dataset guard.
  */
@@ -1970,14 +1985,11 @@ async function loadBrowserVectorFile(
   // has to be parsed here rather than routed away, and carries its own
   // oversized-import guard instead.
   if (isDelimitedTextFileName(file.name)) {
+    // Only the header decides whether this is a lon/lat CSV, and a `File` can
+    // be read in part, so a large CSV headed for the DuckDB fallback below is
+    // never decoded as text in full first.
     const points = await parseDelimitedTextFile(
-      {
-        // Only the header decides whether this is a lon/lat CSV, and a `File`
-        // can be read in part, so a CSV headed for the DuckDB fallback below is
-        // never decoded as text in full first.
-        headerText: await readDelimitedHeaderText(file),
-        readFullText: () => file.text(),
-      },
+      await readDelimitedTextSource(file),
       file.name,
       options,
     );
