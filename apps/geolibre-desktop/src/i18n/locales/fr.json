@@ -1580,6 +1580,10 @@
     "sourceLoading": "Ouverture du COG…",
     "restoreDefaultSource": "Utiliser le terrain mondial",
     "sourceError": "Impossible d’ouvrir le MNT COG.",
+    "sourceErrorEmpty": "Choisissez un MNT COG local ou saisissez son URL.",
+    "sourceErrorBand": "La bande demandée n’existe pas dans ce COG.",
+    "sourceErrorProjection": "Le relief COG ne prend en charge que les MNT en EPSG:3857 et EPSG:4326.",
+    "sourceErrorDetail": "Impossible d’ouvrir le MNT COG. ({{detail}})",
     "reset": "Réinitialiser",
     "done": "Terminé"
   },

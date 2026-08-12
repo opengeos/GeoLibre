@@ -1666,6 +1666,10 @@
     "sourceLoading": "Открытие COG…",
     "restoreDefaultSource": "Использовать глобальный рельеф",
     "sourceError": "Не удалось открыть ЦМР COG.",
+    "sourceErrorEmpty": "Выберите локальную ЦМР COG или укажите её URL.",
+    "sourceErrorBand": "Запрошенный канал отсутствует в этом COG.",
+    "sourceErrorProjection": "Рельеф COG поддерживает только ЦМР в EPSG:3857 и EPSG:4326.",
+    "sourceErrorDetail": "Не удалось открыть ЦМР COG. ({{detail}})",
     "reset": "Сбросить",
     "done": "Готово"
   },

@@ -1537,6 +1537,10 @@
     "sourceLoading": "正在打开 COG…",
     "restoreDefaultSource": "使用全球地形",
     "sourceError": "无法打开 COG DEM。",
+    "sourceErrorEmpty": "请选择本地 COG DEM 或输入其 URL。",
+    "sourceErrorBand": "此 COG 中不存在所请求的波段。",
+    "sourceErrorProjection": "COG 地形仅支持 EPSG:3857 和 EPSG:4326 的 DEM。",
+    "sourceErrorDetail": "无法打开 COG DEM。({{detail}})",
     "reset": "重置",
     "done": "完成"
   },

@@ -1580,6 +1580,10 @@
     "sourceLoading": "COG იხსნება…",
     "restoreDefaultSource": "გლობალური რელიეფის გამოყენება",
     "sourceError": "COG DEM ვერ გაიხსნა.",
+    "sourceErrorEmpty": "აირჩიეთ ლოკალური COG DEM ან შეიყვანეთ მისი URL.",
+    "sourceErrorBand": "მოთხოვნილი არხი ამ COG-ში არ არსებობს.",
+    "sourceErrorProjection": "COG რელიეფი მხარს უჭერს მხოლოდ EPSG:3857 და EPSG:4326 DEM-ებს.",
+    "sourceErrorDetail": "COG DEM ვერ გაიხსნა. ({{detail}})",
     "reset": "საწყისზე დაბრუნება",
     "done": "მზადაა"
   },

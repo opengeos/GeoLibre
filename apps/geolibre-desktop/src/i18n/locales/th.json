@@ -1537,6 +1537,10 @@
     "sourceLoading": "กำลังเปิด COG…",
     "restoreDefaultSource": "ใช้ภูมิประเทศทั่วโลก",
     "sourceError": "ไม่สามารถเปิด DEM แบบ COG ได้",
+    "sourceErrorEmpty": "เลือก DEM แบบ COG ในเครื่อง หรือกรอก URL ของไฟล์",
+    "sourceErrorBand": "ไม่มีแบนด์ที่ร้องขอในไฟล์ COG นี้",
+    "sourceErrorProjection": "ภูมิประเทศ COG รองรับเฉพาะ DEM แบบ EPSG:3857 และ EPSG:4326 เท่านั้น",
+    "sourceErrorDetail": "ไม่สามารถเปิด DEM แบบ COG ได้ ({{detail}})",
     "reset": "รีเซ็ต",
     "done": "เสร็จสิ้น"
   },

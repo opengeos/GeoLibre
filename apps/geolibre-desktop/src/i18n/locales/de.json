@@ -1580,6 +1580,10 @@
     "sourceLoading": "COG wird geöffnet…",
     "restoreDefaultSource": "Globales Gelände verwenden",
     "sourceError": "Das COG-DEM konnte nicht geöffnet werden.",
+    "sourceErrorEmpty": "Wählen Sie ein lokales COG-DEM oder geben Sie dessen URL ein.",
+    "sourceErrorBand": "Das angeforderte Band ist in diesem COG nicht vorhanden.",
+    "sourceErrorProjection": "COG-Gelände unterstützt nur DEMs in EPSG:3857 und EPSG:4326.",
+    "sourceErrorDetail": "Das COG-DEM konnte nicht geöffnet werden. ({{detail}})",
     "reset": "Zurücksetzen",
     "done": "Fertig"
   },

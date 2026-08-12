@@ -26,7 +26,12 @@ export {
   DEFAULT_TERRAIN_EXAGGERATION,
   type TerrainControlOptions,
 } from "./terrain-control";
-export { encodeTerrariumDem, registerCogDemSource } from "./cog-dem-source";
+export {
+  CogDemError,
+  encodeTerrariumDem,
+  registerCogDemSource,
+  type CogDemErrorCode,
+} from "./cog-dem-source";
 export {
   detectGeometryProfile,
   getLayerBounds,

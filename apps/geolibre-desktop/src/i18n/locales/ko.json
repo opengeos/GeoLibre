@@ -1537,6 +1537,10 @@
     "sourceLoading": "COG 여는 중…",
     "restoreDefaultSource": "전 세계 지형 사용",
     "sourceError": "COG DEM을 열 수 없습니다.",
+    "sourceErrorEmpty": "로컬 COG DEM을 선택하거나 URL을 입력하세요.",
+    "sourceErrorBand": "요청한 밴드가 이 COG에 없습니다.",
+    "sourceErrorProjection": "COG 지형은 EPSG:3857 및 EPSG:4326 DEM만 지원합니다.",
+    "sourceErrorDetail": "COG DEM을 열 수 없습니다. ({{detail}})",
     "reset": "초기화",
     "done": "완료"
   },

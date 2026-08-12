@@ -1,7 +1,9 @@
 import {
+  CogDemError,
   DEFAULT_TERRAIN_EXAGGERATION,
   TERRAIN_SETTINGS_CLOSE_EVENT,
   TERRAIN_SETTINGS_EVENT,
+  type CogDemErrorCode,
   type MapController,
 } from "@geolibre/map";
 import {
@@ -26,6 +28,14 @@ import {
 
 // Default sourced from the map package so it can't drift from the control's.
 const DEFAULT_EXAGGERATION = DEFAULT_TERRAIN_EXAGGERATION;
+
+// @geolibre/map is i18n-agnostic and throws English messages, so the failure
+// kinds it tags are mapped to the catalog here rather than shown verbatim.
+const SOURCE_ERROR_KEYS = {
+  "empty-source": "terrainSettings.sourceErrorEmpty",
+  "unsupported-band": "terrainSettings.sourceErrorBand",
+  "unsupported-projection": "terrainSettings.sourceErrorProjection",
+} as const satisfies Record<CogDemErrorCode, string>;
 
 export interface TerrainSettingsDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
@@ -119,6 +129,17 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
     setDraft(String(clamped));
   };
 
+  // Anything the map package did not tag — a network or decode failure — keeps
+  // its message as detail inside a translated sentence, so the user still sees
+  // why it failed without the whole line arriving in English.
+  const translateSourceError = (error: unknown): string => {
+    if (error instanceof CogDemError) return t(SOURCE_ERROR_KEYS[error.code]);
+    const detail = error instanceof Error ? error.message.trim() : "";
+    return detail
+      ? t("terrainSettings.sourceErrorDetail", { detail })
+      : t("terrainSettings.sourceError");
+  };
+
   // Optional chaining on the ref would resolve to undefined and read as a
   // successful source change, leaving the dialog claiming a switch that never
   // happened. Surface the failure instead.
@@ -134,7 +155,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       await controller.setTerrainCogSource(source);
       onApplied?.();
     } catch (error) {
-      setSourceError(error instanceof Error ? error.message : t("terrainSettings.sourceError"));
+      setSourceError(translateSourceError(error));
     } finally {
       setSourceLoading(false);
     }

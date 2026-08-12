@@ -369,6 +369,9 @@ export class MapController {
   private cogDemRegistration: CogDemSourceRegistration | null = null;
   private cogDemUrl: string | null = null;
   private cogDemGeneration = 0;
+  // Seam for tests: opening a COG needs a real GeoTIFF over the network, which
+  // the generation-guard tests in setTerrainCogSource have no use for.
+  private openCogDem: typeof registerCogDemSource = registerCogDemSource;
   private terrainExaggeration = DEFAULT_TERRAIN_EXAGGERATION;
   // Undefined until the React layer supplies a translated label; the control
   // falls back to its own default in the meantime (single source for the string).
@@ -2529,9 +2532,7 @@ export class MapController {
   async setTerrainCogSource(source: string | Blob | null, band = 1): Promise<void> {
     const normalizedSource = typeof source === "string" ? source.trim() || null : source;
     const generation = ++this.cogDemGeneration;
-    const registration = normalizedSource
-      ? await registerCogDemSource(normalizedSource, band)
-      : null;
+    const registration = normalizedSource ? await this.openCogDem(normalizedSource, band) : null;
     // A slower, older request must not replace a source selected after it.
     if (generation !== this.cogDemGeneration) {
       registration?.dispose();

@@ -1580,6 +1580,10 @@
     "sourceLoading": "COG openen…",
     "restoreDefaultSource": "Wereldwijd terrein gebruiken",
     "sourceError": "De COG-DEM kon niet worden geopend.",
+    "sourceErrorEmpty": "Kies een lokaal COG-DEM of voer de URL ervan in.",
+    "sourceErrorBand": "De gevraagde band bestaat niet in deze COG.",
+    "sourceErrorProjection": "COG-terrein ondersteunt alleen DEM's in EPSG:3857 en EPSG:4326.",
+    "sourceErrorDetail": "De COG-DEM kon niet worden geopend. ({{detail}})",
     "reset": "Standaardwaarden",
     "done": "Gereed"
   },

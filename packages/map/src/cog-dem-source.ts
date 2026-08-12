@@ -5,6 +5,10 @@ const PROTOCOL = "cog-dem";
 const TILE_SIZE = 256;
 const WEB_MERCATOR_HALF_WORLD = 20_037_508.342789244;
 const MAX_MERCATOR_LATITUDE = 85.0511287798066;
+// Halving each axis, 30 levels take the largest TIFF an offset can address down
+// to a single pixel, so a real pyramid never reaches this. It bounds the
+// getImage() fan-out for a file whose IFD chain claims far more.
+const MAX_IFDS = 32;
 /** TIFF NewSubfileType bit 0: the IFD is a reduced-resolution overview. */
 const REDUCED_RESOLUTION_SUBFILE_TYPE = 0b001;
 /** TIFF NewSubfileType bit 2: the IFD is a transparency mask, not imagery. */
@@ -22,6 +26,24 @@ interface CogDemDataset {
   /** Tile reads still using the reader; see closeWhenIdle. */
   pendingReads: number;
   disposed: boolean;
+}
+
+/** Failure kinds the app layer can translate; see CogDemError. */
+export type CogDemErrorCode = "empty-source" | "unsupported-band" | "unsupported-projection";
+
+/**
+ * A COG that could not be used as a terrain source, tagged with why. This
+ * package is i18n-agnostic, so the message is English and the code is what the
+ * app layer maps to a translated string.
+ */
+export class CogDemError extends Error {
+  readonly code: CogDemErrorCode;
+
+  constructor(code: CogDemErrorCode, message: string) {
+    super(message);
+    this.name = "CogDemError";
+    this.code = code;
+  }
 }
 
 export interface CogDemSourceRegistration {
@@ -425,7 +447,7 @@ export async function registerCogDemSource(
     !normalizedSource ||
     (typeof Blob !== "undefined" && source instanceof Blob && source.size === 0)
   ) {
-    throw new Error("Choose a local COG DEM or enter its URL.");
+    throw new CogDemError("empty-source", "Choose a local COG DEM or enter its URL.");
   }
   const { fromBlob, fromUrl } = await import("geotiff");
   const tiff =
@@ -435,17 +457,23 @@ export async function registerCogDemSource(
   const image = await tiff.getImage();
   if (band < 1 || band > image.getSamplesPerPixel()) {
     closeQuietly(tiff);
-    throw new Error(`Band ${band} does not exist in this COG.`);
+    throw new CogDemError("unsupported-band", `Band ${band} does not exist in this COG.`);
   }
   const projection = projectionFromGeoKeys(image.getGeoKeys() as Record<string, unknown> | null);
   if (!projection) {
     closeQuietly(tiff);
-    throw new Error("COG terrain currently supports EPSG:3857 and EPSG:4326 DEMs.");
+    throw new CogDemError(
+      "unsupported-projection",
+      "COG terrain currently supports EPSG:3857 and EPSG:4326 DEMs.",
+    );
   }
   ensureCogDemProtocol();
   let images: GeoTIFFImage[];
   try {
-    const imageCount = await tiff.getImageCount();
+    // imageCount comes from the file's own IFD chain, so a corrupt or crafted
+    // one can advertise an enormous pyramid and fan out into that many
+    // concurrent getImage() calls before anything has had a chance to validate.
+    const imageCount = Math.min(await tiff.getImageCount(), MAX_IFDS);
     const allImages = await Promise.all(
       Array.from({ length: imageCount }, (_, index) => tiff.getImage(index)),
     );

@@ -1580,6 +1580,10 @@
     "sourceLoading": "COG açılıyor…",
     "restoreDefaultSource": "Küresel araziyi kullan",
     "sourceError": "COG DEM açılamadı.",
+    "sourceErrorEmpty": "Yerel bir COG DEM seçin veya URL’sini girin.",
+    "sourceErrorBand": "İstenen bant bu COG dosyasında yok.",
+    "sourceErrorProjection": "COG arazi yalnızca EPSG:3857 ve EPSG:4326 DEM’lerini destekler.",
+    "sourceErrorDetail": "COG DEM açılamadı. ({{detail}})",
     "reset": "Sıfırla",
     "done": "Bitti"
   },
