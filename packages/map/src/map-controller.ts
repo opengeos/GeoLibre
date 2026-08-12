@@ -883,6 +883,9 @@ export class MapController {
     this.removeGeolocateControl();
     this.removeGlobeControl();
     this.removeTerrainControl();
+    // Bumping the generation first invalidates a COG registration still being
+    // opened, so it disposes itself instead of attaching to a destroyed map.
+    this.cogDemGeneration += 1;
     this.cogDemRegistration?.dispose();
     this.cogDemRegistration = null;
     this.removeScaleControl();

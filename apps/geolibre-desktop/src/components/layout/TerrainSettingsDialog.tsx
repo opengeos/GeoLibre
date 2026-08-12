@@ -119,11 +119,20 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
     setDraft(String(clamped));
   };
 
-  const applyCogSource = async () => {
+  // Optional chaining on the ref would resolve to undefined and read as a
+  // successful source change, leaving the dialog claiming a switch that never
+  // happened. Surface the failure instead.
+  const applyTerrainSource = async (source: string | File | null, onApplied?: () => void) => {
+    const controller = mapControllerRef.current;
+    if (!controller) {
+      setSourceError(t("terrainSettings.sourceError"));
+      return;
+    }
     setSourceLoading(true);
     setSourceError(null);
     try {
-      await mapControllerRef.current?.setTerrainCogSource(terrainUrl);
+      await controller.setTerrainCogSource(source);
+      onApplied?.();
     } catch (error) {
       setSourceError(error instanceof Error ? error.message : t("terrainSettings.sourceError"));
     } finally {
@@ -131,34 +140,14 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
     }
   };
 
-  const applyLocalCogSource = async (file: File) => {
-    setSourceLoading(true);
-    setSourceError(null);
-    try {
-      await mapControllerRef.current?.setTerrainCogSource(file);
-      // Keep the URL input empty: a local filename is not a fetchable URL, and
-      // leaving it in this field would let a later "Use COG DEM" click try to
-      // open it as an HTTP source.
-      setTerrainUrl("");
-    } catch (error) {
-      setSourceError(error instanceof Error ? error.message : t("terrainSettings.sourceError"));
-    } finally {
-      setSourceLoading(false);
-    }
-  };
+  const applyCogSource = () => applyTerrainSource(terrainUrl);
 
-  const restoreDefaultSource = async () => {
-    setSourceLoading(true);
-    setSourceError(null);
-    try {
-      await mapControllerRef.current?.setTerrainCogSource(null);
-      setTerrainUrl("");
-    } catch (error) {
-      setSourceError(error instanceof Error ? error.message : t("terrainSettings.sourceError"));
-    } finally {
-      setSourceLoading(false);
-    }
-  };
+  // Keep the URL input empty: a local filename is not a fetchable URL, and
+  // leaving it in this field would let a later "Use COG DEM" click try to open
+  // it as an HTTP source.
+  const applyLocalCogSource = (file: File) => applyTerrainSource(file, () => setTerrainUrl(""));
+
+  const restoreDefaultSource = () => applyTerrainSource(null, () => setTerrainUrl(""));
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -219,7 +208,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
                 id="terrain-cog-file"
                 type="file"
                 accept=".tif,.tiff,image/tiff"
-                disabled={sourceLoading}
+                disabled={sourceLoading || !mapControllerRef.current}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   if (file) void applyLocalCogSource(file);
@@ -239,7 +228,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
               <Button
                 type="button"
                 variant="outline"
-                disabled={sourceLoading || !terrainUrl.trim()}
+                disabled={sourceLoading || !terrainUrl.trim() || !mapControllerRef.current}
                 onClick={() => void applyCogSource()}
               >
                 {sourceLoading ? t("terrainSettings.sourceLoading") : t("terrainSettings.useCog")}

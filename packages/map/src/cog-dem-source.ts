@@ -1,5 +1,5 @@
 import maplibregl, { type RequestParameters } from "maplibre-gl";
-import type { GeoTIFF, TypedArrayWithDimensions } from "geotiff";
+import type { GeoTIFF, GeoTIFFImage, TypedArrayWithDimensions } from "geotiff";
 
 const PROTOCOL = "cog-dem";
 const TILE_SIZE = 256;
@@ -10,6 +10,8 @@ type DemProjection = "EPSG:3857" | "EPSG:4326";
 
 interface CogDemDataset {
   tiff: GeoTIFF;
+  images: GeoTIFFImage[];
+  sourceBounds: [number, number, number, number];
   projection: DemProjection;
   nodata: number | null;
   band: number;
@@ -20,6 +22,8 @@ export interface CogDemSourceRegistration {
   tiles: [string];
   /** Geographic extent reported by the COG, when it can be derived safely. */
   bounds?: [number, number, number, number];
+  /** Render one terrain tile. Exposed for diagnostics and integration tests. */
+  renderTile: (z: number, x: number, y: number) => Promise<Uint8ClampedArray>;
   /** Release the COG reader after this terrain source is replaced. */
   dispose: () => void;
 }
@@ -27,6 +31,10 @@ export interface CogDemSourceRegistration {
 const datasets = new Map<string, CogDemDataset>();
 let datasetSequence = 0;
 let protocolRegistered = false;
+
+function isMissing(value: number, nodata: number | null): boolean {
+  return !Number.isFinite(value) || (nodata !== null && value === nodata);
+}
 
 /** Encode elevations in metres into Mapzen Terrarium RGB pixels. */
 export function encodeTerrariumDem(
@@ -36,7 +44,7 @@ export function encodeTerrariumDem(
   const rgba = new Uint8ClampedArray(elevations.length * 4);
   for (let index = 0; index < elevations.length; index += 1) {
     const elevation = Number(elevations[index]);
-    const missing = !Number.isFinite(elevation) || (nodata !== null && elevation === nodata);
+    const missing = isMissing(elevation, nodata);
     // MapLibre's raster-dem decoder has no missing-data representation. A flat
     // zero-metre pixel is the least surprising fill outside a partial DEM and
     // avoids the extreme spike that encoding NaN would otherwise produce.
@@ -104,6 +112,7 @@ function normalizeNoData(value: unknown): number | null {
 function remapGeographicRows(
   source: TypedArrayWithDimensions,
   mercatorBounds: [number, number, number, number],
+  nodata: number | null = null,
 ): Float64Array {
   const output = new Float64Array(TILE_SIZE * TILE_SIZE);
   const [, minY, , maxY] = mercatorBounds;
@@ -120,7 +129,16 @@ function remapGeographicRows(
     for (let column = 0; column < TILE_SIZE; column += 1) {
       const a = Number(source[y0 * source.width + column]);
       const b = Number(source[y1 * source.width + column]);
-      output[row * TILE_SIZE + column] = a + (b - a) * fraction;
+      // Interpolating across a nodata sentinel (commonly -9999 or -3.4e38)
+      // would produce a value near, but not equal to, the sentinel — slipping
+      // past the equality check in encodeTerrariumDem and drawing a spike at
+      // the DEM edge. Fall back to the nearer sample instead of blending.
+      output[row * TILE_SIZE + column] =
+        isMissing(a, nodata) || isMissing(b, nodata)
+          ? fraction < 0.5
+            ? a
+            : b
+          : a + (b - a) * fraction;
     }
   }
   return output;
@@ -142,17 +160,61 @@ async function readTile(
           longitudeFromMercatorX(bounds[2]),
           mercatorYToLatitude(bounds[3]),
         ];
-  const rasters = await dataset.tiff.readRasters({
-    bbox,
+  const requestedResolution = Math.max(
+    Math.abs(bbox[2] - bbox[0]) / TILE_SIZE,
+    Math.abs(bbox[3] - bbox[1]) / TILE_SIZE,
+  );
+  // Pick the coarsest overview that is still at least as detailed as the
+  // requested tile. Using GeoTIFF.readRasters({bbox}) here looks convenient,
+  // but on a global 86,400 x 43,200 COG such as GEBCO it may allocate an
+  // intermediate array for the base image before resizing it (hundreds of
+  // billions of entries). Selecting the IFD and pixel window explicitly keeps
+  // memory proportional to one 256 px terrain tile.
+  let image = dataset.images[0];
+  for (const candidate of dataset.images) {
+    const resolution = candidate.getResolution(dataset.images[0]);
+    if (Math.max(Math.abs(resolution[0]), Math.abs(resolution[1])) <= requestedResolution) {
+      image = candidate;
+    } else {
+      break;
+    }
+  }
+  const [sourceMinX, sourceMinY, sourceMaxX, sourceMaxY] = dataset.sourceBounds;
+  const clipped: [number, number, number, number] = [
+    Math.max(sourceMinX, bbox[0]),
+    Math.max(sourceMinY, bbox[1]),
+    Math.min(sourceMaxX, bbox[2]),
+    Math.min(sourceMaxY, bbox[3]),
+  ];
+  if (clipped[0] >= clipped[2] || clipped[1] >= clipped[3]) {
+    return new Float64Array(TILE_SIZE * TILE_SIZE).fill(Number.NaN);
+  }
+  const width = image.getWidth();
+  const height = image.getHeight();
+  const window = [
+    Math.max(0, Math.floor(((clipped[0] - sourceMinX) / (sourceMaxX - sourceMinX)) * width)),
+    Math.max(0, Math.floor(((sourceMaxY - clipped[3]) / (sourceMaxY - sourceMinY)) * height)),
+    Math.min(width, Math.ceil(((clipped[2] - sourceMinX) / (sourceMaxX - sourceMinX)) * width)),
+    Math.min(height, Math.ceil(((sourceMaxY - clipped[1]) / (sourceMaxY - sourceMinY)) * height)),
+  ];
+  const rasters = await image.readRasters({
+    window,
     width: TILE_SIZE,
     height: TILE_SIZE,
     samples: [dataset.band],
     interleave: true,
-    resampleMethod: "bilinear",
+    // Nearest, not bilinear: bilinear blends real samples with the nodata
+    // sentinel at void/ocean/DEM edges, and the blend lands near — but not on
+    // — the sentinel, so encodeTerrariumDem reads it as a real elevation and
+    // draws a spike. An overview at least as detailed as the tile is selected
+    // above, so the resampling ratio is small either way.
+    resampleMethod: "nearest",
     fillValue: Number.NaN,
   });
   const values = rasters as TypedArrayWithDimensions;
-  return dataset.projection === "EPSG:4326" ? remapGeographicRows(values, bounds) : values;
+  return dataset.projection === "EPSG:4326"
+    ? remapGeographicRows(values, bounds, dataset.nodata)
+    : values;
 }
 
 async function rgbaToPng(rgba: Uint8ClampedArray): Promise<ArrayBuffer> {
@@ -230,6 +292,7 @@ export async function registerCogDemSource(
       : await fromBlob(normalizedSource);
   const image = await tiff.getImage();
   if (band < 1 || band > image.getSamplesPerPixel()) {
+    await tiff.close();
     throw new Error(`Band ${band} does not exist in this COG.`);
   }
   const projection = projectionFromGeoKeys(image.getGeoKeys() as Record<string, unknown> | null);
@@ -238,19 +301,28 @@ export async function registerCogDemSource(
     throw new Error("COG terrain currently supports EPSG:3857 and EPSG:4326 DEMs.");
   }
   ensureCogDemProtocol();
+  const imageCount = await tiff.getImageCount();
+  const images = await Promise.all(
+    Array.from({ length: imageCount }, (_, index) => tiff.getImage(index)),
+  );
   const key = String(++datasetSequence);
   const directory = image.getFileDirectory() as unknown as Record<string, unknown>;
   datasets.set(key, {
     tiff,
+    images,
+    sourceBounds: image.getBoundingBox() as [number, number, number, number],
     projection,
     nodata: normalizeNoData(directory.GDAL_NODATA),
     band: band - 1,
   });
   const sourceBounds = image.getBoundingBox();
   const bounds = geographicBounds(sourceBounds, projection);
+  const dataset = datasets.get(key)!;
   return {
     tiles: [`${PROTOCOL}://${key}/{z}/{x}/{y}`],
     bounds,
+    renderTile: async (z, x, y) =>
+      encodeTerrariumDem(await readTile(dataset, z, x, y), dataset.nodata),
     dispose: () => {
       const dataset = datasets.get(key);
       datasets.delete(key);
