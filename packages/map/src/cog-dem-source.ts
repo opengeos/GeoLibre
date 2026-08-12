@@ -106,13 +106,23 @@ function projectionFromGeoKeys(geoKeys: Record<string, unknown> | null): DemProj
   return null;
 }
 
-function normalizeNoData(value: unknown): number | null {
-  const parsed = typeof value === "string" ? Number(value) : Number.NaN;
+/** Read the GDAL_NODATA tag as a number. Exported for tests. */
+export function normalizeNoData(value: unknown): number | null {
+  // GDAL writes GDAL_NODATA as a NUL-terminated ASCII field and geotiff.js
+  // hands the NUL through, which Number() reads as NaN. parseFloat stops at the
+  // terminator, so the sentinel survives and nodata pixels stay detectable.
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const parsed = typeof value === "string" ? parseFloat(value) : Number.NaN;
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** Round a tile-space edge to a whole pixel inside the 256 px tile. */
+function clampTileEdge(value: number): number {
+  return Math.max(0, Math.min(TILE_SIZE, Math.round(value)));
+}
+
 function remapGeographicRows(
-  source: TypedArrayWithDimensions,
+  source: Float64Array,
   mercatorBounds: [number, number, number, number],
   nodata: number | null = null,
 ): Float64Array {
@@ -124,13 +134,13 @@ function remapGeographicRows(
   for (let row = 0; row < TILE_SIZE; row += 1) {
     const mercatorY = maxY - ((row + 0.5) / TILE_SIZE) * (maxY - minY);
     const latitude = mercatorYToLatitude(mercatorY);
-    const sourceY = ((north - latitude) / latitudeSpan) * (source.height - 1);
-    const y0 = Math.max(0, Math.min(source.height - 1, Math.floor(sourceY)));
-    const y1 = Math.min(source.height - 1, y0 + 1);
+    const sourceY = ((north - latitude) / latitudeSpan) * (TILE_SIZE - 1);
+    const y0 = Math.max(0, Math.min(TILE_SIZE - 1, Math.floor(sourceY)));
+    const y1 = Math.min(TILE_SIZE - 1, y0 + 1);
     const fraction = sourceY - y0;
     for (let column = 0; column < TILE_SIZE; column += 1) {
-      const a = Number(source[y0 * source.width + column]);
-      const b = Number(source[y1 * source.width + column]);
+      const a = source[y0 * TILE_SIZE + column];
+      const b = source[y1 * TILE_SIZE + column];
       // Interpolating across a nodata sentinel (commonly -9999 or -3.4e38)
       // would produce a value near, but not equal to, the sentinel — slipping
       // past the equality check in encodeTerrariumDem and drawing a spike at
@@ -222,10 +232,25 @@ async function readTile(
       ),
     ),
   ];
+  // The window covers whole source pixels, so its own extent — not the extent
+  // that was asked for — says where these samples belong in the tile. Resizing
+  // the window straight to 256 x 256 would stretch a partial overlap across the
+  // whole tile, so read it at the size of the sub-rectangle it really occupies
+  // and leave the rest of the tile as nodata.
+  const pixelSpanX = (sourceMaxX - sourceMinX) / width;
+  const pixelSpanY = (sourceMaxY - sourceMinY) / height;
+  const tileColumn = (sourceX: number) =>
+    clampTileEdge(((sourceX - bbox[0]) / (bbox[2] - bbox[0])) * TILE_SIZE);
+  const tileRow = (sourceY: number) =>
+    clampTileEdge(((bbox[3] - sourceY) / (bbox[3] - bbox[1])) * TILE_SIZE);
+  const destLeft = tileColumn(sourceMinX + window[0] * pixelSpanX);
+  const destTop = tileRow(sourceMaxY - window[1] * pixelSpanY);
+  const destWidth = Math.max(1, tileColumn(sourceMinX + window[2] * pixelSpanX) - destLeft);
+  const destHeight = Math.max(1, tileRow(sourceMaxY - window[3] * pixelSpanY) - destTop);
   const rasters = await image.readRasters({
     window,
-    width: TILE_SIZE,
-    height: TILE_SIZE,
+    width: destWidth,
+    height: destHeight,
     samples: [dataset.band],
     interleave: true,
     // Nearest, not bilinear: bilinear blends real samples with the nodata
@@ -237,9 +262,16 @@ async function readTile(
     fillValue: Number.NaN,
   });
   const values = rasters as TypedArrayWithDimensions;
+  const tile = new Float64Array(TILE_SIZE * TILE_SIZE).fill(Number.NaN);
+  for (let row = 0; row < destHeight && destTop + row < TILE_SIZE; row += 1) {
+    const target = (destTop + row) * TILE_SIZE + destLeft;
+    for (let column = 0; column < destWidth && destLeft + column < TILE_SIZE; column += 1) {
+      tile[target + column] = Number(values[row * destWidth + column]);
+    }
+  }
   return dataset.projection === "EPSG:4326"
-    ? remapGeographicRows(values, bounds, dataset.nodata)
-    : values;
+    ? remapGeographicRows(tile, bounds, dataset.nodata)
+    : tile;
 }
 
 async function rgbaToPng(rgba: Uint8ClampedArray): Promise<ArrayBuffer> {
@@ -326,21 +358,28 @@ export async function registerCogDemSource(
     throw new Error("COG terrain currently supports EPSG:3857 and EPSG:4326 DEMs.");
   }
   ensureCogDemProtocol();
-  const imageCount = await tiff.getImageCount();
-  const allImages = await Promise.all(
-    Array.from({ length: imageCount }, (_, index) => tiff.getImage(index)),
-  );
-  // getImageCount() counts every IFD, transparency masks included. A mask IFD
-  // left in this list can win the overview selection in readTile and have its
-  // mask samples read as elevations, so keep only the full-resolution image and
-  // the reduced-resolution overviews.
-  const images = allImages.filter((candidate, index) => {
-    if (index === 0) return true;
-    const subfileType = Number(
-      (candidate.getFileDirectory() as unknown as Record<string, unknown>).NewSubfileType ?? 0,
+  let images: GeoTIFFImage[];
+  try {
+    const imageCount = await tiff.getImageCount();
+    const allImages = await Promise.all(
+      Array.from({ length: imageCount }, (_, index) => tiff.getImage(index)),
     );
-    return (subfileType & MASK_SUBFILE_TYPE) === 0;
-  });
+    // getImageCount() counts every IFD, transparency masks included. A mask IFD
+    // left in this list can win the overview selection in readTile and have its
+    // mask samples read as elevations, so keep only the full-resolution image
+    // and the reduced-resolution overviews.
+    images = allImages.filter((candidate, index) => {
+      if (index === 0) return true;
+      const subfileType = Number(
+        (candidate.getFileDirectory() as unknown as Record<string, unknown>).NewSubfileType ?? 0,
+      );
+      return (subfileType & MASK_SUBFILE_TYPE) === 0;
+    });
+  } catch (error) {
+    // A truncated or corrupt overview IFD must not leak the open reader.
+    await tiff.close();
+    throw error;
+  }
   const key = String(++datasetSequence);
   const directory = image.getFileDirectory() as unknown as Record<string, unknown>;
   datasets.set(key, {
