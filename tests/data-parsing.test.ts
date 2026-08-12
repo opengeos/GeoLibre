@@ -6,6 +6,7 @@ import {
   detectCoordinateFields,
   detectDelimitedTextDelimiter,
   firstDelimitedTextLine,
+  hasCompleteHeaderLine,
   parseCoordinate,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
@@ -365,6 +366,21 @@ describe("delimited text row counting and header slicing", () => {
     assert.equal(firstDelimitedTextLine("a,b\r\n1,2"), "a,b");
     assert.equal(firstDelimitedTextLine("﻿a,b\n1,2"), "a,b");
     assert.equal(firstDelimitedTextLine("a,b"), "a,b");
+  });
+
+  it("reports whether a prefix holds the header's own terminator", () => {
+    assert.equal(hasCompleteHeaderLine("a,b\n1,2"), true);
+    assert.equal(hasCompleteHeaderLine("a,b\r\n1,2"), true);
+    assert.equal(hasCompleteHeaderLine("a,b\r1,2"), true);
+    // Cut mid-header: the prefix ends before any terminator.
+    assert.equal(hasCompleteHeaderLine("a,b,c"), false);
+    // The trap this exists for: the blank line supplies a line break, but the
+    // header after it is still unterminated, so a plain newline test would
+    // wrongly call this prefix complete.
+    assert.equal(hasCompleteHeaderLine("\n\na,b,c"), false);
+    assert.equal(hasCompleteHeaderLine("\n\na,b,c\n1,2,3"), true);
+    assert.equal(hasCompleteHeaderLine(""), false);
+    assert.equal(hasCompleteHeaderLine("\n \n"), false);
   });
 
   it("ends the header at a bare CR, so a classic-Mac file is not one long line", () => {

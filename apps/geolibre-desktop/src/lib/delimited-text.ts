@@ -87,7 +87,7 @@ export function parseDelimitedTextLayer(
   }
   if (!wantsLatitude && !wantsLongitude) {
     const tableFeatures: Feature<Geometry | null, GeoJsonProperties>[] = [];
-    for (const row of body.rows()) {
+    for (const row of body.rows) {
       tableFeatures.push({
         type: "Feature",
         geometry: null,
@@ -124,7 +124,7 @@ export function parseDelimitedTextLayer(
   let totalRows = 0;
   const features: Feature<Point, GeoJsonProperties>[] = [];
 
-  for (const row of body.rows()) {
+  for (const row of body.rows) {
     totalRows += 1;
     // For a projected CRS, treat a bare comma as a thousands separator (large
     // easting/northing) rather than a decimal point.
@@ -188,7 +188,7 @@ export function parseDelimitedTextRows(
 
   const fields = body.fields;
   const rows: Record<string, string>[] = [];
-  for (const row of body.rows()) {
+  for (const row of body.rows) {
     const record: Record<string, string> = {};
     fields.forEach((field, index) => {
       record[field] = (row[index] ?? "").trim();
@@ -315,12 +315,14 @@ function* iterateDelimitedRows(text: string, delimiter: string): Generator<strin
  * dropped. Returns `null` when the text has no header row or no data rows, so
  * each caller can raise its own error.
  *
- * `rows()` streams from the same underlying scan and so can only be consumed
- * once; that is what keeps a large file from being held in memory twice.
+ * `rows` is the live generator over the same underlying scan, not a factory that
+ * restarts it: consuming it twice would split the rows between the consumers
+ * rather than replay them. It is exposed as the generator itself so that
+ * single-use contract is visible at every call site.
  */
 interface DelimitedTextBody {
   fields: string[];
-  rows: () => Generator<string[]>;
+  rows: Generator<string[]>;
 }
 
 function readDelimitedTextBody(text: string, delimiter: string): DelimitedTextBody | null {
@@ -338,10 +340,10 @@ function readDelimitedTextBody(text: string, delimiter: string): DelimitedTextBo
 
   return {
     fields: uniqueFieldNames(headerRow.map((field) => field.trim())),
-    rows: function* () {
+    rows: (function* () {
       yield firstDataRow;
       for (let row = nextRow(); row !== null; row = nextRow()) yield row;
-    },
+    })(),
   };
 }
 
@@ -464,6 +466,35 @@ export function countDelimitedTextRows(text: string, delimiter: string): number 
  *   blank.
  */
 export function firstDelimitedTextLine(text: string): string {
+  const bounds = headerLineBounds(text);
+  return bounds ? text.slice(bounds.start, bounds.end) : "";
+}
+
+/**
+ * Whether `text` holds a *complete* header line, meaning the first non-blank
+ * line ends at a line break within `text` rather than running off its end.
+ *
+ * A caller that read only a prefix of a file uses this to tell "the header fits
+ * in what I read" from "my prefix was cut mid-header". Merely testing the
+ * prefix for a line break is not equivalent: leading blank lines contribute
+ * line breaks of their own, so a header that overruns the prefix can still look
+ * terminated.
+ *
+ * @param text - A prefix of a delimited file, optionally starting with a BOM.
+ * @returns True when the header line's own terminator is present.
+ */
+export function hasCompleteHeaderLine(text: string): boolean {
+  return headerLineBounds(text)?.terminated ?? false;
+}
+
+/** The first non-blank line's span, and whether its terminator was reached. */
+interface HeaderLineBounds {
+  start: number;
+  end: number;
+  terminated: boolean;
+}
+
+function headerLineBounds(text: string): HeaderLineBounds | null {
   let start = contentStart(text);
   while (start < text.length) {
     // Blankness is tracked during the same scan that finds the terminator, so
@@ -477,14 +508,14 @@ export function firstDelimitedTextLine(text: string): string {
       if (!hasContent && !isTrimmableCode(code, text, end)) hasContent = true;
       end += 1;
     }
-    if (hasContent) return text.slice(start, end);
-    if (end >= text.length) return "";
+    if (hasContent) return { start, end, terminated: end < text.length };
+    if (end >= text.length) return null;
     start =
       text.charCodeAt(end) === CARRIAGE_RETURN_CODE && text.charCodeAt(end + 1) === LINE_FEED_CODE
         ? end + 2
         : end + 1;
   }
-  return "";
+  return null;
 }
 
 /**

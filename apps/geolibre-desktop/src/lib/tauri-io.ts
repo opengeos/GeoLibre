@@ -26,6 +26,7 @@ import {
   detectCoordinateFields,
   detectDelimitedTextDelimiter,
   firstDelimitedTextLine,
+  hasCompleteHeaderLine,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "./delimited-text";
@@ -654,7 +655,10 @@ const DELIMITED_TEXT_HEADER_PROBE_BYTES = 1024 * 1024;
 async function readDelimitedHeaderText(file: File): Promise<string> {
   if (file.size <= DELIMITED_TEXT_HEADER_PROBE_BYTES) return file.text();
   const probe = await file.slice(0, DELIMITED_TEXT_HEADER_PROBE_BYTES).text();
-  return probe.includes("\n") ? probe : file.text();
+  // Deliberately not "does the probe contain a line break": blank lines before
+  // the header contribute breaks of their own, so a header that overruns the
+  // probe would still look terminated and be handed back truncated.
+  return hasCompleteHeaderLine(probe) ? probe : file.text();
 }
 
 /**
