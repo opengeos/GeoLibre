@@ -1,0 +1,171 @@
+import assert from "node:assert/strict";
+import { beforeEach, describe, it } from "node:test";
+import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { tileColumnsOf } from "../packages/plugins/src/plugins/geolens-api";
+import {
+  desiredTileColumns,
+  MAX_GEOLENS_TILE_COLUMNS,
+} from "../packages/plugins/src/plugins/maplibre-geolens";
+
+/**
+ * The `cols=` opt-in that makes a GeoLens vector-tile layer carry attributes.
+ *
+ * GeoLens projects no attribute columns below zoom 10, so without this a layer
+ * viewed at world zoom hands MapLibre `properties: {}` on every feature and
+ * everything that reads attributes off the map — categorized styling, the Time
+ * Slider bind dialog, labels, popups — finds nothing (GeoLibre#1854).
+ */
+
+const BASE_URL = "https://datasets.example.com";
+const DATASET = "ds-1";
+const FIELDS = ["name", "nature", "year", "month", "day"];
+
+function tileUrl(cols?: string): string {
+  const query = `sig=abc&exp=9999999999&scope=tracks${cols ? `&cols=${cols}` : ""}`;
+  return `${BASE_URL}/api/tiles/data.tracks/{z}/{x}/{y}.pbf?${query}`;
+}
+
+/** A GeoLens vector-tile layer as `addVectorTilesLayer` builds it. */
+function addTileLayer(overrides: Partial<GeoLibreLayer> = {}, fields = FIELDS): string {
+  const layer: GeoLibreLayer = {
+    id: `layer-${Math.random().toString(36).slice(2)}`,
+    name: "Hurricane tracks",
+    type: "vector-tiles",
+    source: {
+      type: "vector",
+      tiles: [tileUrl(fields.join(","))],
+      sourceLayer: "data.tracks",
+    },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {
+      sourceKind: "geolens-vector-tiles",
+      geolensBaseUrl: BASE_URL,
+      geolensDatasetId: DATASET,
+      fields,
+    },
+    ...overrides,
+  } as GeoLibreLayer;
+  useAppStore.getState().addLayer(layer);
+  return layer.id;
+}
+
+function storedLayer(id: string): GeoLibreLayer {
+  const layer = useAppStore.getState().layers.find((l) => l.id === id);
+  assert.ok(layer);
+  return layer;
+}
+
+function storedTileColumns(id: string): string[] {
+  const tiles = storedLayer(id).source.tiles;
+  assert.ok(Array.isArray(tiles) && typeof tiles[0] === "string");
+  return tileColumnsOf(tiles[0]);
+}
+
+beforeEach(() => {
+  for (const layer of [...useAppStore.getState().layers]) {
+    useAppStore.getState().removeLayer(layer.id);
+  }
+});
+
+describe("desiredTileColumns", () => {
+  it("requests the whole attribute table for an ordinary dataset", () => {
+    // Nothing has been styled yet: this is exactly the case the opt-in has to
+    // cover, since the user cannot pick a column they cannot see.
+    const id = addTileLayer();
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), [...FIELDS].sort());
+  });
+
+  it("adds the attributes the layer's own style points at", () => {
+    const id = addTileLayer();
+    useAppStore.getState().setLayerStyle(id, {
+      vectorStyleMode: "categorized",
+      vectorStyleProperty: "nature",
+      labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "name" },
+    });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), [...FIELDS].sort());
+  });
+
+  it("keeps a too-wide dataset on the server's own budget", () => {
+    // The whole-table opt-in is what the server's low-zoom budget exists to
+    // prevent for wide tables, so past the ceiling only what is in use is asked
+    // for — enough to render an applied style, not to discover a new one.
+    const wide = Array.from({ length: MAX_GEOLENS_TILE_COLUMNS + 1 }, (_, i) => `col_${i}`);
+    const id = addTileLayer({}, wide);
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), []);
+
+    useAppStore.getState().setLayerStyle(id, { vectorStyleProperty: "col_3" });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_3"]);
+  });
+
+  it("ignores style fields whose feature is switched off", () => {
+    const wide = Array.from({ length: MAX_GEOLENS_TILE_COLUMNS + 1 }, (_, i) => `col_${i}`);
+    const id = addTileLayer({}, wide);
+    // `extrusionHeightProperty` defaults to "height" and the label field can
+    // outlive the labels being turned off; neither is being drawn, so neither
+    // is worth a column.
+    useAppStore.getState().setLayerStyle(id, {
+      extrusionEnabled: false,
+      extrusionHeightProperty: "col_1",
+      labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: false, field: "col_2" },
+    });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), []);
+
+    useAppStore.getState().setLayerStyle(id, { extrusionEnabled: true });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_1"]);
+  });
+
+  it("includes the Time Slider binding's property", () => {
+    const wide = Array.from({ length: MAX_GEOLENS_TILE_COLUMNS + 1 }, (_, i) => `col_${i}`);
+    const id = addTileLayer({}, wide);
+    const layer = storedLayer(id);
+    useAppStore.getState().updateLayer(id, {
+      metadata: { ...layer.metadata, timeBinding: { property: "col_7", valueKind: "year" } },
+    });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_7"]);
+  });
+
+  it("falls back to the columns in use when the field list is unknown", () => {
+    // A project saved before the field list was recorded still styles by name.
+    const id = addTileLayer({}, []);
+    useAppStore.getState().setLayerStyle(id, { vectorStyleProperty: "nature" });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), ["nature"]);
+  });
+});
+
+describe("tile column sync", () => {
+  it("restamps a layer whose tiles do not carry the attribute it needs", () => {
+    // A layer restored from a project saved before the opt-in: its URL asks for
+    // nothing, so its categorized style renders against empty properties.
+    const wide = Array.from({ length: MAX_GEOLENS_TILE_COLUMNS + 1 }, (_, i) => `col_${i}`);
+    const id = addTileLayer({ source: { type: "vector", tiles: [tileUrl()] } }, wide);
+    assert.deepEqual(storedTileColumns(id), []);
+
+    useAppStore.getState().setLayerStyle(id, { vectorStyleProperty: "col_3" });
+
+    assert.deepEqual(storedTileColumns(id), ["col_3"]);
+    // The signature rides along untouched — restamping must not cost a re-mint.
+    const tiles = storedLayer(id).source.tiles as string[];
+    assert.ok(tiles[0].includes("sig=abc"));
+    assert.ok(tiles[0].includes("/{z}/{x}/{y}.pbf?"));
+  });
+
+  it("leaves a layer alone once its tiles already carry what it needs", () => {
+    const id = addTileLayer();
+    const before = (storedLayer(id).source.tiles as string[])[0];
+    useAppStore.getState().setLayerStyle(id, { vectorStyleProperty: "nature" });
+    // `nature` is already in the opt-in, so the URL must not churn — a changed
+    // URL is a full tile refetch.
+    assert.equal((storedLayer(id).source.tiles as string[])[0], before);
+  });
+
+  it("does not touch layers from other sources", () => {
+    const id = addTileLayer({
+      metadata: { sourceKind: "ogc-vector-tiles", fields: FIELDS },
+      source: { type: "vector", tiles: [tileUrl()] },
+    });
+    useAppStore.getState().setLayerStyle(id, { vectorStyleProperty: "nature" });
+    assert.deepEqual(storedTileColumns(id), []);
+  });
+});
