@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { isGeographicCrs, projectedGeoJsonCrs } from "../apps/geolibre-desktop/src/lib/crs-utils";
 import {
+  countDelimitedTextRows,
   detectCoordinateFields,
   detectDelimitedTextDelimiter,
+  firstDelimitedTextLine,
   parseCoordinate,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
@@ -279,6 +281,91 @@ describe("parseCoordinate", () => {
     // test pins that documented behavior so a future change to the heuristic is
     // a conscious one.
     assert.equal(parseCoordinate("45,123", { grouped: true }), 45123);
+  });
+});
+
+// The row scanner slices fields out of the source string and streams rows
+// instead of appending character by character into a fully materialized
+// `string[][]`, which is what made a 146 MB CSV exhaust the renderer heap
+// (GeoLibre#1854). These pin the scanner's behavior so that rewrite cannot
+// silently regress on the awkward inputs the slicing has to special-case.
+describe("delimited text row scanning", () => {
+  function table(text: string, delimiter = ",") {
+    return parseDelimitedTextLayer(text, {
+      delimiter,
+      longitudeField: "",
+      latitudeField: "",
+    });
+  }
+
+  it("keeps a newline inside a quoted field", () => {
+    const result = table('name,note\nAlice,"line one\nline two"\nBob,plain');
+    assert.equal(result.totalRows, 2);
+    assert.equal(result.data.features[0].properties?.note, "line one\nline two");
+    assert.equal(result.data.features[1].properties?.note, "plain");
+  });
+
+  it("unescapes doubled quotes and keeps a bare quote inside an unquoted field", () => {
+    const result = table('name,note\n"say ""hi""",6" pipe');
+    assert.equal(result.data.features[0].properties?.name, 'say "hi"');
+    assert.equal(result.data.features[0].properties?.note, '6" pipe');
+  });
+
+  it("strips a leading BOM from the first header name", () => {
+    const result = table("﻿name,note\nAlice,hello");
+    assert.deepEqual(result.fields, ["name", "note"]);
+    assert.equal(result.data.features[0].properties?.name, "Alice");
+  });
+
+  it("handles CRLF line endings and a final row with no trailing newline", () => {
+    const result = table("name,note\r\nAlice,hello\r\nBob,bye");
+    assert.equal(result.totalRows, 2);
+    assert.equal(result.data.features[1].properties?.name, "Bob");
+  });
+
+  it("skips blank lines between rows", () => {
+    const result = table("name,note\n\nAlice,hello\n \nBob,bye\n");
+    assert.equal(result.totalRows, 2);
+    assert.deepEqual(
+      result.data.features.map((feature) => feature.properties?.name),
+      ["Alice", "Bob"],
+    );
+  });
+
+  it("splits on a multi-character delimiter", () => {
+    const result = table("name||note\nAlice||hello", "||");
+    assert.deepEqual(result.fields, ["name", "note"]);
+    assert.equal(result.data.features[0].properties?.note, "hello");
+  });
+
+  it("pads short rows and drops columns past the header width", () => {
+    const result = table("a,b,c\n1,2\n1,2,3,4");
+    assert.equal(result.data.features[0].properties?.c, "");
+    assert.deepEqual(result.data.features[1].properties, { a: "1", b: "2", c: "3" });
+  });
+
+  it("reads only the header row when just the fields are wanted", () => {
+    // A whole file is passed here in practice, so this must not depend on the
+    // rest of the text being well-formed.
+    assert.deepEqual(parseDelimitedTextFields('name,note\n"unterminated', ","), ["name", "note"]);
+  });
+});
+
+describe("delimited text row counting and header slicing", () => {
+  it("counts data rows, ignoring the header, blank lines, and quoted newlines", () => {
+    assert.equal(countDelimitedTextRows('name,note\nAlice,"a\nb"\n\nBob,c\n', ","), 2);
+  });
+
+  it("counts nothing for a header-only file or a blank delimiter", () => {
+    assert.equal(countDelimitedTextRows("name,note\n", ","), 0);
+    assert.equal(countDelimitedTextRows("name,note\nAlice,hello", ""), 0);
+  });
+
+  it("returns the first line without its terminator, skipping a BOM", () => {
+    assert.equal(firstDelimitedTextLine("a,b\r\n1,2"), "a,b");
+    assert.equal(firstDelimitedTextLine("﻿a,b\n1,2"), "a,b");
+    assert.equal(firstDelimitedTextLine("a,b"), "a,b");
+    assert.equal(firstDelimitedTextLine("\na,b"), "");
   });
 });
 

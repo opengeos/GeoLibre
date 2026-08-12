@@ -22,8 +22,10 @@ import { combine, parseDbf, parseShp } from "shpjs";
 import {
   DELIMITER_CANDIDATES,
   NO_VALID_COORDINATES_MESSAGE,
+  countDelimitedTextRows,
   detectCoordinateFields,
   detectDelimitedTextDelimiter,
+  firstDelimitedTextLine,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "./delimited-text";
@@ -642,21 +644,40 @@ function isDelimitedTextFileName(path: string): boolean {
  * (e.g. a CSV with a WKT geometry column). Throws a helpful error (pointing at
  * the Add Data dialog) when the file is empty or the auto-detected columns hold
  * no usable WGS84 coordinates (e.g. a CSV whose `x`/`y` columns are projected).
+ *
+ * @param text - The file's full text.
+ * @param path - The file name or path, used in the messages.
+ * @param context - `options` carries the caller's large-dataset guard;
+ *   `largeFile` marks a file big enough to be worth counting its rows first.
  */
-function parseDelimitedTextFile(text: string, path: string): FeatureCollection | null {
+async function parseDelimitedTextFile(
+  text: string,
+  path: string,
+  context?: { options?: DuckDbVectorLoadOptions; largeFile?: boolean },
+): Promise<FeatureCollection | null> {
   const name = browserSafeFileName(path);
   const pickColumns = `Use Add Data → Delimited Text to choose the coordinate columns for ${name}.`;
   const delimiter = detectDelimitedTextDelimiter(text);
   // Detect the coordinate columns from the header slice only;
   // parseDelimitedTextLayer re-reads the header internally, so parsing the
   // whole file here just to recover the column names would double the work.
-  const headerLine = text.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0] ?? "";
+  const headerLine = firstDelimitedTextLine(text);
   if (!headerLine.trim()) {
     throw new Error(`${name} appears to be empty. ${pickColumns}`);
   }
   const fields = parseDelimitedTextFields(headerLine, delimiter);
   const coordinateFields = detectCoordinateFields(fields);
   if (!coordinateFields) return null;
+  // Delimited text is the one vector path that never reaches the DuckDB loader
+  // (which has no lon/lat column detection), so it was also the one path with
+  // no oversized-import guard at all. The count is a second scan of the text,
+  // so it only runs for a file already large enough for the answer to matter.
+  if (context?.largeFile) {
+    await confirmLargeDataset(
+      { name, featureCount: countDelimitedTextRows(text, delimiter) },
+      context.options?.onLargeDataset,
+    );
+  }
   try {
     return parseDelimitedTextLayer(text, {
       delimiter,
@@ -1905,11 +1926,15 @@ async function loadBrowserVectorFile(
   // Deliberately NOT gated on `streamViaDuckDb`: `loadDuckDbVectorFile` has no
   // longitude/latitude column detection (that lives only in the GeoParquet
   // conversion path), so routing a plain lon/lat CSV to DuckDB fails with
-  // "DuckDB did not find a geometry column in this file." Delimited text is
-  // line-oriented and cheap to parse, so size is not the concern it is for
-  // GeoJSON or shapefiles.
+  // "DuckDB did not find a geometry column in this file." A big CSV therefore
+  // has to be parsed here rather than routed away, so `largeFile` passes the
+  // routing decision down as the trigger for the oversized-import guard
+  // instead.
   if (isDelimitedTextFileName(file.name)) {
-    const points = parseDelimitedTextFile(await file.text(), file.name);
+    const points = await parseDelimitedTextFile(await file.text(), file.name, {
+      options,
+      largeFile: streamViaDuckDb,
+    });
     // No lon/lat columns: fall through to DuckDB so spatial CSV variants
     // (e.g. a WKT geometry column) still load.
     if (points) {
@@ -2193,7 +2218,10 @@ async function loadTauriVectorFile(
   // Not gated on `streamViaDuckDb` — see the note in `loadBrowserVectorFile`:
   // the DuckDB reader cannot build points from lon/lat columns.
   if (isDelimitedTextFileName(path)) {
-    const points = parseDelimitedTextFile(await readLocalFileText(path), path);
+    const points = await parseDelimitedTextFile(await readLocalFileText(path), path, {
+      options,
+      largeFile: streamViaDuckDb,
+    });
     // No lon/lat columns: fall through to DuckDB so spatial CSV variants
     // (e.g. a WKT geometry column) still load.
     if (points) {
