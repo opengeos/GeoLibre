@@ -20,7 +20,13 @@
  * here and inputs are plain elements styled with the shadcn HSL theme tokens.
  */
 
-import { DEFAULT_LAYER_STYLE, styleValue, useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  parseJsonExpression,
+  styleValue,
+  useAppStore,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import type { Map as MapLibreMap, RequestParameters, ResourceType } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
@@ -606,7 +612,16 @@ function attributePropertiesInUse(layer: GeoLibreLayer): string[] {
   if (styleValue(style, "proportionalSizeEnabled")) {
     add(styleValue(style, "proportionalSizeProperty"));
   }
-  if (styleValue(style, "extrusionEnabled")) add(styleValue(style, "extrusionHeightProperty"));
+  if (styleValue(style, "extrusionEnabled")) {
+    // Advanced mode's height expression wins over the property, but only when
+    // it parses — a blank or invalid one falls back to the property (see
+    // `extrusionHeightValue`), so gating on the flag alone would drop a column
+    // the renderer still reads.
+    const advancedHeight = styleValue(style, "extrusionAdvancedStyleEnabled")
+      ? parseJsonExpression(styleValue(style, "extrusionHeightExpression"))
+      : null;
+    if (!advancedHeight) add(styleValue(style, "extrusionHeightProperty"));
+  }
   if (styleValue(style, "diagramType") !== "none") {
     for (const field of styleValue(style, "diagramFields")) add(field?.property);
   }

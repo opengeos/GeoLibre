@@ -116,6 +116,18 @@ describe("desiredTileColumns", () => {
 
     useAppStore.getState().setLayerStyle(id, { extrusionEnabled: true });
     assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_1"]);
+
+    // An advanced height expression replaces the property outright...
+    useAppStore.getState().setLayerStyle(id, {
+      extrusionAdvancedStyleEnabled: true,
+      extrusionHeightExpression: '["get", "col_9"]',
+    });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), []);
+
+    // ...but only while it parses; an unfinished one still renders from the
+    // property, so the column has to come back.
+    useAppStore.getState().setLayerStyle(id, { extrusionHeightExpression: "[" });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_1"]);
   });
 
   it("drops the classification property when nothing paints from it", () => {
