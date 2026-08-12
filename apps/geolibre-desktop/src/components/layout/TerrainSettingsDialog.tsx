@@ -100,6 +100,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
   // setTerrain calls — each of which reprocesses the terrain mesh — per second.
   const frameRef = useRef<number | null>(null);
   const pendingRef = useRef<number | null>(null);
+  const sourceRequestRef = useRef(0);
   useEffect(
     () => () => {
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
@@ -155,16 +156,21 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       setSourceError(t("terrainSettings.sourceError"));
       return;
     }
+    // Requests share the loading and error state, so an older one settling late
+    // would clear the spinner or post its error over a newer request that is
+    // still running. Only the newest touches that state.
+    const request = ++sourceRequestRef.current;
+    const isCurrent = () => sourceRequestRef.current === request;
     setSourceLoading(true);
     setSourceError(null);
     try {
       // False means another caller's newer selection won, so this request must
       // not clear the field or otherwise report itself as the applied source.
-      if (await controller.setTerrainCogSource(source)) onApplied?.();
+      if ((await controller.setTerrainCogSource(source)) && isCurrent()) onApplied?.();
     } catch (error) {
-      setSourceError(translateSourceError(error));
+      if (isCurrent()) setSourceError(translateSourceError(error));
     } finally {
-      setSourceLoading(false);
+      if (isCurrent()) setSourceLoading(false);
     }
   };
 
@@ -227,7 +233,11 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
               disabled={sourceLoading || !mapControllerRef.current}
               onChange={(event) => setTerrainUrl(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && terrainUrl.trim()) void applyCogSource();
+                // Gated like the button: a second Enter before React repaints
+                // would otherwise start an overlapping request.
+                if (event.key === "Enter" && !sourceLoading && terrainUrl.trim()) {
+                  void applyCogSource();
+                }
               }}
             />
             <div className="space-y-1">

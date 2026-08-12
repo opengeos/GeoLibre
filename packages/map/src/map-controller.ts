@@ -2538,7 +2538,16 @@ export class MapController {
   async setTerrainCogSource(source: string | Blob | null, band = 1): Promise<boolean> {
     const normalizedSource = typeof source === "string" ? source.trim() || null : source;
     const generation = ++this.cogDemGeneration;
-    const registration = normalizedSource ? await this.openCogDem(normalizedSource, band) : null;
+    let registration: CogDemSourceRegistration | null = null;
+    try {
+      registration = normalizedSource ? await this.openCogDem(normalizedSource, band) : null;
+    } catch (error) {
+      // A superseded request's failure is as stale as its success would be:
+      // reporting it would let an older pick put an error over the source the
+      // user actually chose last.
+      if (generation === this.cogDemGeneration) throw error;
+      return false;
+    }
     // A slower, older request must not replace a source selected after it.
     if (generation !== this.cogDemGeneration) {
       registration?.dispose();
