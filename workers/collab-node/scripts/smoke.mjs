@@ -17,6 +17,7 @@ const baseUrl = (process.argv[2] ?? "http://127.0.0.1:8787").replace(/\/+$/, "")
 // SQLite database before it listens.
 const STARTUP_TIMEOUT_MS = 60_000;
 const WS_TIMEOUT_MS = 15_000;
+const PROBE_TIMEOUT_MS = 5_000;
 
 function fail(message, detail) {
   console.error(`FAIL: ${message}`);
@@ -31,7 +32,15 @@ async function waitForHealth() {
   let lastError = "no response";
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${baseUrl}/health`);
+      // Bounded, because a container that accepts the connection and then never
+      // answers falls back on undici's own header/body timeouts, which are
+      // minutes long: the job would stall well past the startup budget instead
+      // of failing at it. Capped at whatever is left of that budget so a probe
+      // started near the deadline cannot overrun it either.
+      const signal = AbortSignal.timeout(Math.min(PROBE_TIMEOUT_MS, deadline - Date.now()));
+      const response = await fetch(`${baseUrl}/health`, { signal });
+      // The same signal still covers this: aborting after the headers arrive
+      // errors the body stream rather than leaving the read hanging.
       const body = await response.json();
       if (response.ok && body?.ok) return body;
       lastError = `HTTP ${response.status} ${JSON.stringify(body)}`;
@@ -48,6 +57,9 @@ async function createSession() {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: "{}",
+    // Bounded for the same reason as the health probe: the relay has answered
+    // by now, so anything slower than this is a hang, not a slow start.
+    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
   });
   const body = await response.json().catch(() => null);
   if (!response.ok || !body?.sessionId || !body?.hostToken)

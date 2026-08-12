@@ -33,9 +33,11 @@ beyond Node:
 node workers/collab-node/scripts/smoke.mjs http://127.0.0.1:8787
 ```
 
-CI runs it against the freshly built image, because the failure it guards
-against (a runtime stage missing a dependency the bundle imports) is invisible
-to `docker build` and only appears when the container starts.
+CI runs it against the freshly built image. The Dockerfile already imports the
+staged bundle during `docker build`, so a missing `ws` or a broken
+`@geolibre/collab-core` target fails there; this script covers the rest, which
+only a running container shows: that the process starts and stays up, and that
+it actually serves HTTP and completes a WebSocket upgrade.
 
 ## Volume ownership
 

@@ -17,9 +17,12 @@ RUN npm run build -w geolibre-collab-node
 # the container exited at startup with ERR_MODULE_NOT_FOUND (GeoLibre#1866), so
 # take the nested tree too, guarded because it disappears whenever a dependency
 # bump lets npm hoist `ws` to the root instead. packages/collab-core comes along
-# so the workspace symlink under node_modules resolves rather than dangling. The
+# for a weaker reason: esbuild inlines it, so the running server never imports it
+# and it is not what broke the image. It is copied so that the symlink npm leaves
+# at node_modules/@geolibre/collab-core points at something, since a dangling
+# entry in node_modules trips anything that walks the tree in the container. The
 # reinstall drops esbuild and the other dev dependencies now that the bundle is
-# built, which is also what keeps the copied tree small.
+# built, which is what keeps the copied tree small.
 RUN npm ci --omit=dev --workspace geolibre-collab-node --workspace @geolibre/collab-core \
   && mkdir -p /runtime/workers/collab-node \
   && cp -a node_modules /runtime/node_modules \
@@ -31,7 +34,9 @@ RUN npm ci --omit=dev --workspace geolibre-collab-node --workspace @geolibre/col
 
 # Load the staged bundle from the path it will actually sit at, so a layout
 # regression fails the build here instead of at container start. Importing it is
-# side-effect-free: server.js only listens when it is process.argv[1].
+# side-effect-free: server.js only listens when it is process.argv[1]. The
+# `test` is the weaker half -- nothing at runtime resolves that symlink, it just
+# asserts the tree was copied whole.
 RUN node --input-type=module \
   -e "await import('/runtime/workers/collab-node/dist/server.js');" \
   && test -e /runtime/node_modules/@geolibre/collab-core
