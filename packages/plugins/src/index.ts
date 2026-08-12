@@ -46,6 +46,20 @@ export {
 // of re-implementing (and drifting from) it.
 export { PanelTitleResolver } from "./panel-title";
 export { maplibreLayerControlPlugin } from "./plugins/layer-control";
+export {
+  AISSTREAM_PLUGIN_ID,
+  maplibreAisStreamPlugin,
+} from "./plugins/maplibre-aisstream";
+export {
+  AISSTREAM_URL,
+  aisFeatureCollection,
+  buildAisStreamSubscription,
+  normalizeAisStreamMessage,
+  parseAisStreamEvent,
+  type AisBounds,
+  type AisPositionFeature,
+  type AisPositionProperties,
+} from "./plugins/aisstream-api";
 export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";
 export {

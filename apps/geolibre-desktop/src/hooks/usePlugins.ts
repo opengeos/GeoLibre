@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import {
   addCogRasterLayer,
+  maplibreAisStreamPlugin,
   maplibreAnnotationsPlugin,
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
@@ -134,6 +135,7 @@ interface TauriRuntimeWindow extends Window {
 const manager = new PluginManager();
 manager.registerAll([
   maplibreLayerControlPlugin,
+  maplibreAisStreamPlugin,
   maplibreGeoEditorPlugin,
   maplibreAnnotationsPlugin,
   maplibreBasemapControlPlugin,
