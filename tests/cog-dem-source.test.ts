@@ -22,6 +22,19 @@ describe("COG DEM terrain encoding", () => {
     );
   });
 
+  it("matches a float32 sentinel against a short decimal GDAL_NODATA tag", () => {
+    // The pixel holds float32 -3.4028235e38, i.e. -3.4028234663852886e38, while
+    // the tag parses to a float64 that is close but not equal.
+    const pixel = new Float32Array([-3.4028235e38])[0];
+    const tag = normalizeNoData("-3.4028235e+38");
+    assert.notEqual(pixel, tag);
+    assert.deepEqual(Array.from(encodeTerrariumDem([pixel], tag)), [128, 0, 0, 255]);
+  });
+
+  it("still treats a distinct elevation as data", () => {
+    assert.deepEqual(Array.from(encodeTerrariumDem([100], -9999)), [128, 100, 0, 255]);
+  });
+
   it("clamps elevations to the representable Terrarium range", () => {
     assert.deepEqual(
       Array.from(encodeTerrariumDem([-100_000, 100_000])),

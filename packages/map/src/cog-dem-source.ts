@@ -109,7 +109,15 @@ export function isDemOverviewIfd(subfileType: unknown): boolean {
 }
 
 function isMissing(value: number, nodata: number | null): boolean {
-  return !Number.isFinite(value) || (nodata !== null && value === nodata);
+  if (!Number.isFinite(value)) return true;
+  if (nodata === null) return false;
+  if (value === nodata) return true;
+  // GDAL_NODATA is decimal text, so a float32 sentinel written with too few
+  // digits parses to a float64 that never equals the upconverted float32
+  // sample: "-3.4028235e+38" reads as -3.4028235e+38 while the pixel holds
+  // -3.4028234663852886e+38. Comparing both at float32 makes those meet, and a
+  // real elevation that collides is one no DEM carries.
+  return Math.fround(value) === Math.fround(nodata);
 }
 
 /** Encode elevations in metres into Mapzen Terrarium RGB pixels. */

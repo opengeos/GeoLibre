@@ -2569,7 +2569,13 @@ export class MapController {
     previous?.dispose();
 
     if (this.map && this.isStyleReady()) this.addTerrainSource();
-    if (wasEnabled) this.setTerrainEnabled(true);
+    // A style reload that started while the COG was opening leaves both calls
+    // bailing on their own style guard, which would drop terrain until the user
+    // toggled it again. Defer to handleStyleReady the way autoEnableTerrain
+    // does so it comes back on its own.
+    if (wasEnabled && !this.setTerrainEnabled(true) && this.terrainControl) {
+      this.terrainEnablePending = true;
+    }
     return true;
   }
 
