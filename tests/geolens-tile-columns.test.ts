@@ -95,7 +95,9 @@ describe("desiredTileColumns", () => {
     const id = addTileLayer({}, wide);
     assert.deepEqual(desiredTileColumns(storedLayer(id)), []);
 
-    useAppStore.getState().setLayerStyle(id, { vectorStyleProperty: "col_3" });
+    useAppStore
+      .getState()
+      .setLayerStyle(id, { vectorStyleMode: "categorized", vectorStyleProperty: "col_3" });
     assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_3"]);
   });
 
@@ -116,6 +118,20 @@ describe("desiredTileColumns", () => {
     assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_1"]);
   });
 
+  it("drops the classification property when nothing paints from it", () => {
+    // The property survives a switch back to a fixed color, so reading it
+    // ungated would keep a column alive for a style that no longer uses it.
+    const wide = Array.from({ length: MAX_GEOLENS_TILE_COLUMNS + 1 }, (_, i) => `col_${i}`);
+    const id = addTileLayer({}, wide);
+    useAppStore
+      .getState()
+      .setLayerStyle(id, { vectorStyleMode: "categorized", vectorStyleProperty: "col_5" });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_5"]);
+
+    useAppStore.getState().setLayerStyle(id, { vectorStyleMode: "single" });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), []);
+  });
+
   it("includes the Time Slider binding's property", () => {
     const wide = Array.from({ length: MAX_GEOLENS_TILE_COLUMNS + 1 }, (_, i) => `col_${i}`);
     const id = addTileLayer({}, wide);
@@ -129,7 +145,9 @@ describe("desiredTileColumns", () => {
   it("falls back to the columns in use when the field list is unknown", () => {
     // A project saved before the field list was recorded still styles by name.
     const id = addTileLayer({}, []);
-    useAppStore.getState().setLayerStyle(id, { vectorStyleProperty: "nature" });
+    useAppStore
+      .getState()
+      .setLayerStyle(id, { vectorStyleMode: "categorized", vectorStyleProperty: "nature" });
     assert.deepEqual(desiredTileColumns(storedLayer(id)), ["nature"]);
   });
 });
@@ -142,7 +160,9 @@ describe("tile column sync", () => {
     const id = addTileLayer({ source: { type: "vector", tiles: [tileUrl()] } }, wide);
     assert.deepEqual(storedTileColumns(id), []);
 
-    useAppStore.getState().setLayerStyle(id, { vectorStyleProperty: "col_3" });
+    useAppStore
+      .getState()
+      .setLayerStyle(id, { vectorStyleMode: "categorized", vectorStyleProperty: "col_3" });
 
     assert.deepEqual(storedTileColumns(id), ["col_3"]);
     // The signature rides along untouched — restamping must not cost a re-mint.
@@ -154,7 +174,9 @@ describe("tile column sync", () => {
   it("leaves a layer alone once its tiles already carry what it needs", () => {
     const id = addTileLayer();
     const before = (storedLayer(id).source.tiles as string[])[0];
-    useAppStore.getState().setLayerStyle(id, { vectorStyleProperty: "nature" });
+    useAppStore
+      .getState()
+      .setLayerStyle(id, { vectorStyleMode: "categorized", vectorStyleProperty: "nature" });
     // `nature` is already in the opt-in, so the URL must not churn — a changed
     // URL is a full tile refetch.
     assert.equal((storedLayer(id).source.tiles as string[])[0], before);
@@ -165,7 +187,30 @@ describe("tile column sync", () => {
       metadata: { sourceKind: "ogc-vector-tiles", fields: FIELDS },
       source: { type: "vector", tiles: [tileUrl()] },
     });
-    useAppStore.getState().setLayerStyle(id, { vectorStyleProperty: "nature" });
+    useAppStore
+      .getState()
+      .setLayerStyle(id, { vectorStyleMode: "categorized", vectorStyleProperty: "nature" });
     assert.deepEqual(storedTileColumns(id), []);
+  });
+
+  it("restamps every stale layer in one pass", () => {
+    // `updateLayer` notifies the sync's own subscription synchronously, so a
+    // second stale layer is the case where a mid-loop patch would spread a
+    // `source` the nested pass already replaced.
+    const wide = Array.from({ length: MAX_GEOLENS_TILE_COLUMNS + 1 }, (_, i) => `col_${i}`);
+    const a = addTileLayer({ source: { type: "vector", tiles: [tileUrl()] } }, wide);
+    const b = addTileLayer({ source: { type: "vector", tiles: [tileUrl()] } }, wide);
+    useAppStore
+      .getState()
+      .setLayerStyle(a, { vectorStyleMode: "categorized", vectorStyleProperty: "col_3" });
+    useAppStore
+      .getState()
+      .setLayerStyle(b, { vectorStyleMode: "categorized", vectorStyleProperty: "col_4" });
+
+    assert.deepEqual(storedTileColumns(a), ["col_3"]);
+    assert.deepEqual(storedTileColumns(b), ["col_4"]);
+    for (const id of [a, b]) {
+      assert.ok((storedLayer(id).source.tiles as string[])[0].includes("sig=abc"));
+    }
   });
 });

@@ -595,7 +595,12 @@ function attributePropertiesInUse(layer: GeoLibreLayer): string[] {
     if (typeof value === "string" && value.trim()) names.push(value.trim());
   };
 
-  add(styleValue(style, "vectorStyleProperty"));
+  const mode = styleValue(style, "vectorStyleMode");
+  // Only the two attribute-driven modes read the property; it survives a switch
+  // back to "single" (and is unused by the rule/expression modes, which carry
+  // their own expressions), so an ungated read would keep requesting a column
+  // nothing paints from.
+  if (mode === "categorized" || mode === "graduated") add(styleValue(style, "vectorStyleProperty"));
   const labels = styleValue(style, "labels");
   if (labels?.enabled) add(labels.field);
   if (styleValue(style, "proportionalSizeEnabled")) {
@@ -667,6 +672,11 @@ function tileColumnsFor(
   return normalizeTileColumns([...(wide ? [] : fields), ...inUse]);
 }
 
+/** Guards the apply phase against the store notification it triggers itself. */
+let syncingTileColumns = false;
+/** Set when a store change was dropped by that guard, so the batch rescans. */
+let pendingTileColumnSync = false;
+
 /**
  * Restamp GeoLens vector-tile layers whose `cols=` no longer matches what they
  * need — the user styled by an attribute the tiles don't carry, bound one to
@@ -679,18 +689,50 @@ function tileColumnsFor(
  * only queue a wasted refetch.
  */
 function syncGeoLensTileColumns(): void {
-  for (const layer of useAppStore.getState().layers) {
-    if (layer.metadata.sourceKind !== "geolens-vector-tiles") continue;
-    if (restoringLayerIds.has(layer.id)) continue;
-    const tiles = layer.source.tiles;
-    const url = Array.isArray(tiles) && typeof tiles[0] === "string" ? tiles[0] : "";
-    if (!url) continue;
-    const desired = desiredTileColumns(layer);
-    const current = tileColumnsOf(url);
-    if (desired.length === current.length && desired.every((c, i) => c === current[i])) continue;
-    useAppStore.getState().updateLayer(layer.id, {
-      source: { ...layer.source, tiles: [withTileColumns(url, desired)] },
-    });
+  // `updateLayer` notifies Zustand's subscribers synchronously, and one of them
+  // is the subscription that calls this function — so patching inside the scan
+  // would re-enter here mid-loop, and the outer loop would go on to spread a
+  // `layer.source` the nested pass has already replaced. Scan first, then apply
+  // behind a guard, re-reading each layer at the moment it is patched.
+  if (syncingTileColumns) {
+    // A change landed while a batch was applying; that notification is being
+    // dropped here, so ask the running pass for one more scan instead.
+    pendingTileColumnSync = true;
+    return;
+  }
+  syncingTileColumns = true;
+  try {
+    do {
+      pendingTileColumnSync = false;
+      const patches: Array<{ id: string; columns: string[] }> = [];
+      for (const layer of useAppStore.getState().layers) {
+        if (layer.metadata.sourceKind !== "geolens-vector-tiles") continue;
+        if (restoringLayerIds.has(layer.id)) continue;
+        const tiles = layer.source.tiles;
+        const url = Array.isArray(tiles) && typeof tiles[0] === "string" ? tiles[0] : "";
+        if (!url) continue;
+        const desired = desiredTileColumns(layer);
+        const current = tileColumnsOf(url);
+        if (desired.length === current.length && desired.every((c, i) => c === current[i])) {
+          continue;
+        }
+        patches.push({ id: layer.id, columns: desired });
+      }
+      for (const { id, columns } of patches) {
+        const layer = useAppStore.getState().layers.find((l) => l.id === id);
+        if (!layer) continue; // removed while the batch was applying
+        const tiles = layer.source.tiles;
+        const url = Array.isArray(tiles) && typeof tiles[0] === "string" ? tiles[0] : "";
+        if (!url) continue;
+        useAppStore.getState().updateLayer(id, {
+          source: { ...layer.source, tiles: [withTileColumns(url, columns)] },
+        });
+      }
+      // A pass that patched nothing cannot have re-entered, so this terminates
+      // after one extra scan at most.
+    } while (pendingTileColumnSync);
+  } finally {
+    syncingTileColumns = false;
   }
 }
 
@@ -1253,12 +1295,17 @@ async function refreshVectorTilesForDataset(
   for (const target of targets) {
     try {
       const token = await mintTileToken(client, datasetId, fetchImpl);
-      // The token alone is not enough: GeoLens hands back the same signature
-      // for the rest of its time bucket, so the URL would be unchanged and the
-      // caches would answer with the pre-save tiles.
-      const tiles = withTileVersion(vectorTileTemplate(client, token).tiles, Date.now());
       const current = useAppStore.getState().layers.find((l) => l.id === target.id);
       if (!current) continue;
+      // The token alone is not enough: GeoLens hands back the same signature
+      // for the rest of its time bucket, so the URL would be unchanged and the
+      // caches would answer with the pre-save tiles. The columns are rebuilt
+      // here too — dropping them would serve attribute-free tiles until the
+      // store subscription restamped them, costing a second refetch.
+      const tiles = withTileVersion(
+        vectorTileTemplate(client, token, desiredTileColumns(current)).tiles,
+        Date.now(),
+      );
       useAppStore.getState().updateLayer(target.id, {
         source: { ...current.source, tiles: [tiles] },
       });

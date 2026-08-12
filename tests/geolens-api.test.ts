@@ -224,6 +224,16 @@ describe("withTileColumns / tileColumnsOf", () => {
       withTileColumns("https://h/api/tiles/t/{z}/{x}/{y}.pbf", ["a"]),
       "https://h/api/tiles/t/{z}/{x}/{y}.pbf?cols=a",
     );
+    // That branch builds its query separately from the one above, so a
+    // multi-column case pins them to one serialization: the URL is the tile
+    // cache key, and `cols` has to look the same however it was added.
+    const noQuery = withTileColumns("https://h/api/tiles/t/{z}/{x}/{y}.pbf", ["b", "a"]);
+    const withQuery = withTileColumns("https://h/api/tiles/t/{z}/{x}/{y}.pbf?sig=abc", ["b", "a"]);
+    assert.equal(
+      noQuery.slice(noQuery.indexOf("cols=")),
+      withQuery.slice(withQuery.indexOf("cols=")),
+    );
+    assert.deepEqual(tileColumnsOf(noQuery), ["a", "b"]);
   });
 });
 
