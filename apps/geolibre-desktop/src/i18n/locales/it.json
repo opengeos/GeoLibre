@@ -5523,5 +5523,15 @@
     "mapPoint": "Punto sulla mappa",
     "reply": "Rispondi",
     "replyPlaceholder": "Scrivi una risposta..."
+  },
+  "auth": {
+    "unavailableTitle": "Accesso non disponibile",
+    "unavailableDescription": "GeoLibre non è riuscito a raggiungere il servizio di accesso, quindi non può sapere se hai effettuato l'accesso. Di solito è un problema temporaneo; se persiste, le impostazioni di autenticazione di questo deployment potrebbero richiedere attenzione.",
+    "retry": "Riprova",
+    "signInTitle": "Accedi a GeoLibre",
+    "signInDescription": "Questo deployment richiede un account. Verrai portato a una pagina di accesso sicura e poi riportato qui.",
+    "signIn": "Accedi",
+    "signOut": "Esci",
+    "account": "Account"
   }
 }

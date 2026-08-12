@@ -5444,5 +5444,15 @@
     "mapPoint": "地图点",
     "reply": "回复",
     "replyPlaceholder": "写下回复..."
+  },
+  "auth": {
+    "unavailableTitle": "登录不可用",
+    "unavailableDescription": "GeoLibre 无法访问登录服务，因此无法判断您是否已登录。这通常是暂时的；如果持续出现，可能需要检查此部署的身份验证设置。",
+    "retry": "重试",
+    "signInTitle": "登录 GeoLibre",
+    "signInDescription": "此部署需要账户。系统会将您带到安全的登录页面，然后返回此处。",
+    "signIn": "登录",
+    "signOut": "退出登录",
+    "account": "账户"
   }
 }

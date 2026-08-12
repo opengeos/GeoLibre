@@ -5444,5 +5444,15 @@
     "mapPoint": "지도 지점",
     "reply": "답글",
     "replyPlaceholder": "답글을 입력하세요..."
+  },
+  "auth": {
+    "unavailableTitle": "로그인을 사용할 수 없습니다",
+    "unavailableDescription": "GeoLibre가 로그인 서비스에 연결하지 못해 로그인 여부를 확인할 수 없습니다. 대개 일시적인 문제이며, 계속된다면 이 배포의 인증 설정을 확인해야 할 수 있습니다.",
+    "retry": "다시 시도",
+    "signInTitle": "GeoLibre에 로그인",
+    "signInDescription": "이 배포에는 계정이 필요합니다. 보안 로그인 페이지로 이동한 뒤 이곳으로 돌아옵니다.",
+    "signIn": "로그인",
+    "signOut": "로그아웃",
+    "account": "계정"
   }
 }

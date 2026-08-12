@@ -5523,5 +5523,15 @@
     "mapPoint": "Point de la carte",
     "reply": "Répondre",
     "replyPlaceholder": "Écrire une réponse..."
+  },
+  "auth": {
+    "unavailableTitle": "La connexion est indisponible",
+    "unavailableDescription": "GeoLibre n'a pas pu joindre le service de connexion et ne peut donc pas savoir si vous êtes connecté. Ce problème est généralement temporaire ; s'il persiste, les paramètres d'authentification de ce déploiement méritent peut-être une vérification.",
+    "retry": "Réessayer",
+    "signInTitle": "Connectez-vous à GeoLibre",
+    "signInDescription": "Ce déploiement nécessite un compte. Vous serez redirigé vers une page de connexion sécurisée, puis ramené ici.",
+    "signIn": "Se connecter",
+    "signOut": "Se déconnecter",
+    "account": "Compte"
   }
 }

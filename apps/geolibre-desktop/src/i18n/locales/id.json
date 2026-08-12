@@ -5444,5 +5444,15 @@
     "mapPoint": "Titik Peta",
     "reply": "Balas",
     "replyPlaceholder": "Tulis balasan..."
+  },
+  "auth": {
+    "unavailableTitle": "Masuk tidak tersedia",
+    "unavailableDescription": "GeoLibre tidak dapat menjangkau layanan masuk, sehingga tidak dapat mengetahui apakah Anda sudah masuk. Ini biasanya bersifat sementara; jika terus terjadi, pengaturan autentikasi penerapan ini mungkin perlu diperiksa.",
+    "retry": "Coba lagi",
+    "signInTitle": "Masuk ke GeoLibre",
+    "signInDescription": "Penerapan ini memerlukan akun. Anda akan dibawa ke halaman masuk yang aman lalu dikembalikan ke sini.",
+    "signIn": "Masuk",
+    "signOut": "Keluar",
+    "account": "Akun"
   }
 }

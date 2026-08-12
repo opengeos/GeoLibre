@@ -5523,5 +5523,15 @@
     "mapPoint": "Punto del mapa",
     "reply": "Responder",
     "replyPlaceholder": "Escriba una respuesta..."
+  },
+  "auth": {
+    "unavailableTitle": "El inicio de sesión no está disponible",
+    "unavailableDescription": "GeoLibre no pudo conectar con el servicio de inicio de sesión, por lo que no puede saber si ha iniciado sesión. Esto suele ser temporal; si persiste, es posible que haya que revisar la configuración de autenticación de esta implementación.",
+    "retry": "Intentar de nuevo",
+    "signInTitle": "Inicie sesión en GeoLibre",
+    "signInDescription": "Esta implementación requiere una cuenta. Se le llevará a una página de inicio de sesión segura y volverá aquí.",
+    "signIn": "Iniciar sesión",
+    "signOut": "Cerrar sesión",
+    "account": "Cuenta"
   }
 }

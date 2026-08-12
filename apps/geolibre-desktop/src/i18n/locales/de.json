@@ -5523,5 +5523,15 @@
     "mapPoint": "Kartenpunkt",
     "reply": "Antworten",
     "replyPlaceholder": "Antwort schreiben..."
+  },
+  "auth": {
+    "unavailableTitle": "Anmeldung ist nicht verfügbar",
+    "unavailableDescription": "GeoLibre konnte den Anmeldedienst nicht erreichen und kann daher nicht feststellen, ob Sie angemeldet sind. Das ist meist vorübergehend; falls es weiterhin auftritt, müssen möglicherweise die Authentifizierungseinstellungen dieser Bereitstellung geprüft werden.",
+    "retry": "Erneut versuchen",
+    "signInTitle": "Bei GeoLibre anmelden",
+    "signInDescription": "Diese Bereitstellung erfordert ein Konto. Sie werden zu einer sicheren Anmeldeseite weitergeleitet und danach hierher zurückgebracht.",
+    "signIn": "Anmelden",
+    "signOut": "Abmelden",
+    "account": "Konto"
   }
 }

@@ -5444,5 +5444,15 @@
     "mapPoint": "地図上のポイント",
     "reply": "返信",
     "replyPlaceholder": "返信を入力..."
+  },
+  "auth": {
+    "unavailableTitle": "サインインを利用できません",
+    "unavailableDescription": "GeoLibre はサインインサービスに接続できなかったため、サインイン済みかどうかを判断できません。通常は一時的なものです。解消しない場合は、このデプロイの認証設定を確認する必要があるかもしれません。",
+    "retry": "再試行",
+    "signInTitle": "GeoLibre にサインイン",
+    "signInDescription": "このデプロイにはアカウントが必要です。安全なサインインページに移動し、その後ここに戻ります。",
+    "signIn": "サインイン",
+    "signOut": "サインアウト",
+    "account": "アカウント"
   }
 }
