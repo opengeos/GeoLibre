@@ -76,6 +76,12 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       setDraft(String(value));
       setTerrainUrl(mapControllerRef.current?.getTerrainCogSource() ?? "");
       setSourceError(null);
+      // A COG still opening from a previous session of this dialog would
+      // otherwise leave the controls disabled and the button reading "Opening
+      // COG…" with nothing in flight that the user can see. Its own finally
+      // clears the flag again; a second request racing it is settled by the
+      // controller, which reports the superseded one as not applied.
+      setSourceLoading(false);
       setOpen(true);
     };
     // Close if the terrain control is removed (e.g. hidden from the Controls
@@ -152,8 +158,9 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
     setSourceLoading(true);
     setSourceError(null);
     try {
-      await controller.setTerrainCogSource(source);
-      onApplied?.();
+      // False means another caller's newer selection won, so this request must
+      // not clear the field or otherwise report itself as the applied source.
+      if (await controller.setTerrainCogSource(source)) onApplied?.();
     } catch (error) {
       setSourceError(translateSourceError(error));
     } finally {
