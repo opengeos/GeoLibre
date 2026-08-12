@@ -599,6 +599,9 @@ function expressionPropertyRefs(expression: string): string[] {
   const refs: string[] = [];
   const walk = (node: unknown): void => {
     if (!Array.isArray(node)) return;
+    // `["literal", …]` wraps data, not a sub-expression, so a `get`-shaped array
+    // inside it is an array element and names no column.
+    if (node[0] === "literal") return;
     if (
       node.length === 2 &&
       (node[0] === "get" || node[0] === "has") &&

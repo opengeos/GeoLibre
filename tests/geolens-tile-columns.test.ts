@@ -151,6 +151,20 @@ describe("desiredTileColumns", () => {
     });
     assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_4"]);
 
+    // A `literal` payload is data: the expression matches `col_3` against a
+    // fixed list, and a `get`-shaped array inside that list is just an element.
+    useAppStore.getState().setLayerStyle(id, {
+      vectorStyleMode: "expression",
+      vectorStyleExpression:
+        '["case", ["in", ["get", "col_3"], ["literal", ["a", "b"]]], "#111111", "#222222"]',
+    });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), ["col_3"]);
+    useAppStore.getState().setLayerStyle(id, {
+      vectorStyleExpression:
+        '["case", ["==", ["literal", ["get", "col_9"]], 1], "#111111", "#222222"]',
+    });
+    assert.deepEqual(desiredTileColumns(storedLayer(id)), []);
+
     // A key computed at render time names no column, and `["get", key, object]`
     // reads from a supplied object rather than the feature.
     useAppStore.getState().setLayerStyle(id, {
