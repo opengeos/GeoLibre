@@ -19,6 +19,9 @@ interface CogDemDataset {
   projection: DemProjection;
   nodata: number | null;
   band: number;
+  /** Tile reads still using the reader; see closeWhenIdle. */
+  pendingReads: number;
+  disposed: boolean;
 }
 
 export interface CogDemSourceRegistration {
@@ -35,6 +38,39 @@ export interface CogDemSourceRegistration {
 const datasets = new Map<string, CogDemDataset>();
 let datasetSequence = 0;
 let protocolRegistered = false;
+
+/**
+ * Release a reader without letting a failed close surface as an unhandled
+ * rejection. GeoTIFF.close() returns false for sources that need no closing.
+ */
+function closeQuietly(tiff: GeoTIFF): void {
+  void Promise.resolve(tiff.close()).catch(() => undefined);
+}
+
+/**
+ * Close a disposed dataset once its last tile read has finished. Switching the
+ * terrain source mid-read would otherwise close the reader out from under an
+ * in-flight readRasters and fail that tile.
+ */
+function closeWhenIdle(dataset: CogDemDataset): void {
+  if (dataset.disposed && dataset.pendingReads === 0) closeQuietly(dataset.tiff);
+}
+
+/** Read one tile, holding the reader open for as long as the read needs it. */
+async function readTileHoldingReader(
+  dataset: CogDemDataset,
+  z: number,
+  x: number,
+  y: number,
+): Promise<ArrayLike<number>> {
+  dataset.pendingReads += 1;
+  try {
+    return await readTile(dataset, z, x, y);
+  } finally {
+    dataset.pendingReads -= 1;
+    closeWhenIdle(dataset);
+  }
+}
 
 /**
  * Whether a NewSubfileType tag marks an IFD readTile may use as an overview.
@@ -137,6 +173,87 @@ function clampTileEdge(value: number): number {
   return Math.max(0, Math.min(TILE_SIZE, Math.round(value)));
 }
 
+export interface DemTilePlacement {
+  /** Pixel window to read from the image: [left, top, right, bottom]. */
+  window: [number, number, number, number];
+  /** Sub-rectangle of the 256 px tile those samples fill. */
+  destLeft: number;
+  destTop: number;
+  destWidth: number;
+  destHeight: number;
+}
+
+/**
+ * Work out which image pixels a terrain tile needs and where they belong in it.
+ * Both extents are in the DEM's own CRS. Returns null when the tile misses the
+ * DEM entirely. Exported for tests: this is the pixel math a warped hillshade
+ * would come from, and it fails silently rather than throwing.
+ */
+export function demTilePlacement(
+  tileBounds: readonly number[],
+  sourceBounds: readonly number[],
+  imageWidth: number,
+  imageHeight: number,
+): DemTilePlacement | null {
+  const [sourceMinX, sourceMinY, sourceMaxX, sourceMaxY] = sourceBounds;
+  const clipped = [
+    Math.max(sourceMinX, tileBounds[0]),
+    Math.max(sourceMinY, tileBounds[1]),
+    Math.min(sourceMaxX, tileBounds[2]),
+    Math.min(sourceMaxY, tileBounds[3]),
+  ];
+  if (clipped[0] >= clipped[2] || clipped[1] >= clipped[3]) return null;
+  // On a coarse overview a thin clipped extent can floor and ceil onto the same
+  // pixel boundary, which would hand readRasters an empty window. Keep the
+  // window at least one pixel wide and tall.
+  const left = Math.min(
+    imageWidth - 1,
+    Math.max(0, Math.floor(((clipped[0] - sourceMinX) / (sourceMaxX - sourceMinX)) * imageWidth)),
+  );
+  const top = Math.min(
+    imageHeight - 1,
+    Math.max(0, Math.floor(((sourceMaxY - clipped[3]) / (sourceMaxY - sourceMinY)) * imageHeight)),
+  );
+  const window: [number, number, number, number] = [
+    left,
+    top,
+    Math.min(
+      imageWidth,
+      Math.max(
+        left + 1,
+        Math.ceil(((clipped[2] - sourceMinX) / (sourceMaxX - sourceMinX)) * imageWidth),
+      ),
+    ),
+    Math.min(
+      imageHeight,
+      Math.max(
+        top + 1,
+        Math.ceil(((sourceMaxY - clipped[1]) / (sourceMaxY - sourceMinY)) * imageHeight),
+      ),
+    ),
+  ];
+  // The window covers whole source pixels, so its own extent — not the extent
+  // that was asked for — says where these samples belong in the tile. Resizing
+  // the window straight to 256 x 256 would stretch a partial overlap across the
+  // whole tile, so it is read at the size of the sub-rectangle it really
+  // occupies and the rest of the tile is left as nodata.
+  const pixelSpanX = (sourceMaxX - sourceMinX) / imageWidth;
+  const pixelSpanY = (sourceMaxY - sourceMinY) / imageHeight;
+  const tileColumn = (sourceX: number) =>
+    clampTileEdge(((sourceX - tileBounds[0]) / (tileBounds[2] - tileBounds[0])) * TILE_SIZE);
+  const tileRow = (sourceY: number) =>
+    clampTileEdge(((tileBounds[3] - sourceY) / (tileBounds[3] - tileBounds[1])) * TILE_SIZE);
+  const destLeft = tileColumn(sourceMinX + window[0] * pixelSpanX);
+  const destTop = tileRow(sourceMaxY - window[1] * pixelSpanY);
+  return {
+    window,
+    destLeft,
+    destTop,
+    destWidth: Math.max(1, tileColumn(sourceMinX + window[2] * pixelSpanX) - destLeft),
+    destHeight: Math.max(1, tileRow(sourceMaxY - window[3] * pixelSpanY) - destTop),
+  };
+}
+
 function remapGeographicRows(
   source: Float64Array,
   mercatorBounds: [number, number, number, number],
@@ -207,62 +324,14 @@ async function readTile(
       break;
     }
   }
-  const [sourceMinX, sourceMinY, sourceMaxX, sourceMaxY] = dataset.sourceBounds;
-  const clipped: [number, number, number, number] = [
-    Math.max(sourceMinX, bbox[0]),
-    Math.max(sourceMinY, bbox[1]),
-    Math.min(sourceMaxX, bbox[2]),
-    Math.min(sourceMaxY, bbox[3]),
-  ];
-  if (clipped[0] >= clipped[2] || clipped[1] >= clipped[3]) {
-    return new Float64Array(TILE_SIZE * TILE_SIZE).fill(Number.NaN);
-  }
-  const width = image.getWidth();
-  const height = image.getHeight();
-  // On a coarse overview a thin clipped extent can floor and ceil onto the same
-  // pixel boundary, which would hand readRasters an empty window. Keep the
-  // window at least one pixel wide and tall.
-  const left = Math.min(
-    width - 1,
-    Math.max(0, Math.floor(((clipped[0] - sourceMinX) / (sourceMaxX - sourceMinX)) * width)),
+  const placement = demTilePlacement(
+    bbox,
+    dataset.sourceBounds,
+    image.getWidth(),
+    image.getHeight(),
   );
-  const top = Math.min(
-    height - 1,
-    Math.max(0, Math.floor(((sourceMaxY - clipped[3]) / (sourceMaxY - sourceMinY)) * height)),
-  );
-  const window = [
-    left,
-    top,
-    Math.min(
-      width,
-      Math.max(
-        left + 1,
-        Math.ceil(((clipped[2] - sourceMinX) / (sourceMaxX - sourceMinX)) * width),
-      ),
-    ),
-    Math.min(
-      height,
-      Math.max(
-        top + 1,
-        Math.ceil(((sourceMaxY - clipped[1]) / (sourceMaxY - sourceMinY)) * height),
-      ),
-    ),
-  ];
-  // The window covers whole source pixels, so its own extent — not the extent
-  // that was asked for — says where these samples belong in the tile. Resizing
-  // the window straight to 256 x 256 would stretch a partial overlap across the
-  // whole tile, so read it at the size of the sub-rectangle it really occupies
-  // and leave the rest of the tile as nodata.
-  const pixelSpanX = (sourceMaxX - sourceMinX) / width;
-  const pixelSpanY = (sourceMaxY - sourceMinY) / height;
-  const tileColumn = (sourceX: number) =>
-    clampTileEdge(((sourceX - bbox[0]) / (bbox[2] - bbox[0])) * TILE_SIZE);
-  const tileRow = (sourceY: number) =>
-    clampTileEdge(((bbox[3] - sourceY) / (bbox[3] - bbox[1])) * TILE_SIZE);
-  const destLeft = tileColumn(sourceMinX + window[0] * pixelSpanX);
-  const destTop = tileRow(sourceMaxY - window[1] * pixelSpanY);
-  const destWidth = Math.max(1, tileColumn(sourceMinX + window[2] * pixelSpanX) - destLeft);
-  const destHeight = Math.max(1, tileRow(sourceMaxY - window[3] * pixelSpanY) - destTop);
+  if (!placement) return new Float64Array(TILE_SIZE * TILE_SIZE).fill(Number.NaN);
+  const { window, destLeft, destTop, destWidth, destHeight } = placement;
   const rasters = await image.readRasters({
     window,
     width: destWidth,
@@ -340,7 +409,7 @@ function ensureCogDemProtocol(): void {
     const { key, z, x, y } = parseTileRequest(request);
     const dataset = datasets.get(key);
     if (!dataset) throw new Error("The COG DEM source is no longer available.");
-    const elevations = await readTile(dataset, z, x, y);
+    const elevations = await readTileHoldingReader(dataset, z, x, y);
     return { data: await rgbaToPng(encodeTerrariumDem(elevations, dataset.nodata)) };
   });
   protocolRegistered = true;
@@ -365,12 +434,12 @@ export async function registerCogDemSource(
       : await fromBlob(normalizedSource);
   const image = await tiff.getImage();
   if (band < 1 || band > image.getSamplesPerPixel()) {
-    await tiff.close();
+    closeQuietly(tiff);
     throw new Error(`Band ${band} does not exist in this COG.`);
   }
   const projection = projectionFromGeoKeys(image.getGeoKeys() as Record<string, unknown> | null);
   if (!projection) {
-    await tiff.close();
+    closeQuietly(tiff);
     throw new Error("COG terrain currently supports EPSG:3857 and EPSG:4326 DEMs.");
   }
   ensureCogDemProtocol();
@@ -391,7 +460,7 @@ export async function registerCogDemSource(
     );
   } catch (error) {
     // A truncated or corrupt overview IFD must not leak the open reader.
-    await tiff.close();
+    closeQuietly(tiff);
     throw error;
   }
   const key = String(++datasetSequence);
@@ -403,6 +472,8 @@ export async function registerCogDemSource(
     projection,
     nodata: normalizeNoData(directory.GDAL_NODATA),
     band: band - 1,
+    pendingReads: 0,
+    disposed: false,
   });
   const sourceBounds = image.getBoundingBox();
   const bounds = geographicBounds(sourceBounds, projection);
@@ -411,11 +482,11 @@ export async function registerCogDemSource(
     tiles: [`${PROTOCOL}://${key}/{z}/{x}/{y}`],
     bounds,
     renderTile: async (z, x, y) =>
-      encodeTerrariumDem(await readTile(dataset, z, x, y), dataset.nodata),
+      encodeTerrariumDem(await readTileHoldingReader(dataset, z, x, y), dataset.nodata),
     dispose: () => {
-      const dataset = datasets.get(key);
       datasets.delete(key);
-      void dataset?.tiff.close();
+      dataset.disposed = true;
+      closeWhenIdle(dataset);
     },
   };
 }

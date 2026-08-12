@@ -196,7 +196,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
               inputMode="url"
               placeholder={t("terrainSettings.sourcePlaceholder")}
               value={terrainUrl}
-              disabled={sourceLoading}
+              disabled={sourceLoading || !mapControllerRef.current}
               onChange={(event) => setTerrainUrl(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && terrainUrl.trim()) void applyCogSource();

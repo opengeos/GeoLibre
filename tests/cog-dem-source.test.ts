@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  demTilePlacement,
   encodeTerrariumDem,
   isDemOverviewIfd,
   normalizeNoData,
@@ -61,5 +62,59 @@ describe("overview IFD selection", () => {
   it("treats an absent or unreadable tag as not an overview", () => {
     assert.equal(isDemOverviewIfd(undefined), false);
     assert.equal(isDemOverviewIfd("overview"), false);
+  });
+});
+
+describe("terrain tile placement", () => {
+  // A 1000 x 1000 image over a square extent, and the tile that covers it.
+  const source = [0, 0, 1000, 1000];
+
+  it("reads the whole image into the whole tile when the extents match", () => {
+    assert.deepEqual(demTilePlacement(source, source, 1000, 1000), {
+      window: [0, 0, 1000, 1000],
+      destLeft: 0,
+      destTop: 0,
+      destWidth: 256,
+      destHeight: 256,
+    });
+  });
+
+  it("places a partial overlap in its own quadrant instead of stretching it", () => {
+    // The tile extends past the DEM's north and east edges, so the DEM covers
+    // the tile's lower-left quarter.
+    const placement = demTilePlacement([0, 0, 2000, 2000], source, 1000, 1000);
+    assert.deepEqual(placement, {
+      window: [0, 0, 1000, 1000],
+      destLeft: 0,
+      destTop: 128,
+      destWidth: 128,
+      destHeight: 128,
+    });
+  });
+
+  it("reads only the overlapping pixels of a tile inside the DEM", () => {
+    // The tile's south-west quarter of the DEM: right/bottom half of the image.
+    const placement = demTilePlacement([500, 0, 1000, 500], source, 1000, 1000);
+    assert.deepEqual(placement, {
+      window: [500, 500, 1000, 1000],
+      destLeft: 0,
+      destTop: 0,
+      destWidth: 256,
+      destHeight: 256,
+    });
+  });
+
+  it("keeps the window at least one pixel on a coarse overview", () => {
+    // A sliver of a 4 x 4 overview: floor and ceil would land on one boundary.
+    const placement = demTilePlacement([0, 0, 1, 1], source, 4, 4);
+    assert.equal(placement?.window[2], placement!.window[0] + 1);
+    assert.equal(placement?.window[3], placement!.window[1] + 1);
+    assert.ok(placement!.destWidth >= 1 && placement!.destHeight >= 1);
+  });
+
+  it("reports no placement for a tile that misses the DEM", () => {
+    assert.equal(demTilePlacement([2000, 2000, 3000, 3000], source, 1000, 1000), null);
+    // Touching along an edge is not an overlap either.
+    assert.equal(demTilePlacement([1000, 0, 2000, 1000], source, 1000, 1000), null);
   });
 });
