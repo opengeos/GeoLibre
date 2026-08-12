@@ -367,6 +367,15 @@ describe("delimited text row counting and header slicing", () => {
     assert.equal(firstDelimitedTextLine("a,b"), "a,b");
   });
 
+  it("ends the header at a bare CR, so a classic-Mac file is not one long line", () => {
+    const bareCr = "name,longitude,latitude\rA,-78.6,35.7\rB,-80.1,36.2\r";
+    assert.equal(firstDelimitedTextLine(bareCr), "name,longitude,latitude");
+    // The delimiter guess is scored on column count, so feeding it the whole
+    // file as the "header" is what makes this worth pinning.
+    assert.equal(detectDelimitedTextDelimiter("a;b;c\r1;2;3\r"), ";");
+    assert.equal(countDelimitedTextRows(bareCr, ","), 2);
+  });
+
   it("skips blank lines before the header, matching the row parsers", () => {
     // Taking the first physical line would report these as empty files and
     // hand delimiter detection a blank line to guess from.

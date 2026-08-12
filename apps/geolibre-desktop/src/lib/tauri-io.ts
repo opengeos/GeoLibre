@@ -684,6 +684,14 @@ async function parseDelimitedTextFile(
   // this preflight neither parses nor even reads the body. parseDelimitedText-
   // Layer re-reads the header internally, so recovering the column names by
   // parsing the whole file here would double the work.
+  //
+  // A header cell containing a quoted newline is cut short here (see
+  // firstDelimitedTextLine for why that cannot be resolved before the delimiter
+  // is known). That only ever costs auto-detection, never correctness: the
+  // column names below are resolved against a full, quote-aware parse of the
+  // file, so the worst case is that lon/lat columns past the cut go unnoticed
+  // and the file falls through to DuckDB, whose failure points at Add Data ->
+  // Delimited Text, where the user picks the columns by hand.
   const headerLine = firstDelimitedTextLine(source.headerText);
   if (!headerLine) {
     throw new Error(`${name} appears to be empty. ${pickColumns}`);

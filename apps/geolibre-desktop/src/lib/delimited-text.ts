@@ -448,9 +448,16 @@ export function countDelimitedTextRows(text: string, delimiter: string): number 
  * instead would report a file that merely starts with a newline as empty, and
  * would hand delimiter detection a blank line to guess from.
  *
- * Line breaks are `\n` or `\r\n`, matching the rest of this module; a quoted
- * newline is not honored, since a header row containing one cannot be found
- * without parsing the whole file.
+ * A line ends at `\n`, `\r\n`, or a bare `\r`, the same three terminators
+ * {@link iterateDelimitedRows} recognizes. A bare `\r` matters here: a file
+ * written with classic-Mac endings has no `\n` at all, so looking only for that
+ * would hand back the entire file as its "header".
+ *
+ * A newline inside a *quoted* header cell is not honored, and the header is cut
+ * short at it. Honoring it is circular: whether a quote opens a quoted field
+ * depends on where the field boundaries are, which depends on the delimiter,
+ * which is what this line is read to detect. The consequence is contained;
+ * see the note in `parseDelimitedTextFile`.
  *
  * @param text - The delimited text, optionally starting with a BOM.
  * @returns The header line without its terminator, or `""` when every line is
@@ -459,28 +466,25 @@ export function countDelimitedTextRows(text: string, delimiter: string): number 
 export function firstDelimitedTextLine(text: string): string {
   let start = contentStart(text);
   while (start < text.length) {
-    const newline = text.indexOf("\n", start);
-    const lineEnd = newline < 0 ? text.length : newline;
-    const end =
-      lineEnd > start && text.charCodeAt(lineEnd - 1) === CARRIAGE_RETURN_CODE
-        ? lineEnd - 1
-        : lineEnd;
-    // Tested over the range rather than on a slice, so skipping past blank
-    // lines never copies, and neither does reaching the end of a file that has
-    // no line break at all.
-    if (!isBlankRange(text, start, end)) return text.slice(start, end);
-    if (newline < 0) return "";
-    start = newline + 1;
+    // Blankness is tracked during the same scan that finds the terminator, so
+    // skipping past blank lines never slices, and neither does reaching the end
+    // of a file that has no line break at all.
+    let end = start;
+    let hasContent = false;
+    while (end < text.length) {
+      const code = text.charCodeAt(end);
+      if (code === LINE_FEED_CODE || code === CARRIAGE_RETURN_CODE) break;
+      if (!hasContent && !isTrimmableCode(code, text, end)) hasContent = true;
+      end += 1;
+    }
+    if (hasContent) return text.slice(start, end);
+    if (end >= text.length) return "";
+    start =
+      text.charCodeAt(end) === CARRIAGE_RETURN_CODE && text.charCodeAt(end + 1) === LINE_FEED_CODE
+        ? end + 2
+        : end + 1;
   }
   return "";
-}
-
-/** Whether every character in `[start, end)` is one `trim` would strip. */
-function isBlankRange(text: string, start: number, end: number): boolean {
-  for (let index = start; index < end; index += 1) {
-    if (!isTrimmableCode(text.charCodeAt(index), text, index)) return false;
-  }
-  return true;
 }
 
 /**
