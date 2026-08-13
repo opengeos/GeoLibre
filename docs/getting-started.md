@@ -591,7 +591,7 @@ Where to find the output:
 | `GEOLIBRE_CEREUS_CDN` | `1` (CDN) | Set `0` to bundle CereusDB WASM (~40 MB) instead of loading from jsDelivr. |
 | `GEOLIBRE_GDAL_CDN` | `1` (CDN) | Set `0` to disable GDAL export (the ~40 MB WASM/data are not bundled, just unavailable). |
 | `GEOLIBRE_DUCKDB_WASM_CDN` | `0` (bundled) | Set `1` to move DuckDB-WASM to jsDelivr (required for Cloudflare Pages' 25 MiB per-file limit). |
-| `GEOLIBRE_NO_EXTERNAL_CDN` | unset | Set `1` to strip **all** external CDN references from the build. Forces all `*_CDN=0` flags and disables features that embed CDN URLs (storymap HTML export, built-in detection models, ONNX WASM, 3D Tiles decoders, Pyodide). Intended for enterprise deployments that cannot reference untrusted CDNs. |
+| `GEOLIBRE_NO_EXTERNAL_CDN` | unset | Set `1` to strip **all GeoLibre-controlled** external CDN references from the build. Forces all `*_CDN=0` flags (so PGlite, CereusDB and DuckDB-WASM are bundled rather than fetched) and disables features that embed CDN URLs (storymap HTML export, built-in detection models, ONNX WASM, 3D Tiles decoders, Pyodide, GDAL export). Some third-party packages keep their own internal CDN URLs, which this flag cannot remove — see [architecture.md](architecture.md). Intended for enterprise deployments that cannot reference untrusted CDNs. |
 | `GEOLIBRE_STORE_BUILD` | unset | Set `1` for Microsoft Store MSIX builds (removes in-app updater). |
 | `GEOLIBRE_MAS_BUILD` | unset | Set `1` for Mac App Store builds (removes sidecar/server features). |
 | `GEOLIBRE_EMBED` | unset | Set `1` for the Jupyter embed wheel build. |
