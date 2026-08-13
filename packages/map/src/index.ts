@@ -27,6 +27,12 @@ export {
   type TerrainControlOptions,
 } from "./terrain-control";
 export {
+  CogDemError,
+  encodeTerrariumDem,
+  registerCogDemSource,
+  type CogDemErrorCode,
+} from "./cog-dem-source";
+export {
   detectGeometryProfile,
   getLayerBounds,
   sourceId,

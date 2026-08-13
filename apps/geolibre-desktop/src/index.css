@@ -1100,6 +1100,21 @@ body,
 }
 
 /*
+ * Geoman's `text_marker` mode (via the GeoEditor plugin) appends a bare
+ * <textarea> into the map container with only inline position/opacity — no
+ * class, no appearance. `all: revert` undoes Tailwind's Preflight reset, which
+ * leaves it transparent and borderless (invisible while you type); its inline
+ * styles outrank the revert, so positioning survives. The z-index clears the
+ * Effects plugin's `z-index: 4` map canvas, and must come after `all`.
+ * Direct child only — that is the sole way to target the element, which carries
+ * no class, so re-check it on `@geoman-io/maplibre-geoman-free` bumps.
+ */
+.maplibregl-map > textarea {
+  all: revert;
+  z-index: 10;
+}
+
+/*
  * The overlaid deck.gl canvas (COG rasters via CogLayerControl, ArcGIS I3S, the
  * Tauri raster fallback) is map content and must sit UNDER the map-control
  * panels, not over them. It lives inside `.maplibregl-control-container` (pinned

@@ -126,6 +126,40 @@ jobs:
             exit 1
           fi
 
+  collab-image:
+    name: Collab relay image
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      # publish-container.yml only builds the web Dockerfile, so nothing in CI
+      # ever built the relay image and v2.5.0 shipped one that exited at startup
+      # on module resolution (GeoLibre#1866). A build alone would not have caught
+      # it either -- the missing dependency only surfaces when the container
+      # runs, so this job starts it and talks to it.
+      - name: Build the collaboration relay image
+        run: docker build -f workers/collab-node/Dockerfile -t geolibre-collab:ci .
+
+      - name: Start the relay container
+        run: docker run -d --name collab -p 8787:8787 geolibre-collab:ci
+
+      - name: Smoke-test the running relay
+        run: node workers/collab-node/scripts/smoke.mjs http://127.0.0.1:8787
+
+      # The container logs carry the module-resolution error that a failed smoke
+      # test only reports as "never answered GET /health".
+      - name: Show the container logs
+        if: ${{ always() }}
+        run: docker logs collab
+
   checks:
     name: Build and test
     runs-on: ubuntu-22.04

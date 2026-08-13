@@ -195,7 +195,7 @@ def _simplify(
     result["geometry"] = gdf.geometry.simplify(tolerance)
     return (
         _to_feature_collection(result),
-        [f"Simplified {len(result)} feature(s) (tolerance {tolerance})"],
+        [f"Simplified {len(result)} feature(s) (tolerance {tolerance} degrees)"],
     )
 
 

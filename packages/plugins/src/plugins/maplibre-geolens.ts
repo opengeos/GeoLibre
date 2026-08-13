@@ -20,7 +20,13 @@
  * here and inputs are plain elements styled with the shadcn HSL theme tokens.
  */
 
-import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  parseJsonExpression,
+  styleValue,
+  useAppStore,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import type { Map as MapLibreMap, RequestParameters, ResourceType } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
@@ -36,12 +42,15 @@ import {
   isEditPlanEmpty,
   mintTileToken,
   normalizeBaseUrl,
+  normalizeTileColumns,
   rasterTemplatesForServer,
   rasterTileAuthHeaders,
   resolveRasterTiles,
   searchDatasets,
+  tileColumnsOf,
   tileUrlPrefix,
   vectorTileTemplate,
+  withTileColumns,
   withTileVersion,
   type GeoLensBbox,
   type GeoLensClientOptions,
@@ -540,6 +549,279 @@ function clearRasterApiKeys(): void {
   installedOnMap = null;
 }
 
+// ---------------------------------------------------------------------------
+// MVT attribute columns (`cols=`).
+// ---------------------------------------------------------------------------
+
+/**
+ * Field-count ceiling for opting a dataset's whole attribute table into its
+ * tiles.
+ *
+ * GeoLens serves attribute-free tiles below zoom 10 (see the `cols=` opt-in in
+ * `geolens-api.ts`), and the host reads a tile layer's attributes from the
+ * tiles themselves: the Style panel scans loaded features for a property's
+ * distinct values, the Time Slider bind dialog scans them for a timestamp
+ * column, popups show what a feature carries. None of those can
+ * name the column they need up front — the user picks it *after* seeing it — so
+ * an opt-in limited to columns already in use cannot bootstrap any of them.
+ * Requesting the dataset's fields is therefore the default.
+ *
+ * The ceiling is what keeps that from re-creating the tile bloat the server's
+ * own budget exists to prevent (its docs cite a 137-column table producing
+ * 824 KB tiles). A table wider than this stays on the server default and opts
+ * in only the columns the layer actually uses, which is enough to *render* a
+ * style the user has already applied, just not to discover one.
+ */
+export const MAX_GEOLENS_TILE_COLUMNS = 24;
+
+/** Datasets already reported as too wide for the full opt-in, so the warning fires once. */
+const wideDatasetsWarned = new Set<string>();
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
+    : [];
+}
+
+/**
+ * Feature properties a MapLibre expression reads, i.e. the string-literal
+ * argument of every `["get", …]` / `["has", …]` in it.
+ *
+ * Only the two-argument forms count: `["get", key, object]` reads from a
+ * supplied object rather than the feature, and a computed key
+ * (`["get", ["concat", …]]`) names a column that is not knowable until render
+ * time. An unparseable expression yields nothing, matching the renderer, which
+ * ignores it.
+ */
+function expressionPropertyRefs(expression: string): string[] {
+  const parsed = parseJsonExpression(expression);
+  if (!parsed) return [];
+  const refs: string[] = [];
+  const walk = (node: unknown): void => {
+    if (!Array.isArray(node)) return;
+    // `["literal", …]` wraps data, not a sub-expression, so a `get`-shaped array
+    // inside it is an array element and names no column.
+    if (node[0] === "literal") return;
+    if (
+      node.length === 2 &&
+      (node[0] === "get" || node[0] === "has") &&
+      typeof node[1] === "string"
+    ) {
+      refs.push(node[1]);
+    }
+    for (const child of node) walk(child);
+  };
+  walk(parsed);
+  return refs;
+}
+
+/**
+ * The attribute names a layer's own state points at: its classification
+ * property, label field, proportional-size and extrusion fields, diagram
+ * fields, the Time Slider binding, and the properties read by whichever of its
+ * expressions are in effect (the expression renderer, rule filters, label
+ * overrides, advanced extrusion). Each is read only when the feature that uses
+ * it is switched on, so a default style contributes nothing.
+ */
+function attributePropertiesInUse(layer: GeoLibreLayer): string[] {
+  const style = layer.style;
+  const names: string[] = [];
+  const add = (value: unknown): void => {
+    if (typeof value === "string" && value.trim()) names.push(value.trim());
+  };
+  /** Add every feature property an in-effect expression reads. */
+  const addRefs = (expression: unknown): void => {
+    if (typeof expression === "string")
+      for (const ref of expressionPropertyRefs(expression)) add(ref);
+  };
+
+  const mode = styleValue(style, "vectorStyleMode");
+  // Only the two attribute-driven modes read the property; it survives a switch
+  // back to "single" (and is unused by the rule/expression modes, which carry
+  // their own expressions), so an ungated read would keep requesting a column
+  // nothing paints from.
+  if (mode === "categorized" || mode === "graduated") add(styleValue(style, "vectorStyleProperty"));
+  if (mode === "expression") addRefs(styleValue(style, "vectorStyleExpression"));
+  if (mode === "rule-based") {
+    for (const rule of styleValue(style, "vectorRules")) addRefs(rule?.filter);
+  }
+  const labels = styleValue(style, "labels");
+  if (labels?.enabled) {
+    add(labels.field);
+    // The text expression and the data-defined overrides all read attributes.
+    addRefs(labels.expression);
+    addRefs(labels.sizeExpression);
+    addRefs(labels.colorExpression);
+    addRefs(labels.opacityExpression);
+    addRefs(labels.visibilityExpression);
+    addRefs(labels.priorityExpression);
+  }
+  if (styleValue(style, "proportionalSizeEnabled")) {
+    add(styleValue(style, "proportionalSizeProperty"));
+  }
+  if (styleValue(style, "extrusionEnabled")) {
+    const advanced = styleValue(style, "extrusionAdvancedStyleEnabled");
+    const heightExpression = advanced ? styleValue(style, "extrusionHeightExpression") : "";
+    if (advanced) {
+      addRefs(heightExpression);
+      addRefs(styleValue(style, "extrusionColorExpression"));
+    }
+    // The height expression wins over the property, but only when it parses: a
+    // blank or half-typed one falls back to the property (`extrusionHeightValue`),
+    // so gating on the advanced flag alone would drop a column still being read.
+    if (!parseJsonExpression(heightExpression)) add(styleValue(style, "extrusionHeightProperty"));
+  }
+  if (styleValue(style, "diagramType") !== "none") {
+    for (const field of styleValue(style, "diagramFields")) add(field?.property);
+    // Attribute sizing reads its own property alongside the slice fields
+    // (`collectDiagramData`); without it every diagram would size from a value
+    // that is not in the tile and collapse to the floor.
+    if (styleValue(style, "diagramSizeMode") === "attribute") {
+      add(styleValue(style, "diagramSizeProperty"));
+    }
+  }
+  const timeBinding = layer.metadata.timeBinding;
+  if (timeBinding && typeof timeBinding === "object") {
+    add((timeBinding as { property?: unknown }).property);
+  }
+  return names;
+}
+
+/**
+ * Resolved column sets, keyed by the layer object.
+ *
+ * The sync below runs on every store update that replaces the `layers` array —
+ * an opacity drag on an *unrelated* layer fires it per frame — and resolving a
+ * set re-parses the layer's expressions. `updateLayer` keeps the identity of
+ * every layer it did not patch, so keying on the object skips that work with
+ * no invalidation to get wrong: a layer that changed is a different object.
+ * (`layer-sync.ts` memoizes its own label overrides for the same reason.)
+ */
+const tileColumnsByLayer = new WeakMap<GeoLibreLayer, string[]>();
+
+/**
+ * The `cols=` set a GeoLens vector-tile layer should be requesting right now:
+ * the dataset's fields when the table is narrow enough for the whole-table
+ * opt-in, plus whatever the layer's style and bindings currently point at.
+ *
+ * Recomputed from the layer rather than remembered, so it stays right across a
+ * token re-mint and a project reload (`metadata.fields` is persisted with the
+ * layer).
+ *
+ * @param layer - A `geolens-vector-tiles` store layer.
+ * @returns Normalized column names (sorted, deduplicated); empty when the
+ *   dataset is too wide and the layer uses no attributes yet.
+ */
+export function desiredTileColumns(layer: GeoLibreLayer): string[] {
+  const memoized = tileColumnsByLayer.get(layer);
+  if (memoized) return memoized;
+  const datasetId = layer.metadata.geolensDatasetId;
+  const columns = tileColumnsFor(
+    stringArray(layer.metadata.fields),
+    attributePropertiesInUse(layer),
+    typeof datasetId === "string" ? datasetId : layer.id,
+    layer.name,
+  );
+  tileColumnsByLayer.set(layer, columns);
+  return columns;
+}
+
+/**
+ * Resolve the `cols=` set from a dataset's field list and the columns a layer
+ * currently uses. Shared by the add path (which has the field list but no layer
+ * yet) and {@link desiredTileColumns}, so both apply the width budget the same
+ * way and a too-wide dataset is reported once rather than per call site.
+ *
+ * @param fields - Every attribute column the dataset has, per its OGC items.
+ * @param inUse - Columns the layer styles or binds by (empty on a fresh add).
+ * @param datasetKey - Identity used to report a too-wide dataset only once.
+ * @param label - Human-readable dataset/layer name for that report.
+ * @returns Normalized column names to request.
+ */
+function tileColumnsFor(
+  fields: readonly string[],
+  inUse: readonly string[],
+  datasetKey: string,
+  label: string,
+): string[] {
+  const wide = fields.length > MAX_GEOLENS_TILE_COLUMNS;
+  if (wide && !wideDatasetsWarned.has(datasetKey)) {
+    wideDatasetsWarned.add(datasetKey);
+    console.info(
+      `[GeoLibre] GeoLens dataset "${label}" has ${fields.length} fields (over the ` +
+        `${MAX_GEOLENS_TILE_COLUMNS}-field tile budget), so its tiles carry only the ` +
+        `attributes this layer styles or binds by. Below zoom 10 the rest are absent ` +
+        `from popups and the Style panel; load the dataset as GeoJSON to work with all ` +
+        `of them.`,
+    );
+  }
+  return normalizeTileColumns([...(wide ? [] : fields), ...inUse]);
+}
+
+/** Guards the apply phase against the store notification it triggers itself. */
+let syncingTileColumns = false;
+/** Set when a store change was dropped by that guard, so the batch rescans. */
+let pendingTileColumnSync = false;
+
+/**
+ * Restamp GeoLens vector-tile layers whose `cols=` no longer matches what they
+ * need — the user styled by an attribute the tiles don't carry, bound one to
+ * the Time Slider, or the project was saved before this opt-in existed. The
+ * token is untouched (only the query is rewritten), so this costs a tile
+ * refetch and no network round trip of its own.
+ *
+ * Layers mid-remint are skipped: that path rebuilds the URL from the fresh
+ * token with the same desired columns, so restamping the doomed URL first would
+ * only queue a wasted refetch.
+ */
+function syncGeoLensTileColumns(): void {
+  // `updateLayer` notifies Zustand's subscribers synchronously, and one of them
+  // is the subscription that calls this function — so patching inside the scan
+  // would re-enter here mid-loop, and the outer loop would go on to spread a
+  // `layer.source` the nested pass has already replaced. Scan first, then apply
+  // behind a guard, re-reading each layer at the moment it is patched.
+  if (syncingTileColumns) {
+    // A change landed while a batch was applying; that notification is being
+    // dropped here, so ask the running pass for one more scan instead.
+    pendingTileColumnSync = true;
+    return;
+  }
+  syncingTileColumns = true;
+  try {
+    do {
+      pendingTileColumnSync = false;
+      const patches: Array<{ id: string; columns: string[] }> = [];
+      for (const layer of useAppStore.getState().layers) {
+        if (layer.metadata.sourceKind !== "geolens-vector-tiles") continue;
+        if (restoringLayerIds.has(layer.id)) continue;
+        const tiles = layer.source.tiles;
+        const url = Array.isArray(tiles) && typeof tiles[0] === "string" ? tiles[0] : "";
+        if (!url) continue;
+        const desired = desiredTileColumns(layer);
+        const current = tileColumnsOf(url);
+        if (desired.length === current.length && desired.every((c, i) => c === current[i])) {
+          continue;
+        }
+        patches.push({ id: layer.id, columns: desired });
+      }
+      for (const { id, columns } of patches) {
+        const layer = useAppStore.getState().layers.find((l) => l.id === id);
+        if (!layer) continue; // removed while the batch was applying
+        const tiles = layer.source.tiles;
+        const url = Array.isArray(tiles) && typeof tiles[0] === "string" ? tiles[0] : "";
+        if (!url) continue;
+        useAppStore.getState().updateLayer(id, {
+          source: { ...layer.source, tiles: [withTileColumns(url, columns)] },
+        });
+      }
+      // A pass that patched nothing cannot have re-entered, so this terminates
+      // after one extra scan at most.
+    } while (pendingTileColumnSync);
+  } finally {
+    syncingTileColumns = false;
+  }
+}
+
 /** True when the layer's signed tile URL carries an expired (or near-expiry) token. */
 function tileTokenExpired(layer: GeoLibreLayer): boolean {
   const tiles = layer.source.tiles;
@@ -576,7 +858,10 @@ function healRestoredGeoLensLayers(): void {
       .then((token) => {
         const current = useAppStore.getState().layers.find((l) => l.id === layer.id);
         if (!current) return;
-        const { tiles } = vectorTileTemplate(client, token);
+        // Columns come from the layer as it is now: a restored project may
+        // already be styled by (or time-bound to) an attribute, and the fresh
+        // URL has to carry it or the restored style renders against nothing.
+        const { tiles } = vectorTileTemplate(client, token, desiredTileColumns(current));
         useAppStore
           .getState()
           .updateLayer(layer.id, { source: { ...current.source, tiles: [tiles] } });
@@ -591,13 +876,18 @@ function healRestoredGeoLensLayers(): void {
 // plus once now for layers already present when this module loads. Guarded on
 // the `layers` reference so unrelated store churn (pointer, selection, map view)
 // doesn't re-run the scan — useAppStore has no selector-subscribe middleware.
+// The same subscription keeps each layer's `cols=` opt-in in step with what it
+// styles and binds by: a style edit replaces the layer (and so the `layers`
+// array), which is exactly the signal the column sync needs.
 let lastLayersRef: readonly GeoLibreLayer[] | null = null;
 useAppStore.subscribe((state) => {
   if (state.layers === lastLayersRef) return;
   lastLayersRef = state.layers;
   healRestoredGeoLensLayers();
+  syncGeoLensTileColumns();
 });
 healRestoredGeoLensLayers();
+syncGeoLensTileColumns();
 
 /**
  * Schedule a re-mint of the signed tile token shortly before it expires and
@@ -626,10 +916,10 @@ function scheduleTokenRefresh(
     if (!layer) return; // removed from the Layers panel — nothing to refresh.
     void mintTileToken(client, datasetId, fetchImpl)
       .then((token) => {
-        const { tiles } = vectorTileTemplate(client, token);
         // Re-read: the layer may have been removed while the mint was in flight.
         const current = useAppStore.getState().layers.find((l) => l.id === layerId);
         if (!current) return;
+        const { tiles } = vectorTileTemplate(client, token, desiredTileColumns(current));
         useAppStore
           .getState()
           .updateLayer(layerId, { source: { ...current.source, tiles: [tiles] } });
@@ -671,7 +961,13 @@ async function addVectorTilesLayer(
     mintTileToken(client, dataset.id, fetchImpl),
     fetchDatasetFields(client, dataset.id, fetchImpl).catch(() => [] as string[]),
   ]);
-  const { tiles, sourceLayer } = vectorTileTemplate(client, token);
+  // The same field list doubles as the tiles' `cols=` opt-in, so those dropdowns
+  // lead somewhere: without it the tiles carry no attributes at all below zoom
+  // 10 and every attribute-driven feature reads an empty property bag. A table
+  // too wide for the budget requests nothing here and picks columns up as the
+  // layer starts using them (see `desiredTileColumns`).
+  const columns = tileColumnsFor(fields, [], dataset.id, dataset.title);
+  const { tiles, sourceLayer } = vectorTileTemplate(client, token, columns);
   const layer: GeoLibreLayer = {
     id: createLayerId(),
     name: dataset.title,
@@ -1085,12 +1381,17 @@ async function refreshVectorTilesForDataset(
   for (const target of targets) {
     try {
       const token = await mintTileToken(client, datasetId, fetchImpl);
-      // The token alone is not enough: GeoLens hands back the same signature
-      // for the rest of its time bucket, so the URL would be unchanged and the
-      // caches would answer with the pre-save tiles.
-      const tiles = withTileVersion(vectorTileTemplate(client, token).tiles, Date.now());
       const current = useAppStore.getState().layers.find((l) => l.id === target.id);
       if (!current) continue;
+      // The token alone is not enough: GeoLens hands back the same signature
+      // for the rest of its time bucket, so the URL would be unchanged and the
+      // caches would answer with the pre-save tiles. The columns are rebuilt
+      // here too — dropping them would serve attribute-free tiles until the
+      // store subscription restamped them, costing a second refetch.
+      const tiles = withTileVersion(
+        vectorTileTemplate(client, token, desiredTileColumns(current)).tiles,
+        Date.now(),
+      );
       useAppStore.getState().updateLayer(target.id, {
         source: { ...current.source, tiles: [tiles] },
       });

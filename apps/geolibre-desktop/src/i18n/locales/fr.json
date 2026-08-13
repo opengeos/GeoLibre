@@ -1571,6 +1571,19 @@
     "description": "Ajustez l'exagération verticale du relief 3D. Des valeurs plus élevées rendent les collines et les montagnes plus abruptes.",
     "label": "Exagération verticale",
     "controlLabel": "Basculer le relief (double-cliquez pour l'exagération)",
+    "sourceLabel": "Source du terrain",
+    "sourceDescription": "Utilisez un COG monobande en EPSG:3857 ou EPSG:4326 comme source d’altitude. Le fichier doit autoriser CORS et les requêtes HTTP par plage.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "MNT COG local",
+    "localSourceDescription": "Le fichier reste sur cet appareil et est lu par petites plages à mesure que les tuiles de terrain sont nécessaires.",
+    "useCog": "Utiliser le MNT COG",
+    "sourceLoading": "Ouverture du COG…",
+    "restoreDefaultSource": "Utiliser le terrain mondial",
+    "sourceError": "Impossible d’ouvrir le MNT COG.",
+    "sourceErrorEmpty": "Ce fichier est vide. Choisissez un fichier MNT COG.",
+    "sourceErrorBand": "La bande demandée n’existe pas dans ce COG.",
+    "sourceErrorProjection": "Le relief COG ne prend en charge que les MNT en EPSG:3857 et EPSG:4326.",
+    "sourceErrorDetail": "Impossible d’ouvrir le MNT COG. ({{detail}})",
     "reset": "Réinitialiser",
     "done": "Terminé"
   },
@@ -5510,5 +5523,15 @@
     "mapPoint": "Point de la carte",
     "reply": "Répondre",
     "replyPlaceholder": "Écrire une réponse..."
+  },
+  "auth": {
+    "unavailableTitle": "La connexion est indisponible",
+    "unavailableDescription": "GeoLibre n'a pas pu joindre le service de connexion et ne peut donc pas savoir si vous êtes connecté. Ce problème est généralement temporaire ; s'il persiste, les paramètres d'authentification de ce déploiement méritent peut-être une vérification.",
+    "retry": "Réessayer",
+    "signInTitle": "Connectez-vous à GeoLibre",
+    "signInDescription": "Ce déploiement nécessite un compte. Vous serez redirigé vers une page de connexion sécurisée, puis ramené ici.",
+    "signIn": "Se connecter",
+    "signOut": "Se déconnecter",
+    "account": "Compte"
   }
 }

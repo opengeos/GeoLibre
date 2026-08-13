@@ -1528,6 +1528,19 @@
     "description": "3D 지형의 수직 과장 정도를 조정합니다. 값이 클수록 언덕과 산이 더 가파르게 표시됩니다.",
     "label": "수직 과장",
     "controlLabel": "지형 켜기/끄기(과장 설정은 더블클릭)",
+    "sourceLabel": "지형 소스",
+    "sourceDescription": "EPSG:3857 또는 EPSG:4326 단일 밴드 COG를 고도 소스로 사용합니다. 파일에서 CORS 및 HTTP 범위 요청을 허용해야 합니다.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "로컬 COG DEM",
+    "localSourceDescription": "파일은 이 기기에 유지되며 지형 타일이 필요할 때 작은 범위로 읽습니다.",
+    "useCog": "COG DEM 사용",
+    "sourceLoading": "COG 여는 중…",
+    "restoreDefaultSource": "전 세계 지형 사용",
+    "sourceError": "COG DEM을 열 수 없습니다.",
+    "sourceErrorEmpty": "해당 파일이 비어 있습니다. COG DEM 파일을 선택하세요.",
+    "sourceErrorBand": "요청한 밴드가 이 COG에 없습니다.",
+    "sourceErrorProjection": "COG 지형은 EPSG:3857 및 EPSG:4326 DEM만 지원합니다.",
+    "sourceErrorDetail": "COG DEM을 열 수 없습니다. ({{detail}})",
     "reset": "초기화",
     "done": "완료"
   },
@@ -5431,5 +5444,15 @@
     "mapPoint": "지도 지점",
     "reply": "답글",
     "replyPlaceholder": "답글을 입력하세요..."
+  },
+  "auth": {
+    "unavailableTitle": "로그인을 사용할 수 없습니다",
+    "unavailableDescription": "GeoLibre가 로그인 서비스에 연결하지 못해 로그인 여부를 확인할 수 없습니다. 대개 일시적인 문제이며, 계속된다면 이 배포의 인증 설정을 확인해야 할 수 있습니다.",
+    "retry": "다시 시도",
+    "signInTitle": "GeoLibre에 로그인",
+    "signInDescription": "이 배포에는 계정이 필요합니다. 보안 로그인 페이지로 이동한 뒤 이곳으로 돌아옵니다.",
+    "signIn": "로그인",
+    "signOut": "로그아웃",
+    "account": "계정"
   }
 }

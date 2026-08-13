@@ -52,6 +52,7 @@ import { ResetBearingControl } from "./reset-bearing-control";
 import { MaptoolkitLogoControl } from "./maptoolkit-logo-control";
 import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control";
 import { getDynamicPaintProperty, setDynamicPaintProperty } from "./dynamic-style-property";
+import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 
 /**
  * GeolocateControl is constructed through this indirection so tests can
@@ -98,7 +99,7 @@ const OPACITY_PAINT_PROPERTIES: Record<string, string[]> = {
   symbol: ["icon-opacity", "text-opacity"],
 };
 const TERRAIN_SOURCE_ID = "geolibre-terrain-dem";
-const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
+const DEFAULT_TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
   type: "raster-dem",
   tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
   tileSize: 256,
@@ -376,6 +377,13 @@ export class MapController {
   private geolocateControl: maplibregl.GeolocateControl | null = null;
   private globeControl: maplibregl.GlobeControl | null = null;
   private terrainControl: TerrainControl | null = null;
+  private terrainSource: maplibregl.RasterDEMSourceSpecification = DEFAULT_TERRAIN_SOURCE;
+  private cogDemRegistration: CogDemSourceRegistration | null = null;
+  private cogDemUrl: string | null = null;
+  private cogDemGeneration = 0;
+  // Seam for tests: opening a COG needs a real GeoTIFF over the network, which
+  // the generation-guard tests in setTerrainCogSource have no use for.
+  private openCogDem: typeof registerCogDemSource = registerCogDemSource;
   private terrainExaggeration = DEFAULT_TERRAIN_EXAGGERATION;
   // Undefined until the React layer supplies a translated label; the control
   // falls back to its own default in the meantime (single source for the string).
@@ -890,6 +898,11 @@ export class MapController {
     this.removeGeolocateControl();
     this.removeGlobeControl();
     this.removeTerrainControl();
+    // Bumping the generation first invalidates a COG registration still being
+    // opened, so it disposes itself instead of attaching to a destroyed map.
+    this.cogDemGeneration += 1;
+    this.cogDemRegistration?.dispose();
+    this.cogDemRegistration = null;
     this.removeScaleControl();
     this.removeAttributionControl();
     this.removeLogoControl();
@@ -1768,7 +1781,7 @@ export class MapController {
       return false;
     }
     if (this.map.getSource(TERRAIN_SOURCE_ID)) return true;
-    this.map.addSource(TERRAIN_SOURCE_ID, TERRAIN_SOURCE);
+    this.map.addSource(TERRAIN_SOURCE_ID, this.terrainSource);
     return true;
   }
 
@@ -2518,6 +2531,81 @@ export class MapController {
   /** Whether GeoLibre's built-in 3D terrain is currently active. */
   isTerrainEnabled(): boolean {
     return this.map?.getTerrain()?.source === TERRAIN_SOURCE_ID;
+  }
+
+  /** The custom HTTP COG DEM URL, or null for a local file / built-in terrain. */
+  getTerrainCogSource(): string | null {
+    return this.cogDemUrl;
+  }
+
+  /** Whether terrain is backed by either a local or HTTP COG DEM. */
+  hasCustomTerrainSource(): boolean {
+    return this.cogDemRegistration !== null;
+  }
+
+  /**
+   * Replace the built-in global terrain with a DEM read directly from a COG.
+   * Passing null restores the default AWS Terrarium source. The COG is opened
+   * and validated before the active terrain is disturbed, so a bad URL leaves
+   * the currently working source in place.
+   *
+   * Resolves true once the source is applied, and false when a later call has
+   * already superseded this one — including when that later call failed, since
+   * the source the user asked for most recently is the one that decides what
+   * happens, and quietly loading an earlier pick behind a visible error would
+   * be the greater surprise. Concurrent callers can tell the two apart.
+   */
+  async setTerrainCogSource(source: string | Blob | null, band = 1): Promise<boolean> {
+    const normalizedSource = typeof source === "string" ? source.trim() || null : source;
+    const generation = ++this.cogDemGeneration;
+    let registration: CogDemSourceRegistration | null = null;
+    try {
+      registration = normalizedSource ? await this.openCogDem(normalizedSource, band) : null;
+    } catch (error) {
+      // A superseded request's failure is as stale as its success would be:
+      // reporting it would let an older pick put an error over the source the
+      // user actually chose last.
+      if (generation === this.cogDemGeneration) throw error;
+      return false;
+    }
+    // A slower, older request must not replace a source selected after it.
+    if (generation !== this.cogDemGeneration) {
+      registration?.dispose();
+      return false;
+    }
+
+    const wasEnabled = this.isTerrainEnabled();
+    if (wasEnabled) {
+      if (this.terrainControl) this.terrainControl.setEnabled(false);
+      else this.map?.setTerrain(null);
+    }
+    if (this.map?.getSource(TERRAIN_SOURCE_ID)) this.map.removeSource(TERRAIN_SOURCE_ID);
+
+    const previous = this.cogDemRegistration;
+    this.cogDemRegistration = registration;
+    this.cogDemUrl = typeof normalizedSource === "string" ? normalizedSource : null;
+    this.terrainSource = registration
+      ? {
+          type: "raster-dem",
+          tiles: registration.tiles,
+          tileSize: 256,
+          maxzoom: 22,
+          encoding: "terrarium",
+          ...(registration.bounds ? { bounds: registration.bounds } : {}),
+          attribution: "Elevation from user-provided Cloud Optimized GeoTIFF",
+        }
+      : DEFAULT_TERRAIN_SOURCE;
+    previous?.dispose();
+
+    if (this.map && this.isStyleReady()) this.addTerrainSource();
+    // A style reload that started while the COG was opening leaves both calls
+    // bailing on their own style guard, which would drop terrain until the user
+    // toggled it again. Defer to handleStyleReady the way autoEnableTerrain
+    // does so it comes back on its own.
+    if (wasEnabled && !this.setTerrainEnabled(true) && this.terrainControl) {
+      this.terrainEnablePending = true;
+    }
+    return true;
   }
 
   /**

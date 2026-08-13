@@ -406,17 +406,112 @@ export async function mintTileToken(
 export function vectorTileTemplate(
   options: GeoLensClientOptions,
   token: GeoLensTileToken,
+  columns?: Iterable<string>,
 ): GeoLensVectorTiles {
   const table = `data.${token.scope}`;
-  const query = new URLSearchParams({
+  const params = new URLSearchParams({
     sig: token.sig,
     exp: String(token.exp),
     scope: token.scope,
-  }).toString();
+  });
+  const cols = columns ? normalizeTileColumns(columns) : [];
+  if (cols.length > 0) params.set(GEOLENS_TILE_COLUMNS_PARAM, cols.join(","));
   return {
-    tiles: `${options.baseUrl}/api/tiles/${table}/{z}/{x}/{y}.pbf?${query}`,
+    tiles: `${options.baseUrl}/api/tiles/${table}/{z}/{x}/{y}.pbf?${params.toString()}`,
     sourceLayer: table,
   };
+}
+
+/**
+ * Query parameter that opts individual attribute columns into the MVT.
+ *
+ * GeoLens projects **no** attribute columns below zoom 10 by default (its tile
+ * service's `_DEFAULT_NO_ATTR_BELOW_ZOOM`) to bound tile size for wide tables,
+ * so a dataset viewed at world/basin zoom hands MapLibre features whose
+ * `properties` is `{}`. Everything that reads a tile layer's attributes off the
+ * map — categorized/graduated styling, the Time Slider bind dialog, labels,
+ * popups — then sees nothing to work with and reports the layer as having no
+ * usable fields. `cols=` is the server's documented runtime opt-in: the listed
+ * columns are unioned in at *every* zoom, and are validated server-side against
+ * the dataset's real columns, so an unknown name is dropped rather than
+ * erroring the tile.
+ *
+ * Signature validation ignores unknown/extra parameters, so this rides along
+ * with a signed token the same way {@link GEOLENS_TILE_VERSION_PARAM} does.
+ */
+export const GEOLENS_TILE_COLUMNS_PARAM = "cols";
+
+/**
+ * Column names GeoLens accepts. Mirrors its `_COLUMN_NAME_RE`; the server drops
+ * anything else, so filtering here keeps the cache key (and the URL) clean
+ * rather than adding a defense.
+ */
+const TILE_COLUMN_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Normalize column names for `cols=`: valid identifiers only, deduplicated and
+ * sorted.
+ *
+ * The sort is not cosmetic. GeoLens keys its tile cache on the normalized
+ * parameter (`parse_cols_param` sorts and dedupes there too), so `cols=a,b` and
+ * `cols=b,a` are the same entry server-side while being two different URLs to
+ * MapLibre and the browser cache — emitting a stable order keeps one tile to
+ * one URL.
+ *
+ * @param names - Candidate column names, in any order.
+ * @returns Sorted, deduplicated, valid column names.
+ */
+export function normalizeTileColumns(names: Iterable<string>): string[] {
+  const valid = new Set<string>();
+  for (const name of names) {
+    if (typeof name !== "string") continue;
+    const trimmed = name.trim();
+    if (TILE_COLUMN_NAME_RE.test(trimmed)) valid.add(trimmed);
+  }
+  return [...valid].sort();
+}
+
+/**
+ * Read the columns a signed tile template currently opts into, so a caller can
+ * tell whether it needs restamping without rebuilding the URL.
+ *
+ * @param template - A tile template built by {@link vectorTileTemplate}.
+ * @returns The normalized column names, or an empty array when there are none.
+ */
+export function tileColumnsOf(template: string): string[] {
+  const split = template.indexOf("?");
+  if (split === -1) return [];
+  const raw = new URLSearchParams(template.slice(split + 1)).get(GEOLENS_TILE_COLUMNS_PARAM);
+  return raw ? normalizeTileColumns(raw.split(",")) : [];
+}
+
+/**
+ * Stamp (or clear) the `cols=` opt-in on an existing signed tile template,
+ * leaving the signature and the literal `{z}/{x}/{y}` path placeholders alone.
+ *
+ * Used when the set of attributes a layer needs changes after it was added —
+ * the user styles by an attribute, binds it to the Time Slider — so the tiles
+ * can start carrying that column without re-minting the token.
+ *
+ * @param template - The current tile template.
+ * @param columns - The columns to request; empty removes the parameter.
+ * @returns The restamped template.
+ */
+export function withTileColumns(template: string, columns: Iterable<string>): string {
+  const cols = normalizeTileColumns(columns);
+  const split = template.indexOf("?");
+  if (split === -1) {
+    // Encoded through URLSearchParams like every other branch: the URL is the
+    // tile cache key, so `cols` must serialize identically however it was added.
+    return cols.length === 0
+      ? template
+      : `${template}?${new URLSearchParams({ [GEOLENS_TILE_COLUMNS_PARAM]: cols.join(",") })}`;
+  }
+  const params = new URLSearchParams(template.slice(split + 1));
+  if (cols.length === 0) params.delete(GEOLENS_TILE_COLUMNS_PARAM);
+  else params.set(GEOLENS_TILE_COLUMNS_PARAM, cols.join(","));
+  const query = params.toString();
+  return query ? `${template.slice(0, split)}?${query}` : template.slice(0, split);
 }
 
 /**

@@ -1571,6 +1571,19 @@
     "description": "Passen Sie die vertikale Überhöhung des 3D-Geländes an. Höhere Werte lassen Hügel und Berge steiler erscheinen.",
     "label": "Vertikale Überhöhung",
     "controlLabel": "Gelände umschalten (Doppelklick für Überhöhung)",
+    "sourceLabel": "Geländequelle",
+    "sourceDescription": "Verwenden Sie ein einbandiges COG in EPSG:3857 oder EPSG:4326 als Höhenquelle. Die Datei muss CORS und HTTP-Bereichsanfragen erlauben.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "Lokales COG-DEM",
+    "localSourceDescription": "Die Datei bleibt auf diesem Gerät und wird bei Bedarf in kleinen Bereichen als Geländekacheln gelesen.",
+    "useCog": "COG-DEM verwenden",
+    "sourceLoading": "COG wird geöffnet…",
+    "restoreDefaultSource": "Globales Gelände verwenden",
+    "sourceError": "Das COG-DEM konnte nicht geöffnet werden.",
+    "sourceErrorEmpty": "Diese Datei ist leer. Wählen Sie eine COG-DEM-Datei.",
+    "sourceErrorBand": "Das angeforderte Band ist in diesem COG nicht vorhanden.",
+    "sourceErrorProjection": "COG-Gelände unterstützt nur DEMs in EPSG:3857 und EPSG:4326.",
+    "sourceErrorDetail": "Das COG-DEM konnte nicht geöffnet werden. ({{detail}})",
     "reset": "Zurücksetzen",
     "done": "Fertig"
   },
@@ -5510,5 +5523,15 @@
     "mapPoint": "Kartenpunkt",
     "reply": "Antworten",
     "replyPlaceholder": "Antwort schreiben..."
+  },
+  "auth": {
+    "unavailableTitle": "Anmeldung ist nicht verfügbar",
+    "unavailableDescription": "GeoLibre konnte den Anmeldedienst nicht erreichen und kann daher nicht feststellen, ob Sie angemeldet sind. Das ist meist vorübergehend; falls es weiterhin auftritt, müssen möglicherweise die Authentifizierungseinstellungen dieser Bereitstellung geprüft werden.",
+    "retry": "Erneut versuchen",
+    "signInTitle": "Bei GeoLibre anmelden",
+    "signInDescription": "Diese Bereitstellung erfordert ein Konto. Sie werden zu einer sicheren Anmeldeseite weitergeleitet und danach hierher zurückgebracht.",
+    "signIn": "Anmelden",
+    "signOut": "Abmelden",
+    "account": "Konto"
   }
 }

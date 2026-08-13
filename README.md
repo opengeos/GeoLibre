@@ -98,6 +98,7 @@ Switch bodies from the planet switcher in the Layers panel. See [Demos](https://
 
 - [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 - [Geoprocessing in the Browser: 700+ Free GIS Tools in GeoLibre, Zero Install](https://youtu.be/W32bIQO_nG8)
+- [GeoLibre + GeoLens: A Modern GIS Stack for Self-Hosting Geospatial Data](https://youtu.be/kQqgrxXGd4o)
 
 ## Geoprocessing: 1,000+ tools, zero install
 
@@ -116,8 +117,8 @@ the Processing menu:
 
 | Category | Tools | Examples |
 | --- | --- | --- |
-| **Vector** | 280 | overlays, buffers, joins, cleaning, topology, generalization |
-| **Raster** | 232 | algebra, filters, reclassification, zonal and focal statistics |
+| **Vector** | 313 | overlays, buffers, joins, cleaning, topology, generalization |
+| **Raster** | 256 | algebra, filters, reclassification, zonal and focal statistics |
 | **Remote sensing** | 154 | spectral indices, band math, classification, change detection |
 | **Hydrology** | 100 | flow accumulation, watersheds, stream networks, depression filling |
 | **Terrain** | 99 | slope, aspect, hillshade, curvature, ruggedness, viewsheds |

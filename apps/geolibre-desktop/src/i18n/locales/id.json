@@ -1528,6 +1528,19 @@
     "description": "Sesuaikan eksagerasi vertikal medan 3D. Nilai lebih tinggi membuat bukit dan gunung tampak lebih curam.",
     "label": "Eksagerasi vertikal",
     "controlLabel": "Alihkan medan (klik dua kali untuk eksagerasi)",
+    "sourceLabel": "Sumber medan",
+    "sourceDescription": "Gunakan COG pita tunggal EPSG:3857 atau EPSG:4326 sebagai sumber elevasi. Berkas harus mengizinkan CORS dan permintaan rentang HTTP.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "DEM COG lokal",
+    "localSourceDescription": "Berkas tetap berada di perangkat ini dan dibaca dalam rentang kecil saat petak medan diperlukan.",
+    "useCog": "Gunakan DEM COG",
+    "sourceLoading": "Membuka COG…",
+    "restoreDefaultSource": "Gunakan medan global",
+    "sourceError": "DEM COG tidak dapat dibuka.",
+    "sourceErrorEmpty": "Berkas itu kosong. Pilih berkas DEM COG.",
+    "sourceErrorBand": "Band yang diminta tidak ada dalam COG ini.",
+    "sourceErrorProjection": "Terrain COG hanya mendukung DEM EPSG:3857 dan EPSG:4326.",
+    "sourceErrorDetail": "DEM COG tidak dapat dibuka. ({{detail}})",
     "reset": "Atur ulang",
     "done": "Selesai"
   },
@@ -5431,5 +5444,15 @@
     "mapPoint": "Titik Peta",
     "reply": "Balas",
     "replyPlaceholder": "Tulis balasan..."
+  },
+  "auth": {
+    "unavailableTitle": "Masuk tidak tersedia",
+    "unavailableDescription": "GeoLibre tidak dapat menjangkau layanan masuk, sehingga tidak dapat mengetahui apakah Anda sudah masuk. Ini biasanya bersifat sementara; jika terus terjadi, pengaturan autentikasi penerapan ini mungkin perlu diperiksa.",
+    "retry": "Coba lagi",
+    "signInTitle": "Masuk ke GeoLibre",
+    "signInDescription": "Penerapan ini memerlukan akun. Anda akan dibawa ke halaman masuk yang aman lalu dikembalikan ke sini.",
+    "signIn": "Masuk",
+    "signOut": "Keluar",
+    "account": "Akun"
   }
 }

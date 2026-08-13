@@ -1738,3 +1738,178 @@ describe("MapController Mapbox descriptor requests", () => {
     });
   });
 });
+
+describe("COG DEM terrain source", () => {
+  interface TerrainInternals {
+    map: unknown;
+    styleReady: boolean;
+    openCogDem: (source: string | Blob, band?: number) => Promise<unknown>;
+    cogDemRegistration: { tiles: [string] } | null;
+    terrainSource: { tiles?: string[] };
+  }
+
+  const TERRAIN_SOURCE_ID = "geolibre-terrain-dem";
+
+  /** Minimal map: setTerrainCogSource only touches the terrain source. */
+  function terrainController(): {
+    controller: MapController;
+    sources: Map<string, unknown>;
+    terrain: () => { source: string } | null;
+  } {
+    const sources = new Map<string, unknown>();
+    let terrain: { source: string } | null = null;
+    const controller = createMapController();
+    const internal = controller as unknown as TerrainInternals;
+    internal.map = {
+      getSource: (id: string) => sources.get(id),
+      addSource: (id: string, spec: unknown) => sources.set(id, spec),
+      removeSource: (id: string) => sources.delete(id),
+      getTerrain: () => terrain,
+      setTerrain: (next: { source: string } | null) => {
+        terrain = next;
+      },
+      setCenterClampedToGround: () => {},
+      remove: () => {},
+      on: () => {},
+      off: () => {},
+    };
+    internal.styleReady = true;
+    return { controller, sources, terrain: () => terrain };
+  }
+
+  /** A stand-in registration that records whether it was disposed. */
+  function fakeRegistration(name: string) {
+    const registration = {
+      tiles: [`cog-dem://${name}/{z}/{x}/{y}`] as [string],
+      bounds: undefined,
+      renderTile: async () => new Uint8ClampedArray(),
+      disposed: false,
+      dispose() {
+        this.disposed = true;
+      },
+    };
+    return registration;
+  }
+
+  it("discards a slow open that a newer selection has already superseded", async () => {
+    const { controller } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const slow = fakeRegistration("slow");
+    const fast = fakeRegistration("fast");
+    let releaseSlow: () => void = () => {};
+    const slowOpened = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+
+    internal.openCogDem = async (source) => {
+      if (source === "slow.tif") {
+        await slowOpened;
+        return slow;
+      }
+      return fast;
+    };
+
+    const first = controller.setTerrainCogSource("slow.tif");
+    assert.equal(await controller.setTerrainCogSource("fast.tif"), true);
+    releaseSlow();
+    // The superseded call reports that it did not apply, rather than resolving
+    // as though it had.
+    assert.equal(await first, false);
+
+    // The user's latest choice wins, and the superseded open is released.
+    assert.equal(slow.disposed, true);
+    assert.equal(fast.disposed, false);
+    assert.equal(internal.cogDemRegistration, fast);
+    assert.deepEqual(internal.terrainSource.tiles, fast.tiles);
+    assert.equal(controller.getTerrainCogSource(), "fast.tif");
+    controller.destroy();
+  });
+
+  it("leaves the working source in place when an open fails", async () => {
+    const { controller } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const working = fakeRegistration("working");
+
+    internal.openCogDem = async () => working;
+    await controller.setTerrainCogSource("working.tif");
+
+    internal.openCogDem = async () => {
+      throw new Error("404");
+    };
+    await assert.rejects(() => controller.setTerrainCogSource("missing.tif"), /404/);
+
+    assert.equal(working.disposed, false);
+    assert.equal(internal.cogDemRegistration, working);
+    assert.deepEqual(internal.terrainSource.tiles, working.tiles);
+    assert.equal(controller.getTerrainCogSource(), "working.tif");
+    assert.equal(controller.hasCustomTerrainSource(), true);
+    controller.destroy();
+  });
+
+  it("restores the built-in terrain and releases the COG when set to null", async () => {
+    const { controller } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const registration = fakeRegistration("custom");
+
+    internal.openCogDem = async () => registration;
+    await controller.setTerrainCogSource("custom.tif");
+    await controller.setTerrainCogSource(null);
+
+    assert.equal(registration.disposed, true);
+    assert.equal(controller.hasCustomTerrainSource(), false);
+    assert.equal(controller.getTerrainCogSource(), null);
+    assert.ok(internal.terrainSource.tiles?.[0].includes("elevation-tiles-prod"));
+    controller.destroy();
+  });
+
+  it("swallows the failure of an open a newer selection already superseded", async () => {
+    const { controller } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const good = fakeRegistration("good");
+    let failSlow: (reason: Error) => void = () => {};
+    const slowFailure = new Promise<never>((_, reject) => {
+      failSlow = reject;
+    });
+
+    internal.openCogDem = async (source) => {
+      if (source === "slow-bad.tif") return slowFailure;
+      return good;
+    };
+
+    const stale = controller.setTerrainCogSource("slow-bad.tif");
+    assert.equal(await controller.setTerrainCogSource("good.tif"), true);
+    failSlow(new Error("404"));
+
+    // The stale failure reports itself as not applied rather than rejecting,
+    // so it cannot put an error over the source the user chose last.
+    assert.equal(await stale, false);
+    assert.equal(internal.cogDemRegistration, good);
+    assert.equal(controller.getTerrainCogSource(), "good.tif");
+    controller.destroy();
+  });
+
+  it("keeps terrain switched on across a source swap", async () => {
+    const { controller, sources, terrain } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const first = fakeRegistration("first");
+    const second = fakeRegistration("second");
+
+    internal.openCogDem = async () => first;
+    await controller.setTerrainCogSource("first.tif");
+    controller.setTerrainEnabled(true);
+    assert.equal(controller.isTerrainEnabled(), true);
+
+    internal.openCogDem = async () => second;
+    await controller.setTerrainCogSource("second.tif");
+
+    // Terrain stays on, now reading from the newly selected COG.
+    assert.equal(controller.isTerrainEnabled(), true);
+    assert.equal(terrain()?.source, TERRAIN_SOURCE_ID);
+    assert.deepEqual(
+      (sources.get(TERRAIN_SOURCE_ID) as { tiles?: string[] } | undefined)?.tiles,
+      second.tiles,
+    );
+    assert.equal(first.disposed, true);
+    controller.destroy();
+  });
+});
