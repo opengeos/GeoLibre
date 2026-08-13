@@ -173,7 +173,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - The desktop app prefers the Python sidecar, whose GDAL/rio-cogeo stack reads more input formats and tiles deeper
 - **1,000+ geoprocessing tools** in the Whitebox toolbox, running entirely in the browser through a WebAssembly runtime with raster and vector I/O — no Python sidecar required, so the full set works on the web, desktop, and Android
     - Surfaces both the Whitebox Next Gen suite and GeoLibre's own WASM tools, filterable by source
-    - Nine categories: vector (~280 tools), raster (~230), remote sensing (~150), hydrology (~100), terrain (~100), LiDAR (~65), conversion (~50), network (~25), and projection (4)
+    - Nine categories: vector (~315 tools), raster (~255), remote sensing (~155), hydrology (~100), terrain (~100), LiDAR (~65), conversion (~50), network (~25), and projection (4)
     - Browsable by category directly in the Processing menu, with nested subcategory submenus and an offline-bundled tool catalog
     - A **Run locally (WASM)** toggle switches any tool between the in-browser runtime and the Python sidecar, which reads native file paths for batch runs over a directory
     - Deep-linkable through a `?tool=` URL parameter that preselects a tool and pre-fills its form, with a Copy link button that builds the shareable link
@@ -278,5 +278,8 @@ See the [Plugin API](plugin-api.md) to build your own.
     - A GitHub Actions workflow builds both the universal App Bundle that Play ships and signed, per-architecture sideload APKs (~40 MB)
     - A permanent `org.geolibre.app` package id, API level 36, and 16 KB page-size alignment verified in CI
     - Tools that depend on a local desktop process (Raster, Conversion, AI Segmentation, PostgreSQL/Martin) are hidden on mobile, so nothing is shown that cannot run; the WebAssembly geoprocessing toolbox needs no such process and stays available
-- iOS build scaffolding on the same codebase, with Tauri iOS configuration, location permissions, and a CI workflow that signs and exports an `.ipa` when Apple signing secrets are present (bring-up: no iOS build has shipped yet). See [iOS](ios.md)
+- Native iOS app for iPhone and iPad built from the same codebase with Tauri v2 mobile, published on the [App Store](https://apps.apple.com/app/geolibre/id6796039674). See [iOS](ios.md)
+    - A GitHub Actions workflow on a macOS runner archives unsigned and exports a signed, submittable `.ipa` when the Apple signing secrets are present, stamping a monotonic `CFBundleVersion` and asserting the bundle id, signature, and minimum OS version
+    - The `NSLocationWhenInUseUsageDescription` string lives in a checked-in `Info.ios.plist` and covers Field Collection, GPS Tracking, and the GeoLocate control, so requesting location does not terminate the app
+    - The same tools that need a local desktop process (Raster, Conversion, AI Segmentation, PostgreSQL/Martin) are hidden on iOS as they are on Android, since the iOS sandbox forbids spawning one; the WebAssembly geoprocessing toolbox stays available
 - Installable, offline-capable Progressive Web App (PWA) build, plus a **Download Offline Area** tool that pre-caches the current map view's basemap tiles, and service-worker caching of the CDN-loaded Pyodide and PGlite/PostGIS engines so browser SQL and Python keep working offline after first use

@@ -22,6 +22,7 @@ import {
   itemsUrl,
   mintTileToken,
   normalizeBaseUrl,
+  normalizeTileColumns,
   parseDataset,
   rasterTemplatesForServer,
   rasterTileAuthHeaders,
@@ -29,8 +30,10 @@ import {
   searchDatasets,
   stacCatalogUrl,
   stacCollectionsUrl,
+  tileColumnsOf,
   tileUrlPrefix,
   vectorTileTemplate,
+  withTileColumns,
   withTileVersion,
   type GeoLensFetch,
   type GeoLensHttpResponse,
@@ -152,6 +155,85 @@ describe("vectorTileTemplate", () => {
     assert.ok(out.tiles.includes("sig=abc123"));
     assert.ok(out.tiles.includes("exp=1784668500"));
     assert.ok(out.tiles.includes("scope=world_countries"));
+    // No columns requested: the parameter is absent rather than empty, so the
+    // URL matches what GeoLens caches for a plain tile request.
+    assert.ok(!out.tiles.includes("cols="));
+  });
+
+  it("stamps requested attribute columns onto the signed template", () => {
+    const out = vectorTileTemplate(
+      { baseUrl: "http://localhost:8080" },
+      { kind: "vector", sig: "abc123", exp: 1784668500, scope: "tracks", expiresIn: 465 },
+      ["year", "nature", "year"],
+    );
+    assert.ok(out.tiles.includes("/{z}/{x}/{y}.pbf?"), "placeholders must stay literal");
+    assert.deepEqual(tileColumnsOf(out.tiles), ["nature", "year"]);
+    assert.ok(out.tiles.includes("sig=abc123"));
+  });
+});
+
+describe("normalizeTileColumns", () => {
+  it("sorts and deduplicates so one tile keeps one URL", () => {
+    // GeoLens sorts and dedupes server-side for its tile cache key, so an
+    // unsorted client would spend two cache entries on the same tile.
+    assert.deepEqual(normalizeTileColumns(["year", "nature", "year"]), ["nature", "year"]);
+    assert.deepEqual(normalizeTileColumns(["b", "a"]), normalizeTileColumns(["a", "b"]));
+  });
+
+  it("drops names GeoLens would reject", () => {
+    assert.deepEqual(
+      normalizeTileColumns(["ok_1", "1bad", "also bad", "", "  spaced  ", "geom;drop"]),
+      ["ok_1", "spaced"],
+    );
+  });
+});
+
+describe("withTileColumns / tileColumnsOf", () => {
+  const template =
+    "https://demo.example.com/api/tiles/data.b/{z}/{x}/{y}.pbf?sig=abc&exp=1&scope=b";
+
+  it("reads back nothing when the template opts into no columns", () => {
+    assert.deepEqual(tileColumnsOf(template), []);
+    assert.deepEqual(tileColumnsOf("https://h/api/tiles/t/{z}/{x}/{y}.pbf"), []);
+  });
+
+  it("stamps columns while leaving the signature and placeholders intact", () => {
+    const out = withTileColumns(template, ["nature", "year"]);
+    assert.ok(out.includes("/{z}/{x}/{y}.pbf?"), "placeholders must stay literal");
+    assert.ok(out.includes("sig=abc"));
+    assert.ok(out.includes("exp=1"));
+    assert.deepEqual(tileColumnsOf(out), ["nature", "year"]);
+  });
+
+  it("replaces a previous opt-in rather than appending a second one", () => {
+    const once = withTileColumns(template, ["nature"]);
+    const twice = withTileColumns(once, ["year", "month"]);
+    assert.equal(twice.match(/cols=/g)?.length, 1);
+    assert.deepEqual(tileColumnsOf(twice), ["month", "year"]);
+  });
+
+  it("clears the parameter when nothing is requested", () => {
+    const stamped = withTileColumns(template, ["nature"]);
+    const cleared = withTileColumns(stamped, []);
+    assert.ok(!cleared.includes("cols="));
+    assert.ok(cleared.includes("sig=abc"));
+  });
+
+  it("handles a template that carries no query at all", () => {
+    assert.equal(
+      withTileColumns("https://h/api/tiles/t/{z}/{x}/{y}.pbf", ["a"]),
+      "https://h/api/tiles/t/{z}/{x}/{y}.pbf?cols=a",
+    );
+    // That branch builds its query separately from the one above, so a
+    // multi-column case pins them to one serialization: the URL is the tile
+    // cache key, and `cols` has to look the same however it was added.
+    const noQuery = withTileColumns("https://h/api/tiles/t/{z}/{x}/{y}.pbf", ["b", "a"]);
+    const withQuery = withTileColumns("https://h/api/tiles/t/{z}/{x}/{y}.pbf?sig=abc", ["b", "a"]);
+    assert.equal(
+      noQuery.slice(noQuery.indexOf("cols=")),
+      withQuery.slice(withQuery.indexOf("cols=")),
+    );
+    assert.deepEqual(tileColumnsOf(noQuery), ["a", "b"]);
   });
 });
 

@@ -41,6 +41,12 @@ export interface AddLayerSpec {
   beforeId?: string;
 }
 
+export interface AddDataOptions {
+  styleUrl?: string;
+  /** Fit the map to the newly added data. Defaults to true. */
+  fit?: boolean;
+}
+
 export type EmbedEventMap = {
   ready: { version: string };
   /**
@@ -84,6 +90,7 @@ export interface GeoLibreEmbedClient {
   setFilter(layerId: string, expression: unknown[] | null): Promise<void>;
   getViewport(): Promise<Viewport>;
   addLayer(spec: AddLayerSpec): Promise<string>;
+  addData(url: string, options?: AddDataOptions): Promise<string[]>;
   exportImage(): Promise<string>;
   on<K extends EventName>(type: K, listener: Listener<K>): () => void;
   disconnect(): void;
@@ -164,6 +171,7 @@ export function connect(
     setFilter: (layerId, expression) => send("setFilter", { layerId, expression }),
     getViewport: () => send<Viewport>("getViewport"),
     addLayer: (spec) => send<string>("addLayer", { spec }),
+    addData: (url, options = {}) => send<string[]>("addData", { url, ...options }),
     exportImage: () => send<string>("exportImage"),
     on: (type, listener) => {
       const set = listeners.get(type) ?? new Set();

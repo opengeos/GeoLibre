@@ -229,7 +229,9 @@
     "invalidUrl": "有効なHTTPまたはHTTPSのスタイルURLを入力してください。",
     "sectionMoon": "月",
     "sectionMars": "火星",
-    "sectionOther": "その他の天体"
+    "sectionOther": "その他の天体",
+    "sectionRegional": "地域",
+    "regionChina": "中国"
   },
   "planetSwitcher": {
     "label": "天体",
@@ -1528,6 +1530,19 @@
     "description": "3D地形の垂直方向の誇張度を調整します。値を大きくすると、丘や山がより急峻に表示されます。",
     "label": "垂直誇張度",
     "controlLabel": "地形の表示切り替え(ダブルクリックで誇張度を設定)",
+    "sourceLabel": "地形ソース",
+    "sourceDescription": "EPSG:3857 または EPSG:4326 の単一バンド COG を標高ソースとして使用します。ファイルは CORS と HTTP 範囲リクエストを許可する必要があります。",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "ローカル COG DEM",
+    "localSourceDescription": "ファイルはこのデバイスに保持され、地形タイルが必要になるたびに小さな範囲で読み取られます。",
+    "useCog": "COG DEM を使用",
+    "sourceLoading": "COG を開いています…",
+    "restoreDefaultSource": "全球地形を使用",
+    "sourceError": "COG DEM を開けませんでした。",
+    "sourceErrorEmpty": "このファイルは空です。COG DEM ファイルを選択してください。",
+    "sourceErrorBand": "要求されたバンドはこの COG に存在しません。",
+    "sourceErrorProjection": "COG 地形は EPSG:3857 と EPSG:4326 の DEM のみに対応しています。",
+    "sourceErrorDetail": "COG DEM を開けませんでした。({{detail}})",
     "reset": "リセット",
     "done": "完了"
   },
@@ -5431,5 +5446,15 @@
     "mapPoint": "地図上のポイント",
     "reply": "返信",
     "replyPlaceholder": "返信を入力..."
+  },
+  "auth": {
+    "unavailableTitle": "サインインを利用できません",
+    "unavailableDescription": "GeoLibre はサインインサービスに接続できなかったため、サインイン済みかどうかを判断できません。通常は一時的なものです。解消しない場合は、このデプロイの認証設定を確認する必要があるかもしれません。",
+    "retry": "再試行",
+    "signInTitle": "GeoLibre にサインイン",
+    "signInDescription": "このデプロイにはアカウントが必要です。安全なサインインページに移動し、その後ここに戻ります。",
+    "signIn": "サインイン",
+    "signOut": "サインアウト",
+    "account": "アカウント"
   }
 }

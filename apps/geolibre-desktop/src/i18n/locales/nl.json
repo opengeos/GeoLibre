@@ -231,7 +231,9 @@
     "invalidUrl": "Voer een geldige HTTP- of HTTPS-stijl-URL in.",
     "sectionMoon": "De Maan",
     "sectionMars": "Mars",
-    "sectionOther": "Andere hemellichamen"
+    "sectionOther": "Andere hemellichamen",
+    "sectionRegional": "Regionaal",
+    "regionChina": "China (中国)"
   },
   "planetSwitcher": {
     "label": "Hemellichaam",
@@ -1571,6 +1573,19 @@
     "description": "Pas de verticale overdrijving van het 3D-terrein aan. Hogere waarden laten heuvels en bergen steiler lijken.",
     "label": "Verticale overdrijving",
     "controlLabel": "Terrein in-/uitschakelen (dubbelklik voor overdrijving)",
+    "sourceLabel": "Terreinbron",
+    "sourceDescription": "Gebruik een enkelbands COG in EPSG:3857 of EPSG:4326 als hoogtebron. Het bestand moet CORS en HTTP-bereikverzoeken toestaan.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "Lokale COG-DEM",
+    "localSourceDescription": "Het bestand blijft op dit apparaat en wordt in kleine bereiken gelezen wanneer terreintegels nodig zijn.",
+    "useCog": "COG-DEM gebruiken",
+    "sourceLoading": "COG openen…",
+    "restoreDefaultSource": "Wereldwijd terrein gebruiken",
+    "sourceError": "De COG-DEM kon niet worden geopend.",
+    "sourceErrorEmpty": "Dat bestand is leeg. Kies een COG-DEM-bestand.",
+    "sourceErrorBand": "De gevraagde band bestaat niet in deze COG.",
+    "sourceErrorProjection": "COG-terrein ondersteunt alleen DEM's in EPSG:3857 en EPSG:4326.",
+    "sourceErrorDetail": "De COG-DEM kon niet worden geopend. ({{detail}})",
     "reset": "Standaardwaarden",
     "done": "Gereed"
   },
@@ -5510,5 +5525,15 @@
     "mapPoint": "Kaartpunt",
     "reply": "Beantwoorden",
     "replyPlaceholder": "Schrijf een antwoord..."
+  },
+  "auth": {
+    "unavailableTitle": "Aanmelden is niet beschikbaar",
+    "unavailableDescription": "GeoLibre kon de aanmeldservice niet bereiken en kan daarom niet vaststellen of u bent aangemeld. Dit is meestal tijdelijk; als het aanhoudt, vragen de authenticatie-instellingen van deze implementatie mogelijk om aandacht.",
+    "retry": "Opnieuw proberen",
+    "signInTitle": "Aanmelden bij GeoLibre",
+    "signInDescription": "Deze implementatie vereist een account. U wordt naar een beveiligde aanmeldpagina geleid en daarna hier teruggebracht.",
+    "signIn": "Aanmelden",
+    "signOut": "Afmelden",
+    "account": "Account"
   }
 }

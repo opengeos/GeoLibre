@@ -143,6 +143,7 @@ export type EmbedCommand =
   | { type: "setFilter"; layerId: string; expression: unknown[] | null }
   | { type: "getViewport" }
   | { type: "addLayer"; spec: AddLayerSpec }
+  | { type: "addData"; url: string; styleUrl: string | null; fit: boolean }
   | { type: "exportImage" };
 
 /** A parsed inbound message: the command plus the host's correlation id. */
@@ -580,6 +581,29 @@ export function parseEmbedRequest(
       }
       return {
         command: { type: "addLayer", spec: spec as unknown as AddLayerSpec },
+        requestId,
+      };
+    }
+    case "addData": {
+      if (!isFetchableUrl(payload.url) || !/^https?:/i.test(payload.url)) {
+        return fail("addData: url must be an http(s) URL");
+      }
+      if (
+        payload.styleUrl !== undefined &&
+        (!isFetchableUrl(payload.styleUrl) || !/^https?:/i.test(payload.styleUrl))
+      ) {
+        return fail("addData: styleUrl must be an http(s) URL");
+      }
+      if (payload.fit !== undefined && typeof payload.fit !== "boolean") {
+        return fail("addData: fit must be a boolean");
+      }
+      return {
+        command: {
+          type: "addData",
+          url: payload.url,
+          styleUrl: typeof payload.styleUrl === "string" ? payload.styleUrl : null,
+          fit: payload.fit ?? true,
+        },
         requestId,
       };
     }

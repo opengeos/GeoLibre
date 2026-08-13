@@ -233,6 +233,7 @@ const map = await connect(document.querySelector("iframe"), {
 });
 await map.setView({ center: [-95.7, 37.1], zoom: 5 });
 await map.setLayerVisibility("roads", false);
+const added = await map.addData("https://assets.geolibre.app/data/places.geojson");
 const layers = await map.listLayers();
 map.on("selectionChanged", ({ featureIds }) => console.log(featureIds));
 ```
@@ -304,6 +305,7 @@ other frame or origin is ignored. Pass the *app's* origin, not your own.
 | `setFilter(layerId, expression)`       | `void`                  | A MapLibre filter expression, or `null` to clear it.                    |
 | `getViewport()`                        | `Viewport`              | `{ bbox, center, zoom, bearing, pitch }`.                               |
 | `addLayer(spec)`                       | the new layer's `id`    | Takes a project-format layer specification.                             |
+| `addData(url, options?)`               | the new layer `id`s     | Loads remote data like `?data=`; options are `{ styleUrl, fit }`.        |
 | `exportImage()`                        | a PNG `data:` URL       | The map as currently rendered.                                          |
 | `on(event, listener)`                  | an unsubscribe function | Not a promise; events are the set the app posts (see below).            |
 | `disconnect()`                         | not a promise           | Removes the listener and rejects anything still in flight.              |
@@ -350,6 +352,7 @@ them out of the other `postMessage` traffic on your page.
 | `setFilter`        | `{ layerId, expression }`                                  | Applies a MapLibre filter expression; send `null` to clear it.                        |
 | `getViewport`      | `{}`                                                       | Returns the current camera and bounds in `result`.                                    |
 | `addLayer`         | `{ spec }`                                                 | Adds a project-format layer specification at runtime.                                 |
+| `addData`          | `{ url, styleUrl?, fit? }`                                 | Loads GeoJSON/API, ZIP, GeoParquet, PMTiles, or COG data without reloading the iframe. |
 | `exportImage`      | `{}`                                                       | Returns the rendered map as a PNG data URL in `result`.                               |
 
 Send `{ layerId }` alone to `highlightFeature` to clear the highlight. A request
@@ -366,6 +369,12 @@ or a non-empty `tiles`, or — for the two layer types drawn from inline feature
 `ack` rather than reporting success and rendering nothing. `addLayer` also
 refuses `javascript:`, `vbscript:`, `data:`, `file:`, and `blob:` URLs on a
 source; a custom map protocol such as `pmtiles://` is fine.
+
+`addData` uses the same format detection, CORS requirements, safety limits, and
+optional Mapbox/MapLibre style import as the [`data` URL parameter](#open-remote-data).
+It fits the newly loaded data by default; pass `fit: false` to preserve the
+current camera. Its acknowledgement returns every created layer id, including
+all layers extracted from a ZIP archive.
 
 Add a `requestId` to any message and the app answers with an `ack` (below)
 reporting whether it worked.

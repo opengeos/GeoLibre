@@ -231,7 +231,9 @@
     "invalidUrl": "Digite uma URL de estilo HTTP ou HTTPS válida.",
     "sectionMoon": "A Lua",
     "sectionMars": "Marte",
-    "sectionOther": "Outros corpos celestes"
+    "sectionOther": "Outros corpos celestes",
+    "sectionRegional": "Regional",
+    "regionChina": "China (中国)"
   },
   "planetSwitcher": {
     "label": "Corpo celeste",
@@ -1571,6 +1573,19 @@
     "description": "Ajuste o exagero vertical do terreno 3D. Valores mais altos fazem colinas e montanhas parecerem mais íngremes.",
     "label": "Exagero vertical",
     "controlLabel": "Alternar terreno (clique duas vezes para exagero)",
+    "sourceLabel": "Fonte do terreno",
+    "sourceDescription": "Use um COG de banda única em EPSG:3857 ou EPSG:4326 como fonte de elevação. O ficheiro deve permitir CORS e pedidos de intervalo HTTP.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "DEM COG local",
+    "localSourceDescription": "O ficheiro permanece neste dispositivo e é lido em pequenos intervalos à medida que os mosaicos de terreno são necessários.",
+    "useCog": "Usar DEM COG",
+    "sourceLoading": "A abrir COG…",
+    "restoreDefaultSource": "Usar terreno global",
+    "sourceError": "Não foi possível abrir o DEM COG.",
+    "sourceErrorEmpty": "Esse arquivo está vazio. Escolha um arquivo DEM COG.",
+    "sourceErrorBand": "A banda solicitada não existe neste COG.",
+    "sourceErrorProjection": "O relevo COG só oferece suporte a DEMs em EPSG:3857 e EPSG:4326.",
+    "sourceErrorDetail": "Não foi possível abrir o DEM COG. ({{detail}})",
     "reset": "Redefinir",
     "done": "Concluído"
   },
@@ -5510,5 +5525,15 @@
     "mapPoint": "Ponto do mapa",
     "reply": "Responder",
     "replyPlaceholder": "Escreva uma resposta..."
+  },
+  "auth": {
+    "unavailableTitle": "O login não está disponível",
+    "unavailableDescription": "O GeoLibre não conseguiu acessar o serviço de login, portanto não sabe se você está conectado. Isso costuma ser temporário; se persistir, as configurações de autenticação desta implantação podem precisar de atenção.",
+    "retry": "Tentar novamente",
+    "signInTitle": "Faça login no GeoLibre",
+    "signInDescription": "Esta implantação requer uma conta. Você será levado a uma página de login segura e retornará para cá.",
+    "signIn": "Entrar",
+    "signOut": "Sair",
+    "account": "Conta"
   }
 }

@@ -3,7 +3,10 @@ import {
   DEFAULT_BASEMAP,
   DEFAULT_PROJECT_PREFERENCES,
   getPlanetaryBasemapByStyleUrl,
+  getRegionalBasemapByStyleUrl,
+  isRegionalBasemapSentinel,
   PLANETARY_BASEMAP_SENTINEL_PREFIX,
+  type RegionalBasemap,
   scaleAltitudeToActiveBody,
   useAppStore,
 } from "@geolibre/core";
@@ -51,6 +54,7 @@ import { getOfflineBasemapStyle, isOfflineBasemapSentinel } from "./protomaps-ba
 import { ResetBearingControl } from "./reset-bearing-control";
 import { MaptoolkitLogoControl } from "./maptoolkit-logo-control";
 import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control";
+import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
   type: "globe",
@@ -86,7 +90,7 @@ const OPACITY_PAINT_PROPERTIES: Record<string, string[]> = {
   symbol: ["icon-opacity", "text-opacity"],
 };
 const TERRAIN_SOURCE_ID = "geolibre-terrain-dem";
-const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
+const DEFAULT_TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
   type: "raster-dem",
   tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
   tileSize: 256,
@@ -218,6 +222,21 @@ function createBlankMapStyle(): maplibregl.StyleSpecification {
   };
 }
 
+/**
+ * Whether a basemap style URL is one of GeoLibre's internal sentinels rather
+ * than something fetchable. Every sentinel kind — planetary (`geolibre://
+ * basemap/`), offline (`geolibre://offline-basemap/`), and regional
+ * (`geolibre://regional-basemap/`) — is expanded to an inline style by
+ * {@link resolveMapStyle} and would throw if handed to `fetch`.
+ *
+ * Matching on the scheme rather than enumerating the three prefixes keeps a
+ * fourth sentinel kind from silently reintroducing that fetch, and covers a
+ * sentinel whose id no longer resolves (which the per-kind lookups miss).
+ */
+function isGeoLibreSentinelStyleUrl(styleUrl: string | undefined): boolean {
+  return Boolean(styleUrl?.startsWith("geolibre://"));
+}
+
 function resolveMapStyle(styleUrl: string | undefined): string | maplibregl.StyleSpecification {
   if (styleUrl === BLANK_BASEMAP) return createBlankMapStyle();
   const offline = getOfflineBasemapStyle(styleUrl);
@@ -246,7 +265,66 @@ function resolveMapStyle(styleUrl: string | undefined): string | maplibregl.Styl
     console.warn(`Unknown planetary basemap "${styleUrl}"; falling back to the default basemap.`);
     return DEFAULT_BASEMAP;
   }
+  const regional = getRegionalBasemapByStyleUrl(styleUrl);
+  if (regional) return createRegionalMapStyle(regional);
+  // Same guard as the planetary path: a regional sentinel that no longer
+  // resolves must not be handed to MapLibre as a style URL.
+  if (isRegionalBasemapSentinel(styleUrl)) {
+    console.warn(`Unknown regional basemap "${styleUrl}"; falling back to the default basemap.`);
+    return DEFAULT_BASEMAP;
+  }
   return styleUrl ?? DEFAULT_BASEMAP;
+}
+
+/**
+ * A raster style for a {@link RegionalBasemap} — today the mainland-China
+ * providers, whose tiles are ordinary Web-Mercator images (XYZ, or TMS when
+ * `scheme` says so). A basemap with an `overlayTileUrl` (Amap Hybrid) stacks
+ * its transparent roads-and-labels tiles above the imagery, so one selection
+ * gives a labeled satellite basemap.
+ *
+ * Unlike the planetary styles this uses a light background rather than black:
+ * these cover Earth, so a gap should read as missing map, not as space.
+ */
+function createRegionalMapStyle(basemap: RegionalBasemap): maplibregl.StyleSpecification {
+  const rasterSource = (tiles: string, withAttribution: boolean) =>
+    ({
+      type: "raster",
+      tiles: [tiles],
+      tileSize: 256,
+      maxzoom: basemap.maxZoom,
+      ...(basemap.scheme ? { scheme: basemap.scheme } : {}),
+      // Credit the provider once; repeating it on the overlay would print the
+      // same attribution twice in the map's attribution control.
+      ...(withAttribution ? { attribution: basemap.attribution } : {}),
+    }) satisfies maplibregl.RasterSourceSpecification;
+
+  return {
+    version: 8,
+    sources: {
+      "regional-basemap": rasterSource(basemap.tileUrl, true),
+      ...(basemap.overlayTileUrl
+        ? { "regional-basemap-overlay": rasterSource(basemap.overlayTileUrl, false) }
+        : {}),
+    },
+    layers: [
+      {
+        id: BLANK_BACKGROUND_LAYER_ID,
+        type: "background",
+        paint: { "background-color": BLANK_BACKGROUND_COLOR },
+      },
+      { id: "regional-basemap", type: "raster", source: "regional-basemap" },
+      ...(basemap.overlayTileUrl
+        ? [
+            {
+              id: "regional-basemap-overlay",
+              type: "raster" as const,
+              source: "regional-basemap-overlay",
+            },
+          ]
+        : []),
+    ],
+  };
 }
 
 /**
@@ -364,6 +442,13 @@ export class MapController {
   private geolocateControl: maplibregl.GeolocateControl | null = null;
   private globeControl: maplibregl.GlobeControl | null = null;
   private terrainControl: TerrainControl | null = null;
+  private terrainSource: maplibregl.RasterDEMSourceSpecification = DEFAULT_TERRAIN_SOURCE;
+  private cogDemRegistration: CogDemSourceRegistration | null = null;
+  private cogDemUrl: string | null = null;
+  private cogDemGeneration = 0;
+  // Seam for tests: opening a COG needs a real GeoTIFF over the network, which
+  // the generation-guard tests in setTerrainCogSource have no use for.
+  private openCogDem: typeof registerCogDemSource = registerCogDemSource;
   private terrainExaggeration = DEFAULT_TERRAIN_EXAGGERATION;
   // Undefined until the React layer supplies a translated label; the control
   // falls back to its own default in the meantime (single source for the string).
@@ -878,6 +963,11 @@ export class MapController {
     this.removeGeolocateControl();
     this.removeGlobeControl();
     this.removeTerrainControl();
+    // Bumping the generation first invalidates a COG registration still being
+    // opened, so it disposes itself instead of attaching to a destroyed map.
+    this.cogDemGeneration += 1;
+    this.cogDemRegistration?.dispose();
+    this.cogDemRegistration = null;
     this.removeScaleControl();
     this.removeAttributionControl();
     this.removeLogoControl();
@@ -945,7 +1035,11 @@ export class MapController {
 
     if (!isMapboxStyleUrl(url)) {
       this.beginStyleSwap();
-      map.setStyle(resolveMapStyle(url));
+      // GeoLibre deliberately rebuilds every style-owned control and layer in
+      // style.load, so diffing cannot preserve any work for us. Disabling it
+      // also avoids MapLibre's noisy fallback when a second basemap arrives
+      // before the current style has finished loading.
+      map.setStyle(resolveMapStyle(url), { diff: false });
       return;
     }
 
@@ -955,7 +1049,7 @@ export class MapController {
       .then((style) => {
         if (this.map !== map || this.styleGeneration !== generation) return;
         this.beginStyleSwap();
-        map.setStyle(style, { validate: false });
+        map.setStyle(style, { diff: false, validate: false });
       })
       .catch((error: unknown) => {
         if (this.map !== map || this.styleGeneration !== generation) return;
@@ -1748,7 +1842,7 @@ export class MapController {
       return false;
     }
     if (this.map.getSource(TERRAIN_SOURCE_ID)) return true;
-    this.map.addSource(TERRAIN_SOURCE_ID, TERRAIN_SOURCE);
+    this.map.addSource(TERRAIN_SOURCE_ID, this.terrainSource);
     return true;
   }
 
@@ -1760,16 +1854,14 @@ export class MapController {
     this.layerControlSignature = this.createLayerControlSignature(layerControlConfig);
     this.layerControl = new LayerControl({
       // The layer control fetches this URL to introspect the basemap's layers.
-      // Both planetary and offline basemaps use a non-fetchable `geolibre://`
-      // sentinel (expanded to an inline style by resolveMapStyle), so hand the
-      // control the blank sentinel instead — like blank/raster basemaps it then
-      // skips the fetch (which would otherwise throw "Failed to fetch" on the
+      // Planetary, offline, and regional basemaps all use a non-fetchable
+      // `geolibre://` sentinel (expanded to an inline style by resolveMapStyle),
+      // so hand the control the blank sentinel instead — like blank/raster
+      // basemaps it then skips the fetch (which would otherwise throw on the
       // sentinel URL) and shows a single background entry.
-      basemapStyleUrl:
-        getPlanetaryBasemapByStyleUrl(this.basemapStyleUrl) ||
-        isOfflineBasemapSentinel(this.basemapStyleUrl)
-          ? BLANK_BASEMAP
-          : this.basemapStyleUrl,
+      basemapStyleUrl: isGeoLibreSentinelStyleUrl(this.basemapStyleUrl)
+        ? BLANK_BASEMAP
+        : this.basemapStyleUrl,
       collapsed: true,
       panelWidth: 340,
       panelMinWidth: 240,
@@ -2498,6 +2590,81 @@ export class MapController {
   /** Whether GeoLibre's built-in 3D terrain is currently active. */
   isTerrainEnabled(): boolean {
     return this.map?.getTerrain()?.source === TERRAIN_SOURCE_ID;
+  }
+
+  /** The custom HTTP COG DEM URL, or null for a local file / built-in terrain. */
+  getTerrainCogSource(): string | null {
+    return this.cogDemUrl;
+  }
+
+  /** Whether terrain is backed by either a local or HTTP COG DEM. */
+  hasCustomTerrainSource(): boolean {
+    return this.cogDemRegistration !== null;
+  }
+
+  /**
+   * Replace the built-in global terrain with a DEM read directly from a COG.
+   * Passing null restores the default AWS Terrarium source. The COG is opened
+   * and validated before the active terrain is disturbed, so a bad URL leaves
+   * the currently working source in place.
+   *
+   * Resolves true once the source is applied, and false when a later call has
+   * already superseded this one — including when that later call failed, since
+   * the source the user asked for most recently is the one that decides what
+   * happens, and quietly loading an earlier pick behind a visible error would
+   * be the greater surprise. Concurrent callers can tell the two apart.
+   */
+  async setTerrainCogSource(source: string | Blob | null, band = 1): Promise<boolean> {
+    const normalizedSource = typeof source === "string" ? source.trim() || null : source;
+    const generation = ++this.cogDemGeneration;
+    let registration: CogDemSourceRegistration | null = null;
+    try {
+      registration = normalizedSource ? await this.openCogDem(normalizedSource, band) : null;
+    } catch (error) {
+      // A superseded request's failure is as stale as its success would be:
+      // reporting it would let an older pick put an error over the source the
+      // user actually chose last.
+      if (generation === this.cogDemGeneration) throw error;
+      return false;
+    }
+    // A slower, older request must not replace a source selected after it.
+    if (generation !== this.cogDemGeneration) {
+      registration?.dispose();
+      return false;
+    }
+
+    const wasEnabled = this.isTerrainEnabled();
+    if (wasEnabled) {
+      if (this.terrainControl) this.terrainControl.setEnabled(false);
+      else this.map?.setTerrain(null);
+    }
+    if (this.map?.getSource(TERRAIN_SOURCE_ID)) this.map.removeSource(TERRAIN_SOURCE_ID);
+
+    const previous = this.cogDemRegistration;
+    this.cogDemRegistration = registration;
+    this.cogDemUrl = typeof normalizedSource === "string" ? normalizedSource : null;
+    this.terrainSource = registration
+      ? {
+          type: "raster-dem",
+          tiles: registration.tiles,
+          tileSize: 256,
+          maxzoom: 22,
+          encoding: "terrarium",
+          ...(registration.bounds ? { bounds: registration.bounds } : {}),
+          attribution: "Elevation from user-provided Cloud Optimized GeoTIFF",
+        }
+      : DEFAULT_TERRAIN_SOURCE;
+    previous?.dispose();
+
+    if (this.map && this.isStyleReady()) this.addTerrainSource();
+    // A style reload that started while the COG was opening leaves both calls
+    // bailing on their own style guard, which would drop terrain until the user
+    // toggled it again. Defer to handleStyleReady the way autoEnableTerrain
+    // does so it comes back on its own.
+    if (wasEnabled && !this.setTerrainEnabled(true) && this.terrainControl) {
+      this.terrainEnablePending = true;
+    }
+    return true;
   }
 
   /**

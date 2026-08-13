@@ -231,7 +231,9 @@
     "invalidUrl": "Introduzca una URL de estilo HTTP o HTTPS válida.",
     "sectionMoon": "La Luna",
     "sectionMars": "Marte",
-    "sectionOther": "Otros cuerpos celestes"
+    "sectionOther": "Otros cuerpos celestes",
+    "sectionRegional": "Regional",
+    "regionChina": "China (中国)"
   },
   "planetSwitcher": {
     "label": "Cuerpo celeste",
@@ -1571,6 +1573,19 @@
     "description": "Ajuste la exageración vertical del terreno 3D. Los valores más altos hacen que las colinas y montañas parezcan más pronunciadas.",
     "label": "Exageración vertical",
     "controlLabel": "Alternar terreno (doble clic para exageración)",
+    "sourceLabel": "Fuente de terreno",
+    "sourceDescription": "Utilice un COG de una sola banda en EPSG:3857 o EPSG:4326 como fuente de elevación. El archivo debe permitir CORS y solicitudes de rango HTTP.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "DEM COG local",
+    "localSourceDescription": "El archivo permanece en este dispositivo y se lee en pequeños rangos a medida que se necesitan teselas de terreno.",
+    "useCog": "Usar DEM COG",
+    "sourceLoading": "Abriendo COG…",
+    "restoreDefaultSource": "Usar terreno global",
+    "sourceError": "No se pudo abrir el DEM COG.",
+    "sourceErrorEmpty": "Ese archivo está vacío. Elija un archivo DEM COG.",
+    "sourceErrorBand": "La banda solicitada no existe en este COG.",
+    "sourceErrorProjection": "El relieve COG solo admite DEM en EPSG:3857 y EPSG:4326.",
+    "sourceErrorDetail": "No se pudo abrir el DEM COG. ({{detail}})",
     "reset": "Restablecer",
     "done": "Listo"
   },
@@ -5510,5 +5525,15 @@
     "mapPoint": "Punto del mapa",
     "reply": "Responder",
     "replyPlaceholder": "Escriba una respuesta..."
+  },
+  "auth": {
+    "unavailableTitle": "El inicio de sesión no está disponible",
+    "unavailableDescription": "GeoLibre no pudo conectar con el servicio de inicio de sesión, por lo que no puede saber si ha iniciado sesión. Esto suele ser temporal; si persiste, es posible que haya que revisar la configuración de autenticación de esta implementación.",
+    "retry": "Intentar de nuevo",
+    "signInTitle": "Inicie sesión en GeoLibre",
+    "signInDescription": "Esta implementación requiere una cuenta. Se le llevará a una página de inicio de sesión segura y volverá aquí.",
+    "signIn": "Iniciar sesión",
+    "signOut": "Cerrar sesión",
+    "account": "Cuenta"
   }
 }

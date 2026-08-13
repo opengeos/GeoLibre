@@ -34,14 +34,14 @@ export const MIXED_COORDINATE_FIELDS_MESSAGE =
 export function parseDelimitedTextFields(text: string, delimiter: string): string[] {
   if (!delimiter) throw new Error("Enter a delimiter.");
 
-  const rows = parseDelimitedRows(text, delimiter).filter((row) =>
-    row.some((value) => value.trim()),
-  );
-  if (rows.length === 0) {
-    throw new Error("The delimited text must include a header row.");
+  // Only the header is needed, so stop at the first non-blank row instead of
+  // parsing the whole file; callers pass entire multi-hundred-MB files here.
+  for (const row of iterateDelimitedRows(text, delimiter)) {
+    if (!row.some((value) => value.trim())) continue;
+    return uniqueFieldNames(row.map((field) => field.trim()));
   }
 
-  return uniqueFieldNames(rows[0].map((field) => field.trim()));
+  throw new Error("The delimited text must include a header row.");
 }
 
 export function parseDelimitedTextLayer(
@@ -67,14 +67,11 @@ export function parseDelimitedTextLayer(
   // reproject the raw coordinates to WGS84.
   const geographic = isGeographicCrs(options.sourceCrs);
 
-  const rows = parseDelimitedRows(text, delimiter).filter((row) =>
-    row.some((value) => value.trim()),
-  );
-  if (rows.length < 2) {
+  const body = readDelimitedTextBody(text, delimiter);
+  if (!body) {
     throw new Error("The delimited text must include a header and data rows.");
   }
-
-  const fields = uniqueFieldNames(rows[0].map((field) => field.trim()));
+  const fields = body.fields;
 
   // When both coordinate fields are left blank the file is imported as a
   // non-spatial attribute table: every row becomes a feature with a null
@@ -89,13 +86,14 @@ export function parseDelimitedTextLayer(
     throw new Error(MIXED_COORDINATE_FIELDS_MESSAGE);
   }
   if (!wantsLatitude && !wantsLongitude) {
-    const tableFeatures: Feature<Geometry | null, GeoJsonProperties>[] = rows
-      .slice(1)
-      .map((row) => ({
+    const tableFeatures: Feature<Geometry | null, GeoJsonProperties>[] = [];
+    for (const row of body.rows) {
+      tableFeatures.push({
         type: "Feature",
         geometry: null,
         properties: buildRowProperties(fields, row),
-      }));
+      });
+    }
 
     return {
       // GeoJSON Features may legally carry a null geometry; the app's layer
@@ -107,7 +105,7 @@ export function parseDelimitedTextLayer(
       } as FeatureCollection,
       fields,
       skippedRows: 0,
-      totalRows: rows.length - 1,
+      totalRows: tableFeatures.length,
       isTable: true,
     };
   }
@@ -123,9 +121,11 @@ export function parseDelimitedTextLayer(
   }
 
   let skippedRows = 0;
+  let totalRows = 0;
   const features: Feature<Point, GeoJsonProperties>[] = [];
 
-  for (const row of rows.slice(1)) {
+  for (const row of body.rows) {
+    totalRows += 1;
     // For a projected CRS, treat a bare comma as a thousands separator (large
     // easting/northing) rather than a decimal point.
     const latitude = parseCoordinate(row[latitudeIndex], { grouped: !geographic });
@@ -160,7 +160,7 @@ export function parseDelimitedTextLayer(
     },
     fields,
     skippedRows,
-    totalRows: rows.length - 1,
+    totalRows,
     isTable: false,
   };
 }
@@ -181,73 +181,350 @@ export function parseDelimitedTextRows(
 ): { fields: string[]; rows: Record<string, string>[] } {
   if (!delimiter) throw new Error("Enter a delimiter.");
 
-  const rawRows = parseDelimitedRows(text, delimiter).filter((row) =>
-    row.some((value) => value.trim()),
-  );
-  if (rawRows.length < 2) {
+  const body = readDelimitedTextBody(text, delimiter);
+  if (!body) {
     throw new Error("The delimited text must include a header and data rows.");
   }
 
-  const fields = uniqueFieldNames(rawRows[0].map((field) => field.trim()));
-  const rows = rawRows.slice(1).map((row) => {
+  const fields = body.fields;
+  const rows: Record<string, string>[] = [];
+  for (const row of body.rows) {
     const record: Record<string, string> = {};
     fields.forEach((field, index) => {
       record[field] = (row[index] ?? "").trim();
     });
-    return record;
-  });
+    rows.push(record);
+  }
 
   return { fields, rows };
 }
 
-function parseDelimitedRows(text: string, delimiter: string): string[][] {
-  const rows: string[][] = [];
-  let field = "";
-  let row: string[] = [];
-  let inQuotes = false;
-  const normalizedText = text.replace(/^\uFEFF/, "");
+/** The index the content starts at, skipping a leading BOM. */
+function contentStart(text: string): number {
+  return text.charCodeAt(0) === 0xfeff ? 1 : 0;
+}
 
-  for (let index = 0; index < normalizedText.length; index += 1) {
-    const char = normalizedText[index];
-    const next = normalizedText[index + 1];
+/**
+ * Yields the rows of delimited text one at a time.
+ *
+ * Two properties matter for large files, and both are why this is written as a
+ * generator over index arithmetic rather than the obvious string accumulation:
+ *
+ * - **Nothing is buffered.** Callers that build features row by row never hold
+ *   the whole file as a `string[][]` alongside the features they derive from it.
+ * - **Fields are slices of `text`, not characters appended one at a time.**
+ *   `field += char` builds a cons-string chain roughly one node per character,
+ *   so a 146 MB CSV of long free-text columns needed several GB of heap and
+ *   crashed the renderer with an out-of-memory error (GeoLibre#1854). A field
+ *   is only assembled from pieces when a quote actually interrupts it.
+ *
+ * A leading BOM is skipped by offset, so the source string is never copied.
+ *
+ * SYNC: `countDelimitedTextRows` re-implements this scanner's quoting,
+ * escaping, and row rules without allocating. Any change to them has to land in
+ * both; the differential tests in `tests/data-parsing.test.ts` are what catch
+ * drift. Grep "SYNC:" to find the partner.
+ *
+ * @param text - The delimited text, optionally starting with a BOM.
+ * @param delimiter - The field delimiter; may be more than one character.
+ * @yields Each row's raw field values, in column order.
+ */
+function* iterateDelimitedRows(text: string, delimiter: string): Generator<string[]> {
+  const start = contentStart(text);
+  const delimiterHead = delimiter.charAt(0);
+  const multiCharDelimiter = delimiter.length > 1;
+
+  let row: string[] = [];
+  // The field being read is `text.slice(fieldStart, index)`, unless a quote
+  // interrupted it; then the earlier pieces are held in `segments` and
+  // `segmentsLength` counts the characters already in them.
+  let segments: string[] | null = null;
+  let segmentsLength = 0;
+  let fieldStart = start;
+  let inQuotes = false;
+
+  // `extra` appends a literal that is not present in `text` as-is, namely the
+  // single `"` an escaped `""` pair stands for.
+  const pushSegment = (end: number, extra?: string): void => {
+    const parts = segments ?? (segments = []);
+    parts.push(text.slice(fieldStart, end));
+    segmentsLength += end - fieldStart;
+    if (extra !== undefined) {
+      parts.push(extra);
+      segmentsLength += extra.length;
+    }
+  };
+
+  const takeField = (end: number): string => {
+    if (segments === null) return text.slice(fieldStart, end);
+    pushSegment(end);
+    const field = segments.join("");
+    segments = null;
+    segmentsLength = 0;
+    return field;
+  };
+
+  let index = start;
+  for (; index < text.length; index += 1) {
+    const char = text[index];
 
     if (char === '"') {
-      if (inQuotes && next === '"') {
-        field += '"';
+      if (inQuotes && text[index + 1] === '"') {
+        // An escaped quote inside a quoted field: keep one literal `"` and
+        // resume the slice after the pair.
+        pushSegment(index, '"');
         index += 1;
-      } else if (inQuotes || field === "") {
+        fieldStart = index + 1;
+      } else if (inQuotes || (segmentsLength === 0 && index === fieldStart)) {
+        // Opens or closes a quoted field. The quote is not part of the value,
+        // so the slice restarts after it. Quoting only opens while the field is
+        // still empty; a quote further in is a literal character (below).
+        pushSegment(index);
+        fieldStart = index + 1;
         inQuotes = !inQuotes;
-      } else {
-        field += char;
       }
+      // A bare quote inside an unquoted field is literal, and already covered
+      // by the slice in progress, so there is nothing to do.
       continue;
     }
 
-    if (!inQuotes && normalizedText.startsWith(delimiter, index)) {
-      row.push(field);
-      field = "";
+    if (
+      !inQuotes &&
+      char === delimiterHead &&
+      (!multiCharDelimiter || text.startsWith(delimiter, index))
+    ) {
+      row.push(takeField(index));
       index += delimiter.length - 1;
+      fieldStart = index + 1;
       continue;
     }
 
     if (!inQuotes && (char === "\n" || char === "\r")) {
-      row.push(field);
-      field = "";
-      rows.push(row);
+      row.push(takeField(index));
+      if (char === "\r" && text[index + 1] === "\n") index += 1;
+      fieldStart = index + 1;
+      yield row;
       row = [];
-      if (char === "\r" && next === "\n") index += 1;
+    }
+  }
+
+  // A final row with no trailing newline.
+  if (segmentsLength > 0 || index > fieldStart || row.length > 0) {
+    row.push(takeField(index));
+    yield row;
+  }
+}
+
+/**
+ * A delimited file split into its header and its data rows, with blank rows
+ * dropped. Returns `null` when the text has no header row or no data rows, so
+ * each caller can raise its own error.
+ *
+ * `rows` is the live generator over the same underlying scan, not a factory that
+ * restarts it: consuming it twice would split the rows between the consumers
+ * rather than replay them. It is exposed as the generator itself so that
+ * single-use contract is visible at every call site.
+ */
+interface DelimitedTextBody {
+  fields: string[];
+  rows: Generator<string[]>;
+}
+
+function readDelimitedTextBody(text: string, delimiter: string): DelimitedTextBody | null {
+  const iterator = iterateDelimitedRows(text, delimiter)[Symbol.iterator]();
+  const nextRow = (): string[] | null => {
+    for (let next = iterator.next(); !next.done; next = iterator.next()) {
+      if (next.value.some((value) => value.trim())) return next.value;
+    }
+    return null;
+  };
+
+  const headerRow = nextRow();
+  const firstDataRow = headerRow ? nextRow() : null;
+  if (!headerRow || !firstDataRow) return null;
+
+  return {
+    fields: uniqueFieldNames(headerRow.map((field) => field.trim())),
+    rows: (function* () {
+      yield firstDataRow;
+      for (let row = nextRow(); row !== null; row = nextRow()) yield row;
+    })(),
+  };
+}
+
+/** Character codes the scanners compare against. */
+const QUOTE_CODE = 34;
+const LINE_FEED_CODE = 10;
+const CARRIAGE_RETURN_CODE = 13;
+
+/**
+ * Whether a character is one `String.prototype.trim` would strip, which is what
+ * decides whether a row counts as blank. ASCII is settled by code alone; only a
+ * non-ASCII character needs the regex, whose set is exactly trim's.
+ */
+function isTrimmableCode(code: number, text: string, index: number): boolean {
+  if (code === 32 || (code >= 9 && code <= 13)) return true;
+  if (code < 127) return false;
+  return /\s/.test(text[index]);
+}
+
+/**
+ * Counts the data rows (header and blank rows excluded) without building any
+ * features, so a caller can warn about an oversized import before paying for
+ * the GeoJSON materialization. Quoting is respected, so a newline inside a
+ * quoted field does not inflate the count.
+ *
+ * This mirrors {@link iterateDelimitedRows}' row rules, but deliberately does
+ * not reuse it: it compares character codes and allocates nothing at all, where
+ * the iterator allocates an array and a slice per field. That keeps the count
+ * cheap enough to run on every guarded import rather than only on files past
+ * some size, which is what lets the guard key on rows rather than on bytes.
+ * The blank-row test stops as soon as a row is known to have content, so it
+ * runs on a handful of characters per row rather than on all of them.
+ *
+ * SYNC: this duplicates `iterateDelimitedRows`' quoting, escaping, and row
+ * rules on purpose, for the zero-allocation win. Any change to them has to land
+ * in both. Grep "SYNC:" to find the partner.
+ *
+ * @param text - The delimited text, optionally starting with a BOM.
+ * @param delimiter - The field delimiter.
+ * @returns The number of data rows, or 0 when the delimiter is blank.
+ */
+export function countDelimitedTextRows(text: string, delimiter: string): number {
+  if (!delimiter) return 0;
+  const start = contentStart(text);
+  const delimiterHead = delimiter.charCodeAt(0);
+  const multiCharDelimiter = delimiter.length > 1;
+
+  let rows = 0;
+  let rowHasContent = false;
+  // Counts the characters materialized into the current field, standing in for
+  // the iterator's `field === ""` test that decides whether a quote opens.
+  let fieldLength = 0;
+  let inQuotes = false;
+
+  for (let index = start; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+
+    if (code === QUOTE_CODE) {
+      if (inQuotes && text.charCodeAt(index + 1) === QUOTE_CODE) {
+        fieldLength += 1;
+        rowHasContent = true;
+        index += 1;
+      } else if (inQuotes || fieldLength === 0) {
+        inQuotes = !inQuotes;
+      } else {
+        fieldLength += 1;
+        rowHasContent = true;
+      }
       continue;
     }
 
-    field += char;
+    if (
+      !inQuotes &&
+      code === delimiterHead &&
+      (!multiCharDelimiter || text.startsWith(delimiter, index))
+    ) {
+      fieldLength = 0;
+      index += delimiter.length - 1;
+      continue;
+    }
+
+    if (!inQuotes && (code === LINE_FEED_CODE || code === CARRIAGE_RETURN_CODE)) {
+      if (rowHasContent) rows += 1;
+      rowHasContent = false;
+      fieldLength = 0;
+      if (code === CARRIAGE_RETURN_CODE && text.charCodeAt(index + 1) === LINE_FEED_CODE) {
+        index += 1;
+      }
+      continue;
+    }
+
+    fieldLength += 1;
+    if (!rowHasContent && !isTrimmableCode(code, text, index)) rowHasContent = true;
   }
 
-  if (field || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
+  if (rowHasContent) rows += 1;
+  // The first non-blank row is the header, not data.
+  return rows > 0 ? rows - 1 : 0;
+}
 
-  return rows;
+/**
+ * Returns the header line of delimited text, skipping a leading BOM and any
+ * blank lines before it. Slices rather than splitting, so reading the header of
+ * a large file does not copy it.
+ *
+ * Leading blank lines are skipped because the row parsers drop blank rows and
+ * treat the first non-blank one as the header; taking the first *physical* line
+ * instead would report a file that merely starts with a newline as empty, and
+ * would hand delimiter detection a blank line to guess from.
+ *
+ * A line ends at `\n`, `\r\n`, or a bare `\r`, the same three terminators
+ * {@link iterateDelimitedRows} recognizes. A bare `\r` matters here: a file
+ * written with classic-Mac endings has no `\n` at all, so looking only for that
+ * would hand back the entire file as its "header".
+ *
+ * A newline inside a *quoted* header cell is not honored, and the header is cut
+ * short at it. Honoring it is circular: whether a quote opens a quoted field
+ * depends on where the field boundaries are, which depends on the delimiter,
+ * which is what this line is read to detect. The consequence is contained;
+ * see the note in `parseDelimitedTextFile`.
+ *
+ * @param text - The delimited text, optionally starting with a BOM.
+ * @returns The header line without its terminator, or `""` when every line is
+ *   blank.
+ */
+export function firstDelimitedTextLine(text: string): string {
+  const bounds = headerLineBounds(text);
+  return bounds ? text.slice(bounds.start, bounds.end) : "";
+}
+
+/**
+ * Whether `text` holds a *complete* header line, meaning the first non-blank
+ * line ends at a line break within `text` rather than running off its end.
+ *
+ * A caller that read only a prefix of a file uses this to tell "the header fits
+ * in what I read" from "my prefix was cut mid-header". Merely testing the
+ * prefix for a line break is not equivalent: leading blank lines contribute
+ * line breaks of their own, so a header that overruns the prefix can still look
+ * terminated.
+ *
+ * @param text - A prefix of a delimited file, optionally starting with a BOM.
+ * @returns True when the header line's own terminator is present.
+ */
+export function hasCompleteHeaderLine(text: string): boolean {
+  return headerLineBounds(text)?.terminated ?? false;
+}
+
+/** The first non-blank line's span, and whether its terminator was reached. */
+interface HeaderLineBounds {
+  start: number;
+  end: number;
+  terminated: boolean;
+}
+
+function headerLineBounds(text: string): HeaderLineBounds | null {
+  let start = contentStart(text);
+  while (start < text.length) {
+    // Blankness is tracked during the same scan that finds the terminator, so
+    // skipping past blank lines never slices, and neither does reaching the end
+    // of a file that has no line break at all.
+    let end = start;
+    let hasContent = false;
+    while (end < text.length) {
+      const code = text.charCodeAt(end);
+      if (code === LINE_FEED_CODE || code === CARRIAGE_RETURN_CODE) break;
+      if (!hasContent && !isHeaderPadding(code, text, end)) hasContent = true;
+      end += 1;
+    }
+    if (hasContent) return { start, end, terminated: end < text.length };
+    if (end >= text.length) return null;
+    start =
+      text.charCodeAt(end) === CARRIAGE_RETURN_CODE && text.charCodeAt(end + 1) === LINE_FEED_CODE
+        ? end + 2
+        : end + 1;
+  }
+  return null;
 }
 
 /**
@@ -363,6 +640,26 @@ export const LATITUDE_FIELD_CANDIDATES = ["latitude", "lat", "y", "ycoord", "y_c
 /** Delimiters tried, in order, when auto-detecting a delimited file's format. */
 export const DELIMITER_CANDIDATES = [",", "\t", ";", "|"];
 
+const DELIMITER_CANDIDATE_CODES = new Set(
+  DELIMITER_CANDIDATES.map((delimiter) => delimiter.charCodeAt(0)),
+);
+
+/**
+ * Whether a character can be ruled out as header *content*: whitespace, or a
+ * character that could be the delimiter.
+ *
+ * The row parsers call a row blank when every field trims to nothing, which
+ * makes a line of nothing but separators (`,,,`) a blank row. That test needs
+ * the delimiter, which is not known while the header is being located, so
+ * {@link headerLineBounds} instead rules out every *candidate* delimiter at
+ * once: a line built only from those and whitespace has no content under any
+ * delimiter this module would go on to pick, so skipping it is safe and keeps
+ * the two notions of "blank" in agreement.
+ */
+function isHeaderPadding(code: number, text: string, index: number): boolean {
+  return isTrimmableCode(code, text, index) || DELIMITER_CANDIDATE_CODES.has(code);
+}
+
 /**
  * Guesses the field delimiter of a delimited text file by parsing its header
  * row with each candidate delimiter and keeping the one that yields the most
@@ -373,7 +670,7 @@ export const DELIMITER_CANDIDATES = [",", "\t", ";", "|"];
  * @returns The detected delimiter; defaults to a comma when none stands out.
  */
 export function detectDelimitedTextDelimiter(text: string): string {
-  const header = text.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0] ?? "";
+  const header = firstDelimitedTextLine(text);
   let best = ",";
   let bestCount = 0;
   for (const delimiter of DELIMITER_CANDIDATES) {

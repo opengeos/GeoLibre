@@ -82,6 +82,7 @@ function getStyleProviderCredentials(): {
   protomapsApiKey?: string;
   stadiaApiKey?: string;
   mapboxAccessToken?: string;
+  tiandituApiKey?: string;
 } {
   const env = getRuntimeEnvironment();
   const protomapsApiKey = getProtomapsApiKey(env);
@@ -90,10 +91,16 @@ function getStyleProviderCredentials(): {
   // the others: the panel's API keys view has a Mapbox field, so pushing an
   // empty string would clobber a token typed there.
   const mapboxAccessToken = getMapboxAccessToken(env);
+  // Tianditu (added in maplibre-gl-basemap-control 0.14.0) is the only basemap
+  // provider in the catalog reachable from mainland China that also aligns with
+  // WGS84 data, so its key gets the same env route as every other provider
+  // rather than being panel-only.
+  const tiandituApiKey = env.VITE_TIANDITU_API_KEY?.trim() || undefined;
   return {
     ...(protomapsApiKey ? { protomapsApiKey } : {}),
     ...(stadiaApiKey ? { stadiaApiKey } : {}),
     ...(mapboxAccessToken ? { mapboxAccessToken } : {}),
+    ...(tiandituApiKey ? { tiandituApiKey } : {}),
   };
 }
 
@@ -286,10 +293,12 @@ function addRuntimeEnvListener(): void {
       basemapControl.setAmazonCredentials(amazon.amazonApiKey, amazon.awsRegion);
     }
     // Same rule for the style-provider keys: push only what the user actually set.
-    const { protomapsApiKey, stadiaApiKey, mapboxAccessToken } = getStyleProviderCredentials();
+    const { protomapsApiKey, stadiaApiKey, mapboxAccessToken, tiandituApiKey } =
+      getStyleProviderCredentials();
     if (protomapsApiKey) basemapControl.setProtomapsApiKey(protomapsApiKey);
     if (stadiaApiKey) basemapControl.setStadiaApiKey(stadiaApiKey);
     if (mapboxAccessToken) basemapControl.setMapboxAccessToken(mapboxAccessToken);
+    if (tiandituApiKey) basemapControl.setTiandituApiKey(tiandituApiKey);
   };
 
   window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);

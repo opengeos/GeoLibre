@@ -9,7 +9,8 @@
 [![image](https://img.shields.io/conda/vn/conda-forge/geolibre.svg)](https://anaconda.org/conda-forge/geolibre)
 [![Conda Recipe](https://img.shields.io/badge/recipe-geolibre-green.svg)](https://github.com/conda-forge/geolibre-feedstock)
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-GeoLibre-0078D4?logo=windows)](https://apps.microsoft.com/detail/9nwt67rv531x)
-[![Mac App Store](https://img.shields.io/badge/Mac%20App%20Store-GeoLibre-000000?logo=apple&logoColor=white)](https://apps.apple.com/app/geolibre-desktop/id6796848769)
+[![Mac App Store](https://img.shields.io/badge/Mac%20App%20Store-GeoLibre-0D96F6?logo=apple&logoColor=white)](https://apps.apple.com/app/geolibre-desktop/id6796848769)
+[![App Store](https://img.shields.io/badge/App%20Store-GeoLibre-0D96F6?logo=appstore&logoColor=white)](https://apps.apple.com/app/geolibre/id6796039674)
 [![Google Play](https://img.shields.io/badge/Google%20Play-GeoLibre-01875F?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=org.geolibre.app)
 [![AUR version](https://img.shields.io/aur/version/geolibre-bin?logo=archlinux&label=AUR)](https://aur.archlinux.org/packages/geolibre-bin)
 [![FlatPark](https://img.shields.io/badge/FlatPark-GeoLibre-4A90D9?logo=flatpak)](https://flatpark.org/apps/app.geolibre.GeoLibre/)
@@ -34,7 +35,7 @@ You can load browser-selected vector data supported by DuckDB-WASM Spatial, drag
 
 ### On the desktop
 
-The desktop app adds local filesystem dialogs, local MBTiles, local raster file reads, and project save/open. Installers are available for Windows, macOS, and Linux, including the Microsoft Store, the Mac App Store, Homebrew, winget, the AUR, COPR, and Flatpak.
+The desktop app adds local filesystem dialogs, local MBTiles, local raster file reads, and project save/open. Installers are available for Windows, macOS, and Linux, including the Microsoft Store, the Mac App Store, Homebrew, winget, the AUR, COPR, and Flatpak. (The Mac App Store listing is the sandboxed *desktop* build; the [App Store](https://apps.apple.com/app/geolibre/id6796039674) listing is the iPhone and iPad app.)
 
 [Download the desktop app](downloads.md){ .md-button .md-button--primary }
 
@@ -78,10 +79,19 @@ GeoLibre ships as a native Android app built from the same codebase, with a resp
 
 Signed APKs are also attached to each [GitHub release](https://github.com/opengeos/GeoLibre/releases) if you prefer to sideload. See [Android](android.md) for what runs on mobile, sideloading instructions, and build details.
 
+### On iOS
+
+GeoLibre ships as a native iOS app for iPhone and iPad, built from the same codebase, with the same responsive touch layout. Install it from the App Store and it updates automatically:
+
+[Get GeoLibre on the App Store](https://apps.apple.com/app/geolibre/id6796039674){ .md-button .md-button--primary }
+
+See [iOS](ios.md) for what runs on mobile and for build details.
+
 ## Video tutorials
 
 - [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 - [Geoprocessing in the Browser: 700+ Free GIS Tools in GeoLibre, Zero Install](https://youtu.be/W32bIQO_nG8)
+- [GeoLibre + GeoLens: A Modern GIS Stack for Self-Hosting Geospatial Data](https://youtu.be/kQqgrxXGd4o)
 
 ## Run from source
 
@@ -633,6 +643,38 @@ VITE_STADIA_API_KEY=your_stadia_api_key         # https://client.stadiamaps.com
 ```
 
 Protomaps reuses the key described in [Optional basemap credentials](#optional-basemap-credentials) above — set it once and both places pick it up. Until each key is set, the panel shows a "Get a … API key" prompt in place of the basemap rather than loading tiles.
+
+## Basemaps in mainland China
+
+GeoLibre's default basemaps (OpenFreeMap, Protomaps) are hosted outside mainland China with no presence inside it, so from there they range from slow to unreachable, as does most of the Basemaps control's catalog. Two places offer basemaps served from inside China.
+
+### The Regional section (no key)
+
+**New project** and **Change basemap** both carry a collapsed **Regional → China (中国)** section with five keyless basemaps: 高德地图, 高德卫星, 高德混合 (Amap street, satellite, and satellite-with-labels) and 腾讯地图, 腾讯深色 (Tencent street and dark). Pick one and it applies like any other basemap. Nothing to configure.
+
+### The Basemaps control (adds Tianditu)
+
+The Basemaps control plugin carries the same Amap and Tencent tiles plus **Tianditu (天地图)**, China's official National Platform for Common Geospatial Information Services: vector, imagery, and terrain, each with a separate label overlay. Search the panel for `Tianditu`, `Amap`, or `Tencent`, or for their Chinese names.
+
+Tianditu needs a free key from [console.tianditu.gov.cn](https://console.tianditu.gov.cn/api/key). Set it in **Settings → Environment Variables** (or type it into the panel's **API keys** view):
+
+```env
+VITE_TIANDITU_API_KEY=your_tianditu_api_key   # https://console.tianditu.gov.cn/api/key
+```
+
+Tianditu ships each basemap and its labels as separate layers. Turn on **Add basemaps (stack instead of replace)** in the panel to lay a label overlay over its base.
+
+### Which to pick
+
+| Provider | Datum | Key | Where |
+|----------|-------|-----|-------|
+| Tianditu (天地图) | CGCS2000 | required | Basemaps control |
+| Amap (高德地图) | GCJ-02 | none | Regional section, Basemaps control |
+| Tencent Maps (腾讯地图) | GCJ-02 | none | Regional section, Basemaps control |
+
+**Prefer Tianditu whenever the map also carries your own data.** Chinese law requires public map services to publish in GCJ-02, an offset datum that displaces features by roughly 100 to 700 m from WGS84; nothing in GeoLibre or MapLibre applies the shift, so your layers will visibly misalign over Amap or Tencent. Tianditu publishes in CGCS2000, which is close enough to WGS84 that ordinary data lines up.
+
+The Amap and Tencent tile endpoints are not documented public APIs. They are fine for exploration, but obtain a commercial key from the provider before building a product on either.
 
 Keys set via **Settings → Environment Variables**, or typed directly into the panel's **API keys** view (the key button in the panel header), apply at runtime without reopening the project. A key baked into `apps/geolibre-desktop/.env.local` is read at build time and needs a dev server restart. When `VITE_AMAZON_LOCATION_API_KEY` is set in the environment it takes precedence over a key typed in the panel; removing it from the environment clears it on the next page reload.
 

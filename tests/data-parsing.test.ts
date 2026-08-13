@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { isGeographicCrs, projectedGeoJsonCrs } from "../apps/geolibre-desktop/src/lib/crs-utils";
 import {
+  countDelimitedTextRows,
   detectCoordinateFields,
   detectDelimitedTextDelimiter,
+  firstDelimitedTextLine,
+  hasCompleteHeaderLine,
   parseCoordinate,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
@@ -279,6 +282,144 @@ describe("parseCoordinate", () => {
     // test pins that documented behavior so a future change to the heuristic is
     // a conscious one.
     assert.equal(parseCoordinate("45,123", { grouped: true }), 45123);
+  });
+});
+
+// The row scanner slices fields out of the source string and streams rows
+// instead of appending character by character into a fully materialized
+// `string[][]`, which is what made a 146 MB CSV exhaust the renderer heap
+// (GeoLibre#1854). These pin the scanner's behavior so that rewrite cannot
+// silently regress on the awkward inputs the slicing has to special-case.
+describe("delimited text row scanning", () => {
+  function table(text: string, delimiter = ",") {
+    return parseDelimitedTextLayer(text, {
+      delimiter,
+      longitudeField: "",
+      latitudeField: "",
+    });
+  }
+
+  it("keeps a newline inside a quoted field", () => {
+    const result = table('name,note\nAlice,"line one\nline two"\nBob,plain');
+    assert.equal(result.totalRows, 2);
+    assert.equal(result.data.features[0].properties?.note, "line one\nline two");
+    assert.equal(result.data.features[1].properties?.note, "plain");
+  });
+
+  it("unescapes doubled quotes and keeps a bare quote inside an unquoted field", () => {
+    const result = table('name,note\n"say ""hi""",6" pipe');
+    assert.equal(result.data.features[0].properties?.name, 'say "hi"');
+    assert.equal(result.data.features[0].properties?.note, '6" pipe');
+  });
+
+  it("strips a leading BOM from the first header name", () => {
+    const result = table("﻿name,note\nAlice,hello");
+    assert.deepEqual(result.fields, ["name", "note"]);
+    assert.equal(result.data.features[0].properties?.name, "Alice");
+  });
+
+  it("handles CRLF line endings and a final row with no trailing newline", () => {
+    const result = table("name,note\r\nAlice,hello\r\nBob,bye");
+    assert.equal(result.totalRows, 2);
+    assert.equal(result.data.features[1].properties?.name, "Bob");
+  });
+
+  it("skips blank lines between rows", () => {
+    const result = table("name,note\n\nAlice,hello\n \nBob,bye\n");
+    assert.equal(result.totalRows, 2);
+    assert.deepEqual(
+      result.data.features.map((feature) => feature.properties?.name),
+      ["Alice", "Bob"],
+    );
+  });
+
+  it("splits on a multi-character delimiter", () => {
+    const result = table("name||note\nAlice||hello", "||");
+    assert.deepEqual(result.fields, ["name", "note"]);
+    assert.equal(result.data.features[0].properties?.note, "hello");
+  });
+
+  it("pads short rows and drops columns past the header width", () => {
+    const result = table("a,b,c\n1,2\n1,2,3,4");
+    assert.equal(result.data.features[0].properties?.c, "");
+    assert.deepEqual(result.data.features[1].properties, { a: "1", b: "2", c: "3" });
+  });
+
+  it("reads only the header row when just the fields are wanted", () => {
+    // A whole file is passed here in practice, so this must not depend on the
+    // rest of the text being well-formed.
+    assert.deepEqual(parseDelimitedTextFields('name,note\n"unterminated', ","), ["name", "note"]);
+  });
+});
+
+describe("delimited text row counting and header slicing", () => {
+  it("counts data rows, ignoring the header, blank lines, and quoted newlines", () => {
+    assert.equal(countDelimitedTextRows('name,note\nAlice,"a\nb"\n\nBob,c\n', ","), 2);
+  });
+
+  it("counts nothing for a header-only file or a blank delimiter", () => {
+    assert.equal(countDelimitedTextRows("name,note\n", ","), 0);
+    assert.equal(countDelimitedTextRows("name,note\nAlice,hello", ""), 0);
+  });
+
+  it("returns the header line without its terminator, skipping a BOM", () => {
+    assert.equal(firstDelimitedTextLine("a,b\r\n1,2"), "a,b");
+    assert.equal(firstDelimitedTextLine("﻿a,b\n1,2"), "a,b");
+    assert.equal(firstDelimitedTextLine("a,b"), "a,b");
+  });
+
+  it("skips a leading separator-only line, as the row parsers do", () => {
+    // The row parsers call a row blank when every field trims to nothing, so
+    // `,,,` is a blank row to them. The header scan cannot split on a delimiter
+    // it has not detected yet, so it rules out every candidate delimiter to
+    // reach the same answer.
+    assert.equal(
+      firstDelimitedTextLine(",,,\nname,longitude,latitude\nA,1,2"),
+      "name,longitude,latitude",
+    );
+    assert.equal(firstDelimitedTextLine(";;\n\na;b;c"), "a;b;c");
+    assert.equal(firstDelimitedTextLine("|||\nx|y"), "x|y");
+    assert.deepEqual(parseDelimitedTextFields(",,,\nname,longitude,latitude\nA,1,2", ","), [
+      "name",
+      "longitude",
+      "latitude",
+    ]);
+    // A line of separators with real content is still the header.
+    assert.equal(firstDelimitedTextLine(",,a,,\nb,c"), ",,a,,");
+  });
+
+  it("reports whether a prefix holds the header's own terminator", () => {
+    assert.equal(hasCompleteHeaderLine("a,b\n1,2"), true);
+    assert.equal(hasCompleteHeaderLine("a,b\r\n1,2"), true);
+    assert.equal(hasCompleteHeaderLine("a,b\r1,2"), true);
+    // Cut mid-header: the prefix ends before any terminator.
+    assert.equal(hasCompleteHeaderLine("a,b,c"), false);
+    // The trap this exists for: the blank line supplies a line break, but the
+    // header after it is still unterminated, so a plain newline test would
+    // wrongly call this prefix complete.
+    assert.equal(hasCompleteHeaderLine("\n\na,b,c"), false);
+    assert.equal(hasCompleteHeaderLine("\n\na,b,c\n1,2,3"), true);
+    assert.equal(hasCompleteHeaderLine(""), false);
+    assert.equal(hasCompleteHeaderLine("\n \n"), false);
+  });
+
+  it("ends the header at a bare CR, so a classic-Mac file is not one long line", () => {
+    const bareCr = "name,longitude,latitude\rA,-78.6,35.7\rB,-80.1,36.2\r";
+    assert.equal(firstDelimitedTextLine(bareCr), "name,longitude,latitude");
+    // The delimiter guess is scored on column count, so feeding it the whole
+    // file as the "header" is what makes this worth pinning.
+    assert.equal(detectDelimitedTextDelimiter("a;b;c\r1;2;3\r"), ";");
+    assert.equal(countDelimitedTextRows(bareCr, ","), 2);
+  });
+
+  it("skips blank lines before the header, matching the row parsers", () => {
+    // Taking the first physical line would report these as empty files and
+    // hand delimiter detection a blank line to guess from.
+    assert.equal(firstDelimitedTextLine("\na,b\n1,2"), "a,b");
+    assert.equal(firstDelimitedTextLine("\r\n  \r\na;b\r\n1;2"), "a;b");
+    assert.equal(firstDelimitedTextLine("﻿\n\na,b"), "a,b");
+    assert.equal(firstDelimitedTextLine("\n \n\t\n"), "");
+    assert.equal(firstDelimitedTextLine(""), "");
   });
 });
 

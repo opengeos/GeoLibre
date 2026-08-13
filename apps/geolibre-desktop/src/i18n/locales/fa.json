@@ -231,7 +231,9 @@
     "invalidUrl": "یک نشانی شیوهٔ نمایش معتبر HTTP یا HTTPS وارد کنید.",
     "sectionMoon": "ماه",
     "sectionMars": "مریخ",
-    "sectionOther": "دیگر اجرام آسمانی"
+    "sectionOther": "دیگر اجرام آسمانی",
+    "sectionRegional": "منطقه‌ای",
+    "regionChina": "چین (中国)"
   },
   "planetSwitcher": {
     "label": "جرم آسمانی",
@@ -1571,6 +1573,19 @@
     "description": "اغراق عمودی زمین سه‌بعدی را تنظیم کنید. مقادیر بالاتر تپه‌ها و کوه‌ها را پرشیب‌تر نشان می‌دهند.",
     "label": "اغراق عمودی",
     "controlLabel": "روشن/خاموش کردن زمین (برای اغراق دوبار کلیک کنید)",
+    "sourceLabel": "منبع زمین",
+    "sourceDescription": "از یک COG تک‌باند با EPSG:3857 یا EPSG:4326 به‌عنوان منبع ارتفاع استفاده کنید. فایل باید درخواست‌های CORS و محدوده HTTP را مجاز کند.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "DEM نوع COG محلی",
+    "localSourceDescription": "فایل روی این دستگاه می‌ماند و هنگام نیاز به کاشی‌های زمین در محدوده‌های کوچک خوانده می‌شود.",
+    "useCog": "استفاده از DEM نوع COG",
+    "sourceLoading": "در حال باز کردن COG…",
+    "restoreDefaultSource": "استفاده از زمین جهانی",
+    "sourceError": "باز کردن DEM نوع COG ممکن نشد.",
+    "sourceErrorEmpty": "این فایل خالی است. یک فایل DEM نوع COG انتخاب کنید.",
+    "sourceErrorBand": "باند درخواست‌شده در این COG وجود ندارد.",
+    "sourceErrorProjection": "ناهمواری COG فقط از DEM با EPSG:3857 و EPSG:4326 پشتیبانی می‌کند.",
+    "sourceErrorDetail": "باز کردن DEM نوع COG ممکن نشد. ({{detail}})",
     "reset": "بازنشانی",
     "done": "تمام"
   },
@@ -5510,5 +5525,15 @@
     "mapPoint": "نقطهٔ نقشه",
     "reply": "پاسخ",
     "replyPlaceholder": "پاسخی بنویسید..."
+  },
+  "auth": {
+    "unavailableTitle": "ورود در دسترس نیست",
+    "unavailableDescription": "GeoLibre نتوانست به سرویس ورود دسترسی پیدا کند، بنابراین نمی‌داند که آیا وارد شده‌اید یا نه. این وضعیت معمولاً موقتی است؛ اگر ادامه یافت، شاید تنظیمات احراز هویت این استقرار نیاز به بررسی داشته باشد.",
+    "retry": "تلاش دوباره",
+    "signInTitle": "ورود به GeoLibre",
+    "signInDescription": "این استقرار به یک حساب نیاز دارد. به یک صفحهٔ ورود امن هدایت می‌شوید و سپس به اینجا بازمی‌گردید.",
+    "signIn": "ورود",
+    "signOut": "خروج",
+    "account": "حساب"
   }
 }
