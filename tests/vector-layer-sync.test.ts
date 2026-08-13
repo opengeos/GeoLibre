@@ -640,6 +640,22 @@ describe("wireVectorStoreSync", () => {
     });
   });
 
+  it("reapplies hidden visibility after switching to heatmap", () => {
+    const { control, calls } = fakeControl([vectorInfo({ geometryType: "point" })]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    useAppStore.getState().setLayerVisibility("vector-1", false);
+    calls.length = 0;
+    useAppStore.getState().setLayerStyle("vector-1", { pointRenderer: "heatmap" });
+
+    assert.equal(calls[0].method, "setLayerStyle");
+    assert.deepEqual(calls[1], {
+      method: "setLayerVisibility",
+      args: ["vector-1", false],
+    });
+  });
+
   it("pushes a categorized color expression through the control", () => {
     const { control, calls } = fakeControl([vectorInfo()]);
     syncVectorLayersToStore(control);
