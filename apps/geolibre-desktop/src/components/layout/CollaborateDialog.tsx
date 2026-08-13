@@ -145,8 +145,13 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
     try {
       await api.start(name.trim(), color, mode, requireIdentity);
     } catch (err) {
+      // Show a localized message; keep the raw error in the console for
+      // diagnostics. When the relay sends a specific rejection reason
+      // (identity-required, forbidden, etc.) it arrives as err.message;
+      // fall back to the generic string for unexpected failures.
       console.error("[GeoLibre] Collaboration error", err);
-      setError(t("collaborate.connectFailed"));
+      const message = err instanceof Error && err.message ? err.message : undefined;
+      setError(message || t("collaborate.connectFailed"));
     } finally {
       setBusy(false);
     }
@@ -167,7 +172,8 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
       await api.join(code.trim(), name.trim(), color);
     } catch (err) {
       console.error("[GeoLibre] Collaboration error", err);
-      setError(t("collaborate.connectFailed"));
+      const message = err instanceof Error && err.message ? err.message : undefined;
+      setError(message || t("collaborate.connectFailed"));
       setInvited(false);
     } finally {
       setBusy(false);

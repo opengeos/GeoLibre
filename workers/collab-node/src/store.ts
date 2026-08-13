@@ -184,6 +184,24 @@ export class SessionStore {
       );
   }
 
+  /**
+   * Atomically increment an invite's use_count, succeeding only if the invite
+   * is not revoked and has not exceeded its maxUses cap. Returns true if the
+   * claim succeeded. This closes a TOCTOU window where two near-simultaneous
+   * joins could both read use_count < max_uses before either writes.
+   */
+  atomicClaimInvite(sessionId: string, token: string): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE collab_invites
+         SET use_count = use_count + 1
+         WHERE session_id = ? AND token = ? AND revoked = 0
+           AND (max_uses IS NULL OR use_count < max_uses)`,
+      )
+      .run(sessionId, token);
+    return result.changes === 1;
+  }
+
   createInvite(sessionId: string, invite: CollabInvite): void {
     this.saveInvite(sessionId, invite);
   }

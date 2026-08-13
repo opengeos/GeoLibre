@@ -534,8 +534,24 @@ export class CollabSession extends DurableObject<Env> {
     }
 
     if (matchedInvite) {
-      matchedInvite.useCount += 1;
-      this.writeInvite(matchedInvite);
+      // Re-read the invite after the `await verifyIdentityToken` above to close
+      // a TOCTOU window: two concurrent joins on a maxUses:1 invite could both
+      // have read useCount:0 before either writes. Re-validating here narrows
+      // the race to the synchronous path between read and write.
+      const inviteTokenToCheck = matchedInvite.token;
+      const freshInvites = this.readInvites();
+      const freshInv = freshInvites.find(
+        (i) => i.token === inviteTokenToCheck && !i.revoked,
+      );
+      if (!freshInv || (freshInv.maxUses && freshInv.useCount >= freshInv.maxUses)) {
+        // Invite was consumed or revoked between the initial check and now.
+        matchedInvite = undefined;
+        inviteToken = undefined;
+      } else {
+        freshInv.useCount += 1;
+        this.writeInvite(freshInv);
+        matchedInvite = freshInv;
+      }
     }
 
     const attachment: SocketAttachment = {
@@ -576,11 +592,13 @@ export class CollabSession extends DurableObject<Env> {
     message: Extract<ClientMessage, { type: "snapshot" }>,
     byteLength: number,
   ): Promise<void> {
-    const [mode, lockedLayerIds, storedRaw] = await Promise.all([
-      (await this.ctx.storage.get<CollaborationMode>("mode")) ?? "co-edit",
-      (await this.ctx.storage.get<string[]>("lockedLayerIds")) ?? [],
+    const [rawMode, rawLockedLayerIds, storedRaw] = await Promise.all([
+      this.ctx.storage.get<CollaborationMode>("mode"),
+      this.ctx.storage.get<string[]>("lockedLayerIds"),
       this.readSnapshot(),
     ]);
+    const mode = rawMode ?? "co-edit";
+    const lockedLayerIds = rawLockedLayerIds ?? [];
     const storedSnapshot = parseStoredSnapshot(storedRaw);
 
     const decision = authorizeSnapshot(

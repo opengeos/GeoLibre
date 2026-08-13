@@ -2278,6 +2278,7 @@ export function DesktopShell({
                   renderBuiltin={({ collapsed, onCollapsedChange }) => (
                     <LayerPanel
                       mapControllerRef={mapControllerRef}
+                      collaborationApi={collaboration}
                       onResizeStart={startLayerPanelResize}
                       geometryEditLayerId={geometryEditLayerId}
                       onToggleGeometryEdit={handleToggleGeometryEdit}
@@ -2304,6 +2305,7 @@ export function DesktopShell({
                 ) : (
                   <LayerPanel
                     mapControllerRef={mapControllerRef}
+                    collaborationApi={collaboration}
                     onResizeStart={startLayerPanelResize}
                     geometryEditLayerId={geometryEditLayerId}
                     onToggleGeometryEdit={handleToggleGeometryEdit}

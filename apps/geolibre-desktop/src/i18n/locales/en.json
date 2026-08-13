@@ -1203,7 +1203,11 @@
     "chatLocationAttached": "Location attached (click to remove)",
     "chatGoToLocation": "Go to this location",
     "sessionStatusUnread_one": "Live collaboration session, {{count}} unread message. Click to see who's connected and chat.",
-    "sessionStatusUnread_other": "Live collaboration session, {{count}} unread messages. Click to see who's connected and chat."
+    "sessionStatusUnread_other": "Live collaboration session, {{count}} unread messages. Click to see who's connected and chat.",
+    "lockLayer": "Lock layer for guests",
+    "unlockLayer": "Unlock layer for guests",
+    "layerLocked": "Locked",
+    "layerLockedHint": "This layer is locked by the host and cannot be edited"
   },
   "share": {
     "title": "Share project",

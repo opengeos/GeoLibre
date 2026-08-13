@@ -362,8 +362,14 @@ export function createRelay(options: RelayOptions = {}): {
       }
 
       if (matchedInvite) {
-        matchedInvite.useCount += 1;
-        store.saveInvite(id, matchedInvite);
+        // Use an atomic SQL UPDATE to close the TOCTOU window: the initial
+        // maxUses check (line 312) happened before `await verifyIdentityToken`,
+        // and another join could have consumed the invite in the meantime.
+        if (!store.atomicClaimInvite(id, matchedInvite.token)) {
+          // Invite was consumed or revoked between the initial check and now.
+          matchedInvite = undefined;
+          inviteToken = undefined;
+        }
       }
 
       peer.participant = {
@@ -800,7 +806,7 @@ export function createRelay(options: RelayOptions = {}): {
       // account" option before it ever tries to create a session.
       return json(response, 200, { ok: true, service: "geolibre-collab", identitySupported });
     if (url.pathname === "/sessions" && request.method === "POST") {
-      const origin = request.headers["origin"];
+      const origin = request.headers["origin"] ?? request.headers["referer"];
       if (!isAllowedOrigin(origin)) {
         return json(response, 403, { error: "Forbidden origin" });
       }

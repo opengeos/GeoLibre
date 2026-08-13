@@ -24,7 +24,7 @@ import {
   resolveCollabBaseUrl,
   sessionWsUrl,
 } from "../lib/collab-client";
-import type { CommentMutationAction, ServerMessage } from "../lib/collab-protocol";
+import { type CommentMutationAction, type ServerMessage, participantCanEditLayer } from "../lib/collab-protocol";
 import { mergeInboundCollaborationProject } from "../lib/collaboration-project";
 
 const SNAPSHOT_DEBOUNCE_MS = 250;
@@ -33,6 +33,7 @@ const CURSOR_THROTTLE_MS = 40;
 export interface CollaborationApi {
   enabled: boolean;
   canEdit: () => boolean;
+  canEditLayer: (layerId: string) => boolean;
   start: (
     displayName: string,
     color: string,
@@ -94,6 +95,17 @@ export function useCollaboration(
     const self = c.participants.find((p) => p.clientId === c.clientId);
     return self?.editOverride ?? c.mode === "co-edit";
   };
+
+  const canEditLayer = useCallback((layerId: string): boolean => {
+    const c = useAppStore.getState().collaboration;
+    if (!c.isActive) return true;
+    if (c.role === "host") return true;
+    const self = c.participants.find((p) => p.clientId === c.clientId);
+    if (!self) {
+      return c.mode === "co-edit" && !(c.lockedLayerIds ?? []).includes(layerId);
+    }
+    return participantCanEditLayer(self, c.mode, layerId, c.lockedLayerIds ?? []);
+  }, []);
 
   const sendSnapshot = async (): Promise<void> => {
     if (!canEdit() || syncPausedRef.current) return;
@@ -300,9 +312,6 @@ export function useCollaboration(
       if (projectChanged(state, prev)) scheduleSnapshot();
     });
 
-    const map = mapControllerRef.current?.getMap() ?? null;
-    const detachMap = map ? bindPresence(map, conn) : () => {};
-
     conn.send({
       type: "join",
       clientId: selfIdRef.current ?? crypto.randomUUID(),
@@ -312,6 +321,9 @@ export function useCollaboration(
       inviteToken,
       identityToken,
     });
+
+    const map = mapControllerRef.current?.getMap() ?? null;
+    const detachMap = map ? bindPresence(map, conn) : () => {};
 
     teardownRef.current = () => {
       if (debounce) clearTimeout(debounce);
@@ -519,6 +531,7 @@ export function useCollaboration(
   return {
     enabled,
     canEdit,
+    canEditLayer,
     start,
     join,
     leave,
