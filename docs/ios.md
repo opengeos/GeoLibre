@@ -346,10 +346,11 @@ registered devices, `debugging` for development).
 
 GeoLibre is **live on the
 [App Store](https://apps.apple.com/app/geolibre/id6796039674)**, so the one-time
-onboarding below (steps 1, 4, 5, 6, 7) is done and only needs revisiting when
-something it declares changes. Each subsequent release repeats step 3: upload a
-build, then submit it for review. The build side is covered by the CI workflow;
-the rest is App Store Connect.
+onboarding below is finished; each step it covers is marked *(Done.)* and only
+needs revisiting when something it declares changes. Every subsequent release
+repeats step 3, upload a build and submit it for review, under the standing
+constraint in step 2. The build side is covered by the CI workflow; the rest is
+App Store Connect.
 
 1. **App record.** *(Done.)* In App Store Connect, create a new app with the
    bundle id `org.geolibre.app` (register the app id in the Developer portal
@@ -387,17 +388,19 @@ the rest is App Store Connect.
 
    Uploading by hand (no CI) means setting the build number yourself if the
    marketing version has been uploaded before.
-4. **Store listing:** icon (already generated under `src-tauri/icons/ios`),
-   screenshots for the required device sizes (6.7" and 6.5" iPhone, plus 12.9"
-   iPad — a GIS workspace is genuinely iPad-appropriate), description, keywords.
-5. **Privacy.** Fill the **App Privacy** questionnaire honestly — declare each
-   network destination (geocoding, the AI assistant, basemap/tile fetches, Google
-   OAuth for Earth Engine) and that location is used *when in use* and not
-   collected by a backend. Point the privacy policy URL at the published
-   [privacy policy](privacy.md).
-6. **Age rating** questionnaire and category: GeoLibre is listed under
+4. **Store listing.** *(Done.)* Icon (already generated under
+   `src-tauri/icons/ios`), screenshots for the required device sizes (6.7" and
+   6.5" iPhone, plus 12.9" iPad — a GIS workspace is genuinely
+   iPad-appropriate), description, keywords.
+5. **Privacy.** *(Done.)* Fill the **App Privacy** questionnaire honestly —
+   declare each network destination (geocoding, the AI assistant, basemap/tile
+   fetches, Google OAuth for Earth Engine) and that location is used *when in
+   use* and not collected by a backend. Point the privacy policy URL at the
+   published [privacy policy](privacy.md).
+6. **Age rating and category.** *(Done.)* GeoLibre is listed under
    **Productivity**.
-7. **Export compliance.** Already declared in `src-tauri/Info.ios.plist`:
+7. **Export compliance.** *(Done.)* Already declared in
+   `src-tauri/Info.ios.plist`:
 
    ```xml
    <key>ITSAppUsesNonExemptEncryption</key>
