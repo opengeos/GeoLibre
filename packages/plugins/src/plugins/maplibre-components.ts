@@ -1766,15 +1766,37 @@ export async function addPMTilesLayerFromUrl(
   }
 
   const map = options.fit === false ? app.getMap?.() : undefined;
-  const camera = map
-    ? {
-        center: map.getCenter(),
-        zoom: map.getZoom(),
-        bearing: map.getBearing(),
-        pitch: map.getPitch(),
-      }
-    : null;
-  await pmtilesControl.addLayer(url);
+  const readCamera = () =>
+    map
+      ? {
+          center: map.getCenter(),
+          zoom: map.getZoom(),
+          bearing: map.getBearing(),
+          pitch: map.getPitch(),
+        }
+      : null;
+  let camera = readCamera();
+  let userMoving = false;
+  const onMoveStart = (event: { originalEvent?: unknown }) => {
+    if (event.originalEvent) userMoving = true;
+  };
+  const onMoveEnd = () => {
+    if (userMoving) {
+      camera = readCamera();
+      userMoving = false;
+    }
+  };
+  map?.on("movestart", onMoveStart);
+  map?.on("moveend", onMoveEnd);
+  try {
+    await pmtilesControl.addLayer(url);
+  } finally {
+    // Preserve a host user's camera interaction that happened while the archive
+    // header was loading, rather than restoring the older pre-load position.
+    if (userMoving) camera = readCamera();
+    map?.off("movestart", onMoveStart);
+    map?.off("moveend", onMoveEnd);
+  }
   // The upstream PMTiles control always frames a newly added archive. Restore
   // the host's camera when a programmatic caller explicitly opts out.
   if (camera) map?.jumpTo(camera);

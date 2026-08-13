@@ -43,7 +43,7 @@ export interface AddLayerSpec {
 
 export interface AddDataOptions {
   styleUrl?: string;
-  /** Fit the map to newly added GeoJSON layers. Defaults to true. */
+  /** Fit the map to the newly added data. Defaults to true. */
   fit?: boolean;
 }
 
