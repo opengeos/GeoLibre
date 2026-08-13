@@ -1,7 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-const MAPLIBRE_BUNDLE_URL = new URL("../node_modules/maplibre-gl/dist/maplibre-gl.js", import.meta.url);
+const MAPLIBRE_BUNDLE_URL = new URL(
+  "../node_modules/maplibre-gl/dist/maplibre-gl.js",
+  import.meta.url,
+);
 
 /**
  * MapLibre 5.24 labels its globe projection pixel-pack buffer STREAM_READ.
