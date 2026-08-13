@@ -67,7 +67,7 @@ Client → server:
 | `snapshot` | `project, rev` | a debounced project push; co-editors only |
 | `presence` | `cursor?, view?` | throttled cursor / viewport |
 | `set-mode` | `mode` | host only |
-| `set-participant-mode` | `clientId, canEdit` | host only; pin one guest to can-edit / view-only (#754, durable across reconnect) |
+| `set-participant-mode` | `clientId, canEdit` | host only; pin one guest to can-edit / view-only (#754; persisted per participant key, so it survives a reconnect only for identity/invite joins — see *Moderation*) |
 | `mint-invite` | `role, maxUses?` | host only; mint a co-edit or view-only invite link |
 | `revoke-invite` | `token` | host only; invalidate an active invite link |
 | `set-session-config` | `requireIdentity` | host only; mandate signed-in identity to join |
@@ -177,10 +177,13 @@ field (`true` / `false`, or `null` to follow the session mode). Effective edit
 permission, computed identically on the client and the relay, is: the host
 always edits; otherwise the override wins; otherwise the session mode applies. A
 guest pinned to view-only has their `snapshot` pushes rejected with
-`error: forbidden`, exactly like the session-wide view-only path. Overrides are
-keyed to the per-socket `clientId`, so a guest who reconnects reverts to the
-session default (acceptable for the ephemeral MVP). The host roster surfaces a
-per-guest toggle; other participants see each guest's current permission read-only.
+`error: forbidden`, exactly like the session-wide view-only path. An override is
+also persisted against the guest's **participant key**, so it is reapplied when
+they rejoin — but only for identity- and invite-based joins, for the same reason
+a block is (see *Moderation* below): an anonymous guest arrives with a fresh
+`clientId` and therefore a fresh key, so their override reverts to the session
+default on reconnect. The host roster surfaces a per-guest toggle; other
+participants see each guest's current permission read-only.
 
 The host token (returned only to the creator) gates `set-mode` and
 `set-participant-mode`, so a guest can't escalate the session or another guest.
@@ -229,7 +232,8 @@ their **participant key** so the relay refuses the next join. That key is
 join, and otherwise `anon:<clientId>` — where `clientId` is minted fresh on
 every join.
 
-So a block is durable only for identity- and invite-based joins. **An anonymous
+The same key backs a persisted per-participant override, so both carry the same
+caveat: a block is durable only for identity- and invite-based joins. **An anonymous
 guest can rejoin simply by reconnecting**, since they arrive with a new
 `clientId` and therefore a new key. Blocking is a moderation convenience, not a
 security boundary; a session that needs an enforceable ban has to require an
