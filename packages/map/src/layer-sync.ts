@@ -1633,10 +1633,10 @@ function syncVectorControlPointSymbology(
     const nativeLayer = map.getLayer(nativeLayerId);
     if (!nativeLayer) continue;
     setNativeLayerVisibility(map, nativeLayerId, layer.visible ? "visible" : "none");
-    // maplibre-gl-vector's rebuilt point layers can continue painting after a
-    // layout visibility update (#1882). Mirror the eye state into the renderer
-    // opacity as a reliable fallback, restoring the same master/style opacity
-    // the control uses when the layer is shown again.
+    // Some control-rebuilt point layers keep painting after their layout is
+    // hidden, so opacity is the final visibility fallback. On show, repeat the
+    // restoration in a microtask because the control's synchronous visibility
+    // callback can otherwise reapply the hidden paint after this sync pass.
     const overriddenOpacityIds = vectorVisibilityOpacityIdsFor(map);
     if (
       layer.visible
@@ -1645,16 +1645,15 @@ function syncVectorControlPointSymbology(
     ) {
       continue;
     }
-    const master = layer.visible ? layer.opacity : 0;
     if (!layer.visible) overriddenOpacityIds.add(nativeLayerId);
-    if (nativeLayer.type === "heatmap") {
-      map.setPaintProperty(nativeLayerId, "heatmap-opacity", master);
-    } else if (nativeLayer.type === "circle") {
-      const paint = circlePaint(layer.style, master);
-      map.setPaintProperty(nativeLayerId, "circle-opacity", paint["circle-opacity"]);
-      map.setPaintProperty(nativeLayerId, "circle-stroke-opacity", paint["circle-stroke-opacity"]);
-    } else if (nativeLayer.type === "symbol" && renderer === "cluster") {
-      map.setPaintProperty(nativeLayerId, "text-opacity", master);
+    applyVectorRendererOpacity(map, nativeLayerId, nativeLayer.type, renderer, layer);
+    if (layer.visible) {
+      queueMicrotask(() => {
+        const currentLayer = map.getLayer(nativeLayerId);
+        if (currentLayer) {
+          applyVectorRendererOpacity(map, nativeLayerId, currentLayer.type, renderer, layer);
+        }
+      });
     }
   }
   const syntheticMarkerId = markerLayerId(layer.id);
@@ -1741,9 +1740,6 @@ function syncVectorControlPointSymbology(
   }
 }
 
-// Native point layers whose opacity GeoLibre forced to zero as a visibility
-// fallback. Tracking per map lets the show path restore only paint we changed,
-// leaving pristine control-owned paint untouched.
 const vectorVisibilityOpacityLayerIds = new WeakMap<maplibregl.Map, Set<string>>();
 
 function vectorVisibilityOpacityIdsFor(map: maplibregl.Map): Set<string> {
@@ -1753,6 +1749,25 @@ function vectorVisibilityOpacityIdsFor(map: maplibregl.Map): Set<string> {
     vectorVisibilityOpacityLayerIds.set(map, ids);
   }
   return ids;
+}
+
+function applyVectorRendererOpacity(
+  map: maplibregl.Map,
+  nativeLayerId: string,
+  nativeLayerType: string,
+  renderer: LayerStyle["pointRenderer"],
+  layer: GeoLibreLayer,
+): void {
+  const master = layer.visible ? layer.opacity : 0;
+  if (nativeLayerType === "heatmap") {
+    map.setPaintProperty(nativeLayerId, "heatmap-opacity", master);
+  } else if (nativeLayerType === "circle") {
+    const paint = circlePaint(layer.style, master);
+    map.setPaintProperty(nativeLayerId, "circle-opacity", paint["circle-opacity"]);
+    map.setPaintProperty(nativeLayerId, "circle-stroke-opacity", paint["circle-stroke-opacity"]);
+  } else if (nativeLayerType === "symbol" && renderer === "cluster") {
+    map.setPaintProperty(nativeLayerId, "text-opacity", master);
+  }
 }
 
 // Control-owned circle layers whose circle-radius GeoLibre has overridden with
