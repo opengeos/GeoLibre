@@ -239,7 +239,9 @@
     "invalidUrl": "أدخل عنوان URL صالحًا للنمط يبدأ بـ HTTP أو HTTPS.",
     "sectionMoon": "القمر",
     "sectionMars": "المريخ",
-    "sectionOther": "أجرام سماوية أخرى"
+    "sectionOther": "أجرام سماوية أخرى",
+    "sectionRegional": "إقليمية",
+    "regionChina": "الصين (中国)"
   },
   "planetSwitcher": {
     "label": "الجرم السماوي",

@@ -231,7 +231,9 @@
     "invalidUrl": "एक मान्य HTTP या HTTPS स्टाइल URL दर्ज करें।",
     "sectionMoon": "चंद्रमा",
     "sectionMars": "मंगल",
-    "sectionOther": "अन्य खगोलीय पिंड"
+    "sectionOther": "अन्य खगोलीय पिंड",
+    "sectionRegional": "क्षेत्रीय",
+    "regionChina": "चीन (中国)"
   },
   "planetSwitcher": {
     "label": "खगोलीय पिंड",

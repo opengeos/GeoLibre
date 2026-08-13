@@ -229,7 +229,9 @@
     "invalidUrl": "유효한 HTTP 또는 HTTPS 스타일 URL을 입력하세요.",
     "sectionMoon": "달",
     "sectionMars": "화성",
-    "sectionOther": "기타 천체"
+    "sectionOther": "기타 천체",
+    "sectionRegional": "지역",
+    "regionChina": "중국 (中国)"
   },
   "planetSwitcher": {
     "label": "천체",

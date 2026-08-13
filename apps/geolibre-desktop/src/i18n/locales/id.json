@@ -229,7 +229,9 @@
     "invalidUrl": "Masukkan URL gaya HTTP atau HTTPS yang valid.",
     "sectionMoon": "Bulan",
     "sectionMars": "Mars",
-    "sectionOther": "Benda langit lainnya"
+    "sectionOther": "Benda langit lainnya",
+    "sectionRegional": "Regional",
+    "regionChina": "Tiongkok (中国)"
   },
   "planetSwitcher": {
     "label": "Benda langit",

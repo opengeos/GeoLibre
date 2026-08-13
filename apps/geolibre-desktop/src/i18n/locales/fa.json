@@ -231,7 +231,9 @@
     "invalidUrl": "یک نشانی شیوهٔ نمایش معتبر HTTP یا HTTPS وارد کنید.",
     "sectionMoon": "ماه",
     "sectionMars": "مریخ",
-    "sectionOther": "دیگر اجرام آسمانی"
+    "sectionOther": "دیگر اجرام آسمانی",
+    "sectionRegional": "منطقه‌ای",
+    "regionChina": "چین (中国)"
   },
   "planetSwitcher": {
     "label": "جرم آسمانی",

@@ -229,7 +229,9 @@
     "invalidUrl": "ป้อน URL สไตล์แบบ HTTP หรือ HTTPS ที่ถูกต้อง",
     "sectionMoon": "ดวงจันทร์",
     "sectionMars": "ดาวอังคาร",
-    "sectionOther": "เทหวัตถุอื่น ๆ"
+    "sectionOther": "เทหวัตถุอื่น ๆ",
+    "sectionRegional": "ระดับภูมิภาค",
+    "regionChina": "จีน (中国)"
   },
   "planetSwitcher": {
     "label": "เทหวัตถุ",

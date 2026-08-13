@@ -235,7 +235,9 @@
     "invalidUrl": "Введите корректный URL стиля (HTTP или HTTPS).",
     "sectionMoon": "Луна",
     "sectionMars": "Марс",
-    "sectionOther": "Другие небесные тела"
+    "sectionOther": "Другие небесные тела",
+    "sectionRegional": "Региональные",
+    "regionChina": "Китай (中国)"
   },
   "planetSwitcher": {
     "label": "Небесное тело",

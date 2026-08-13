@@ -231,7 +231,9 @@
     "invalidUrl": "Entrez une URL de style HTTP ou HTTPS valide.",
     "sectionMoon": "La Lune",
     "sectionMars": "Mars",
-    "sectionOther": "Autres corps célestes"
+    "sectionOther": "Autres corps célestes",
+    "sectionRegional": "Régional",
+    "regionChina": "Chine (中国)"
   },
   "planetSwitcher": {
     "label": "Corps céleste",

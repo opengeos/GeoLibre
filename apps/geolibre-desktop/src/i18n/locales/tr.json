@@ -231,7 +231,9 @@
     "invalidUrl": "Geçerli bir HTTP veya HTTPS stil URL'si girin.",
     "sectionMoon": "Ay",
     "sectionMars": "Mars",
-    "sectionOther": "Diğer gök cisimleri"
+    "sectionOther": "Diğer gök cisimleri",
+    "sectionRegional": "Bölgesel",
+    "regionChina": "Çin (中国)"
   },
   "planetSwitcher": {
     "label": "Gök cismi",

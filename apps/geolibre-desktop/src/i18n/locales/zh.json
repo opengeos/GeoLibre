@@ -229,7 +229,9 @@
     "invalidUrl": "请输入有效的 HTTP 或 HTTPS 样式 URL。",
     "sectionMoon": "月球",
     "sectionMars": "火星",
-    "sectionOther": "其他天体"
+    "sectionOther": "其他天体",
+    "sectionRegional": "区域",
+    "regionChina": "中国"
   },
   "planetSwitcher": {
     "label": "天体",

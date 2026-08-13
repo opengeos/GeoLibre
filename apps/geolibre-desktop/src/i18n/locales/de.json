@@ -231,7 +231,9 @@
     "invalidUrl": "Geben Sie eine gültige HTTP- oder HTTPS-Style-URL ein.",
     "sectionMoon": "Der Mond",
     "sectionMars": "Mars",
-    "sectionOther": "Andere Himmelskörper"
+    "sectionOther": "Andere Himmelskörper",
+    "sectionRegional": "Regional",
+    "regionChina": "China (中国)"
   },
   "planetSwitcher": {
     "label": "Himmelskörper",

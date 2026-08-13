@@ -231,7 +231,9 @@
     "invalidUrl": "შეიყვანეთ სწორი HTTP ან HTTPS სტილის URL.",
     "sectionMoon": "მთვარე",
     "sectionMars": "მარსი",
-    "sectionOther": "სხვა ციური სხეულები"
+    "sectionOther": "სხვა ციური სხეულები",
+    "sectionRegional": "რეგიონული",
+    "regionChina": "ჩინეთი (中国)"
   },
   "planetSwitcher": {
     "label": "ციური სხეული",

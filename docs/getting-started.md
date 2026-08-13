@@ -644,6 +644,38 @@ VITE_STADIA_API_KEY=your_stadia_api_key         # https://client.stadiamaps.com
 
 Protomaps reuses the key described in [Optional basemap credentials](#optional-basemap-credentials) above — set it once and both places pick it up. Until each key is set, the panel shows a "Get a … API key" prompt in place of the basemap rather than loading tiles.
 
+## Basemaps in mainland China
+
+GeoLibre's default basemaps (OpenFreeMap, Protomaps) are hosted outside mainland China with no presence inside it, so from there they range from slow to unreachable, as does most of the Basemaps control's catalog. Two places offer basemaps served from inside China.
+
+### The Regional section (no key)
+
+**New project** and **Change basemap** both carry a collapsed **Regional → China (中国)** section with five keyless basemaps: 高德地图, 高德卫星, 高德混合 (Amap street, satellite, and satellite-with-labels) and 腾讯地图, 腾讯深色 (Tencent street and dark). Pick one and it applies like any other basemap. Nothing to configure.
+
+### The Basemaps control (adds Tianditu)
+
+The Basemaps control plugin carries the same Amap and Tencent tiles plus **Tianditu (天地图)**, China's official National Platform for Common Geospatial Information Services: vector, imagery, and terrain, each with a separate label overlay. Search the panel for `Tianditu`, `Amap`, or `Tencent`, or for their Chinese names.
+
+Tianditu needs a free key from [console.tianditu.gov.cn](https://console.tianditu.gov.cn/api/key). Set it in **Settings → Environment Variables** (or type it into the panel's **API keys** view):
+
+```env
+VITE_TIANDITU_API_KEY=your_tianditu_api_key   # https://console.tianditu.gov.cn/api/key
+```
+
+Tianditu ships each basemap and its labels as separate layers. Turn on **Add basemaps (stack instead of replace)** in the panel to lay a label overlay over its base.
+
+### Which to pick
+
+| Provider | Datum | Key | Where |
+|----------|-------|-----|-------|
+| Tianditu (天地图) | CGCS2000 | required | Basemaps control |
+| Amap (高德地图) | GCJ-02 | none | Regional section, Basemaps control |
+| Tencent Maps (腾讯地图) | GCJ-02 | none | Regional section, Basemaps control |
+
+**Prefer Tianditu whenever the map also carries your own data.** Chinese law requires public map services to publish in GCJ-02, an offset datum that displaces features by roughly 100 to 700 m from WGS84; nothing in GeoLibre or MapLibre applies the shift, so your layers will visibly misalign over Amap or Tencent. Tianditu publishes in CGCS2000, which is close enough to WGS84 that ordinary data lines up.
+
+The Amap and Tencent tile endpoints are not documented public APIs. They are fine for exploration, but obtain a commercial key from the provider before building a product on either.
+
 Keys set via **Settings → Environment Variables**, or typed directly into the panel's **API keys** view (the key button in the panel header), apply at runtime without reopening the project. A key baked into `apps/geolibre-desktop/.env.local` is read at build time and needs a dev server restart. When `VITE_AMAZON_LOCATION_API_KEY` is set in the environment it takes precedence over a key typed in the panel; removing it from the environment clears it on the next page reload.
 
 ## Optional 3D globe credentials (Cesium Ion)

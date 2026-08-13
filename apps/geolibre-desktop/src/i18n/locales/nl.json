@@ -231,7 +231,9 @@
     "invalidUrl": "Voer een geldige HTTP- of HTTPS-stijl-URL in.",
     "sectionMoon": "De Maan",
     "sectionMars": "Mars",
-    "sectionOther": "Andere hemellichamen"
+    "sectionOther": "Andere hemellichamen",
+    "sectionRegional": "Regionaal",
+    "regionChina": "China (中国)"
   },
   "planetSwitcher": {
     "label": "Hemellichaam",

@@ -231,7 +231,9 @@
     "invalidUrl": "Enter a valid HTTP or HTTPS style URL.",
     "sectionMoon": "The Moon",
     "sectionMars": "Mars",
-    "sectionOther": "Other celestial bodies"
+    "sectionOther": "Other celestial bodies",
+    "sectionRegional": "Regional",
+    "regionChina": "China (中国)"
   },
   "planetSwitcher": {
     "label": "Celestial body",
