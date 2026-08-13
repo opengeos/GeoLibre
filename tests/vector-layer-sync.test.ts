@@ -629,11 +629,15 @@ describe("wireVectorStoreSync", () => {
       clusterRadius: 40,
     });
 
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length, 2);
     const pushed = calls[0].args[1] as VectorLayerStyle;
     // GeoLibre's "cluster" maps to the control's pointMode, with cluster params.
     assert.equal(pushed.pointMode, "cluster");
     assert.equal(pushed.clusterRadius, 40);
+    assert.deepEqual(calls[1], {
+      method: "setLayerVisibility",
+      args: ["vector-1", true],
+    });
   });
 
   it("pushes a categorized color expression through the control", () => {
