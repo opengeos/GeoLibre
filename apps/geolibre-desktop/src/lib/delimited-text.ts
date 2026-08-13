@@ -220,6 +220,11 @@ function contentStart(text: string): number {
  *
  * A leading BOM is skipped by offset, so the source string is never copied.
  *
+ * SYNC: `countDelimitedTextRows` re-implements this scanner's quoting,
+ * escaping, and row rules without allocating. Any change to them has to land in
+ * both; the differential tests in `tests/data-parsing.test.ts` are what catch
+ * drift. Grep "SYNC:" to find the partner.
+ *
  * @param text - The delimited text, optionally starting with a BOM.
  * @param delimiter - The field delimiter; may be more than one character.
  * @yields Each row's raw field values, in column order.
@@ -377,6 +382,10 @@ function isTrimmableCode(code: number, text: string, index: number): boolean {
  * The blank-row test stops as soon as a row is known to have content, so it
  * runs on a handful of characters per row rather than on all of them.
  *
+ * SYNC: this duplicates `iterateDelimitedRows`' quoting, escaping, and row
+ * rules on purpose, for the zero-allocation win. Any change to them has to land
+ * in both. Grep "SYNC:" to find the partner.
+ *
  * @param text - The delimited text, optionally starting with a BOM.
  * @param delimiter - The field delimiter.
  * @returns The number of data rows, or 0 when the delimiter is blank.
@@ -505,7 +514,7 @@ function headerLineBounds(text: string): HeaderLineBounds | null {
     while (end < text.length) {
       const code = text.charCodeAt(end);
       if (code === LINE_FEED_CODE || code === CARRIAGE_RETURN_CODE) break;
-      if (!hasContent && !isTrimmableCode(code, text, end)) hasContent = true;
+      if (!hasContent && !isHeaderPadding(code, text, end)) hasContent = true;
       end += 1;
     }
     if (hasContent) return { start, end, terminated: end < text.length };
@@ -630,6 +639,26 @@ export const LATITUDE_FIELD_CANDIDATES = ["latitude", "lat", "y", "ycoord", "y_c
 
 /** Delimiters tried, in order, when auto-detecting a delimited file's format. */
 export const DELIMITER_CANDIDATES = [",", "\t", ";", "|"];
+
+const DELIMITER_CANDIDATE_CODES = new Set(
+  DELIMITER_CANDIDATES.map((delimiter) => delimiter.charCodeAt(0)),
+);
+
+/**
+ * Whether a character can be ruled out as header *content*: whitespace, or a
+ * character that could be the delimiter.
+ *
+ * The row parsers call a row blank when every field trims to nothing, which
+ * makes a line of nothing but separators (`,,,`) a blank row. That test needs
+ * the delimiter, which is not known while the header is being located, so
+ * {@link headerLineBounds} instead rules out every *candidate* delimiter at
+ * once: a line built only from those and whitespace has no content under any
+ * delimiter this module would go on to pick, so skipping it is safe and keeps
+ * the two notions of "blank" in agreement.
+ */
+function isHeaderPadding(code: number, text: string, index: number): boolean {
+  return isTrimmableCode(code, text, index) || DELIMITER_CANDIDATE_CODES.has(code);
+}
 
 /**
  * Guesses the field delimiter of a delimited text file by parsing its header

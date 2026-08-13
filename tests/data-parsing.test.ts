@@ -368,6 +368,26 @@ describe("delimited text row counting and header slicing", () => {
     assert.equal(firstDelimitedTextLine("a,b"), "a,b");
   });
 
+  it("skips a leading separator-only line, as the row parsers do", () => {
+    // The row parsers call a row blank when every field trims to nothing, so
+    // `,,,` is a blank row to them. The header scan cannot split on a delimiter
+    // it has not detected yet, so it rules out every candidate delimiter to
+    // reach the same answer.
+    assert.equal(
+      firstDelimitedTextLine(",,,\nname,longitude,latitude\nA,1,2"),
+      "name,longitude,latitude",
+    );
+    assert.equal(firstDelimitedTextLine(";;\n\na;b;c"), "a;b;c");
+    assert.equal(firstDelimitedTextLine("|||\nx|y"), "x|y");
+    assert.deepEqual(parseDelimitedTextFields(",,,\nname,longitude,latitude\nA,1,2", ","), [
+      "name",
+      "longitude",
+      "latitude",
+    ]);
+    // A line of separators with real content is still the header.
+    assert.equal(firstDelimitedTextLine(",,a,,\nb,c"), ",,a,,");
+  });
+
   it("reports whether a prefix holds the header's own terminator", () => {
     assert.equal(hasCompleteHeaderLine("a,b\n1,2"), true);
     assert.equal(hasCompleteHeaderLine("a,b\r\n1,2"), true);
