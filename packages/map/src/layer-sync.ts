@@ -1617,6 +1617,43 @@ function syncVectorControlPointSymbology(
   beforeId?: string,
 ): void {
   if (layer.metadata.sourceKind !== "maplibre-gl-vector") return;
+  // A point-renderer change replaces the control's native layers
+  // asynchronously. metadata.nativeLayerIds can therefore still name the old
+  // circle while the live map already contains the new heatmap (or vice
+  // versa). Apply the store visibility to the active renderer's deterministic
+  // ids so the Layers-panel eye cannot miss that handoff (#1882).
+  const renderer = styleValue(layer.style, "pointRenderer");
+  const activeRendererIds =
+    renderer === "heatmap"
+      ? [`${layer.id}-heatmap`]
+      : renderer === "cluster"
+        ? [`${layer.id}-cluster`, `${layer.id}-cluster-count`, `${layer.id}-circle`]
+        : [`${layer.id}-circle`];
+  for (const nativeLayerId of activeRendererIds) {
+    const nativeLayer = map.getLayer(nativeLayerId);
+    if (!nativeLayer) continue;
+    setNativeLayerVisibility(map, nativeLayerId, layer.visible ? "visible" : "none");
+    // maplibre-gl-vector's rebuilt point layers can continue painting after a
+    // layout visibility update (#1882). Mirror the eye state into the renderer
+    // opacity as a reliable fallback, restoring the same master/style opacity
+    // the control uses when the layer is shown again.
+    const overriddenOpacityIds = vectorVisibilityOpacityIdsFor(map);
+    if (layer.visible && !overriddenOpacityIds.delete(nativeLayerId)) continue;
+    const master = layer.visible ? layer.opacity : 0;
+    if (!layer.visible) overriddenOpacityIds.add(nativeLayerId);
+    if (nativeLayer.type === "heatmap") {
+      map.setPaintProperty(nativeLayerId, "heatmap-opacity", master);
+    } else if (nativeLayer.type === "circle") {
+      map.setPaintProperty(
+        nativeLayerId,
+        "circle-opacity",
+        master * styleValue(layer.style, "fillOpacity"),
+      );
+      map.setPaintProperty(nativeLayerId, "circle-stroke-opacity", master);
+    } else if (nativeLayer.type === "symbol" && renderer === "cluster") {
+      map.setPaintProperty(nativeLayerId, "text-opacity", master);
+    }
+  }
   const syntheticMarkerId = markerLayerId(layer.id);
   const singleRenderer = styleValue(layer.style, "pointRenderer") === "single";
   const circleNativeId = getExternalNativeLayerIds(layer).find(
@@ -1699,6 +1736,20 @@ function syncVectorControlPointSymbology(
   } else {
     restoreOverriddenCircleRadius(map, circleNativeId, layer);
   }
+}
+
+// Native point layers whose opacity GeoLibre forced to zero as a visibility
+// fallback. Tracking per map lets the show path restore only paint we changed,
+// leaving pristine control-owned paint untouched.
+const vectorVisibilityOpacityLayerIds = new WeakMap<maplibregl.Map, Set<string>>();
+
+function vectorVisibilityOpacityIdsFor(map: maplibregl.Map): Set<string> {
+  let ids = vectorVisibilityOpacityLayerIds.get(map);
+  if (!ids) {
+    ids = new Set<string>();
+    vectorVisibilityOpacityLayerIds.set(map, ids);
+  }
+  return ids;
 }
 
 // Control-owned circle layers whose circle-radius GeoLibre has overridden with
