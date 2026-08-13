@@ -11,7 +11,21 @@
 // (tests/object-detection.test.ts) so a dependency bump that forgets this
 // constant fails CI instead of breaking inference at runtime.
 export const ORT_VERSION = "1.27.0";
-const ORT_WASM_BASE = __NO_EXTERNAL_CDN__
+
+// Injected by vite.config.ts; declared locally (module scope, so it does not
+// collide with the app's global declaration in vite-env.d.ts) because this
+// package must stay importable from a plain Node test where the define is
+// absent.
+declare const __NO_EXTERNAL_CDN__: boolean;
+
+/**
+ * True when the build strips every external CDN reference, which leaves the
+ * runtime with no host to fetch its `.wasm` from — so inference is disabled
+ * rather than left to fail on a blocked request.
+ */
+const NO_EXTERNAL_CDN = typeof __NO_EXTERNAL_CDN__ !== "undefined" && __NO_EXTERNAL_CDN__;
+
+const ORT_WASM_BASE = NO_EXTERNAL_CDN
   ? ""
   : `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
 
@@ -32,7 +46,7 @@ let ortPromise: Promise<typeof import("onnxruntime-web/wasm")> | null = null;
  */
 export function loadOrt(): Promise<typeof import("onnxruntime-web/wasm")> {
   if (!ortPromise) {
-    if (__NO_EXTERNAL_CDN__) {
+    if (NO_EXTERNAL_CDN) {
       ortPromise = Promise.reject(
         new Error(
           "ONNX Runtime WASM is unavailable in this build (external CDN resources are disabled).",

@@ -34,10 +34,6 @@
     "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/msix/build-msix.ps1",
     "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1"
   },
-  "dependencies": {
-    "@auth0/auth0-react": "^2.24.0",
-    "@clerk/react": "^6.14.1"
-  },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.62.1",

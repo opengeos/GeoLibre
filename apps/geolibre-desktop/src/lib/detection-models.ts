@@ -19,6 +19,7 @@
  * mirror these files into a GeoLibre-controlled repo so the built-in option does
  * not depend on an external account.
  */
+import { NO_EXTERNAL_CDN } from "./build-flags";
 
 /** The 80 COCO class names, in model output order. */
 export const COCO_CLASSES = [
@@ -118,7 +119,7 @@ export interface BuiltinDetectionModel {
   inputSize: number;
 }
 
-export const BUILTIN_DETECTION_MODELS: readonly BuiltinDetectionModel[] = __NO_EXTERNAL_CDN__
+export const BUILTIN_DETECTION_MODELS: readonly BuiltinDetectionModel[] = NO_EXTERNAL_CDN
   ? []
   : [
       {

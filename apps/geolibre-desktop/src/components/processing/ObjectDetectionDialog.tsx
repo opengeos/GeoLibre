@@ -185,11 +185,18 @@ export function ObjectDetectionDialog({
   const [imageBytes, setImageBytes] = useState<ArrayBuffer | null>(null);
   const [imageName, setImageName] = useState("");
   // Default to a built-in model so detection works out of the box with no file.
-  const [modelSource, setModelSource] = useState<"builtin" | "local">("builtin");
-  const [builtinModelId, setBuiltinModelId] = useState(BUILTIN_DETECTION_MODELS[0].id);
+  // A build with external CDNs disabled ships no built-ins (the weights are
+  // CDN-hosted), so fall back to a user-supplied model rather than indexing
+  // into an empty list.
+  const [modelSource, setModelSource] = useState<"builtin" | "local">(
+    BUILTIN_DETECTION_MODELS.length > 0 ? "builtin" : "local",
+  );
+  const [builtinModelId, setBuiltinModelId] = useState(BUILTIN_DETECTION_MODELS[0]?.id ?? "");
   const [modelBytes, setModelBytes] = useState<ArrayBuffer | null>(null);
   const [modelName, setModelName] = useState("");
-  const [classNames, setClassNames] = useState(BUILTIN_DETECTION_MODELS[0].classNames.join(", "));
+  const [classNames, setClassNames] = useState(
+    BUILTIN_DETECTION_MODELS[0]?.classNames.join(", ") ?? "",
+  );
   const [confidence, setConfidence] = useState(0.25);
   const [iou, setIou] = useState(0.45);
   const [inputSize, setInputSize] = useState(640);
@@ -539,7 +546,9 @@ export function ObjectDetectionDialog({
                 if (next === "builtin") selectBuiltinModel(builtinModelId);
               }}
             >
-              <option value="builtin">{t("objectDetection.modelSourceBuiltin")}</option>
+              {BUILTIN_DETECTION_MODELS.length > 0 ? (
+                <option value="builtin">{t("objectDetection.modelSourceBuiltin")}</option>
+              ) : null}
               <option value="local">{t("objectDetection.modelSourceLocal")}</option>
             </Select>
           </div>
