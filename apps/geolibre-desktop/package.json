@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "node ../../scripts/patch-maplibre-read-buffer.mjs",
     "dev": "vite",
     "predev": "npm run build -w @geolibre/embed && node ../../scripts/build-jupyterlite.mjs --if-missing",
     "prebuild": "npm run build -w @geolibre/embed && node ../../scripts/build-jupyterlite.mjs",

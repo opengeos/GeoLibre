@@ -9,7 +9,6 @@
     "workers/*"
   ],
   "scripts": {
-    "postinstall": "node scripts/patch-maplibre-read-buffer.mjs",
     "dev": "npm run dev -w geolibre-desktop",
     "build": "npm run build -w geolibre-desktop",
     "lite:build": "node scripts/lite-build.mjs",
