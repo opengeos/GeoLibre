@@ -1617,45 +1617,6 @@ function syncVectorControlPointSymbology(
   beforeId?: string,
 ): void {
   if (layer.metadata.sourceKind !== "maplibre-gl-vector") return;
-  // A point-renderer change replaces the control's native layers
-  // asynchronously. metadata.nativeLayerIds can therefore still name the old
-  // circle while the live map already contains the new heatmap (or vice
-  // versa). Apply the store visibility to the active renderer's deterministic
-  // ids so the Layers-panel eye cannot miss that handoff (#1882).
-  const renderer = styleValue(layer.style, "pointRenderer");
-  const activeRendererIds =
-    renderer === "heatmap"
-      ? [`${layer.id}-heatmap`]
-      : renderer === "cluster"
-        ? [`${layer.id}-cluster`, `${layer.id}-cluster-count`, `${layer.id}-circle`]
-        : [`${layer.id}-circle`];
-  for (const nativeLayerId of activeRendererIds) {
-    const nativeLayer = map.getLayer(nativeLayerId);
-    if (!nativeLayer) continue;
-    setNativeLayerVisibility(map, nativeLayerId, layer.visible ? "visible" : "none");
-    // Some control-rebuilt point layers keep painting after their layout is
-    // hidden, so opacity is the final visibility fallback. On show, repeat the
-    // restoration in a microtask because the control's synchronous visibility
-    // callback can otherwise reapply the hidden paint after this sync pass.
-    const overriddenOpacityIds = vectorVisibilityOpacityIdsFor(map);
-    if (
-      layer.visible
-        ? !overriddenOpacityIds.delete(nativeLayerId)
-        : overriddenOpacityIds.has(nativeLayerId)
-    ) {
-      continue;
-    }
-    if (!layer.visible) overriddenOpacityIds.add(nativeLayerId);
-    applyVectorRendererOpacity(map, nativeLayerId, nativeLayer.type, renderer, layer);
-    if (layer.visible) {
-      queueMicrotask(() => {
-        const currentLayer = map.getLayer(nativeLayerId);
-        if (currentLayer) {
-          applyVectorRendererOpacity(map, nativeLayerId, currentLayer.type, renderer, layer);
-        }
-      });
-    }
-  }
   const syntheticMarkerId = markerLayerId(layer.id);
   const singleRenderer = styleValue(layer.style, "pointRenderer") === "single";
   const circleNativeId = getExternalNativeLayerIds(layer).find(
@@ -1737,36 +1698,6 @@ function syncVectorControlPointSymbology(
     overriddenRadiusIdsFor(map).add(circleNativeId);
   } else {
     restoreOverriddenCircleRadius(map, circleNativeId, layer);
-  }
-}
-
-const vectorVisibilityOpacityLayerIds = new WeakMap<maplibregl.Map, Set<string>>();
-
-function vectorVisibilityOpacityIdsFor(map: maplibregl.Map): Set<string> {
-  let ids = vectorVisibilityOpacityLayerIds.get(map);
-  if (!ids) {
-    ids = new Set<string>();
-    vectorVisibilityOpacityLayerIds.set(map, ids);
-  }
-  return ids;
-}
-
-function applyVectorRendererOpacity(
-  map: maplibregl.Map,
-  nativeLayerId: string,
-  nativeLayerType: string,
-  renderer: LayerStyle["pointRenderer"],
-  layer: GeoLibreLayer,
-): void {
-  const master = layer.visible ? layer.opacity : 0;
-  if (nativeLayerType === "heatmap") {
-    map.setPaintProperty(nativeLayerId, "heatmap-opacity", master);
-  } else if (nativeLayerType === "circle") {
-    const paint = circlePaint(layer.style, master);
-    map.setPaintProperty(nativeLayerId, "circle-opacity", paint["circle-opacity"]);
-    map.setPaintProperty(nativeLayerId, "circle-stroke-opacity", paint["circle-stroke-opacity"]);
-  } else if (nativeLayerType === "symbol" && renderer === "cluster") {
-    map.setPaintProperty(nativeLayerId, "text-opacity", master);
   }
 }
 

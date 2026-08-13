@@ -367,8 +367,7 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
           continue;
         }
 
-        const visibilityChanged = current.visible !== layer.visible;
-        if (visibilityChanged) {
+        if (current.visible !== layer.visible) {
           activeControl.setLayerVisibility(layer.id, current.visible);
           rememberControlVectorRenderState(layer.id, { visible: current.visible });
         }
@@ -377,22 +376,8 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
           rememberControlVectorRenderState(layer.id, { opacity: current.opacity });
         }
         const nextStyle = layerStyleToVectorStyle(current.style);
-        const previousStyle = layerStyleToVectorStyle(layer.style);
-        if (!vectorStylesEqual(previousStyle, nextStyle)) {
+        if (!vectorStylesEqual(layerStyleToVectorStyle(layer.style), nextStyle)) {
           activeControl.setLayerStyle(layer.id, nextStyle);
-          // Point renderer changes replace the control's native MapLibre
-          // layers. Reapply the effective visibility while that rebuild is in
-          // flight so the replacement heatmap/circle inherits the eye icon's
-          // current state even though the store boolean itself did not change.
-          if (
-            !visibilityChanged &&
-            (previousStyle.pointMode !== nextStyle.pointMode ||
-              previousStyle.clusterRadius !== nextStyle.clusterRadius ||
-              previousStyle.clusterMaxZoom !== nextStyle.clusterMaxZoom)
-          ) {
-            activeControl.setLayerVisibility(layer.id, current.visible);
-            rememberControlVectorRenderState(layer.id, { visible: current.visible });
-          }
           // A pointMode change makes the control rebuild its map layers, so the
           // new layer ids replace the old ones. Refresh nativeLayerIds/sourceIds
           // from the control so the core sync orders/toggles the new layers.

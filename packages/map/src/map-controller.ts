@@ -1295,10 +1295,29 @@ export class MapController {
     const userStyleLayerIds = new Set(
       this.syncedLayers.flatMap((layer) => this.getCandidateStyleLayers(layer).map(({ id }) => id)),
     );
+    // A control that rebuilds its own render layers (maplibre-gl-vector swaps
+    // circle <-> heatmap <-> cluster layers on a point-renderer change) does so
+    // asynchronously, so `metadata.nativeLayerIds` can name layers the map no
+    // longer has while the live replacements are missing from the set above.
+    // Those replacements are still the user's data — always drawn from the
+    // layer's own source — so claim every style layer that reads one of the
+    // synced layers' sources. Without this the Background pass mistakes them
+    // for basemap layers: it pins their opacity to whatever it first saw
+    // (breaking the panel's opacity slider) and forces them back to the
+    // basemap's visibility (re-showing a hidden heatmap, #1882).
+    const userSourceIds = new Set(
+      this.syncedLayers.flatMap((layer) => {
+        const sourceIds = layer.metadata.sourceIds;
+        return Array.isArray(sourceIds) ? sourceIds.filter((id) => typeof id === "string") : [];
+      }),
+    );
     const nonBasemapStyleLayerIds = new Set(NON_BASEMAP_STYLE_LAYER_IDS);
 
     return (map.getStyle().layers ?? []).filter(
-      (layer) => !userStyleLayerIds.has(layer.id) && !nonBasemapStyleLayerIds.has(layer.id),
+      (layer) =>
+        !userStyleLayerIds.has(layer.id) &&
+        !nonBasemapStyleLayerIds.has(layer.id) &&
+        !("source" in layer && typeof layer.source === "string" && userSourceIds.has(layer.source)),
     );
   }
 

@@ -683,6 +683,37 @@ describe("MapController basemap controls", () => {
     assert.ok(!ids.includes(circleId("a")), "user layers are not basemap layers");
   });
 
+  it("claims a control's rebuilt render layer through its source (#1882)", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    // maplibre-gl-vector rebuilds its point layers asynchronously on a
+    // point-renderer change, so the store snapshot can still name the old
+    // circle while the map already holds the replacement heatmap. Both read the
+    // layer's own source, which is what identifies them as user data.
+    controller.syncLayers([controlVectorLayer("pts")]);
+    fake.layers.set("pts-heatmap", {
+      id: "pts-heatmap",
+      type: "heatmap",
+      source: "pts-source",
+      paint: { "heatmap-opacity": 1 },
+    });
+    fake.order.push("pts-heatmap");
+
+    assert.ok(!controller.getBasemapStyleLayerIds().includes("pts-heatmap"));
+
+    controller.setBasemapVisible(false);
+    controller.setBasemapOpacity(0.25);
+
+    assert.ok(
+      !fake.calls.some(
+        (call) =>
+          call.args[0] === "pts-heatmap" &&
+          (call.method === "setLayoutProperty" || call.method === "setPaintProperty"),
+      ),
+      "the Background controls leave the rebuilt heatmap alone",
+    );
+  });
+
   it("keeps KML marker symbols independent from basemap visibility and opacity", () => {
     for (const type of ["geojson", "vector-tiles"] as const) {
       const { map, fake } = makeFakeMap();

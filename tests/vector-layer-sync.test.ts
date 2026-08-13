@@ -629,31 +629,11 @@ describe("wireVectorStoreSync", () => {
       clusterRadius: 40,
     });
 
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 1);
     const pushed = calls[0].args[1] as VectorLayerStyle;
     // GeoLibre's "cluster" maps to the control's pointMode, with cluster params.
     assert.equal(pushed.pointMode, "cluster");
     assert.equal(pushed.clusterRadius, 40);
-    assert.deepEqual(calls[1], {
-      method: "setLayerVisibility",
-      args: ["vector-1", true],
-    });
-  });
-
-  it("reapplies hidden visibility after switching to heatmap", () => {
-    const { control, calls } = fakeControl([vectorInfo({ geometryType: "point" })]);
-    syncVectorLayersToStore(control);
-    wireVectorStoreSync(control);
-
-    useAppStore.getState().setLayerVisibility("vector-1", false);
-    calls.length = 0;
-    useAppStore.getState().setLayerStyle("vector-1", { pointRenderer: "heatmap" });
-
-    assert.equal(calls[0].method, "setLayerStyle");
-    assert.deepEqual(calls[1], {
-      method: "setLayerVisibility",
-      args: ["vector-1", false],
-    });
   });
 
   it("pushes a categorized color expression through the control", () => {

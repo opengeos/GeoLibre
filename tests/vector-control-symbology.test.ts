@@ -42,26 +42,6 @@ function makeVectorControlMapStub(layerId: string) {
   return { map, calls };
 }
 
-function makeStaleHeatmapMapStub(layerId: string) {
-  const calls: MapCall[] = [];
-  const heatmapSpec = {
-    id: `${layerId}-heatmap`,
-    type: "heatmap",
-    source: `${layerId}-source`,
-  };
-  const map = {
-    getStyle: () => ({ layers: [heatmapSpec] }),
-    getLayer: (id: string) => (id === heatmapSpec.id ? heatmapSpec : undefined),
-    getSource: () => undefined,
-    getLayoutProperty: () => "visible",
-    setLayoutProperty: (...args: unknown[]) => calls.push({ method: "setLayoutProperty", args }),
-    setPaintProperty: (...args: unknown[]) => calls.push({ method: "setPaintProperty", args }),
-    moveLayer: () => {},
-    removeLayer: () => {},
-  };
-  return { map, calls };
-}
-
 function vectorControlLayer(layerId: string, patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
   return {
     id: layerId,
@@ -117,41 +97,6 @@ describe("vector-control point symbology overlay (#1311)", () => {
           c.args[2] === "none",
       ),
       "expected effective group visibility to hide the control's native layer",
-    );
-  });
-
-  it("hides a rebuilt heatmap while metadata still names the old circle", () => {
-    const { map, calls } = makeStaleHeatmapMapStub("cities");
-    const layer = vectorControlLayer("cities", {
-      visible: false,
-      style: { ...DEFAULT_LAYER_STYLE, pointRenderer: "heatmap" },
-      // This is the real async handoff from the Add Vector sample: the map has
-      // cities-heatmap, while the store snapshot still lists cities-circle.
-      metadata: {
-        ...vectorControlLayer("cities").metadata,
-        nativeLayerIds: ["cities-circle"],
-      },
-    });
-
-    syncLayer(map as never, layer);
-
-    assert.ok(
-      calls.some(
-        (call) =>
-          call.method === "setLayoutProperty" &&
-          call.args[0] === "cities-heatmap" &&
-          call.args[1] === "visibility" &&
-          call.args[2] === "none",
-      ),
-    );
-    assert.ok(
-      calls.some(
-        (call) =>
-          call.method === "setPaintProperty" &&
-          call.args[0] === "cities-heatmap" &&
-          call.args[1] === "heatmap-opacity" &&
-          call.args[2] === 0,
-      ),
     );
   });
 
