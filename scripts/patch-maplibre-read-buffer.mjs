@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const MAPLIBRE_BUNDLE_URL = new URL(
@@ -16,17 +16,29 @@ const MAPLIBRE_BUNDLE_URL = new URL(
 export function patchMapLibreReadBuffer(bundle) {
   const target = ".STREAM_READ";
   const occurrences = bundle.split(target).length - 1;
-  if (occurrences === 0) return { bundle, changed: false };
+  if (occurrences === 0) return { bundle, changed: false, occurrences };
   if (occurrences !== 1) {
-    throw new Error(`Expected one MapLibre STREAM_READ usage, found ${occurrences}`);
+    return { bundle, changed: false, occurrences };
   }
-  return { bundle: bundle.replace(target, ".STREAM_DRAW"), changed: true };
+  return { bundle: bundle.replace(target, ".STREAM_DRAW"), changed: true, occurrences };
 }
 
 async function main() {
   const source = await readFile(MAPLIBRE_BUNDLE_URL, "utf8");
   const result = patchMapLibreReadBuffer(source);
-  if (result.changed) await writeFile(MAPLIBRE_BUNDLE_URL, result.bundle);
+  if (result.occurrences > 1) {
+    console.warn(
+      `Skipping MapLibre read-buffer patch: expected one STREAM_READ usage, found ${result.occurrences}`,
+    );
+    return;
+  }
+  if (result.changed) {
+    // Replacing the directory entry instead of rewriting the existing inode is
+    // safe when Bun populated node_modules with hardlinks to its global cache.
+    const temporaryUrl = new URL(`${MAPLIBRE_BUNDLE_URL.href}.${process.pid}.tmp`);
+    await writeFile(temporaryUrl, result.bundle);
+    await rename(temporaryUrl, MAPLIBRE_BUNDLE_URL);
+  }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -14,10 +14,11 @@ describe("MapLibre read-buffer patch", () => {
     assert.equal(result.changed, false);
   });
 
-  it("fails if the dependency gains another READ usage that needs review", () => {
-    assert.throws(
-      () => patchMapLibreReadBuffer("gl.STREAM_READ; gl.STREAM_READ"),
-      /Expected one MapLibre STREAM_READ usage, found 2/,
-    );
+  it("does not alter an unexpected dependency shape", () => {
+    const bundle = "gl.STREAM_READ; gl.STREAM_READ";
+    const result = patchMapLibreReadBuffer(bundle);
+    assert.equal(result.bundle, bundle);
+    assert.equal(result.changed, false);
+    assert.equal(result.occurrences, 2);
   });
 });
