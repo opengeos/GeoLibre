@@ -89,6 +89,26 @@ describe("layoutOptionsFromLocation", () => {
     assert.equal(options.panelsHidden, true);
   });
 
+  it("hides only the toolbar for toolbar=none", () => {
+    withSearch("?toolbar=none");
+    const options = layoutOptionsFromLocation(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
+    assert.equal(options.toolbarVisible, false);
+    assert.equal(options.statusBarVisible, true);
+    assert.equal(options.layerPanelVisible, true);
+    assert.equal(options.stylePanelVisible, true);
+    assert.equal(options.attributePanelVisible, true);
+    assert.equal(options.panelsHidden, false);
+  });
+
+  it("accepts hidden toolbar aliases", () => {
+    for (const value of ["hidden", "hide", "off"]) {
+      withSearch(`?toolbar=${value}`);
+      const options = layoutOptionsFromLocation(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
+      assert.equal(options.toolbarVisible, false, `toolbar=${value}`);
+      assert.equal(options.layerPanelVisible, true, `toolbar=${value}`);
+    }
+  });
+
   it("starts side panels collapsed without hiding their rails", () => {
     withSearch("?panels=collapsed");
     const options = layoutOptionsFromLocation(DEFAULT_DESKTOP_LAYOUT_SETTINGS);

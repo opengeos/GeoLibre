@@ -27,6 +27,7 @@ export interface LayoutOptions {
 
 const COMPACT_LAYOUT_VALUES = new Set(["compact", "embed", "iframe"]);
 const ICON_TOOLBAR_VALUES = new Set(["icon", "icons", "icon-only"]);
+const HIDDEN_TOOLBAR_VALUES = new Set(["hidden", "hide", "none", "off"]);
 const HIDDEN_PANEL_VALUES = new Set(["hidden", "hide", "none", "off"]);
 const MAP_ONLY_VALUES = new Set(["", "true", "1", "yes", "on"]);
 
@@ -91,7 +92,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     statusBarVisible: !mapOnly,
     stylePanelVisible,
     toolbarLabels,
-    toolbarVisible: !mapOnly,
+    toolbarVisible: !mapOnly && !HIDDEN_TOOLBAR_VALUES.has(toolbar),
     viewer,
   };
 }

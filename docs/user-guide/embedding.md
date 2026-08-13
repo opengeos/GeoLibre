@@ -26,7 +26,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | `data`       | `data=https://assets.geolibre.app/data/places.geojson`     | Loads public GeoJSON, GeoParquet, PMTiles, a COG, or a ZIP/REST response containing multiple GeoJSON files.                           |
 | `style`      | `style=https://assets.geolibre.app/data/sample.style.json` | Applies a GeoLibre/MapLibre vector style or raster-style JSON to the data loaded by `data`.                                            |
 | `layout`     | `layout=viewer`                                            | `viewer` provides read-only chrome: Layers, View, Controls, basemaps, search/identify, and Help, with authoring UI hidden. `compact` is the icon-only full-app layout; `embed` and `iframe` are aliases. |
-| `toolbar`    | `toolbar=icons`                                            | Icon-only toolbar buttons without the full compact layout. `icon` and `icon-only` are aliases.                                        |
+| `toolbar`    | `toolbar=none`                                             | Hides the top toolbar while keeping panels and the status bar. Use `icons` for icon-only buttons; `icon` and `icon-only` are aliases. `hidden`, `hide`, and `off` are aliases for `none`. |
 | `panels`     | `panels=collapsed`                                         | Starts Layers and Style collapsed to their icon rails. Use `none` to hide all panels; `hidden`, `hide`, and `off` are aliases.         |
 | `hidePanels` | `hidePanels=true`                                          | Alternative way to hide those panels.                                                                                                 |
 | `maponly`    | `maponly`                                                  | Hides all chrome (toolbar, panels, and status bar), leaving only the map. The bare flag or `true`, `1`, `yes`, `on` enable it.        |
@@ -85,7 +85,8 @@ Drop the viewer into an `<iframe>`:
 ></iframe>
 ```
 
-Use `layout=viewer` for a read-only map with layer toggles, search/identify, and
+Use `toolbar=none` to hide the top toolbar while retaining the configured side
+panels and status bar. Use `layout=viewer` for a read-only map with layer toggles, search/identify, and
 basemap switching. Its layer list mirrors the authoring Layers panel, folders
 and all, so group names carry over. The Controls menu is part of the viewer
 chrome, minus the two entries that write to the project (Field Collection and
