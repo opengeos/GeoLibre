@@ -1638,18 +1638,21 @@ function syncVectorControlPointSymbology(
     // opacity as a reliable fallback, restoring the same master/style opacity
     // the control uses when the layer is shown again.
     const overriddenOpacityIds = vectorVisibilityOpacityIdsFor(map);
-    if (layer.visible && !overriddenOpacityIds.delete(nativeLayerId)) continue;
+    if (
+      layer.visible
+        ? !overriddenOpacityIds.delete(nativeLayerId)
+        : overriddenOpacityIds.has(nativeLayerId)
+    ) {
+      continue;
+    }
     const master = layer.visible ? layer.opacity : 0;
     if (!layer.visible) overriddenOpacityIds.add(nativeLayerId);
     if (nativeLayer.type === "heatmap") {
       map.setPaintProperty(nativeLayerId, "heatmap-opacity", master);
     } else if (nativeLayer.type === "circle") {
-      map.setPaintProperty(
-        nativeLayerId,
-        "circle-opacity",
-        master * styleValue(layer.style, "fillOpacity"),
-      );
-      map.setPaintProperty(nativeLayerId, "circle-stroke-opacity", master);
+      const paint = circlePaint(layer.style, master);
+      map.setPaintProperty(nativeLayerId, "circle-opacity", paint["circle-opacity"]);
+      map.setPaintProperty(nativeLayerId, "circle-stroke-opacity", paint["circle-stroke-opacity"]);
     } else if (nativeLayer.type === "symbol" && renderer === "cluster") {
       map.setPaintProperty(nativeLayerId, "text-opacity", master);
     }

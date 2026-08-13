@@ -367,7 +367,8 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
           continue;
         }
 
-        if (current.visible !== layer.visible) {
+        const visibilityChanged = current.visible !== layer.visible;
+        if (visibilityChanged) {
           activeControl.setLayerVisibility(layer.id, current.visible);
           rememberControlVectorRenderState(layer.id, { visible: current.visible });
         }
@@ -384,9 +385,10 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
           // flight so the replacement heatmap/circle inherits the eye icon's
           // current state even though the store boolean itself did not change.
           if (
-            previousStyle.pointMode !== nextStyle.pointMode ||
-            previousStyle.clusterRadius !== nextStyle.clusterRadius ||
-            previousStyle.clusterMaxZoom !== nextStyle.clusterMaxZoom
+            !visibilityChanged &&
+            (previousStyle.pointMode !== nextStyle.pointMode ||
+              previousStyle.clusterRadius !== nextStyle.clusterRadius ||
+              previousStyle.clusterMaxZoom !== nextStyle.clusterMaxZoom)
           ) {
             activeControl.setLayerVisibility(layer.id, current.visible);
             rememberControlVectorRenderState(layer.id, { visible: current.visible });

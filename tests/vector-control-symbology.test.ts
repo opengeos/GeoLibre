@@ -155,6 +155,38 @@ describe("vector-control point symbology overlay (#1311)", () => {
     );
   });
 
+  it("restores simplestyle circle opacity once after a visibility fallback", () => {
+    const { map, calls } = makeVectorControlMapStub("cities");
+    const hidden = vectorControlLayer("cities", {
+      visible: false,
+      opacity: 0.5,
+      style: { ...DEFAULT_LAYER_STYLE, simpleStyleEnabled: true },
+    });
+
+    syncLayer(map as never, hidden);
+    const firstPaintCallCount = calls.filter((call) => call.method === "setPaintProperty").length;
+    syncLayer(map as never, hidden);
+    assert.equal(
+      calls.filter((call) => call.method === "setPaintProperty").length,
+      firstPaintCallCount,
+    );
+
+    syncLayer(map as never, { ...hidden, visible: true });
+    assert.ok(
+      calls.some(
+        (call) =>
+          call.method === "setPaintProperty" &&
+          call.args[1] === "circle-stroke-opacity" &&
+          JSON.stringify(call.args[2]) ===
+            JSON.stringify([
+              "*",
+              ["to-number", ["coalesce", ["get", "stroke-opacity"], 1], 1],
+              0.5,
+            ]),
+      ),
+    );
+  });
+
   it("renders a GeoLibre marker symbol layer and hides the control's circle", () => {
     const { map, calls } = makeVectorControlMapStub("vecm");
     const layer = vectorControlLayer("vecm", {
