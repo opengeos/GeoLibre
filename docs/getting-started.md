@@ -583,6 +583,25 @@ Where to find the output:
 - **Web build** — static files in `apps/geolibre-desktop/dist/`. Serve this directory with any static web server (or the Docker image above).
 - **Desktop installers** — `apps/geolibre-desktop/src-tauri/target/release/bundle/`, with per-platform subfolders: `deb/`, `rpm/`, and `appimage/` on Linux; `msi/` and `nsis/` on Windows; `dmg/` and `macos/` on macOS. The unbundled executable is in `apps/geolibre-desktop/src-tauri/target/release/`. On Linux, `npm run tauri:build` builds `deb` and `rpm` by default; passing `--bundles` replaces that default selection rather than adding to it, so list every format you want, for example `npm run tauri:build -- --bundles deb,rpm,appimage` for all three.
 
+### Build-time flags
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `GEOLIBRE_PGLITE_CDN` | `1` (CDN) | Set `0` to bundle PGlite/PostGIS into the build (~22 MB) instead of loading from jsDelivr. |
+| `GEOLIBRE_CEREUS_CDN` | `1` (CDN) | Set `0` to bundle CereusDB WASM (~40 MB) instead of loading from jsDelivr. |
+| `GEOLIBRE_GDAL_CDN` | `1` (CDN) | Set `0` to disable GDAL export (the ~40 MB WASM/data are not bundled, just unavailable). |
+| `GEOLIBRE_DUCKDB_WASM_CDN` | `0` (bundled) | Set `1` to move DuckDB-WASM to jsDelivr (required for Cloudflare Pages' 25 MiB per-file limit). |
+| `GEOLIBRE_NO_EXTERNAL_CDN` | unset | Set `1` to strip **all** external CDN references from the build. Forces all `*_CDN=0` flags and disables features that embed CDN URLs (storymap HTML export, built-in detection models, ONNX WASM, 3D Tiles decoders, Pyodide). Intended for enterprise deployments that cannot reference untrusted CDNs. |
+| `GEOLIBRE_STORE_BUILD` | unset | Set `1` for Microsoft Store MSIX builds (removes in-app updater). |
+| `GEOLIBRE_MAS_BUILD` | unset | Set `1` for Mac App Store builds (removes sidecar/server features). |
+| `GEOLIBRE_EMBED` | unset | Set `1` for the Jupyter embed wheel build. |
+
+Example — build with no external CDN dependencies:
+
+```bash
+GEOLIBRE_NO_EXTERNAL_CDN=1 npx vite build
+```
+
 ## Optional imagery credentials
 
 The Street View plugin can use Google Street View and Mapillary imagery. The 3D Tiles panel can also load Google Photorealistic 3D Tiles with the same Google Maps key. Create `apps/geolibre-desktop/.env.local` and set one or both provider credentials:
