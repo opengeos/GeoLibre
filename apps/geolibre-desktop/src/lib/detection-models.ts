@@ -118,22 +118,24 @@ export interface BuiltinDetectionModel {
   inputSize: number;
 }
 
-export const BUILTIN_DETECTION_MODELS: readonly BuiltinDetectionModel[] = [
-  {
-    id: "yolov8n-coco",
-    label: "YOLOv8n (COCO, 80 classes)",
-    url: "https://cdn.jsdelivr.net/gh/Hyuto/yolov8-onnxruntime-web@fc4a52c466d15ad4519873a0cef22fbc935b93b6/public/model/yolov8n.onnx",
-    classNames: COCO_CLASSES,
-    inputSize: 640,
-  },
-  {
-    id: "yolov5n-coco",
-    label: "YOLOv5n (COCO, 80 classes)",
-    url: "https://cdn.jsdelivr.net/gh/Hyuto/yolov5-onnxruntime-web@203637cc45962e40a81b2a7e78f98813f93971db/public/model/yolov5n.onnx",
-    classNames: COCO_CLASSES,
-    inputSize: 640,
-  },
-];
+export const BUILTIN_DETECTION_MODELS: readonly BuiltinDetectionModel[] = __NO_EXTERNAL_CDN__
+  ? []
+  : [
+      {
+        id: "yolov8n-coco",
+        label: "YOLOv8n (COCO, 80 classes)",
+        url: "https://cdn.jsdelivr.net/gh/Hyuto/yolov8-onnxruntime-web@fc4a52c466d15ad4519873a0cef22fbc935b93b6/public/model/yolov8n.onnx",
+        classNames: COCO_CLASSES,
+        inputSize: 640,
+      },
+      {
+        id: "yolov5n-coco",
+        label: "YOLOv5n (COCO, 80 classes)",
+        url: "https://cdn.jsdelivr.net/gh/Hyuto/yolov5-onnxruntime-web@203637cc45962e40a81b2a7e78f98813f93971db/public/model/yolov5n.onnx",
+        classNames: COCO_CLASSES,
+        inputSize: 640,
+      },
+    ];
 
 /** Cache bucket holding downloaded model files so a model is fetched once. */
 const MODEL_CACHE = "geolibre-detection-models";

@@ -110,6 +110,21 @@ if (!process.env.VITE_GEE_OAUTH_CLIENT_ID) {
 // the service worker from the desktop bundle.
 const IS_TAURI_BUILD = !!process.env.TAURI_ENV_PLATFORM;
 
+// Strip ALL external CDN references (unpkg.com, cdn.jsdelivr.net, etc.) from the
+// build output. When set, features that depend on external CDN-hosted resources
+// (storymap HTML export, object detection models, ONNX WASM, 3D Tiles decoders,
+// Pyodide, PGlite, CereusDB, GDAL) are either disabled or degraded. Intended for
+// deployments that cannot reference untrusted external CDNs (e.g. Harmony/Amazon).
+// This implicitly forces GEOLIBRE_PGLITE_CDN=0, GEOLIBRE_CEREUS_CDN=0,
+// GEOLIBRE_GDAL_CDN=0, and GEOLIBRE_DUCKDB_WASM_CDN=0.
+const NO_EXTERNAL_CDN = process.env.GEOLIBRE_NO_EXTERNAL_CDN === "1";
+if (NO_EXTERNAL_CDN) {
+  process.env.GEOLIBRE_PGLITE_CDN = "0";
+  process.env.GEOLIBRE_CEREUS_CDN = "0";
+  process.env.GEOLIBRE_GDAL_CDN = "0";
+  process.env.GEOLIBRE_DUCKDB_WASM_CDN = "0";
+}
+
 // PGlite + PostGIS is ~25 MB raw and weighs ~22 MB inside the Tauri binary
 // (postgis.tar is pre-gzipped, so brotli can't shrink it — it was the entire
 // 42 → 63 MB binary regression). By default it is fetched from jsDelivr at
@@ -908,6 +923,7 @@ export default defineConfig({
     __GEOLIBRE_STORE_BUILD__: JSON.stringify(IS_STORE_BUILD),
     __GEOLIBRE_MAS_BUILD__: JSON.stringify(IS_MAS_BUILD),
     __GEOLIBRE_EMBED_BUILD__: JSON.stringify(IS_EMBED),
+    __NO_EXTERNAL_CDN__: JSON.stringify(NO_EXTERNAL_CDN),
     __PGLITE_CDN_URL__: JSON.stringify(PGLITE_CDN_URL),
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),

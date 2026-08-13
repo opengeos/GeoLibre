@@ -11,7 +11,9 @@
 // (tests/object-detection.test.ts) so a dependency bump that forgets this
 // constant fails CI instead of breaking inference at runtime.
 export const ORT_VERSION = "1.27.0";
-const ORT_WASM_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
+const ORT_WASM_BASE = __NO_EXTERNAL_CDN__
+  ? ""
+  : `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
 
 // A promise singleton: the import-and-configure runs exactly once and every
 // caller awaits the same settled promise, so concurrent tool calls cannot race
@@ -30,6 +32,14 @@ let ortPromise: Promise<typeof import("onnxruntime-web/wasm")> | null = null;
  */
 export function loadOrt(): Promise<typeof import("onnxruntime-web/wasm")> {
   if (!ortPromise) {
+    if (__NO_EXTERNAL_CDN__) {
+      ortPromise = Promise.reject(
+        new Error(
+          "ONNX Runtime WASM is unavailable in this build (external CDN resources are disabled).",
+        ),
+      );
+      return ortPromise;
+    }
     ortPromise = import("onnxruntime-web/wasm")
       .then((ort) => {
         ort.env.wasm.numThreads = 1;

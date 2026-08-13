@@ -48,8 +48,12 @@ const THREE_D_TILES_LAYER_ID = "geolibre-3d-tiles";
 // against. Only used as a fallback when the control does not expose its own
 // decoder paths (see getThreeDTilesDecoderOptions).
 const THREE_VERSION = "0.184.0";
-const DEFAULT_DRACO_DECODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/draco/`;
-const DEFAULT_KTX2_TRANSCODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
+const DEFAULT_DRACO_DECODER_PATH = __NO_EXTERNAL_CDN__
+  ? ""
+  : `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/draco/`;
+const DEFAULT_KTX2_TRANSCODER_PATH = __NO_EXTERNAL_CDN__
+  ? ""
+  : `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
 const GOOGLE_PHOTOREALISTIC_TILES_URL = "https://tile.googleapis.com/v1/3dtiles/root.json";
 const GOOGLE_PHOTOREALISTIC_TILES_LABEL = "Google Photorealistic 3D Tiles";
 const ARCGIS_I3S_SAMPLE_TILES_URL =

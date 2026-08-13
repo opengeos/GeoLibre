@@ -9,7 +9,9 @@ import { getRuntimeEnvironment } from "@geolibre/core";
 
 export const PYODIDE_VERSION = "0.27.7";
 
-const DEFAULT_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+const DEFAULT_INDEX_URL = __NO_EXTERNAL_CDN__
+  ? ""
+  : `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 
 /**
  * Resolve the Pyodide indexURL (where pyodide.js, the wasm runtime, the
