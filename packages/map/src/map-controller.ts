@@ -1304,12 +1304,11 @@ export class MapController {
     // synced layers' sources. Without this the Background pass mistakes them
     // for basemap layers: it pins their opacity to whatever it first saw
     // (breaking the panel's opacity slider) and forces them back to the
-    // basemap's visibility (re-showing a hidden heatmap, #1882).
+    // basemap's visibility (re-showing a hidden heatmap, #1882). Reuse
+    // getLayerSourceIds so this stays in step with the rest of the controller:
+    // it also covers the singular `metadata.sourceId` some registrations use.
     const userSourceIds = new Set(
-      this.syncedLayers.flatMap((layer) => {
-        const sourceIds = layer.metadata.sourceIds;
-        return Array.isArray(sourceIds) ? sourceIds.filter((id) => typeof id === "string") : [];
-      }),
+      this.syncedLayers.flatMap((layer) => this.getLayerSourceIds(layer)),
     );
     const nonBasemapStyleLayerIds = new Set(NON_BASEMAP_STYLE_LAYER_IDS);
 
