@@ -57,7 +57,7 @@ you pick the right tool for a given job, not to declare a winner.
 | **Cost** | Free | Free | Paid subscription | Paid subscription (credit-metered analysis) | Paid subscription | Paid subscription | Free |
 | **Browser** | Full app, nothing to install | No official browser build | No | Yes (the product *is* the browser app) | Yes | Yes (the authoring product) | Yes |
 | **Desktop** | Windows, macOS, Linux (Tauri) | Windows, macOS, Linux | Windows only | — | — | — | — |
-| **Mobile** | Native Android app; responsive touch layout | Via QField / Mergin Maps (separate apps) | — | Via ArcGIS Field Maps (separate app) | — | Felt Field App for iOS and Android (separate app) | Responsive web |
+| **Mobile** | Native Android and iOS apps; responsive touch layout | Via QField / Mergin Maps (separate apps) | — | Via ArcGIS Field Maps (separate app) | — | Felt Field App for iOS and Android (separate app) | Responsive web |
 | **In Jupyter** | Full app as an anywidget, two-way sync | Via `qgis` bindings, not the UI | Notebooks drive `arcpy`, not the UI | ArcGIS API for Python | Via `pydeck-carto` | — | Yes (widget) |
 | **Works offline** | Yes — PWA install, offline area download, desktop build | Yes | Yes | Limited (Field Maps offline areas) | No — connected platform by design | Field App offline areas, syncing on reconnect (higher plans) | Client-side, but assets are hosted |
 | **Where your data lives** | Your device — processed client-side in the browser session | Your device | Your device / your enterprise geodatabase | Vendor cloud | Your own cloud data warehouse — no CARTO-side storage (except cache) or sync; imports write to a warehouse you own | Vendor cloud, or a single-tenant instance in your own AWS account (Enterprise) | Your browser |

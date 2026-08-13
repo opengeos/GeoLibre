@@ -126,7 +126,7 @@ The tools come from the [Whitebox Next Gen](https://github.com/opengeos/Whitebox
 
 ### Where the tools run
 
-They run **in the browser**, through a WebAssembly runtime with raster and vector I/O — no Python sidecar, no server, and no data leaving your machine. That means the full toolbox is available on GeoLibre Web and on Android, not just the desktop app.
+They run **in the browser**, through a WebAssembly runtime with raster and vector I/O — no Python sidecar, no server, and no data leaving your machine. That means the full toolbox is available on GeoLibre Web and on Android and iOS, not just the desktop app.
 
 The **Run locally (WASM)** checkbox controls the engine:
 

@@ -5,23 +5,31 @@ v2 mobile** — no separate app. The webview UI (WKWebView) is bundled in the ap
 so the shell works offline; map tiles and the heavier engines are fetched on
 demand (same as the desktop and Android builds).
 
-> **Status: builds and signs, locally and in CI; not yet shipped.** The pipeline
-> has been run end to end both ways and produces a **submittable** `.ipa` —
-> bundle id `org.geolibre.app`, signed by *Apple Distribution*,
-> `get-task-allow=false`, an embedded App Store provisioning profile, the merged
-> location usage string, and the web assets embedded in the binary.
->
-> - **Locally** on a Mac (Xcode 26.6 / iOS SDK 26.5): `tauri ios init` → unsigned
->   archive → `xcodebuild -exportArchive`.
-> - **In CI**, the signed job has run green on a `macos-15` runner (Xcode 26.3):
->   it imported the certificate and profile from the `APPLE_IOS_*` secrets,
->   archived, exported under manual signing, verified the signature, and
->   published the `geolibre-ios-ipa` artifact.
->
-> A first build (version 2.4.0, build 2.4.0) has been uploaded to App Store
-> Connect by hand via Transporter. What has **not** happened: any submission for
-> review. Everything below still has to be run on a Mac (iOS cannot be
-> cross-compiled from Linux).
+## Install
+
+GeoLibre is published on the
+[App Store](https://apps.apple.com/app/geolibre/id6796039674) for iPhone and
+iPad. The Store build is signed and updates automatically:
+
+[Get GeoLibre on the App Store](https://apps.apple.com/app/geolibre/id6796039674){ .md-button .md-button--primary }
+
+There is no sideload path on iOS, since Apple installs apps only through the App
+Store or TestFlight, so no `.ipa` is attached to GitHub releases the way Android
+APKs are. The rest of this page is for developers building the app themselves,
+which has to happen on a Mac (iOS cannot be cross-compiled from Linux).
+
+The signing and archiving pipeline behind that listing runs two ways, and either
+produces a submittable `.ipa` — bundle id `org.geolibre.app`, signed by *Apple
+Distribution*, `get-task-allow=false`, an embedded App Store provisioning
+profile, the merged location usage string, and the web assets embedded in the
+binary:
+
+- **Locally** on a Mac (Xcode 26.6 / iOS SDK 26.5): `tauri ios init` → unsigned
+  archive → `xcodebuild -exportArchive`.
+- **In CI**, on a `macos-15` runner (Xcode 26.3): it imports the certificate and
+  profile from the `APPLE_IOS_*` secrets, archives, exports under manual
+  signing, verifies the signature, and publishes the `geolibre-ios-ipa`
+  artifact.
 
 ## What works on iOS vs desktop
 
@@ -83,7 +91,9 @@ Leave the key out and the **Tauri CLI's own default applies**, which is `14.0`.
 That is below Apple's floor: starting Spring 2027, App Store Connect refuses any
 upload with a `MinimumOSVersion` under 15.0. Until then it accepts the build and
 sends a warning email afterward (`ITMS-90068`), which is how version 2.5.0
-build 7 was found to have shipped at 14.0.
+build 7 was found to have shipped at 14.0. That build is the one that was
+approved, so the live App Store listing still reads *iOS 14.0 or later*; the
+listing picks up 15.0 with the next release.
 
 Because `gen/apple` is generated, a change here only takes effect once the
 project is regenerated. CI regenerates on every run, so it picks the value up
@@ -292,10 +302,10 @@ add an Apple Distribution certificate and an App Store provisioning profile for
 > This has been verified on a runner — a `workflow_dispatch` run with
 > `export_method: app-store-connect` completed green, reporting
 > `IPA ... bundle id org.geolibre.app, signed by Apple Distribution` and
-> publishing the `geolibre-ios-ipa` artifact. What remains unexercised is the
-> **release-triggered** entry point (the job has only been started manually) and
-> everything downstream of the artifact: no build has been uploaded to App Store
-> Connect.
+> publishing the `geolibre-ios-ipa` artifact. A build (version 2.5.0, build 7)
+> has since been through App Store review and is live. What remains unexercised
+> is the **release-triggered** entry point: the job has only ever been started
+> manually.
 
 > **The runner's Xcode sets a hard floor.** `tauri ios init` generates an Xcode
 > project in **object format 77**, which only **Xcode 16+** can open. On
@@ -323,7 +333,7 @@ The `workflow_dispatch` `export_method` input picks the export path
 (`app-store-connect` for TestFlight/App Store, `release-testing` for ad-hoc
 registered devices, `debugging` for development).
 
-## Install / test
+## Run and test a local build
 
 - **Simulator:** `npx tauri ios dev` and pick a simulator, or open the Xcode
   project and Run. No paid account needed for the simulator.
@@ -334,11 +344,16 @@ registered devices, `debugging` for development).
 
 ## Publishing to the App Store
 
-The build side is covered by the CI workflow; the rest is App Store Connect
-onboarding.
+GeoLibre is **live on the
+[App Store](https://apps.apple.com/app/geolibre/id6796039674)**, so the one-time
+onboarding below (steps 1, 4, 5, 6, 7) is done and only needs revisiting when
+something it declares changes. Each subsequent release repeats step 3: upload a
+build, then submit it for review. The build side is covered by the CI workflow;
+the rest is App Store Connect.
 
-1. **App record.** In App Store Connect, create a new app with the bundle id
-   `org.geolibre.app` (register the app id in the Developer portal first).
+1. **App record.** *(Done.)* In App Store Connect, create a new app with the
+   bundle id `org.geolibre.app` (register the app id in the Developer portal
+   first). GeoLibre's record is Apple ID `6796039674`, listed under Productivity.
 2. **Minimum Functionality (Guideline 4.2).** Apple rejects apps that are "a
    repackaged website." GeoLibre passes because it's a bundled native app with
    real device integration — GPS, offline-capable map workspace, local file
@@ -380,7 +395,8 @@ onboarding.
    OAuth for Earth Engine) and that location is used *when in use* and not
    collected by a backend. Point the privacy policy URL at the published
    [privacy policy](privacy.md).
-6. **Age rating** questionnaire and category (Navigation or Productivity).
+6. **Age rating** questionnaire and category: GeoLibre is listed under
+   **Productivity**.
 7. **Export compliance.** Already declared in `src-tauri/Info.ios.plist`:
 
    ```xml
