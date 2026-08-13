@@ -11,6 +11,7 @@ import { useDataUrlLoader } from "./hooks/useDataUrlLoader";
 import { useBeforeUnloadGuard } from "./hooks/useBeforeUnloadGuard";
 import { useRecentProjectsPersistence } from "./hooks/useRecentProjectsPersistence";
 import { useLayerLibraryPersistence } from "./hooks/useLayerLibraryPersistence";
+import { useLastBasemapPersistence } from "./hooks/useLastBasemapPersistence";
 import { useStyleLibraryPersistence } from "./hooks/useStyleLibraryPersistence";
 import { useTemplateLibraryPersistence } from "./hooks/useTemplateLibraryPersistence";
 import { useRuntimeEnvironmentVariables } from "./hooks/useRuntimeEnvironmentVariables";
@@ -25,6 +26,7 @@ import { createAppAPI } from "./hooks/usePlugins";
 import { languageDirection } from "./i18n/languages";
 
 export default function App() {
+  useLastBasemapPersistence();
   // Re-renders on language change, so Radix primitives (menus, sliders, tabs)
   // pick up the right-to-left direction together with the document `dir`.
   const { i18n } = useTranslation();
