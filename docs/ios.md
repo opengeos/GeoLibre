@@ -13,10 +13,11 @@ iPad. The Store build is signed and updates automatically:
 
 [Get GeoLibre on the App Store](https://apps.apple.com/app/geolibre/id6796039674){ .md-button .md-button--primary }
 
-There is no sideload path on iOS, since Apple installs apps only through the App
-Store or TestFlight, so no `.ipa` is attached to GitHub releases the way Android
-APKs are. The rest of this page is for developers building the app themselves,
-which has to happen on a Mac (iOS cannot be cross-compiled from Linux).
+GeoLibre does not publish a sideloadable `.ipa` for end users, so no iOS build is
+attached to GitHub releases the way the Android APKs are; the App Store listing,
+and TestFlight for beta builds, are how it is distributed. The rest of this page
+is for developers building the app themselves, which has to happen on a Mac (iOS
+cannot be cross-compiled from Linux).
 
 The signing and archiving pipeline behind that listing runs two ways, and either
 produces a submittable `.ipa` — bundle id `org.geolibre.app`, signed by *Apple

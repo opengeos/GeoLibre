@@ -8,7 +8,7 @@ GeoLibre is not trying to replace any of these outright. It occupies a spot none
 of them quite fills: a **free and open-source GIS that runs in a browser tab with
 nothing installed**, keeps your data on your own machine, and still ships real
 analysis, spatial SQL, cartography, and a project file — then packages the *same*
-app as a desktop install, an Android app, and a Jupyter widget.
+app as a desktop install, an Android app, an iOS app, and a Jupyter widget.
 
 !!! note "How to read this"
     Comparisons like this age quickly and are written by an interested party. The

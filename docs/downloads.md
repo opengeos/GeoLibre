@@ -295,10 +295,10 @@ builds:
 
 [Get GeoLibre on the App Store](https://apps.apple.com/app/geolibre/id6796039674){ .md-button .md-button--primary }
 
-There is no sideload path on iOS: Apple requires apps to be installed through the
-App Store (or TestFlight for beta builds), so unlike Android there are no `.ipa`
-files attached to GitHub releases. To run an unreleased build, build it yourself
-on a Mac (see [iOS](ios.md)).
+GeoLibre does not publish a sideloadable `.ipa` for end users, so unlike Android
+there are no iOS files attached to GitHub releases: the App Store listing, and
+TestFlight for beta builds, are how it is distributed. To run an unreleased
+build, build it yourself on a Mac (see [iOS](ios.md)).
 
 The tools that are hidden on Android are hidden on iOS too, for the same reason:
 the Raster, Conversion, and AI Segmentation toolboxes and the PostgreSQL data
