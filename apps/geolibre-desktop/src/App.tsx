@@ -62,6 +62,7 @@ export default function App() {
         layoutOptions={layoutOptions}
         projectUrlLoadState={projectUrlLoadState}
         dataUrlLoadState={dataUrlLoadState}
+        mapAppAPI={mapAppAPI}
         themeMode={themeMode}
         onToggleThemeMode={toggleThemeMode}
         onMapReady={handleMapReady}
