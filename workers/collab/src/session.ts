@@ -540,9 +540,7 @@ export class CollabSession extends DurableObject<Env> {
       // the race to the synchronous path between read and write.
       const inviteTokenToCheck = matchedInvite.token;
       const freshInvites = this.readInvites();
-      const freshInv = freshInvites.find(
-        (i) => i.token === inviteTokenToCheck && !i.revoked,
-      );
+      const freshInv = freshInvites.find((i) => i.token === inviteTokenToCheck && !i.revoked);
       if (!freshInv || (freshInv.maxUses && freshInv.useCount >= freshInv.maxUses)) {
         // Invite was consumed or revoked between the initial check and now.
         matchedInvite = undefined;

@@ -24,7 +24,11 @@ import {
   resolveCollabBaseUrl,
   sessionWsUrl,
 } from "../lib/collab-client";
-import { type CommentMutationAction, type ServerMessage, participantCanEditLayer } from "../lib/collab-protocol";
+import {
+  type CommentMutationAction,
+  type ServerMessage,
+  participantCanEditLayer,
+} from "../lib/collab-protocol";
 import { mergeInboundCollaborationProject } from "../lib/collaboration-project";
 
 const SNAPSHOT_DEBOUNCE_MS = 250;

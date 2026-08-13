@@ -4113,7 +4113,9 @@ export function LayerPanel({
                         size="icon"
                         className="h-7 w-7 text-destructive disabled:opacity-40"
                         title={
-                          !layerEditable ? t("collaborate.layerLockedHint") : t("layers.removeLayer")
+                          !layerEditable
+                            ? t("collaborate.layerLockedHint")
+                            : t("layers.removeLayer")
                         }
                         aria-label={t("layers.removeLayer")}
                         disabled={!layerEditable}
