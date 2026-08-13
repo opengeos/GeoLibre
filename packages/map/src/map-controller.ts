@@ -1035,7 +1035,11 @@ export class MapController {
 
     if (!isMapboxStyleUrl(url)) {
       this.beginStyleSwap();
-      map.setStyle(resolveMapStyle(url));
+      // GeoLibre deliberately rebuilds every style-owned control and layer in
+      // style.load, so diffing cannot preserve any work for us. Disabling it
+      // also avoids MapLibre's noisy fallback when a second basemap arrives
+      // before the current style has finished loading.
+      map.setStyle(resolveMapStyle(url), { diff: false });
       return;
     }
 
@@ -1045,7 +1049,7 @@ export class MapController {
       .then((style) => {
         if (this.map !== map || this.styleGeneration !== generation) return;
         this.beginStyleSwap();
-        map.setStyle(style, { validate: false });
+        map.setStyle(style, { diff: false, validate: false });
       })
       .catch((error: unknown) => {
         if (this.map !== map || this.styleGeneration !== generation) return;

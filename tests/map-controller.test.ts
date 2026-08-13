@@ -1632,11 +1632,14 @@ describe("MapController Mapbox descriptor requests", () => {
   const OPENFREEMAP = "https://tiles.openfreemap.org/styles/liberty";
 
   /** Minimal map stub: setStyle/remove are all the Mapbox path touches. */
-  function mapboxController(): { controller: MapController; styles: unknown[] } {
-    const styles: unknown[] = [];
+  function mapboxController(): {
+    controller: MapController;
+    styles: Array<{ style: unknown; options: unknown }>;
+  } {
+    const styles: Array<{ style: unknown; options: unknown }> = [];
     const map = {
-      setStyle: (style: unknown) => {
-        styles.push(style);
+      setStyle: (style: unknown, options?: unknown) => {
+        styles.push({ style, options });
       },
       remove: () => {},
       addControl: () => {},
@@ -1713,7 +1716,7 @@ describe("MapController Mapbox descriptor requests", () => {
         controller.setStyle(OPENFREEMAP);
 
         // The plain URL resolves synchronously, and no second fetch is made.
-        assert.deepEqual(styles, [OPENFREEMAP]);
+        assert.deepEqual(styles, [{ style: OPENFREEMAP, options: { diff: false } }]);
         assert.equal(signals.length, 1);
         assert.equal(signals[0]?.aborted, true);
       } finally {
