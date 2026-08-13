@@ -122,19 +122,14 @@ export function useEmbedApi(
     let projectSourceUrl: string | null = projectUrlFromLocation();
     let loadAbort: AbortController | null = null;
     const dataLoadAborts = new Set<AbortController>();
-    const dataLoadQueues = new Map<string, Promise<void>>();
+    let dataLoadQueue: Promise<void> = Promise.resolve();
 
-    const queueDataLoad = <T>(url: string, operation: () => Promise<T>): Promise<T> => {
-      const previous = dataLoadQueues.get(url) ?? Promise.resolve();
-      const next = previous.then(operation, operation);
-      const settled = next.then(
+    const queueDataLoad = <T>(operation: () => Promise<T>): Promise<T> => {
+      const next = dataLoadQueue.then(operation, operation);
+      dataLoadQueue = next.then(
         () => undefined,
         () => undefined,
       );
-      dataLoadQueues.set(url, settled);
-      void settled.finally(() => {
-        if (dataLoadQueues.get(url) === settled) dataLoadQueues.delete(url);
-      });
       return next;
     };
 
@@ -253,7 +248,7 @@ export function useEmbedApi(
         case "addData": {
           const abort = new AbortController();
           dataLoadAborts.add(abort);
-          const result = await queueDataLoad(command.url, () =>
+          const result = await queueDataLoad(() =>
             loadDataUrl(mapAppAPI, command.url, {
               styleUrl: command.styleUrl,
               signal: abort.signal,
