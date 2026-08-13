@@ -36,8 +36,9 @@ function layerPointsAt(layer: GeoLibreLayer, url: string): boolean {
 export async function loadDataUrl(
   mapAppAPI: ReturnType<typeof createAppAPI>,
   dataUrl: string,
-  options: { styleUrl?: string | null; signal?: AbortSignal } = {},
+  options: { styleUrl?: string | null; signal?: AbortSignal; fit?: boolean } = {},
 ): Promise<DataUrlLoadResult> {
+  const fit = options.fit ?? true;
   const [remote, rawStyle] = await Promise.all([
     fetchRemoteData(dataUrl, { signal: options.signal }),
     options.styleUrl ? fetchRemoteStyle(options.styleUrl, { signal: options.signal }) : null,
@@ -51,8 +52,13 @@ export async function loadDataUrl(
     const id = await addRasterToMap(mapAppAPI, remote.url, {
       name: remote.name,
       defaults: { engine: "maplibre-gl-raster" },
+      zoomTo: fit,
       ...(rasterStyle ? { state: rasterStyle } : {}),
     });
+    if (options.signal?.aborted) {
+      store.removeLayer(id);
+      throw new DOMException("The operation was aborted", "AbortError");
+    }
     layerIds.push(id);
   } else if (remote.kind === "pmtiles" || remote.kind === "vector") {
     const styleResult = rawStyle === null ? null : parseMapboxStyle(rawStyle);
@@ -62,10 +68,10 @@ export async function loadDataUrl(
     const previousIds = new Set(store.layers.map((layer) => layer.id));
     const added =
       remote.kind === "pmtiles"
-        ? await addPMTilesLayerFromUrl(mapAppAPI, remote.url)
+        ? await addPMTilesLayerFromUrl(mapAppAPI, remote.url, { fit })
         : await addVectorLayerFromUrl(mapAppAPI, remote.url, {
             name: remote.name,
-            fitBounds: true,
+            fitBounds: fit,
           });
     if (!added) throw new Error(`Could not add ${remote.name} to the map.`);
     const addedLayers = useAppStore
@@ -75,6 +81,10 @@ export async function loadDataUrl(
       throw new Error(
         `The ${remote.kind === "pmtiles" ? "PMTiles" : "GeoParquet"} loader did not create a layer for ${remote.url}.`,
       );
+    }
+    if (options.signal?.aborted) {
+      for (const layer of addedLayers) store.removeLayer(layer.id);
+      throw new DOMException("The operation was aborted", "AbortError");
     }
     if (styleResult && addedLayers.some((layer) => layer.metadata.tileType === "raster")) {
       for (const layer of addedLayers) store.removeLayer(layer.id);

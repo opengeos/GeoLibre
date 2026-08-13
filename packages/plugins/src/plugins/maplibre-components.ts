@@ -1744,7 +1744,11 @@ export function openPMTilesLayerPanel(app: GeoLibreAppAPI): void {
  * @returns True when the archive was added.
  * @throws If the archive could not be loaded (unreachable, not PMTiles, 403).
  */
-export async function addPMTilesLayerFromUrl(app: GeoLibreAppAPI, url: string): Promise<boolean> {
+export async function addPMTilesLayerFromUrl(
+  app: GeoLibreAppAPI,
+  url: string,
+  options: { fit?: boolean } = {},
+): Promise<boolean> {
   const { PMTilesLayerControl: PMTilesLayerControlClass } = await getComponentsConstructors();
 
   pmtilesControl ??= createPMTilesControl(PMTilesLayerControlClass);
@@ -1761,7 +1765,19 @@ export async function addPMTilesLayerFromUrl(app: GeoLibreAppAPI, url: string): 
     pmtilesControl.hide();
   }
 
+  const map = options.fit === false ? app.getMap?.() : undefined;
+  const camera = map
+    ? {
+        center: map.getCenter(),
+        zoom: map.getZoom(),
+        bearing: map.getBearing(),
+        pitch: map.getPitch(),
+      }
+    : null;
   await pmtilesControl.addLayer(url);
+  // The upstream PMTiles control always frames a newly added archive. Restore
+  // the host's camera when a programmatic caller explicitly opts out.
+  if (camera) map?.jumpTo(camera);
   // A failed load does NOT reject: the control catches it, records it on
   // `state.error`, and emits "error" (same convention as CogLayerControl, which
   // addLayerWithCogRasterControl has to check the same way). Without this a

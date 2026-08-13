@@ -121,6 +121,22 @@ export function useEmbedApi(
     // host can tell its own load from one the user triggered.
     let projectSourceUrl: string | null = projectUrlFromLocation();
     let loadAbort: AbortController | null = null;
+    const dataLoadAborts = new Set<AbortController>();
+    const dataLoadQueues = new Map<string, Promise<void>>();
+
+    const queueDataLoad = <T>(url: string, operation: () => Promise<T>): Promise<T> => {
+      const previous = dataLoadQueues.get(url) ?? Promise.resolve();
+      const next = previous.then(operation, operation);
+      const settled = next.then(
+        () => undefined,
+        () => undefined,
+      );
+      dataLoadQueues.set(url, settled);
+      void settled.finally(() => {
+        if (dataLoadQueues.get(url) === settled) dataLoadQueues.delete(url);
+      });
+      return next;
+    };
 
     const loadProjectFromUrl = async (url: string) => {
       // A second load supersedes the first; otherwise a slow fetch could land
@@ -235,9 +251,15 @@ export function useEmbedApi(
           return layer.id;
         }
         case "addData": {
-          const result = await loadDataUrl(mapAppAPI, command.url, {
-            styleUrl: command.styleUrl,
-          });
+          const abort = new AbortController();
+          dataLoadAborts.add(abort);
+          const result = await queueDataLoad(command.url, () =>
+            loadDataUrl(mapAppAPI, command.url, {
+              styleUrl: command.styleUrl,
+              signal: abort.signal,
+              fit: command.fit,
+            }),
+          ).finally(() => dataLoadAborts.delete(abort));
           if (command.fit) {
             const bounds = useAppStore
               .getState()
@@ -395,6 +417,8 @@ export function useEmbedApi(
       window.removeEventListener("message", handleMessage);
       unsubscribe();
       loadAbort?.abort();
+      for (const abort of dataLoadAborts) abort.abort();
+      dataLoadAborts.clear();
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (trailingTimer !== null) window.clearTimeout(trailingTimer);
       viewMap?.off("move", onMapMove);
