@@ -29,6 +29,18 @@ const ORT_WASM_BASE = NO_EXTERNAL_CDN
   ? ""
   : `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
 
+/**
+ * Whether the ONNX Runtime WASM backend can load at all in this build.
+ *
+ * False only in a no-external-CDN build, where the runtime has no host to fetch
+ * its `.wasm` from and `loadOrt()` always rejects. UI that would otherwise let
+ * a user select an image and a model, then fail at the end of the run, should
+ * check this up front and fail closed instead.
+ */
+export function isOrtAvailable(): boolean {
+  return !NO_EXTERNAL_CDN;
+}
+
 // A promise singleton: the import-and-configure runs exactly once and every
 // caller awaits the same settled promise, so concurrent tool calls cannot race
 // on configuration.
