@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { WebSocket } from "ws";
+import { signIdentityToken } from "@geolibre/collab-core";
 import { createRelay } from "../src/server.js";
+
+/** Issuer secret for the identity tests; a relay without one rejects all tokens. */
+const IDENTITY_SECRET = "test-identity-secret";
 
 type Message = Record<string, unknown> & { type: string };
 
@@ -83,7 +87,11 @@ describe("Node collaboration relay", () => {
   it("serves health, creates sessions, and rejects unknown websocket routes", async () => {
     const { http } = await start();
     const health = await fetch(`${http}/health`);
-    assert.deepEqual(await health.json(), { ok: true, service: "geolibre-collab" });
+    assert.deepEqual(await health.json(), {
+      ok: true,
+      service: "geolibre-collab",
+      identitySupported: false,
+    });
 
     const created = await createSession(http, "view-only");
     assert.match(created.sessionId, /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/);
@@ -340,7 +348,7 @@ describe("Node collaboration relay", () => {
   });
 
   it("defers invite consumption until after authorization checks succeed", async () => {
-    const { http } = await start();
+    const { http } = await start({ identitySecret: IDENTITY_SECRET });
     const createdRes = await fetch(`${http}/sessions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -402,7 +410,10 @@ describe("Node collaboration relay", () => {
         displayName: "Alice",
         color: "#00ff00",
         inviteToken,
-        identityToken: JSON.stringify({ provider: "geolibre", userId: "user1", username: "Alice" }),
+        identityToken: await signIdentityToken(
+          { provider: "geolibre", userId: "user1", username: "Alice" },
+          IDENTITY_SECRET,
+        ),
       }),
     );
     const welcome = await next(authGuest, "welcome");
@@ -419,7 +430,10 @@ describe("Node collaboration relay", () => {
         displayName: "Bob",
         color: "#ff0000",
         inviteToken,
-        identityToken: JSON.stringify({ provider: "geolibre", userId: "user2", username: "Bob" }),
+        identityToken: await signIdentityToken(
+          { provider: "geolibre", userId: "user2", username: "Bob" },
+          IDENTITY_SECRET,
+        ),
       }),
     );
     const welcome2 = await next(authGuest2, "welcome");
@@ -432,5 +446,64 @@ describe("Node collaboration relay", () => {
 
     authGuest2.close();
     host.close();
+  });
+
+  it("rejects a self-asserted identity token and refuses requireIdentity without an issuer", async () => {
+    // No identitySecret: this relay has no issuer configured.
+    const { http } = await start();
+
+    // A host cannot arm a gate nobody could pass.
+    const refused = await fetch(`${http}/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "co-edit", requireIdentity: true }),
+    });
+    assert.equal(refused.status, 400);
+
+    const created = await createSession(http);
+    const guest = await connect(http, created.sessionId);
+    guest.send(
+      JSON.stringify({
+        type: "join",
+        clientId: "client1",
+        displayName: "Mallory",
+        color: "#ffffff",
+        // Raw JSON, the shape the relay used to trust verbatim.
+        identityToken: JSON.stringify({ provider: "geolibre", userId: "admin", username: "Admin" }),
+      }),
+    );
+    const welcome = await next(guest, "welcome");
+    assert.equal(welcome.identitySupported, false);
+    const self = (welcome.participants as { clientId: string; identity: unknown }[]).find(
+      (p) => p.clientId === welcome.clientId,
+    );
+    // Unverified claims must not reach the roster, or the "verified" badge lies.
+    assert.equal(self?.identity, null);
+    guest.close();
+  });
+
+  it("rejects an identity token signed with the wrong secret", async () => {
+    const { http } = await start({ identitySecret: IDENTITY_SECRET });
+    const created = await createSession(http);
+    const guest = await connect(http, created.sessionId);
+    guest.send(
+      JSON.stringify({
+        type: "join",
+        clientId: "client1",
+        displayName: "Mallory",
+        color: "#ffffff",
+        identityToken: await signIdentityToken(
+          { provider: "geolibre", userId: "admin", username: "Admin" },
+          "not-the-relay-secret",
+        ),
+      }),
+    );
+    const welcome = await next(guest, "welcome");
+    assert.equal(welcome.identitySupported, true);
+    const self = (welcome.participants as { clientId: string; identity: unknown }[]).find(
+      (p) => p.clientId === welcome.clientId,
+    );
+    assert.equal(self?.identity, null);
+    guest.close();
   });
 });

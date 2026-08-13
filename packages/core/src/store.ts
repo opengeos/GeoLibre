@@ -709,6 +709,7 @@ export const DEFAULT_COLLABORATION_STATE: CollaborationState = Object.freeze({
   followHost: false,
   chat: Object.freeze([] as CollaborationChatMessage[]) as CollaborationChatMessage[],
   requireIdentity: false,
+  identitySupported: false,
   lockedLayerIds: Object.freeze([] as string[]) as string[],
   invites: Object.freeze([] as CollabInvite[]) as CollabInvite[],
   error: null,

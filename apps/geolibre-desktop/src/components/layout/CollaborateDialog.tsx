@@ -15,6 +15,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
+import { fetchCollabCapabilities } from "../../lib/collab-client";
 import { CollaborationParticipantRow } from "./CollaborationParticipantRow";
 
 // A small fixed palette so participant colors stay distinct and legible. Each
@@ -61,6 +62,11 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
   const copyTimer = useRef<number | null>(null);
+  // Whether the relay can verify a sign-in. Probed when the dialog opens
+  // because the "require a signed-in account" option has to be decided before
+  // a session exists; false until the probe answers, so the option is hidden
+  // rather than briefly offered on a relay that would reject it.
+  const [identitySupported, setIdentitySupported] = useState(false);
 
   // Seed from a prior session (or a ?collab= deep link) when the dialog opens.
   useEffect(() => {
@@ -86,6 +92,19 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
       window.history.replaceState({}, "", url.toString());
     }
   }, [open, collaboration.selfName, collaboration.selfColor]);
+
+  // Probe relay capabilities on open. Ignored if the dialog closes first, so a
+  // slow relay can't flip the option on after the user has moved away.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void fetchCollabCapabilities().then((caps) => {
+      if (!cancelled) setIdentitySupported(caps.identitySupported);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(
     () => () => {
@@ -279,16 +298,18 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
                       <option value="view-only">{t("collaborate.modeViewOnly")}</option>
                     </Select>
                   </div>
-                  <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground pt-1">
-                    <input
-                      type="checkbox"
-                      checked={requireIdentity}
-                      onChange={(e) => setRequireIdentity(e.target.checked)}
-                      disabled={busy}
-                      className="h-3.5 w-3.5 rounded border"
-                    />
-                    {(t as (key: string) => string)("collaborate.requireIdentityLabel")}
-                  </label>
+                  {identitySupported && (
+                    <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground pt-1">
+                      <input
+                        type="checkbox"
+                        checked={requireIdentity}
+                        onChange={(e) => setRequireIdentity(e.target.checked)}
+                        disabled={busy}
+                        className="h-3.5 w-3.5 rounded border"
+                      />
+                      {(t as (key: string) => string)("collaborate.requireIdentityLabel")}
+                    </label>
+                  )}
                   <Button
                     type="button"
                     onClick={() => void handleStart()}
@@ -396,7 +417,7 @@ function ActiveSession({
         </label>
       )}
 
-      {isHost && (
+      {isHost && collaboration.identitySupported && (
         <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"

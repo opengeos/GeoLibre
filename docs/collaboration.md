@@ -73,14 +73,14 @@ Client → server:
 | `set-session-config` | `requireIdentity` | host only; mandate signed-in identity to join |
 | `set-layer-locks` | `lockedLayerIds` | host only; mark specific layer IDs read-only |
 | `kick-participant` | `clientId, reason?` | host only; disconnect a participant |
-| `block-participant` | `clientId, reason?` | host only; disconnect and ban participant/identity from rejoining |
+| `block-participant` | `clientId, reason?` | host only; disconnect and bar that participant key from rejoining (see the caveat under *Moderation*) |
 | `chat` | `text, coordinate?` | a chat message, with an optional attached map coordinate (#754) |
 
 Server → client:
 
 | type | payload | notes |
 | --- | --- | --- |
-| `welcome` | `clientId, role, mode, participants[], snapshot \| null, presence, chat[], rev, requireIdentity, lockedLayerIds, invites[]` | sent once on join; the late-joiner bootstrap |
+| `welcome` | `clientId, role, mode, participants[], snapshot \| null, presence, chat[], rev, requireIdentity, identitySupported, lockedLayerIds, invites[]` | sent once on join; the late-joiner bootstrap |
 | `snapshot` | `project, origin, rev` | fan-out of a peer's snapshot |
 | `presence` | `clientId, cursor?, view?` | fan-out of a peer's presence |
 | `participants` | `participants[]` | on join / leave / role / permission change; each carries `editOverride` and `identity` |
@@ -91,7 +91,7 @@ Server → client:
 | `layer-locks` | `lockedLayerIds` | broadcast when host locks/unlocks layer IDs |
 | `kicked` | `reason` | sent to a participant who was kicked or blocked by the host |
 | `chat` | `message` | fan-out of a chat message (echoed to the sender, so order is server-authoritative) (#754) |
-| `error` | `code, message` | e.g. `forbidden`, `too-large`, `identity-required`, `layer-locked` |
+| `error` | `code, message` | e.g. `forbidden`, `too-large`, `identity-required`, `identity-unavailable`, `layer-locked` |
 
 ### Echo / feedback-loop prevention
 
@@ -188,6 +188,52 @@ Codes are unguessable and sessions auto-expire. The relay assigns each
 participant's `clientId` server-side (the client-supplied value is ignored) so
 one participant can't claim another's identity, and it validates the `color` to
 a hex value before storing/broadcasting it.
+
+### Signed-in identity (optional)
+
+A joiner may present an `identityToken`. It is **not** self-reported JSON: the
+relay verifies an HMAC-SHA256 signature over the token's payload segment before
+it will populate `participant.identity`, so a client cannot mint an account,
+impersonate another user, or wear the roster's verified badge. The format is
+
+```
+<base64url(payloadJSON)>.<base64url(hmacSha256(base64url(payloadJSON)))>
+```
+
+with payload claims `{ userId, username, provider?, exp? }`. `verifyIdentityToken`
+in `@geolibre/collab-core` is the single implementation both relays call, and
+`signIdentityToken` alongside it mints one.
+
+Identity is **off unless a deployment opts in** by setting the signing secret
+shared with its issuer — `COLLAB_IDENTITY_SECRET` (a Worker secret for
+`workers/collab`, an environment variable for `workers/collab-node`). With no
+secret configured:
+
+- every `identityToken` verifies to null, so all joiners are anonymous;
+- `requireIdentity` cannot be turned on — `POST /sessions` answers `400` and
+  `set-session-config` answers `error: identity-unavailable`, rather than arming
+  a gate that would reject every guest including the host's own collaborators;
+- `GET /health` and every `welcome` report `identitySupported: false`, which is
+  how the Collaborate dialog decides to hide the "require a signed-in account"
+  option entirely.
+
+GeoLibre itself ships no sign-in flow yet, so the stock deployment leaves the
+secret unset and the whole identity path dormant. The protocol and relay support
+are in place for a deployment that fronts the relay with its own issuer.
+
+### Moderation
+
+`kick-participant` disconnects a participant. `block-participant` also records
+their **participant key** so the relay refuses the next join. That key is
+`user:<userId>` for a verified identity, `invite:<token>` for an invite-based
+join, and otherwise `anon:<clientId>` — where `clientId` is minted fresh on
+every join.
+
+So a block is durable only for identity- and invite-based joins. **An anonymous
+guest can rejoin simply by reconnecting**, since they arrive with a new
+`clientId` and therefore a new key. Blocking is a moderation convenience, not a
+security boundary; a session that needs an enforceable ban has to require an
+invite or a signed-in identity.
 
 ## Chat (#754)
 

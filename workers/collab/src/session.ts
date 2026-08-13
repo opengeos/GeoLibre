@@ -27,6 +27,7 @@ import {
   diffLockedLayers,
   EMPTY_SESSION_TTL_MS,
   getParticipantKey,
+  isIdentityConfigured,
   MAX_CHAT_STORAGE_BYTES,
   MAX_CHAT_TEXT_LENGTH,
   MAX_SNAPSHOT_BYTES,
@@ -40,6 +41,7 @@ import {
   sanitizeView,
   setParticipantOverride,
   toWireParticipant,
+  verifyIdentityToken,
   type SessionParticipant,
 } from "@geolibre/collab-core";
 
@@ -60,6 +62,13 @@ export interface Env {
   COLLAB_MAX_SNAPSHOT_BYTES?: string;
   /** Optional allowed origins list for session creation. */
   ALLOWED_ORIGINS?: string;
+  /**
+   * HMAC-SHA256 secret shared with this deployment's identity issuer. Unset
+   * (the default) disables identity entirely: `identityToken` is ignored, every
+   * joiner is anonymous, and "require a signed-in account" cannot be turned on.
+   * Set it with `wrangler secret put COLLAB_IDENTITY_SECRET`.
+   */
+  COLLAB_IDENTITY_SECRET?: string;
 }
 
 // The snapshot cap, empty-session TTL, and chat limits now live in
@@ -478,22 +487,14 @@ export class CollabSession extends DurableObject<Env> {
       }
     }
 
-    let identity: ParticipantIdentity | null = null;
-    if (message.identityToken && typeof message.identityToken === "string") {
-      try {
-        const parsed = JSON.parse(message.identityToken) as ParticipantIdentity;
-        if (parsed && typeof parsed.userId === "string" && typeof parsed.username === "string") {
-          identity = {
-            provider:
-              typeof parsed.provider === "string" && parsed.provider ? parsed.provider : "geolibre",
-            userId: parsed.userId,
-            username: sanitizeDisplayName(parsed.username),
-          };
-        }
-      } catch {
-        // Invalid token
-      }
-    }
+    // Signature-checked against COLLAB_IDENTITY_SECRET, so `identity` is only
+    // ever non-null for a credential this deployment's issuer actually minted.
+    // A relay with no secret configured yields null for every token, making
+    // every joiner anonymous rather than trusting self-reported claims.
+    const identity: ParticipantIdentity | null = await verifyIdentityToken(
+      message.identityToken,
+      this.env.COLLAB_IDENTITY_SECRET,
+    );
 
     if (requireIdentity && !identity && role !== "host") {
       this.send(ws, {
@@ -561,6 +562,7 @@ export class CollabSession extends DurableObject<Env> {
       chat: parseStoredChat(chat),
       rev: rev ?? 0,
       requireIdentity: requireIdentity ?? false,
+      identitySupported: isIdentityConfigured(this.env.COLLAB_IDENTITY_SECRET),
       lockedLayerIds: lockedLayerIds ?? [],
       ...(welcomeInvites ? { invites: welcomeInvites } : {}),
     });
@@ -1128,6 +1130,17 @@ export class CollabSession extends DurableObject<Env> {
     }
     if (message.requireIdentity !== undefined) {
       const req = message.requireIdentity === true;
+      // Refuse to arm a gate no one could pass: without an issuer, every
+      // joiner is anonymous, so turning this on would strand the host's own
+      // session with no way to undo it from a second client.
+      if (req && !isIdentityConfigured(this.env.COLLAB_IDENTITY_SECRET)) {
+        this.send(ws, {
+          type: "error",
+          code: "identity-unavailable",
+          message: "This relay has no sign-in provider configured.",
+        });
+        return;
+      }
       await this.ctx.storage.put("requireIdentity", req);
       this.broadcast({ type: "session-config", requireIdentity: req });
     }

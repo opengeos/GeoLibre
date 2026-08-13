@@ -154,6 +154,7 @@ export function useCollaboration(
           participants: message.participants,
           chat: message.chat ?? [],
           requireIdentity: message.requireIdentity ?? false,
+          identitySupported: message.identitySupported ?? false,
           lockedLayerIds: message.lockedLayerIds ?? [],
           invites: message.invites ?? [],
           error: null,

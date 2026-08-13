@@ -59,6 +59,16 @@ export function participantCanEditLayer(
   return !lockedLayerIds.includes(layerId);
 }
 
+/**
+ * Stable-ish key a host's block is recorded against.
+ *
+ * Only the identity and invite forms are durable. The `anon:` fallback keys on
+ * a `clientId` the relay mints fresh on every join, so a blocked anonymous
+ * guest is unblocked the moment they reconnect. That is a known limit, not an
+ * oversight: without an identity or an invite there is nothing about an
+ * anonymous joiner to remember. Blocking is a moderation convenience, not a
+ * security boundary — see the *Moderation* section of `docs/collaboration.md`.
+ */
 export function getParticipantKey(
   participant: Pick<SessionParticipant, "clientId" | "identity" | "inviteToken">,
 ): string {

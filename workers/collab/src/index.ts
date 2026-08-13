@@ -9,6 +9,7 @@
 // The session code namespaces the Durable Object (idFromName), so every
 // participant of a session lands on the same actor and gets fanned out to.
 
+import { isIdentityConfigured } from "@geolibre/collab-core";
 import { CollabSession, type Env } from "./session";
 
 export { CollabSession };
@@ -140,6 +141,12 @@ export default {
       };
       const mode = body.mode === "view-only" ? "view-only" : "co-edit";
       const requireIdentity = body.requireIdentity === true;
+      // Fail the create rather than silently downgrading: a host who asked for
+      // a sign-in gate should hear that this relay has no issuer, not discover
+      // it by watching anonymous guests walk in.
+      if (requireIdentity && !isIdentityConfigured(env.COLLAB_IDENTITY_SECRET)) {
+        return json({ error: "This relay has no sign-in provider configured." }, 400);
+      }
       // Retry on the (rare) collision with an existing active session: /init
       // is a no-op when the code is already taken, so without this the caller
       // would receive a hostToken that doesn't match the stored one and be
@@ -173,7 +180,13 @@ export default {
     }
 
     if (url.pathname === "/" || url.pathname === "/health") {
-      return json({ ok: true, service: "geolibre-collab" });
+      // `identitySupported` lets the client hide the "require a signed-in
+      // account" option before it ever tries to create a session.
+      return json({
+        ok: true,
+        service: "geolibre-collab",
+        identitySupported: isIdentityConfigured(env.COLLAB_IDENTITY_SECRET),
+      });
     }
 
     return json({ error: "Not found" }, 404);

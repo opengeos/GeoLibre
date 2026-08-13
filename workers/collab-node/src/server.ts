@@ -15,6 +15,7 @@ import {
   clearParticipantOverrides,
   diffLockedLayers,
   getParticipantKey,
+  isIdentityConfigured,
   normalizeMode,
   participantCanEdit,
   preserveStoredComments,
@@ -26,6 +27,7 @@ import {
   toWireParticipant,
   validateComment,
   validateReply,
+  verifyIdentityToken,
   isBoundedId,
   type ClientMessage,
   type CollabChatMessage,
@@ -90,6 +92,14 @@ function isAllowedOrigin(
 interface Peer {
   socket: WebSocket;
   participant?: SessionParticipant;
+  /**
+   * Tail of this peer's frame-handling chain. `handleMessage` became async when
+   * identity verification did (Web Crypto has no sync HMAC), and `ws` delivers
+   * frames without waiting, so frames are chained rather than started
+   * concurrently — otherwise a `snapshot` sent right behind a `join` could
+   * overtake it and be rejected with "Send a join message first".
+   */
+  queue?: Promise<void>;
 }
 
 interface LiveSession {
@@ -105,6 +115,13 @@ export interface RelayOptions {
   maxSnapshotBytes?: number;
   idleTtlMs?: number;
   trustProxy?: boolean;
+  /**
+   * HMAC-SHA256 secret shared with this deployment's identity issuer, normally
+   * from `COLLAB_IDENTITY_SECRET`. Unset disables identity: `identityToken` is
+   * ignored, every joiner is anonymous, and "require a signed-in account"
+   * cannot be turned on.
+   */
+  identitySecret?: string;
 }
 
 function positive(value: string | undefined, fallback: number): number {
@@ -147,6 +164,8 @@ export function createRelay(options: RelayOptions = {}): {
     options.idleTtlMs ?? positive(process.env.COLLAB_IDLE_TTL_MS, DEFAULT_IDLE_TTL_MS);
   const trustProxy =
     options.trustProxy ?? (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1");
+  const identitySecret = options.identitySecret ?? process.env.COLLAB_IDENTITY_SECRET;
+  const identitySupported = isIdentityConfigured(identitySecret);
   const store = new SessionStore(dbPath);
   const sessions = new Map<string, LiveSession>();
   const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -244,12 +263,12 @@ export function createRelay(options: RelayOptions = {}): {
     }
   }
 
-  function handleMessage(
+  async function handleMessage(
     id: string,
     session: LiveSession,
     peer: Peer,
     raw: WebSocket.RawData,
-  ): void {
+  ): Promise<void> {
     const text = raw.toString();
     let message: ClientMessage;
     try {
@@ -296,24 +315,14 @@ export function createRelay(options: RelayOptions = {}): {
         }
       }
 
-      let identity: ParticipantIdentity | null = null;
-      if (message.identityToken && typeof message.identityToken === "string") {
-        try {
-          const parsed = JSON.parse(message.identityToken) as ParticipantIdentity;
-          if (parsed && typeof parsed.userId === "string" && typeof parsed.username === "string") {
-            identity = {
-              provider:
-                typeof parsed.provider === "string" && parsed.provider
-                  ? parsed.provider
-                  : "geolibre",
-              userId: parsed.userId,
-              username: sanitizeDisplayName(parsed.username),
-            };
-          }
-        } catch {
-          // Invalid identity token
-        }
-      }
+      // Signature-checked against the configured issuer secret, so `identity`
+      // is only ever non-null for a credential this deployment actually minted.
+      // With no secret configured it is null for every token, making every
+      // joiner anonymous rather than trusting self-reported claims.
+      const identity: ParticipantIdentity | null = await verifyIdentityToken(
+        message.identityToken,
+        identitySecret,
+      );
 
       if (persisted.requireIdentity && !identity && role !== "host") {
         send(peer, {
@@ -380,6 +389,7 @@ export function createRelay(options: RelayOptions = {}): {
         chat: persisted.chat,
         rev: persisted.rev,
         requireIdentity: persisted.requireIdentity,
+        identitySupported,
         lockedLayerIds: persisted.lockedLayerIds,
         ...(welcomeInvites ? { invites: welcomeInvites } : {}),
       });
@@ -527,6 +537,17 @@ export function createRelay(options: RelayOptions = {}): {
       }
       if (message.requireIdentity !== undefined) {
         const req = message.requireIdentity === true;
+        // Refuse to arm a gate no one could pass: without an issuer, every
+        // joiner is anonymous, so turning this on would strand the host's own
+        // session with no way to undo it from a second client.
+        if (req && !identitySupported) {
+          send(peer, {
+            type: "error",
+            code: "identity-unavailable",
+            message: "This relay has no sign-in provider configured.",
+          });
+          return;
+        }
         store.saveSessionConfig(id, req);
         broadcast(session, { type: "session-config", requireIdentity: req });
       }
@@ -775,7 +796,9 @@ export function createRelay(options: RelayOptions = {}): {
     const url = new URL(request.url ?? "/", "http://localhost");
     if (request.method === "OPTIONS") return json(response, 204, null);
     if ((url.pathname === "/" || url.pathname === "/health") && request.method === "GET")
-      return json(response, 200, { ok: true, service: "geolibre-collab" });
+      // `identitySupported` lets the client hide the "require a signed-in
+      // account" option before it ever tries to create a session.
+      return json(response, 200, { ok: true, service: "geolibre-collab", identitySupported });
     if (url.pathname === "/sessions" && request.method === "POST") {
       const origin = request.headers["origin"];
       if (!isAllowedOrigin(origin)) {
@@ -841,6 +864,14 @@ export function createRelay(options: RelayOptions = {}): {
         const reqObj = requested as { mode?: CollaborationMode; requireIdentity?: boolean } | null;
         const mode = normalizeMode(reqObj?.mode);
         const requireIdentity = reqObj?.requireIdentity === true;
+        // Fail the create rather than silently downgrading: a host who asked
+        // for a sign-in gate should hear that this relay has no issuer, not
+        // discover it by watching anonymous guests walk in.
+        if (requireIdentity && !identitySupported) {
+          return json(response, 400, {
+            error: "This relay has no sign-in provider configured.",
+          });
+        }
         for (let attempt = 0; attempt < 5; attempt++) {
           const sessionId = randomCode();
           const hostToken = randomToken();
@@ -885,14 +916,18 @@ export function createRelay(options: RelayOptions = {}): {
           });
           return;
         }
-        // Defence in depth: this listener runs outside any promise chain, so an
-        // throw here is an uncaught exception that stops the whole relay. No
-        // single session's frame should be able to do that to the others.
-        try {
-          handleMessage(id, session, peer, raw);
-        } catch {
-          send(peer, { type: "error", code: "bad-message", message: "Could not handle message." });
-        }
+        // Defence in depth: a throw (or rejection) here would otherwise be an
+        // uncaught exception that stops the whole relay. No single session's
+        // frame should be able to do that to the others.
+        peer.queue = (peer.queue ?? Promise.resolve())
+          .then(() => handleMessage(id, session, peer, raw))
+          .catch(() => {
+            send(peer, {
+              type: "error",
+              code: "bad-message",
+              message: "Could not handle message.",
+            });
+          });
       });
       websocket.on("close", () => closePeer(id, session, peer));
       websocket.on("error", () => closePeer(id, session, peer));

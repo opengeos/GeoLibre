@@ -1172,6 +1172,13 @@ export interface CollaborationState {
   chat: CollaborationChatMessage[];
   /** Session flag requiring participants to be signed in. */
   requireIdentity: boolean;
+  /**
+   * Whether the connected relay has an identity issuer configured. False (the
+   * default) means it cannot verify a sign-in, so the host UI hides the
+   * "require a signed-in account" toggle instead of offering a gate that would
+   * lock every guest out.
+   */
+  identitySupported: boolean;
   /** Layer IDs marked locked by the host. */
   lockedLayerIds: string[];
   /** Active session invites minted by host. */

@@ -67,7 +67,11 @@ export interface JoinMessage {
   hostToken?: string;
   /** Optional invite token carrying a baked-in role. */
   inviteToken?: string;
-  /** Optional identity token verifying the user's account. */
+  /**
+   * Optional HMAC-signed identity credential minted by the relay's issuer. See
+   * `verifyIdentityToken` in `@geolibre/collab-core`; a relay with no signing
+   * secret configured ignores this field entirely.
+   */
   identityToken?: string;
 }
 
@@ -177,6 +181,12 @@ export interface WelcomeMessage {
   chat: CollaborationChatMessage[];
   rev: number;
   requireIdentity?: boolean;
+  /**
+   * Whether this relay has an identity issuer configured. False means every
+   * joiner is anonymous and `requireIdentity` cannot be turned on, so the host
+   * UI hides the toggle rather than offering a gate nobody could pass.
+   */
+  identitySupported?: boolean;
   lockedLayerIds?: string[];
   invites?: CollabInvite[];
 }
@@ -249,6 +259,7 @@ export interface ErrorMessage {
     | "bad-message"
     | "not-found"
     | "identity-required"
+    | "identity-unavailable"
     | "layer-locked";
   message: string;
 }
