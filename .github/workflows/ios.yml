@@ -226,6 +226,12 @@ jobs:
         # into an output and gated on below. All three are required to sign: a
         # partial set would spend the whole archive and only then fail.
         #
+        # APPLE_IOS_CERTIFICATE_PASSWORD is deliberately NOT in the set. A .p12
+        # can be exported without a password, and the import step passes
+        # `-P "${APPLE_IOS_CERTIFICATE_PASSWORD:-}"` precisely so that case
+        # works — requiring it here would refuse to sign a valid passwordless
+        # identity. An empty value is therefore not evidence of a partial set.
+        #
         # The iOS cert/profile use APPLE_IOS_* names, deliberately distinct from
         # the release.yml macOS secrets (APPLE_CERTIFICATE / APPLE_CERTIFICATE_
         # PASSWORD): that identity is a *Developer ID Application* cert for the
@@ -238,13 +244,19 @@ jobs:
           APPLE_IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_IOS_PROVISIONING_PROFILE_BASE64 }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -n "${APPLE_IOS_CERTIFICATE_BASE64:-}" ] \
-            && [ -n "${APPLE_IOS_PROVISIONING_PROFILE_BASE64:-}" ] \
-            && [ -n "${APPLE_TEAM_ID:-}" ]; then
+          missing=()
+          for name in APPLE_IOS_CERTIFICATE_BASE64 \
+            APPLE_IOS_PROVISIONING_PROFILE_BASE64 APPLE_TEAM_ID; do
+            [ -n "${!name:-}" ] || missing+=("$name")
+          done
+          if [ "${#missing[@]}" -eq 0 ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No complete Apple iOS signing secret set — building an unsigned compile check only (no installable .ipa). Set APPLE_IOS_CERTIFICATE_BASE64, APPLE_IOS_CERTIFICATE_PASSWORD, APPLE_IOS_PROVISIONING_PROFILE_BASE64 (and reuse the existing APPLE_TEAM_ID) to produce a signed build."
+            # Carried to the release-note step below so it can name what was
+            # actually absent rather than reciting the whole required set.
+            echo "missing=${missing[*]}" >> "$GITHUB_OUTPUT"
+            echo "::notice::Missing Apple iOS signing secrets (${missing[*]}) — building an unsigned compile check only (no installable .ipa). Set APPLE_IOS_CERTIFICATE_BASE64, APPLE_IOS_CERTIFICATE_PASSWORD, APPLE_IOS_PROVISIONING_PROFILE_BASE64 (and reuse the existing APPLE_TEAM_ID) to produce a signed build."
           fi
 
       # ---- No-signing path: prove the iOS build compiles ---------------------
@@ -624,5 +636,9 @@ jobs:
         # secrets → the job ran the no-signing compile check), so it does not
         # read as a silent failure.
         if: github.event_name == 'release' && steps.signing.outputs.present != 'true'
+        env:
+          # Secret *names*, not values — but passed via env rather than
+          # interpolated into the script, matching the rest of this workflow.
+          MISSING: ${{ steps.signing.outputs.missing }}
         run: |
-          echo "::warning::No Apple iOS signing secrets, so this release run produced only a compile check and attached no .ipa. Set APPLE_IOS_CERTIFICATE_BASE64, APPLE_IOS_CERTIFICATE_PASSWORD and APPLE_IOS_PROVISIONING_PROFILE_BASE64 to publish one."
+          echo "::warning::This release run produced only a compile check and attached no .ipa — missing Apple iOS signing secrets: ${MISSING:-unknown}. Set them (and reuse the existing APPLE_TEAM_ID) to publish one."
