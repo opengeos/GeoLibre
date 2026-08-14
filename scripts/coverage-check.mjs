@@ -19,7 +19,7 @@
 // If the retry ever starts firing regularly, that is the signal to stop
 // mitigating and fix the measurement: the retry logs both numbers precisely so
 // #1889 can accumulate evidence.
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,47 +30,61 @@ const LINES = 78;
 const BRANCHES = 78;
 const FUNCTIONS = 63;
 
-// Expanded here rather than left to a shell glob, so the gate behaves the same
-// under zsh, bash, and cmd.exe.
-const testFiles = readdirSync("tests")
-  .filter((name) => name.endsWith(".test.ts"))
-  .sort()
-  .map((name) => path.posix.join("tests", name));
-
-if (testFiles.length === 0) {
-  console.error("coverage-check: no tests/*.test.ts files found.");
-  process.exit(1);
+/** The `node --test` invocation this gate wraps. */
+function testRunnerArgs() {
+  // Expanded here rather than left to a shell glob, so the gate behaves the
+  // same under zsh, bash, and cmd.exe.
+  const testFiles = readdirSync("tests")
+    .filter((name) => name.endsWith(".test.ts"))
+    .sort()
+    .map((name) => path.posix.join("tests", name));
+  if (testFiles.length === 0) throw new Error("no tests/*.test.ts files found");
+  return [
+    "--import",
+    "tsx",
+    "--test",
+    "--experimental-test-coverage",
+    `--test-coverage-lines=${LINES}`,
+    `--test-coverage-branches=${BRANCHES}`,
+    `--test-coverage-functions=${FUNCTIONS}`,
+    "--test-coverage-exclude=tests/**",
+    "--test-coverage-exclude=e2e/**",
+    "--test-coverage-exclude=**/*.config.*",
+    ...testFiles,
+  ];
 }
 
-const args = [
-  "--import",
-  "tsx",
-  "--test",
-  "--experimental-test-coverage",
-  `--test-coverage-lines=${LINES}`,
-  `--test-coverage-branches=${BRANCHES}`,
-  `--test-coverage-functions=${FUNCTIONS}`,
-  "--test-coverage-exclude=tests/**",
-  "--test-coverage-exclude=e2e/**",
-  "--test-coverage-exclude=**/*.config.*",
-  ...testFiles,
-];
-
 /**
- * Run the suite once, echoing output as it is captured so the CI log reads
- * exactly as it did before this wrapper existed.
+ * Run the suite once, streaming its output through as it arrives while also
+ * accumulating it for {@link classify}.
+ *
+ * Deliberately streamed rather than buffered and written at the end.
+ * `process.stdout` is asynchronous when it is a pipe, which is what it is under
+ * a CI runner (but not when redirected to a file locally, which is how this hid
+ * at first). Writing a multi-megabyte string and then exiting drops whatever had
+ * not flushed: the run that caught this lost ~42,000 lines of test output and
+ * the entire coverage summary, cut off mid-line, while still exiting 0.
  */
-function runSuite() {
-  const result = spawnSync(process.execPath, args, {
-    encoding: "utf8",
-    maxBuffer: 256 * 1024 * 1024,
-    stdio: ["inherit", "pipe", "pipe"],
+function runSuite(args) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, args, { stdio: ["inherit", "pipe", "pipe"] });
+    let output = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      output += chunk;
+      process.stdout.write(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk;
+      process.stderr.write(chunk);
+    });
+    child.on("error", (error) => {
+      console.error(`coverage-check: could not start the test runner: ${error.message}`);
+      resolve({ status: 1, output });
+    });
+    child.on("close", (code) => resolve({ status: code ?? 1, output }));
   });
-  const stdout = result.stdout ?? "";
-  const stderr = result.stderr ?? "";
-  process.stdout.write(stdout);
-  process.stderr.write(stderr);
-  return { status: result.status ?? 1, output: `${stdout}\n${stderr}` };
 }
 
 /**
@@ -92,7 +106,7 @@ export function classify({ status, output }) {
     ok: status === 0,
     failedTests,
     thresholds,
-    // The one case worth a second measurement: the suite passed, and lines are
+    // The one case worth a second measurement: every test passed, and lines are
     // the only floor that came up short.
     lineOnly:
       status !== 0 &&
@@ -102,9 +116,14 @@ export function classify({ status, output }) {
   };
 }
 
-function main() {
-  const first = classify(runSuite());
-  if (first.ok) process.exit(0);
+/**
+ * Returns the process exit code. Never calls `process.exit`, which would cut
+ * off streamed output that has not flushed yet.
+ */
+async function main() {
+  const args = testRunnerArgs();
+  const first = classify(await runSuite(args));
+  if (first.ok) return 0;
 
   if (!first.lineOnly) {
     if (first.failedTests > 0) {
@@ -119,7 +138,7 @@ function main() {
           "reproducible run to run, so this is a real regression and is not retried.",
       );
     }
-    process.exit(1);
+    return 1;
   }
 
   const firstLine = first.thresholds[0];
@@ -130,7 +149,7 @@ function main() {
       "https://github.com/opengeos/GeoLibre/issues/1889, so re-measuring once before failing.\n",
   );
 
-  const second = classify(runSuite());
+  const second = classify(await runSuite(args));
   if (second.ok) {
     console.error(
       `\ncoverage-check: the re-run cleared the floor, so the ${firstLine.actual}% reading was a ` +
@@ -138,7 +157,7 @@ function main() {
         `coverage-check: please add the pair (${firstLine.actual}% then passing) to issue #1889. ` +
         "If this is happening often, the gate needs fixing rather than retrying.",
     );
-    process.exit(0);
+    return 0;
   }
 
   const secondLine = second.thresholds.find((entry) => entry.metric === "line");
@@ -148,11 +167,21 @@ function main() {
       "A real regression reproduces; this is one. Add tests or, if the drop is a module newly " +
       "pulled into the report rather than code getting less tested, see the coverage notes in CLAUDE.md.",
   );
-  process.exit(1);
+  return 1;
 }
 
 // Only run the gate when invoked directly, so the test file can import
 // `classify` without spawning the whole suite.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main();
+  main().then(
+    (code) => {
+      // Set exitCode rather than calling process.exit, so Node exits once the
+      // streamed output has drained instead of truncating it.
+      process.exitCode = code;
+    },
+    (error) => {
+      console.error(`coverage-check: ${error.message}`);
+      process.exitCode = 1;
+    },
+  );
 }

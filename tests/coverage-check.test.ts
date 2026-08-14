@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { classify } from "../scripts/coverage-check.mjs";
 
@@ -82,6 +83,23 @@ describe("coverage-check classify", () => {
     });
     assert.equal(result.failedTests, 2);
     assert.equal(result.lineOnly, false);
+  });
+
+  it("never calls process.exit, which would truncate the streamed output", () => {
+    // `process.stdout` is async when it is a pipe, which is what CI gives it.
+    // An earlier version buffered the whole run and then called process.exit,
+    // which dropped ~42,000 lines and the entire coverage summary from the CI
+    // log, mid-line, while still exiting 0. The gate looked green and reported
+    // nothing. Only `process.exitCode` is safe here, and the failure is
+    // invisible when stdout is a file (as it is when a developer redirects it),
+    // so pin it at the source rather than hope someone notices.
+    const source = readFileSync(new URL("../scripts/coverage-check.mjs", import.meta.url), "utf8");
+    assert.equal(
+      /(?<!\.)\bprocess\.exit\s*\(/.test(source),
+      false,
+      "coverage-check.mjs must set process.exitCode instead of calling process.exit()",
+    );
+    assert.ok(source.includes("process.exitCode"));
   });
 
   it("does not retry a non-zero exit that reported no threshold at all", () => {
