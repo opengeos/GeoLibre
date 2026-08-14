@@ -22,6 +22,18 @@ app as a desktop install, an Android app, an iOS app, and a Jupyter widget.
     [open an issue](https://github.com/opengeos/GeoLibre/issues) — corrections
     are welcome.
 
+!!! info "This page is closed to new columns"
+    The tables below cover a fixed set of platforms and are **not accepting
+    additional ones**. Every extra column means more than forty cells that have
+    to be researched, dated, and re-verified on each update, and the tables have
+    reached the width a page can readably hold. Adding more would make the
+    comparison harder to read and harder to keep honest.
+
+    Corrections to the platforms already listed are still very welcome. If you
+    maintain another tool and want it compared with GeoLibre, publish that
+    comparison on your own site and add a link under
+    [Comparisons hosted elsewhere](#comparisons-hosted-elsewhere).
+
 ## Complementary, not competing
 
 A useful way to think about GeoLibre and QGIS is smartphone cameras versus
@@ -177,6 +189,37 @@ Stated plainly, so the table above is worth trusting:
 - **Maturity.** GeoLibre is stable and in active development, but it is far
   younger than QGIS or ArcGIS. Some capabilities listed as shipping are recent —
   see [Recently added](index.md#recently-added).
+
+## Comparisons hosted elsewhere
+
+Since this page cannot keep growing, other projects are welcome to compare
+themselves with GeoLibre on their own site, and to have that page linked from
+here.
+
+<!--
+  Entries go here, one line each, alphabetical by tool name:
+  - [<Tool> vs GeoLibre](<https URL>), maintained by <the project or author>
+  Delete the "none submitted yet" line below once the first one lands.
+-->
+
+*No external comparisons have been submitted yet. Yours can be the first.*
+
+To add one, [open a pull request](https://github.com/opengeos/GeoLibre/edit/main/docs/comparison.md)
+adding a single line of the form
+`- [Acme vs GeoLibre](https://acme.example/vs-geolibre), maintained by Acme`.
+To keep the list useful:
+
+- The linked page must actually compare your tool with GeoLibre, rather than
+  being a general product, pricing, or marketing page.
+- Link the comparison itself, not a site root or a redirect.
+- Say who maintains it, so readers know whose viewpoint they are reading.
+- It must be publicly readable, with no login, paywall, or signup.
+- One entry per project.
+
+These pages are written and maintained by their own authors. GeoLibre does not
+review, verify, or endorse what they claim, including what they claim about
+GeoLibre. Links that stop working, or that describe GeoLibre inaccurately and
+are not corrected when asked, will be removed.
 
 ## See also
 
