@@ -6,8 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     image: geolibre-web:local
-    ports:
-      - "${GEOLIBRE_WEB_PORT:-8080}:80"
+    # ports:
+    #   - "${GEOLIBRE_WEB_PORT:-8080}:80"
     environment:
       # These are browser-reachable URLs, not Compose service names. Override
       # them with the public TLS origins when deploying behind an ingress.
