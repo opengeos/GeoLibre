@@ -139,8 +139,7 @@ async function main() {
   // Whitebox-sourced WASM tools the snapshot has never heard of. They belong in
   // the menu under their own category's regular subheading (not the
   // GEOLIBRE_SUBCATEGORY one — they are not GeoLibre-authored), and they are
-  // the reason the menu
-  // could list fewer tools than the WASM actually ships.
+  // the reason the menu could list fewer tools than the WASM actually ships.
   const snapshotIds = new Set(tools.map((t) => t.id));
   const wasmOnly = wasmTools.filter((t) => t.source !== "geolibre" && !snapshotIds.has(t.id));
 
