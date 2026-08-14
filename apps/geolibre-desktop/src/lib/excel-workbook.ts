@@ -6,7 +6,9 @@ export interface ExcelWorksheet {
 /** Read workbook metadata and lazily convert a selected sheet to CSV. */
 export async function readExcelWorksheets(data: ArrayBuffer): Promise<ExcelWorksheet[]> {
   const XLSX = await import("@e965/xlsx");
-  const workbook = XLSX.read(data, { type: "array" });
+  // `cellDates` keeps date columns from reaching `rawNumbers` below as bare
+  // serial numbers (45305.79…) instead of the date the user sees in Excel.
+  const workbook = XLSX.read(data, { type: "array", cellDates: true });
 
   return workbook.SheetNames.flatMap((name) => {
     const worksheet = workbook.Sheets[name];
@@ -22,6 +24,9 @@ export async function readExcelWorksheets(data: ArrayBuffer): Promise<ExcelWorks
     return [
       {
         name,
+        // `rawNumbers` keeps a display format (thousands separators, rounding)
+        // from reaching the delimited-text parser as `1,234.5678` or a
+        // truncated coordinate.
         toCsv: () => XLSX.utils.sheet_to_csv(worksheet, { blankrows: false, rawNumbers: true }),
       },
     ];
