@@ -32,7 +32,6 @@ COPY packages/map/package.json packages/map/package.json
 COPY packages/plugins/package.json packages/plugins/package.json
 COPY packages/processing/package.json packages/processing/package.json
 COPY packages/ui/package.json packages/ui/package.json
-COPY scripts/patch-maplibre-read-buffer.mjs scripts/patch-maplibre-read-buffer.mjs
 
 RUN npm ci
 

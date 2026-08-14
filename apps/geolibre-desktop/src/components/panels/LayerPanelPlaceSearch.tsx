@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import {
   type GeocodeMatch,
   geocodeForward,

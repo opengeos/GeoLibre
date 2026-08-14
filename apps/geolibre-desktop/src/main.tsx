@@ -1,4 +1,6 @@
 import "./lib/symbol-dispose-polyfill";
+// Must precede any Map construction (see the module docs).
+import "./lib/maplibre-worker";
 import React from "react";
 import ReactDOM from "react-dom/client";
 /* App typeface — see the --font-sans/--font-mono note in index.css.

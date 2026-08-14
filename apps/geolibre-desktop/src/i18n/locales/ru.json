@@ -731,6 +731,7 @@
       "statusTablesFound_other": "Найдено {{count}} пространственной таблицы.",
       "statusNoTables": "В этой базе данных не найдено пространственных таблиц.",
       "editableTable": "Таблица",
+      "geometryColumn": "Столбец геометрии",
       "tableReadOnly": "{{table}} (только чтение: нет первичного ключа)",
       "errorSelectTable": "Выберите таблицу для загрузки.",
       "errorRuntimeMissing": "У сервера обработки не установлен рантайм PostGIS (psycopg). Установите дополнение 'postgis' для geolibre-server, чтобы загружать редактируемые слои."

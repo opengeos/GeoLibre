@@ -683,6 +683,7 @@
       "statusTablesFound_other": "已找到 {{count}} 个空间表。",
       "statusNoTables": "在此数据库中未找到任何空间表。",
       "editableTable": "表",
+      "geometryColumn": "几何列",
       "tableReadOnly": "{{table}}（只读：无主键）",
       "errorSelectTable": "请选择要加载的表。",
       "errorRuntimeMissing": "处理服务器未安装 PostGIS 运行时（psycopg）。请安装 geolibre-server 的 “postgis” 扩展以加载可编辑图层。"

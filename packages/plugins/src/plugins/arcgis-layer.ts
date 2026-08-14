@@ -3,7 +3,7 @@
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { HostedLayer, VectorTileLayer } from "@esri/maplibre-arcgis";
 import type { Feature, FeatureCollection } from "geojson";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
 
 export type ArcGISLayerType = "feature" | "vector-tile" | "map-service" | "image-service";

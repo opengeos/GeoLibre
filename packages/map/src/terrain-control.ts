@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 /**
  * Clicks landing within this window of the previous one are treated as a

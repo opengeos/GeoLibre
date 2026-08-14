@@ -1,7 +1,7 @@
 import { type GeoLibreLayer, lineWidthValue, styleValue, useAppStore } from "@geolibre/core";
 import { Geoman, defaultLayerStyles } from "@geoman-io/maplibre-geoman-free";
 import type { Feature, FeatureCollection } from "geojson";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { GeoEditor, type GeoEditorOptions } from "maplibre-gl-geo-editor";
 import {
   type EditedFeatureProperties,
@@ -123,6 +123,16 @@ let viewImportLoadCounter = 0;
 
 const GEOMAN_EDIT_SYNC_EVENTS = ["gm:dragend", "gm:editend", "gm:rotateend"] as const;
 
+/**
+ * MapLibre v6 narrowed the catch-all `Map#on`/`off` overload from `type: string`
+ * to `type: keyof MapEventType`, so Geoman's `gm:*` events no longer type-check
+ * even though the map dispatches them. Bind through this slice instead.
+ */
+interface ThirdPartyEventTarget {
+  on(type: string, listener: () => void): unknown;
+  off(type: string, listener: () => void): unknown;
+}
+
 export { GEO_EDITOR_PLUGIN_ID };
 
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
@@ -239,14 +249,14 @@ function bindGeomanEditSync(map: maplibregl.Map): void {
   unbindGeomanEditSync();
   geomanEditSyncMap = map;
   for (const eventName of GEOMAN_EDIT_SYNC_EVENTS) {
-    map.on(eventName, handleGeomanEditSync);
+    (map as unknown as ThirdPartyEventTarget).on(eventName, handleGeomanEditSync);
   }
 }
 
 function unbindGeomanEditSync(): void {
   if (!geomanEditSyncMap) return;
   for (const eventName of GEOMAN_EDIT_SYNC_EVENTS) {
-    geomanEditSyncMap.off(eventName, handleGeomanEditSync);
+    (geomanEditSyncMap as unknown as ThirdPartyEventTarget).off(eventName, handleGeomanEditSync);
   }
   geomanEditSyncMap = null;
 }
@@ -1261,6 +1271,11 @@ function applyGeomanDisplayLayerOpacity(
   }
 }
 
+/** See the cast inside `setGeomanPaintProperty`. */
+interface DynamicPaintTarget {
+  setPaintProperty(layerId: string, property: string, value: unknown): void;
+}
+
 function setGeomanPaintProperty(
   map: maplibregl.Map,
   layerId: string,
@@ -1268,7 +1283,11 @@ function setGeomanPaintProperty(
   value: unknown,
 ): void {
   try {
-    map.setPaintProperty(layerId, property, value);
+    // v6 types setPaintProperty as generic over `keyof AllPaintProperties`, and
+    // these names are computed per layer type. Same rationale as
+    // `dynamic-style-property.ts` in @geolibre/map, which this package cannot
+    // import (plugins depends only on @geolibre/core).
+    (map as unknown as DynamicPaintTarget).setPaintProperty(layerId, property, value);
   } catch {
     // Geoman layers are rebuilt often and may not support every paint property.
   }

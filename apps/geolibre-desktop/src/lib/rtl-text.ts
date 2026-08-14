@@ -1,4 +1,4 @@
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 // Vite resolves this to a hashed, same-origin asset URL at build time, so the
 // RTL plugin ships with the app (web, desktop, and the Jupyter embed) instead of
 // being fetched from a CDN — keeps every build's CSP simple and works offline.

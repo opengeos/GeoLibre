@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import type { MapController } from "@geolibre/map";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {

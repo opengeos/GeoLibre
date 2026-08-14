@@ -1,4 +1,4 @@
-import maplibregl, { type RequestParameters } from "maplibre-gl";
+import { addProtocol, type RequestParameters } from "maplibre-gl";
 import type { GeoTIFF, GeoTIFFImage, TypedArrayWithDimensions } from "geotiff";
 
 const PROTOCOL = "cog-dem";
@@ -443,7 +443,7 @@ function parseTileRequest(request: RequestParameters): {
 
 function ensureCogDemProtocol(): void {
   if (protocolRegistered) return;
-  maplibregl.addProtocol(PROTOCOL, async (request) => {
+  addProtocol(PROTOCOL, async (request: RequestParameters) => {
     const { key, z, x, y } = parseTileRequest(request);
     const dataset = datasets.get(key);
     if (!dataset) throw new Error("The COG DEM source is no longer available.");

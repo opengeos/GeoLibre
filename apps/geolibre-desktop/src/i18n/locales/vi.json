@@ -608,6 +608,7 @@
       "errorStop": "Không thể ngăn cản Martin.",
       "statusNoTables": "Không có bảng không gian nào được tìm thấy trong cơ sở dữ liệu này.",
       "editableTable": "Bàn",
+      "geometryColumn": "Cột hình học",
       "tableReadOnly": "{{table}} (chỉ đọc: không có khóa chính)",
       "errorSelectTable": "Chọn một bảng để tải.",
       "errorRuntimeMissing": "Máy chủ xử lý chưa cài đặt thời gian chạy PostGIS (psycopg). Cài đặt thêm 'postgis' máy chủ địa lý để tải các lớp có thể chỉnh sửa."

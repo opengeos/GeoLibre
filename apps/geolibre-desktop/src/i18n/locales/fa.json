@@ -699,6 +699,7 @@
       "statusTablesFound_other": "{{count}} جدول مکانی یافت شد.",
       "statusNoTables": "در این پایگاه داده هیچ جدول مکانی یافت نشد.",
       "editableTable": "جدول",
+      "geometryColumn": "ستون هندسه",
       "tableReadOnly": "{{table}} (فقط‌خواندنی: بدون کلید اصلی)",
       "errorSelectTable": "یک جدول را برای بارگیری برگزینید.",
       "errorRuntimeMissing": "سرور پردازش، زمان اجرای PostGIS (psycopg) را نصب ندارد. برای بارگیری لایه‌های ویرایش‌پذیر، افزودنی «postgis» بستهٔ geolibre-server را نصب کنید."

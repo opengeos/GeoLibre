@@ -699,6 +699,7 @@
       "statusTablesFound_other": "{{count}} स्थानिक टेबल मिलीं।",
       "statusNoTables": "इस डेटाबेस में कोई स्थानिक टेबल नहीं मिली।",
       "editableTable": "टेबल",
+      "geometryColumn": "ज्यामिति स्तंभ",
       "tableReadOnly": "{{table}} (केवल पढ़ने योग्य: कोई प्राइमरी की नहीं)",
       "errorSelectTable": "लोड करने के लिए एक टेबल चुनें।",
       "errorRuntimeMissing": "प्रोसेसिंग सर्वर में PostGIS रनटाइम (psycopg) इंस्टॉल नहीं है। संपादन योग्य लेयर लोड करने के लिए geolibre-server का 'postgis' एक्स्ट्रा इंस्टॉल करें।"

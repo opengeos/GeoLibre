@@ -699,6 +699,7 @@
       "statusTablesFound_other": "{{count}} räumliche Tabellen gefunden.",
       "statusNoTables": "In dieser Datenbank wurden keine räumlichen Tabellen gefunden.",
       "editableTable": "Tabelle",
+      "geometryColumn": "Geometriespalte",
       "tableReadOnly": "{{table}} (schreibgeschützt: kein Primärschlüssel)",
       "errorSelectTable": "Wählen Sie eine zu ladende Tabelle aus.",
       "errorRuntimeMissing": "Der Verarbeitungsserver hat die PostGIS-Laufzeitumgebung (psycopg) nicht installiert. Installieren Sie das Extra „postgis“ von geolibre-server, um bearbeitbare Ebenen zu laden."

@@ -763,6 +763,7 @@
       "statusTablesFound_other": "تم العثور على {{count}} جدول مكاني.",
       "statusNoTables": "لم يُعثر على جداول مكانية في قاعدة البيانات هذه.",
       "editableTable": "الجدول",
+      "geometryColumn": "عمود الشكل الهندسي",
       "tableReadOnly": "{{table}} (للقراءة فقط: بلا مفتاح أساسي)",
       "errorSelectTable": "حدد جدولًا لتحميله.",
       "errorRuntimeMissing": "لا تتوفر لدى خادم المعالجة بيئة تشغيل PostGIS (حزمة psycopg). ثبّت إضافة 'postgis' الخاصة بـ geolibre-server لتحميل طبقات قابلة للتحرير."

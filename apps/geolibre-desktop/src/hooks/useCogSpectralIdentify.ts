@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { knownCogBandCount, readCogSpectralProfile } from "@geolibre/plugins/cog-spectral-profile";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";

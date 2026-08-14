@@ -1,5 +1,5 @@
 import { useAppStore, type CollaborationPresence } from "@geolibre/core";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import type { MapController } from "@geolibre/map";

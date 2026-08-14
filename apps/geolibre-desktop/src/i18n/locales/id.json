@@ -683,6 +683,7 @@
       "statusTablesFound_other": "Menemukan {{count}} tabel spasial.",
       "statusNoTables": "Tidak ada tabel spasial yang ditemukan dalam database ini.",
       "editableTable": "Tabel",
+      "geometryColumn": "Kolom geometri",
       "tableReadOnly": "{{table}} (hanya baca: tanpa kunci utama)",
       "errorSelectTable": "Pilih tabel untuk dimuat.",
       "errorRuntimeMissing": "Server pemrosesan tidak memiliki runtime PostGIS (psycopg) terpasang. Pasang ekstra 'postgis' pada geolibre-server untuk memuat layer yang dapat diedit."

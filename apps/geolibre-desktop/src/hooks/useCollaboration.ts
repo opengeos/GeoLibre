@@ -11,7 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { RefObject } from "react";
 import type { MapController } from "@geolibre/map";
-import type { Map as MapLibreMap } from "maplibre-gl";
+import type { Map as MapLibreMap, MapLibreEvent } from "maplibre-gl";
 import i18n from "../i18n";
 import {
   buildCollaborationSnapshot,
@@ -345,7 +345,10 @@ export function useCollaboration(
       conn.send({ type: "presence", cursor: { lng: e.lngLat.lng, lat: e.lngLat.lat } });
     };
     const onMouseOut = () => conn.send({ type: "presence", cursor: null });
-    const onMoveEnd = (event?: { flightCameraToken?: number }) => {
+    // The token rides along as `eventData` on the flight simulator's camera
+    // calls, so it is an extra field on a real `moveend` event rather than a
+    // standalone shape — v6's listener types reject the latter.
+    const onMoveEnd = (event?: MapLibreEvent & { flightCameraToken?: number }) => {
       if (event?.flightCameraToken !== undefined) return;
       conn.send({ type: "presence", view: mapControllerRef.current?.readView() ?? null });
     };

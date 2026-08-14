@@ -22,7 +22,7 @@ import type {
 } from "@geolibre/core";
 import bbox from "@turf/bbox";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { LayerControl, type CustomLayerAdapter, type LayerState } from "maplibre-gl-layer-control";
 import { CollapsedAttributionControl } from "./collapsed-attribution-control";
 import {
@@ -54,7 +54,25 @@ import { getOfflineBasemapStyle, isOfflineBasemapSentinel } from "./protomaps-ba
 import { ResetBearingControl } from "./reset-bearing-control";
 import { MaptoolkitLogoControl } from "./maptoolkit-logo-control";
 import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control";
+import { getDynamicPaintProperty, setDynamicPaintProperty } from "./dynamic-style-property";
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
+import { installMapTransformCompat } from "./map-transform-compat";
+
+// Before any `Map` is constructed: re-expose `map.transform` for the packages
+// we do not control that still read it (deck.gl above all). See the module for
+// why it cannot wait until a map exists.
+installMapTransformCompat();
+
+/**
+ * GeolocateControl is constructed through this indirection so tests can
+ * substitute a fake. Assigning over `maplibregl.GeolocateControl` is not an
+ * option: a MapLibre v6 ESM namespace is sealed and rejects assignment
+ * (`TypeError: Cannot assign to property 'GeolocateControl' of [object Module]`).
+ */
+export const geolocateControlFactory = {
+  create: (options: maplibregl.GeolocateControlOptions): maplibregl.GeolocateControl =>
+    new maplibregl.GeolocateControl(options),
+};
 
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
   type: "globe",
@@ -730,11 +748,11 @@ export class MapController {
       const props = OPACITY_PAINT_PROPERTIES[styleLayer.type] ?? [];
       for (const prop of props) {
         if (typeof durationMs === "number" && durationMs >= 0) {
-          this.map.setPaintProperty(nativeId, `${prop}-transition`, {
+          setDynamicPaintProperty(this.map, nativeId, `${prop}-transition`, {
             duration: durationMs,
           });
         }
-        this.map.setPaintProperty(nativeId, prop, clamped);
+        setDynamicPaintProperty(this.map, nativeId, prop, clamped);
       }
     }
   }
@@ -760,7 +778,7 @@ export class MapController {
           const styleLayer = this.map.getLayer(nativeId);
           if (!styleLayer) continue;
           for (const prop of OPACITY_PAINT_PROPERTIES[styleLayer.type] ?? []) {
-            this.map.setPaintProperty(nativeId, `${prop}-transition`, {
+            setDynamicPaintProperty(this.map, nativeId, `${prop}-transition`, {
               duration: 0,
             });
           }
@@ -1171,12 +1189,20 @@ export class MapController {
    * "Eye alt" (issue #1816). Corrected for the active body, since MapLibre
    * computes it from the Earth-based Mercator scale.
    *
-   * `transform` is public on the Map but `getCameraAltitude` is a newer
-   * addition, so it is probed defensively: a MapLibre bump that drops or
-   * renames it should blank the readout, not throw inside a `moveend` handler.
+   * v6 split `Camera` out of `Map`, moving the transform to `_camera`; v5
+   * exposed it on the map itself. Both are read because `getCameraAltitude` is
+   * also a newer addition, so the whole chain is probed defensively: a MapLibre
+   * bump that drops or renames either should blank the readout, not throw
+   * inside a `moveend` handler.
    */
   readCameraAltitude(): number | null {
-    const transform = this.map?.transform as { getCameraAltitude?: () => number } | undefined;
+    const host = this.map as
+      | {
+          _camera?: { transform?: { getCameraAltitude?: () => number } };
+          transform?: { getCameraAltitude?: () => number };
+        }
+      | undefined;
+    const transform = host?._camera?.transform ?? host?.transform;
     if (typeof transform?.getCameraAltitude !== "function") return null;
     try {
       return scaleAltitudeToActiveBody(transform.getCameraAltitude());
@@ -1329,7 +1355,7 @@ export class MapController {
       this.basemapOriginalPaintValues.set(layerId, originalPaintValues);
     }
     if (!originalPaintValues.has(property)) {
-      originalPaintValues.set(property, this.map.getPaintProperty(layerId, property));
+      originalPaintValues.set(property, getDynamicPaintProperty(this.map, layerId, property));
     }
 
     const original = originalPaintValues.get(property);
@@ -1340,9 +1366,9 @@ export class MapController {
           ? original * this.basemapOpacity
           : this.basemapOpacity;
     try {
-      const current = this.map.getPaintProperty(layerId, property);
+      const current = getDynamicPaintProperty(this.map, layerId, property);
       if (styleValuesEqual(current, opacity)) return;
-      this.map.setPaintProperty(layerId, property, opacity);
+      setDynamicPaintProperty(this.map, layerId, property, opacity);
     } catch {
       // Some third-party custom style layers may not expose paint properties.
     }
@@ -2485,7 +2511,7 @@ export class MapController {
     if (!this.map || this.geolocateControl || !this.controlVisibility.geolocate) {
       return false;
     }
-    const control = new maplibregl.GeolocateControl({
+    const control = geolocateControlFactory.create({
       positionOptions: {
         enableHighAccuracy: true,
       },

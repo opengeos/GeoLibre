@@ -10,7 +10,7 @@
  * stays free of MapLibre and the DOM and can be unit tested with data-URL
  * images.
  */
-import jsPDF from "jspdf";
+import { jsPDF } from "jspdf";
 import { pageMm, resolvePageSize, type Orientation, type PaperSizeId } from "./print-layout";
 
 /** An image to embed: a canvas (app) or a PNG/JPEG data URL (tests), plus its

@@ -13,7 +13,7 @@ import { Button, Input, Select } from "@geolibre/ui";
 import { Crosshair, Download, GripVertical, LineChart, Loader2, Trash2, X } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import type { MapController } from "@geolibre/map";
 import { type ChartDomain, resolveChartDomain } from "../../lib/chart-domain";
 import { useFloatingPanelRect } from "../../hooks/useFloatingPanelRect";

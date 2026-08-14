@@ -6,7 +6,7 @@ import {
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import type { InvokableTool, JSONValue } from "@strands-agents/sdk";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { tool } from "@strands-agents/sdk";
 import type { FeatureCollection } from "geojson";
 import { z } from "zod";

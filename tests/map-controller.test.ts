@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import {
   DEFAULT_LAYER_STYLE,
   setActiveEllipsoidId,
   type GeoLibreLayer,
   type LayerStyle,
 } from "@geolibre/core";
-import { createMapController, MapController } from "../packages/map/src/map-controller";
+import {
+  createMapController,
+  geolocateControlFactory,
+  MapController,
+} from "../packages/map/src/map-controller";
 
 // Internal shape of MapController we reach into to inject a fake map. The
 // controller only ever constructs a real maplibregl.Map through init(), which
@@ -1216,12 +1220,13 @@ function controllerWithGeolocate(): {
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("MapController geolocate permission-denied recovery", () => {
-  const originalControl = maplibregl.GeolocateControl;
+  const originalCreate = geolocateControlFactory.create;
 
   function withStubbedControl(run: () => Promise<void>): Promise<void> {
-    (maplibregl as { GeolocateControl: unknown }).GeolocateControl = FakeGeolocateControl;
+    geolocateControlFactory.create = () =>
+      new FakeGeolocateControl() as unknown as maplibregl.GeolocateControl;
     return run().finally(() => {
-      (maplibregl as { GeolocateControl: unknown }).GeolocateControl = originalControl;
+      geolocateControlFactory.create = originalCreate;
     });
   }
 

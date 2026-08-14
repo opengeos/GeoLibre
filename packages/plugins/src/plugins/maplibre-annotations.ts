@@ -1,6 +1,8 @@
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Feature, FeatureCollection, Position } from "geojson";
-import maplibregl from "maplibre-gl";
+// A value (not type-only) namespace import: main added runtime use of
+// `maplibregl.LngLat`/`maplibregl.Marker` here, and v6 has no default export.
+import * as maplibregl from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import { ANNOTATIONS_PLUGIN_ID } from "../plugin-ids";
 
