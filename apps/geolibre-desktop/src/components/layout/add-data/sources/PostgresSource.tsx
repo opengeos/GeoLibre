@@ -16,6 +16,7 @@ import {
   stopMartinServer,
 } from "../../../../lib/martin";
 import { postgisFeatureKeys, registerPostgisConnection } from "../../../../lib/postgis-connections";
+import { postgisTableKey, postgisTableLabel } from "../../../../lib/postgis-table-selection";
 import { IS_MAS_BUILD } from "../../../../lib/build-flags";
 import { startGeoLibreSidecar } from "../../../../lib/sidecar";
 import { isTauri } from "../../../../lib/tauri-io";
@@ -31,10 +32,6 @@ import { martinSourceMatchesTable } from "../martin-source-match";
 import type { OpenAddDataPostgres } from "../open-add-data";
 
 type PostgresLoadMode = "tiles" | "editable";
-
-function postgisTableKey(table: PostgisTableInfo): string {
-  return `${table.schema}.${table.table}`;
-}
 
 interface PostgresSourceProps {
   /** Prefill from the Browser panel (saved connection / clicked table). */
@@ -598,12 +595,15 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
             >
               {uniquePostgisTables.map((table) => {
                 const key = postgisTableKey(table);
+                const label = postgisTableLabel(table);
                 // Tables without a usable key stay visible (so the user sees
                 // why they are missing) but cannot be picked: this mode exists
                 // to save edits back, which needs a primary key.
                 return (
                   <option key={key} value={key} disabled={!table.primary_key}>
-                    {table.primary_key ? key : t("addData.postgres.tableReadOnly", { table: key })}
+                    {table.primary_key
+                      ? label
+                      : t("addData.postgres.tableReadOnly", { table: label })}
                   </option>
                 );
               })}
