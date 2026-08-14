@@ -245,6 +245,44 @@ describe("ArcGIS Pro project import", () => {
     );
   });
 
+  it("recognizes a geodatabase by its workspace path when no factory names one", () => {
+    // Not every connection reports a workspaceFactory, so a .gdb workspace has
+    // to be enough on its own -- otherwise these fall back to a bare "format"
+    // and the user is told nothing about which format that was.
+    const mapx = {
+      type: "CIMMap",
+      name: "Survey",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [
+        {
+          ...featureLayer("Parcels", ""),
+          featureTable: {
+            dataConnection: {
+              workspaceConnectionString: "DATABASE=C:\\data\\city.gdb",
+              dataset: "parcels",
+            },
+          },
+        },
+        {
+          type: "CIMRasterLayer",
+          name: "DEM",
+          dataConnection: {
+            workspaceConnectionString: "DATABASE=C:\\data\\city.gdb",
+            dataset: "dem",
+          },
+        },
+      ],
+    };
+    const result = importArcgisProject(JSON.stringify(mapx), "C:\\projects\\main.mapx");
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [
+        ["Parcels", "file-geodatabase"],
+        ["DEM", "file-geodatabase"],
+      ],
+    );
+  });
+
   it("keeps a nested layer's own visibility instead of the cascaded value", () => {
     // A visible layer inside a hidden group inside a visible group: every level
     // must store only its own toggle, or re-enabling "Hidden" in the UI would

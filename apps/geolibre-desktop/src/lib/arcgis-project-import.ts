@@ -447,7 +447,9 @@ function resolveRasterSource(
   if (!workspace && !dataset) return { reason: "missing-source" };
   if (isNetworkPath(workspace)) return { reason: "network-path" };
   // A raster dataset stored in a geodatabase reports the same reason a
-  // geodatabase feature class does, rather than a bare "format".
+  // geodatabase feature class does, rather than a bare "format", and is
+  // recognized by either the factory or the workspace path (see
+  // {@link resolveDataSource}).
   if (
     stringValue(connection.workspaceFactory).toLowerCase().includes("filegdb") ||
     extension(workspace) === "gdb"
@@ -477,12 +479,14 @@ function resolveDataSource(
     path = joinPath(workspace, /\.[a-z0-9]+$/i.test(dataset) ? dataset : `${dataset}.shp`);
   } else if (workspaceFactory.includes("text") && dataset) {
     path = joinPath(workspace, dataset);
-  } else if (workspaceFactory.includes("filegdb")) {
+  } else if (workspaceFactory.includes("filegdb") || extension(workspace) === "gdb") {
     // Reported distinctly from a plain unsupported "format" because a File
     // Geodatabase backs whole projects at a time -- a .gdb-based project can
     // produce hundreds of identical warnings, and "data format is not
     // supported" leaves the user with no idea which format that was, nor that
-    // the desktop build can add those feature classes another way.
+    // the desktop build can add those feature classes another way. The
+    // workspace path is checked as well as the factory because not every
+    // connection names one, and a .gdb workspace is a geodatabase either way.
     return { reason: "file-geodatabase" };
   } else if (dataset && extension(workspace) === "gpkg") {
     path = workspace;
