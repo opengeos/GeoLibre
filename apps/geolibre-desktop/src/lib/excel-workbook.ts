@@ -1,18 +1,29 @@
 export interface ExcelWorksheet {
   name: string;
-  csv: string;
+  toCsv: () => string;
 }
 
-/** Convert Excel worksheets to CSV so Add Data can reuse its existing parser. */
+/** Read workbook metadata and lazily convert a selected sheet to CSV. */
 export async function readExcelWorksheets(data: ArrayBuffer): Promise<ExcelWorksheet[]> {
   const XLSX = await import("@e965/xlsx");
   const workbook = XLSX.read(data, { type: "array" });
 
   return workbook.SheetNames.flatMap((name) => {
     const worksheet = workbook.Sheets[name];
-    if (!worksheet) return [];
-    const csv = XLSX.utils.sheet_to_csv(worksheet, { blankrows: false });
-    return csv.trim() ? [{ name, csv }] : [];
+    const hasValues =
+      worksheet &&
+      Object.entries(worksheet).some(([cell, entry]) => {
+        if (cell.startsWith("!")) return false;
+        const value = (entry as { v?: unknown }).v;
+        return typeof value === "string" ? value.trim().length > 0 : value != null;
+      });
+    if (!worksheet || !hasValues) return [];
+    return [
+      {
+        name,
+        toCsv: () => XLSX.utils.sheet_to_csv(worksheet, { blankrows: false }),
+      },
+    ];
   });
 }
 

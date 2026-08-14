@@ -19,7 +19,10 @@ for (const bookType of ["xls", "xlsx"] as const) {
 
     const worksheets = await readExcelWorksheets(bytes);
 
-    assert.deepEqual(worksheets, [{ name: "Survey", csv: "site,X,Y\nAlpha,-77.0365,38.8977" }]);
+    assert.deepEqual(
+      worksheets.map((worksheet) => ({ name: worksheet.name, csv: worksheet.toCsv() })),
+      [{ name: "Survey", csv: "site,X,Y\nAlpha,-77.0365,38.8977" }],
+    );
   });
 }
 

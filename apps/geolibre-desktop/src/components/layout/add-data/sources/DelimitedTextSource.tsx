@@ -24,7 +24,11 @@ import {
   parseDelimitedTextRows,
 } from "../../../../lib/delimited-text";
 import { reprojectFeatureCollectionToWgs84 } from "../../../../lib/duckdb-vector-loader";
-import { isExcelFile, readExcelWorksheets } from "../../../../lib/excel-workbook";
+import {
+  type ExcelWorksheet,
+  isExcelFile,
+  readExcelWorksheets,
+} from "../../../../lib/excel-workbook";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import {
   COMMON_CRS_PRESETS,
@@ -98,7 +102,7 @@ export function DelimitedTextSource() {
   const [selectedDelimitedText, setSelectedDelimitedText] = useState<{
     path: string;
     text: string;
-    worksheets?: { name: string; csv: string }[];
+    worksheets?: ExcelWorksheet[];
   } | null>(null);
   const [selectedWorksheet, setSelectedWorksheet] = useState("");
   // Whether points are built from coordinate columns (default, unchanged
@@ -167,7 +171,7 @@ export function DelimitedTextSource() {
       );
       return {
         sourcePath: selectedDelimitedText.path,
-        text: worksheet?.csv ?? selectedDelimitedText.text,
+        text: worksheet?.toCsv() ?? selectedDelimitedText.text,
       };
     }
 
@@ -667,6 +671,7 @@ export function DelimitedTextSource() {
                 setDelimitedTextDelimiter(event.target.value as DelimitedTextDelimiter);
                 resetDelimitedTextColumns();
               }}
+              disabled={Boolean(selectedDelimitedText?.worksheets)}
             >
               <option value="comma">{t("addData.delimitedText.delimiterComma")}</option>
               <option value="tab">{t("addData.delimitedText.delimiterTab")}</option>
