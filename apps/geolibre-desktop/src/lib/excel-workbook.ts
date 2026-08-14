@@ -21,13 +21,17 @@ export async function readExcelWorksheets(data: ArrayBuffer): Promise<ExcelWorks
         return typeof value === "string" ? value.trim().length > 0 : value != null;
       });
     if (!worksheet || !hasValues) return [];
+    // Retrieving the columns and importing the layer each ask for the CSV, so
+    // cache it rather than walking every row of a large sheet twice.
+    let csv: string | undefined;
     return [
       {
         name,
         // `rawNumbers` keeps a display format (thousands separators, rounding)
         // from reaching the delimited-text parser as `1,234.5678` or a
         // truncated coordinate.
-        toCsv: () => XLSX.utils.sheet_to_csv(worksheet, { blankrows: false, rawNumbers: true }),
+        toCsv: () =>
+          (csv ??= XLSX.utils.sheet_to_csv(worksheet, { blankrows: false, rawNumbers: true })),
       },
     ];
   });

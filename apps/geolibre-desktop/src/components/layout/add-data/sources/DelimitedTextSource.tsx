@@ -142,6 +142,7 @@ export function DelimitedTextSource() {
   const handleDelimitedTextModeChange = (mode: DelimitedTextMode) => {
     setDelimitedTextMode(mode);
     setSelectedDelimitedText(null);
+    setSelectedWorksheet("");
     resetDelimitedTextColumns();
     resetDelimitedTextCrs();
   };
@@ -825,6 +826,7 @@ export function DelimitedTextSource() {
           onSelect={(url) => {
             setDelimitedTextMode("url");
             setSelectedDelimitedText(null);
+            setSelectedWorksheet("");
             resetDelimitedTextColumns();
             // The sample is a comma-delimited CSV, so reset the delimiter too;
             // otherwise a previously chosen delimiter would misparse it.
