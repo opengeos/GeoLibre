@@ -231,7 +231,9 @@
     "invalidUrl": "Introduzca una URL de estilo HTTP o HTTPS válida.",
     "sectionMoon": "La Luna",
     "sectionMars": "Marte",
-    "sectionOther": "Otros cuerpos celestes"
+    "sectionOther": "Otros cuerpos celestes",
+    "sectionRegional": "Regional",
+    "regionChina": "China (中国)"
   },
   "planetSwitcher": {
     "label": "Cuerpo celeste",
@@ -1189,6 +1191,9 @@
     "viewOnly": "Solo lectura",
     "allowEdit": "Permitir que esta persona edite",
     "setViewOnly": "Poner a esta persona en solo lectura",
+    "kick": "Expulsar al participante",
+    "block": "Bloquear al participante",
+    "requireIdentityLabel": "Requerir una cuenta con sesión iniciada para unirse",
     "chatLog": "Chat de la sesión",
     "chatCompose": "Escriba un mensaje",
     "chatEmpty": "Aún no hay mensajes.",
@@ -1198,7 +1203,11 @@
     "chatLocationAttached": "Ubicación adjunta (haga clic para quitarla)",
     "chatGoToLocation": "Ir a esta ubicación",
     "sessionStatusUnread_one": "Sesión de colaboración en vivo, {{count}} mensaje sin leer. Haga clic para ver quién está conectado y chatear.",
-    "sessionStatusUnread_other": "Sesión de colaboración en vivo, {{count}} mensajes sin leer. Haga clic para ver quién está conectado y chatear."
+    "sessionStatusUnread_other": "Sesión de colaboración en vivo, {{count}} mensajes sin leer. Haga clic para ver quién está conectado y chatear.",
+    "lockLayer": "Bloquear capa para los invitados",
+    "unlockLayer": "Desbloquear capa para los invitados",
+    "layerLocked": "Bloqueada",
+    "layerLockedHint": "Esta capa está bloqueada por el anfitrión y no se puede editar"
   },
   "share": {
     "title": "Compartir proyecto",
@@ -4171,6 +4180,7 @@
     "title": "Detección de objetos",
     "description": "Ejecute un modelo YOLO exportado a ONNX sobre un GeoTIFF, completamente en el navegador. Los cuadros detectados se georreferencian y cada clase se añade como su propia capa.",
     "hint": "Use un modelo COCO integrado (que se descarga y almacena en caché una vez) o aporte su propio ONNX de YOLOv5/v8/v11. La detección se ejecuta localmente en el navegador. Los modelos integrados detectan objetos cotidianos; para imágenes aéreas, aporte su propio modelo entrenado con vistas cenitales.",
+    "unavailableNoExternalCdn": "La detección de objetos no está disponible en esta compilación. Necesita ONNX Runtime, que se carga desde una CDN externa que esta implementación ha deshabilitado. Proporcionar su propio archivo de modelo no soluciona el problema.",
     "imageLabel": "Imagen (GeoTIFF)",
     "imagePlaceholder": "Elija un GeoTIFF…",
     "chooseImage": "Elegir imagen",
@@ -4203,6 +4213,7 @@
     "title": "Segmentar todo",
     "description": "Ejecute SlimSAM automáticamente sobre un GeoTIFF, completamente en el navegador. Cada objeto detectado se convierte en un polígono georreferenciado añadido como una sola capa.",
     "hint": "Se muestrea una cuadrícula de puntos por toda la imagen y se segmenta con SlimSAM (que se descarga y almacena en caché una vez). Sin clics ni etiquetas: las cuadrículas más densas encuentran más objetos, pero tardan más.",
+    "unavailableNoExternalCdn": "«Segmentar todo» no está disponible en esta compilación. Necesita ONNX Runtime, que se carga desde una CDN externa que esta implementación ha deshabilitado.",
     "imageLabel": "Imagen (GeoTIFF)",
     "imagePlaceholder": "Elija un GeoTIFF…",
     "chooseImage": "Elegir imagen",

@@ -312,6 +312,7 @@ export {
   type SegmentMask,
   type SegmentEverythingOptions,
 } from "./segment-everything";
+export { isOrtAvailable } from "./ort";
 export {
   extractCogSubset,
   extractWmsSubset,

@@ -3,7 +3,7 @@
 ## Interface
 
 ```typescript
-import type { FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { IControl } from "maplibre-gl";
 
 export type GeoLibreMapControlPosition =
@@ -55,6 +55,19 @@ export interface GeoLibreDeckGL {
   mapbox: typeof import("@deck.gl/mapbox");
 }
 
+export interface GeoLibreLayerSummary {
+  id: string;
+  name: string;
+  type: string;
+  visible: boolean;
+  opacity: number;
+}
+
+export interface GeoLibreSelection {
+  layerId: string | null;
+  features: Feature<Geometry | null>[];
+}
+
 export interface GeoLibreAppAPI {
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (
@@ -62,6 +75,14 @@ export interface GeoLibreAppAPI {
     data: FeatureCollection,
     sourcePath?: string,
   ) => string;
+  listLayers?: () => GeoLibreLayerSummary[];
+  getLayerFeatures?: (layerId: string) => Feature<Geometry | null>[];
+  getSelectedFeatures?: () => Feature<Geometry | null>[];
+  getSelectedLayerId?: () => string | null;
+  getDrawnFeatures?: () => Feature<Geometry | null>[];
+  onSelectionChange?: (
+    callback: (selection: GeoLibreSelection) => void,
+  ) => () => void;
   // Native raster/tile layers (see "Raster and tile layers" below). Each
   // returns the new layer's id and the layer appears in the Layers panel and
   // persists with the project, like addGeoJsonLayer does for vector data.
@@ -415,6 +436,48 @@ https://web.geolibre.app/?url=https://example.com/project.geolibre.json&exampleG
 ```
 
 A URL parameter activates only an already-registered (installed) plugin that owns it; it never loads a plugin from the URL. For external plugins, include the plugin manifest URL in the project `plugins` state (so the plugin is registered) before relying on its URL handler — the matching parameter then activates and dispatches it even if it is not in the active set.
+
+## Read-only layer and feature queries
+
+External plugins can inspect the current layer list, a layer's GeoJSON features,
+the current feature selection, and features in GeoEditor's Sketches layers. The
+methods are optional so the same plugin remains compatible with older hosts.
+
+```typescript
+const layers = app.listLayers?.() ?? [];
+const selectedLayerId = app.getSelectedLayerId?.() ?? null;
+const selectedFeatures = app.getSelectedFeatures?.() ?? [];
+
+if (selectedLayerId && app.getLayerFeatures) {
+  const layerFeatures = app.getLayerFeatures(selectedLayerId);
+  console.log(layers, layerFeatures, selectedFeatures);
+}
+
+const drawnFeatures = app.getDrawnFeatures?.() ?? [];
+```
+
+`getSelectedFeatures` returns every selected feature in the selected layer, not
+only the most recently selected feature. Features without a GeoJSON `id` are
+matched using their zero-based array index converted to a string. An empty
+selection returns an empty array. `getLayerFeatures` throws when the layer id is
+unknown and returns an empty array for a layer that has no GeoJSON features.
+
+Selection subscriptions fire after the selected layer or selected feature-id
+array changes. Keep and call the returned unsubscribe function during plugin
+deactivation:
+
+```typescript
+const unsubscribe = app.onSelectionChange?.(({ layerId, features }) => {
+  console.log(layerId, features);
+});
+
+// In deactivate or another cleanup path:
+unsubscribe?.();
+```
+
+These methods are a read-only query surface: calling them does not change the
+GeoLibre store. Plugins must also treat returned GeoJSON features as read-only
+and use host APIs such as `addGeoJsonLayer` when they need to add data.
 
 ## Raster and tile layers
 

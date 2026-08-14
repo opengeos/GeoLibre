@@ -687,6 +687,50 @@ describe("MapController basemap controls", () => {
     assert.ok(!ids.includes(circleId("a")), "user layers are not basemap layers");
   });
 
+  it("claims a control's rebuilt render layer through its source (#1882)", () => {
+    // maplibre-gl-vector rebuilds its point layers asynchronously on a
+    // point-renderer change, so the store snapshot can still name the old
+    // circle while the map already holds the replacement heatmap. Both read the
+    // layer's own source, which is what identifies them as user data. Cover the
+    // singular `sourceId` too: registrations use either shape.
+    const sourceShapes = [
+      { label: "sourceIds", source: { sourceIds: ["pts-source"] } },
+      { label: "sourceId", source: { sourceId: "pts-source" } },
+    ];
+    for (const { label, source } of sourceShapes) {
+      const { map, fake } = makeFakeMap();
+      const controller = controllerWith(map);
+      const layer = controlVectorLayer("pts");
+      controller.syncLayers([
+        {
+          ...layer,
+          metadata: { ...layer.metadata, sourceIds: undefined, ...source },
+        },
+      ]);
+      fake.layers.set("pts-heatmap", {
+        id: "pts-heatmap",
+        type: "heatmap",
+        source: "pts-source",
+        paint: { "heatmap-opacity": 1 },
+      });
+      fake.order.push("pts-heatmap");
+
+      assert.ok(!controller.getBasemapStyleLayerIds().includes("pts-heatmap"), label);
+
+      controller.setBasemapVisible(false);
+      controller.setBasemapOpacity(0.25);
+
+      assert.ok(
+        !fake.calls.some(
+          (call) =>
+            call.args[0] === "pts-heatmap" &&
+            (call.method === "setLayoutProperty" || call.method === "setPaintProperty"),
+        ),
+        `the Background controls leave the rebuilt heatmap alone (${label})`,
+      );
+    }
+  });
+
   it("keeps KML marker symbols independent from basemap visibility and opacity", () => {
     for (const type of ["geojson", "vector-tiles"] as const) {
       const { map, fake } = makeFakeMap();
@@ -1637,11 +1681,14 @@ describe("MapController Mapbox descriptor requests", () => {
   const OPENFREEMAP = "https://tiles.openfreemap.org/styles/liberty";
 
   /** Minimal map stub: setStyle/remove are all the Mapbox path touches. */
-  function mapboxController(): { controller: MapController; styles: unknown[] } {
-    const styles: unknown[] = [];
+  function mapboxController(): {
+    controller: MapController;
+    styles: Array<{ style: unknown; options: unknown }>;
+  } {
+    const styles: Array<{ style: unknown; options: unknown }> = [];
     const map = {
-      setStyle: (style: unknown) => {
-        styles.push(style);
+      setStyle: (style: unknown, options?: unknown) => {
+        styles.push({ style, options });
       },
       remove: () => {},
       addControl: () => {},
@@ -1710,6 +1757,26 @@ describe("MapController Mapbox descriptor requests", () => {
     });
   });
 
+  it("disables validation and diffing for a loaded Mapbox descriptor", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ version: 8, sources: {}, layers: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as typeof globalThis.fetch;
+    const { controller, styles } = mapboxController();
+    try {
+      controller.setStyle(MAPBOX_STREETS);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      assert.equal(styles.length, 1);
+      assert.deepEqual(styles[0]?.options, { diff: false, validate: false });
+    } finally {
+      globalThis.fetch = originalFetch;
+      controller.destroy();
+    }
+  });
+
   it("aborts a pending descriptor request when a non-Mapbox style is applied", async () => {
     await withPendingFetch((signals) => {
       const { controller, styles } = mapboxController();
@@ -1718,7 +1785,7 @@ describe("MapController Mapbox descriptor requests", () => {
         controller.setStyle(OPENFREEMAP);
 
         // The plain URL resolves synchronously, and no second fetch is made.
-        assert.deepEqual(styles, [OPENFREEMAP]);
+        assert.deepEqual(styles, [{ style: OPENFREEMAP, options: { diff: false } }]);
         assert.equal(signals.length, 1);
         assert.equal(signals[0]?.aborted, true);
       } finally {

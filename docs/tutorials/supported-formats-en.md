@@ -17,6 +17,7 @@ Before listing formats, it's important to clarify "where it runs," since many fo
 | Browser | Open `web.geolibre.app` | No installation needed; works offline after initial load |
 | Desktop | Tauri v2 native application | Windows / macOS / Linux; available via Microsoft Store, Homebrew, winget, AUR, Flatpak |
 | Android | Google Play native app | ~40 MB per ABI |
+| iOS | App Store native app | iPhone and iPad, same codebase via Tauri v2 mobile |
 | Jupyter | `pip install geolibre` | The entire application embedded in a notebook cell |
 
 > **No accounts, no servers, no fees for the core application.** Local files are read in place and stay on your machine, and once the app has loaded, local workflows keep working offline. The optional remote pieces are the exception: online catalogs (STAC, Source Cooperative, Overture, Planetary Computer), basemap and tile downloads from a CDN, and services such as Earth Engine or an authenticated ArcGIS endpoint all need network access, and some need their own credentials or OAuth sign-in.
@@ -255,7 +256,7 @@ Mentioned piecemeal above, consolidated here. **This is where things most easily
 | **Desktop (Tauri) exclusive** | Native file/folder dialogs, local MBTiles, local raster reads, Shapefile companion file auto-discovery, PostGIS/Martin, file geodatabase, local file watch reload |
 | **Requires Python sidecar** | File geodatabase, all desktop conversion tools (preferred path), raster tools (rasterio), AI segmentation, PostGIS, Sedona |
 | **Mac App Store build** | No Python sidecar: hides PostgreSQL and GDB data sources, hides AI segmentation; Whitebox, conversion, raster, and vector tools all fall back to their browser/WASM engines; Shapefile companion files must be manually multi-selected |
-| **Android / Mobile** | Hides raster tools, conversion tools, AI segmentation, PostgreSQL — all sidecar-backed. The Whitebox toolbox is WASM-backed and stays available |
+| **Android / iOS (mobile)** | Hides raster tools, conversion tools, AI segmentation, PostgreSQL — all sidecar-backed. The Whitebox toolbox is WASM-backed and stays available |
 | **Browser** | No local MBTiles/GDB/PostGIS; conversion output is subset; vector conversion doesn't accept `.zip`; raster-to-COG only accepts GeoTIFF; Zarr local folders unavailable in Firefox/Safari |
 
 ---

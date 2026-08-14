@@ -1,10 +1,12 @@
 import type {
   CollabChatMessage,
   CollabCursor,
+  CollabInvite,
   CollabParticipant,
   CollabView,
   CollaborationMode,
   CollaborationRole,
+  ParticipantIdentity,
 } from "./protocol";
 import { finite, HEX_COLOR_RE } from "./internal/validate";
 
@@ -31,6 +33,8 @@ export interface SessionParticipant {
   color: string;
   role: CollaborationRole;
   editOverride?: boolean;
+  identity?: ParticipantIdentity | null;
+  inviteToken?: string | null;
   lastChatTs?: number;
   lastCommentTs?: number;
 }
@@ -44,9 +48,114 @@ export function participantCanEdit(
   return mode === "co-edit";
 }
 
+export function participantCanEditLayer(
+  participant: Pick<SessionParticipant, "role" | "editOverride">,
+  mode: CollaborationMode,
+  layerId: string,
+  lockedLayerIds: string[] = [],
+): boolean {
+  if (!participantCanEdit(participant, mode)) return false;
+  if (participant.role === "host") return true;
+  return !lockedLayerIds.includes(layerId);
+}
+
+/**
+ * Stable-ish key a host's block and persisted edit override are recorded
+ * against.
+ *
+ * Only the identity and invite forms are durable. The `anon:` fallback keys on
+ * a `clientId` the relay mints fresh on every join, so for an anonymous guest
+ * both a block and an override are forgotten the moment they reconnect. That is
+ * a known limit, not an oversight: without an identity or an invite there is
+ * nothing about an anonymous joiner to remember, and any client-supplied handle
+ * is trivially reset. Blocking is a moderation convenience, not a security
+ * boundary — see the *Moderation* section of `docs/collaboration.md`.
+ */
+export function getParticipantKey(
+  participant: Pick<SessionParticipant, "clientId" | "identity" | "inviteToken">,
+): string {
+  if (participant.identity?.userId) {
+    return `user:${participant.identity.userId}`;
+  }
+  if (participant.inviteToken) {
+    return `invite:${participant.inviteToken}`;
+  }
+  return `anon:${participant.clientId}`;
+}
+
+function isStructurallyEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || !a || !b) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!isStructurallyEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  const keysA = Object.keys(a as object);
+  const keysB = Object.keys(b as object);
+  if (keysA.length !== keysB.length) return false;
+  for (const k of keysA) {
+    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if (
+      !isStructurallyEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function diffLockedLayers(
+  storedProject: unknown,
+  inboundProject: unknown,
+  lockedLayerIds: string[] = [],
+): { lockedId: string; layerName: string } | null {
+  if (!lockedLayerIds.length || !storedProject || !inboundProject) return null;
+  if (typeof storedProject !== "object" || typeof inboundProject !== "object") return null;
+
+  const storedLayers = Array.isArray((storedProject as { layers?: unknown }).layers)
+    ? (storedProject as { layers: Record<string, unknown>[] }).layers
+    : [];
+  const inboundLayers = Array.isArray((inboundProject as { layers?: unknown }).layers)
+    ? (inboundProject as { layers: Record<string, unknown>[] }).layers
+    : [];
+
+  const storedMap = new Map<string, Record<string, unknown>>();
+  for (const layer of storedLayers) {
+    if (layer && typeof layer === "object" && typeof layer.id === "string") {
+      storedMap.set(layer.id, layer);
+    }
+  }
+
+  const inboundMap = new Map<string, Record<string, unknown>>();
+  for (const layer of inboundLayers) {
+    if (layer && typeof layer === "object" && typeof layer.id === "string") {
+      inboundMap.set(layer.id, layer);
+    }
+  }
+
+  for (const lockedId of lockedLayerIds) {
+    const stored = storedMap.get(lockedId);
+    if (!stored) continue;
+    const inbound = inboundMap.get(lockedId);
+    const layerName = typeof stored.name === "string" ? stored.name : lockedId;
+    if (!inbound) {
+      return { lockedId, layerName };
+    }
+    if (!isStructurallyEqual(stored, inbound)) {
+      return { lockedId, layerName };
+    }
+  }
+
+  return null;
+}
+
 export type SnapshotDecision =
   | { ok: true }
-  | { ok: false; code: "forbidden" | "too-large"; message: string };
+  | { ok: false; code: "forbidden" | "too-large" | "layer-locked"; message: string };
 
 /** Shared authorization/size gate used by every relay implementation. */
 export function authorizeSnapshot(
@@ -54,6 +163,9 @@ export function authorizeSnapshot(
   mode: CollaborationMode,
   byteLength: number,
   maxBytes = MAX_SNAPSHOT_BYTES,
+  storedSnapshot?: unknown,
+  inboundSnapshot?: unknown,
+  lockedLayerIds: string[] = [],
 ): SnapshotDecision {
   if (!participantCanEdit(participant, mode)) {
     return {
@@ -72,12 +184,27 @@ export function authorizeSnapshot(
       message: "Project is too large to sync live. Share it via URL instead.",
     };
   }
+  if (
+    participant.role !== "host" &&
+    lockedLayerIds.length > 0 &&
+    storedSnapshot &&
+    inboundSnapshot
+  ) {
+    const diff = diffLockedLayers(storedSnapshot, inboundSnapshot, lockedLayerIds);
+    if (diff) {
+      return {
+        ok: false,
+        code: "layer-locked",
+        message: `Layer "${diff.layerName}" is locked by the host and cannot be modified.`,
+      };
+    }
+  }
   return { ok: true };
 }
 
 export function authorizeHostAction(
   participant: Pick<SessionParticipant, "role">,
-  action: "session mode" | "participant permissions",
+  action: string,
 ): string | null {
   return participant.role === "host" ? null : `Only the host can change ${action}.`;
 }
@@ -93,7 +220,7 @@ export function setParticipantOverride(
   canEdit: unknown,
 ): boolean {
   if (actor.role !== "host" || typeof clientId !== "string") return false;
-  const target = participants.find((participant) => participant.clientId === clientId);
+  const target = participants.find((p) => p.clientId === clientId);
   if (!target || target.role === "host") return false;
   target.editOverride = canEdit === true;
   return true;
@@ -117,6 +244,13 @@ export function toWireParticipant(participant: SessionParticipant): CollabPartic
     color: participant.color,
     role: participant.role,
     editOverride: participant.role === "host" ? null : (participant.editOverride ?? null),
+    identity: participant.identity
+      ? {
+          provider: participant.identity.provider,
+          userId: participant.identity.userId,
+          username: participant.identity.username,
+        }
+      : null,
   };
 }
 

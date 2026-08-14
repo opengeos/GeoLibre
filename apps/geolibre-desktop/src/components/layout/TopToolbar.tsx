@@ -1146,20 +1146,40 @@ export function TopToolbar({
     });
   };
 
-  // The Maptoolkit logo is Maptoolkit-basemap attribution, so it must not linger
-  // over a different basemap. When no Maptoolkit basemap is active (see
-  // isMaptoolkitBasemapActive), turn the logo back off through the same path as
-  // the menu, so the map controller and this menu's checkmark stay in sync.
+  // The Maptoolkit logo is Maptoolkit-basemap attribution, required by their
+  // terms whenever a Maptoolkit basemap is in use (see isMaptoolkitBasemapActive)
+  // and meaningless otherwise, so it tracks that flag automatically: shown the
+  // moment a Maptoolkit basemap activates, hidden the moment it doesn't. The
+  // imperative call is made directly in the effect body, not inside the
+  // setControlsVisible updater — React (Strict Mode) runs a mount effect twice,
+  // and add/removeMaptoolkitLogoControl report "already there"/"already gone" as
+  // false, which isn't a failure; gating the state update on that return value
+  // made the second of the two mount runs read as failed and leave the control
+  // (and desired-vs-applied state) permanently out of sync. Calling it
+  // unconditionally is safe: both helpers no-op when already in the desired
+  // state.
+  //
+  // Deliberately NOT keyed on mapReadyGeneration (unlike
+  // useVectorTileGeometryBackfill above): that generation bumps on every
+  // basemap style load, not just the controller's first readiness (see
+  // MapCanvas's per-basemap-change `onControllerReadyRef` call), so including
+  // it here re-fires this effect on every Maptoolkit-to-Maptoolkit style
+  // switch — reapplying the flag and silently clobbering a manual toggle the
+  // user made while that basemap stayed active. The effect depends only on
+  // the flag itself (edge-triggered), so a manual toggle from the menu is left
+  // alone until the flag actually flips; the trade-off is that an activation
+  // landing before the controller exists (mapControllerRef.current still
+  // null) is not retried, which our mount ordering does not otherwise hit.
   const maptoolkitBasemapActive = useAppStore((s) =>
     isMaptoolkitBasemapActive(s.basemapStyleUrl, s.layers),
   );
   useEffect(() => {
-    if (maptoolkitBasemapActive) return;
-    setControlsVisible((current) => {
-      if (!current["maptoolkit-logo"]) return current;
-      mapControllerRef.current?.setBuiltInControlVisible("maptoolkit-logo", false);
-      return { ...current, "maptoolkit-logo": false };
-    });
+    mapControllerRef.current?.setBuiltInControlVisible("maptoolkit-logo", maptoolkitBasemapActive);
+    setControlsVisible((current) =>
+      current["maptoolkit-logo"] === maptoolkitBasemapActive
+        ? current
+        : { ...current, "maptoolkit-logo": maptoolkitBasemapActive },
+    );
   }, [maptoolkitBasemapActive, mapControllerRef]);
 
   // The command registry: the single source of truth shared by the command

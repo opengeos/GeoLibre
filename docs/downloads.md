@@ -286,6 +286,34 @@ Segmentation toolboxes, and the PostgreSQL data source — are hidden on Android
 The Whitebox geoprocessing toolbox runs on WebAssembly and stays available. See
 [Android](android.md) for the full list and for build instructions.
 
+## iOS installation
+
+GeoLibre is on the
+[App Store](https://apps.apple.com/app/geolibre/id6796039674) as a native app for
+iPhone and iPad, built from the same codebase as the desktop, web, and Android
+builds:
+
+[Get GeoLibre on the App Store](https://apps.apple.com/app/geolibre/id6796039674){ .md-button .md-button--primary }
+
+GeoLibre does not publish a sideloadable `.ipa` for end users, so unlike Android
+there are no iOS files attached to GitHub releases: the App Store listing, and
+TestFlight for beta builds, are how it is distributed. To run an unreleased
+build, build it yourself on a Mac (see [iOS](ios.md)).
+
+The tools that are hidden on Android are hidden on iOS too, for the same reason:
+the Raster, Conversion, and AI Segmentation toolboxes and the PostgreSQL data
+source all need a local desktop process, and the iOS sandbox forbids spawning
+one. The Whitebox geoprocessing toolbox runs on WebAssembly and stays available.
+See [iOS](ios.md) for the full list.
+
+!!! note
+
+    The App Store listing above is the iPhone and iPad app
+    (`org.geolibre.app`). The [Mac App Store](#mac-app-store) listing is a
+    separate record for the sandboxed macOS **desktop** build
+    (`org.geolibre.desktop`); the two are different apps with different feature
+    sets.
+
 ## Build from source
 
 ```bash

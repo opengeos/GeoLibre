@@ -21,6 +21,14 @@ declare const __GEOLIBRE_MAS_BUILD__: boolean;
 // vite.config.ts.
 declare const __GEOLIBRE_EMBED_BUILD__: boolean;
 
+// True when the build is configured with GEOLIBRE_NO_EXTERNAL_CDN=1 to strip
+// all references to external CDN origins (unpkg.com, cdn.jsdelivr.net, etc.).
+// Features that depend on externally hosted resources (storymap HTML export,
+// built-in object detection models, ONNX WASM, 3D Tiles decoders, Pyodide) are
+// disabled or degraded. Intended for deployments that cannot load from untrusted
+// CDNs (e.g. Amazon/Harmony). See vite.config.ts.
+declare const __NO_EXTERNAL_CDN__: boolean;
+
 // jsDelivr URLs for the PGlite engine and its PostGIS extension, injected by
 // vite.config.ts. Only the embed (Jupyter wheel) build reads them, from
 // pglite-loader.cdn.ts; web/desktop builds bundle PGlite and never reference

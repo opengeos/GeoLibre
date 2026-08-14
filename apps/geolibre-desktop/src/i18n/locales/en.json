@@ -231,7 +231,9 @@
     "invalidUrl": "Enter a valid HTTP or HTTPS style URL.",
     "sectionMoon": "The Moon",
     "sectionMars": "Mars",
-    "sectionOther": "Other celestial bodies"
+    "sectionOther": "Other celestial bodies",
+    "sectionRegional": "Regional",
+    "regionChina": "China (中国)"
   },
   "planetSwitcher": {
     "label": "Celestial body",
@@ -1189,6 +1191,9 @@
     "viewOnly": "View-only",
     "allowEdit": "Allow this person to edit",
     "setViewOnly": "Set this person to view-only",
+    "kick": "Kick participant",
+    "block": "Block participant",
+    "requireIdentityLabel": "Require signed-in account to join",
     "chatLog": "Session chat",
     "chatCompose": "Type a message",
     "chatEmpty": "No messages yet.",
@@ -1198,7 +1203,11 @@
     "chatLocationAttached": "Location attached (click to remove)",
     "chatGoToLocation": "Go to this location",
     "sessionStatusUnread_one": "Live collaboration session, {{count}} unread message. Click to see who's connected and chat.",
-    "sessionStatusUnread_other": "Live collaboration session, {{count}} unread messages. Click to see who's connected and chat."
+    "sessionStatusUnread_other": "Live collaboration session, {{count}} unread messages. Click to see who's connected and chat.",
+    "lockLayer": "Lock layer for guests",
+    "unlockLayer": "Unlock layer for guests",
+    "layerLocked": "Locked",
+    "layerLockedHint": "This layer is locked by the host and cannot be edited"
   },
   "share": {
     "title": "Share project",
@@ -4181,6 +4190,7 @@
     "title": "Object Detection",
     "description": "Run a YOLO model exported to ONNX over a GeoTIFF or geotagged photo, fully in the browser. Each detected class is added as its own layer.",
     "hint": "Use a built-in COCO model (downloaded and cached once) or bring your own YOLOv5/v8/v11 ONNX. GeoTIFF detections become georeferenced boxes. Photo detections become points at the camera's GPS location because a photo does not define a ground footprint.",
+    "unavailableNoExternalCdn": "Object detection is unavailable in this build. It needs the ONNX Runtime, which is loaded from an external CDN that this deployment has disabled. Supplying your own model file does not help.",
     "imageLabel": "Image (GeoTIFF or geotagged photo)",
     "imagePlaceholder": "Choose a GeoTIFF, JPEG, PNG, or WebP…",
     "chooseImage": "Choose image",
@@ -4213,6 +4223,7 @@
     "title": "Segment Everything",
     "description": "Run SlimSAM automatically over a GeoTIFF, fully in the browser. Every detected object becomes a georeferenced polygon added as one layer.",
     "hint": "A grid of points is sampled across the image and segmented with SlimSAM (downloaded and cached once). No clicks or labels — denser grids find more objects but take longer.",
+    "unavailableNoExternalCdn": "Segment Everything is unavailable in this build. It needs the ONNX Runtime, which is loaded from an external CDN that this deployment has disabled.",
     "imageLabel": "Image (GeoTIFF)",
     "imagePlaceholder": "Choose a GeoTIFF…",
     "chooseImage": "Choose image",

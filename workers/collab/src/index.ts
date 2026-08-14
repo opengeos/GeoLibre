@@ -9,6 +9,7 @@
 // The session code namespaces the Durable Object (idFromName), so every
 // participant of a session lands on the same actor and gets fanned out to.
 
+import { isIdentityConfigured } from "@geolibre/collab-core";
 import { CollabSession, type Env } from "./session";
 
 export { CollabSession };
@@ -23,6 +24,73 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Headers": "Content-Type",
   "Access-Control-Max-Age": "86400",
 };
+
+const MAX_RATE_LIMIT_KEYS = 10_000;
+const SWEEP_INTERVAL_MS = 60_000;
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+let lastRateLimitSweep = 0;
+
+function cleanupRateLimitMap(now: number): void {
+  for (const [k, rec] of rateLimitMap.entries()) {
+    if (now > rec.resetAt) rateLimitMap.delete(k);
+  }
+  while (rateLimitMap.size >= MAX_RATE_LIMIT_KEYS) {
+    const oldestKey = rateLimitMap.keys().next().value;
+    if (oldestKey === undefined) break;
+    rateLimitMap.delete(oldestKey);
+  }
+  lastRateLimitSweep = now;
+}
+
+function isAllowedOrigin(originHeader: string | null, envAllowed?: string): boolean {
+  if (!originHeader) return true;
+  const allowedList = envAllowed
+    ? envAllowed
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [
+        "https://geolibre.app",
+        "https://collab.geolibre.app",
+        "http://localhost",
+        "http://127.0.0.1",
+        "tauri://localhost",
+      ];
+
+  try {
+    const originUrl = new URL(originHeader);
+    const host = originUrl.hostname;
+    if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost")) return true;
+    return allowedList.some((allowed) => {
+      if (allowed === "*") return true;
+      try {
+        const allowedUrl = new URL(allowed);
+        return originUrl.origin === allowedUrl.origin;
+      } catch {
+        return originHeader === allowed || host === allowed;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
+function checkRateLimit(key: string, maxRequests = 10, windowMs = 60_000): boolean {
+  const now = Date.now();
+  if (now - lastRateLimitSweep > SWEEP_INTERVAL_MS || rateLimitMap.size >= MAX_RATE_LIMIT_KEYS) {
+    cleanupRateLimitMap(now);
+  }
+  const record = rateLimitMap.get(key);
+  if (!record || now > record.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (record.count >= maxRequests) {
+    return false;
+  }
+  record.count += 1;
+  return true;
+}
 
 function randomCode(): string {
   const bytes = new Uint8Array(CODE_LENGTH);
@@ -57,10 +125,28 @@ export default {
 
     // Create a session.
     if (url.pathname === "/sessions" && request.method === "POST") {
+      const origin = request.headers.get("Origin") ?? request.headers.get("Referer");
+      if (!isAllowedOrigin(origin, env.ALLOWED_ORIGINS)) {
+        return json({ error: "Origin not allowed to create sessions." }, 403);
+      }
+
+      const clientKey = request.headers.get("CF-Connecting-IP") ?? origin ?? "anonymous";
+      if (!checkRateLimit(clientKey)) {
+        return json({ error: "Too many session creation requests. Please try again later." }, 429);
+      }
+
       const body = (await request.json().catch(() => ({}))) as {
         mode?: string;
+        requireIdentity?: boolean;
       };
       const mode = body.mode === "view-only" ? "view-only" : "co-edit";
+      const requireIdentity = body.requireIdentity === true;
+      // Fail the create rather than silently downgrading: a host who asked for
+      // a sign-in gate should hear that this relay has no issuer, not discover
+      // it by watching anonymous guests walk in.
+      if (requireIdentity && !isIdentityConfigured(env.COLLAB_IDENTITY_SECRET)) {
+        return json({ error: "This relay has no sign-in provider configured." }, 400);
+      }
       // Retry on the (rare) collision with an existing active session: /init
       // is a no-op when the code is already taken, so without this the caller
       // would receive a hostToken that doesn't match the stored one and be
@@ -71,13 +157,13 @@ export default {
         const stub = env.COLLAB_SESSION.get(env.COLLAB_SESSION.idFromName(sessionId));
         const initRes = await stub.fetch("https://collab/init", {
           method: "POST",
-          body: JSON.stringify({ mode, hostToken }),
+          body: JSON.stringify({ mode, hostToken, requireIdentity }),
         });
         const initBody = (await initRes.json().catch(() => ({}))) as {
           alreadyInitialized?: boolean;
         };
         if (!initBody.alreadyInitialized) {
-          return json({ sessionId, hostToken, mode });
+          return json({ sessionId, hostToken, mode, requireIdentity });
         }
       }
       return json({ error: "Could not allocate a session code. Please try again." }, 503);
@@ -94,7 +180,13 @@ export default {
     }
 
     if (url.pathname === "/" || url.pathname === "/health") {
-      return json({ ok: true, service: "geolibre-collab" });
+      // `identitySupported` lets the client hide the "require a signed-in
+      // account" option before it ever tries to create a session.
+      return json({
+        ok: true,
+        service: "geolibre-collab",
+        identitySupported: isIdentityConfigured(env.COLLAB_IDENTITY_SECRET),
+      });
     }
 
     return json({ error: "Not found" }, 404);

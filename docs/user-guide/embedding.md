@@ -26,7 +26,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | `data`       | `data=https://assets.geolibre.app/data/places.geojson`     | Loads public GeoJSON, GeoParquet, PMTiles, a COG, or a ZIP/REST response containing multiple GeoJSON files.                           |
 | `style`      | `style=https://assets.geolibre.app/data/sample.style.json` | Applies a GeoLibre/MapLibre vector style or raster-style JSON to the data loaded by `data`.                                            |
 | `layout`     | `layout=viewer`                                            | `viewer` provides read-only chrome: Layers, View, Controls, basemaps, search/identify, and Help, with authoring UI hidden. `compact` is the icon-only full-app layout; `embed` and `iframe` are aliases. |
-| `toolbar`    | `toolbar=icons`                                            | Icon-only toolbar buttons without the full compact layout. `icon` and `icon-only` are aliases.                                        |
+| `toolbar`    | `toolbar=none`                                             | Hides the top toolbar while keeping panels and the status bar. Use `icons` for icon-only buttons; `icon` and `icon-only` are aliases. `hidden`, `hide`, and `off` are aliases for `none`. |
 | `panels`     | `panels=collapsed`                                         | Starts Layers and Style collapsed to their icon rails. Use `none` to hide all panels; `hidden`, `hide`, and `off` are aliases.         |
 | `hidePanels` | `hidePanels=true`                                          | Alternative way to hide those panels.                                                                                                 |
 | `maponly`    | `maponly`                                                  | Hides all chrome (toolbar, panels, and status bar), leaving only the map. The bare flag or `true`, `1`, `yes`, `on` enable it.        |
@@ -85,7 +85,8 @@ Drop the viewer into an `<iframe>`:
 ></iframe>
 ```
 
-Use `layout=viewer` for a read-only map with layer toggles, search/identify, and
+Use `toolbar=none` to hide the top toolbar while retaining the configured side
+panels and status bar. Use `layout=viewer` for a read-only map with layer toggles, search/identify, and
 basemap switching. Its layer list mirrors the authoring Layers panel, folders
 and all, so group names carry over. The Controls menu is part of the viewer
 chrome, minus the two entries that write to the project (Field Collection and
@@ -233,6 +234,7 @@ const map = await connect(document.querySelector("iframe"), {
 });
 await map.setView({ center: [-95.7, 37.1], zoom: 5 });
 await map.setLayerVisibility("roads", false);
+const added = await map.addData("https://assets.geolibre.app/data/places.geojson");
 const layers = await map.listLayers();
 map.on("selectionChanged", ({ featureIds }) => console.log(featureIds));
 ```
@@ -304,6 +306,7 @@ other frame or origin is ignored. Pass the *app's* origin, not your own.
 | `setFilter(layerId, expression)`       | `void`                  | A MapLibre filter expression, or `null` to clear it.                    |
 | `getViewport()`                        | `Viewport`              | `{ bbox, center, zoom, bearing, pitch }`.                               |
 | `addLayer(spec)`                       | the new layer's `id`    | Takes a project-format layer specification.                             |
+| `addData(url, options?)`               | the new layer `id`s     | Loads remote data like `?data=`; options are `{ styleUrl, fit }`.        |
 | `exportImage()`                        | a PNG `data:` URL       | The map as currently rendered.                                          |
 | `on(event, listener)`                  | an unsubscribe function | Not a promise; events are the set the app posts (see below).            |
 | `disconnect()`                         | not a promise           | Removes the listener and rejects anything still in flight.              |
@@ -350,6 +353,7 @@ them out of the other `postMessage` traffic on your page.
 | `setFilter`        | `{ layerId, expression }`                                  | Applies a MapLibre filter expression; send `null` to clear it.                        |
 | `getViewport`      | `{}`                                                       | Returns the current camera and bounds in `result`.                                    |
 | `addLayer`         | `{ spec }`                                                 | Adds a project-format layer specification at runtime.                                 |
+| `addData`          | `{ url, styleUrl?, fit? }`                                 | Loads GeoJSON/API, ZIP, GeoParquet, PMTiles, or COG data without reloading the iframe. |
 | `exportImage`      | `{}`                                                       | Returns the rendered map as a PNG data URL in `result`.                               |
 
 Send `{ layerId }` alone to `highlightFeature` to clear the highlight. A request
@@ -366,6 +370,12 @@ or a non-empty `tiles`, or — for the two layer types drawn from inline feature
 `ack` rather than reporting success and rendering nothing. `addLayer` also
 refuses `javascript:`, `vbscript:`, `data:`, `file:`, and `blob:` URLs on a
 source; a custom map protocol such as `pmtiles://` is fine.
+
+`addData` uses the same format detection, CORS requirements, safety limits, and
+optional Mapbox/MapLibre style import as the [`data` URL parameter](#open-remote-data).
+It fits the newly loaded data by default; pass `fit: false` to preserve the
+current camera. Its acknowledgement returns every created layer id, including
+all layers extracted from a ZIP archive.
 
 Add a `requestId` to any message and the app answers with an `ack` (below)
 reporting whether it worked.

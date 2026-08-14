@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { WebSocket } from "ws";
+import { signIdentityToken } from "@geolibre/collab-core";
 import { createRelay } from "../src/server.js";
+
+/** Issuer secret for the identity tests; a relay without one rejects all tokens. */
+const IDENTITY_SECRET = "test-identity-secret";
 
 type Message = Record<string, unknown> & { type: string };
 
@@ -83,7 +87,11 @@ describe("Node collaboration relay", () => {
   it("serves health, creates sessions, and rejects unknown websocket routes", async () => {
     const { http } = await start();
     const health = await fetch(`${http}/health`);
-    assert.deepEqual(await health.json(), { ok: true, service: "geolibre-collab" });
+    assert.deepEqual(await health.json(), {
+      ok: true,
+      service: "geolibre-collab",
+      identitySupported: false,
+    });
 
     const created = await createSession(http, "view-only");
     assert.match(created.sessionId, /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/);
@@ -309,5 +317,193 @@ describe("Node collaboration relay", () => {
     assert.deepEqual(welcome.snapshot, { persisted: true });
     assert.equal(welcome.rev, 1);
     rejoined.close();
+  });
+
+  it("only honors X-Forwarded-For when trustProxy is enabled", async () => {
+    const untrusted = await start({ trustProxy: false });
+    for (let i = 1; i <= 10; i++) {
+      const res = await fetch(`${untrusted.http}/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": `10.0.0.${i}` },
+        body: JSON.stringify({ mode: "co-edit" }),
+      });
+      assert.equal(res.status, 200);
+    }
+    const res11Untrusted = await fetch(`${untrusted.http}/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "10.0.0.11" },
+      body: JSON.stringify({ mode: "co-edit" }),
+    });
+    assert.equal(res11Untrusted.status, 429);
+
+    const trusted = await start({ trustProxy: true });
+    for (let i = 1; i <= 11; i++) {
+      const res = await fetch(`${trusted.http}/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": `10.0.1.${i}` },
+        body: JSON.stringify({ mode: "co-edit" }),
+      });
+      assert.equal(res.status, 200);
+    }
+  });
+
+  it("defers invite consumption until after authorization checks succeed", async () => {
+    const { http } = await start({ identitySecret: IDENTITY_SECRET });
+    const createdRes = await fetch(`${http}/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "view-only", requireIdentity: true }),
+    });
+    const created = (await createdRes.json()) as { sessionId: string; hostToken: string };
+
+    const host = await connect(http, created.sessionId);
+    await joinSession(host, created.hostToken);
+
+    // Host join with hostToken AND inviteToken should not consume the invite.
+    host.send(
+      JSON.stringify({
+        type: "mint-invite",
+        role: "co-edit",
+        maxUses: 1,
+      }),
+    );
+    const inviteMsg = await next(host, "invite-created");
+    const inviteToken = (inviteMsg.invite as { token: string }).token;
+
+    // 1. Host reconnects supplying hostToken AND inviteToken; should join as host without burning invite.
+    const hostReconnect = await connect(http, created.sessionId);
+    hostReconnect.send(
+      JSON.stringify({
+        type: "join",
+        clientId: "host2",
+        displayName: "HostReconnect",
+        color: "#000000",
+        hostToken: created.hostToken,
+        inviteToken,
+      }),
+    );
+    const hostWelcome = await next(hostReconnect, "welcome");
+    assert.equal(hostWelcome.role, "host");
+    hostReconnect.close();
+
+    // 2. Unauthenticated guest attempts to join with inviteToken (fails identity check).
+    const unauthGuest = await connect(http, created.sessionId);
+    unauthGuest.send(
+      JSON.stringify({
+        type: "join",
+        clientId: "client1",
+        displayName: "Guest",
+        color: "#ffffff",
+        inviteToken,
+      }),
+    );
+    const err = await next(unauthGuest, "error");
+    assert.equal(err.code, "identity-required");
+    unauthGuest.close();
+
+    // 3. First authenticated guest joins with inviteToken; succeeds and claims the 1-use co-edit invite.
+    const authGuest = await connect(http, created.sessionId);
+    authGuest.send(
+      JSON.stringify({
+        type: "join",
+        clientId: "client2",
+        displayName: "Alice",
+        color: "#00ff00",
+        inviteToken,
+        identityToken: await signIdentityToken(
+          { provider: "geolibre", userId: "user1", username: "Alice" },
+          IDENTITY_SECRET,
+        ),
+      }),
+    );
+    const welcome = await next(authGuest, "welcome");
+    assert.equal(welcome.type, "welcome");
+    authGuest.close();
+
+    // 4. Second authenticated guest attempts to join using the same maxUses: 1 inviteToken.
+    // The invite was consumed by Alice, so authGuest2 does NOT get co-edit override.
+    const authGuest2 = await connect(http, created.sessionId);
+    authGuest2.send(
+      JSON.stringify({
+        type: "join",
+        clientId: "client3",
+        displayName: "Bob",
+        color: "#ff0000",
+        inviteToken,
+        identityToken: await signIdentityToken(
+          { provider: "geolibre", userId: "user2", username: "Bob" },
+          IDENTITY_SECRET,
+        ),
+      }),
+    );
+    const welcome2 = await next(authGuest2, "welcome");
+    assert.equal(welcome2.type, "welcome");
+
+    // Since the co-edit invite was maxed out, Bob is a view-only guest in this view-only session.
+    authGuest2.send(JSON.stringify({ type: "snapshot", project: { name: "bob" }, rev: 0 }));
+    const editErr = await next(authGuest2, "error");
+    assert.equal(editErr.code, "forbidden");
+
+    authGuest2.close();
+    host.close();
+  });
+
+  it("rejects a self-asserted identity token and refuses requireIdentity without an issuer", async () => {
+    // No identitySecret: this relay has no issuer configured.
+    const { http } = await start();
+
+    // A host cannot arm a gate nobody could pass.
+    const refused = await fetch(`${http}/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "co-edit", requireIdentity: true }),
+    });
+    assert.equal(refused.status, 400);
+
+    const created = await createSession(http);
+    const guest = await connect(http, created.sessionId);
+    guest.send(
+      JSON.stringify({
+        type: "join",
+        clientId: "client1",
+        displayName: "Mallory",
+        color: "#ffffff",
+        // Raw JSON, the shape the relay used to trust verbatim.
+        identityToken: JSON.stringify({ provider: "geolibre", userId: "admin", username: "Admin" }),
+      }),
+    );
+    const welcome = await next(guest, "welcome");
+    assert.equal(welcome.identitySupported, false);
+    const self = (welcome.participants as { clientId: string; identity: unknown }[]).find(
+      (p) => p.clientId === welcome.clientId,
+    );
+    // Unverified claims must not reach the roster, or the "verified" badge lies.
+    assert.equal(self?.identity, null);
+    guest.close();
+  });
+
+  it("rejects an identity token signed with the wrong secret", async () => {
+    const { http } = await start({ identitySecret: IDENTITY_SECRET });
+    const created = await createSession(http);
+    const guest = await connect(http, created.sessionId);
+    guest.send(
+      JSON.stringify({
+        type: "join",
+        clientId: "client1",
+        displayName: "Mallory",
+        color: "#ffffff",
+        identityToken: await signIdentityToken(
+          { provider: "geolibre", userId: "admin", username: "Admin" },
+          "not-the-relay-secret",
+        ),
+      }),
+    );
+    const welcome = await next(guest, "welcome");
+    assert.equal(welcome.identitySupported, true);
+    const self = (welcome.participants as { clientId: string; identity: unknown }[]).find(
+      (p) => p.clientId === welcome.clientId,
+    );
+    assert.equal(self?.identity, null);
+    guest.close();
   });
 });

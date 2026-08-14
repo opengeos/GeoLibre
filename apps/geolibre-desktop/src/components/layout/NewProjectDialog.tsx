@@ -6,6 +6,7 @@ import {
   PLANETARY_BASEMAP_GROUPS,
   PLANETARY_BASEMAPS,
   PROTOMAPS_BASEMAPS,
+  REGIONAL_BASEMAPS,
   useAppStore,
   type MapViewState,
 } from "@geolibre/core";
@@ -19,6 +20,7 @@ import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/pla
 import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
 import { clearProjectSnapshots } from "../../lib/project-history-store";
 import { CollapsibleSection } from "../CollapsibleSection";
+import { RegionalBasemapSection } from "../panels/RegionalBasemapSection";
 import {
   Button,
   cn,
@@ -54,6 +56,7 @@ type BasemapChoice =
   | (typeof OPENFREEMAP_BASEMAPS)[number]["id"]
   | (typeof PROTOMAPS_BASEMAPS)[number]["id"]
   | (typeof PLANETARY_BASEMAPS)[number]["id"]
+  | (typeof REGIONAL_BASEMAPS)[number]["id"]
   | typeof CUSTOM_BASEMAP_ID
   | typeof BLANK_BASEMAP_ID;
 
@@ -154,6 +157,12 @@ export function NewProjectDialog({
     () => PLANETARY_BASEMAPS.find((basemap) => basemap.id === selectedBasemapId),
     [selectedBasemapId],
   );
+  // Regional basemaps are their own list too, but unlike the planetary ones
+  // they cover Earth, so selecting one leaves the project's ellipsoid alone.
+  const selectedRegional = useMemo(
+    () => REGIONAL_BASEMAPS.find((basemap) => basemap.id === selectedBasemapId),
+    [selectedBasemapId],
+  );
   const isCustomUrlValid = useMemo(() => {
     if (!customStyleUrl) return false;
     try {
@@ -165,7 +174,10 @@ export function NewProjectDialog({
   }, [customStyleUrl]);
   const canCreate = isCustomSelected
     ? isCustomUrlValid
-    : isBlankSelected || Boolean(selectedPreset) || Boolean(selectedPlanetary);
+    : isBlankSelected ||
+      Boolean(selectedPreset) ||
+      Boolean(selectedPlanetary) ||
+      Boolean(selectedRegional);
 
   const resetForm = () => {
     setSelectedBasemapId(DEFAULT_BASEMAP_ID);
@@ -190,7 +202,7 @@ export function NewProjectDialog({
         : customStyleUrl
       : isBlankSelected
         ? BLANK_BASEMAP
-        : (selectedPreset ?? selectedPlanetary)?.styleUrl;
+        : (selectedPreset ?? selectedPlanetary ?? selectedRegional)?.styleUrl;
     if (basemapStyleUrl == null) return;
 
     newProject({
@@ -378,6 +390,11 @@ export function NewProjectDialog({
                     </div>
                   </div>
                 ) : null}
+
+                <RegionalBasemapSection
+                  selectedId={selectedBasemapId}
+                  onSelect={(basemap) => setSelectedBasemapId(basemap.id)}
+                />
 
                 {PLANETARY_BASEMAP_GROUPS.map((group) => {
                   const heading = t(planetaryBasemapSectionKey(group.id));

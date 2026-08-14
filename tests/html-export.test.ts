@@ -26,7 +26,7 @@ describe("buildProjectHtml", () => {
     // "&" is HTML-escaped to "&amp;" in the attribute (decoded back by browsers).
     assert.match(
       html,
-      /<iframe id="geolibre-frame" src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/,
+      /<iframe id="geolibre-frame" src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"/,
     );
     // The project rides in a JSON <script> block and is replayed over the bridge.
     assert.match(html, /id="geolibre-project"/);
@@ -165,6 +165,15 @@ describe("buildProjectHtml", () => {
       () => buildProjectHtml({ project: PROJECT, title: "T", height: "1px;color:red" }),
       /Invalid CSS height/,
     );
+  });
+
+  it("includes a sandbox attribute that restricts top-navigation and popups", () => {
+    const html = buildProjectHtml({ project: PROJECT, title: "T" });
+    // The sandbox must be present with only the minimal set of permissions.
+    assert.match(html, /sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"/);
+    // Dangerous permissions must NOT be present.
+    assert.ok(!html.includes("allow-top-navigation"));
+    assert.ok(!html.includes("allow-popups"));
   });
 });
 

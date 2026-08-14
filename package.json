@@ -1,6 +1,6 @@
 {
   "name": "geolibre",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "private": true,
   "description": "GeoLibre: a free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private",
   "workspaces": [
@@ -17,8 +17,8 @@
     "typecheck": "npm run build",
     "lint": "eslint apps packages workers tests",
     "test": "npm run test:frontend",
-    "test:frontend": "node --import ./tests/hooks/register-maplibre-shim.mjs --import tsx --test tests/*.test.ts",
-    "test:frontend:coverage": "node --import ./tests/hooks/register-maplibre-shim.mjs --import tsx --test --experimental-test-coverage --test-coverage-lines=78 --test-coverage-branches=78 --test-coverage-functions=63 --test-coverage-exclude=\"tests/**\" --test-coverage-exclude=\"e2e/**\" --test-coverage-exclude=\"**/*.config.*\" tests/*.test.ts",
+    "test:frontend": "node --import tsx --test tests/*.test.ts",
+    "test:frontend:coverage": "node scripts/coverage-check.mjs",
     "test:backend": "python -m pytest backend/geolibre_server/tests",
     "test:backend:coverage": "python -m pytest backend/geolibre_server/tests --cov=geolibre_server --cov-report=term-missing --cov-fail-under=55",
     "test:worker": "npm run typecheck -w geolibre-viewer-worker && npm run typecheck -w geolibre-collab-worker && npm run typecheck -w geolibre-collab-node && npm test -w geolibre-collab-node && npm run typecheck -w geolibre-tiles-worker && npm run typecheck -w geolibre-ai-proxy-worker",

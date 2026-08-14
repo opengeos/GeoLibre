@@ -111,6 +111,36 @@ if (!process.env.VITE_GEE_OAUTH_CLIENT_ID) {
 // the service worker from the desktop bundle.
 const IS_TAURI_BUILD = !!process.env.TAURI_ENV_PLATFORM;
 
+// Strip ALL external CDN references (unpkg.com, cdn.jsdelivr.net, etc.) from the
+// build output. When set, features that depend on external CDN-hosted resources
+// (storymap HTML export, object detection models, ONNX WASM, 3D Tiles decoders,
+// Pyodide, PGlite, CereusDB, GDAL) are either disabled or degraded. Intended for
+// deployments that cannot reference untrusted external CDNs (e.g. Harmony/Amazon).
+// This implicitly forces GEOLIBRE_PGLITE_CDN=0, GEOLIBRE_CEREUS_CDN=0,
+// GEOLIBRE_GDAL_CDN=0, and GEOLIBRE_DUCKDB_WASM_CDN=0.
+const NO_EXTERNAL_CDN = process.env.GEOLIBRE_NO_EXTERNAL_CDN === "1";
+if (NO_EXTERNAL_CDN) {
+  // `npm run lite:build` exists to move DuckDB-WASM to jsDelivr, because the
+  // bundled .wasm files are the only assets over Cloudflare's 25 MiB per-file
+  // limit. That is the exact opposite of this flag, so the two cannot both be
+  // satisfied. Reject the combination here: silently overriding it to "0"
+  // instead lets the build run to completion and then trip lite-build.mjs's
+  // oversized-asset guard, whose hint blames `duckdbWasmBundlesPlugin` and
+  // sends the reader to the wrong place entirely.
+  if (process.env.GEOLIBRE_DUCKDB_WASM_CDN === "1") {
+    throw new Error(
+      "GEOLIBRE_NO_EXTERNAL_CDN=1 cannot be combined with GEOLIBRE_DUCKDB_WASM_CDN=1 " +
+        "(which `npm run lite:build` sets). The lite build offloads DuckDB-WASM to jsDelivr to stay " +
+        "under Cloudflare's 25 MiB per-file limit, and a no-external-CDN build must bundle it. " +
+        "Use `npm run build` and host on a target without that per-file cap.",
+    );
+  }
+  process.env.GEOLIBRE_PGLITE_CDN = "0";
+  process.env.GEOLIBRE_CEREUS_CDN = "0";
+  process.env.GEOLIBRE_GDAL_CDN = "0";
+  process.env.GEOLIBRE_DUCKDB_WASM_CDN = "0";
+}
+
 // PGlite + PostGIS is ~25 MB raw and weighs ~22 MB inside the Tauri binary
 // (postgis.tar is pre-gzipped, so brotli can't shrink it — it was the entire
 // 42 → 63 MB binary regression). By default it is fetched from jsDelivr at
@@ -910,6 +940,7 @@ export default defineConfig({
     __GEOLIBRE_STORE_BUILD__: JSON.stringify(IS_STORE_BUILD),
     __GEOLIBRE_MAS_BUILD__: JSON.stringify(IS_MAS_BUILD),
     __GEOLIBRE_EMBED_BUILD__: JSON.stringify(IS_EMBED),
+    __NO_EXTERNAL_CDN__: JSON.stringify(NO_EXTERNAL_CDN),
     __PGLITE_CDN_URL__: JSON.stringify(PGLITE_CDN_URL),
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),

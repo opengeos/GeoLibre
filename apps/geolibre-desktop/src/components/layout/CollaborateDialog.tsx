@@ -15,6 +15,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
+import { fetchCollabCapabilities } from "../../lib/collab-client";
 import { CollaborationParticipantRow } from "./CollaborationParticipantRow";
 
 // A small fixed palette so participant colors stay distinct and legible. Each
@@ -61,6 +62,11 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
   const copyTimer = useRef<number | null>(null);
+  // Whether the relay can verify a sign-in. Probed when the dialog opens
+  // because the "require a signed-in account" option has to be decided before
+  // a session exists; false until the probe answers, so the option is hidden
+  // rather than briefly offered on a relay that would reject it.
+  const [identitySupported, setIdentitySupported] = useState(false);
 
   // Seed from a prior session (or a ?collab= deep link) when the dialog opens.
   useEffect(() => {
@@ -86,6 +92,19 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
       window.history.replaceState({}, "", url.toString());
     }
   }, [open, collaboration.selfName, collaboration.selfColor]);
+
+  // Probe relay capabilities on open. Ignored if the dialog closes first, so a
+  // slow relay can't flip the option on after the user has moved away.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void fetchCollabCapabilities().then((caps) => {
+      if (!cancelled) setIdentitySupported(caps.identitySupported);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(
     () => () => {
@@ -114,6 +133,8 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
       });
   };
 
+  const [requireIdentity, setRequireIdentity] = useState(false);
+
   const handleStart = async () => {
     if (!name.trim()) {
       setError(t("collaborate.nameRequired"));
@@ -122,12 +143,15 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
     setBusy(true);
     setError(null);
     try {
-      await api.start(name.trim(), color, mode);
+      await api.start(name.trim(), color, mode, requireIdentity);
     } catch (err) {
       // Show a localized message; keep the raw error in the console for
-      // diagnostics (collab-client throws human-readable English strings).
+      // diagnostics. When the relay sends a specific rejection reason
+      // (identity-required, forbidden, etc.) it arrives as err.message;
+      // fall back to the generic string for unexpected failures.
       console.error("[GeoLibre] Collaboration error", err);
-      setError(t("collaborate.connectFailed"));
+      const message = err instanceof Error && err.message ? err.message : undefined;
+      setError(message || t("collaborate.connectFailed"));
     } finally {
       setBusy(false);
     }
@@ -147,12 +171,9 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
     try {
       await api.join(code.trim(), name.trim(), color);
     } catch (err) {
-      // Show a localized message; keep the raw error in the console for
-      // diagnostics (collab-client throws human-readable English strings).
       console.error("[GeoLibre] Collaboration error", err);
-      setError(t("collaborate.connectFailed"));
-      // The invite link could not connect (e.g. an expired or invalid code), so
-      // reveal the full layout and let the user fix the code or host instead.
+      const message = err instanceof Error && err.message ? err.message : undefined;
+      setError(message || t("collaborate.connectFailed"));
       setInvited(false);
     } finally {
       setBusy(false);
@@ -184,13 +205,13 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
             onDismiss={() => onOpenChange(false)}
             onSetMode={api.setMode}
             onSetParticipantMode={api.setParticipantMode}
+            onKickParticipant={api.kickParticipant}
+            onBlockParticipant={api.blockParticipant}
+            onSetSessionConfig={api.setSessionConfig}
             onSetFollowHost={api.setFollowHost}
           />
         ) : (
           <div className="space-y-4">
-            {/* Name and color feed both actions below, so group them in a
-                shaded panel above the cards to read as shared profile inputs
-                rather than belonging to either Start or Join (#706). */}
             <div className="space-y-3 rounded-md border bg-muted/40 p-3">
               <div className="space-y-1.5">
                 <Label htmlFor="collab-name">{t("collaborate.displayName")}</Label>
@@ -206,8 +227,6 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
               </div>
               <div className="space-y-1.5">
                 <Label>{t("collaborate.color")}</Label>
-                {/* Full panel width keeps every swatch on one row instead of
-                    wrapping a lone dot to a second line (#706). */}
                 <div className="flex flex-wrap gap-2 pt-1">
                   {COLOR_PALETTE.map((c) => (
                     <button
@@ -216,9 +235,6 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
                       aria-label={c.name}
                       aria-pressed={color === c.hex}
                       onClick={() => setColor(c.hex)}
-                      // Selection is an outer ring (offset from the swatch), so
-                      // the colored circle stays the same size — a border would
-                      // inset the fill and make the selected one look smaller.
                       className={`h-6 w-6 rounded-full transition ${
                         color === c.hex
                           ? "ring-2 ring-offset-2 ring-offset-background ring-foreground"
@@ -231,10 +247,6 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
               </div>
             </div>
 
-            {/* An invited participant (arrived via a `?collab=` link) only needs
-                to join, so collapse the layout to a single Join action and hide
-                the "Start a session" controls that are irrelevant to them
-                (#753). They can still fall back to hosting via the link below. */}
             {invited ? (
               <div className="space-y-3 rounded-md border p-3">
                 <div className="space-y-1">
@@ -269,9 +281,6 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
                 </Button>
                 <button
                   type="button"
-                  // Keep the prefilled `code` so the join field stays populated
-                  // if the user changes their mind; the full layout shows Start
-                  // as the primary action, so leaving it is non-destructive.
                   onClick={() => setInvited(false)}
                   disabled={busy}
                   className="cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline disabled:cursor-default disabled:opacity-50"
@@ -295,6 +304,18 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
                       <option value="view-only">{t("collaborate.modeViewOnly")}</option>
                     </Select>
                   </div>
+                  {identitySupported && (
+                    <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground pt-1">
+                      <input
+                        type="checkbox"
+                        checked={requireIdentity}
+                        onChange={(e) => setRequireIdentity(e.target.checked)}
+                        disabled={busy}
+                        className="h-3.5 w-3.5 rounded border"
+                      />
+                      {(t as (key: string) => string)("collaborate.requireIdentityLabel")}
+                    </label>
+                  )}
                   <Button
                     type="button"
                     onClick={() => void handleStart()}
@@ -333,9 +354,6 @@ export function CollaborateDialog({ open, onOpenChange, api }: CollaborateDialog
               </>
             )}
 
-            {/* Show local validation errors and connect failures, the latter
-                arriving asynchronously in the store (the WebSocket handshake
-                fails after this dialog's call already resolved). */}
             {(error || collaboration.error) && (
               <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">
                 {error || collaboration.error}
@@ -356,6 +374,9 @@ function ActiveSession({
   onDismiss,
   onSetMode,
   onSetParticipantMode,
+  onKickParticipant,
+  onBlockParticipant,
+  onSetSessionConfig,
   onSetFollowHost,
 }: {
   shareLink: string;
@@ -365,6 +386,9 @@ function ActiveSession({
   onDismiss: () => void;
   onSetMode: (mode: CollaborationMode) => void;
   onSetParticipantMode: (clientId: string, canEdit: boolean) => void;
+  onKickParticipant?: (clientId: string) => void;
+  onBlockParticipant?: (clientId: string) => void;
+  onSetSessionConfig?: (config: { requireIdentity?: boolean }) => void;
   onSetFollowHost: (enabled: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -387,8 +411,6 @@ function ActiveSession({
         )}
       </div>
 
-      {/* Cameras are independent by default; a non-host can opt to follow the
-          host's viewport (presenter mode). */}
       {!isHost && (
         <label className="flex cursor-pointer items-center gap-2 text-sm">
           <input
@@ -398,6 +420,18 @@ function ActiveSession({
             className="h-4 w-4 accent-foreground"
           />
           {t("collaborate.followHost")}
+        </label>
+      )}
+
+      {isHost && collaboration.identitySupported && (
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={collaboration.requireIdentity}
+            onChange={(e) => onSetSessionConfig?.({ requireIdentity: e.target.checked })}
+            className="h-3.5 w-3.5 rounded border"
+          />
+          {(t as (key: string) => string)("collaborate.requireIdentityLabel")}
         </label>
       )}
 
@@ -441,7 +475,6 @@ function ActiveSession({
             )}
           </Button>
         </div>
-        {/* Only the host invites others, so the scan-to-join QR is host-only. */}
         {isHost && (
           <div className="flex flex-col items-center gap-1.5 pt-1">
             <div className="rounded-md bg-white p-2">
@@ -472,6 +505,8 @@ function ActiveSession({
               isSelf={p.clientId === collaboration.clientId}
               canManage={isHost}
               onSetParticipantMode={onSetParticipantMode}
+              onKickParticipant={onKickParticipant}
+              onBlockParticipant={onBlockParticipant}
             />
           ))}
         </ul>
@@ -483,12 +518,7 @@ function ActiveSession({
         </p>
       )}
 
-      {/* Primary way out of the dialog: dismiss it while keeping the session
-          live, so the host isn't tempted to use the "X" (which they fear ends
-          the session) to get back to the map (#754). */}
       <Button type="button" className="w-full" onClick={onDismiss}>
-        {/* A view-only guest cannot edit, so "collaborate" would mislead; offer
-            "watch" wording for that case. */}
         {isHost || collaboration.mode === "co-edit"
           ? t("collaborate.goToMap")
           : t("collaborate.goToMapViewOnly")}

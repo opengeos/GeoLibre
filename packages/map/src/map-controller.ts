@@ -3,7 +3,10 @@ import {
   DEFAULT_BASEMAP,
   DEFAULT_PROJECT_PREFERENCES,
   getPlanetaryBasemapByStyleUrl,
+  getRegionalBasemapByStyleUrl,
+  isRegionalBasemapSentinel,
   PLANETARY_BASEMAP_SENTINEL_PREFIX,
+  type RegionalBasemap,
   scaleAltitudeToActiveBody,
   useAppStore,
 } from "@geolibre/core";
@@ -231,6 +234,21 @@ function createBlankMapStyle(): maplibregl.StyleSpecification {
   };
 }
 
+/**
+ * Whether a basemap style URL is one of GeoLibre's internal sentinels rather
+ * than something fetchable. Every sentinel kind — planetary (`geolibre://
+ * basemap/`), offline (`geolibre://offline-basemap/`), and regional
+ * (`geolibre://regional-basemap/`) — is expanded to an inline style by
+ * {@link resolveMapStyle} and would throw if handed to `fetch`.
+ *
+ * Matching on the scheme rather than enumerating the three prefixes keeps a
+ * fourth sentinel kind from silently reintroducing that fetch, and covers a
+ * sentinel whose id no longer resolves (which the per-kind lookups miss).
+ */
+function isGeoLibreSentinelStyleUrl(styleUrl: string | undefined): boolean {
+  return Boolean(styleUrl?.startsWith("geolibre://"));
+}
+
 function resolveMapStyle(styleUrl: string | undefined): string | maplibregl.StyleSpecification {
   if (styleUrl === BLANK_BASEMAP) return createBlankMapStyle();
   const offline = getOfflineBasemapStyle(styleUrl);
@@ -259,7 +277,66 @@ function resolveMapStyle(styleUrl: string | undefined): string | maplibregl.Styl
     console.warn(`Unknown planetary basemap "${styleUrl}"; falling back to the default basemap.`);
     return DEFAULT_BASEMAP;
   }
+  const regional = getRegionalBasemapByStyleUrl(styleUrl);
+  if (regional) return createRegionalMapStyle(regional);
+  // Same guard as the planetary path: a regional sentinel that no longer
+  // resolves must not be handed to MapLibre as a style URL.
+  if (isRegionalBasemapSentinel(styleUrl)) {
+    console.warn(`Unknown regional basemap "${styleUrl}"; falling back to the default basemap.`);
+    return DEFAULT_BASEMAP;
+  }
   return styleUrl ?? DEFAULT_BASEMAP;
+}
+
+/**
+ * A raster style for a {@link RegionalBasemap} — today the mainland-China
+ * providers, whose tiles are ordinary Web-Mercator images (XYZ, or TMS when
+ * `scheme` says so). A basemap with an `overlayTileUrl` (Amap Hybrid) stacks
+ * its transparent roads-and-labels tiles above the imagery, so one selection
+ * gives a labeled satellite basemap.
+ *
+ * Unlike the planetary styles this uses a light background rather than black:
+ * these cover Earth, so a gap should read as missing map, not as space.
+ */
+function createRegionalMapStyle(basemap: RegionalBasemap): maplibregl.StyleSpecification {
+  const rasterSource = (tiles: string, withAttribution: boolean) =>
+    ({
+      type: "raster",
+      tiles: [tiles],
+      tileSize: 256,
+      maxzoom: basemap.maxZoom,
+      ...(basemap.scheme ? { scheme: basemap.scheme } : {}),
+      // Credit the provider once; repeating it on the overlay would print the
+      // same attribution twice in the map's attribution control.
+      ...(withAttribution ? { attribution: basemap.attribution } : {}),
+    }) satisfies maplibregl.RasterSourceSpecification;
+
+  return {
+    version: 8,
+    sources: {
+      "regional-basemap": rasterSource(basemap.tileUrl, true),
+      ...(basemap.overlayTileUrl
+        ? { "regional-basemap-overlay": rasterSource(basemap.overlayTileUrl, false) }
+        : {}),
+    },
+    layers: [
+      {
+        id: BLANK_BACKGROUND_LAYER_ID,
+        type: "background",
+        paint: { "background-color": BLANK_BACKGROUND_COLOR },
+      },
+      { id: "regional-basemap", type: "raster", source: "regional-basemap" },
+      ...(basemap.overlayTileUrl
+        ? [
+            {
+              id: "regional-basemap-overlay",
+              type: "raster" as const,
+              source: "regional-basemap-overlay",
+            },
+          ]
+        : []),
+    ],
+  };
 }
 
 /**
@@ -970,7 +1047,11 @@ export class MapController {
 
     if (!isMapboxStyleUrl(url)) {
       this.beginStyleSwap();
-      map.setStyle(resolveMapStyle(url));
+      // GeoLibre deliberately rebuilds every style-owned control and layer in
+      // style.load, so diffing cannot preserve any work for us. Disabling it
+      // also avoids MapLibre's noisy fallback when a second basemap arrives
+      // before the current style has finished loading.
+      map.setStyle(resolveMapStyle(url), { diff: false });
       return;
     }
 
@@ -980,7 +1061,7 @@ export class MapController {
       .then((style) => {
         if (this.map !== map || this.styleGeneration !== generation) return;
         this.beginStyleSwap();
-        map.setStyle(style, { validate: false });
+        map.setStyle(style, { diff: false, validate: false });
       })
       .catch((error: unknown) => {
         if (this.map !== map || this.styleGeneration !== generation) return;
@@ -1234,10 +1315,28 @@ export class MapController {
     const userStyleLayerIds = new Set(
       this.syncedLayers.flatMap((layer) => this.getCandidateStyleLayers(layer).map(({ id }) => id)),
     );
+    // A control that rebuilds its own render layers (maplibre-gl-vector swaps
+    // circle <-> heatmap <-> cluster layers on a point-renderer change) does so
+    // asynchronously, so `metadata.nativeLayerIds` can name layers the map no
+    // longer has while the live replacements are missing from the set above.
+    // Those replacements are still the user's data — always drawn from the
+    // layer's own source — so claim every style layer that reads one of the
+    // synced layers' sources. Without this the Background pass mistakes them
+    // for basemap layers: it pins their opacity to whatever it first saw
+    // (breaking the panel's opacity slider) and forces them back to the
+    // basemap's visibility (re-showing a hidden heatmap, #1882). Reuse
+    // getLayerSourceIds so this stays in step with the rest of the controller:
+    // it also covers the singular `metadata.sourceId` some registrations use.
+    const userSourceIds = new Set(
+      this.syncedLayers.flatMap((layer) => this.getLayerSourceIds(layer)),
+    );
     const nonBasemapStyleLayerIds = new Set(NON_BASEMAP_STYLE_LAYER_IDS);
 
     return (map.getStyle().layers ?? []).filter(
-      (layer) => !userStyleLayerIds.has(layer.id) && !nonBasemapStyleLayerIds.has(layer.id),
+      (layer) =>
+        !userStyleLayerIds.has(layer.id) &&
+        !nonBasemapStyleLayerIds.has(layer.id) &&
+        !("source" in layer && typeof layer.source === "string" && userSourceIds.has(layer.source)),
     );
   }
 
@@ -1793,16 +1892,14 @@ export class MapController {
     this.layerControlSignature = this.createLayerControlSignature(layerControlConfig);
     this.layerControl = new LayerControl({
       // The layer control fetches this URL to introspect the basemap's layers.
-      // Both planetary and offline basemaps use a non-fetchable `geolibre://`
-      // sentinel (expanded to an inline style by resolveMapStyle), so hand the
-      // control the blank sentinel instead — like blank/raster basemaps it then
-      // skips the fetch (which would otherwise throw "Failed to fetch" on the
+      // Planetary, offline, and regional basemaps all use a non-fetchable
+      // `geolibre://` sentinel (expanded to an inline style by resolveMapStyle),
+      // so hand the control the blank sentinel instead — like blank/raster
+      // basemaps it then skips the fetch (which would otherwise throw on the
       // sentinel URL) and shows a single background entry.
-      basemapStyleUrl:
-        getPlanetaryBasemapByStyleUrl(this.basemapStyleUrl) ||
-        isOfflineBasemapSentinel(this.basemapStyleUrl)
-          ? BLANK_BASEMAP
-          : this.basemapStyleUrl,
+      basemapStyleUrl: isGeoLibreSentinelStyleUrl(this.basemapStyleUrl)
+        ? BLANK_BASEMAP
+        : this.basemapStyleUrl,
       collapsed: true,
       panelWidth: 340,
       panelMinWidth: 240,

@@ -149,6 +149,7 @@ import {
   Layers,
   Library,
   Locate,
+  Lock,
   Map as MapIcon,
   MoreHorizontal,
   MousePointerClick,
@@ -170,6 +171,7 @@ import {
   TableProperties,
   Timer,
   Trash2,
+  Unlock,
   Upload,
   X,
   ZoomIn,
@@ -228,12 +230,15 @@ import {
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { isTauri } from "../../lib/is-tauri";
 import { getNetcdfLayerState } from "../../lib/netcdf-image-symbology";
+import { participantCanEditLayer } from "../../lib/collab-protocol";
+import type { CollaborationApi } from "../../hooks/useCollaboration";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
 import { LayerSwatchIcon } from "./LayerSwatchIcon";
 
 interface LayerPanelProps {
   mapControllerRef: RefObject<MapController | null>;
+  collaborationApi?: CollaborationApi;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   /** Id of the layer currently in a geometry-edit session, or null. */
   geometryEditLayerId: string | null;
@@ -611,6 +616,7 @@ function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
 
 export function LayerPanel({
   mapControllerRef,
+  collaborationApi,
   onResizeStart,
   geometryEditLayerId,
   onToggleGeometryEdit,
@@ -706,6 +712,40 @@ export function LayerPanel({
   const setRasterAttributeTableOpen = useAppStore((s) => s.setRasterAttributeTableOpen);
   const setLoadEditorFeaturesOpen = useAppStore((s) => s.setLoadEditorFeaturesOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
+  const collaboration = useAppStore((s) => s.collaboration);
+  const selfParticipant = useMemo(() => {
+    if (!collaboration.isActive || !collaboration.clientId) return null;
+    return collaboration.participants.find((p) => p.clientId === collaboration.clientId) ?? null;
+  }, [collaboration.isActive, collaboration.clientId, collaboration.participants]);
+
+  const canEditLayer = useCallback(
+    (layerId: string): boolean => {
+      if (!collaboration.isActive) return true;
+      if (collaborationApi?.canEditLayer) return collaborationApi.canEditLayer(layerId);
+      if (!selfParticipant) {
+        if (collaboration.role === "host") return true;
+        return (
+          collaboration.mode === "co-edit" &&
+          !(collaboration.lockedLayerIds ?? []).includes(layerId)
+        );
+      }
+      return participantCanEditLayer(
+        selfParticipant,
+        collaboration.mode,
+        layerId,
+        collaboration.lockedLayerIds ?? [],
+      );
+    },
+    [
+      collaboration.isActive,
+      collaboration.role,
+      collaboration.mode,
+      collaboration.lockedLayerIds,
+      selfParticipant,
+      collaborationApi,
+    ],
+  );
+
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
@@ -3087,6 +3127,9 @@ export function LayerPanel({
             // dismissed (and its on-map icon removed) when closed.
             const canEditRasterStyle = layer.metadata.sourceKind === RASTER_SOURCE_KIND;
             const canRefresh = isRefreshableLayer(layer);
+            const isLayerLocked =
+              collaboration.isActive && (collaboration.lockedLayerIds ?? []).includes(layer.id);
+            const layerEditable = canEditLayer(layer.id);
             const refreshConfig = getLayerRefreshConfig(layer);
             // Live SQL query layers (issue #1295) refresh by re-running their
             // stored DuckDB statement and offer a shortcut to edit it.
@@ -3238,16 +3281,26 @@ export function LayerPanel({
                             groupHidden ? "text-muted-foreground" : ""
                           }`}
                           title={
-                            groupHidden
-                              ? `${t("layers.hiddenByGroup")} — ${t("layers.doubleClickToRename")}`
-                              : t("layers.doubleClickToRename")
+                            isLayerLocked
+                              ? t("collaborate.layerLockedHint")
+                              : groupHidden
+                                ? `${t("layers.hiddenByGroup")} — ${t("layers.doubleClickToRename")}`
+                                : t("layers.doubleClickToRename")
                           }
                           onDoubleClick={(e: ReactMouseEvent) => {
                             e.stopPropagation();
-                            beginRename(layer);
+                            if (layerEditable) beginRename(layer);
                           }}
                         >
                           {layer.name}
+                        </span>
+                      )}
+                      {isLayerLocked && (
+                        <span title={t("collaborate.layerLockedHint")}>
+                          <Lock
+                            className="h-3 w-3 shrink-0 text-amber-500"
+                            aria-label={t("collaborate.layerLockedHint")}
+                          />
                         </span>
                       )}
                       <span className="shrink-0 text-[10px] uppercase text-muted-foreground">
@@ -3396,13 +3449,40 @@ export function LayerPanel({
                           align="end"
                           onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                         >
-                          {/* Rename is always available — name is a display-only
-                          label, so no per-layer-type guard is needed here.
+                          {collaboration.isActive && collaboration.role === "host" && (
+                            <>
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  const currentLocks = collaboration.lockedLayerIds ?? [];
+                                  const nextLocks = currentLocks.includes(layer.id)
+                                    ? currentLocks.filter((id) => id !== layer.id)
+                                    : [...currentLocks, layer.id];
+                                  collaborationApi?.setLayerLocks(nextLocks);
+                                }}
+                              >
+                                {isLayerLocked ? (
+                                  <>
+                                    <Unlock className="me-2 h-3.5 w-3.5 text-amber-500" />
+                                    {t("collaborate.unlockLayer")}
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock className="me-2 h-3.5 w-3.5" />
+                                    {t("collaborate.lockLayer")}
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                            </>
+                          )}
+                          {/* Rename is available when layer is editable.
                           preventDefault keeps the menu's default close from
                           racing autoFocus on the rename input. */}
                           <DropdownMenuItem
+                            disabled={!layerEditable}
                             onSelect={(e: Event) => {
                               e.preventDefault();
+                              if (!layerEditable) return;
                               beginRename(layer);
                             }}
                           >
@@ -3476,7 +3556,9 @@ export function LayerPanel({
                           {canMaterializeDuckDB && (
                             <>
                               <DropdownMenuItem
+                                disabled={!layerEditable}
                                 onSelect={() => {
+                                  if (!layerEditable) return;
                                   onMaterializeDuckDBLayer(layer);
                                 }}
                               >
@@ -3488,8 +3570,9 @@ export function LayerPanel({
                           )}
                           {(canEditGeometry || geometryEditActive) && (
                             <DropdownMenuItem
-                              disabled={geometryEditElsewhere}
+                              disabled={geometryEditElsewhere || !layerEditable}
                               onSelect={() => {
+                                if (!layerEditable) return;
                                 selectLayer(layer.id);
                                 if (identifyActive) setIdentifyLayer(null);
                                 onToggleGeometryEdit(layer.id);
@@ -3503,7 +3586,9 @@ export function LayerPanel({
                           )}
                           {canLoadIntoEditor && (
                             <DropdownMenuItem
+                              disabled={!layerEditable}
                               onSelect={() => {
+                                if (!layerEditable) return;
                                 selectLayer(layer.id);
                                 setLoadEditorFeaturesOpen(true, layer.id);
                               }}
@@ -4026,11 +4111,17 @@ export function LayerPanel({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-destructive"
-                        title={t("layers.removeLayer")}
+                        className="h-7 w-7 text-destructive disabled:opacity-40"
+                        title={
+                          !layerEditable
+                            ? t("collaborate.layerLockedHint")
+                            : t("layers.removeLayer")
+                        }
                         aria-label={t("layers.removeLayer")}
+                        disabled={!layerEditable}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (!layerEditable) return;
                           setLayerPendingRemoval(layer);
                         }}
                       >

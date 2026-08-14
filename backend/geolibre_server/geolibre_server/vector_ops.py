@@ -89,6 +89,33 @@ def _to_feature_collection(gdf: Any) -> dict:
     return json.loads(gdf.to_json())
 
 
+def _estimate_metric_crs(gdf: Any) -> Any:
+    """Estimate a local metric (UTM) CRS, guarding against antimeridian crossings.
+
+    ``estimate_utm_crs`` picks a zone from the mean of the layer's
+    ``total_bounds`` longitudes, so a layer spanning the antimeridian (features
+    at, say, +179° and -179°) centers near 0° longitude — the opposite side of
+    the planet — and metric results come out severely distorted.
+
+    The >180° span is a heuristic, and deliberately measured layer-wide to match
+    the granularity of what it guards: a layer already split into individually
+    non-crossing features still yields the same wrong zone, so a per-geometry
+    test would wave it through. The cost of that choice is that a single feature
+    genuinely spanning over 180° of longitude without touching the dateline is
+    rejected as well.
+    """
+    minx, _, maxx, _ = gdf.total_bounds
+    span = maxx - minx
+    if span > 180.0:
+        raise ValueError(
+            f"Input layer crosses the antimeridian (longitude span > 180°, "
+            f"got {span:.1f}°). Split the geometry at the dateline into "
+            "per-hemisphere layers, or reproject to an explicit projected CRS, "
+            "before running metric operations."
+        )
+    return gdf.estimate_utm_crs()
+
+
 # Every tool handler below shares the signature
 # ``(geojson, overlay, parameters) -> (feature_collection, messages)`` so they
 # can be dispatched uniformly (see _DISPATCH). Single-layer tools accept but
@@ -116,7 +143,7 @@ def _buffer(
         raise ValueError("Buffer distance must be >= 0")
     # Buffer in a local metric CRS so the distance is in real-world meters,
     # then reproject the result back to WGS84.
-    metric_crs = gdf.estimate_utm_crs()
+    metric_crs = _estimate_metric_crs(gdf)
     projected = gdf.to_crs(metric_crs)
     projected["geometry"] = projected.geometry.buffer(meters)
     return (
@@ -132,7 +159,7 @@ def _centroids(
     gdf = _load_gdf(geojson, "Input layer")
     # Compute centroids in a local metric CRS (like _buffer) so the result is
     # accurate for large or elongated features, then reproject back to WGS84.
-    metric_crs = gdf.estimate_utm_crs()
+    metric_crs = _estimate_metric_crs(gdf)
     projected = gdf.to_crs(metric_crs)
     result = projected.copy()
     result["geometry"] = projected.geometry.centroid

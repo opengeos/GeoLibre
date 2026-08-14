@@ -13,6 +13,9 @@ import {
   authorizeHostAction,
   authorizeSnapshot,
   clearParticipantOverrides,
+  diffLockedLayers,
+  getParticipantKey,
+  isIdentityConfigured,
   normalizeMode,
   participantCanEdit,
   preserveStoredComments,
@@ -24,10 +27,14 @@ import {
   toWireParticipant,
   validateComment,
   validateReply,
+  verifyIdentityToken,
   isBoundedId,
   type ClientMessage,
   type CollabChatMessage,
+  type CollabInvite,
   type CollaborationMode,
+  type CollaborationRole,
+  type ParticipantIdentity,
   type PresenceEntry,
   type ServerMessage,
   type SessionParticipant,
@@ -43,9 +50,56 @@ const MAX_SESSION_BODY_BYTES = 16_384;
 const DEFAULT_IDLE_TTL_MS = 2 * 60 * 60 * 1000;
 const ENCODER = new TextEncoder();
 
+const MAX_RATE_LIMIT_KEYS = 10_000;
+const SWEEP_INTERVAL_MS = 60_000;
+
+function isAllowedOrigin(
+  originHeader: string | undefined,
+  envAllowed = process.env.ALLOWED_ORIGINS,
+): boolean {
+  if (!originHeader) return true;
+  const allowedList = envAllowed
+    ? envAllowed
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [
+        "https://geolibre.app",
+        "https://collab.geolibre.app",
+        "http://localhost",
+        "http://127.0.0.1",
+        "tauri://localhost",
+      ];
+
+  try {
+    const originUrl = new URL(originHeader);
+    const host = originUrl.hostname;
+    if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost")) return true;
+    return allowedList.some((allowed) => {
+      if (allowed === "*") return true;
+      try {
+        const allowedUrl = new URL(allowed);
+        return originUrl.origin === allowedUrl.origin;
+      } catch {
+        return originHeader === allowed || host === allowed;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
 interface Peer {
   socket: WebSocket;
   participant?: SessionParticipant;
+  /**
+   * Tail of this peer's frame-handling chain. `handleMessage` became async when
+   * identity verification did (Web Crypto has no sync HMAC), and `ws` delivers
+   * frames without waiting, so frames are chained rather than started
+   * concurrently — otherwise a `snapshot` sent right behind a `join` could
+   * overtake it and be rejected with "Send a join message first".
+   */
+  queue?: Promise<void>;
 }
 
 interface LiveSession {
@@ -60,6 +114,14 @@ export interface RelayOptions {
   dbPath?: string;
   maxSnapshotBytes?: number;
   idleTtlMs?: number;
+  trustProxy?: boolean;
+  /**
+   * HMAC-SHA256 secret shared with this deployment's identity issuer, normally
+   * from `COLLAB_IDENTITY_SECRET`. Unset disables identity: `identityToken` is
+   * ignored, every joiner is anonymous, and "require a signed-in account"
+   * cannot be turned on.
+   */
+  identitySecret?: string;
 }
 
 function positive(value: string | undefined, fallback: number): number {
@@ -100,21 +162,46 @@ export function createRelay(options: RelayOptions = {}): {
     options.maxSnapshotBytes ?? positive(process.env.COLLAB_MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_BYTES);
   const idleTtlMs =
     options.idleTtlMs ?? positive(process.env.COLLAB_IDLE_TTL_MS, DEFAULT_IDLE_TTL_MS);
+  const trustProxy =
+    options.trustProxy ?? (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1");
+  const identitySecret = options.identitySecret ?? process.env.COLLAB_IDENTITY_SECRET;
+  const identitySupported = isIdentityConfigured(identitySecret);
   const store = new SessionStore(dbPath);
   const sessions = new Map<string, LiveSession>();
+  const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+  let lastRateLimitSweep = 0;
+
+  function checkRateLimit(key: string, maxRequests = 10, windowMs = 60_000): boolean {
+    const now = Date.now();
+    if (now - lastRateLimitSweep > SWEEP_INTERVAL_MS || rateLimitMap.size >= MAX_RATE_LIMIT_KEYS) {
+      for (const [k, rec] of rateLimitMap.entries()) {
+        if (now > rec.resetAt) rateLimitMap.delete(k);
+      }
+      while (rateLimitMap.size >= MAX_RATE_LIMIT_KEYS) {
+        const oldestKey = rateLimitMap.keys().next().value;
+        if (oldestKey === undefined) break;
+        rateLimitMap.delete(oldestKey);
+      }
+      lastRateLimitSweep = now;
+    }
+    const record = rateLimitMap.get(key);
+    if (!record || now > record.resetAt) {
+      rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
+      return true;
+    }
+    if (record.count >= maxRequests) {
+      return false;
+    }
+    record.count += 1;
+    return true;
+  }
   const wss = new WebSocketServer({ noServer: true, maxPayload: maxSnapshotBytes + 64_000 });
 
-  // `POST /sessions` is unauthenticated and inserts a row per call, while the
-  // only delete path runs after a peer has connected *and* disconnected. A code
-  // nobody ever joins would otherwise sit in SQLite forever.
   const sweep = (): void => store.deleteStaleBefore(Date.now() - idleTtlMs, sessions.keys());
   sweep();
   const sweepTimer = setInterval(sweep, Math.min(idleTtlMs, 15 * 60 * 1000));
   sweepTimer.unref();
 
-  // A TCP connection dropped without a close frame (NAT or proxy idle timeout)
-  // fires neither "close" nor "error", so the peer would linger in the roster
-  // forever and keep peers.size above zero, which blocks the idle cleanup above.
   const alive = new WeakSet<WebSocket>();
   const heartbeat = setInterval(() => {
     for (const session of sessions.values()) {
@@ -176,20 +263,15 @@ export function createRelay(options: RelayOptions = {}): {
     }
   }
 
-  function handleMessage(
+  async function handleMessage(
     id: string,
     session: LiveSession,
     peer: Peer,
     raw: WebSocket.RawData,
-  ): void {
-    // ws delivers text as Buffer too; isBinary is handled at the event site.
+  ): Promise<void> {
     const text = raw.toString();
     let message: ClientMessage;
     try {
-      // `null`, `1` and `"x"` are all valid JSON, so parsing alone does not
-      // guarantee an object. Reading `.type` off a non-object throws inside the
-      // ws "message" listener, which is an uncaught exception that takes the
-      // whole relay -- and every other session it hosts -- down with it.
       const parsed: unknown = JSON.parse(text);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("not an object");
@@ -199,13 +281,7 @@ export function createRelay(options: RelayOptions = {}): {
       send(peer, { type: "error", code: "bad-message", message: "Malformed JSON." });
       return;
     }
-    // Presence is by far the highest-frequency frame (one per cursor move, per
-    // participant) and needs no persisted state, so it is answered before the
-    // store read below. store.get is a synchronous SQLite SELECT * that pulls
-    // the snapshot and chat blobs and blocks the event loop; because this relay
-    // hosts every session in one process, doing that per presence frame would
-    // add latency to every *other* session too. The Cloudflare DO can afford the
-    // per-message read because each session is its own isolated actor.
+
     if (message.type === "presence" && peer.participant) {
       const cursor = sanitizeCursor(message.cursor);
       const view = sanitizeView(message.view);
@@ -223,16 +299,91 @@ export function createRelay(options: RelayOptions = {}): {
 
     if (message.type === "join") {
       if (peer.participant) return;
-      const role =
+      let role: CollaborationRole =
         message.hostToken && persisted.hostToken && message.hostToken === persisted.hostToken
           ? "host"
           : "guest";
-      peer.participant = {
-        clientId: randomUUID(),
-        displayName: sanitizeDisplayName(message.displayName),
+
+      let inviteToken: string | undefined = undefined;
+      let matchedInvite: CollabInvite | undefined = undefined;
+      if (role === "guest" && message.inviteToken && typeof message.inviteToken === "string") {
+        const invites = store.getInvites(id);
+        const inv = invites.find((i) => i.token === message.inviteToken && !i.revoked);
+        if (inv && (!inv.maxUses || inv.useCount < inv.maxUses)) {
+          inviteToken = inv.token;
+          matchedInvite = inv;
+        }
+      }
+
+      // Signature-checked against the configured issuer secret, so `identity`
+      // is only ever non-null for a credential this deployment actually minted.
+      // With no secret configured it is null for every token, making every
+      // joiner anonymous rather than trusting self-reported claims.
+      const identity: ParticipantIdentity | null = await verifyIdentityToken(
+        message.identityToken,
+        identitySecret,
+      );
+
+      if (persisted.requireIdentity && !identity && role !== "host") {
+        send(peer, {
+          type: "error",
+          code: "identity-required",
+          message: "Sign-in required to join this session.",
+        });
+        return;
+      }
+
+      const socketClientId = randomUUID();
+      const joiningParticipant: SessionParticipant = {
+        clientId: socketClientId,
+        displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
         color: sanitizeColor(message.color),
         role,
+        identity,
+        inviteToken,
       };
+      const participantKey = getParticipantKey(joiningParticipant);
+
+      if (store.isBlockedKey(id, participantKey)) {
+        send(peer, {
+          type: "error",
+          code: "forbidden",
+          message: "You have been blocked from this session by the host.",
+        });
+        return;
+      }
+
+      const durableOverride = store.getDurableOverride(id, participantKey);
+      let initialOverride: boolean | undefined = undefined;
+      if (durableOverride !== undefined) {
+        initialOverride = durableOverride;
+      } else if (matchedInvite) {
+        initialOverride = matchedInvite.role === "co-edit";
+      }
+
+      if (matchedInvite) {
+        // Use an atomic SQL UPDATE to close the TOCTOU window: the initial
+        // maxUses check (line 312) happened before `await verifyIdentityToken`,
+        // and another join could have consumed the invite in the meantime.
+        if (!store.atomicClaimInvite(id, matchedInvite.token)) {
+          // Invite was consumed or revoked between the initial check and now.
+          matchedInvite = undefined;
+          inviteToken = undefined;
+        }
+      }
+
+      peer.participant = {
+        clientId: socketClientId,
+        displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
+        color: sanitizeColor(message.color),
+        role,
+        ...(initialOverride !== undefined ? { editOverride: initialOverride } : {}),
+        identity,
+        inviteToken,
+      };
+
+      const welcomeInvites = role === "host" ? store.getInvites(id) : undefined;
+
       send(peer, {
         type: "welcome",
         clientId: peer.participant.clientId,
@@ -243,6 +394,10 @@ export function createRelay(options: RelayOptions = {}): {
         presence: Object.fromEntries(session.presence),
         chat: persisted.chat,
         rev: persisted.rev,
+        requireIdentity: persisted.requireIdentity,
+        identitySupported,
+        lockedLayerIds: persisted.lockedLayerIds,
+        ...(welcomeInvites ? { invites: welcomeInvites } : {}),
       });
       broadcastParticipants(session, peer);
       return;
@@ -264,6 +419,9 @@ export function createRelay(options: RelayOptions = {}): {
         persisted.mode,
         ENCODER.encode(text).length,
         maxSnapshotBytes,
+        persisted.snapshot,
+        message.project,
+        persisted.lockedLayerIds,
       );
       if (!authorization.ok) {
         send(peer, {
@@ -274,13 +432,17 @@ export function createRelay(options: RelayOptions = {}): {
         return;
       }
       const project = preserveStoredComments(message.project ?? null, persisted.snapshot);
-      const rev = store.saveSnapshot(id, project);
-      broadcast(session, { type: "snapshot", project, origin: participant.clientId, rev }, peer);
+      const nextRev = (persisted.rev ?? 0) + 1;
+      store.saveSnapshot(id, project, nextRev);
+      persisted.rev = nextRev;
+      broadcast(
+        session,
+        { type: "snapshot", project, origin: participant.clientId, rev: nextRev },
+        peer,
+      );
       return;
     }
 
-    // A presence frame from a peer that has not joined yet falls through to
-    // here, where the join guard above has already rejected it.
     if (message.type === "presence") return;
 
     if (message.type === "set-mode") {
@@ -293,6 +455,9 @@ export function createRelay(options: RelayOptions = {}): {
       store.saveMode(id, mode);
       const list = participants(session);
       if (clearParticipantOverrides(list)) broadcastParticipants(session);
+      // Also clear persisted durable overrides so disconnected participants
+      // don't reconnect with a stale override that contradicts the new mode.
+      store.clearDurableOverrides(id);
       broadcast(session, { type: "mode", mode });
       return;
     }
@@ -312,8 +477,143 @@ export function createRelay(options: RelayOptions = {}): {
           message.canEdit,
         )
       ) {
+        const targetPeer = [...session.peers].find(
+          (p) => p.participant?.clientId === message.clientId,
+        );
+        if (targetPeer?.participant) {
+          const targetKey = getParticipantKey(targetPeer.participant);
+          store.saveDurableOverride(id, targetKey, targetPeer.participant.editOverride);
+        }
         broadcastParticipants(session);
       }
+      return;
+    }
+
+    if (message.type === "mint-invite") {
+      const authorization = authorizeHostAction(participant, "session invites");
+      if (authorization) {
+        send(peer, { type: "error", code: "forbidden", message: authorization });
+        return;
+      }
+      const role: CollaborationMode = message.role === "view-only" ? "view-only" : "co-edit";
+      const token = randomUUID();
+      const maxUses =
+        Number.isSafeInteger(message.maxUses) && (message.maxUses as number) > 0
+          ? (message.maxUses as number)
+          : undefined;
+      const invite: CollabInvite = {
+        token,
+        role,
+        createdAt: Date.now(),
+        ...(maxUses !== undefined ? { maxUses } : {}),
+        useCount: 0,
+        revoked: false,
+      };
+      store.saveInvite(id, invite);
+      for (const p of session.peers) {
+        if (p.participant?.role === "host") {
+          send(p, { type: "invite-created", invite });
+        }
+      }
+      return;
+    }
+
+    if (message.type === "revoke-invite") {
+      const authorization = authorizeHostAction(participant, "session invites");
+      if (authorization) {
+        send(peer, { type: "error", code: "forbidden", message: authorization });
+        return;
+      }
+      if (typeof message.token === "string") {
+        store.revokeInvite(id, message.token);
+        for (const p of session.peers) {
+          if (p.participant?.role === "host") {
+            send(p, { type: "invite-revoked", token: message.token });
+          }
+        }
+      }
+      return;
+    }
+
+    if (message.type === "set-session-config") {
+      const authorization = authorizeHostAction(participant, "session settings");
+      if (authorization) {
+        send(peer, { type: "error", code: "forbidden", message: authorization });
+        return;
+      }
+      if (message.requireIdentity !== undefined) {
+        const req = message.requireIdentity === true;
+        // Refuse to arm a gate no one could pass: without an issuer, every
+        // joiner is anonymous, so turning this on would strand the host's own
+        // session with no way to undo it from a second client.
+        if (req && !identitySupported) {
+          send(peer, {
+            type: "error",
+            code: "identity-unavailable",
+            message: "This relay has no sign-in provider configured.",
+          });
+          return;
+        }
+        store.saveSessionConfig(id, req);
+        broadcast(session, { type: "session-config", requireIdentity: req });
+      }
+      return;
+    }
+
+    if (message.type === "set-layer-locks") {
+      const authorization = authorizeHostAction(participant, "layer locks");
+      if (authorization) {
+        send(peer, { type: "error", code: "forbidden", message: authorization });
+        return;
+      }
+      const lockedLayerIds = Array.isArray(message.lockedLayerIds)
+        ? message.lockedLayerIds.filter((item: unknown): item is string => typeof item === "string")
+        : [];
+      store.saveLayerLocks(id, lockedLayerIds);
+      broadcast(session, { type: "layer-locks", lockedLayerIds });
+      return;
+    }
+
+    if (message.type === "kick-participant") {
+      const authorization = authorizeHostAction(participant, "participant moderation");
+      if (authorization) {
+        send(peer, { type: "error", code: "forbidden", message: authorization });
+        return;
+      }
+      if (typeof message.clientId !== "string") return;
+      const targetPeer = [...session.peers].find(
+        (p) => p.participant?.clientId === message.clientId,
+      );
+      if (!targetPeer || targetPeer.participant?.role === "host") return;
+
+      send(targetPeer, {
+        type: "kicked",
+        reason: message.reason ?? "Kicked by session host.",
+      });
+      targetPeer.socket.close(4000, "Kicked by host");
+      return;
+    }
+
+    if (message.type === "block-participant") {
+      const authorization = authorizeHostAction(participant, "participant moderation");
+      if (authorization) {
+        send(peer, { type: "error", code: "forbidden", message: authorization });
+        return;
+      }
+      if (typeof message.clientId !== "string") return;
+      const targetPeer = [...session.peers].find(
+        (p) => p.participant?.clientId === message.clientId,
+      );
+      if (!targetPeer || !targetPeer.participant || targetPeer.participant.role === "host") return;
+
+      const targetKey = getParticipantKey(targetPeer.participant);
+      store.blockKey(id, targetKey);
+
+      send(targetPeer, {
+        type: "kicked",
+        reason: message.reason ?? "Blocked by session host.",
+      });
+      targetPeer.socket.close(4001, "Blocked by host");
       return;
     }
 
@@ -502,8 +802,23 @@ export function createRelay(options: RelayOptions = {}): {
     const url = new URL(request.url ?? "/", "http://localhost");
     if (request.method === "OPTIONS") return json(response, 204, null);
     if ((url.pathname === "/" || url.pathname === "/health") && request.method === "GET")
-      return json(response, 200, { ok: true, service: "geolibre-collab" });
+      // `identitySupported` lets the client hide the "require a signed-in
+      // account" option before it ever tries to create a session.
+      return json(response, 200, { ok: true, service: "geolibre-collab", identitySupported });
     if (url.pathname === "/sessions" && request.method === "POST") {
+      const origin = request.headers["origin"] ?? request.headers["referer"];
+      if (!isAllowedOrigin(origin)) {
+        return json(response, 403, { error: "Forbidden origin" });
+      }
+
+      const rawXff = trustProxy
+        ? (request.headers["x-forwarded-for"] as string | undefined)
+        : undefined;
+      const clientIp = rawXff?.split(",")[0].trim() || request.socket.remoteAddress || "unknown";
+      if (!checkRateLimit(clientIp, 10, 60_000)) {
+        return json(response, 429, { error: "Too many session creation requests" });
+      }
+
       // Refuse on the declared length before any handler is registered, so an
       // oversized upload cannot hold the connection open while it trickles in.
       // The byte counter below still runs, for clients that omit or understate
@@ -552,12 +867,22 @@ export function createRelay(options: RelayOptions = {}): {
         } catch {
           // Match the Worker: malformed/empty input uses defaults.
         }
-        const mode = normalizeMode((requested as { mode?: CollaborationMode } | null)?.mode);
+        const reqObj = requested as { mode?: CollaborationMode; requireIdentity?: boolean } | null;
+        const mode = normalizeMode(reqObj?.mode);
+        const requireIdentity = reqObj?.requireIdentity === true;
+        // Fail the create rather than silently downgrading: a host who asked
+        // for a sign-in gate should hear that this relay has no issuer, not
+        // discover it by watching anonymous guests walk in.
+        if (requireIdentity && !identitySupported) {
+          return json(response, 400, {
+            error: "This relay has no sign-in provider configured.",
+          });
+        }
         for (let attempt = 0; attempt < 5; attempt++) {
           const sessionId = randomCode();
           const hostToken = randomToken();
-          if (store.create(sessionId, hostToken, mode))
-            return json(response, 200, { sessionId, hostToken, mode });
+          if (store.create(sessionId, hostToken, mode, requireIdentity))
+            return json(response, 200, { sessionId, hostToken, mode, requireIdentity });
         }
         return json(response, 503, {
           error: "Could not allocate a session code. Please try again.",
@@ -582,13 +907,13 @@ export function createRelay(options: RelayOptions = {}): {
       return;
     }
     const id = match[1];
-    wss.handleUpgrade(request, socket, head, (websocket) => {
+    wss.handleUpgrade(request, socket, head, (websocket: WebSocket) => {
       const session = live(id);
       const peer: Peer = { socket: websocket };
       session.peers.add(peer);
       alive.add(websocket);
       websocket.on("pong", () => alive.add(websocket));
-      websocket.on("message", (raw, isBinary) => {
+      websocket.on("message", (raw: WebSocket.RawData, isBinary: boolean) => {
         if (isBinary) {
           send(peer, {
             type: "error",
@@ -597,14 +922,18 @@ export function createRelay(options: RelayOptions = {}): {
           });
           return;
         }
-        // Defence in depth: this listener runs outside any promise chain, so an
-        // throw here is an uncaught exception that stops the whole relay. No
-        // single session's frame should be able to do that to the others.
-        try {
-          handleMessage(id, session, peer, raw);
-        } catch {
-          send(peer, { type: "error", code: "bad-message", message: "Could not handle message." });
-        }
+        // Defence in depth: a throw (or rejection) here would otherwise be an
+        // uncaught exception that stops the whole relay. No single session's
+        // frame should be able to do that to the others.
+        peer.queue = (peer.queue ?? Promise.resolve())
+          .then(() => handleMessage(id, session, peer, raw))
+          .catch(() => {
+            send(peer, {
+              type: "error",
+              code: "bad-message",
+              message: "Could not handle message.",
+            });
+          });
       });
       websocket.on("close", () => closePeer(id, session, peer));
       websocket.on("error", () => closePeer(id, session, peer));

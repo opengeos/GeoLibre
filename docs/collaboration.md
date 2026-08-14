@@ -63,24 +63,35 @@ Client → server:
 
 | type | payload | notes |
 | --- | --- | --- |
-| `join` | `displayName, color, hostToken?` | first frame after connect; the relay assigns the `clientId` (returned in `welcome`) |
+| `join` | `displayName, color, hostToken?, inviteToken?, identityToken?` | first frame after connect; the relay assigns the `clientId` (returned in `welcome`) |
 | `snapshot` | `project, rev` | a debounced project push; co-editors only |
 | `presence` | `cursor?, view?` | throttled cursor / viewport |
 | `set-mode` | `mode` | host only |
-| `set-participant-mode` | `clientId, canEdit` | host only; pin one guest to can-edit / view-only (#754) |
+| `set-participant-mode` | `clientId, canEdit` | host only; pin one guest to can-edit / view-only (#754; persisted per participant key, so it survives a reconnect only for identity/invite joins — see *Moderation*) |
+| `mint-invite` | `role, maxUses?` | host only; mint a co-edit or view-only invite link |
+| `revoke-invite` | `token` | host only; invalidate an active invite link |
+| `set-session-config` | `requireIdentity` | host only; mandate signed-in identity to join |
+| `set-layer-locks` | `lockedLayerIds` | host only; mark specific layer IDs read-only |
+| `kick-participant` | `clientId, reason?` | host only; disconnect a participant |
+| `block-participant` | `clientId, reason?` | host only; disconnect and bar that participant key from rejoining (see the caveat under *Moderation*) |
 | `chat` | `text, coordinate?` | a chat message, with an optional attached map coordinate (#754) |
 
 Server → client:
 
 | type | payload | notes |
 | --- | --- | --- |
-| `welcome` | `clientId, role, mode, participants[], snapshot \| null, presence, chat[], rev` | sent once on join; the late-joiner bootstrap |
+| `welcome` | `clientId, role, mode, participants[], snapshot \| null, presence, chat[], rev, requireIdentity, identitySupported, lockedLayerIds, invites[]` | sent once on join; the late-joiner bootstrap |
 | `snapshot` | `project, origin, rev` | fan-out of a peer's snapshot |
 | `presence` | `clientId, cursor?, view?` | fan-out of a peer's presence |
-| `participants` | `participants[]` | on join / leave / role / permission change; each carries `editOverride` |
+| `participants` | `participants[]` | on join / leave / role / permission change; each carries `editOverride` and `identity` |
 | `mode` | `mode` | host changed the session mode |
+| `invite-created` | `invite` | fan-out of a new invite link created by host |
+| `invite-revoked` | `token` | fan-out when host revokes an invite link |
+| `session-config` | `requireIdentity` | broadcast when session identity policy changes |
+| `layer-locks` | `lockedLayerIds` | broadcast when host locks/unlocks layer IDs |
+| `kicked` | `reason` | sent to a participant who was kicked or blocked by the host |
 | `chat` | `message` | fan-out of a chat message (echoed to the sender, so order is server-authoritative) (#754) |
-| `error` | `code, message` | e.g. `forbidden`, `too-large` |
+| `error` | `code, message` | e.g. `forbidden`, `too-large`, `identity-required`, `identity-unavailable`, `layer-locked` |
 
 ### Echo / feedback-loop prevention
 
@@ -166,10 +177,13 @@ field (`true` / `false`, or `null` to follow the session mode). Effective edit
 permission, computed identically on the client and the relay, is: the host
 always edits; otherwise the override wins; otherwise the session mode applies. A
 guest pinned to view-only has their `snapshot` pushes rejected with
-`error: forbidden`, exactly like the session-wide view-only path. Overrides are
-keyed to the per-socket `clientId`, so a guest who reconnects reverts to the
-session default (acceptable for the ephemeral MVP). The host roster surfaces a
-per-guest toggle; other participants see each guest's current permission read-only.
+`error: forbidden`, exactly like the session-wide view-only path. An override is
+also persisted against the guest's **participant key**, so it is reapplied when
+they rejoin — but only for identity- and invite-based joins, for the same reason
+a block is (see *Moderation* below): an anonymous guest arrives with a fresh
+`clientId` and therefore a fresh key, so their override reverts to the session
+default on reconnect. The host roster surfaces a per-guest toggle; other
+participants see each guest's current permission read-only.
 
 The host token (returned only to the creator) gates `set-mode` and
 `set-participant-mode`, so a guest can't escalate the session or another guest.
@@ -177,6 +191,53 @@ Codes are unguessable and sessions auto-expire. The relay assigns each
 participant's `clientId` server-side (the client-supplied value is ignored) so
 one participant can't claim another's identity, and it validates the `color` to
 a hex value before storing/broadcasting it.
+
+### Signed-in identity (optional)
+
+A joiner may present an `identityToken`. It is **not** self-reported JSON: the
+relay verifies an HMAC-SHA256 signature over the token's payload segment before
+it will populate `participant.identity`, so a client cannot mint an account,
+impersonate another user, or wear the roster's verified badge. The format is
+
+```
+<base64url(payloadJSON)>.<base64url(hmacSha256(base64url(payloadJSON)))>
+```
+
+with payload claims `{ userId, username, provider?, exp? }`. `verifyIdentityToken`
+in `@geolibre/collab-core` is the single implementation both relays call, and
+`signIdentityToken` alongside it mints one.
+
+Identity is **off unless a deployment opts in** by setting the signing secret
+shared with its issuer — `COLLAB_IDENTITY_SECRET` (a Worker secret for
+`workers/collab`, an environment variable for `workers/collab-node`). With no
+secret configured:
+
+- every `identityToken` verifies to null, so all joiners are anonymous;
+- `requireIdentity` cannot be turned on — `POST /sessions` answers `400` and
+  `set-session-config` answers `error: identity-unavailable`, rather than arming
+  a gate that would reject every guest including the host's own collaborators;
+- `GET /health` and every `welcome` report `identitySupported: false`, which is
+  how the Collaborate dialog decides to hide the "require a signed-in account"
+  option entirely.
+
+GeoLibre itself ships no sign-in flow yet, so the stock deployment leaves the
+secret unset and the whole identity path dormant. The protocol and relay support
+are in place for a deployment that fronts the relay with its own issuer.
+
+### Moderation
+
+`kick-participant` disconnects a participant. `block-participant` also records
+their **participant key** so the relay refuses the next join. That key is
+`user:<userId>` for a verified identity, `invite:<token>` for an invite-based
+join, and otherwise `anon:<clientId>` — where `clientId` is minted fresh on
+every join.
+
+The same key backs a persisted per-participant override, so both carry the same
+caveat: a block is durable only for identity- and invite-based joins. **An anonymous
+guest can rejoin simply by reconnecting**, since they arrive with a new
+`clientId` and therefore a new key. Blocking is a moderation convenience, not a
+security boundary; a session that needs an enforceable ban has to require an
+invite or a signed-in identity.
 
 ## Chat (#754)
 
@@ -194,10 +255,16 @@ clickable coordinate that recenters the recipient's map. Chat lives on the
 on-canvas status badge so it is reachable while working on the map; it is
 ephemeral and never written to a project file.
 
-> **Operator note:** `POST /sessions` is unauthenticated and currently responds
-> with `Access-Control-Allow-Origin: *`, so any page can create sessions. This is
-> acceptable for the experimental MVP but should be restricted to the app's own
-> origin(s) before a wider rollout to avoid capacity abuse.
+> **Operator note:** `POST /sessions` validates the request `Origin` (or
+> `Referer`) against `ALLOWED_ORIGINS` via `isAllowedOrigin` (defaults to the
+> app's own domains plus `localhost` for development) as browser-origin filtering
+> and defense-in-depth (not authentication or a general server-side access gate)
+> and enforces a per-IP `checkRateLimit` (10 requests / 60 s). `Access-Control-Allow-Origin: *` is
+> still sent on responses so non-browser clients (e.g. Tauri) are not blocked by
+> CORS; non-browser clients may omit these headers and remain supported, unless a
+> verifiable credential requirement is added. Configure `ALLOWED_ORIGINS`
+> (comma-separated list) to restrict which browser origins may create sessions in
+> production.
 
 ## Feature flag
 

@@ -19,6 +19,7 @@
 | 浏览器 | 打开 `web.geolibre.app` | 什么都不用装，加载完可离线用 |
 | 桌面 | Tauri v2 原生应用 | Windows / macOS / Linux，微软商店、Homebrew、winget、AUR、Flatpak 都有 |
 | 安卓 | Google Play 原生 App | 每 ABI 约 40MB |
+| iOS | App Store 原生 App | iPhone 与 iPad，同一套代码经 Tauri v2 mobile 构建 |
 | Jupyter | `pip install geolibre` | 整个应用嵌进 notebook 单元格 |
 
 > **核心应用没有账号、没有服务器、没有费用。** 本地文件就地读取、不出本机，应用加载完成后本地流程也能离线继续用。例外的是那些可选的远程能力：在线目录（STAC、Source Cooperative、Overture、Planetary Computer）、从 CDN 下载底图与瓦片，以及 Earth Engine、需要鉴权的 ArcGIS 服务等，都需要联网，部分还需要各自的凭据或 OAuth 登录。
@@ -257,7 +258,7 @@ _浏览器端输出格式是子集：geojson / json / csv / parquet / geoparquet
 | **桌面端（Tauri）专属** | 原生文件/文件夹对话框、本地 MBTiles、本地栅格读取、Shapefile 同名文件自动发现、PostGIS/Martin、文件地理数据库、本地文件监听重载 |
 | **需要 Python sidecar** | 文件地理数据库、桌面端的全部转换工具（首选路径）、栅格工具（rasterio）、AI 分割、PostGIS、Sedona |
 | **Mac App Store 版本** | 不带 Python sidecar：隐藏 PostgreSQL 和 GDB 数据源、隐藏 AI 分割；Whitebox、转换、栅格、矢量工具全部退回浏览器/WASM 引擎；Shapefile companion 文件要手动多选 |
-| **安卓 / 移动端** | 隐藏栅格工具、转换工具、AI 分割、PostgreSQL——这些都依赖 sidecar。Whitebox 工具箱走 WASM，依然可用 |
+| **安卓 / iOS 移动端** | 隐藏栅格工具、转换工具、AI 分割、PostgreSQL——这些都依赖 sidecar。Whitebox 工具箱走 WASM，依然可用 |
 | **浏览器端** | 无本地 MBTiles/GDB/PostGIS；转换输出是子集；矢量转换不收 `.zip`；栅格转 COG 只收 GeoTIFF；Zarr 本地文件夹在 Firefox/Safari 不可用 |
 
 ---

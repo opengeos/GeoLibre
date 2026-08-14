@@ -231,7 +231,9 @@
     "invalidUrl": "Geçerli bir HTTP veya HTTPS stil URL'si girin.",
     "sectionMoon": "Ay",
     "sectionMars": "Mars",
-    "sectionOther": "Diğer gök cisimleri"
+    "sectionOther": "Diğer gök cisimleri",
+    "sectionRegional": "Bölgesel",
+    "regionChina": "Çin (中国)"
   },
   "planetSwitcher": {
     "label": "Gök cismi",
@@ -1189,6 +1191,9 @@
     "viewOnly": "Yalnızca görüntüleme",
     "allowEdit": "Bu kişinin düzenlemesine izin ver",
     "setViewOnly": "Bu kişiyi yalnızca görüntülemeye ayarla",
+    "kick": "Katılımcıyı çıkar",
+    "block": "Katılımcıyı engelle",
+    "requireIdentityLabel": "Katılmak için oturum açılmış hesap iste",
     "chatLog": "Oturum sohbeti",
     "chatCompose": "Bir mesaj yazın",
     "chatEmpty": "Henüz mesaj yok.",
@@ -1198,7 +1203,11 @@
     "chatLocationAttached": "Konum eklendi (kaldırmak için tıklayın)",
     "chatGoToLocation": "Bu konuma git",
     "sessionStatusUnread_one": "Canlı iş birliği oturumu, {{count}} okunmamış mesaj. Kimlerin bağlı olduğunu görmek ve sohbet etmek için tıklayın.",
-    "sessionStatusUnread_other": "Canlı iş birliği oturumu, {{count}} okunmamış mesaj. Kimlerin bağlı olduğunu görmek ve sohbet etmek için tıklayın."
+    "sessionStatusUnread_other": "Canlı iş birliği oturumu, {{count}} okunmamış mesaj. Kimlerin bağlı olduğunu görmek ve sohbet etmek için tıklayın.",
+    "lockLayer": "Katmanı konuklar için kilitle",
+    "unlockLayer": "Katmanın kilidini konuklar için aç",
+    "layerLocked": "Kilitli",
+    "layerLockedHint": "Bu katman ev sahibi tarafından kilitlendi ve düzenlenemez"
   },
   "share": {
     "title": "Projeyi paylaş",
@@ -4171,6 +4180,7 @@
     "title": "Nesne Algılama",
     "description": "Bir GeoTIFF üzerinde ONNX'e aktarılmış bir YOLO modelini tamamen tarayıcıda çalıştırın. Algılanan kutular coğrafi olarak konumlandırılır ve her sınıf kendi katmanı olarak eklenir.",
     "hint": "Yerleşik bir COCO modeli kullanın (bir kez indirilip önbelleğe alınır) ya da kendi YOLOv5/v8/v11 ONNX modelinizi getirin. Algılama tarayıcıda yerel olarak çalışır. Yerleşik modeller günlük nesneleri algılar; hava görüntüleri için kendi yukarıdan eğitilmiş modelinizi sağlayın.",
+    "unavailableNoExternalCdn": "Nesne algılama bu derlemede kullanılamıyor. ONNX Runtime gerekiyor; bu çalışma zamanı, bu dağıtımın devre dışı bıraktığı harici bir CDN'den yükleniyor. Kendi model dosyanızı vermeniz durumu değiştirmez.",
     "imageLabel": "Görüntü (GeoTIFF)",
     "imagePlaceholder": "Bir GeoTIFF seçin…",
     "chooseImage": "Görüntü seç",
@@ -4203,6 +4213,7 @@
     "title": "Her Şeyi Bölütle",
     "description": "SlimSAM'i bir GeoTIFF üzerinde tamamen tarayıcıda otomatik olarak çalıştırın. Algılanan her nesne, tek bir katman olarak eklenen coğrafi konumlu bir poligona dönüşür.",
     "hint": "Görüntü üzerinde bir nokta ızgarası örneklenir ve SlimSAM ile bölütlenir (bir kez indirilip önbelleğe alınır). Tıklama veya etiket yok — daha yoğun ızgaralar daha fazla nesne bulur ama daha uzun sürer.",
+    "unavailableNoExternalCdn": "“Her Şeyi Bölütle” bu derlemede kullanılamıyor. ONNX Runtime gerekiyor; bu çalışma zamanı, bu dağıtımın devre dışı bıraktığı harici bir CDN'den yükleniyor.",
     "imageLabel": "Görüntü (GeoTIFF)",
     "imagePlaceholder": "Bir GeoTIFF seçin…",
     "chooseImage": "Görüntü seç",

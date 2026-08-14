@@ -130,6 +130,7 @@ import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
 import { setTimeSliderOpenedByBinding, shouldCloseTimeSliderDock } from "../lib/time-slider-dock";
 import { createWmsTileUrl, normalizeWmsVersion } from "../components/layout/add-data/helpers";
 import { createExternalNativeStoreLayer } from "../lib/external-native-layer";
+import { createPluginLayerQueries } from "../lib/plugin-layer-queries";
 import { mergeStringLists } from "../lib/string-lists";
 import {
   browserSaveFallsBackToDownload,
@@ -840,6 +841,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
       const id = store.addGeoJsonLayer(name, data, sourcePath);
       return id;
     },
+    ...createPluginLayerQueries(),
     addTileLayer: (name: string, url: string, options?: GeoLibreTileLayerOptions) =>
       store.addTileLayer(
         name,

@@ -1,12 +1,14 @@
 import { DurableObject } from "cloudflare:workers";
 import type {
   CollabChatMessage,
+  CollabInvite,
   CollabParticipant,
   ClientMessage,
   CollaborationMode,
   CollaborationRole,
   PresenceEntry,
   ServerMessage,
+  ParticipantIdentity,
 } from "./protocol";
 import {
   isBoundedId,
@@ -22,7 +24,10 @@ import {
   authorizeSnapshot,
   CHAT_HISTORY_LIMIT,
   clearParticipantOverrides,
+  diffLockedLayers,
   EMPTY_SESSION_TTL_MS,
+  getParticipantKey,
+  isIdentityConfigured,
   MAX_CHAT_STORAGE_BYTES,
   MAX_CHAT_TEXT_LENGTH,
   MAX_SNAPSHOT_BYTES,
@@ -36,6 +41,7 @@ import {
   sanitizeView,
   setParticipantOverride,
   toWireParticipant,
+  verifyIdentityToken,
   type SessionParticipant,
 } from "@geolibre/collab-core";
 
@@ -54,6 +60,15 @@ export interface Env {
   COLLAB_SESSION: DurableObjectNamespace<CollabSession>;
   /** Optional deployment-specific snapshot ceiling, expressed in bytes. */
   COLLAB_MAX_SNAPSHOT_BYTES?: string;
+  /** Optional allowed origins list for session creation. */
+  ALLOWED_ORIGINS?: string;
+  /**
+   * HMAC-SHA256 secret shared with this deployment's identity issuer. Unset
+   * (the default) disables identity entirely: `identityToken` is ignored, every
+   * joiner is anonymous, and "require a signed-in account" cannot be turned on.
+   * Set it with `wrangler secret put COLLAB_IDENTITY_SECRET`.
+   */
+  COLLAB_IDENTITY_SECRET?: string;
 }
 
 // The snapshot cap, empty-session TTL, and chat limits now live in
@@ -102,10 +117,121 @@ export class CollabSession extends DurableObject<Env> {
     return Number.isSafeInteger(configured) && configured > 0 ? configured : MAX_SNAPSHOT_BYTES;
   }
 
-  private ensureSnapshotTable(): void {
+  private ensureTables(): void {
     this.ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS collab_snapshot_chunks (seq INTEGER PRIMARY KEY, value TEXT NOT NULL)",
     );
+    this.ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS collab_invites (token TEXT PRIMARY KEY, role TEXT NOT NULL, created_at INTEGER NOT NULL, max_uses INTEGER, use_count INTEGER NOT NULL DEFAULT 0, revoked INTEGER NOT NULL DEFAULT 0)",
+    );
+    this.ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS collab_durable_overrides (participant_key TEXT PRIMARY KEY, edit_override INTEGER NOT NULL)",
+    );
+    this.ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS collab_blocked_keys (participant_key TEXT PRIMARY KEY, blocked_at INTEGER NOT NULL)",
+    );
+  }
+
+  private readDurableOverride(participantKey: string | null): boolean | undefined {
+    if (!participantKey) return undefined;
+    this.ensureTables();
+    const rows = this.ctx.storage.sql
+      .exec<{ edit_override: number }>(
+        "SELECT edit_override FROM collab_durable_overrides WHERE participant_key = ?",
+        participantKey,
+      )
+      .toArray();
+    return rows.length > 0 ? rows[0].edit_override === 1 : undefined;
+  }
+
+  private writeDurableOverride(
+    participantKey: string | null,
+    editOverride: boolean | undefined,
+  ): void {
+    if (!participantKey) return;
+    this.ensureTables();
+    if (editOverride === undefined) {
+      this.ctx.storage.sql.exec(
+        "DELETE FROM collab_durable_overrides WHERE participant_key = ?",
+        participantKey,
+      );
+    } else {
+      this.ctx.storage.sql.exec(
+        "INSERT OR REPLACE INTO collab_durable_overrides (participant_key, edit_override) VALUES (?, ?)",
+        participantKey,
+        editOverride ? 1 : 0,
+      );
+    }
+  }
+
+  private clearAllDurableOverrides(): void {
+    this.ensureTables();
+    this.ctx.storage.sql.exec("DELETE FROM collab_durable_overrides");
+  }
+
+  private isBlockedKey(participantKey: string | null): boolean {
+    if (!participantKey) return false;
+    this.ensureTables();
+    const rows = this.ctx.storage.sql
+      .exec<{ participant_key: string }>(
+        "SELECT participant_key FROM collab_blocked_keys WHERE participant_key = ?",
+        participantKey,
+      )
+      .toArray();
+    return rows.length > 0;
+  }
+
+  private blockKey(participantKey: string | null): void {
+    if (!participantKey) return;
+    this.ensureTables();
+    this.ctx.storage.sql.exec(
+      "INSERT OR REPLACE INTO collab_blocked_keys (participant_key, blocked_at) VALUES (?, ?)",
+      participantKey,
+      Date.now(),
+    );
+  }
+
+  private readInvites(): CollabInvite[] {
+    this.ensureTables();
+    const rows = this.ctx.storage.sql
+      .exec<{
+        token: string;
+        role: string;
+        created_at: number;
+        max_uses: number | null;
+        use_count: number;
+        revoked: number;
+      }>(
+        "SELECT token, role, created_at, max_uses, use_count, revoked FROM collab_invites ORDER BY created_at DESC",
+      )
+      .toArray();
+    return rows.map((r) => ({
+      token: r.token,
+      role: r.role === "view-only" ? "view-only" : "co-edit",
+      createdAt: r.created_at,
+      ...(r.max_uses !== null ? { maxUses: r.max_uses } : {}),
+      useCount: r.use_count,
+      revoked: r.revoked === 1,
+    }));
+  }
+
+  private writeInvite(invite: CollabInvite): void {
+    this.ensureTables();
+    this.ctx.storage.sql.exec(
+      "INSERT OR REPLACE INTO collab_invites (token, role, created_at, max_uses, use_count, revoked) VALUES (?, ?, ?, ?, ?, ?)",
+      invite.token,
+      invite.role,
+      invite.createdAt,
+      invite.maxUses ?? null,
+      invite.useCount,
+      invite.revoked ? 1 : 0,
+    );
+  }
+
+  private revokeInviteToken(token: string): boolean {
+    this.ensureTables();
+    this.ctx.storage.sql.exec("UPDATE collab_invites SET revoked = 1 WHERE token = ?", token);
+    return true;
   }
 
   /**
@@ -115,7 +241,7 @@ export class CollabSession extends DurableObject<Env> {
    * before this table existed still serves late joiners.
    */
   private readSqlSnapshot(): string | undefined {
-    this.ensureSnapshotTable();
+    this.ensureTables();
     // Not `.one()`: that throws unless the result set holds exactly one row,
     // so a session that has not stored a snapshot yet would fail instead of
     // falling through to the legacy KV read below.
@@ -141,7 +267,7 @@ export class CollabSession extends DurableObject<Env> {
    * run of rows, so the project is split and rejoined on read.
    */
   private async writeSnapshot(snapshot: string): Promise<void> {
-    this.ensureSnapshotTable();
+    this.ensureTables();
     this.ctx.storage.sql.exec("DELETE FROM collab_snapshot_chunks");
     for (
       let offset = 0, seq = 0;
@@ -175,11 +301,14 @@ export class CollabSession extends DurableObject<Env> {
       const body = (await request.json()) as {
         mode?: CollaborationMode;
         hostToken?: string;
+        requireIdentity?: boolean;
       };
       const mode: CollaborationMode = body.mode === "view-only" ? "view-only" : "co-edit";
       await this.ctx.storage.put({
         mode,
         hostToken: body.hostToken ?? "",
+        requireIdentity: body.requireIdentity === true,
+        lockedLayerIds: [] as string[],
         rev: 0,
       });
       return Response.json({ ok: true });
@@ -268,6 +397,24 @@ export class CollabSession extends DurableObject<Env> {
       case "comment-mutation":
         await this.handleCommentMutation(ws, attachment, message);
         break;
+      case "mint-invite":
+        this.handleMintInvite(ws, attachment, message);
+        break;
+      case "revoke-invite":
+        this.handleRevokeInvite(ws, attachment, message);
+        break;
+      case "set-session-config":
+        await this.handleSetSessionConfig(ws, attachment, message);
+        break;
+      case "kick-participant":
+        this.handleKickParticipant(ws, attachment, message);
+        break;
+      case "block-participant":
+        this.handleBlockParticipant(ws, attachment, message);
+        break;
+      case "set-layer-locks":
+        await this.handleSetLayerLocks(ws, attachment, message);
+        break;
     }
   }
 
@@ -315,33 +462,108 @@ export class CollabSession extends DurableObject<Env> {
     // close handler only deletes the current clientId).
     if (ws.deserializeAttachment()) return;
 
-    const [storedToken, mode, rev, snapshot, chat] = await Promise.all([
-      this.ctx.storage.get<string>("hostToken"),
-      this.ctx.storage.get<CollaborationMode>("mode"),
-      this.ctx.storage.get<number>("rev"),
-      this.readSnapshot(),
-      this.ctx.storage.get<string>("chat"),
-    ]);
+    const [storedToken, mode, rev, snapshot, chat, requireIdentity, lockedLayerIds] =
+      await Promise.all([
+        this.ctx.storage.get<string>("hostToken"),
+        this.ctx.storage.get<CollaborationMode>("mode"),
+        this.ctx.storage.get<number>("rev"),
+        this.readSnapshot(),
+        this.ctx.storage.get<string>("chat"),
+        this.ctx.storage.get<boolean>("requireIdentity"),
+        this.ctx.storage.get<string[]>("lockedLayerIds"),
+      ]);
 
-    const role: CollaborationRole =
+    let role: CollaborationRole =
       message.hostToken && storedToken && message.hostToken === storedToken ? "host" : "guest";
 
-    const attachment: SocketAttachment = {
-      // Assign the id server-side instead of trusting the client's, so a
-      // participant can't claim another's clientId to hijack their presence or
-      // collide React keys. The welcome echoes it back for the client to adopt.
-      clientId: crypto.randomUUID(),
-      // Guard against a non-string displayName (JSON.parse won't enforce the
-      // type) so a crafted frame can't crash the handler on `.slice`.
-      displayName: sanitizeDisplayName(message.displayName),
-      // Only accept a hex color; fall back to neutral grey so a hostile value
-      // never reaches peers (defense-in-depth with the client's DOM rendering).
-      // Guard the type first: `.test()` coerces a non-string (number/array) to a
-      // string, which could spuriously pass and store a non-string color.
+    let inviteToken: string | undefined = undefined;
+    let matchedInvite: CollabInvite | undefined = undefined;
+    if (role === "guest" && message.inviteToken && typeof message.inviteToken === "string") {
+      const invites = this.readInvites();
+      const inv = invites.find((i) => i.token === message.inviteToken && !i.revoked);
+      if (inv && (!inv.maxUses || inv.useCount < inv.maxUses)) {
+        inviteToken = inv.token;
+        matchedInvite = inv;
+      }
+    }
+
+    // Signature-checked against COLLAB_IDENTITY_SECRET, so `identity` is only
+    // ever non-null for a credential this deployment's issuer actually minted.
+    // A relay with no secret configured yields null for every token, making
+    // every joiner anonymous rather than trusting self-reported claims.
+    const identity: ParticipantIdentity | null = await verifyIdentityToken(
+      message.identityToken,
+      this.env.COLLAB_IDENTITY_SECRET,
+    );
+
+    if (requireIdentity && !identity && role !== "host") {
+      this.send(ws, {
+        type: "error",
+        code: "identity-required",
+        message: "Sign-in required to join this session.",
+      });
+      return;
+    }
+
+    const socketClientId = crypto.randomUUID();
+    const joiningParticipant: SessionParticipant = {
+      clientId: socketClientId,
+      displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
       color: sanitizeColor(message.color),
       role,
+      identity,
+      inviteToken,
+    };
+    const participantKey = getParticipantKey(joiningParticipant);
+
+    if (this.isBlockedKey(participantKey)) {
+      this.send(ws, {
+        type: "error",
+        code: "forbidden",
+        message: "You have been blocked from this session by the host.",
+      });
+      return;
+    }
+
+    const durableOverride = this.readDurableOverride(participantKey);
+    let initialOverride: boolean | undefined = undefined;
+    if (durableOverride !== undefined) {
+      initialOverride = durableOverride;
+    } else if (matchedInvite) {
+      initialOverride = matchedInvite.role === "co-edit";
+    }
+
+    if (matchedInvite) {
+      // Re-read the invite after the `await verifyIdentityToken` above to close
+      // a TOCTOU window: two concurrent joins on a maxUses:1 invite could both
+      // have read useCount:0 before either writes. Re-validating here narrows
+      // the race to the synchronous path between read and write.
+      const inviteTokenToCheck = matchedInvite.token;
+      const freshInvites = this.readInvites();
+      const freshInv = freshInvites.find((i) => i.token === inviteTokenToCheck && !i.revoked);
+      if (!freshInv || (freshInv.maxUses && freshInv.useCount >= freshInv.maxUses)) {
+        // Invite was consumed or revoked between the initial check and now.
+        matchedInvite = undefined;
+        inviteToken = undefined;
+      } else {
+        freshInv.useCount += 1;
+        this.writeInvite(freshInv);
+        matchedInvite = freshInv;
+      }
+    }
+
+    const attachment: SocketAttachment = {
+      clientId: socketClientId,
+      displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
+      color: sanitizeColor(message.color),
+      role,
+      ...(initialOverride !== undefined ? { editOverride: initialOverride } : {}),
+      identity,
+      inviteToken,
     };
     ws.serializeAttachment(attachment);
+
+    const welcomeInvites = role === "host" ? this.readInvites() : undefined;
 
     this.send(ws, {
       type: "welcome",
@@ -349,19 +571,16 @@ export class CollabSession extends DurableObject<Env> {
       role,
       mode: mode ?? "co-edit",
       participants: this.participants(),
-      // A corrupt stored snapshot (partial write/storage error) must not throw
-      // here — that would close the socket 1011 and every reconnect would hit
-      // the same poison value, locking the whole session out. Fall back to null.
       snapshot: parseStoredSnapshot(snapshot),
-      // Bootstrap the joiner with existing participants' live cursors/viewports.
       presence: Object.fromEntries(this.presence),
-      // Bootstrap the joiner with the recent chat history.
       chat: parseStoredChat(chat),
       rev: rev ?? 0,
+      requireIdentity: requireIdentity ?? false,
+      identitySupported: isIdentityConfigured(this.env.COLLAB_IDENTITY_SECRET),
+      lockedLayerIds: lockedLayerIds ?? [],
+      ...(welcomeInvites ? { invites: welcomeInvites } : {}),
     });
 
-    // The joiner already has the up-to-date list from `welcome` above; only the
-    // other participants need the update.
     this.broadcastParticipants(ws);
   }
 
@@ -371,11 +590,24 @@ export class CollabSession extends DurableObject<Env> {
     message: Extract<ClientMessage, { type: "snapshot" }>,
     byteLength: number,
   ): Promise<void> {
-    const mode = (await this.ctx.storage.get<CollaborationMode>("mode")) ?? "co-edit";
-    // A host-set per-participant override takes precedence over the session
-    // default, so a single guest can be pinned to view-only (or granted edit) in
-    // an otherwise co-edit (or view-only) session (#754, Part 3).
-    const decision = authorizeSnapshot(attachment, mode, byteLength, this.maxSnapshotBytes());
+    const [rawMode, rawLockedLayerIds, storedRaw] = await Promise.all([
+      this.ctx.storage.get<CollaborationMode>("mode"),
+      this.ctx.storage.get<string[]>("lockedLayerIds"),
+      this.readSnapshot(),
+    ]);
+    const mode = rawMode ?? "co-edit";
+    const lockedLayerIds = rawLockedLayerIds ?? [];
+    const storedSnapshot = parseStoredSnapshot(storedRaw);
+
+    const decision = authorizeSnapshot(
+      attachment,
+      mode,
+      byteLength,
+      this.maxSnapshotBytes(),
+      storedSnapshot,
+      message.project,
+      lockedLayerIds,
+    );
     if (!decision.ok) {
       this.send(ws, {
         type: "error",
@@ -461,6 +693,10 @@ export class CollabSession extends DurableObject<Env> {
         socket.serializeAttachment(attachment);
       }
     }
+    // Also clear persisted durable overrides so disconnected participants
+    // don't reconnect with a stale override that contradicts the new mode.
+    this.ensureTables();
+    this.ctx.storage.sql.exec("DELETE FROM collab_durable_overrides");
     // Broadcast the cleared roster first, then the new mode, so clients have
     // dropped the stale `editOverride`s by the time they apply the mode change
     // (the two frames are sent back-to-back with no await between them).
@@ -494,12 +730,12 @@ export class CollabSession extends DurableObject<Env> {
       message.canEdit,
     );
     if (!changed) return;
-    // `changed` implies the entry is in this same snapshot -- setParticipantOverride
-    // found and mutated it, with no await in between -- so this always resolves.
     const target = socketsWithAttachments.find(
       (entry) => entry.attachment.clientId === message.clientId,
     );
     if (!target) return;
+    const targetKey = getParticipantKey(target.attachment);
+    this.writeDurableOverride(targetKey, target.attachment.editOverride);
     target.socket.serializeAttachment(target.attachment);
     // Everyone re-derives effective permission from the participants list (the
     // affected guest learns its own change here too), so a single broadcast
@@ -852,5 +1088,165 @@ export class CollabSession extends DurableObject<Env> {
     }
 
     this.broadcast(sanitizedMessage, ws);
+  }
+
+  private handleMintInvite(
+    ws: WebSocket,
+    attachment: SocketAttachment,
+    message: Extract<ClientMessage, { type: "mint-invite" }>,
+  ): void {
+    const forbidden = authorizeHostAction(attachment, "session invites");
+    if (forbidden) {
+      this.send(ws, { type: "error", code: "forbidden", message: forbidden });
+      return;
+    }
+    const role: CollaborationMode = message.role === "view-only" ? "view-only" : "co-edit";
+    const token = crypto.randomUUID();
+    const maxUses =
+      Number.isSafeInteger(message.maxUses) && (message.maxUses as number) > 0
+        ? (message.maxUses as number)
+        : undefined;
+    const invite: CollabInvite = {
+      token,
+      role,
+      createdAt: Date.now(),
+      ...(maxUses !== undefined ? { maxUses } : {}),
+      useCount: 0,
+      revoked: false,
+    };
+    this.writeInvite(invite);
+    this.broadcastHostOnly({ type: "invite-created", invite });
+  }
+
+  private handleRevokeInvite(
+    ws: WebSocket,
+    attachment: SocketAttachment,
+    message: Extract<ClientMessage, { type: "revoke-invite" }>,
+  ): void {
+    const forbidden = authorizeHostAction(attachment, "session invites");
+    if (forbidden) {
+      this.send(ws, { type: "error", code: "forbidden", message: forbidden });
+      return;
+    }
+    if (typeof message.token === "string") {
+      this.revokeInviteToken(message.token);
+      this.broadcastHostOnly({ type: "invite-revoked", token: message.token });
+    }
+  }
+
+  private async handleSetSessionConfig(
+    ws: WebSocket,
+    attachment: SocketAttachment,
+    message: Extract<ClientMessage, { type: "set-session-config" }>,
+  ): Promise<void> {
+    const forbidden = authorizeHostAction(attachment, "session settings");
+    if (forbidden) {
+      this.send(ws, { type: "error", code: "forbidden", message: forbidden });
+      return;
+    }
+    if (message.requireIdentity !== undefined) {
+      const req = message.requireIdentity === true;
+      // Refuse to arm a gate no one could pass: without an issuer, every
+      // joiner is anonymous, so turning this on would strand the host's own
+      // session with no way to undo it from a second client.
+      if (req && !isIdentityConfigured(this.env.COLLAB_IDENTITY_SECRET)) {
+        this.send(ws, {
+          type: "error",
+          code: "identity-unavailable",
+          message: "This relay has no sign-in provider configured.",
+        });
+        return;
+      }
+      await this.ctx.storage.put("requireIdentity", req);
+      this.broadcast({ type: "session-config", requireIdentity: req });
+    }
+  }
+
+  private async handleSetLayerLocks(
+    ws: WebSocket,
+    attachment: SocketAttachment,
+    message: Extract<ClientMessage, { type: "set-layer-locks" }>,
+  ): Promise<void> {
+    const forbidden = authorizeHostAction(attachment, "layer locks");
+    if (forbidden) {
+      this.send(ws, { type: "error", code: "forbidden", message: forbidden });
+      return;
+    }
+    const lockedLayerIds = Array.isArray(message.lockedLayerIds)
+      ? message.lockedLayerIds.filter((id: unknown): id is string => typeof id === "string")
+      : [];
+    await this.ctx.storage.put("lockedLayerIds", lockedLayerIds);
+    this.broadcast({ type: "layer-locks", lockedLayerIds });
+  }
+
+  private handleKickParticipant(
+    ws: WebSocket,
+    attachment: SocketAttachment,
+    message: Extract<ClientMessage, { type: "kick-participant" }>,
+  ): void {
+    const forbidden = authorizeHostAction(attachment, "participant moderation");
+    if (forbidden) {
+      this.send(ws, { type: "error", code: "forbidden", message: forbidden });
+      return;
+    }
+    if (typeof message.clientId !== "string") return;
+    const target = this.attachedSockets().find(
+      (entry) => entry.attachment.clientId === message.clientId,
+    );
+    if (!target || target.attachment.role === "host") return;
+
+    this.send(target.socket, {
+      type: "kicked",
+      reason: message.reason ?? "Kicked by session host.",
+    });
+    try {
+      target.socket.close(4000, "Kicked by host");
+    } catch {
+      // Already closing
+    }
+  }
+
+  private handleBlockParticipant(
+    ws: WebSocket,
+    attachment: SocketAttachment,
+    message: Extract<ClientMessage, { type: "block-participant" }>,
+  ): void {
+    const forbidden = authorizeHostAction(attachment, "participant moderation");
+    if (forbidden) {
+      this.send(ws, { type: "error", code: "forbidden", message: forbidden });
+      return;
+    }
+    if (typeof message.clientId !== "string") return;
+    const target = this.attachedSockets().find(
+      (entry) => entry.attachment.clientId === message.clientId,
+    );
+    if (!target || target.attachment.role === "host") return;
+
+    const targetKey = getParticipantKey(target.attachment);
+    this.blockKey(targetKey);
+
+    this.send(target.socket, {
+      type: "kicked",
+      reason: message.reason ?? "Blocked by session host.",
+    });
+    try {
+      target.socket.close(4001, "Blocked by host");
+    } catch {
+      // Already closing
+    }
+  }
+
+  private broadcastHostOnly(message: ServerMessage): void {
+    const payload = JSON.stringify(message);
+    for (const socket of this.ctx.getWebSockets()) {
+      const a = socket.deserializeAttachment() as SocketAttachment | null;
+      if (a?.role === "host") {
+        try {
+          socket.send(payload);
+        } catch {
+          // ignore
+        }
+      }
+    }
   }
 }

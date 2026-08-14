@@ -68,6 +68,27 @@ POINT_IN_SQUARE = {
         }
     ],
 }
+ANTIMERIDIAN_LAYER = {
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {"name": "fiji_tonga"},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [175.0, -18.0],
+                        [-175.0, -18.0],
+                        [-175.0, -16.0],
+                        [175.0, -16.0],
+                        [175.0, -18.0],
+                    ]
+                ],
+            },
+        }
+    ],
+}
 
 
 def _attr_point(name: str, pop, x: float) -> dict:
@@ -120,12 +141,24 @@ def test_buffer_returns_feature_collection_and_messages() -> None:
 
 
 @requires_geopandas
+def test_buffer_antimeridian_crossing_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="crosses the antimeridian"):
+        run_vector_tool("buffer", ANTIMERIDIAN_LAYER, parameters={"distance": 1})
+
+
+@requires_geopandas
 def test_centroids_exercises_pyproj_utm_path() -> None:
     # centroids/buffer call estimate_utm_crs(), which needs pyproj's PROJ data;
     # this guards that path that the Pyodide engine also relies on.
     geojson, _ = run_vector_tool("centroids", SQUARE)
     assert geojson["type"] == "FeatureCollection"
     assert geojson["features"][0]["geometry"]["type"] == "Point"
+
+
+@requires_geopandas
+def test_centroids_antimeridian_crossing_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="crosses the antimeridian"):
+        run_vector_tool("centroids", ANTIMERIDIAN_LAYER)
 
 
 @requires_geopandas

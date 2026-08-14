@@ -24,7 +24,11 @@ import {
   resolveCollabBaseUrl,
   sessionWsUrl,
 } from "../lib/collab-client";
-import type { CommentMutationAction, ServerMessage } from "../lib/collab-protocol";
+import {
+  type CommentMutationAction,
+  type ServerMessage,
+  participantCanEditLayer,
+} from "../lib/collab-protocol";
 import { mergeInboundCollaborationProject } from "../lib/collaboration-project";
 
 const SNAPSHOT_DEBOUNCE_MS = 250;
@@ -33,11 +37,28 @@ const CURSOR_THROTTLE_MS = 40;
 export interface CollaborationApi {
   enabled: boolean;
   canEdit: () => boolean;
-  start: (displayName: string, color: string, mode: CollaborationMode) => Promise<string>;
-  join: (sessionId: string, displayName: string, color: string) => Promise<void>;
+  canEditLayer: (layerId: string) => boolean;
+  start: (
+    displayName: string,
+    color: string,
+    mode: CollaborationMode,
+    requireIdentity?: boolean,
+  ) => Promise<string>;
+  join: (
+    sessionId: string,
+    displayName: string,
+    color: string,
+    options?: { inviteToken?: string; identityToken?: string },
+  ) => Promise<void>;
   leave: () => void;
   setMode: (mode: CollaborationMode) => void;
   setParticipantMode: (clientId: string, canEdit: boolean) => void;
+  mintInvite: (role: CollaborationMode, maxUses?: number) => void;
+  revokeInvite: (token: string) => void;
+  setSessionConfig: (config: { requireIdentity?: boolean }) => void;
+  setLayerLocks: (lockedLayerIds: string[]) => void;
+  kickParticipant: (clientId: string, reason?: string) => void;
+  blockParticipant: (clientId: string, reason?: string) => void;
   setFollowHost: (enabled: boolean) => void;
   sendChat: (text: string, coordinate?: { lng: number; lat: number } | null) => boolean;
   sendCommentMutation: (action: CommentMutationAction) => boolean;
@@ -79,6 +100,17 @@ export function useCollaboration(
     return self?.editOverride ?? c.mode === "co-edit";
   };
 
+  const canEditLayer = useCallback((layerId: string): boolean => {
+    const c = useAppStore.getState().collaboration;
+    if (!c.isActive) return true;
+    if (c.role === "host") return true;
+    const self = c.participants.find((p) => p.clientId === c.clientId);
+    if (!self) {
+      return c.mode === "co-edit" && !(c.lockedLayerIds ?? []).includes(layerId);
+    }
+    return participantCanEditLayer(self, c.mode, layerId, c.lockedLayerIds ?? []);
+  }, []);
+
   const sendSnapshot = async (): Promise<void> => {
     if (!canEdit() || syncPausedRef.current) return;
     const request = ++snapshotRequestRef.current;
@@ -86,19 +118,11 @@ export function useCollaboration(
     try {
       project = await buildCollaborationSnapshot(mapControllerRef);
     } catch {
-      // Materializing control-managed vector data can fail (the plugin chunk
-      // or a DuckDB query). Surface it so the participant knows their edits
-      // stopped propagating, but only for the newest request that is still
-      // allowed to broadcast: a stale failure, or one racing a relay error
-      // that already paused sync, must not overwrite the message the user
-      // needs to see.
       if (request === snapshotRequestRef.current && canEdit() && !syncPausedRef.current) {
         useAppStore.getState().setCollaboration({ error: i18n.t("collaborate.shareFailed") });
       }
       return;
     }
-    // Materializing control-managed vector data is asynchronous. Discard an
-    // older result if a newer broadcast started while it was being read.
     if (request !== snapshotRequestRef.current || !canEdit() || syncPausedRef.current) return;
     const content = serializeProject(project);
     if (content === lastContentRef.current) return;
@@ -145,6 +169,10 @@ export function useCollaboration(
           mode: message.mode,
           participants: message.participants,
           chat: message.chat ?? [],
+          requireIdentity: message.requireIdentity ?? false,
+          identitySupported: message.identitySupported ?? false,
+          lockedLayerIds: message.lockedLayerIds ?? [],
+          invites: message.invites ?? [],
           error: null,
         });
         for (const [clientId, entry] of Object.entries(message.presence)) {
@@ -160,15 +188,8 @@ export function useCollaboration(
         if (message.snapshot) {
           applyRemoteSnapshot(message.snapshot, true);
         } else if (message.role === "host") {
-          // A newly created session has no relay snapshot yet. The store
-          // subscription only observes changes made after attach(), so without
-          // this seed a project (especially external-plugin layers loaded
-          // before starting collaboration) stays invisible to the first guest
-          // until the host happens to edit something.
           void sendSnapshot();
         }
-        // Guests follow the host by default. Apply the host's latest presence
-        // immediately instead of waiting for their next moveend event.
         if (message.role === "guest" && useAppStore.getState().collaboration.followHost) {
           const host = message.participants.find((participant) => participant.role === "host");
           const hostView = host ? message.presence[host.clientId]?.view : null;
@@ -180,7 +201,6 @@ export function useCollaboration(
         break;
       }
       case "snapshot":
-        // origin is the server-assigned clientId of the sender; skip our own echo.
         if (message.origin !== selfIdRef.current) {
           applyRemoteSnapshot(message.project, false);
         }
@@ -214,14 +234,9 @@ export function useCollaboration(
         store.setCollaboration({ mode: message.mode });
         break;
       case "chat":
-        // The relay echoes our own messages back with the server-assigned id.
-        // Always add via the echo so the server id is used — addCollaborationChat
-        // deduplicates by id so subsequent echoes are harmless.
         store.addCollaborationChat(message.message);
         break;
       case "comment-mutation": {
-        // The relay excludes the sender (broadcast(msg, ws)), so we never receive
-        // our own mutations back over WebSocket. Apply everything we receive.
         const action = message.action;
         if (action.type === "add") {
           store.addComment(action.comment);
@@ -234,15 +249,57 @@ export function useCollaboration(
         }
         break;
       }
-      case "error":
+      case "invite-created": {
+        const current = useAppStore.getState().collaboration.invites;
+        store.setCollaboration({ invites: [...current, message.invite] });
+        break;
+      }
+      case "invite-revoked": {
+        const current = useAppStore.getState().collaboration.invites;
+        store.setCollaboration({ invites: current.filter((i) => i.token !== message.token) });
+        break;
+      }
+      case "session-config": {
+        if (message.requireIdentity !== undefined) {
+          store.setCollaboration({ requireIdentity: message.requireIdentity });
+        }
+        break;
+      }
+      case "layer-locks": {
+        store.setCollaboration({ lockedLayerIds: message.lockedLayerIds });
+        break;
+      }
+      case "kicked": {
+        disconnect();
+        useAppStore.getState().resetCollaboration();
+        useAppStore
+          .getState()
+          .setCollaboration({ error: message.reason ?? "Removed from session." });
+        break;
+      }
+      case "error": {
+        if (pendingConnectRef.current) {
+          const pending = pendingConnectRef.current;
+          pendingConnectRef.current = null;
+          disconnect();
+          store.setCollaboration({ connecting: false, error: message.message });
+          pending.reject(new Error(message.message));
+          return;
+        }
         store.setCollaboration({ error: message.message });
         if (message.code === "too-large") syncPausedRef.current = true;
         break;
+      }
     }
   };
 
-  // Called from onOpen — the socket is open and we are ready to join.
-  const attach = (displayName: string, color: string, hostToken: string | undefined): void => {
+  const attach = (
+    displayName: string,
+    color: string,
+    hostToken: string | undefined,
+    inviteToken?: string,
+    identityToken?: string,
+  ): void => {
     const conn = connRef.current;
     if (!conn) return;
 
@@ -259,16 +316,18 @@ export function useCollaboration(
       if (projectChanged(state, prev)) scheduleSnapshot();
     });
 
-    const map = mapControllerRef.current?.getMap() ?? null;
-    const detachMap = map ? bindPresence(map, conn) : () => {};
-
     conn.send({
       type: "join",
       clientId: selfIdRef.current ?? crypto.randomUUID(),
       displayName,
       color,
       hostToken,
+      inviteToken,
+      identityToken,
     });
+
+    const map = mapControllerRef.current?.getMap() ?? null;
+    const detachMap = map ? bindPresence(map, conn) : () => {};
 
     teardownRef.current = () => {
       if (debounce) clearTimeout(debounce);
@@ -309,6 +368,7 @@ export function useCollaboration(
     displayName: string,
     color: string,
     hostToken: string | undefined,
+    options?: { inviteToken?: string; identityToken?: string },
   ): Promise<void> => {
     disconnect();
     syncPausedRef.current = false;
@@ -336,8 +396,6 @@ export function useCollaboration(
       mode: "co-edit",
       clientId: selfIdRef.current,
       participants: [selfParticipant],
-      // A participant joining an existing session normally wants to arrive at
-      // and stay with the host's viewport. They can turn this off at any time.
       followHost: !hostToken,
       error: null,
     });
@@ -348,7 +406,7 @@ export function useCollaboration(
       const conn = new CollabConnection(sessionWsUrl(baseUrl!, normalizedCode), {
         onOpen: () => {
           if (connRef.current !== conn) return;
-          attach(displayName, color, hostToken);
+          attach(displayName, color, hostToken, options?.inviteToken, options?.identityToken);
         },
         onMessage: (msg) => {
           if (connRef.current !== conn) return;
@@ -393,8 +451,13 @@ export function useCollaboration(
   };
 
   const start = useCallback(
-    async (displayName: string, color: string, mode: CollaborationMode) => {
-      const session = await createSession(mode, baseUrl);
+    async (
+      displayName: string,
+      color: string,
+      mode: CollaborationMode,
+      requireIdentity?: boolean,
+    ) => {
+      const session = await createSession({ mode, requireIdentity }, baseUrl);
       await connect(session.sessionId, displayName, color, session.hostToken);
       return session.sessionId;
     },
@@ -403,8 +466,13 @@ export function useCollaboration(
   );
 
   const join = useCallback(
-    async (sessionId: string, displayName: string, color: string) => {
-      await connect(sessionId.trim().toUpperCase(), displayName, color, undefined);
+    async (
+      sessionId: string,
+      displayName: string,
+      color: string,
+      options?: { inviteToken?: string; identityToken?: string },
+    ) => {
+      await connect(sessionId.trim().toUpperCase(), displayName, color, undefined, options);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [baseUrl],
@@ -423,13 +491,33 @@ export function useCollaboration(
     connRef.current?.send({ type: "set-participant-mode", clientId, canEdit: canEditFlag });
   }, []);
 
+  const mintInvite = useCallback((role: CollaborationMode, maxUses?: number) => {
+    connRef.current?.send({ type: "mint-invite", role, maxUses });
+  }, []);
+
+  const revokeInvite = useCallback((token: string) => {
+    connRef.current?.send({ type: "revoke-invite", token });
+  }, []);
+
+  const setSessionConfig = useCallback((config: { requireIdentity?: boolean }) => {
+    connRef.current?.send({ type: "set-session-config", ...config });
+  }, []);
+
+  const setLayerLocks = useCallback((lockedLayerIds: string[]) => {
+    connRef.current?.send({ type: "set-layer-locks", lockedLayerIds });
+  }, []);
+
+  const kickParticipant = useCallback((clientId: string, reason?: string) => {
+    connRef.current?.send({ type: "kick-participant", clientId, reason });
+  }, []);
+
+  const blockParticipant = useCallback((clientId: string, reason?: string) => {
+    connRef.current?.send({ type: "block-participant", clientId, reason });
+  }, []);
+
   const sendChat = useCallback((text: string, coordinate?: { lng: number; lat: number } | null) => {
     const trimmed = text.trim();
     if (!trimmed) return false;
-    // Send to the relay only. The relay broadcasts back to everyone including
-    // the sender with a server-assigned id; handleMessage("chat") adds it to
-    // the store then. This means the server's ordering is always the truth and
-    // the sender's message appears only once (via the echo, not optimistically).
     return connRef.current?.send({ type: "chat", text: trimmed, coordinate }) ?? false;
   }, []);
 
@@ -450,11 +538,18 @@ export function useCollaboration(
   return {
     enabled,
     canEdit,
+    canEditLayer,
     start,
     join,
     leave,
     setMode,
     setParticipantMode,
+    mintInvite,
+    revokeInvite,
+    setSessionConfig,
+    setLayerLocks,
+    kickParticipant,
+    blockParticipant,
     setFollowHost,
     sendChat,
     sendCommentMutation,

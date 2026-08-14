@@ -444,6 +444,7 @@ Web 构建是一个可安装的 PWA，用 `vite-plugin-pwa` + Workbox。缓存**
 
 - 想去掉「首次也要联网」，可以用 `GEOLIBRE_PGLITE_CDN=0`、`GEOLIBRE_CEREUS_CDN=0` 把它们塞回 `/assets/`——**代价是 PGlite 一个就给 Tauri 二进制加回 ~22 MB**
 - **Pyodide 和 gdal3.js 没有这个开关。** Pyodide 永远走 CDN（`VITE_PYODIDE_INDEX_URL` 能改镜像，但**那个镜像不在两条 CacheFirst 规则的匹配范围内**，除非把它放到 `/assets/` 下，否则只能退回普通 HTTP 缓存）；gdal3.js 从不 vendor，`GEOLIBRE_GDAL_CDN=0` 的效果是**关掉那个导出功能**，不是打包它
+- **要去掉所有由 GeoLibre 控制的外部 CDN 引用**（适用于不允许引用任何不受信外部 CDN 的部署），设置 `GEOLIBRE_NO_EXTERNAL_CDN=1`。它隐含所有 `*_CDN=0` 标志，并额外禁用那些源码中嵌入了 CDN URL 的功能（故事地图 HTML 导出、内置检测模型、ONNX WASM、3D Tiles 解码器路径、Pyodide 默认 URL）。第三方 npm 包内部的 CDN URL 字符串不受 GeoLibre 控制，无法移除
 - **桌面构建不装 Service Worker**（Tauri 自带资源已离线），所以桌面版每次安装都会重新拉一次 CDN 引擎
 - 底图只缓存 CORS 友好的默认源（OpenFreeMap、CARTO），其它远程瓦片和 WMS/WFS **按设计就是离线不可用**
 - 新部署用 `registerType: "autoUpdate"` + `skipWaiting`，但**故意压掉了 Workbox 默认的「激活时强制刷新」**——因为在 `/demo/` 这种相对 base 的子路径下会误触发，把用户正在编辑的地图状态冲掉。页面恢复交给 `installStaleChunkReload`，**只在孤儿 lazy chunk 404 时才重载**，还带冷却保护
