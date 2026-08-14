@@ -5510,7 +5510,9 @@ function createStacSearchStoreLayer(
       ...(properties?.constellation ? { constellation: properties.constellation } : {}),
       ...(properties?.instruments ? { sensor: properties.instruments } : {}),
       ...(properties?.gsd ? { gsd: properties.gsd } : {}),
-      ...(properties?.["processing:level"] ? { processingLevel: properties["processing:level"] } : {}),
+      ...(properties?.["processing:level"]
+        ? { processingLevel: properties["processing:level"] }
+        : {}),
       ...(item?.assets ? { bandNames: Object.keys(item.assets) } : {}),
       ...(selectedAsset && assetHrefs[selectedAsset]
         ? { primaryAssetUrl: assetHrefs[selectedAsset], assetHrefs }

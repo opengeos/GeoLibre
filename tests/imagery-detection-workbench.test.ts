@@ -54,7 +54,7 @@ describe("Imagery Detection Workbench classes", () => {
         ["k", "sailboat"],
         ["l", "unknown_vessel"],
         [";", "not_vessel"],
-      ]
+      ],
     );
     assert.equal(vesselClassForKey("A")?.id, "cargo");
     assert.equal(vesselClassForKey(";")?.id, "not_vessel");
@@ -110,7 +110,7 @@ describe("imagery setup", () => {
       ],
       100,
       100,
-      [0, 0, 10, 10]
+      [0, 0, 10, 10],
     );
     assert.ok(corners);
     assert.deepEqual(corners, [
@@ -141,24 +141,15 @@ describe("detection annotations", () => {
     assert.equal(feature.properties.sensor, "Sentinel-2");
     assert.equal(feature.properties.imagery_layer_id, "scene-1");
     assert.equal(feature.properties.review_status, "unreviewed");
-    assert.deepEqual(
-      feature.geometry.coordinates[0]?.[0],
-      feature.geometry.coordinates[0]?.[4]
-    );
+    assert.deepEqual(feature.geometry.coordinates[0]?.[0], feature.geometry.coordinates[0]?.[4]);
   });
 
   it("accepts vessel classes and rejects the negative class", () => {
     const feature = createDetectionFeature([...corners], imagery, {
       id: "det-1",
     });
-    assert.equal(
-      classifyDetection(feature, "cargo").properties.review_status,
-      "accepted"
-    );
-    assert.equal(
-      classifyDetection(feature, "not_vessel").properties.review_status,
-      "rejected"
-    );
+    assert.equal(classifyDetection(feature, "cargo").properties.review_status, "accepted");
+    assert.equal(classifyDetection(feature, "not_vessel").properties.review_status, "rejected");
   });
 });
 
@@ -166,27 +157,18 @@ describe("training exports", () => {
   const accepted = classifyDetection(
     createDetectionFeature([...corners], imagery, { id: "det-1" }),
     "cargo",
-    "2026-08-12T01:00:00Z"
+    "2026-08-12T01:00:00Z",
   );
   const rejected = classifyDetection(
     createDetectionFeature([...corners], imagery, { id: "det-2" }),
     "not_vessel",
-    "2026-08-12T01:00:00Z"
+    "2026-08-12T01:00:00Z",
   );
 
   it("maps geographic coordinates to north-up source pixels", () => {
-    assert.deepEqual(
-      geographicToPixel([-10, 45], imagery.bounds!, 1000, 500),
-      [0, 0]
-    );
-    assert.deepEqual(
-      geographicToPixel([0, 40], imagery.bounds!, 1000, 500),
-      [1000, 500]
-    );
-    assert.deepEqual(
-      geographicToPixel([-5, 42.5], imagery.bounds!, 1000, 500),
-      [500, 250]
-    );
+    assert.deepEqual(geographicToPixel([-10, 45], imagery.bounds!, 1000, 500), [0, 0]);
+    assert.deepEqual(geographicToPixel([0, 40], imagery.bounds!, 1000, 500), [1000, 500]);
+    assert.deepEqual(geographicToPixel([-5, 42.5], imagery.bounds!, 1000, 500), [500, 250]);
   });
 
   it("exports a provenance manifest and annotation ledger", () => {
@@ -210,19 +192,13 @@ describe("training exports", () => {
   it("exports normalized YOLO oriented-box coordinates", () => {
     assert.equal(
       exportYoloObb(imagery, [accepted, rejected]),
-      "0 0.100000 0.200000 0.200000 0.200000 0.200000 0.400000 0.100000 0.400000\n"
+      "0 0.100000 0.200000 0.200000 0.200000 0.200000 0.400000 0.100000 0.400000\n",
     );
   });
 
   it("refuses pixel exports without dimensions and bounds", () => {
     const incomplete = { ...imagery, widthPx: undefined };
-    assert.throws(
-      () => exportCoco(incomplete, [accepted]),
-      /requires image width/
-    );
-    assert.throws(
-      () => exportYoloObb(incomplete, [accepted]),
-      /requires image width/
-    );
+    assert.throws(() => exportCoco(incomplete, [accepted]), /requires image width/);
+    assert.throws(() => exportYoloObb(incomplete, [accepted]), /requires image width/);
   });
 });

@@ -1,8 +1,4 @@
-import {
-  DEFAULT_LAYER_STYLE,
-  useAppStore,
-  type GeoLibreLayer,
-} from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Map as MapLibreMap, MapMouseEvent, Point } from "maplibre-gl";
 import { fromBlob } from "geotiff";
 import {
@@ -73,23 +69,16 @@ async function fetchSegmentModel(url: string): Promise<ArrayBuffer> {
   const cached = await cache?.match(url).catch(() => undefined);
   if (cached) return cached.arrayBuffer();
   const response = await fetch(url, { mode: "cors" });
-  if (!response.ok)
-    throw new Error(`Failed to download SlimSAM (HTTP ${response.status}).`);
+  if (!response.ok) throw new Error(`Failed to download SlimSAM (HTTP ${response.status}).`);
   await cache?.put(url, response.clone()).catch(() => {});
   return response.arrayBuffer();
 }
 
-async function segmentSourceBytes(
-  bytes: ArrayBuffer,
-  sceneBounds: ImageBounds
-): Promise<void> {
+async function segmentSourceBytes(bytes: ArrayBuffer, sceneBounds: ImageBounds): Promise<void> {
   await segmentRaster(await readRasterData(bytes), sceneBounds);
 }
 
-async function segmentRaster(
-  raster: RasterData,
-  sceneBounds: ImageBounds
-): Promise<void> {
+async function segmentRaster(raster: RasterData, sceneBounds: ImageBounds): Promise<void> {
   if (!imageryDraft?.bounds || segmenting) return;
   segmenting = true;
   segmentProgress = "Reading source imagery…";
@@ -112,9 +101,7 @@ async function segmentRaster(
           stabilityScoreThreshold: 0.86,
           minAreaFraction: 0.00001,
           onProgress: (done, total) => {
-            segmentProgress = `Tile ${tileIndex + 1} / ${
-              tiles.length
-            } · SAM ${done} / ${total}`;
+            segmentProgress = `Tile ${tileIndex + 1} / ${tiles.length} · SAM ${done} / ${total}`;
             renderPanel();
           },
         });
@@ -123,14 +110,14 @@ async function segmentRaster(
             mask.polygon,
             tile.raster.width,
             tile.raster.height,
-            tile.bounds
+            tile.bounds,
           );
           if (!corners || !candidatePassesSceneMask(corners)) continue;
           proposals.push(
             createDetectionFeature(corners, imageryDraft!, {
               geometrySource: "model",
               modelScore: Number(mask.score.toFixed(4)),
-            })
+            }),
           );
         }
       }
@@ -140,14 +127,10 @@ async function segmentRaster(
     const deduplicated = deduplicateProposals(proposals);
     pushUndo();
     writeDetections([...detections(), ...deduplicated]);
-    selectedDetectionId =
-      deduplicated[0]?.properties.detection_id ?? selectedDetectionId;
-    if (deduplicated.length)
-      selectAt(detections().length - deduplicated.length);
+    selectedDetectionId = deduplicated[0]?.properties.detection_id ?? selectedDetectionId;
+    if (deduplicated.length) selectAt(detections().length - deduplicated.length);
     segmentProgress = deduplicated.length
-      ? `${deduplicated.length} SAM candidates added from ${
-          tiles.length
-        } overlapping tiles${
+      ? `${deduplicated.length} SAM candidates added from ${tiles.length} overlapping tiles${
           sceneMask && useSceneMask ? " after Sentinel-2 scene masking" : ""
         }.`
       : "SAM found no candidate objects with the current thresholds.";
@@ -163,7 +146,7 @@ function rasterTiles(
   raster: RasterData,
   bounds: ImageBounds,
   tileSize = 896,
-  overlap = 128
+  overlap = 128,
 ): Array<{ raster: RasterData; bounds: ImageBounds }> {
   const step = tileSize - overlap;
   const xStarts: number[] = [];
@@ -185,11 +168,8 @@ function rasterTiles(
         const target = new Float32Array(width * height);
         for (let row = 0; row < height; row += 1)
           target.set(
-            source.subarray(
-              (y0 + row) * raster.width + x0,
-              (y0 + row) * raster.width + x1
-            ),
-            row * width
+            source.subarray((y0 + row) * raster.width + x0, (y0 + row) * raster.width + x1),
+            row * width,
           );
         return target;
       });
@@ -210,7 +190,7 @@ function rasterTiles(
         },
         bounds: tileBounds,
       };
-    })
+    }),
   );
 }
 
@@ -230,27 +210,21 @@ function bboxIou(a: ImageBounds, b: ImageBounds): number {
   return intersection / Math.max(Number.EPSILON, areaA + areaB - intersection);
 }
 
-function deduplicateProposals(
-  features: DetectionFeature[]
-): DetectionFeature[] {
+function deduplicateProposals(features: DetectionFeature[]): DetectionFeature[] {
   const sorted = [...features].sort(
-    (a, b) => (b.properties.model_score ?? 0) - (a.properties.model_score ?? 0)
+    (a, b) => (b.properties.model_score ?? 0) - (a.properties.model_score ?? 0),
   );
   const kept: DetectionFeature[] = [];
   for (const feature of sorted) {
     const bounds = candidateBounds(feature);
-    if (
-      !kept.some(
-        (candidate) => bboxIou(bounds, candidateBounds(candidate)) > 0.45
-      )
-    )
+    if (!kept.some((candidate) => bboxIou(bounds, candidateBounds(candidate)) > 0.45))
       kept.push(feature);
   }
   return kept;
 }
 
 function candidatePassesSceneMask(
-  corners: [LngLatPoint, LngLatPoint, LngLatPoint, LngLatPoint]
+  corners: [LngLatPoint, LngLatPoint, LngLatPoint, LngLatPoint],
 ): boolean {
   if (!useSceneMask || !sceneMask) return true;
   const longitude = corners.reduce((sum, point) => sum + point[0], 0) / 4;
@@ -264,14 +238,14 @@ function candidatePassesSceneMask(
     sceneMask.raster.height,
     x,
     y,
-    5
+    5,
   );
 }
 
 async function readVisibleRasterFile(
   file: File,
   fullBounds: ImageBounds,
-  visibleBounds: ImageBounds
+  visibleBounds: ImageBounds,
 ): Promise<RasterData> {
   const tiff = await fromBlob(file);
   const image = await tiff.getImage();
@@ -279,34 +253,18 @@ async function readVisibleRasterFile(
   const height = image.getHeight();
   const [west, south, east, north] = fullBounds;
   const [clipWest, clipSouth, clipEast, clipNorth] = visibleBounds;
-  const x0 = Math.max(
-    0,
-    Math.floor(((clipWest - west) / (east - west)) * width)
-  );
-  const x1 = Math.min(
-    width,
-    Math.ceil(((clipEast - west) / (east - west)) * width)
-  );
-  const y0 = Math.max(
-    0,
-    Math.floor(((north - clipNorth) / (north - south)) * height)
-  );
-  const y1 = Math.min(
-    height,
-    Math.ceil(((north - clipSouth) / (north - south)) * height)
-  );
-  if (x1 <= x0 || y1 <= y0)
-    throw new Error("The visible map area does not overlap this raster.");
+  const x0 = Math.max(0, Math.floor(((clipWest - west) / (east - west)) * width));
+  const x1 = Math.min(width, Math.ceil(((clipEast - west) / (east - west)) * width));
+  const y0 = Math.max(0, Math.floor(((north - clipNorth) / (north - south)) * height));
+  const y1 = Math.min(height, Math.ceil(((north - clipSouth) / (north - south)) * height));
+  if (x1 <= x0 || y1 <= y0) throw new Error("The visible map area does not overlap this raster.");
   const sourceWidth = x1 - x0;
   const sourceHeight = y1 - y0;
   const scale = Math.min(1, 2048 / Math.max(sourceWidth, sourceHeight));
   const outputWidth = Math.max(1, Math.round(sourceWidth * scale));
   const outputHeight = Math.max(1, Math.round(sourceHeight * scale));
   const sampleCount = image.getSamplesPerPixel();
-  const samples = Array.from(
-    { length: Math.min(3, sampleCount) },
-    (_, index) => index
-  );
+  const samples = Array.from({ length: Math.min(3, sampleCount) }, (_, index) => index);
   const result = await image.readRasters({
     window: [x0, y0, x1, y1],
     width: outputWidth,
@@ -314,9 +272,7 @@ async function readVisibleRasterFile(
     samples,
     resampleMethod: "bilinear",
   });
-  const rawBands = (
-    Array.isArray(result) ? result : [result]
-  ) as ArrayLike<number>[];
+  const rawBands = (Array.isArray(result) ? result : [result]) as ArrayLike<number>[];
   const noData = image.getGDALNoData();
   return {
     bands: rawBands.map((band) => Float32Array.from(band)),
@@ -342,77 +298,59 @@ function currentAnalysisBounds(): ImageBounds | null {
     Math.min(east, mapBounds.getEast()),
     Math.min(north, mapBounds.getNorth()),
   ];
-  return clipped[0] < clipped[2] && clipped[1] < clipped[3]
-    ? clipped
-    : imageryDraft.bounds;
+  return clipped[0] < clipped[2] && clipped[1] < clipped[3] ? clipped : imageryDraft.bounds;
 }
 
 async function planetaryComputerSignedUrl(url: string): Promise<string> {
   if (!/\.blob\.core\.windows\.net\//i.test(url)) return url;
   const response = await fetch(
-    `https://planetarycomputer.microsoft.com/api/sas/v1/sign?href=${encodeURIComponent(
-      url
-    )}`
+    `https://planetarycomputer.microsoft.com/api/sas/v1/sign?href=${encodeURIComponent(url)}`,
   );
   if (!response.ok)
-    throw new Error(
-      `Could not authorize the Planetary Computer asset (HTTP ${response.status}).`
-    );
+    throw new Error(`Could not authorize the Planetary Computer asset (HTTP ${response.status}).`);
   const result = (await response.json()) as { href?: string };
   return result.href ?? url;
 }
 
 async function selectedSourceUrl(): Promise<string> {
-  if (
-    imageryDraft?.sourceUri &&
-    /^(https?:|blob:|data:)/i.test(imageryDraft.sourceUri)
-  )
+  if (imageryDraft?.sourceUri && /^(https?:|blob:|data:)/i.test(imageryDraft.sourceUri))
     return imageryDraft.sourceUri;
-  const layer = rasterLayers().find(
-    (candidate) => candidate.id === selectedImageryId
-  );
+  const layer = rasterLayers().find((candidate) => candidate.id === selectedImageryId);
   const collection = layer?.metadata.stacCollectionId;
   const itemId = layer?.metadata.stacItemId;
   if (typeof collection === "string" && typeof itemId === "string") {
     const endpoint = `https://planetarycomputer.microsoft.com/api/stac/v1/collections/${encodeURIComponent(
-      collection
+      collection,
     )}/items/${encodeURIComponent(itemId)}`;
     const response = await fetch(endpoint);
     if (!response.ok)
-      throw new Error(
-        `Could not retrieve the STAC item (HTTP ${response.status}).`
-      );
+      throw new Error(`Could not retrieve the STAC item (HTTP ${response.status}).`);
     const item = (await response.json()) as {
       assets?: Record<string, { href?: string }>;
     };
     const assets = item.assets ?? {};
     const preferred = ["visual", "rendered_preview", ...Object.keys(assets)]
       .map((key) => assets[key]?.href)
-      .find(
-        (href): href is string =>
-          typeof href === "string" && /\.tiff?(?:\?|$)/i.test(href)
-      );
+      .find((href): href is string => typeof href === "string" && /\.tiff?(?:\?|$)/i.test(href));
     if (preferred) return preferred;
   }
   throw new Error("The selected layer does not expose a fetchable COG asset.");
 }
 
 async function selectedStacAssets(): Promise<Record<string, string>> {
-  const layer = rasterLayers().find(
-    (candidate) => candidate.id === selectedImageryId
-  );
+  const layer = rasterLayers().find((candidate) => candidate.id === selectedImageryId);
   const stored = layer?.metadata.assetHrefs;
   if (stored && typeof stored === "object")
     return Object.fromEntries(
       Object.entries(stored).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string"
-      )
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
     );
   const collection = layer?.metadata.stacCollectionId;
   const itemId = layer?.metadata.stacItemId;
   if (typeof collection !== "string" || typeof itemId !== "string") return {};
   const endpoint = `https://planetarycomputer.microsoft.com/api/stac/v1/collections/${encodeURIComponent(
-    collection
+    collection,
   )}/items/${encodeURIComponent(itemId)}`;
   const response = await fetch(endpoint);
   if (!response.ok) return {};
@@ -421,23 +359,18 @@ async function selectedStacAssets(): Promise<Record<string, string>> {
   };
   return Object.fromEntries(
     Object.entries(item.assets ?? {})
-      .filter((entry): entry is [string, { href: string }] =>
-        Boolean(entry[1]?.href)
-      )
-      .map(([key, asset]) => [key, asset.href])
+      .filter((entry): entry is [string, { href: string }] => Boolean(entry[1]?.href))
+      .map(([key, asset]) => [key, asset.href]),
   );
 }
 
 async function loadSentinel2SceneMask(
-  bounds: ImageBounds
+  bounds: ImageBounds,
 ): Promise<{ raster: RasterData; bounds: ImageBounds } | null> {
-  if (!useSceneMask || !/sentinel-2/i.test(imageryDraft?.sensor ?? ""))
-    return null;
+  if (!useSceneMask || !/sentinel-2/i.test(imageryDraft?.sensor ?? "")) return null;
   try {
     const assets = await selectedStacAssets();
-    const key = Object.keys(assets).find((candidate) =>
-      /^scl$/i.test(candidate)
-    );
+    const key = Object.keys(assets).find((candidate) => /^scl$/i.test(candidate));
     if (!key) return null;
     const source = await planetaryComputerSignedUrl(assets[key]);
     const subset = await extractCogSubset(source, {
@@ -448,7 +381,7 @@ async function loadSentinel2SceneMask(
     });
     const bytes = subset.buffer.slice(
       subset.byteOffset,
-      subset.byteOffset + subset.byteLength
+      subset.byteOffset + subset.byteLength,
     ) as ArrayBuffer;
     return { raster: await readRasterData(bytes), bounds };
   } catch (error) {
@@ -470,7 +403,7 @@ async function segmentSelectedImagery(): Promise<void> {
     const boundedResolution = Math.max(
       nativeResolution,
       (bounds[2] - bounds[0]) / 2048,
-      (bounds[3] - bounds[1]) / 2048
+      (bounds[3] - bounds[1]) / 2048,
     );
     const subset = await extractCogSubset(source, {
       bbox: bounds,
@@ -481,7 +414,7 @@ async function segmentSelectedImagery(): Promise<void> {
     segmenting = false;
     const bytes = subset.buffer.slice(
       subset.byteOffset,
-      subset.byteOffset + subset.byteLength
+      subset.byteOffset + subset.byteLength,
     ) as ArrayBuffer;
     await segmentSourceBytes(bytes, bounds);
   } catch (error) {
@@ -507,8 +440,7 @@ function chooseSourceForSegmentation(): void {
       void readVisibleRasterFile(file, fullBounds, visibleBounds)
         .then((raster) => segmentRaster(raster, visibleBounds))
         .catch((error) => {
-          segmentProgress =
-            error instanceof Error ? error.message : String(error);
+          segmentProgress = error instanceof Error ? error.message : String(error);
           renderPanel();
         });
     }
@@ -534,9 +466,7 @@ const CSS = {
 } as const;
 
 function rasterLayers(): GeoLibreLayer[] {
-  return useAppStore
-    .getState()
-    .layers.filter((layer) => RASTER_TYPES.has(layer.type));
+  return useAppStore.getState().layers.filter((layer) => RASTER_TYPES.has(layer.type));
 }
 
 function imageryFromLayer(layer: GeoLibreLayer): ImageryMetadata {
@@ -558,20 +488,14 @@ function finishCoverage(status: "reviewed" | "skipped"): void {
 
 function detections(): DetectionFeature[] {
   const layer = annotationLayerId
-    ? useAppStore
-        .getState()
-        .layers.find((candidate) => candidate.id === annotationLayerId)
+    ? useAppStore.getState().layers.find((candidate) => candidate.id === annotationLayerId)
     : useAppStore
         .getState()
-        .layers.find(
-          (candidate) =>
-            candidate.metadata.sourceKind === ANNOTATION_SOURCE_KIND
-        );
+        .layers.find((candidate) => candidate.metadata.sourceKind === ANNOTATION_SOURCE_KIND);
   if (!layer) return [];
   annotationLayerId = layer.id;
   return (layer.geojson?.features ?? []).filter(
-    (feature): feature is DetectionFeature =>
-      feature.geometry?.type === "Polygon"
+    (feature): feature is DetectionFeature => feature.geometry?.type === "Polygon",
   );
 }
 
@@ -579,14 +503,9 @@ function writeDetections(next: DetectionFeature[]): void {
   if (!appRef) return;
   if (
     !annotationLayerId ||
-    !useAppStore
-      .getState()
-      .layers.some((layer) => layer.id === annotationLayerId)
+    !useAppStore.getState().layers.some((layer) => layer.id === annotationLayerId)
   ) {
-    annotationLayerId = appRef.addGeoJsonLayer(
-      ANNOTATION_LAYER_NAME,
-      featureCollection(next)
-    );
+    annotationLayerId = appRef.addGeoJsonLayer(ANNOTATION_LAYER_NAME, featureCollection(next));
     useAppStore.getState().updateLayer(annotationLayerId, {
       style: {
         ...DEFAULT_LAYER_STYLE,
@@ -602,9 +521,7 @@ function writeDetections(next: DetectionFeature[]): void {
     });
     return;
   }
-  useAppStore
-    .getState()
-    .updateLayer(annotationLayerId, { geojson: featureCollection(next) });
+  useAppStore.getState().updateLayer(annotationLayerId, { geojson: featureCollection(next) });
 }
 
 function pushUndo(): void {
@@ -614,7 +531,7 @@ function pushUndo(): void {
 
 function currentIndex(items = detections()): number {
   const index = items.findIndex(
-    (feature) => feature.properties.detection_id === selectedDetectionId
+    (feature) => feature.properties.detection_id === selectedDetectionId,
   );
   return index >= 0 ? index : items.length ? 0 : -1;
 }
@@ -629,12 +546,7 @@ function selectAt(index: number): void {
     if (ring?.length) {
       const xs = ring.map((point) => point[0]);
       const ys = ring.map((point) => point[1]);
-      appRef?.fitBounds?.([
-        Math.min(...xs),
-        Math.min(...ys),
-        Math.max(...xs),
-        Math.max(...ys),
-      ]);
+      appRef?.fitBounds?.([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]);
     }
   }
   renderPanel();
@@ -645,15 +557,14 @@ function advance(): void {
   if (!items.length) return selectAt(-1);
   const index = currentIndex(items);
   const nextUnreviewed = items.findIndex(
-    (feature, candidate) =>
-      candidate > index && feature.properties.review_status === "unreviewed"
+    (feature, candidate) => candidate > index && feature.properties.review_status === "unreviewed",
   );
   selectAt(nextUnreviewed >= 0 ? nextUnreviewed : index + 1);
 }
 
 function updateSelected(
   transform: (feature: DetectionFeature) => DetectionFeature,
-  advanceAfter = false
+  advanceAfter = false,
 ): void {
   const items = detections();
   const index = currentIndex(items);
@@ -670,7 +581,7 @@ function updateSelected(
 function screenBoxCorners(
   map: MapLibreMap,
   start: Point,
-  end: Point
+  end: Point,
 ): [LngLatPoint, LngLatPoint, LngLatPoint, LngLatPoint] | null {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
@@ -759,26 +670,17 @@ function onKeyDown(event: KeyboardEvent): void {
   const vesselClass = vesselClassForKey(event.key);
   if (vesselClass) {
     event.preventDefault();
-    updateSelected(
-      (feature) => classifyDetection(feature, vesselClass.id),
-      !event.shiftKey
-    );
+    updateSelected((feature) => classifyDetection(feature, vesselClass.id), !event.shiftKey);
     return;
   }
   if (event.key.toLowerCase() === "b") startDrawing();
   else if (event.key.toLowerCase() === "q")
-    coverage.length
-      ? showCoverage(coverageIndex - 1)
-      : selectAt(currentIndex() - 1);
+    coverage.length ? showCoverage(coverageIndex - 1) : selectAt(currentIndex() - 1);
   else if (event.key.toLowerCase() === "e")
-    coverage.length
-      ? showCoverage(coverageIndex + 1)
-      : selectAt(currentIndex() + 1);
+    coverage.length ? showCoverage(coverageIndex + 1) : selectAt(currentIndex() + 1);
   else if (event.key === " " && coverage.length) finishCoverage("reviewed");
   else if (event.key.toLowerCase() === "w")
-    coverage.length
-      ? finishCoverage("skipped")
-      : updateSelected(skipDetection, true);
+    coverage.length ? finishCoverage("skipped") : updateSelected(skipDetection, true);
   else if (event.key.toLowerCase() === "z" && undoStack.length) {
     writeDetections(undoStack.pop()!);
     renderPanel();
@@ -789,11 +691,10 @@ function input(
   label: string,
   value: string,
   onChange: (value: string) => void,
-  type = "text"
+  type = "text",
 ): HTMLElement {
   const wrapper = document.createElement("label");
-  wrapper.style.cssText =
-    "display:flex;flex-direction:column;gap:3px;font-size:11px;";
+  wrapper.style.cssText = "display:flex;flex-direction:column;gap:3px;font-size:11px;";
   const caption = document.createElement("span");
   caption.textContent = label;
   const field = document.createElement("input");
@@ -805,11 +706,7 @@ function input(
   return wrapper;
 }
 
-function action(
-  label: string,
-  handler: () => void,
-  primary = false
-): HTMLButtonElement {
+function action(label: string, handler: () => void, primary = false): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = label;
@@ -818,12 +715,7 @@ function action(
   return button;
 }
 
-function saveText(
-  name: string,
-  text: string,
-  extensions: string[],
-  mimeType: string
-): void {
+function saveText(name: string, text: string, extensions: string[], mimeType: string): void {
   appRef?.exportTextFile?.(name, text, {
     description: "Training dataset",
     extensions,
@@ -854,9 +746,7 @@ function renderPanel(): void {
   const layers = rasterLayers();
   const blank = document.createElement("option");
   blank.value = "";
-  blank.textContent = layers.length
-    ? "Choose a raster layer…"
-    : "No raster layers loaded";
+  blank.textContent = layers.length ? "Choose a raster layer…" : "No raster layers loaded";
   select.append(blank);
   for (const layer of layers) {
     const option = document.createElement("option");
@@ -867,9 +757,7 @@ function renderPanel(): void {
   }
   select.addEventListener("change", () => {
     selectedImageryId = select.value || null;
-    const layer = layers.find(
-      (candidate) => candidate.id === selectedImageryId
-    );
+    const layer = layers.find((candidate) => candidate.id === selectedImageryId);
     imageryDraft = layer ? imageryFromLayer(layer) : null;
     sceneMask = null;
     coverage = [];
@@ -878,50 +766,41 @@ function renderPanel(): void {
   });
   sourceSection.append(heading, select);
   if (imageryDraft) {
-    const set = <K extends keyof ImageryMetadata>(
-      key: K,
-      value: ImageryMetadata[K]
-    ) => {
+    const set = <K extends keyof ImageryMetadata>(key: K, value: ImageryMetadata[K]) => {
       imageryDraft = { ...imageryDraft!, [key]: value };
     };
     sourceSection.append(
-      input("Sensor", imageryDraft.sensor, (value) =>
-        set("sensor", value || "Unknown")
-      ),
-      input("Modality", imageryDraft.modality, (value) =>
-        set("modality", value || "unknown")
-      ),
+      input("Sensor", imageryDraft.sensor, (value) => set("sensor", value || "Unknown")),
+      input("Modality", imageryDraft.modality, (value) => set("modality", value || "unknown")),
       input("Acquisition time", imageryDraft.acquiredAt ?? "", (value) =>
-        set("acquiredAt", value || undefined)
+        set("acquiredAt", value || undefined),
       ),
       input(
         "Resolution (m)",
         imageryDraft.resolutionM?.toString() ?? "",
         (value) => set("resolutionM", value ? Number(value) : undefined),
-        "number"
+        "number",
       ),
       input("Bands / render recipe", imageryDraft.bands ?? "", (value) =>
-        set("bands", value || undefined)
+        set("bands", value || undefined),
       ),
       input(
         "Image width (px)",
         imageryDraft.widthPx?.toString() ?? "",
         (value) => set("widthPx", value ? Number(value) : undefined),
-        "number"
+        "number",
       ),
       input(
         "Image height (px)",
         imageryDraft.heightPx?.toString() ?? "",
         (value) => set("heightPx", value ? Number(value) : undefined),
-        "number"
-      )
+        "number",
+      ),
     );
     const sourceNote = document.createElement("div");
     sourceNote.style.cssText = CSS.muted;
     sourceNote.textContent = imageryDraft.bounds
-      ? `Bounds detected: ${imageryDraft.bounds
-          .map((value) => value.toFixed(4))
-          .join(", ")}`
+      ? `Bounds detected: ${imageryDraft.bounds.map((value) => value.toFixed(4)).join(", ")}`
       : "No geographic bounds found. GeoJSON export works, but COCO/YOLO pixel export requires bounds.";
     sourceSection.append(sourceNote);
   }
@@ -937,22 +816,20 @@ function renderPanel(): void {
   discoverActions.style.cssText = CSS.row;
   const selectedLayer = layers.find((layer) => layer.id === selectedImageryId);
   const remoteSource = Boolean(
-    (imageryDraft?.sourceUri &&
-      /^(https?:|blob:|data:)/i.test(imageryDraft.sourceUri)) ||
-      (selectedLayer?.metadata.stacCollectionId &&
-        selectedLayer.metadata.stacItemId)
+    (imageryDraft?.sourceUri && /^(https?:|blob:|data:)/i.test(imageryDraft.sourceUri)) ||
+    (selectedLayer?.metadata.stacCollectionId && selectedLayer.metadata.stacItemId),
   );
   if (remoteSource) {
     discoverActions.append(
       action(
         segmenting ? "SAM is running…" : "Analyze visible imagery",
         () => void segmentSelectedImagery(),
-        true
-      )
+        true,
+      ),
     );
   }
   discoverActions.append(
-    action("Choose local GeoTIFF", chooseSourceForSegmentation, !remoteSource)
+    action("Choose local GeoTIFF", chooseSourceForSegmentation, !remoteSource),
   );
   discover.append(discoverActions);
   const discoverNote = document.createElement("div");
@@ -967,8 +844,7 @@ function renderPanel(): void {
   discover.append(discoverNote);
   if (/sentinel-2/i.test(imageryDraft?.sensor ?? "")) {
     const maskLabel = document.createElement("label");
-    maskLabel.style.cssText =
-      "display:flex;gap:6px;align-items:flex-start;font-size:11px;";
+    maskLabel.style.cssText = "display:flex;gap:6px;align-items:flex-start;font-size:11px;";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = useSceneMask;
@@ -999,13 +875,11 @@ function renderPanel(): void {
             coverage = createCoverageGrid(imageryDraft!.bounds!, 6, 6);
             showCoverage(0);
           },
-          true
-        )
+          true,
+        ),
       );
     } else {
-      const reviewed = coverage.filter(
-        (chip) => chip.status !== "unreviewed"
-      ).length;
+      const reviewed = coverage.filter((chip) => chip.status !== "unreviewed").length;
       const status = document.createElement("div");
       status.style.cssText = CSS.muted;
       status.textContent = `Chip ${coverageIndex + 1} / ${
@@ -1015,12 +889,8 @@ function renderPanel(): void {
       row.style.cssText = CSS.row;
       row.append(
         action("Q  Previous", () => showCoverage(coverageIndex - 1)),
-        action(
-          "Space  Reviewed + next",
-          () => finishCoverage("reviewed"),
-          true
-        ),
-        action("E  Next", () => showCoverage(coverageIndex + 1))
+        action("Space  Reviewed + next", () => finishCoverage("reviewed"), true),
+        action("E  Next", () => showCoverage(coverageIndex + 1)),
       );
       coverageSection.append(status, row);
     }
@@ -1048,7 +918,7 @@ function renderPanel(): void {
   drawRow.append(
     action(drawing ? "Drag on map…" : "B  Draw vessel box", startDrawing, true),
     action("Q  Previous", () => selectAt(index - 1)),
-    action("E  Next", () => selectAt(index + 1))
+    action("E  Next", () => selectAt(index + 1)),
   );
   annotate.append(annotateHeading, drawRow);
   if (selected) {
@@ -1095,24 +965,19 @@ function renderPanel(): void {
           "vessel-annotations.geojson",
           JSON.stringify(featureCollection(items), null, 2),
           ["geojson", "json"],
-          "application/geo+json"
-        )
+          "application/geo+json",
+        ),
       ),
       action("Manifest CSV", () =>
         saveText(
           "imagery-manifest.csv",
           exportManifestCsv(imageryDraft!, items),
           ["csv"],
-          "text/csv"
-        )
+          "text/csv",
+        ),
       ),
       action("Annotations CSV", () =>
-        saveText(
-          "vessel-annotations.csv",
-          exportAnnotationsCsv(items),
-          ["csv"],
-          "text/csv"
-        )
+        saveText("vessel-annotations.csv", exportAnnotationsCsv(items), ["csv"], "text/csv"),
       ),
       action("COCO", () => {
         try {
@@ -1120,7 +985,7 @@ function renderPanel(): void {
             "vessel-annotations.coco.json",
             JSON.stringify(exportCoco(imageryDraft!, items), null, 2),
             ["json"],
-            "application/json"
+            "application/json",
           );
         } catch (error) {
           window.alert(error instanceof Error ? error.message : String(error));
@@ -1132,12 +997,12 @@ function renderPanel(): void {
             "vessel-annotations.txt",
             exportYoloObb(imageryDraft!, items),
             ["txt"],
-            "text/plain"
+            "text/plain",
           );
         } catch (error) {
           window.alert(error instanceof Error ? error.message : String(error));
         }
-      })
+      }),
     );
     exports.append(exportButtons);
     const exportNote = document.createElement("div");
@@ -1166,9 +1031,7 @@ export const maplibreImageryDetectionWorkbenchPlugin: GeoLibrePlugin = {
     annotationLayerId =
       useAppStore
         .getState()
-        .layers.find(
-          (layer) => layer.metadata.sourceKind === ANNOTATION_SOURCE_KIND
-        )?.id ?? null;
+        .layers.find((layer) => layer.metadata.sourceKind === ANNOTATION_SOURCE_KIND)?.id ?? null;
     bindMap(app.getMap?.() ?? null);
     document.addEventListener("keydown", onKeyDown);
     unsubscribeStore = useAppStore.subscribe(() => {

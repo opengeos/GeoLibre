@@ -23,12 +23,7 @@ export const VESSEL_CLASSES = [
 
 export type VesselClassId = (typeof VESSEL_CLASSES)[number]["id"];
 export type LngLatPoint = [longitude: number, latitude: number];
-export type ImageBounds = [
-  west: number,
-  south: number,
-  east: number,
-  north: number
-];
+export type ImageBounds = [west: number, south: number, east: number, north: number];
 
 export interface ImageryMetadata {
   layerId: string;
@@ -57,8 +52,7 @@ export interface CoverageChip {
 function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) return value;
-    if (Array.isArray(value) && value.length)
-      return value.map(String).join(",");
+    if (Array.isArray(value) && value.length) return value.map(String).join(",");
   }
   return undefined;
 }
@@ -71,32 +65,23 @@ function firstNumber(...values: unknown[]): number | undefined {
   return undefined;
 }
 
-export function imageryMetadataFromLayer(
-  layer: GeoLibreLayer
-): ImageryMetadata {
+export function imageryMetadataFromLayer(layer: GeoLibreLayer): ImageryMetadata {
   const metadata = layer.metadata as Record<string, unknown>;
   const source = layer.source as Record<string, unknown>;
   const collection =
-    firstString(
-      metadata.stacCollectionId,
-      metadata.collectionId,
-      source.collectionId
-    ) ?? "";
+    firstString(metadata.stacCollectionId, metadata.collectionId, source.collectionId) ?? "";
   const context = `${collection} ${
-    firstString(metadata.platform, metadata.constellation, metadata.sensor) ??
-    ""
+    firstString(metadata.platform, metadata.constellation, metadata.sensor) ?? ""
   }`;
   const inferredSensor = /sentinel-2/i.test(context)
     ? "Sentinel-2"
     : /sentinel-1/i.test(context)
-    ? "Sentinel-1"
-    : /landsat/i.test(context)
-    ? "Landsat"
-    : "Unknown";
+      ? "Sentinel-1"
+      : /landsat/i.test(context)
+        ? "Landsat"
+        : "Unknown";
   const candidateBounds = metadata.bounds ?? source.bounds;
-  const values = Array.isArray(candidateBounds)
-    ? candidateBounds.slice(0, 4).map(Number)
-    : [];
+  const values = Array.isArray(candidateBounds) ? candidateBounds.slice(0, 4).map(Number) : [];
   const bounds =
     values.length === 4 &&
     values.every(Number.isFinite) &&
@@ -111,40 +96,17 @@ export function imageryMetadataFromLayer(
       metadata.primaryAssetUrl,
       source.url,
       layer.sourcePath,
-      metadata.stacItemId
+      metadata.stacItemId,
     ),
     sensor:
-      firstString(metadata.sensor, metadata.platform, metadata.constellation) ??
-      inferredSensor,
-    modality: /sentinel-1|sar/i.test(`${context} ${metadata.modality ?? ""}`)
-      ? "SAR"
-      : "optical",
-    acquiredAt: firstString(
-      metadata.acquiredAt,
-      metadata.datetime,
-      metadata.nasaDate
-    ),
+      firstString(metadata.sensor, metadata.platform, metadata.constellation) ?? inferredSensor,
+    modality: /sentinel-1|sar/i.test(`${context} ${metadata.modality ?? ""}`) ? "SAR" : "optical",
+    acquiredAt: firstString(metadata.acquiredAt, metadata.datetime, metadata.nasaDate),
     resolutionM: firstNumber(metadata.resolutionM, metadata.gsd),
-    bands: firstString(
-      metadata.bands,
-      metadata.bandNames,
-      source.bands,
-      metadata.assets
-    ),
-    processingLevel: firstString(
-      metadata.processingLevel,
-      metadata.processing_level
-    ),
-    widthPx: firstNumber(
-      metadata.widthPx,
-      metadata.width,
-      metadata.rasterWidth
-    ),
-    heightPx: firstNumber(
-      metadata.heightPx,
-      metadata.height,
-      metadata.rasterHeight
-    ),
+    bands: firstString(metadata.bands, metadata.bandNames, source.bands, metadata.assets),
+    processingLevel: firstString(metadata.processingLevel, metadata.processing_level),
+    widthPx: firstNumber(metadata.widthPx, metadata.width, metadata.rasterWidth),
+    heightPx: firstNumber(metadata.heightPx, metadata.height, metadata.rasterHeight),
     bounds,
   };
 }
@@ -152,7 +114,7 @@ export function imageryMetadataFromLayer(
 export function createCoverageGrid(
   bounds: ImageBounds,
   rows: number,
-  columns: number
+  columns: number,
 ): CoverageChip[] {
   const safeRows = Math.max(1, Math.floor(rows));
   const safeColumns = Math.max(1, Math.floor(columns));
@@ -190,7 +152,7 @@ export function sentinel2SclAllowsCandidate(
   height: number,
   x: number,
   y: number,
-  coastalRadiusPx = 5
+  coastalRadiusPx = 5,
 ): boolean {
   const cx = Math.max(0, Math.min(width - 1, Math.round(x)));
   const cy = Math.max(0, Math.min(height - 1, Math.round(y)));
@@ -237,9 +199,7 @@ export interface DetectionProperties {
 
 export type DetectionFeature = Feature<Polygon, DetectionProperties>;
 
-export function vesselClassForKey(
-  key: string
-): (typeof VESSEL_CLASSES)[number] | undefined {
+export function vesselClassForKey(key: string): (typeof VESSEL_CLASSES)[number] | undefined {
   return VESSEL_CLASSES.find((entry) => entry.key === key.toLowerCase());
 }
 
@@ -251,7 +211,7 @@ export function createDetectionFeature(
     now?: string;
     geometrySource?: DetectionProperties["geometry_source"];
     modelScore?: number;
-  } = {}
+  } = {},
 ): DetectionFeature {
   const id =
     options.id ??
@@ -271,19 +231,13 @@ export function createDetectionFeature(
       sensor: imagery.sensor,
       modality: imagery.modality,
       ...(imagery.acquiredAt ? { acquired_at: imagery.acquiredAt } : {}),
-      ...(imagery.resolutionM !== undefined
-        ? { resolution_m: imagery.resolutionM }
-        : {}),
+      ...(imagery.resolutionM !== undefined ? { resolution_m: imagery.resolutionM } : {}),
       ...(imagery.bands ? { bands: imagery.bands } : {}),
-      ...(imagery.processingLevel
-        ? { processing_level: imagery.processingLevel }
-        : {}),
+      ...(imagery.processingLevel ? { processing_level: imagery.processingLevel } : {}),
       review_status: "unreviewed",
       analyst_confidence: "medium",
       geometry_source: options.geometrySource ?? "analyst",
-      ...(options.modelScore !== undefined
-        ? { model_score: options.modelScore }
-        : {}),
+      ...(options.modelScore !== undefined ? { model_score: options.modelScore } : {}),
       created_at: now,
     },
   };
@@ -295,7 +249,7 @@ export function maskPolygonToOrientedCorners(
   polygon: [number, number][],
   width: number,
   height: number,
-  bounds: ImageBounds
+  bounds: ImageBounds,
 ): [LngLatPoint, LngLatPoint, LngLatPoint, LngLatPoint] | null {
   const points =
     polygon.length > 1 &&
@@ -339,10 +293,7 @@ export function maskPolygonToOrientedCorners(
   const toGeographic = (u: number, v: number): LngLatPoint => {
     const px = cx + u * ux + v * vx;
     const py = cy + u * uy + v * vy;
-    return [
-      west + (px / width) * (east - west),
-      north - (py / height) * (north - south),
-    ];
+    return [west + (px / width) * (east - west), north - (py / height) * (north - south)];
   };
   return [
     toGeographic(minU, minV),
@@ -355,7 +306,7 @@ export function maskPolygonToOrientedCorners(
 export function classifyDetection(
   feature: DetectionFeature,
   vesselClass: VesselClassId,
-  now = new Date().toISOString()
+  now = new Date().toISOString(),
 ): DetectionFeature {
   return {
     ...feature,
@@ -375,9 +326,7 @@ export function skipDetection(feature: DetectionFeature): DetectionFeature {
   };
 }
 
-export function featureCollection(
-  features: DetectionFeature[]
-): FeatureCollection<Polygon> {
+export function featureCollection(features: DetectionFeature[]): FeatureCollection<Polygon> {
   return { type: "FeatureCollection", features };
 }
 
@@ -385,7 +334,7 @@ export function geographicToPixel(
   point: LngLatPoint,
   bounds: ImageBounds,
   width: number,
-  height: number
+  height: number,
 ): [number, number] {
   const [west, south, east, north] = bounds;
   return [
@@ -396,20 +345,13 @@ export function geographicToPixel(
 
 function pixelPolygon(
   feature: DetectionFeature,
-  imagery: ImageryMetadata
+  imagery: ImageryMetadata,
 ): [number, number][] | null {
   if (!imagery.bounds || !imagery.widthPx || !imagery.heightPx) return null;
-  const ring = feature.geometry.coordinates[0]?.slice(0, -1) as
-    | LngLatPoint[]
-    | undefined;
+  const ring = feature.geometry.coordinates[0]?.slice(0, -1) as LngLatPoint[] | undefined;
   if (!ring || ring.length !== 4) return null;
   return ring.map((point) =>
-    geographicToPixel(
-      point,
-      imagery.bounds!,
-      imagery.widthPx!,
-      imagery.heightPx!
-    )
+    geographicToPixel(point, imagery.bounds!, imagery.widthPx!, imagery.heightPx!),
   );
 }
 
@@ -418,10 +360,7 @@ function csvCell(value: unknown): string {
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-export function exportManifestCsv(
-  imagery: ImageryMetadata,
-  features: DetectionFeature[]
-): string {
+export function exportManifestCsv(imagery: ImageryMetadata, features: DetectionFeature[]): string {
   const header = [
     "scene_id",
     "image_uri",
@@ -442,7 +381,7 @@ export function exportManifestCsv(
   ];
   const bounds = imagery.bounds ?? [undefined, undefined, undefined, undefined];
   const reviewed = features.filter(
-    (feature) => feature.properties.review_status !== "unreviewed"
+    (feature) => feature.properties.review_status !== "unreviewed",
   ).length;
   const row = [
     imagery.layerId,
@@ -494,32 +433,22 @@ export function exportAnnotationsCsv(features: DetectionFeature[]): string {
     .join("\n")}${rows.length ? "\n" : ""}`;
 }
 
-export function exportCoco(
-  imagery: ImageryMetadata,
-  features: DetectionFeature[]
-): object {
+export function exportCoco(imagery: ImageryMetadata, features: DetectionFeature[]): object {
   if (!imagery.widthPx || !imagery.heightPx || !imagery.bounds) {
-    throw new Error(
-      "COCO export requires image width, height, and geographic bounds."
-    );
+    throw new Error("COCO export requires image width, height, and geographic bounds.");
   }
-  const categories = VESSEL_CLASSES.filter(
-    (entry) => entry.id !== "not_vessel"
-  ).map((entry, index) => ({ id: index + 1, name: entry.id }));
+  const categories = VESSEL_CLASSES.filter((entry) => entry.id !== "not_vessel").map(
+    (entry, index) => ({ id: index + 1, name: entry.id }),
+  );
   const categoryIds = new Map<string, number>(
-    categories.map((entry) => [entry.name, entry.id] as const)
+    categories.map((entry) => [entry.name, entry.id] as const),
   );
   const annotations = features.flatMap((feature, index) => {
     const categoryId = feature.properties.vessel_class
       ? categoryIds.get(feature.properties.vessel_class)
       : undefined;
     const polygon = pixelPolygon(feature, imagery);
-    if (
-      !categoryId ||
-      !polygon ||
-      feature.properties.review_status !== "accepted"
-    )
-      return [];
+    if (!categoryId || !polygon || feature.properties.review_status !== "accepted") return [];
     const xs = polygon.map(([x]) => x);
     const ys = polygon.map(([, y]) => y);
     const minX = Math.min(...xs);
@@ -556,19 +485,14 @@ export function exportCoco(
   };
 }
 
-export function exportYoloObb(
-  imagery: ImageryMetadata,
-  features: DetectionFeature[]
-): string {
+export function exportYoloObb(imagery: ImageryMetadata, features: DetectionFeature[]): string {
   if (!imagery.widthPx || !imagery.heightPx || !imagery.bounds) {
-    throw new Error(
-      "YOLO OBB export requires image width, height, and geographic bounds."
-    );
+    throw new Error("YOLO OBB export requires image width, height, and geographic bounds.");
   }
   const categoryIds = new Map<string, number>(
     VESSEL_CLASSES.filter((entry) => entry.id !== "not_vessel").map(
-      (entry, index) => [entry.id, index] as const
-    )
+      (entry, index) => [entry.id, index] as const,
+    ),
   );
   const lines: string[] = [];
   for (const feature of features) {
@@ -576,19 +500,13 @@ export function exportYoloObb(
       ? categoryIds.get(feature.properties.vessel_class)
       : undefined;
     const polygon = pixelPolygon(feature, imagery);
-    if (
-      classId === undefined ||
-      !polygon ||
-      feature.properties.review_status !== "accepted"
-    )
+    if (classId === undefined || !polygon || feature.properties.review_status !== "accepted")
       continue;
     const normalized = polygon.flatMap(([x, y]) => [
       Math.max(0, Math.min(1, x / imagery.widthPx!)),
       Math.max(0, Math.min(1, y / imagery.heightPx!)),
     ]);
-    lines.push(
-      `${classId} ${normalized.map((value) => value.toFixed(6)).join(" ")}`
-    );
+    lines.push(`${classId} ${normalized.map((value) => value.toFixed(6)).join(" ")}`);
   }
   return lines.length ? `${lines.join("\n")}\n` : "";
 }

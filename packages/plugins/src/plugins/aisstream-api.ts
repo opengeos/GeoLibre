@@ -40,7 +40,12 @@ export function buildAisStreamSubscription(apiKey: string, bounds: AisBounds): o
   }
   return {
     APIKey: apiKey.trim(),
-    BoundingBoxes: [[[south, west], [north, east]]],
+    BoundingBoxes: [
+      [
+        [south, west],
+        [north, east],
+      ],
+    ],
     FilterMessageTypes: [...POSITION_TYPES],
   };
 }

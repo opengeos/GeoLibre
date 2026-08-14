@@ -239,8 +239,12 @@ function createPlanetaryComputerStoreLayer(activeLayer: ActiveLayer): GeoLibreLa
       .filter((entry): entry is [string, { href: string }] => typeof entry[1]?.href === "string")
       .map(([key, asset]) => [key, asset.href]),
   );
-  const preferredAsset = ["visual", "rendered_preview", ...(activeLayer.assets ?? []), ...assetNames]
-    .find((key) => assetHrefs[key]);
+  const preferredAsset = [
+    "visual",
+    "rendered_preview",
+    ...(activeLayer.assets ?? []),
+    ...assetNames,
+  ].find((key) => assetHrefs[key]);
 
   return {
     id: activeLayer.id,
@@ -272,7 +276,9 @@ function createPlanetaryComputerStoreLayer(activeLayer: ActiveLayer): GeoLibreLa
       ...(properties?.constellation ? { constellation: properties.constellation } : {}),
       ...(properties?.instruments ? { sensor: properties.instruments } : {}),
       ...(properties?.gsd ? { gsd: properties.gsd } : {}),
-      ...(properties?.["processing:level"] ? { processingLevel: properties["processing:level"] } : {}),
+      ...(properties?.["processing:level"]
+        ? { processingLevel: properties["processing:level"] }
+        : {}),
       ...(assetNames?.length ? { bandNames: assetNames } : {}),
       ...(preferredAsset ? { primaryAssetUrl: assetHrefs[preferredAsset], assetHrefs } : {}),
       tileType: "raster",

@@ -162,13 +162,14 @@ export const maplibreAisStreamPlugin: GeoLibrePlugin = {
   name: "AISStream",
   version: "0.1.0",
   activate: (app) => {
-    unregisterPanel = app.registerRightPanel?.({
-      id: PANEL_ID,
-      title: "AISStream",
-      dock: "left-of-style",
-      defaultWidth: 360,
-      render: (container) => renderPanel(app, container),
-    }) ?? null;
+    unregisterPanel =
+      app.registerRightPanel?.({
+        id: PANEL_ID,
+        title: "AISStream",
+        dock: "left-of-style",
+        defaultWidth: 360,
+        render: (container) => renderPanel(app, container),
+      }) ?? null;
     if (!unregisterPanel) return false;
     app.openRightPanel?.(PANEL_ID);
   },

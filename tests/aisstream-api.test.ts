@@ -5,7 +5,10 @@ import {
   normalizeAisStreamMessage,
   parseAisStreamEvent,
 } from "../packages/plugins/src/plugins/aisstream-api";
-import { buildTimeBinding, buildTimeFilter } from "../packages/plugins/src/plugins/time-slider-binding";
+import {
+  buildTimeBinding,
+  buildTimeFilter,
+} from "../packages/plugins/src/plugins/time-slider-binding";
 
 const message = {
   MessageType: "PositionReport",
@@ -30,7 +33,12 @@ describe("AISStream adapter", () => {
   it("builds a latitude-longitude subscription from GeoLibre bounds", () => {
     assert.deepEqual(buildAisStreamSubscription(" secret ", [-77, 36, -75, 38]), {
       APIKey: "secret",
-      BoundingBoxes: [[[36, -77], [38, -75]]],
+      BoundingBoxes: [
+        [
+          [36, -77],
+          [38, -75],
+        ],
+      ],
       FilterMessageTypes: [
         "PositionReport",
         "StandardClassBPositionReport",

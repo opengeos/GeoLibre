@@ -47,10 +47,7 @@ export {
 // of re-implementing (and drifting from) it.
 export { PanelTitleResolver } from "./panel-title";
 export { maplibreLayerControlPlugin } from "./plugins/layer-control";
-export {
-  AISSTREAM_PLUGIN_ID,
-  maplibreAisStreamPlugin,
-} from "./plugins/maplibre-aisstream";
+export { AISSTREAM_PLUGIN_ID, maplibreAisStreamPlugin } from "./plugins/maplibre-aisstream";
 export {
   AISSTREAM_URL,
   aisFeatureCollection,
@@ -61,9 +58,7 @@ export {
   type AisPositionFeature,
   type AisPositionProperties,
 } from "./plugins/aisstream-api";
-export {
-  maplibreImageryDetectionWorkbenchPlugin,
-} from "./plugins/maplibre-imagery-detection-workbench";
+export { maplibreImageryDetectionWorkbenchPlugin } from "./plugins/maplibre-imagery-detection-workbench";
 export {
   ANNOTATION_SOURCE_KIND,
   IMAGERY_DETECTION_WORKBENCH_ID,
