@@ -56,6 +56,12 @@ import { MaptoolkitLogoControl } from "./maptoolkit-logo-control";
 import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control";
 import { getDynamicPaintProperty, setDynamicPaintProperty } from "./dynamic-style-property";
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
+import { installMapTransformCompat } from "./map-transform-compat";
+
+// Before any `Map` is constructed: re-expose `map.transform` for the packages
+// we do not control that still read it (deck.gl above all). See the module for
+// why it cannot wait until a map exists.
+installMapTransformCompat();
 
 /**
  * GeolocateControl is constructed through this indirection so tests can
