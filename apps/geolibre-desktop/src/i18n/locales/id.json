@@ -1157,6 +1157,9 @@
     "viewOnly": "Hanya-lihat",
     "allowEdit": "Izinkan orang ini mengedit",
     "setViewOnly": "Jadikan orang ini hanya-lihat",
+    "kick": "Keluarkan peserta",
+    "block": "Blokir peserta",
+    "requireIdentityLabel": "Wajibkan akun yang sudah masuk untuk bergabung",
     "chatLog": "Obrolan sesi",
     "chatCompose": "Ketik pesan",
     "chatEmpty": "Belum ada pesan.",
@@ -1165,7 +1168,11 @@
     "chatAttachLocation": "Lampirkan lokasi peta saat ini",
     "chatLocationAttached": "Lokasi terlampir (klik untuk menghapus)",
     "chatGoToLocation": "Buka lokasi ini",
-    "sessionStatusUnread_other": "Sesi kolaborasi langsung, {{count}} pesan belum dibaca. Klik untuk melihat siapa yang terhubung dan mengobrol."
+    "sessionStatusUnread_other": "Sesi kolaborasi langsung, {{count}} pesan belum dibaca. Klik untuk melihat siapa yang terhubung dan mengobrol.",
+    "lockLayer": "Kunci layer untuk tamu",
+    "unlockLayer": "Buka kunci layer untuk tamu",
+    "layerLocked": "Terkunci",
+    "layerLockedHint": "Layer ini dikunci oleh host dan tidak dapat diedit"
   },
   "share": {
     "title": "Bagikan proyek",
@@ -4106,6 +4113,7 @@
     "title": "Deteksi Objek",
     "description": "Jalankan model YOLO yang diekspor ke ONNX pada GeoTIFF, sepenuhnya di browser. Kotak yang terdeteksi diberi georeferensi dan setiap kelas ditambahkan sebagai layernya sendiri.",
     "hint": "Gunakan model COCO bawaan (diunduh dan disimpan dalam cache sekali) atau bawa ONNX YOLOv5/v8/v11 Anda sendiri. Deteksi berjalan secara lokal di browser. Model bawaan mendeteksi objek sehari-hari; untuk citra udara, sediakan model Anda sendiri yang dilatih dari udara.",
+    "unavailableNoExternalCdn": "Deteksi objek tidak tersedia di build ini. Fitur ini memerlukan ONNX Runtime, yang dimuat dari CDN eksternal yang dinonaktifkan oleh penerapan ini. Menyediakan file model Anda sendiri tidak membantu.",
     "imageLabel": "Gambar (GeoTIFF)",
     "imagePlaceholder": "Pilih GeoTIFF…",
     "chooseImage": "Pilih gambar",
@@ -4138,6 +4146,7 @@
     "title": "Segmentasikan Semua",
     "description": "Jalankan SlimSAM secara otomatis pada GeoTIFF, sepenuhnya di browser. Setiap objek yang terdeteksi menjadi poligon berreferensi geografis yang ditambahkan sebagai satu layer.",
     "hint": "Grid titik disampel di seluruh gambar dan disegmentasi dengan SlimSAM (diunduh dan disimpan dalam cache sekali). Tanpa klik atau label — grid yang lebih rapat menemukan lebih banyak objek tetapi memakan waktu lebih lama.",
+    "unavailableNoExternalCdn": "“Segmentasikan Semua” tidak tersedia di build ini. Fitur ini memerlukan ONNX Runtime, yang dimuat dari CDN eksternal yang dinonaktifkan oleh penerapan ini.",
     "imageLabel": "Gambar (GeoTIFF)",
     "imagePlaceholder": "Pilih GeoTIFF…",
     "chooseImage": "Pilih gambar",

@@ -1157,6 +1157,9 @@
     "viewOnly": "보기 전용",
     "allowEdit": "이 사용자에게 편집 허용",
     "setViewOnly": "이 사용자를 보기 전용으로 설정",
+    "kick": "참가자 내보내기",
+    "block": "참가자 차단",
+    "requireIdentityLabel": "참가하려면 로그인한 계정 필요",
     "chatLog": "세션 채팅",
     "chatCompose": "메시지 입력",
     "chatEmpty": "아직 메시지가 없습니다.",
@@ -1165,7 +1168,11 @@
     "chatAttachLocation": "현재 지도 위치 첨부",
     "chatLocationAttached": "위치가 첨부됨(클릭하여 제거)",
     "chatGoToLocation": "이 위치로 이동",
-    "sessionStatusUnread_other": "실시간 공동작업 세션, 읽지 않은 메시지 {{count}}개. 클릭하여 접속자를 확인하고 채팅하세요."
+    "sessionStatusUnread_other": "실시간 공동작업 세션, 읽지 않은 메시지 {{count}}개. 클릭하여 접속자를 확인하고 채팅하세요.",
+    "lockLayer": "게스트에 대해 레이어 잠금",
+    "unlockLayer": "게스트에 대해 레이어 잠금 해제",
+    "layerLocked": "잠김",
+    "layerLockedHint": "이 레이어는 호스트가 잠갔으므로 편집할 수 없습니다"
   },
   "share": {
     "title": "프로젝트 공유",
@@ -4106,6 +4113,7 @@
     "title": "객체 탐지",
     "description": "ONNX로 내보낸 YOLO 모델을 GeoTIFF에 대해 전적으로 브라우저에서 실행합니다. 탐지된 상자는 지오레퍼런싱되며 각 클래스가 개별 레이어로 추가됩니다.",
     "hint": "내장 COCO 모델(한 번 다운로드 후 캐시됨)을 사용하거나 직접 만든 YOLOv5/v8/v11 ONNX를 가져오세요. 탐지는 브라우저에서 로컬로 실행됩니다. 내장 모델은 일상적인 객체를 탐지합니다. 항공 영상의 경우 직접 상공 촬영으로 학습한 모델을 제공하세요.",
+    "unavailableNoExternalCdn": "이 빌드에서는 객체 탐지를 사용할 수 없습니다. ONNX Runtime이 필요하지만 외부 CDN에서 로드되며 이 배포에서는 비활성화되어 있습니다. 직접 모델 파일을 제공해도 해결되지 않습니다.",
     "imageLabel": "이미지 (GeoTIFF)",
     "imagePlaceholder": "GeoTIFF 선택…",
     "chooseImage": "이미지 선택",
@@ -4138,6 +4146,7 @@
     "title": "전체 세그먼트",
     "description": "SlimSAM을 GeoTIFF에 대해 자동으로 전적으로 브라우저에서 실행합니다. 탐지된 모든 객체가 지오레퍼런싱된 폴리곤이 되어 하나의 레이어로 추가됩니다.",
     "hint": "이미지 전체에 점 격자를 샘플링하여 SlimSAM(한 번 다운로드 후 캐시됨)으로 세그먼트화합니다. 클릭이나 레이블이 필요 없습니다 — 격자가 조밀할수록 더 많은 객체를 찾지만 시간이 더 걸립니다.",
+    "unavailableNoExternalCdn": "이 빌드에서는 “전체 세그먼트”를 사용할 수 없습니다. ONNX Runtime이 필요하지만 외부 CDN에서 로드되며 이 배포에서는 비활성화되어 있습니다.",
     "imageLabel": "이미지 (GeoTIFF)",
     "imagePlaceholder": "GeoTIFF 선택…",
     "chooseImage": "이미지 선택",

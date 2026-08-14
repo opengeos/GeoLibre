@@ -1121,6 +1121,9 @@
     "viewOnly": "Chỉ xem",
     "allowEdit": "Cho phép người này chỉnh sửa",
     "setViewOnly": "Đặt người này ở chế độ chỉ xem",
+    "kick": "Loại người tham gia",
+    "block": "Chặn người tham gia",
+    "requireIdentityLabel": "Yêu cầu tài khoản đã đăng nhập để tham gia",
     "chatLog": "Phiên trò chuyện",
     "chatCompose": "Nhập tin nhắn",
     "chatEmpty": "Chưa có tin nhắn nào.",
@@ -1165,7 +1168,11 @@
     "chatAttachLocation": "Đính kèm vị trí bản đồ hiện tại",
     "chatLocationAttached": "Vị trí đính kèm (click để xóa)",
     "chatGoToLocation": "Đi đến vị trí này",
-    "sessionStatusUnread_other": "Phiên cộng tác trực tiếp, {{count}} tin nhắn chưa đọc. Nhấp để xem ai đã kết nối và trò chuyện."
+    "sessionStatusUnread_other": "Phiên cộng tác trực tiếp, {{count}} tin nhắn chưa đọc. Nhấp để xem ai đã kết nối và trò chuyện.",
+    "lockLayer": "Khóa lớp đối với khách mời",
+    "unlockLayer": "Mở khóa lớp đối với khách mời",
+    "layerLocked": "Đã khóa",
+    "layerLockedHint": "Lớp này đã bị chủ nhà khóa và không thể chỉnh sửa"
   },
   "share": {
     "title": "Chia sẻ dự án",
@@ -4126,6 +4133,7 @@
     "title": "Phân đoạn mọi thứ",
     "description": "Chạy SlimSAM tự động trên GeoTIFF, hoàn toàn trong trình duyệt. Mọi đối tượng được phát hiện sẽ trở thành một đa giác tham chiếu địa lý được thêm vào dưới dạng một lớp.",
     "hint": "Một lưới các điểm được lấy mẫu trên hình ảnh và được phân đoạn bằng SlimSAM (được tải xuống và lưu vào bộ nhớ đệm một lần). Không có nhấp chuột hoặc nhãn — lưới dày đặc hơn sẽ tìm thấy nhiều đối tượng hơn nhưng mất nhiều thời gian hơn.",
+    "unavailableNoExternalCdn": "“Phân đoạn mọi thứ” không khả dụng trong bản dựng này. Tính năng này cần ONNX Runtime, vốn được tải từ một CDN bên ngoài mà bản triển khai này đã tắt.",
     "added": "Đã thêm {{count}} phân đoạn.",
     "layerName": "Hiển thị tất cả tính năng",
     "error": {
@@ -4137,6 +4145,7 @@
   "objectDetection": {
     "description": "Chạy mô hình YOLO được xuất sang ONNX qua GeoTIFF hoặc ảnh được gắn thẻ địa lý, hoàn toàn trong trình duyệt. Mỗi lớp được phát hiện sẽ được thêm vào dưới dạng lớp riêng của nó.",
     "hint": "Sử dụng mô hình COCO tích hợp sẵn (được tải xuống và lưu vào bộ nhớ đệm một lần) hoặc mang theo ONNX YOLOv5/v8/v11 của riêng bạn. Phát hiện GeoTIFF trở thành hộp tham chiếu địa lý. Việc phát hiện ảnh trở thành các điểm tại vị trí GPS của máy ảnh vì ảnh không xác định dấu chân trên mặt đất.",
+    "unavailableNoExternalCdn": "Phát hiện đối tượng không khả dụng trong bản dựng này. Tính năng này cần ONNX Runtime, vốn được tải từ một CDN bên ngoài mà bản triển khai này đã tắt. Việc cung cấp tệp mô hình của riêng bạn cũng không giúp được.",
     "imageLabel": "Hình ảnh (GeoTIFF hoặc ảnh được gắn thẻ địa lý)",
     "imagePlaceholder": "Chọn GeoTIFF, JPEG, PNG hoặc WebP…",
     "chooseImage": "Chọn hình ảnh",

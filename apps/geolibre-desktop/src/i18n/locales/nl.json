@@ -1191,6 +1191,9 @@
     "viewOnly": "Alleen-weergave",
     "allowEdit": "Deze persoon laten bewerken",
     "setViewOnly": "Deze persoon op alleen-weergave zetten",
+    "kick": "Deelnemer verwijderen",
+    "block": "Deelnemer blokkeren",
+    "requireIdentityLabel": "Aangemeld account vereist om deel te nemen",
     "chatLog": "Sessiechat",
     "chatCompose": "Typ een bericht",
     "chatEmpty": "Nog geen berichten.",
@@ -1200,7 +1203,11 @@
     "chatLocationAttached": "Locatie bijgevoegd (klik om te verwijderen)",
     "chatGoToLocation": "Naar deze locatie gaan",
     "sessionStatusUnread_one": "Live samenwerkingssessie, {{count}} ongelezen bericht. Klik om te zien wie er verbonden is en te chatten.",
-    "sessionStatusUnread_other": "Live samenwerkingssessie, {{count}} ongelezen berichten. Klik om te zien wie er verbonden is en te chatten."
+    "sessionStatusUnread_other": "Live samenwerkingssessie, {{count}} ongelezen berichten. Klik om te zien wie er verbonden is en te chatten.",
+    "lockLayer": "Laag vergrendelen voor gasten",
+    "unlockLayer": "Laag ontgrendelen voor gasten",
+    "layerLocked": "Vergrendeld",
+    "layerLockedHint": "Deze laag is vergrendeld door de host en kan niet worden bewerkt"
   },
   "share": {
     "title": "Project delen",
@@ -4173,6 +4180,7 @@
     "title": "Objectdetectie",
     "description": "Voer een naar ONNX geëxporteerd YOLO-model uit over een GeoTIFF, volledig in de browser. Gedetecteerde kaders worden gegeorefereerd en elke klasse wordt als eigen laag toegevoegd.",
     "hint": "Gebruik een ingebouwd COCO-model (eenmalig gedownload en gecachet) of breng uw eigen YOLOv5/v8/v11 ONNX. Detectie draait lokaal in de browser. Ingebouwde modellen detecteren alledaagse objecten; lever voor luchtbeelden uw eigen model getraind op bovenaanzichten.",
+    "unavailableNoExternalCdn": "Objectdetectie is niet beschikbaar in deze build. Hiervoor is de ONNX Runtime nodig, die wordt geladen vanaf een externe CDN die door deze implementatie is uitgeschakeld. Een eigen modelbestand aanleveren helpt niet.",
     "imageLabel": "Afbeelding (GeoTIFF)",
     "imagePlaceholder": "Kies een GeoTIFF…",
     "chooseImage": "Afbeelding kiezen",
@@ -4205,6 +4213,7 @@
     "title": "Alles segmenteren",
     "description": "Voer SlimSAM automatisch uit over een GeoTIFF, volledig in de browser. Elk gedetecteerd object wordt een gegeorefereerde polygoon die als één laag wordt toegevoegd.",
     "hint": "Een raster van punten wordt over de afbeelding bemonsterd en gesegmenteerd met SlimSAM (eenmalig gedownload en gecachet). Geen klikken of labels — dichtere rasters vinden meer objecten maar duren langer.",
+    "unavailableNoExternalCdn": "‘Alles segmenteren’ is niet beschikbaar in deze build. Hiervoor is de ONNX Runtime nodig, die wordt geladen vanaf een externe CDN die door deze implementatie is uitgeschakeld.",
     "imageLabel": "Afbeelding (GeoTIFF)",
     "imagePlaceholder": "Kies een GeoTIFF…",
     "chooseImage": "Afbeelding kiezen",

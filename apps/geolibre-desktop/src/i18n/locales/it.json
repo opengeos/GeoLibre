@@ -1191,6 +1191,9 @@
     "viewOnly": "Sola visualizzazione",
     "allowEdit": "Consenti a questa persona di modificare",
     "setViewOnly": "Imposta questa persona in sola visualizzazione",
+    "kick": "Espelli partecipante",
+    "block": "Blocca partecipante",
+    "requireIdentityLabel": "Richiedi un account con accesso effettuato per partecipare",
     "chatLog": "Chat della sessione",
     "chatCompose": "Scrivi un messaggio",
     "chatEmpty": "Nessun messaggio ancora.",
@@ -1200,7 +1203,11 @@
     "chatLocationAttached": "Posizione allegata (fai clic per rimuoverla)",
     "chatGoToLocation": "Vai a questa posizione",
     "sessionStatusUnread_one": "Sessione di collaborazione live, {{count}} messaggio non letto. Fai clic per vedere chi è connesso e chattare.",
-    "sessionStatusUnread_other": "Sessione di collaborazione live, {{count}} messaggi non letti. Fai clic per vedere chi è connesso e chattare."
+    "sessionStatusUnread_other": "Sessione di collaborazione live, {{count}} messaggi non letti. Fai clic per vedere chi è connesso e chattare.",
+    "lockLayer": "Blocca livello per gli ospiti",
+    "unlockLayer": "Sblocca livello per gli ospiti",
+    "layerLocked": "Bloccato",
+    "layerLockedHint": "Questo livello è bloccato dall'host e non può essere modificato"
   },
   "share": {
     "title": "Condividi progetto",
@@ -4173,6 +4180,7 @@
     "title": "Rilevamento oggetti",
     "description": "Esegui un modello YOLO esportato in ONNX su un GeoTIFF, interamente nel browser. I riquadri rilevati vengono georeferenziati e ogni classe viene aggiunta come livello a sé.",
     "hint": "Usa un modello COCO integrato (scaricato e memorizzato nella cache una sola volta) oppure porta il tuo ONNX YOLOv5/v8/v11. Il rilevamento viene eseguito localmente nel browser. I modelli integrati rilevano oggetti di uso quotidiano; per le immagini aeree, fornisci un tuo modello addestrato su immagini dall'alto.",
+    "unavailableNoExternalCdn": "Il rilevamento oggetti non è disponibile in questa build. Richiede ONNX Runtime, che viene caricato da una CDN esterna disabilitata da questo deployment. Fornire un proprio file del modello non risolve il problema.",
     "imageLabel": "Immagine (GeoTIFF)",
     "imagePlaceholder": "Scegli un GeoTIFF…",
     "chooseImage": "Scegli immagine",
@@ -4205,6 +4213,7 @@
     "title": "Segmenta tutto",
     "description": "Esegui SlimSAM automaticamente su un GeoTIFF, interamente nel browser. Ogni oggetto rilevato diventa un poligono georeferenziato aggiunto come un unico livello.",
     "hint": "Una griglia di punti viene campionata sull'immagine e segmentata con SlimSAM (scaricato e memorizzato nella cache una sola volta). Nessun clic o etichetta — griglie più fitte trovano più oggetti ma richiedono più tempo.",
+    "unavailableNoExternalCdn": "«Segmenta tutto» non è disponibile in questa build. Richiede ONNX Runtime, che viene caricato da una CDN esterna disabilitata da questo deployment.",
     "imageLabel": "Immagine (GeoTIFF)",
     "imagePlaceholder": "Scegli un GeoTIFF…",
     "chooseImage": "Scegli immagine",

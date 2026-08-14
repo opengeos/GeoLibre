@@ -1157,6 +1157,9 @@
     "viewOnly": "閲覧のみ",
     "allowEdit": "このユーザーに編集を許可",
     "setViewOnly": "このユーザーを閲覧のみに設定",
+    "kick": "参加者を退出させる",
+    "block": "参加者をブロック",
+    "requireIdentityLabel": "参加にはサインイン済みアカウントを必須にする",
     "chatLog": "セッションチャット",
     "chatCompose": "メッセージを入力",
     "chatEmpty": "メッセージはまだありません。",
@@ -1165,7 +1168,11 @@
     "chatAttachLocation": "現在の地図位置を添付",
     "chatLocationAttached": "位置情報を添付しました(クリックで削除)",
     "chatGoToLocation": "この位置に移動",
-    "sessionStatusUnread_other": "ライブ共同編集セッション、未読メッセージ {{count}} 件。クリックすると接続中のメンバーとチャットを確認できます。"
+    "sessionStatusUnread_other": "ライブ共同編集セッション、未読メッセージ {{count}} 件。クリックすると接続中のメンバーとチャットを確認できます。",
+    "lockLayer": "ゲスト向けにレイヤーをロック",
+    "unlockLayer": "ゲスト向けにレイヤーのロックを解除",
+    "layerLocked": "ロック中",
+    "layerLockedHint": "このレイヤーはホストによってロックされており、編集できません"
   },
   "share": {
     "title": "プロジェクトを共有",
@@ -4106,6 +4113,7 @@
     "title": "物体検出",
     "description": "ONNXにエクスポートしたYOLOモデルをGeoTIFFに対して、すべてブラウザ内で実行します。検出されたボックスは地理参照され、各クラスが独自のレイヤーとして追加されます。",
     "hint": "ビルトインのCOCOモデル(一度ダウンロードしてキャッシュ)を使用するか、独自のYOLOv5/v8/v11 ONNXを持ち込めます。検出はブラウザ内でローカルに実行されます。ビルトインモデルは日常的な物体を検出します。航空画像には、上空撮影用に学習した独自のモデルを用意してください。",
+    "unavailableNoExternalCdn": "このビルドでは物体検出を利用できません。ONNX Runtimeが必要ですが、これは外部CDNから読み込まれ、このデプロイでは無効化されています。独自のモデルファイルを指定しても解決しません。",
     "imageLabel": "画像(GeoTIFF)",
     "imagePlaceholder": "GeoTIFFを選択…",
     "chooseImage": "画像を選択",
@@ -4138,6 +4146,7 @@
     "title": "すべてをセグメント化",
     "description": "SlimSAMをGeoTIFFに対して自動的に、すべてブラウザ内で実行します。検出された各物体は地理参照されたポリゴンとなり、1つのレイヤーとして追加されます。",
     "hint": "画像全体でポイントのグリッドがサンプリングされ、SlimSAM(一度ダウンロードしてキャッシュ)でセグメント化されます。クリックやラベルは不要です。グリッドが密なほど多くの物体を見つけますが、時間がかかります。",
+    "unavailableNoExternalCdn": "このビルドでは「すべてをセグメント化」を利用できません。ONNX Runtimeが必要ですが、これは外部CDNから読み込まれ、このデプロイでは無効化されています。",
     "imageLabel": "画像(GeoTIFF)",
     "imagePlaceholder": "GeoTIFFを選択…",
     "chooseImage": "画像を選択",

@@ -1191,6 +1191,9 @@
     "viewOnly": "Somente visualização",
     "allowEdit": "Permitir que esta pessoa edite",
     "setViewOnly": "Definir esta pessoa como somente visualização",
+    "kick": "Remover participante",
+    "block": "Bloquear participante",
+    "requireIdentityLabel": "Exigir conta com login para entrar",
     "chatLog": "Chat da sessão",
     "chatCompose": "Digite uma mensagem",
     "chatEmpty": "Ainda não há mensagens.",
@@ -1200,7 +1203,11 @@
     "chatLocationAttached": "Localização anexada (clique para remover)",
     "chatGoToLocation": "Ir para esta localização",
     "sessionStatusUnread_one": "Sessão de colaboração ao vivo, {{count}} mensagem não lida. Clique para ver quem está conectado e conversar.",
-    "sessionStatusUnread_other": "Sessão de colaboração ao vivo, {{count}} mensagens não lidas. Clique para ver quem está conectado e conversar."
+    "sessionStatusUnread_other": "Sessão de colaboração ao vivo, {{count}} mensagens não lidas. Clique para ver quem está conectado e conversar.",
+    "lockLayer": "Travar camada para os convidados",
+    "unlockLayer": "Destravar camada para os convidados",
+    "layerLocked": "Travada",
+    "layerLockedHint": "Esta camada está travada pelo anfitrião e não pode ser editada"
   },
   "share": {
     "title": "Compartilhar projeto",
@@ -4173,6 +4180,7 @@
     "title": "Detecção de objetos",
     "description": "Execute um modelo YOLO exportado para ONNX sobre um GeoTIFF, inteiramente no navegador. As caixas detectadas são georreferenciadas e cada classe é adicionada como sua própria camada.",
     "hint": "Use um modelo COCO integrado (baixado e armazenado em cache uma vez) ou traga seu próprio ONNX YOLOv5/v8/v11. A detecção é executada localmente no navegador. Os modelos integrados detectam objetos do dia a dia; para imagens aéreas, forneça seu próprio modelo treinado com vistas superiores.",
+    "unavailableNoExternalCdn": "A detecção de objetos não está disponível nesta compilação. Ela precisa do ONNX Runtime, que é carregado de uma CDN externa que esta implantação desativou. Fornecer o seu próprio arquivo de modelo não resolve.",
     "imageLabel": "Imagem (GeoTIFF)",
     "imagePlaceholder": "Escolha um GeoTIFF…",
     "chooseImage": "Escolher imagem",
@@ -4205,6 +4213,7 @@
     "title": "Segmentar tudo",
     "description": "Execute o SlimSAM automaticamente sobre um GeoTIFF, inteiramente no navegador. Cada objeto detectado torna-se um polígono georreferenciado adicionado como uma camada.",
     "hint": "Uma grade de pontos é amostrada por toda a imagem e segmentada com o SlimSAM (baixado e armazenado em cache uma vez). Sem cliques nem rótulos — grades mais densas encontram mais objetos, mas levam mais tempo.",
+    "unavailableNoExternalCdn": "“Segmentar tudo” não está disponível nesta compilação. Ele precisa do ONNX Runtime, que é carregado de uma CDN externa que esta implantação desativou.",
     "imageLabel": "Imagem (GeoTIFF)",
     "imagePlaceholder": "Escolha um GeoTIFF…",
     "chooseImage": "Escolher imagem",
