@@ -33,7 +33,7 @@ import type { OpenAddDataPostgres } from "../open-add-data";
 type PostgresLoadMode = "tiles" | "editable";
 
 function postgisTableKey(table: PostgisTableInfo): string {
-  return `${table.schema}.${table.table}`;
+  return `${table.schema}.${table.table} [${table.geometry_column}]`;
 }
 
 interface PostgresSourceProps {
@@ -165,17 +165,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
         // not revive a table list that belongs to the previous string.
         return;
       }
-      // geometry_columns lists one row per geometry column, so a table with
-      // several geometry columns appears several times; keep the first entry
-      // (the /postgis/read endpoint edits that table's first geometry column)
-      // so the select has unique keys.
-      const seen = new Set<string>();
-      const tables = listed.filter((table) => {
-        const key = postgisTableKey(table);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+      const tables = listed;
       setSavedPostgresConnections(rememberPostgresConnection(connectionString));
       setPostgisConnection(connectionString);
       setPostgisTables(tables);
@@ -372,6 +362,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
       connection: connectionString,
       schema_name: table.schema,
       table: table.table,
+      geometry_column: table.geometry_column,
     });
     const layer = {
       ...createBaseLayer(
