@@ -447,20 +447,28 @@ function resolveRasterSource(
   const dataset = stringValue(connection.dataset);
   if (!workspace && !dataset) return { reason: "missing-source" };
   if (isNetworkPath(workspace)) return { reason: "network-path" };
-  // Recognized by either the factory or the workspace path, the way a
-  // geodatabase feature class is (see {@link resolveDataSource}), but reported
-  // under its own reason: the desktop build's Add Data -> File Geodatabase
-  // source lists only feature classes that carry geometry, so pointing a
-  // raster at it would send the user somewhere that cannot open their data.
-  if (
-    stringValue(connection.workspaceFactory).toLowerCase().includes("filegdb") ||
-    extension(workspace) === "gdb"
-  ) {
+  // Reported under its own reason rather than the feature class one: the
+  // desktop build's Add Data -> File Geodatabase source lists only feature
+  // classes that carry geometry, so pointing a raster at it would send the
+  // user somewhere that cannot open their data.
+  if (stringValue(connection.workspaceFactory).toLowerCase().includes("filegdb")) {
     return { reason: "file-geodatabase-raster" };
   }
-  if (!workspace || !dataset) return { reason: "missing-source" };
+  // Past this point the factory did not name a geodatabase, so only the
+  // workspace suffix is left to go on -- and it is consulted last, after the
+  // joined path fails. A readable GeoTIFF is therefore still loaded from a
+  // plain folder that happens to be named "*.gdb"; only a dataset the app
+  // cannot open falls through to the suffix, where naming the geodatabase
+  // beats a bare "format".
+  const looksLikeGeodatabase = extension(workspace) === "gdb";
+  if (!workspace || !dataset) {
+    return looksLikeGeodatabase
+      ? { reason: "file-geodatabase-raster" }
+      : { reason: "missing-source" };
+  }
   const path = resolveRelativePath(joinPath(workspace, dataset), projectPath);
-  return ["tif", "tiff"].includes(extension(path)) ? { path } : { reason: "format" };
+  if (["tif", "tiff"].includes(extension(path))) return { path };
+  return looksLikeGeodatabase ? { reason: "file-geodatabase-raster" } : { reason: "format" };
 }
 
 function resolveDataSource(

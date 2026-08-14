@@ -248,6 +248,31 @@ describe("ArcGIS Pro project import", () => {
     );
   });
 
+  it("still loads a GeoTIFF from a plain folder whose name ends in .gdb", () => {
+    // The workspace suffix is a last resort, not a short circuit: a readable
+    // dataset wins over a folder that merely looks like a geodatabase. ArcGIS
+    // reserves .gdb for real geodatabases, so this is unlikely -- but the
+    // suffix check must not cost a raster that would otherwise have loaded.
+    const mapx = {
+      type: "CIMMap",
+      name: "Elevation",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [
+        {
+          type: "CIMRasterLayer",
+          name: "DEM",
+          dataConnection: {
+            workspaceConnectionString: "DATABASE=C:\\data\\rasters.gdb",
+            dataset: "dem.tif",
+          },
+        },
+      ],
+    };
+    const result = importArcgisProject(JSON.stringify(mapx), "C:\\projects\\main.mapx");
+    assert.deepEqual(result.warnings, []);
+    assert.equal(result.rasters[0].sourcePath, "C:/data/rasters.gdb/dem.tif");
+  });
+
   it("reports a geodatabase raster with no dataset name as a geodatabase", () => {
     // The geodatabase check deliberately precedes the missing-dataset guard,
     // so this matches what the vector resolver already did for the same
