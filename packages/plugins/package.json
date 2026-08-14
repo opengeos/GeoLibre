@@ -29,7 +29,7 @@
     "@esri/maplibre-arcgis": "^1.3.1",
     "@geolibre/core": "*",
     "@geolibre/map": "*",
-    "@geoman-io/maplibre-geoman-free": "^0.8.4",
+    "@geoman-io/maplibre-geoman-free": "^0.9.0",
     "@loaders.gl/i3s": "^4.4.4",
     "@mapbox/vector-tile": "^3.0.0",
     "@maplibre/maplibre-gl-directions": "^0.9.1",
