@@ -452,28 +452,7 @@ function isFeatureCollection(value: unknown): value is FeatureCollection {
 const WEB_MERCATOR_RADIUS = 6378137;
 const MAX_WEB_MERCATOR_LATITUDE = 85.0511287798066;
 
-/**
- * Prepare a WGS84 map layer for Whitebox's planar buffer operation.
- *
- * `buffer_vector` treats both axes as Cartesian map units. Buffering RFC 7946
- * longitude/latitude directly therefore creates a circle in degrees which is
- * stretched into an oval when MapLibre displays it in Web Mercator. Projecting
- * the input to EPSG:3857 makes the tool operate in the same conformal plane as
- * the map. The GeoJSON writer sees the attached CRS and reprojects the result
- * back to WGS84 before GeoLibre imports it.
- *
- * The dialog stores the buffer distance in degrees, including values converted
- * from metres by its explicitly approximate geographic-distance control. Using
- * the equatorial metres-per-degree scale preserves the old buffer's horizontal
- * radius while making its vertical radius match.
- */
-export function prepareGeographicBufferInput(
-  geojson: FeatureCollection,
-  distance: unknown,
-): { geojson: FeatureCollection; distance: number } | null {
-  const degrees = typeof distance === "number" ? distance : Number(distance);
-  if (!Number.isFinite(degrees) || degrees <= 0) return null;
-
+export function projectGeographicBufferInput(geojson: FeatureCollection): FeatureCollection {
   const projectPosition = (position: number[]): number[] => {
     const longitude = position[0];
     const latitude = Math.max(
@@ -516,9 +495,33 @@ export function prepareGeographicBufferInput(
     projectGeometry(feature.geometry);
   }
   projected.crs = { type: "name", properties: { name: "EPSG:3857" } };
+  return projected;
+}
+
+/**
+ * Prepare a WGS84 map layer for Whitebox's planar buffer operation.
+ *
+ * `buffer_vector` treats both axes as Cartesian map units. Buffering RFC 7946
+ * longitude/latitude directly therefore creates a circle in degrees which is
+ * stretched into an oval when MapLibre displays it in Web Mercator. Projecting
+ * the input to EPSG:3857 makes the tool operate in the same conformal plane as
+ * the map. The GeoJSON writer sees the attached CRS and reprojects the result
+ * back to WGS84 before GeoLibre imports it.
+ *
+ * The dialog stores the buffer distance in degrees, including values converted
+ * from metres by its explicitly approximate geographic-distance control. Using
+ * the equatorial metres-per-degree scale preserves the old buffer's horizontal
+ * radius while making its vertical radius match.
+ */
+export function prepareGeographicBufferInput(
+  geojson: FeatureCollection,
+  distance: unknown,
+): { geojson: FeatureCollection; distance: number } | null {
+  const degrees = typeof distance === "number" ? distance : Number(distance);
+  if (!Number.isFinite(degrees) || degrees <= 0) return null;
 
   return {
-    geojson: projected,
+    geojson: projectGeographicBufferInput(geojson),
     distance: WEB_MERCATOR_RADIUS * ((degrees * Math.PI) / 180),
   };
 }
@@ -643,15 +646,15 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
   const args: string[] = [];
   const parameterOverrides: Record<string, unknown> = {};
   let geographicBufferInput: FeatureCollection | null = null;
-  if (request.tool_id === "buffer_vector") {
-    const geojson = request.layer_inputs?.input?.geojson;
-    const prepared = geojson
-      ? prepareGeographicBufferInput(geojson, request.parameters.distance)
-      : null;
+  const geojson = request.layer_inputs?.input?.geojson;
+  if (request.tool_id === "buffer_vector" && geojson) {
+    const prepared = prepareGeographicBufferInput(geojson, request.parameters.distance);
     if (prepared) {
       geographicBufferInput = prepared.geojson;
       parameterOverrides.distance = prepared.distance;
     }
+  } else if (request.tool_id === "multiple_ring_buffer" && geojson) {
+    geographicBufferInput = projectGeographicBufferInput(geojson);
   }
   // How each output file is turned into a job output: "geojson" is parsed into a
   // FeatureCollection (a map layer); "raster" is normalized to a COG before it
@@ -679,9 +682,9 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
     if (kind === "vector_in") {
       let geojson = request.layer_inputs?.[name]?.geojson;
       if (!geojson) throw new Error(`Missing vector input for "${name}"`);
-      // A map layer is RFC 7946 WGS84, while Whitebox's buffer is Cartesian.
-      // Run this one operation in Web Mercator so its round buffers stay round
-      // on the map; the EPSG tag makes the tool's GeoJSON writer return WGS84.
+      // A map layer is RFC 7946 WGS84, while Whitebox's buffer tools are
+      // Cartesian. Run them in Web Mercator; the EPSG tag makes the GeoJSON
+      // writer return WGS84.
       if (name === "input" && geographicBufferInput) geojson = geographicBufferInput;
       const file = `${name}.geojson`;
       input[file] = encoder.encode(JSON.stringify(geojson));

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { FeatureCollection, GeometryCollection, Point } from "geojson";
 import { prepareGeographicBufferInput } from "@geolibre/processing";
+import { projectGeographicBufferInput } from "../packages/processing/src/wasm-client";
 
 const warsaw: FeatureCollection<Point> = {
   type: "FeatureCollection",
@@ -68,5 +69,21 @@ describe("prepareGeographicBufferInput", () => {
     for (const distance of [undefined, "", "not a number", 0, -1]) {
       assert.equal(prepareGeographicBufferInput(warsaw, distance), null);
     }
+  });
+});
+
+describe("projectGeographicBufferInput", () => {
+  it("projects multiple-ring inputs independently of their CRS-unit distances", () => {
+    const before = structuredClone(warsaw);
+    const projected = projectGeographicBufferInput(warsaw);
+    assert.deepEqual((projected as FeatureCollection & { crs?: unknown }).crs, {
+      type: "name",
+      properties: { name: "EPSG:3857" },
+    });
+    assert.deepEqual(warsaw, before);
+
+    const point = projected.features[0].geometry as Point;
+    assert.ok(Math.abs(point.coordinates[0] - 2_339_067.4) < 1);
+    assert.ok(Math.abs(point.coordinates[1] - 6_841_765.2) < 1);
   });
 });
