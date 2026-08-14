@@ -2632,6 +2632,7 @@
         "missing-source": "Il livello non ha una sorgente dati locale leggibile.",
         "format": "Il formato dati del livello non è supportato.",
         "file-geodatabase": "Le origini File Geodatabase (.gdb) non vengono caricate dai progetti. In GeoLibre Desktop aggiungile con Aggiungi dati → File Geodatabase (GDB).",
+        "file-geodatabase-raster": "I dataset raster archiviati in un File Geodatabase (.gdb) non sono supportati. Esporta il raster in GeoTIFF e aggiungilo come livello raster.",
         "network-path": "I percorsi di condivisione di rete non vengono caricati per motivi di sicurezza.",
         "service": "I livelli di servizio ArcGIS contenuti nei progetti non sono ancora supportati.",
         "browser-local-file": "Il file locale è referenziato, ma i browser non possono riaprire i percorsi dati di ArcGIS Pro. Usa GeoLibre Desktop per caricarlo.",

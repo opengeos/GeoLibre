@@ -16,6 +16,7 @@ export interface ArcgisProjectImportWarning {
     | "missing-source"
     | "format"
     | "file-geodatabase"
+    | "file-geodatabase-raster"
     | "network-path"
     | "service"
     | "browser-local-file"
@@ -446,15 +447,16 @@ function resolveRasterSource(
   const dataset = stringValue(connection.dataset);
   if (!workspace && !dataset) return { reason: "missing-source" };
   if (isNetworkPath(workspace)) return { reason: "network-path" };
-  // A raster dataset stored in a geodatabase reports the same reason a
-  // geodatabase feature class does, rather than a bare "format", and is
-  // recognized by either the factory or the workspace path (see
-  // {@link resolveDataSource}).
+  // Recognized by either the factory or the workspace path, the way a
+  // geodatabase feature class is (see {@link resolveDataSource}), but reported
+  // under its own reason: the desktop build's Add Data -> File Geodatabase
+  // source lists only feature classes that carry geometry, so pointing a
+  // raster at it would send the user somewhere that cannot open their data.
   if (
     stringValue(connection.workspaceFactory).toLowerCase().includes("filegdb") ||
     extension(workspace) === "gdb"
   ) {
-    return { reason: "file-geodatabase" };
+    return { reason: "file-geodatabase-raster" };
   }
   if (!workspace || !dataset) return { reason: "missing-source" };
   const path = resolveRelativePath(joinPath(workspace, dataset), projectPath);

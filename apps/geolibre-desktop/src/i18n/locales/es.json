@@ -2632,6 +2632,7 @@
         "missing-source": "La capa no tiene una fuente de datos local legible.",
         "format": "El formato de datos de la capa no es compatible.",
         "file-geodatabase": "Las fuentes de geodatabase de archivos (.gdb) no se cargan desde los proyectos. En GeoLibre Desktop, añádelas con Añadir datos → Geodatabase de archivos (GDB).",
+        "file-geodatabase-raster": "Los conjuntos de datos ráster almacenados en una geodatabase de archivos (.gdb) no son compatibles. Exporta el ráster a GeoTIFF y añádelo como capa ráster.",
         "network-path": "Las rutas de recursos compartidos de red no se cargan por motivos de seguridad.",
         "service": "Las capas de servicio de ArcGIS incluidas en proyectos aún no son compatibles.",
         "browser-local-file": "Se hace referencia al archivo local, pero los navegadores no pueden volver a abrir rutas de datos de ArcGIS Pro. Use GeoLibre Desktop para cargarlo.",

@@ -2585,6 +2585,7 @@
         "missing-source": "Layer tidak memiliki sumber data lokal yang dapat dibaca.",
         "format": "Format data layer tidak didukung.",
         "file-geodatabase": "Sumber File Geodatabase (.gdb) tidak dimuat dari proyek. Di GeoLibre Desktop, tambahkan melalui Tambah Data → File Geodatabase (GDB).",
+        "file-geodatabase-raster": "Dataset raster yang disimpan dalam File Geodatabase (.gdb) tidak didukung. Ekspor raster ke GeoTIFF lalu tambahkan sebagai layer raster.",
         "network-path": "Jalur berbagi jaringan tidak dimuat karena alasan keamanan.",
         "service": "Layer layanan ArcGIS di dalam proyek belum didukung.",
         "browser-local-file": "Berkas lokal dirujuk, tetapi peramban tidak dapat membuka kembali jalur data ArcGIS Pro. Gunakan GeoLibre Desktop untuk memuatnya.",

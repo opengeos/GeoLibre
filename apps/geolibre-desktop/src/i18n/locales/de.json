@@ -2632,6 +2632,7 @@
         "missing-source": "Die Ebene hat keine lesbare lokale Datenquelle.",
         "format": "Das Datenformat der Ebene wird nicht unterstützt.",
         "file-geodatabase": "File-Geodatabase-Quellen (.gdb) werden nicht aus Projekten geladen. Fügen Sie sie in GeoLibre Desktop über Daten hinzufügen → File-Geodatabase (GDB) hinzu.",
+        "file-geodatabase-raster": "Rasterdatensätze in einer File-Geodatabase (.gdb) werden nicht unterstützt. Exportieren Sie das Raster nach GeoTIFF und fügen Sie es als Rasterebene hinzu.",
         "network-path": "Netzwerkfreigabepfade werden aus Sicherheitsgründen nicht geladen.",
         "service": "ArcGIS-Dienstebenen in Projekten werden noch nicht unterstützt.",
         "browser-local-file": "Die lokale Datei wird referenziert, aber Browser können ArcGIS-Pro-Datenpfade nicht erneut öffnen. Verwenden Sie GeoLibre Desktop, um sie zu laden.",

@@ -2632,6 +2632,7 @@
         "missing-source": "La couche n'a pas de source de données locale lisible.",
         "format": "Le format de données de la couche n'est pas pris en charge.",
         "file-geodatabase": "Les sources File Geodatabase (.gdb) ne sont pas chargées depuis les projets. Dans GeoLibre Desktop, ajoutez-les via Ajouter des données → File Geodatabase (GDB).",
+        "file-geodatabase-raster": "Les jeux de données raster stockés dans une File Geodatabase (.gdb) ne sont pas pris en charge. Exportez le raster en GeoTIFF et ajoutez-le comme couche raster.",
         "network-path": "Les chemins de partage réseau ne sont pas chargés pour des raisons de sécurité.",
         "service": "Les couches de service ArcGIS présentes dans les projets ne sont pas encore prises en charge.",
         "browser-local-file": "Le fichier local est référencé, mais les navigateurs ne peuvent pas rouvrir les chemins de données ArcGIS Pro. Utilisez GeoLibre Desktop pour le charger.",

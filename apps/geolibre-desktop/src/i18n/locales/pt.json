@@ -2632,6 +2632,7 @@
         "missing-source": "A camada não tem uma fonte de dados local legível.",
         "format": "O formato de dados da camada não é compatível.",
         "file-geodatabase": "As fontes File Geodatabase (.gdb) não são carregadas a partir dos projetos. No GeoLibre Desktop, adicione-as em Adicionar dados → File Geodatabase (GDB).",
+        "file-geodatabase-raster": "Os conjuntos de dados raster armazenados numa File Geodatabase (.gdb) não são suportados. Exporte o raster para GeoTIFF e adicione-o como camada raster.",
         "network-path": "Caminhos de compartilhamento de rede não são carregados por motivos de segurança.",
         "service": "Camadas de serviço do ArcGIS em projetos ainda não são compatíveis.",
         "browser-local-file": "O arquivo local é referenciado, mas navegadores não conseguem reabrir caminhos de dados do ArcGIS Pro. Use o GeoLibre Desktop para carregá-lo.",

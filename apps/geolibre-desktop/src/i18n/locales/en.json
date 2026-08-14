@@ -2642,6 +2642,7 @@
         "missing-source": "The layer has no readable local data source.",
         "format": "The layer's data format is not supported.",
         "file-geodatabase": "File Geodatabase (.gdb) sources are not loaded from projects. In GeoLibre Desktop, add them with Add Data → File Geodatabase (GDB).",
+        "file-geodatabase-raster": "Raster datasets stored in a File Geodatabase (.gdb) are not supported. Export the raster to GeoTIFF and add it as a raster layer.",
         "network-path": "Network share paths are not loaded for security reasons.",
         "service": "ArcGIS service layers in projects are not supported yet.",
         "browser-local-file": "The local file is referenced, but browsers cannot reopen ArcGIS Pro data paths. Use GeoLibre Desktop to load it.",

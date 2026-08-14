@@ -2585,6 +2585,7 @@
         "missing-source": "该图层没有可读取的本地数据源。",
         "format": "不支持该图层的数据格式。",
         "file-geodatabase": "项目中的文件地理数据库（.gdb）数据源不会被加载。请在 GeoLibre Desktop 中通过添加数据 → 文件地理数据库（GDB）添加。",
+        "file-geodatabase-raster": "存储在文件地理数据库（.gdb）中的栅格数据集不受支持。请将栅格导出为 GeoTIFF，再作为栅格图层添加。",
         "network-path": "出于安全原因，不加载网络共享路径。",
         "service": "暂不支持项目中的 ArcGIS 服务图层。",
         "browser-local-file": "已引用该本地文件，但浏览器无法重新打开 ArcGIS Pro 数据路径。请使用 GeoLibre Desktop 加载。",

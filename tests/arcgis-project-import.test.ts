@@ -241,7 +241,34 @@ describe("ArcGIS Pro project import", () => {
     const result = importArcgisProject(JSON.stringify(mapx), "C:\\projects\\main.mapx");
     assert.deepEqual(
       result.warnings.map((warning) => [warning.layerName, warning.reason]),
-      [["DEM", "file-geodatabase"]],
+      // Its own reason, not the feature-class one: the desktop File
+      // Geodatabase source that reason points at lists only feature classes
+      // with geometry, so a raster must not be sent there.
+      [["DEM", "file-geodatabase-raster"]],
+    );
+  });
+
+  it("reports a geodatabase raster with no dataset name as a geodatabase", () => {
+    // The geodatabase check deliberately precedes the missing-dataset guard,
+    // so this matches what the vector resolver already did for the same
+    // connection. "It is a geodatabase" is the actionable half; the absent
+    // dataset name would not change what the user has to do.
+    const mapx = {
+      type: "CIMMap",
+      name: "Elevation",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [
+        {
+          type: "CIMRasterLayer",
+          name: "DEM",
+          dataConnection: { workspaceConnectionString: "DATABASE=C:\\data\\terrain.gdb" },
+        },
+      ],
+    };
+    const result = importArcgisProject(JSON.stringify(mapx), "C:\\projects\\main.mapx");
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [["DEM", "file-geodatabase-raster"]],
     );
   });
 
@@ -278,7 +305,7 @@ describe("ArcGIS Pro project import", () => {
       result.warnings.map((warning) => [warning.layerName, warning.reason]),
       [
         ["Parcels", "file-geodatabase"],
-        ["DEM", "file-geodatabase"],
+        ["DEM", "file-geodatabase-raster"],
       ],
     );
   });

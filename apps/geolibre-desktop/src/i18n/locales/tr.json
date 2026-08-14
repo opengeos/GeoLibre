@@ -2632,6 +2632,7 @@
         "missing-source": "Katmanın okunabilir bir yerel veri kaynağı yok.",
         "format": "Katmanın veri biçimi desteklenmiyor.",
         "file-geodatabase": "File Geodatabase (.gdb) kaynakları projelerden yüklenmez. GeoLibre Desktop'ta bunları Veri Ekle → Dosya Coğrafi Veritabanı (GDB) ile ekleyin.",
+        "file-geodatabase-raster": "Dosya Coğrafi Veritabanında (.gdb) saklanan raster veri kümeleri desteklenmiyor. Rasteri GeoTIFF olarak dışa aktarın ve raster katmanı olarak ekleyin.",
         "network-path": "Ağ paylaşımı yolları güvenlik nedeniyle yüklenmez.",
         "service": "Projelerdeki ArcGIS servis katmanları henüz desteklenmiyor.",
         "browser-local-file": "Yerel dosyaya başvuruluyor, ancak tarayıcılar ArcGIS Pro veri yollarını yeniden açamaz. Yüklemek için GeoLibre Desktop kullanın.",

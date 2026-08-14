@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { groupImportWarnings, type ImportWarningLike } from "../../../lib/import-warning-groups";
 
@@ -21,13 +21,16 @@ export function ImportWarningList<T extends ImportWarningLike>({
   describe,
 }: ImportWarningListProps<T>) {
   const { t } = useTranslation();
+  const listId = useId();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const groups = useMemo(() => groupImportWarnings(warnings, describe), [warnings, describe]);
 
   return (
     <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
-      {groups.map((group) => {
+      {groups.map((group, index) => {
         const isExpanded = expanded.has(group.message);
+        // Indexed rather than keyed on the message, which is free text.
+        const namesId = `${listId}-names-${index}`;
         return (
           <li key={group.message}>
             <strong>
@@ -43,6 +46,7 @@ export function ImportWarningList<T extends ImportWarningLike>({
                 <button
                   type="button"
                   aria-expanded={isExpanded}
+                  aria-controls={namesId}
                   className="text-xs text-primary underline underline-offset-2"
                   onClick={() =>
                     setExpanded((current) => {
@@ -55,7 +59,7 @@ export function ImportWarningList<T extends ImportWarningLike>({
                   {isExpanded ? t("toolbar.item.hideLayerNames") : t("toolbar.item.showLayerNames")}
                 </button>
                 {isExpanded ? (
-                  <p className="mt-1 break-words text-xs text-muted-foreground">
+                  <p id={namesId} className="mt-1 break-words text-xs text-muted-foreground">
                     {group.layerNames.join(", ")}
                   </p>
                 ) : null}

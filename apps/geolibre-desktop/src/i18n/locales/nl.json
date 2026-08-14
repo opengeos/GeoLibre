@@ -2632,6 +2632,7 @@
         "missing-source": "De laag heeft geen leesbare lokale gegevensbron.",
         "format": "Het gegevensformaat van de laag wordt niet ondersteund.",
         "file-geodatabase": "File Geodatabase-bronnen (.gdb) worden niet uit projecten geladen. Voeg ze in GeoLibre Desktop toe via Gegevens toevoegen → File Geodatabase (GDB).",
+        "file-geodatabase-raster": "Rasterdatasets in een File Geodatabase (.gdb) worden niet ondersteund. Exporteer het raster naar GeoTIFF en voeg het toe als rasterlaag.",
         "network-path": "Netwerkpaden worden om veiligheidsredenen niet geladen.",
         "service": "ArcGIS-servicelagen in projecten worden nog niet ondersteund.",
         "browser-local-file": "Er wordt naar het lokale bestand verwezen, maar browsers kunnen ArcGIS Pro-gegevenspaden niet opnieuw openen. Gebruik GeoLibre Desktop om het te laden.",

@@ -2585,6 +2585,7 @@
         "missing-source": "레이어에 읽을 수 있는 로컬 데이터 소스가 없습니다.",
         "format": "레이어의 데이터 형식은 지원되지 않습니다.",
         "file-geodatabase": "파일 지오데이터베이스(.gdb) 소스는 프로젝트에서 불러오지 않습니다. GeoLibre Desktop에서 데이터 추가 → 파일 지오데이터베이스 (GDB)로 추가하세요.",
+        "file-geodatabase-raster": "파일 지오데이터베이스(.gdb)에 저장된 래스터 데이터셋은 지원되지 않습니다. 래스터를 GeoTIFF로 내보낸 뒤 래스터 레이어로 추가하세요.",
         "network-path": "네트워크 공유 경로는 보안상의 이유로 불러오지 않습니다.",
         "service": "프로젝트에 포함된 ArcGIS 서비스 레이어는 아직 지원되지 않습니다.",
         "browser-local-file": "로컬 파일이 참조되어 있지만 브라우저는 ArcGIS Pro 데이터 경로를 다시 열 수 없습니다. GeoLibre Desktop으로 불러오세요.",
