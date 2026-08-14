@@ -1204,8 +1204,8 @@
     "chatGoToLocation": "Bu konuma git",
     "sessionStatusUnread_one": "Canlı iş birliği oturumu, {{count}} okunmamış mesaj. Kimlerin bağlı olduğunu görmek ve sohbet etmek için tıklayın.",
     "sessionStatusUnread_other": "Canlı iş birliği oturumu, {{count}} okunmamış mesaj. Kimlerin bağlı olduğunu görmek ve sohbet etmek için tıklayın.",
-    "lockLayer": "Katmanı konuklara kilitle",
-    "unlockLayer": "Katmanın konuklara kilidini aç",
+    "lockLayer": "Katmanı konuklar için kilitle",
+    "unlockLayer": "Katmanın kilidini konuklar için aç",
     "layerLocked": "Kilitli",
     "layerLockedHint": "Bu katman ev sahibi tarafından kilitlendi ve düzenlenemez"
   },

@@ -1329,7 +1329,7 @@
     "setViewOnly": "تعيين هذا الشخص للعرض فقط",
     "kick": "طرد المشارك",
     "block": "حظر المشارك",
-    "requireIdentityLabel": "طلب حساب مسجّل الدخول للانضمام",
+    "requireIdentityLabel": "اشتراط تسجيل الدخول بحساب للانضمام",
     "chatLog": "دردشة الجلسة",
     "chatCompose": "اكتب رسالة",
     "chatEmpty": "لا توجد رسائل بعد.",

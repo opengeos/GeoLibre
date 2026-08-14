@@ -1121,7 +1121,7 @@
     "viewOnly": "Chỉ xem",
     "allowEdit": "Cho phép người này chỉnh sửa",
     "setViewOnly": "Đặt người này ở chế độ chỉ xem",
-    "kick": "Loại người tham gia",
+    "kick": "Đưa người tham gia ra khỏi phiên",
     "block": "Chặn người tham gia",
     "requireIdentityLabel": "Yêu cầu tài khoản đã đăng nhập để tham gia",
     "chatLog": "Phiên trò chuyện",
