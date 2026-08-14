@@ -3430,9 +3430,9 @@ export function StylePanel({
         id={id}
         value={value}
         onChange={(event) => onSelect(event.target.value)}
-        disabled={numericPropertyOptions.length === 0}
+        disabled={numericPropertyOptions.length === 0 && value === ""}
       >
-        {numericPropertyOptions.length === 0 ? (
+        {numericPropertyOptions.length === 0 && value === "" ? (
           <option value="">{t("style.labels.noAttributes")}</option>
         ) : (
           <>
@@ -3442,6 +3442,14 @@ export function StylePanel({
                 {property}
               </option>
             ))}
+            {/* A stored field that is not a numeric column here — a style
+                pasted from another layer, a `?style=` import, or data whose
+                schema changed — still renders as the selection. Without it
+                the browser would fall back to "None (fixed)" while the style
+                kept sizing by a field that resolves to null everywhere. */}
+            {value !== "" && !numericPropertyOptions.includes(value) ? (
+              <option value={value}>{value}</option>
+            ) : null}
           </>
         )}
       </Select>
