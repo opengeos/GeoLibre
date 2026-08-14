@@ -97,7 +97,12 @@ jobs:
     name: Build MAS pkg
     runs-on: macos-latest
     needs: secrets-gate
-    if: needs.secrets-gate.outputs.present == 'true'
+    # success() is explicit because a custom job `if:` REPLACES the default
+    # success() check on `needs:` rather than ANDing with it. Without it, this
+    # job's gating would rest on the invariant that secrets-gate writes
+    # present=false before any path that fails the step — true today, but not
+    # something Actions enforces against a future edit.
+    if: success() && needs.secrets-gate.outputs.present == 'true'
     # Elevated here (not workflow-level) so only this job can write release
     # assets; workflow_dispatch runs never attach but the grant is harmless.
     permissions:

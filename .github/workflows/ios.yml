@@ -256,7 +256,7 @@ jobs:
             # Carried to the release-note step below so it can name what was
             # actually absent rather than reciting the whole required set.
             echo "missing=${missing[*]}" >> "$GITHUB_OUTPUT"
-            echo "::notice::Missing Apple iOS signing secrets (${missing[*]}) — building an unsigned compile check only (no installable .ipa). Set APPLE_IOS_CERTIFICATE_BASE64, APPLE_IOS_CERTIFICATE_PASSWORD, APPLE_IOS_PROVISIONING_PROFILE_BASE64 (and reuse the existing APPLE_TEAM_ID) to produce a signed build."
+            echo "::notice::Missing Apple iOS signing secrets (${missing[*]}) — building an unsigned compile check only (no installable .ipa). Set the listed secrets to produce a signed build; APPLE_TEAM_ID is the one already used by the macOS release signing, and APPLE_IOS_CERTIFICATE_PASSWORD is needed only if the .p12 is password-protected."
           fi
 
       # ---- No-signing path: prove the iOS build compiles ---------------------
