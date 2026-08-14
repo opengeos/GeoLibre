@@ -3558,19 +3558,21 @@ export function StylePanel({
           </div>
           {generatorType === "centroid" && (
             <>
-              {generatorSizeProperty === "" && (
-                <NumericStyleInput
-                  id="geometryGeneratorCircleRadius"
-                  label={t("style.generator.circleRadius")}
-                  min={1}
-                  max={40}
-                  step={1}
-                  value={styleValue(style, "geometryGeneratorCircleRadius")}
-                  onChange={(geometryGeneratorCircleRadius) =>
-                    setLayerStyle(layer.id, { geometryGeneratorCircleRadius })
-                  }
-                />
-              )}
+              {/* Stays visible with a size field chosen: it is the radius
+                  `generatorCircleRadiusValue` falls back to whenever the
+                  field's range turns out degenerate, so hiding it would leave
+                  the radius actually in use unreachable. */}
+              <NumericStyleInput
+                id="geometryGeneratorCircleRadius"
+                label={t("style.generator.circleRadius")}
+                min={1}
+                max={40}
+                step={1}
+                value={styleValue(style, "geometryGeneratorCircleRadius")}
+                onChange={(geometryGeneratorCircleRadius) =>
+                  setLayerStyle(layer.id, { geometryGeneratorCircleRadius })
+                }
+              />
               {generatorFieldSelect(
                 "geometryGeneratorSizeProperty",
                 t("style.generator.sizeField"),
