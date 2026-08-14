@@ -4806,11 +4806,15 @@
       "typeConvexHull": "凸包",
       "typeBuffer": "バッファ",
       "bufferDistance": "バッファ距離 (m)",
+      "bufferField": "距離フィールド",
+      "bufferFieldHint": "各フィーチャは自身の値(メートル)でバッファされます。上の距離は値がないフィーチャに使われます。",
+      "fieldNone": "なし (固定)",
       "fillColor": "塗りつぶし色",
       "strokeColor": "輪郭色",
       "strokeWidth": "輪郭幅 (px)",
       "opacity": "塗りつぶし不透明度",
-      "circleRadius": "ポイント半径 (px)"
+      "circleRadius": "ポイント半径 (px)",
+      "sizeField": "サイズフィールド"
     },
     "attributeForm": {
       "heading": "属性フォーム",

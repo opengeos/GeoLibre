@@ -4880,11 +4880,15 @@
       "typeConvexHull": "Convexe omhullenden",
       "typeBuffer": "Buffers",
       "bufferDistance": "Bufferafstand (m)",
+      "bufferField": "Afstandsveld",
+      "bufferFieldHint": "Elk object krijgt een buffer op basis van zijn eigen waarde in meters; de afstand hierboven geldt voor objecten zonder waarde.",
+      "fieldNone": "Geen (vast)",
       "fillColor": "Vulkleur",
       "strokeColor": "Omtrekkleur",
       "strokeWidth": "Omtrekbreedte (px)",
       "opacity": "Vuldekking",
-      "circleRadius": "Puntstraal (px)"
+      "circleRadius": "Puntstraal (px)",
+      "sizeField": "Grootteveld"
     },
     "attributeForm": {
       "heading": "Attributenformulier",

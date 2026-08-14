@@ -336,7 +336,7 @@
 
 - [x] A **rule-based renderer** with per-rule symbol properties, scale-dependent visibility, nested rules, and per-rule toggles, so a single layer can carry a full hierarchy of styling rules and hide anything that matches no rule when the else rule is off
 - [x] A **Style Manager** that saves reusable symbol, color-ramp, and label presets to a personal library and applies them across projects
-- [x] A symbology pack covering inverted-polygon masks, arrow and marker lines, and geometry generators, plus data-driven proportional sizing for marker icons
+- [x] A symbology pack covering inverted-polygon masks, arrow and marker lines, and geometry generators (with attribute-driven centroid size and buffer distance), plus data-driven proportional sizing for marker icons
 - [x] **Diagram symbology**: draw pie, donut, and bar charts on features straight from their attributes
 - [x] A **data-defined labeling engine** with expression-driven label properties, placement priority, and full control over how labels are drawn
 - [x] A shared **Expression Builder** — a function reference, searchable field list, live preview, and reusable variables — wired into filters, labels, styling, and selection

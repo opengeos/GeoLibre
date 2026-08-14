@@ -4880,11 +4880,15 @@
       "typeConvexHull": "Involucri convessi",
       "typeBuffer": "Buffer",
       "bufferDistance": "Distanza buffer (m)",
+      "bufferField": "Campo distanza",
+      "bufferFieldHint": "Ogni elemento viene bufferizzato con il proprio valore in metri; la distanza sopra vale per gli elementi senza valore.",
+      "fieldNone": "Nessuno (fisso)",
       "fillColor": "Colore riempimento",
       "strokeColor": "Colore contorno",
       "strokeWidth": "Larghezza contorno (px)",
       "opacity": "Opacità riempimento",
-      "circleRadius": "Raggio punto (px)"
+      "circleRadius": "Raggio punto (px)",
+      "sizeField": "Campo dimensione"
     },
     "attributeForm": {
       "heading": "Modulo attributi",

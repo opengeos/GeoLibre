@@ -1637,13 +1637,16 @@ export function StylePanel({
     diagramStyleSize,
     diagramStyleSizeProperty,
   ]);
-  // Numeric-attribute candidates for the diagram field pickers. Unlike
-  // graduated classification (which needs a value spread), one finite value
-  // qualifies. Memoized on the geojson/metadata (not the layer object) so
-  // unrelated panel edits never re-run the per-property feature scans. Kept
-  // before the early returns below so the hook order stays stable.
+  // Numeric-attribute candidates for the diagram and geometry-generator field
+  // pickers. Unlike graduated classification (which needs a value spread), one
+  // finite value qualifies. Both consumers only exist on layers that carry a
+  // local `geojson`, so scanning it directly (rather than the tiled sampling
+  // the proportional-size picker needs) is enough. Memoized on the
+  // geojson/metadata (not the layer object) so unrelated panel edits never
+  // re-run the per-property feature scans. Kept before the early returns below
+  // so the hook order stays stable.
   const diagramMetadata = layer?.metadata;
-  const diagramNumericProperties = useMemo(() => {
+  const numericPropertyOptions = useMemo(() => {
     if (!diagramGeojson) return [];
     const probe = { geojson: diagramGeojson, metadata: diagramMetadata ?? {} };
     return getAttributePropertyNames(probe).filter((property) =>
@@ -3394,6 +3397,56 @@ export function StylePanel({
   );
   // --- Geometry generator (per-feature derived geometry symbology) ---
   const generatorType = styleValue(style, "geometryGenerator");
+  const generatorSizeProperty = styleValue(style, "geometryGeneratorSizeProperty");
+  /**
+   * The field pickers below only offer numeric columns, so a chosen field
+   * always has a usable range — unlike the proportional-size picker, which
+   * offers every attribute and has to reject a bad pick after the fact.
+   * Picking one seeds the value range from the data (an unseeded 0..100
+   * default would map a population column onto a single radius).
+   */
+  const chooseGeneratorSizeProperty = (property: string) => {
+    if (!property) {
+      setLayerStyle(layer.id, { geometryGeneratorSizeProperty: "" });
+      return;
+    }
+    const bounds = proportionalSizeBounds(layer, property);
+    setLayerStyle(layer.id, {
+      geometryGeneratorSizeProperty: property,
+      ...(bounds
+        ? { geometryGeneratorSizeMinValue: bounds.min, geometryGeneratorSizeMaxValue: bounds.max }
+        : {}),
+    });
+  };
+  const generatorFieldSelect = (
+    id: string,
+    label: string,
+    value: string,
+    onSelect: (property: string) => void,
+  ) => (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Select
+        id={id}
+        value={value}
+        onChange={(event) => onSelect(event.target.value)}
+        disabled={numericPropertyOptions.length === 0}
+      >
+        {numericPropertyOptions.length === 0 ? (
+          <option value="">{t("style.labels.noAttributes")}</option>
+        ) : (
+          <>
+            <option value="">{t("style.generator.fieldNone")}</option>
+            {numericPropertyOptions.map((property) => (
+              <option key={property} value={property}>
+                {property}
+              </option>
+            ))}
+          </>
+        )}
+      </Select>
+    </div>
+  );
   const generatorControls = (
     <div className="space-y-3">
       <div className="space-y-2">
@@ -3417,17 +3470,31 @@ export function StylePanel({
       {generatorType !== "none" && (
         <>
           {generatorType === "buffer" && (
-            <NumericStyleInput
-              id="geometryGeneratorBufferDistance"
-              label={t("style.generator.bufferDistance")}
-              min={-100000}
-              max={1000000}
-              step={10}
-              value={styleValue(style, "geometryGeneratorBufferDistance")}
-              onChange={(geometryGeneratorBufferDistance) =>
-                setLayerStyle(layer.id, { geometryGeneratorBufferDistance })
-              }
-            />
+            <>
+              <NumericStyleInput
+                id="geometryGeneratorBufferDistance"
+                label={t("style.generator.bufferDistance")}
+                min={-100000}
+                max={1000000}
+                step={10}
+                value={styleValue(style, "geometryGeneratorBufferDistance")}
+                onChange={(geometryGeneratorBufferDistance) =>
+                  setLayerStyle(layer.id, { geometryGeneratorBufferDistance })
+                }
+              />
+              {generatorFieldSelect(
+                "geometryGeneratorBufferProperty",
+                t("style.generator.bufferField"),
+                styleValue(style, "geometryGeneratorBufferProperty"),
+                (geometryGeneratorBufferProperty) =>
+                  setLayerStyle(layer.id, { geometryGeneratorBufferProperty }),
+              )}
+              {styleValue(style, "geometryGeneratorBufferProperty") !== "" && (
+                <p className="text-xs text-muted-foreground">
+                  {t("style.generator.bufferFieldHint")}
+                </p>
+              )}
+            </>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
@@ -3478,24 +3545,86 @@ export function StylePanel({
             />
           </div>
           {generatorType === "centroid" && (
-            <NumericStyleInput
-              id="geometryGeneratorCircleRadius"
-              label={t("style.generator.circleRadius")}
-              min={1}
-              max={40}
-              step={1}
-              value={styleValue(style, "geometryGeneratorCircleRadius")}
-              onChange={(geometryGeneratorCircleRadius) =>
-                setLayerStyle(layer.id, { geometryGeneratorCircleRadius })
-              }
-            />
+            <>
+              {generatorSizeProperty === "" && (
+                <NumericStyleInput
+                  id="geometryGeneratorCircleRadius"
+                  label={t("style.generator.circleRadius")}
+                  min={1}
+                  max={40}
+                  step={1}
+                  value={styleValue(style, "geometryGeneratorCircleRadius")}
+                  onChange={(geometryGeneratorCircleRadius) =>
+                    setLayerStyle(layer.id, { geometryGeneratorCircleRadius })
+                  }
+                />
+              )}
+              {generatorFieldSelect(
+                "geometryGeneratorSizeProperty",
+                t("style.generator.sizeField"),
+                generatorSizeProperty,
+                chooseGeneratorSizeProperty,
+              )}
+              {generatorSizeProperty !== "" && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <NumericStyleInput
+                      id="geometryGeneratorSizeMinValue"
+                      label={t("style.symbology.minValue")}
+                      min={-1_000_000_000}
+                      max={1_000_000_000}
+                      step={1}
+                      value={styleValue(style, "geometryGeneratorSizeMinValue")}
+                      onChange={(geometryGeneratorSizeMinValue) =>
+                        setLayerStyle(layer.id, { geometryGeneratorSizeMinValue })
+                      }
+                    />
+                    <NumericStyleInput
+                      id="geometryGeneratorSizeMaxValue"
+                      label={t("style.symbology.maxValue")}
+                      min={-1_000_000_000}
+                      max={1_000_000_000}
+                      step={1}
+                      value={styleValue(style, "geometryGeneratorSizeMaxValue")}
+                      onChange={(geometryGeneratorSizeMaxValue) =>
+                        setLayerStyle(layer.id, { geometryGeneratorSizeMaxValue })
+                      }
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <NumericStyleInput
+                      id="geometryGeneratorSizeMinRadius"
+                      label={t("style.symbology.minSize")}
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={styleValue(style, "geometryGeneratorSizeMinRadius")}
+                      onChange={(geometryGeneratorSizeMinRadius) =>
+                        setLayerStyle(layer.id, { geometryGeneratorSizeMinRadius })
+                      }
+                    />
+                    <NumericStyleInput
+                      id="geometryGeneratorSizeMaxRadius"
+                      label={t("style.symbology.maxSize")}
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={styleValue(style, "geometryGeneratorSizeMaxRadius")}
+                      onChange={(geometryGeneratorSizeMaxRadius) =>
+                        setLayerStyle(layer.id, { geometryGeneratorSizeMaxRadius })
+                      }
+                    />
+                  </div>
+                </>
+              )}
+            </>
           )}
         </>
       )}
     </div>
   );
   // --- Diagram symbology (per-feature pie/bar charts, immediate writes) ---
-  // The numeric-attribute candidates (diagramNumericProperties) are memoized
+  // The numeric-attribute candidates (numericPropertyOptions) are memoized
   // above the early returns.
   const diagramType = styleValue(style, "diagramType");
   const diagramFields = styleValue(style, "diagramFields");
@@ -3504,7 +3633,7 @@ export function StylePanel({
     setLayerStyle(layer.id, { diagramFields: fields });
   const addDiagramField = () => {
     const used = new Set(diagramFields.map((field) => field.property));
-    const property = diagramNumericProperties.find((candidate) => !used.has(candidate)) ?? "";
+    const property = numericPropertyOptions.find((candidate) => !used.has(candidate)) ?? "";
     setDiagramFields([...diagramFields, { property, color: nextStopColor(diagramFields.length) }]);
   };
   const updateDiagramField = (index: number, patch: Partial<DiagramField>) =>
@@ -3519,7 +3648,7 @@ export function StylePanel({
     !!layer.geojson &&
     !hasExternalDeckLayer(layer) &&
     (!supportsPointRenderer || pointRenderer === "single") &&
-    (diagramNumericProperties.length > 0 || diagramFields.length > 0);
+    (numericPropertyOptions.length > 0 || diagramFields.length > 0);
 
   const diagramControls = (
     <div className="space-y-3">
@@ -3536,10 +3665,10 @@ export function StylePanel({
             if (
               nextType !== "none" &&
               diagramFields.length === 0 &&
-              diagramNumericProperties.length > 0
+              numericPropertyOptions.length > 0
             ) {
               setDiagramFields(
-                diagramNumericProperties.slice(0, 2).map((property, index) => ({
+                numericPropertyOptions.slice(0, 2).map((property, index) => ({
                   property,
                   color: nextStopColor(index),
                 })),
@@ -3602,13 +3731,12 @@ export function StylePanel({
                       }
                     >
                       <option value="">{t("style.symbology.chooseField")}</option>
-                      {diagramNumericProperties.map((property) => (
+                      {numericPropertyOptions.map((property) => (
                         <option key={property} value={property}>
                           {property}
                         </option>
                       ))}
-                      {field.property !== "" &&
-                      !diagramNumericProperties.includes(field.property) ? (
+                      {field.property !== "" && !numericPropertyOptions.includes(field.property) ? (
                         <option value={field.property}>{field.property}</option>
                       ) : null}
                     </Select>
@@ -3657,13 +3785,13 @@ export function StylePanel({
                 }
               >
                 <option value="">{t("style.symbology.chooseField")}</option>
-                {diagramNumericProperties.map((property) => (
+                {numericPropertyOptions.map((property) => (
                   <option key={property} value={property}>
                     {property}
                   </option>
                 ))}
                 {styleValue(style, "diagramSizeProperty") !== "" &&
-                !diagramNumericProperties.includes(styleValue(style, "diagramSizeProperty")) ? (
+                !numericPropertyOptions.includes(styleValue(style, "diagramSizeProperty")) ? (
                   <option value={styleValue(style, "diagramSizeProperty")}>
                     {styleValue(style, "diagramSizeProperty")}
                   </option>

@@ -4880,11 +4880,15 @@
       "typeConvexHull": "Enveloppes convexes",
       "typeBuffer": "Tampons",
       "bufferDistance": "Distance de tampon (m)",
+      "bufferField": "Champ de distance",
+      "bufferFieldHint": "Chaque entité est tamponnée selon sa propre valeur en mètres ; la distance ci-dessus s'applique aux entités sans valeur.",
+      "fieldNone": "Aucun (fixe)",
       "fillColor": "Couleur de remplissage",
       "strokeColor": "Couleur de contour",
       "strokeWidth": "Largeur de contour (px)",
       "opacity": "Opacité du remplissage",
-      "circleRadius": "Rayon de point (px)"
+      "circleRadius": "Rayon de point (px)",
+      "sizeField": "Champ de taille"
     },
     "attributeForm": {
       "heading": "Formulaire d'attributs",

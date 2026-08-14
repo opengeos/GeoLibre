@@ -4806,11 +4806,15 @@
       "typeConvexHull": "รูปนูนห่อหุ้ม",
       "typeBuffer": "บัฟเฟอร์",
       "bufferDistance": "ระยะบัฟเฟอร์ (m)",
+      "bufferField": "ฟิลด์ระยะทาง",
+      "bufferFieldHint": "แต่ละฟีเจอร์จะสร้างบัฟเฟอร์ตามค่าของตนเองเป็นเมตร ส่วนระยะทางด้านบนใช้กับฟีเจอร์ที่ไม่มีค่า",
+      "fieldNone": "ไม่มี (คงที่)",
       "fillColor": "สีเติม",
       "strokeColor": "สีเส้นขอบ",
       "strokeWidth": "ความหนาเส้นขอบ (พิกเซล)",
       "opacity": "ความทึบของสีเติม",
-      "circleRadius": "รัศมีของจุด (พิกเซล)"
+      "circleRadius": "รัศมีของจุด (พิกเซล)",
+      "sizeField": "ฟิลด์ขนาด"
     },
     "attributeForm": {
       "heading": "แบบฟอร์มแอตทริบิวต์",

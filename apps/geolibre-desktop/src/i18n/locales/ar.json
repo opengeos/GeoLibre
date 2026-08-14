@@ -5175,11 +5175,15 @@
       "typeConvexHull": "أغلفة محدبة",
       "typeBuffer": "مناطق عازلة",
       "bufferDistance": "مسافة العزل (م)",
+      "bufferField": "حقل المسافة",
+      "bufferFieldHint": "يتم إنشاء نطاق لكل معلم بقيمته الخاصة بالأمتار؛ وتُستخدم المسافة أعلاه للمعالم التي لا تحتوي على قيمة.",
+      "fieldNone": "بلا (ثابت)",
       "fillColor": "لون التعبئة",
       "strokeColor": "لون الحد",
       "strokeWidth": "عرض الحد (px)",
       "opacity": "عتامة التعبئة",
-      "circleRadius": "نصف قطر النقطة (px)"
+      "circleRadius": "نصف قطر النقطة (px)",
+      "sizeField": "حقل الحجم"
     },
     "attributeForm": {
       "heading": "نموذج السمات",

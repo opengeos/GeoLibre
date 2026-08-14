@@ -4880,11 +4880,15 @@
       "typeConvexHull": "پوش‌های محدب",
       "typeBuffer": "بافرها",
       "bufferDistance": "فاصلهٔ بافر (متر)",
+      "bufferField": "فیلد فاصله",
+      "bufferFieldHint": "هر عارضه با مقدار خودش (به متر) بافر می‌شود؛ فاصلهٔ بالا برای عارضه‌های بدون مقدار به کار می‌رود.",
+      "fieldNone": "هیچ‌کدام (ثابت)",
       "fillColor": "رنگ پرشدگی",
       "strokeColor": "رنگ خط دور",
       "strokeWidth": "ضخامت خط دور (پیکسل)",
       "opacity": "کدری پرشدگی",
-      "circleRadius": "شعاع نقطه (پیکسل)"
+      "circleRadius": "شعاع نقطه (پیکسل)",
+      "sizeField": "فیلد اندازه"
     },
     "attributeForm": {
       "heading": "فرم صفات",

@@ -4806,11 +4806,15 @@
       "typeConvexHull": "凸包",
       "typeBuffer": "缓冲区",
       "bufferDistance": "缓冲距离 (m)",
+      "bufferField": "距离字段",
+      "bufferFieldHint": "每个要素按自身的值(米)生成缓冲区;上面的距离用于没有值的要素。",
+      "fieldNone": "无(固定)",
       "fillColor": "填充颜色",
       "strokeColor": "轮廓颜色",
       "strokeWidth": "轮廓宽度 (px)",
       "opacity": "填充不透明度",
-      "circleRadius": "点半径 (px)"
+      "circleRadius": "点半径 (px)",
+      "sizeField": "大小字段"
     },
     "attributeForm": {
       "heading": "属性表单",

@@ -3,6 +3,7 @@ import {
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
   type ExternalNativePaintBridge,
+  generatorCircleRadiusValue,
   geojsonHasZCoordinates,
   getExternalNativePaintBridge,
   type LayerStyle,
@@ -16,7 +17,7 @@ import {
 import { addProtocol, config } from "maplibre-gl";
 import type { GeoJSON } from "geojson";
 import type maplibregl from "maplibre-gl";
-import type { PropertyValueSpecification } from "maplibre-gl";
+import type { DataDrivenPropertyValueSpecification, PropertyValueSpecification } from "maplibre-gl";
 import { FileSource, PMTiles, Protocol } from "pmtiles";
 import {
   ensureGeoJsonVtProtocol,
@@ -2538,6 +2539,7 @@ function applyGeometryGeneratorLayers(
           layer.geojson,
           generatorType,
           styleValue(layer.style, "geometryGeneratorBufferDistance"),
+          styleValue(layer.style, "geometryGeneratorBufferProperty"),
         )
       : null;
   if (!generated || generated.features.length === 0) {
@@ -2615,7 +2617,9 @@ function applyGeometryGeneratorLayers(
         filter: ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
         paint: {
           "circle-color": fillColor,
-          "circle-radius": Math.max(1, styleValue(layer.style, "geometryGeneratorCircleRadius")),
+          "circle-radius": generatorCircleRadiusValue(
+            layer.style,
+          ) as DataDrivenPropertyValueSpecification<number>,
           "circle-opacity": genOpacity,
           "circle-stroke-color": strokeColor,
           "circle-stroke-width": strokeWidth,

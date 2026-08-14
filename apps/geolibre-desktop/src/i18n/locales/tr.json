@@ -4880,11 +4880,15 @@
       "typeConvexHull": "Dışbükey zarflar",
       "typeBuffer": "Tamponlar",
       "bufferDistance": "Tampon mesafesi (m)",
+      "bufferField": "Mesafe alanı",
+      "bufferFieldHint": "Her öğe kendi değerine göre metre cinsinden tamponlanır; yukarıdaki mesafe, değeri olmayan öğeler için kullanılır.",
+      "fieldNone": "Yok (sabit)",
       "fillColor": "Dolgu rengi",
       "strokeColor": "Kontur rengi",
       "strokeWidth": "Kontur genişliği (px)",
       "opacity": "Dolgu saydamlığı",
-      "circleRadius": "Nokta yarıçapı (px)"
+      "circleRadius": "Nokta yarıçapı (px)",
+      "sizeField": "Boyut alanı"
     },
     "attributeForm": {
       "heading": "Öznitelik Formu",

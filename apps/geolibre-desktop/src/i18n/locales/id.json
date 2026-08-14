@@ -4806,11 +4806,15 @@
       "typeConvexHull": "Cangkang cembung",
       "typeBuffer": "Buffer",
       "bufferDistance": "Jarak buffer (m)",
+      "bufferField": "Bidang jarak",
+      "bufferFieldHint": "Setiap fitur di-buffer sesuai nilainya sendiri dalam meter; jarak di atas berlaku untuk fitur tanpa nilai.",
+      "fieldNone": "Tidak ada (tetap)",
       "fillColor": "Warna isian",
       "strokeColor": "Warna garis luar",
       "strokeWidth": "Lebar garis luar (px)",
       "opacity": "Opasitas isian",
-      "circleRadius": "Radius titik (px)"
+      "circleRadius": "Radius titik (px)",
+      "sizeField": "Bidang ukuran"
     },
     "attributeForm": {
       "heading": "Formulir Atribut",

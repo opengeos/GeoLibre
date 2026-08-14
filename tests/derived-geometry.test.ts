@@ -38,6 +38,10 @@ function collection(...features: GeoJSON.Feature[]): FeatureCollection {
   return { type: "FeatureCollection", features };
 }
 
+function pointAt(x: number, y: number): GeoJSON.Feature<GeoJSON.Point> {
+  return { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [x, y] } };
+}
+
 describe("buildInvertedMask", () => {
   it("produces a world polygon with the features as holes", () => {
     const fc = collection(square(0, 0, 10, 10));
@@ -138,6 +142,78 @@ describe("buildGeneratedGeometry", () => {
     const derived = buildGeneratedGeometry(fc, "buffer", 0);
     assert.ok(derived);
     assert.equal(derived.features.length, 0);
+  });
+
+  it("buffers each feature by its own attribute value", () => {
+    const fc = collection(
+      { ...pointAt(0, 0), properties: { radius: 1000 } },
+      { ...pointAt(10, 0), properties: { radius: 5000 } },
+    );
+    const derived = buildGeneratedGeometry(fc, "buffer", 1000, "radius");
+    assert.ok(derived);
+    assert.equal(derived.features.length, 2);
+    // The 5 km buffer must come out about five times wider than the 1 km one.
+    const widths = derived.features.map((feature) => {
+      const xs = (feature.geometry as Polygon).coordinates[0].map(([x]) => x);
+      return Math.max(...xs) - Math.min(...xs);
+    });
+    assert.ok(widths[1] / widths[0] > 4.5 && widths[1] / widths[0] < 5.5);
+  });
+
+  it("falls back to the flat distance for missing or non-numeric values", () => {
+    const fc = collection(
+      { ...pointAt(0, 0), properties: { radius: null } },
+      { ...pointAt(10, 0), properties: { radius: "wide" } },
+      { ...pointAt(20, 0), properties: {} },
+      // A blank string coerces to 0 via Number(""), so it must read as a
+      // missing value rather than a real zero-distance buffer.
+      { ...pointAt(30, 0), properties: { radius: "" } },
+      // Numeric strings are honored, matching the numeric-field pickers.
+      { ...pointAt(40, 0), properties: { radius: "1000" } },
+    );
+    const derived = buildGeneratedGeometry(fc, "buffer", 1000, "radius");
+    assert.ok(derived);
+    assert.equal(derived.features.length, 5);
+    const widths = derived.features.map((feature) => {
+      const xs = (feature.geometry as Polygon).coordinates[0].map(([x]) => x);
+      return Math.max(...xs) - Math.min(...xs);
+    });
+    // Every feature ends up with the same 1 km buffer.
+    for (const width of widths) {
+      assert.ok(Math.abs(width - widths[0]) < 1e-6);
+    }
+  });
+
+  it("skips features whose buffer field resolves to zero", () => {
+    const fc = collection(
+      { ...pointAt(0, 0), properties: { radius: 0 } },
+      { ...pointAt(10, 0), properties: { radius: 1000 } },
+    );
+    const derived = buildGeneratedGeometry(fc, "buffer", 1000, "radius");
+    assert.ok(derived);
+    // A zero-distance turf buffer returns the source geometry, which would
+    // draw the untouched feature as if it were its own buffer.
+    assert.equal(derived.features.length, 1);
+  });
+
+  it("still derives buffers when only the field supplies a distance", () => {
+    const fc = collection({ ...pointAt(0, 0), properties: { radius: 1000 } });
+    // A zero flat distance short-circuits to an empty collection without a
+    // field, but with one it is only the fallback.
+    assert.equal(buildGeneratedGeometry(fc, "buffer", 0)?.features.length, 0);
+    assert.equal(buildGeneratedGeometry(fc, "buffer", 0, "radius")?.features.length, 1);
+  });
+
+  it("caches buffer variants per field", () => {
+    const fc = collection({ ...pointAt(0, 0), properties: { radius: 1000, wide: 5000 } });
+    assert.equal(
+      buildGeneratedGeometry(fc, "buffer", 1000, "radius"),
+      buildGeneratedGeometry(fc, "buffer", 1000, "radius"),
+    );
+    assert.notEqual(
+      buildGeneratedGeometry(fc, "buffer", 1000, "radius"),
+      buildGeneratedGeometry(fc, "buffer", 1000, "wide"),
+    );
   });
 
   it("memoizes per collection and parameters", () => {

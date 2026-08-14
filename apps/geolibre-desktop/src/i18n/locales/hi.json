@@ -4880,11 +4880,15 @@
       "typeConvexHull": "उत्तल आवरण",
       "typeBuffer": "बफ़र",
       "bufferDistance": "बफ़र दूरी (मी)",
+      "bufferField": "दूरी फ़ील्ड",
+      "bufferFieldHint": "हर फ़ीचर अपने स्वयं के मान (मीटर में) से बफ़र होता है; ऊपर दी गई दूरी उन फ़ीचर पर लागू होती है जिनका मान नहीं है।",
+      "fieldNone": "कोई नहीं (स्थिर)",
       "fillColor": "भराव रंग",
       "strokeColor": "रूपरेखा रंग",
       "strokeWidth": "रूपरेखा चौड़ाई (px)",
       "opacity": "भराव अपारदर्शिता",
-      "circleRadius": "बिंदु त्रिज्या (px)"
+      "circleRadius": "बिंदु त्रिज्या (px)",
+      "sizeField": "आकार फ़ील्ड"
     },
     "attributeForm": {
       "heading": "विशेषता फ़ॉर्म",
