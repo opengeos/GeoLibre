@@ -581,13 +581,14 @@ def test_read_excludes_secondary_geometry_columns(live_table) -> None:
 
 
 @requires_live_postgis
-def test_read_rejects_unknown_geometry_column(live_table) -> None:
+@pytest.mark.parametrize("geometry_column", ["not_a_geometry", ""])
+def test_read_rejects_unknown_geometry_column(live_table, geometry_column: str) -> None:
     with pytest.raises(HTTPException) as exc:
         postgis_read(
             PostgisReadRequest(
                 connection=LIVE_DSN,
                 table=TABLE,
-                geometry_column="not_a_geometry",
+                geometry_column=geometry_column,
             )
         )
     assert exc.value.status_code == 400

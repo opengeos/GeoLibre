@@ -365,7 +365,7 @@ def _table_info(
                 status_code=400,
                 detail=(f"Geometry column not found on {schema}.{table}: {geometry_column}"),
             )
-        geometry_column = geometry_column or geom_rows[0][0]
+        geometry_column = geom_rows[0][0] if geometry_column is None else geometry_column
         srid = geometry_by_name[geometry_column]
         # A table can register several geometry columns; the layer edits only
         # the selected one, and the others must not leak into the attribute

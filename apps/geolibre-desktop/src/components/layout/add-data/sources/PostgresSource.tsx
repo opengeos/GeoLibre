@@ -36,6 +36,15 @@ function postgisTableKey(table: PostgisTableInfo): string {
   return `${table.schema}.${table.table} [${table.geometry_column}]`;
 }
 
+function postgisTableLabel(table: PostgisTableInfo, tables: PostgisTableInfo[]): string {
+  const tableName = `${table.schema}.${table.table}`;
+  const hasMultipleGeometries = tables.some(
+    (candidate) =>
+      candidate !== table && candidate.schema === table.schema && candidate.table === table.table,
+  );
+  return hasMultipleGeometries ? `${tableName} [${table.geometry_column}]` : tableName;
+}
+
 interface PostgresSourceProps {
   /** Prefill from the Browser panel (saved connection / clicked table). */
   initialPostgres?: OpenAddDataPostgres;
@@ -569,12 +578,15 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
             >
               {postgisTables.map((table) => {
                 const key = postgisTableKey(table);
+                const label = postgisTableLabel(table, postgisTables);
                 // Tables without a usable key stay visible (so the user sees
                 // why they are missing) but cannot be picked: this mode exists
                 // to save edits back, which needs a primary key.
                 return (
                   <option key={key} value={key} disabled={!table.primary_key}>
-                    {table.primary_key ? key : t("addData.postgres.tableReadOnly", { table: key })}
+                    {table.primary_key
+                      ? label
+                      : t("addData.postgres.tableReadOnly", { table: label })}
                   </option>
                 );
               })}
