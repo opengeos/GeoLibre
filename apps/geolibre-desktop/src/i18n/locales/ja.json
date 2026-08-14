@@ -4807,7 +4807,7 @@
       "typeBuffer": "バッファ",
       "bufferDistance": "バッファ距離 (m)",
       "bufferField": "距離フィールド",
-      "bufferFieldHint": "各フィーチャは自身の値(メートル)でバッファされます。上の距離は値がないフィーチャに使われます。",
+      "bufferFieldHint": "各フィーチャは自身の値(メートル)でバッファされます。値がないフィーチャは上の距離を使い、値が 0 の場合は何も描画されません。",
       "fieldNone": "なし (固定)",
       "fillColor": "塗りつぶし色",
       "strokeColor": "輪郭色",

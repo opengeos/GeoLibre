@@ -4881,7 +4881,7 @@
       "typeBuffer": "Tamponlar",
       "bufferDistance": "Tampon mesafesi (m)",
       "bufferField": "Mesafe alanı",
-      "bufferFieldHint": "Her öğe kendi değerine göre metre cinsinden tamponlanır; yukarıdaki mesafe, değeri olmayan öğeler için kullanılır.",
+      "bufferFieldHint": "Her öğe kendi değerine göre metre cinsinden tamponlanır; değeri olmayan öğeler yukarıdaki mesafeyi kullanır ve 0 değeri hiçbir şey çizmez.",
       "fieldNone": "Yok (sabit)",
       "fillColor": "Dolgu rengi",
       "strokeColor": "Kontur rengi",

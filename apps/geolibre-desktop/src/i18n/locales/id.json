@@ -4807,7 +4807,7 @@
       "typeBuffer": "Buffer",
       "bufferDistance": "Jarak buffer (m)",
       "bufferField": "Bidang jarak",
-      "bufferFieldHint": "Setiap fitur di-buffer sesuai nilainya sendiri dalam meter; jarak di atas berlaku untuk fitur tanpa nilai.",
+      "bufferFieldHint": "Setiap fitur di-buffer sesuai nilainya sendiri dalam meter; fitur tanpa nilai memakai jarak di atas, dan nilai 0 tidak menggambar apa pun.",
       "fieldNone": "Tidak ada (tetap)",
       "fillColor": "Warna isian",
       "strokeColor": "Warna garis luar",

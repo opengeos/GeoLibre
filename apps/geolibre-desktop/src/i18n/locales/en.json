@@ -4891,7 +4891,7 @@
       "typeBuffer": "Buffers",
       "bufferDistance": "Buffer distance (m)",
       "bufferField": "Distance field",
-      "bufferFieldHint": "Each feature is buffered by its own value in meters; the distance above covers features with no value.",
+      "bufferFieldHint": "Each feature is buffered by its own value in meters; features with no value use the distance above, and a value of 0 draws nothing.",
       "fieldNone": "None (fixed)",
       "fillColor": "Fill color",
       "strokeColor": "Outline color",

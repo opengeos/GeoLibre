@@ -4881,7 +4881,7 @@
       "typeBuffer": "Tampons",
       "bufferDistance": "Distance de tampon (m)",
       "bufferField": "Champ de distance",
-      "bufferFieldHint": "Chaque entité est tamponnée selon sa propre valeur en mètres ; la distance ci-dessus s'applique aux entités sans valeur.",
+      "bufferFieldHint": "Chaque entité est tamponnée selon sa propre valeur en mètres ; les entités sans valeur utilisent la distance ci-dessus et une valeur de 0 ne dessine rien.",
       "fieldNone": "Aucun (fixe)",
       "fillColor": "Couleur de remplissage",
       "strokeColor": "Couleur de contour",

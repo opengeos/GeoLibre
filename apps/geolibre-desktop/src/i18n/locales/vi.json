@@ -4817,7 +4817,7 @@
       "typeBuffer": "Bộ đệm",
       "bufferDistance": "Khoảng cách đệm (m)",
       "bufferField": "Trường khoảng cách",
-      "bufferFieldHint": "Mỗi đối tượng được đệm theo giá trị riêng của nó tính bằng mét; khoảng cách ở trên áp dụng cho đối tượng không có giá trị.",
+      "bufferFieldHint": "Mỗi đối tượng được đệm theo giá trị riêng của nó tính bằng mét; đối tượng không có giá trị dùng khoảng cách ở trên, và giá trị 0 không vẽ gì cả.",
       "fieldNone": "Không có (cố định)",
       "fillColor": "Tô màu",
       "strokeColor": "Màu đường viền",

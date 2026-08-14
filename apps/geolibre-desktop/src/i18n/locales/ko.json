@@ -4807,7 +4807,7 @@
       "typeBuffer": "버퍼",
       "bufferDistance": "버퍼 거리 (m)",
       "bufferField": "거리 필드",
-      "bufferFieldHint": "각 피처는 자체 값(미터)으로 버퍼링됩니다. 위의 거리는 값이 없는 피처에 적용됩니다.",
+      "bufferFieldHint": "각 피처는 자체 값(미터)으로 버퍼링됩니다. 값이 없는 피처는 위의 거리를 사용하며, 값이 0이면 아무것도 그리지 않습니다.",
       "fieldNone": "없음 (고정)",
       "fillColor": "채우기 색상",
       "strokeColor": "윤곽선 색상",

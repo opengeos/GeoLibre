@@ -4881,7 +4881,7 @@
       "typeBuffer": "Puffer",
       "bufferDistance": "Pufferdistanz (m)",
       "bufferField": "Entfernungsfeld",
-      "bufferFieldHint": "Jedes Objekt wird mit seinem eigenen Wert in Metern gepuffert; die oben angegebene Entfernung gilt für Objekte ohne Wert.",
+      "bufferFieldHint": "Jedes Objekt wird mit seinem eigenen Wert in Metern gepuffert; Objekte ohne Wert verwenden die oben angegebene Entfernung, und der Wert 0 zeichnet nichts.",
       "fieldNone": "Keines (fest)",
       "fillColor": "Füllfarbe",
       "strokeColor": "Umrissfarbe",

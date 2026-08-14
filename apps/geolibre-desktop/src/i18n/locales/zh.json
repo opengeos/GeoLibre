@@ -4807,7 +4807,7 @@
       "typeBuffer": "缓冲区",
       "bufferDistance": "缓冲距离 (m)",
       "bufferField": "距离字段",
-      "bufferFieldHint": "每个要素按自身的值(米)生成缓冲区;上面的距离用于没有值的要素。",
+      "bufferFieldHint": "每个要素按自身的值(米)生成缓冲区;没有值的要素使用上面的距离,值为 0 时不绘制任何内容。",
       "fieldNone": "无(固定)",
       "fillColor": "填充颜色",
       "strokeColor": "轮廓颜色",

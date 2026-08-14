@@ -4881,7 +4881,7 @@
       "typeBuffer": "Buffer",
       "bufferDistance": "Distanza buffer (m)",
       "bufferField": "Campo distanza",
-      "bufferFieldHint": "Ogni elemento viene bufferizzato con il proprio valore in metri; la distanza sopra vale per gli elementi senza valore.",
+      "bufferFieldHint": "Ogni elemento viene bufferizzato con il proprio valore in metri; gli elementi senza valore usano la distanza sopra e il valore 0 non disegna nulla.",
       "fieldNone": "Nessuno (fisso)",
       "fillColor": "Colore riempimento",
       "strokeColor": "Colore contorno",

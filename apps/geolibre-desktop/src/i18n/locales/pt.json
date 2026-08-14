@@ -4881,7 +4881,7 @@
       "typeBuffer": "Buffers",
       "bufferDistance": "Distância do buffer (m)",
       "bufferField": "Campo de distância",
-      "bufferFieldHint": "Cada feição recebe um buffer com o seu próprio valor em metros; a distância acima aplica-se às feições sem valor.",
+      "bufferFieldHint": "Cada feição recebe um buffer com o seu próprio valor em metros; as feições sem valor usam a distância acima e o valor 0 não desenha nada.",
       "fieldNone": "Nenhum (fixo)",
       "fillColor": "Cor de preenchimento",
       "strokeColor": "Cor do contorno",

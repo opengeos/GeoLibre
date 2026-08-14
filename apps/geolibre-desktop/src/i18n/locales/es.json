@@ -4881,7 +4881,7 @@
       "typeBuffer": "Zonas de influencia",
       "bufferDistance": "Distancia de influencia (m)",
       "bufferField": "Campo de distancia",
-      "bufferFieldHint": "A cada entidad se le aplica una zona de influencia según su propio valor en metros; la distancia fija indicada arriba se aplica a las entidades sin valor.",
+      "bufferFieldHint": "A cada entidad se le aplica una zona de influencia según su propio valor en metros; las entidades sin valor usan la distancia indicada arriba y un valor de 0 no dibuja nada.",
       "fieldNone": "Ninguno (fijo)",
       "fillColor": "Color de relleno",
       "strokeColor": "Color de contorno",
