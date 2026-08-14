@@ -171,24 +171,31 @@ describe("buildGeneratedGeometry", () => {
       { ...pointAt(30, 0), properties: { radius: "" } },
       { ...pointAt(40, 0), properties: { radius: "  " } },
       // Number() would turn these into a 1 m and a 1 km buffer respectively,
-      // but neither is a distance.
+      // but neither is a distance. Both differ from the flat distance below,
+      // so a regression to a bare Number(raw) shows up as a width.
       { ...pointAt(50, 0), properties: { radius: true } },
       { ...pointAt(60, 0), properties: { radius: [1000] } },
       { ...pointAt(70, 0), properties: { radius: Number.NaN } },
-      // Numeric strings are honored, matching the numeric-field pickers.
-      { ...pointAt(80, 0), properties: { radius: "1000" } },
+      // Numeric strings are honored, matching the numeric-field pickers. Kept
+      // different from the flat distance so the assertion below can tell a
+      // parsed value apart from a fallback.
+      { ...pointAt(80, 0), properties: { radius: "2000" } },
     );
-    const derived = buildGeneratedGeometry(fc, "buffer", 1000, "radius");
+    const derived = buildGeneratedGeometry(fc, "buffer", 3000, "radius");
     assert.ok(derived);
     assert.equal(derived.features.length, 9);
     const widths = derived.features.map((feature) => {
       const xs = (feature.geometry as Polygon).coordinates[0].map(([x]) => x);
       return Math.max(...xs) - Math.min(...xs);
     });
-    // Every feature ends up with the same 1 km buffer.
-    for (const width of widths) {
-      assert.ok(Math.abs(width - widths[0]) < 1e-6);
+    // Every unreadable value ends up on the same 3 km fallback...
+    const [fallbackWidth, ...rest] = widths.slice(0, 8);
+    for (const width of rest) {
+      assert.ok(Math.abs(width - fallbackWidth) < 1e-6);
     }
+    // ...while the numeric string is parsed, not fallen back to.
+    const ratio = widths[8] / fallbackWidth;
+    assert.ok(ratio > 0.6 && ratio < 0.73);
   });
 
   it("skips features whose buffer field resolves to zero", () => {
