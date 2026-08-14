@@ -2550,6 +2550,7 @@
       "modelBuilder": "Batch & Models",
       "processingHistory": "History",
       "conversion": "Conversion",
+      "convertFiles": "Convert Files",
       "vector": "Vector",
       "network": "Network",
       "statistics": "Spatial Statistics",

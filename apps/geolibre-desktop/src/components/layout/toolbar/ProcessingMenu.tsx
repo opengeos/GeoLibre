@@ -183,14 +183,18 @@ export function ProcessingMenu({
             models, and AI segmentation. Grouped under a single "GeoLibre"
             submenu so their category names don't collide with the Whitebox
             category submenus above. Each child keeps its own visibility gate;
-            the parent shows when any child does. */}
+            the parent shows when any child does. The file-conversion child is
+            labeled "Convert Files", not "Conversion" -- the Whitebox catalog
+            already has its own top-level "Conversion" category (with a
+            "GeoLibre" subcategory of its own), and a same-named child here
+            let users land in the wrong tool. */}
         {showGeolibre && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>{t("toolbar.item.geolibre")}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               {!mobile && show("processing.conversion") && (
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>{t("toolbar.item.conversion")}</DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger>{t("toolbar.item.convertFiles")}</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
                     <DropdownMenuItem onSelect={() => setConversionOpen("vector-to-vector")}>
                       {t("toolbar.conversion.vectorToVector")}

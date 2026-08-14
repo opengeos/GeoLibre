@@ -423,7 +423,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   {
     id: "processing.conversion",
     menuId: "processing",
-    labelKey: "toolbar.item.conversion",
+    labelKey: "toolbar.item.convertFiles",
     tier: "intermediate",
   },
   {
