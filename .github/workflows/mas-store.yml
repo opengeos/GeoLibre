@@ -47,9 +47,16 @@ on:
 permissions:
   contents: read
 
+# A release run must never be cancelled: it is the only producer of that tag's
+# release assets, and losing it mid-upload leaves the release incomplete with no
+# obvious sign of why. So the group separates release runs from manual ones (a
+# workflow_dispatch on the same tag would otherwise share the group and cancel
+# the release build), and cancel-in-progress is disabled for release runs
+# outright. Manual runs still supersede each other, which is what you want while
+# iterating.
 concurrency:
-  group: mas-store-${{ github.ref }}
-  cancel-in-progress: true
+  group: mas-store-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
 
 jobs:
   # Split out of `build` so a release run with no MAS secrets skips the whole
