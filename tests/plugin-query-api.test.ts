@@ -1,61 +1,17 @@
 import assert from "node:assert/strict";
-import { createRequire, registerHooks } from "node:module";
-import { before, beforeEach, describe, it } from "node:test";
+import { beforeEach, describe, it } from "node:test";
+import { useAppStore } from "@geolibre/core";
+import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins/geo-editor-geometry";
 import type { GeoLibreSelection } from "@geolibre/plugins";
+import { createPluginLayerQueries } from "../apps/geolibre-desktop/src/lib/plugin-layer-queries";
 
-(globalThis as typeof globalThis & { window: typeof globalThis }).window = globalThis;
-(globalThis as typeof globalThis & { location: { search: string } }).location = { search: "" };
-const emptyStorage = { getItem: () => null };
-(globalThis as typeof globalThis & { sessionStorage: typeof emptyStorage }).sessionStorage =
-  emptyStorage;
-(globalThis as typeof globalThis & { localStorage: typeof emptyStorage }).localStorage =
-  emptyStorage;
-const maplibreGl = createRequire(`${process.cwd()}/package.json`)("maplibre-gl") as Record<
-  string,
-  unknown
->;
-(globalThis as typeof globalThis & { __maplibreGl: Record<string, unknown> }).__maplibreGl =
-  maplibreGl;
-const maplibreGlModuleSource = [
-  "export default globalThis.__maplibreGl;",
-  ...Object.keys(maplibreGl)
-    .filter((name) => name !== "default" && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name))
-    .map((name) => `export const ${name} = globalThis.__maplibreGl[${JSON.stringify(name)}];`),
-].join("\n");
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "maplibre-gl") {
-      return { url: "test:maplibre-gl", shortCircuit: true };
-    }
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    if (url === "test:maplibre-gl") {
-      return { format: "module", source: maplibreGlModuleSource, shortCircuit: true };
-    }
-    if (url.endsWith(".css")) {
-      return { format: "module", source: "", shortCircuit: true };
-    }
-    if (url === "virtual:bundled-plugins") {
-      return {
-        format: "module",
-        source: "export const bundledPluginManifestPaths = [];",
-        shortCircuit: true,
-      };
-    }
-    return nextLoad(url, context);
-  },
-});
-const SKETCHES_SOURCE_KIND = "geoeditor-sketches";
-let useAppStore: typeof import("@geolibre/core").useAppStore;
-let createAppAPI: typeof import("../apps/geolibre-desktop/src/hooks/usePlugins").createAppAPI;
-
-before(async () => {
-  [{ useAppStore }, { createAppAPI }] = await Promise.all([
-    import("@geolibre/core"),
-    import("../apps/geolibre-desktop/src/hooks/usePlugins"),
-  ]);
-});
+// These exercise `createPluginLayerQueries`, which `createAppAPI` spreads into
+// the object it hands plugins, rather than reaching through `createAppAPI`
+// itself. Loading `usePlugins.ts` pulls in the whole built-in plugin registry
+// (and MapCanvas, CesiumCanvas, and every `maplibre-*` plugin with it), which
+// forced this file to stub `maplibre-gl`, `window`, and `localStorage` just to
+// import it, and put 39 browser-only modules into the coverage report. The
+// wiring itself is a typed spread, so `npm run build` is what holds it.
 
 describe("external plugin query API", () => {
   beforeEach(() => {
@@ -74,18 +30,18 @@ describe("external plugin query API", () => {
     store.selectLayer(layerId);
     store.selectFeatures(["A", "B"]);
 
-    const app = createAppAPI();
-    assert.equal(app.getSelectedLayerId?.(), layerId);
+    const app = createPluginLayerQueries();
+    assert.equal(app.getSelectedLayerId(), layerId);
     assert.deepEqual(
-      app.getSelectedFeatures?.().map((feature) => feature.id),
+      app.getSelectedFeatures().map((feature) => feature.id),
       ["A", "B"],
     );
   });
 
   it("notifies and unsubscribes selection listeners", () => {
-    const app = createAppAPI();
+    const app = createPluginLayerQueries();
     const events: unknown[] = [];
-    const unsubscribe = app.onSelectionChange?.((selection) => events.push(selection));
+    const unsubscribe = app.onSelectionChange((selection) => events.push(selection));
     assert.ok(unsubscribe);
     useAppStore.getState().selectFeatures(["A"]);
     assert.equal(events.length, 1);
@@ -109,8 +65,8 @@ describe("external plugin query API", () => {
     });
     const before = JSON.stringify(useAppStore.getState());
 
-    const app = createAppAPI();
-    assert.deepEqual(app.listLayers?.(), [
+    const app = createPluginLayerQueries();
+    assert.deepEqual(app.listLayers(), [
       {
         id: layerId,
         name: "Catchments",
@@ -119,7 +75,7 @@ describe("external plugin query API", () => {
         opacity: 1,
       },
     ]);
-    assert.deepEqual(app.getLayerFeatures?.(layerId), [
+    assert.deepEqual(app.getLayerFeatures(layerId), [
       {
         type: "Feature",
         id: "A",
@@ -127,9 +83,9 @@ describe("external plugin query API", () => {
         geometry: { type: "Point", coordinates: [101.7, 3.1] },
       },
     ]);
-    app.getSelectedFeatures?.();
-    app.getSelectedLayerId?.();
-    app.getDrawnFeatures?.();
+    app.getSelectedFeatures();
+    app.getSelectedLayerId();
+    app.getDrawnFeatures();
 
     assert.equal(JSON.stringify(useAppStore.getState()), before);
   });
@@ -152,9 +108,9 @@ describe("external plugin query API", () => {
     });
     store.selectLayer(layerId);
 
-    const app = createAppAPI();
+    const app = createPluginLayerQueries();
     let callbackSelection: GeoLibreSelection | undefined;
-    const unsubscribe = app.onSelectionChange?.((selection) => {
+    const unsubscribe = app.onSelectionChange((selection) => {
       callbackSelection = selection;
     });
     assert.ok(unsubscribe);
@@ -162,9 +118,9 @@ describe("external plugin query API", () => {
     assert.ok(callbackSelection);
 
     const returnedFeatures = [
-      app.getLayerFeatures?.(layerId)[0],
-      app.getSelectedFeatures?.()[0],
-      app.getDrawnFeatures?.()[0],
+      app.getLayerFeatures(layerId)[0],
+      app.getSelectedFeatures()[0],
+      app.getDrawnFeatures()[0],
       callbackSelection.features[0],
     ];
     for (const feature of returnedFeatures) {
@@ -184,8 +140,8 @@ describe("external plugin query API", () => {
   });
 
   it("throws when a requested layer does not exist", () => {
-    const app = createAppAPI();
-    assert.throws(() => app.getLayerFeatures?.("missing-layer"), {
+    const app = createPluginLayerQueries();
+    assert.throws(() => app.getLayerFeatures("missing-layer"), {
       message: 'No layer with id "missing-layer"',
     });
   });
@@ -203,8 +159,8 @@ describe("external plugin query API", () => {
     store.selectFeatures(["1"]);
 
     assert.deepEqual(
-      createAppAPI()
-        .getSelectedFeatures?.()
+      createPluginLayerQueries()
+        .getSelectedFeatures()
         .map((feature) => feature.properties?.NAME),
       ["Second"],
     );
@@ -218,9 +174,9 @@ describe("external plugin query API", () => {
     });
     store.selectLayer(layerId);
 
-    const app = createAppAPI();
-    assert.equal(app.getSelectedLayerId?.(), layerId);
-    assert.deepEqual(app.getSelectedFeatures?.(), []);
+    const app = createPluginLayerQueries();
+    assert.equal(app.getSelectedLayerId(), layerId);
+    assert.deepEqual(app.getSelectedFeatures(), []);
   });
 
   it("returns features from every sketch layer and excludes ordinary layers", () => {
@@ -244,7 +200,7 @@ describe("external plugin query API", () => {
       metadata: { sourceKind: SKETCHES_SOURCE_KIND },
     });
 
-    assert.deepEqual(createAppAPI().getDrawnFeatures?.(), [
+    assert.deepEqual(createPluginLayerQueries().getDrawnFeatures(), [
       {
         type: "Feature",
         id: "drawn-1",
