@@ -424,11 +424,15 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
     await addMartinSource(martin.selectedSourceId);
   });
 
-  const uniquePostgisTables = postgisTables.filter(
-    (table, index, tables) =>
-      tables.findIndex((candidate) => postgisTableKey(candidate) === postgisTableKey(table)) ===
-      index,
-  );
+  const uniquePostgisTables = (() => {
+    const seen = new Set<string>();
+    return postgisTables.filter((table) => {
+      const key = postgisTableKey(table);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
   const selectedTableGeometries = postgisTables.filter(
     (table) => postgisTableKey(table) === selectedTableKey,
   );
