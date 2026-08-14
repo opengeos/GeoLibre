@@ -2570,7 +2570,7 @@
       "arcgisImportReason": {
         "layer-type": "Loại lớp {{layerType}} không được hỗ trợ.",
         "missing-source": "Lớp này không có nguồn dữ liệu cục bộ có thể đọc được.",
-        "format": "Bản đồ nhỏ",
+        "format": "Định dạng dữ liệu của lớp không được hỗ trợ.",
         "file-geodatabase": "Nguồn File Geodatabase (.gdb) không được tải từ dự án. Trong GeoLibre Desktop, hãy thêm chúng bằng Thêm dữ liệu → Cơ sở dữ liệu địa lý tệp (GDB).",
         "network-path": "Đường dẫn chia sẻ mạng không được tải vì lý do bảo mật.",
         "service": "Các lớp dịch vụ ArcGIS trong các dự án chưa được hỗ trợ.",
