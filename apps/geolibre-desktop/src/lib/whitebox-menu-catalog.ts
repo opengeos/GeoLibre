@@ -2,7 +2,7 @@
 // Whitebox tools come from the Whitebox Next Gen catalog snapshot
 // (opengeos/Whitebox-Next-Gen-ArcGIS WNG/data/catalog_snapshot.json);
 // GeoLibre-authored WASM tools come from the geolibre-wasm manifests and
-// are grouped under a "GeoLibre" subheading. Tool ids match the
+// are grouped under a "GeoLibre (WASM)" subheading. Tool ids match the
 // runtime/sidecar/WASM catalog used by ProcessingDialog.
 // Regenerate with scripts/gen-whitebox-menu-catalog.mjs; do not hand-edit.
 // Tool/subcategory names are catalog data and are intentionally not
@@ -38,7 +38,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
     labelKey: "toolbar.item.conversion",
     subcategories: [
       {
-        label: "GeoLibre",
+        label: "GeoLibre (WASM)",
         tools: [
           { id: "calculate_transit_service_frequency", name: "Calculate Transit Service Frequency" },
           { id: "excel_to_table", name: "Excel To Table" },
@@ -113,7 +113,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
     labelKey: "toolbar.item.hydrology",
     subcategories: [
       {
-        label: "GeoLibre",
+        label: "GeoLibre (WASM)",
         tools: [
           { id: "delineate_depressions", name: "Delineate Depressions" },
           { id: "delineate_mounts", name: "Delineate Mounts" },
@@ -259,7 +259,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
     labelKey: "toolbar.item.lidar",
     subcategories: [
       {
-        label: "GeoLibre",
+        label: "GeoLibre (WASM)",
         tools: [
           { id: "assign_projection_lidar", name: "Assign Projection Lidar" },
         ],
@@ -407,7 +407,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
     labelKey: "toolbar.item.raster",
     subcategories: [
       {
-        label: "GeoLibre",
+        label: "GeoLibre (WASM)",
         tools: [
           { id: "aggregate_multidimensional_raster", name: "Aggregate Multidimensional Raster" },
           { id: "analyze_changes_ccdc", name: "Analyze Changes Using CCDC" },
@@ -1054,7 +1054,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
     labelKey: "toolbar.item.vector",
     subcategories: [
       {
-        label: "GeoLibre",
+        label: "GeoLibre (WASM)",
         tools: [
           { id: "add_surface_information", name: "Add Surface Information" },
           { id: "add_z_information", name: "Add Z Information" },
