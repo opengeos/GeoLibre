@@ -12,7 +12,7 @@ from .authoring import (
 from .geolibre import Feature, Layer, Map
 from .legends import builtin_legend_names
 
-__version__ = "2.5.0"
+__version__ = "2.6.0"
 __all__ = [
     "Feature",
     "Layer",

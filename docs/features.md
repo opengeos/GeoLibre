@@ -17,17 +17,21 @@ kepler.gl, see the [Comparison](comparison.md).
     - Google Earth-style camera resets: `N` north up, `U` top-down, `R` reset view
     - A `?` shortcuts cheat sheet
 - Customizable UI profiles that tailor which menus, panels, and data sources are visible, so a deployment can present a focused subset of the app to its users. See [UI Profiles](ui-profiles.md)
-- Internationalization framework with react-i18next and 16 complete per-build translation catalogs — including right-to-left Arabic with a fully mirrored interface — plus a `?locale`/`?lang` query parameter to set the embed language
+- Internationalization framework with react-i18next and 18 complete per-build translation catalogs — including right-to-left Arabic and Persian with a fully mirrored interface, Persian set in Vazirmatn — plus a `?locale`/`?lang` query parameter to set the embed language
 - Accessibility pass with axe-checked screens, keyboard navigation, and screen-reader labels
 - App-wide, section, and plugin React error boundaries that contain failures and keep the rest of the workspace usable
 - Undo/redo for layer and style operations
+- A design system of the app's own: self-hosted IBM Plex Sans and IBM Plex Mono (no CDN, so the desktop build renders offline under its CSP) instead of whatever the platform's UI font happens to be, a dark-mode elevation ladder that separates canvas, panels, dialogs, and menus by surface rather than by a 1px border, theme-aware shadows that stay visible in dark mode, and one translucent map-glass treatment shared by every piece of chrome that floats over the map
 
 ## Map workspace and basemaps
 
 - MapLibre map workspace
     - **Basemaps**: OpenFreeMap, Protomaps, EOX Sentinel-2 cloudless, and Openbasiskaart, with stacking of multiple raster basemaps, blank background support, and double-click to swap the core basemap from the layer panel
+    - **Regional basemaps**: a collapsed Regional section in both the New Project and Change Basemap panels for providers with local coverage the global defaults lack, starting with five keyless Chinese basemaps (高德地图, 高德卫星, 高德混合, 腾讯地图, 腾讯深色), with the same providers plus Tianditu available through the Basemaps control plugin
+    - **A remembered basemap**: an empty startup workspace opens on the basemap you last selected, while a project's own basemap stays authoritative
     - **Planetary basemaps**: Mars and the Moon (OpenPlanetaryMap), plus Mercury, Venus, the Galilean moons (Io, Europa, Ganymede, Callisto), Titan, Pluto, and Charon (USGS Astrogeology, reprojected to Web Mercator by the tiles Worker). A per-project ellipsoid drives distance, area, and scale measurements from that body's radius, and a planet switcher sits in the Layers panel
     - **Toggleable controls**: navigation, fullscreen, geolocation, globe, terrain, scale (metric, imperial, or nautical), attribution, and logo, plus a double-click terrain control for setting vertical exaggeration
+    - **Your own DEM as the terrain source**: terrain settings accept a single-band EPSG:3857 or EPSG:4326 Cloud Optimized GeoTIFF over HTTP or from a local file, read in ranges and encoded to Terrarium tiles through a custom MapLibre protocol, so higher-resolution local elevation can shape the 3D view and the hillshade instead of the global tile set
     - **On-map helpers**: a right-click context menu that reads out and copies the clicked coordinate, opens it in Google Maps or Google Earth, and carries a **Quick analysis** submenu — buffers, drive- and walk-time isochrones, and a viewshed, each run on the clicked point with no dialog and no point layer to create first (the same submenu on a layer row runs buffers, centroids, convex hull, and bounding box over the whole layer) — plus a Gridlines coordinate-grid overlay with edge labels and a UTM easting/northing grid mode
     - **Interactive viewshed**: right-click anywhere and get what is visible from that spot within 2, 5, or 15 km, computed from the same public terrain tiles the map already renders — no DEM to find, download, or load, and 3D terrain need not even be on. The result is an ordinary image overlay layer, so it gets opacity, ordering, zoom-to, and project save for free. Earth curvature and refraction are not modelled; the Whitebox **Viewshed** tool remains the rigorous DEM-in-hand option
     - **Status bar readouts**: the pointer coordinate in decimal degrees, DMS, DDM, or UTM (click to cycle, or set it in Settings; UTM reuses the projection that draws the Gridlines grid, and falls back to degrees outside its valid latitude band), the ground elevation under the pointer, camera altitude above sea level as Google Earth-style **Eye alt** — scaled to the active celestial body, so it stays right on a Mars or Moon basemap — plus zoom, bearing, pitch, and the view bounding box
@@ -46,7 +50,7 @@ kepler.gl, see the [Comparison](comparison.md).
 - Large local vector layers render through client-side vector tiling, with a warning before loading very large files
 - Add Data menu covering every remote and cloud-native source:
     - **URL deep links**: open GeoJSON, GeoParquet, PMTiles, a REST endpoint returning a GeoJSON FeatureCollection, a COG, or a ZIP/REST response containing multiple GeoJSON files with `?data=`; optionally apply vector or raster style JSON with `?style=`, automatically fit the layer extent, and associate per-file ZIP styles by filename stem
-    - **Tile and map services**: XYZ tiles; WMS and WFS, with layers and feature types discovered from the service's GetCapabilities so you pick from a populated dropdown; vector tiles, including OGC API - Tiles services; and ArcGIS FeatureServer, VectorTileServer, MapServer, and ImageServer layers, the last two with optional sublayer selection and server-side raster functions
+    - **Tile and map services**: XYZ tiles; WMS and WFS, with layers and feature types discovered from the service's GetCapabilities so you pick from a populated dropdown; vector tiles, including OGC API - Tiles services; and ArcGIS FeatureServer, VectorTileServer, MapServer, and ImageServer layers. The last two load as ordinary raster layers, so opacity, the Style panel's brightness/contrast/saturation, reordering, and project save all apply, drawing from the service's own fused cache when it was built on the standard Web Mercator scheme and from `/export` or `/exportImage` otherwise. MapServer sublayers are browsed and picked from the service's own list rather than typed in as ids, and an ImageServer rendering rule is an optional field
     - **Feature services and feeds**: GeoJSON URLs; GeoRSS feeds from a URL or file; and OGC API - Features collections added as vector layers from whatever URL you have in hand — a landing page, `/collections`, a collection, or a full items URL
     - **Raster**: COG and GeoTIFF; Cloud-Optimized NetCDF/HDF via kerchunk references, plus local HDF5 and NetCDF-4 files; and MBTiles
     - **Cloud-native archives**: PMTiles, and Zarr from a remote store or a folder on disk, with variable and dimension pickers that offer the store's real coordinate values rather than raw indices
@@ -66,7 +70,7 @@ kepler.gl, see the [Comparison](comparison.md).
 
 ## Layers, styling, and labels
 
-- Layer panel for visibility, opacity, reordering, rename, zoom-to-layer, identify, labels, open attribute table, export, and remove actions
+- Layer panel for visibility, opacity, reordering, rename, zoom-to-layer, identify, labels, open attribute table, open Style panel, export, and remove actions. Selecting a layer never pops the Style panel open over the map on its own; it expands only from that explicit menu item
     - A per-row symbology swatch (dot, line, square, or image glyph) colored from the layer's own styling
     - Copy and paste of a layer's style onto another layer
     - A metadata dialog that reads a raster's real georeferencing from the GeoTIFF header: CRS and EPSG code, pixel size and extent in CRS units, data type, nodata, compression, tiling, and overviews
@@ -131,7 +135,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Persistent mode banners for the Directions and Reverse Geocode tools
     - A Camera Tour recorder that captures an animated keyframe tour to video, with per-keyframe recapture, per-keyframe hold and transition duration controls, and saving or loading a named tour setup as JSON
     - A Dashboard panel of configurable chart widgets that summarize the loaded layers: histogram, scatter, bar, line, box, and pie charts, plus big-number indicator tiles with count, sum, mean, min, max, or median aggregation and a custom prefix and suffix
-- Print Layout composer (**Project → Print Layout...**) that exports the map to PNG or PDF: a user-editable legend, an explicit map-scale input, a title block with editable title and footer, page-size controls, a custom print extent drawn with the mouse or by touch, attribute-table and chart blocks, Atlas / map series generation that produces one page per feature or a uniform series of pages along a line, and Copy to Clipboard
+- Print Layout composer (**Project → Print Layout...**) that exports the map to PNG or PDF: a user-editable legend, an explicit map-scale input, a title block with editable title and footer, page-size controls, a custom print extent drawn with the mouse or by touch, attribute-table and chart blocks (filterable to all features, only those contained by the page, or every feature the page intersects), Atlas / map series generation that produces one page per feature or a uniform series of pages along a line, and Copy to Clipboard
 - Record the map canvas, or a drawn bounding box, to a video file straight from the browser (with an optional title/source caption and on-map panel capture for HTML, legend, and colorbar overlays), and animate a marker along any line layer with 3D track-follow camera controls and MP4 export
 - Bookmarks that capture the active layers alongside the camera, organized into folders, with selectable export, a resizable and reorderable panel, and a save-as name prompt
 - Elements panel that lists the map's annotations — text, arrows, rectangle, ellipse and freehand highlights, pin markers, sticky notes, and placed images — so each one can be found and managed from a list instead of hunted for on the canvas. Most elements are anchored to a point and move with the map; a placed image can instead be pinned to an extent so it scales with the view. See [Annotations and the Elements panel](user-guide/map-controls.md#annotations-and-the-elements-panel)
@@ -149,7 +153,8 @@ kepler.gl, see the [Comparison](comparison.md).
 - Real-time multi-user collaboration (MVP; see [Collaboration](collaboration.md)) so several people can edit the same project together
     - Per-participant permissions and an in-app chat panel
     - An on-canvas session-status badge and roster — a live dot, a connected-participant count, and an expandable client list — while a session is active
-- Anchored review comments: drop a pin on the map, write a note, and reply, resolve, reopen, or delete the thread, filtered by open, resolved, or all. Comments are saved in the project file so they travel with a shared project, and every mutation syncs live to the other participants during a collaboration session. See [Review comments](user-guide/map-controls.md#review-comments)
+    - Portable snapshots: shared layers embed their features rather than pointing at a local file or control-managed data the guest cannot read, the host seeds the first snapshot instead of waiting to make an edit, guests arrive at the host's viewport, and the session Copy button yields a joinable URL. Plugin activation and settings stay participant-local, so a peer's snapshot cannot deactivate your controls
+- Anchored review comments: drop a pin on the map, write a note, and reply, resolve, reopen, or delete the thread, filtered by open, resolved, or all. Clicking a pin reveals, highlights, and scrolls to its card, `C` places a new comment from the command palette, and the panel sits on the Style rail. Comments are saved in the project file so they travel with a shared project, and every mutation syncs live to the other participants during a collaboration session. See [Review comments](user-guide/map-controls.md#review-comments)
 
 ## AI, Python, and automation
 
@@ -163,6 +168,9 @@ kepler.gl, see the [Comparison](comparison.md).
     - Notebook cells drive the map through an auto-loaded `geolibre` client, and external Jupyter frontends attached to that server (VS Code's Jupyter extension, `jupyter console`, nbclient) drive the map too
 - Python package (`geolibre`) that embeds the full app in Jupyter notebooks as an [anywidget](https://anywidget.dev), with two-way project sync. See the [Python package guide](python.md)
     - An expanded leafmap-style API: local raster, marker/cluster, and choropleth layers; `split_map`, `add_legend`, and `add_colorbar` helpers; typed read-back of selected and drawn features; and `to_html` export
+    - Layer management and camera control as plain project mutations on `Map` and `Layer` — reorder, duplicate, rename, and remove layers, read attribute values, and frame the map — with the project authoring helpers exported for scripts that never display a widget, and credentials swept out of the layer records and basemap URLs a notebook cell prints back
+    - The bundled Whitebox WASM catalog runs from the widget through `list_whitebox_tools` and `run_whitebox_tool`, resolving `Layer` handles to layer ids and adding both vector and raster outputs back to the map, so terrain and raster work no longer means leaving the notebook for the UI
+- MCP server (`geolibre-mcp`) that lets an AI client author real `.geolibre.json` projects headlessly over stdio — no browser, no running app, and no bundled web build — composing them with the same builders the Python package uses, so anything it writes opens unchanged in the desktop app, the web app, and the Jupyter widget. Every read and write is confined to the roots given by `--root` or `GEOLIBRE_MCP_ROOTS`. See [MCP server](mcp.md)
 - R package (`geolibre`) for interactive GeoLibre maps in RStudio, Quarto, R Markdown, and Shiny, with GeoJSON, `sf`, remote raster, camera, and project-file support. See the [R package guide](r.md)
 - Optional Python FastAPI sidecar for heavier processing workflows
 
@@ -227,11 +235,13 @@ kepler.gl, see the [Comparison](comparison.md).
     - **[GeoLens](https://github.com/geolens-io/geolens)**, which connects to a self-hosted GeoLens server and adds datasets as signed vector tiles, OGC API Features GeoJSON, or server-rendered raster tiles — and writes edits to a GeoJSON-loaded dataset back to the GeoLens server, feature by feature, when the server allows it
 - Analysis and editing integrations: Elevation Profile, Overture Maps, USGS LiDAR, GeoAgent, and GeoEditor
     - The GeoEditor can pull the vector features currently visible in the map view into the editor for editing without re-importing the source, and write edits back to their origin, including GeoPackage and GeoJSON files and PostGIS database tables
+    - Topological polygon digitizing, so a polygon drawn against its neighbor shares that edge instead of leaving a sliver or an overlap behind
 - Configurable control positions and external plugin manifests, and external plugins can:
     - Render on the host's shared deck.gl instance via `app.getDeckGL()`
     - Use the maplibre-gl-raster stack and the map projection control, and register native raster and tile layers
     - Render Zarr through the renderer the app already ships via `addZarrLayer`, with plugin-owned paint properties honored on custom layers so the Style panel's sliders apply, and read a pixel or region back off that native layer with `queryZarrLayer` — a point for click-to-value, a polygon for region statistics — instead of reimplementing the reprojection and chunk indexing the renderer already did
     - Expose layer groups of their own
+    - Query a layer's features read-only through the host, instead of re-fetching and re-parsing the source the app has already loaded
     - Register first-class right-sidebar panels, toolbar menus, and floating panels through the plugin UI host API, including a shared-rail replace-style dock mode, and place their toolbar menus after the Help menu
 - Time Slider plugin for animating time series raster and vector data
     - Binds existing vector layers already on the map to the timeline — GeoJSON as well as vector tiles, PMTiles, and MBTiles, whose timestamp field is detected from a live tile sample so a tiled layer animates over its full extent without a local copy of the data
@@ -252,12 +262,14 @@ See the [Plugin API](plugin-api.md) to build your own.
 
 - Browser deployment with Docker, with optional HTTP Basic Auth for the web container. See [Embedding & Sharing](user-guide/embedding.md)
     - Embed-friendly URL parameters, including `?url=` project deep links that skip the welcome wizard and a `?welcome=0` param to opt out of onboarding
-    - A `maponly` chrome-free mode
+    - A `maponly` chrome-free mode, a `panels=collapsed` layout that keeps the Layers and Style icon rails reachable while starting both panels collapsed, and an option to hide the top toolbar outright for a focused viewer
     - A `layout=viewer` read-only preset that keeps Layers, View, Controls, basemaps, and search/identify while hiding every authoring path — menus, shortcuts, drag-and-drop import, and the plugins whose on-map control writes to the project — so an embed cannot be steered into editing
 - Self-hostable sharing, accounts, and live collaboration, so a deployment keeps its projects on its own infrastructure
     - A documented version 1 projects and identity HTTP contract that any server may implement, with a FastAPI reference implementation in `backend/geolibre_server_api`. See [Server API](server-api.md)
     - A plain Node collaboration relay alongside the Cloudflare Durable Object one, both driven by a shared session core and both held to a single conformance suite so their permission behavior cannot drift
     - `GEOLIBRE_SHARE_URL` and `GEOLIBRE_COLLAB_URL` repoint a published web image at those servers at container runtime instead of requiring a rebuilt fork; `off` removes Share and the Project Gallery from the UI entirely, and a malformed value stops the container at boot rather than falling back to the public hosted service
+- Optional Clerk access gate for a hosted deployment that needs individual sign-in, with an optional waitlist screen, loaded on demand and kept out of the default PWA precache. The gate is decided by the build target rather than by a client-controlled query parameter, so public, native, and embedded builds stay unchanged. See [Getting started](getting-started.md)
+- `GEOLIBRE_NO_EXTERNAL_CDN=1` build for deployments that cannot load from untrusted third-party hosts: it strips the GeoLibre-controlled CDN references, vendors the PGlite and CereusDB engines into the build rather than dropping them, and makes the few features that genuinely need a remote host (GDAL export, ONNX object detection and Segment Everything, story map HTML export, Pyodide without a configured mirror) report that up front instead of failing at the end of a run. See [Self-hosting](self-hosting.md)
 - Versioned `postMessage` API for a host page that frames the app. See [Talking to the map at runtime](user-guide/embedding.md#talking-to-the-map-at-runtime)
     - **Commands**: load a project, move the camera, highlight features, open a processing tool, toggle and list layers, apply filters, read the viewport, add a layer, and export the map as a PNG at runtime
     - **Events back out**: `ready`, `ack`, `projectLoaded`, `selectionChanged`, `viewChanged`, `toolCompleted`, and `serverFileWritten`
