@@ -140,22 +140,16 @@ export function ProcessingMenu({
             <DropdownMenuSeparator />
           </>
         )}
-        {/* Section header for the toolbox block below. Without it nothing in
-            the menu says the nine category submenus belong to the Whitebox
-            toolbox — they render as bare siblings of the GeoLibre submenu, so
-            "Conversion" (toolbox) and "GeoLibre → Conversion" (app dialog) look
-            like peers (GeoLibre#1904). A label, not a parent submenu: the
-            grouping is worth one muted line, not an extra hover on the way to
-            every tool. */}
+        {/* Heads the toolbox block below: the nine category submenus render as
+            bare siblings of the GeoLibre submenu, so "Conversion" (toolbox) and
+            "GeoLibre → Conversion" (app dialog) otherwise look like peers
+            (GeoLibre#1904). Names the toolbox rather than repeating the bare
+            product name, and says what clicking it does. Reuses the dialog's
+            own heading string, which is already translated in every locale. */}
         {showWhitebox && (
-          <>
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("toolbar.item.whitebox")}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
-              {t("processing.whitebox.toolbox")}
-            </DropdownMenuItem>
-          </>
+          <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
+            {t("processing.whitebox.toolbox")}
+          </DropdownMenuItem>
         )}
         {/* Whitebox tools grouped by category/subcategory. Each leaf opens the
             Whitebox toolbox dialog preselected to that tool. Catalog data lives

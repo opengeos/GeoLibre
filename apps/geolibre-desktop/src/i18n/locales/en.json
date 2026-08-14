@@ -4073,7 +4073,7 @@
       "allSources": "All sources",
       "geolibreTools": "GeoLibre tools",
       "whiteboxTools": "Whitebox tools",
-      "toolbox": "Whitebox toolbox",
+      "toolbox": "Whitebox Toolbox",
       "checkingRuntime": "Checking runtime.",
       "toolsAvailable_one": "{{count}} tool available.",
       "toolsAvailable_other": "{{count}} tools available.",
