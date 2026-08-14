@@ -590,6 +590,8 @@
       "errorMissingCrs": "Impossibile rilevare il sistema di coordinate di questa feature class. Inserisci il suo CRS di origine per aggiungerla."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "La cartella di lavoro Excel non contiene fogli non vuoti.",
+      "worksheet": "Foglio di lavoro",
       "defaultName": "Livello di testo delimitato",
       "sampleLabel": "Città USA",
       "errorChooseFile": "Scegli un file di testo delimitato.",

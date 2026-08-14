@@ -583,6 +583,8 @@
       "errorMissingCrs": "このフィーチャクラスの座標系を検出できませんでした。追加するにはソースCRSを入力してください。"
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "Excel ブックに空でないワークシートがありません。",
+      "worksheet": "ワークシート",
       "defaultName": "区切りテキストレイヤー",
       "sampleLabel": "米国の都市",
       "errorChooseFile": "区切りテキストファイルを選択してください。",

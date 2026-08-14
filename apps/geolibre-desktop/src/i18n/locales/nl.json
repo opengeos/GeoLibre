@@ -590,6 +590,8 @@
       "errorMissingCrs": "Het coördinatenstelsel van deze feature class kon niet worden gedetecteerd. Voer het bron-CRS in om deze toe te voegen."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "De Excel-werkmap bevat geen niet-lege werkbladen.",
+      "worksheet": "Werkblad",
       "defaultName": "Tekstlaag met scheidingstekens",
       "sampleLabel": "Amerikaanse steden",
       "errorChooseFile": "Kies een tekstbestand met scheidingstekens.",

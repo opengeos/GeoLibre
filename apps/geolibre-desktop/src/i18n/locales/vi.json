@@ -486,6 +486,8 @@
       "routes": "Tuyến đường"
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "Sổ làm việc Excel không có trang tính nào chứa dữ liệu.",
+      "worksheet": "Trang tính",
       "crsHelp": "Để trống nếu tọa độ đã là kinh độ/vĩ độ (WGS84). Nếu không, hãy nhập mã EPSG của các cột tọa độ và các điểm sẽ được chuyển sang WGS84. Đối với CRS được chiếu, các trường kinh độ và vĩ độ chọn cột X (hướng đông) và Y (hướng bắc).",
       "importMode": "Nhập dưới dạng",
       "modeCoordinates": "tọa độ",

@@ -604,6 +604,8 @@
       "errorMissingCrs": "Не удалось определить систему координат этого класса объектов. Укажите исходную CRS, чтобы добавить его."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "В книге Excel нет непустых листов.",
+      "worksheet": "Лист",
       "defaultName": "Слой с разделителями",
       "sampleLabel": "Города США",
       "errorChooseFile": "Выберите файл с разделителями.",

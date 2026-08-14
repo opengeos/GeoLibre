@@ -590,6 +590,8 @@
       "errorMissingCrs": "سیستم مختصات این کلاس عارضه شناسایی نشد. برای افزودن آن، سیستم مختصات مبدأ را وارد کنید."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "کتاب کار Excel هیچ کاربرگ غیرخالی ندارد.",
+      "worksheet": "کاربرگ",
       "defaultName": "لایهٔ متن جداشده",
       "sampleLabel": "شهرهای آمریکا",
       "errorChooseFile": "یک فایل متن جداشده انتخاب کنید.",

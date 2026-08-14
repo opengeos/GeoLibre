@@ -590,6 +590,8 @@
       "errorMissingCrs": "Não foi possível detectar o sistema de coordenadas desta classe de feição. Digite seu CRS de origem para adicioná-la."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "A pasta de trabalho do Excel não contém planilhas com dados.",
+      "worksheet": "Planilha",
       "defaultName": "Camada de texto delimitado",
       "sampleLabel": "Cidades dos EUA",
       "errorChooseFile": "Escolha um arquivo de texto delimitado.",

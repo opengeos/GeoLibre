@@ -590,6 +590,8 @@
       "errorMissingCrs": "Le système de coordonnées de cette classe d'entités n'a pas pu être détecté. Entrez son CRS source pour l'ajouter."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "Le classeur Excel ne contient aucune feuille non vide.",
+      "worksheet": "Feuille de calcul",
       "defaultName": "Couche de texte délimité",
       "sampleLabel": "Villes américaines",
       "errorChooseFile": "Choisissez un fichier de texte délimité.",

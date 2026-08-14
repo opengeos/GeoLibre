@@ -583,6 +583,8 @@
       "errorMissingCrs": "이 피처 클래스의 좌표계를 감지할 수 없습니다. 추가하려면 원본 CRS를 입력하세요."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "Excel 통합 문서에 비어 있지 않은 워크시트가 없습니다.",
+      "worksheet": "워크시트",
       "defaultName": "구분 텍스트 레이어",
       "sampleLabel": "미국 도시",
       "errorChooseFile": "구분 텍스트 파일을 선택하세요.",

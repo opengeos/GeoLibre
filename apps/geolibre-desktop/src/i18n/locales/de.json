@@ -590,6 +590,8 @@
       "errorMissingCrs": "Das Koordinatensystem dieser Feature-Class konnte nicht erkannt werden. Geben Sie ihr Quell-CRS ein, um sie hinzuzufügen."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "Die Excel-Arbeitsmappe enthält keine nicht leeren Arbeitsblätter.",
+      "worksheet": "Arbeitsblatt",
       "defaultName": "Trennzeichengetrennte Textebene",
       "sampleLabel": "US-Städte",
       "errorChooseFile": "Wählen Sie eine trennzeichengetrennte Textdatei aus.",

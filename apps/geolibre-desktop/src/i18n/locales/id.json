@@ -583,6 +583,8 @@
       "errorMissingCrs": "Sistem koordinat kelas fitur ini tidak dapat terdeteksi. Masukkan CRS sumbernya untuk menambahkannya."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "Buku kerja Excel tidak memiliki lembar kerja yang berisi data.",
+      "worksheet": "Lembar kerja",
       "defaultName": "Layer Teks Berpembatas",
       "sampleLabel": "Kota-kota AS",
       "errorChooseFile": "Pilih file teks berpembatas.",

@@ -590,6 +590,8 @@
       "errorMissingCrs": "This feature class's coordinate system could not be detected. Enter its source CRS to add it."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "The Excel workbook has no non-empty worksheets.",
+      "worksheet": "Worksheet",
       "defaultName": "Delimited Text Layer",
       "sampleLabel": "US cities",
       "errorChooseFile": "Choose a delimited text file.",

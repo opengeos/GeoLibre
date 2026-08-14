@@ -618,6 +618,8 @@
       "errorMissingCrs": "تعذّر اكتشاف نظام إحداثيات فئة المعالم هذه. أدخل نظام الإحداثيات المصدر لإضافتها."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "لا يحتوي مصنف Excel على أوراق عمل غير فارغة.",
+      "worksheet": "ورقة العمل",
       "defaultName": "طبقة نص مفصول",
       "sampleLabel": "المدن الأمريكية",
       "errorChooseFile": "اختر ملف نص مفصول.",

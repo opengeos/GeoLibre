@@ -590,6 +590,8 @@
       "errorMissingCrs": "Bu öğe sınıfının koordinat sistemi algılanamadı. Eklemek için kaynak KRS'sini girin."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "Excel çalışma kitabında dolu çalışma sayfası yok.",
+      "worksheet": "Çalışma sayfası",
       "defaultName": "Sınırlayıcılı Metin Katmanı",
       "sampleLabel": "ABD şehirleri",
       "errorChooseFile": "Sınırlayıcılı bir metin dosyası seçin.",

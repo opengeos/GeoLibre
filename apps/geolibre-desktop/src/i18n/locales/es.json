@@ -590,6 +590,8 @@
       "errorMissingCrs": "No se pudo detectar el sistema de coordenadas de esta clase de entidad. Introduzca su CRS de origen para añadirla."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "El libro de Excel no contiene hojas de cálculo con datos.",
+      "worksheet": "Hoja de cálculo",
       "defaultName": "Capa de texto delimitado",
       "sampleLabel": "Ciudades de EE. UU.",
       "errorChooseFile": "Elija un archivo de texto delimitado.",

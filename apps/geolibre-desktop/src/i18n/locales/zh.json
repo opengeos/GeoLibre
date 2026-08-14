@@ -583,6 +583,8 @@
       "errorMissingCrs": "无法检测此要素类的坐标系。请输入其源坐标系后再添加。"
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "Excel 工作簿中没有非空工作表。",
+      "worksheet": "工作表",
       "defaultName": "分隔文本图层",
       "sampleLabel": "美国城市",
       "errorChooseFile": "请选择一个分隔文本文件。",
