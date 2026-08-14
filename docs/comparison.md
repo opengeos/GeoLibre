@@ -204,8 +204,9 @@ here.
 
 *No external comparisons have been submitted yet. Yours can be the first.*
 
-To add one, [open a pull request](https://github.com/opengeos/GeoLibre/edit/main/docs/comparison.md)
-adding a single line of the form
+To add one, follow the [documentation contribution
+instructions](contributing.md#documentation) and open a pull request adding a
+single line of the form
 `- [Acme vs GeoLibre](https://acme.example/vs-geolibre), maintained by Acme`.
 To keep the list useful:
 
