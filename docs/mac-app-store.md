@@ -205,8 +205,9 @@ Creating the inputs (Apple Developer account required):
    (the numeric listing identifier App Store Connect labels "Apple ID" on the App
    Information page), so later releases start at step 2.
 2. Download the `.pkg` — from the `geolibre-mas-pkg` artifact of the release's
-   workflow run, or from the release's own `..._universal_mas.pkg` asset once the
-   artifact has expired — and upload it with the **Transporter** app (or
+   workflow run, or from the release's own
+   `GeoLibre.Desktop_<version>_universal_mas.pkg` asset once the artifact has
+   expired — and upload it with the **Transporter** app (or
    `xcrun altool --upload-app -f <pkg> -t macos`).
 3. Fill in screenshots, description, and the privacy questionnaire
    (see `docs/privacy.md`; the app makes no tracking calls).
