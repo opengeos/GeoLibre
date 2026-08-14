@@ -11,6 +11,11 @@ name: iOS
 # + provisioning profile + team id). Without those secrets the job still runs a
 # no-signing compile check so CI catches iOS build breakage; it just can't
 # produce an installable .ipa.
+#
+# On a published release the signed .ipa is attached to that release as well as
+# uploaded as a CI artifact — see the "Attach IPA to GitHub Release" step for
+# what that asset is and is not (it is the App Store submission package, not a
+# sideload download).
 on:
   release:
     types: [published]
@@ -28,9 +33,16 @@ on:
 permissions:
   contents: read
 
+# A release run must never be cancelled: it is the only producer of that tag's
+# release assets, and losing it mid-upload leaves the release incomplete with no
+# obvious sign of why. So the group separates release runs from manual ones (a
+# workflow_dispatch on the same tag would otherwise share the group and cancel
+# the release build), and cancel-in-progress is disabled for release runs
+# outright. Manual runs still supersede each other, which is what you want while
+# iterating.
 concurrency:
-  group: ios-${{ github.ref }}
-  cancel-in-progress: true
+  group: ios-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
 
 env:
   # The Apple bundle identifier, asserted after the build. Comes from
@@ -221,6 +233,12 @@ jobs:
         # into an output and gated on below. All three are required to sign: a
         # partial set would spend the whole archive and only then fail.
         #
+        # APPLE_IOS_CERTIFICATE_PASSWORD is deliberately NOT in the set. A .p12
+        # can be exported without a password, and the import step passes
+        # `-P "${APPLE_IOS_CERTIFICATE_PASSWORD:-}"` precisely so that case
+        # works — requiring it here would refuse to sign a valid passwordless
+        # identity. An empty value is therefore not evidence of a partial set.
+        #
         # The iOS cert/profile use APPLE_IOS_* names, deliberately distinct from
         # the release.yml macOS secrets (APPLE_CERTIFICATE / APPLE_CERTIFICATE_
         # PASSWORD): that identity is a *Developer ID Application* cert for the
@@ -233,13 +251,19 @@ jobs:
           APPLE_IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_IOS_PROVISIONING_PROFILE_BASE64 }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -n "${APPLE_IOS_CERTIFICATE_BASE64:-}" ] \
-            && [ -n "${APPLE_IOS_PROVISIONING_PROFILE_BASE64:-}" ] \
-            && [ -n "${APPLE_TEAM_ID:-}" ]; then
+          missing=()
+          for name in APPLE_IOS_CERTIFICATE_BASE64 \
+            APPLE_IOS_PROVISIONING_PROFILE_BASE64 APPLE_TEAM_ID; do
+            [ -n "${!name:-}" ] || missing+=("$name")
+          done
+          if [ "${#missing[@]}" -eq 0 ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No complete Apple iOS signing secret set — building an unsigned compile check only (no installable .ipa). Set APPLE_IOS_CERTIFICATE_BASE64, APPLE_IOS_CERTIFICATE_PASSWORD, APPLE_IOS_PROVISIONING_PROFILE_BASE64 (and reuse the existing APPLE_TEAM_ID) to produce a signed build."
+            # Carried to the release-note step below so it can name what was
+            # actually absent rather than reciting the whole required set.
+            echo "missing=${missing[*]}" >> "$GITHUB_OUTPUT"
+            echo "::notice::Missing Apple iOS signing secrets (${missing[*]}) — building an unsigned compile check only (no installable .ipa). Set the listed secrets to produce a signed build; APPLE_TEAM_ID is the one already used by the macOS release signing, and APPLE_IOS_CERTIFICATE_PASSWORD is needed only if the .p12 is password-protected."
           fi
 
       # ---- No-signing path: prove the iOS build compiles ---------------------
@@ -587,3 +611,41 @@ jobs:
           path: ${{ env.IPA_PATH }}
           if-no-files-found: error
           retention-days: 14
+
+      - name: Attach IPA to GitHub Release
+        # Only on a published release, and only when the build was actually
+        # signed — an unsigned compile-check run has no .ipa at all.
+        #
+        # Read the asset name before assuming this is a sideload download: on a
+        # release run EXPORT_METHOD is always `app-store-connect` (the choice
+        # input exists only for workflow_dispatch), and an App Store IPA cannot
+        # be installed on a device. It is the *submission* package — the exact
+        # bytes uploaded to App Store Connect / TestFlight for this tag — kept
+        # next to the release so a submission can be reproduced or re-uploaded
+        # later, long after the 14-day CI artifact has expired. End users get
+        # the app from the App Store listing.
+        if: github.event_name == 'release' && steps.signing.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          # Renamed rather than uploaded in place: xcodebuild names the export
+          # after the Xcode product ("geolibre-desktop.ipa"), which says nothing
+          # about the version or that this is the App Store build. Release assets
+          # are permanent and world-visible, so the name has to carry both.
+          asset="$RUNNER_TEMP/GeoLibre_${IOS_SHORT_VERSION}_ios_app-store.ipa"
+          cp "$IPA_PATH" "$asset"
+          gh release upload "$TAG" "$asset" --clobber
+
+      - name: Note skipped release upload
+        # Surface why a release run attached no .ipa (missing Apple signing
+        # secrets → the job ran the no-signing compile check), so it does not
+        # read as a silent failure.
+        if: github.event_name == 'release' && steps.signing.outputs.present != 'true'
+        env:
+          # Secret *names*, not values — but passed via env rather than
+          # interpolated into the script, matching the rest of this workflow.
+          MISSING: ${{ steps.signing.outputs.missing }}
+        run: |
+          echo "::warning::This release run produced only a compile check and attached no .ipa — missing Apple iOS signing secrets: ${MISSING:-unknown}. Set them (and reuse the existing APPLE_TEAM_ID) to publish one."

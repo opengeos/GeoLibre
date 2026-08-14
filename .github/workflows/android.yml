@@ -14,9 +14,16 @@ on:
 permissions:
   contents: read
 
+# A release run must never be cancelled: it is the only producer of that tag's
+# release assets, and losing it mid-upload leaves the release incomplete with no
+# obvious sign of why. So the group separates release runs from manual ones (a
+# workflow_dispatch on the same tag would otherwise share the group and cancel
+# the release build), and cancel-in-progress is disabled for release runs
+# outright. Manual runs still supersede each other, which is what you want while
+# iterating.
 concurrency:
-  group: android-${{ github.ref }}
-  cancel-in-progress: true
+  group: android-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
 
 env:
   # Keep these in sync with docs/android.md and the local setup.
@@ -546,9 +553,7 @@ jobs:
 
       - name: Upload Play AAB
         # Separate artifact from the APKs: this is the file you upload to the
-        # Play Console, and it only exists on release-keystore runs. Deliberately
-        # NOT attached to the GitHub Release — an .aab is not user-installable
-        # and would only confuse people looking for a sideload download.
+        # Play Console, and it only exists on release-keystore runs.
         if: steps.sign.outputs.signed == 'release'
         uses: actions/upload-artifact@v7
         with:
@@ -557,19 +562,26 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Attach APKs to GitHub Release
-        # Only on a published release, and only when the APKs were signed with the
-        # real release keystore — never publish debug-signed builds as official
-        # downloads. workflow_dispatch runs still get the CI artifact above.
+      - name: Attach APKs and AAB to GitHub Release
+        # Only on a published release, and only when the artifacts were signed
+        # with the real release keystore — never publish debug-signed builds as
+        # official downloads (and Play rejects a debug-signed bundle anyway).
+        # workflow_dispatch runs still get the CI artifacts above.
+        #
+        # The APKs are the sideload download. The .aab is *not* user-installable
+        # — it is the Play Console upload — but it is attached so the exact
+        # bundle submitted for a tag stays recoverable after the 14-day CI
+        # artifact expires. The `.aab` extension is what distinguishes them on
+        # the releases page; docs/android.md spells the difference out.
         if: github.event_name == 'release' && steps.sign.outputs.signed == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" "$RUNNER_TEMP"/apks/*.apk --clobber
+        run: gh release upload "$TAG" "$RUNNER_TEMP"/apks/*.apk "$RUNNER_TEMP"/aab/*.aab --clobber
 
       - name: Note skipped release upload
         # Surface why a release run did not attach APKs (missing keystore secrets),
         # so it does not look like a silent failure.
         if: github.event_name == 'release' && steps.sign.outputs.signed != 'release'
         run: |
-          echo "::warning::APKs were debug-signed (no ANDROID_KEYSTORE_BASE64 secret) and were NOT attached to the release. They are available as the CI artifact for testing only."
+          echo "::warning::APKs were debug-signed (no ANDROID_KEYSTORE_BASE64 secret) and were NOT attached to the release; no AAB was built at all. The APKs are available as the CI artifact for testing only."

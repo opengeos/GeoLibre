@@ -683,6 +683,7 @@
       "statusTablesFound_other": "{{count}}件の空間テーブルが見つかりました。",
       "statusNoTables": "このデータベースには空間テーブルが見つかりませんでした。",
       "editableTable": "テーブル",
+      "geometryColumn": "ジオメトリ列",
       "tableReadOnly": "{{table}} (読み取り専用: 主キーなし)",
       "errorSelectTable": "読み込むテーブルを選択してください。",
       "errorRuntimeMissing": "処理サーバーにPostGISランタイム(psycopg)がインストールされていません。編集可能なレイヤーを読み込むには、geolibre-serverの'postgis'エクストラをインストールしてください。"

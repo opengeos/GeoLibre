@@ -699,6 +699,7 @@
       "statusTablesFound_other": "{{count}} konumsal tablo bulundu.",
       "statusNoTables": "Bu veritabanında konumsal tablo bulunamadı.",
       "editableTable": "Tablo",
+      "geometryColumn": "Geometri sütunu",
       "tableReadOnly": "{{table}} (salt okunur: birincil anahtar yok)",
       "errorSelectTable": "Yüklenecek bir tablo seçin.",
       "errorRuntimeMissing": "İşleme sunucusunda PostGIS çalışma zamanı (psycopg) yüklü değil. Düzenlenebilir katmanları yüklemek için geolibre-server 'postgis' ek paketini yükleyin."

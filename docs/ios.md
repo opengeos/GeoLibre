@@ -13,11 +13,13 @@ iPad. The Store build is signed and updates automatically:
 
 [Get GeoLibre on the App Store](https://apps.apple.com/app/geolibre/id6796039674){ .md-button .md-button--primary }
 
-GeoLibre does not publish a sideloadable `.ipa` for end users, so no iOS build is
-attached to GitHub releases the way the Android APKs are; the App Store listing,
-and TestFlight for beta builds, are how it is distributed. The rest of this page
-is for developers building the app themselves, which has to happen on a Mac (iOS
-cannot be cross-compiled from Linux).
+GeoLibre does not publish a sideloadable `.ipa` for end users; the App Store
+listing, and TestFlight for beta builds, are how it is distributed. Each release
+*does* carry a `GeoLibre_<version>_ios_app-store.ipa` asset, but unlike the
+Android APKs that is the App Store **submission** package — archived next to the
+tag so a submission stays reproducible — and it cannot be installed on a device.
+The rest of this page is for developers building the app themselves, which has to
+happen on a Mac (iOS cannot be cross-compiled from Linux).
 
 The signing and archiving pipeline behind that listing runs two ways, and either
 produces a submittable `.ipa` — bundle id `org.geolibre.app`, signed by *Apple
@@ -269,7 +271,9 @@ not free to choose — see the Xcode floor below.
 - **With Apple signing secrets set**, it imports the identity into a throwaway
   keychain, archives **unsigned**, exports a signed `.ipa` under manual signing,
   verifies the bundle id, the signature, the build number shape and the
-  `MinimumOSVersion`, and uploads it as the `geolibre-ios-ipa` artifact:
+  `MinimumOSVersion`, and uploads it as the `geolibre-ios-ipa` artifact — plus,
+  on a published release, as the `GeoLibre_<version>_ios_app-store.ipa` release
+  asset, which outlives the artifact's 14-day retention:
   - `APPLE_IOS_CERTIFICATE_BASE64` — `base64 -i dist.p12`
   - `APPLE_IOS_CERTIFICATE_PASSWORD`
   - `APPLE_IOS_PROVISIONING_PROFILE_BASE64` — `base64 -i profile.mobileprovision`
@@ -277,7 +281,9 @@ not free to choose — see the Xcode floor below.
     secrets; the Team ID is account-wide.
 - **Without them**, it falls back to a no-signing **compile check**
   (`cargo build --lib --target aarch64-apple-ios`) so CI still catches iOS build
-  breakage; it just can't produce an installable `.ipa`.
+  breakage; it just can't produce an installable `.ipa`. A release run in that
+  state attaches nothing and logs a warning saying which secrets were missing,
+  rather than failing the release.
 
 ### Reusing the macOS/Homebrew signing secrets?
 
@@ -362,9 +368,10 @@ App Store Connect.
    handling — not a wrapper that loads a remote URL. Keep it that way: ship the
    web assets in the binary (the default here), don't point the webview at
    `geolibre.app`.
-3. **Upload** the `.ipa` from the `geolibre-ios-ipa` CI artifact (or via
-   Transporter / Xcode Organizer) to a TestFlight build, then submit that build
-   for App Store review.
+3. **Upload** the `.ipa` (via Transporter or Xcode Organizer) to a TestFlight
+   build, then submit that build for App Store review. Take it from the
+   `geolibre-ios-ipa` CI artifact, or — for an older tag whose artifact has
+   expired — from that release's `GeoLibre_<version>_ios_app-store.ipa` asset.
 
    **Build numbers.** App Store Connect consumes a `CFBundleVersion`
    permanently per marketing version, and each upload must also sort above the

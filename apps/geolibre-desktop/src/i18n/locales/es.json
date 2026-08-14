@@ -699,6 +699,7 @@
       "statusTablesFound_other": "Se encontraron {{count}} tablas espaciales.",
       "statusNoTables": "No se encontraron tablas espaciales en esta base de datos.",
       "editableTable": "Tabla",
+      "geometryColumn": "Columna de geometría",
       "tableReadOnly": "{{table}} (solo lectura: sin clave primaria)",
       "errorSelectTable": "Seleccione una tabla para cargar.",
       "errorRuntimeMissing": "El servidor de procesamiento no tiene instalado el entorno de ejecución de PostGIS (psycopg). Instale el extra «postgis» de geolibre-server para cargar capas editables."

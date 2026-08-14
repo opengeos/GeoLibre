@@ -194,8 +194,8 @@ export function BrowserPanel({
         .then((tables) => {
           // geometry_columns returns one row per geometry column, so a table
           // with several geometry columns appears several times; keep the first
-          // (mirrors PostgresSource.handleConnectEditable's dedup) so the tree
-          // doesn't emit duplicate node ids.
+          // because the Browser tree represents tables, while the Add Data
+          // dialog provides the geometry-column picker after a table is chosen.
           const seen = new Set<string>();
           const deduped: { schema: string; table: string }[] = [];
           for (const tbl of tables) {

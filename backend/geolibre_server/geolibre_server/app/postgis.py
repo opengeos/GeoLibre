@@ -256,6 +256,7 @@ class PostgisReadRequest(BaseModel):
     connection: str
     schema_name: str = "public"
     table: str
+    geometry_column: Optional[str] = None
     excluded_fields: list[str] = []
 
 
@@ -265,6 +266,7 @@ class PostgisWriteRequest(BaseModel):
     connection: str
     schema_name: str = "public"
     table: str
+    geometry_column: Optional[str] = None
     geojson: dict
     # Primary-key values the edit session started from (the last read). When
     # provided, deletions are scoped to these keys, so rows inserted by another
@@ -317,7 +319,9 @@ def _connect(connection: str) -> Any:
         ) from exc
 
 
-def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
+def _table_info(
+    conn: Any, schema: str, table: str, geometry_column: Optional[str] = None
+) -> dict[str, Any]:
     """Resolve geometry column, SRID, primary key and columns from the catalogs.
 
     The client only names the schema and table; every identifier used in the
@@ -328,6 +332,8 @@ def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
         conn: An open psycopg connection.
         schema: Schema name as stored in ``geometry_columns``.
         table: Table name as stored in ``geometry_columns``.
+        geometry_column: Requested registered geometry column, or None to use
+            the alphabetically first column for backward compatibility.
 
     Returns:
         A dict with ``geometry_column``, ``srid``, ``primary_key`` (None when
@@ -353,10 +359,17 @@ def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
                 status_code=404,
                 detail=f"Spatial table not found: {schema}.{table}",
             )
-        geometry_column, srid = geom_rows[0][0], int(geom_rows[0][1] or 0)
+        geometry_by_name = {row[0]: int(row[1] or 0) for row in geom_rows}
+        if geometry_column is not None and geometry_column not in geometry_by_name:
+            raise HTTPException(
+                status_code=400,
+                detail=(f"Geometry column not found on {schema}.{table}: {geometry_column}"),
+            )
+        geometry_column = geom_rows[0][0] if geometry_column is None else geometry_column
+        srid = geometry_by_name[geometry_column]
         # A table can register several geometry columns; the layer edits only
-        # the first, and the others must not leak into the attribute list (they
-        # would be read as WKB hex and written back as text).
+        # the selected one, and the others must not leak into the attribute
+        # list (they would be read as WKB hex and written back as text).
         all_geometry_columns = {row[0] for row in geom_rows}
 
         # Single-column primary key, if any. Composite keys are unsupported for
@@ -529,7 +542,7 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
 
     try:
         with _connect(request.connection) as conn:
-            info = _table_info(conn, request.schema_name, request.table)
+            info = _table_info(conn, request.schema_name, request.table, request.geometry_column)
             geom = sql.Identifier(info["geometry_column"])
             # A zero/unknown SRID cannot be transformed; serve the coordinates
             # as stored (the common convention for srid 0 data is lon/lat
@@ -657,7 +670,7 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
         )
 
     with _connect(request.connection) as conn:
-        info = _table_info(conn, request.schema_name, request.table)
+        info = _table_info(conn, request.schema_name, request.table, request.geometry_column)
         pk = info["primary_key"]
         if pk is None:
             raise HTTPException(

@@ -1964,10 +1964,15 @@ export function LayerPanel({
               ? layer.metadata.postgisSchema
               : "public";
           const table = layer.metadata.postgisTable as string;
+          const geometryColumn =
+            typeof layer.metadata.postgisGeometryColumn === "string"
+              ? layer.metadata.postgisGeometryColumn
+              : undefined;
           const result = await writePostgisTable({
             connection,
             schema_name: schema,
             table,
+            geometry_column: geometryColumn,
             geojson,
             // Scope deletions to the rows this session actually read so a
             // save cannot sweep away rows inserted concurrently elsewhere.
@@ -1984,6 +1989,7 @@ export function LayerPanel({
               connection,
               schema_name: schema,
               table,
+              geometry_column: geometryColumn,
               excluded_fields: layer.fieldVisibility
                 ? Object.keys(layer.fieldVisibility).filter(
                     (k) => layer.fieldVisibility![k] === "excluded",
