@@ -14,14 +14,15 @@ export async function readExcelWorksheets(data: ArrayBuffer): Promise<ExcelWorks
       worksheet &&
       Object.entries(worksheet).some(([cell, entry]) => {
         if (cell.startsWith("!")) return false;
-        const value = (entry as { v?: unknown }).v;
+        const { f: formula, v: value } = entry as { f?: string; v?: unknown };
+        if (formula?.trim()) return true;
         return typeof value === "string" ? value.trim().length > 0 : value != null;
       });
     if (!worksheet || !hasValues) return [];
     return [
       {
         name,
-        toCsv: () => XLSX.utils.sheet_to_csv(worksheet, { blankrows: false }),
+        toCsv: () => XLSX.utils.sheet_to_csv(worksheet, { blankrows: false, rawNumbers: true }),
       },
     ];
   });

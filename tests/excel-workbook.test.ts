@@ -15,13 +15,22 @@ for (const bookType of ["xls", "xlsx"] as const) {
       "Survey",
     );
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([]), "Empty");
+    const formulaSheet = XLSX.utils.aoa_to_sheet([[null]]);
+    formulaSheet.A1 = { f: "1+1", t: "n" };
+    formulaSheet["!ref"] = "A1";
+    XLSX.utils.book_append_sheet(workbook, formulaSheet, "Formula");
+    const surveySheet = workbook.Sheets.Survey;
+    if (surveySheet?.B2) surveySheet.B2.z = "#,##0.0000";
     const bytes = XLSX.write(workbook, { bookType, type: "array" });
 
     const worksheets = await readExcelWorksheets(bytes);
 
     assert.deepEqual(
       worksheets.map((worksheet) => ({ name: worksheet.name, csv: worksheet.toCsv() })),
-      [{ name: "Survey", csv: "site,X,Y\nAlpha,-77.0365,38.8977" }],
+      [
+        { name: "Survey", csv: "site,X,Y\nAlpha,-77.0365,38.8977" },
+        ...(bookType === "xlsx" ? [{ name: "Formula", csv: "=1+1" }] : []),
+      ],
     );
   });
 }
