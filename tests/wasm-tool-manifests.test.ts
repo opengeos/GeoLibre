@@ -441,4 +441,22 @@ describe("fileOutputTargetExtension", () => {
     const opaque = { name: "output", data_kind: "file", io_role: "output" };
     assert.equal(fileOutputTargetExtension(opaque, undefined), "dat");
   });
+
+  it("honors a recommended extension in the description over the table default", () => {
+    // excel_to_table's output param, as the WASM manifest reports it: data_kind
+    // "table" would otherwise default to .csv, but the writer is the generic
+    // vector format dispatch (no CSV driver) and the description already names
+    // the extension that does work.
+    const excelToTable = {
+      name: "file_out",
+      description:
+        "Optional output table path (driver from its extension; GeoParquet .parquet recommended). If omitted, stored in memory.",
+      data_kind: "table",
+      io_role: "output",
+    };
+    assert.equal(fileOutputTargetExtension(excelToTable, undefined), "parquet");
+    assert.equal(fileOutputTargetExtension(excelToTable, ""), "parquet");
+    // An explicit user-chosen path still wins.
+    assert.equal(fileOutputTargetExtension(excelToTable, "report.gpkg"), "gpkg");
+  });
 });

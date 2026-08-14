@@ -417,14 +417,23 @@ export function fileOutputTargetExtension(
 /**
  * The text/tabular output format a `file_out` parameter declares through its
  * name, description, or `table` data kind, as a bare extension (`csv`/`html`/
- * `json`), or `null` when nothing recognizable is found. Shared by the WASM
- * runner's {@link fileOutputTargetExtension} and the dialog's default-name and
- * download-naming code so the two hint lists cannot drift apart.
+ * `json`/...), or `null` when nothing recognizable is found. Shared by the
+ * WASM runner's {@link fileOutputTargetExtension} and the dialog's
+ * default-name and download-naming code so the two hint lists cannot drift
+ * apart.
  *
  * @param param - The output parameter.
- * @returns `"csv" | "html" | "json"`, or `null` if no text format is implied.
+ * @returns A bare extension, or `null` if no text format is implied.
  */
 export function outputTextFormatHint(param: WhiteboxToolParameter): string | null {
+  // An explicit "<ext> recommended" in the description is the tool author's
+  // own guidance and wins over every heuristic below. `excel_to_table`'s
+  // output is `data_kind: "table"` but its writer is the generic vector
+  // format dispatch (same as GeoParquet/GPKG tools), which has no CSV driver
+  // -- defaulting a blank path to ".csv" made the tool reject its own default,
+  // the same failure mode as #1074.
+  const recommended = (param.description ?? "").match(/\.([a-z0-9]+)\s+recommended/i);
+  if (recommended) return recommended[1].toLowerCase();
   const hint = `${param.name ?? ""} ${param.description ?? ""} ${param.type ?? ""}`;
   if (/\bcsv\b/i.test(hint)) return "csv";
   if (/\bhtml\b/i.test(hint)) return "html";
