@@ -3399,11 +3399,14 @@ export function StylePanel({
   const generatorType = styleValue(style, "geometryGenerator");
   const generatorSizeProperty = styleValue(style, "geometryGeneratorSizeProperty");
   /**
-   * The field pickers below only offer numeric columns, so a chosen field
-   * always has a usable range — unlike the proportional-size picker, which
-   * offers every attribute and has to reject a bad pick after the fact.
-   * Picking one seeds the value range from the data (an unseeded 0..100
-   * default would map a population column onto a single radius).
+   * Picking a size field seeds the value range from the data, since an
+   * unseeded 0..100 default would map a population column onto a single
+   * radius. Unlike the proportional-size picker, this one offers numeric
+   * columns only, so there is no bad pick to reject after the fact — but
+   * `numericPropertyOptions` admits a column with a single numeric value,
+   * which has no spread to derive a range from. That case falls back to the
+   * defaults rather than keeping the previous field's range, which would
+   * scale the new field against numbers that never came from it.
    */
   const chooseGeneratorSizeProperty = (property: string) => {
     if (!property) {
@@ -3413,9 +3416,10 @@ export function StylePanel({
     const bounds = proportionalSizeBounds(layer, property);
     setLayerStyle(layer.id, {
       geometryGeneratorSizeProperty: property,
-      ...(bounds
-        ? { geometryGeneratorSizeMinValue: bounds.min, geometryGeneratorSizeMaxValue: bounds.max }
-        : {}),
+      geometryGeneratorSizeMinValue:
+        bounds?.min ?? DEFAULT_LAYER_STYLE.geometryGeneratorSizeMinValue,
+      geometryGeneratorSizeMaxValue:
+        bounds?.max ?? DEFAULT_LAYER_STYLE.geometryGeneratorSizeMaxValue,
     });
   };
   const generatorFieldSelect = (

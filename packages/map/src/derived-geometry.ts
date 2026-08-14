@@ -178,12 +178,14 @@ function computeGeneratedGeometry(
  */
 function featureBufferDistance(feature: Feature, property: string, fallback: number): number {
   const raw = feature.properties?.[property];
-  // Number(null) is 0, and Number() trims before coercing so every
-  // whitespace-only string is 0 too — an absent or blank attribute would
-  // otherwise read as a real zero-distance buffer instead of a miss.
-  if (raw === null || raw === undefined) return fallback;
-  if (typeof raw === "string" && raw.trim() === "") return fallback;
-  const value = typeof raw === "number" ? raw : Number(raw);
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : fallback;
+  // Number("") and Number(" ") are both 0 (it trims first), so a blank
+  // attribute would otherwise read as a real zero-distance buffer — which
+  // drops the feature — instead of as a miss.
+  // Only strings are coerced: Number() turns `true` into a 1 m buffer and
+  // `[1000]` into a 1 km one, and those are no more a distance than a name is.
+  if (typeof raw !== "string" || raw.trim() === "") return fallback;
+  const value = Number(raw);
   return Number.isFinite(value) ? value : fallback;
 }
 

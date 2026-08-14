@@ -170,12 +170,17 @@ describe("buildGeneratedGeometry", () => {
       // first, so a whitespace-only value is the same case.
       { ...pointAt(30, 0), properties: { radius: "" } },
       { ...pointAt(40, 0), properties: { radius: "  " } },
+      // Number() would turn these into a 1 m and a 1 km buffer respectively,
+      // but neither is a distance.
+      { ...pointAt(50, 0), properties: { radius: true } },
+      { ...pointAt(60, 0), properties: { radius: [1000] } },
+      { ...pointAt(70, 0), properties: { radius: Number.NaN } },
       // Numeric strings are honored, matching the numeric-field pickers.
-      { ...pointAt(50, 0), properties: { radius: "1000" } },
+      { ...pointAt(80, 0), properties: { radius: "1000" } },
     );
     const derived = buildGeneratedGeometry(fc, "buffer", 1000, "radius");
     assert.ok(derived);
-    assert.equal(derived.features.length, 6);
+    assert.equal(derived.features.length, 9);
     const widths = derived.features.map((feature) => {
       const xs = (feature.geometry as Polygon).coordinates[0].map(([x]) => x);
       return Math.max(...xs) - Math.min(...xs);
