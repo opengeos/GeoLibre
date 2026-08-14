@@ -65,6 +65,10 @@ describe("controlOwnsPaint external native layers", () => {
         ],
       },
       metadata: {
+        // Every store layer the control creates carries customLayerType, so
+        // the fixture must too: without it the layer takes a branch of
+        // syncExternalNativeLayer that no real control layer reaches.
+        customLayerType: "circle",
         externalNativeLayer: true,
         nativeLayerIds: ["mub-deliveries-circle"],
         sourceIds: ["mub-deliveries-source"],
@@ -100,6 +104,7 @@ describe("controlOwnsPaint external native layers", () => {
         ],
       },
       metadata: {
+        customLayerType: "circle",
         externalNativeLayer: true,
         nativeLayerIds: [],
         sourceIds: [],

@@ -455,7 +455,7 @@ function isExternalNativeLayer(layer: GeoLibreLayer): boolean {
 const VECTOR_CONTROL_SOURCE_KIND = "maplibre-gl-vector";
 
 /**
- * A layer the Add Vector Layer control owns, matched by `sourceKind` rather
+ * A layer the Add Vector Layer control owns, matched by its metadata rather
  * than by having native layer ids.
  *
  * Restoring after a style change, the control clears its retained record's
@@ -465,16 +465,26 @@ const VECTOR_CONTROL_SOURCE_KIND = "maplibre-gl-vector";
  * recognizes the layer as external, and rebuilds it down the ordinary GeoJSON
  * path: a second source and circle layer carrying GeoLibre's own paint,
  * stacked under the one the control restores a moment later. That is the
- * concentric point ring of opengeos/GeoLibre#1902, which the guard in
- * {@link syncExternalNativeLayer} does not catch because it only runs once the
- * ids are already back.
+ * concentric point ring of opengeos/GeoLibre#1902.
  *
  * The control owns these layers in either window, so route them to the
- * external path throughout; with no ids to work on it no-ops until the control
- * brings its layers back and the next sync reconciles them normally.
+ * external path throughout. There they take the {@link isExternalCustomLayer}
+ * branch, which already tolerates an empty id list: it no-ops until the
+ * control brings its layers back and the next sync reconciles them normally.
+ *
+ * `customLayerType` is part of the match because
+ * `createVectorStoreLayer` always sets it (`vectorCustomLayerType` falls back
+ * to `"custom"`), so every genuine control layer carries it at every point in
+ * its lifecycle. Requiring it leaves a layer that claims the `sourceKind`
+ * without it — a hand-edited or pre-`customLayerType` project file, which no
+ * live control will ever hand native layer ids — on the ordinary GeoJSON path,
+ * where its embedded `geojson` still renders.
  */
 function isVectorControlLayer(layer: GeoLibreLayer): boolean {
-  return layer.metadata.sourceKind === VECTOR_CONTROL_SOURCE_KIND;
+  return (
+    layer.metadata.sourceKind === VECTOR_CONTROL_SOURCE_KIND &&
+    typeof layer.metadata.customLayerType === "string"
+  );
 }
 
 function syncExternalNativeLayer(
@@ -576,16 +586,7 @@ function syncExternalNativeLayer(
     return;
   }
 
-  // maplibre-gl-vector owns both the source and presentation layers and, since
-  // v0.10.11, restores them from its retained layer record after setStyle.
-  // Rebuilding its missing layer here races that style.load handler: the host
-  // circle is drawn first with GeoLibre's generic paint, then the control adds
-  // its own circle, leaving concentric point rings after a basemap swap. Other
-  // external GeoJSON registrations do not provide a restore handler, so retain
-  // the host fallback for them.
-  if (!isVectorControlLayer(layer)) {
-    ensureExternalGeoJsonNativeLayer(map, layer, nativeLayerIds, beforeId);
-  }
+  ensureExternalGeoJsonNativeLayer(map, layer, nativeLayerIds, beforeId);
 
   if (
     !controlOwnsPaint(layer) &&
