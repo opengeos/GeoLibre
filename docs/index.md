@@ -22,9 +22,18 @@ hide:
       <a class="md-button" href="downloads/">Download app</a>
     </div>
   </div>
-  <figure class="hero__media">
-    <img src="https://files.opengeos.org/GeoLibre-demo.webp" alt="GeoLibre map interface showing the GIS workspace">
-  </figure>
+  <div class="hero__media">
+    <figure>
+      <a href="https://share.geolibre.app/giswqs/3d-tiles" title="Open the 3D Tiles map">
+        <img src="https://assets.geolibre.app/images/GeoLibre-demo.webp" alt="GeoLibre map interface showing the GIS workspace">
+      </a>
+    </figure>
+    <figure>
+      <a href="https://share.geolibre.app/giswqs/nyc-buildings-and-subways" title="Open the New York City buildings and subways map">
+        <img src="https://assets.geolibre.app/images/nyc-buildings.webp" alt="Manhattan buildings extruded in 3D and colored by construction era, with MTA subway lines and stations and an auto-generated legend">
+      </a>
+    </figure>
+  </div>
 </section>
 
 ## What GeoLibre does today
@@ -56,9 +65,9 @@ Add Data covers XYZ, WMS, WFS, WMTS, ArcGIS, and STAC services; GeoParquet, Flat
 </div>
 
 <div class="feature-card" markdown>
-### Conversion and Whitebox
+### 1,000+ geoprocessing tools
 
-Convert vector and raster data to cloud-native GeoParquet, FlatGeobuf, PMTiles, and COG from the Conversion menu, and run batch geoprocessing with the extensive Whitebox toolbox running on the optional Python sidecar.
+Run **1,000+ geoprocessing tools** — vector, raster, remote sensing, hydrology, terrain, LiDAR, conversion, network, and projection — from the Whitebox toolbox, browsable by category in the Processing menu. They execute in the browser on a WebAssembly runtime with raster and vector I/O, so there is no Python sidecar to install and the full set works on the web, desktop, and Android.
 </div>
 
 <div class="feature-card" markdown>
@@ -86,6 +95,12 @@ Embed the full GeoLibre app in a Jupyter notebook with the [`geolibre`](python.m
 </div>
 
 <div class="feature-card" markdown>
+### R, Quarto, and Shiny
+
+Build interactive maps in RStudio, Quarto, R Markdown, and Shiny with the [`geolibre`](r.md) R package. Add GeoJSON, `sf` objects, and remote rasters, control the camera, and exchange portable `.geolibre.json` projects with the web and desktop applications.
+</div>
+
+<div class="feature-card" markdown>
 ### AI Assistant
 
 Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) that turns plain-English requests into GeoLibre operations — Spatial SQL, symbology, add or remove data, and map control — applied through the app so they stay auditable and undoable. Provider-pluggable (Google Gemini, Anthropic, OpenAI) with your own API key, disabled until configured.
@@ -95,12 +110,6 @@ Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) 
 ### Collaboration and story maps
 
 Edit the same project with others in real time ([collaboration](collaboration.md) MVP; requires `VITE_GEOLIBRE_COLLAB_URL`), and build scroll-driven [story maps](user-guide/storymaps.md) with a presenter view and a standalone HTML export you can publish anywhere.
-</div>
-
-<div class="feature-card" markdown>
-### Network analysis and geocoding
-
-Compute isochrones, service areas, and origin–destination cost matrices for network analysis, and run forward, batch, and reverse [geocoding](user-guide/data-integrations.md#geocoding) through a multi-provider abstraction with pluggable providers.
 </div>
 
 </div>
@@ -126,11 +135,21 @@ GeoLibre Web is the full browser version of the GeoLibre app, ready to use with 
 !!! note "Hosted on GitHub Pages, private by design"
     GeoLibre Web is a static site deployed on GitHub Pages and runs entirely in your browser. It has no analytics and no server account, and the data you load is processed client-side in your browser session. Data leaves your browser only when you choose to add a remote URL or explicitly share a project.
 
+    If your data cannot be public at all, run the same web build on your own server next to your data. See [Self-Hosting & Private Data](self-hosting.md).
+
 Open a project by passing a public `.geolibre.json` URL with the `url` query parameter:
 
 ```text
 https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json
 ```
+
+You can also open hosted data directly. `data` accepts GeoJSON, GeoParquet, PMTiles, REST endpoints returning GeoJSON or ZIP, ZIP archives containing multiple GeoJSON files, and COGs. Add `style` to apply hosted vector or raster symbology:
+
+```text
+https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson&style=https://assets.geolibre.app/data/sample.style.json
+```
+
+Vector layers can produce a compatible file from **Layer actions → Styles → Export GeoLibre URL style**, and apply it again with **Import style (GeoLibre URL / Mapbox GL / SLD / QML)…**.
 
 For narrow embeds, add `?layout=compact` to the demo URL to use icon-only toolbar buttons and hide project metadata:
 
@@ -144,12 +163,21 @@ For map-focused embeds, add `&panels=none` to hide the Layers, Style, and Attrib
 https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=compact&panels=none
 ```
 
-Use `toolbar=icons` when you only want icon-only toolbar buttons. `panels=hidden`, `panels=hide`, `panels=off`, and `hidePanels=true` are accepted aliases for hiding panels.
+Use `toolbar=icons` when you only want icon-only toolbar buttons, or `toolbar=none` to hide the top toolbar while retaining panels and the status bar. `panels=hidden`, `panels=hide`, `panels=off`, and `hidePanels=true` are accepted aliases for hiding panels.
+
+Use `panels=collapsed` to keep the Layers and Style icon rails visible while
+starting both panels collapsed.
 
 For a fully chrome-free, map-only embed, add `&maponly` to hide the toolbar menu, all panels, and the status bar:
 
 ```text
 https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&maponly
+```
+
+For a read-only embed that viewers can still explore, use `&layout=viewer`. It keeps the Layers list, View and Controls menus, basemaps, and search/identify, and hides everything that would change the project:
+
+```text
+https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=viewer
 ```
 
 Other parameters control the toolbar, panels, and theme. See [Embedding & Sharing](user-guide/embedding.md) for the full parameter reference and `<iframe>` examples.
@@ -159,4 +187,49 @@ Other parameters control the toolbar, panels, and theme. See [Embedding & Sharin
 
 ## Project status
 
-GeoLibre 2.2 is a stable release. It includes the map workspace, the `.geolibre.json` project format with Save, Open, and Share, the plugin API, and the plugin marketplace for installing, updating, and removing external plugins. Data support spans browser vector import, DuckDB-WASM Spatial loading, the full Add Data surface (files, web services, cloud formats, 3D layers, and databases), and cloud integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and the federal Web Services plugins. Processing covers the vector tools (Turf.js with an optional GeoPandas sidecar), the raster tools (rasterio sidecar with a client-side fallback), a Spectral Index toolbox, a Raster Georeferencer, a Spatial Statistics toolbox, network analysis (isochrones, service areas, OD cost matrices), the Conversion menu (GeoParquet, FlatGeobuf, PMTiles, COG), the Whitebox toolbox, AI Segmentation via SamGeo/SAM 3, and the SQL Workspace for DuckDB Spatial SQL (with PGlite PostGIS and Apache Sedona engines). The release also ships a docked Notebook panel that runs Jupyter beside the map (JupyterLite on the web, a desktop JupyterLab server), a Field Collection tool for capturing point, line, and polygon observations, real-time multi-user collaboration, a scroll-driven story map builder, a natural-language AI assistant and in-app Python Console, multi-provider geocoding, the Time Slider plugin, a Controls menu (Measure, Bookmark, Minimap, View State), a Print menu, Layout settings, runtime environment variables, diagnostics, embed-friendly URL parameters including the `maponly` mode, cross-platform installers (including a macOS Homebrew Cask and a Windows Microsoft Store listing), and Docker support for the browser app. GeoLibre also ships as a native **Android** app built from the same codebase via Tauri v2 mobile (see [Android](android.md)), with a responsive touch layout for phones, and offline improvements (a Download Offline Area tool plus service-worker caching of the CDN-loaded Pyodide and PGlite/PostGIS engines). Version 2.0 adds a CesiumJS 3D globe view for any map pane, planetary mapping (Mars and the Moon from OpenPlanetaryMap, plus Mercury, Venus, the Galilean moons, Titan, Pluto, and Charon from USGS Astrogeology reprojected to Web Mercator, with a per-project ellipsoid and a planet switcher in the Layers panel), symbology interchange that imports and exports vector styling as OGC SLD, QGIS QML, and Mapbox GL style JSON, editable source layers that write vector edits back to GeoPackage, GeoJSON, and PostGIS, a Weather menu with live cloud and precipitation radar overlays and a sun position simulation, and new Mapillary, Historical Imagery, and Elevation Profile plugins. Version 2.1 adds a QGIS-style Browser panel (Data Source Manager) for browsing services, PostGIS databases, local files, and favorites from one place; route animation that sends a marker along a line layer with 3D track-follow camera controls and MP4 export; in-browser ONNX/YOLO object detection; map recording of the canvas or a drawn bounding box to video; a native-resolution geotagged photo viewer; Wikipedia knowledge cards; USGS basemaps for nine more celestial bodies; and a new OpenAerialMap imagery search plugin. Version 2.2 adds a styling overhaul (a rule-based renderer with per-rule symbol properties, scale-dependent visibility, and nested rules, a Style Manager preset library, diagram symbology, and a symbology pack of inverted-polygon masks, arrow and marker lines, and geometry generators); a shared Expression Builder wired into filters, labels, styling, and selection, driving a data-defined labeling engine and Select by Expression; virtual fields, persistent attribute joins, an attribute form designer, and a Raster Attribute Table; Atlas / map series generation in the Print Layout; browser-native COG, FlatGeobuf, Shapefile, GeoPackage, and Vector to PMTiles conversions; live GPS tracking; data quality tools (check validity, fix geometries, check topology); a Processing History panel; and new Natural Earth and Source Cooperative data browsers. See the [roadmap](roadmap.md) for the full release history and what comes next.
+GeoLibre is **stable and in active development**, with regular releases on
+[GitHub](https://github.com/opengeos/GeoLibre/releases). For the complete,
+current inventory see [Features](features.md); for how GeoLibre compares to
+QGIS, ArcGIS, Felt, and kepler.gl, see the [Comparison](comparison.md); for the
+full release history and what comes next, see the [Roadmap](roadmap.md).
+
+### What ships today
+
+- **Core workspace** — the map workspace, the `.geolibre.json` project format with Save, Open, and Share, the plugin API, and the plugin marketplace for installing, updating, and removing external plugins.
+- **Data** — browser vector import, DuckDB-WASM Spatial loading, the full Add Data surface (files, web services, cloud formats, 3D layers, and databases), and cloud integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and the federal Web Services plugins.
+- **Processing** — the Whitebox toolbox of **1,000+ geoprocessing tools** running in the browser on WebAssembly, vector tools (Turf.js with an optional GeoPandas sidecar), raster tools (rasterio sidecar with a client-side fallback), a Spectral Index toolbox, a Raster Georeferencer, a Spatial Statistics toolbox, network analysis (isochrones, service areas, OD cost matrices), the Conversion menu (GeoParquet, FlatGeobuf, PMTiles, COG), and AI Segmentation via SamGeo/SAM 3.
+- **SQL and scripting** — the SQL Workspace for DuckDB Spatial SQL (with PGlite PostGIS and Apache Sedona engines), a docked Notebook panel running Jupyter beside the map (JupyterLite on the web, a JupyterLab server on desktop), a natural-language AI assistant, and an in-app Python Console.
+- **Field and collaboration** — a Field Collection tool for point, line, and polygon observations, real-time multi-user collaboration, and a scroll-driven story map builder.
+- **Map surface** — multi-provider geocoding, the Time Slider plugin, a Controls menu (Measure, Bookmark, Minimap, View State), Layout settings, runtime environment variables, and diagnostics.
+- **3D and planetary** — a CesiumJS 3D globe view for any secondary map pane, a multi-map grid of synchronized views, a free-flight camera, and planetary mapping for the Moon, Mars, Mercury, Venus, the Galilean moons, Titan, Pluto, and Charon, with a per-project ellipsoid driving measurements.
+- **Styling and labeling** — a rule-based renderer with per-rule symbol properties and scale-dependent visibility, a Style Manager preset library, diagram symbology, an auto-generated on-map Legend, a shared Expression Builder driving data-defined labeling and Select by Expression, and symbology interchange as OGC SLD, QGIS QML, Mapbox GL, and GeoLibre URL style JSON.
+- **Attribute depth** — virtual fields, persistent attribute joins, an attribute form designer, a Raster Attribute Table, and editable source layers that write vector edits back to GeoPackage, GeoJSON, and PostGIS.
+- **Catalog browsers** — a QGIS-style Browser panel (Data Source Manager) plus panels for STAC, NASA Earthdata, Hugging Face, GeoLens, Natural Earth, Source Cooperative, ArcGIS Hub, Socrata, and CKAN.
+- **Media and capture** — map recording to video, route animation with a track-follow camera, a Camera Tour recorder, a Print Layout composer with Atlas / map series, in-browser ONNX/YOLO object detection, and a native-resolution geotagged photo viewer.
+- **Distribution** — embed-friendly URL parameters including `maponly`, a versioned `postMessage` API and the typed `@geolibre/embed` client for host pages, cross-platform installers (with a macOS Homebrew Cask, a [Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769) listing for the sandboxed build, and a Windows Microsoft Store listing), Docker for the browser app, and native **Android** and **iOS** apps built from the same codebase via Tauri v2 mobile, on [Google Play](https://play.google.com/store/apps/details?id=org.geolibre.app) (see [Android](android.md)) and the [App Store](https://apps.apple.com/app/geolibre/id6796039674) (see [iOS](ios.md)), with a responsive touch layout and offline improvements (Download Offline Area plus service-worker caching of the CDN-loaded Pyodide and PGlite/PostGIS engines).
+
+### Recently added
+
+Newest capabilities, still settling in: autosave with crash recovery and a
+browsable [project history](user-guide/projects.md#project-history-and-crash-recovery),
+[QGIS](user-guide/projects.md#importing-a-qgis-project) and
+[ArcGIS Pro project import](user-guide/projects.md#importing-an-arcgis-pro-project), nested
+[layer groups](user-guide/layers.md#layer-groups) with multi-select moves,
+anchored [review comments](user-guide/map-controls.md#review-comments) that sync
+through a collaboration session, an
+[Elements panel](user-guide/map-controls.md#annotations-and-the-elements-panel)
+for map annotations, [ArcGIS Hub and open-data catalog
+browsers](user-guide/adding-data.md#more-data-sources), address geocoding of
+delimited text at import time, KML Super-Overlay support, a Dashboard selector
+widget that cross-filters the other widgets, and
+[NMEA receiver support](user-guide/map-controls.md#gps-tracking) in GPS Tracking.
+
+The [roadmap](roadmap.md) tracks every release, version by version.
+
+## Support GeoLibre
+
+GeoLibre is free and open source, and stays that way. If it is useful to you or
+your team, [becoming a sponsor](sponsor.md) — through
+[GitHub Sponsors](https://github.com/sponsors/giswqs) or
+[Buy Me a Coffee](https://buymeacoffee.com/giswqs) — is the most direct way to
+keep development, hosting, and app-store distribution going.

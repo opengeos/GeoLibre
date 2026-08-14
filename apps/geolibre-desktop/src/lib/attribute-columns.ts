@@ -440,3 +440,27 @@ export function moveColumn(
     metadata: metadataWithSettings(layer, { ...settings, order: next }),
   };
 }
+
+/**
+ * The type a column holds, taken from the first feature that has a value for it.
+ *
+ * An individual cell that is null says nothing about its column, and typing into
+ * one used to store a string — so a number column with an empty cell silently
+ * became mixed. That reads fine locally but is rejected by anything with a real
+ * schema behind it (a PostGIS-backed dataset answers "a value is incompatible
+ * with a column's type or constraints"), and it corrupts sorting and styling for
+ * plain files too.
+ */
+export function inferColumnTypes(
+  rows: readonly (Record<string, unknown> | null | undefined)[],
+): Map<string, string> {
+  const types = new Map<string, string>();
+  for (const properties of rows) {
+    if (!properties) continue;
+    for (const [key, value] of Object.entries(properties)) {
+      if (value == null || types.has(key)) continue;
+      types.set(key, typeof value);
+    }
+  }
+  return types;
+}

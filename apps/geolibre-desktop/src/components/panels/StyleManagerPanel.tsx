@@ -41,7 +41,10 @@ import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
 import { isQmlStyleXml } from "../../lib/style-format";
 import { openLocalDataFileWithFallback, saveTextFileWithFallback } from "../../lib/tauri-io";
-import { createCategorizedStops, createGraduatedStops } from "./StylePanel";
+import {
+  createCategorizedStops,
+  createGraduatedStops,
+} from "../../lib/vector-style-classification";
 
 /** Default panel geometry (px); the user can drag it around the map area. */
 const PANEL_DEFAULT_W = 384;
@@ -351,6 +354,9 @@ export function StyleManagerPanel() {
             extensions: ["json", "qml", "sld", "xml"],
           },
         ],
+        // Android cannot reliably map the SLD/QML extensions to MIME types.
+        // Accept any document there and validate its contents after selection.
+        androidFilters: [],
         accept: ".json,.qml,.sld,.xml,application/json,application/xml,text/xml",
         readText: true,
       });

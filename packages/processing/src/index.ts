@@ -8,6 +8,7 @@ export {
 export {
   VECTOR_TOOLS,
   getVectorTool,
+  resolveVectorRerun,
   matchFeaturesByLocation,
   MAX_CLIENT_PAIRS,
   SELECT_LOCATION_PREDICATES,
@@ -52,9 +53,86 @@ export {
 export {
   H3_TOOLS,
   getH3Tool,
-  createH3GridTool,
-  binPointsTool,
+  buildBinSql,
+  buildGridFromBboxSql,
+  buildH3CompactSql,
+  buildH3ExpandSql,
+  buildH3ExpandCountSql,
+  H3_AGG_OPS,
+  normalizeLonLatBbox,
+  type H3AggOp,
 } from "./h3-tools";
+export {
+  buildA5GridFromWktSql,
+  buildA5GridFromBboxSql,
+  buildA5GridFromSourceSql,
+  buildA5BinSql,
+  buildA5CompactSql,
+  buildA5ExpandSql,
+  buildA5ExpandCountSql,
+  a5RowsToFeatureCollection,
+  suggestA5Resolution,
+  estimateA5CellCount,
+  A5_MAX_TOOL_RES,
+} from "./a5-tools";
+export { unwrapAntimeridianGeometry, unwrapAntimeridianRing } from "./antimeridian";
+export {
+  buildDggridGridFromWktSql,
+  buildDggridGridFromSourceSql,
+  buildDggridBinSql,
+  dggridRowsToFeatureCollection,
+  suggestDggridResolution,
+  estimateDggridCellCount,
+  resolveDggridGridType,
+  maxResolutionForDggrid,
+  DGGRID_MAX_TOOL_RES,
+  DGGRID_GRID_TYPES,
+  DGGRID_GRID_TYPE_OPTIONS,
+  DGGRID_GRID_SPECS,
+  DEFAULT_DGGRID_GRID_TYPE,
+  type DggridGridType,
+} from "./dggrid-tools";
+export {
+  DGGS_TOOLS,
+  getDggsTool,
+  createDggsGridTool,
+  dggsBinPointsTool,
+  dggsCompactTool,
+  maxResolutionForDggs,
+  extensionForDggs,
+  type DggsType,
+} from "./dggs-tools";
+export {
+  s2GridFromBbox,
+  s2GridFromFeatureCollection,
+  binPointsToS2,
+  compactS2Tokens,
+  expandS2Tokens,
+  compactS2FeatureCollection,
+  expandS2FeatureCollection,
+  suggestS2Resolution,
+  estimateS2CellCount,
+  S2_MAX_TOOL_RES,
+} from "./s2-tools";
+export {
+  DGGAL_TYPES,
+  DGGAL_GRID_TYPES,
+  DGGAL_GRID_TYPE_OPTIONS,
+  DEFAULT_DGGAL_GRID_TYPE,
+  DGGAL_MAX_TOOL_RES,
+  resolveDggalGridType,
+  maxResolutionForDggal,
+  suggestDggalResolution,
+  estimateDggalCellCount,
+  dggalGridFromBbox,
+  dggalGridFromFeatureCollection,
+  binPointsToDggal,
+  compactDggalTokens,
+  expandDggalTokens,
+  compactDggalFeatureCollection,
+  expandDggalFeatureCollection,
+  type DggalGridType,
+} from "./dggal-tools";
 export {
   RASTER_TOOLS,
   getRasterTool,
@@ -184,10 +262,13 @@ export {
   whiteboxWasmAvailable,
   listWhiteboxWasmTools,
   listWasmToolManifests,
+  manifestScalarDefaults,
   mergeWasmToolManifests,
+  type ToolManifest,
   outputBaseName,
   fileOutputTargetExtension,
   outputTextFormatHint,
+  prepareGeographicBufferInput,
   isTiff,
 } from "./wasm-client";
 export {
@@ -225,6 +306,8 @@ export {
 } from "./pmtiles-extract";
 export {
   detectObjects,
+  rasterFromRgba,
+  readDetectionImage,
   type Detection,
   type DetectionOptions,
 } from "./object-detection";
@@ -235,6 +318,7 @@ export {
   type SegmentEverythingOptions,
   type SegmentEverythingSessions,
 } from "./segment-everything";
+export { isOrtAvailable } from "./ort";
 export {
   extractCogSubset,
   extractWmsSubset,
@@ -243,3 +327,17 @@ export {
   type ExtractWmsSubsetOptions,
   type ExtractXyzTileSubsetOptions,
 } from "./raster-subset";
+
+export {
+  assembleTerrainDem,
+  computeViewshed,
+  computeViewshedAsync,
+  decodeTerrariumElevation,
+  viewshedToRgba,
+  MAX_VIEWSHED_RADIUS_METERS,
+  MIN_VIEWSHED_RADIUS_METERS,
+  type AssembleTerrainDemOptions,
+  type TerrainDem,
+  type ViewshedObserver,
+  type ViewshedResult,
+} from "./terrain-viewshed";

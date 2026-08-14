@@ -5,7 +5,7 @@ These tutorials walk through common GeoLibre workflows end to end. Each one is s
 ## Before you start
 
 - You can follow most tutorials in the **live viewer** at [web.geolibre.app](https://web.geolibre.app/), which is the browser build of GeoLibre. No installation required.
-- A few steps need the **desktop app**: opening and saving project files, reading local MBTiles and rasters, and the Python sidecar tools (raster processing, sidecar conversions, and Whitebox). These are called out where they appear. See [Downloads](../downloads.md) to install.
+- A few steps need the **desktop app**: opening and saving project files, reading local MBTiles and rasters, and the Python sidecar tools (raster processing and sidecar conversions). These are called out where they appear. See [Downloads](../downloads.md) to install. The Whitebox geoprocessing toolbox is not among them — its 1,000+ tools run in the browser on WebAssembly.
 - The sample dataset used in several tutorials is a public GeoParquet file of world countries: `https://data.source.coop/giswqs/opengeos/countries.parquet`.
 
 ## The tutorials
@@ -25,3 +25,4 @@ Work through them in order for a guided tour, or jump to the one that matches yo
 
 - [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 - [Geoprocessing in the Browser: 700+ Free GIS Tools in GeoLibre, Zero Install](https://youtu.be/W32bIQO_nG8)
+- [GeoLibre + GeoLens: A Modern GIS Stack for Self-Hosting Geospatial Data](https://youtu.be/kQqgrxXGd4o)

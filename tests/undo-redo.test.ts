@@ -8,7 +8,13 @@ import {
   setMaxHistoryFeatureCount,
   trimHistoryBySize,
 } from "../packages/core/src/history";
-import { clearHistory, redo, undo, useAppStore } from "../packages/core/src/store";
+import {
+  clearHistory,
+  redo,
+  registerProjectRestoreHistory,
+  undo,
+  useAppStore,
+} from "../packages/core/src/store";
 import { createEmptyProject } from "../packages/core/src/project";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -155,6 +161,49 @@ describe("store history tracking", () => {
     useAppStore.getState().setPointerCoords([1, 2]);
     useAppStore.getState().setAttributeFilter("abc");
     assert.equal(pastLen(), before);
+  });
+});
+
+describe("project restore history", () => {
+  beforeEach(() => {
+    setHistoryCoalesceMs(0);
+    useAppStore.getState().newProject({ name: "reset" });
+  });
+
+  it("undoes and redoes a whole-project snapshot restore", () => {
+    const before = createEmptyProject("Before restore");
+    const after = createEmptyProject("Restored snapshot");
+    useAppStore.getState().loadProject(after, null, { rememberRecent: false, presenting: false });
+    registerProjectRestoreHistory(
+      before,
+      "/tmp/before.geolibre.json",
+      after,
+      "/tmp/before.geolibre.json",
+    );
+
+    undo();
+    assert.equal(useAppStore.getState().projectName, "Before restore");
+    assert.equal(useAppStore.getState().projectPath, "/tmp/before.geolibre.json");
+    assert.equal(useAppStore.getState().isDirty, true);
+
+    redo();
+    assert.equal(useAppStore.getState().projectName, "Restored snapshot");
+    assert.equal(useAppStore.getState().projectPath, "/tmp/before.geolibre.json");
+    assert.equal(useAppStore.getState().isDirty, true);
+  });
+
+  it("invalidates restore redo when a normal edit follows undo", () => {
+    const before = createEmptyProject("Before restore");
+    const after = createEmptyProject("Restored snapshot");
+    useAppStore.getState().loadProject(after, null, { rememberRecent: false, presenting: false });
+    registerProjectRestoreHistory(before, null, after);
+
+    undo();
+    useAppStore.getState().setBasemapOpacity(0.5);
+    redo();
+
+    assert.equal(useAppStore.getState().projectName, "Before restore");
+    assert.equal(useAppStore.getState().basemapOpacity, 0.5);
   });
 });
 
@@ -363,5 +412,41 @@ describe("undo/redo behavior", () => {
     useAppStore.getState().loadProject(createEmptyProject("loaded"));
     assert.equal(pastLen(), 0);
     assert.equal(futureLen(), 0);
+  });
+});
+
+describe("trimHistoryBySize with inline image payloads", () => {
+  /** A snapshot holding one image layer whose source is a data URL of `bytes`. */
+  function imageSnapshot(bytes: number, seed = "a") {
+    return { layers: [{ source: { url: `data:image/png;base64,${seed.repeat(bytes)}` } }] };
+  }
+
+  it("charges a data URL against the budget", () => {
+    // A NetCDF grid baked to pixels holds a whole PNG on `source.url`, which the
+    // feature-count heuristic alone would score as free.
+    const past = [imageSnapshot(100_000, "a"), imageSnapshot(100_000, "b")];
+    // 100k chars each at 200 bytes per equivalent is 500 units apiece.
+    assert.equal(trimHistoryBySize(past, 10_000).length, 2);
+    assert.equal(trimHistoryBySize(past, 600).length, 1);
+  });
+
+  it("charges an unchanged URL once across snapshots", () => {
+    // Editing something else must not evict history just because an image layer
+    // is present; the same URL repeated is one payload.
+    const url = `data:image/png;base64,${"a".repeat(100_000)}`;
+    const past = [
+      { layers: [{ source: { url } }] },
+      { layers: [{ source: { url } }] },
+      { layers: [{ source: { url } }] },
+    ];
+    assert.equal(trimHistoryBySize(past, 600).length, 3);
+  });
+
+  it("ignores a non-inline source url", () => {
+    const past = [
+      { layers: [{ source: { url: "https://example.com/a.png" } }] },
+      { layers: [{ source: { url: "https://example.com/b.png" } }] },
+    ];
+    assert.equal(trimHistoryBySize(past, 0).length, 2);
   });
 });

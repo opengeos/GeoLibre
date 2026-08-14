@@ -1,12 +1,6 @@
 import type { FeatureCollection, Geometry } from "geojson";
-import bbox from "@turf/bbox";
-import type { GeoLibreLayer } from "@geolibre/core";
-import type {
-  DuckDbCapability,
-  DuckDbGeoJsonSource,
-  ProcessingAlgorithm,
-  ProcessingContext,
-} from "./types";
+import { unwrapAntimeridianGeometry } from "./antimeridian";
+import type { ProcessingAlgorithm } from "./types";
 
 /** Average area (km^2) of an H3 cell at each resolution 0..15 (official values). */
 export const H3_AVG_AREA_KM2: number[] = [
@@ -63,11 +57,11 @@ export function suggestResolution(
   return 0;
 }
 
-function sqlStr(value: string): string {
+export function sqlStr(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
-function sqlIdent(value: string): string {
+export function sqlIdent(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
@@ -77,16 +71,89 @@ export function bboxToWktPolygon(bbox: [number, number, number, number]): string
   return `POLYGON((${w} ${s}, ${e} ${s}, ${e} ${n}, ${w} ${n}, ${w} ${s}))`;
 }
 
+/**
+ * Clamp a lon/lat bbox into WGS84. Spans wider than 180° of longitude (typical
+ * zoomed-out MapLibre viewports / world copies) collapse to [-180, 180].
+ * Edges outside ±180° also collapse to the full-width path so clipping does
+ * not silently drop coverage (e.g. west=-190, east=-10).
+ * Callers that polyfill must still split that full-width ring — DuckDB H3
+ * treats `POLYGON((-180 … 180 …))` as a dateline sliver (~tens of cells).
+ */
+export function normalizeLonLatBbox(
+  bbox: [number, number, number, number],
+): [number, number, number, number] {
+  let [west, south, east, north] = bbox;
+  south = Math.max(-90, Math.min(90, south));
+  north = Math.max(-90, Math.min(90, north));
+  if (south > north) [south, north] = [north, south];
+
+  let lonSpan = east - west;
+  if (lonSpan < 0) lonSpan += 360;
+  if (lonSpan > 180 || west < -180 || east > 180 || west > 180 || east < -180) {
+    return [-180, south, 180, north];
+  }
+
+  west = Math.max(-180, Math.min(180, west));
+  east = Math.max(-180, Math.min(180, east));
+  return [west, south, east, north];
+}
+
 const GRID_SELECT =
   "SELECT h3_h3_to_string(cell) AS h3, " +
   "ST_AsGeoJSON(ST_GeomFromText(h3_cell_to_boundary_wkt(cell))) AS geojson FROM cells";
 
-/** Grid SQL from a polygon WKT literal (used for bbox / viewport sources). */
-export function buildGridFromWktSql(wkt: string, res: number): string {
+/**
+ * Prefer the experimental polyfill with overlap containment. The legacy
+ * `h3_polygon_wkt_to_cells` (center containment) returns an empty list when the
+ * polygon is smaller than a cell, and also for near-global ±180° rings that
+ * H3's center algorithm mishandles.
+ */
+function polyfillUnnest(wktSql: string, res: number): string {
+  return `unnest(h3_polygon_wkt_to_cells_experimental(${wktSql}, ${res}, 'overlap'))`;
+}
+
+/** Wrap a `SELECT … AS cell` query; optionally `h3_compact_cells` the result. */
+function finalizeH3Cells(rawSelect: string, compact: boolean): string {
+  if (!compact) {
+    return `WITH cells AS (${rawSelect}) ` + GRID_SELECT;
+  }
   return (
-    `WITH cells AS (SELECT unnest(h3_polygon_wkt_to_cells(${sqlStr(wkt)}, ${res})) AS cell) ` +
+    `WITH raw AS (${rawSelect}), ` +
+    `arr AS (SELECT list(cell) AS cells FROM raw), ` +
+    `cells AS (SELECT unnest(h3_compact_cells(cells)) AS cell FROM arr) ` +
     GRID_SELECT
   );
+}
+
+/** Grid SQL from a polygon WKT literal (used for bbox / viewport sources). */
+export function buildGridFromWktSql(wkt: string, res: number, compact = false): string {
+  return finalizeH3Cells(`SELECT ${polyfillUnnest(sqlStr(wkt), res)} AS cell`, compact);
+}
+
+/**
+ * Grid SQL from a lon/lat bbox. After {@link normalizeLonLatBbox}, a whole-world
+ * request is [-180, s, 180, n]; a single ring polyfills to a dateline sliver, so
+ * that case is split into western/eastern hemispheres and unioned.
+ */
+export function buildGridFromBboxSql(
+  bbox: [number, number, number, number],
+  res: number,
+  compact = false,
+): string {
+  const [w, s, e, n] = normalizeLonLatBbox(bbox);
+  if (w === -180 && e === 180) {
+    const left = bboxToWktPolygon([-180, s, 0, n]);
+    const right = bboxToWktPolygon([0, s, 180, n]);
+    return finalizeH3Cells(
+      `SELECT DISTINCT cell FROM (` +
+        `SELECT ${polyfillUnnest(sqlStr(left), res)} AS cell ` +
+        `UNION ALL ` +
+        `SELECT ${polyfillUnnest(sqlStr(right), res)} AS cell` +
+        `)`,
+      compact,
+    );
+  }
+  return buildGridFromWktSql(bboxToWktPolygon([w, s, e, n]), res, compact);
 }
 
 /**
@@ -94,16 +161,17 @@ export function buildGridFromWktSql(wkt: string, res: number): string {
  * (multi)polygon and fills it (used for the polyfill source). `sourceSql` is a
  * FROM-able expression whose geometry column is `geom` (DuckDB `ST_Read`).
  */
-export function buildGridFromSourceSql(sourceSql: string, res: number): string {
+export function buildGridFromSourceSql(sourceSql: string, res: number, compact = false): string {
   // Union only polygonal geometries: a mixed layer would otherwise aggregate to
-  // a GEOMETRYCOLLECTION that `h3_polygon_wkt_to_cells` rejects. The `cells` CTE
+  // a GEOMETRYCOLLECTION that the H3 polyfill rejects. The `cells` CTE
   // filters a NULL union result (no polygons survived) so a NULL WKT never
   // reaches the h3 function, which can throw on NULL.
-  return (
-    `WITH merged AS (SELECT ST_AsText(ST_Union_Agg(geom)) AS wkt FROM ${sourceSql} ` +
-    `WHERE geom IS NOT NULL AND ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON')), ` +
-    `cells AS (SELECT unnest(h3_polygon_wkt_to_cells(wkt, ${res})) AS cell FROM merged WHERE wkt IS NOT NULL) ` +
-    GRID_SELECT
+  return finalizeH3Cells(
+    `SELECT ${polyfillUnnest("wkt", res)} AS cell FROM (` +
+      `SELECT ST_AsText(ST_Union_Agg(geom)) AS wkt FROM ${sourceSql} ` +
+      `WHERE geom IS NOT NULL AND ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON')` +
+      `) merged WHERE wkt IS NOT NULL`,
+    compact,
   );
 }
 
@@ -144,8 +212,53 @@ export function buildBinSql(sourceSql: string, res: number, op: H3AggOp, field?:
   );
 }
 
+/**
+ * Collect H3 cell IDs from `cellField` on `sourceSql` into an array.
+ * `sourceSql` is a FROM-able expression (DuckDB `ST_Read`) with that column.
+ */
+function h3CellArrayCte(sourceSql: string, cellField: string): string {
+  const f = sqlIdent(cellField);
+  return (
+    `input AS (SELECT DISTINCT h3_string_to_h3(CAST(${f} AS VARCHAR)) AS cell FROM ${sourceSql} ` +
+    `WHERE ${f} IS NOT NULL AND CAST(${f} AS VARCHAR) <> ''), ` +
+    `arr AS (SELECT list(cell) AS cells FROM input)`
+  );
+}
+
+/** Compact H3 cells from a polygon cell layer (IDs in `cellField`, default `h3`). */
+export function buildH3CompactSql(sourceSql: string, cellField = "h3"): string {
+  return (
+    `WITH ${h3CellArrayCte(sourceSql, cellField)}, ` +
+    `cells AS (SELECT unnest(h3_compact_cells(cells)) AS cell FROM arr) ` +
+    GRID_SELECT
+  );
+}
+
+/**
+ * Expand (uncompact) H3 cells to a uniform `res`. Cells already finer than
+ * `res` are rejected by the H3 extension.
+ */
+export function buildH3ExpandSql(sourceSql: string, res: number, cellField = "h3"): string {
+  return (
+    `WITH ${h3CellArrayCte(sourceSql, cellField)}, ` +
+    `cells AS (SELECT unnest(h3_uncompact_cells(cells, ${res})) AS cell FROM arr) ` +
+    GRID_SELECT
+  );
+}
+
+/** Count of cells that {@link buildH3ExpandSql} would emit (for the hard-cap guard). */
+export function buildH3ExpandCountSql(sourceSql: string, res: number, cellField = "h3"): string {
+  return (
+    `WITH ${h3CellArrayCte(sourceSql, cellField)} ` +
+    `SELECT coalesce(len(h3_uncompact_cells(cells, ${res})), 0) AS n FROM arr`
+  );
+}
+
 /** Build a FeatureCollection from rows carrying `h3`, optional `count`/`value`, and `geojson`. */
-export function rowsToFeatureCollection(rows: Record<string, unknown>[]): FeatureCollection {
+export function rowsToFeatureCollection(
+  rows: Record<string, unknown>[],
+  fixAntimeridian = true,
+): FeatureCollection {
   const features = [];
   for (const row of rows) {
     const raw = row.geojson;
@@ -165,326 +278,16 @@ export function rowsToFeatureCollection(rows: Record<string, unknown>[]): Featur
     if (row.value !== undefined && row.value !== null) {
       properties.value = Number(row.value);
     }
-    features.push({ type: "Feature" as const, geometry, properties });
+    features.push({
+      type: "Feature" as const,
+      geometry: fixAntimeridian ? unwrapAntimeridianGeometry(geometry) : geometry,
+      properties,
+    });
   }
   return { type: "FeatureCollection", features };
 }
 
-const NO_DUCKDB = "This tool requires DuckDB-WASM, which is unavailable in this environment.";
-
-function requireDuckDb(ctx: ProcessingContext): DuckDbCapability {
-  if (!ctx.duckdb) throw new Error(NO_DUCKDB);
-  return ctx.duckdb;
-}
-
-// Mirrors the same helper in vector-tools.ts and registry.ts; intentionally
-// duplicated because vector-tools.ts imports from this file, so importing the
-// other direction would create a cycle. Keep the three copies in sync.
-function getLayer(ctx: ProcessingContext, paramId = "layer"): GeoLibreLayer | undefined {
-  const id = ctx.parameters[paramId] as string | undefined;
-  return ctx.layers.find((l) => l.id === id);
-}
-
-/** Read a numeric parameter, returning NaN when missing or non-numeric. */
-function numberParam(ctx: ProcessingContext, id: string): number {
-  const raw = ctx.parameters[id];
-  if (raw === undefined || raw === null || raw === "") return NaN;
-  return typeof raw === "string" ? Number(raw) : (raw as number);
-}
-
-/**
- * Read and validate the manual [west, south, east, north] bbox parameters.
- * Logs a clear error and returns null when any value is missing or the box is
- * degenerate (west >= east or south >= north).
- */
-function bboxFromParams(ctx: ProcessingContext): [number, number, number, number] | null {
-  const west = numberParam(ctx, "west");
-  const south = numberParam(ctx, "south");
-  const east = numberParam(ctx, "east");
-  const north = numberParam(ctx, "north");
-  if ([west, south, east, north].some((n) => !Number.isFinite(n))) {
-    ctx.log("Error: enter numeric west, south, east, and north values");
-    return null;
-  }
-  if (west >= east || south >= north) {
-    ctx.log("Error: bounding box must have west < east and south < north");
-    return null;
-  }
-  return [west, south, east, north];
-}
-
-/** Parse the `resolution` param, or auto-suggest from area. Logs + returns null on bad input. */
-function resolveResolution(ctx: ProcessingContext, areaKm2: number): number | null {
-  const raw = ctx.parameters.resolution;
-  if (raw === undefined || raw === null || raw === "") {
-    const suggested = suggestResolution(areaKm2);
-    ctx.log(`Using suggested resolution ${suggested}`);
-    return suggested;
-  }
-  const res = typeof raw === "string" ? Number(raw) : (raw as number);
-  if (!Number.isInteger(res) || res < 0 || res > 15) {
-    ctx.log("Error: resolution must be an integer from 0 to 15");
-    return null;
-  }
-  return res;
-}
-
-export const createH3GridTool: ProcessingAlgorithm = {
-  id: "h3-grid",
-  name: "Create H3 grid",
-  description:
-    "Fill an area with H3 hexagons (DuckDB h3 extension). Source: a layer's geometry, a layer's extent, the current map view, or a manual bounding box.",
-  group: "H3",
-  parameters: [
-    {
-      id: "source",
-      label: "Area source",
-      type: "select",
-      default: "polyfill",
-      options: [
-        { value: "polyfill", label: "Layer geometry (polyfill)" },
-        { value: "extent", label: "Layer extent (bbox)" },
-        { value: "viewport", label: "Map viewport" },
-        { value: "bbox", label: "Manual bounding box" },
-      ],
-    },
-    {
-      id: "layer",
-      label: "Input layer",
-      type: "layer",
-      required: true,
-      // No geometry filter: "extent" fills any layer's bounding box, while
-      // "polyfill" needs polygons (validated at run time below). The layer is
-      // only required for the layer-based sources, so it stays hidden (and
-      // skips required validation) for the viewport and bbox sources.
-      visibleWhen: { param: "source", in: ["polyfill", "extent"] },
-    },
-    {
-      id: "west",
-      label: "West (min lon)",
-      type: "number",
-      required: true,
-      min: -180,
-      max: 180,
-      visibleWhen: { param: "source", in: ["bbox"] },
-    },
-    {
-      id: "south",
-      label: "South (min lat)",
-      type: "number",
-      required: true,
-      min: -90,
-      max: 90,
-      visibleWhen: { param: "source", in: ["bbox"] },
-    },
-    {
-      id: "east",
-      label: "East (max lon)",
-      type: "number",
-      required: true,
-      min: -180,
-      max: 180,
-      visibleWhen: { param: "source", in: ["bbox"] },
-    },
-    {
-      id: "north",
-      label: "North (max lat)",
-      type: "number",
-      required: true,
-      min: -90,
-      max: 90,
-      visibleWhen: { param: "source", in: ["bbox"] },
-    },
-    {
-      id: "resolution",
-      label: "Resolution (0-15)",
-      type: "number",
-      min: 0,
-      max: 15,
-      step: 1,
-      description: "Leave blank to auto-pick from the area.",
-    },
-  ],
-  run: async (ctx) => {
-    const duckdb = requireDuckDb(ctx);
-    const source = (ctx.parameters.source as string) || "polyfill";
-
-    let areaKm2: number;
-    let wkt: string | null = null;
-    let inputGeojson: FeatureCollection | null = null;
-    if (source === "viewport") {
-      const bounds = ctx.viewportBounds?.();
-      if (!bounds) {
-        ctx.log("Error: map viewport is unavailable");
-        return;
-      }
-      if (bounds[0] >= bounds[2]) {
-        // west >= east means the viewport wraps the antimeridian; the rectangle
-        // WKT would self-cross and fill the wrong (340deg) span. Bail with a
-        // clear message rather than producing wrong cells.
-        ctx.log(
-          "Error: the map view crosses the antimeridian; pan so it doesn't wrap +/-180, or use a manual bounding box",
-        );
-        return;
-      }
-      areaKm2 = bboxAreaKm2(bounds);
-      wkt = bboxToWktPolygon(bounds);
-    } else if (source === "bbox") {
-      const bounds = bboxFromParams(ctx);
-      if (!bounds) return;
-      areaKm2 = bboxAreaKm2(bounds);
-      wkt = bboxToWktPolygon(bounds);
-    } else {
-      const layer = getLayer(ctx, "layer");
-      if (!layer?.geojson?.features?.length) {
-        ctx.log('Error: parameter "layer" has no GeoJSON features');
-        return;
-      }
-      if (source === "polyfill") {
-        const hasPolygon = layer.geojson.features.some(
-          (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon",
-        );
-        if (!hasPolygon) {
-          ctx.log(
-            'Error: polyfill needs a polygon layer; use the "Layer extent" source for point or line layers',
-          );
-          return;
-        }
-      }
-      inputGeojson = layer.geojson;
-      const bb = bbox(layer.geojson) as [number, number, number, number];
-      areaKm2 = bboxAreaKm2(bb);
-      if (source === "extent") wkt = bboxToWktPolygon(bb);
-    }
-
-    const res = resolveResolution(ctx, areaKm2);
-    if (res === null) return;
-
-    const estimate = estimateCellCount(areaKm2, res);
-    if (estimate > H3_HARD_CAP) {
-      ctx.log(
-        `Error: resolution ${res} would generate about ${Math.round(
-          estimate,
-        ).toLocaleString()} cells (cap ${H3_HARD_CAP.toLocaleString()}). Choose a coarser resolution.`,
-      );
-      return;
-    }
-
-    await duckdb.ensureExtensions(["spatial", "h3"]);
-    let registered: DuckDbGeoJsonSource | null = null;
-    try {
-      let sql: string;
-      if (wkt) {
-        sql = buildGridFromWktSql(wkt, res);
-      } else {
-        registered = await duckdb.registerGeoJson(inputGeojson!); // non-null: polyfill path only runs after the layer guard above set inputGeojson
-        sql = buildGridFromSourceSql(registered.sql, res);
-      }
-      const rows = await duckdb.query(sql);
-      const fc = rowsToFeatureCollection(rows);
-      if (fc.features.length === 0) {
-        ctx.log(
-          `No H3 cells were produced at resolution ${res}. Try a coarser resolution or a larger area.`,
-        );
-        return;
-      }
-      ctx.log(`Created ${fc.features.length} H3 cell(s) at resolution ${res}`);
-      ctx.addResultLayer?.(`H3 grid (res ${res})`, fc);
-    } finally {
-      await registered?.release();
-    }
-  },
-};
-
-export const binPointsTool: ProcessingAlgorithm = {
-  id: "h3-bin-points",
-  name: "Bin points to H3",
-  description:
-    "Aggregate a point layer into H3 cells (count, or sum/mean/min/max of a numeric field).",
-  group: "H3",
-  parameters: [
-    {
-      id: "layer",
-      label: "Input point layer",
-      type: "layer",
-      required: true,
-      geometryFilter: ["point"],
-    },
-    {
-      id: "aggOp",
-      label: "Aggregate",
-      type: "select",
-      default: "count",
-      options: [
-        { value: "count", label: "Count" },
-        { value: "sum", label: "Sum" },
-        { value: "mean", label: "Mean" },
-        { value: "min", label: "Min" },
-        { value: "max", label: "Max" },
-      ],
-    },
-    {
-      id: "field",
-      label: "Field",
-      type: "field",
-      fieldSource: "layer",
-      required: true,
-      visibleWhen: { param: "aggOp", notIn: ["count"] },
-      description: "Numeric field to aggregate.",
-    },
-    {
-      id: "resolution",
-      label: "Resolution (0-15)",
-      type: "number",
-      min: 0,
-      max: 15,
-      step: 1,
-      description: "Leave blank to auto-pick from the area.",
-    },
-  ],
-  run: async (ctx) => {
-    const duckdb = requireDuckDb(ctx);
-    const layer = getLayer(ctx, "layer");
-    if (!layer?.geojson?.features?.length) {
-      ctx.log('Error: parameter "layer" has no GeoJSON features');
-      return;
-    }
-    const op = (ctx.parameters.aggOp as string) || "count";
-    if (!H3_AGG_OPS.includes(op as H3AggOp)) {
-      ctx.log(`Error: unknown aggregate "${op}"`);
-      return;
-    }
-    const field = ctx.parameters.field as string | undefined;
-    if (op !== "count" && !field) {
-      ctx.log(`Error: select a numeric field to ${op}`);
-      return;
-    }
-
-    const bb = bbox(layer.geojson) as [number, number, number, number];
-    const res = resolveResolution(ctx, bboxAreaKm2(bb));
-    if (res === null) return;
-
-    await duckdb.ensureExtensions(["spatial", "h3"]);
-    const registered = await duckdb.registerGeoJson(layer.geojson);
-    try {
-      const sql = buildBinSql(registered.sql, res, op as H3AggOp, field);
-      const rows = await duckdb.query(sql);
-      const fc = rowsToFeatureCollection(rows);
-      if (fc.features.length === 0) {
-        ctx.log(
-          `No points fell into H3 cells at resolution ${res}. Check the layer has point geometries.`,
-        );
-        return;
-      }
-      ctx.log(`Binned points into ${fc.features.length} H3 cell(s) at resolution ${res}`);
-      ctx.addResultLayer?.(`H3 bins (res ${res})`, fc);
-    } finally {
-      await registered.release();
-    }
-  },
-};
-
-export const H3_TOOLS: ProcessingAlgorithm[] = [createH3GridTool, binPointsTool];
+export const H3_TOOLS: ProcessingAlgorithm[] = [];
 
 export function getH3Tool(id: string): ProcessingAlgorithm | undefined {
   return H3_TOOLS.find((tool) => tool.id === id);

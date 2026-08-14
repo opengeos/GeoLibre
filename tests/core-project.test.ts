@@ -9,30 +9,56 @@ import {
   parseProject,
   parseStoryMapCsv,
   parseStoryMapJson,
+  applyProjectToStore,
   projectFromStore,
   serializeProject,
   serializeStoryMapCsv,
   serializeStoryMapJson,
   useAppStore,
-  type GeoLibreLayer,
 } from "@geolibre/core";
-
-function geojsonLayer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
-  return {
-    id: "layer-a",
-    name: "Layer A",
-    type: "geojson",
-    source: { type: "geojson" },
-    visible: true,
-    opacity: 1,
-    style: { ...DEFAULT_LAYER_STYLE },
-    metadata: {},
-    geojson: { type: "FeatureCollection", features: [] },
-    ...patch,
-  };
-}
+import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("project parsing", () => {
+  it("preserves a valid selected layer and drops a dangling selection", () => {
+    const base = createEmptyProject("Selection");
+    const layer = geojsonLayer({ id: "chosen" });
+    const selected = parseProject(
+      serializeProject({ ...base, layers: [layer], selectedLayerId: "chosen" }),
+    );
+    assert.equal(selected.selectedLayerId, "chosen");
+
+    const dangling = parseProject(
+      serializeProject({ ...base, layers: [layer], selectedLayerId: "missing" }),
+    );
+    assert.equal(dangling.selectedLayerId, undefined);
+  });
+
+  it("normalizes the selected layer on save as well as on load", () => {
+    const layer = geojsonLayer({ id: "chosen" });
+    const save = (selectedLayerId: string | null | undefined) =>
+      parseProject(
+        serializeProject(
+          projectFromStore({
+            projectName: "Selection",
+            mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+            basemapStyleUrl: DEFAULT_BASEMAP,
+            basemapVisible: true,
+            basemapOpacity: 1,
+            layers: [layer],
+            selectedLayerId,
+            preferences: createEmptyProject().preferences,
+            metadata: {},
+          }),
+        ),
+      );
+
+    assert.equal(save("chosen").selectedLayerId, "chosen");
+    assert.equal(save("missing").selectedLayerId, undefined);
+    assert.equal(save(undefined).selectedLayerId, undefined);
+    // An explicit null is a saved "nothing active", so it must survive the trip.
+    assert.equal(save(null).selectedLayerId, null);
+  });
+
   it("fills defaults while preserving valid project fields", () => {
     const project = parseProject(
       JSON.stringify({
@@ -169,6 +195,69 @@ describe("project parsing", () => {
     assert.equal(project.legend?.groupByLayer, false);
     assert.deepEqual(project.legend?.order, ["a", "b"]);
     assert.deepEqual(project.legend?.overrides, { a: { label: "Renamed", hidden: true } });
+  });
+
+  it("keeps hand-authored legend item sizes and drops nonsensical ones", () => {
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Legend",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        legend: {
+          title: "Legend",
+          groupByLayer: true,
+          order: [],
+          overrides: {},
+          customEntries: {
+            a: {
+              items: [
+                { label: "Small", color: "#440154", shape: "circle", size: 4 },
+                { label: "Huge", color: "#fde725", shape: "circle", size: 9e9 },
+                { label: "Bad", color: "#000000", size: "big" },
+                { label: "None", color: "#111111", size: 0 },
+              ],
+            },
+          },
+        },
+      }),
+    );
+    assert.deepEqual(project.legend?.customEntries?.a.items, [
+      { label: "Small", color: "#440154", shape: "circle", size: 4 },
+      { label: "Huge", color: "#fde725", shape: "circle", size: 1000 },
+      { label: "Bad", color: "#000000" },
+      { label: "None", color: "#111111" },
+    ]);
+  });
+
+  it("strips the transient per-feature filters when saving", () => {
+    // `timeFilter` (Time Slider) and `embedFilter` (the embed API's runtime
+    // `setFilter`, set by whatever host page framed the app) are both session
+    // state, not project state. A leaked `embedFilter` would silently bake one
+    // host's runtime filter into the shared `.geolibre.json` — the next person
+    // to open it would see a filtered map with nothing in the UI explaining it.
+    const layer = {
+      ...geojsonLayer({ id: "roads" }),
+      timeFilter: ["<=", ["get", "t"], 5],
+      embedFilter: ["==", ["get", "kind"], "road"],
+    } as unknown as Parameters<typeof projectFromStore>[0]["layers"][number];
+    const project = projectFromStore({
+      projectName: "Filters",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [layer],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+    const saved = project.layers[0] as Record<string, unknown>;
+    assert.ok(!("timeFilter" in saved), "timeFilter must not be saved");
+    assert.ok(!("embedFilter" in saved), "embedFilter must not be saved");
+    // Everything else about the layer survives.
+    assert.equal(saved.id, "roads");
+
+    const reparsed = parseProject(serializeProject(project)).layers[0] as Record<string, unknown>;
+    assert.ok(!("embedFilter" in reparsed));
   });
 
   it("round-trips a legend config through projectFromStore", () => {
@@ -478,6 +567,152 @@ describe("project parsing", () => {
   });
 });
 
+describe("project serialization", () => {
+  /** A layer whose features carry enough coordinates to show the whitespace cost. */
+  const featureRichLayer = () =>
+    geojsonLayer({
+      id: "cities",
+      geojson: {
+        type: "FeatureCollection",
+        features: Array.from({ length: 200 }, (_, index) => ({
+          type: "Feature" as const,
+          properties: { name: `City ${index}` },
+          geometry: {
+            type: "LineString" as const,
+            coordinates: Array.from(
+              { length: 20 },
+              (_, point) => [index / 10 + point, point / 10] as [number, number],
+            ),
+          },
+        })),
+      },
+    });
+
+  it("writes embedded GeoJSON compactly while indenting the project structure", () => {
+    const project = createEmptyProject("Compact");
+    project.layers = [featureRichLayer()];
+    const text = serializeProject(project);
+
+    // The structure stays readable...
+    assert.match(text, /^\{\n {2}"version":/);
+    assert.match(text, /\n {2}"layers": \[\n {4}\{\n {6}"id": "cities",/);
+    // ...but the whole feature collection sits on one line, so no coordinate
+    // ever gets its own line of indentation (GeoLibre#1829).
+    assert.match(
+      text,
+      /\n {6}"geojson": \{"type":"FeatureCollection","features":\[\{"type":"Feature"/,
+    );
+    assert.ok(!text.includes('"coordinates": ['), "coordinate arrays must not be pretty-printed");
+  });
+
+  it("compacts an embedded GeoJSON copy held in layer metadata", () => {
+    const project = createEmptyProject("Embedded");
+    const { geojson, ...layer } = featureRichLayer();
+    project.layers = [{ ...layer, metadata: { embeddedGeoJSON: geojson } }];
+    const text = serializeProject(project);
+
+    assert.match(text, /"embeddedGeoJSON": \{"type":"FeatureCollection"/);
+    assert.ok(!text.includes('"coordinates": ['));
+  });
+
+  it("keeps a feature-heavy project within a few percent of a fully minified file", () => {
+    const project = createEmptyProject("Sized");
+    project.layers = [featureRichLayer()];
+    const minified = JSON.stringify(project).length;
+
+    // Pretty-printing every coordinate used to cost more than 3x; the structure
+    // that stays indented is a rounding error next to the feature data.
+    assert.ok(
+      serializeProject(project).length < minified * 1.05,
+      "serialized project should be close to the minified size",
+    );
+  });
+
+  it("formats a project without GeoJSON exactly as JSON.stringify does", () => {
+    const project = createEmptyProject("Plain");
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+  });
+
+  it("matches JSON.stringify for values it drops, empty containers, and toJSON", () => {
+    const project = createEmptyProject("Edges");
+    project.metadata = {
+      dropped: undefined,
+      inArray: [undefined, () => "fn", 1],
+      notFinite: Number.NaN,
+      emptyObject: {},
+      emptyArray: [],
+      nested: { deep: { deeper: [1, { two: 2 }] } },
+      date: new Date("2026-08-10T00:00:00.000Z"),
+      quote: 'a "quoted" \\ value\n',
+    };
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+  });
+
+  it("writes a sparse array's holes as null, matching JSON.stringify", () => {
+    const project = createEmptyProject("Sparse");
+    // eslint-disable-next-line no-sparse-arrays
+    project.metadata = { gappy: [1, , 2] };
+    const text = serializeProject(project);
+    assert.equal(text, JSON.stringify(project, null, 2));
+    assert.deepEqual((JSON.parse(text) as typeof project).metadata.gappy, [1, null, 2]);
+  });
+
+  it("passes the property key to a custom toJSON, as JSON.stringify does", () => {
+    const project = createEmptyProject("Keys");
+    const probe = { toJSON: (key: string) => `saw:${key}` };
+    project.metadata = { named: probe, list: [probe] };
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+    const parsed = JSON.parse(serializeProject(project)) as typeof project;
+    assert.equal(parsed.metadata.named, "saw:named");
+    assert.deepEqual(parsed.metadata.list, ["saw:0"]);
+  });
+
+  it("unwraps boxed primitives the way JSON.stringify does", () => {
+    const project = createEmptyProject("Boxed");
+    project.metadata = {
+      // eslint-disable-next-line no-new-wrappers
+      count: new Number(7),
+      // eslint-disable-next-line no-new-wrappers
+      label: new String("x"),
+      // eslint-disable-next-line no-new-wrappers
+      flag: new Boolean(true),
+    };
+    const text = serializeProject(project);
+    assert.equal(text, JSON.stringify(project, null, 2));
+    assert.deepEqual((JSON.parse(text) as typeof project).metadata, {
+      count: 7,
+      label: "x",
+      flag: true,
+    });
+  });
+
+  it("throws on a circular reference instead of overflowing the stack", () => {
+    const project = createEmptyProject("Cyclic");
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    project.metadata = { cycle };
+    // A RangeError here would be read as "project too large to save" by the
+    // save path, sending the user after a size problem they do not have.
+    assert.throws(() => serializeProject(project), TypeError);
+  });
+
+  it("serializes a value referenced twice side by side without calling it a cycle", () => {
+    const project = createEmptyProject("Shared");
+    const shared = { shared: true };
+    project.metadata = { first: shared, second: shared };
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+  });
+
+  it("round-trips a feature-heavy project through parseProject", () => {
+    const project = createEmptyProject("Round trip");
+    project.layers = [featureRichLayer()];
+    assert.deepEqual(
+      parseProject(serializeProject(project)).layers[0].geojson,
+      project.layers[0].geojson,
+    );
+  });
+});
+
 describe("multi-map grid persistence", () => {
   it("omits the grid keys for a default single-map project", () => {
     const project = projectFromStore({
@@ -663,6 +898,29 @@ describe("app store", () => {
     useAppStore.getState().selectLayer(first);
     useAppStore.getState().removeLayer(first);
     assert.equal(useAppStore.getState().selectedLayerId, second);
+  });
+
+  it("restores the saved active layer and keeps the legacy first-layer fallback", () => {
+    const first = geojsonLayer({ id: "first", name: "First" });
+    const second = geojsonLayer({ id: "second", name: "Second" });
+    const base = createEmptyProject("Selection");
+
+    useAppStore.getState().loadProject({
+      ...base,
+      layers: [first, second],
+      selectedLayerId: "second",
+    });
+    assert.equal(useAppStore.getState().selectedLayerId, "second");
+
+    useAppStore.getState().loadProject({ ...base, layers: [first, second] });
+    assert.equal(useAppStore.getState().selectedLayerId, "first");
+
+    useAppStore.getState().loadProject({
+      ...base,
+      layers: [first, second],
+      selectedLayerId: null,
+    });
+    assert.equal(useAppStore.getState().selectedLayerId, null);
   });
 
   it("renames a layer without changing its id (keeps MapLibre sync stable)", () => {
@@ -1174,5 +1432,43 @@ describe("annotation layer persistence", () => {
       (feature) => feature.properties?.__annotation === "arrowhead",
     );
     assert.equal(head?.properties?.annotationId, "a1");
+  });
+});
+
+describe("primary mapView normalization", () => {
+  it("clamps an out-of-range primary camera on parse", () => {
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Camera",
+        mapView: {
+          center: ["x", 200],
+          zoom: -1,
+          bearing: -90,
+          pitch: 200,
+        },
+      }),
+    );
+    // Invalid lon falls back to the default camera longitude; lat clamps to 90.
+    assert.deepEqual(project.mapView.center, [-100, 90]);
+    assert.equal(project.mapView.zoom, 0);
+    assert.equal(project.mapView.pitch, 85);
+    assert.equal(project.mapView.bearing, 270);
+  });
+
+  it("normalizes an out-of-range camera through applyProjectToStore", () => {
+    const applied = applyProjectToStore({
+      ...createEmptyProject("Camera"),
+      mapView: {
+        center: ["x", 200] as unknown as [number, number],
+        zoom: -1,
+        bearing: -90,
+        pitch: 200,
+      },
+    });
+    assert.deepEqual(applied.mapView.center, [-100, 90]);
+    assert.equal(applied.mapView.zoom, 0);
+    assert.equal(applied.mapView.pitch, 85);
+    assert.equal(applied.mapView.bearing, 270);
   });
 });

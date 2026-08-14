@@ -84,6 +84,18 @@ export async function fetchProjectFromUrl(
   try {
     response = await fetchImpl(projectUrl, {
       headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.8" },
+      // Always revalidate. A share host may serve the project with a long
+      // freshness lifetime (share.geolibre.app sends `max-age=3600`), and a
+      // shared URL is a *mutable* document: re-sharing overwrites it in place.
+      // With the default cache mode the browser answers from its own copy for
+      // the rest of that window, so recipients keep loading a superseded
+      // project with nothing in the UI to explain it -- and because the body
+      // feeds the plugin trust prompt, a stale copy can keep prompting for a
+      // plugin URL the current project no longer carries. `no-cache` (not
+      // `no-store`) still uses the cache; it just forces a conditional request
+      // first, so an unchanged project comes back as a 304 rather than a
+      // re-download.
+      cache: "no-cache",
       signal,
     });
   } catch (error) {

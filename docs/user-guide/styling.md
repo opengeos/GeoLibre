@@ -41,6 +41,12 @@ The **Style type** control chooses how feature values map to color:
 
 For graduated and categorized styles, GeoLibre generates the class breaks or category stops and shows them in the panel, where you can fine-tune individual colors before applying.
 
+### Style interchange and URL styles
+
+The selected vector layer's **Layer actions → Styles** submenu imports and exports GeoLibre URL style JSON, Mapbox/MapLibre style JSON, OGC SLD, and QGIS QML. A GeoLibre URL style is a compact MapLibre style whose feature data is supplied separately through the `data` URL parameter. Export one when you want to publish the current symbology beside hosted GeoJSON or a ZIP of GeoJSON files; import it when you want to apply that symbology to a layer already open in GeoLibre.
+
+See [Managing Layers](layers.md#importing-and-exporting-styles) for the menu workflow and [Embedding & Sharing](embedding.md#open-remote-data) for the JSON conventions.
+
 !!! tip "Choropleth maps"
     To make a choropleth, select **Graduated**, pick a numeric attribute, choose a colormap, and click **Apply style type**. See the [Your First Map tutorial](../tutorials/first-map.md).
 
@@ -54,6 +60,20 @@ For raster layers the Style panel exposes image adjustments:
 - **Hue rotation** (in degrees)
 
 These let you tune the look of GeoTIFF, COG, and tile-based raster layers without changing the underlying data.
+
+### Spectral profile
+
+For a **multiband** raster — a stacked Landsat or Sentinel scene, a NetCDF/HDF cube, or any COG with more than one band — the Style panel adds a **Spectral profile** chart of one pixel's value across every band.
+
+Turn on **Identify** for the layer in the [Layers panel](layers.md), then click the map. Each click adds a numbered dot on the map and a matching curve in the chart, so you can click water, vegetation, and asphalt and compare the three responses side by side. Up to six points are compared at once; older points age off as you add more.
+
+- The chart plots against **wavelength** when the file declares one wavelength per band, and against **band number** otherwise. A wavelength list that doesn't match the band count is ignored rather than trusted, so a stale one can't mislabel the axis.
+- Only the tile containing the clicked pixel is fetched, not the whole scene, so profiling a large remote COG stays fast.
+- **Pop out** floats the chart in a draggable, resizable window over the map; **PNG** and **CSV** export it.
+
+Single-band rasters produce no profile — use Identify on its own to read the pixel value. Clicks outside the raster, or on a pixel that is nodata in every band, are dropped without disturbing the points you have already collected.
+
+A remote GeoJSON, GeoParquet, or vector PMTiles layer opened with the `data` URL parameter can receive a GeoLibre/MapLibre vector style through `style`. A remote COG can receive a raster style instead. Raster URL styles support band mode and selection, rescale ranges, colormap and reversal, nodata, opacity, gamma, stretch, and normalized-difference index presets. See the [remote data examples](embedding.md#open-remote-data).
 
 ## Legends and colorbars
 

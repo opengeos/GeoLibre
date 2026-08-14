@@ -16,6 +16,7 @@ export type KindI18nKey =
   | "wms"
   | "wfs"
   | "wmts"
+  | "ogcFeatures"
   | "ogcVectorTiles"
   | "gpx"
   | "georss"
@@ -39,6 +40,7 @@ export const KIND_I18N_KEY: Record<AddDataKind, KindI18nKey> = {
   wms: "wms",
   wfs: "wfs",
   wmts: "wmts",
+  "ogc-features": "ogcFeatures",
   "ogc-vector-tiles": "ogcVectorTiles",
   gpx: "gpx",
   georss: "georss",
@@ -87,6 +89,11 @@ export const DEFAULT_WMTS_URL =
 // this to any EOX tile layer, however it was added.
 export const EOX_S2CLOUDLESS_ATTRIBUTION =
   'Sentinel-2 cloudless 2025 by <a href="https://s2maps.eu" target="_blank" rel="noreferrer">EOX IT Services GmbH</a> (contains modified Copernicus Sentinel data 2025)';
+// pygeoapi's public demo, the reference OGC API - Features implementation. Its
+// `lakes` collection is a small global polygon set, and the server caps `limit`
+// at 10 per page, so the sample also exercises the `next`-link paging walk.
+export const DEFAULT_OGC_FEATURES_ENDPOINT = "https://demo.pygeoapi.io/master";
+export const DEFAULT_OGC_FEATURES_COLLECTION = "lakes";
 // PDOK BGT (Dutch large-scale base map) served as OGC API - Tiles vector tiles.
 // The style document carries the source-layer names the TileJSON omits; both
 // are prefilled so the sample works out of the box (zoom into the Netherlands).
@@ -113,9 +120,20 @@ export const DEFAULT_ARCGIS_FEATURE_URL =
   "https://services3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/USA_Major_Cities/FeatureServer/0";
 export const DEFAULT_ARCGIS_VECTOR_TILE_URL =
   "https://vectortileservices3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/Santa_Monica_parcels_VTL/VectorTileServer";
+// USGS National Boundaries Dataset (states, counties, tribal and federal areas).
+// A keyless *dynamic* (uncached) MapServer, so it exercises the `/export` path
+// rather than a tile cache.
+export const DEFAULT_ARCGIS_MAP_SERVICE_URL =
+  "https://carto.nationalmap.gov/arcgis/rest/services/govunits/MapServer";
+// USGS 3DEP bare-earth elevation, a keyless ImageServer that renders through
+// `/exportImage` (it has no tile cache) and accepts rendering rules.
+export const DEFAULT_ARCGIS_IMAGE_SERVICE_URL =
+  "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer";
 export const DEFAULT_ARCGIS_URLS: Record<ArcGISLayerType, string> = {
   feature: DEFAULT_ARCGIS_FEATURE_URL,
   "vector-tile": DEFAULT_ARCGIS_VECTOR_TILE_URL,
+  "map-service": DEFAULT_ARCGIS_MAP_SERVICE_URL,
+  "image-service": DEFAULT_ARCGIS_IMAGE_SERVICE_URL,
 };
 // Keep in sync with GPX_PROXY_PATH in vite.config.ts (the dev proxy binds it there).
 export const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";

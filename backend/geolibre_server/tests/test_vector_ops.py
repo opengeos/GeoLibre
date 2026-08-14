@@ -7,6 +7,7 @@ bad input, and :func:`run_vector_tool_json` round-trips through JSON strings.
 """
 
 import json
+from typing import NoReturn
 
 import pytest
 
@@ -67,6 +68,27 @@ POINT_IN_SQUARE = {
         }
     ],
 }
+ANTIMERIDIAN_LAYER = {
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {"name": "fiji_tonga"},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [175.0, -18.0],
+                        [-175.0, -18.0],
+                        [-175.0, -16.0],
+                        [175.0, -16.0],
+                        [175.0, -18.0],
+                    ]
+                ],
+            },
+        }
+    ],
+}
 
 
 def _attr_point(name: str, pop, x: float) -> dict:
@@ -119,12 +141,24 @@ def test_buffer_returns_feature_collection_and_messages() -> None:
 
 
 @requires_geopandas
+def test_buffer_antimeridian_crossing_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="crosses the antimeridian"):
+        run_vector_tool("buffer", ANTIMERIDIAN_LAYER, parameters={"distance": 1})
+
+
+@requires_geopandas
 def test_centroids_exercises_pyproj_utm_path() -> None:
     # centroids/buffer call estimate_utm_crs(), which needs pyproj's PROJ data;
     # this guards that path that the Pyodide engine also relies on.
     geojson, _ = run_vector_tool("centroids", SQUARE)
     assert geojson["type"] == "FeatureCollection"
     assert geojson["features"][0]["geometry"]["type"] == "Point"
+
+
+@requires_geopandas
+def test_centroids_antimeridian_crossing_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="crosses the antimeridian"):
+        run_vector_tool("centroids", ANTIMERIDIAN_LAYER)
 
 
 @requires_geopandas
@@ -1194,6 +1228,49 @@ def test_fix_geometries_no_op_on_valid_layer() -> None:
     geojson, messages = run_vector_tool("fix-geometries", SQUARE)
     assert len(geojson["features"]) == 1
     assert any("already valid" in m for m in messages)
+
+
+@requires_geopandas
+@pytest.mark.parametrize("failure", ["raises", "returns_empty"])
+def test_fix_geometries_leaves_unfixable_unchanged(monkeypatch, failure: str) -> None:
+    # A degenerate polygon (e.g., <3 distinct points) that make_valid cannot repair
+    # into a valid polygonal area will either raise or return empty. Both are
+    # separate branches of _repair; each leaves the original unchanged and
+    # increments the unfixable count.
+    import shapely.validation
+    from shapely.geometry import Polygon
+
+    def raising_make_valid(_geom: object) -> NoReturn:
+        raise ValueError
+
+    def emptying_make_valid(_geom: object) -> Polygon:
+        return Polygon()
+
+    monkeypatch.setattr(
+        shapely.validation,
+        "make_valid",
+        raising_make_valid if failure == "raises" else emptying_make_valid,
+    )
+
+    degenerate = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "degenerate"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0, 0], [1, 1], [0, 0]]],
+                },
+            }
+        ],
+    }
+    geojson, messages = run_vector_tool("fix-geometries", degenerate)
+    assert len(geojson["features"]) == 1
+    # GeoPandas pads the LinearRing to 4 coordinates when loading/dumping
+    coords = geojson["features"][0]["geometry"]["coordinates"]
+    assert coords == [[[0.0, 0.0], [1.0, 1.0], [0.0, 0.0], [0.0, 0.0]]]
+    assert any("1 could not be repaired" in m for m in messages)
 
 
 @requires_geopandas

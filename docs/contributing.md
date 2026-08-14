@@ -7,7 +7,7 @@ typo to adding a new processing tool or plugin.
 
 By participating, you agree to keep interactions respectful and constructive.
 
-## Ways to contribute
+## Ways to Contribute
 
 - **Report a bug or request a feature** by opening an
   [issue](https://github.com/opengeos/GeoLibre/issues). Include steps to
@@ -31,10 +31,13 @@ before you invest time in a pull request.
   commit hooks below) and, if you work on the backend, the conversion sidecar
   and its tests
 
-## Set up
+## Setup
+
+Fork the repository, then clone your fork. Replace `YOUR_GITHUB_USERNAME` with
+your GitHub username:
 
 ```bash
-git clone https://github.com/opengeos/GeoLibre.git
+git clone https://github.com/YOUR_GITHUB_USERNAME/GeoLibre.git
 cd GeoLibre
 npm install
 ```
@@ -194,6 +197,56 @@ links and pages left out of the navigation fail the build. Link to other docs
 pages with a relative path (for example `architecture.md`), and link to files
 outside `docs/` with a full GitHub URL.
 
+### Images, demos, and sample data
+
+**Do not commit screenshots, GIFs, videos, or sample datasets to this
+repository.** Binaries are never really deleted from Git history, so every one
+of them permanently enlarges the clone for everyone, including CI.
+
+Put them in [opengeos/geolibre-assets](https://github.com/opengeos/geolibre-assets)
+instead. It is a plain static host, so any file type works. Anything pushed to
+that repository's `main` branch is published by GitHub Pages at the matching
+path under its one hostname, <https://assets.geolibre.app>, usually within a
+minute:
+
+| Repository path        | Published URL                                      |
+| ---------------------- | -------------------------------------------------- |
+| `images/my-panel.webp` | `https://assets.geolibre.app/images/my-panel.webp` |
+| `demos/my-demo.gif`    | `https://assets.geolibre.app/demos/my-demo.gif`    |
+| `data/sample.parquet`  | `https://assets.geolibre.app/data/sample.parquet`  |
+
+Then reference the published URL from your Markdown:
+
+```markdown
+![Raster style panel](https://assets.geolibre.app/images/raster-style-panel.webp)
+```
+
+This is the one exception to the "link to files outside `docs/` with a full
+GitHub URL" rule above: an asset in `geolibre-assets` is referenced by its
+published `assets.geolibre.app` URL, never by a GitHub blob or raw URL.
+
+A few things worth knowing:
+
+- Use `images/` for stills, `demos/` for animations and screen recordings,
+  `data/` for sample datasets, and `styles/` or `fonts/` for map resources.
+- Prefer **WebP** or AVIF for stills, and PMTiles or GeoParquet for data. The
+  screenshots on this site are WebP.
+- Keep individual files under 100 MB, GitHub's hard limit.
+- Published paths are effectively permanent. Renaming or deleting a file breaks
+  every page already pointing at it, so pick the name once.
+- Assets are served with permissive CORS, so the app can fetch them
+  cross-origin.
+
+Sample datasets are still served from another GeoLibre-operated host,
+`data.geolibre.app`. Those URLs keep working and do not need rewriting;
+`geolibre-assets` is simply the one you can open a pull request against, so send
+new assets there.
+
+The only images that belong in this repository are the site chrome under
+`docs/assets/` — currently just the icon `mkdocs.yml` uses for the logo and
+favicon. Do not add to that directory; if you find something there that nothing
+references, it is a leftover, not a precedent.
+
 ## Plugins and extensions
 
 GeoLibre supports external plugins loaded from a zip, a local directory, or a
@@ -221,6 +274,14 @@ launch), see the [sidecar README](https://github.com/opengeos/GeoLibre/blob/main
 
 Run its tests with `npm run test:backend` from the repository root, or
 `python -m pytest` from the backend directory.
+
+## Sponsoring
+
+Code is not the only way to contribute. If you or your organization depend on
+GeoLibre, financial support keeps development, hosting, and app-store
+distribution going — see [Become a Sponsor](sponsor.md) for
+[GitHub Sponsors](https://github.com/sponsors/giswqs) and
+[Buy Me a Coffee](https://buymeacoffee.com/giswqs).
 
 ## License
 

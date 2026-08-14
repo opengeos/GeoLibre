@@ -1,3 +1,4 @@
+import { useAppStore } from "@geolibre/core";
 import {
   Button,
   Dialog,
@@ -10,7 +11,11 @@ import {
 } from "@geolibre/ui";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
+import {
+  LARGE_EMBED_WARNING_BYTES,
+  type ProjectFileActions,
+} from "../../../hooks/useProjectFileActions";
+import { SaveTemplateDialog } from "../SaveTemplateDialog";
 
 interface ProjectFileDialogsProps {
   projectFiles: ProjectFileActions;
@@ -75,6 +80,38 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
         </DialogContent>
       </Dialog>
       <Dialog
+        open={projectFiles.arcgisImportWarnings !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) projectFiles.setArcgisImportWarnings(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.item.arcgisImportComplete")}</DialogTitle>
+            <DialogDescription>
+              {t("toolbar.item.arcgisImportWarnings", {
+                count: projectFiles.arcgisImportWarnings?.length ?? 0,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+            {projectFiles.arcgisImportWarnings?.map((warning, index) => (
+              <li key={`${warning.layerName}-${index}`}>
+                <strong>{warning.layerName}:</strong>{" "}
+                {t(`toolbar.item.arcgisImportReason.${warning.reason}`, {
+                  layerType: warning.layerType || t("toolbar.item.arcgisUnknownLayerType"),
+                })}
+              </li>
+            ))}
+          </ul>
+          <div className="flex justify-end">
+            <Button onClick={() => projectFiles.setArcgisImportWarnings(null)}>
+              {t("common.ok")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
         open={projectFiles.actionError !== null}
         onOpenChange={(open: boolean) => {
           if (!open) projectFiles.setActionError(null);
@@ -88,6 +125,38 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           <div className="flex justify-end">
             <Button onClick={() => projectFiles.setActionError(null)}>
               {t("toolbar.item.dismiss")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={projectFiles.qgisImportWarnings !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) projectFiles.setQgisImportWarnings(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.item.qgisImportComplete")}</DialogTitle>
+            <DialogDescription>
+              {t("toolbar.item.qgisImportWarnings", {
+                count: projectFiles.qgisImportWarnings?.length ?? 0,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+            {projectFiles.qgisImportWarnings?.map((warning, index) => (
+              <li key={`${warning.layerName}-${index}`}>
+                <strong>{warning.layerName}:</strong>{" "}
+                {t(`toolbar.item.qgisImportReason.${warning.reason}`, {
+                  provider: warning.provider || t("toolbar.item.qgisUnknownProvider"),
+                })}
+              </li>
+            ))}
+          </ul>
+          <div className="flex justify-end">
+            <Button onClick={() => projectFiles.setQgisImportWarnings(null)}>
+              {t("common.ok")}
             </Button>
           </div>
         </DialogContent>
@@ -130,9 +199,9 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
         </DialogContent>
       </Dialog>
       <Dialog
-        open={projectFiles.envStripPrompt !== null}
+        open={projectFiles.credentialStripPrompt !== null}
         onOpenChange={(open: boolean) => {
-          if (!open) projectFiles.resolveEnvStripPrompt("cancel");
+          if (!open) projectFiles.resolveCredentialStripPrompt("cancel");
         }}
       >
         <DialogContent className="max-w-lg">
@@ -140,18 +209,24 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             <DialogTitle>{t("settings.env.stripPromptTitle")}</DialogTitle>
             <DialogDescription>
               {t("settings.env.stripPromptDesc", {
-                count: projectFiles.envStripPrompt?.count ?? 0,
+                count: projectFiles.credentialStripPrompt?.count ?? 0,
               })}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => projectFiles.resolveEnvStripPrompt("cancel")}>
+            <Button
+              variant="outline"
+              onClick={() => projectFiles.resolveCredentialStripPrompt("cancel")}
+            >
               {t("common.cancel")}
             </Button>
-            <Button variant="outline" onClick={() => projectFiles.resolveEnvStripPrompt("keep")}>
+            <Button
+              variant="outline"
+              onClick={() => projectFiles.resolveCredentialStripPrompt("keep")}
+            >
               {t("settings.env.keepButton")}
             </Button>
-            <Button onClick={() => projectFiles.resolveEnvStripPrompt("strip")}>
+            <Button onClick={() => projectFiles.resolveCredentialStripPrompt("strip")}>
               {t("settings.env.stripButton")}
             </Button>
           </div>
@@ -178,6 +253,16 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               )}
             </DialogDescription>
           </DialogHeader>
+          {(projectFiles.embedVectorDataPrompt?.bytes ?? 0) >= LARGE_EMBED_WARNING_BYTES ? (
+            <p
+              role="alert"
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            >
+              {t("toolbar.item.embedVectorLargeWarning", {
+                size: formatByteSize(projectFiles.embedVectorDataPrompt?.bytes ?? 0),
+              })}
+            </p>
+          ) : null}
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
@@ -201,6 +286,15 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           </div>
         </DialogContent>
       </Dialog>
+      <SaveTemplateDialog
+        open={projectFiles.saveTemplateDialogOpen}
+        onOpenChange={projectFiles.setSaveTemplateDialogOpen}
+        getProject={() => {
+          const { project } = projectFiles.buildCurrentProject();
+          const currentName = useAppStore.getState().projectName;
+          return { project, defaultProjectName: currentName };
+        }}
+      />
     </>
   );
 }

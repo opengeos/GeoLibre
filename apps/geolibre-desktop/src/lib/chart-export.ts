@@ -33,7 +33,17 @@ export function serializeChartSvg(svg: SVGSVGElement, width: number, height: num
   return source;
 }
 
-function triggerDownload(blob: Blob, filename: string): void {
+/**
+ * Hand a blob to the browser as a download.
+ *
+ * Exported so the charts that write their *data* out (the NetCDF spectral
+ * profile's CSV) use the same anchor-and-revoke path as the image exports here,
+ * rather than each growing its own copy.
+ *
+ * @param blob - The file contents.
+ * @param filename - The name to save it under.
+ */
+export function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;

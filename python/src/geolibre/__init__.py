@@ -2,10 +2,29 @@
 
 from typing import Any
 
+from .authoring import (
+    basemap_catalog,
+    color_ramp_names,
+    describe_project,
+    load_project,
+    save_project,
+)
 from .geolibre import Feature, Layer, Map
+from .legends import builtin_legend_names
 
-__version__ = "2.2.0"
-__all__ = ["Feature", "Layer", "Map", "__version__"]
+__version__ = "2.6.0"
+__all__ = [
+    "Feature",
+    "Layer",
+    "Map",
+    "__version__",
+    "basemap_catalog",
+    "builtin_legend_names",
+    "color_ramp_names",
+    "describe_project",
+    "load_project",
+    "save_project",
+]
 
 
 def _jupyter_server_extension_points() -> list[dict[str, str]]:

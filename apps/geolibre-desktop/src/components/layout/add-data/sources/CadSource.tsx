@@ -186,6 +186,7 @@ export function CadSource() {
             sourceCrs: overrideSourceCrs || null,
             featureCount: featureCollection.features.length,
           },
+          { geojson: featureCollection },
         ),
         geojson: featureCollection,
         sourcePath: selectedFile.path,

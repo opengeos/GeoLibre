@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
 import {
+  attributeLinkUrl,
   coerceAttributeFormValue,
   isDuckDBQueryLayer,
   useAppStore,
   validateAttributeFormValues,
+  excludeHiddenFieldsFromGeojson,
   type AttributeFormConfig,
   type AttributeFormFieldConfig,
   type AttributeFormFieldError,
@@ -69,6 +71,7 @@ import {
   Telescope,
   Trash2,
   X,
+  Ban,
 } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
@@ -93,6 +96,7 @@ import {
   visibleColumns,
   type ColumnMoveDirection,
   type NewColumnType,
+  inferColumnTypes,
 } from "../../lib/attribute-columns";
 import {
   coerceComputedValue,
@@ -118,11 +122,13 @@ import {
   exportVectorLayer,
   formatAttributeValue,
   geojsonVectorSourceId,
+  kmlExportErrorMessage,
   sanitizeExportFileName,
   shapefileFieldWarnings,
   type VectorExportFormat,
 } from "../../lib/vector-export";
 import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
+import { openExternalLink } from "../../lib/open-external";
 
 type SortDirection = "asc" | "desc";
 type SortKey = "__featureId" | string;
@@ -170,13 +176,24 @@ function compareAttributeValues(a: unknown, b: unknown): number {
   });
 }
 
-function parseAttributeDraft(draft: string, previousValue: unknown): unknown {
+function parseAttributeDraft(draft: string, previousValue: unknown, columnType?: string): unknown {
   if (draft.trim() === "") return null;
 
-  // A null/undefined cell carries no original type to infer from, so the raw
-  // string is kept as-is: editing a previously-empty cell does not coerce to
-  // number/boolean/object.
-  if (previousValue == null) return draft;
+  // An empty cell carries no type of its own, so fall back to what the rest of
+  // the column holds; only a column with no values anywhere keeps the raw string.
+  if (previousValue == null) {
+    if (columnType === "number") {
+      const nextValue = Number(draft);
+      return Number.isFinite(nextValue) ? nextValue : draft;
+    }
+    if (columnType === "boolean") {
+      const normalized = draft.trim().toLowerCase();
+      if (normalized === "true") return true;
+      if (normalized === "false") return false;
+      return draft;
+    }
+    return draft;
+  }
 
   if (typeof previousValue === "number") {
     const nextValue = Number(draft);
@@ -221,6 +238,9 @@ function applyDraftsToFeatures(
   drafts: AttributeDrafts,
   formFields?: Map<string, AttributeFormFieldConfig>,
 ): Feature[] {
+  // Derived from the whole collection, so an edit to an empty cell adopts the
+  // column's type rather than the cell's (absent) one.
+  const columnTypes = inferColumnTypes(features.map((feature) => feature.properties));
   return features.map((feature, index) => {
     const featureId = String(feature.id ?? index);
     const rowDrafts = drafts[featureId];
@@ -238,7 +258,7 @@ function applyDraftsToFeatures(
       const config = formFields?.get(column);
       properties[column] = config
         ? coerceAttributeFormValue(config, draft)
-        : parseAttributeDraft(draft, previousValue);
+        : parseAttributeDraft(draft, previousValue, columnTypes?.get(column));
     }
 
     return { ...feature, properties };
@@ -313,6 +333,8 @@ function applyDraftsToDuckDBRows(
 ): Record<string, Record<string, unknown>> {
   const rowById = new Map(rows.map((row) => [row.featureId, row]));
   const updates: Record<string, Record<string, unknown>> = {};
+  // Same column-level inference as the GeoJSON path, over the query's rows.
+  const columnTypes = inferColumnTypes(rows.map((row) => row.properties));
 
   for (const [featureId, rowDrafts] of Object.entries(drafts)) {
     const row = rowById.get(featureId);
@@ -322,7 +344,7 @@ function applyDraftsToDuckDBRows(
     for (const [column, draft] of Object.entries(rowDrafts)) {
       const previousValue = row.properties[column];
       if (isInvalidObjectDraft(draft, previousValue)) continue;
-      properties[column] = parseAttributeDraft(draft, previousValue);
+      properties[column] = parseAttributeDraft(draft, previousValue, columnTypes.get(column));
     }
 
     if (Object.keys(properties).length > 0) updates[featureId] = properties;
@@ -907,11 +929,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     try {
       setExportError(null);
       setExportWarning(null);
-      const exportGeojson = geojsonWithDrafts();
+      let exportGeojson = geojsonWithDrafts();
       if (!exportGeojson) return;
+      if (layer.fieldVisibility) {
+        exportGeojson = excludeHiddenFieldsFromGeojson(exportGeojson, layer.fieldVisibility);
+      }
 
       const baseName = sanitizeExportFileName(layer.name);
-      const savedPath = await exportVectorLayer(exportGeojson, format, baseName);
+      const savedPath = await exportVectorLayer(exportGeojson, format, baseName, layer.name);
       // Surface Shapefile field-name limitations (10-char truncation and any
       // resulting collisions) only when a file was actually written; a null
       // path means the user cancelled the save dialog.
@@ -921,7 +946,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       }
     } catch (error) {
       console.error("Failed to export attribute table", error);
-      setExportError(error instanceof Error ? error.message : t("attributeTable.exportFailed"));
+      setExportError(
+        kmlExportErrorMessage(error, t) ??
+          (error instanceof Error ? error.message : t("attributeTable.exportFailed")),
+      );
     }
   };
 
@@ -970,6 +998,19 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const handleToggleHidden = (col: string) => {
     if (!layer) return;
     updateLayer(layer.id, toggleColumnHidden(layer, col));
+  };
+
+  const handleToggleExcluded = (col: string) => {
+    if (!layer) return;
+    const current = layer.fieldVisibility || {};
+    const isExcluded = current[col] === "excluded";
+    const next = { ...current };
+    if (isExcluded) {
+      delete next[col];
+    } else {
+      next[col] = "excluded";
+    }
+    updateLayer(layer.id, { fieldVisibility: next });
   };
 
   const handleShowAllColumns = () => {
@@ -1345,6 +1386,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               <EyeOff className="me-2 h-3.5 w-3.5" />
               {t("attributeTable.hideField")}
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => handleToggleExcluded(col)}>
+              <Ban className="me-2 h-3.5 w-3.5" />
+              {layer?.fieldVisibility?.[col] === "excluded"
+                ? t("attributeTable.includeField", "Include field on export")
+                : t("attributeTable.excludeField", "Exclude field on export")}
+            </DropdownMenuItem>
             <DropdownMenuItem
               disabled={isRtl ? index === columns.length - 1 : index === 0}
               onSelect={() => handleMoveColumn(col, isRtl ? "right" : "left")}
@@ -1644,6 +1691,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuItem onSelect={() => void exportLayer("geopackage")}>
               GeoPackage
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("kml")}>KML</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("kmz")}>KMZ</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void exportLayer("shapefile")}>
               Shapefile (zipped)
             </DropdownMenuItem>
@@ -1812,6 +1861,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                             : "h-7 min-w-0 px-2 text-xs";
                         const config = formFields.get(col);
                         const current = draft ?? formatAttributeValue(value);
+                        const isEditableCell = isEditing && !derivedColumns.has(col);
+                        const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
                         const invalidTitle = invalid
                           ? formError
                             ? formErrorText(formError)
@@ -1836,7 +1887,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                                   : undefined
                             }
                           >
-                            {isEditing && !derivedColumns.has(col) ? (
+                            {isEditableCell ? (
                               config?.widget === "valueMap" && config.valueMap?.length ? (
                                 <Select
                                   className={inputClassName}
@@ -1895,6 +1946,21 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                                   onChange={(event) => commitDraft(event.target.value)}
                                 />
                               )
+                            ) : linkUrl ? (
+                              <a
+                                href={linkUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={linkUrl}
+                                className="inline-block max-w-full truncate align-bottom text-primary underline underline-offset-2"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  void openExternalLink(linkUrl);
+                                }}
+                              >
+                                {linkUrl}
+                              </a>
                             ) : (
                               formatAttributeValue(value)
                             )}
@@ -1913,6 +1979,25 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             </table>
           )}
         </ScrollArea>
+      ) : null}
+      {/*
+        Status bar: how many features the layer has, how many the table is
+        currently showing, and how many are selected. The "shown" count only
+        appears when a search or the Selected view is narrowing the table, so
+        the common case reads as one unambiguous total rather than two equal
+        numbers. Sits outside the ScrollArea so it stays put while scrolling.
+      */}
+      {!collapsed && hasAttributeSource ? (
+        <div
+          data-testid="attribute-table-status"
+          className="flex shrink-0 items-center gap-3 border-t bg-card px-3 py-1 text-[11px] text-muted-foreground"
+        >
+          <span>{t("attributeTable.statusFeatures", { count: attributeRows.length })}</span>
+          {filtered.length !== attributeRows.length ? (
+            <span>{t("attributeTable.statusShown", { count: filtered.length })}</span>
+          ) : null}
+          <span>{t("attributeTable.statusSelected", { count: selectedFeatureIds.length })}</span>
+        </div>
       ) : null}
       <Dialog
         open={columnPendingDelete !== null}

@@ -1,12 +1,13 @@
+import { useAppStore } from "@geolibre/core";
 import {
   closeBookmarkPanel,
   closeColorbarPanel,
   closeHtmlPanel,
-  closeLegendPanel,
   closeMeasurePanel,
   closeMinimapPanel,
   closePrintPanel,
   closeSearchPlacesPanel,
+  closeFlightSimulatorPanel,
   closeRouteAnimationPanel,
   closeSpinGlobePanel,
   closeSunPanel,
@@ -15,11 +16,11 @@ import {
   isColorbarPanelVisible,
   isEarthEnginePanelVisible,
   isHtmlPanelVisible,
-  isLegendPanelVisible,
   isMeasurePanelVisible,
   isMinimapPanelVisible,
   isPrintPanelVisible,
   isSearchPlacesPanelVisible,
+  isFlightSimulatorPanelVisible,
   isRouteAnimationPanelVisible,
   isSpinGlobePanelVisible,
   isSunPanelVisible,
@@ -27,11 +28,11 @@ import {
   openBookmarkPanel,
   openColorbarPanel,
   openHtmlPanel,
-  openLegendPanel,
   openMeasurePanel,
   openMinimapPanel,
   openPrintPanel,
   openSearchPlacesPanel,
+  openFlightSimulatorPanel,
   openRouteAnimationPanel,
   openSpinGlobePanel,
   openSunPanel,
@@ -40,11 +41,11 @@ import {
   subscribeColorbarPanel,
   subscribeEarthEnginePanel,
   subscribeHtmlPanel,
-  subscribeLegendPanel,
   subscribeMeasurePanel,
   subscribeMinimapPanel,
   subscribePrintPanel,
   subscribeSearchPlacesPanel,
+  subscribeFlightSimulatorPanel,
   subscribeRouteAnimationPanel,
   subscribeSpinGlobePanel,
   subscribeSunPanel,
@@ -66,6 +67,7 @@ export interface ToolbarPanels {
   spinGlobe: ToolbarPanel;
   sun: ToolbarPanel;
   routeAnimation: ToolbarPanel;
+  flightSimulator: ToolbarPanel;
   print: ToolbarPanel;
   colorbar: ToolbarPanel;
   legend: ToolbarPanel;
@@ -102,6 +104,11 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     isRouteAnimationPanelVisible,
     isRouteAnimationPanelVisible,
   );
+  const flightSimulatorVisible = useSyncExternalStore(
+    subscribeFlightSimulatorPanel,
+    isFlightSimulatorPanelVisible,
+    isFlightSimulatorPanelVisible,
+  );
   const printVisible = useSyncExternalStore(
     subscribePrintPanel,
     isPrintPanelVisible,
@@ -112,11 +119,11 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     isColorbarPanelVisible,
     isColorbarPanelVisible,
   );
-  const legendVisible = useSyncExternalStore(
-    subscribeLegendPanel,
-    isLegendPanelVisible,
-    isLegendPanelVisible,
-  );
+  // The Legend panel is React-rendered from store state (MapLegendPanel), not
+  // a maplibre-gl-components control like the rest.
+  const legendConfig = useAppStore((state) => state.legend);
+  const setLegend = useAppStore((state) => state.setLegend);
+  const legendVisible = legendConfig.panelVisible === true;
   const htmlVisible = useSyncExternalStore(
     subscribeHtmlPanel,
     isHtmlPanelVisible,
@@ -189,6 +196,16 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
         openRouteAnimationPanel(appApi);
       },
     },
+    flightSimulator: {
+      visible: flightSimulatorVisible,
+      toggle: () => {
+        if (flightSimulatorVisible) {
+          closeFlightSimulatorPanel(appApi);
+          return;
+        }
+        openFlightSimulatorPanel(appApi);
+      },
+    },
     print: {
       visible: printVisible,
       toggle: () => {
@@ -211,13 +228,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     },
     legend: {
       visible: legendVisible,
-      toggle: () => {
-        if (legendVisible) {
-          closeLegendPanel(appApi);
-          return;
-        }
-        openLegendPanel(appApi);
-      },
+      toggle: () => setLegend({ ...legendConfig, panelVisible: !legendVisible }),
     },
     html: {
       visible: htmlVisible,

@@ -4,6 +4,7 @@ import {
   serializeProject,
   useAppStore,
   type CollaborationMode,
+  type CollaborationParticipant,
   type CollaborationPresence,
   type GeoLibreProject,
 } from "@geolibre/core";
@@ -12,94 +13,76 @@ import type { RefObject } from "react";
 import type { MapController } from "@geolibre/map";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import i18n from "../i18n";
-import { buildProjectSnapshot } from "../lib/build-project-snapshot";
+import {
+  buildCollaborationSnapshot,
+  buildProjectEgressSnapshot,
+} from "../lib/build-project-snapshot";
+import { projectChanged } from "../lib/project-broadcast-changed";
 import {
   CollabConnection,
   createSession,
   resolveCollabBaseUrl,
   sessionWsUrl,
 } from "../lib/collab-client";
-import type { ServerMessage } from "../lib/collab-protocol";
+import {
+  type CommentMutationAction,
+  type ServerMessage,
+  participantCanEditLayer,
+} from "../lib/collab-protocol";
+import { mergeInboundCollaborationProject } from "../lib/collaboration-project";
 
-// Coalesce the burst of store writes one user action produces into a single
-// outbound snapshot — same window the embed bridge uses.
 const SNAPSHOT_DEBOUNCE_MS = 250;
-// Cursor presence is high-frequency; cap it so we don't flood the relay.
 const CURSOR_THROTTLE_MS = 40;
 
 export interface CollaborationApi {
-  /** True when `VITE_GEOLIBRE_COLLAB_URL` is configured; gates all UI. */
   enabled: boolean;
-  /** Host a new session and connect. Resolves with the shareable code. */
-  start: (displayName: string, color: string, mode: CollaborationMode) => Promise<string>;
-  /** Join an existing session by its code. */
-  join: (sessionId: string, displayName: string, color: string) => Promise<void>;
-  /** Leave the active session and tear everything down. */
+  canEdit: () => boolean;
+  canEditLayer: (layerId: string) => boolean;
+  start: (
+    displayName: string,
+    color: string,
+    mode: CollaborationMode,
+    requireIdentity?: boolean,
+  ) => Promise<string>;
+  join: (
+    sessionId: string,
+    displayName: string,
+    color: string,
+    options?: { inviteToken?: string; identityToken?: string },
+  ) => Promise<void>;
   leave: () => void;
-  /** Host-only: switch the session between view-only and co-edit. */
   setMode: (mode: CollaborationMode) => void;
-  /** Host-only: pin one participant to can-edit or view-only (#754). */
   setParticipantMode: (clientId: string, canEdit: boolean) => void;
-  /** Toggle whether this participant's camera follows the host's viewport. */
+  mintInvite: (role: CollaborationMode, maxUses?: number) => void;
+  revokeInvite: (token: string) => void;
+  setSessionConfig: (config: { requireIdentity?: boolean }) => void;
+  setLayerLocks: (lockedLayerIds: string[]) => void;
+  kickParticipant: (clientId: string, reason?: string) => void;
+  blockParticipant: (clientId: string, reason?: string) => void;
   setFollowHost: (enabled: boolean) => void;
-  /**
-   * Send a chat message to the session, optionally attaching a coordinate
-   * (#754). Returns true if it reached an open socket, so the caller can keep
-   * the draft when a send is dropped (socket not open).
-   */
   sendChat: (text: string, coordinate?: { lng: number; lat: number } | null) => boolean;
+  sendCommentMutation: (action: CommentMutationAction) => boolean;
 }
 
-/**
- * Drives live multi-user collaboration (issue #307): subscribes to the store and
- * broadcasts debounced, deduped project snapshots over a WebSocket, streams
- * cursor/viewport presence, and applies inbound snapshots/presence back into the
- * store. Inert when collaboration is not configured.
- *
- * The transport mirrors {@link useEmbedBridge}: a single `lastAppliedContent`
- * cache suppresses the echo a remote apply would otherwise re-broadcast.
- *
- * @param mapControllerRef - Ref to the live map controller, used to read the
- *   camera for snapshots and to bind cursor/viewport presence handlers.
- * @returns The session control API consumed by the Collaborate dialog.
- */
 export function useCollaboration(
   mapControllerRef: RefObject<MapController | null>,
 ): CollaborationApi {
   const baseUrl = useMemo(() => resolveCollabBaseUrl(), []);
   const enabled = baseUrl !== null;
 
-  // All mutable session machinery lives in refs so the effects/actions are
-  // stable and don't re-subscribe on every render.
   const connRef = useRef<CollabConnection | null>(null);
   const teardownRef = useRef<(() => void) | null>(null);
-  // Shared dedupe key for both directions: the last serialized project we sent
-  // or applied. A remote apply sets this first so the store update it triggers
-  // serializes identically and is suppressed (no echo).
   const lastContentRef = useRef<string | null>(null);
   const revRef = useRef(0);
+  const snapshotRequestRef = useRef(0);
   const selfIdRef = useRef<string | null>(null);
-  // Whether we ever completed the initial join (received a `welcome`). A
-  // disconnect before that means the session code was bad or the relay is
-  // unreachable, which we treat as a fatal connect failure rather than retrying
-  // a dead session forever.
-  const joinedRef = useRef(false);
-  // Set when the relay rejects a snapshot as too large; stops further sends so
-  // an over-size project doesn't re-fail on every keystroke. Reset on reconnect.
   const syncPausedRef = useRef(false);
-  // Debounces the projectGeneration bump that drives plugin-layer restoration
-  // after a burst of incremental remote edits.
   const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Settles when the current connect attempt joins (welcome) or fatally fails,
-  // so start()/join() resolve only on real success and the dialog keeps its
-  // busy spinner until then.
   const pendingConnectRef = useRef<{
     resolve: () => void;
     reject: (error: Error) => void;
   } | null>(null);
 
-  // Tear everything down on unmount: close the socket AND clear the slice so a
-  // stale "active" session can't linger in the store if the host unmounts.
   useEffect(
     () => () => {
       disconnect();
@@ -111,87 +94,72 @@ export function useCollaboration(
 
   const canEdit = (): boolean => {
     const c = useAppStore.getState().collaboration;
-    // Require an active (joined) session so a debounced snapshot can't fire in
-    // the window between connect() and the `welcome` (where mode still holds its
-    // default of "co-edit").
     if (!c.isActive) return false;
     if (c.role === "host") return true;
-    // A host-set per-participant override wins over the session mode (#754);
-    // fall back to the mode when there is no override for us.
     const self = c.participants.find((p) => p.clientId === c.clientId);
     return self?.editOverride ?? c.mode === "co-edit";
   };
 
-  const sendSnapshot = (): void => {
-    const conn = connRef.current;
-    if (!conn || !canEdit() || syncPausedRef.current) return;
-    const project = buildProjectSnapshot(mapControllerRef);
+  const canEditLayer = useCallback((layerId: string): boolean => {
+    const c = useAppStore.getState().collaboration;
+    if (!c.isActive) return true;
+    if (c.role === "host") return true;
+    const self = c.participants.find((p) => p.clientId === c.clientId);
+    if (!self) {
+      return c.mode === "co-edit" && !(c.lockedLayerIds ?? []).includes(layerId);
+    }
+    return participantCanEditLayer(self, c.mode, layerId, c.lockedLayerIds ?? []);
+  }, []);
+
+  const sendSnapshot = async (): Promise<void> => {
+    if (!canEdit() || syncPausedRef.current) return;
+    const request = ++snapshotRequestRef.current;
+    let project: GeoLibreProject;
+    try {
+      project = await buildCollaborationSnapshot(mapControllerRef);
+    } catch {
+      if (request === snapshotRequestRef.current && canEdit() && !syncPausedRef.current) {
+        useAppStore.getState().setCollaboration({ error: i18n.t("collaborate.shareFailed") });
+      }
+      return;
+    }
+    if (request !== snapshotRequestRef.current || !canEdit() || syncPausedRef.current) return;
     const content = serializeProject(project);
-    // Skip identical snapshots (selection/presence writes don't change content).
     if (content === lastContentRef.current) return;
     lastContentRef.current = content;
     revRef.current += 1;
-    conn.send({ type: "snapshot", project, rev: revRef.current });
+    connRef.current?.send({ type: "snapshot", project, rev: revRef.current });
   };
 
-  // Bump projectGeneration (debounced) to run DesktopShell's plugin/native-layer
-  // restoration once after a burst of incremental edits settles. The bump alone
-  // re-runs the restoration effect; it changes no serialized project field, so
-  // the snapshot subscription dedupes it (no echo).
-  const RESTORE_DEBOUNCE_MS = 200;
   const scheduleRestore = (): void => {
     if (restoreTimerRef.current) clearTimeout(restoreTimerRef.current);
     restoreTimerRef.current = setTimeout(() => {
       restoreTimerRef.current = null;
-      useAppStore.setState((s) => ({
-        projectGeneration: s.projectGeneration + 1,
-      }));
-    }, RESTORE_DEBOUNCE_MS);
+      useAppStore.setState((s) => ({ projectGeneration: s.projectGeneration + 1 }));
+    }, 200);
   };
 
   const applyRemoteSnapshot = (project: GeoLibreProject, initial: boolean): void => {
-    // Keep each participant's own camera: replace the incoming view with the
-    // local one before applying, so a peer's edit never yanks our viewport.
-    // Where others are looking is conveyed by presence viewport rectangles.
-    const localView = mapControllerRef.current?.readView() ?? useAppStore.getState().mapView;
-    const merged: GeoLibreProject = { ...project, mapView: localView };
+    const state = useAppStore.getState();
+    const localView = mapControllerRef.current?.readView() ?? state.mapView;
+    const merged = mergeInboundCollaborationProject(project, localView, state.projectPlugins);
     if (initial) {
-      // First bootstrap (the welcome snapshot): a one-time full loadProject is
-      // fine and runs the plugin/native-layer restoration so the joiner sees
-      // the host's existing 3D-tiles/deck/raster layers.
       useAppStore
         .getState()
         .loadProject(merged, null, { rememberRecent: false, presenting: false });
     } else {
-      // Incremental remote edit: apply the project slice immediately so
-      // MapLibre-native layers (geojson, vector/raster tiles, …) reconcile via
-      // MapCanvas's syncLayers without flicker. We apply directly rather than
-      // via loadProject so the local user's selectedLayerId isn't reset to the
-      // first layer on every remote edit.
       const applied = applyProjectToStore(merged);
       useAppStore.setState({ ...applied });
       clearHistory();
-      // Plugin-rendered layer types (raster-COG, LiDAR, 3D-tiles, deck) are NOT
-      // handled by syncLayers — DesktopShell's restoration effect (keyed on
-      // projectGeneration) renders them. Bump it, debounced, so a burst of edits
-      // triggers that heavier restoration once after it settles rather than on
-      // every snapshot.
       scheduleRestore();
     }
-    // Cache the POST-normalization serialization (mirrors useEmbedBridge): the
-    // store update we just made re-serializes to this exact string and is
-    // suppressed, so a remote apply never echoes back as a new snapshot.
-    // Serializing `merged` (the pre-normalization input) instead would mismatch
-    // applyProjectToStore's normalized output (deduped styles, defaults,
-    // reordering) and create a broadcast feedback loop.
-    lastContentRef.current = serializeProject(buildProjectSnapshot(mapControllerRef));
+    lastContentRef.current = serializeProject(buildProjectEgressSnapshot(mapControllerRef));
   };
 
   const handleMessage = (message: ServerMessage): void => {
     const store = useAppStore.getState();
     switch (message.type) {
       case "welcome": {
-        joinedRef.current = true;
         selfIdRef.current = message.clientId;
         store.setCollaboration({
           isActive: true,
@@ -200,15 +168,13 @@ export function useCollaboration(
           role: message.role,
           mode: message.mode,
           participants: message.participants,
-          // Bootstrap (or, on a reconnect, re-seed) the chat log from the relay's
-          // recent history so a late joiner sees the conversation so far. Default
-          // to [] so an older relay that omits `chat` can't leave the slice
-          // undefined (which would crash the chat UI).
           chat: message.chat ?? [],
+          requireIdentity: message.requireIdentity ?? false,
+          identitySupported: message.identitySupported ?? false,
+          lockedLayerIds: message.lockedLayerIds ?? [],
+          invites: message.invites ?? [],
           error: null,
         });
-        // Bootstrap existing participants' cursors/viewports so they're visible
-        // immediately, not only after their next move.
         for (const [clientId, entry] of Object.entries(message.presence)) {
           if (clientId === message.clientId) continue;
           const participant = message.participants.find((p) => p.clientId === clientId);
@@ -219,9 +185,16 @@ export function useCollaboration(
             view: entry.view,
           });
         }
-        if (message.snapshot) applyRemoteSnapshot(message.snapshot, true);
-        // Resolve the connect() promise so start()/join() (and the dialog's busy
-        // state) settle only once the join actually succeeds.
+        if (message.snapshot) {
+          applyRemoteSnapshot(message.snapshot, true);
+        } else if (message.role === "host") {
+          void sendSnapshot();
+        }
+        if (message.role === "guest" && useAppStore.getState().collaboration.followHost) {
+          const host = message.participants.find((participant) => participant.role === "host");
+          const hostView = host ? message.presence[host.clientId]?.view : null;
+          if (hostView) mapControllerRef.current?.applyView(hostView);
+        }
         const pending = pendingConnectRef.current;
         pendingConnectRef.current = null;
         pending?.resolve();
@@ -243,7 +216,6 @@ export function useCollaboration(
           view: message.view,
         };
         store.updateCollaborationPresence(message.clientId, presence);
-        // Follow mode: mirror the host's camera onto the local map.
         if (collab.followHost && participant?.role === "host" && message.view) {
           mapControllerRef.current?.applyView(message.view);
         }
@@ -251,7 +223,6 @@ export function useCollaboration(
       }
       case "participants": {
         store.setCollaboration({ participants: message.participants });
-        // Drop presence for anyone who left so stale cursors don't linger.
         const present = new Set(message.participants.map((p) => p.clientId));
         const presence = useAppStore.getState().collaboration.presence;
         for (const id of Object.keys(presence)) {
@@ -263,22 +234,72 @@ export function useCollaboration(
         store.setCollaboration({ mode: message.mode });
         break;
       case "chat":
-        // The relay echoes our own messages back too, so the store is the single
-        // ordered source of truth; addCollaborationChat de-dupes by id.
         store.addCollaborationChat(message.message);
         break;
-      case "error":
+      case "comment-mutation": {
+        const action = message.action;
+        if (action.type === "add") {
+          store.addComment(action.comment);
+        } else if (action.type === "reply") {
+          store.replyToComment(action.commentId, action.reply);
+        } else if (action.type === "toggle-resolve") {
+          store.toggleResolveComment(action.commentId, action.resolved);
+        } else if (action.type === "delete") {
+          store.deleteComment(action.commentId);
+        }
+        break;
+      }
+      case "invite-created": {
+        const current = useAppStore.getState().collaboration.invites;
+        store.setCollaboration({ invites: [...current, message.invite] });
+        break;
+      }
+      case "invite-revoked": {
+        const current = useAppStore.getState().collaboration.invites;
+        store.setCollaboration({ invites: current.filter((i) => i.token !== message.token) });
+        break;
+      }
+      case "session-config": {
+        if (message.requireIdentity !== undefined) {
+          store.setCollaboration({ requireIdentity: message.requireIdentity });
+        }
+        break;
+      }
+      case "layer-locks": {
+        store.setCollaboration({ lockedLayerIds: message.lockedLayerIds });
+        break;
+      }
+      case "kicked": {
+        disconnect();
+        useAppStore.getState().resetCollaboration();
+        useAppStore
+          .getState()
+          .setCollaboration({ error: message.reason ?? "Removed from session." });
+        break;
+      }
+      case "error": {
+        if (pendingConnectRef.current) {
+          const pending = pendingConnectRef.current;
+          pendingConnectRef.current = null;
+          disconnect();
+          store.setCollaboration({ connecting: false, error: message.message });
+          pending.reject(new Error(message.message));
+          return;
+        }
         store.setCollaboration({ error: message.message });
-        // A too-large project will fail on every subsequent edit; pause sending
-        // so it doesn't re-fail in a loop until the session is rejoined.
         if (message.code === "too-large") syncPausedRef.current = true;
         break;
+      }
     }
   };
 
-  // Wire the store subscription and map presence handlers once a connection is
-  // open. Returns a teardown that removes them all.
-  const attach = (displayName: string, color: string, hostToken: string | undefined): void => {
+  const attach = (
+    displayName: string,
+    color: string,
+    hostToken: string | undefined,
+    inviteToken?: string,
+    identityToken?: string,
+  ): void => {
     const conn = connRef.current;
     if (!conn) return;
 
@@ -287,28 +308,26 @@ export function useCollaboration(
       if (debounce) clearTimeout(debounce);
       debounce = setTimeout(() => {
         debounce = null;
-        sendSnapshot();
+        void sendSnapshot();
       }, SNAPSHOT_DEBOUNCE_MS);
     };
 
-    // Only schedule when the project content could have changed; presence and
-    // collaboration-slice writes (remote cursors) must not keep resetting the
-    // debounce and starving our own edits.
     const unsubscribe = useAppStore.subscribe((state, prev) => {
       if (projectChanged(state, prev)) scheduleSnapshot();
     });
 
-    const map = mapControllerRef.current?.getMap() ?? null;
-    const detachMap = map ? bindPresence(map, conn) : () => {};
-
-    // Send join once the socket is open (attach runs from onOpen).
     conn.send({
       type: "join",
       clientId: selfIdRef.current ?? crypto.randomUUID(),
       displayName,
       color,
       hostToken,
+      inviteToken,
+      identityToken,
     });
+
+    const map = mapControllerRef.current?.getMap() ?? null;
+    const detachMap = map ? bindPresence(map, conn) : () => {};
 
     teardownRef.current = () => {
       if (debounce) clearTimeout(debounce);
@@ -323,21 +342,16 @@ export function useCollaboration(
       const now = Date.now();
       if (now - lastCursor < CURSOR_THROTTLE_MS) return;
       lastCursor = now;
-      conn.send({
-        type: "presence",
-        cursor: { lng: e.lngLat.lng, lat: e.lngLat.lat },
-      });
+      conn.send({ type: "presence", cursor: { lng: e.lngLat.lng, lat: e.lngLat.lat } });
     };
     const onMouseOut = () => conn.send({ type: "presence", cursor: null });
-    const onMoveEnd = () =>
-      conn.send({
-        type: "presence",
-        view: mapControllerRef.current?.readView() ?? null,
-      });
+    const onMoveEnd = (event?: { flightCameraToken?: number }) => {
+      if (event?.flightCameraToken !== undefined) return;
+      conn.send({ type: "presence", view: mapControllerRef.current?.readView() ?? null });
+    };
     map.on("mousemove", onMouseMove);
     map.on("mouseout", onMouseOut);
     map.on("moveend", onMoveEnd);
-    // Announce our initial viewport immediately.
     onMoveEnd();
     return () => {
       map.off("mousemove", onMouseMove);
@@ -346,58 +360,68 @@ export function useCollaboration(
     };
   };
 
-  // Resolves once the connection joins (welcome) and rejects on a fatal
-  // connect failure, so callers can keep a busy state until the join really
-  // succeeds.
   const connect = (
     sessionId: string,
     displayName: string,
     color: string,
     hostToken: string | undefined,
+    options?: { inviteToken?: string; identityToken?: string },
   ): Promise<void> => {
-    // Unreachable when disabled (the UI is hidden), but guard so `baseUrl` is
-    // a string below without a non-null assertion.
-    if (!baseUrl) return Promise.reject(new Error("not configured"));
     disconnect();
-    joinedRef.current = false;
     syncPausedRef.current = false;
     selfIdRef.current = crypto.randomUUID();
     lastContentRef.current = null;
     revRef.current = 0;
+
+    const normalizedCode = sessionId.trim().toUpperCase();
+
+    const selfParticipant: CollaborationParticipant = {
+      clientId: selfIdRef.current,
+      displayName,
+      color,
+      role: hostToken ? "host" : "guest",
+      editOverride: null,
+    };
+
     useAppStore.getState().setCollaboration({
       connecting: true,
-      sessionId,
+      isActive: false,
+      sessionId: normalizedCode,
       selfName: displayName,
       selfColor: color,
+      role: hostToken ? "host" : "guest",
+      mode: "co-edit",
+      clientId: selfIdRef.current,
+      participants: [selfParticipant],
+      followHost: !hostToken,
       error: null,
     });
+
     return new Promise<void>((resolve, reject) => {
       pendingConnectRef.current = { resolve, reject };
-      const conn = new CollabConnection(sessionWsUrl(baseUrl, sessionId), {
-        onOpen: () => attach(displayName, color, hostToken),
-        onMessage: handleMessage,
+
+      const conn = new CollabConnection(sessionWsUrl(baseUrl!, normalizedCode), {
+        onOpen: () => {
+          if (connRef.current !== conn) return;
+          attach(displayName, color, hostToken, options?.inviteToken, options?.identityToken);
+        },
+        onMessage: (msg) => {
+          if (connRef.current !== conn) return;
+          handleMessage(msg);
+        },
         onClose: (reconnecting) => {
-          // A reconnect re-runs onOpen -> attach -> join, so drop the stale
-          // store subscription/handlers first.
+          if (connRef.current && connRef.current !== conn) return;
           teardownRef.current?.();
           teardownRef.current = null;
-          // A disconnect before the first successful join (bad session code,
-          // unreachable relay) is fatal: stop retrying and surface the error to
-          // the dialog instead of spinning forever. close() here suppresses the
-          // pending reconnect (see CollabConnection).
-          if (reconnecting && !joinedRef.current) {
-            const pending = pendingConnectRef.current;
+          if (reconnecting && pendingConnectRef.current) {
+            const p = pendingConnectRef.current;
             pendingConnectRef.current = null;
-            disconnect();
-            useAppStore.getState().setCollaboration({
-              connecting: false,
-              isActive: false,
-              error: i18n.t("collaborate.connectFailed"),
-            });
-            pending?.reject(new Error("connect failed"));
-            return;
+            conn.close();
+            useAppStore
+              .getState()
+              .setCollaboration({ connecting: false, error: "Could not connect to the session." });
+            p.reject(new Error("Could not connect to the session."));
           }
-          useAppStore.getState().setCollaboration({ connecting: reconnecting });
         },
       });
       connRef.current = conn;
@@ -406,8 +430,14 @@ export function useCollaboration(
   };
 
   const disconnect = (): void => {
+    snapshotRequestRef.current += 1;
     teardownRef.current?.();
     teardownRef.current = null;
+    if (pendingConnectRef.current) {
+      const p = pendingConnectRef.current;
+      pendingConnectRef.current = null;
+      p.reject(new Error(i18n.t("comments.sessionDisconnected")));
+    }
     connRef.current?.close();
     connRef.current = null;
     selfIdRef.current = null;
@@ -415,17 +445,16 @@ export function useCollaboration(
       clearTimeout(restoreTimerRef.current);
       restoreTimerRef.current = null;
     }
-    // Drop any in-flight connect promise without settling it; a fresh connect()
-    // installs a new one, and the only fatal path settles it explicitly above.
-    pendingConnectRef.current = null;
   };
 
-  // `connect`/`disconnect` close only over stable refs and `baseUrl`, so keying
-  // these actions on `baseUrl` alone is correct; listing `connect` would
-  // needlessly re-create them every render.
   const start = useCallback(
-    async (displayName: string, color: string, mode: CollaborationMode) => {
-      const session = await createSession(mode, baseUrl);
+    async (
+      displayName: string,
+      color: string,
+      mode: CollaborationMode,
+      requireIdentity?: boolean,
+    ) => {
+      const session = await createSession({ mode, requireIdentity }, baseUrl);
       await connect(session.sessionId, displayName, color, session.hostToken);
       return session.sessionId;
     },
@@ -434,8 +463,13 @@ export function useCollaboration(
   );
 
   const join = useCallback(
-    async (sessionId: string, displayName: string, color: string) => {
-      await connect(sessionId.trim().toUpperCase(), displayName, color, undefined);
+    async (
+      sessionId: string,
+      displayName: string,
+      color: string,
+      options?: { inviteToken?: string; identityToken?: string },
+    ) => {
+      await connect(sessionId.trim().toUpperCase(), displayName, color, undefined, options);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [baseUrl],
@@ -451,11 +485,31 @@ export function useCollaboration(
   }, []);
 
   const setParticipantMode = useCallback((clientId: string, canEditFlag: boolean) => {
-    connRef.current?.send({
-      type: "set-participant-mode",
-      clientId,
-      canEdit: canEditFlag,
-    });
+    connRef.current?.send({ type: "set-participant-mode", clientId, canEdit: canEditFlag });
+  }, []);
+
+  const mintInvite = useCallback((role: CollaborationMode, maxUses?: number) => {
+    connRef.current?.send({ type: "mint-invite", role, maxUses });
+  }, []);
+
+  const revokeInvite = useCallback((token: string) => {
+    connRef.current?.send({ type: "revoke-invite", token });
+  }, []);
+
+  const setSessionConfig = useCallback((config: { requireIdentity?: boolean }) => {
+    connRef.current?.send({ type: "set-session-config", ...config });
+  }, []);
+
+  const setLayerLocks = useCallback((lockedLayerIds: string[]) => {
+    connRef.current?.send({ type: "set-layer-locks", lockedLayerIds });
+  }, []);
+
+  const kickParticipant = useCallback((clientId: string, reason?: string) => {
+    connRef.current?.send({ type: "kick-participant", clientId, reason });
+  }, []);
+
+  const blockParticipant = useCallback((clientId: string, reason?: string) => {
+    connRef.current?.send({ type: "block-participant", clientId, reason });
   }, []);
 
   const sendChat = useCallback((text: string, coordinate?: { lng: number; lat: number } | null) => {
@@ -464,12 +518,14 @@ export function useCollaboration(
     return connRef.current?.send({ type: "chat", text: trimmed, coordinate }) ?? false;
   }, []);
 
+  const sendCommentMutation = useCallback((action: CommentMutationAction) => {
+    return connRef.current?.send({ type: "comment-mutation", action }) ?? false;
+  }, []);
+
   const setFollowHost = useCallback((enabled: boolean) => {
     const store = useAppStore.getState();
     store.setCollaboration({ followHost: enabled });
     if (!enabled) return;
-    // Jump to the host's last-known viewport immediately so following takes
-    // effect now rather than only on the host's next move.
     const host = store.collaboration.participants.find((p) => p.role === "host");
     const view = host ? store.collaboration.presence[host.clientId]?.view : null;
     if (view) mapControllerRef.current?.applyView(view);
@@ -478,42 +534,21 @@ export function useCollaboration(
 
   return {
     enabled,
+    canEdit,
+    canEditLayer,
     start,
     join,
     leave,
     setMode,
     setParticipantMode,
+    mintInvite,
+    revokeInvite,
+    setSessionConfig,
+    setLayerLocks,
+    kickParticipant,
+    blockParticipant,
     setFollowHost,
     sendChat,
+    sendCommentMutation,
   };
-}
-
-// Reference-compares the store fields that feed a project snapshot. Every
-// mutating store action produces new refs for the slice it touches, so this is
-// a cheap, correct "did the broadcastable project change?" check that ignores
-// selection, UI, and collaboration-slice churn.
-//
-// `mapView` is deliberately NOT compared: each participant keeps their own
-// camera (applyRemoteSnapshot overrides the incoming view), so broadcasting a
-// full-project snapshot on every pan/zoom only churns receivers' layer
-// reconciliation for no visible effect — and that churn was intermittently
-// crashing the map under rapid panning. Camera is shared through presence
-// (viewport rectangles + opt-in follow-host) instead.
-function projectChanged(
-  a: ReturnType<typeof useAppStore.getState>,
-  b: ReturnType<typeof useAppStore.getState>,
-): boolean {
-  return (
-    a.projectName !== b.projectName ||
-    a.basemapStyleUrl !== b.basemapStyleUrl ||
-    a.basemapVisible !== b.basemapVisible ||
-    a.basemapOpacity !== b.basemapOpacity ||
-    a.layers !== b.layers ||
-    a.layerGroups !== b.layerGroups ||
-    a.preferences !== b.preferences ||
-    a.projectPlugins !== b.projectPlugins ||
-    a.legend !== b.legend ||
-    a.storymap !== b.storymap ||
-    a.metadata !== b.metadata
-  );
 }

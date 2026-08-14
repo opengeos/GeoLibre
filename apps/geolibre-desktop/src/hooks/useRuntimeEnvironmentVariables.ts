@@ -1,7 +1,12 @@
 import { normalizeGeocodingProviderId, useAppStore } from "@geolibre/core";
 import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { mergeRuntimeEnv, type RuntimeEnv } from "../lib/assistant/provider";
+import {
+  mergeRuntimeEnv,
+  readBuildTimeAssistantEnv,
+  readDeploymentAssistantEnv,
+  type RuntimeEnv,
+} from "../lib/assistant/provider";
 import { loadOsEnvVars, readOsEnv } from "../lib/assistant/os-env";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
@@ -18,7 +23,7 @@ export function useRuntimeEnvironmentVariables() {
   // updates (e.g. dragging the accent-color picker), which normalizeDesktopSettings
   // would otherwise churn into a fresh object every time — needlessly re-running
   // this effect and re-rendering the host.
-  const aiProviderEnv = useDesktopSettingsStore(useShallow((s) => s.desktopSettings.aiProviderEnv));
+  const aiProfiles = useDesktopSettingsStore(useShallow((s) => s.desktopSettings.aiProfiles));
   const lastSerializedEnv = useRef<string | null>(null);
   const isFirstRender = useRef(true);
 
@@ -63,10 +68,14 @@ export function useRuntimeEnvironmentVariables() {
 
     // Device-local AI provider credentials, keyed by env var name. Empty values
     // are dropped so a blank entry never blanks out a build-time or OS value.
+    // Credentials from all profiles are projected so any profile can be selected
+    // at runtime without re-projecting.
     const aiEnv: Record<string, string> = {};
-    for (const [key, value] of Object.entries(aiProviderEnv)) {
-      const name = key.trim();
-      if (name && value) aiEnv[name] = value;
+    for (const profile of aiProfiles) {
+      for (const [key, value] of Object.entries(profile.fieldValues)) {
+        const name = key.trim();
+        if (name && value) aiEnv[name] = value;
+      }
     }
 
     // Only inject the Cesium token when set: an empty value would override (and
@@ -79,7 +88,13 @@ export function useRuntimeEnvironmentVariables() {
     // Precedence (low -> high): OS env < device AI keys < geocoder < cesium <
     // explicit project Environment variables. See mergeRuntimeEnv for details.
     const runtimeEnv = mergeRuntimeEnv({
-      osEnv,
+      // Build-time keys are the lowest-precedence defaults. OS, saved profile,
+      // and project values can all override them without requiring a rebuild.
+      osEnv: {
+        ...readBuildTimeAssistantEnv(),
+        ...readDeploymentAssistantEnv(),
+        ...osEnv,
+      },
       aiEnv,
       geocoderEnv,
       cesiumEnv,
@@ -108,5 +123,5 @@ export function useRuntimeEnvironmentVariables() {
     lastSerializedEnv.current = serializedEnv;
 
     window.dispatchEvent(new CustomEvent("geolibre:runtime-env-change", { detail: runtimeEnv }));
-  }, [environmentVariables, geocoding, cesiumIonToken, aiProviderEnv, osEnv]);
+  }, [environmentVariables, geocoding, cesiumIonToken, aiProfiles, osEnv]);
 }

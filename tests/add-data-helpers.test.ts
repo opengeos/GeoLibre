@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { beforeEach, describe, it } from "node:test";
+import {
+  DEFAULT_LAYER_STYLE,
+  darkenHex,
+  type GeoLibreLayer,
+  LAYER_PALETTE,
+  useAppStore,
+} from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
   EOX_S2CLOUDLESS_ATTRIBUTION,
@@ -8,6 +15,7 @@ import {
 import {
   appendQuery,
   attributionForTileUrl,
+  createBaseLayer,
   createWfsGetCapabilitiesUrl,
   createWmsGetCapabilitiesUrl,
   createWmsTileUrl,
@@ -509,5 +517,129 @@ describe("serviceRequestErrorMessage", () => {
 
   it("uses the fallback when an unclassified error carries no message", () => {
     assert.equal(serviceRequestErrorMessage({}, fakeT, "fallback"), "fallback");
+  });
+});
+
+describe("createBaseLayer", () => {
+  /** A collection of `count` points, enough to be classified as a point layer. */
+  function points(count = 3): FeatureCollection {
+    return {
+      type: "FeatureCollection",
+      features: Array.from({ length: count }, (_, index) => ({
+        type: "Feature" as const,
+        properties: {},
+        geometry: { type: "Point" as const, coordinates: [index, index] },
+      })),
+    };
+  }
+
+  /** Puts `layer` in the store so the next createBaseLayer call can see it. */
+  function addToStore(layer: GeoLibreLayer): void {
+    useAppStore.getState().addLayer(layer);
+  }
+
+  beforeEach(() => {
+    useAppStore.getState().newProject({ name: "Add Data" });
+  });
+
+  it("leaves a non-vector layer on the flat schema defaults", () => {
+    const layer = createBaseLayer("Imagery", "xyz", { type: "raster" });
+    assert.deepEqual(layer.style, DEFAULT_LAYER_STYLE);
+  });
+
+  it("gives a vector layer a palette color and geometry-appropriate sizing", () => {
+    const layer = createBaseLayer(
+      "Cities",
+      "geojson",
+      { type: "geojson" },
+      {},
+      {
+        geojson: points(),
+      },
+    );
+    assert.equal(layer.style.fillColor, LAYER_PALETTE[0]);
+    assert.equal(layer.style.strokeColor, darkenHex(LAYER_PALETTE[0], 0.55));
+    // The point overrides, not DEFAULT_LAYER_STYLE's 6 / 0.6.
+    assert.equal(layer.style.circleRadius, 5);
+    assert.equal(layer.style.fillOpacity, 0.9);
+  });
+
+  it("does not repeat a palette color a layer already in the project wears", () => {
+    addToStore(createBaseLayer("First", "geojson", { type: "geojson" }, {}, { geojson: points() }));
+    const second = createBaseLayer(
+      "Second",
+      "geojson",
+      { type: "geojson" },
+      {},
+      {
+        geojson: points(),
+      },
+    );
+    assert.equal(second.style.fillColor, LAYER_PALETTE[1]);
+  });
+
+  it("gives each layer of one multi-layer import its own color", () => {
+    // The GPX case: both groups are built before either reaches the store, so
+    // only pendingLayers keeps the second off the first's color.
+    const first = createBaseLayer(
+      "Tracks",
+      "geojson",
+      { type: "geojson" },
+      {},
+      {
+        geojson: points(),
+      },
+    );
+    const second = createBaseLayer(
+      "Waypoints",
+      "geojson",
+      { type: "geojson" },
+      {},
+      {
+        geojson: points(),
+        pendingLayers: [first],
+      },
+    );
+    assert.equal(first.style.fillColor, LAYER_PALETTE[0]);
+    assert.equal(second.style.fillColor, LAYER_PALETTE[1]);
+  });
+
+  it("reserves no palette color for a layer that paints from no collection", () => {
+    // A non-spatial attribute table (delimited text with no coordinate columns)
+    // passes no geojson, so the next real vector layer still gets blue.
+    addToStore(createBaseLayer("Table", "geojson", { type: "geojson" }));
+    const next = createBaseLayer(
+      "Cities",
+      "geojson",
+      { type: "geojson" },
+      {},
+      {
+        geojson: points(),
+      },
+    );
+    assert.equal(next.style.fillColor, LAYER_PALETTE[0]);
+  });
+
+  it("enables simplestyle rendering when the collection carries those properties", () => {
+    const styled: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { "marker-color": "#ff0000" },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+      ],
+    };
+    assert.equal(
+      createBaseLayer("Feed", "geojson", { type: "geojson" }, {}, { geojson: styled }).style
+        .simpleStyleEnabled,
+      true,
+    );
+    assert.equal(
+      createBaseLayer("Plain", "geojson", { type: "geojson" }, {}, { geojson: points() }).style
+        .simpleStyleEnabled,
+      false,
+    );
   });
 });

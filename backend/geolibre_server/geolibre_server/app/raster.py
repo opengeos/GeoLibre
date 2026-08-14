@@ -929,6 +929,7 @@ print("{marker}" + json.dumps({"output_path": output_path}))
 
 
 _RASTER_CALC_SCRIPT = """
+import ast
 import json, re, sys
 
 import numpy as np
@@ -1024,6 +1025,89 @@ safe_funcs = {
     "e": np.e,
 }
 namespace.update(safe_funcs)
+# Band arrays are full ndarrays, so attribute access (``A.tofile(...)``,
+# ``A.dump(...)``) would still write files even with an empty ``__builtins__``
+# and no bare ``np``. Allowlist the expression AST before ``eval`` so only
+# curated calls/operators run — and so list/bytes/tuple multiplication cannot
+# allocate unbounded memory before the shape check.
+try:
+    tree = ast.parse(expression, mode="eval")
+except SyntaxError as exc:
+    raise SystemExit(f"Failed to evaluate expression: {exc}") from exc
+allowed_calls = set(safe_funcs)
+_allowed_nodes = (
+    ast.Expression,
+    ast.Name,
+    ast.Load,
+    ast.Constant,
+    ast.Call,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.BoolOp,
+    ast.Compare,
+    ast.IfExp,
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.FloorDiv,
+    ast.Mod,
+    ast.Pow,
+    ast.UAdd,
+    ast.USub,
+    ast.Not,
+    ast.And,
+    ast.Or,
+    ast.Eq,
+    ast.NotEq,
+    ast.Lt,
+    ast.LtE,
+    ast.Gt,
+    ast.GtE,
+    ast.keyword,
+)
+# ``**`` on two plain integers stays exact, so ``9**9**6`` builds a
+# half-million-digit result and pins a core for tens of seconds before the shape
+# check can reject it. Require the exponent to be a small numeric literal unless
+# it derives from a band or a curated call, whose element-wise float power is
+# bounded by the raster's shape. 64 is far past anything band math needs
+# (squares, gamma, roots).
+MAX_POW_EXPONENT = 64
+for node in ast.walk(tree):
+    if not isinstance(node, _allowed_nodes):
+        raise SystemExit(
+            f"Expression may not use {type(node).__name__} "
+            "(band math only allows curated functions and operators)"
+        )
+    if isinstance(node, ast.Constant) and not isinstance(node.value, (int, float, bool)):
+        raise SystemExit(
+            "Expression may only use numeric constants "
+            "(band math only allows curated functions and operators)"
+        )
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+        exponent = node.right
+        while isinstance(exponent, ast.UnaryOp):
+            exponent = exponent.operand
+        band_backed = any(
+            isinstance(inner, (ast.Name, ast.Call)) for inner in ast.walk(exponent)
+        )
+        if not band_backed:
+            if not isinstance(exponent, ast.Constant):
+                raise SystemExit(
+                    "Exponent must be a plain number or derive from a band "
+                    f"(band math caps '**' at {MAX_POW_EXPONENT})"
+                )
+            if abs(exponent.value) > MAX_POW_EXPONENT:
+                raise SystemExit(
+                    f"Exponent may not exceed {MAX_POW_EXPONENT} "
+                    "(band math caps '**' to keep evaluation bounded)"
+                )
+    if isinstance(node, ast.Call):
+        # ``np.where(...)`` / ``A.tofile(...)`` parse as Attribute-backed calls;
+        # Attribute is already rejected above, but keep an explicit Name check.
+        if not isinstance(node.func, ast.Name) or node.func.id not in allowed_calls:
+            name = node.func.id if isinstance(node.func, ast.Name) else type(node.func).__name__
+            raise SystemExit(f"Call to '{name}' is not allowed in band math")
 try:
     with np.errstate(all="ignore"):
         result = eval(expression, {"__builtins__": {}}, namespace)

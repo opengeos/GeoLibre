@@ -128,16 +128,118 @@ export function tagFeatureKeys(collection: FeatureCollection): FeatureCollection
   };
 }
 
+/** Prefix Geoman namespaces its own feature properties with. */
+const GEOMAN_PROPERTY_PREFIX = "__gm_";
+
+/**
+ * The property names Geoman claims as its own "shape properties".
+ *
+ * On import it reads each of these from a feature's plain, unprefixed
+ * attributes, and on export it deletes **both** the plain and the prefixed form
+ * from the feature's own properties and re-emits its value as `__gm_<name>`
+ * (`parseGmShapeProperties` / `parseExtraProperties` in
+ * `@geoman-io/maplibre-geoman-free`). A data layer with a column called
+ * `height` or `id` therefore comes back from an edit session with that column
+ * renamed to `__gm_height` / `__gm_id` — silent attribute corruption, and these
+ * are ordinary GIS column names (building heights, source ids).
+ *
+ * Mirrored from the library's `Th` validator map, which is internal and not
+ * exported. If Geoman adds a shape property, a column of that name starts
+ * getting renamed again; `tests/geo-editor-geometry.test.ts` pins the round-trip
+ * behavior this list exists to defend.
+ */
+export const GEOMAN_SHAPE_PROPERTIES: ReadonlySet<string> = new Set([
+  "id",
+  "shape",
+  "center",
+  "width",
+  "height",
+  "xSemiAxis",
+  "ySemiAxis",
+  "angle",
+  "text",
+  "disableEdit",
+  "group",
+]);
+
+/** Each edited feature's attributes as they were loaded, keyed by feature tag. */
+export type EditedFeatureProperties = ReadonlyMap<string, Record<string, unknown> | null>;
+
+/**
+ * Snapshot the attributes of a tagged collection on its way into the editor.
+ *
+ * A geometry-edit session changes geometry only — attributes are edited in the
+ * attribute table, not here — so the values captured here are what the features
+ * must still have on the way out, whatever Geoman did to them in between.
+ *
+ * `source` is the collection as it was **before** tagging, read positionally:
+ * {@link tagFeatureKeys} maps one input feature to one output feature in order.
+ * Without it a feature whose `properties` were `null` would be snapshotted as
+ * `{}` (tagging has to put the tag somewhere), and a geometry-only save would
+ * quietly rewrite valid GeoJSON `null` into an empty object.
+ *
+ * @param collection The collection from {@link tagFeatureKeys}.
+ * @param source The same collection before tagging, for exact attributes.
+ * @returns Attributes (tag removed) keyed by feature tag.
+ */
+export function captureEditedProperties(
+  collection: FeatureCollection,
+  source?: FeatureCollection,
+): Map<string, Record<string, unknown> | null> {
+  const snapshot = new Map<string, Record<string, unknown> | null>();
+  collection.features.forEach((feature, index) => {
+    const tag = feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY];
+    if (tag == null) return;
+    const original = source?.features[index];
+    if (original) {
+      const props = original.properties;
+      snapshot.set(String(tag), props == null ? null : { ...props });
+      return;
+    }
+    const rawProps = feature.properties;
+    if (rawProps == null) {
+      snapshot.set(String(tag), null);
+      return;
+    }
+    const properties = { ...rawProps };
+    delete properties[GEOMETRY_EDIT_FID_PROPERTY];
+    snapshot.set(String(tag), properties);
+  });
+  return snapshot;
+}
+
+/** A copy of `properties` without Geoman's namespaced keys or the edit tag. */
+function withoutEditorProperties(rawProps: Record<string, unknown>): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(rawProps)) {
+    if (key === GEOMETRY_EDIT_FID_PROPERTY) continue;
+    if (key.startsWith(GEOMAN_PROPERTY_PREFIX)) continue;
+    properties[key] = value;
+  }
+  return properties;
+}
+
 /**
  * Restore stable feature ids from the load-time tag and strip it, so the store
  * layer stays tag-free. Ids are guaranteed unique: a duplicated tag (e.g. from a
  * Geoman copy/split that cloned `properties`) and untagged new features each get
  * a fresh id that does not collide.
  *
+ * Attributes are restored from `originalProperties` when the feature was one of
+ * the loaded ones, because Geoman rewrites any column whose name it reserves
+ * (see {@link GEOMAN_SHAPE_PROPERTIES}) and the session was never allowed to
+ * change attributes anyway. A feature drawn during the session has no snapshot,
+ * so it keeps what it has minus the editor's own `__gm_*` bookkeeping, which
+ * would otherwise show up as columns in the layer's attribute table.
+ *
  * @param collection The editor's current feature collection (tagged).
- * @returns A new collection with unique stable ids and the tag removed.
+ * @param originalProperties Snapshot from {@link captureEditedProperties}.
+ * @returns A new collection with unique stable ids and editor keys removed.
  */
-export function reconcileEditedFeatures(collection: FeatureCollection): FeatureCollection {
+export function reconcileEditedFeatures(
+  collection: FeatureCollection,
+  originalProperties?: EditedFeatureProperties,
+): FeatureCollection {
   const ids = makeIdAllocator();
   return {
     type: "FeatureCollection",
@@ -145,13 +247,15 @@ export function reconcileEditedFeatures(collection: FeatureCollection): FeatureC
       const rawProps = feature.properties;
       const tag = rawProps?.[GEOMETRY_EDIT_FID_PROPERTY];
       // Preserve null properties as null (GeoJSON allows it, and a feature drawn
-      // during the session may have null); only strip the tag from real objects.
+      // during the session may have null).
       let properties: Record<string, unknown> | null;
-      if (rawProps == null) {
+      const restored = tag == null ? undefined : originalProperties?.get(String(tag));
+      if (restored !== undefined) {
+        properties = restored === null ? null : { ...restored };
+      } else if (rawProps == null) {
         properties = null;
       } else {
-        properties = { ...rawProps };
-        delete properties[GEOMETRY_EDIT_FID_PROPERTY];
+        properties = withoutEditorProperties(rawProps);
       }
       const id = ids.take(tag);
       return { ...feature, id, properties };

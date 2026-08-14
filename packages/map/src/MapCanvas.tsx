@@ -1,10 +1,14 @@
 import {
   applyGroupEffects,
+  createPointerElevationResolver,
+  getActiveEllipsoid,
   isDuckDBQueryLayer,
+  NETCDF_IMAGE_SOURCE_KIND,
   PHOTO_FULL_PROPERTY,
   PHOTO_PROPERTY,
   useAppStore,
   type GeoLibreLayer,
+  type PointerElevationResolver,
 } from "@geolibre/core";
 import maplibregl from "maplibre-gl";
 import { memo, useEffect, useMemo, useRef } from "react";
@@ -40,6 +44,17 @@ export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   onControllerReady?: () => void;
+  /**
+   * Whether the status bar's elevation readout may fall back to the public
+   * Open-Meteo service. Supplied by the app, which owns the persisted consent
+   * flag; `@geolibre/map` has no opinion about consent storage.
+   *
+   * **Omitting it denies the remote lookup.** A privacy gate that fails open
+   * would send coordinates off-device for any embedder that simply did not know
+   * to pass a predicate. The terrain path is unaffected either way, since it
+   * sends nothing anywhere.
+   */
+  canUseRemoteElevation?: () => boolean;
 }
 
 export interface MapDiagnosticEvent {
@@ -66,6 +81,29 @@ interface GeoLibreDuckDBBridge {
     point: { x: number; y: number },
   ) => DuckDBIdentifyBridgeResult | null;
   setSelectedFeature?: (layerId: string, featureId: string | null) => void;
+}
+
+/** One band's value at an identified pixel, from the Time Slider bridge. */
+interface TimeSliderBandReading {
+  index: number;
+  name: string | null;
+  value: number;
+  isNodata: boolean;
+}
+
+interface TimeSliderPixelIdentifyBridgeResult {
+  sourceId: string;
+  date: string;
+  url: string;
+  bands: TimeSliderBandReading[];
+}
+
+interface GeoLibreTimeSliderBridge {
+  identifyPixelAt?: (
+    sourceId: string,
+    lngLat: [number, number],
+    options?: { signal?: AbortSignal },
+  ) => Promise<TimeSliderPixelIdentifyBridgeResult | null>;
 }
 
 function stringifyIdentifyValue(value: unknown): string {
@@ -102,11 +140,19 @@ function createIdentifyPopupElement(
 
     const valueCell = document.createElement("div");
     valueCell.className = "break-words text-foreground";
-    // Render inline image data URLs (e.g. a geotagged-photo or field-collection
-    // thumbnail) as an actual thumbnail rather than a multi-kilobyte string.
-    // Match base64 raster images only, excluding SVG (which can carry scripts)
-    // so an untrusted GeoJSON value can't smuggle one in.
-    if (typeof value === "string" && /^data:image\/(?!svg)[\w.+-]+;base64,/i.test(value)) {
+    // Render known KML description structures as sanitized markup. Requiring a
+    // supported tag keeps ordinary text such as "Elevation <500m>" intact.
+    if (
+      key === "description" &&
+      typeof value === "string" &&
+      /<(?:a|b|br|div|em|i|p|span|strong|table|tbody|td|th|thead|tr)\b/i.test(value)
+    ) {
+      appendSanitizedKmlDescription(valueCell, value);
+      // Render inline image data URLs (e.g. a geotagged-photo or field-collection
+      // thumbnail) as an actual thumbnail rather than a multi-kilobyte string.
+      // Match base64 raster images only, excluding SVG (which can carry scripts)
+      // so an untrusted GeoJSON value can't smuggle one in.
+    } else if (typeof value === "string" && /^data:image\/(?!svg)[\w.+-]+;base64,/i.test(value)) {
       const image = document.createElement("img");
       image.src = value;
       image.alt = key;
@@ -128,7 +174,9 @@ function createIdentifyPopupElement(
   // show a second copy of the same photo in the same small box. Filter before
   // the empty-state check so a feature whose only property is `photo_full` still
   // reports "No attributes" rather than rendering an empty panel.
-  const entries = Object.entries(properties).filter(([key]) => key !== PHOTO_FULL_KEY);
+  const entries = Object.entries(properties).filter(
+    ([key]) => key !== PHOTO_FULL_KEY && !key.startsWith("__geolibre_"),
+  );
   if (entries.length === 0 && featureId == null) {
     const empty = document.createElement("div");
     empty.className = "text-muted-foreground";
@@ -139,6 +187,57 @@ function createIdentifyPopupElement(
   }
 
   return root;
+}
+
+const KML_DESCRIPTION_TAGS = new Set([
+  "a",
+  "b",
+  "br",
+  "div",
+  "em",
+  "i",
+  "p",
+  "span",
+  "strong",
+  "table",
+  "tbody",
+  "td",
+  "th",
+  "thead",
+  "tr",
+]);
+
+/** Render useful KML description markup while dropping scripts and attributes. */
+function appendSanitizedKmlDescription(target: HTMLElement, html: string): void {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const copy = (node: Node, parent: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      parent.appendChild(document.createTextNode(node.textContent ?? ""));
+      return;
+    }
+    if (!(node instanceof Element)) return;
+    const tag = node.localName.toLowerCase();
+    if (tag === "script" || tag === "style" || tag === "head" || tag === "meta") return;
+    if (!KML_DESCRIPTION_TAGS.has(tag)) {
+      for (const child of node.childNodes) copy(child, parent);
+      return;
+    }
+    const element = document.createElement(tag);
+    if (tag === "a") {
+      const href = node.getAttribute("href")?.trim();
+      if (href && /^(https?:|mailto:)/i.test(href)) {
+        element.setAttribute("href", href);
+        element.setAttribute("target", "_blank");
+        element.setAttribute("rel", "noopener noreferrer");
+      }
+    }
+    for (const child of node.childNodes) copy(child, element);
+    parent.appendChild(element);
+  };
+  const content = document.createElement("div");
+  content.className = "geolibre-kml-description";
+  for (const child of parsed.body.childNodes) copy(child, content);
+  target.appendChild(content);
 }
 
 function createIdentifyMessagePopupElement(layerName: string, message: string): HTMLElement {
@@ -503,6 +602,7 @@ function identifyStyleLayerIds(layer: GeoLibreLayer): string[] {
     ...nativeIdentifyLayerIds(layer),
     ...nativeIdentifyLayerIds(layer).map(externalExtrusionLayerId),
     ...mbtilesStyleLayerIds(layer),
+    markerLayerId(layer.id),
     circleLayerId(layer.id),
     lineLayerId(layer.id),
     fillExtrusionLayerId(layer.id),
@@ -547,6 +647,50 @@ function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
   return typeof window === "undefined"
     ? undefined
     : (window as Window & { __GEOLIBRE_DUCKDB__?: GeoLibreDuckDBBridge }).__GEOLIBRE_DUCKDB__;
+}
+
+function timeSliderBridge(): GeoLibreTimeSliderBridge | undefined {
+  return typeof window === "undefined"
+    ? undefined
+    : (window as Window & { __GEOLIBRE_TIME_SLIDER__?: GeoLibreTimeSliderBridge })
+        .__GEOLIBRE_TIME_SLIDER__;
+}
+
+/**
+ * Whether Identify should read source pixel values for this layer rather than
+ * query vector features. Set by the Time Slider for its COG/mosaic sources,
+ * which resolve to a different file per timeline date.
+ */
+function isPixelIdentifyLayer(layer: GeoLibreLayer): boolean {
+  return layer.metadata.pixelIdentify === true;
+}
+
+/**
+ * Trim a float sample to something readable. A 32-bit raster value decoded to a
+ * JS double prints all 17 digits of its binary representation
+ * (`48.11851119995117`), which is noise past the sensor's precision — six
+ * significant digits is more than any COG carries. Integers are left alone so a
+ * classification code is never shown in exponential form.
+ */
+function formatPixelValue(value: number): string {
+  if (!Number.isFinite(value)) return String(value);
+  if (Number.isInteger(value)) return String(value);
+  return String(Number(value.toPrecision(6)));
+}
+
+/** Turn a pixel reading into the flat key/value rows the identify popup shows. */
+function pixelIdentifyProperties(
+  result: TimeSliderPixelIdentifyBridgeResult,
+): Record<string, unknown> {
+  const properties: Record<string, unknown> = { Date: result.date };
+  for (const band of result.bands) {
+    // Prefer the COG's own band name, falling back to the 1-based index so
+    // unnamed bands still get a stable, distinct row label.
+    const key = band.name ?? `Band ${band.index}`;
+    const formatted = formatPixelValue(band.value);
+    properties[key] = band.isNodata ? `${formatted} (nodata)` : formatted;
+  }
+  return properties;
 }
 
 function stringSource(value: unknown): string | undefined {
@@ -892,6 +1036,7 @@ export const MapCanvas = memo(function MapCanvas({
   controllerRef,
   onMapDiagnosticEvent,
   onControllerReady,
+  canUseRemoteElevation,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -919,6 +1064,43 @@ export const MapCanvas = memo(function MapCanvas({
   const selectFeature = useAppStore((s) => s.selectFeature);
   const setMapView = useAppStore((s) => s.setMapView);
   const setPointerCoords = useAppStore((s) => s.setPointerCoords);
+  const setPointerElevation = useAppStore((s) => s.setPointerElevation);
+  const setCameraAltitude = useAppStore((s) => s.setCameraAltitude);
+  const showPointerElevation = useAppStore((s) => s.preferences.map.showPointerElevation);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
+  const pointerElevationRef = useRef<PointerElevationResolver | null>(null);
+  // Held in a ref so the once-only init effect can read the current predicate
+  // without re-creating the map when the consent flag changes.
+  const canUseRemoteElevationRef = useRef<() => boolean>(() => true);
+  canUseRemoteElevationRef.current = canUseRemoteElevation ?? (() => false);
+
+  // loadProject resets the readout, but a lookup already in flight for the
+  // previous project would repaint it a moment later -- including Earth to
+  // Earth, where neither the body nor the pointer changed.
+  useEffect(() => {
+    pointerElevationRef.current?.invalidate();
+  }, [projectGeneration]);
+
+  // The resolver consults the preference, but only when a pointer event asks it
+  // to. Switching the toggle off with the cursor resting motionless over the
+  // map (a keyboard-only toggle) would otherwise leave the last resolved value
+  // on screen until the next mousemove.
+  useEffect(() => {
+    if (!showPointerElevation) {
+      // invalidate() before clearing: a lookup scheduled inside the 500ms
+      // debounce window would otherwise still fire the request, and only be
+      // suppressed afterwards by the isEnabled() re-check. Cancelling the timer
+      // means the request is never made at all.
+      pointerElevationRef.current?.invalidate();
+      setPointerElevation(null);
+      return;
+    }
+    // Symmetrically, switching it *on* while the cursor sits still would show
+    // nothing until the next mousemove. Resolve once for wherever the pointer
+    // already is, so the readout appears with the toggle.
+    const coords = useAppStore.getState().pointerCoords;
+    if (coords) pointerElevationRef.current?.update(coords);
+  }, [showPointerElevation, setPointerElevation]);
   const previousSelectedFeatureKey = useRef<string | null>(null);
   const previousDuckDBSelectionLayerId = useRef<string | null>(null);
   const identifyPopup = useRef<maplibregl.Popup | null>(null);
@@ -936,10 +1118,37 @@ export const MapCanvas = memo(function MapCanvas({
     controller.current = mc;
     if (controllerRef) controllerRef.current = mc;
 
-    map.on("mousemove", (e) => {
-      setPointerCoords([e.lngLat.lng, e.lngLat.lat]);
+    // Ground elevation under the cursor for the status bar (issue #1813).
+    // Terrain sampling is synchronous so the readout tracks the pointer live;
+    // the resolver only falls back to the network once the pointer settles.
+    const pointerElevation = createPointerElevationResolver({
+      getMap: () => map,
+      isEarth: () => getActiveEllipsoid().id === "earth",
+      // Read per call, not captured: the map is initialised once, so a captured
+      // value would freeze at whatever the toggle was at mount.
+      isEnabled: () => useAppStore.getState().preferences.map.showPointerElevation,
+      // Only the Open-Meteo fallback is gated; the terrain path sends nothing
+      // anywhere. Checked here rather than by scrubbing the stored preference,
+      // so a project that arrives with the readout switched on still cannot
+      // reach the network without local consent.
+      canUseRemote: () => canUseRemoteElevationRef.current(),
+      emit: setPointerElevation,
     });
-    map.on("mouseout", () => setPointerCoords(null));
+    pointerElevationRef.current = pointerElevation;
+
+    map.on("mousemove", (e) => {
+      const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+      setPointerCoords(point);
+      pointerElevation.update(point);
+    });
+    map.on("mouseout", () => {
+      // invalidate() rather than update(null): both cancel a pending lookup, but
+      // update(null) also emits null, and setPointerCoords(null) already clears
+      // the stored elevation — so emitting here would be a second store write
+      // and re-render saying the same thing.
+      pointerElevation.invalidate();
+      setPointerCoords(null);
+    });
     map.on("error", (event) => {
       // Cancelled tile fetches are already surfaced (as info) by the
       // network capture; logging them here would double-count aborts.
@@ -947,7 +1156,7 @@ export const MapCanvas = memo(function MapCanvas({
       onMapDiagnosticEventRef.current?.(mapErrorDiagnosticEvent(event));
     });
 
-    const updateView = (event?: { originalEvent?: unknown }) => {
+    const updateView = (event?: { originalEvent?: unknown; flightCameraToken?: number }) => {
       // While presenting a story map the presenter owns the camera. Syncing its
       // transient chapter flies and rotations back into the store would both
       // overwrite the saved project view and, worse, re-enter the applyView
@@ -955,7 +1164,14 @@ export const MapCanvas = memo(function MapCanvas({
       // the rotate handler starts orbiting the previous chapter instead of the
       // one just clicked. Skipping the sync keeps the presenter authoritative.
       if (useAppStore.getState().ui.storymapPresenting) return;
+      // The flight simulator likewise owns the camera while it flies, and jumps
+      // it every animation frame. Writing each of those into the store would
+      // overwrite the project's saved view ~60 times a second.
+      if (event?.flightCameraToken !== undefined) return;
       setMapView(mc.readView(), Boolean(event?.originalEvent));
+      // Same moveend cadence as zoom/bearing/pitch: a bar where one number is
+      // live and the rest lag during a drag reads as broken.
+      setCameraAltitude(mc.readCameraAltitude());
     };
     map.on("moveend", updateView);
 
@@ -981,7 +1197,6 @@ export const MapCanvas = memo(function MapCanvas({
     map.on("projectiontransition", updateProjection);
     map.on("load", () => {
       const state = useAppStore.getState();
-      mc.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
       mc.setBasemapVisible(state.basemapVisible);
       mc.setBasemapOpacity(state.basemapOpacity);
       mc.highlightFeature(
@@ -1037,6 +1252,7 @@ export const MapCanvas = memo(function MapCanvas({
       if (resizeFrame !== null) {
         window.cancelAnimationFrame(resizeFrame);
       }
+      pointerElevation.dispose();
       mc.destroy();
       controller.current = null;
       if (controllerRef) controllerRef.current = null;
@@ -1053,7 +1269,6 @@ export const MapCanvas = memo(function MapCanvas({
     prevBasemap.current = basemapStyleUrl;
     map.once("style.load", () => {
       const state = useAppStore.getState();
-      controller.current?.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
       controller.current?.setBasemapVisible(state.basemapVisible);
       controller.current?.setBasemapOpacity(state.basemapOpacity);
       controller.current?.highlightFeature(
@@ -1063,6 +1278,15 @@ export const MapCanvas = memo(function MapCanvas({
       onControllerReadyRef.current?.();
     });
     controller.current?.setStyle(basemapStyleUrl);
+    // Switching the active body without moving the camera -- the planet switcher
+    // or a different planetary basemap -- changes the radius the altitude is
+    // scaled by, but fires no moveend, so the readout would keep the previous
+    // body's number until the next pan. Mirrors how setStyle refreshes the
+    // scale bar for the same reason.
+    setCameraAltitude(controller.current?.readCameraAltitude() ?? null);
+    // setCameraAltitude is a stable store action; the effect is keyed on the
+    // basemap alone so it does not re-run on unrelated store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basemapStyleUrl]);
 
   useEffect(() => {
@@ -1151,9 +1375,14 @@ export const MapCanvas = memo(function MapCanvas({
     // "cog" is identify-enabled; plain "raster" never reaches here.)
     if (layer.type === "cog") return;
 
+    // Likewise for a NetCDF grid baked to pixels: useNetcdfIdentify reads its
+    // retained grid directly, and the image layer has no features to query.
+    if (layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) return;
+
     map.getCanvas().style.cursor = "crosshair";
 
     let wmsIdentifyAbortController: AbortController | null = null;
+    let pixelIdentifyAbortController: AbortController | null = null;
 
     const handleIdentifyClick = (event: maplibregl.MapMouseEvent) => {
       const clearIdentifyResult = () => {
@@ -1175,6 +1404,58 @@ export const MapCanvas = memo(function MapCanvas({
           .setDOMContent(content)
           .addTo(map);
       };
+
+      if (isPixelIdentifyLayer(layer)) {
+        const identifyPixelAt = timeSliderBridge()?.identifyPixelAt;
+        if (!identifyPixelAt) {
+          clearIdentifyResult();
+          return;
+        }
+        pixelIdentifyAbortController?.abort();
+        const abortController = new AbortController();
+        pixelIdentifyAbortController = abortController;
+        selectFeature(null);
+        showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, "Loading..."));
+        // Same dismissal dance as the WMS branch: the × on the loading popup
+        // must cancel the read, but the programmatic swap to the result popup
+        // also fires "close", so track user dismissal with a flag rather than
+        // treating every close as a cancel.
+        let userDismissed = false;
+        const loadingPopup = identifyPopup.current;
+        const onLoadingClose = () => {
+          userDismissed = true;
+          abortController.abort();
+          if (pixelIdentifyAbortController === abortController) {
+            pixelIdentifyAbortController = null;
+          }
+        };
+        loadingPopup!.once("close", onLoadingClose);
+
+        void identifyPixelAt(layer.id, [event.lngLat.lng, event.lngLat.lat], {
+          signal: abortController.signal,
+        })
+          .then((result) => {
+            if (userDismissed || abortController.signal.aborted) return;
+            pixelIdentifyAbortController = null;
+            loadingPopup?.off("close", onLoadingClose);
+            // A null result means the click landed off the image grid, which is
+            // an ordinary miss rather than a failure.
+            showIdentifyPopup(
+              result
+                ? createIdentifyPopupElement(layer.name, pixelIdentifyProperties(result))
+                : createIdentifyMessagePopupElement(layer.name, "No data at this location."),
+            );
+          })
+          .catch((error: unknown) => {
+            if (userDismissed || isAbortError(error) || abortController.signal.aborted) return;
+            pixelIdentifyAbortController = null;
+            loadingPopup?.off("close", onLoadingClose);
+            const message =
+              error instanceof Error ? error.message : "The pixel value could not be read.";
+            showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, message));
+          });
+        return;
+      }
 
       if (isWmsLayer(layer)) {
         wmsIdentifyAbortController?.abort();
@@ -1265,6 +1546,7 @@ export const MapCanvas = memo(function MapCanvas({
 
     return () => {
       wmsIdentifyAbortController?.abort();
+      pixelIdentifyAbortController?.abort();
       map.off("click", handleIdentifyClick);
       identifyPopup.current?.remove();
       identifyPopup.current = null;

@@ -544,7 +544,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       {navOpen ? (
         <nav
           aria-label={t("storymap.chapterNav")}
-          className="absolute left-3 top-14 z-[72] max-h-[calc(100%-4.5rem)] w-52 overflow-y-auto rounded-md border bg-background/85 p-1.5 shadow-lg backdrop-blur"
+          className="absolute left-3 top-14 z-[72] max-h-[calc(100%-4.5rem)] w-52 overflow-y-auto rounded-md border map-glass p-1.5 shadow-lg"
         >
           {chapters.map((chapter, index) => (
             <button

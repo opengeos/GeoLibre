@@ -40,8 +40,14 @@ theme:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - Features: features.md
+  - Comparison: comparison.md
+  - Demos: demos.md
   - Downloads: downloads.md
-  - Launch GeoLibre Web: /demo/
+  - Sponsor: sponsor.md
+  # Keep this deployment-relative: production serves at /, while PR previews
+  # are nested under /pages-preview/GeoLibre/pr-<number>/.
+  - Launch GeoLibre Web: demo/
   - User Guide:
       - Interface Overview: user-guide/interface.md
       - Projects: user-guide/projects.md
@@ -69,15 +75,24 @@ nav:
       - Terrain Analysis: tutorials/terrain-analysis.md
       - Spatial SQL: tutorials/spatial-sql.md
       - Sharing & Embedding: tutorials/sharing-embedding.md
+      - Format Reference: tutorials/supported-formats-en.md
+      - Format Reference (中文): tutorials/supported-formats-zh.md
+      - Source Code Deep Dive: tutorials/source-code-deep-dive-en.md
+      - Source Code Deep Dive (中文): tutorials/source-code-deep-dive-zh.md
   - Reference:
       - Architecture: architecture.md
+      - Self-Hosting: self-hosting.md
       - Android: android.md
       - iOS: ios.md
+      - Mac App Store: mac-app-store.md
       - Project Format: project-format.md
       - Plugin API: plugin-api.md
+      - Collaboration: collaboration.md
       - UI Profiles: ui-profiles.md
       - Internationalization: i18n.md
       - Python Package: python.md
+      - R Package: r.md
+      - MCP Server: mcp.md
       - Notebook Panel: notebook.md
       - Roadmap: roadmap.md
       - Contributing: contributing.md
@@ -113,3 +128,9 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/opengeos/GeoLibre
       name: GeoLibre on GitHub
+    - icon: fontawesome/solid/heart
+      link: https://github.com/sponsors/giswqs
+      name: Sponsor GeoLibre on GitHub
+    - icon: fontawesome/solid/mug-hot
+      link: https://buymeacoffee.com/giswqs
+      name: Buy the maintainer a coffee

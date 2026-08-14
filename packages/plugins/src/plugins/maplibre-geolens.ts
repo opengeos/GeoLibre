@@ -20,32 +20,82 @@
  * here and inputs are plain elements styled with the shadcn HSL theme tokens.
  */
 
-import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import type { FeatureCollection } from "geojson";
+import {
+  DEFAULT_LAYER_STYLE,
+  parseJsonExpression,
+  styleValue,
+  useAppStore,
+  type GeoLibreLayer,
+} from "@geolibre/core";
+import type { Map as MapLibreMap, RequestParameters, ResourceType } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
-  authHeaders,
+  applyFeatureEdits,
+  captureFeatureBaseline,
   datasetPageUrl,
   defaultGeoLensFetch,
+  diffFeatures,
+  fetchCapabilities,
+  fetchDatasetFeatures,
   fetchDatasetFields,
   geometryKind,
-  itemsUrl,
+  isEditPlanEmpty,
   mintTileToken,
   normalizeBaseUrl,
+  normalizeTileColumns,
+  rasterTemplatesForServer,
+  rasterTileAuthHeaders,
   resolveRasterTiles,
   searchDatasets,
+  tileColumnsOf,
+  tileUrlPrefix,
   vectorTileTemplate,
+  withTileColumns,
+  withTileVersion,
+  type GeoLensBbox,
   type GeoLensClientOptions,
   type GeoLensDataset,
+  type GeoLensEditPlan,
+  type GeoLensFeatureBaseline,
   type GeoLensFetch,
 } from "./geolens-api";
 
 export const GEOLENS_PLUGIN_ID = "maplibre-gl-geolens";
 
+/**
+ * Metadata `sourceKind` of a layer loaded from GeoLens as editable GeoJSON —
+ * distinct from `geolens-vector-tiles`, which cannot be edited in place. It,
+ * together with `geolensBaseUrl`/`geolensDatasetId`, is what lets the panel
+ * find a layer's origin again after a project reload.
+ */
+export const GEOLENS_FEATURES_SOURCE_KIND = "geolens-features";
+
+/** One entry in the sample-server dropdown. */
+export interface GeoLensSampleServer {
+  /** Shown in the dropdown; the URL is the title text. */
+  label: string;
+  baseUrl: string;
+}
+
+/**
+ * Public GeoLens deployments offered in the panel, so the plugin can be tried
+ * without hunting for a server URL. Both are open catalogs that need no key.
+ *
+ * The labels are the deployments' own names rather than translatable strings:
+ * they identify a specific server, the way a bookmark does.
+ */
+export const GEOLENS_SAMPLE_SERVERS: readonly GeoLensSampleServer[] = [
+  { label: "GeoLibre datasets", baseUrl: "https://datasets.geolibre.app" },
+  { label: "GeoLens demo", baseUrl: "https://demo.getgeolens.com" },
+];
+
 /** Number of datasets requested per catalog search. */
 const SEARCH_LIMIT = 50;
-/** OGC Features page size (GeoLens caps `limit`, so this reads one page). */
-const FEATURES_LIMIT = 100;
+/** Default maximum number of editable GeoJSON features loaded per dataset. */
+export const DEFAULT_GEOLENS_FEATURE_LIMIT = 10_000;
+const MAX_GEOLENS_FEATURE_LIMIT = 1_000_000;
+const FEATURE_LIMIT_STORAGE_KEY = "geolibre.geolens.featureLimit";
+const VIEW_ONLY_STORAGE_KEY = "geolibre.geolens.viewOnly";
 /** Re-mint the tile token this many seconds before it expires. */
 const TOKEN_REFRESH_LEAD_SECONDS = 30;
 /** Floor on the refresh delay, so a tiny/expired TTL cannot busy-loop. */
@@ -61,6 +111,8 @@ const TOKEN_REFRESH_MAX_RETRY_SECONDS = 300;
 
 export interface GeoLensLabels {
   hint: string;
+  sampleServer: string;
+  sampleServerTitle: string;
   baseUrlPlaceholder: string;
   apiKeyPlaceholder: string;
   connect: string;
@@ -70,6 +122,7 @@ export interface GeoLensLabels {
   searching: string;
   noResults: string;
   loadError: (message: string) => string;
+  blockedError: (host: string) => string;
   showing: (count: number) => string;
   vectorBadge: string;
   rasterBadge: string;
@@ -81,14 +134,44 @@ export interface GeoLensLabels {
   added: string;
   addGeoJson: string;
   addGeoJsonTitle: string;
+  addGeoJsonViewTitle: string;
   metadata: string;
   metadataTitle: string;
+  settings: string;
+  featureLimit: string;
+  featureLimitHelp: string;
+  viewOnly: string;
+  viewOnlyHelp: string;
+  viewSuffix: string;
   addError: (message: string) => string;
   features: (count: number) => string;
+  editsHeading: string;
+  editsPending: (added: number, changed: number, deleted: number) => string;
+  editsNone: string;
+  saveEdits: string;
+  saveEditsTitle: string;
+  savingEdits: (done: number, total: number) => string;
+  savedEdits: (written: number) => string;
+  saveDisabledByServer: string;
+  saveNeedsKey: string;
+  confirmDeletes: (count: number) => string;
+  saveError: (message: string) => string;
+  savePartial: (failed: number, message: string) => string;
+  revertEdits: string;
+  revertEditsTitle: string;
+  revertingEdits: string;
+  refreshToView: string;
+  refreshToViewTitle: string;
+  refreshingToView: string;
+  refreshSavePrompt: (pending: number) => string;
+  refreshDiscardPrompt: (pending: number) => string;
+  revertConfirm: (added: number, changed: number, deleted: number) => string;
 }
 
 export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   hint: "Connect to a GeoLens server to browse and add its catalog datasets.",
+  sampleServer: "Sample server…",
+  sampleServerTitle: "Connect to a public GeoLens deployment",
   baseUrlPlaceholder: "GeoLens URL, e.g. https://datasets.geolibre.app",
   apiKeyPlaceholder: "API key (optional, for private data)",
   connect: "Connect",
@@ -98,6 +181,10 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   searching: "Searching…",
   noResults: "No matching datasets.",
   loadError: (message) => `Could not reach GeoLens: ${message}`,
+  blockedError: (host) =>
+    `Could not reach ${host}. The request never completed — the host may be ` +
+    `unreachable or offline, or, if it is reachable, it may not allow ` +
+    `cross-origin requests from GeoLibre (CORS).`,
   showing: (count) => `${count} dataset${count === 1 ? "" : "s"}.`,
   vectorBadge: "vector",
   rasterBadge: "raster",
@@ -108,15 +195,114 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   adding: "Adding…",
   added: "Added",
   addGeoJson: "Add GeoJSON",
-  addGeoJsonTitle:
-    "Load features as editable GeoJSON (first 100) for the attribute table and export",
+  addGeoJsonTitle: "Load features as editable GeoJSON for the attribute table and export",
+  addGeoJsonViewTitle:
+    "Load the features in the current map view as editable GeoJSON for the attribute table " +
+    "and export",
   metadata: "Metadata",
   metadataTitle: "Open this dataset's page on the GeoLens server in a new tab",
+  settings: "Settings",
+  featureLimit: "Default GeoJSON feature limit",
+  featureLimitHelp: "The loader follows paginated responses until this many features are loaded.",
+  viewOnly: "Only load features in the current map view",
+  viewOnlyHelp:
+    "Add GeoJSON asks the server for the features inside the current view, so the limit above " +
+    "caps what is loaded from that area instead of taking an arbitrary slice of the whole dataset.",
+  viewSuffix: "current view",
   addError: (message) => `Could not add layer: ${message}`,
   features: (count) => `${count.toLocaleString()} features`,
+  editsHeading: "Edits",
+  editsPending: (added, changed, deleted) =>
+    [
+      added ? `${added} added` : "",
+      changed ? `${changed} changed` : "",
+      deleted ? `${deleted} deleted` : "",
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  editsNone: "No local changes.",
+  saveEdits: "Save to GeoLens",
+  saveEditsTitle: "Write the added, changed, and deleted features back to the GeoLens dataset",
+  savingEdits: (done, total) => `Saving ${done}/${total}…`,
+  savedEdits: (written) => `Saved ${written} change${written === 1 ? "" : "s"} to GeoLens.`,
+  saveDisabledByServer: "This GeoLens server has dataset editing turned off.",
+  saveNeedsKey: "Connect with an API key that can write to this dataset.",
+  confirmDeletes: (count) =>
+    `Saving will DELETE ${count} feature${count === 1 ? "" : "s"} from the GeoLens dataset — ` +
+    `features that are in the dataset but no longer in this layer. Continue?`,
+  saveError: (message) => `Could not save: ${message}`,
+  savePartial: (failed, message) =>
+    `${failed} change${failed === 1 ? "" : "s"} failed — ${message}`,
+  revertEdits: "Reload",
+  revertEditsTitle: "Discard local changes and reload this dataset's features from GeoLens",
+  revertingEdits: "Reloading…",
+  refreshToView: "Load this view",
+  refreshToViewTitle: "Replace this layer's features with the ones in the current map view",
+  refreshingToView: "Loading this view…",
+  refreshSavePrompt: (pending) =>
+    `This layer has ${pending} unsaved change${pending === 1 ? "" : "s"}. Save ` +
+    `${pending === 1 ? "it" : "them"} to GeoLens before loading the current view? ` +
+    `Cancel to decide whether to discard instead.`,
+  refreshDiscardPrompt: (pending) =>
+    `Discard ${pending} unsaved change${pending === 1 ? "" : "s"} and load the current view?`,
+  revertConfirm: (added, changed, deleted) =>
+    `Discard unsaved changes to this layer (${[
+      added ? `${added} added` : "",
+      changed ? `${changed} changed` : "",
+      deleted ? `${deleted} deleted` : "",
+    ]
+      .filter(Boolean)
+      .join(", ")}) and reload it from GeoLens?`,
 };
 
 let labels: GeoLensLabels = { ...DEFAULT_GEOLENS_LABELS };
+
+export function normalizeGeoLensFeatureLimit(value: unknown): number {
+  if (value === null || value === undefined || value === "") {
+    return DEFAULT_GEOLENS_FEATURE_LIMIT;
+  }
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_GEOLENS_FEATURE_LIMIT;
+  return Math.min(MAX_GEOLENS_FEATURE_LIMIT, Math.max(1, Math.floor(parsed)));
+}
+
+function readFeatureLimit(): number {
+  if (typeof localStorage === "undefined") return DEFAULT_GEOLENS_FEATURE_LIMIT;
+  try {
+    return normalizeGeoLensFeatureLimit(localStorage.getItem(FEATURE_LIMIT_STORAGE_KEY));
+  } catch {
+    return DEFAULT_GEOLENS_FEATURE_LIMIT;
+  }
+}
+
+function writeFeatureLimit(value: number): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(FEATURE_LIMIT_STORAGE_KEY, String(value));
+  } catch {
+    // Storage can be unavailable in privacy-restricted webviews.
+  }
+}
+
+function readViewOnly(): boolean {
+  if (typeof localStorage === "undefined") return true;
+  try {
+    // Default on: a catalog dataset is usually far larger than the area being
+    // looked at, and "the features I can see" beats an arbitrary first-N slice.
+    return localStorage.getItem(VIEW_ONLY_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function writeViewOnly(value: boolean): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(VIEW_ONLY_STORAGE_KEY, String(value));
+  } catch {
+    // Storage can be unavailable in privacy-restricted webviews.
+  }
+}
 
 /** Panels currently mounted, so a language change can repaint them in place. */
 const mountedPanels = new Set<() => void>();
@@ -174,6 +360,16 @@ const CSS = {
     "padding:2px 8px;font-size:11px;border-radius:4px;cursor:pointer;" +
     "border:1px solid hsl(var(--border));background:hsl(var(--background));" +
     "color:hsl(var(--foreground));",
+  settings:
+    "display:none;flex-direction:column;gap:5px;padding:7px;border-radius:6px;" +
+    "border:1px solid hsl(var(--border));background:hsl(var(--muted));",
+  edits:
+    "display:none;flex-direction:column;gap:6px;padding:7px;border-radius:6px;" +
+    "border:1px solid hsl(var(--border));background:hsl(var(--muted));",
+  editsHeading: "font-size:11px;font-weight:600;",
+  editRow: "display:flex;flex-direction:column;gap:3px;",
+  editName:
+    "font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;",
 } as const;
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -202,6 +398,41 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * Whether a failure was the request never reaching the server at all.
+ *
+ * `fetch` rejects with a bare `TypeError` ("Failed to fetch") when the browser
+ * blocks the request — a CORS policy, a DNS failure, being offline — and gives
+ * the page no detail beyond that, by design. Every failure this module raises
+ * itself is a plain `Error`, so the constructor is a reliable discriminator.
+ *
+ * It matters because CORS is the likeliest cause and the least guessable: a
+ * GeoLens deployment that serves its catalog happily to `curl` is unreachable
+ * from a browser unless it sends `Access-Control-Allow-Origin` for the app's
+ * origin, and `demo.getgeolens.com` currently sends none at all.
+ */
+function isTransportFailure(error: unknown): boolean {
+  return error instanceof TypeError;
+}
+
+/** The host of a base URL, for an error message; falls back to the whole URL. */
+function hostOf(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl;
+  }
+}
+
+/** Scheme + host + port of a base URL, or null when it is not a usable URL. */
+function originOf(baseUrl: string): string | null {
+  try {
+    return new URL(baseUrl).origin;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Layer creation + tile-token lifecycle.
 // ---------------------------------------------------------------------------
@@ -210,6 +441,28 @@ function createLayerId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * The current map view as a bbox, or null when there is no usable map.
+ *
+ * A globe view can report longitudes beyond ±180 (and a fully zoomed-out map
+ * covers everything), so a view that spans the world is treated as "no bbox" —
+ * filtering to it would only add a pointless query parameter.
+ */
+function currentViewBbox(app: GeoLibreAppAPI | null): GeoLensBbox | null {
+  const bounds = app?.getMap?.()?.getBounds();
+  if (!bounds) return null;
+  const west = bounds.getWest();
+  const east = bounds.getEast();
+  const south = bounds.getSouth();
+  const north = bounds.getNorth();
+  if (![west, east, south, north].every((n) => Number.isFinite(n))) return null;
+  if (east - west >= 360) return null;
+  // A wrapped view (crossing the antimeridian) would need two boxes; ask for the
+  // whole world rather than silently loading the wrong half.
+  if (east < west) return null;
+  return [west, south, east, north];
 }
 
 /** A stable identity for "this dataset from this server", for add/remove state. */
@@ -232,6 +485,341 @@ function clearRefreshTimer(layerId: string): void {
 function clearAllRefreshTimers(): void {
   for (const timer of refreshTimers.values()) clearTimeout(timer);
   refreshTimers.clear();
+}
+
+/**
+ * Raster tile URL prefixes that need an `X-Api-Key` header, mapped to the key.
+ *
+ * MapLibre issues raster tile requests itself, so an API-key-only private raster
+ * cannot carry the key the way the fetch calls in `./geolens-api` do.
+ * `transformRequest` is the supported hook: `RasterTileSource` routes every tile
+ * URL through it, and supplying any header other than `accept` moves the request
+ * off `HTMLImageElement` onto fetch, which sends headers. (Verified against
+ * maplibre-gl 5.24: `ImageRequest.doImageRequest` only takes the
+ * `HTMLImageElement` path when `requestParameters.headers` is empty or
+ * `accept`-only.)
+ *
+ * Keyed by tile-URL prefix (everything before the `{z}` placeholder) rather than
+ * by origin, so a key is only ever attached to the exact GeoLens raster endpoint
+ * that issued it. A basemap, another plugin's tiles, or a second GeoLens server
+ * reachable on the same origin never sees it.
+ */
+const rasterApiKeys = new Map<string, string>();
+
+let installedOnMap: MapLibreMap | null = null;
+
+function geolensTransformRequest(
+  url: string,
+  resourceType?: ResourceType,
+): RequestParameters | undefined {
+  if (resourceType !== "Tile" || rasterApiKeys.size === 0) return undefined;
+  const headers = rasterTileAuthHeaders(url, rasterApiKeys);
+  return headers ? { url, headers } : undefined;
+}
+
+/**
+ * Register a private raster's tile URL so its requests carry the API key.
+ *
+ * Installs the transform on first use only. GeoLibre sets no `transformRequest`
+ * of its own, and `Map` exposes no getter for an existing one, so this
+ * deliberately does not try to chain: it returns `undefined` for anything it
+ * does not recognize, which is the documented "leave this request alone" answer
+ * and keeps the hook cheap to hand over if the host ever wants to own it.
+ */
+function registerRasterApiKey(app: GeoLibreAppAPI, tiles: string, apiKey: string): void {
+  rasterApiKeys.set(tileUrlPrefix(tiles), apiKey);
+  const map = app.getMap?.();
+  if (!map || installedOnMap === map) return;
+  map.setTransformRequest(geolensTransformRequest);
+  installedOnMap = map;
+}
+
+/**
+ * Drop every registered key and uninstall the hook (plugin deactivation).
+ *
+ * Raster layers the user added stay on the map, but a private one stops
+ * rendering once its key is gone. That is deliberate: the credential was
+ * entered into the plugin panel, so it should not outlive the plugin. The way
+ * back is the connect handler, which re-registers templates for restored
+ * layers when the user reconnects with a key.
+ */
+function clearRasterApiKeys(): void {
+  rasterApiKeys.clear();
+  installedOnMap?.setTransformRequest(null);
+  installedOnMap = null;
+}
+
+// ---------------------------------------------------------------------------
+// MVT attribute columns (`cols=`).
+// ---------------------------------------------------------------------------
+
+/**
+ * Field-count ceiling for opting a dataset's whole attribute table into its
+ * tiles.
+ *
+ * GeoLens serves attribute-free tiles below zoom 10 (see the `cols=` opt-in in
+ * `geolens-api.ts`), and the host reads a tile layer's attributes from the
+ * tiles themselves: the Style panel scans loaded features for a property's
+ * distinct values, the Time Slider bind dialog scans them for a timestamp
+ * column, popups show what a feature carries. None of those can
+ * name the column they need up front — the user picks it *after* seeing it — so
+ * an opt-in limited to columns already in use cannot bootstrap any of them.
+ * Requesting the dataset's fields is therefore the default.
+ *
+ * The ceiling is what keeps that from re-creating the tile bloat the server's
+ * own budget exists to prevent (its docs cite a 137-column table producing
+ * 824 KB tiles). A table wider than this stays on the server default and opts
+ * in only the columns the layer actually uses, which is enough to *render* a
+ * style the user has already applied, just not to discover one.
+ */
+export const MAX_GEOLENS_TILE_COLUMNS = 24;
+
+/** Datasets already reported as too wide for the full opt-in, so the warning fires once. */
+const wideDatasetsWarned = new Set<string>();
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
+    : [];
+}
+
+/**
+ * Feature properties a MapLibre expression reads, i.e. the string-literal
+ * argument of every `["get", …]` / `["has", …]` in it.
+ *
+ * Only the two-argument forms count: `["get", key, object]` reads from a
+ * supplied object rather than the feature, and a computed key
+ * (`["get", ["concat", …]]`) names a column that is not knowable until render
+ * time. An unparseable expression yields nothing, matching the renderer, which
+ * ignores it.
+ */
+function expressionPropertyRefs(expression: string): string[] {
+  const parsed = parseJsonExpression(expression);
+  if (!parsed) return [];
+  const refs: string[] = [];
+  const walk = (node: unknown): void => {
+    if (!Array.isArray(node)) return;
+    // `["literal", …]` wraps data, not a sub-expression, so a `get`-shaped array
+    // inside it is an array element and names no column.
+    if (node[0] === "literal") return;
+    if (
+      node.length === 2 &&
+      (node[0] === "get" || node[0] === "has") &&
+      typeof node[1] === "string"
+    ) {
+      refs.push(node[1]);
+    }
+    for (const child of node) walk(child);
+  };
+  walk(parsed);
+  return refs;
+}
+
+/**
+ * The attribute names a layer's own state points at: its classification
+ * property, label field, proportional-size and extrusion fields, diagram
+ * fields, the Time Slider binding, and the properties read by whichever of its
+ * expressions are in effect (the expression renderer, rule filters, label
+ * overrides, advanced extrusion). Each is read only when the feature that uses
+ * it is switched on, so a default style contributes nothing.
+ */
+function attributePropertiesInUse(layer: GeoLibreLayer): string[] {
+  const style = layer.style;
+  const names: string[] = [];
+  const add = (value: unknown): void => {
+    if (typeof value === "string" && value.trim()) names.push(value.trim());
+  };
+  /** Add every feature property an in-effect expression reads. */
+  const addRefs = (expression: unknown): void => {
+    if (typeof expression === "string")
+      for (const ref of expressionPropertyRefs(expression)) add(ref);
+  };
+
+  const mode = styleValue(style, "vectorStyleMode");
+  // Only the two attribute-driven modes read the property; it survives a switch
+  // back to "single" (and is unused by the rule/expression modes, which carry
+  // their own expressions), so an ungated read would keep requesting a column
+  // nothing paints from.
+  if (mode === "categorized" || mode === "graduated") add(styleValue(style, "vectorStyleProperty"));
+  if (mode === "expression") addRefs(styleValue(style, "vectorStyleExpression"));
+  if (mode === "rule-based") {
+    for (const rule of styleValue(style, "vectorRules")) addRefs(rule?.filter);
+  }
+  const labels = styleValue(style, "labels");
+  if (labels?.enabled) {
+    add(labels.field);
+    // The text expression and the data-defined overrides all read attributes.
+    addRefs(labels.expression);
+    addRefs(labels.sizeExpression);
+    addRefs(labels.colorExpression);
+    addRefs(labels.opacityExpression);
+    addRefs(labels.visibilityExpression);
+    addRefs(labels.priorityExpression);
+  }
+  if (styleValue(style, "proportionalSizeEnabled")) {
+    add(styleValue(style, "proportionalSizeProperty"));
+  }
+  if (styleValue(style, "extrusionEnabled")) {
+    const advanced = styleValue(style, "extrusionAdvancedStyleEnabled");
+    const heightExpression = advanced ? styleValue(style, "extrusionHeightExpression") : "";
+    if (advanced) {
+      addRefs(heightExpression);
+      addRefs(styleValue(style, "extrusionColorExpression"));
+    }
+    // The height expression wins over the property, but only when it parses: a
+    // blank or half-typed one falls back to the property (`extrusionHeightValue`),
+    // so gating on the advanced flag alone would drop a column still being read.
+    if (!parseJsonExpression(heightExpression)) add(styleValue(style, "extrusionHeightProperty"));
+  }
+  if (styleValue(style, "diagramType") !== "none") {
+    for (const field of styleValue(style, "diagramFields")) add(field?.property);
+    // Attribute sizing reads its own property alongside the slice fields
+    // (`collectDiagramData`); without it every diagram would size from a value
+    // that is not in the tile and collapse to the floor.
+    if (styleValue(style, "diagramSizeMode") === "attribute") {
+      add(styleValue(style, "diagramSizeProperty"));
+    }
+  }
+  const timeBinding = layer.metadata.timeBinding;
+  if (timeBinding && typeof timeBinding === "object") {
+    add((timeBinding as { property?: unknown }).property);
+  }
+  return names;
+}
+
+/**
+ * Resolved column sets, keyed by the layer object.
+ *
+ * The sync below runs on every store update that replaces the `layers` array —
+ * an opacity drag on an *unrelated* layer fires it per frame — and resolving a
+ * set re-parses the layer's expressions. `updateLayer` keeps the identity of
+ * every layer it did not patch, so keying on the object skips that work with
+ * no invalidation to get wrong: a layer that changed is a different object.
+ * (`layer-sync.ts` memoizes its own label overrides for the same reason.)
+ */
+const tileColumnsByLayer = new WeakMap<GeoLibreLayer, string[]>();
+
+/**
+ * The `cols=` set a GeoLens vector-tile layer should be requesting right now:
+ * the dataset's fields when the table is narrow enough for the whole-table
+ * opt-in, plus whatever the layer's style and bindings currently point at.
+ *
+ * Recomputed from the layer rather than remembered, so it stays right across a
+ * token re-mint and a project reload (`metadata.fields` is persisted with the
+ * layer).
+ *
+ * @param layer - A `geolens-vector-tiles` store layer.
+ * @returns Normalized column names (sorted, deduplicated); empty when the
+ *   dataset is too wide and the layer uses no attributes yet.
+ */
+export function desiredTileColumns(layer: GeoLibreLayer): string[] {
+  const memoized = tileColumnsByLayer.get(layer);
+  if (memoized) return memoized;
+  const datasetId = layer.metadata.geolensDatasetId;
+  const columns = tileColumnsFor(
+    stringArray(layer.metadata.fields),
+    attributePropertiesInUse(layer),
+    typeof datasetId === "string" ? datasetId : layer.id,
+    layer.name,
+  );
+  tileColumnsByLayer.set(layer, columns);
+  return columns;
+}
+
+/**
+ * Resolve the `cols=` set from a dataset's field list and the columns a layer
+ * currently uses. Shared by the add path (which has the field list but no layer
+ * yet) and {@link desiredTileColumns}, so both apply the width budget the same
+ * way and a too-wide dataset is reported once rather than per call site.
+ *
+ * @param fields - Every attribute column the dataset has, per its OGC items.
+ * @param inUse - Columns the layer styles or binds by (empty on a fresh add).
+ * @param datasetKey - Identity used to report a too-wide dataset only once.
+ * @param label - Human-readable dataset/layer name for that report.
+ * @returns Normalized column names to request.
+ */
+function tileColumnsFor(
+  fields: readonly string[],
+  inUse: readonly string[],
+  datasetKey: string,
+  label: string,
+): string[] {
+  const wide = fields.length > MAX_GEOLENS_TILE_COLUMNS;
+  if (wide && !wideDatasetsWarned.has(datasetKey)) {
+    wideDatasetsWarned.add(datasetKey);
+    console.info(
+      `[GeoLibre] GeoLens dataset "${label}" has ${fields.length} fields (over the ` +
+        `${MAX_GEOLENS_TILE_COLUMNS}-field tile budget), so its tiles carry only the ` +
+        `attributes this layer styles or binds by. Below zoom 10 the rest are absent ` +
+        `from popups and the Style panel; load the dataset as GeoJSON to work with all ` +
+        `of them.`,
+    );
+  }
+  return normalizeTileColumns([...(wide ? [] : fields), ...inUse]);
+}
+
+/** Guards the apply phase against the store notification it triggers itself. */
+let syncingTileColumns = false;
+/** Set when a store change was dropped by that guard, so the batch rescans. */
+let pendingTileColumnSync = false;
+
+/**
+ * Restamp GeoLens vector-tile layers whose `cols=` no longer matches what they
+ * need — the user styled by an attribute the tiles don't carry, bound one to
+ * the Time Slider, or the project was saved before this opt-in existed. The
+ * token is untouched (only the query is rewritten), so this costs a tile
+ * refetch and no network round trip of its own.
+ *
+ * Layers mid-remint are skipped: that path rebuilds the URL from the fresh
+ * token with the same desired columns, so restamping the doomed URL first would
+ * only queue a wasted refetch.
+ */
+function syncGeoLensTileColumns(): void {
+  // `updateLayer` notifies Zustand's subscribers synchronously, and one of them
+  // is the subscription that calls this function — so patching inside the scan
+  // would re-enter here mid-loop, and the outer loop would go on to spread a
+  // `layer.source` the nested pass has already replaced. Scan first, then apply
+  // behind a guard, re-reading each layer at the moment it is patched.
+  if (syncingTileColumns) {
+    // A change landed while a batch was applying; that notification is being
+    // dropped here, so ask the running pass for one more scan instead.
+    pendingTileColumnSync = true;
+    return;
+  }
+  syncingTileColumns = true;
+  try {
+    do {
+      pendingTileColumnSync = false;
+      const patches: Array<{ id: string; columns: string[] }> = [];
+      for (const layer of useAppStore.getState().layers) {
+        if (layer.metadata.sourceKind !== "geolens-vector-tiles") continue;
+        if (restoringLayerIds.has(layer.id)) continue;
+        const tiles = layer.source.tiles;
+        const url = Array.isArray(tiles) && typeof tiles[0] === "string" ? tiles[0] : "";
+        if (!url) continue;
+        const desired = desiredTileColumns(layer);
+        const current = tileColumnsOf(url);
+        if (desired.length === current.length && desired.every((c, i) => c === current[i])) {
+          continue;
+        }
+        patches.push({ id: layer.id, columns: desired });
+      }
+      for (const { id, columns } of patches) {
+        const layer = useAppStore.getState().layers.find((l) => l.id === id);
+        if (!layer) continue; // removed while the batch was applying
+        const tiles = layer.source.tiles;
+        const url = Array.isArray(tiles) && typeof tiles[0] === "string" ? tiles[0] : "";
+        if (!url) continue;
+        useAppStore.getState().updateLayer(id, {
+          source: { ...layer.source, tiles: [withTileColumns(url, columns)] },
+        });
+      }
+      // A pass that patched nothing cannot have re-entered, so this terminates
+      // after one extra scan at most.
+    } while (pendingTileColumnSync);
+  } finally {
+    syncingTileColumns = false;
+  }
 }
 
 /** True when the layer's signed tile URL carries an expired (or near-expiry) token. */
@@ -270,7 +858,10 @@ function healRestoredGeoLensLayers(): void {
       .then((token) => {
         const current = useAppStore.getState().layers.find((l) => l.id === layer.id);
         if (!current) return;
-        const { tiles } = vectorTileTemplate(client, token);
+        // Columns come from the layer as it is now: a restored project may
+        // already be styled by (or time-bound to) an attribute, and the fresh
+        // URL has to carry it or the restored style renders against nothing.
+        const { tiles } = vectorTileTemplate(client, token, desiredTileColumns(current));
         useAppStore
           .getState()
           .updateLayer(layer.id, { source: { ...current.source, tiles: [tiles] } });
@@ -285,13 +876,18 @@ function healRestoredGeoLensLayers(): void {
 // plus once now for layers already present when this module loads. Guarded on
 // the `layers` reference so unrelated store churn (pointer, selection, map view)
 // doesn't re-run the scan — useAppStore has no selector-subscribe middleware.
+// The same subscription keeps each layer's `cols=` opt-in in step with what it
+// styles and binds by: a style edit replaces the layer (and so the `layers`
+// array), which is exactly the signal the column sync needs.
 let lastLayersRef: readonly GeoLibreLayer[] | null = null;
 useAppStore.subscribe((state) => {
   if (state.layers === lastLayersRef) return;
   lastLayersRef = state.layers;
   healRestoredGeoLensLayers();
+  syncGeoLensTileColumns();
 });
 healRestoredGeoLensLayers();
+syncGeoLensTileColumns();
 
 /**
  * Schedule a re-mint of the signed tile token shortly before it expires and
@@ -320,10 +916,10 @@ function scheduleTokenRefresh(
     if (!layer) return; // removed from the Layers panel — nothing to refresh.
     void mintTileToken(client, datasetId, fetchImpl)
       .then((token) => {
-        const { tiles } = vectorTileTemplate(client, token);
         // Re-read: the layer may have been removed while the mint was in flight.
         const current = useAppStore.getState().layers.find((l) => l.id === layerId);
         if (!current) return;
+        const { tiles } = vectorTileTemplate(client, token, desiredTileColumns(current));
         useAppStore
           .getState()
           .updateLayer(layerId, { source: { ...current.source, tiles: [tiles] } });
@@ -365,7 +961,13 @@ async function addVectorTilesLayer(
     mintTileToken(client, dataset.id, fetchImpl),
     fetchDatasetFields(client, dataset.id, fetchImpl).catch(() => [] as string[]),
   ]);
-  const { tiles, sourceLayer } = vectorTileTemplate(client, token);
+  // The same field list doubles as the tiles' `cols=` opt-in, so those dropdowns
+  // lead somewhere: without it the tiles carry no attributes at all below zoom
+  // 10 and every attribute-driven feature reads an empty property bag. A table
+  // too wide for the budget requests nothing here and picks columns up as the
+  // layer starts using them (see `desiredTileColumns`).
+  const columns = tileColumnsFor(fields, [], dataset.id, dataset.title);
+  const { tiles, sourceLayer } = vectorTileTemplate(client, token, columns);
   const layer: GeoLibreLayer = {
     id: createLayerId(),
     name: dataset.title,
@@ -415,6 +1017,8 @@ async function addRasterTilesLayer(
   fetchImpl: GeoLensFetch,
 ): Promise<void> {
   const raster = await resolveRasterTiles(client, dataset.id, fetchImpl);
+  // A public raster renders anonymously; only a keyed client needs the header.
+  if (client.apiKey) registerRasterApiKey(app, raster.tiles, client.apiKey);
   const layer: GeoLibreLayer = {
     id: createLayerId(),
     name: dataset.title,
@@ -443,22 +1047,462 @@ async function addRasterTilesLayer(
 }
 
 /**
- * Add a vector dataset as GeoJSON via OGC API Features. Reads one page (GeoLens
- * caps `limit`); the vector-tile path is preferred for large datasets. Uses the
- * host GeoJSON layer so styling/attribute-table/export all apply.
+ * Add a vector dataset as GeoJSON via OGC API Features. Follows `rel=next`
+ * pages until `featureLimit` features are loaded; the vector-tile path is
+ * preferred for large datasets. Uses the host GeoJSON layer so
+ * styling/attribute-table/export all apply.
  */
 async function addFeaturesLayer(
   app: GeoLibreAppAPI,
   client: GeoLensClientOptions,
   dataset: GeoLensDataset,
+  featureLimit: number,
+  fetchImpl: GeoLensFetch,
+  bbox?: GeoLensBbox,
+): Promise<void> {
+  const data = await fetchDatasetFeatures(
+    client,
+    dataset.id,
+    featureLimit,
+    fetchImpl,
+    undefined,
+    bbox,
+  );
+  // Name the layer for what it holds: a view-filtered load is a subset, and the
+  // Layers panel is where the user will later wonder why.
+  const name = bbox ? `${dataset.title} (${labels.viewSuffix})` : dataset.title;
+  const layerId = app.addGeoJsonLayer(name, data, `${sourcePathFor(client, dataset)}#items`);
+  // Register the baseline before the metadata write below: that write is the
+  // store change that makes the panel notice the layer, and it must already be
+  // able to report "no local changes" rather than an unknown state.
+  editSessions.set(layerId, { baseline: captureFeatureBaseline(data) });
+  // Tag the layer with where it came from, so the panel can offer to write
+  // edits back — including after a project reload, when the in-memory baseline
+  // is gone but the metadata was persisted with the project.
+  const store = useAppStore.getState();
+  const layer = store.layers.find((l) => l.id === layerId);
+  if (layer) {
+    store.updateLayer(layerId, {
+      metadata: {
+        ...layer.metadata,
+        sourceKind: GEOLENS_FEATURES_SOURCE_KIND,
+        geolensBaseUrl: client.baseUrl,
+        geolensDatasetId: dataset.id,
+        // What this layer was loaded with. A baseline rebuilt on any other
+        // terms would disagree with the layer about which features exist:
+        // everything outside the recorded extent (or past the recorded limit)
+        // would diff as a deletion, and the next save would delete it from the
+        // dataset.
+        geolensFeatureLimit: featureLimit,
+        geolensDatasetTitle: dataset.title,
+        ...(bbox ? { geolensBbox: [...bbox] } : {}),
+      },
+    });
+  }
+  if (dataset.bbox) app.fitBounds?.(dataset.bbox);
+}
+
+// ---------------------------------------------------------------------------
+// Feature editing: change tracking and write-back.
+// ---------------------------------------------------------------------------
+
+/** What a layer's features looked like on the server, per store layer id. */
+interface GeoLensEditSession {
+  baseline: GeoLensFeatureBaseline;
+}
+
+/**
+ * Per-layer baselines for the GeoLens datasets loaded this session.
+ *
+ * Deliberately in memory only — a baseline is a copy of the whole dataset, and
+ * persisting it would bloat every saved project. A restored project therefore
+ * has none, and {@link ensureBaseline} rebuilds it from the server, which also
+ * means the diff is against what the dataset holds *now* rather than what it
+ * held whenever the project was last saved.
+ */
+const editSessions = new Map<string, GeoLensEditSession>();
+
+/** A GeoLens GeoJSON layer in the store that can be written back. */
+interface GeoLensEditableLayer {
+  id: string;
+  name: string;
+  datasetId: string;
+  baseUrl: string;
+  geojson: import("geojson").FeatureCollection;
+  /** The feature limit this layer was loaded with, when it was recorded. */
+  featureLimit?: number;
+  /** The extent this layer was loaded from, when it was view-filtered. */
+  bbox?: GeoLensBbox;
+  /** The dataset's catalog title, used to keep an auto-generated name accurate. */
+  datasetTitle?: string;
+}
+
+/** Whether a persisted metadata value is a usable `[w, s, e, n]` extent. */
+function isBbox(value: unknown): value is GeoLensBbox {
+  return (
+    Array.isArray(value) &&
+    value.length === 4 &&
+    value.every((n) => typeof n === "number" && Number.isFinite(n))
+  );
+}
+
+/** The editable GeoLens feature layers currently in the store for one server. */
+export function editableLayersForServer(baseUrl: string): GeoLensEditableLayer[] {
+  const out: GeoLensEditableLayer[] = [];
+  for (const layer of useAppStore.getState().layers) {
+    if (layer.metadata.sourceKind !== GEOLENS_FEATURES_SOURCE_KIND) continue;
+    if (layer.metadata.geolensBaseUrl !== baseUrl) continue;
+    const datasetId = layer.metadata.geolensDatasetId;
+    if (typeof datasetId !== "string" || !layer.geojson) continue;
+    const limit = layer.metadata.geolensFeatureLimit;
+    const bbox = layer.metadata.geolensBbox;
+    out.push({
+      id: layer.id,
+      name: layer.name,
+      datasetId,
+      baseUrl,
+      geojson: layer.geojson,
+      ...(typeof limit === "number" && Number.isFinite(limit) ? { featureLimit: limit } : {}),
+      ...(isBbox(bbox) ? { bbox } : {}),
+      ...(typeof layer.metadata.geolensDatasetTitle === "string"
+        ? { datasetTitle: layer.metadata.geolensDatasetTitle }
+        : {}),
+    });
+  }
+  return out;
+}
+
+/**
+ * The baseline for a layer: the one captured when it was loaded, or — after a
+ * project reload or a plugin reactivation — a fresh read of the dataset from
+ * the server. Reading it back is what makes "Save" work at all on a restored
+ * project, and it is why a save then only writes what genuinely differs from
+ * the server rather than re-writing every feature.
+ */
+async function ensureBaseline(
+  client: GeoLensClientOptions,
+  layer: GeoLensEditableLayer,
+  featureLimit: number,
+  fetchImpl: GeoLensFetch,
+  signal?: AbortSignal,
+): Promise<GeoLensFeatureBaseline> {
+  const existing = editSessions.get(layer.id);
+  if (existing) return existing.baseline;
+  const data = await fetchDatasetFeatures(
+    client,
+    layer.datasetId,
+    // Re-read on the terms the layer was loaded with, not the panel's current
+    // ones: a baseline covering more of the dataset than the layer does would
+    // report every extra feature as deleted, and the save would delete them.
+    layer.featureLimit ?? featureLimit,
+    fetchImpl,
+    signal,
+    layer.bbox,
+  );
+  const baseline = captureFeatureBaseline(data);
+  editSessions.set(layer.id, { baseline });
+  return baseline;
+}
+
+/** Counts shown next to a layer in the Edits section. */
+interface GeoLensPendingCounts {
+  added: number;
+  changed: number;
+  deleted: number;
+}
+
+function planCounts(plan: GeoLensEditPlan): GeoLensPendingCounts {
+  return {
+    added: plan.creates.length,
+    changed: plan.updates.length,
+    deleted: plan.deletes.length,
+  };
+}
+
+/**
+ * Last computed counts per layer, keyed on the exact collection and baseline
+ * they were derived from. Diffing walks every feature, and the panel repaints
+ * whenever *any* layer changes, so without this an edit to one layer would
+ * re-diff every other tracked dataset as well.
+ */
+const pendingCountsCache = new Map<
+  string,
+  {
+    collection: import("geojson").FeatureCollection;
+    baseline: GeoLensFeatureBaseline;
+    counts: GeoLensPendingCounts;
+  }
+>();
+
+/**
+ * The pending changes for a layer whose baseline is already known, or null when
+ * it is not (a restored project, before a save reads the dataset back). The
+ * panel uses this for its at-a-glance counts, which is why it never triggers a
+ * network read of its own.
+ */
+function pendingCountsFor(layer: GeoLensEditableLayer): GeoLensPendingCounts | null {
+  const session = editSessions.get(layer.id);
+  if (!session) return null;
+  const cached = pendingCountsCache.get(layer.id);
+  if (cached && cached.collection === layer.geojson && cached.baseline === session.baseline) {
+    return cached.counts;
+  }
+  const counts = planCounts(diffFeatures(layer.geojson, session.baseline));
+  pendingCountsCache.set(layer.id, {
+    collection: layer.geojson,
+    baseline: session.baseline,
+    counts,
+  });
+  return counts;
+}
+
+/** The outcome of one layer's save, as the panel reports it. */
+interface GeoLensSaveOutcome {
+  written: number;
+  errors: string[];
+}
+
+/**
+ * Diff a layer against its baseline and write the differences to GeoLens.
+ *
+ * After the writes, the ids GeoLens assigned to newly inserted features are
+ * stamped back onto the store layer, and the baseline is advanced to match —
+ * but only for the writes that actually succeeded, so a partially applied save
+ * leaves exactly the failed changes still pending instead of silently dropping
+ * them.
+ */
+async function saveLayerEdits(
+  client: GeoLensClientOptions,
+  layer: GeoLensEditableLayer,
+  featureLimit: number,
+  fetchImpl: GeoLensFetch,
+  onProgress: (done: number, total: number) => void,
+  signal?: AbortSignal,
+  // Asked before anything is written, once the plan is known. Returning false
+  // cancels the save.
+  confirmPlan?: (plan: GeoLensEditPlan) => boolean,
+): Promise<GeoLensSaveOutcome> {
+  const baseline = await ensureBaseline(client, layer, featureLimit, fetchImpl, signal);
+  const plan = diffFeatures(layer.geojson, baseline);
+  if (isEditPlanEmpty(plan)) return { written: 0, errors: [] };
+  // A deletion is the one part of a plan the user cannot undo, and it is not
+  // always deliberate: a feature the editor failed to load is simply absent
+  // from the layer afterwards, which diffs identically to "the user deleted
+  // it". Deletions are also the only change that can be produced without the
+  // user touching the feature at all, so they get an explicit confirmation.
+  if (confirmPlan && !confirmPlan(plan)) return { written: 0, errors: [] };
+
+  const result = await applyFeatureEdits(
+    client,
+    layer.datasetId,
+    plan,
+    fetchImpl,
+    onProgress,
+    signal,
+  );
+
+  // Stamp the new gids onto the features that were just inserted, so a second
+  // save updates those rows instead of inserting duplicates.
+  const newGidByIndex = new Map<number, number>();
+  for (const created of result.created) {
+    if (created.gid !== null) newGidByIndex.set(created.index, created.gid);
+  }
+  // What the server now holds: the collection that was actually diffed and
+  // written, with the assigned row ids stamped on. Deliberately NOT re-read
+  // from the store — an edit made while the save was in flight is not on the
+  // server, and baselining it would mark it as already saved, so it could never
+  // be written and would be lost.
+  const saved: import("geojson").FeatureCollection =
+    newGidByIndex.size === 0
+      ? layer.geojson
+      : {
+          ...layer.geojson,
+          features: layer.geojson.features.map((feature, index) => {
+            const gid = newGidByIndex.get(index);
+            return gid === undefined ? feature : { ...feature, id: gid };
+          }),
+        };
+
+  const current = useAppStore.getState().layers.find((l) => l.id === layer.id);
+  if (newGidByIndex.size > 0 && current?.geojson === layer.geojson) {
+    // Only write the stamped ids back when the layer has not been edited again
+    // while the save was in flight; otherwise the indices no longer refer to the
+    // same features and stamping them would attach a row id to the wrong one.
+    useAppStore.getState().updateLayer(layer.id, { geojson: saved });
+  }
+
+  // Advance the baseline to the saved state, then put back the entries whose
+  // write failed so they stay pending.
+  const next = captureFeatureBaseline(saved);
+  const updatedOk = new Set(result.updated.map(String));
+  for (const update of plan.updates) {
+    if (updatedOk.has(String(update.gid))) continue;
+    const original = baseline.get(String(update.gid));
+    if (original) next.set(String(update.gid), original);
+  }
+  const deletedOk = new Set(result.deleted.map(String));
+  for (const gid of plan.deletes) {
+    if (deletedOk.has(String(gid))) continue;
+    const original = baseline.get(String(gid));
+    if (original) next.set(String(gid), original);
+  }
+  editSessions.set(layer.id, { baseline: next });
+
+  const written = result.updated.length + result.created.length + result.deleted.length;
+  return { written, errors: result.errors };
+}
+
+/**
+ * Re-point every GeoLens vector-tile layer showing `datasetId` at a freshly
+ * signed tile URL, so the map drops what it cached and re-renders the dataset.
+ *
+ * Saving edits changes the data behind the tiles, but MapLibre keeps serving
+ * the tiles it already has: only zoom levels the user had not visited yet would
+ * show the edit, which reads as "the map updated when I zoom in but not out".
+ * A new token means a new URL, which busts both MapLibre's tile cache and the
+ * browser's HTTP cache; the layer sync pushes it into the live source.
+ *
+ * Best-effort: a failed mint leaves the layer exactly as it was (still showing
+ * pre-save tiles), which is why this never throws into the save's result.
+ */
+async function refreshVectorTilesForDataset(
+  client: GeoLensClientOptions,
+  datasetId: string,
   fetchImpl: GeoLensFetch,
 ): Promise<void> {
-  const url = itemsUrl(client, dataset.id, FEATURES_LIMIT);
-  const res = await fetchImpl(url, { headers: authHeaders(client) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = (await res.json()) as FeatureCollection;
-  app.addGeoJsonLayer(dataset.title, data, `${sourcePathFor(client, dataset)}#items`);
-  if (dataset.bbox) app.fitBounds?.(dataset.bbox);
+  const targets = useAppStore
+    .getState()
+    .layers.filter(
+      (l) =>
+        l.metadata.sourceKind === "geolens-vector-tiles" &&
+        l.metadata.geolensBaseUrl === client.baseUrl &&
+        l.metadata.geolensDatasetId === datasetId,
+    );
+  for (const target of targets) {
+    try {
+      const token = await mintTileToken(client, datasetId, fetchImpl);
+      const current = useAppStore.getState().layers.find((l) => l.id === target.id);
+      if (!current) continue;
+      // The token alone is not enough: GeoLens hands back the same signature
+      // for the rest of its time bucket, so the URL would be unchanged and the
+      // caches would answer with the pre-save tiles. The columns are rebuilt
+      // here too — dropping them would serve attribute-free tiles until the
+      // store subscription restamped them, costing a second refetch.
+      const tiles = withTileVersion(
+        vectorTileTemplate(client, token, desiredTileColumns(current)).tiles,
+        Date.now(),
+      );
+      useAppStore.getState().updateLayer(target.id, {
+        source: { ...current.source, tiles: [tiles] },
+      });
+      scheduleTokenRefresh(client, target.id, datasetId, token.expiresIn, fetchImpl);
+    } catch {
+      // Leave this layer on its existing token; the next scheduled refresh retries.
+    }
+  }
+}
+
+/**
+ * Discard a layer's local changes by reloading the dataset from GeoLens. Also
+ * re-captures the baseline, so the layer starts clean rather than immediately
+ * looking edited again.
+ */
+async function reloadLayerFeatures(
+  client: GeoLensClientOptions,
+  layer: GeoLensEditableLayer,
+  featureLimit: number,
+  fetchImpl: GeoLensFetch,
+  signal?: AbortSignal,
+): Promise<void> {
+  // Same terms the layer was loaded with, so a reload restores the same slice
+  // of the dataset rather than silently widening or narrowing it.
+  const data = await fetchDatasetFeatures(
+    client,
+    layer.datasetId,
+    layer.featureLimit ?? featureLimit,
+    fetchImpl,
+    signal,
+    layer.bbox,
+  );
+  useAppStore.getState().updateLayer(layer.id, { geojson: data });
+  editSessions.set(layer.id, { baseline: captureFeatureBaseline(data) });
+}
+
+/**
+ * Drop bookkeeping for layers that have left the store.
+ *
+ * A baseline is a full copy of its dataset, so without this a session of adding
+ * and removing GeoLens layers retains one dataset per layer the user has since
+ * discarded. Called from the panel's store subscription, which already runs on
+ * every `layers` change.
+ */
+function pruneEditSessions(): void {
+  const live = new Set(useAppStore.getState().layers.map((l) => l.id));
+  for (const id of editSessions.keys()) {
+    if (!live.has(id)) editSessions.delete(id);
+  }
+  for (const id of pendingCountsCache.keys()) {
+    if (!live.has(id)) pendingCountsCache.delete(id);
+  }
+}
+
+/**
+ * Re-scope a layer to a different extent: load the dataset's features for
+ * `bbox` (or the whole dataset when there is none), replace the layer's
+ * features, and record the new terms so the baseline and any later reload agree
+ * with what the layer now holds.
+ *
+ * The layer's name is only rewritten when it is still the one this plugin
+ * generated, so a rename the user made survives while an untouched name stays
+ * truthful about whether the layer is the whole dataset or one view of it.
+ */
+async function refreshLayerToExtent(
+  client: GeoLensClientOptions,
+  layer: GeoLensEditableLayer,
+  featureLimit: number,
+  fetchImpl: GeoLensFetch,
+  bbox: GeoLensBbox | undefined,
+  viewSuffix: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const data = await fetchDatasetFeatures(
+    client,
+    layer.datasetId,
+    featureLimit,
+    fetchImpl,
+    signal,
+    bbox,
+  );
+  const store = useAppStore.getState();
+  const current = store.layers.find((l) => l.id === layer.id);
+  if (!current) return;
+
+  const title = layer.datasetTitle;
+  const generatedNames = title ? [title, `${title} (${viewSuffix})`] : [];
+  const name = generatedNames.includes(current.name)
+    ? bbox
+      ? `${title} (${viewSuffix})`
+      : (title as string)
+    : current.name;
+
+  const { geolensBbox: _dropped, ...metadata } = current.metadata as Record<string, unknown>;
+  void _dropped;
+  store.updateLayer(layer.id, {
+    name,
+    geojson: data,
+    metadata: {
+      ...metadata,
+      geolensFeatureLimit: featureLimit,
+      ...(bbox ? { geolensBbox: [...bbox] } : {}),
+    },
+  });
+  editSessions.set(layer.id, { baseline: captureFeatureBaseline(data) });
+}
+
+/** Forget every tracked baseline (plugin deactivation). */
+function clearEditSessions(): void {
+  editSessions.clear();
+  pendingCountsCache.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -471,6 +1515,13 @@ interface PanelState {
   /** Monotonic token to ignore superseded in-flight requests. */
   generation: number;
   controller: AbortController | null;
+  featureLimit: number;
+  /** Whether Add GeoJSON restricts the load to the current map view. */
+  viewOnly: boolean;
+  /** Whether the connected server has dataset editing enabled. */
+  editingEnabled: boolean;
+  /** Layer ids with a save/reload in flight, so the row can't be re-triggered. */
+  busyLayerIds: Set<string>;
 }
 
 /**
@@ -488,10 +1539,60 @@ function buildPanel(
     datasets: [],
     generation: 0,
     controller: null,
+    featureLimit: readFeatureLimit(),
+    viewOnly: readViewOnly(),
+    editingEnabled: false,
+    busyLayerIds: new Set(),
   };
 
   const panel = el("div", CSS.panel);
-  const hint = el("div", CSS.hint, labels.hint);
+  const hintRow = el("div", "display:flex;align-items:flex-start;gap:8px;");
+  const hint = el("div", `${CSS.hint}flex:1 1 auto;`, labels.hint);
+  const settingsButton = button("⚙", CSS.action, labels.settings);
+  settingsButton.setAttribute("aria-label", labels.settings);
+  hintRow.append(hint, settingsButton);
+
+  const settingsPanel = el("div", CSS.settings);
+  const featureLimitLabel = el("label", "font-size:11px;font-weight:600;", labels.featureLimit);
+  const featureLimitInput = el("input", CSS.input) as HTMLInputElement;
+  featureLimitInput.type = "number";
+  featureLimitInput.min = "1";
+  featureLimitInput.max = String(MAX_GEOLENS_FEATURE_LIMIT);
+  featureLimitInput.step = "1";
+  featureLimitInput.value = String(state.featureLimit);
+  featureLimitInput.style.display = "block";
+  featureLimitInput.style.marginTop = "4px";
+  featureLimitLabel.append(featureLimitInput);
+  const viewOnlyLabel = el(
+    "label",
+    "display:flex;align-items:flex-start;gap:6px;font-size:11px;font-weight:600;",
+  );
+  const viewOnlyInput = el("input", "margin:2px 0 0 0;") as HTMLInputElement;
+  viewOnlyInput.type = "checkbox";
+  viewOnlyInput.checked = state.viewOnly;
+  viewOnlyLabel.append(viewOnlyInput, el("span", "font-weight:600;", labels.viewOnly));
+  settingsPanel.append(
+    featureLimitLabel,
+    el("div", CSS.hint, labels.featureLimitHelp),
+    viewOnlyLabel,
+    el("div", CSS.hint, labels.viewOnlyHelp),
+  );
+
+  // A shortcut to the public deployments. It fills the URL field and connects,
+  // rather than only filling it: picking a sample server is the whole intent, so
+  // leaving the user to press Connect afterwards would just be a second click.
+  const sampleSelect = el("select", CSS.input) as HTMLSelectElement;
+  sampleSelect.title = labels.sampleServerTitle;
+  sampleSelect.setAttribute("aria-label", labels.sampleServerTitle);
+  const samplePlaceholder = el("option", "", labels.sampleServer);
+  samplePlaceholder.value = "";
+  sampleSelect.append(samplePlaceholder);
+  for (const server of GEOLENS_SAMPLE_SERVERS) {
+    const option = el("option", "", server.label);
+    option.value = server.baseUrl;
+    option.title = server.baseUrl;
+    sampleSelect.append(option);
+  }
 
   const baseUrlInput = el("input", CSS.input) as HTMLInputElement;
   baseUrlInput.placeholder = labels.baseUrlPlaceholder;
@@ -519,9 +1620,23 @@ function buildPanel(
   const status = el("div", CSS.status, "");
   const errorLine = el("div", CSS.error, "");
   errorLine.style.display = "none";
+  const edits = el("div", CSS.edits);
+  edits.style.display = "none";
   const list = el("div", CSS.list);
 
-  panel.append(hint, baseUrlInput, apiKeyInput, connectRow, searchRow, status, errorLine, list);
+  panel.append(
+    hintRow,
+    settingsPanel,
+    sampleSelect,
+    baseUrlInput,
+    apiKeyInput,
+    connectRow,
+    searchRow,
+    status,
+    errorLine,
+    edits,
+    list,
+  );
   container.replaceChildren(panel);
 
   const showError = (message: string): void => {
@@ -558,8 +1673,17 @@ function buildPanel(
       return true;
     } catch (error) {
       if (isAbort(error) || generation !== state.generation) return false;
+      // Show no catalog rather than a stale one: after a failed request the
+      // panel does not know what this server holds, and leaving the previous
+      // results up presents them as the answer to a query that never ran.
+      state.datasets = [];
+      renderList();
       status.textContent = "";
-      showError(labels.loadError(messageOf(error)));
+      showError(
+        isTransportFailure(error)
+          ? labels.blockedError(hostOf(state.client?.baseUrl ?? ""))
+          : labels.loadError(messageOf(error)),
+      );
       return false;
     }
   };
@@ -586,6 +1710,219 @@ function buildPanel(
     list.replaceChildren();
     for (const dataset of state.datasets) {
       list.append(renderCard(dataset));
+    }
+  };
+
+  // Per-layer status lines in the Edits section, so a save in progress can
+  // report "Saving 12/48…" into its own row without repainting the section.
+  const rowStatusNodes = new Map<string, HTMLElement>();
+
+  /**
+   * Repaint the Edits section: one row per GeoLens GeoJSON layer on the map that
+   * came from the connected server. Hidden entirely when there are none, so the
+   * panel looks exactly as it did before for read-only use.
+   */
+  const renderEdits = (): void => {
+    rowStatusNodes.clear();
+    const client = state.client;
+    const layers = client ? editableLayersForServer(client.baseUrl) : [];
+    if (!client || layers.length === 0) {
+      edits.replaceChildren();
+      edits.style.display = "none";
+      return;
+    }
+    const children: HTMLElement[] = [el("div", CSS.editsHeading, labels.editsHeading)];
+    // Say *why* saving is unavailable rather than showing a dead button: the
+    // server's editing flag is off, or the connection carries no API key (the
+    // write endpoints reject anonymous requests).
+    if (!state.editingEnabled) {
+      children.push(el("div", CSS.hint, labels.saveDisabledByServer));
+    } else if (!client.apiKey) {
+      children.push(el("div", CSS.hint, labels.saveNeedsKey));
+    }
+    for (const layer of layers) children.push(renderEditRow(layer));
+    edits.replaceChildren(...children);
+    edits.style.display = "flex";
+  };
+
+  const renderEditRow = (layer: GeoLensEditableLayer): HTMLElement => {
+    const row = el("div", CSS.editRow);
+    row.append(el("div", CSS.editName, layer.name));
+
+    const counts = pendingCountsFor(layer);
+    const pending = counts ? counts.added + counts.changed + counts.deleted : null;
+    const rowStatus = el(
+      "div",
+      CSS.hint,
+      // A restored project has no baseline yet, so the counts are unknown until
+      // a save reads the dataset back — leave the line blank rather than claim
+      // there is nothing to save.
+      counts === null
+        ? ""
+        : pending === 0
+          ? labels.editsNone
+          : labels.editsPending(counts.added, counts.changed, counts.deleted),
+    );
+    rowStatusNodes.set(layer.id, rowStatus);
+    row.append(rowStatus);
+
+    const busy = state.busyLayerIds.has(layer.id);
+    const canWrite = state.editingEnabled && !!state.client?.apiKey;
+    const actions = el("div", CSS.actions);
+
+    const saveButton = button(labels.saveEdits, CSS.action, labels.saveEditsTitle);
+    saveButton.disabled = busy || !canWrite || pending === 0;
+    saveButton.addEventListener("click", () => void handleSave(layer));
+
+    const viewButton = button(labels.refreshToView, CSS.action, labels.refreshToViewTitle);
+    viewButton.disabled = busy;
+    viewButton.addEventListener("click", () => void handleRefreshToView(layer));
+
+    const reloadButton = button(labels.revertEdits, CSS.action, labels.revertEditsTitle);
+    reloadButton.disabled = busy;
+    reloadButton.addEventListener("click", () => void handleReload(layer));
+
+    actions.append(saveButton, viewButton, reloadButton);
+    row.append(actions);
+    return row;
+  };
+
+  /** The layer's current store state, or null when it has since been removed. */
+  const currentEditableLayer = (layerId: string): GeoLensEditableLayer | null => {
+    if (!state.client) return null;
+    return editableLayersForServer(state.client.baseUrl).find((l) => l.id === layerId) ?? null;
+  };
+
+  const handleSave = async (layer: GeoLensEditableLayer): Promise<void> => {
+    const client = state.client;
+    if (!client || state.busyLayerIds.has(layer.id)) return;
+    state.busyLayerIds.add(layer.id);
+    clearError();
+    renderEdits();
+    try {
+      // Re-read from the store: the row was built from a snapshot that may be a
+      // few edits old by the time the button is pressed.
+      const fresh = currentEditableLayer(layer.id) ?? layer;
+      const outcome = await saveLayerEdits(
+        client,
+        fresh,
+        state.featureLimit,
+        fetchImpl,
+        (done, total) => {
+          const node = rowStatusNodes.get(layer.id);
+          if (node) node.textContent = labels.savingEdits(done, total);
+        },
+        undefined,
+        (plan) =>
+          plan.deletes.length === 0 || window.confirm(labels.confirmDeletes(plan.deletes.length)),
+      );
+      if (outcome.errors.length > 0) {
+        showError(labels.savePartial(outcome.errors.length, outcome.errors[0]));
+      }
+      status.textContent = labels.savedEdits(outcome.written);
+      // The same dataset may also be on the map as vector tiles, which are now
+      // out of date at every zoom the user has already looked at.
+      if (outcome.written > 0) {
+        await refreshVectorTilesForDataset(client, fresh.datasetId, fetchImpl);
+      }
+    } catch (error) {
+      showError(labels.saveError(messageOf(error)));
+    } finally {
+      state.busyLayerIds.delete(layer.id);
+      renderEdits();
+    }
+  };
+
+  /**
+   * Re-scope a layer to the current map view without removing and re-adding it.
+   *
+   * Unsaved work is never discarded silently: the user is offered the save
+   * first, and a save that did not fully succeed aborts the reload so nothing
+   * is lost. Declining the save asks separately about discarding, so all three
+   * outcomes (save, discard, cancel) are reachable from the one button.
+   */
+  const handleRefreshToView = async (layer: GeoLensEditableLayer): Promise<void> => {
+    const client = state.client;
+    if (!client || state.busyLayerIds.has(layer.id)) return;
+
+    const pending = pendingCountsFor(layer);
+    const pendingCount = pending ? pending.added + pending.changed + pending.deleted : 0;
+    let saveFirst = false;
+    if (pendingCount > 0) {
+      saveFirst = window.confirm(labels.refreshSavePrompt(pendingCount));
+      if (!saveFirst && !window.confirm(labels.refreshDiscardPrompt(pendingCount))) return;
+    }
+
+    state.busyLayerIds.add(layer.id);
+    clearError();
+    renderEdits();
+    const rowStatus = rowStatusNodes.get(layer.id);
+    if (rowStatus) rowStatus.textContent = labels.refreshingToView;
+    try {
+      if (saveFirst) {
+        const outcome = await saveLayerEdits(
+          client,
+          currentEditableLayer(layer.id) ?? layer,
+          state.featureLimit,
+          fetchImpl,
+          (done, total) => {
+            const node = rowStatusNodes.get(layer.id);
+            if (node) node.textContent = labels.savingEdits(done, total);
+          },
+          undefined,
+          (plan) =>
+            plan.deletes.length === 0 || window.confirm(labels.confirmDeletes(plan.deletes.length)),
+        );
+        if (outcome.errors.length > 0) {
+          // Reloading now would replace the features those writes failed on.
+          showError(labels.savePartial(outcome.errors.length, outcome.errors[0]));
+          return;
+        }
+        status.textContent = labels.savedEdits(outcome.written);
+        if (outcome.written > 0) {
+          await refreshVectorTilesForDataset(client, layer.datasetId, fetchImpl);
+        }
+      }
+      await refreshLayerToExtent(
+        client,
+        currentEditableLayer(layer.id) ?? layer,
+        state.featureLimit,
+        fetchImpl,
+        (state.viewOnly ? currentViewBbox(app) : null) ?? undefined,
+        labels.viewSuffix,
+      );
+    } catch (error) {
+      showError(labels.loadError(messageOf(error)));
+    } finally {
+      state.busyLayerIds.delete(layer.id);
+      renderEdits();
+    }
+  };
+
+  const handleReload = async (layer: GeoLensEditableLayer): Promise<void> => {
+    const client = state.client;
+    if (!client || state.busyLayerIds.has(layer.id)) return;
+    // Reloading throws away unsaved work, and there is no undo, so confirm when
+    // there is something to lose. A clean layer still reloads on one click.
+    const pending = pendingCountsFor(layer);
+    if (pending && pending.added + pending.changed + pending.deleted > 0) {
+      const proceed = window.confirm(
+        labels.revertConfirm(pending.added, pending.changed, pending.deleted),
+      );
+      if (!proceed) return;
+    }
+    state.busyLayerIds.add(layer.id);
+    clearError();
+    renderEdits();
+    const rowStatus = rowStatusNodes.get(layer.id);
+    if (rowStatus) rowStatus.textContent = labels.revertingEdits;
+    try {
+      await reloadLayerFeatures(client, layer, state.featureLimit, fetchImpl);
+    } catch (error) {
+      showError(labels.loadError(messageOf(error)));
+    } finally {
+      state.busyLayerIds.delete(layer.id);
+      renderEdits();
     }
   };
 
@@ -627,14 +1964,27 @@ function buildPanel(
     // Full-feature GeoJSON is only meaningful for vector datasets.
     if (dataset.isVector) {
       const geoJsonSourcePath = `${tilesSourcePath}#items`;
-      const geoJsonButton = button(labels.addGeoJson, CSS.action, labels.addGeoJsonTitle);
+      const geoJsonButton = button(
+        labels.addGeoJson,
+        CSS.action,
+        state.viewOnly ? labels.addGeoJsonViewTitle : labels.addGeoJsonTitle,
+      );
       const syncGeoJson = () =>
         syncButtonState(geoJsonButton, geoJsonSourcePath, labels.addGeoJson);
       resyncers.push(syncGeoJson);
       syncGeoJson();
       geoJsonButton.addEventListener("click", () => {
+        // Resolve the extent at click time, so it is the view the user is
+        // actually looking at rather than whatever it was when the card rendered.
         void handleAdd(geoJsonButton, syncGeoJson, () =>
-          addFeaturesLayer(app!, state.client!, dataset, fetchImpl),
+          addFeaturesLayer(
+            app!,
+            state.client!,
+            dataset,
+            state.featureLimit,
+            fetchImpl,
+            (state.viewOnly ? currentViewBbox(app) : null) ?? undefined,
+          ),
         );
       });
       actions.append(geoJsonButton);
@@ -675,13 +2025,41 @@ function buildPanel(
       // label+enabled on failure (the layer never entered the store).
       addingButtons.delete(trigger);
       settle();
+      // A GeoJSON add introduces a layer the Edits section tracks, and it
+      // finishes after the store change that would otherwise have repainted it.
+      renderEdits();
     }
+  };
+
+  /**
+   * Forget the API key when the server being pointed at changes origin.
+   *
+   * A key is issued by one deployment. Carrying it across — which is what
+   * picking a sample server or retyping the host would otherwise do — would send
+   * a private host's credential to a different, possibly public one.
+   */
+  const dropKeyOnOriginChange = (nextBaseUrl: string): void => {
+    const next = originOf(normalizeBaseUrl(nextBaseUrl));
+    const current = originOf(normalizeBaseUrl(baseUrlInput.value));
+    if (!next || !current || next === current) return;
+    apiKeyInput.value = "";
+  };
+
+  const capabilitiesFor = async (client: GeoLensClientOptions): Promise<boolean> => {
+    const { datasetEditing } = await fetchCapabilities(client, fetchImpl);
+    return datasetEditing;
   };
 
   const connect = async (): Promise<void> => {
     const baseUrl = normalizeBaseUrl(baseUrlInput.value);
     if (!baseUrl) return;
     state.client = { baseUrl, apiKey: apiKeyInput.value.trim() || undefined };
+    // Drop the outgoing server's catalog before the new one is queried. Those
+    // cards belong to a server this panel is no longer pointed at: their Add
+    // buttons would build source paths for the old base URL, and if the new
+    // connection fails they would sit there looking like its catalog.
+    state.datasets = [];
+    renderList();
     connectButton.disabled = true;
     connectButton.textContent = labels.connecting;
     const connected = await runSearch("");
@@ -693,9 +2071,53 @@ function buildPanel(
     // display to "" would wipe the inline `display:flex` and collapse to block.
     if (!connected) state.client = null;
     searchRow.style.display = connected ? "flex" : "none";
+    // Ask the server whether it allows dataset editing at all. Public endpoint,
+    // and a failure resolves to "no editing", so this never blocks connecting.
+    state.editingEnabled = connected && state.client ? await capabilitiesFor(state.client) : false;
+    renderEdits();
+    // Restored private rasters (project reopen, plugin reactivation) are in the
+    // store but hold no registered key — and their Add button is disabled, so
+    // re-adding is not a path back. The key entered here is the one credential
+    // they can get; register their templates so their tiles authenticate again.
+    if (connected && app && state.client?.apiKey) {
+      const layers = useAppStore.getState().layers;
+      for (const template of rasterTemplatesForServer(layers, state.client.baseUrl)) {
+        registerRasterApiKey(app, template, state.client.apiKey);
+      }
+    }
   };
 
   connectButton.addEventListener("click", () => void connect());
+  sampleSelect.addEventListener("change", () => {
+    const baseUrl = sampleSelect.value;
+    // Reset to the placeholder: the URL field is the source of truth (the user
+    // can edit it afterwards), so a stuck selection would soon be a lie.
+    sampleSelect.value = "";
+    if (!baseUrl) return;
+    dropKeyOnOriginChange(baseUrl);
+    baseUrlInput.value = baseUrl;
+    void connect();
+  });
+  // Typing a different host clears the key for the same reason as above; the
+  // check runs on `change` (commit), not on every keystroke, so editing a path
+  // or fixing a typo within one host leaves the key alone.
+  baseUrlInput.addEventListener("change", () => dropKeyOnOriginChange(baseUrlInput.value));
+  settingsButton.addEventListener("click", () => {
+    const open = settingsPanel.style.display !== "flex";
+    settingsPanel.style.display = open ? "flex" : "none";
+    settingsButton.setAttribute("aria-expanded", String(open));
+  });
+  settingsButton.setAttribute("aria-expanded", "false");
+  viewOnlyInput.addEventListener("change", () => {
+    state.viewOnly = viewOnlyInput.checked;
+    writeViewOnly(state.viewOnly);
+    renderList();
+  });
+  featureLimitInput.addEventListener("change", () => {
+    state.featureLimit = normalizeGeoLensFeatureLimit(featureLimitInput.value);
+    featureLimitInput.value = String(state.featureLimit);
+    writeFeatureLimit(state.featureLimit);
+  });
   baseUrlInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") void connect();
   });
@@ -706,8 +2128,19 @@ function buildPanel(
 
   // Re-derive every card's add/added button whenever the layer set changes, so
   // removing a layer from the Layers panel re-enables its "Add" button.
-  const unsubscribe = useAppStore.subscribe(() => {
+  //
+  // The Edits section repaints with it — that is what makes the pending counts
+  // follow along as the user edits geometry or attributes elsewhere in the app —
+  // but only when the `layers` array itself changed. Repainting diffs every
+  // tracked collection against its baseline, and this subscription fires on all
+  // store churn (pointer moves, map view), which would run that diff continuously.
+  let lastLayersRef: readonly GeoLibreLayer[] | null = null;
+  const unsubscribe = useAppStore.subscribe((store) => {
     for (const resync of resyncers) resync();
+    if (store.layers === lastLayersRef) return;
+    lastLayersRef = store.layers;
+    pruneEditSessions();
+    if (state.busyLayerIds.size === 0) renderEdits();
   });
 
   return () => {
@@ -756,7 +2189,7 @@ function createGeoLensPlugin(config: GeoLensPluginConfig): GeoLibrePlugin {
         app.registerRightPanel?.({
           id: config.id,
           title: config.name,
-          dock: "right-of-style",
+          dock: "replace-style",
           defaultWidth: 340,
           render: (container) => {
             mountPanel(container);
@@ -775,8 +2208,13 @@ function createGeoLensPlugin(config: GeoLensPluginConfig): GeoLibrePlugin {
       unregisterPanel = null;
       mountedPanels.delete(remount);
       // Layers the user added stay on the map (ordinary GeoLibre layers now),
-      // but the token-refresh timers we own must not outlive the plugin.
+      // but the token-refresh timers and the raster API keys we own must not
+      // outlive the plugin.
       clearAllRefreshTimers();
+      clearRasterApiKeys();
+      // Baselines are the plugin's own bookkeeping and hold a full copy of each
+      // loaded dataset; on reactivation they are read back from the server.
+      clearEditSessions();
       appRef = null;
     },
   };
@@ -789,3 +2227,12 @@ export const maplibreGeoLensPlugin: GeoLibrePlugin = createGeoLensPlugin({
 
 /** Exposed for unit tests: build a plugin over an injected transport. */
 export { createGeoLensPlugin };
+
+/** Exposed for unit tests: the save path and the pending-change readout. */
+export {
+  clearEditSessions,
+  pendingCountsFor,
+  refreshLayerToExtent,
+  saveLayerEdits,
+  type GeoLensEditableLayer,
+};

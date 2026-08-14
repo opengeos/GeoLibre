@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   fileOutputTargetExtension,
+  manifestScalarDefaults,
   mergeWasmToolManifests,
   normalizeVectorOutputFormat,
+  type ToolManifest,
   type WhiteboxTool,
 } from "@geolibre/processing";
 
@@ -295,6 +297,83 @@ describe("mergeWasmToolManifests", () => {
     // it must still be listed rather than dropped.
     const merged = mergeWasmToolManifests([], [{ id: "some_tool", params: [] }]);
     assert.deepEqual(merged[0].params, []);
+  });
+
+  it("fills a missing WASM default from the catalog (#1458)", () => {
+    // The WASM manifest is authoritative for parameter names and kinds, but it
+    // does not always carry defaults; the catalog does. Without this, an
+    // optional flag the tool documents as on rendered as an unchecked box and
+    // was sent as `false`.
+    const catalog: WhiteboxTool = {
+      id: "some_tool",
+      params: [
+        { name: "input", kind: "vector_in", required: true, default: null },
+        { name: "keep_ends", kind: "bool", required: false, default: true },
+        { name: "output", kind: "vector_out", required: true, default: null },
+      ],
+    };
+    const wasm: WhiteboxTool = {
+      id: "some_tool",
+      params: [
+        { name: "input", data_kind: "vector", io_role: "input", required: true },
+        { name: "keep_ends", data_kind: "bool", required: false },
+        { name: "output", data_kind: "vector", io_role: "output", required: true },
+      ],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.find((param) => param.name === "keep_ends")?.default, true);
+    // Dataset params keep no default: a catalog path would be meaningless here,
+    // and the dialog renders their picker from `kind`, not from a value.
+    assert.equal(tool.params?.find((param) => param.name === "input")?.default, undefined);
+  });
+
+  it("never overwrites a default the WASM manifest already declares", () => {
+    const catalog: WhiteboxTool = {
+      id: "some_tool",
+      params: [{ name: "mode", kind: "string", default: "catalog" }],
+    };
+    const wasm: WhiteboxTool = {
+      id: "some_tool",
+      params: [{ name: "mode", data_kind: "string", default: "wasm" }],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.[0].default, "wasm");
+  });
+});
+
+describe("manifestScalarDefaults", () => {
+  // points_along_lines, trimmed to the parts that matter. Its `defaults` map
+  // doubles as the tool's example invocation, so it lists a `lines.shp` input
+  // path and a `spacing` of 50 next to the one real default, `include_end`.
+  const pointsAlongLines: ToolManifest = {
+    id: "points_along_lines",
+    defaults: { include_end: true, input: "lines.shp", spacing: 50 },
+    params: [
+      { name: "input", data_kind: "vector", io_role: "input", required: true },
+      { name: "spacing", data_kind: "number", required: true },
+      { name: "include_end", data_kind: "bool", required: false },
+      { name: "output", data_kind: "vector", io_role: "output", required: true },
+    ],
+  };
+
+  it("keeps an optional scalar default the tool documents (#1458)", () => {
+    // "Include line endpoints (default true)" rendered as an unchecked box, so
+    // `--include_end=false` went to the runner and every line lost its endpoint:
+    // spacing 0.1 over a 0.36-degree line gave 3 points instead of 4, and 0.2
+    // gave a single point that looked like nothing had happened.
+    assert.deepEqual(manifestScalarDefaults(pointsAlongLines), { include_end: true });
+  });
+
+  it("drops dataset and required entries, which are example values", () => {
+    const defaults = manifestScalarDefaults(pointsAlongLines);
+    // `lines.shp` does not exist on the user's machine, and 50 is an arbitrary
+    // value for a required distance the user must supply.
+    assert.equal("input" in defaults, false);
+    assert.equal("spacing" in defaults, false);
+  });
+
+  it("returns nothing when the manifest declares no defaults", () => {
+    assert.deepEqual(manifestScalarDefaults({ id: "some_tool", params: [{ name: "mode" }] }), {});
   });
 });
 

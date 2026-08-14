@@ -1,10 +1,12 @@
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
+  resolveUrl,
   TimeSliderControl,
   type SourceSpec,
   type TimeSliderConfig,
   type TimeSliderOptions,
 } from "maplibre-gl-time-slider";
+import { loadMosaic } from "maplibre-gl-raster";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import {
   buildTimeFilter,
@@ -12,13 +14,30 @@ import {
   type TimeBinding,
   type TimeGranularity,
 } from "./time-slider-binding";
+import {
+  getTemporalLayerAdapter,
+  isSelectorTimeBinding,
+  nearestTimeIndex,
+  resolveSelectorDisplayUnits,
+  subscribeTemporalLayers,
+  TIME_GRANULARITIES,
+  toEpochMsAxis,
+  type SelectorTimeBinding,
+  type TemporalLayerAdapter,
+} from "./temporal-layers";
+import { usesMosaicManifest } from "./time-slider-source-url";
 
 /**
  * Marker placed on every GeoLibre store layer that mirrors a time-slider
  * source, used to reconcile and prune the plugin's layers without touching any
  * others (mirrors the Esri Wayback `sourceKind` convention).
+ *
+ * Exported as {@link TIME_SLIDER_SOURCE_KIND} so the Style panel can recognize
+ * these layers and offer the symbology their dock source supports.
  */
 const STORE_LAYER_SOURCE_KIND = "time-slider";
+
+export { STORE_LAYER_SOURCE_KIND as TIME_SLIDER_SOURCE_KIND };
 
 /**
  * Default configuration applied on first activation. No data sources are seeded:
@@ -138,9 +157,9 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   restoresPanelCollapseState: true,
   activate: (app: GeoLibreAppAPI) => {
     if (timeSliderControl) return;
-    const control = new TimeSliderControl(
-      savedConfig ? configToOptions(savedConfig) : buildDefaultOptions(),
-    );
+    const control = savedConfig
+      ? controlFromConfig(savedConfig)
+      : new TimeSliderControl(buildDefaultOptions());
     timeSliderControl = control;
     attachStoreSync(control);
 
@@ -173,7 +192,7 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     const config = timeSliderControl.getConfig();
     detachStoreSync?.();
     app.removeMapControl(timeSliderControl);
-    const control = new TimeSliderControl(configToOptions(config));
+    const control = controlFromConfig(config);
     timeSliderControl = control;
     attachStoreSync(control);
     const added = app.addMapControl(control, timeSliderPosition);
@@ -234,13 +253,36 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
  * Builds constructor options from a serialized config so a fresh control
  * restores the full timeline state and all of its sources.
  *
+ * Exported so the restore contract can be asserted directly: every path that
+ * rebuilds the control (activate from a saved project, and moving the dock)
+ * goes through here, and a field missing from it is silently dropped rather
+ * than failing a type check, since `TimeSliderOptions` keys are all optional.
+ *
  * @param config - A config produced by `TimeSliderControl.getConfig()`.
  * @returns Options for a new `TimeSliderControl`.
  */
-function configToOptions(config: TimeSliderConfig): TimeSliderOptions {
+export function controlFromConfig(config: TimeSliderConfig): TimeSliderControl {
+  const control = new TimeSliderControl(configToOptions(config));
+  // `TimeSliderOptions` cannot express every `TimeSliderConfig` field: datesUrl
+  // — the URL an ordinal date list was loaded from, which the dock echoes back
+  // in its Dates box — has no option equivalent. setConfig does carry it and is
+  // safe on a control that has not been added to a map yet: without a map it
+  // creates no adapters and stashes the sources for onAdd instead, and every
+  // view/container touch it makes is null-guarded. Replay it only when there is
+  // something to recover, so the ordinary restore stays a single pass.
+  if (config.datesUrl) control.setConfig(config);
+  return control;
+}
+
+export function configToOptions(config: TimeSliderConfig): TimeSliderOptions {
   return {
     startDate: config.startDate,
     endDate: config.endDate,
+    // An ordinal timeline steps through this explicit list instead of the
+    // start/end/interval range. Dropping it silently turned a restored project's
+    // irregular date list back into a continuous range, so the slider stepped
+    // over dates that have no data.
+    dates: config.dates,
     interval: config.interval,
     granularity: config.granularity,
     granularities: config.granularities,
@@ -290,6 +332,16 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
     (candidate.endDate != null && typeof candidate.endDate !== "string") ||
     typeof candidate.granularity !== "string" ||
     (candidate.currentDate !== undefined && typeof candidate.currentDate !== "string") ||
+    // An ordinal timeline's explicit date list. Optional (a continuous timeline
+    // omits it), but when present it must be a list of date strings — it is fed
+    // straight to the library as the steps the slider walks.
+    (candidate.dates !== undefined &&
+      (!Array.isArray(candidate.dates) ||
+        (candidate.dates as unknown[]).some((date) => typeof date !== "string"))) ||
+    // Display-only, but it is rendered into the dock's Dates box, so hold it to
+    // the same http(s)-only rule as the source URLs.
+    (candidate.datesUrl !== undefined &&
+      (typeof candidate.datesUrl !== "string" || !isSafeSourceUrl(candidate.datesUrl))) ||
     !Array.isArray(candidate.sources) ||
     (candidate.sources as unknown[]).some((source) => {
       if (!source || typeof source !== "object") return true;
@@ -334,15 +386,65 @@ function attachStoreSync(control: TimeSliderControl): void {
   // this control is attached.
   startThemeSync(control);
   const detachBindingSync = attachBindingSync(control);
+  const detachDisplaySync = attachDisplaySync(control);
   // Bind the detacher to this specific control and its own handler closures so
   // a second attach can never orphan the previous control's listeners.
   detachStoreSync = () => {
     control.off("sourceadd", onSourceAdd);
     control.off("sourceremove", onSourceRemove);
     detachBindingSync();
+    detachDisplaySync();
     stopThemeSync();
     detachStoreSync = null;
   };
+}
+
+// ----- Opacity and visibility ------------------------------------------------
+// The Layers panel and Style panel drive a mirrored layer the way they drive any
+// other: they write `opacity`/`visible` to the store, and MapController pushes
+// those onto the layer's `nativeLayerIds`. That only reaches a source the
+// library renders as a real MapLibre layer — an XYZ/WMS source, or a COG on the
+// `titiler` engine. A mosaic (and therefore a COG on the `gpu`/`wasm` engine,
+// which the library renders through the same adapter) draws on a deck.gl overlay
+// or through the WASM tiler's own source, so those writes land on a layer id
+// that does not exist and the controls appear dead. Forwarding the store's
+// values to the control instead reaches every source type, because each adapter
+// implements `setOpacity`/`setVisible` against whatever it actually rendered.
+
+/** Last opacity/visibility forwarded per source id, so an unrelated store write
+ * (a rename, another layer's edit) does not re-push identical values. */
+const lastDisplay = new Map<string, { opacity: number; visible: boolean }>();
+
+/**
+ * Forwards the store's opacity and visibility for mirrored dock layers to the
+ * control, which routes them to the adapter that owns the rendering.
+ *
+ * @param control - The active control.
+ * @returns A detacher that stops the subscription.
+ */
+function attachDisplaySync(control: TimeSliderControl): () => void {
+  const apply = (): void => {
+    const ids = new Set<string>();
+    for (const layer of useAppStore.getState().layers) {
+      if (layer.metadata.sourceKind !== STORE_LAYER_SOURCE_KIND) continue;
+      ids.add(layer.id);
+      const opacity = typeof layer.opacity === "number" ? layer.opacity : 1;
+      const visible = layer.visible !== false;
+      const previous = lastDisplay.get(layer.id);
+      if (previous && previous.opacity === opacity && previous.visible === visible) continue;
+      lastDisplay.set(layer.id, { opacity, visible });
+      // Skip the first pass for a layer whose values already match the spec it
+      // was mirrored from, so restoring a project does not re-push what the
+      // control just rendered.
+      if (!previous) continue;
+      control.setSourceProperty(layer.id, { opacity, visible } as Partial<SourceSpec>);
+    }
+    for (const id of [...lastDisplay.keys()]) {
+      if (!ids.has(id)) lastDisplay.delete(id);
+    }
+  };
+  apply();
+  return useAppStore.subscribe(apply);
 }
 
 // ----- Bound GeoLibre layers ------------------------------------------------
@@ -366,6 +468,7 @@ let preBindingRange: {
   // value (setRange treats a null/undefined end as open).
   end: string | undefined;
   granularity: TimeBinding["granularity"];
+  granularities: TimeGranularity[];
 } | null = null;
 // Guards our own timeFilter writes from re-entering the store subscription.
 let applyingBoundFilters = false;
@@ -381,6 +484,17 @@ let applyingOverlayVisibility = false;
 interface BoundLayer {
   id: string;
   binding: TimeBinding;
+}
+
+/**
+ * A layer whose time is an internal dimension (a Zarr data cube's `time` axis,
+ * or a plugin's own custom layer), driven through the temporal-adapter registry
+ * instead of a MapLibre filter or a source swap. See `temporal-layers.ts`.
+ */
+interface SelectorLayer {
+  id: string;
+  binding: SelectorTimeBinding;
+  adapter: TemporalLayerAdapter;
 }
 
 /** A KML `<TimeSpan>`/`<TimeStamp>` overlay frame's epoch-ms window. */
@@ -450,6 +564,26 @@ function getBoundLayers(): BoundLayer[] {
 }
 
 /**
+ * Collect the store layers bound to their own internal time dimension **and**
+ * currently backed by a live adapter. A binding whose adapter is not registered
+ * (yet) is skipped rather than dropped: the registry subscription in
+ * {@link attachBindingSync} reconciles again the moment one appears, which is
+ * what lets a restored project's cube start tracking the timeline as soon as
+ * its renderer finishes loading.
+ */
+function getSelectorLayers(): SelectorLayer[] {
+  const selectors: SelectorLayer[] = [];
+  for (const layer of useAppStore.getState().layers) {
+    const binding = layer.metadata?.timeBinding;
+    if (!isSelectorTimeBinding(binding)) continue;
+    const adapter = getTemporalLayerAdapter(layer.id);
+    if (!adapter) continue;
+    selectors.push({ id: layer.id, binding, adapter });
+  }
+  return selectors;
+}
+
+/**
  * Recompute and write each bound layer's time filter for the control's current
  * date. Writes are diffed so a no-op date tick does not churn the store, and a
  * re-entrancy guard keeps these writes from retriggering the store sync.
@@ -474,6 +608,89 @@ function applyBoundFilters(control: TimeSliderControl, bound: BoundLayer[]): voi
     }
   } finally {
     applyingBoundFilters = false;
+  }
+}
+
+// Last time index *requested* per selector-bound layer, so a tick that lands on
+// the slice already showing costs nothing. Cleared when a layer is unbound or
+// the dock detaches.
+const appliedTimeIndices = new Map<string, number>();
+// The in-flight (or just-finished) apply for each layer. New applies chain onto
+// it so a layer's slices are handed to its adapter strictly in request order:
+// a `setSelector` fetches chunks, and two overlapping calls could otherwise
+// resolve out of order and leave the renderer on the older slice while the memo
+// above records the newer index, stranding the cube behind the handle.
+const selectorApplyChains = new Map<string, Promise<void>>();
+// Pending throttled apply, so scrubbing (or playback) issues at most one chunk
+// fetch per interval per layer instead of one per tick.
+let selectorApplyTimer: ReturnType<typeof setTimeout> | null = null;
+const SELECTOR_APPLY_INTERVAL_MS = 150;
+
+/**
+ * Step every selector-bound layer to the slice nearest the timeline's current
+ * date, throttled: a Zarr `setSelector` fetches chunks, so dragging the handle
+ * must not queue one request per intermediate date. The trailing edge always
+ * runs, so the layer settles on wherever the handle was released.
+ *
+ * The layer set is re-read inside the timer rather than captured, so a binding
+ * added or removed while an apply is pending is honored.
+ *
+ * @param control - The active control.
+ */
+function scheduleSelectorTimes(control: TimeSliderControl): void {
+  if (selectorApplyTimer !== null) return;
+  selectorApplyTimer = setTimeout(() => {
+    selectorApplyTimer = null;
+    applySelectorTimes(control);
+  }, SELECTOR_APPLY_INTERVAL_MS);
+}
+
+function applySelectorTimes(control: TimeSliderControl): void {
+  const selectors = getSelectorLayers();
+  if (selectors.length === 0) return;
+  const targetMs = new Date(control.getConfig().currentDate).getTime();
+  if (!Number.isFinite(targetMs)) return;
+  for (const { id, adapter } of selectors) {
+    const axis = toEpochMsAxis(adapter.getTimeValues());
+    if (!axis) continue;
+    const index = nearestTimeIndex(axis, targetMs);
+    if (index < 0 || appliedTimeIndices.get(id) === index) continue;
+    appliedTimeIndices.set(id, index);
+    // The adapter is handed the slice's own date, not the timeline's, so a
+    // daily cube under a month-stepping slider lands on a real time value.
+    // Chained per layer so the last requested index is also the last applied;
+    // failures are the layer's own (a chunk fetch that 404s) and must not stop
+    // the other layers, or this layer's later slices, from being applied.
+    const date = new Date(axis[index]);
+    const previous = selectorApplyChains.get(id) ?? Promise.resolve();
+    const chained = previous.then(
+      () => applySelectorTime(id, adapter, date, index),
+      () => applySelectorTime(id, adapter, date, index),
+    );
+    selectorApplyChains.set(id, chained);
+    // Drop the chain once it drains, so a quiet layer holds no reference to a
+    // settled promise (and a removed layer leaves nothing behind).
+    void chained.then(() => {
+      if (selectorApplyChains.get(id) === chained) selectorApplyChains.delete(id);
+    });
+  }
+}
+
+/**
+ * Hand one slice to a layer's adapter, swallowing its failure so the chain
+ * survives. A failed apply drops the memo (unless a newer index has since been
+ * requested) so the next tick retries rather than assuming the slice landed.
+ */
+async function applySelectorTime(
+  id: string,
+  adapter: TemporalLayerAdapter,
+  date: Date,
+  index: number,
+): Promise<void> {
+  try {
+    await adapter.setTime(date);
+  } catch {
+    if (appliedTimeIndices.get(id) === index) appliedTimeIndices.delete(id);
   }
 }
 
@@ -505,14 +722,19 @@ function clearBoundFilters(ids: string[]): void {
  * layers (or their bindings) changes.
  */
 function reconcileBoundLayers(control: TimeSliderControl): void {
+  const selectors = getSelectorLayers();
   const bound = getBoundLayers();
   const frames = getTimeOverlayFrames();
-  if (bound.length > 0 || frames.length > 0) {
+  if (bound.length > 0 || selectors.length > 0 || frames.length > 0) {
     let min = Number.POSITIVE_INFINITY;
     let max = Number.NEGATIVE_INFINITY;
-    let granularity: TimeGranularity = bound[0]?.binding.granularity ?? "day";
+    let granularity: TimeGranularity =
+      bound[0]?.binding.granularity ?? selectors[0]?.binding.granularity ?? "day";
     let widestSpan = -1;
-    for (const { binding } of bound) {
+    // A vector filter binding and a data cube's selector binding describe the
+    // same thing here — an extent plus a suggested stepping unit — so they feed
+    // the shared track through one pass.
+    for (const { binding } of [...bound, ...selectors]) {
       if (binding.min < min) min = binding.min;
       if (binding.max > max) max = binding.max;
       const span = binding.max - binding.min;
@@ -528,13 +750,22 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
       const frameMax = frame.end ?? frame.begin;
       if (frameMax > max) max = frameMax;
     }
-    // With no vector binding to set the stepping unit, derive one from the total
+    // With no data binding to set the stepping unit, derive one from the total
     // overlay span (reusing the vector path's bucketing so the two stay
     // consistent) so scrubbing steps through the frames at a sensible rate.
-    if (bound.length === 0 && Number.isFinite(min) && Number.isFinite(max)) {
+    if (
+      bound.length === 0 &&
+      selectors.length === 0 &&
+      Number.isFinite(min) &&
+      Number.isFinite(max)
+    ) {
       granularity = pickGranularity(max - min);
     }
-    const rangeKey = `${min}|${max}|${granularity}`;
+    const orderedDisplayUnits = resolveSelectorDisplayUnits(
+      selectors.map(({ binding }) => binding),
+      granularity,
+    );
+    const rangeKey = `${min}|${max}|${granularity}|${orderedDisplayUnits?.join(",") ?? ""}`;
     if (rangeKey !== lastBoundRangeKey) {
       // Capture the range the control had before any binding overrode it, so it
       // can be restored when every binding is later removed.
@@ -544,10 +775,17 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
           start: config.startDate,
           end: config.endDate,
           granularity: config.granularity,
+          granularities: [...(config.granularities ?? TIME_GRANULARITIES)],
         };
       }
       lastBoundRangeKey = rangeKey;
       control.setRange(new Date(min), new Date(max), undefined, granularity);
+      control.setGranularities(
+        orderedDisplayUnits
+          ? orderedDisplayUnits
+          : (preBindingRange?.granularities ??
+              control.getConfig().granularities ?? [...TIME_GRANULARITIES]),
+      );
     }
   } else {
     // The last binding/frame was removed: restore the pre-binding range so any
@@ -559,12 +797,25 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
         undefined,
         preBindingRange.granularity,
       );
+      control.setGranularities(preBindingRange.granularities);
     }
     preBindingRange = null;
     lastBoundRangeKey = null;
   }
+  // Drop the memo for any layer that is no longer selector-bound, so re-binding
+  // it re-applies the current date instead of assuming the last index still holds.
+  const selectorIds = new Set(selectors.map((entry) => entry.id));
+  for (const id of [...appliedTimeIndices.keys()]) {
+    if (!selectorIds.has(id)) appliedTimeIndices.delete(id);
+  }
+  scheduleSelectorTimes(control);
   applyBoundFilters(control, bound);
   applyTimeOverlayVisibility(control, frames);
+}
+
+/** Exercise binding reconciliation with a stub control in unit tests. */
+export function __reconcileBoundLayersForTests(control: TimeSliderControl): void {
+  reconcileBoundLayers(control);
 }
 
 /**
@@ -578,15 +829,22 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
 function attachBindingSync(control: TimeSliderControl): () => void {
   lastBoundRangeKey = null;
   preBindingRange = null;
+  appliedTimeIndices.clear();
+  selectorApplyChains.clear();
   appliedFilterKeys.clear();
   // `statechange` fires on every date change (scrub and each playback tick) plus
-  // range/granularity changes, which is exactly when bound filters and overlay
-  // frames must update.
+  // range/granularity changes, which is exactly when bound filters, data cubes,
+  // and overlay frames must update.
   const onStateChange = () => {
+    scheduleSelectorTimes(control);
     applyBoundFilters(control, getBoundLayers());
     applyTimeOverlayVisibility(control, getTimeOverlayFrames());
   };
   control.on("statechange", onStateChange);
+  // An adapter can register after its binding is restored (a cube's renderer
+  // loads asynchronously), and that never touches the store, so the registry is
+  // watched separately from it.
+  const unsubscribeTemporal = subscribeTemporalLayers(() => reconcileBoundLayers(control));
 
   // Track the bound layers AND time-overlay frames so a store change only
   // re-snaps the range when one of them was added, removed, or edited (not on
@@ -611,8 +869,18 @@ function attachBindingSync(control: TimeSliderControl): () => void {
 
   return () => {
     control.off("statechange", onStateChange);
+    unsubscribeTemporal();
+    if (selectorApplyTimer !== null) {
+      clearTimeout(selectorApplyTimer);
+      selectorApplyTimer = null;
+    }
     unsubscribe();
     clearBoundFilters(getBoundLayers().map((entry) => entry.id));
+    // A cube stays on the slice it was last stepped to: unlike a filter, that is
+    // a real view of the data rather than a timeline artifact. Only the memo is
+    // dropped, so reactivating the dock re-applies whatever date it opens on.
+    appliedTimeIndices.clear();
+    selectorApplyChains.clear();
     appliedFilterKeys.clear();
     lastBoundRangeKey = null;
     preBindingRange = null;
@@ -626,23 +894,60 @@ function attachBindingSync(control: TimeSliderControl): () => void {
  */
 function temporalSignature(): string {
   return JSON.stringify({
+    selectors: getSelectorLayers().map(({ id, binding }) => [id, binding]),
     bound: getBoundLayers().map(({ id, binding }) => [id, binding]),
     frames: getTimeOverlayFrames().map((frame) => [frame.id, frame.begin, frame.end]),
   });
 }
 
 /**
- * Read the {@link TimeBinding} stored on a layer's metadata, if any. Used by the
- * Layers panel to decide between the Bind and Unbind actions.
+ * Read the binding stored on a layer's metadata, if any. Used by the Layers
+ * panel to decide between the Bind and Unbind actions, and by
+ * {@link isTimeSliderIdle}. Returns either kind: a vector-filter
+ * {@link TimeBinding} or a data cube's {@link SelectorTimeBinding}.
  *
  * @param layer - A store layer.
  * @returns The binding, or `undefined` when the layer is not time-bound.
  */
 export function getLayerTimeBinding(layer: {
   metadata?: Record<string, unknown>;
-}): TimeBinding | undefined {
-  const binding = layer.metadata?.timeBinding as TimeBinding | undefined;
-  return binding && typeof binding.property === "string" ? binding : undefined;
+}): TimeBinding | SelectorTimeBinding | undefined {
+  const binding = layer.metadata?.timeBinding;
+  if (isSelectorTimeBinding(binding)) return binding;
+  const filterBinding = binding as TimeBinding | undefined;
+  return filterBinding && typeof filterBinding.property === "string" ? filterBinding : undefined;
+}
+
+/**
+ * Whether the Time Slider has nothing left to drive. The Layers panel calls
+ * this after removing a binding so the plugin switches itself off once the last
+ * one is gone, rather than leaving the dock over a map it no longer affects.
+ *
+ * The slider drives three unrelated things, and all three have to be clear
+ * before it is safe to switch off:
+ *
+ * - store layers carrying a binding, of either kind: a vector
+ *   {@link TimeBinding} or a data cube's {@link SelectorTimeBinding};
+ * - the dock's own sources (COG stacks, mosaics, tile templates added through
+ *   its "Add data" form), which are mirrored into the store under
+ *   {@link STORE_LAYER_SOURCE_KIND};
+ * - KML `<TimeSpan>` / `<TimeStamp>` image overlays, which the slider animates
+ *   by visibility rather than by filter.
+ *
+ * The last two matter because the dock is the only way to reach them: turning
+ * the plugin off while either exists would take the user's own timeline data
+ * with it.
+ *
+ * @returns True when no bindings, dock sources, or timespan overlays remain.
+ */
+export function isTimeSliderIdle(): boolean {
+  for (const layer of useAppStore.getState().layers) {
+    if (getLayerTimeBinding(layer)) return false;
+    if (layer.metadata?.sourceKind === STORE_LAYER_SOURCE_KIND) return false;
+    const span = layer.metadata?.timeSpan as { begin?: unknown } | undefined;
+    if (span && typeof span.begin === "number") return false;
+  }
+  return true;
 }
 
 /**
@@ -658,6 +963,7 @@ function syncStoreLayers(control: TimeSliderControl | null): void {
   for (const spec of control.getSources()) {
     if (!spec.id) continue;
     activeIds.add(spec.id);
+    ensureSourceBounds(control, spec);
     addOrUpdateStoreLayer(createStoreLayer(spec));
   }
 
@@ -669,7 +975,90 @@ function syncStoreLayers(control: TimeSliderControl | null): void {
     .map((layer) => layer.id);
   for (const id of staleIds) {
     store.removeLayer(id);
+    forgetSourceBounds(id);
   }
+}
+
+// ----- Source extents --------------------------------------------------------
+// The Layers panel's "Zoom to layer" fits `metadata.bounds`, and a dock source
+// carries no extent of its own: the mirrored layer is external-native, so there
+// is no MapLibre source with `bounds` to fall back on either, and the button did
+// nothing. The dock resolves an extent for a COG when the layer is added
+// (`spec.bounds`, from TiTiler); a mosaic's extent is only in its manifest, so
+// it is fetched once per source, off the sync path.
+
+/** Resolved WGS84 `[west, south, east, north]` extents, keyed by source id. */
+const sourceBounds = new Map<string, [number, number, number, number]>();
+/** Source ids whose lookup already ran, success or failure, so a source without
+ * a recoverable extent is not re-fetched on every sync. */
+const boundsAttempted = new Set<string>();
+/** Bumped per source id whenever its cached extent is dropped. A manifest fetch
+ * captures the generation it started under, so a lookup still in flight when the
+ * source is removed cannot write its extent onto a *different* source that later
+ * reuses the same id. */
+const boundsGeneration = new Map<string, number>();
+
+/** Narrows a value to a finite `[west, south, east, north]` extent. */
+function normalizeBounds(value: unknown): [number, number, number, number] | null {
+  return Array.isArray(value) && value.length === 4 && value.every((n) => Number.isFinite(n))
+    ? (value as [number, number, number, number])
+    : null;
+}
+
+/**
+ * Makes a source's extent available to {@link createStoreLayer}, fetching it
+ * when only the mosaic manifest knows it.
+ *
+ * Runs at most once per source id. The manifest fetch is deliberately not
+ * awaited — sync is called from event handlers that must stay synchronous — so
+ * it re-syncs on its own once the extent lands.
+ *
+ * @param control - The control the source belongs to.
+ * @param spec - The dock source to resolve an extent for.
+ */
+function ensureSourceBounds(control: TimeSliderControl, spec: SourceSpec): void {
+  const id = spec.id;
+  if (!id || boundsAttempted.has(id)) return;
+  boundsAttempted.add(id);
+
+  const declared = normalizeBounds((spec as { bounds?: unknown }).bounds);
+  if (declared) {
+    sourceBounds.set(id, declared);
+    return;
+  }
+  if (spec.type !== "mosaic") return;
+
+  const generation = boundsGeneration.get(id) ?? 0;
+  void (async () => {
+    try {
+      const url = await resolveUrl(spec.url, control.getCurrentDate());
+      // Guard the fetch: an engine-rewritten COG also reports `type: "mosaic"`,
+      // and parsing it as a manifest would download the whole GeoTIFF.
+      if (!usesMosaicManifest(spec, url)) return;
+      const { bounds } = await loadMosaic(url);
+      const extent = normalizeBounds([bounds.west, bounds.south, bounds.east, bounds.north]);
+      // The control may have been rebuilt or torn down while the manifest was
+      // in flight; re-syncing a dead control would resurrect its store layers.
+      // The source may also have been removed and a different one added under
+      // the same id, in which case this extent belongs to neither.
+      if (!extent || timeSliderControl !== control) return;
+      if ((boundsGeneration.get(id) ?? 0) !== generation) return;
+      sourceBounds.set(id, extent);
+      syncStoreLayers(control);
+    } catch {
+      // No extent for this source: "Zoom to layer" stays inert, exactly as
+      // before. A missing or unreachable manifest for the current date is the
+      // expected failure here and is not worth surfacing.
+    }
+  })();
+}
+
+/** Drops a removed source's cached extent so a later source reusing the id
+ * resolves its own, and invalidates any lookup still in flight for it. */
+function forgetSourceBounds(id: string): void {
+  sourceBounds.delete(id);
+  boundsAttempted.delete(id);
+  boundsGeneration.set(id, (boundsGeneration.get(id) ?? 0) + 1);
 }
 
 function addOrUpdateStoreLayer(layer: GeoLibreLayer): void {
@@ -699,9 +1088,41 @@ function shouldUpdateStoreLayer(existingLayer: GeoLibreLayer, nextLayer: GeoLibr
   );
 }
 
-function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
+/**
+ * Mirrors one dock source into the store as an external-native layer.
+ *
+ * Exported so the metadata contract with the Layers panel can be asserted: the
+ * `identifiable`/`pixelIdentify` pair is what decides whether the panel's
+ * Identify icon is enabled and whether it reads pixels or queries features.
+ *
+ * @param spec - The dock source to mirror.
+ * @returns The store layer representing it.
+ */
+export function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
   const sourceId = spec.id as string;
   const layerType = spec.type === "geojson" ? "geojson" : "raster";
+  // COG and mosaic sources carry real source values, so Identify reads their
+  // bands at the timeline's current date (see time-slider-pixel-identify) the
+  // same way it reads a COG added through Add Raster Layer. XYZ/WMS sources are
+  // pre-rendered picture tiles with nothing to recover, and a GeoJSON source is
+  // mirrored as a vector layer that identifies through the normal map query.
+  const pixelIdentify = spec.type === "cog" || spec.type === "mosaic";
+  // Whether the client-side raster pipeline (deck.gl, or the WASM tiler's own
+  // source) draws this layer rather than MapLibre. `mosaic` is exactly that set:
+  // a real mosaic, plus a COG on the `gpu`/`wasm` engine, which the library
+  // reports as a mosaic because it renders it through the same adapter.
+  //
+  // Carried on the layer rather than read back from the control so the Style
+  // panel can react to it: a saved project restores its mirrored layers before
+  // the plugin creates its control, and asking the control during that window
+  // answers "no" and offers MapLibre paint sliders that cannot work.
+  const clientRenderedRaster = spec.type === "mosaic";
+  // The source's own extent, when one has been resolved (see
+  // `ensureSourceBounds`). Read from the cache rather than taken as an argument
+  // so every sync rebuilds the same layer, keeping `shouldUpdateStoreLayer`
+  // stable instead of flip-flopping the metadata.
+  const bounds =
+    normalizeBounds((spec as { bounds?: unknown }).bounds) ?? sourceBounds.get(sourceId);
   return {
     id: sourceId,
     name: spec.name ?? sourceId,
@@ -712,7 +1133,12 @@ function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
     style: { ...DEFAULT_LAYER_STYLE },
     metadata: {
       externalNativeLayer: true,
-      identifiable: false,
+      identifiable: pixelIdentify,
+      ...(pixelIdentify ? { pixelIdentify: true } : {}),
+      ...(clientRenderedRaster ? { clientRenderedRaster: true } : {}),
+      // Feeds the Layers panel's "Zoom to layer", which has nothing else to fit
+      // for an external-native layer.
+      ...(bounds ? { bounds } : {}),
       nativeLayerIds: [sourceId],
       sourceId,
       sourceIds: [sourceId],
@@ -728,5 +1154,6 @@ function removeAllTimeSliderStoreLayers(): void {
     .map((layer) => layer.id);
   for (const id of ids) {
     store.removeLayer(id);
+    forgetSourceBounds(id);
   }
 }

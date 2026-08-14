@@ -7,6 +7,7 @@ export type AddDataKind =
   | "wms"
   | "wfs"
   | "wmts"
+  | "ogc-features"
   | "ogc-vector-tiles"
   | "gpx"
   | "georss"
@@ -27,3 +28,5 @@ export type GpxLayerKind = "waypoints" | "tracks" | "trackPoints" | "routes" | "
 export type GeoRssMode = FeedMode;
 export type DelimitedTextMode = FeedMode;
 export type DelimitedTextDelimiter = "comma" | "tab" | "semicolon" | "pipe" | "custom";
+/** Whether the delimited-text source builds points from coordinate columns or by geocoding addresses. */
+export type DelimitedTextImportMode = "coordinates" | "addresses";

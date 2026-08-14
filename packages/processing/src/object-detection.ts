@@ -3,10 +3,10 @@
  *
  * Complements the AI Segmentation toolbox (which proxies SAM3 through the Python
  * sidecar) with a fully client-side path: a user-supplied YOLO model exported to
- * ONNX runs against a chosen raster via `onnxruntime-web`, and the detected
- * bounding boxes come back in source-raster pixel coordinates. The caller
- * (the detection dialog) georeferences those pixel boxes with the raster's
- * geotransform and turns each class into a GeoJSON layer.
+ * ONNX runs against a chosen raster or regular photo via `onnxruntime-web`, and
+ * the detected bounding boxes come back in source-image pixel coordinates. The
+ * caller (the detection dialog) georeferences GeoTIFF boxes with the raster's
+ * transform or locates photo results at the camera's GPS position.
  *
  * Keeping inference in the browser means detection works in the web build with
  * no sidecar, mirroring how the client raster tools (`raster-client.ts`) run on
@@ -23,7 +23,7 @@
 import { loadOrt } from "./ort";
 import type { RasterData } from "./raster-client";
 
-/** A single detection in **source raster pixel** coordinates. */
+/** A single detection in **source image pixel** coordinates. */
 export interface Detection {
   /** Bounding box `[minX, minY, maxX, maxY]` in source pixels (top-left origin). */
   bbox: [number, number, number, number];
@@ -53,10 +53,108 @@ const DEFAULT_CONFIDENCE = 0.25;
 const DEFAULT_IOU = 0.45;
 /** Letterbox padding colour (YOLO uses 114/255 grey). */
 const PAD_VALUE = 114 / 255;
+/**
+ * Maximum bytes allocated for the three Float32 bands decoded from a regular
+ * image. The browser also holds the source bitmap and canvas RGBA buffer, so
+ * keeping this below the raster engine's 512 MB ceiling avoids multi-gigabyte
+ * peaks on very large phone panoramas.
+ */
+const MAX_DETECTION_IMAGE_BYTES = 256 * 1024 * 1024;
 
 // Re-exported for the guard test (tests/object-detection.test.ts), which asserts
 // the CDN WASM version matches the pinned onnxruntime-web dependency.
 export { ORT_VERSION } from "./ort";
+
+function detectionImagePixelCount(width: number, height: number): number {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+    throw new Error("Image dimensions must be positive integers.");
+  }
+  const pixels = width * height;
+  const estimatedBytes = pixels * 3 * Float32Array.BYTES_PER_ELEMENT;
+  if (!Number.isSafeInteger(pixels) || estimatedBytes > MAX_DETECTION_IMAGE_BYTES) {
+    throw new Error("This image is too large for in-browser object detection.");
+  }
+  return pixels;
+}
+
+/**
+ * Convert browser RGBA pixels into the {@link RasterData} shape consumed by
+ * the detection engine.
+ *
+ * Regular photos have no pixel-to-world transform, so their placeholder
+ * georeferencing is deliberately neutral. Callers must use the photo's own GPS
+ * location for result geometry instead of treating these pixel coordinates as
+ * map coordinates.
+ *
+ * @param width Decoded image width in pixels.
+ * @param height Decoded image height in pixels.
+ * @param rgba Row-major RGBA bytes, four entries per pixel.
+ * @returns Three 8-bit-valued Float32 RGB bands.
+ */
+export function rasterFromRgba(width: number, height: number, rgba: Uint8ClampedArray): RasterData {
+  const pixels = detectionImagePixelCount(width, height);
+  if (rgba.length !== pixels * 4) {
+    throw new Error("Decoded image pixels do not match its dimensions.");
+  }
+
+  const red = new Float32Array(pixels);
+  const green = new Float32Array(pixels);
+  const blue = new Float32Array(pixels);
+  for (let pixel = 0, offset = 0; pixel < pixels; pixel += 1, offset += 4) {
+    red[pixel] = rgba[offset];
+    green[pixel] = rgba[offset + 1];
+    blue[pixel] = rgba[offset + 2];
+  }
+  return {
+    bands: [red, green, blue],
+    width,
+    height,
+    originX: 0,
+    originY: 0,
+    resX: 1,
+    resY: 1,
+    nodata: null,
+    geoKeys: {},
+  };
+}
+
+/**
+ * Decode JPEG, PNG, or WebP bytes into RGB bands for object detection.
+ *
+ * @param bytes Encoded browser-readable image bytes.
+ * @param mimeType MIME type inferred from the selected filename.
+ * @returns A raster-shaped RGB image with neutral georeferencing.
+ */
+export async function readDetectionImage(
+  bytes: ArrayBuffer,
+  mimeType: string,
+): Promise<RasterData> {
+  if (typeof createImageBitmap !== "function" || typeof document === "undefined") {
+    throw new Error("This browser cannot decode the selected image.");
+  }
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(new Blob([bytes], { type: mimeType }), {
+      imageOrientation: "from-image",
+    });
+  } catch {
+    throw new Error("Could not decode the selected image.");
+  }
+
+  try {
+    detectionImagePixelCount(bitmap.width, bitmap.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) throw new Error("Could not create an image canvas.");
+    context.drawImage(bitmap, 0, 0);
+    const rgba = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
+    return rasterFromRgba(bitmap.width, bitmap.height, rgba);
+  } finally {
+    bitmap.close();
+  }
+}
 
 /**
  * Pull three colour channels and a normalisation divisor out of a
@@ -70,7 +168,7 @@ export { ORT_VERSION } from "./ort";
  * NoData and non-finite samples are excluded from that maximum so a sea of
  * NoData (or a few sentinel pixels) cannot skew the scale.
  *
- * @param raster The decoded source raster.
+ * @param raster The decoded source image in `RasterData` form.
  * @returns The per-channel band arrays, the divisor, and the source NoData.
  */
 export function rgbBands(raster: RasterData): {
@@ -332,10 +430,10 @@ export function decodeYolo(
 }
 
 /**
- * Run an ONNX YOLO model over a raster and return the detected boxes in source
- * raster pixel coordinates.
+ * Run an ONNX YOLO model over an image and return the detected boxes in source
+ * image pixel coordinates.
  *
- * @param raster The decoded source raster (from `readRasterData`).
+ * @param raster The decoded source image from `readRasterData` or `readDetectionImage`.
  * @param modelBytes The `.onnx` model file bytes.
  * @param options Input size and confidence/NMS thresholds.
  * @returns Detections in source-pixel space, after non-maximum suppression.

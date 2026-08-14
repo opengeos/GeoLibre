@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  App Sandbox entitlements for the Mac App Store build ONLY. The Developer ID
+  builds in release.yml do not use this file; they keep the default hardened
+  runtime without the sandbox.
+
+  ${APPLE_TEAM_ID} is substituted by scripts/render-mas-entitlements.sh before
+  the build (App Store binaries must carry application-identifier and
+  team-identifier entitlements matching the provisioning profile). The rendered
+  Entitlements.mas.plist is gitignored.
+
+  Keep this list minimal: every entitlement is reviewed by App Review, and the
+  sandbox is the reason the MAS build compiles out the Python sidecar, Jupyter,
+  martin, and native DuckDB (see the `mas` cargo feature).
+
+  - network.client: map tiles, basemap styles, remote GeoJSON/COG/PMTiles,
+    collab websocket.
+  - files.user-selected.read-write: open/save project files and datasets picked
+    through the file dialogs.
+
+  There is deliberately NO network.server entitlement. The app makes only
+  outgoing connections. The one feature that listened for an inbound connection
+  was Earth Engine sign-in (Google's OAuth loopback-redirect flow binds
+  127.0.0.1 to receive the browser redirect); App Review rejected the 2.4.0
+  submission over it (guideline 2.4.5, submission 76036eca), so the `mas` build
+  compiles that flow out entirely and hides its UI. If you ever add a feature
+  that accepts an inbound connection, adding the entitlement back is not enough
+  — it has to be justified in App Review Information, and mas-store.yml's
+  "no server entitlement" check will fail until this comment is revisited.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+  <key>com.apple.application-identifier</key>
+  <string>${APPLE_TEAM_ID}.org.geolibre.desktop</string>
+  <key>com.apple.developer.team-identifier</key>
+  <string>${APPLE_TEAM_ID}</string>
+  <key>com.apple.security.network.client</key>
+  <true/>
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+</dict>
+</plist>

@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
+  isOrtAvailable,
   readRasterData,
   segmentEverything,
   type RasterData,
@@ -111,6 +112,10 @@ export function SegmentEverythingPanel({
   const open = useAppStore((s) => s.ui.segmentEverythingOpen);
   const setOpen = useAppStore((s) => s.setSegmentEverythingOpen);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+
+  // Segmentation always goes through onnxruntime-web, which cannot load in a
+  // no-external-CDN build.
+  const ortAvailable = isOrtAvailable();
 
   const [imageBytes, setImageBytes] = useState<ArrayBuffer | null>(null);
   const [imageName, setImageName] = useState("");
@@ -303,6 +308,15 @@ export function SegmentEverythingPanel({
             {t("segmentEverything.hint")}
           </p>
 
+          {/* SlimSAM runs through the same ONNX Runtime WASM backend as object
+              detection, which a no-external-CDN build cannot load. */}
+          {!ortAvailable && (
+            <p className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              {t("segmentEverything.unavailableNoExternalCdn")}
+            </p>
+          )}
+
           {/* Image source */}
           <div className="grid gap-1.5">
             <Label htmlFor="seg-image" className="text-xs">
@@ -396,7 +410,7 @@ export function SegmentEverythingPanel({
           <div className="flex items-center gap-3">
             <Button
               onClick={() => void handleRun()}
-              disabled={running || !imageBytes}
+              disabled={!ortAvailable || running || !imageBytes}
               className="gap-2"
             >
               {running ? (

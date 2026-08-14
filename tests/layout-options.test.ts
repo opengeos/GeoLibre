@@ -29,6 +29,7 @@ describe("layoutOptionsFromLocation", () => {
     assert.equal(options.stylePanelVisible, true);
     assert.equal(options.attributePanelVisible, true);
     assert.equal(options.panelsHidden, false);
+    assert.equal(options.panelsCollapsed, false);
   });
 
   it("hides every chrome element when maponly is set as a bare flag", () => {
@@ -86,5 +87,58 @@ describe("layoutOptionsFromLocation", () => {
     assert.equal(options.stylePanelVisible, false);
     assert.equal(options.attributePanelVisible, false);
     assert.equal(options.panelsHidden, true);
+  });
+
+  it("hides only the toolbar for toolbar=none", () => {
+    withSearch("?toolbar=none");
+    const options = layoutOptionsFromLocation(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
+    assert.equal(options.toolbarVisible, false);
+    assert.equal(options.statusBarVisible, true);
+    assert.equal(options.layerPanelVisible, true);
+    assert.equal(options.stylePanelVisible, true);
+    assert.equal(options.attributePanelVisible, true);
+    assert.equal(options.panelsHidden, false);
+  });
+
+  it("accepts hidden toolbar aliases", () => {
+    for (const value of ["hidden", "hide", "off"]) {
+      withSearch(`?toolbar=${value}`);
+      const options = layoutOptionsFromLocation(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
+      assert.equal(options.toolbarVisible, false, `toolbar=${value}`);
+      assert.equal(options.layerPanelVisible, true, `toolbar=${value}`);
+    }
+  });
+
+  it("starts side panels collapsed without hiding their rails", () => {
+    withSearch("?panels=collapsed");
+    const options = layoutOptionsFromLocation(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
+    assert.equal(options.toolbarVisible, true);
+    assert.equal(options.layerPanelVisible, true);
+    assert.equal(options.stylePanelVisible, true);
+    assert.equal(options.attributePanelVisible, true);
+    assert.equal(options.panelsHidden, false);
+    assert.equal(options.panelsCollapsed, true);
+  });
+
+  it("provides read-only viewer chrome between the full app and maponly", () => {
+    withSearch("?layout=viewer");
+    const options = layoutOptionsFromLocation(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
+    assert.equal(options.viewer, true);
+    assert.equal(options.compact, true);
+    assert.equal(options.toolbarVisible, true);
+    assert.equal(options.statusBarVisible, true);
+    assert.equal(options.layerPanelVisible, true);
+    assert.equal(options.stylePanelVisible, false);
+    assert.equal(options.attributePanelVisible, false);
+    assert.equal(options.panelsHidden, false);
+  });
+
+  it("forces the viewer layer legend on despite a persisted hidden setting", () => {
+    withSearch("?layout=viewer");
+    const options = layoutOptionsFromLocation({
+      ...DEFAULT_DESKTOP_LAYOUT_SETTINGS,
+      layerPanelVisible: false,
+    });
+    assert.equal(options.layerPanelVisible, true);
   });
 });

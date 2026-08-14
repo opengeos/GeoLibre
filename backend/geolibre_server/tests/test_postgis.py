@@ -5,8 +5,9 @@ Two tiers:
 - Validation and status tests that need only psycopg installed (no server).
 - Live round-trip tests against a real PostGIS database, enabled by setting
   ``GEOLIBRE_TEST_POSTGIS_DSN`` to a connection string with rights to create
-  and drop tables. Without it they skip, mirroring how the other optional
-  engines (geopandas/rasterio/sedona) gate their suites.
+  and drop tables and allowing its host with ``GEOLIBRE_POSTGIS_HOSTS``.
+  Without it they skip, mirroring how the other optional engines
+  (geopandas/rasterio/sedona) gate their suites.
 """
 
 from __future__ import annotations
@@ -20,7 +21,10 @@ from geolibre_server.app.postgis import (
     PostgisReadRequest,
     PostgisTablesRequest,
     PostgisWriteRequest,
+    _allowed_postgis_targets,
+    _normalize_host,
     _sanitize_error,
+    _validate_postgis_target,
     postgis_read,
     postgis_status,
     postgis_tables,
@@ -91,6 +95,138 @@ def test_sanitize_error_scrubs_passwords() -> None:
     assert "****@db.example.com" in scrubbed
 
 
+def test_postgis_allowlist_parses_hosts_ips_and_ports() -> None:
+    assert _allowed_postgis_targets(
+        "DB.EXAMPLE., db.internal:5433, 10.0.0.4, [2001:db8::1]:5432"
+    ) == {
+        ("db.example", None),
+        ("db.internal", 5433),
+        ("10.0.0.4", None),
+        ("2001:db8::1", 5432),
+    }
+
+
+def test_postgis_allowlist_requires_brackets_for_ipv6() -> None:
+    """An unbracketed `2001:db8::1:5432` is a valid address, not host plus port."""
+    with pytest.raises(ValueError):
+        _allowed_postgis_targets("2001:db8::1:5432")
+    assert _allowed_postgis_targets("[2001:db8::1]") == {("2001:db8::1", None)}
+
+
+def test_postgis_wildcard_lifts_the_restriction(monkeypatch) -> None:
+    """``*`` (what the desktop app passes its own sidecar) allows any DSN."""
+    assert _allowed_postgis_targets("*") is None
+    # Mixing it with hosts looks like a narrowing but is not one.
+    with pytest.raises(ValueError):
+        _allowed_postgis_targets("db.example,*")
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "*")
+    for conninfo in (
+        {"host": "anything.internal", "port": "5432"},
+        {"host": "/var/run/postgresql"},
+        {"service": "production"},
+        {},
+    ):
+        assert _validate_postgis_target(conninfo) is None
+
+
+def test_postgis_access_is_disabled_without_allowlist(monkeypatch) -> None:
+    monkeypatch.delenv("GEOLIBRE_POSTGIS_HOSTS", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        _validate_postgis_target({"host": "db.example"})
+    assert exc.value.status_code == 403
+
+
+def test_postgis_allowlist_rejects_unlisted_and_wrong_port(monkeypatch) -> None:
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db.example:5433")
+    for conninfo in (
+        {"host": "internal.example", "port": "5433"},
+        {"host": "db.example", "port": "5432"},
+    ):
+        with pytest.raises(HTTPException) as exc:
+            _validate_postgis_target(conninfo)
+        assert exc.value.status_code == 403
+
+
+def test_postgis_allowlist_validates_every_failover_host(monkeypatch) -> None:
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db-a.example:5432,db-b.example:5433")
+    assert _validate_postgis_target({"host": "db-a.example,db-b.example", "port": "5432,5433"}) == (
+        "db-a.example,db-b.example",
+        "5432,5433",
+    )
+    # libpq reads an empty port item as that host's default port.
+    assert _validate_postgis_target({"host": "db-a.example,db-b.example", "port": ",5433"}) == (
+        "db-a.example,db-b.example",
+        "5432,5433",
+    )
+    with pytest.raises(HTTPException) as exc:
+        _validate_postgis_target({"host": "db-a.example,metadata.internal", "port": "5432"})
+    assert exc.value.status_code == 403
+
+
+def test_postgis_host_list_whitespace_is_not_passed_to_libpq(monkeypatch) -> None:
+    """A quoted multi-host DSN can carry spacing libpq would read as the name."""
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db-a.example,db-b.example")
+    assert _validate_postgis_target(
+        {"host": "db-a.example, db-b.example", "port": "5432, 5433"}
+    ) == (
+        "db-a.example,db-b.example",
+        "5432,5433",
+    )
+
+
+def test_postgis_allowlist_matches_dsn_host_case_insensitively(monkeypatch) -> None:
+    """Comparison normalizes the DSN host too, not just the allowlist entry."""
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db.example")
+    # The host is returned as written: libpq resolves case and the DNS root dot.
+    assert _validate_postgis_target({"host": "DB.EXAMPLE."}) == ("DB.EXAMPLE.", "5432")
+
+
+def test_postgis_malformed_allowlist_is_a_server_error(monkeypatch) -> None:
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db.example:99999")
+    with pytest.raises(HTTPException) as exc:
+        _validate_postgis_target({"host": "db.example"})
+    assert exc.value.status_code == 500
+
+
+def test_postgis_allowlist_rejects_indirect_destinations(monkeypatch) -> None:
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "localhost")
+    for conninfo in (
+        {},
+        {"host": "/var/run/postgresql"},
+        {"service": "production"},
+        {"host": "localhost", "hostaddr": "169.254.169.254"},
+    ):
+        with pytest.raises(HTTPException) as exc:
+            _validate_postgis_target(conninfo)
+        assert exc.value.status_code == 400
+
+
+def test_postgis_bracketed_empty_host_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        _normalize_host("[]")
+
+
+@requires_psycopg
+def test_nested_dbname_cannot_redirect_the_connection(monkeypatch) -> None:
+    """A conninfo-shaped ``dbname`` must not move the connection off its host.
+
+    libpq re-parses a ``dbname`` that looks like a connection string only on
+    its keyword/value array path (``expand_dbname``); psycopg hands the DSN to
+    ``PQconnectStart`` as a *string*, whose parser leaves the value literal. If
+    a psycopg upgrade ever switched paths, a nested ``dbname`` would become a
+    way past the allowlist, so the behavior is pinned here: the attempt must
+    still land on the validated loopback host, never on the embedded one.
+    """
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "127.0.0.1:1")
+    request = PostgisTablesRequest(
+        connection="host=127.0.0.1 port=1 dbname='host=192.0.2.9 port=5432 dbname=real'",
+    )
+    with pytest.raises(HTTPException) as exc:
+        postgis_tables(request)
+    assert exc.value.status_code == 400
+    assert "192.0.2.9" not in str(exc.value.detail)
+
+
 @requires_psycopg
 def test_empty_connection_rejected() -> None:
     with pytest.raises(HTTPException) as exc:
@@ -99,7 +235,8 @@ def test_empty_connection_rejected() -> None:
 
 
 @requires_psycopg
-def test_connect_failure_does_not_leak_password() -> None:
+def test_connect_failure_does_not_leak_password(monkeypatch) -> None:
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "127.0.0.1:1")
     request = PostgisReadRequest(
         connection="postgresql://alice:sekretpw@127.0.0.1:1/nope",
         table="whatever",
@@ -222,6 +359,24 @@ def test_read_returns_wgs84_with_primary_key(live_table) -> None:
     assert lon == pytest.approx(-83.9207, abs=1e-4)
     assert lat == pytest.approx(35.9606, abs=1e-4)
     assert knox["id"] == knox["properties"]["gid"]
+
+
+@requires_live_postgis
+def test_read_drops_excluded_fields(live_table) -> None:
+    result = postgis_read(
+        PostgisReadRequest(
+            connection=LIVE_DSN, table=TABLE, excluded_fields=["population", "name", "gid"]
+        )
+    )
+    features = result["geojson"]["features"]
+    assert len(features) == 3
+    knox = features[0]
+    assert "population" not in knox["properties"]
+    assert "name" not in knox["properties"]
+    assert "gid" not in knox["properties"]
+    # The geometry and id must still be populated correctly.
+    assert "geometry" in knox
+    assert "id" in knox
 
 
 @requires_live_postgis
@@ -375,16 +530,74 @@ def test_write_keyless_insert_needs_pk_default(live_table) -> None:
 
 @requires_live_postgis
 def test_read_excludes_secondary_geometry_columns(live_table) -> None:
-    """Extra geometry columns must not surface as (hex WKB) attributes."""
+    """A requested geometry is loaded while the others stay out of attributes."""
     with psycopg.connect(LIVE_DSN) as conn:
         with conn.cursor() as cur:
             cur.execute(f"ALTER TABLE {TABLE} ADD COLUMN geom2 geometry(Point, 4326)")
-            cur.execute(f"UPDATE {TABLE} SET geom2 = ST_Transform(geom, 4326)")
+            cur.execute(f"UPDATE {TABLE} SET geom2 = ST_Translate(ST_Transform(geom, 4326), 10, 0)")
         conn.commit()
-    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    read = postgis_read(
+        PostgisReadRequest(
+            connection=LIVE_DSN,
+            table=TABLE,
+            geometry_column="geom2",
+        )
+    )
+    assert read["geometry_column"] == "geom2"
     properties = read["geojson"]["features"][0]["properties"]
     assert "geom2" not in properties
-    # And a round-trip write must leave the secondary geometry untouched.
+    assert "geom" not in properties
+    # The selected secondary geometry is the translated lon/lat point, not the
+    # alphabetically first column.
+    source_lon = _rows(f"SELECT ST_X(ST_Transform(geom, 4326)) FROM {TABLE} ORDER BY gid LIMIT 1")[
+        0
+    ][0]
+    assert read["geojson"]["features"][0]["geometry"]["coordinates"][0] == pytest.approx(
+        source_lon + 10
+    )
+    edited = read["geojson"]["features"][0]
+    edited_id = edited["id"]
+    original_primary = _rows(f"SELECT ST_AsEWKT(geom) FROM {TABLE} WHERE gid = %s", (edited_id,))[
+        0
+    ][0]
+    edited["geometry"] = _point(42, 43)
+    # Write-back updates the selected geometry and leaves the other registered
+    # geometry column untouched.
+    postgis_write(
+        PostgisWriteRequest(
+            connection=LIVE_DSN,
+            table=TABLE,
+            geometry_column="geom2",
+            geojson=read["geojson"],
+        )
+    )
+    assert _rows(f"SELECT count(*) FROM {TABLE} WHERE geom2 IS NOT NULL")[0][0] == 3
+    written = _rows(
+        f"SELECT ST_X(geom2), ST_Y(geom2), ST_AsEWKT(geom) FROM {TABLE} WHERE gid = %s",
+        (edited_id,),
+    )[0]
+    assert written[:2] == pytest.approx((42, 43))
+    assert written[2] == original_primary
+
+
+@requires_live_postgis
+def test_multi_geometry_omitted_column_uses_first(live_table) -> None:
+    """Omitted read and write selectors consistently use the first geometry."""
+    with psycopg.connect(LIVE_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"ALTER TABLE {TABLE} ADD COLUMN geom2 geometry(Point, 4326)")
+            cur.execute(f"UPDATE {TABLE} SET geom2 = ST_Translate(ST_Transform(geom, 4326), 10, 0)")
+        conn.commit()
+
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    assert read["geometry_column"] == "geom"
+    edited = read["geojson"]["features"][0]
+    edited_id = edited["id"]
+    original_secondary = _rows(
+        f"SELECT ST_AsEWKT(geom2) FROM {TABLE} WHERE gid = %s", (edited_id,)
+    )[0][0]
+    edited["geometry"] = _point(41, 42)
+
     postgis_write(
         PostgisWriteRequest(
             connection=LIVE_DSN,
@@ -392,7 +605,29 @@ def test_read_excludes_secondary_geometry_columns(live_table) -> None:
             geojson=read["geojson"],
         )
     )
-    assert _rows(f"SELECT count(*) FROM {TABLE} WHERE geom2 IS NOT NULL")[0][0] == 3
+    written = _rows(
+        f"SELECT ST_X(ST_Transform(geom, 4326)), "
+        f"ST_Y(ST_Transform(geom, 4326)), ST_AsEWKT(geom2) "
+        f"FROM {TABLE} WHERE gid = %s",
+        (edited_id,),
+    )[0]
+    assert written[:2] == pytest.approx((41, 42))
+    assert written[2] == original_secondary
+
+
+@requires_live_postgis
+@pytest.mark.parametrize("geometry_column", ["not_a_geometry", ""])
+def test_read_rejects_unknown_geometry_column(live_table, geometry_column: str) -> None:
+    with pytest.raises(HTTPException) as exc:
+        postgis_read(
+            PostgisReadRequest(
+                connection=LIVE_DSN,
+                table=TABLE,
+                geometry_column=geometry_column,
+            )
+        )
+    assert exc.value.status_code == 400
+    assert "Geometry column not found" in str(exc.value.detail)
 
 
 @requires_live_postgis

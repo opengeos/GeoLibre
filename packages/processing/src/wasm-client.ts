@@ -6,6 +6,7 @@
 // algorithms and outputs as the sidecar; bounded by WASM's ~4 GiB memory and
 // single-threaded execution (use the sidecar for very large data).
 import type { FeatureCollection } from "geojson";
+import { convertGeoTiffToCog } from "./cog-convert";
 import { normalizeVectorOutputFormat } from "./sidecar-client";
 import type {
   RunWhiteboxToolRequest,
@@ -61,7 +62,7 @@ interface ToolRunResult {
 }
 
 /** One tool's manifest as emitted by `geolibre manifests` (geolibre-wasm). */
-interface ToolManifest {
+export interface ToolManifest {
   id: string;
   display_name?: string;
   summary?: string;
@@ -69,6 +70,12 @@ interface ToolManifest {
   license_tier?: string;
   /** "geolibre" for GeoLibre-authored tools, "whitebox" otherwise. */
   source?: string;
+  /**
+   * Per-parameter default values, keyed by parameter name. Dataset entries are
+   * illustrative example paths rather than real defaults — see
+   * {@link manifestScalarDefaults}.
+   */
+  defaults?: Record<string, unknown>;
   params?: Array<{
     name: string;
     description?: string;
@@ -125,14 +132,51 @@ export async function listWhiteboxWasmTools(): Promise<string[]> {
 }
 
 /**
+ * A manifest's `defaults` map, restricted to the parameters it is safe to
+ * prefill: **optional** scalars, bools and enums.
+ *
+ * The map doubles as the tool's *example* invocation, so it also carries values
+ * for parameters that have no real default. `points_along_lines` declares
+ * `input: "lines.shp"` and `spacing: 50` next to `include_end: true`, yet the
+ * first two are required and the catalog snapshot leaves their `default` null.
+ * Prefilling them would put a path that does not exist on the user's machine
+ * into the input field and an arbitrary 50 into a required distance. So dataset
+ * parameters (`io_role` input/output) and required parameters are both dropped,
+ * leaving the 1028 genuinely-defaulted optional parameters.
+ *
+ * Dropping the whole map (what the dialog did before) is what surfaced as
+ * GeoLibre#1458: `include_end` documents "default true" but rendered as an
+ * unchecked box, so `--include_end=false` was sent and each line lost its
+ * endpoint. The Whitebox catalog snapshot already carries the same defaults for
+ * the tools it lists, so this only closes the gap for local (WASM) mode.
+ *
+ * @param manifest - The tool manifest.
+ * @returns Default values keyed by parameter name; dataset and required params omitted.
+ */
+export function manifestScalarDefaults(manifest: ToolManifest): Record<string, unknown> {
+  const defaults = manifest.defaults;
+  if (!defaults) return {};
+  const scalars: Record<string, unknown> = {};
+  for (const param of manifest.params ?? []) {
+    if (param.io_role || param.required) continue;
+    const value = defaults[param.name];
+    if (value !== undefined) scalars[param.name] = value;
+  }
+  return scalars;
+}
+
+/**
  * Map one WASM tool manifest to the {@link WhiteboxTool} shape the Processing
  * toolbox renders. Each manifest param already carries `io_role`/`data_kind`/
  * `schema`, which the dialog's `parameterKind` reads directly; we additionally
  * flatten an enum schema's choices to `options` so the param renders as a
- * dropdown. `source` is preserved only for GeoLibre-authored tools, matching how
- * the Whitebox catalog snapshot leaves Whitebox tools' `source` unset.
+ * dropdown, and lift the manifest's scalar defaults onto each param so the
+ * dialog opens with the values the tool documents ({@link manifestScalarDefaults}).
+ * `source` is preserved only for GeoLibre-authored tools, matching how the
+ * Whitebox catalog snapshot leaves Whitebox tools' `source` unset.
  */
 function manifestToWhiteboxTool(manifest: ToolManifest): WhiteboxTool {
+  const defaults = manifestScalarDefaults(manifest);
   return {
     id: manifest.id,
     display_name: manifest.display_name,
@@ -149,6 +193,7 @@ function manifestToWhiteboxTool(manifest: ToolManifest): WhiteboxTool {
         data_kind: param.data_kind,
         schema: param.schema,
       };
+      if (param.name in defaults) mapped.default = defaults[param.name];
       if (param.schema?.kind === "enum" && Array.isArray(param.schema.options)) {
         // Coerce to strings (not filter to strings): an enum with numeric or
         // boolean values would otherwise drop to an empty list and render as a
@@ -263,11 +308,22 @@ function reconcileToolParams(
   return wasmParams.map((param) => {
     const catalogParam = catalogByName.get(param.name);
     if (!catalogParam) return param;
+    const wasmKind = paramKind(param);
     const catalogKind = paramKind(catalogParam);
-    if (shouldPreferCatalogKind(param, paramKind(param), catalogKind)) {
-      return { ...param, kind: catalogKind as WhiteboxToolParameter["kind"] };
+    // A WASM manifest with no `defaults` entry for this param falls back to the
+    // catalog's documented default, so local (WASM) mode opens the tool with the
+    // same values the sidecar would (GeoLibre#1458). Dataset params are skipped:
+    // the catalog leaves their default `null`, and a path default would be
+    // meaningless on the user's machine anyway.
+    const isDataset = wasmKind.endsWith("_in") || wasmKind.endsWith("_out");
+    const merged =
+      !isDataset && param.default === undefined && catalogParam.default != null
+        ? { ...param, default: catalogParam.default }
+        : param;
+    if (shouldPreferCatalogKind(param, wasmKind, catalogKind)) {
+      return { ...merged, kind: catalogKind as WhiteboxToolParameter["kind"] };
     }
-    return param;
+    return merged;
   });
 }
 
@@ -393,6 +449,80 @@ function isFeatureCollection(value: unknown): value is FeatureCollection {
   );
 }
 
+const WEB_MERCATOR_RADIUS = 6378137;
+const MAX_WEB_MERCATOR_LATITUDE = 85.0511287798066;
+
+/**
+ * Prepare a WGS84 map layer for Whitebox's planar buffer operation.
+ *
+ * `buffer_vector` treats both axes as Cartesian map units. Buffering RFC 7946
+ * longitude/latitude directly therefore creates a circle in degrees which is
+ * stretched into an oval when MapLibre displays it in Web Mercator. Projecting
+ * the input to EPSG:3857 makes the tool operate in the same conformal plane as
+ * the map. The GeoJSON writer sees the attached CRS and reprojects the result
+ * back to WGS84 before GeoLibre imports it.
+ *
+ * The dialog stores the buffer distance in degrees, including values converted
+ * from metres by its explicitly approximate geographic-distance control. Using
+ * the equatorial metres-per-degree scale preserves the old buffer's horizontal
+ * radius while making its vertical radius match.
+ */
+export function prepareGeographicBufferInput(
+  geojson: FeatureCollection,
+  distance: unknown,
+): { geojson: FeatureCollection; distance: number } | null {
+  const degrees = typeof distance === "number" ? distance : Number(distance);
+  if (!Number.isFinite(degrees) || degrees <= 0) return null;
+
+  const projectPosition = (position: number[]): number[] => {
+    const longitude = position[0];
+    const latitude = Math.max(
+      -MAX_WEB_MERCATOR_LATITUDE,
+      Math.min(MAX_WEB_MERCATOR_LATITUDE, position[1]),
+    );
+    const x = WEB_MERCATOR_RADIUS * ((longitude * Math.PI) / 180);
+    const y = WEB_MERCATOR_RADIUS * Math.log(Math.tan(Math.PI / 4 + (latitude * Math.PI) / 360));
+    return [x, y, ...position.slice(2)];
+  };
+
+  const projectCoordinates = (coordinates: unknown): unknown => {
+    if (!Array.isArray(coordinates)) return coordinates;
+    if (
+      coordinates.length >= 2 &&
+      typeof coordinates[0] === "number" &&
+      typeof coordinates[1] === "number"
+    ) {
+      return projectPosition(coordinates as number[]);
+    }
+    return coordinates.map(projectCoordinates);
+  };
+
+  const projected = structuredClone(geojson) as FeatureCollection & {
+    crs?: { type: "name"; properties: { name: string } };
+  };
+  const projectGeometry = (geometry: (typeof projected.features)[number]["geometry"]): void => {
+    if (!geometry) return;
+    if (geometry.type === "GeometryCollection") {
+      for (const member of geometry.geometries) {
+        projectGeometry(member);
+      }
+      return;
+    }
+    if ("coordinates" in geometry) {
+      geometry.coordinates = projectCoordinates(geometry.coordinates) as never;
+    }
+  };
+  for (const feature of projected.features) {
+    projectGeometry(feature.geometry);
+  }
+  projected.crs = { type: "name", properties: { name: "EPSG:3857" } };
+
+  return {
+    geojson: projected,
+    distance: WEB_MERCATOR_RADIUS * ((degrees * Math.PI) / 180),
+  };
+}
+
 /**
  * Whether bytes start with the TIFF signature: "II" (little-endian) or "MM"
  * (big-endian) followed by the version number in the byte order's own
@@ -490,6 +620,17 @@ const SUBSET_OUTPUT_TOOL_IDS = new Set([
 ]);
 
 /**
+ * Ensure a browser-run Whitebox raster can be streamed by GeoLibre's raster
+ * renderer. Whitebox tools may emit striped GeoTIFFs just like the Python
+ * runtime. The browser converter does not expose full COG validation, and a
+ * tiled GeoTIFF is not necessarily cloud optimized, so re-encode every declared
+ * raster output instead of treating tile layout alone as proof of conformance.
+ */
+export async function ensureWhiteboxRasterCog(bytes: Uint8Array): Promise<Uint8Array> {
+  return convertGeoTiffToCog(bytes);
+}
+
+/**
  * Run a Whitebox tool in the browser via WASM. Mirrors `runWhiteboxTool` but
  * executes locally and returns an already-completed {@link WhiteboxJob}. Output
  * values are inline: a `FeatureCollection` for `vector_out`, or a `Uint8Array`
@@ -500,14 +641,27 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
   const encoder = new TextEncoder();
   const input: Record<string, Uint8Array> = {};
   const args: string[] = [];
+  const parameterOverrides: Record<string, unknown> = {};
+  let geographicBufferInput: FeatureCollection | null = null;
+  if (request.tool_id === "buffer_vector") {
+    const geojson = request.layer_inputs?.input?.geojson;
+    const prepared = geojson
+      ? prepareGeographicBufferInput(geojson, request.parameters.distance)
+      : null;
+    if (prepared) {
+      geographicBufferInput = prepared.geojson;
+      parameterOverrides.distance = prepared.distance;
+    }
+  }
   // How each output file is turned into a job output: "geojson" is parsed into a
-  // FeatureCollection (a map layer); "bytes" is returned raw (a raster COG, a
-  // file_out blob, or a CRS-preserving vector file to download); "shapefile" is
-  // zipped with its sidecars first.
+  // FeatureCollection (a map layer); "raster" is normalized to a COG before it
+  // reaches the map; "bytes" is returned raw (a file_out blob or a
+  // CRS-preserving vector file to download); "shapefile" is zipped with its
+  // sidecars first.
   const outputs: {
     name: string;
     file: string;
-    kind: "geojson" | "bytes" | "shapefile";
+    kind: "geojson" | "raster" | "bytes" | "shapefile";
   }[] = [];
   // Defensive: validate the requested format so a bad value (e.g. a stale
   // output path from switching sidecar/WASM modes) degrades to GeoJSON instead
@@ -523,8 +677,12 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
     const name = param.name;
 
     if (kind === "vector_in") {
-      const geojson = request.layer_inputs?.[name]?.geojson;
+      let geojson = request.layer_inputs?.[name]?.geojson;
       if (!geojson) throw new Error(`Missing vector input for "${name}"`);
+      // A map layer is RFC 7946 WGS84, while Whitebox's buffer is Cartesian.
+      // Run this one operation in Web Mercator so its round buffers stay round
+      // on the map; the EPSG tag makes the tool's GeoJSON writer return WGS84.
+      if (name === "input" && geographicBufferInput) geojson = geographicBufferInput;
       const file = `${name}.geojson`;
       input[file] = encoder.encode(JSON.stringify(geojson));
       args.push(`--${name}=/work/${file}`);
@@ -588,10 +746,10 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
       const ext =
         kind === "file_out" ? fileOutputTargetExtension(param, request.parameters[name]) : "tif";
       const file = `${outputBaseName(request.tool_id, name)}.${ext}`;
-      outputs.push({ name, file, kind: "bytes" });
+      outputs.push({ name, file, kind: kind === "raster_out" ? "raster" : "bytes" });
       args.push(`--${name}=/work/${file}`);
     } else {
-      const value = request.parameters[name];
+      const value = parameterOverrides[name] ?? request.parameters[name];
       if (value !== undefined && value !== null && value !== "") {
         args.push(`--${name}=${value}`);
       }
@@ -627,6 +785,12 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
     }
     const bytes = files[entry.file];
     if (!bytes) continue;
+    if (entry.kind === "raster") {
+      const cog = await ensureWhiteboxRasterCog(bytes);
+      out[entry.name] = cog;
+      stdout.push(`Converted ${entry.file} to a Cloud Optimized GeoTIFF.`);
+      continue;
+    }
     if (entry.kind === "bytes") {
       out[entry.name] = bytes;
       continue;

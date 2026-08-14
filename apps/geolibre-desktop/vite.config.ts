@@ -1,5 +1,5 @@
 import react from "@vitejs/plugin-react";
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -11,6 +11,7 @@ import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyRtlText } from "./vite-plugins/copy-rtl-text";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
+import { proxyBinaryRequestGuarded } from "./vite-proxy-guard";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
 const EARTH_ENGINE_CONTROL_BUNDLE = "maplibre-gl-earth-engine/dist/";
@@ -43,6 +44,17 @@ function resolveViteMode(): string {
 // real shell env var (process.env alone would miss the file).
 const CONFIG_DIR = path.dirname(fileURLToPath(import.meta.url));
 const FILE_ENV = loadEnv(resolveViteMode(), CONFIG_DIR, "");
+
+// A managed build can use the server-side AI proxy without embedding any
+// provider credential. Only its public endpoint and selected model enter the
+// client bundle.
+for (const name of ["GEOLIBRE_AI_URL", "GEOLIBRE_AI_MODEL"] as const) {
+  const viteName = `VITE_${name}`;
+  if (!process.env[viteName]) {
+    const value = process.env[name] || FILE_ENV[viteName] || FILE_ENV[name];
+    if (value) process.env[viteName] = value;
+  }
+}
 if (!process.env.VITE_GOOGLE_MAPS_API_KEY) {
   const googleMapsApiKey =
     process.env.GOOGLE_MAPS_API_KEY ||
@@ -65,6 +77,19 @@ if (!process.env.VITE_CESIUM_TOKEN) {
   }
 }
 
+// Mapbox access token for the basemap control's Mapbox styles: same
+// bare→prefixed bridge as the Google Maps and Cesium keys. `MAPBOX_TOKEN` is the
+// spelling Mapbox's own tooling uses, so accept it from the shell or an .env
+// file and surface it as `VITE_MAPBOX_ACCESS_TOKEN`; getMapboxAccessToken() then
+// lets a runtime Settings override win over this build-time value.
+if (!process.env.VITE_MAPBOX_ACCESS_TOKEN) {
+  const mapboxAccessToken =
+    process.env.MAPBOX_TOKEN || FILE_ENV.VITE_MAPBOX_ACCESS_TOKEN || FILE_ENV.MAPBOX_TOKEN;
+  if (mapboxAccessToken) {
+    process.env.VITE_MAPBOX_ACCESS_TOKEN = mapboxAccessToken;
+  }
+}
+
 // Earth Engine OAuth client ID: same bare→prefixed bridge as the Google Maps
 // and Cesium keys. The app reads `import.meta.env.VITE_GEE_OAUTH_CLIENT_ID`, so
 // a bare `GEE_OAUTH_CLIENT_ID` (shell/.zshrc or an .env file) is surfaced under
@@ -84,6 +109,36 @@ if (!process.env.VITE_GEE_OAUTH_CLIENT_ID) {
 // (`npm run build`), so their presence flags a desktop build. Used below to drop
 // the service worker from the desktop bundle.
 const IS_TAURI_BUILD = !!process.env.TAURI_ENV_PLATFORM;
+
+// Strip ALL external CDN references (unpkg.com, cdn.jsdelivr.net, etc.) from the
+// build output. When set, features that depend on external CDN-hosted resources
+// (storymap HTML export, object detection models, ONNX WASM, 3D Tiles decoders,
+// Pyodide, PGlite, CereusDB, GDAL) are either disabled or degraded. Intended for
+// deployments that cannot reference untrusted external CDNs (e.g. Harmony/Amazon).
+// This implicitly forces GEOLIBRE_PGLITE_CDN=0, GEOLIBRE_CEREUS_CDN=0,
+// GEOLIBRE_GDAL_CDN=0, and GEOLIBRE_DUCKDB_WASM_CDN=0.
+const NO_EXTERNAL_CDN = process.env.GEOLIBRE_NO_EXTERNAL_CDN === "1";
+if (NO_EXTERNAL_CDN) {
+  // `npm run lite:build` exists to move DuckDB-WASM to jsDelivr, because the
+  // bundled .wasm files are the only assets over Cloudflare's 25 MiB per-file
+  // limit. That is the exact opposite of this flag, so the two cannot both be
+  // satisfied. Reject the combination here: silently overriding it to "0"
+  // instead lets the build run to completion and then trip lite-build.mjs's
+  // oversized-asset guard, whose hint blames `duckdbWasmBundlesPlugin` and
+  // sends the reader to the wrong place entirely.
+  if (process.env.GEOLIBRE_DUCKDB_WASM_CDN === "1") {
+    throw new Error(
+      "GEOLIBRE_NO_EXTERNAL_CDN=1 cannot be combined with GEOLIBRE_DUCKDB_WASM_CDN=1 " +
+        "(which `npm run lite:build` sets). The lite build offloads DuckDB-WASM to jsDelivr to stay " +
+        "under Cloudflare's 25 MiB per-file limit, and a no-external-CDN build must bundle it. " +
+        "Use `npm run build` and host on a target without that per-file cap.",
+    );
+  }
+  process.env.GEOLIBRE_PGLITE_CDN = "0";
+  process.env.GEOLIBRE_CEREUS_CDN = "0";
+  process.env.GEOLIBRE_GDAL_CDN = "0";
+  process.env.GEOLIBRE_DUCKDB_WASM_CDN = "0";
+}
 
 // PGlite + PostGIS is ~25 MB raw and weighs ~22 MB inside the Tauri binary
 // (postgis.tar is pre-gzipped, so brotli can't shrink it — it was the entire
@@ -111,6 +166,30 @@ const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN !== "0";
 const IS_EMBED = process.env.GEOLIBRE_EMBED === "1";
 const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
 
+// DuckDB-WASM from jsDelivr instead of the build output. Opt-IN, the reverse of
+// PGLITE_CDN above, because DuckDB is on the critical path for opening a local
+// vector file — making that need the network is a real behaviour change, so only
+// a deployment that cannot serve the binaries asks for it.
+//
+// The one that cannot: `duckdb-mvp.wasm` (~40 MB) and `duckdb-eh.wasm` (~35 MB)
+// both exceed the 25 MiB per-asset limit on Cloudflare Pages and Workers static
+// assets, which rejects the upload outright. Nothing else in the build is close
+// (the next largest is ~22 MB), so this single flag is what decides whether the
+// app can be hosted there at all. GitHub Pages allows 100 MB per file and needs
+// none of this.
+//
+// jsDelivr is already an allowed script-src in the web (docker/nginx.conf) and
+// desktop CSPs, and maplibre-gl-duckdb already loads its own DuckDB from there,
+// so this adds no new external origin. The web build's service worker
+// runtime-caches it after first use (the "geolibre-cdn-engines" rule below).
+// Ignored for the two targets that would be made worse by it, which is why this
+// sits below PWA_DISABLED rather than beside PGLITE_CDN: a Tauri build must stay
+// offline-capable, and an embed build ships no service worker, so there the
+// engine would be refetched every notebook session with no runtime cache behind
+// it. Neither target has the size ceiling this exists for -- a wheel and a
+// binary are not uploaded to Cloudflare.
+const DUCKDB_WASM_CDN = !PWA_DISABLED && process.env.GEOLIBRE_DUCKDB_WASM_CDN === "1";
+
 // Microsoft Store MSIX build. Strips the in-app "Check for updates" flow (Help
 // menu, command palette, About dialog, and the automated startup check) so the
 // Store package updates only through the Store — Microsoft policy 10.2.5 rejects
@@ -119,6 +198,12 @@ const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
 // GitHub .exe/winget installer, the sideload MSIX, portable, macOS, Linux, web,
 // and the Jupyter embed) leaves it unset, so their update checker is untouched.
 const IS_STORE_BUILD = process.env.GEOLIBRE_STORE_BUILD === "1";
+
+// Mac App Store build. The App Sandbox forbids spawning the Python sidecar,
+// the JupyterLab server, and the martin helper processes, so the UI compiles
+// those surfaces out (client/WASM engines keep working in the webview). Set
+// ONLY by the dedicated MAS build path; every other build leaves it unset.
+const IS_MAS_BUILD = process.env.GEOLIBRE_MAS_BUILD === "1";
 
 const pgliteCdnRequire = createRequire(import.meta.url);
 // The ESM entry of a package's manifest. Prefer the `module` field and the
@@ -346,7 +431,7 @@ function wmsProxyPlugin(): Plugin {
       });
       server.middlewares.use(WFS_PROXY_PATH, async (req, res) => {
         try {
-          await proxyBinaryRequest(req, res, WFS_PROXY_PATH);
+          await proxyBinaryRequestGuarded(req, res, WFS_PROXY_PATH);
         } catch (error) {
           const message = error instanceof Error ? error.message : "WFS proxy request failed";
           res.statusCode = 502;
@@ -356,7 +441,7 @@ function wmsProxyPlugin(): Plugin {
       });
       server.middlewares.use(GPX_PROXY_PATH, async (req, res) => {
         try {
-          await proxyBinaryRequest(req, res, GPX_PROXY_PATH);
+          await proxyBinaryRequestGuarded(req, res, GPX_PROXY_PATH);
         } catch (error) {
           const message = error instanceof Error ? error.message : "GPX proxy request failed";
           res.statusCode = 502;
@@ -366,7 +451,7 @@ function wmsProxyPlugin(): Plugin {
       });
       server.middlewares.use(RASTER_PROXY_PATH, async (req, res) => {
         try {
-          await proxyBinaryRequest(req, res, RASTER_PROXY_PATH);
+          await proxyBinaryRequestGuarded(req, res, RASTER_PROXY_PATH);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Raster proxy request failed";
           res.statusCode = 502;
@@ -532,10 +617,15 @@ function cereusCdnLoaderPlugin(): Plugin {
 }
 
 function duckdbWasmBundlesPlugin(): Plugin {
-  const modulePath = path.resolve(
-    __dirname,
-    IS_TAURI_BUILD ? "src/lib/duckdb-wasm-bundles.tauri.ts" : "src/lib/duckdb-wasm-bundles.ts",
-  );
+  // Tauri first: DUCKDB_WASM_CDN is already false for a desktop build, but the
+  // ordering keeps that guarantee local to this decision rather than resting on
+  // a condition set 400 lines up.
+  const variant = IS_TAURI_BUILD
+    ? "src/lib/duckdb-wasm-bundles.tauri.ts"
+    : DUCKDB_WASM_CDN
+      ? "src/lib/duckdb-wasm-bundles.cdn.ts"
+      : "src/lib/duckdb-wasm-bundles.ts";
+  const modulePath = path.resolve(__dirname, variant);
   return {
     name: "geolibre-duckdb-wasm-bundles",
     enforce: "pre",
@@ -551,6 +641,24 @@ function removeJupyterLiteFromTauriDistPlugin(): Plugin {
     apply: "build",
     closeBundle() {
       if (!IS_TAURI_BUILD) return;
+      // The MAS build keeps JupyterLite: the Jupyter server is compiled out
+      // there and the Notebook panel falls back to the JupyterLite site
+      // (Pyodide runs inside WebKit, which App Review permits). Assert it is
+      // actually in the bundle: Tauri's asset resolver answers a missing asset
+      // with index.html, so a MAS build without the site renders a second copy
+      // of GeoLibre inside the Notebook panel instead of a notebook.
+      if (IS_MAS_BUILD) {
+        const entry = path.resolve(__dirname, "dist/jupyterlite/lab/index.html");
+        if (!existsSync(entry)) {
+          throw new Error(
+            "The Mac App Store build embeds the JupyterLite site, but " +
+              `${path.relative(__dirname, entry)} is missing. Run ` +
+              "`npm run build:jupyterlite` (it needs the `jupyter lite` CLI from " +
+              "apps/geolibre-desktop/jupyterlite/requirements.txt).",
+          );
+        }
+        return;
+      }
       rmSync(path.resolve(__dirname, "dist/jupyterlite"), {
         recursive: true,
         force: true,
@@ -603,46 +711,7 @@ function safeDecodeURIComponent(value: string): string {
 }
 
 async function proxyWmsRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  await proxyBinaryRequest(req, res, WMS_PROXY_PATH);
-}
-
-async function proxyBinaryRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
-  proxyPath: string,
-): Promise<void> {
-  const requestUrl = new URL(req.url ?? "", `http://localhost${proxyPath}`);
-  const target = requestUrl.searchParams.get("url");
-  if (!target || !/^https?:\/\//i.test(target)) {
-    res.statusCode = 400;
-    res.setHeader("content-type", "text/plain");
-    res.end("Missing or invalid target URL");
-    return;
-  }
-
-  const headers = new Headers();
-  const range = req.headers.range;
-  if (range) headers.set("range", range);
-
-  const response = await fetch(target, { headers });
-  const contentType = response.headers.get("content-type") ?? "application/octet-stream";
-  const body = Buffer.from(await response.arrayBuffer());
-
-  res.statusCode = response.status;
-  res.setHeader("access-control-allow-origin", "*");
-  res.setHeader("cache-control", "public, max-age=3600");
-  res.setHeader("content-type", contentType);
-  for (const header of ["accept-ranges", "content-range"]) {
-    const value = response.headers.get(header);
-    if (value) res.setHeader(header, value);
-  }
-  // Derive content-length from the buffered body, never the upstream header:
-  // fetch() transparently decompresses gzip/br responses, so the upstream
-  // content-length (the compressed size) would be smaller than the body we
-  // send and truncate it in the browser. The buffer length is correct for both
-  // full (200) and partial (206 + content-range) responses.
-  res.setHeader("content-length", String(body.byteLength));
-  res.end(body);
+  await proxyBinaryRequestGuarded(req, res, WMS_PROXY_PATH);
 }
 
 // Installable, offline-capable web build. See docs/architecture.md (Offline /
@@ -700,6 +769,11 @@ function pwaPlugin(): Plugin[] {
     // is auto-named `i18n-<hash>` and must stay precached, so this must NOT match
     // it. English is bundled there, so it stays precached and works offline.
     "**/i18n-locale-*.js",
+    // Optional hosted-web authentication. These chunks are requested only when
+    // the matching provider is configured, so public deployments should not
+    // download either during service-worker installation.
+    "**/ClerkGate-*.js",
+    "**/Auth0Gate-*.js",
   ];
   // Note: the 4 KB public/pyodide/pyodide-worker.js shim is intentionally left
   // in the precache (revisioned, so no stale-after-deploy risk). The heavy
@@ -799,6 +873,10 @@ function pwaPlugin(): Plugin[] {
             (url.pathname.startsWith("/pyodide/") ||
               url.pathname.startsWith("/npm/@electric-sql/") ||
               url.pathname.startsWith("/npm/@cereusdb/") ||
+              // Only populated when GEOLIBRE_DUCKDB_WASM_CDN=1 moves the engine
+              // off the origin; harmless otherwise. maplibre-gl-duckdb fetches
+              // its own DuckDB from here regardless, so this caches that too.
+              url.pathname.startsWith("/npm/@duckdb/") ||
               url.pathname.startsWith("/npm/gdal3.js")),
           handler: "CacheFirst",
           options: {
@@ -858,6 +936,9 @@ export default defineConfig({
   define: {
     __GEOLIBRE_VERSION__: JSON.stringify(APP_VERSION),
     __GEOLIBRE_STORE_BUILD__: JSON.stringify(IS_STORE_BUILD),
+    __GEOLIBRE_MAS_BUILD__: JSON.stringify(IS_MAS_BUILD),
+    __GEOLIBRE_EMBED_BUILD__: JSON.stringify(IS_EMBED),
+    __NO_EXTERNAL_CDN__: JSON.stringify(NO_EXTERNAL_CDN),
     __PGLITE_CDN_URL__: JSON.stringify(PGLITE_CDN_URL),
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),
@@ -866,6 +947,20 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    watch: {
+      // Never watch the Rust side. `tauri dev` runs this dev server as its
+      // `beforeDevCommand` and then starts cargo in the same tree, so the
+      // watcher would otherwise crawl `src-tauri/target/` while cargo is
+      // writing into it. On Windows that is fatal: chokidar's fs.watch on a
+      // build artifact cargo still holds open throws EBUSY (`errno -4082`) out
+      // of `NodeFsHandler._addToNodeFs`, which is an unhandled error — vite
+      // exits non-zero and tauri reports only `The "beforeDevCommand"
+      // terminated with a non-zero status code` (see the libsqlite3-sys
+      // `*-sqlite3.o` failure). Nothing under src-tauri feeds the frontend
+      // bundle, so there is no HMR to lose. These are appended to Vite's own
+      // defaults (node_modules, .git), not a replacement for them.
+      ignored: ["**/src-tauri/**"],
+    },
   },
   worker: {
     format: "es",
@@ -964,6 +1059,9 @@ export default defineConfig({
     dedupe: ["react", "react-dom", "maplibre-gl", "@anthropic-ai/sdk", "openai", "@google/genai"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // The published package resolves to dist, but the monorepo app should
+      // hot-reload SDK source during development.
+      "@geolibre/embed": path.resolve(__dirname, "../../packages/embed/src/index.ts"),
       module: path.resolve(__dirname, "./src/lib/browser-node-module.ts"),
     },
   },

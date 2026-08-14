@@ -397,16 +397,14 @@ describe("PluginManager async activation", () => {
       }),
     );
 
-    manager.activate("async-plugin", app);
+    const activation = manager.activate("async-plugin", app);
+    const repeatedActivation = manager.activate("async-plugin", app);
     // Optimistically active while the mount is in flight.
     assert.equal(manager.isActive("async-plugin"), true);
+    assert.equal(repeatedActivation, activation);
 
     resolveMount(false);
-    // watchAsyncActivation wraps the plugin promise in Promise.resolve().then(),
-    // so two microtask ticks are needed: one for the wrapper, one for the
-    // callback. (The other async tests below flush twice for the same reason.)
-    await Promise.resolve();
-    await Promise.resolve();
+    assert.equal(await activation, false);
 
     // A failed mount reverts the menu and tears down the partial activation.
     assert.equal(manager.isActive("async-plugin"), false);
@@ -423,9 +421,8 @@ describe("PluginManager async activation", () => {
       }),
     );
 
-    manager.activate("rejecting-plugin", app);
-    await Promise.resolve();
-    await Promise.resolve();
+    const activation = manager.activate("rejecting-plugin", app);
+    assert.equal(await activation, false);
 
     assert.equal(manager.isActive("rejecting-plugin"), false);
   });
@@ -440,9 +437,8 @@ describe("PluginManager async activation", () => {
       }),
     );
 
-    manager.activate("ok-plugin", app);
-    await Promise.resolve();
-    await Promise.resolve();
+    const activation = manager.activate("ok-plugin", app);
+    assert.equal(await activation, true);
 
     assert.equal(manager.isActive("ok-plugin"), true);
   });
@@ -540,6 +536,75 @@ describe("PluginManager async activation", () => {
     await Promise.resolve();
     await Promise.resolve();
     assert.equal(manager.isActive("reactivated-plugin"), true);
+  });
+
+  it("does not let an unregistered plugin's activation revert its replacement", async () => {
+    const manager = new PluginManager();
+    let resolveOldMount: (value: boolean) => void = () => {};
+    let replacementDeactivations = 0;
+
+    manager.register(
+      testPlugin({
+        id: "replaceable-plugin",
+        activate: () =>
+          new Promise<boolean>((resolve) => {
+            resolveOldMount = resolve;
+          }),
+      }),
+    );
+    const oldActivation = manager.activate("replaceable-plugin", app);
+    manager.unregister("replaceable-plugin", app);
+    manager.register(
+      testPlugin({
+        id: "replaceable-plugin",
+        deactivate: () => {
+          replacementDeactivations += 1;
+        },
+      }),
+    );
+
+    assert.equal(await manager.activate("replaceable-plugin", app), true);
+    resolveOldMount(false);
+    assert.equal(await oldActivation, false);
+    assert.equal(manager.isActive("replaceable-plugin"), true);
+    assert.equal(replacementDeactivations, 0);
+  });
+
+  it("starts a fresh activation after project restore deactivates a pending mount", async () => {
+    const manager = new PluginManager();
+    const resolvers: Array<(value: boolean) => void> = [];
+    let activationCalls = 0;
+
+    manager.register(
+      testPlugin({
+        id: "restore-race-plugin",
+        activate: () => {
+          activationCalls += 1;
+          return new Promise<boolean>((resolve) => {
+            resolvers.push(resolve);
+          });
+        },
+      }),
+    );
+    const firstActivation = manager.activate("restore-race-plugin", app);
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: [],
+        mapControlPositions: {},
+        settings: {},
+      },
+      app,
+    );
+    const secondActivation = manager.activate("restore-race-plugin", app);
+
+    assert.equal(activationCalls, 2);
+    assert.notEqual(secondActivation, firstActivation);
+    resolvers[0](true);
+    resolvers[1](true);
+    assert.equal(await firstActivation, false);
+    assert.equal(await secondActivation, true);
+    assert.equal(manager.isActive("restore-race-plugin"), true);
   });
 });
 
@@ -911,7 +976,12 @@ describe("PluginManager markDefaultActive", () => {
     manager.markDefaultActive("bundled-drop-in");
 
     manager.restoreProjectState(
-      { manifestUrls: [], activePluginIds: [], mapControlPositions: {}, settings: {} },
+      {
+        manifestUrls: [],
+        activePluginIds: [],
+        mapControlPositions: {},
+        settings: {},
+      },
       app,
     );
     assert.equal(manager.isActive("bundled-drop-in"), false);
@@ -933,5 +1003,91 @@ describe("PluginManager markDefaultActive", () => {
 
     manager.restoreProjectState(null, app);
     assert.equal(manager.isActive("bundled-drop-in"), false);
+  });
+});
+
+describe("PluginManager plugin coordination", () => {
+  it("applies a state patch to one registered plugin", () => {
+    const manager = new PluginManager();
+    const states: unknown[] = [];
+    manager.register(
+      testPlugin({
+        id: "target",
+        applyProjectState: (_app, state) => {
+          states.push(state);
+        },
+      }),
+    );
+
+    assert.equal(manager.applyPluginState("target", app, { visible: true }), true);
+    assert.deepEqual(states, [{ visible: true }]);
+    assert.equal(manager.applyPluginState("missing", app, {}), false);
+  });
+
+  it("prevents recursive activation across coordinating plugins", async () => {
+    const manager = new PluginManager();
+    let firstCalls = 0;
+    let secondCalls = 0;
+    const coordinatingApp = {
+      ...app,
+      activatePlugin: async (id: string) => Boolean(await manager.activate(id, coordinatingApp)),
+    } as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        id: "first",
+        activate: (scopedApp) => {
+          firstCalls += 1;
+          scopedApp.activatePlugin?.("second");
+        },
+      }),
+    );
+    manager.register(
+      testPlugin({
+        id: "second",
+        activate: (scopedApp) => {
+          secondCalls += 1;
+          scopedApp.activatePlugin?.("first");
+        },
+      }),
+    );
+
+    await manager.activate("first", coordinatingApp);
+    assert.equal(firstCalls, 1);
+    assert.equal(secondCalls, 1);
+    assert.equal(manager.isActive("first"), true);
+    assert.equal(manager.isActive("second"), true);
+  });
+
+  it("lets one plugin deactivate another but never itself", () => {
+    const manager = new PluginManager();
+    const coordinatingApp = {
+      ...app,
+      deactivatePlugin: (id: string) => {
+        manager.deactivate(id, coordinatingApp);
+        return !manager.isActive(id);
+      },
+    } as GeoLibreAppAPI;
+    let closer: GeoLibreAppAPI | null = null;
+    manager.register(
+      testPlugin({
+        id: "closer",
+        activate: (scopedApp) => {
+          closer = scopedApp;
+        },
+      }),
+    );
+    manager.register(testPlugin({ id: "dock" }));
+
+    manager.activate("dock", coordinatingApp);
+    manager.activate("closer", coordinatingApp);
+    assert.ok(closer);
+
+    // Deactivating itself is refused, so the plugin that is still running is
+    // never unmounted from inside its own call.
+    assert.equal(closer!.deactivatePlugin?.("closer"), false);
+    assert.equal(manager.isActive("closer"), true);
+
+    assert.equal(closer!.deactivatePlugin?.("dock"), true);
+    assert.equal(manager.isActive("dock"), false);
   });
 });

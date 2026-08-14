@@ -60,6 +60,10 @@ def _clean_env() -> dict[str, str]:
     """Return a Python subprocess environment suitable for extension imports."""
     env = dict(os.environ)
     env.pop("PYTHONHOME", None)
+    # PyPI geospatial wheels bundle a matching PROJ database. Inherited search
+    # paths can redirect them to an absent or incompatible system installation.
+    env.pop("PROJ_DATA", None)
+    env.pop("PROJ_LIB", None)
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
     return env

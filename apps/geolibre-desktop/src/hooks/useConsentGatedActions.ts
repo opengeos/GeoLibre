@@ -5,6 +5,7 @@ import {
   hasReverseGeocodeConsent,
   recordReverseGeocodeConsent,
 } from "../lib/reverse-geocode-consent";
+import { hasElevationConsent, recordElevationConsent } from "../lib/elevation-consent";
 import { hasRoutingConsent, recordRoutingConsent } from "../lib/routing-consent";
 import type { AppApi } from "../components/layout/toolbar/constants";
 
@@ -76,6 +77,36 @@ export function useConsentGatedActions({
     toggle(REVERSE_GEOCODE_PLUGIN_ID, appApi);
   };
 
+  // The status bar's elevation readout falls back to the public Open-Meteo API
+  // when 3D terrain is off, so enabling it shows the same one-time notice. The
+  // flag is checked at the point of use (MapCanvas), not only here, so a project
+  // that arrives with the readout switched on is covered too.
+  const [elevationNoticeOpen, setElevationNoticeOpen] = useState(false);
+  const setPointerElevation = (enabled: boolean): void => {
+    const current = useAppStore.getState().preferences;
+    useAppStore.getState().setPreferences({
+      ...current,
+      map: { ...current.map, showPointerElevation: enabled },
+    });
+  };
+  const handleTogglePointerElevation = () => {
+    const enabled = useAppStore.getState().preferences.map.showPointerElevation;
+    if (enabled) {
+      setPointerElevation(false);
+      return;
+    }
+    // Terrain-only use sends nothing, but the toggle cannot know in advance
+    // whether terrain will be on wherever the user pans, so the notice is shown
+    // when switching it on.
+    if (hasElevationConsent()) setPointerElevation(true);
+    else setElevationNoticeOpen(true);
+  };
+  const confirmEnablePointerElevation = () => {
+    recordElevationConsent();
+    setElevationNoticeOpen(false);
+    setPointerElevation(true);
+  };
+
   // Network analysis tools send the coordinates of the input points to a public
   // Valhalla routing server, so they show the same one-time consent notice as
   // Directions before opening, gated on every activation path (each menu item).
@@ -111,6 +142,10 @@ export function useConsentGatedActions({
     confirmEnableDirections,
     handleToggleReverseGeocode,
     confirmEnableReverseGeocode,
+    elevationNoticeOpen,
+    setElevationNoticeOpen,
+    handleTogglePointerElevation,
+    confirmEnablePointerElevation,
     openNetworkTool,
     confirmOpenNetworkTool,
   };

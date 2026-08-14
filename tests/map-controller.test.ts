@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import maplibregl from "maplibre-gl";
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  setActiveEllipsoidId,
+  type GeoLibreLayer,
+  type LayerStyle,
+} from "@geolibre/core";
 import { createMapController, MapController } from "../packages/map/src/map-controller";
 
 // Internal shape of MapController we reach into to inject a fake map. The
@@ -36,10 +41,12 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
   fake: FakeMap;
 } {
   const sources = new Map<string, Record<string, unknown>>();
+  const sourceHandles = new Map<string, Record<string, unknown>>();
   const layers = new Map<string, Record<string, unknown>>();
   const order: string[] = [];
   const calls: { method: string; args: unknown[] }[] = [];
   const setDataCalls: { id: string; data: unknown }[] = [];
+  const images = new Set<string>();
   let pendingRenderedFeatures: unknown[] = [];
 
   for (const id of initialBasemapLayers) {
@@ -67,31 +74,39 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
       layers: order.map((id) => ({ id, ...layers.get(id) })),
       sources: Object.fromEntries(sources),
     }),
-    getSource: (id: string) =>
-      sources.has(id)
-        ? {
-            type: (sources.get(id)?.type as string) ?? "geojson",
-            bounds: sources.get(id)?.bounds,
-            // Mirrors RasterTileSource.serialize(): a copy of the original
-            // source spec, used by getLayerRasterSource.
-            serialize: () => ({ ...sources.get(id) }),
-            setData: (data: unknown) => {
-              const spec = sources.get(id);
-              if (spec) spec.data = data;
-              setDataCalls.push({ id, data });
-              calls.push({ method: "setData", args: [id, data] });
-            },
-          }
-        : undefined,
+    getLayersOrder: () => [...order],
+    getSource: (id: string) => {
+      if (!sources.has(id)) return undefined;
+      if (!sourceHandles.has(id)) {
+        sourceHandles.set(id, {
+          type: (sources.get(id)?.type as string) ?? "geojson",
+          bounds: sources.get(id)?.bounds,
+          // Mirrors RasterTileSource.serialize(): a copy of the original
+          // source spec, used by getLayerRasterSource.
+          serialize: () => ({ ...sources.get(id) }),
+          setData: (data: unknown) => {
+            const spec = sources.get(id);
+            if (spec) spec.data = data;
+            setDataCalls.push({ id, data });
+            calls.push({ method: "setData", args: [id, data] });
+          },
+        });
+      }
+      return sourceHandles.get(id);
+    },
     addSource: (id: string, spec: Record<string, unknown>) => {
       sources.set(id, spec);
       calls.push({ method: "addSource", args: [id, spec] });
     },
     removeSource: (id: string) => {
       sources.delete(id);
+      sourceHandles.delete(id);
       calls.push({ method: "removeSource", args: [id] });
     },
     getLayer: (id: string) => (layers.has(id) ? { id, ...layers.get(id) } : undefined),
+    hasImage: (id: string) => images.has(id),
+    addImage: (id: string) => images.add(id),
+    removeImage: (id: string) => images.delete(id),
     addLayer: (spec: Record<string, unknown>, beforeId?: string) => {
       layers.set(spec.id as string, spec);
       insertBefore(spec.id as string, beforeId);
@@ -133,6 +148,8 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
       }
       calls.push({ method: "setLayoutProperty", args: [id, key, value] });
     },
+    getLayoutProperty: (id: string, key: string) =>
+      (layers.get(id)?.layout as Record<string, unknown> | undefined)?.[key],
     setLayerZoomRange: record("setLayerZoomRange"),
     // Camera + query helpers used by the controller's public methods.
     project: (lngLat: [number, number]) => ({ x: lngLat[0], y: lngLat[1] }),
@@ -156,6 +173,9 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     getBearing: () => 0,
     getPitch: () => 0,
     getProjection: () => ({ type: "mercator" }),
+    // A laid-out viewport, so the camera helpers that scale with the canvas
+    // (the globe-safe fit ceiling) have a real size to work from.
+    getCanvas: () => ({ clientWidth: 576, clientHeight: 648 }),
     flyTo: record("flyTo"),
     fitBounds: record("fitBounds"),
     cameraForBounds: (...args: unknown[]) => {
@@ -237,10 +257,105 @@ function rasterLayer(id: string, patch: Partial<GeoLibreLayer> = {}): GeoLibreLa
   };
 }
 
+// An Add Vector Layer entry: the maplibre-gl-vector control owns the paint and
+// creates the native style layers itself, so the store layer only names them.
+function controlVectorLayer(id: string, patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
+  return {
+    id,
+    name: id,
+    type: "geojson",
+    source: { type: "geojson" },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {
+      controlOwnsPaint: true,
+      customLayerType: "fill",
+      externalNativeLayer: true,
+      nativeLayerIds: [`${id}-fill`, `${id}-outline`],
+      sourceIds: [`${id}-source`],
+      sourceKind: "maplibre-gl-vector",
+    },
+    ...patch,
+  };
+}
+
 const circleId = (id: string) => `layer-${id}-circle`;
+const markerId = (id: string) => `layer-${id}-marker`;
+const rasterId = (id: string) => `layer-${id}-raster`;
 const srcId = (id: string) => `source-${id}`;
 
 describe("MapController.syncLayers reconciliation", () => {
+  it("keeps a lower raster beneath every companion of a mixed KML point layer", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const kml = pointLayer("kml", {
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {
+              __geolibre_kml_icon_url:
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ",
+            },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Point", coordinates: [1, 1] },
+          },
+        ],
+      },
+    });
+
+    controller.syncLayers([rasterLayer("imagery"), kml]);
+
+    const imageryIndex = fake.order.indexOf(rasterId("imagery"));
+    assert.ok(imageryIndex >= 0);
+    assert.ok(imageryIndex < fake.order.indexOf(markerId("kml")));
+    assert.ok(imageryIndex < fake.order.indexOf(circleId("kml")));
+  });
+
+  it("runs the initial sync once and restores layers after a style reload", () => {
+    const { map, fake } = makeFakeMap();
+    const listeners = new Map<string, Set<() => void>>();
+    Object.assign(map as object, {
+      on: (event: string, listener: () => void) => {
+        const eventListeners = listeners.get(event) ?? new Set();
+        eventListeners.add(listener);
+        listeners.set(event, eventListeners);
+      },
+      once: (event: string, listener: () => void) => {
+        const eventListeners = listeners.get(event) ?? new Set();
+        eventListeners.add(listener);
+        listeners.set(event, eventListeners);
+      },
+      off: (event: string, listener: () => void) => listeners.get(event)?.delete(listener),
+    });
+    const controller = createMapController();
+    const internal = internals(controller);
+    internal.map = map;
+
+    controller.waitAndSyncLayers([pointLayer("a")]);
+    internal.styleReady = true;
+    for (const listener of [...(listeners.get("style.load") ?? [])]) listener();
+    for (const listener of [...(listeners.get("load") ?? [])]) listener();
+
+    assert.equal(fake.calls.filter((call) => call.method === "addSource").length, 1);
+
+    const styleMap = map as {
+      removeLayer: (id: string) => void;
+      removeSource: (id: string) => void;
+    };
+    styleMap.removeLayer(circleId("a"));
+    styleMap.removeSource(srcId("a"));
+    for (const listener of [...(listeners.get("style.load") ?? [])]) listener();
+
+    assert.equal(fake.calls.filter((call) => call.method === "addSource").length, 2);
+  });
+
   it("does nothing until the style is ready", () => {
     const { map, fake } = makeFakeMap();
     const controller = createMapController();
@@ -300,6 +415,30 @@ describe("MapController.syncLayers reconciliation", () => {
     );
   });
 
+  it("restacks every layer in one pass when a control adds its style layers late", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    // Bottom to top: a raster underlay, an Add Vector Layer polygon layer, and a
+    // point overlay, the shape of the shared project in opengeos/GeoLibre#1404.
+    const layers = [rasterLayer("under"), controlVectorLayer("vec"), pointLayer("over")];
+    const userOrder = () => fake.order.filter((id) => id !== "basemap-bg");
+
+    controller.syncLayers(layers);
+    // The control's data is still loading, so its native layers do not exist yet.
+    assert.deepEqual(userOrder(), [rasterId("under"), circleId("over")]);
+
+    // maplibre-gl-vector finishes loading and adds its layers on top of the
+    // style; the store write that follows drives one more sync pass.
+    const styled = map as unknown as {
+      addLayer: (spec: Record<string, unknown>) => void;
+    };
+    styled.addLayer({ id: "vec-fill", type: "fill", paint: {} });
+    styled.addLayer({ id: "vec-outline", type: "line", paint: {} });
+    controller.syncLayers(layers);
+
+    assert.deepEqual(userOrder(), [rasterId("under"), "vec-fill", "vec-outline", circleId("over")]);
+  });
+
   it("updates data in place via setData rather than recreating the source", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
@@ -325,6 +464,27 @@ describe("MapController.syncLayers reconciliation", () => {
     assert.equal(addSourceCalls(), 1, "source is not re-added");
     assert.equal(fake.setDataCalls.length, 1, "data refreshed via setData");
     assert.equal(fake.setDataCalls[0].id, srcId("a"));
+  });
+
+  it("does not resend unchanged data or style values", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const layer = pointLayer("a");
+
+    controller.syncLayers([layer]);
+    const writes = fake.calls.filter((call) =>
+      ["setData", "setPaintProperty", "setLayoutProperty"].includes(call.method),
+    ).length;
+
+    controller.syncLayers([layer]);
+
+    assert.equal(fake.setDataCalls.length, 0);
+    assert.equal(
+      fake.calls.filter((call) =>
+        ["setData", "setPaintProperty", "setLayoutProperty"].includes(call.method),
+      ).length,
+      writes,
+    );
   });
 
   it("recreates the source when a layer-level change demands it (clustering)", () => {
@@ -393,6 +553,107 @@ describe("MapController.syncLayers reconciliation", () => {
   });
 });
 
+function vectorTileLayer(id: string, patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
+  return {
+    id,
+    name: id,
+    type: "vector-tiles",
+    source: {
+      type: "vector",
+      tiles: ["https://example.com/{z}/{x}/{y}.pbf"],
+      sourceLayer: "buildings",
+      sourceLayers: ["buildings"],
+    },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {},
+    ...patch,
+  };
+}
+
+const POLYGON_GEOMETRY_FILTER = [
+  "match",
+  ["geometry-type"],
+  ["Polygon", "MultiPolygon"],
+  true,
+  false,
+];
+
+describe("MapController.syncLayers vector-tile time filtering", () => {
+  // A Time Slider window on a tile layer is a filter expression evaluated per
+  // feature as each tile decodes, so binding needs no local copy of the data.
+  const timeFilter = ["all", [">=", ["to-number", ["get", "year"]], 1950]];
+
+  it("leaves the geometry filter alone when no time filter is set", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.syncLayers([vectorTileLayer("vt")]);
+
+    assert.deepEqual(fake.layers.get("layer-vt-vector")?.filter, POLYGON_GEOMETRY_FILTER);
+  });
+
+  it("combines the time window with each sub-layer's geometry filter", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.syncLayers([vectorTileLayer("vt", { timeFilter })]);
+
+    assert.deepEqual(fake.layers.get("layer-vt-vector")?.filter, [
+      "all",
+      POLYGON_GEOMETRY_FILTER,
+      timeFilter,
+    ]);
+    assert.deepEqual(fake.layers.get("layer-vt-vector-line")?.filter, [
+      "all",
+      [
+        "match",
+        ["geometry-type"],
+        ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+        true,
+        false,
+      ],
+      timeFilter,
+    ]);
+    assert.deepEqual(fake.layers.get("layer-vt-vector-circle")?.filter, [
+      "all",
+      ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
+      timeFilter,
+    ]);
+  });
+
+  it("applies the window to an extruded tile layer", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.syncLayers([
+      vectorTileLayer("vt", {
+        timeFilter,
+        style: { ...DEFAULT_LAYER_STYLE, extrusionEnabled: true },
+      }),
+    ]);
+
+    assert.deepEqual(fake.layers.get("layer-vt-vector-extrusion")?.filter, [
+      "all",
+      POLYGON_GEOMETRY_FILTER,
+      timeFilter,
+    ]);
+  });
+
+  it("drops the window again when the layer is unbound", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.syncLayers([vectorTileLayer("vt", { timeFilter })]);
+    // Unbinding clears the transient filter; the next sync must restore the
+    // bare geometry filter rather than leave the last window applied.
+    controller.syncLayers([vectorTileLayer("vt", { timeFilter: undefined })]);
+
+    assert.deepEqual(fake.layers.get("layer-vt-vector")?.filter, POLYGON_GEOMETRY_FILTER);
+  });
+});
+
 describe("MapController basemap controls", () => {
   it("hides and shows basemap style layers", () => {
     const { map, fake } = makeFakeMap();
@@ -422,6 +683,78 @@ describe("MapController basemap controls", () => {
     assert.ok(!ids.includes(circleId("a")), "user layers are not basemap layers");
   });
 
+  it("claims a control's rebuilt render layer through its source (#1882)", () => {
+    // maplibre-gl-vector rebuilds its point layers asynchronously on a
+    // point-renderer change, so the store snapshot can still name the old
+    // circle while the map already holds the replacement heatmap. Both read the
+    // layer's own source, which is what identifies them as user data. Cover the
+    // singular `sourceId` too: registrations use either shape.
+    const sourceShapes = [
+      { label: "sourceIds", source: { sourceIds: ["pts-source"] } },
+      { label: "sourceId", source: { sourceId: "pts-source" } },
+    ];
+    for (const { label, source } of sourceShapes) {
+      const { map, fake } = makeFakeMap();
+      const controller = controllerWith(map);
+      const layer = controlVectorLayer("pts");
+      controller.syncLayers([
+        {
+          ...layer,
+          metadata: { ...layer.metadata, sourceIds: undefined, ...source },
+        },
+      ]);
+      fake.layers.set("pts-heatmap", {
+        id: "pts-heatmap",
+        type: "heatmap",
+        source: "pts-source",
+        paint: { "heatmap-opacity": 1 },
+      });
+      fake.order.push("pts-heatmap");
+
+      assert.ok(!controller.getBasemapStyleLayerIds().includes("pts-heatmap"), label);
+
+      controller.setBasemapVisible(false);
+      controller.setBasemapOpacity(0.25);
+
+      assert.ok(
+        !fake.calls.some(
+          (call) =>
+            call.args[0] === "pts-heatmap" &&
+            (call.method === "setLayoutProperty" || call.method === "setPaintProperty"),
+        ),
+        `the Background controls leave the rebuilt heatmap alone (${label})`,
+      );
+    }
+  });
+
+  it("keeps KML marker symbols independent from basemap visibility and opacity", () => {
+    for (const type of ["geojson", "vector-tiles"] as const) {
+      const { map, fake } = makeFakeMap();
+      const controller = controllerWith(map);
+      controller.syncLayers([controlVectorLayer("kml", { type })]);
+      fake.layers.set(markerId("kml"), {
+        id: markerId("kml"),
+        type: "symbol",
+        paint: { "icon-opacity": 1 },
+      });
+      fake.order.push(markerId("kml"));
+
+      assert.ok(!controller.getBasemapStyleLayerIds().includes(markerId("kml")));
+
+      controller.setBasemapVisible(false);
+      controller.setBasemapOpacity(0.25);
+
+      assert.ok(
+        !fake.calls.some(
+          (call) =>
+            call.args[0] === markerId("kml") &&
+            (call.method === "setLayoutProperty" || call.method === "setPaintProperty"),
+        ),
+        `background controls do not update the ${type} KML marker symbol`,
+      );
+    }
+  });
+
   it("scales basemap opacity from the layer's original paint value", () => {
     const { map, fake } = makeFakeMap();
     fake.layers.set("basemap-bg", {
@@ -445,6 +778,59 @@ describe("MapController basemap controls", () => {
 });
 
 describe("MapController camera and query helpers", () => {
+  // setActiveEllipsoidId writes a module-level singleton, so reset it here
+  // rather than inline: an inline reset after an assertion never runs when that
+  // assertion fails, silently leaving a non-Earth body active for later tests.
+  afterEach(() => setActiveEllipsoidId("earth"));
+
+  // The defensive probe in readCameraAltitude exists precisely because a
+  // MapLibre bump could drop or rename transform.getCameraAltitude; without
+  // these cases that fallback was never exercised (the fake map has no
+  // transform at all, so every other test hit the null path by accident).
+  it("returns no camera altitude when MapLibre does not expose one", () => {
+    const { map } = makeFakeMap();
+    const controller = controllerWith(map);
+    assert.equal(controller.readCameraAltitude(), null);
+  });
+
+  it("reads and body-scales the camera altitude when MapLibre exposes it", () => {
+    const { map } = makeFakeMap();
+    (map as { transform?: unknown }).transform = { getCameraAltitude: () => 8000 };
+    const controller = controllerWith(map);
+    setActiveEllipsoidId("earth");
+    assert.equal(controller.readCameraAltitude(), 8000);
+
+    // On a smaller body the Mercator-derived altitude must scale down.
+    setActiveEllipsoidId("moon");
+    const onMoon = controller.readCameraAltitude();
+    assert.ok(onMoon !== null && onMoon < 3000, `expected a scaled altitude, got ${onMoon}`);
+  });
+
+  it("returns no camera altitude when MapLibre throws", () => {
+    const { map } = makeFakeMap();
+    (map as { transform?: unknown }).transform = {
+      getCameraAltitude: () => {
+        throw new Error("degenerate transform");
+      },
+    };
+    const controller = controllerWith(map);
+    assert.equal(controller.readCameraAltitude(), null);
+  });
+
+  it("rescales a held altitude when only the body changes", () => {
+    // The planet switcher changes the active body without moving the camera, so
+    // the same MapLibre altitude must read differently for the new radius.
+    const { map } = makeFakeMap();
+    (map as { transform?: unknown }).transform = { getCameraAltitude: () => 10000 };
+    const controller = controllerWith(map);
+    setActiveEllipsoidId("earth");
+    const onEarth = controller.readCameraAltitude();
+    setActiveEllipsoidId("mars");
+    const onMars = controller.readCameraAltitude();
+    assert.ok(onEarth !== null && onMars !== null);
+    assert.ok(onMars < onEarth, `Mars altitude should be smaller: ${onMars} vs ${onEarth}`);
+  });
+
   it("reads the current view from the map", () => {
     const { map } = makeFakeMap();
     const controller = controllerWith(map);
@@ -490,6 +876,96 @@ describe("MapController camera and query helpers", () => {
     controller.fitBounds([0, 0, Number.NaN, 1]);
 
     assert.equal(fake.calls.length, 0);
+  });
+
+  it("caps a world-spanning fit at the flat-map zoom so the data stays in frame", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    // A mostly-US point layer with a few records in Europe and Asia: the
+    // globe camera would answer this 259°-wide box with zoom ~2, hiding every
+    // feature behind the horizon.
+    controller.fitBounds([-124.16, 16.53, 135.51, 51.58]);
+
+    const fit = fake.calls.find((c) => c.method === "fitBounds");
+    assert.ok(fit, "fits the bounds");
+    const options = fit.args[1] as { maxZoom?: number };
+    assert.ok(typeof options.maxZoom === "number");
+    assert.ok(
+      Math.abs(options.maxZoom - 0.4255) < 0.001,
+      `expected the flat-map fit (~0.4255), got ${options.maxZoom}`,
+    );
+  });
+
+  it("leaves an extent the globe can frame uncapped", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    // A city-sized box is nowhere near the hemisphere MapLibre's globe fit
+    // mishandles, so no ceiling is imposed and the camera is left as it was.
+    controller.fitBounds([-83.93, 35.94, -83.9, 35.97]);
+
+    const fit = fake.calls.find((c) => c.method === "fitBounds");
+    assert.ok(fit);
+    assert.ok(!("maxZoom" in (fit.args[1] as object)));
+  });
+
+  it("omits the fit ceiling when the canvas has not been laid out", () => {
+    const { map, fake } = makeFakeMap();
+    (map as { getCanvas: () => unknown }).getCanvas = () => ({
+      clientWidth: 0,
+      clientHeight: 0,
+    });
+    const controller = controllerWith(map);
+
+    controller.fitBounds([-124.16, 16.53, 135.51, 51.58]);
+
+    const fit = fake.calls.find((c) => c.method === "fitBounds");
+    assert.ok(fit);
+    assert.ok(!("maxZoom" in (fit.args[1] as object)));
+  });
+
+  it("applies the fit ceiling before comparing against a layer's min render zoom", () => {
+    const { map, fake } = makeFakeMap();
+    // `cameraForBounds` shares the globe over-zoom, so the fake reports a
+    // camera above the tile source's minzoom for a world-scale extent. Capped
+    // at the flat-map fit the extent is well below it, and the layer must fly
+    // to its minimum render zoom rather than fit to an empty viewport.
+    (map as { cameraForBounds: unknown }).cameraForBounds = () => ({
+      center: { lng: 0, lat: 0 },
+      zoom: 2.36,
+    });
+    const controller = controllerWith(map);
+
+    controller.fitLayer(
+      pointLayer("global-tiles", {
+        type: "vector-tile",
+        source: { type: "vector-tile", minzoom: 2 },
+        geojson: undefined,
+        metadata: { bounds: [-180, -85, 180, 85] },
+      }),
+    );
+
+    const flyTo = fake.calls.find((c) => c.method === "flyTo");
+    assert.ok(flyTo, "flies to the layer's minimum render zoom");
+    assert.equal((flyTo.args[0] as { zoom: number }).zoom, 2);
+    assert.ok(!fake.calls.some((c) => c.method === "fitBounds"));
+  });
+
+  it("routes a layer fit through the globe-safe path", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.fitLayer(
+      pointLayer("wide", {
+        geojson: undefined,
+        metadata: { bounds: [-124.16, 16.53, 135.51, 51.58] },
+      }),
+    );
+
+    const fit = fake.calls.find((c) => c.method === "fitBounds");
+    assert.ok(fit, "zoom-to-layer fits the bounds");
+    assert.ok(typeof (fit.args[1] as { maxZoom?: number }).maxZoom === "number");
   });
 
   it("frames a scenegraph model layer at a tilt so it is not edge-on", () => {
@@ -1068,6 +1544,37 @@ function makeTerrainDomStub(): { createElement: () => unknown } {
 }
 
 describe("MapController terrain auto-enable", () => {
+  it("lets a plugin enable and restore terrain while the map control is hidden", () => {
+    let terrain: maplibregl.TerrainSpecification | null = null;
+    let centerClamped = true;
+    const sources = new Set<string>();
+    const map = {
+      getSource: (id: string) => (sources.has(id) ? {} : undefined),
+      addSource: (id: string) => {
+        sources.add(id);
+      },
+      getTerrain: () => terrain,
+      setTerrain: (spec: maplibregl.TerrainSpecification | null) => {
+        terrain = spec;
+      },
+      setCenterClampedToGround: (value: boolean) => {
+        centerClamped = value;
+      },
+    };
+    const controller = createMapController();
+    const internal = controller as unknown as { map: unknown; styleReady: boolean };
+    internal.map = map;
+    internal.styleReady = true;
+
+    assert.equal(controller.setTerrainEnabled(true), true);
+    assert.equal(terrain?.source, "geolibre-terrain-dem");
+    assert.equal(centerClamped, false);
+
+    assert.equal(controller.setTerrainEnabled(false), true);
+    assert.equal(terrain, null);
+    assert.equal(centerClamped, true);
+  });
+
   it("enables terrain when the Terrain control is turned on, without a click", () => {
     const prevDoc = (globalThis as { document?: unknown }).document;
     (globalThis as { document?: unknown }).document = makeTerrainDomStub();
@@ -1160,5 +1667,311 @@ describe("MapController terrain auto-enable", () => {
       if (prevDoc === undefined) delete (globalThis as { document?: unknown }).document;
       else (globalThis as { document?: unknown }).document = prevDoc;
     }
+  });
+});
+
+describe("MapController Mapbox descriptor requests", () => {
+  const MAPBOX_STREETS = "https://api.mapbox.com/styles/v1/mapbox/streets-v12?access_token=tok";
+  const MAPBOX_DARK = "https://api.mapbox.com/styles/v1/mapbox/dark-v11?access_token=tok";
+  const OPENFREEMAP = "https://tiles.openfreemap.org/styles/liberty";
+
+  /** Minimal map stub: setStyle/remove are all the Mapbox path touches. */
+  function mapboxController(): {
+    controller: MapController;
+    styles: Array<{ style: unknown; options: unknown }>;
+  } {
+    const styles: Array<{ style: unknown; options: unknown }> = [];
+    const map = {
+      setStyle: (style: unknown, options?: unknown) => {
+        styles.push({ style, options });
+      },
+      remove: () => {},
+      addControl: () => {},
+      removeControl: () => {},
+      getTerrain: () => null,
+      setTerrain: () => {},
+      once: () => {},
+      on: () => {},
+      off: () => {},
+    };
+    const controller = createMapController();
+    const internal = controller as unknown as MapControllerInternals;
+    internal.map = map;
+    internal.styleReady = true;
+    return { controller, styles };
+  }
+
+  /**
+   * Runs `body` with a fetch that never settles on its own, so a descriptor
+   * request stays in flight until something aborts its signal. Every signal
+   * handed to fetch is collected in order.
+   */
+  async function withPendingFetch(
+    body: (signals: (AbortSignal | undefined)[]) => Promise<void> | void,
+  ): Promise<void> {
+    const signals: (AbortSignal | undefined)[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((_input: unknown, init?: { signal?: AbortSignal }) => {
+      signals.push(init?.signal);
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      });
+    }) as typeof globalThis.fetch;
+    try {
+      await body(signals);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
+
+  it("aborts a descriptor request the next basemap supersedes", async () => {
+    await withPendingFetch(async (signals) => {
+      const warnings: unknown[] = [];
+      const originalWarn = console.warn;
+      console.warn = (...args: unknown[]) => warnings.push(args);
+      const { controller } = mapboxController();
+      try {
+        controller.setStyle(MAPBOX_STREETS);
+        controller.setStyle(MAPBOX_DARK);
+
+        assert.equal(signals.length, 2);
+        assert.equal(signals[0]?.aborted, true);
+        assert.equal(signals[1]?.aborted, false);
+
+        // The abort rejection is this controller cancelling its own request,
+        // so it must not surface as a failed-style warning.
+        await Promise.resolve();
+        await Promise.resolve();
+        assert.deepEqual(warnings, []);
+      } finally {
+        console.warn = originalWarn;
+        controller.destroy();
+      }
+    });
+  });
+
+  it("disables validation and diffing for a loaded Mapbox descriptor", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ version: 8, sources: {}, layers: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as typeof globalThis.fetch;
+    const { controller, styles } = mapboxController();
+    try {
+      controller.setStyle(MAPBOX_STREETS);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      assert.equal(styles.length, 1);
+      assert.deepEqual(styles[0]?.options, { diff: false, validate: false });
+    } finally {
+      globalThis.fetch = originalFetch;
+      controller.destroy();
+    }
+  });
+
+  it("aborts a pending descriptor request when a non-Mapbox style is applied", async () => {
+    await withPendingFetch((signals) => {
+      const { controller, styles } = mapboxController();
+      try {
+        controller.setStyle(MAPBOX_STREETS);
+        controller.setStyle(OPENFREEMAP);
+
+        // The plain URL resolves synchronously, and no second fetch is made.
+        assert.deepEqual(styles, [{ style: OPENFREEMAP, options: { diff: false } }]);
+        assert.equal(signals.length, 1);
+        assert.equal(signals[0]?.aborted, true);
+      } finally {
+        controller.destroy();
+      }
+    });
+  });
+
+  it("aborts a pending descriptor request on destroy", async () => {
+    await withPendingFetch((signals) => {
+      const { controller } = mapboxController();
+      controller.setStyle(MAPBOX_STREETS);
+      assert.equal(signals[0]?.aborted, false);
+
+      controller.destroy();
+      assert.equal(signals[0]?.aborted, true);
+    });
+  });
+});
+
+describe("COG DEM terrain source", () => {
+  interface TerrainInternals {
+    map: unknown;
+    styleReady: boolean;
+    openCogDem: (source: string | Blob, band?: number) => Promise<unknown>;
+    cogDemRegistration: { tiles: [string] } | null;
+    terrainSource: { tiles?: string[] };
+  }
+
+  const TERRAIN_SOURCE_ID = "geolibre-terrain-dem";
+
+  /** Minimal map: setTerrainCogSource only touches the terrain source. */
+  function terrainController(): {
+    controller: MapController;
+    sources: Map<string, unknown>;
+    terrain: () => { source: string } | null;
+  } {
+    const sources = new Map<string, unknown>();
+    let terrain: { source: string } | null = null;
+    const controller = createMapController();
+    const internal = controller as unknown as TerrainInternals;
+    internal.map = {
+      getSource: (id: string) => sources.get(id),
+      addSource: (id: string, spec: unknown) => sources.set(id, spec),
+      removeSource: (id: string) => sources.delete(id),
+      getTerrain: () => terrain,
+      setTerrain: (next: { source: string } | null) => {
+        terrain = next;
+      },
+      setCenterClampedToGround: () => {},
+      remove: () => {},
+      on: () => {},
+      off: () => {},
+    };
+    internal.styleReady = true;
+    return { controller, sources, terrain: () => terrain };
+  }
+
+  /** A stand-in registration that records whether it was disposed. */
+  function fakeRegistration(name: string) {
+    const registration = {
+      tiles: [`cog-dem://${name}/{z}/{x}/{y}`] as [string],
+      bounds: undefined,
+      renderTile: async () => new Uint8ClampedArray(),
+      disposed: false,
+      dispose() {
+        this.disposed = true;
+      },
+    };
+    return registration;
+  }
+
+  it("discards a slow open that a newer selection has already superseded", async () => {
+    const { controller } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const slow = fakeRegistration("slow");
+    const fast = fakeRegistration("fast");
+    let releaseSlow: () => void = () => {};
+    const slowOpened = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+
+    internal.openCogDem = async (source) => {
+      if (source === "slow.tif") {
+        await slowOpened;
+        return slow;
+      }
+      return fast;
+    };
+
+    const first = controller.setTerrainCogSource("slow.tif");
+    assert.equal(await controller.setTerrainCogSource("fast.tif"), true);
+    releaseSlow();
+    // The superseded call reports that it did not apply, rather than resolving
+    // as though it had.
+    assert.equal(await first, false);
+
+    // The user's latest choice wins, and the superseded open is released.
+    assert.equal(slow.disposed, true);
+    assert.equal(fast.disposed, false);
+    assert.equal(internal.cogDemRegistration, fast);
+    assert.deepEqual(internal.terrainSource.tiles, fast.tiles);
+    assert.equal(controller.getTerrainCogSource(), "fast.tif");
+    controller.destroy();
+  });
+
+  it("leaves the working source in place when an open fails", async () => {
+    const { controller } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const working = fakeRegistration("working");
+
+    internal.openCogDem = async () => working;
+    await controller.setTerrainCogSource("working.tif");
+
+    internal.openCogDem = async () => {
+      throw new Error("404");
+    };
+    await assert.rejects(() => controller.setTerrainCogSource("missing.tif"), /404/);
+
+    assert.equal(working.disposed, false);
+    assert.equal(internal.cogDemRegistration, working);
+    assert.deepEqual(internal.terrainSource.tiles, working.tiles);
+    assert.equal(controller.getTerrainCogSource(), "working.tif");
+    assert.equal(controller.hasCustomTerrainSource(), true);
+    controller.destroy();
+  });
+
+  it("restores the built-in terrain and releases the COG when set to null", async () => {
+    const { controller } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const registration = fakeRegistration("custom");
+
+    internal.openCogDem = async () => registration;
+    await controller.setTerrainCogSource("custom.tif");
+    await controller.setTerrainCogSource(null);
+
+    assert.equal(registration.disposed, true);
+    assert.equal(controller.hasCustomTerrainSource(), false);
+    assert.equal(controller.getTerrainCogSource(), null);
+    assert.ok(internal.terrainSource.tiles?.[0].includes("elevation-tiles-prod"));
+    controller.destroy();
+  });
+
+  it("swallows the failure of an open a newer selection already superseded", async () => {
+    const { controller } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const good = fakeRegistration("good");
+    let failSlow: (reason: Error) => void = () => {};
+    const slowFailure = new Promise<never>((_, reject) => {
+      failSlow = reject;
+    });
+
+    internal.openCogDem = async (source) => {
+      if (source === "slow-bad.tif") return slowFailure;
+      return good;
+    };
+
+    const stale = controller.setTerrainCogSource("slow-bad.tif");
+    assert.equal(await controller.setTerrainCogSource("good.tif"), true);
+    failSlow(new Error("404"));
+
+    // The stale failure reports itself as not applied rather than rejecting,
+    // so it cannot put an error over the source the user chose last.
+    assert.equal(await stale, false);
+    assert.equal(internal.cogDemRegistration, good);
+    assert.equal(controller.getTerrainCogSource(), "good.tif");
+    controller.destroy();
+  });
+
+  it("keeps terrain switched on across a source swap", async () => {
+    const { controller, sources, terrain } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const first = fakeRegistration("first");
+    const second = fakeRegistration("second");
+
+    internal.openCogDem = async () => first;
+    await controller.setTerrainCogSource("first.tif");
+    controller.setTerrainEnabled(true);
+    assert.equal(controller.isTerrainEnabled(), true);
+
+    internal.openCogDem = async () => second;
+    await controller.setTerrainCogSource("second.tif");
+
+    // Terrain stays on, now reading from the newly selected COG.
+    assert.equal(controller.isTerrainEnabled(), true);
+    assert.equal(terrain()?.source, TERRAIN_SOURCE_ID);
+    assert.deepEqual(
+      (sources.get(TERRAIN_SOURCE_ID) as { tiles?: string[] } | undefined)?.tiles,
+      second.tiles,
+    );
+    assert.equal(first.disposed, true);
+    controller.destroy();
   });
 });

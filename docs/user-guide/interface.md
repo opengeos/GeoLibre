@@ -77,7 +77,50 @@ On-map controls such as zoom, globe, fullscreen, and the Layer Control appear in
 
 ## The status bar
 
-The status bar along the bottom shows the live cursor coordinates, zoom, bearing, and pitch, a button to expand the [Attribute Table](attribute-table.md), and a **Diagnostics** button (also under **Help**) that surfaces any runtime errors.
+The status bar along the bottom reports the live state of the map, from left to right:
+
+| Readout | Description |
+| --- | --- |
+| **Coords** | The coordinate under the pointer. Click it to switch notation — see below. |
+| **Elev** | The ground elevation under the pointer. Off by default; see [Elevation readout](#elevation-readout). |
+| **GPS** | The current fix, while [GPS tracking](map-controls.md#gps-tracking) is running. |
+| **Zoom** | The map zoom level, to two decimals. |
+| **Eye alt** | The camera's altitude above sea level — the same quantity Google Earth Pro calls *Eye alt*. |
+| **Bearing** / **Pitch** | The camera rotation and tilt, in degrees. |
+| **BBox** | The bounding box of the current view (hidden on narrow windows). |
+
+It also holds a button to expand the [Attribute Table](attribute-table.md) and a **Diagnostics** button (also under **Help**) that surfaces any runtime errors.
+
+**Eye alt** is scaled to the active celestial body, so it stays correct on a Mars or Moon basemap rather than reporting an Earth-derived height, and it follows the **Scale bar units** preference (metres/kilometres, feet/miles, or nautical miles). See [Settings → Map Preferences](settings.md#map-preferences).
+
+### Coordinate format
+
+GeoLibre can report the pointer coordinate in four notations:
+
+| Format | Example |
+| --- | --- |
+| **Decimal degrees** (default) | `-83.92074, 35.96064` |
+| **Degrees, minutes, seconds** | `35°57'38.3"N 83°55'14.66"W` |
+| **Degrees, decimal minutes** | `35°57.6384'N 83°55.2444'W` |
+| **UTM (zone, easting/northing)** | `17S 236594mE 3983527mN` |
+
+Decimal degrees are written longitude-first, matching GeoJSON and the rest of the app; DMS and DDM lead with latitude, the way those notations are conventionally written.
+
+Click the coordinates in the status bar to cycle through them, or set the notation in **Settings → Map Preferences → Coordinate format**. The choice is saved with the project.
+
+The UTM readout uses the same projection that draws the [Gridlines](map-controls.md#camera-overlay-and-recording-tools) UTM grid, so the numbers in the status bar always agree with the grid on screen. Outside the UTM latitude band (below 80°S or above 84°N) there is no valid UTM coordinate, and the readout falls back to decimal degrees.
+
+### Elevation readout
+
+**Controls → Elevation** turns on the **Elev** readout. It is **off by default**, and it resolves the height under the pointer from one of two sources:
+
+- **From the map's own 3D terrain**, whenever a usable sample is available there. This is instant, tracks the cursor live, and sends nothing off your device.
+- **From the public [Open-Meteo](https://open-meteo.com/) elevation API** when terrain returns no value for that point — because 3D terrain is off, but also when it is on and the terrain has no sample to give. The lookup waits until the pointer has been still for half a second, caches results per roughly 11 m cell, and runs only on Earth, never on a planetary basemap.
+
+Because that fallback sends the coordinates under your pointer to a third-party service, GeoLibre asks for consent the first time you enable the readout. **Declining is what guarantees the readout never reaches the network** — turning 3D terrain on makes the remote lookup rare, but does not by itself rule it out. Decline and the readout still works wherever terrain can answer. While a lookup is in flight the readout is blank rather than showing the previous point's height.
+
+!!! tip "Reading elevation along a line"
+    For a profile rather than a single point, use the Elevation Profile plugin, or the [Measure tool](map-controls.md#component-tools), which reports terrain-aware 3D distances.
 
 ## Theme
 

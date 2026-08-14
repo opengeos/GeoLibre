@@ -1,8 +1,11 @@
+from typing import NoReturn
+
 import pytest
 from fastapi import HTTPException
 
 from geolibre_server import sedona_ops
 from geolibre_server.app.sql import SqlRunRequest, sql_run, sql_status
+from geolibre_server.sedona_ops import SqlTimeout
 
 try:
     import sedona.db  # noqa: F401
@@ -121,3 +124,110 @@ def test_run_rejects_oversized_layer(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(HTTPException) as exc:
         sql_run(SqlRunRequest(sql="SELECT 1", layers=[{"name": "big", "geojson": big}]))
     assert exc.value.status_code == 413
+
+
+@requires_sedona
+def test_run_rejects_oversized_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Query results that expand past MAX_FEATURES are refused with 413."""
+    monkeypatch.setattr(sedona_ops, "MAX_FEATURES", 1)
+    limited_to: list[int] = []
+
+    class _FakeFrame:
+        def __len__(self) -> int:
+            return 2
+
+        @property
+        def columns(self):
+            return ["n"]
+
+        def to_dict(self, orient: str):  # noqa: ARG002
+            return [{"n": 1}, {"n": 2}]
+
+    class _FakeResult:
+        def limit(self, n: int) -> "_FakeResult":
+            limited_to.append(n)
+            return self
+
+        def to_pandas(self):
+            return _FakeFrame()
+
+    class _FakeConnection:
+        def create_data_frame(self, gdf):  # noqa: ANN001, ARG002
+            class _View:
+                def to_view(self, name: str) -> None:  # noqa: ARG002
+                    return None
+
+            return _View()
+
+        def sql(self, statement: str):  # noqa: ARG002
+            return _FakeResult()
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        sedona_ops,
+        "_import_sedona",
+        lambda: type("M", (), {"connect": staticmethod(lambda: _FakeConnection())})(),
+    )
+    with pytest.raises(HTTPException) as exc:
+        sql_run(SqlRunRequest(sql="SELECT 1 AS n UNION ALL SELECT 2 AS n"))
+    assert exc.value.status_code == 413
+    assert "Query result exceeds" in str(exc.value.detail)
+    assert limited_to == [sedona_ops.MAX_FEATURES + 1]
+
+
+def test_statement_timeout_constant_exists() -> None:
+    """The wall-clock timeout constant must equal the documented 60-second contract."""
+    assert hasattr(sedona_ops, "_STATEMENT_TIMEOUT_MS")
+    assert sedona_ops._STATEMENT_TIMEOUT_MS == 60_000
+
+
+def test_sql_timeout_maps_to_504(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A SqlTimeout from run_sql is surfaced as HTTP 504."""
+    monkeypatch.setattr(sedona_ops, "sedonadb_import_error", lambda: None)
+
+    def _boom(*_a, **_kw):
+        raise SqlTimeout("Spatial SQL timed out after 60 seconds")
+
+    monkeypatch.setattr(sedona_ops, "run_sql", _boom)
+    with pytest.raises(HTTPException) as exc:
+        sql_run(SqlRunRequest(sql="SELECT pg_sleep(999)"))
+    assert exc.value.status_code == 504
+    assert "timed out" in str(exc.value.detail)
+
+
+def test_run_sql_raises_timeout_on_slow_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_sql raises SqlTimeout when the query exceeds the budget."""
+    import time
+
+    monkeypatch.setattr(sedona_ops, "_STATEMENT_TIMEOUT_MS", 100)
+
+    class _FakeConnection:
+        def sql(self, statement):  # noqa: ARG002
+            time.sleep(5)
+
+        def close(self):
+            pass
+
+    fake_mod = type("M", (), {"connect": staticmethod(lambda: _FakeConnection())})()
+    monkeypatch.setattr(sedona_ops, "_import_sedona", lambda: fake_mod)
+
+    with pytest.raises(SqlTimeout, match="timed out"):
+        sedona_ops.run_sql("SELECT 1")
+
+
+def test_run_does_not_leak_exception_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Broad exceptions must not surface internal paths or secrets in the detail."""
+    sensitive_path = "/var/data/credentials.json"
+    monkeypatch.setattr(sedona_ops, "sedonadb_import_error", lambda: None)
+
+    def _boom(*_args: object, **_kwargs: object) -> NoReturn:
+        raise RuntimeError(f"Failed to read {sensitive_path}")  # noqa: TRY003
+
+    monkeypatch.setattr(sedona_ops, "run_sql", _boom)
+    with pytest.raises(HTTPException) as exc:
+        sql_run(SqlRunRequest(sql="SELECT 1"))
+    assert exc.value.status_code == 400
+    assert sensitive_path not in str(exc.value.detail)
+    assert exc.value.detail == "Spatial SQL failed due to an internal error."

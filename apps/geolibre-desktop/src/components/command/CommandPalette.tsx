@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { type Command, filterCommands, formatShortcut, isMacPlatform } from "../../lib/commands";
 
 interface CommandPaletteProps {
@@ -21,6 +22,7 @@ interface CommandPaletteProps {
  * the highlighted command.
  */
 export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -86,18 +88,18 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
         bodyClassName="p-0 gap-0"
         className="top-[15%] max-w-xl translate-y-0"
       >
-        <DialogTitle className="sr-only">Command palette</DialogTitle>
+        <DialogTitle className="sr-only">{t("commandPalette.title")}</DialogTitle>
         <div className="flex items-center gap-2 border-b px-3 pe-10">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             autoFocus
             role="combobox"
-            aria-label="Search commands"
+            aria-label={t("commandPalette.searchAria")}
             aria-expanded={true}
             aria-controls={listboxId}
             aria-activedescendant={activeCommand ? optionId(activeCommand) : undefined}
             className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            placeholder="Search commands…"
+            placeholder={t("commandPalette.searchPlaceholder")}
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -111,11 +113,11 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
           id={listboxId}
           className="max-h-[min(60vh,24rem)] overflow-y-auto p-1"
           role="listbox"
-          aria-label="Commands"
+          aria-label={t("commandPalette.listAria")}
         >
           {filtered.length === 0 ? (
             <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-              No matching commands
+              {t("commandPalette.noMatches")}
             </p>
           ) : (
             filtered.map((command, index) => {

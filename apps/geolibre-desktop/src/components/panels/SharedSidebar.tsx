@@ -15,6 +15,8 @@ interface SharedSidebarProps {
   side: SharedSide;
   /** Id of the active plugin panel docked with `replace-layers`/`replace-style`. */
   pluginId: string;
+  /** Other enabled panels merged into this same shared rail. */
+  additionalPanelIds?: string[];
   /** The active panel's shared content host (see {@link PluginRightPanel}). */
   pluginContentEl: HTMLElement;
   /** Shared plugin-panel width in px, owned by the shell. */
@@ -78,6 +80,7 @@ interface RailEntry {
 export function SharedSidebar({
   side,
   pluginId,
+  additionalPanelIds = [],
   pluginContentEl,
   pluginWidth,
   onPluginWidthChange,
@@ -95,7 +98,8 @@ export function SharedSidebar({
   // which is the desired "collapsed by default" behavior on reopen.
   const [builtinOptedIn, setBuiltinOptedIn] = useState(initialBuiltinExpanded);
 
-  const pluginExpanded = activeId === pluginId && !collapsed;
+  const panelIds = [pluginId, ...additionalPanelIds.filter((id) => id !== pluginId)];
+  const pluginExpanded = panelIds.includes(activeId ?? "") && !collapsed;
   // The plugin displaces the built-in panel: one shared surface, one expanded
   // panel at a time. `forceBuiltinCollapsed` gates this too (it only gates, never
   // clears the opt-in, so the panel restores when the trigger lifts).
@@ -105,9 +109,9 @@ export function SharedSidebar({
   // Switching back to the plugin forgets the built-in opt-in, so a later collapse
   // of the plugin lands on the shared rail (both collapsed) rather than
   // surprising the user by auto-expanding the built-in panel.
-  const expandPlugin = () => {
+  const expandPlugin = (id: string) => {
     setBuiltinOptedIn(false);
-    openRightPanel(pluginId);
+    openRightPanel(id);
   };
   const collapsePlugin = () => collapseRightPanel(pluginId);
   const expandBuiltin = () => {
@@ -117,23 +121,23 @@ export function SharedSidebar({
   };
   const collapseBuiltin = () => setBuiltinOptedIn(false);
 
-  const panel = getRightPanel(pluginId);
-  const pluginIcon =
-    panel?.icon && isImageSource(panel.icon) ? (
-      <img src={panel.icon} alt="" className="h-4 w-4 object-contain" />
-    ) : (
-      <PanelRight className="h-4 w-4" />
-    );
-
-  const entries: RailEntry[] = [
-    {
-      id: pluginId,
-      title: panel?.title ?? pluginId,
-      icon: pluginIcon,
-      active: pluginExpanded,
-      onToggle: pluginExpanded ? collapsePlugin : expandPlugin,
-    },
-  ];
+  const entries: RailEntry[] = panelIds.map((id) => {
+    const panel = getRightPanel(id);
+    const icon =
+      panel?.icon && isImageSource(panel.icon) ? (
+        <img src={panel.icon} alt="" className="h-4 w-4 object-contain" />
+      ) : (
+        <PanelRight className="h-4 w-4" />
+      );
+    const expanded = activeId === id && !collapsed;
+    return {
+      id,
+      title: panel?.title ?? id,
+      icon,
+      active: expanded,
+      onToggle: expanded ? collapsePlugin : () => expandPlugin(id),
+    };
+  });
   if (builtinVisible) {
     entries.push({
       // Namespaced so the built-in entry's React key cannot collide with a plugin

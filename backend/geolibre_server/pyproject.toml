@@ -12,7 +12,7 @@ dev = ["pytest>=8.0.0", "pytest-cov>=5.0.0"]
 # the vector/raster/SQL/ML tests skip themselves (via skipif/importorskip), so a
 # `[dev]`-only install reports a misleadingly green, near-empty run. CI installs
 # this group; run it locally with `pip install -e "backend/geolibre_server[test]"`.
-test = ["geolibre-server[dev,vector,raster,conversion,ml,sedona,postgis]"]
+test = ["geolibre-server[dev,vector,raster,conversion,ml,sedona,postgis,notebook]"]
 whitebox = ["whitebox-workflows>=2.0.2"]
 conversion = ["duckdb>=1.1.0", "rio-cogeo>=5.0.0", "freestiler>=0.1.0"]
 # Optional GeoPandas engine for the Vector processing tools. Not installed by

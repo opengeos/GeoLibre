@@ -10,6 +10,8 @@ import {
 } from "@geolibre/ui";
 import { Copy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { ChartRow } from "../../lib/attribute-charts";
 import { computeFieldStats, formatStatValue, type FieldStats } from "../../lib/attribute-stats";
 
@@ -42,6 +44,7 @@ export function AttributeStatsDialog({
   columns,
   layerName,
 }: AttributeStatsDialogProps) {
+  const { t } = useTranslation();
   const [field, setField] = useState("");
   const [scope, setScope] = useState<StatsScope>("all");
   const [copied, setCopied] = useState(false);
@@ -76,8 +79,11 @@ export function AttributeStatsDialog({
 
   const copySummary = () => {
     if (!stats || !field) return;
-    const lines = statRows(stats).map(([label, value]) => `${label}\t${value}`);
-    const header = `Field statistics — ${field}${scope === "filtered" ? " (filtered)" : ""}`;
+    const lines = statRows(stats, t).map(([label, value]) => `${label}\t${value}`);
+    const header =
+      scope === "filtered"
+        ? t("attributeStats.copyHeaderFiltered", { field })
+        : t("attributeStats.copyHeader", { field });
     void navigator.clipboard
       ?.writeText([header, ...lines].join("\n"))
       .then(() => setCopied(true))
@@ -88,21 +94,21 @@ export function AttributeStatsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Field statistics</DialogTitle>
+          <DialogTitle>{t("attributeStats.title")}</DialogTitle>
           <DialogDescription>
-            {`Summary statistics for a field in "${layerName}".`}
+            {t("attributeStats.description", { layer: layerName })}
           </DialogDescription>
         </DialogHeader>
 
         {columns.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            This layer has no fields to summarize.
+            {t("attributeStats.noFields")}
           </p>
         ) : (
           <div className="grid gap-3 py-1">
             <div className="flex flex-wrap items-end gap-3">
               <div className="grid gap-1.5">
-                <Label htmlFor="stats-field">Field</Label>
+                <Label htmlFor="stats-field">{t("attributeStats.field")}</Label>
                 <Select
                   id="stats-field"
                   className="w-52"
@@ -121,7 +127,7 @@ export function AttributeStatsDialog({
               </div>
               {hasFilter ? (
                 <div className="grid gap-1.5">
-                  <Label htmlFor="stats-scope">Scope</Label>
+                  <Label htmlFor="stats-scope">{t("attributeStats.scope")}</Label>
                   <Select
                     id="stats-scope"
                     className="w-44"
@@ -131,31 +137,37 @@ export function AttributeStatsDialog({
                       setCopied(false);
                     }}
                   >
-                    <option value="all">All features ({rows.length.toLocaleString()})</option>
+                    <option value="all">
+                      {t("attributeStats.scopeAll", { total: rows.length.toLocaleString() })}
+                    </option>
                     <option value="filtered">
-                      Filtered ({filteredRows.length.toLocaleString()})
+                      {t("attributeStats.scopeFiltered", {
+                        total: filteredRows.length.toLocaleString(),
+                      })}
                     </option>
                   </Select>
                 </div>
               ) : null}
             </div>
 
-            <StatsReadout stats={stats} />
+            <StatsReadout stats={stats} t={t} />
           </div>
         )}
 
         <div className="flex items-center justify-end gap-2">
           {copied ? (
-            <span className="me-auto text-xs text-muted-foreground">Copied to clipboard.</span>
+            <span className="me-auto text-xs text-muted-foreground">
+              {t("attributeStats.copiedToClipboard")}
+            </span>
           ) : null}
           {stats ? (
             <Button variant="outline" onClick={copySummary}>
               <Copy className="h-4 w-4" />
-              Copy
+              {t("attributeStats.copy")}
             </Button>
           ) : null}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
+            {t("common.close")}
           </Button>
         </div>
       </DialogContent>
@@ -164,41 +176,46 @@ export function AttributeStatsDialog({
 }
 
 /** The label/value pairs shown for a field, in display order. */
-function statRows(stats: FieldStats): [string, string][] {
+function statRows(stats: FieldStats, t: TFunction): [string, string][] {
   if (stats.kind === "numeric") {
     return [
-      ["Count", stats.count.toLocaleString()],
-      ["Nulls", stats.nulls.toLocaleString()],
+      [t("attributeStats.stat.count"), stats.count.toLocaleString()],
+      [t("attributeStats.stat.nulls"), stats.nulls.toLocaleString()],
       ...(stats.nonNumeric > 0
-        ? ([["Non-numeric", stats.nonNumeric.toLocaleString()]] as [string, string][])
+        ? ([[t("attributeStats.stat.nonNumeric"), stats.nonNumeric.toLocaleString()]] as [
+            string,
+            string,
+          ][])
         : []),
-      ["Unique", stats.unique.toLocaleString()],
-      ["Min", formatStatValue(stats.min)],
-      ["Max", formatStatValue(stats.max)],
-      ["Mean", formatStatValue(stats.mean)],
-      ["Median", formatStatValue(stats.median)],
-      ["Std dev", formatStatValue(stats.std)],
-      ["Sum", formatStatValue(stats.sum)],
+      [t("attributeStats.stat.unique"), stats.unique.toLocaleString()],
+      [t("attributeStats.stat.min"), formatStatValue(stats.min)],
+      [t("attributeStats.stat.max"), formatStatValue(stats.max)],
+      [t("attributeStats.stat.mean"), formatStatValue(stats.mean)],
+      [t("attributeStats.stat.median"), formatStatValue(stats.median)],
+      [t("attributeStats.stat.std"), formatStatValue(stats.std)],
+      [t("attributeStats.stat.sum"), formatStatValue(stats.sum)],
     ];
   }
   return [
-    ["Count", stats.count.toLocaleString()],
-    ["Nulls", stats.nulls.toLocaleString()],
-    ["Unique", stats.unique.toLocaleString()],
+    [t("attributeStats.stat.count"), stats.count.toLocaleString()],
+    [t("attributeStats.stat.nulls"), stats.nulls.toLocaleString()],
+    [t("attributeStats.stat.unique"), stats.unique.toLocaleString()],
   ];
 }
 
-function StatsReadout({ stats }: { stats: FieldStats | null }) {
+function StatsReadout({ stats, t }: { stats: FieldStats | null; t: TFunction }) {
   if (!stats) {
     return (
-      <p className="py-6 text-center text-sm text-muted-foreground">No values to summarize.</p>
+      <p className="py-6 text-center text-sm text-muted-foreground">
+        {t("attributeStats.noValues")}
+      </p>
     );
   }
 
   return (
     <div className="grid gap-3">
       <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-md border bg-background p-3 sm:grid-cols-3">
-        {statRows(stats).map(([label, value]) => (
+        {statRows(stats, t).map(([label, value]) => (
           <div key={label} className="flex flex-col">
             <dt className="text-xs text-muted-foreground">{label}</dt>
             <dd className="font-mono text-sm tabular-nums">{value}</dd>
@@ -208,9 +225,11 @@ function StatsReadout({ stats }: { stats: FieldStats | null }) {
 
       {stats.kind === "text" ? (
         <div className="grid gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">Most frequent values</span>
+          <span className="text-xs font-medium text-muted-foreground">
+            {t("attributeStats.mostFrequent")}
+          </span>
           {stats.top.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No populated values.</p>
+            <p className="text-sm text-muted-foreground">{t("attributeStats.noPopulated")}</p>
           ) : (
             <ul className="rounded-md border bg-background">
               {stats.top.map(({ value, count }) => (

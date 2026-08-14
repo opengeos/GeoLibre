@@ -18,6 +18,7 @@ import {
 } from "@geolibre/ui";
 import { FileDown, Loader2 } from "lucide-react";
 import { captureMapImage } from "../../lib/print-layout-export";
+import { googleMapsUrl } from "../../lib/external-map-links";
 import { PAPER_SIZES, type Orientation, type PaperSizeId } from "../../lib/print-layout";
 import { buildStoryMapHandoutPdf, singleLine, type HandoutChapter } from "../../lib/storymap-pdf";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
@@ -255,6 +256,8 @@ export function StoryMapHandoutDialog({
   const [subtitle, setSubtitle] = useState("");
   const [byline, setByline] = useState("");
   const [footer, setFooter] = useState("");
+  // Draw a clickable pin at each chapter's centre that opens Google Maps (#1839).
+  const [markers, setMarkers] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -277,6 +280,9 @@ export function StoryMapHandoutDialog({
     setSubtitle(singleLine(story.subtitle));
     setByline(singleLine(story.byline));
     setFooter(singleLine(story.footer));
+    // Follow the story's own marker setting, so a story that shows markers on
+    // screen exports them by default (#1839).
+    setMarkers(story.showMarkers);
     setError(null);
     setNotice(null);
     setProgress(null);
@@ -396,11 +402,22 @@ export function StoryMapHandoutDialog({
         const shot = captureMapImage(map);
         // Load the chapter's own photo (if any) so it appears beside the map.
         const photo = chapter.image ? await loadChapterPhoto(chapter.image) : null;
+        const [lng, lat] = chapter.location.center;
         captures.push({
           title: chapter.title,
           description: chapter.description,
           map: { data: shot.image, width: shot.width, height: shot.height },
           ...(photo ? { photo } : {}),
+          // A pin over the map centre, linked to the chapter coordinate in
+          // Google Maps so a reader can navigate to the place (#1839).
+          ...(markers
+            ? {
+                marker: {
+                  url: googleMapsUrl(lat, lng, chapter.location.zoom, { marker: true }),
+                  color: story.markerColor,
+                },
+              }
+            : {}),
         });
       }
       // Stopped: discard the export entirely rather than saving a partial PDF
@@ -457,8 +474,10 @@ export function StoryMapHandoutDialog({
     subtitle,
     byline,
     footer,
+    markers,
     story.title,
     story.theme,
+    story.markerColor,
     mapControllerRef,
     onOpenChange,
     t,
@@ -592,6 +611,22 @@ export function StoryMapHandoutDialog({
                 placeholder={t("storymap.handout.footerPlaceholder")}
               />
             </Field>
+
+            <Separator />
+
+            <div className="space-y-1">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={markers}
+                  onChange={(e) => setMarkers(e.target.checked)}
+                />
+                {t("storymap.handout.markers")}
+              </label>
+              <p className="ms-6 text-xs text-muted-foreground">
+                {t("storymap.handout.markersHint")}
+              </p>
+            </div>
           </div>
         </ScrollArea>
 

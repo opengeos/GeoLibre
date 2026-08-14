@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merged into the generated macOS Info.plist by the Tauri bundler (all macOS
+  builds, Developer ID and Mac App Store alike).
+
+  ITSAppUsesNonExemptEncryption: the app only uses HTTPS/TLS (exempt under
+  category 5 part 2), so App Store Connect should not ask for export compliance
+  documents on every upload.
+-->
+<plist version="1.0">
+<dict>
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
+</dict>
+</plist>

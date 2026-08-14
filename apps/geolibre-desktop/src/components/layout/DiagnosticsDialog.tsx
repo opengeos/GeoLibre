@@ -10,6 +10,7 @@ import {
 } from "@geolibre/ui";
 import { Clipboard, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   clearDiagnostics,
   setCaptureNetworkInfo,
@@ -68,6 +69,7 @@ function recordLevelClass(record: DiagnosticRecord): string {
 }
 
 export function DiagnosticsDialog({ diagnostics, open, onOpenChange }: DiagnosticsDialogProps) {
+  const { t } = useTranslation();
   const [copyState, setCopyState] = useState<"copied" | "idle">("idle");
   const copyResetTimerRef = useRef<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<DiagnosticFilter>("all");
@@ -80,11 +82,20 @@ export function DiagnosticsDialog({ diagnostics, open, onOpenChange }: Diagnosti
           ),
     [diagnostics.records, activeFilter, diagnostics.captureNetworkInfo],
   );
-  const listIsFiltered = activeFilter !== "all";
-  // The network filter's label tracks the badge: plain "network" while request
-  // logging is on, "network error" while it is off.
-  const filterLabel =
-    activeFilter === "network" && !diagnostics.captureNetworkInfo ? "network error" : activeFilter;
+  // The network filter's empty state tracks the badge: plain "network" while
+  // request logging is on, "network error" while it is off.
+  const emptyMessage =
+    activeFilter === "all"
+      ? t("diagnostics.emptyAll")
+      : activeFilter === "network"
+        ? diagnostics.captureNetworkInfo
+          ? t("diagnostics.emptyNetwork")
+          : t("diagnostics.emptyNetworkError")
+        : activeFilter === "error"
+          ? t("diagnostics.emptyError")
+          : activeFilter === "warning"
+            ? t("diagnostics.emptyWarning")
+            : t("diagnostics.emptyInfo");
   // Derived here rather than assumed from networkCount so the badge label
   // and count cannot diverge if non-error network levels are introduced.
   const networkErrorCount = useMemo(
@@ -130,10 +141,8 @@ export function DiagnosticsDialog({ diagnostics, open, onOpenChange }: Diagnosti
         bodyClassName="grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden p-0"
       >
         <DialogHeader className="border-b px-6 py-4 pe-12">
-          <DialogTitle>Diagnostics</DialogTitle>
-          <DialogDescription>
-            Recent network requests, MapLibre errors, console warnings, and runtime exceptions.
-          </DialogDescription>
+          <DialogTitle>{t("diagnostics.title")}</DialogTitle>
+          <DialogDescription>{t("diagnostics.description")}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center justify-between gap-3 px-6">
           <div className="flex flex-wrap gap-2 text-xs">
@@ -146,7 +155,7 @@ export function DiagnosticsDialog({ diagnostics, open, onOpenChange }: Diagnosti
               )}
               onClick={() => setActiveFilter("all")}
             >
-              {diagnostics.totalCount} total
+              {t("diagnostics.countTotal", { count: diagnostics.totalCount })}
             </button>
             <button
               type="button"
@@ -160,7 +169,7 @@ export function DiagnosticsDialog({ diagnostics, open, onOpenChange }: Diagnosti
               )}
               onClick={() => setActiveFilter("error")}
             >
-              {diagnostics.errorCount} errors
+              {t("diagnostics.countErrors", { count: diagnostics.errorCount })}
             </button>
             <button
               type="button"
@@ -174,7 +183,7 @@ export function DiagnosticsDialog({ diagnostics, open, onOpenChange }: Diagnosti
               )}
               onClick={() => setActiveFilter("warning")}
             >
-              {diagnostics.warningCount} warnings
+              {t("diagnostics.countWarnings", { count: diagnostics.warningCount })}
             </button>
             <button
               type="button"
@@ -195,12 +204,12 @@ export function DiagnosticsDialog({ diagnostics, open, onOpenChange }: Diagnosti
               onClick={() => setActiveFilter("network")}
             >
               {diagnostics.captureNetworkInfo
-                ? `${diagnostics.networkCount} network`
-                : `${networkErrorCount} network errors`}
+                ? t("diagnostics.countNetwork", { count: diagnostics.networkCount })
+                : t("diagnostics.countNetworkErrors", { count: networkErrorCount })}
             </button>
             <label
               className="flex items-center gap-1.5 rounded border px-2 py-1 text-muted-foreground"
-              title="Record successful and aborted network requests from now on; requests made while logging was off are not backfilled. Off by default because logging every request slows the app down."
+              title={t("diagnostics.logAllRequestsHint")}
             >
               <input
                 className="h-3.5 w-3.5"
@@ -208,7 +217,7 @@ export function DiagnosticsDialog({ diagnostics, open, onOpenChange }: Diagnosti
                 checked={diagnostics.captureNetworkInfo}
                 onChange={(event) => setCaptureNetworkInfo(event.target.checked)}
               />
-              Log all network requests
+              {t("diagnostics.logAllRequests")}
             </label>
           </div>
           <div className="flex gap-2">
@@ -220,7 +229,7 @@ export function DiagnosticsDialog({ diagnostics, open, onOpenChange }: Diagnosti
               onClick={() => void copyDiagnostics()}
             >
               <Clipboard className="h-3.5 w-3.5" />
-              {copyState === "copied" ? "Copied" : "Copy JSON"}
+              {copyState === "copied" ? t("diagnostics.copied") : t("diagnostics.copyJson")}
             </Button>
             <Button
               type="button"
@@ -233,16 +242,14 @@ export function DiagnosticsDialog({ diagnostics, open, onOpenChange }: Diagnosti
               }}
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Clear
+              {t("diagnostics.clear")}
             </Button>
           </div>
         </div>
         <ScrollArea className="min-h-0 border-t">
           {filteredRecords.length === 0 ? (
             <div className="flex min-h-48 items-center justify-center px-6 py-12 text-sm text-muted-foreground">
-              {listIsFiltered
-                ? `No ${filterLabel} diagnostics captured.`
-                : "No diagnostics captured."}
+              {emptyMessage}
             </div>
           ) : (
             <ol className="divide-y">

@@ -4,9 +4,12 @@ import type { FeatureCollection } from "geojson";
 import {
   addGranularityUnits,
   buildTimeBinding,
+  buildTimeBindingFromRecords,
   buildTimeFilter,
   detectTimeProperties,
+  detectTimePropertiesFromRecords,
   detectValueKind,
+  formatTimeExtentInput,
   parseTimeValue,
   type TimeBinding,
 } from "../packages/plugins/src/plugins/time-slider-binding";
@@ -42,15 +45,22 @@ describe("parseTimeValue", () => {
     assert.equal(parseTimeValue(null), null);
   });
 
-  it("rejects bare years and small integers instead of reading them as 1970", () => {
-    assert.equal(parseTimeValue(2015), null);
-    assert.equal(parseTimeValue("2016"), null);
+  it("reads four-digit integers as bare calendar years anchored at Jan 1 UTC", () => {
+    assert.equal(parseTimeValue(2015), Date.UTC(2015, 0, 1));
+    assert.equal(parseTimeValue("2016"), Date.UTC(2016, 0, 1));
+    assert.equal(parseTimeValue(1819), Date.UTC(1819, 0, 1));
+  });
+
+  it("rejects small integers, fractions, and mid-range ids instead of misreading them", () => {
     assert.equal(parseTimeValue(42), null);
+    assert.equal(parseTimeValue(999), null);
+    assert.equal(parseTimeValue(1958.5), null);
+    assert.equal(parseTimeValue(12_345), null); // five digits: not a year, too small for epoch
   });
 });
 
 describe("detectTimeProperties", () => {
-  it("does not offer a bare-year integer column as a timestamp", () => {
+  it("offers a bare-year integer column as a timestamp", () => {
     const fc = pointFeatures([
       { date: "2015-06-01", label: "a" },
       { date: "2016-06-01", label: "b" },
@@ -62,8 +72,23 @@ describe("detectTimeProperties", () => {
       type: "FeatureCollection",
       features: fc,
     });
-    assert.ok(!candidates.some((c) => c.property === "year"));
+    assert.ok(candidates.some((c) => c.property === "year"));
     assert.ok(candidates.some((c) => c.property === "date"));
+  });
+
+  it("ranks a varied year column above a constant code with equal coverage", () => {
+    // Manhattan Building Heights shape: `construction_year` varies per
+    // building while `feature_code` is the same four-digit code on every row.
+    // Both parse on 100% of features; the distinct-value tiebreak must put the
+    // real vintage column first so the bind dialog defaults to it.
+    const features = [1819, 1886, 1930, 1958, 2015].map((year, i) => ({
+      type: "Feature" as const,
+      properties: { construction_year: year, feature_code: "2100" },
+      geometry: { type: "Point" as const, coordinates: [i, i] },
+    }));
+    const candidates = detectTimeProperties({ type: "FeatureCollection", features });
+    assert.equal(candidates[0]?.property, "construction_year");
+    assert.ok(candidates.some((c) => c.property === "feature_code"));
   });
 });
 
@@ -82,6 +107,79 @@ describe("detectValueKind", () => {
     assert.equal(detectValueKind([1_600_000_000, "2016-06-01"]), "isoDate");
     // An empty / unknown sample falls back to the safe string comparison.
     assert.equal(detectValueKind([]), "isoDateTime");
+  });
+
+  it("classifies an all-years numeric sample as year, but not a mixed one", () => {
+    assert.equal(detectValueKind([1819, 1958, 2015]), "year");
+    assert.equal(detectValueKind(["1819", 1958]), "year");
+    // One epoch-magnitude value means the column is epoch, not vintage years.
+    assert.equal(detectValueKind([1958, 1_600_000_000]), "epochS");
+  });
+});
+
+describe("buildTimeFilter (year)", () => {
+  it("compares the raw year number against year bounds", () => {
+    const binding: TimeBinding = {
+      property: "construction_year",
+      valueKind: "year",
+      min: Date.UTC(1819, 0, 1),
+      max: Date.UTC(2015, 0, 1),
+      granularity: "year",
+      window: { unit: "year", before: 0, after: 1 },
+    };
+    const filter = buildTimeFilter(binding, new Date(Date.UTC(1958, 0, 1)));
+    assert.deepEqual(filter, [
+      "all",
+      // Integer guard: a fractional value like 1958.5 never parses as a year
+      // (parseTimeValue rejects it), so the filter must reject it too rather
+      // than let it slip inside the [1958, 1959) window.
+      [
+        "==",
+        ["to-number", ["get", "construction_year"]],
+        ["floor", ["to-number", ["get", "construction_year"]]],
+      ],
+      [">=", ["to-number", ["get", "construction_year"]], 1958],
+      ["<", ["to-number", ["get", "construction_year"]], 1959],
+    ]);
+  });
+
+  it("only includes years whose Jan 1 anchor falls inside a mid-year window", () => {
+    const binding: TimeBinding = {
+      property: "construction_year",
+      valueKind: "year",
+      min: Date.UTC(1819, 0, 1),
+      max: Date.UTC(2015, 0, 1),
+      granularity: "year",
+      window: { unit: "year", before: 0, after: 1 },
+    };
+    // Window [1958-07-01, 1959-07-01): only 1959's Jan 1 anchor is inside.
+    const filter = buildTimeFilter(binding, new Date(Date.UTC(1958, 6, 1)));
+    assert.deepEqual(filter, [
+      "all",
+      [
+        "==",
+        ["to-number", ["get", "construction_year"]],
+        ["floor", ["to-number", ["get", "construction_year"]]],
+      ],
+      [">=", ["to-number", ["get", "construction_year"]], 1959],
+      ["<", ["to-number", ["get", "construction_year"]], 1960],
+    ]);
+  });
+});
+
+describe("buildTimeBinding (year column)", () => {
+  it("builds a year binding spanning the data extent", () => {
+    const features = [1819, 1886, 1958].map((year, i) => ({
+      type: "Feature" as const,
+      properties: { construction_year: year },
+      geometry: { type: "Point" as const, coordinates: [i, i] },
+    }));
+    const binding = buildTimeBinding({ type: "FeatureCollection", features }, "construction_year");
+    assert.ok(binding);
+    assert.equal(binding.valueKind, "year");
+    assert.equal(binding.min, Date.UTC(1819, 0, 1));
+    assert.equal(binding.max, Date.UTC(1958, 0, 1));
+    assert.equal(binding.granularity, "year");
   });
 });
 
@@ -206,6 +304,166 @@ describe("buildTimeFilter", () => {
       "all",
       [">=", ["to-number", ["get", "date"]], lower],
       ["<", ["to-number", ["get", "date"]], upper],
+    ]);
+  });
+});
+
+describe("record-based binding (tile layers)", () => {
+  // A vector-tile layer has no feature collection; the bind dialog feeds
+  // detection the property bags read out of the loaded tiles instead.
+  const records = [
+    { construction_year: 1958, height_roof: 12 },
+    { construction_year: 1971, height_roof: 40 },
+    { construction_year: 2003, height_roof: 8 },
+  ];
+
+  it("detects the same candidates as the feature-collection form", () => {
+    const candidates = detectTimePropertiesFromRecords(records);
+    assert.equal(candidates[0].property, "construction_year");
+  });
+
+  it("skips missing property bags without counting them", () => {
+    assert.deepEqual(detectTimePropertiesFromRecords([]), []);
+    assert.deepEqual(detectTimePropertiesFromRecords([null, undefined]), []);
+  });
+
+  it("scans the extent from the records when none is supplied", () => {
+    const binding = buildTimeBindingFromRecords(records, "construction_year");
+    assert.equal(binding?.valueKind, "year");
+    assert.equal(binding?.min, Date.UTC(1958, 0, 1));
+    assert.equal(binding?.max, Date.UTC(2003, 0, 1));
+  });
+
+  it("takes an explicit extent, which the tile dialog uses to widen the timeline", () => {
+    // The loaded tiles only reached 1958-2003; the user knows the dataset runs
+    // to 2020, so the timeline must cover that rather than the sample.
+    const binding = buildTimeBindingFromRecords(records, "construction_year", {
+      extent: { min: Date.UTC(1900, 0, 1), max: Date.UTC(2020, 0, 1) },
+    });
+    assert.equal(binding?.min, Date.UTC(1900, 0, 1));
+    assert.equal(binding?.max, Date.UTC(2020, 0, 1));
+    // The value kind still comes from the real sampled values, not the extent.
+    assert.equal(binding?.valueKind, "year");
+  });
+
+  it("orders a reversed extent rather than producing an empty timeline", () => {
+    const binding = buildTimeBindingFromRecords(records, "construction_year", {
+      extent: { min: Date.UTC(2020, 0, 1), max: Date.UTC(1900, 0, 1) },
+    });
+    assert.equal(binding?.min, Date.UTC(1900, 0, 1));
+    assert.equal(binding?.max, Date.UTC(2020, 0, 1));
+  });
+
+  it("still rejects a property with no parseable values, extent or not", () => {
+    const binding = buildTimeBindingFromRecords([{ name: "a" }], "name", {
+      extent: { min: Date.UTC(1900, 0, 1), max: Date.UTC(2020, 0, 1) },
+    });
+    assert.equal(binding, null);
+  });
+});
+
+describe("formatTimeExtentInput", () => {
+  it("renders a vintage column as a bare year that parses back exactly", () => {
+    const text = formatTimeExtentInput(Date.UTC(1958, 0, 1), "year");
+    assert.equal(text, "1958");
+    assert.equal(parseTimeValue(text), Date.UTC(1958, 0, 1));
+  });
+
+  it("renders other kinds as an ISO date that parses back as UTC", () => {
+    const text = formatTimeExtentInput(Date.parse("2015-03-01T00:00:00Z"), "isoDate");
+    assert.equal(text, "2015-03-01");
+    assert.equal(parseTimeValue(text), Date.parse("2015-03-01T00:00:00Z"));
+  });
+
+  it("carries a non-aligned upper bound forward so the last partial day survives", () => {
+    // Truncating 2015-03-01T18:00 to 2015-03-01 would end the timeline before
+    // the features on that day.
+    assert.equal(
+      formatTimeExtentInput(Date.parse("2015-03-01T18:00:00Z"), "isoDate", true),
+      "2015-03-02",
+    );
+    // An already-aligned bound is left alone.
+    assert.equal(
+      formatTimeExtentInput(Date.parse("2015-03-01T00:00:00Z"), "isoDate", true),
+      "2015-03-01",
+    );
+    // A year anchored exactly at Jan 1 is its own year, not the next one.
+    assert.equal(formatTimeExtentInput(Date.UTC(2003, 0, 1), "year", true), "2003");
+  });
+
+  it("returns empty text for a non-finite bound", () => {
+    assert.equal(formatTimeExtentInput(Number.NaN, "year"), "");
+  });
+});
+
+describe("buildTimeFilter (cumulative)", () => {
+  const yearBinding: TimeBinding = {
+    property: "construction_year",
+    valueKind: "year",
+    min: Date.UTC(1900, 0, 1),
+    max: Date.UTC(2020, 0, 1),
+    granularity: "year",
+    window: { unit: "year", before: 0, after: 1 },
+  };
+
+  it("anchors the lower bound at the start of the data instead of the window", () => {
+    const stepping = buildTimeFilter(yearBinding, new Date(Date.UTC(1980, 0, 1)));
+    const cumulative = buildTimeFilter(
+      { ...yearBinding, cumulative: true },
+      new Date(Date.UTC(1980, 0, 1)),
+    );
+    const value = ["to-number", ["get", "construction_year"]];
+
+    // Stepping shows only 1980; cumulative shows 1900 through 1980.
+    assert.deepEqual(stepping, [
+      "all",
+      ["==", value, ["floor", value]],
+      [">=", value, 1980],
+      ["<", value, 1981],
+    ]);
+    assert.deepEqual(cumulative, [
+      "all",
+      ["==", value, ["floor", value]],
+      [">=", value, 1900],
+      ["<", value, 1981],
+    ]);
+  });
+
+  it("keeps the lower bound a real timestamp, so undated features stay hidden", () => {
+    // A missing property coerces to 0 through to-number / "" through to-string,
+    // both below the anchored lower bound.
+    const isoCumulative = buildTimeFilter(
+      {
+        ...yearBinding,
+        valueKind: "isoDate",
+        property: "date",
+        min: Date.parse("2015-01-01T00:00:00Z"),
+        cumulative: true,
+      },
+      new Date("2018-01-01T00:00:00Z"),
+    );
+    assert.deepEqual(isoCumulative, [
+      "all",
+      [">=", ["slice", ["to-string", ["get", "date"]], 0, 10], "2015-01-01"],
+      ["<", ["slice", ["to-string", ["get", "date"]], 0, 10], "2019-01-01"],
+    ]);
+  });
+
+  it("scales the anchored bound into epoch seconds", () => {
+    const filter = buildTimeFilter(
+      {
+        ...yearBinding,
+        valueKind: "epochS",
+        property: "ts",
+        min: Date.parse("2015-01-01T00:00:00Z"),
+        cumulative: true,
+      },
+      new Date("2018-01-01T00:00:00Z"),
+    );
+    assert.deepEqual(filter, [
+      "all",
+      [">=", ["to-number", ["get", "ts"]], Date.parse("2015-01-01T00:00:00Z") / 1000],
+      ["<", ["to-number", ["get", "ts"]], Date.parse("2019-01-01T00:00:00Z") / 1000],
     ]);
   });
 });

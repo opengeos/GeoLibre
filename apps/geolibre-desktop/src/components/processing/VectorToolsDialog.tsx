@@ -3,8 +3,10 @@ import { detectGeometryProfile, type MapController } from "@geolibre/map";
 import {
   VECTOR_TOOLS,
   getVectorTool,
+  resolveVectorRerun,
   runVectorTool,
   fetchVectorStatus,
+  maxResolutionForDggs,
   type AlgorithmParameter,
   type GeometryFamily,
   type ProcessingAlgorithm,
@@ -12,6 +14,7 @@ import {
   type VectorToolRequest,
   type VectorToolResult,
 } from "@geolibre/processing";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { onPyodideProgress, runVectorToolInPyodide } from "../../lib/pyodide/pyodide-vector-loader";
 import { createDuckDbCapability } from "../../lib/duckdb-processing";
 import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
@@ -97,7 +100,9 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     // produces a result without touching the selector; client-only tools force
     // "client". requiresSidecar is checked first so it wins even if a tool ever
     // sets it without supportsSidecar (the JSDoc says it implies supportsSidecar).
-    if (tool.requiresSidecar) setEngine("sidecar");
+    // The Mac App Store build has no sidecar, so those tools run on Pyodide
+    // (the same Python, in-browser) instead.
+    if (tool.requiresSidecar) setEngine(IS_MAS_BUILD ? "pyodide" : "sidecar");
     else if (!tool.supportsSidecar) setEngine("client");
   }, [tool]);
 
@@ -106,9 +111,10 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
   // win over the defaults when both effects fire in the same commit.
   useEffect(() => {
     if (!open || !rerun || rerun.kind !== "vector") return;
-    // A saved-project history entry can reference a tool that was renamed or
-    // removed since; drop the request instead of leaving it pending forever.
-    if (!getVectorTool(rerun.toolId)) {
+    // History may still carry pre-DGGS H3 tool ids — map them before lookup so
+    // we do not clear the request as "unavailable" and leave it pending.
+    const resolved = resolveVectorRerun(rerun.toolId, rerun.parameters);
+    if (!getVectorTool(resolved.toolId)) {
       setLog((prev) => [
         ...prev,
         `Error: ${t("processing.history.toolUnavailable", { toolId: rerun.toolId })}`,
@@ -116,21 +122,28 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
       setProcessingRerun(null);
       return;
     }
-    if (rerun.toolId !== tool.id) return;
-    setParams({ ...rerun.parameters });
+    if (resolved.toolId !== tool.id) {
+      // Alias mapped to a different tool than the one currently selected
+      // (e.g. History opened with a stale VectorToolKind). Switch over.
+      if (selectedId !== resolved.toolId) setSelectedId(resolved.toolId);
+      return;
+    }
+    setParams({ ...resolved.parameters });
     if (rerun.engine === "client" || rerun.engine === "sidecar" || rerun.engine === "pyodide") {
-      setEngine(rerun.engine);
+      // A history entry recorded on a sidecar run re-runs on Pyodide in the
+      // Mac App Store build, where the sidecar engine does not exist.
+      setEngine(rerun.engine === "sidecar" && IS_MAS_BUILD ? "pyodide" : rerun.engine);
     }
     setProcessingRerun(null);
     if (rerun.autoRun) setAutoRunPending(true);
-  }, [open, rerun, tool, setProcessingRerun, t]);
+  }, [open, rerun, tool, selectedId, setProcessingRerun, t]);
 
-  // Prefill the H3 grid's manual bounding-box fields from the current map
+  // Prefill the DGGS Generator's manual bounding-box fields from the current map
   // viewport when the user first switches to that source, so they can tweak the
   // box rather than type it from scratch. Only fills empty fields, so it never
   // clobbers manual edits. Keyed on the source value, not every keystroke.
   useEffect(() => {
-    if (selectedId !== "h3-grid" || params.source !== "bbox") return;
+    if (selectedId !== "dggs-grid" || params.source !== "bbox") return;
     if (
       params.west !== undefined ||
       params.south !== undefined ||
@@ -154,9 +167,10 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, params.source, mapControllerRef]);
 
-  // Probe the sidecar's vector capability when the dialog opens.
+  // Probe the sidecar's vector capability when the dialog opens. Skipped in
+  // the Mac App Store build, which has no sidecar engine to probe.
   useEffect(() => {
-    if (!open) return;
+    if (!open || IS_MAS_BUILD) return;
     let cancelled = false;
     fetchVectorStatus()
       .then((status) => {
@@ -433,10 +447,8 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     >
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Vector tools</DialogTitle>
-          <DialogDescription>
-            Run common vector geometry operations on your GeoJSON layers.
-          </DialogDescription>
+          <DialogTitle>{t("processing.vectorTools.title")}</DialogTitle>
+          <DialogDescription>{t("processing.vectorTools.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex gap-4">
@@ -471,46 +483,77 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
             <p className="text-sm text-muted-foreground">{tool.description}</p>
 
             <div className="flex flex-col gap-3">
-              {tool.parameters.filter(isParamVisible).map((param) => (
-                <ParameterField
-                  key={param.id}
-                  param={param}
-                  value={params[param.id]}
-                  layerOptions={layerOptions(param.geometryFilter)}
-                  fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
-                  onChange={(value) => handleParamChange(param.id, value)}
-                />
-              ))}
+              {tool.parameters.filter(isParamVisible).map((param) => {
+                // Narrow the resolution spinner to the selected DGGS type's range.
+                const fieldParam =
+                  (tool.id === "dggs-grid" ||
+                    tool.id === "dggs-bin" ||
+                    tool.id === "dggs-compact") &&
+                  param.id === "resolution"
+                    ? (() => {
+                        const dggsType =
+                          params.dggsType === "s2" ||
+                          params.dggsType === "a5" ||
+                          params.dggsType === "dggrid" ||
+                          params.dggsType === "dggal"
+                            ? params.dggsType
+                            : "h3";
+                        const rawSubtype =
+                          dggsType === "dggal" ? params.dggalType : params.dggridType;
+                        const subtype = typeof rawSubtype === "string" ? rawSubtype : undefined;
+                        const max = maxResolutionForDggs(dggsType, subtype);
+                        return {
+                          ...param,
+                          max,
+                          label: t("processing.vectorTools.resolutionRange", { max }),
+                        };
+                      })()
+                    : param;
+                return (
+                  <ParameterField
+                    key={param.id}
+                    param={fieldParam}
+                    value={params[param.id]}
+                    layerOptions={layerOptions(param.geometryFilter)}
+                    fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
+                    onChange={(value) => handleParamChange(param.id, value)}
+                  />
+                );
+              })}
             </div>
 
             {tool.supportsSidecar || tool.requiresSidecar ? (
               <div className="flex flex-col gap-1">
                 <Label className="flex items-center gap-1.5 text-xs">
-                  <Server className="h-3.5 w-3.5" /> Engine
+                  <Server className="h-3.5 w-3.5" /> {t("processing.vectorTools.engine")}
                 </Label>
                 <Select value={engine} onChange={(e) => setEngine(e.target.value as Engine)}>
                   {/* requiresSidecar tools (e.g. Reproject) have no working client
                       path, so don't let the user pick a dead-end engine. */}
                   <option value="client" disabled={tool.requiresSidecar}>
-                    Client (Turf.js)
+                    {t("processing.vectorTools.engineClient")}
                   </option>
-                  <option value="sidecar">Sidecar (GeoPandas)</option>
-                  <option value="pyodide">Python (Pyodide)</option>
+                  {/* No sidecar engine in the Mac App Store build. */}
+                  {!IS_MAS_BUILD && (
+                    <option value="sidecar">{t("processing.vectorTools.engineSidecar")}</option>
+                  )}
+                  <option value="pyodide">{t("processing.vectorTools.enginePyodide")}</option>
                 </Select>
                 {engine === "sidecar" && sidecarAvailable === null ? (
-                  <p className="text-xs text-muted-foreground">Checking sidecar availability...</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("processing.vectorTools.checkingSidecar")}
+                  </p>
                 ) : null}
                 {engine === "sidecar" && sidecarAvailable === false ? (
                   <p className="text-xs text-destructive">
-                    The GeoPandas sidecar is not available. Start the sidecar with the vector extra,
-                    or switch to
-                    {tool.requiresSidecar ? " Python (Pyodide)." : " the client engine."}
+                    {tool.requiresSidecar
+                      ? t("processing.vectorTools.sidecarUnavailablePyodide")
+                      : t("processing.vectorTools.sidecarUnavailableClient")}
                   </p>
                 ) : null}
                 {engine === "pyodide" ? (
                   <p className="text-xs text-muted-foreground">
-                    Runs GeoPandas in your browser. The first run downloads the Python runtime
-                    (one-time, needs an internet connection).
+                    {t("processing.vectorTools.pyodideNote")}
                   </p>
                 ) : null}
               </div>
@@ -527,13 +570,15 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
                 ) : (
                   <Play className="h-4 w-4" />
                 )}
-                Run
+                {t("processing.vectorTools.run")}
               </Button>
             </div>
 
             <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
               {log.length === 0 ? (
-                <span className="text-muted-foreground">Output will appear here.</span>
+                <span className="text-muted-foreground">
+                  {t("processing.vectorTools.outputPlaceholder")}
+                </span>
               ) : (
                 log.map((line, index) => (
                   <div key={index} className="whitespace-pre-wrap">

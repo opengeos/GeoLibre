@@ -1,22 +1,34 @@
 import {
   DEFAULT_PROJECT_NAME,
+  detachProjectCopy,
   projectFromStore,
+  redactProjectCredentials,
+  excludeHiddenFieldsFromProject,
   serializeProject,
   useAppStore,
   type GeoLibreLayer,
+  type GeoLibreProject,
 } from "@geolibre/core";
-import { materializeEmbeddableVectorLayers } from "@geolibre/plugins";
+import {
+  addArcGISLayer,
+  addRasterToMap,
+  isRecoverableNonTiledRasterError,
+  materializeEmbeddableVectorLayers,
+} from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
 import { type FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getPluginManager } from "./usePlugins";
-import { useDesktopSettingsStore } from "./useDesktopSettings";
+import { createAppAPI, getPluginManager } from "./usePlugins";
+import { pluginManifestUrlsForIds } from "../lib/external-plugins";
 import {
   browserSaveFallsBackToDownload,
   isAbsoluteLocalPath,
   isHttpUrl,
   isTauri,
+  loadDroppedRasterPaths,
+  openArcgisProjectFile,
   openProjectFile,
+  openQgisProjectFile,
   openRecentProjectFile,
   RecentProjectGoneError,
   saveProjectFile,
@@ -31,14 +43,49 @@ import { getShareFetch } from "../lib/share-fetch";
 import { resolveShareBaseUrl } from "../lib/share-geolibre";
 import { shareAuthorizedFetch } from "../lib/share-gallery";
 import { normalizeProjectUrl } from "../lib/urls";
+import { recordExplicitProjectSave } from "../lib/project-history-session";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
+import {
+  importQgisProject,
+  materializeQgisRemoteLayers,
+  type QgisProjectImportWarning,
+} from "../lib/qgis-project-import";
+import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 
-/** A pending "strip env vars before saving?" prompt. */
-export interface EnvStripPrompt {
+/** A pending "strip credentials before saving?" prompt. */
+export interface CredentialStripPrompt {
   count: number;
   resolve: (choice: "strip" | "keep" | "cancel") => void;
 }
+
+/**
+ * Embedded-data size above which the save prompt warns that the project will be
+ * slow (or impossible) to reopen and points at PMTiles/FlatGeobuf instead.
+ *
+ * Embedded GeoJSON is parsed and held in memory in full when the project is
+ * reopened, so a browser tab can run out of memory and drop the layers with no
+ * error (GeoLibre#1829). 50 MB is well under that cliff while leaving ordinary
+ * projects unbothered.
+ */
+export const LARGE_EMBED_WARNING_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Messages engines raise when a string passes their maximum length, which is
+ * how "this project is too large to serialize" surfaces.
+ *
+ * Matched by text rather than by error class because there is no typed signal:
+ * V8 (Chromium, WebView2) throws `RangeError: Invalid string length`,
+ * JavaScriptCore (the macOS and Linux Tauri webviews) reports an out-of-memory
+ * error, and SpiderMonkey says "allocation size overflow". Matching only V8's
+ * wording would leave desktop users on every other webview with the generic
+ * failure message instead of the guidance this exists to give.
+ *
+ * Deliberately narrow: a genuine serialization bug (a cycle, say, which reads
+ * "Converting circular structure to JSON") must not be filed under size.
+ */
+const SERIALIZATION_TOO_LARGE_PATTERN =
+  /invalid string length|out of memory|allocation size overflow|string too long/i;
 
 /**
  * A pending "embed local vector data?" prompt, shown on the web when saving a
@@ -99,6 +146,85 @@ function isReloadableLocalFileLayer(layer: GeoLibreLayer): boolean {
 }
 
 /**
+ * Let React commit a newly loaded project before a plugin attaches native map
+ * sources. A project load can replace the MapLibre style (and always schedules
+ * a layer sync); adding a raster in the same tick can therefore attach it to
+ * the outgoing style. Its store entry survives, but the native raster source
+ * is removed by the pending style/layer update.
+ */
+function importedProjectMapReady(
+  mapControllerRef: MapControllerRef,
+  basemapWillChange: boolean,
+): Promise<void> {
+  const map = mapControllerRef.current?.getMap();
+  const styleReady =
+    map && basemapWillChange
+      ? new Promise<void>((resolve) => map.once("style.load", () => resolve()))
+      : Promise.resolve();
+
+  return (async () => {
+    // Let the project store update commit and its MapCanvas effects run first.
+    // Register the style listener above (before loadProject) so a fast inline
+    // style cannot finish between the store update and this wait.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await styleReady;
+  })();
+}
+
+/**
+ * Adds one raster from an imported QGIS/ArcGIS Pro project, cleaning up after
+ * itself when the raster cannot be loaded.
+ *
+ * `addRasterToMap` resolves only once the GeoTIFF header has been read, but the
+ * control creates the store layer earlier (its `rasteradd` fires before that
+ * await). A rejection therefore leaves the layer behind, so importers that
+ * simply caught the error listed a raster as unsupported while it was still
+ * sitting in the layer list -- see the NLCD case in GeoLibre#1637. Rolling the
+ * layer back keeps the warning dialog and the layer list telling the same story.
+ *
+ * The striped "not tiled" rejection is deliberately not a failure: that layer
+ * stays on the map while the registered non-tiled handler offers to convert it
+ * to a COG, so it is neither rolled back nor reported.
+ *
+ * @param app - The app API for the live map.
+ * @param source - Raster source resolved from the project's layer path.
+ * @param options - Passed through to {@link addRasterToMap}.
+ * @param groupId - Imported layer group to move the raster into, if any.
+ * @throws The original load error, after the partial layer has been removed.
+ */
+async function addImportedProjectRaster(
+  app: ReturnType<typeof createAppAPI>,
+  source: Parameters<typeof addRasterToMap>[1],
+  options: Parameters<typeof addRasterToMap>[2],
+  groupId: string | undefined,
+): Promise<void> {
+  const before = new Set(useAppStore.getState().layers.map((layer) => layer.id));
+  try {
+    const layerId = await addRasterToMap(app, source, options);
+    if (groupId) useAppStore.getState().moveLayerToGroup(layerId, groupId);
+  } catch (error) {
+    if (isRecoverableNonTiledRasterError(error)) {
+      // The rejection carried no layer id, but the control already created the
+      // store layer and is keeping it while the COG conversion is offered, so
+      // it still has to be placed in its imported group -- otherwise a raster
+      // that converts successfully ends up at the top level.
+      if (groupId) {
+        const { layers, moveLayerToGroup } = useAppStore.getState();
+        const created = layers.find((layer) => !before.has(layer.id));
+        if (created) moveLayerToGroup(created.id, groupId);
+      }
+      return;
+    }
+    const { layers, removeLayer } = useAppStore.getState();
+    for (const layer of layers) {
+      if (!before.has(layer.id)) removeLayer(layer.id);
+    }
+    throw error;
+  }
+}
+
+/**
  * Bundles every project file action (open from file/URL/recent, save, save as)
  * along with the related dialog state (Open-from-URL, env-var strip prompt, and
  * the shared action-error dialog).
@@ -115,11 +241,19 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const markSaved = useAppStore((s) => s.markSaved);
 
   const [actionError, setActionError] = useState<string | null>(null);
+  const [qgisImportWarnings, setQgisImportWarnings] = useState<QgisProjectImportWarning[] | null>(
+    null,
+  );
+  const [arcgisImportWarnings, setArcgisImportWarnings] = useState<
+    ArcgisProjectImportWarning[] | null
+  >(null);
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
-  const [envStripPrompt, setEnvStripPrompt] = useState<EnvStripPrompt | null>(null);
+  const [credentialStripPrompt, setCredentialStripPrompt] = useState<CredentialStripPrompt | null>(
+    null,
+  );
   const [embedVectorDataPrompt, setEmbedVectorDataPrompt] = useState<EmbedVectorDataPrompt | null>(
     null,
   );
@@ -148,6 +282,205 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           error instanceof Error ? error.message : t("toolbar.error.couldNotOpenProject"),
         );
       }
+    }
+  };
+
+  const handleImportQgisProject = async () => {
+    const result = await openQgisProjectFile();
+    if (!result) return;
+    try {
+      const imported = await materializeQgisRemoteLayers(
+        importQgisProject(result.data, result.path),
+      );
+      if (!isTauri()) {
+        const unavailableLayerIds = new Set<string>();
+        for (const layer of imported.project.layers) {
+          if (layer.sourcePath && !isHttpUrl(layer.sourcePath)) {
+            unavailableLayerIds.add(layer.id);
+            imported.warnings.push({
+              layerName: layer.name,
+              reason: "browser-local-file",
+            });
+          }
+        }
+        imported.project.layers = imported.project.layers.filter(
+          (layer) => !unavailableLayerIds.has(layer.id),
+        );
+        const usedGroupIds = new Set(
+          imported.project.layers.flatMap((layer) => (layer.groupId ? [layer.groupId] : [])),
+        );
+        imported.project.layerGroups = imported.project.layerGroups?.filter((group) =>
+          usedGroupIds.has(group.id),
+        );
+        for (const raster of imported.rasters) {
+          imported.warnings.push({
+            layerName: raster.name,
+            reason: "browser-local-raster",
+          });
+        }
+      }
+      const mapReady = importedProjectMapReady(
+        mapControllerRef,
+        useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
+      );
+      loadProject(imported.project, null);
+      if (isTauri()) {
+        await mapReady;
+        const app = createAppAPI(mapControllerRef);
+        for (const raster of imported.rasters) {
+          try {
+            const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
+              importProjectPath: result.path,
+            });
+            if (!loaded) throw new Error("Unsupported raster path");
+            await addImportedProjectRaster(
+              app,
+              loaded.source,
+              {
+                name: raster.name,
+                localPath: raster.sourcePath,
+                // The Tauri/WebKitGTK WASM backend can stall when its first
+                // source is created immediately after a project style load.
+                // GPU renders this local COG directly and preserves the imported
+                // QGIS ramp, so use the verified backend for project imports.
+                defaults: { engine: "maplibre-gl-raster" },
+                state: {
+                  ...raster.state,
+                  visible: raster.visible,
+                  opacity: raster.opacity,
+                },
+                beforeId: raster.beforeId,
+                zoomTo: false,
+              },
+              raster.groupId,
+            );
+          } catch (error) {
+            console.error(`Failed to import QGIS raster "${raster.name}"`, error);
+            imported.warnings.push({
+              layerName: raster.name,
+              reason: "format",
+            });
+          }
+        }
+      }
+      useAppStore.setState({ isDirty: true });
+      setQgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
+    } catch (error) {
+      console.error("Failed to import QGIS project", error);
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotImportQgisProject"),
+      );
+    }
+  };
+
+  const handleImportArcgisProject = async () => {
+    const result = await openArcgisProjectFile();
+    if (!result) return;
+    try {
+      const imported = importArcgisProject(result.data, result.path);
+      if (!isTauri()) {
+        const unavailableLayerIds = new Set<string>();
+        for (const layer of imported.project.layers) {
+          if (layer.sourcePath && !isHttpUrl(layer.sourcePath)) {
+            unavailableLayerIds.add(layer.id);
+            imported.warnings.push({ layerName: layer.name, reason: "browser-local-file" });
+          }
+        }
+        imported.project.layers = imported.project.layers.filter(
+          (layer) => !unavailableLayerIds.has(layer.id),
+        );
+        for (const raster of imported.rasters) {
+          imported.warnings.push({ layerName: raster.name, reason: "browser-local-file" });
+        }
+        // Rasters never load in the browser build, so drop them before the
+        // group prune below rather than letting them keep a group alive that
+        // will stay empty. Services still load, so they still count.
+        imported.rasters = [];
+        // Re-prune the groups: dropping the local-file layers can empty a group
+        // that the importer kept, and an empty group left behind shows up as a
+        // dangling entry in the layer panel.
+        const usedGroupIds = new Set<string>([
+          ...imported.project.layers.flatMap((layer) => (layer.groupId ? [layer.groupId] : [])),
+          ...imported.services.flatMap((service) => (service.groupId ? [service.groupId] : [])),
+        ]);
+        // A parent group stays as long as a surviving group still names it, so
+        // walk up the chain before filtering.
+        const groupById = new Map(
+          (imported.project.layerGroups ?? []).map((group) => [group.id, group]),
+        );
+        for (const id of [...usedGroupIds]) {
+          let parentId = groupById.get(id)?.parentId;
+          while (parentId && !usedGroupIds.has(parentId)) {
+            usedGroupIds.add(parentId);
+            parentId = groupById.get(parentId)?.parentId;
+          }
+        }
+        imported.project.layerGroups = imported.project.layerGroups?.filter((group) =>
+          usedGroupIds.has(group.id),
+        );
+      }
+      const mapReady = importedProjectMapReady(
+        mapControllerRef,
+        useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
+      );
+      loadProject(imported.project, null);
+      await mapReady;
+      const app = createAppAPI(mapControllerRef);
+      if (isTauri()) {
+        for (const raster of imported.rasters) {
+          try {
+            const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
+              importProjectPath: result.path,
+            });
+            if (!loaded) throw new Error("Unsupported raster path");
+            await addImportedProjectRaster(
+              app,
+              loaded.source,
+              {
+                name: raster.name,
+                localPath: raster.sourcePath,
+                defaults: { engine: "maplibre-gl-raster" },
+                state: { visible: raster.visible, opacity: raster.opacity },
+                zoomTo: false,
+              },
+              raster.groupId,
+            );
+          } catch (error) {
+            console.error(`Failed to import ArcGIS raster "${raster.name}"`, error);
+            imported.warnings.push({ layerName: raster.name, reason: "format" });
+          }
+        }
+      }
+      for (const service of imported.services) {
+        try {
+          const serviceLayerId = await addArcGISLayer(app, {
+            itemId: service.itemId,
+            layerType: "vector-tile",
+            name: service.name,
+            sourceType: "portal-item",
+            // The project's saved extent was applied by loadProject above, and
+            // this runs after it. Without the opt-out, each imported service
+            // would fit the map to its own bounds and throw that extent away.
+            zoomTo: false,
+          });
+          if (service.groupId) {
+            useAppStore.getState().moveLayerToGroup(serviceLayerId, service.groupId);
+          }
+          if (!service.visible) {
+            useAppStore.getState().setLayerVisibility(serviceLayerId, false);
+          }
+        } catch (error) {
+          console.error(`Failed to import ArcGIS service "${service.name}"`, error);
+          imported.warnings.push({ layerName: service.name, reason: "service" });
+        }
+      }
+      useAppStore.setState({ isDirty: true });
+      setArcgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
+    } catch (error) {
+      console.error("Failed to import ArcGIS project", error);
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotImportArcgisProject"),
+      );
     }
   };
 
@@ -193,16 +526,19 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // rethrows on failure so the caller (the gallery dialog) can show the error
   // inline next to the card it came from.
   //
-  // When `authToken` is set (the user has a share.geolibre.app API token), the
-  // request to the share host carries it as a Bearer token so the owner's
-  // unlisted and private projects load too. The token is attached only for the
-  // share host (see shareAuthorizedFetch), never to third-party hosts a project
-  // might reference. Token-authenticated opens are not remembered as recent
-  // (path = null), since reopening a private URL on restart would 403 without
-  // the header.
+  // When `authToken` is set (the user has a share API token), the request to the
+  // share host carries it as a Bearer token so the owner's unlisted and private
+  // projects load too. The token is attached only for the share host (see
+  // shareAuthorizedFetch), never to third-party hosts a project might reference —
+  // so when no share host is configured, the plain fetch is used and the token is
+  // simply not sent anywhere. Token-authenticated opens are not remembered as
+  // recent (path = null), since reopening a private URL on restart would 403
+  // without the header.
+  const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false);
+
   const openProjectFromShareUrl = async (
     url: string,
-    options: { authToken?: string } = {},
+    options: { authToken?: string; asCopy?: boolean } = {},
   ): Promise<void> => {
     const normalizedUrl = normalizeProjectUrl(url);
     if (!normalizedUrl) {
@@ -214,30 +550,35 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     shareUrlAbortRef.current = controller;
 
     try {
-      if (options.authToken) {
+      let project: Awaited<ReturnType<typeof resolveProjectXyzLayers>>;
+      // One decision drives both the fetch and whether the URL is remembered: a
+      // token is only actually sent when there is a share host to send it to, and
+      // an unauthenticated open of a public URL should still be remembered.
+      const shareBaseUrl = resolveShareBaseUrl();
+      const shareAuth =
+        options.authToken && shareBaseUrl
+          ? { token: options.authToken, baseUrl: shareBaseUrl }
+          : null;
+      if (shareAuth) {
         const fetched = await fetchProjectFromUrl(normalizedUrl, {
           signal: controller.signal,
-          fetchImpl: shareAuthorizedFetch(
-            options.authToken,
-            resolveShareBaseUrl(),
-            // Matches fetchMyProjects: on desktop this routes the share host
-            // through Tauri's native HTTP, which is exempt from the WebView's
-            // CORS enforcement. Omitting it falls back to browser `fetch`,
-            // which is why listing a private project worked but opening it did
-            // not.
-            getShareFetch(),
-          ),
+          fetchImpl: shareAuthorizedFetch(shareAuth.token, shareAuth.baseUrl, getShareFetch()),
         });
-        const project = await resolveProjectXyzLayers(fetched, controller.signal);
-        if (controller.signal.aborted) return;
-        loadProject(project, null);
-        return;
+        project = await resolveProjectXyzLayers(fetched, controller.signal);
+      } else {
+        const result = await openRecentProjectFile(normalizedUrl, controller.signal);
+        project = await resolveProjectXyzLayers(result.project, controller.signal);
       }
 
-      const result = await openRecentProjectFile(normalizedUrl, controller.signal);
-      const project = await resolveProjectXyzLayers(result.project, controller.signal);
       if (controller.signal.aborted) return;
-      loadProject(project, result.path);
+
+      if (options.asCopy) {
+        const detached = detachProjectCopy(project, { nameSuffix: "" });
+        loadProject(detached, null);
+        useAppStore.setState({ isDirty: true });
+      } else {
+        loadProject(project, shareAuth ? null : normalizedUrl);
+      }
     } finally {
       if (shareUrlAbortRef.current === controller) {
         shareUrlAbortRef.current = null;
@@ -294,9 +635,26 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const state = useAppStore.getState();
     const defaultProjectName =
       nameOverride?.trim() || state.projectName.trim() || DEFAULT_PROJECT_NAME;
+    const pluginProjectState = getPluginManager().getProjectState();
+    // Record only the plugin URLs this project actually needs: the ones it
+    // already declared, plus the manifest URLs behind the plugins it uses. A
+    // plugin counts as used when it is active or has stored project state --
+    // `mapControlPositions` is written for every plugin that reports a position,
+    // so it says nothing about use.
+    //
+    // The author's remaining installed URLs are deliberately NOT merged in.
+    // Doing so stamped every share with the full list, so recipients were
+    // prompted to trust and execute third-party code the project never runs
+    // (the prompt is scary by design, and firing it on irrelevant URLs trains
+    // people to click through it), and the shared file disclosed exactly which
+    // plugins the author had installed.
+    const usedPluginIds = new Set([
+      ...pluginProjectState.activePluginIds,
+      ...Object.keys(pluginProjectState.settings ?? {}),
+    ]);
     const pluginManifestUrls = mergeStringLists(
       state.projectPlugins?.manifestUrls ?? [],
-      useDesktopSettingsStore.getState().desktopSettings.pluginManifestUrls,
+      pluginManifestUrlsForIds(usedPluginIds),
     );
     const project = projectFromStore({
       projectName: defaultProjectName,
@@ -305,10 +663,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       basemapVisible: state.basemapVisible,
       basemapOpacity: state.basemapOpacity,
       layers: layersOverride ?? state.layers,
+      selectedLayerId: state.selectedLayerId,
       layerGroups: state.layerGroups,
       preferences: state.preferences,
       plugins: {
-        ...getPluginManager().getProjectState(),
+        ...pluginProjectState,
         manifestUrls: pluginManifestUrls,
       },
       legend: state.legend,
@@ -321,29 +680,59 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       secondaryMapViews: state.secondaryMapViews,
       primaryMapLabel: state.primaryMapLabel,
       styleLibrary: state.projectStyleLibrary,
+      comments: state.comments,
       metadata: state.metadata,
     });
+    // The serialized text is deliberately not returned: every caller
+    // re-serializes after redacting credentials, so producing it here doubled
+    // the peak memory of a save for a project embedding large vector layers
+    // (GeoLibre#1829).
     return {
       project,
       defaultProjectName,
-      content: serializeProject(project),
       // Expose the path read from this same snapshot so callers don't take a
       // second `getState()` read that could be misread as a separate instant.
       projectPath: state.projectPath,
     };
   };
 
-  // Ask whether to strip environment variables before writing the file. The
-  // promise resolves when the user picks an option in the dialog.
-  const askStripEnvVars = (count: number) =>
+  // Serializing a project runs synchronously and throws `RangeError: Invalid
+  // string length` once the text passes V8's ~536 MB string cap, which a
+  // project embedding large vector layers can still reach. Unguarded, that
+  // throw escaped `void handleSave()` as an unhandled rejection and Save
+  // silently did nothing (GeoLibre#1829), so report it instead of returning
+  // text. Returns null when the project could not be serialized.
+  const serializeForSave = (project: GeoLibreProject): string | null => {
+    try {
+      return serializeProject(project);
+    } catch (error) {
+      console.error("Failed to serialize project", error);
+      // Only the string-length cap means "too large"; anything else is a real
+      // serialization bug and must not be filed under a size problem. Matching
+      // on `RangeError` alone was too broad — a stack overflow raises one too,
+      // and pointing that at PMTiles/FlatGeobuf would send the user chasing a
+      // size problem they do not have.
+      setActionError(
+        error instanceof Error && SERIALIZATION_TOO_LARGE_PATTERN.test(error.message)
+          ? t("toolbar.error.projectTooLargeToSave")
+          : t("toolbar.error.couldNotSaveProject"),
+      );
+      return null;
+    }
+  };
+
+  // Ask whether to strip credentials (environment variables, geocoder keys,
+  // layer tokens) before writing the file. The promise resolves when the user
+  // picks an option in the dialog.
+  const askStripCredentials = (count: number) =>
     new Promise<"strip" | "keep" | "cancel">((resolve) => {
-      setEnvStripPrompt({ count, resolve });
+      setCredentialStripPrompt({ count, resolve });
     });
 
-  const resolveEnvStripPrompt = (choice: "strip" | "keep" | "cancel") => {
+  const resolveCredentialStripPrompt = (choice: "strip" | "keep" | "cancel") => {
     // Resolve outside the state updater (updaters must be side-effect free).
-    envStripPrompt?.resolve(choice);
-    setEnvStripPrompt(null);
+    credentialStripPrompt?.resolve(choice);
+    setCredentialStripPrompt(null);
   };
 
   // Ask whether to embed local vector layers' data in the saved file. Resolves
@@ -505,26 +894,24 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // first, so the serialized content below reflects the user's choice.
     const layersForSave = await resolveLayersForSave();
     if (layersForSave === "cancel") return false;
-    const { project, defaultProjectName, content, projectPath } = buildCurrentProject(
+    const { project, defaultProjectName, projectPath } = buildCurrentProject(
       undefined,
       layersForSave.layers,
     );
-    // Env vars (possibly API keys) are serialized in plain text. If any are set,
-    // offer to strip them from the saved file before writing.
-    let contentToSave = content;
-    const envVarCount = (project.preferences.environmentVariables ?? []).filter((variable) =>
-      variable.key.trim(),
-    ).length;
-    if (envVarCount > 0) {
-      const choice = await askStripEnvVars(envVarCount);
+    // Credentials are serialized in plain text for a local project that needs
+    // them. Make keeping them an explicit choice and use the same central
+    // redaction pass as every external egress.
+    let contentToSave: string | null;
+    const projectToEgress = excludeHiddenFieldsFromProject(project);
+    const redacted = redactProjectCredentials(projectToEgress);
+    if (redacted.redactedPaths.length > 0) {
+      const choice = await askStripCredentials(redacted.redactedCount);
       if (choice === "cancel") return false;
-      if (choice === "strip") {
-        contentToSave = serializeProject({
-          ...project,
-          preferences: { ...project.preferences, environmentVariables: [] },
-        });
-      }
+      contentToSave = serializeForSave(choice === "strip" ? redacted.project : projectToEgress);
+    } else {
+      contentToSave = serializeForSave(projectToEgress);
     }
+    if (contentToSave === null) return false;
     // Projects opened from a URL have no writable path, so both Save and
     // Save As fall back to the save dialog for them.
     const existingLocalPath = projectPath && !isHttpUrl(projectPath) ? projectPath : null;
@@ -549,7 +936,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     try {
       path =
         !options?.saveAs && existingLocalPath
-          ? await saveProjectFileToPath(contentToSave, existingLocalPath)
+          ? await saveProjectFileToPath(contentToSave, existingLocalPath, saveName)
           : await saveProjectFile(
               contentToSave,
               promptForName ? saveName : (existingLocalPath ?? saveName),
@@ -569,6 +956,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       openedAt: new Date().toISOString(),
     });
     markSaved();
+    recordExplicitProjectSave();
     return true;
   };
 
@@ -620,18 +1008,15 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         if (chosen === null) return false;
         defaultName = ensureHtmlFileName(chosen, slug);
       }
-      // Only now embed local vector data (self-contained, like Share) and strip
-      // env vars (secrets serve no purpose in a static viewer): this can be
-      // costly on a project with many local layers, so it runs after the user
+      // Only now embed local vector data (self-contained, like Share): this can
+      // be costly on a project with many local layers, so it runs after the user
       // has committed to the export rather than before the prompt. Reuse the
-      // name snapshot so the title matches the slug computed above.
+      // name snapshot so the title matches the slug computed above. Credentials
+      // serve no purpose in a static viewer and are removed inside
+      // buildProjectHtml, which runs the central redaction pass.
       const { project, defaultProjectName } = await buildEmbeddedProject(projectName);
-      const safeProject = {
-        ...project,
-        preferences: { ...project.preferences, environmentVariables: [] },
-      };
       const html = buildProjectHtml({
-        project: safeProject,
+        project,
         title: defaultProjectName,
       });
       // Returns null when the user cancels the save dialog; report that as a
@@ -671,9 +1056,20 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
   };
 
+  const handleDuplicate = () => {
+    const { project } = buildCurrentProject();
+    const duplicated = detachProjectCopy(project, { nameSuffix: "(copy)" });
+    loadProject(duplicated, null);
+    useAppStore.setState({ isDirty: true });
+  };
+
   return {
     actionError,
     setActionError,
+    qgisImportWarnings,
+    setQgisImportWarnings,
+    arcgisImportWarnings,
+    setArcgisImportWarnings,
     projectUrlDialogOpen,
     setProjectUrlDialogOpen,
     handleProjectUrlDialogOpenChange,
@@ -682,8 +1078,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     projectUrlError,
     setProjectUrlError,
     projectUrlLoading,
-    envStripPrompt,
-    resolveEnvStripPrompt,
+    saveTemplateDialogOpen,
+    setSaveTemplateDialogOpen,
+    handleDuplicate,
+    handleSaveAsTemplate: () => setSaveTemplateDialogOpen(true),
+    credentialStripPrompt,
+    resolveCredentialStripPrompt,
     embedVectorDataPrompt,
     resolveEmbedVectorDataPrompt,
     saveNamePrompt,
@@ -692,6 +1092,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     submitSaveNamePrompt,
     cancelSaveNamePrompt,
     handleOpenFromFile,
+    handleImportQgisProject,
+    handleImportArcgisProject,
     handleOpenFromUrl,
     openProjectFromShareUrl,
     handleOpenRecent,

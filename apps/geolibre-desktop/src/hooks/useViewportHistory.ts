@@ -117,12 +117,21 @@ export function useViewportHistory(
       syncNav();
     };
 
-    const onMoveEnd = (event: { storyCameraToken?: number }) => {
+    const onMoveEnd = (event: { storyCameraToken?: number; flightCameraToken?: number }) => {
       // Story presenter / chapter-preview camera moves carry a storyCameraToken
       // in their event data. Those are scripted playback, not user navigation,
       // so don't record them (checked before the restore counter so a story
       // move never consumes a pending restore's slot).
       if (event?.storyCameraToken !== undefined) return;
+      // The flight simulator jumps the camera every animation frame; recording
+      // those would bury the user's real history under ~60 entries a second.
+      if (event?.flightCameraToken !== undefined) {
+        // A flight frame is authoritative: its jumpTo cancels any restore ease
+        // still animating, so drop the pending count rather than leaving it to
+        // swallow the next ordinary moveend. Already 0 in the common case.
+        restoringCountRef.current = 0;
+        return;
+      }
       if (restoringCountRef.current > 0) {
         restoringCountRef.current--;
         return;

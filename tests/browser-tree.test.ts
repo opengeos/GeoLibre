@@ -268,6 +268,98 @@ describe("buildBrowserTree — Favorites section", () => {
   });
 });
 
+describe("buildBrowserTree — My Data section", () => {
+  it("omits My Data unless the libraryLayers input is provided", () => {
+    const tree = buildBrowserTree({ services: [], recentProjects: [] });
+    assert.equal(find(tree, "section:my-data"), undefined);
+  });
+
+  it("renders an empty My Data section so Import stays reachable", () => {
+    const tree = buildBrowserTree({ services: [], recentProjects: [], libraryLayers: [] });
+    const myData = find(tree, "section:my-data");
+    assert.equal(myData?.kind, "section");
+    assert.equal(myData?.libraryImportExport, true);
+    assert.equal(myData?.count, 0);
+    assert.equal(myData?.children?.length, 0);
+  });
+
+  it("lists saved layers in the given order, before Services", () => {
+    const tree = buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      libraryLayers: [
+        { id: "e2", name: "Newest" },
+        { id: "e1", name: "Older" },
+      ],
+    });
+    assert.deepEqual(
+      tree.map((n) => n.id),
+      ["section:my-data", "section:services", "section:recent"],
+    );
+    const myData = find(tree, "section:my-data");
+    assert.deepEqual(
+      myData?.children?.map((c) => c.label),
+      ["Newest", "Older"],
+    );
+    assert.equal(myData?.count, 2);
+  });
+
+  it("sits under Favorites when both are present", () => {
+    const tree = buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      favorites: [{ id: "service:s1", kind: "service", label: "Basemap", serviceId: "s1" }],
+      libraryLayers: [{ id: "e1", name: "Cities" }],
+    });
+    assert.deepEqual(
+      tree.slice(0, 2).map((n) => n.id),
+      ["section:favorites", "section:my-data"],
+    );
+  });
+
+  it("marks each saved layer addable, renamable, and deletable", () => {
+    const tree = buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      libraryLayers: [{ id: "e1", name: "Cities" }],
+    });
+    const leaf = find(tree, "library-layer:e1");
+    assert.equal(leaf?.kind, "library-layer");
+    assert.equal(leaf?.addable, true);
+    assert.equal(leaf?.renamable, true);
+    assert.equal(leaf?.deletable, true);
+    assert.equal(leaf?.libraryLayerId, "e1");
+    // Leaves, not groups: no children array, so the tree offers no chevron.
+    assert.equal(leaf?.children, undefined);
+    assert.equal(leaf?.needsLocalFile, undefined);
+  });
+
+  it("flags an entry that only a filesystem-capable host can re-add", () => {
+    const tree = buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      libraryLayers: [{ id: "e1", name: "Huge", needsLocalFile: true }],
+    });
+    assert.equal(find(tree, "library-layer:e1")?.needsLocalFile, true);
+  });
+
+  it("finds a saved layer by search", () => {
+    const tree = buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      libraryLayers: [
+        { id: "e1", name: "US cities" },
+        { id: "e2", name: "Rivers" },
+      ],
+    });
+    const filtered = filterBrowserTree(tree, "cit");
+    assert.deepEqual(
+      find(filtered, "section:my-data")?.children?.map((c) => c.label),
+      ["US cities"],
+    );
+  });
+});
+
 describe("buildBrowserTree — Files section", () => {
   it("omits the Files section unless files input is provided", () => {
     const tree = buildBrowserTree({ services: [], recentProjects: [] });

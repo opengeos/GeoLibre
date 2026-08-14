@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { maplibreTimeSliderPlugin } from "../packages/plugins/src/plugins/maplibre-time-slider";
+import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import {
+  __reconcileBoundLayersForTests,
+  configToOptions,
+  getLayerTimeBinding,
+  createStoreLayer,
+  isTimeSliderIdle,
+  maplibreTimeSliderPlugin,
+} from "../packages/plugins/src/plugins/maplibre-time-slider";
+import { registerTemporalLayer } from "../packages/plugins/src/plugins/temporal-layers";
+import type { SourceSpec, TimeSliderControl } from "maplibre-gl-time-slider";
 
 // applyProjectState / getProjectState touch no app methods while no control is
 // active (the plugin is never activated here), so a bare stub satisfies the type.
@@ -61,6 +71,60 @@ describe("Time Slider open-ended end date persistence", () => {
   });
 });
 
+describe("Time Slider selector display-unit restoration", () => {
+  it("restores the previous controls after the last selector is unbound", () => {
+    const store = useAppStore.getState();
+    const previousLayers = store.layers;
+    const layer = {
+      id: "restore-units",
+      name: "Daily cube",
+      type: "geojson",
+      source: {},
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {
+        timeBinding: {
+          kind: "selector",
+          dimension: "time",
+          min: Date.UTC(2020, 0, 1),
+          max: Date.UTC(2020, 0, 2),
+          granularity: "day",
+          displayUnits: ["day"],
+        },
+      },
+    } satisfies GeoLibreLayer;
+    const ranges: unknown[][] = [];
+    const granularities: string[][] = [];
+    const control = {
+      getConfig: () =>
+        baseConfig({
+          granularities: ["year", "month"],
+        }),
+      setRange: (...args: unknown[]) => ranges.push(args),
+      setGranularities: (units: string[]) => granularities.push(units),
+    } as unknown as TimeSliderControl;
+    const detach = registerTemporalLayer(layer.id, {
+      getTimeValues: () => [Date.UTC(2020, 0, 1), Date.UTC(2020, 0, 2)],
+      setTime: () => {},
+    });
+
+    try {
+      useAppStore.setState({ layers: [layer] });
+      __reconcileBoundLayersForTests(control);
+      assert.deepEqual(granularities.at(-1), ["day"]);
+
+      useAppStore.getState().updateLayer(layer.id, { metadata: {} });
+      __reconcileBoundLayersForTests(control);
+      assert.deepEqual(granularities.at(-1), ["year", "month"]);
+      assert.equal(ranges.at(-1)?.[3], "year");
+    } finally {
+      detach();
+      useAppStore.setState({ layers: previousLayers });
+    }
+  });
+});
+
 describe("Time Slider mosaic source persistence", () => {
   const mosaicSource = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
     type: "mosaic",
@@ -90,5 +154,279 @@ describe("Time Slider mosaic source persistence", () => {
       apply(baseConfig({ sources: [mosaicSource({ url: "javascript:alert(1)" })] })),
       false,
     );
+  });
+});
+
+describe("Time Slider ordinal dates persistence", () => {
+  const DATES = ["2023-01-28", "2023-02-20", "2023-03-27", "2025-10-03"];
+
+  it("round-trips an explicit date list through a save", () => {
+    assert.equal(apply(baseConfig({ dates: DATES })), true);
+    assert.deepEqual(saved()?.dates, DATES);
+  });
+
+  it("round-trips the URL the dates were loaded from", () => {
+    const datesUrl = "https://example.com/dates.json";
+    assert.equal(apply(baseConfig({ dates: DATES, datesUrl })), true);
+    assert.equal(saved()?.datesUrl, datesUrl);
+  });
+
+  it("omits dates for a continuous timeline", () => {
+    assert.equal(apply(baseConfig()), true);
+    const config = saved();
+    assert.ok(config);
+    assert.equal("dates" in config, false);
+  });
+
+  it("rejects a dates value that is not a list of strings", () => {
+    assert.equal(apply(baseConfig({ dates: "2023-01-28" })), false);
+    assert.equal(apply(baseConfig({ dates: [2023] })), false);
+  });
+
+  it("rejects a datesUrl that is not a plain http(s) URL", () => {
+    assert.equal(apply(baseConfig({ dates: DATES, datesUrl: "javascript:alert(1)" })), false);
+  });
+
+  // The restore path builds a fresh control from options, so a `dates` list the
+  // config carries but the options drop leaves the rebuilt timeline continuous.
+  it("carries the date list into the options a rebuilt control is built from", () => {
+    const options = configToOptions({
+      startDate: "2023-01-01T00:00:00.000Z",
+      interval: 1,
+      granularity: "day",
+      currentDate: "2023-01-28T00:00:00.000Z",
+      speed: 800,
+      loop: true,
+      sources: [],
+      dates: DATES,
+    });
+    assert.deepEqual(options.dates, DATES);
+  });
+
+  it("leaves the options without dates for a continuous timeline", () => {
+    const options = configToOptions({
+      startDate: "2023-01-01T00:00:00.000Z",
+      interval: 1,
+      granularity: "day",
+      currentDate: "2023-01-28T00:00:00.000Z",
+      speed: 800,
+      loop: true,
+      sources: [],
+    });
+    assert.equal(options.dates, undefined);
+  });
+});
+
+describe("Time Slider store layer identify metadata", () => {
+  it("marks a COG source for pixel identify", () => {
+    const layer = createStoreLayer({
+      type: "cog",
+      id: "landsat",
+      url: "https://example.com/{date:YYYY}.tif",
+    } as SourceSpec);
+    assert.equal(layer.type, "raster");
+    assert.equal(layer.metadata.identifiable, true);
+    assert.equal(layer.metadata.pixelIdentify, true);
+  });
+
+  it("marks a mosaic source for pixel identify", () => {
+    const layer = createStoreLayer({
+      type: "mosaic",
+      id: "s2",
+      url: "https://example.com/{date:YYYY}.json",
+    } as SourceSpec);
+    assert.equal(layer.metadata.identifiable, true);
+    assert.equal(layer.metadata.pixelIdentify, true);
+  });
+
+  it("leaves pre-rendered tile sources unidentifiable", () => {
+    // An XYZ/WMS source is a picture; there are no source values to report, so
+    // the Identify icon stays disabled rather than opening an empty popup.
+    for (const type of ["xyz", "wms"]) {
+      const layer = createStoreLayer({
+        type,
+        id: `${type}-source`,
+        tiles: "https://example.com/{z}/{x}/{y}.png",
+        baseUrl: "https://example.com/wms",
+      } as unknown as SourceSpec);
+      assert.equal(layer.metadata.identifiable, false, type);
+      assert.equal("pixelIdentify" in layer.metadata, false, type);
+    }
+  });
+
+  it("marks a mosaic as client-rendered so the Style panel hides MapLibre-only paint", () => {
+    // The flag rides on the layer rather than being read back from the control:
+    // a restored project mirrors its layers before the plugin builds its
+    // control, and asking the control during that window answers "no".
+    const layer = createStoreLayer({
+      type: "mosaic",
+      id: "s2",
+      url: "https://example.com/{date:YYYY}.json",
+    } as SourceSpec);
+    assert.equal(layer.metadata.clientRenderedRaster, true);
+  });
+
+  it("leaves a TiTiler COG unflagged, since MapLibre renders it natively", () => {
+    const layer = createStoreLayer({
+      type: "cog",
+      id: "landsat",
+      url: "https://example.com/{date:YYYY}.tif",
+    } as SourceSpec);
+    assert.equal("clientRenderedRaster" in layer.metadata, false);
+  });
+
+  it("carries a declared source extent so Zoom to layer has something to fit", () => {
+    // A mirrored dock layer is external-native: there is no MapLibre source with
+    // `bounds` to fall back on, so without this the button does nothing.
+    const layer = createStoreLayer({
+      type: "cog",
+      id: "landsat",
+      url: "https://example.com/{date:YYYY}.tif",
+      bounds: [-10, -5, 10, 5],
+    } as SourceSpec);
+    assert.deepEqual(layer.metadata.bounds, [-10, -5, 10, 5]);
+  });
+
+  it("omits the extent when the source declares none", () => {
+    const layer = createStoreLayer({
+      type: "cog",
+      id: "no-bounds",
+      url: "https://example.com/{date:YYYY}.tif",
+    } as SourceSpec);
+    assert.equal("bounds" in layer.metadata, false);
+  });
+
+  it("ignores a malformed extent rather than passing it to the map", () => {
+    const layer = createStoreLayer({
+      type: "cog",
+      id: "bad-bounds",
+      url: "https://example.com/{date:YYYY}.tif",
+      bounds: [-10, -5, Number.NaN, 5],
+    } as unknown as SourceSpec);
+    assert.equal("bounds" in layer.metadata, false);
+  });
+
+  it("leaves a GeoJSON source to the normal vector feature query", () => {
+    const layer = createStoreLayer({
+      type: "geojson",
+      id: "quakes",
+      data: "https://example.com/quakes.geojson",
+      timeProperty: "time",
+    } as SourceSpec);
+    assert.equal(layer.type, "geojson");
+    assert.equal("pixelIdentify" in layer.metadata, false);
+  });
+});
+
+describe("isTimeSliderIdle", () => {
+  const layer = (id: string, metadata: Record<string, unknown>): GeoLibreLayer => ({
+    id,
+    name: id,
+    type: "geojson",
+    source: { type: "geojson" },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata,
+  });
+
+  const withLayers = (layers: GeoLibreLayer[]): void => {
+    useAppStore.setState({ layers });
+  };
+
+  afterEach(() => {
+    withLayers([]);
+  });
+
+  it("is idle with no layers at all", () => {
+    withLayers([]);
+    assert.equal(isTimeSliderIdle(), true);
+  });
+
+  it("is idle when the remaining layers carry no time state", () => {
+    withLayers([layer("a", {}), layer("b", { sourceKind: "maplibre-gl-vector" })]);
+    assert.equal(isTimeSliderIdle(), true);
+  });
+
+  it("is busy while any layer is still bound", () => {
+    withLayers([
+      layer("a", {}),
+      layer("b", { timeBinding: { property: "year", valueKind: "year" } }),
+    ]);
+    assert.equal(isTimeSliderIdle(), false);
+  });
+
+  it("ignores a malformed binding the Layers panel would not treat as bound", () => {
+    // getLayerTimeBinding requires a string `property`, so this is not a
+    // binding and must not keep the plugin switched on.
+    withLayers([layer("a", { timeBinding: { valueKind: "year" } })]);
+    assert.equal(isTimeSliderIdle(), true);
+  });
+
+  it("is busy while the dock owns a source of its own", () => {
+    // Switching the plugin off would take the user's COG stack with it: the
+    // dock is the only place those sources can be managed.
+    withLayers([layer("cog", { sourceKind: "time-slider" })]);
+    assert.equal(isTimeSliderIdle(), false);
+  });
+
+  it("is busy while a KML timespan overlay is present", () => {
+    withLayers([layer("kml", { timeSpan: { begin: 1_600_000_000_000, end: null } })]);
+    assert.equal(isTimeSliderIdle(), false);
+  });
+
+  it("treats a timespan without a numeric begin as inert", () => {
+    withLayers([layer("kml", { timeSpan: { begin: null, end: null } })]);
+    assert.equal(isTimeSliderIdle(), true);
+  });
+
+  describe("selector bindings on the Layers panel contract", () => {
+    const cube = (binding: unknown): GeoLibreLayer => ({
+      id: "cube",
+      name: "cube",
+      type: "zarr",
+      source: { type: "raster" },
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: { timeBinding: binding },
+    });
+
+    const selectorBinding = {
+      kind: "selector",
+      dimension: "time",
+      min: Date.UTC(2020, 0, 1),
+      max: Date.UTC(2020, 0, 31),
+      granularity: "day",
+    };
+
+    afterEach(() => {
+      useAppStore.setState({ layers: [] });
+    });
+
+    it("reads back a data cube's selector binding", () => {
+      // The Layers panel keys the Bind/Unbind label off this, so a cube whose
+      // binding is not recognized would offer "Bind" over an already-bound layer.
+      assert.deepEqual(getLayerTimeBinding(cube(selectorBinding)), selectorBinding);
+    });
+
+    it("still reads back a vector filter binding", () => {
+      const filterBinding = { property: "year", valueKind: "year" };
+      assert.deepEqual(getLayerTimeBinding(cube(filterBinding)), filterBinding);
+    });
+
+    it("rejects a selector binding with no usable extent", () => {
+      assert.equal(
+        getLayerTimeBinding(cube({ kind: "selector", dimension: "time", min: Number.NaN, max: 1 })),
+        undefined,
+      );
+    });
+
+    it("keeps the dock switched on while a cube is bound to it", () => {
+      // Otherwise unbinding a vector layer would close the dock out from under a
+      // Zarr cube that is still tracking the timeline.
+      useAppStore.setState({ layers: [cube(selectorBinding)] });
+      assert.equal(isTimeSliderIdle(), false);
+    });
   });
 });

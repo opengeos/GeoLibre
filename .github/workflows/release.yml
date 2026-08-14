@@ -77,12 +77,14 @@ jobs:
             libxdo-dev \
             patchelf \
             rpm \
-            wget
+            wget \
+            zsync
 
       - name: Install frontend dependencies
         run: npm ci
 
       - name: Build and upload release assets
+        id: tauri
         uses: tauri-apps/tauri-action@v1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -106,6 +108,26 @@ jobs:
           tagName: ${{ github.event.release.tag_name }}
           args: ${{ matrix.args }}
           uploadPlainBinary: true
+
+      # Tauri's bundler leaves the AppImage runtime's 1 KiB `.upd_info` section
+      # zeroed, so AppImageUpdate, AppImageLauncher, AppManager and AM all
+      # report "no update information" and refuse to update the image. Fill it
+      # in and publish the matching `.zsync` so those tools fetch only the
+      # blocks that changed (~4 KiB in practice) instead of the whole ~120 MB
+      # image. The patched AppImage replaces the one tauri-action just attached:
+      # it differs only in that section, but the `.zsync` checksums have to
+      # describe the file actually being served.
+      - name: Embed AppImage update information
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: |
+          image="$(scripts/select-single-appimage.sh "$ARTIFACT_PATHS")"
+          scripts/embed-appimage-update-info.sh "$image"
+          gh release upload "$TAG" "$image" "$image.zsync" --clobber
 
       - name: Build MSIX package
         id: build_msix

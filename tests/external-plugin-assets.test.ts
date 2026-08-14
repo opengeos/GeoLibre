@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { pluginAssetUrlFromSource } from "../apps/geolibre-desktop/src/lib/plugin-asset-url";
+import {
+  managedUrlSourcesForIds,
+  pluginAssetUrlFromSource,
+} from "../apps/geolibre-desktop/src/lib/plugin-asset-url";
 
 describe("pluginAssetUrlFromSource", () => {
   it("resolves an asset against a bundled plugin's manifest URL", () => {
@@ -66,5 +69,55 @@ describe("pluginAssetUrlFromSource", () => {
       pluginAssetUrlFromSource("https://geolibre.app/plugins/x/plugin.json", "%2e%2e/secrets"),
       null,
     );
+  });
+});
+
+describe("managedUrlSourcesForIds", () => {
+  // A plugin id -> loaded-source map covering every source kind the loader
+  // records: a manifest-URL install, a desktop bundled drop-in, a desktop
+  // filesystem plugin, and a web "install from file" archive.
+  const SOURCES: Record<string, string> = {
+    "url-plugin": "https://data.example.com/url-plugin/plugin.json",
+    "bundled-plugin": "tauri://localhost/plugins/bundled-plugin/plugin.json",
+    "filesystem-plugin": "/home/user/.local/share/org.geolibre.desktop/plugins/fs-plugin",
+    "web-archive-plugin": "web-archive:web-archive-plugin",
+  };
+  const sourceOf = (pluginId: string) => SOURCES[pluginId];
+
+  it("returns the manifest URL for a plugin installed from a URL", () => {
+    assert.deepEqual(managedUrlSourcesForIds(["url-plugin"], sourceOf), [
+      "https://data.example.com/url-plugin/plugin.json",
+    ]);
+  });
+
+  it("ignores built-in plugins, which have no recorded source", () => {
+    assert.deepEqual(managedUrlSourcesForIds(["maplibre-3d-tiles"], sourceOf), []);
+  });
+
+  it("skips sources a recipient could never fetch", () => {
+    // A filesystem path is local to the author's machine and a web archive
+    // source is a synthetic id; recording either in a shared project would
+    // raise a trust prompt that can never be satisfied.
+    assert.deepEqual(
+      managedUrlSourcesForIds(["filesystem-plugin", "web-archive-plugin"], sourceOf),
+      [],
+    );
+  });
+
+  it("preserves order and de-duplicates repeated ids", () => {
+    assert.deepEqual(
+      managedUrlSourcesForIds(
+        ["bundled-plugin", "url-plugin", "bundled-plugin", "filesystem-plugin"],
+        sourceOf,
+      ),
+      [
+        "tauri://localhost/plugins/bundled-plugin/plugin.json",
+        "https://data.example.com/url-plugin/plugin.json",
+      ],
+    );
+  });
+
+  it("returns nothing when the project uses no plugins", () => {
+    assert.deepEqual(managedUrlSourcesForIds([], sourceOf), []);
   });
 });

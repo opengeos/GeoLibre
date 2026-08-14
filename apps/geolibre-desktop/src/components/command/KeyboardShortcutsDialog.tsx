@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@geolibre/ui";
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   type Command,
   type Shortcut,
@@ -29,13 +30,13 @@ interface ShortcutRow {
  * command registry), listed for discoverability. These mirror Google Earth's
  * navigation keys and only work while the map canvas has focus.
  */
-const MAP_NAVIGATION_ROWS: ShortcutRow[] = [
-  { id: "nav.zoom-in", label: "Zoom in", display: "+" },
-  { id: "nav.zoom-out", label: "Zoom out", display: "−" },
-  { id: "nav.pan", label: "Pan", display: "← ↑ ↓ →" },
-  { id: "nav.rotate", label: "Rotate", display: "⇧ ← / →" },
-  { id: "nav.tilt", label: "Tilt", display: "⇧ ↑ / ↓" },
-];
+const MAP_NAVIGATION_KEYS = [
+  { id: "nav.zoom-in", label: "shortcuts.nav.zoomIn", display: "+" },
+  { id: "nav.zoom-out", label: "shortcuts.nav.zoomOut", display: "−" },
+  { id: "nav.pan", label: "shortcuts.nav.pan", display: "← ↑ ↓ →" },
+  { id: "nav.rotate", label: "shortcuts.nav.rotate", display: "⇧ ← / →" },
+  { id: "nav.tilt", label: "shortcuts.nav.tilt", display: "⇧ ↑ / ↓" },
+] as const;
 
 /**
  * A cheat sheet (opened with `?`) listing every global keyboard shortcut,
@@ -46,6 +47,7 @@ export function KeyboardShortcutsDialog({
   commands,
   onOpenChange,
 }: KeyboardShortcutsDialogProps) {
+  const { t } = useTranslation();
   const isMac = useMemo(() => isMacPlatform(), []);
 
   const groups = useMemo(() => {
@@ -63,19 +65,20 @@ export function KeyboardShortcutsDialog({
 
     // The palette and cheat-sheet shortcuts are not commands, so list them
     // first under a "General" group.
-    pushRow("General", {
+    pushRow(t("shortcuts.groupGeneral"), {
       id: "general.open-command-palette",
-      label: "Open command palette",
+      label: t("shortcuts.openCommandPalette"),
       shortcut: PALETTE_SHORTCUT,
     });
-    pushRow("General", {
+    pushRow(t("shortcuts.groupGeneral"), {
       id: "general.show-keyboard-shortcuts",
-      label: "Show keyboard shortcuts",
+      label: t("shortcuts.showKeyboardShortcuts"),
       shortcut: SHORTCUTS_HELP_SHORTCUT,
     });
 
     for (const command of commands) {
       if (command.shortcut) {
+        // Command titles arrive already translated from the command registry.
         pushRow(command.group, {
           id: command.id,
           label: command.title,
@@ -85,20 +88,23 @@ export function KeyboardShortcutsDialog({
     }
 
     // Append the MapLibre-native navigation keys as a final, display-only group.
-    for (const row of MAP_NAVIGATION_ROWS) {
-      pushRow("Map navigation", row);
+    for (const row of MAP_NAVIGATION_KEYS) {
+      pushRow(t("shortcuts.groupMapNavigation"), {
+        id: row.id,
+        label: t(row.label),
+        display: row.display,
+      });
     }
     return ordered;
-  }, [commands]);
+  }, [commands, t]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Keyboard shortcuts</DialogTitle>
+          <DialogTitle>{t("shortcuts.title")}</DialogTitle>
           <DialogDescription>
-            Press {formatShortcut(PALETTE_SHORTCUT, isMac)} to search every action in the command
-            palette.
+            {t("shortcuts.description", { shortcut: formatShortcut(PALETTE_SHORTCUT, isMac) })}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">

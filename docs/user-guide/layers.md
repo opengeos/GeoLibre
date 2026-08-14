@@ -15,15 +15,46 @@ The **Layers panel** on the left lists every layer in the project, from the topm
 Each layer exposes a set of actions:
 
 - **Zoom to layer**: fit the map to the layer's extent (for layers whose bounds are known).
-- **Identify features**: click features on the map to see their attributes in a popup.
+- **Identify features**: click features on the map to see their attributes in a popup. On a raster layer this reads the pixel value instead, and on a multiband raster it also builds a [spectral profile](styling.md#spectral-profile).
 - **Labels**: toggle text labels for vector layers that have a label field.
 - **Metadata / Properties**: inspect the layer's source and configuration.
 - **Remove layer**: delete the layer from the project.
 - **Insert before**: control where a new layer is placed in the stack.
 
+### Importing and exporting styles
+
+Vector layers have a **Layer actions → Styles** submenu for symbology interchange:
+
+- **Export GeoLibre URL style** writes a compact `.geolibre.style.json` file designed for the [`data` and `style` URL parameters](embedding.md#open-remote-data). It contains no feature data. Its MapLibre render layers use the original GeoJSON filename stem as `source`, allowing one style document to distinguish GeoJSON members in a ZIP.
+- **Export as Mapbox GL style** writes a self-contained Mapbox/MapLibre style with the layer's GeoJSON embedded.
+- **Export as OGC SLD** and **Export as QGIS QML** produce styles for other desktop and server GIS software.
+- **Import style (GeoLibre URL / Mapbox GL / SLD / QML)…** applies a supported style file to the selected layer. When importing a GeoLibre URL style interactively, the filename-based `source` association is ignored because the selected layer is the target.
+
+To use a GeoLibre URL style, upload it to a CORS-enabled web host and open GeoLibre with both URLs:
+
+```text
+https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson&style=https://assets.geolibre.app/data/sample.style.json
+```
+
+See [Embedding & Sharing](embedding.md#open-remote-data) for GeoParquet and PMTiles deep links, ZIP source matching, REST API responses, raster-style JSON, and encoding nested URLs.
+
+## Layer groups
+
+Groups are folders in the layer stack. They can nest, so a project can carry a real hierarchy rather than one flat list.
+
+- **Create**: **New group** adds an empty folder. **New group from layer** wraps the layer you are on, and **New group from selected layers** wraps a multi-selection.
+- **Fill**: **Move to group** moves one layer, **Move selected layers to group** moves a whole selection in one step (keeping their relative order), and **Add data to group** opens Add Data with the new layer targeted at that group.
+- **Organize**: rename a group, collapse or expand it, move it up or down, and set a group-level opacity that applies to everything inside.
+- **Visibility**: hiding a group hides its layers. A layer inside a hidden group is marked *Hidden because its group is not visible*, so you can tell it apart from a layer you turned off yourself.
+- **Remove**: **Ungroup (keep layers)** dissolves the folder and leaves its layers in place; **Delete group and layers** removes both.
+
+Groups and their nesting are saved with the project, and [importing a QGIS project](projects.md#importing-a-qgis-project) brings that project's group tree across.
+
 ## Refreshing live layers
 
 WFS and GeoJSON URL layers can refresh automatically so the map stays current with a changing source. Open the layer's refresh configuration and choose an interval (for example off, 15 seconds, 30 seconds, 1 minute, 5 minutes, 15 minutes, or a custom value), or trigger a manual refresh.
+
+Each reloadable layer persists a **connection** record with the project, so the refresh cadence survives a save and reopen. The record also carries the layer's synchronization status — when it last succeeded and the most recent error — which the Layers panel shows, and an on-failure policy that decides whether a failed refresh keeps the last good data or clears it. See [Project Format](../project-format.md) for the schema.
 
 ## DuckDB layers
 

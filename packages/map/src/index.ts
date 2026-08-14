@@ -27,6 +27,12 @@ export {
   type TerrainControlOptions,
 } from "./terrain-control";
 export {
+  CogDemError,
+  encodeTerrariumDem,
+  registerCogDemSource,
+  type CogDemErrorCode,
+} from "./cog-dem-source";
+export {
   detectGeometryProfile,
   getLayerBounds,
   sourceId,
@@ -54,6 +60,14 @@ export {
   type ProtomapsBasemapStyleOptions,
 } from "./protomaps-basemap";
 export {
+  isMapboxStyleUrl,
+  loadMapboxStyle,
+  mapboxAccessTokenFromStyleUrl,
+  redactMapboxStyleUrl,
+  resolveMapboxInternalUrl,
+  transformMapboxStyle,
+} from "./mapbox-style";
+export {
   ensureRemotePMTilesArchive,
   hasPMTilesArchive,
   pmtilesNativeLayerIds,
@@ -70,6 +84,7 @@ export {
   type MapboxStyleExportOptions,
   type MapboxStyleExportResult,
 } from "./mapbox-style-export";
+export { buildGeoLibreQueryStyle, geoLibreStyleSourceName } from "./query-param-style";
 export {
   applyMapboxStyleImport,
   parseMapboxStyle,

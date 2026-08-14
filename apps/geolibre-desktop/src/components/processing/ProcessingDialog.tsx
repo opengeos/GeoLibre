@@ -1,5 +1,5 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import { getLayerBounds, type MapController } from "@geolibre/map";
 import {
   clearRemoteWhiteboxCatalogSnapshotCache,
   fetchWhiteboxJob,
@@ -53,20 +53,45 @@ import {
   type FileDialogFilter,
 } from "../../lib/tauri-io";
 import { clamp } from "../../lib/clamp";
-import { fetchableUrl } from "../../lib/url-utils";
 import {
   layersForSubsetUrl,
   subsetUrlFieldValues,
   subsetUrlToolKind,
 } from "../../lib/subset-tool-url";
 import { buildWhiteboxToolShareUrl, whiteboxToolShareBase } from "../../lib/whitebox-tool-url";
+import { fieldSourceInputName, isFieldParameterName } from "../../lib/whitebox-field-params";
+import {
+  DISTANCE_UNITS,
+  degreesToUnit,
+  formatDistanceValue,
+  isDistanceParameterName,
+  parseDistanceInput,
+  unitToDegrees,
+  wgs84VectorLayerIds,
+  type DistanceUnit,
+} from "../../lib/whitebox-distance-params";
+import { parameterKind } from "../../lib/whitebox-param-kind";
+import {
+  canUseLayerForParameter,
+  fetchLayerBytes,
+  layerPath,
+} from "../../lib/whitebox-layer-inputs";
+import {
+  cornerExtentParameters,
+  extentFieldValues,
+  isBboxExtentParameter,
+  isCornerExtentParameter,
+  type ExtentBounds,
+} from "../../lib/whitebox-extent";
 import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
+import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
 import {
   beginProcessingRun,
   MAX_TRACKED_HISTORY_JOBS,
   type ProcessingRunTracker,
 } from "../../lib/processing-history";
+import { CrsPickerInput } from "./CrsPickerInput";
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
 
 interface ProcessingDialogProps {
@@ -80,6 +105,9 @@ interface ProcessingDialogProps {
 type ParameterValues = Record<string, unknown>;
 
 const LAYER_TOKEN_PREFIX = "layer:";
+
+/** A layer's `[west, south, east, north]` extent, or null when it has none. */
+type LayerBounds = [number, number, number, number] | null;
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
 
 // Smallest the floating panel can be resized to, so the two-column tool browser
@@ -103,37 +131,6 @@ function humanize(value: string): string {
 
 function parameterLabel(param: WhiteboxToolParameter): string {
   return param.description || humanize(param.name);
-}
-
-function parameterKind(param: WhiteboxToolParameter): string {
-  if (param.kind) return param.kind;
-  const schema = param.schema;
-  const schemaObject =
-    schema && typeof schema === "object" ? (schema as Record<string, unknown>) : {};
-  const dataset =
-    schemaObject.dataset && typeof schemaObject.dataset === "object"
-      ? (schemaObject.dataset as Record<string, unknown>)
-      : {};
-  const dataKind = String(
-    param.data_kind ?? schemaObject.data_kind ?? dataset.kind ?? param.type ?? "",
-  ).toLowerCase();
-  const role = String(param.io_role ?? schemaObject.kind ?? "").toLowerCase();
-  if (role === "input") return datasetParameterKind(dataKind, "in");
-  if (role === "output") return datasetParameterKind(dataKind, "out");
-  if (dataKind === "bool" || schemaObject.kind === "bool") return "bool";
-  if (schemaObject.kind === "enum" || param.options?.length) return "enum";
-  if (dataKind === "number" || schemaObject.kind === "scalar") {
-    const scalar = String(schemaObject.scalar ?? "").toLowerCase();
-    return scalar.includes("int") ? "int" : "double";
-  }
-  return "string";
-}
-
-function datasetParameterKind(dataKind: string, suffix: "in" | "out"): string {
-  if (["raster", "vector", "lidar", "file"].includes(dataKind)) {
-    return `${dataKind}_${suffix}`;
-  }
-  return `file_${suffix}`;
 }
 
 function isOutputParameter(param: WhiteboxToolParameter): boolean {
@@ -178,18 +175,6 @@ function isDataInputParameter(param: WhiteboxToolParameter): boolean {
   return ["raster_in", "vector_in", "lidar_in", "file_in"].includes(parameterKind(param));
 }
 
-// A `bbox` string param paired with a `bbox_crs` param is the geographic extent
-// of a subset tool, so the field can offer a "Use map extent" shortcut that
-// fills both from the current map view (GeoLibre#1213). Matching on the pair
-// covers every COG/WMS/XYZ (and future) extractor without hard-coding tool ids.
-function isMapExtentParameter(tool: WhiteboxTool, param: WhiteboxToolParameter): boolean {
-  return (
-    param.name === "bbox" &&
-    parameterKind(param) === "string" &&
-    Boolean(tool.params?.some((other) => other.name === "bbox_crs"))
-  );
-}
-
 // The `url` string param of a COG/WMS/XYZ subset extractor, whose value can be
 // filled from a compatible layer already loaded in the map (GeoLibre#1271). The
 // tool-kind lookup keeps this to the subset extractors without hard-coding each
@@ -198,6 +183,72 @@ function isMapExtentParameter(tool: WhiteboxTool, param: WhiteboxToolParameter):
 function isSubsetUrlParameter(tool: WhiteboxTool, param: WhiteboxToolParameter): boolean {
   return (
     param.name === "url" && parameterKind(param) === "string" && subsetUrlToolKind(tool.id) !== null
+  );
+}
+
+// A `*_field` / `*_attribute` string param names a column of one of the tool's
+// vector inputs (points_to_line's `line_field`/`sort_field`, and ~170 other
+// tools), so the dialog can offer the selected layer's attribute names instead
+// of asking the user to recall a column name (GeoLibre#1459). The kind check is
+// what keeps a same-named *dataset* param out (join_tables' `primary_key_field`
+// is a vector input): only a scalar string names a column.
+function isFieldParameter(param: WhiteboxToolParameter): boolean {
+  return parameterKind(param) === "string" && isFieldParameterName(param.name);
+}
+
+// A numeric `epsg` parameter names a coordinate reference system, so the field
+// can offer a searchable CRS list instead of asking for a code from memory
+// (GeoLibre#1538). Matching the name suffix covers `epsg`
+// (assign_projection_vector), `dst_epsg` (reproject_vector/raster/lidar),
+// `epsg_code`, `output_epsg` and the rest without hard-coding tool ids. The kind
+// check keeps a *string* CRS override out (`sidewalks_epsg` takes an authority
+// string, not a bare code), since the picker fills in a plain numeric code.
+function isCrsParameter(param: WhiteboxToolParameter): boolean {
+  const kind = parameterKind(param);
+  return (kind === "int" || kind === "double") && /(^|_)epsg(_code)?$/i.test(param.name);
+}
+
+// A `*_dist` / `*_radius` / `spacing` / `tolerance` (and friends) parameter is a
+// ground distance in the input's coordinate units, so the field can offer
+// metres/km/feet/miles alongside the degrees a WGS84 map layer forces on it
+// (GeoLibre#1540). The name rule lives in `whitebox-distance-params.ts`. Only
+// `double` qualifies: a metric distance almost always converts to a fractional
+// number of degrees, which an integer parameter cannot carry, and the kind check
+// also keeps a same-named enum or dataset parameter out.
+function isDistanceParameter(param: WhiteboxToolParameter): boolean {
+  return parameterKind(param) === "double" && isDistanceParameterName(param.name);
+}
+
+/**
+ * The map layers supplying a tool's coordinates when those coordinates are known
+ * to be WGS84, or `null` when they are not.
+ *
+ * The distance unit picker is only safe when every dataset input is a map
+ * layer's in-memory GeoJSON, which `runSelectedTool` hands over verbatim and RFC
+ * 7946 fixes to WGS84. A raster or LiDAR input keeps its own CRS (GeoLibre never
+ * reprojects those), so a tool with one is left alone entirely; the per-input
+ * rule (a path leaves the units unknowable) lives in `wgs84VectorLayerIds`,
+ * where it is unit-tested.
+ *
+ * Returns ids rather than latitudes so the caller can measure only the one or
+ * two layers actually wired to the tool, instead of every layer in the project.
+ *
+ * @param tool - The selected tool.
+ * @param values - The current form values.
+ * @returns The chosen layers' ids, or `null` when the units are unknown.
+ */
+function wgs84ToolLayerIds(tool: WhiteboxTool | null, values: ParameterValues): string[] | null {
+  const params = tool?.params ?? [];
+  if (!params.length) return null;
+  const kinds = params.map((param) => parameterKind(param));
+  if (kinds.some((kind) => kind === "raster_in" || kind === "lidar_in" || kind === "file_in")) {
+    return null;
+  }
+  const vectorInputs = params.filter((_, index) => kinds[index] === "vector_in");
+  if (!vectorInputs.length) return null;
+  return wgs84VectorLayerIds(
+    vectorInputs.map((param) => ({ required: param.required, value: values[param.name] })),
+    LAYER_TOKEN_PREFIX,
   );
 }
 
@@ -287,53 +338,6 @@ function isFeatureCollection(value: unknown): value is FeatureCollection {
   );
 }
 
-function layerPath(layer: GeoLibreLayer): string {
-  if (layer.sourcePath) return layer.sourcePath;
-  const url = layer.source.url;
-  if (typeof url === "string") return url;
-  const tiles = layer.source.tiles;
-  if (Array.isArray(tiles) && typeof tiles[0] === "string") return tiles[0];
-  return "";
-}
-
-// Fetch a raster/LiDAR layer's underlying bytes for the in-browser WASM runner.
-// Returns null when the data is not directly fetchable (e.g. a desktop file
-// path or a tile template), in which case the caller falls back to the sidecar.
-async function fetchLayerBytes(layer: GeoLibreLayer): Promise<Uint8Array | null> {
-  const src = layer.source as Record<string, unknown>;
-  const tiles = Array.isArray(src.tiles) ? src.tiles : [];
-  // localBytesUrl is a blob URL retaining a File-loaded raster's bytes (the
-  // raster control's source.objectUrl, surfaced by the raster store sync);
-  // prefer it so locally loaded rasters are WASM-runnable.
-  const candidates = [layer.metadata.localBytesUrl, src.url, tiles[0], layer.sourcePath];
-  for (const candidate of candidates) {
-    const url = fetchableUrl(candidate);
-    if (!url) continue;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) continue;
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      if (bytes.length === 0 || bytes[0] === 0x3c) continue; // 0x3c '<' = HTML
-      return bytes;
-    } catch {
-      // try the next candidate
-    }
-  }
-  return null;
-}
-
-function canUseLayerForParameter(layer: GeoLibreLayer, param: WhiteboxToolParameter): boolean {
-  const kind = parameterKind(param);
-  if (kind === "vector_in") {
-    return Boolean(layer.geojson || layerPath(layer));
-  }
-  if (kind === "raster_in") {
-    return ["raster", "cog", "wms", "wmts", "xyz", "zarr"].includes(layer.type);
-  }
-  if (kind === "lidar_in") return layer.type === "lidar";
-  return Boolean(layerPath(layer));
-}
-
 function defaultParameterValue(param: WhiteboxToolParameter): unknown {
   if (isOutputParameter(param)) return "";
   if (param.default !== undefined && param.default !== null) return param.default;
@@ -417,10 +421,14 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   // Cache the desktop check once, matching the sibling processing dialogs
   // (ConversionDialog, RasterToolsDialog).
   const desktop = isTauri();
+  // Whether this build can spawn/stop the sidecar server: desktop, except the
+  // Mac App Store build, whose App Sandbox forbids the sidecar process. All
+  // server UI gates use this; the WASM runner keeps working either way.
+  const desktopServer = desktop && !IS_MAS_BUILD;
   // Run tools locally in WebAssembly (no Python sidecar). Default on in the
   // browser, where there is no sidecar; off under Tauri, where the sidecar is
   // available and can read native file paths that the WASM runner cannot fetch.
-  const [runLocal, setRunLocal] = useState(!desktop);
+  const [runLocal, setRunLocal] = useState(!desktopServer);
   const [error, setError] = useState<string | null>(null);
   const [startingServer, setStartingServer] = useState(false);
   const [stoppingServer, setStoppingServer] = useState(false);
@@ -671,6 +679,129 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   // source filter — pointless when every tool is from Whitebox.
   const hasGeolibreTools = useMemo(() => tools.some((tool) => tool.source === "geolibre"), [tools]);
 
+  // The selected tool's vector inputs, which decide both the coordinate-units
+  // note and where a field parameter's column names come from.
+  const vectorInputParams = useMemo(
+    () => (selectedTool?.params ?? []).filter((param) => parameterKind(param) === "vector_in"),
+    [selectedTool],
+  );
+
+  // A tool that asks for its extent as four separate boundary numbers renders
+  // them as one grouped control, in place of the first of the four, so the
+  // "Use map extent" / "Draw on map" shortcuts sit with the whole box instead of
+  // beside a lone longitude (GeoLibre#1541).
+  const cornerExtentParams = useMemo(
+    () => (selectedTool ? cornerExtentParameters(selectedTool) : []),
+    [selectedTool],
+  );
+  const cornerExtentAnchor = useMemo(
+    () =>
+      selectedTool?.params?.find((param) => isCornerExtentParameter(selectedTool, param))?.name ??
+      null,
+    [selectedTool],
+  );
+
+  // Attribute-field names per layer, memoized on the layer set (and the dialog
+  // being open) so it doesn't recompute on every keystroke. GeoJSON is
+  // schemaless, so sample the first FIELD_SCAN_SAMPLE features rather than
+  // scanning a whole large layer on the React commit path.
+  const fieldsByLayer = useMemo(() => {
+    const FIELD_SCAN_SAMPLE = 1000;
+    const map = new Map<string, string[]>();
+    if (!open) return map;
+    for (const layer of layers) {
+      if (!layer.geojson) continue;
+      const keys = new Set<string>();
+      for (const feature of layer.geojson.features.slice(0, FIELD_SCAN_SAMPLE)) {
+        for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
+      }
+      if (keys.size) map.set(layer.id, [...keys]);
+    }
+    return map;
+  }, [layers, open]);
+
+  // The layers wired to the selected tool's vector inputs, when the tool's
+  // coordinates are known to be WGS84 (GeoLibre#1540). Joined into a string so
+  // the extent scan below keeps its memo across the keystrokes that rebuild
+  // `values`; null when the units are unknown, which hides the unit picker.
+  const distanceLayerKey = useMemo(
+    () => wgs84ToolLayerIds(selectedTool, values)?.join("\n") ?? null,
+    [selectedTool, values],
+  );
+
+  // Measured extents, keyed on the FeatureCollection itself so the scan below is
+  // repeated only when a layer's data actually changes. The `layers` array is
+  // replaced on any layer mutation in the app — a visibility toggle, a restyle,
+  // an unrelated layer being added — and re-scanning a large collection on each
+  // of those, on the React commit path, is exactly the cost this avoids.
+  const layerBoundsCache = useRef(new WeakMap<FeatureCollection, LayerBounds>());
+
+  // The latitude a distance parameter's metric entry converts at: the middle of
+  // the combined extent of the layers the tool reads. With several inputs that is
+  // the area the operation actually spans, where averaging each layer's own
+  // centre would weight a city-sized input the same as a country-sized one and
+  // land between the two. Only the one or two layers the tool reads are measured,
+  // never every GeoJSON layer in the project.
+  const distanceLatitude = useMemo(() => {
+    if (!open || distanceLayerKey === null) return null;
+    let south = Number.POSITIVE_INFINITY;
+    let north = Number.NEGATIVE_INFINITY;
+    for (const id of distanceLayerKey.split("\n")) {
+      const layer = layers.find((item) => item.id === id);
+      // No in-memory GeoJSON is fatal: the layer is passed as a path, in its own
+      // CRS, so the tool's units stop being knowable.
+      if (!layer?.geojson) return null;
+      const cache = layerBoundsCache.current;
+      let bounds = cache.get(layer.geojson);
+      if (bounds === undefined) {
+        bounds = getLayerBounds(layer);
+        cache.set(layer.geojson, bounds);
+      }
+      // A layer with no finite extent (an attribute table, whose features all
+      // carry a null geometry) contributes no coordinates to the operation, so
+      // skip it rather than disqualifying inputs that do have one.
+      if (!bounds) continue;
+      south = Math.min(south, bounds[1]);
+      north = Math.max(north, bounds[3]);
+    }
+    // Every input was extentless, so there is nothing to anchor a conversion to.
+    return Number.isFinite(south) ? (south + north) / 2 : null;
+  }, [distanceLayerKey, layers, open]);
+
+  // Whether this tool's distance fields carry a unit picker, which decides which
+  // of the two coordinate-units notes the form shows above the parameters.
+  const showDistanceNote =
+    distanceLatitude !== null &&
+    (selectedTool?.params ?? []).some((param) => isDistanceParameter(param));
+
+  // Column names to offer for a `*_field` parameter (GeoLibre#1459): those of
+  // the layer picked for the vector input the parameter names. With a single
+  // vector input that is unambiguous; with several, an unmatched name falls back
+  // to the union of every selected input's columns, so the right column is still
+  // in the list even when the naming doesn't line up. Empty when the input is a
+  // file path rather than a loaded layer — the field stays a plain text box.
+  const fieldOptions = useCallback(
+    (param: WhiteboxToolParameter): string[] => {
+      if (!vectorInputParams.length || !isFieldParameter(param)) return [];
+      const columnsOf = (input: WhiteboxToolParameter): string[] => {
+        const value = values[input.name];
+        if (typeof value !== "string" || !value.startsWith(LAYER_TOKEN_PREFIX)) return [];
+        return fieldsByLayer.get(value.slice(LAYER_TOKEN_PREFIX.length)) ?? [];
+      };
+      const sourceName =
+        vectorInputParams.length === 1
+          ? vectorInputParams[0].name
+          : fieldSourceInputName(
+              param.name,
+              vectorInputParams.map((input) => input.name),
+            );
+      const source = vectorInputParams.find((input) => input.name === sourceName);
+      if (source) return columnsOf(source);
+      return [...new Set(vectorInputParams.flatMap(columnsOf))];
+    },
+    [fieldsByLayer, values, vectorInputParams],
+  );
+
   // A shareable `?tool=` deep link for the selected tool: the tool id plus the
   // parameters the user changed from their defaults. Local file paths
   // (`*_in`/`*_out`) are excluded — they are machine-specific and either useless
@@ -744,12 +875,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     for (const tool of tools) {
       if (!matchesSource(tool)) continue;
       total += 1;
-      const name = tool.category || "General";
+      const name = tool.category || t("processing.whitebox.categoryGeneral");
       counts.set(name, (counts.get(name) ?? 0) + 1);
     }
     const sorted = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     return [
-      { value: "All", label: `All (${total})` },
+      { value: "All", label: t("processing.whitebox.categoryAll", { total }) },
       ...sorted.map(([name, count]) => ({
         value: name,
         label: `${name} (${count})`,
@@ -802,7 +933,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         setRuntimeMessage(message);
         setTools([]);
         setSelectedToolId("");
-        setError(err instanceof Error ? err.message : "Could not load Whitebox catalog snapshot.");
+        setError(err instanceof Error ? err.message : t("processing.whitebox.errorLoadSnapshot"));
       }
     };
 
@@ -884,7 +1015,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       } catch (err) {
         await applyRemoteCatalogSnapshot(
           `${
-            err instanceof Error ? err.message : "Could not load live catalog."
+            err instanceof Error ? err.message : t("processing.whitebox.errorLoadLive")
           } Showing GitHub catalog only.`,
           true,
         );
@@ -913,7 +1044,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       setRuntimeAvailable(false);
       await applyRemoteCatalogSnapshot(
         `${
-          err instanceof Error ? err.message : "Could not connect to sidecar."
+          err instanceof Error ? err.message : t("processing.whitebox.errorConnect")
         } Showing GitHub catalog only.`,
         false,
       );
@@ -1032,7 +1163,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not poll job.");
+          setError(err instanceof Error ? err.message : t("processing.whitebox.errorPoll"));
         }
       }
     };
@@ -1098,46 +1229,33 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     setError(null);
   };
 
-  // Fill a subset tool's `bbox` (and companion `bbox_crs`) from the current map
-  // view (GeoLibre#1213). The map reads in EPSG:4326, so the bbox is written as
-  // WGS84 `west,south,east,north` and the CRS is set to 4326 in the same gesture
-  // to keep the pair consistent (a stale `bbox_crs` would misread the extent).
-  // Validate a WGS84 box and write it into the `bbox`/`bbox_crs` fields. Shared
-  // by "Use map extent" (current view) and "Draw on map" (rubber-band). Rejects
-  // an unnormalized box - a view/box wrapping 180° yields west >= east, and at
-  // low zoom (multiple world copies) getBounds() corners can fall outside
-  // ±180°/±90° while still ordered - which the subset extractors mis-clip or
-  // reject, matching RasterSubsetPanel.parseBbox's ordering + range checks.
-  const applyBboxExtent = (bounds: [number, number, number, number] | undefined): void => {
+  // Fill the selected tool's extent fields from the current map view
+  // (GeoLibre#1213) or from a box drawn on it (GeoLibre#1541). The map reads in
+  // EPSG:4326, so the box is written as WGS84 `west,south,east,north` (into a
+  // single `bbox` string or into the four boundary numbers, whichever the tool
+  // takes) and its companion CRS is set to 4326 in the same gesture, which
+  // is what `extentFieldValues` resolves (including the box validity check that
+  // mirrors RasterSubsetPanel.parseBbox). Shared by "Use map extent" (current
+  // view) and "Draw on map" (rubber-band).
+  const applyMapExtent = (bounds: ExtentBounds | undefined): void => {
     setError(null);
-    if (!bounds) {
+    if (!bounds || !selectedTool) {
       setError(t("processing.whitebox.mapExtentUnavailable"));
       return;
     }
-    const [west, south, east, north] = bounds;
-    if (
-      !(west < east) ||
-      !(south < north) ||
-      west < -180 ||
-      east > 180 ||
-      south < -90 ||
-      north > 90
-    ) {
+    const fields = extentFieldValues(selectedTool, bounds);
+    if (!fields) {
       setError(t("processing.whitebox.mapExtentInvalid"));
       return;
     }
-    const fmt = (value: number) => Number(value.toFixed(6)).toString();
-    updateValue("bbox", bounds.map(fmt).join(","));
-    // Store as a string to match the file's convention that every int/double
-    // field value is a string (NumberStepperInput always emits one).
-    updateValue("bbox_crs", String(4326));
+    for (const [name, value] of Object.entries(fields)) updateValue(name, value);
   };
 
   const handleUseMapExtent = () => {
     // Cancel any in-flight draw so its late-resolving box can't overwrite the
     // extent the user just asked for from the current view.
     drawAbortRef.current?.abort();
-    applyBboxExtent(mapControllerRef.current?.readView().bbox);
+    applyMapExtent(mapControllerRef.current?.readView().bbox);
   };
 
   // Rubber-band a box on the map to fill the bbox (only workable because the
@@ -1189,7 +1307,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         },
       });
       if (controller.signal.aborted) return;
-      if (extent) applyBboxExtent(extent);
+      if (extent) applyMapExtent(extent);
     } finally {
       clearPrintExtent(map);
       setDrawPoints(null);
@@ -1455,7 +1573,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       }
       setJob(nextJob);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not start Whitebox tool.";
+      const message = err instanceof Error ? err.message : t("processing.whitebox.errorStartTool");
       tracker.finish("error", message);
       setError(message);
     } finally {
@@ -1470,7 +1588,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       await startGeoLibreSidecar();
       await loadWhitebox();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start GeoLibre sidecar.");
+      setError(err instanceof Error ? err.message : t("processing.whitebox.errorStartSidecar"));
     } finally {
       setStartingServer(false);
     }
@@ -1485,7 +1603,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       setRuntimeMessage("GeoLibre sidecar is stopped. Showing GitHub catalog only.");
       setJob(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not stop GeoLibre sidecar.");
+      setError(err instanceof Error ? err.message : t("processing.whitebox.errorStopSidecar"));
     } finally {
       setStoppingServer(false);
     }
@@ -1611,7 +1729,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               desktop app can spawn or stop. In the browser these buttons
               would always fail, and a same-origin sidecar (when deployed) is
               auto-detected without them, so gate both on the desktop build. */}
-          {desktop && runtimeAvailable !== true && (
+          {desktopServer && runtimeAvailable !== true && (
             <Button type="button" variant="outline" onClick={startServer} disabled={serverBusy}>
               {startingServer ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1622,7 +1740,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
             </Button>
           )}
 
-          {desktop && runtimeAvailable === true && (
+          {desktopServer && runtimeAvailable === true && (
             <Button
               type="button"
               variant="outline"
@@ -1677,7 +1795,9 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                   Loading
                 </div>
               ) : filteredTools.length === 0 ? (
-                <div className="p-3 text-sm text-muted-foreground">No tools found.</div>
+                <div className="p-3 text-sm text-muted-foreground">
+                  {t("processing.whitebox.noToolsFound")}
+                </div>
               ) : (
                 filteredTools.map((tool) => (
                   <button
@@ -1710,25 +1830,29 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="truncate text-base font-semibold">
-                  {selectedTool ? toolLabel(selectedTool) : "No tool selected"}
+                  {selectedTool ? toolLabel(selectedTool) : t("processing.whitebox.noToolSelected")}
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {selectedTool?.id}
                   {selectedTool?.license_tier ? ` | ${selectedTool.license_tier}` : ""}
                 </p>
               </div>
-              <label
-                className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                title={t("processing.whitebox.runLocalHint")}
-              >
-                <input
-                  type="checkbox"
-                  data-testid="whitebox-run-local"
-                  checked={runLocal}
-                  onChange={(e) => handleRunLocalChange(e.target.checked)}
-                />
-                {t("processing.whitebox.runLocal")}
-              </label>
+              {/* The Mac App Store build has no sidecar to switch to, so the
+                  local/server toggle is dropped (WASM is the only runtime). */}
+              {!IS_MAS_BUILD && (
+                <label
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                  title={t("processing.whitebox.runLocalHint")}
+                >
+                  <input
+                    type="checkbox"
+                    data-testid="whitebox-run-local"
+                    checked={runLocal}
+                    onChange={(e) => handleRunLocalChange(e.target.checked)}
+                  />
+                  {t("processing.whitebox.runLocal")}
+                </label>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -1773,35 +1897,90 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
 
           <ScrollArea className="min-h-0">
             <div className="grid gap-4 pb-2 pe-5">
+              {/* The chosen layers are WGS84 and this tool takes a ground
+                  distance, so its distance fields carry a unit picker
+                  (GeoLibre#1540). Say once, up front, that the layers are
+                  geographic and what to do about it, rather than repeating the
+                  reprojection advice under every field. This note supersedes the
+                  degrees warning below, which says the same thing without the
+                  way out, so only one of the two ever renders. */}
+              {showDistanceNote ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("processing.distance.geographicNote")}
+                </p>
+              ) : null}
+              {/* Local (WASM) mode hands every vector input to the runner as
+                  GeoJSON, which RFC 7946 fixes to WGS84 — so a tool's distance,
+                  spacing or tolerance parameter is measured in degrees, not
+                  metres. Nothing in the tool descriptions says so, which is how
+                  a 0.1 "spacing" (≈ 11 km) yielded a handful of points on a
+                  city-scale line (GeoLibre#1458). */}
+              {!showDistanceNote && runLocal && vectorInputParams.length > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("processing.whitebox.vectorUnitsNote")}
+                </p>
+              ) : null}
               {(selectedTool?.params ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">This tool has no parameters.</p>
+                <p className="text-sm text-muted-foreground">
+                  {t("processing.whitebox.noParameters")}
+                </p>
               ) : (
-                selectedTool?.params?.map((param) => (
-                  <ParameterField
-                    key={param.name}
-                    param={param}
-                    layers={layers}
-                    toolId={selectedTool.id}
-                    runLocal={runLocal}
-                    value={values[param.name]}
-                    onChange={(value) => updateValue(param.name, value)}
-                    onPickFile={(fileName, bytes) =>
-                      handlePickInputFile(param.name, fileName, bytes)
-                    }
-                    onUseMapExtent={
-                      isMapExtentParameter(selectedTool, param) ? handleUseMapExtent : undefined
-                    }
-                    onDrawMapExtent={
-                      isMapExtentParameter(selectedTool, param) ? handleDrawBbox : undefined
-                    }
-                    drawingMapExtent={drawing}
-                    onPopulateFromLayer={
-                      isSubsetUrlParameter(selectedTool, param)
-                        ? handlePopulateSubsetUrl
-                        : undefined
-                    }
-                  />
-                ))
+                selectedTool?.params?.map((param) => {
+                  // The four boundary numbers are rendered together, once, at the
+                  // position of the first of them; the other three are folded
+                  // into that group rather than repeated below it.
+                  if (isCornerExtentParameter(selectedTool, param)) {
+                    if (param.name !== cornerExtentAnchor) return null;
+                    return (
+                      <ExtentParameterGroup
+                        key="extent"
+                        params={cornerExtentParams}
+                        values={values}
+                        onChange={updateValue}
+                        onUseMapExtent={handleUseMapExtent}
+                        onDrawMapExtent={handleDrawBbox}
+                        drawingMapExtent={drawing}
+                      />
+                    );
+                  }
+                  return (
+                    <ParameterField
+                      // Keyed by tool as well as parameter name: dozens of tools
+                      // share names like `tolerance` or `radius`, and without the
+                      // tool id React reuses the field instance across a tool
+                      // switch, carrying a distance field's unit and typed draft
+                      // over to a parameter that reset to another tool's default.
+                      key={`${selectedTool.id}:${param.name}`}
+                      param={param}
+                      layers={layers}
+                      toolId={selectedTool.id}
+                      runLocal={runLocal}
+                      value={values[param.name]}
+                      fieldOptions={fieldOptions(param)}
+                      degreeLatitude={
+                        distanceLatitude !== null && isDistanceParameter(param)
+                          ? distanceLatitude
+                          : undefined
+                      }
+                      onChange={(value) => updateValue(param.name, value)}
+                      onPickFile={(fileName, bytes) =>
+                        handlePickInputFile(param.name, fileName, bytes)
+                      }
+                      onUseMapExtent={
+                        isBboxExtentParameter(selectedTool, param) ? handleUseMapExtent : undefined
+                      }
+                      onDrawMapExtent={
+                        isBboxExtentParameter(selectedTool, param) ? handleDrawBbox : undefined
+                      }
+                      drawingMapExtent={drawing}
+                      onPopulateFromLayer={
+                        isSubsetUrlParameter(selectedTool, param)
+                          ? handlePopulateSubsetUrl
+                          : undefined
+                      }
+                    />
+                  );
+                })
               )}
             </div>
           </ScrollArea>
@@ -1811,7 +1990,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                 troubleshooting with a one-click switch to the WASM runner.
                 Otherwise fall back to a plain error line (e.g. a parameter or
                 tool-run error that has nothing to do with the sidecar). */}
-            {!runLocal && runtimeAvailable === false ? (
+            {!IS_MAS_BUILD && !runLocal && runtimeAvailable === false ? (
               <SidecarHelpBanner
                 isDesktop={desktop}
                 error={error}
@@ -1856,6 +2035,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
 }
 
 function JobOutputPanel({ job }: { job: WhiteboxJob }) {
+  const { t } = useTranslation();
   const outputs = outputEntries(job.outputs);
   const hasMessages = job.messages.length > 0;
   const hasOutputs = outputs.length > 0;
@@ -1875,7 +2055,7 @@ function JobOutputPanel({ job }: { job: WhiteboxJob }) {
       </p>
       <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
         {!hasMessages && !hasOutputs ? (
-          <span className="text-muted-foreground">No output yet.</span>
+          <span className="text-muted-foreground">{t("processing.whitebox.noOutput")}</span>
         ) : null}
         {job.messages.map((line, index) => (
           <div key={`${index}-${line}`}>{line}</div>
@@ -1888,9 +2068,138 @@ function JobOutputPanel({ job }: { job: WhiteboxJob }) {
   );
 }
 
+const EXTENT_GROUP_LABEL_ID = "whitebox-extent-label";
+
+// Short label per boundary field. The parameter descriptions ("West boundary
+// longitude (EPSG:4326).") are too long to sit over a half-width box, and they
+// repeat the CRS four times; the full text stays as the field's tooltip.
+const EXTENT_LABEL_KEYS = {
+  north: "processing.whitebox.extentNorth",
+  south: "processing.whitebox.extentSouth",
+  west: "processing.whitebox.extentWest",
+  east: "processing.whitebox.extentEast",
+} as const;
+
+interface ExtentParameterGroupProps {
+  /** The tool's four boundary parameters, in reading order. */
+  params: WhiteboxToolParameter[];
+  values: ParameterValues;
+  onChange: (name: string, value: unknown) => void;
+  /** Fills all four fields (and the extent CRS) from the current map view. */
+  onUseMapExtent: () => void;
+  /** Fills them by rubber-banding a box on the map. */
+  onDrawMapExtent: () => void;
+  /** Whether a draw is in progress (toggles the button's label/state). */
+  drawingMapExtent: boolean;
+}
+
+/**
+ * Area-of-interest control for a tool that takes its extent as four separate
+ * boundary numbers (`download_osm_vector`). The four fields sit in one block
+ * under a shared label, with the map shortcuts above them, so the box can be
+ * picked from the map instead of typed a coordinate at a time (GeoLibre#1541).
+ * Laid out like the Extract subset panel's bounding box, so the app's two extent
+ * controls read the same.
+ *
+ * @param props - The boundary parameters, their current values, and the change /
+ *   map-shortcut callbacks.
+ */
+function ExtentParameterGroup({
+  params,
+  values,
+  onChange,
+  onUseMapExtent,
+  onDrawMapExtent,
+  drawingMapExtent,
+}: ExtentParameterGroupProps) {
+  const { t } = useTranslation();
+  if (params.length === 0) return null;
+  // One badge stands for all four fields, so it names every kind present rather
+  // than the first field's: a tool that mixed an int boundary with double ones
+  // would otherwise have three of them labelled by the wrong kind. (Each field
+  // still takes its own stepper behavior from its own kind, below.)
+  const kindLabel = [...new Set(params.map((param) => parameterKind(param)))].sort().join(", ");
+
+  return (
+    // A labelled group rather than one field's label: the four boxes each carry
+    // their own, so pointing this one at the first of them would leave that box
+    // named "Area of interest North".
+    <div className="grid gap-1.5" role="group" aria-labelledby={EXTENT_GROUP_LABEL_ID}>
+      <div className="flex items-center justify-between gap-3">
+        <span id={EXTENT_GROUP_LABEL_ID} className="text-sm font-medium leading-none">
+          {t("processing.whitebox.extentLabel")}
+        </span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {kindLabel}
+          {params.some((param) => param.required) ? t("processing.whitebox.requiredSuffix") : ""}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onUseMapExtent}>
+          <Scan className="h-3.5 w-3.5" aria-hidden="true" />
+          {t("processing.whitebox.useMapExtent")}
+        </Button>
+        <Button
+          type="button"
+          variant={drawingMapExtent ? "secondary" : "outline"}
+          size="sm"
+          aria-pressed={drawingMapExtent}
+          onClick={onDrawMapExtent}
+        >
+          <SquareDashed className="h-3.5 w-3.5" aria-hidden="true" />
+          {drawingMapExtent
+            ? t("processing.whitebox.drawingBbox")
+            : t("processing.whitebox.drawBbox")}
+        </Button>
+      </div>
+      {drawingMapExtent ? (
+        <p className="text-xs text-muted-foreground">{t("processing.whitebox.drawBboxHint")}</p>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-2">
+        {params.map((param) => {
+          // EXTENT_LABEL_KEYS covers every name cornerExtentParameters can
+          // return, so the humanized fallback is only a guard for a manifest
+          // that renames a boundary: such a field keeps a readable label instead
+          // of an empty one.
+          const labelKey = EXTENT_LABEL_KEYS[param.name as keyof typeof EXTENT_LABEL_KEYS];
+          const value = values[param.name];
+          return (
+            <div key={param.name} className="grid gap-1">
+              <Label
+                htmlFor={`whitebox-${param.name}`}
+                className="text-xs text-muted-foreground"
+                title={param.description || undefined}
+              >
+                {labelKey ? t(labelKey) : humanize(param.name)}
+              </Label>
+              <NumberStepperInput
+                id={`whitebox-${param.name}`}
+                integer={parameterKind(param) === "int"}
+                value={value === undefined || value === null ? "" : String(value)}
+                onChange={(next) => onChange(param.name, next)}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-xs text-muted-foreground">{t("processing.whitebox.extentHint")}</p>
+    </div>
+  );
+}
+
 interface ParameterFieldProps {
   param: WhiteboxToolParameter;
   layers: GeoLibreLayer[];
+  /** Attribute names to offer for a `*_field` parameter; empty keeps it free text. */
+  fieldOptions?: string[];
+  /**
+   * Reference latitude for a distance parameter whose input is a WGS84 map
+   * layer, which turns the number box into a value + unit pair. Undefined
+   * leaves it a plain number field.
+   */
+  degreeLatitude?: number;
   onChange: (value: unknown) => void;
   onPickFile?: (fileName: string, bytes: Uint8Array) => void;
   /** When set, renders a "Use map extent" button that fills this bbox field
@@ -1912,6 +2221,8 @@ interface ParameterFieldProps {
 function ParameterField({
   param,
   layers,
+  fieldOptions,
+  degreeLatitude,
   onChange,
   onPickFile,
   onUseMapExtent,
@@ -1937,7 +2248,9 @@ function ParameterField({
         <Label htmlFor={`whitebox-${param.name}`}>{label}</Label>
         <span className="shrink-0 text-xs text-muted-foreground">
           {kind}
-          {param.required && !isOutputParameter(param) ? " | required" : ""}
+          {param.required && !isOutputParameter(param)
+            ? t("processing.whitebox.requiredSuffix")
+            : ""}
         </span>
       </div>
 
@@ -1949,7 +2262,7 @@ function ParameterField({
             checked={Boolean(value)}
             onChange={(event) => onChange(event.target.checked)}
           />
-          Enabled
+          {t("processing.whitebox.enabled")}
         </label>
       ) : param.options?.length ? (
         <Select
@@ -1957,13 +2270,20 @@ function ParameterField({
           value={valueText}
           onChange={(event) => onChange(event.target.value)}
         >
-          {!param.required && <option value="">Default</option>}
+          {!param.required && <option value="">{t("processing.whitebox.optionDefault")}</option>}
           {param.options.map((option) => (
             <option key={option} value={option}>
               {option}
             </option>
           ))}
         </Select>
+      ) : isCrsParameter(param) ? (
+        // Checked before the path and number branches (like the map-extent one
+        // below): an EPSG code is a number, but a bare stepper walks to
+        // unrelated systems, so this field gets the searchable CRS list instead
+        // (GeoLibre#1538). Placed ahead of isPathParameter so an epsg
+        // description that happens to mention a file can't shadow the picker.
+        <CrsPickerInput id={`whitebox-${param.name}`} value={valueText} onChange={onChange} />
       ) : onUseMapExtent ? (
         // Checked before the path/data-input branches: once isMapExtentParameter
         // has identified this bbox field, the "Use map extent" affordance should
@@ -2063,6 +2383,46 @@ function ParameterField({
             </p>
           )}
         </div>
+      ) : fieldOptions?.length ? (
+        // A `*_field` parameter with a layer chosen for its vector input: offer
+        // that layer's attribute names so the column need not be typed from
+        // memory (GeoLibre#1459). The text box stays editable alongside the
+        // picker, so a column the property sample missed can still be typed.
+        <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)] gap-2">
+          <Select
+            aria-label={t("processing.whitebox.selectField")}
+            value={fieldOptions.includes(valueText) ? valueText : ""}
+            onChange={(event) => onChange(event.target.value)}
+          >
+            <option value="">{t("processing.whitebox.selectField")}</option>
+            {fieldOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </Select>
+          <Input
+            id={`whitebox-${param.name}`}
+            type="text"
+            value={valueText}
+            placeholder={t("processing.whitebox.fieldName")}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
+          />
+        </div>
+      ) : kind === "double" && degreeLatitude !== undefined ? (
+        // A ground distance whose input is a WGS84 map layer: the tool measures
+        // it in degrees, so pair the number box with a unit picker that converts
+        // metres/km/feet/miles for the user (GeoLibre#1540). Placed ahead of
+        // isPathParameter like the CRS and map-extent pickers above: that
+        // fallback matches path/file/folder anywhere in a parameter's name or
+        // description, so a distance whose wording mentions one would otherwise
+        // render as a file browser.
+        <DistanceInput
+          id={`whitebox-${param.name}`}
+          latitude={degreeLatitude}
+          value={valueText}
+          onChange={onChange}
+        />
       ) : isPathParameter(param) ? (
         <PathPickerInput
           id={`whitebox-${param.name}`}
@@ -2142,6 +2502,174 @@ function NumberStepperInput({ id, integer, onChange, value }: NumberStepperInput
   );
 }
 
+interface DistanceInputProps {
+  id: string;
+  /** Latitude the metric conversion is anchored at (the input layer's centre). */
+  latitude: number;
+  onChange: (value: unknown) => void;
+  /** The stored parameter value, always in degrees. */
+  value: string;
+}
+
+/**
+ * A distance field with a unit picker, for a tool whose coordinates come from a
+ * WGS84 map layer (GeoLibre#1540).
+ *
+ * The parameter itself is always stored in degrees, because that is what the
+ * tool will read. Choosing metres (or km/ft/mi) keeps a local draft of what the
+ * user typed and pushes the converted degrees up on every keystroke, so the
+ * round trip through the conversion cannot rewrite the digits being typed. The
+ * conversion varies with latitude and direction, so the field states the degree
+ * value it produced and points at reprojection for exact work.
+ */
+function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
+  const { t } = useTranslation();
+  const [unit, setUnit] = useState<DistanceUnit>("degrees");
+  // What the user typed, in `unit`. Only used while `unit` is not degrees; kept
+  // out of the parameter so the stored value stays in the tool's own unit.
+  const [draft, setDraft] = useState("");
+
+  const degrees = parseDistanceInput(value);
+  // What the metric box currently holds: a number to convert, or null when it is
+  // empty or not a complete number (so nothing was converted).
+  const draftValue = parseDistanceInput(draft);
+
+  // The last value this field pushed up, so a `value` that changed for some
+  // other reason (a re-run pre-filled from Processing History, say) can be told
+  // apart from the field's own edits.
+  const lastPushed = useRef(value);
+  const push = (next: string) => {
+    lastPushed.current = next;
+    onChange(next);
+  };
+
+  const changeUnit = (next: DistanceUnit) => {
+    setUnit(next);
+    if (next === "degrees") {
+      setDraft("");
+      return;
+    }
+    // Carry the current distance over to the new unit rather than clearing it.
+    // A stored value that is no number at all (malformed text a previous edit
+    // pushed through verbatim) has no conversion to carry, so it moves across
+    // as-is: blanking the box instead would leave the field looking empty while
+    // Run still submitted the old text. Formatted to the same digits the stored
+    // degrees were written with, so a precisely typed value survives a trip
+    // through Degrees and back rather than coming back rounded.
+    setDraft(
+      degrees === null ? value : formatDistanceValue(degreesToUnit(degrees, next, latitude), 8),
+    );
+  };
+
+  const changeDraft = (text: string) => {
+    setDraft(text);
+    const parsed = parseDistanceInput(text);
+    // Text that is not a complete number is stored verbatim rather than
+    // converted, so a half-typed or malformed value fails at the tool instead of
+    // being silently reinterpreted as a different distance.
+    push(
+      parsed === null
+        ? text.trim() === ""
+          ? ""
+          : text
+        : formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8),
+    );
+  };
+
+  // Reconcile the field against changes it did not make itself. Both cases live
+  // in one effect so their precedence is stated rather than left to the order
+  // two effects happen to flush in: a Processing History re-run rewrites the
+  // stored value *and* can rebind the input layer in a single `setValues`, and
+  // as separate effects the latitude branch would still see the pre-reset `unit`
+  // and `draft` from this render's closure and push a reconversion of the old
+  // draft over the value the reset was restoring.
+  const lastLatitude = useRef(latitude);
+  useEffect(() => {
+    const latitudeChanged = lastLatitude.current !== latitude;
+    lastLatitude.current = latitude;
+    if (value !== lastPushed.current) {
+      // Someone else rewrote the parameter, so the typed draft and its unit
+      // describe a distance that is no longer stored: show the degrees that are,
+      // and let that win over any re-conversion.
+      lastPushed.current = value;
+      setUnit("degrees");
+      setDraft("");
+      return;
+    }
+    // The input layer moved under a metric entry: switching a tool's vector
+    // input from a layer at 44°N to one at 10°N leaves the typed distance on
+    // screen while the stored degrees still come from the old latitude, so the
+    // note would show the new latitude beside a value converted at the old one
+    // and Run would send the stale degrees.
+    if (!latitudeChanged || unit === "degrees") return;
+    const parsed = parseDistanceInput(draft);
+    if (parsed === null) return;
+    const next = formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8);
+    lastPushed.current = next;
+    onChange(next);
+  }, [draft, latitude, onChange, unit, value]);
+
+  // A hemisphere suffix only means something away from the equator, and a
+  // worldwide layer's combined extent lands on 0.0 often enough for "0.0°N" to
+  // read as a mistake.
+  const rounded = Math.abs(latitude).toFixed(1);
+  const latitudeLabel = t(
+    rounded === "0.0"
+      ? "processing.distance.equator"
+      : latitude > 0
+        ? "processing.distance.north"
+        : "processing.distance.south",
+    { latitude: rounded },
+  );
+
+  // Only claim a conversion when one actually happened. Text the field could not
+  // read went through untouched, so saying it was "converted at 44.0°N" would
+  // describe something the tool is about to reject.
+  const conversionNote =
+    draft.trim() === ""
+      ? t("processing.distance.convertedEmpty", { latitude: latitudeLabel })
+      : draftValue === null
+        ? t("processing.distance.notANumber")
+        : t("processing.distance.converted", { degrees: value, latitude: latitudeLabel });
+
+  return (
+    <div className="grid gap-1.5">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(120px,160px)] gap-2">
+        {unit === "degrees" ? (
+          // Routed through `push` like the metric box, so an edit made in
+          // degrees keeps `lastPushed` accurate and does not read as an
+          // outside rewrite to the reconcile effect below.
+          <NumberStepperInput
+            id={id}
+            integer={false}
+            value={value}
+            onChange={(next) => push(String(next ?? ""))}
+          />
+        ) : (
+          <Input
+            id={id}
+            inputMode="decimal"
+            value={draft}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => changeDraft(event.target.value)}
+          />
+        )}
+        <Select
+          aria-label={t("processing.distance.unitLabel")}
+          value={unit}
+          onChange={(event) => changeUnit(event.target.value as DistanceUnit)}
+        >
+          {DISTANCE_UNITS.map((option) => (
+            <option key={option} value={option}>
+              {t(`processing.distance.units.${option}`)}
+            </option>
+          ))}
+        </Select>
+      </div>
+      {unit !== "degrees" && <p className="text-xs text-muted-foreground">{conversionNote}</p>}
+    </div>
+  );
+}
+
 interface LayerOrPathInputProps {
   id: string;
   layers: GeoLibreLayer[];
@@ -2159,11 +2687,12 @@ function LayerOrPathInput({
   param,
   value,
 }: LayerOrPathInputProps) {
+  const { t } = useTranslation();
   const usingLayer = value.startsWith(LAYER_TOKEN_PREFIX);
   return (
     <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)_2.25rem] gap-2">
       <Select value={usingLayer ? value : ""} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Path</option>
+        <option value="">{t("processing.whitebox.optionPath")}</option>
         {layers.map((layer) => (
           <option key={layer.id} value={`${LAYER_TOKEN_PREFIX}${layer.id}`}>
             {layer.name}
@@ -2173,7 +2702,9 @@ function LayerOrPathInput({
       <Input
         id={id}
         value={usingLayer ? "" : value}
-        placeholder={usingLayer ? "Selected layer" : "File path"}
+        placeholder={
+          usingLayer ? t("processing.whitebox.selectedLayer") : t("processing.whitebox.filePath")
+        }
         disabled={usingLayer}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -2198,12 +2729,17 @@ interface PathPickerInputProps {
 }
 
 function PathPickerInput({ id, onChange, onPickFile, param, toolId, value }: PathPickerInputProps) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
       <Input
         id={id}
         value={value}
-        placeholder={isOutputParameter(param) ? "Auto" : "File path"}
+        placeholder={
+          isOutputParameter(param)
+            ? t("processing.whitebox.auto")
+            : t("processing.whitebox.filePath")
+        }
         onChange={(event) => onChange(event.target.value)}
       />
       <PathBrowseButton
@@ -2234,6 +2770,7 @@ function PathBrowseButton({
   param,
   toolId = "whitebox",
 }: PathBrowseButtonProps) {
+  const { t } = useTranslation();
   const pickPath = async () => {
     const filters = pathFiltersForParameter(param);
     if (mode === "save") {
@@ -2277,7 +2814,11 @@ function PathBrowseButton({
       variant="outline"
       size="icon"
       disabled={disabled}
-      title={mode === "save" ? "Choose output path" : "Choose input path"}
+      title={
+        mode === "save"
+          ? t("processing.whitebox.chooseOutputPath")
+          : t("processing.whitebox.chooseInputPath")
+      }
       onClick={() => void pickPath()}
     >
       {mode === "save" ? <Save className="h-4 w-4" /> : <FolderOpen className="h-4 w-4" />}

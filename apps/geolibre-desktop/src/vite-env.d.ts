@@ -8,6 +8,27 @@ declare const __GEOLIBRE_VERSION__: string;
 // (Microsoft policy 10.2.5). false in every other build. See vite.config.ts.
 declare const __GEOLIBRE_STORE_BUILD__: boolean;
 
+// True only in the Mac App Store build (GEOLIBRE_MAS_BUILD=1), where the App
+// Sandbox forbids the Python sidecar/Jupyter/martin helper processes, so the
+// UI compiles them out. false in every other build. See vite.config.ts.
+declare const __GEOLIBRE_MAS_BUILD__: boolean;
+
+// True only in the Jupyter embed wheel build (GEOLIBRE_EMBED=1), which is served
+// from inside a notebook and must never render a hosted deployment's sign-in
+// gate. false in every other build. Deliberately a *build* flag: the runtime
+// `isEmbedded()` heuristic accepts a `?embed=1` query parameter, which a visitor
+// controls and so cannot decide whether authentication applies. See
+// vite.config.ts.
+declare const __GEOLIBRE_EMBED_BUILD__: boolean;
+
+// True when the build is configured with GEOLIBRE_NO_EXTERNAL_CDN=1 to strip
+// all references to external CDN origins (unpkg.com, cdn.jsdelivr.net, etc.).
+// Features that depend on externally hosted resources (storymap HTML export,
+// built-in object detection models, ONNX WASM, 3D Tiles decoders, Pyodide) are
+// disabled or degraded. Intended for deployments that cannot load from untrusted
+// CDNs (e.g. Amazon/Harmony). See vite.config.ts.
+declare const __NO_EXTERNAL_CDN__: boolean;
+
 // jsDelivr URLs for the PGlite engine and its PostGIS extension, injected by
 // vite.config.ts. Only the embed (Jupyter wheel) build reads them, from
 // pglite-loader.cdn.ts; web/desktop builds bundle PGlite and never reference

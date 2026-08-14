@@ -1,15 +1,19 @@
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   DEFAULT_TILES_BASE_URL,
+  defaultSizeForGeometry,
   layerIdsForSourceLayer,
   OvertureMapsControl,
   sourceIdForTheme,
   THEME_IDS,
   THEMES,
   tileUrlForTheme,
+  type OvertureGeometry,
   type OvertureMapsControlOptions,
   type OvertureMapsEventHandler,
   type OvertureMapsState,
+  type OvertureLayerState,
+  type OvertureThemeState,
   type OvertureTheme,
 } from "maplibre-gl-overture-maps";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
@@ -20,6 +24,7 @@ const OVERTURE_OPTIONS = {
   collapsed: false,
   title: "Overture Maps",
   panelWidth: 340,
+  inspect: true,
   className: "geolibre-overture-control",
   // Start with only the buildings theme (its "building" and "building_part"
   // source layers) shown, instead of the upstream default that also enables
@@ -33,7 +38,7 @@ const SOURCE_KIND = "overture-maps";
 let overtureControl: OvertureMapsControl | null = null;
 // Holds the panel state while the control is detached so re-activating or
 // repositioning it restores the user's release, visibility, and opacity.
-let pendingState: Partial<OvertureMapsState> | null = null;
+let pendingState: RestorableOvertureState | null = null;
 
 function createOvertureControl(app: GeoLibreAppAPI): OvertureMapsControl {
   // Construct with the static defaults, then let setState restore the full
@@ -59,13 +64,238 @@ function createOvertureControl(app: GeoLibreAppAPI): OvertureMapsControl {
   return control;
 }
 
-function isOvertureMapsState(value: unknown): value is Partial<OvertureMapsState> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+type OvertureStatePatch = Partial<
+  Pick<OvertureMapsState, "collapsed" | "inspect" | "panelWidth" | "release">
+> & {
+  themes?: Partial<
+    Record<
+      OvertureTheme,
+      Partial<Omit<OvertureThemeState, "layers">> & {
+        layers?: Record<string, Partial<OvertureLayerState>>;
+      }
+    >
+  >;
+};
+
+type RestorableOvertureState = Partial<
+  Pick<OvertureMapsState, "collapsed" | "inspect" | "panelWidth" | "release">
+> & {
+  themes: OvertureMapsState["themes"];
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isLayerStatePatch(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    (value.visible === undefined || typeof value.visible === "boolean") &&
+    (value.opacity === undefined ||
+      (typeof value.opacity === "number" && Number.isFinite(value.opacity))) &&
+    (value.color === undefined || typeof value.color === "string") &&
+    (value.size === undefined || (typeof value.size === "number" && Number.isFinite(value.size)))
+  );
+}
+
+function isThemeStatePatch(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (value.expanded !== undefined && typeof value.expanded !== "boolean") return false;
+  if (value.layers === undefined) return true;
+  if (!isRecord(value.layers)) return false;
+  return Object.values(value.layers).every(isLayerStatePatch);
+}
+
+function isOvertureMapsState(value: unknown): value is OvertureStatePatch {
+  if (!isRecord(value)) return false;
+  if (!["collapsed", "inspect", "panelWidth", "release", "themes"].some((key) => key in value)) {
     return false;
   }
-  // Require at least one distinctive OvertureMapsState field so an unrelated
-  // object stored under this plugin's key is not forwarded to setState.
-  return "themes" in value || "release" in value || "collapsed" in value;
+  if (value.collapsed !== undefined && typeof value.collapsed !== "boolean") return false;
+  if (value.inspect !== undefined && typeof value.inspect !== "boolean") return false;
+  if (
+    value.panelWidth !== undefined &&
+    (typeof value.panelWidth !== "number" || !Number.isFinite(value.panelWidth))
+  ) {
+    return false;
+  }
+  if (value.release !== undefined && typeof value.release !== "string") return false;
+  if (value.themes === undefined) return true;
+  if (!isRecord(value.themes)) return false;
+  return Object.values(value.themes).every(isThemeStatePatch);
+}
+
+function defaultOvertureState(): OvertureMapsState {
+  const visibleThemes = new Set<OvertureTheme>(OVERTURE_OPTIONS.visibleThemes);
+  const themes = Object.fromEntries(
+    THEME_IDS.map((theme) => [
+      theme,
+      {
+        expanded: false,
+        layers: Object.fromEntries(
+          THEMES[theme].layers.map((layer) => [
+            layer.sourceLayer,
+            {
+              visible: visibleThemes.has(theme),
+              opacity: 0.8,
+              color: THEMES[theme].color,
+              size: defaultSizeForGeometry(layer.geometry),
+            },
+          ]),
+        ),
+      },
+    ]),
+  ) as OvertureMapsState["themes"];
+  return {
+    collapsed: OVERTURE_OPTIONS.collapsed,
+    panelWidth: OVERTURE_OPTIONS.panelWidth,
+    release: "",
+    releases: [],
+    themes,
+    inspect: OVERTURE_OPTIONS.inspect,
+    error: null,
+  };
+}
+
+function restorableOvertureState(state: OvertureMapsState): RestorableOvertureState {
+  return {
+    collapsed: state.collapsed,
+    panelWidth: state.panelWidth,
+    inspect: state.inspect,
+    ...(state.release ? { release: state.release } : {}),
+    themes: state.themes,
+  };
+}
+
+interface OvertureStateMergeResult {
+  state: OvertureMapsState;
+  applied: boolean;
+}
+
+function mergeOvertureMapsStateWithResult(
+  base: OvertureMapsState,
+  patch: OvertureStatePatch,
+): OvertureStateMergeResult {
+  const themes = Object.fromEntries(
+    Object.entries(base.themes).map(([theme, state]) => [
+      theme,
+      {
+        ...state,
+        layers: Object.fromEntries(
+          Object.entries(state.layers).map(([sourceLayer, layer]) => [sourceLayer, { ...layer }]),
+        ),
+      },
+    ]),
+  ) as OvertureMapsState["themes"];
+  const state: OvertureMapsState = { ...base, themes };
+  let applied = false;
+
+  if (patch.collapsed !== undefined && patch.collapsed !== state.collapsed) {
+    state.collapsed = patch.collapsed;
+    applied = true;
+  }
+  if (patch.inspect !== undefined && patch.inspect !== state.inspect) {
+    state.inspect = patch.inspect;
+    applied = true;
+  }
+  if (patch.panelWidth !== undefined && patch.panelWidth !== state.panelWidth) {
+    state.panelWidth = patch.panelWidth;
+    applied = true;
+  }
+  if (patch.release && patch.release !== state.release) {
+    state.release = patch.release;
+    applied = true;
+  }
+
+  for (const [theme, themePatch] of Object.entries(patch.themes ?? {}) as Array<
+    [OvertureTheme, NonNullable<OvertureStatePatch["themes"]>[OvertureTheme]]
+  >) {
+    const currentTheme = state.themes[theme];
+    if (!currentTheme || !themePatch) continue;
+    if (themePatch.expanded !== undefined && themePatch.expanded !== currentTheme.expanded) {
+      currentTheme.expanded = themePatch.expanded;
+      applied = true;
+    }
+    for (const [sourceLayer, layerPatch] of Object.entries(themePatch.layers ?? {})) {
+      const layer = currentTheme.layers[sourceLayer];
+      if (!layer) continue;
+      if (layerPatch.visible !== undefined && layerPatch.visible !== layer.visible) {
+        layer.visible = layerPatch.visible;
+        applied = true;
+      }
+      if (layerPatch.opacity !== undefined && layerPatch.opacity !== layer.opacity) {
+        layer.opacity = layerPatch.opacity;
+        applied = true;
+      }
+      if (layerPatch.color !== undefined && layerPatch.color !== layer.color) {
+        layer.color = layerPatch.color;
+        applied = true;
+      }
+      if (layerPatch.size !== undefined && layerPatch.size !== layer.size) {
+        layer.size = layerPatch.size;
+        applied = true;
+      }
+    }
+  }
+
+  return { state, applied };
+}
+
+/** Deep-merge a partial Overture state patch without dropping other themes. */
+export function mergeOvertureMapsState(
+  base: OvertureMapsState,
+  patch: OvertureStatePatch,
+): OvertureMapsState {
+  return mergeOvertureMapsStateWithResult(base, patch).state;
+}
+
+function applyOvertureMapsState(control: OvertureMapsControl, patch: OvertureStatePatch): boolean {
+  const current = control.getState();
+  const { state: next, applied } = mergeOvertureMapsStateWithResult(current, patch);
+  if (!applied) return false;
+
+  if (next.release !== current.release) {
+    control.setRelease(next.release);
+  }
+  if (patch.inspect !== undefined && next.inspect !== current.inspect) {
+    control.setInspect(next.inspect);
+  }
+  for (const [theme, themePatch] of Object.entries(patch.themes ?? {}) as Array<
+    [OvertureTheme, NonNullable<OvertureStatePatch["themes"]>[OvertureTheme]]
+  >) {
+    if (!themePatch) continue;
+    const currentTheme = current.themes[theme];
+    const nextTheme = next.themes[theme];
+    if (!currentTheme || !nextTheme) continue;
+    if (themePatch.expanded !== undefined && nextTheme.expanded !== currentTheme.expanded) {
+      control.setThemeExpanded(theme, nextTheme.expanded);
+    }
+    for (const [sourceLayer, layerPatch] of Object.entries(themePatch.layers ?? {})) {
+      const before = currentTheme.layers[sourceLayer];
+      const after = nextTheme.layers[sourceLayer];
+      if (!before || !after) continue;
+      if (layerPatch.visible !== undefined && after.visible !== before.visible) {
+        control.setLayerVisible(theme, sourceLayer, after.visible);
+      }
+      if (layerPatch.opacity !== undefined && after.opacity !== before.opacity) {
+        control.setLayerOpacity(theme, sourceLayer, after.opacity);
+      }
+      if (layerPatch.color !== undefined && after.color !== before.color) {
+        control.setLayerColor(theme, sourceLayer, after.color);
+      }
+      if (layerPatch.size !== undefined && after.size !== before.size) {
+        control.setLayerSize(theme, sourceLayer, after.size);
+      }
+    }
+  }
+  if (patch.panelWidth !== undefined) {
+    control.setState({ panelWidth: next.panelWidth });
+  }
+  if (patch.collapsed !== undefined && next.collapsed !== current.collapsed) {
+    if (next.collapsed) control.collapse();
+    else control.expand();
+  }
+  return true;
 }
 
 export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
@@ -91,7 +321,7 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     if (!overtureControl) return;
     detachStoreSync();
-    pendingState = overtureControl.getState();
+    pendingState = restorableOvertureState(overtureControl.getState());
     app.removeMapControl(overtureControl);
     overtureControl = null;
   },
@@ -101,7 +331,7 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
     if (!overtureControl) return;
     // Snapshot before detaching from the map so a failed re-add still keeps
     // the latest state, mirroring the ordering used in deactivate.
-    pendingState = overtureControl.getState();
+    pendingState = restorableOvertureState(overtureControl.getState());
     app.removeMapControl(overtureControl);
     const added = app.addMapControl(overtureControl, overturePosition);
     if (!added) {
@@ -114,8 +344,18 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
   getProjectState: () => overtureControl?.getState() ?? pendingState ?? undefined,
   applyProjectState: (_app: GeoLibreAppAPI, state: unknown) => {
     if (!isOvertureMapsState(state)) return false;
-    pendingState = state;
-    overtureControl?.setState(state);
+    if (overtureControl) {
+      if (!applyOvertureMapsState(overtureControl, state)) return false;
+      pendingState = restorableOvertureState(overtureControl.getState());
+    } else {
+      const base = pendingState
+        ? mergeOvertureMapsStateWithResult(defaultOvertureState(), pendingState).state
+        : defaultOvertureState();
+      const { state: next, applied } = mergeOvertureMapsStateWithResult(base, state);
+      if (!applied) return false;
+      pendingState = restorableOvertureState(next);
+    }
+    return true;
   },
 };
 
@@ -145,6 +385,7 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
 interface OvertureUnit {
   theme: OvertureTheme;
   sourceLayer: string;
+  geometry: OvertureGeometry;
 }
 
 let storeUnsubscribe: (() => void) | null = null;
@@ -159,8 +400,17 @@ const OVERTURE_UNITS: OvertureUnit[] = THEME_IDS.flatMap((theme) =>
   THEMES[theme].layers.map((layer) => ({
     theme,
     sourceLayer: layer.sourceLayer,
+    geometry: layer.geometry,
   })),
 );
+
+// Numeric Overture schema fields worth extruding by, offered as the Style
+// panel's height-attribute options. The tiles carry no field listing, so
+// without these the picker has nothing to choose from and the user is stuck on
+// the default. Only the buildings theme defines height in the Overture schema.
+const BUILDING_HEIGHT_FIELDS: Partial<Record<OvertureTheme, string[]>> = {
+  buildings: ["height", "min_height", "num_floors", "min_floor", "roof_height"],
+};
 
 function unitKey(unit: OvertureUnit): string {
   return `${unit.theme}/${unit.sourceLayer}`;
@@ -335,6 +585,12 @@ function createOvertureStoreLayer(
       sourceId,
       sourceIds: [sourceId],
       sourceKind: SOURCE_KIND,
+      // The control has no extrusion concept, so polygon themes hand 3D
+      // extrusion back to GeoLibre's layer sync, which re-renders the control's
+      // native fill as a fill-extrusion. Without this the Style panel's 3D mode
+      // is offered but never takes effect.
+      ...(unit.geometry === "polygon" ? { nativeFillExtrusion: true } : {}),
+      ...(BUILDING_HEIGHT_FIELDS[unit.theme] ? { fields: BUILDING_HEIGHT_FIELDS[unit.theme] } : {}),
     },
     sourcePath: tileUrl,
   };

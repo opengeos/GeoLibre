@@ -11,6 +11,7 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
+import type { Map as MapLibreMap } from "maplibre-gl";
 import {
   DEFAULT_TILESET_URL,
   ThreeDTilesControl,
@@ -34,14 +35,37 @@ import {
   THREE_D_TILES_DECK_LOAD_OPTIONS,
 } from "./arcgis-i3s-tiles";
 
+/**
+ * `metadata.sourceKind` marking the 3D Tiles layers this plugin adds. Exported so the Layer Library's restore
+ * dispatch keys off the same value this plugin writes rather than a hand-typed
+ * copy (issue #1520).
+ */
+export const THREE_D_TILES_SOURCE_KIND = "3d-tiles-url";
+
 const threeDTilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const THREE_D_TILES_LAYER_ID = "geolibre-3d-tiles";
 // Keep in sync with the three.js version maplibre-gl-3d-tiles is built
 // against. Only used as a fallback when the control does not expose its own
 // decoder paths (see getThreeDTilesDecoderOptions).
 const THREE_VERSION = "0.184.0";
-const DEFAULT_DRACO_DECODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/draco/`;
-const DEFAULT_KTX2_TRANSCODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
+
+// Injected by vite.config.ts; declared locally (module scope, so it does not
+// collide with the app's global declaration in vite-env.d.ts) because this
+// package must stay importable from a plain Node test where the define is
+// absent.
+declare const __NO_EXTERNAL_CDN__: boolean;
+
+// When the build strips external CDN references there is no host to fetch the
+// Draco/KTX2 decoders from, so the fallback paths are left empty and only the
+// control's own decoder paths (if it exposes any) are used.
+const NO_EXTERNAL_CDN = typeof __NO_EXTERNAL_CDN__ !== "undefined" && __NO_EXTERNAL_CDN__;
+
+const DEFAULT_DRACO_DECODER_PATH = NO_EXTERNAL_CDN
+  ? ""
+  : `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/draco/`;
+const DEFAULT_KTX2_TRANSCODER_PATH = NO_EXTERNAL_CDN
+  ? ""
+  : `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
 const GOOGLE_PHOTOREALISTIC_TILES_URL = "https://tile.googleapis.com/v1/3dtiles/root.json";
 const GOOGLE_PHOTOREALISTIC_TILES_LABEL = "Google Photorealistic 3D Tiles";
 const ARCGIS_I3S_SAMPLE_TILES_URL =
@@ -86,6 +110,7 @@ let threeDTilesStoreUnsubscribe: (() => void) | null = null;
 let threeDTilesStoreSyncSuspended = 0;
 let threeDTilesRuntimeEnvUnsubscribe: (() => void) | null = null;
 let activeThreeDTilesApp: GeoLibreAppAPI | null = null;
+const pendingThreeDTilesStyleRestores = new WeakSet<MapLibreMap>();
 
 // The Google tiles render through the shared interleaved deck overlay
 // (./shared-deck-overlay.ts) under the "google-3d-tiles" source, so they coexist
@@ -150,6 +175,11 @@ export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
   const layers = useAppStore.getState().layers.filter(isThreeDTilesControlLayer);
   if (layers.length === 0) return;
 
+  const map = app.getMap?.();
+  if (map && deferThreeDTilesRestoreUntilMapIdle(map, () => restoreThreeDTilesLayers(app))) {
+    return;
+  }
+
   const control = runWithThreeDTilesStoreSyncSuspended(() => ensureThreeDTilesControl(app));
   if (!control) return;
 
@@ -169,6 +199,35 @@ export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
   } catch (error) {
     console.error("[GeoLibre] Failed to restore 3D Tiles layers", error);
   }
+}
+
+/**
+ * Queue one restore after an in-progress MapLibre style load becomes idle.
+ *
+ * Project restoration can run while the saved basemap is still replacing the
+ * initial style. MapLibre accepts a custom layer during that window, then
+ * discards it when the new style finishes loading. This mirrors the upstream
+ * control's style-ready guard. The `idle` event is used because the host's
+ * initial `load` callback can run after `style.load` while `isStyleLoaded()`
+ * remains false. Repeated restore passes are deduplicated.
+ *
+ * @param map - The MapLibre map receiving the restored custom layer.
+ * @param restore - Replays the current project state after the map becomes idle.
+ * @returns True when restoration was deferred, otherwise false.
+ */
+export function deferThreeDTilesRestoreUntilMapIdle(
+  map: MapLibreMap,
+  restore: () => void,
+): boolean {
+  if (map.isStyleLoaded()) return false;
+  if (pendingThreeDTilesStyleRestores.has(map)) return true;
+
+  pendingThreeDTilesStyleRestores.add(map);
+  map.once("idle", () => {
+    pendingThreeDTilesStyleRestores.delete(map);
+    restore();
+  });
+  return true;
 }
 
 function openStandaloneThreeDTilesControl(app: GeoLibreAppAPI): boolean {
@@ -481,7 +540,7 @@ function createThreeDTilesStoreLayer(
       nativeLayerIds: [tileset.layerId],
       panelCollapsed,
       sourceId: tileset.id,
-      sourceKind: "3d-tiles-url",
+      sourceKind: THREE_D_TILES_SOURCE_KIND,
       status: tileset.status,
     },
     sourcePath: tileset.tilesetUrl,
@@ -539,7 +598,7 @@ function resetThreeDTilesControl(control: ThreeDTilesControl | null): void {
 function isThreeDTilesControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "3d-tiles" &&
-    layer.metadata.sourceKind === "3d-tiles-url" &&
+    layer.metadata.sourceKind === THREE_D_TILES_SOURCE_KIND &&
     layer.metadata.externalNativeLayer === true &&
     !isGooglePhotorealisticTilesetLayerUrl(layer)
   );
@@ -1461,8 +1520,12 @@ function getThreeDTilesDecoderOptions(control: ThreeDTilesControl): {
     // When it does not, fall back to a CDN build of three pinned to the
     // version maplibre-gl-3d-tiles depends on (THREE_VERSION). This is a
     // network-dependent supply-chain fallback, so surface it for diagnosis.
+    // A no-external-CDN build has no such fallback to offer, so say that
+    // rather than naming a unpkg URL this build will never request.
     console.warn(
-      `[GeoLibre] ThreeDTilesControl decoder paths unavailable; falling back to unpkg three@${THREE_VERSION}. Compressed tilesets will fail offline.`,
+      NO_EXTERNAL_CDN
+        ? "[GeoLibre] ThreeDTilesControl decoder paths unavailable and external CDNs are disabled in this build; Draco/KTX2-compressed tilesets will fail to load."
+        : `[GeoLibre] ThreeDTilesControl decoder paths unavailable; falling back to unpkg three@${THREE_VERSION}. Compressed tilesets will fail offline.`,
     );
   }
   return {

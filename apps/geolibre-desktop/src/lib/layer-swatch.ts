@@ -34,7 +34,7 @@ const NON_RASTER_TYPES = new Set<GeoLibreLayer["type"]>([
 ]);
 
 /** Whether a layer is raster/imagery (COG, XYZ, WMS/WMTS, raster MBTiles, …). */
-function isRasterLike(layer: GeoLibreLayer): boolean {
+export function isRasterLike(layer: GeoLibreLayer): boolean {
   if (VECTOR_TYPES.has(layer.type) || NON_RASTER_TYPES.has(layer.type)) return false;
   if (layer.type === "mbtiles") {
     return layer.metadata.tileType === "raster" || layer.source.type === "raster";
@@ -98,39 +98,4 @@ export function layerSwatch(layer: GeoLibreLayer): LayerSwatch {
     color: swatches[0]?.color ?? NEUTRAL,
     shape: layerSwatchShape(layer),
   };
-}
-
-/** One flattened row in the on-map legend (the legend control has no raster glyph). */
-export interface AutoLegendItem {
-  label: string;
-  color: string;
-  shape: "square" | "circle" | "line";
-}
-
-/**
- * Flatten the VISIBLE layers into legend rows (top-of-stack first). A
- * single-symbol layer contributes one row (its name + geometry swatch); a
- * graduated / categorized / rule-based layer contributes a name row followed by
- * one row per class — mirroring the Layers panel's swatches. Kept pure (no
- * React / map deps) so it is unit testable.
- */
-export function autoLegendItems(layers: GeoLibreLayer[]): AutoLegendItem[] {
-  const items: AutoLegendItem[] = [];
-  for (const layer of [...layers].reverse()) {
-    if (!layer.visible) continue;
-    const swatches = legendSwatchesForLayer(layer);
-    if (swatches.length === 0) continue;
-    // The legend control has no raster glyph, so it falls back to a square.
-    const resolved = layerSwatchShape(layer);
-    const shape = resolved === "raster" ? "square" : resolved;
-    if (swatches.length === 1) {
-      items.push({ label: layer.name, color: swatches[0].color || NEUTRAL, shape });
-      continue;
-    }
-    items.push({ label: layer.name, color: swatches[0].color || NEUTRAL, shape });
-    for (const swatch of swatches) {
-      items.push({ label: swatch.label ?? "", color: swatch.color || NEUTRAL, shape: "square" });
-    }
-  }
-  return items;
 }

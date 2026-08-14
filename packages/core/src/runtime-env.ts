@@ -91,6 +91,36 @@ export function getGoogleMapsApiKey(env?: Record<string, string | undefined>): s
 }
 
 /**
+ * Resolves the Mapbox access token from the runtime environment.
+ *
+ * The basemap control's Mapbox styles authenticate with the user's own token.
+ * It is supplied via `VITE_MAPBOX_ACCESS_TOKEN` (baked in at build time from the
+ * bare `MAPBOX_TOKEN` env var, which `vite.config.ts` copies into the prefixed
+ * name — the spelling Mapbox's own tooling uses) or set at runtime through
+ * Settings → Environment variables (`window.__GEOLIBRE_RUNTIME_ENV__`, which
+ * bypasses Vite's envPrefix allowlist, so a bare `MAPBOX_TOKEN` entry works
+ * there too). When unset, the Mapbox basemaps prompt for a token in the basemap
+ * panel's API keys view instead.
+ *
+ * Note the precedence, shared with {@link getGoogleMapsApiKey} and
+ * {@link getCesiumIonToken}: the prefixed name always wins over the bare one,
+ * and `getRuntimeEnvironment` merges build-time and runtime vars into one
+ * record. So a build that baked in `VITE_MAPBOX_ACCESS_TOKEN` is overridden at
+ * runtime by a Settings entry under that *same* prefixed name; a bare
+ * `MAPBOX_TOKEN` entry is a fallback for when nothing was baked in, not a way
+ * to override a baked token.
+ *
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The trimmed token, or undefined when unset.
+ */
+export function getMapboxAccessToken(env?: Record<string, string | undefined>): string | undefined {
+  const runtimeEnv = env ?? getRuntimeEnvironment();
+  const trimmed = runtimeEnv.VITE_MAPBOX_ACCESS_TOKEN?.trim() || runtimeEnv.MAPBOX_TOKEN?.trim();
+  return trimmed || undefined;
+}
+
+/**
  * Resolves the Cesium Ion access token from the runtime environment.
  *
  * The 3D-globe view's world imagery and terrain need a Cesium Ion token. It is

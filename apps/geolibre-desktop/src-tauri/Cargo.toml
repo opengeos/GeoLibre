@@ -1,6 +1,6 @@
 [package]
 name = "geolibre-desktop"
-version = "2.2.0"
+version = "2.6.0"
 description = "GeoLibre Desktop — lightweight cloud-native desktop GIS"
 authors = ["GeoLibre Contributors"]
 edition = "2021"
@@ -12,6 +12,11 @@ crate-type = ["lib", "cdylib", "staticlib"]
 [features]
 default = []
 native-duckdb = ["dep:duckdb"]
+# Mac App Store build: compiles out every command that downloads or spawns
+# external code (sidecar, Jupyter, Martin, uv, external plugin installs), which
+# the App Sandbox and App Store guideline 2.5.2 forbid. Mutually exclusive with
+# native-duckdb (see the compile_error! in src/lib.rs).
+mas = []
 
 # Optimize the release binary for size. The frontend assets dominate the binary,
 # but these still trim the Rust code: LTO + a single codegen unit let the linker
@@ -29,19 +34,20 @@ panic = "abort"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = { version = "2", features = ["watch"] }
 # Native geolocation on Android/iOS: ships the location manifest permissions and
 # drives the OS permission dialog for Field Collection / GPS Tracking, which the
 # WebView's navigator.geolocation cannot do on Android. On desktop it is inert
-# (the frontend only invokes it on mobile).
-tauri-plugin-geolocation = "2"
+# (the frontend only invokes it on mobile). This is a patched 2.3.2 release;
+# see vendor/tauri-plugin-geolocation/GEOLIBRE_PATCH.md before upgrading.
+tauri-plugin-geolocation = { path = "vendor/tauri-plugin-geolocation" }
 tauri-plugin-http = "2"
 tauri-plugin-opener = "2"
 # Persists the fs scope the folder picker grants, so Browser-panel pinned
 # folders stay readable across app restarts (no re-pick required).
-tauri-plugin-persisted-scope = "2"
+tauri-plugin-persisted-scope = { version = "2", features = ["protocol-asset"] }
 duckdb = { version = "1.10504.0", features = ["bundled", "parquet"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 # rustls-tls stays the default backend for every request. rustls-tls-native-roots
@@ -74,3 +80,15 @@ reqwest = { version = "0.12", default-features = false, features = ["native-tls"
 # Runtime WebKitGTK version check (already an indirect dep via tauri/wry).
 [target."cfg(target_os = \"linux\")".dependencies]
 webkit2gtk-sys = "2"
+
+# Reclaiming port 8766 from a Jupyter server orphaned by a previous session
+# (issue #1643): the IP Helper TCP table names the process that owns the
+# listening socket, and the process APIs let us check its image path before
+# terminating it. Windows has no /proc, so the Linux path cannot be reused.
+# Already an indirect dep via tauri, so this adds no new crate to the build.
+[target."cfg(target_os = \"windows\")".dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_System_Threading",
+] }

@@ -12,12 +12,26 @@ import { isSqlQueryLayer } from "./sql-query-layer";
 const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
 const FETCH_TIMEOUT_MS = 30_000;
+// Feature cap for refreshing an OGC API - Features layer whose stored request
+// carries no `maxFeatures` (added before it was persisted, or hand-edited).
+// Mirrors DEFAULT_OGC_FEATURES_MAX_FEATURES in lib/ogc-api-features.ts.
+const DEFAULT_OGC_FEATURES_REFRESH_MAX = 1000;
 export const MIN_REFRESH_INTERVAL_MS = 1_000;
 const GEORSS_SOURCE_KIND = "georss";
+// Local copy of OGC_FEATURES_SOURCE_KIND (lib/ogc-api-features.ts), kept here so
+// this module's metadata checks stay free of that module's import graph; the
+// paged fetch itself is imported dynamically in the refresh branch below.
+const OGC_FEATURES_SOURCE_KIND = "ogc-features-items";
+// Local copy of ARCGIS_FEATURE_SOURCE_KIND (@geolibre/plugins), kept here for
+// the same reason as the OGC one above; the paged fetch is imported dynamically
+// in the refresh branch below.
+const ARCGIS_FEATURE_SOURCE_KIND = "arcgis-feature-query";
 const REFRESHABLE_GEOJSON_SOURCE_KINDS = new Set([
   "wfs-getfeature",
   "geojson-url",
   GEORSS_SOURCE_KIND,
+  OGC_FEATURES_SOURCE_KIND,
+  ARCGIS_FEATURE_SOURCE_KIND,
 ]);
 
 // Add Vector Layer (maplibre-gl-vector) tags its store layers with this
@@ -226,9 +240,21 @@ export async function fetchWfsGeoJson(
   throw lastError instanceof Error ? lastError : new WfsXmlResponseError(false);
 }
 
-export async function refreshGeoJsonLayer(
-  layer: GeoLibreLayer,
-): Promise<{ geojson: FeatureCollection; featureCount: number }> {
+/** The reloaded features, plus any layer metadata the refresh itself updates. */
+export interface GeoJsonRefreshResult {
+  geojson: FeatureCollection;
+  featureCount: number;
+  /**
+   * Metadata keys the refresh recomputed, merged over the layer's existing
+   * metadata by the caller. Only the source kinds that carry request state
+   * beyond the feature count (currently OGC API - Features, whose
+   * `numberMatched`/`truncated` would otherwise stay at the values from when
+   * the layer was added) return anything here.
+   */
+  metadata?: Record<string, unknown>;
+}
+
+export async function refreshGeoJsonLayer(layer: GeoLibreLayer): Promise<GeoJsonRefreshResult> {
   const sourceUrl = refreshSourceUrl(layer);
   if (!sourceUrl) {
     throw new Error("This layer does not have a refreshable GeoJSON URL.");
@@ -240,6 +266,20 @@ export async function refreshGeoJsonLayer(
     return refreshGeoRssLayer(sourceUrl);
   }
 
+  // An OGC API - Features layer was loaded by walking the service's `next`
+  // links, so re-fetching the stored URL alone would silently shrink it to the
+  // first page. Replay the same paged request instead.
+  if (isOgcFeaturesLayer(layer)) {
+    return refreshOgcFeaturesLayer(layer);
+  }
+
+  // Same story for an ArcGIS feature layer: its stored URL is the unbounded
+  // `where=1=1` query, which truncates at the service's record limit (or fails
+  // outright on a large layer). Replay the paged download.
+  if (isArcGISFeatureLayer(layer)) {
+    return refreshArcGISLayer(layer);
+  }
+
   const data = await fetchGeoJsonFeatureCollection(sourceUrl, {
     useWfsProxy: isWfsLayer(layer),
   });
@@ -247,6 +287,64 @@ export async function refreshGeoJsonLayer(
   return {
     geojson: data,
     featureCount: data.features.length,
+  };
+}
+
+/**
+ * Re-runs an OGC API - Features layer's paged items request from the parameters
+ * stored on its source, so a refresh reloads the whole slice the layer was
+ * added with.
+ *
+ * A layer saved before these parameters existed (or hand-edited) may carry only
+ * the items URL; that case falls back to a plain single-page fetch of it, which
+ * is still better than failing the refresh outright.
+ *
+ * @param layer - The OGC API - Features layer to reload.
+ * @returns The reloaded features, their count, and the refreshed paging metadata.
+ */
+async function refreshOgcFeaturesLayer(layer: GeoLibreLayer): Promise<GeoJsonRefreshResult> {
+  const source = layer.source as {
+    url?: unknown;
+    baseUrl?: unknown;
+    collectionId?: unknown;
+    maxFeatures?: unknown;
+    bbox?: unknown;
+    datetime?: unknown;
+    extraQuery?: unknown;
+  };
+  const baseUrl = typeof source.baseUrl === "string" ? source.baseUrl : "";
+  const collectionId = typeof source.collectionId === "string" ? source.collectionId : "";
+  if (!baseUrl || !collectionId) {
+    const url = layerHttpUrl(layer);
+    if (!url) throw new Error("This layer does not have a refreshable GeoJSON URL.");
+    const data = await fetchGeoJsonFeatureCollection(url);
+    // No metadata patch: this path reads a single page with no `numberMatched`
+    // to compare against, so it cannot say whether the collection is truncated.
+    // Leaving the stored values alone beats overwriting them with a guess.
+    return { geojson: data, featureCount: data.features.length };
+  }
+  // Imported here rather than at module scope so this module stays light for
+  // the callers that only read refresh metadata.
+  const { fetchOgcFeatureItems } = await import("./ogc-api-features");
+  const maxFeatures =
+    typeof source.maxFeatures === "number" && Number.isFinite(source.maxFeatures)
+      ? source.maxFeatures
+      : DEFAULT_OGC_FEATURES_REFRESH_MAX;
+  const result = await fetchOgcFeatureItems({
+    baseUrl,
+    collectionId,
+    extraQuery: typeof source.extraQuery === "string" ? source.extraQuery : undefined,
+    maxFeatures,
+    bbox: typeof source.bbox === "string" ? source.bbox : undefined,
+    datetime: typeof source.datetime === "string" ? source.datetime : undefined,
+  });
+  return {
+    geojson: result.data,
+    featureCount: result.data.features.length,
+    // Both are always written, `numberMatched` even when the service stopped
+    // advertising one, so the layer reports this fetch rather than the counts
+    // it was originally added with.
+    metadata: { numberMatched: result.numberMatched, truncated: result.truncated },
   };
 }
 
@@ -290,6 +388,21 @@ export function isVectorControlRefreshLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+/**
+ * True when the "clear the layer on refresh failure" policy can actually be
+ * honored for this layer. Clearing works by writing an empty FeatureCollection
+ * into `layer.geojson`, which vector-control layers never populate — their
+ * features live in the external control's own sources and are mirrored into the
+ * store only as metadata. Offering the option there would silently do nothing,
+ * so the refresh-settings dialog hides it for those layers.
+ *
+ * @param layer - The store layer to test.
+ * @returns Whether a failure policy other than "keep-last" takes effect.
+ */
+export function supportsRefreshFailurePolicy(layer: GeoLibreLayer): boolean {
+  return !isVectorControlRefreshLayer(layer);
+}
+
 export function isRefreshableLayer(layer: GeoLibreLayer): boolean {
   return (
     Boolean(refreshSourceUrl(layer)) ||
@@ -301,6 +414,16 @@ export function isRefreshableLayer(layer: GeoLibreLayer): boolean {
 }
 
 export function getLayerRefreshConfig(layer: GeoLibreLayer): LayerRefreshConfig {
+  if (layer.connection) {
+    const seconds = layer.connection.interval;
+    const converted =
+      typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+    const intervalMs =
+      converted > 0 && Number.isFinite(converted)
+        ? Math.max(MIN_REFRESH_INTERVAL_MS, converted)
+        : 0;
+    return { enabled: intervalMs > 0, intervalMs };
+  }
   const refresh = layer.metadata.refresh;
   if (!refresh || typeof refresh !== "object" || Array.isArray(refresh)) {
     return { enabled: false, intervalMs: 0 };
@@ -331,12 +454,36 @@ export function setLayerRefreshConfig(
   // accumulate meaningless { enabled: false, intervalMs: 0 } entries.
   const { refresh: _refresh, ...restMetadata } = layer.metadata;
   return {
+    connection: {
+      layerId: layer.id,
+      interval: enabled ? config.intervalMs / 1000 : null,
+      lastSyncedAt: layer.connection?.lastSyncedAt ?? null,
+      lastError: layer.connection?.lastError ?? null,
+      onFailure: layer.connection?.onFailure ?? "keep-last",
+    },
     metadata: enabled
       ? {
           ...restMetadata,
           refresh: { enabled: true, intervalMs: config.intervalMs },
         }
       : restMetadata,
+  };
+}
+
+/** Return a layer patch that records the outcome of a synchronization. */
+export function setLayerConnectionResult(
+  layer: GeoLibreLayer,
+  result: { syncedAt?: string; error?: string | null },
+): Partial<GeoLibreLayer> {
+  const config = getLayerRefreshConfig(layer);
+  return {
+    connection: {
+      layerId: layer.id,
+      interval: config.enabled ? config.intervalMs / 1000 : null,
+      lastSyncedAt: result.syncedAt ?? layer.connection?.lastSyncedAt ?? null,
+      lastError: result.error === undefined ? (layer.connection?.lastError ?? null) : result.error,
+      onFailure: layer.connection?.onFailure ?? "keep-last",
+    },
   };
 }
 
@@ -403,8 +550,74 @@ function isWfsLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+/**
+ * Re-runs an ArcGIS feature layer's paged query from the parameters stored on
+ * its source, so a refresh reloads every feature the layer was added with
+ * rather than the first page the unbounded query happens to return.
+ *
+ * A layer saved before those parameters existed carries only the query URL;
+ * that case derives the endpoint from the stored URL, which is the same
+ * `/query` path with the unbounded parameters that get replaced anyway.
+ *
+ * A layer that is loading by viewport is the exception: it only ever holds the
+ * current extent, so replaying the unbounded download here would swap the whole
+ * service in behind the user's back until the next `moveend` — the very cost
+ * viewport loading avoids. Those refresh by re-running the bounded query.
+ *
+ * @param layer - The ArcGIS feature layer to reload.
+ * @returns The reloaded features and their count.
+ */
+async function refreshArcGISLayer(layer: GeoLibreLayer): Promise<GeoJsonRefreshResult> {
+  const source = layer.source as {
+    arcgisQueryUrl?: unknown;
+    maxFeatures?: unknown;
+    pageSize?: unknown;
+  };
+  // Imported here rather than at module scope so this module stays light for
+  // the callers that only read refresh metadata.
+  const { refreshArcGISFeatureLayer, reloadArcGISViewportLayer } =
+    await import("@geolibre/plugins");
+  if (layer.metadata.viewportLoading === true) {
+    const viewport = reloadArcGISViewportLayer(layer.id);
+    // No loader at all: the layer is in a host with no map (`restoreArcGISViewportLayers`
+    // registers one synchronously wherever there is one). Falling through to
+    // the unbounded replay below would download the entire service — the cost
+    // this layer is loaded by viewport to avoid — so say so instead.
+    if (!viewport) {
+      throw new Error("This layer is not bound to a map viewport, so it cannot be refreshed.");
+    }
+    const bounded = await viewport;
+    return { geojson: bounded, featureCount: bounded.features.length };
+  }
+
+  const stored = typeof source.arcgisQueryUrl === "string" ? source.arcgisQueryUrl.trim() : "";
+  // Fall back to the layer's own URL, stripped of its query string: it is the
+  // `/query` endpoint the paged fetch wants, just with the parameters attached.
+  const queryUrl = stored || (layerHttpUrl(layer) ?? "").split("?")[0];
+  if (!queryUrl) throw new Error("This layer does not have a refreshable GeoJSON URL.");
+
+  const data = await refreshArcGISFeatureLayer({
+    maxFeatures: typeof source.maxFeatures === "number" ? source.maxFeatures : undefined,
+    pageSize: typeof source.pageSize === "number" ? source.pageSize : undefined,
+    queryUrl,
+  });
+  return { geojson: data, featureCount: data.features.length };
+}
+
+function isArcGISFeatureLayer(layer: GeoLibreLayer): boolean {
+  return layer.metadata.sourceKind === ARCGIS_FEATURE_SOURCE_KIND;
+}
+
 function isGeoRssLayer(layer: GeoLibreLayer): boolean {
   return layer.metadata.sourceKind === GEORSS_SOURCE_KIND;
+}
+
+function isOgcFeaturesLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.metadata.sourceKind === OGC_FEATURES_SOURCE_KIND ||
+    layer.metadata.service === "ogc-features" ||
+    layer.source.service === "ogc-features"
+  );
 }
 
 function isViteDevServer(): boolean {

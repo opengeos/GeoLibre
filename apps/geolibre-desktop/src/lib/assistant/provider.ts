@@ -32,6 +32,29 @@ export interface BedrockCredentials {
   sessionToken?: string;
 }
 
+/**
+ * A named, saved profile that bundles a provider, model, and credential values
+ * together so users can define multiple LLM configurations and switch between
+ * them. Profiles are stored in DesktopSettings (localStorage), never in the
+ * shared project file.
+ */
+export interface AssistantProfile {
+  /** Stable unique identifier (UUID v4). */
+  id: string;
+  /** User-given label, e.g. "Work Gemini" or "Local Ollama". */
+  name: string;
+  /** The LLM provider for this profile. */
+  provider: AssistantProviderId;
+  /** The model id to use (e.g. "gemini-3.5-flash"). */
+  modelId: string;
+  /**
+   * Credential values keyed by env-var name, matching {@link PROVIDER_FIELDS}.
+   * E.g. for google: `{ GEMINI_API_KEY: "AIza..." }`
+   *      for ollama: `{ OLLAMA_BASE_URL: "http://localhost:11434", OLLAMA_MODEL: "llama3.2" }`
+   */
+  fieldValues: Record<string, string>;
+}
+
 /** A fully resolved provider selection ready to build a model from. */
 export interface AssistantProviderConfig {
   provider: AssistantProviderId;
@@ -40,6 +63,8 @@ export interface AssistantProviderConfig {
   apiKey?: string;
   /** OpenAI-compatible base URL (ollama, custom). */
   baseURL?: string;
+  /** Suppress Bearer auth for same-origin proxies protected by browser auth. */
+  suppressAuthorizationHeader?: boolean;
   /** AWS region (bedrock). */
   region?: string;
   /** AWS credentials (bedrock). */
@@ -183,16 +208,24 @@ export function mergeRuntimeEnv({
  * Selectable models per provider, recommended/newest first. The first entry is
  * the provider default. Users can pin any other id via `GEOLIBRE_ASSISTANT_MODEL`
  * (or the per-provider env var) or the model picker. The hosted-model ids were
- * verified against the providers' docs as of 2026-06; the `ollama`/`bedrock`
+ * verified against the providers' docs as of 2026-07; the `ollama`/`bedrock`
  * lists are common examples (use your own via the env vars). `custom` has no
  * preset — supply the model with `OPENAI_COMPATIBLE_MODEL`.
  */
 export const PROVIDER_MODELS: Record<AssistantProviderId, readonly string[]> = {
-  google: ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-2.5-flash"],
-  anthropic: ["claude-opus-4-8", "claude-fable-5", "claude-sonnet-4-6", "claude-haiku-4-5"],
-  openai: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"],
-  ollama: ["llama3.2", "llama3.1", "qwen2.5", "mistral", "gemma2"],
+  google: [
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-pro-preview",
+  ],
+  anthropic: ["claude-opus-5", "claude-fable-5", "claude-sonnet-5", "claude-haiku-4-5"],
+  openai: ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
+  ollama: ["gemma4", "qwen3.6", "qwen3.5", "llama4", "gpt-oss"],
   bedrock: [
+    "global.anthropic.claude-opus-5",
+    "global.anthropic.claude-fable-5",
+    "global.anthropic.claude-sonnet-5",
     "global.anthropic.claude-sonnet-4-6",
     "global.anthropic.claude-opus-4-8",
     "global.anthropic.claude-haiku-4-5",
@@ -228,12 +261,77 @@ export const PROVIDER_LABELS: Record<AssistantProviderId, string> = {
  */
 export type RuntimeEnv = Record<string, string>;
 
-/** Read the live runtime environment map, or `{}` outside the browser. */
-export function readRuntimeEnv(): RuntimeEnv {
+function browserOrigin(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const origin = window.location?.origin;
+  return origin && origin !== "null" ? origin : undefined;
+}
+
+function managedProxyBaseUrl(proxyUrl: string, baseOrigin?: string): string {
+  let normalized = proxyUrl.trim().replace(/\/+$/, "");
+  if (baseOrigin && normalized.startsWith("/")) {
+    normalized = new URL(normalized, baseOrigin).toString().replace(/\/+$/, "");
+  }
+  return normalized.endsWith("/v1") ? normalized : `${normalized}/v1`;
+}
+
+/** Public AI proxy configuration embedded by Vite for a managed build. */
+export function readBuildTimeAssistantEnv(
+  viteEnv: Record<string, string | undefined> | undefined = (
+    import.meta as ImportMeta & { env?: Record<string, string | undefined> }
+  ).env,
+  baseOrigin?: string,
+): RuntimeEnv {
+  if (!viteEnv) return {};
+  const result: RuntimeEnv = {};
+  const proxyUrl = viteEnv.VITE_GEOLIBRE_AI_URL?.trim().replace(/\/+$/, "");
+  if (proxyUrl) {
+    result.OPENAI_COMPATIBLE_BASE_URL = managedProxyBaseUrl(proxyUrl, baseOrigin);
+    result.OPENAI_COMPATIBLE_MODEL =
+      viteEnv.VITE_GEOLIBRE_AI_MODEL?.trim() || result.OPENAI_COMPATIBLE_MODEL || "openai/gpt-5.5";
+  }
+  return result;
+}
+
+/** Public proxy configuration injected by the Docker entrypoint at container startup. */
+export function readDeploymentAssistantEnv(): RuntimeEnv {
   if (typeof window === "undefined") return {};
-  return (
-    (window as unknown as { __GEOLIBRE_RUNTIME_ENV__?: RuntimeEnv }).__GEOLIBRE_RUNTIME_ENV__ ?? {}
+  const deploymentEnv = (
+    window as unknown as {
+      __GEOLIBRE_DEPLOYMENT_ENV__?: Record<string, string | undefined>;
+    }
+  ).__GEOLIBRE_DEPLOYMENT_ENV__;
+  const result = readBuildTimeAssistantEnv(deploymentEnv, browserOrigin());
+  if (result.OPENAI_COMPATIBLE_BASE_URL) {
+    result.GEOLIBRE_AI_PROXY_BASE_URL = result.OPENAI_COMPATIBLE_BASE_URL;
+    result.GEOLIBRE_AI_PROXY_OMIT_AUTHORIZATION = "1";
+  }
+  return result;
+}
+
+/**
+ * True when the build or the Docker entrypoint supplied a managed AI proxy.
+ *
+ * Deliberately ignores `__GEOLIBRE_RUNTIME_ENV__`: an endpoint the user typed
+ * into Settings is their own custom provider, not an operator-managed proxy.
+ */
+export function hasManagedAssistantProxy(viteEnv?: Record<string, string | undefined>): boolean {
+  return Boolean(
+    readBuildTimeAssistantEnv(viteEnv, browserOrigin()).OPENAI_COMPATIBLE_BASE_URL ||
+    readDeploymentAssistantEnv().OPENAI_COMPATIBLE_BASE_URL,
   );
+}
+
+/** Read build-time credentials plus the live runtime environment map. */
+export function readRuntimeEnv(): RuntimeEnv {
+  const built = readBuildTimeAssistantEnv(undefined, browserOrigin());
+  if (typeof window === "undefined") return built;
+  return {
+    ...built,
+    ...readDeploymentAssistantEnv(),
+    ...((window as unknown as { __GEOLIBRE_RUNTIME_ENV__?: RuntimeEnv }).__GEOLIBRE_RUNTIME_ENV__ ??
+      {}),
+  };
 }
 
 /** First non-empty value among `names` in `env`, or null. */
@@ -327,11 +425,17 @@ export function configForProvider(
       const baseURL = firstValue(env, "OPENAI_COMPATIBLE_BASE_URL");
       if (!baseURL || !modelId) return null;
       const apiKey = firstValue(env, "OPENAI_COMPATIBLE_API_KEY") ?? "not-needed";
+      const normalizedBaseURL = baseURL.replace(/\/+$/, "");
+      const proxyBaseURL = firstValue(env, "GEOLIBRE_AI_PROXY_BASE_URL")?.replace(/\/+$/, "");
       return {
         provider,
         apiKey,
-        baseURL: baseURL.replace(/\/+$/, ""),
+        baseURL: normalizedBaseURL,
         modelId,
+        suppressAuthorizationHeader:
+          env.GEOLIBRE_AI_PROXY_OMIT_AUTHORIZATION === "1" &&
+          Boolean(proxyBaseURL) &&
+          normalizedBaseURL === proxyBaseURL,
       };
     }
     case "bedrock": {
@@ -387,6 +491,70 @@ export function availableProviders(env: RuntimeEnv = readRuntimeEnv()): Assistan
 }
 
 /**
+ * Headers the OpenAI SDK attaches to every request that carry no meaning for a
+ * third-party OpenAI-compatible endpoint: its own telemetry (`X-Stainless-*`)
+ * and a `User-Agent` override.
+ *
+ * They are harmless against `api.openai.com`, but they break OpenAI-compatible
+ * gateways in the browser (issue #1834). Any of them makes the request
+ * non-simple, so the browser sends a CORS preflight listing every one of them in
+ * `Access-Control-Request-Headers`. A gateway that allows only the standard
+ * `Authorization`/`Content-Type`/`Accept` trio answers that preflight without an
+ * `Access-Control-Allow-Origin` header, the browser rejects it, and the SDK sees
+ * the opaque `TypeError: Failed to fetch`, reported as "Connection error" with
+ * three identical network diagnostics (one per SDK retry) even though the
+ * endpoint's CORS policy is otherwise fine and the credentials are valid.
+ *
+ * Dropping them leaves the preflight asking only for headers such a gateway
+ * already allows. `User-Agent` is included because the browser supplies its own
+ * once the SDK's override is gone.
+ *
+ * This is exactly the set the client attaches to *every* request. The SDK's
+ * remaining `X-Stainless-*` names (`Helper-Method`, `Poll-Helper`,
+ * `Custom-Poll-Interval`) are deliberately absent: they are set per request by
+ * the assistants/vector-store polling helpers, whose per-request headers are
+ * merged *after* `defaultHeaders` and so cannot be stripped here anyway. The
+ * assistant reaches the API through plain `chat.completions.create`, which never
+ * uses those helpers. The `openAiCompatibleHeaders` test asserts the header
+ * names actually put on the wire, so an SDK bump that adds one to every request
+ * fails there rather than in a user's gateway.
+ */
+export const OPENAI_COMPATIBLE_STRIPPED_HEADERS: readonly string[] = [
+  "User-Agent",
+  "X-Stainless-Arch",
+  "X-Stainless-Lang",
+  "X-Stainless-OS",
+  "X-Stainless-Package-Version",
+  "X-Stainless-Retry-Count",
+  "X-Stainless-Runtime",
+  "X-Stainless-Runtime-Version",
+  "X-Stainless-Timeout",
+];
+
+/**
+ * The `defaultHeaders` to hand the OpenAI SDK for an OpenAI-compatible endpoint
+ * (`ollama` / `custom`).
+ *
+ * A `null` value tells the SDK to *remove* that header rather than send an empty
+ * one, and `defaultHeaders` is merged after the block where the client sets its
+ * own, so every name in {@link OPENAI_COMPATIBLE_STRIPPED_HEADERS} is dropped
+ * before the request is built. `Authorization` joins them when the endpoint is
+ * the managed same-origin proxy, which is authenticated by the browser session
+ * instead of a Bearer token.
+ *
+ * @param suppressAuthorizationHeader Also drop `Authorization` (managed proxy).
+ * @returns A header map whose every value is `null`.
+ */
+export function openAiCompatibleHeaders(
+  suppressAuthorizationHeader: boolean,
+): Record<string, null> {
+  const headers: Record<string, null> = {};
+  for (const name of OPENAI_COMPATIBLE_STRIPPED_HEADERS) headers[name] = null;
+  if (suppressAuthorizationHeader) headers.Authorization = null;
+  return headers;
+}
+
+/**
  * Build a Strands {@link Model} for the resolved provider. The provider SDK is
  * dynamically imported so unused providers never enter the initial bundle.
  *
@@ -433,6 +601,7 @@ export async function createModel(config: AssistantProviderConfig): Promise<Mode
         modelId: config.modelId,
         clientConfig: {
           baseURL: config.baseURL,
+          defaultHeaders: openAiCompatibleHeaders(Boolean(config.suppressAuthorizationHeader)),
           dangerouslyAllowBrowser: true,
         },
       }) as unknown as Model;

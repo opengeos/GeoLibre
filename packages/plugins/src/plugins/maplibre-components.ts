@@ -1,4 +1,18 @@
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import {
+  clearExternalNativePaintBridge,
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  interpolateRampColors,
+  setExternalNativePaintBridge,
+  useAppStore,
+} from "@geolibre/core";
+import type {
+  QueryGeometry,
+  QueryOptions,
+  QueryResult,
+  Selector,
+  ZarrLayer,
+} from "@carbonplan/zarr-layer";
 import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import { RasterLayer, type RasterLayerProps } from "@developmentseed/deck.gl-raster";
@@ -53,12 +67,14 @@ import type {
   ZarrLayerControl,
   ZarrLayerControlOptions,
   ZarrLayerEventHandler,
+  ZarrLocalStoreProvider,
   ZarrLayerInfo,
 } from "maplibre-gl-components";
 import type { GaussianSplatControl, GaussianSplatLayerAdapter } from "maplibre-gl-splat";
 import type { LidarControlEventHandler, PointCloudInfo } from "maplibre-gl-lidar";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
+import { ensureSharedDeckOverlay, setSharedDeckLayers } from "./shared-deck-overlay";
 import { attachTerrainMeasure, measurePanelElement, type TerrainMapLike } from "./terrain-measure";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
@@ -66,6 +82,25 @@ import {
   loadKerchunkReference,
   type KerchunkRefs,
 } from "./kerchunk-reference-store";
+import {
+  nearestTimeIndex,
+  registerTemporalLayer,
+  unregisterTemporalLayer,
+} from "./temporal-layers";
+import { pickTimeDimension, resolveZarrTimeAxis, type ZarrTimeAttributes } from "./zarr-time-axis";
+import {
+  ZarrDirectoryStore,
+  createDirectoryZarrMetadataReader,
+  localZarrStoreUrl,
+  type ZarrDirectoryReader,
+} from "./zarr-directory-store";
+
+/**
+ * `metadata.sourceKind` marking the LiDAR point-cloud layers this plugin adds. Exported so the Layer Library's
+ * restore dispatch keys off the same value this plugin writes rather than a
+ * hand-typed copy (issue #1520).
+ */
+export const LIDAR_SOURCE_KIND = "lidar-url";
 
 type ControlGridConstructor = (typeof import("maplibre-gl-components"))["ControlGrid"];
 type AddVectorControlConstructor = (typeof import("maplibre-gl-components"))["AddVectorControl"];
@@ -138,10 +173,26 @@ const lidarControlPosition: GeoLibreMapControlPosition = "top-left";
 const splattingControlPosition: GeoLibreMapControlPosition = "top-left";
 
 const FLATGEOBUF_SAMPLE_URL = "https://flatgeobuf.org/test/data/UScounties.fgb";
+const BUILDING_COUNT_H3_PMTILES_SAMPLE_URL =
+  "https://data.source.coop/giswqs/opengeos/building_count_h3.pmtiles";
 const PMTILES_SAMPLE_URL =
   "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-06-17.0/buildings.pmtiles";
 const ZARR_SAMPLE_URL =
   "https://carbonplan-maps.s3.us-west-2.amazonaws.com/v2/demo/4d/tavg-prec-month";
+/**
+ * A cube with a real time axis, so the Zarr panel can demonstrate the Time
+ * Slider binding. The CarbonPlan sample above cannot: its non-spatial dims are
+ * `band` and a bare 1-12 `month` climatology with no CF `units`, which is not a
+ * series of instants, so no temporal adapter is registered for it and the
+ * Layers panel correctly offers no bind action.
+ *
+ * NOAA OI SST V2 monthly means, 1981-2023 on a 1-degree global grid, chunked
+ * one time step per chunk (~165 KiB) so stepping the timeline is a single small
+ * read. Public domain (U.S. Government work); see the store's own attributes
+ * for the citation.
+ */
+const ZARR_TIME_SERIES_SAMPLE_URL =
+  "https://data.source.coop/giswqs/opengeos/noaa-oisst-v2-monthly.zarr";
 const LIDAR_SAMPLE_URL = "https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz";
 const SPLATTING_SAMPLE_URL = "https://maplibre.org/maplibre-gl-js/docs/assets/34M_17/34M_17.gltf";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
@@ -228,7 +279,10 @@ const PMTILES_OPTIONS = {
   defaultLineColor: DEFAULT_LAYER_STYLE.strokeColor,
   defaultOpacity: 0.8,
   defaultPickable: false,
-  sampleData: [{ label: "Overture buildings", url: PMTILES_SAMPLE_URL }],
+  sampleData: [
+    { label: "Overture buildings", url: PMTILES_SAMPLE_URL },
+    { label: "H3 building counts", url: BUILDING_COUNT_H3_PMTILES_SAMPLE_URL },
+  ],
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies PMTilesLayerControlOptions;
 
@@ -581,6 +635,11 @@ function getStacColorRampModule(colormap: string): typeof STAC_COLOR_RAMP_MODULE
   };
 }
 
+// Matches the stop count of the control's own default colormap, so a named ramp
+// renders with the same smoothness as the built-in Zarr panel default. Declared
+// above ZARR_OPTIONS because that initializer resolves a ramp for its samples.
+const ZARR_COLORMAP_STOPS = 9;
+
 const ZARR_OPTIONS = {
   backgroundColor: "hsl(var(--popover))",
   className: "geolibre-zarr-control",
@@ -600,7 +659,23 @@ const ZARR_OPTIONS = {
   defaultOpacity: 0.85,
   defaultPickable: false,
   defaultSelector: { band: "prec", month: 1 },
-  sampleData: [{ label: "Climate (CarbonPlan)", url: ZARR_SAMPLE_URL }],
+  // The SST entry carries its own settings because the `default*` options above
+  // are the CarbonPlan sample's: a -2..35 degree field drawn against a 0-300
+  // ramp is a flat wash, and `{ band, month }` names dimensions it does not
+  // have. Needs maplibre-gl-components >= 0.28.0, which applies these on select.
+  sampleData: [
+    { label: "Climate (CarbonPlan)", url: ZARR_SAMPLE_URL },
+    {
+      label: "Sea surface temperature, monthly (NOAA)",
+      url: ZARR_TIME_SERIES_SAMPLE_URL,
+      variable: "sst",
+      clim: [-2, 32],
+      colormap: interpolateRampColors("turbo", ZARR_COLORMAP_STOPS),
+      // This store's only non-spatial dimension is `time`, which the Time
+      // Slider drives; an empty selector clears the climate sample's.
+      selector: {},
+    },
+  ],
   defaultVariable: "climate",
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies ZarrLayerControlOptions;
@@ -658,6 +733,12 @@ let bookmarkControl: BookmarkControl | null = null;
 let minimapControl: MinimapControl | null = null;
 let viewStateControl: ViewStateControl | null = null;
 let stacSearchControl: StacSearchControl | null = null;
+// The host API the STAC Search control was opened with, kept so its deck.gl COG
+// layers can reach the shared interleaved overlay from the patched hooks below.
+let stacSearchApp: GeoLibreAppAPI | null = null;
+// Store-derived `beforeId` per STAC Search deck layer id, pushed in by
+// `applyStacSearchLayerOrder`. See `renderStacSearchDeckLayers`.
+const stacSearchBeforeIds = new Map<string, string | undefined>();
 let zarrControl: ZarrLayerControl | null = null;
 let colorbarControl: ColorbarGuiControl | null = null;
 let legendControl: LegendGuiControl | null = null;
@@ -1663,7 +1744,11 @@ export function openPMTilesLayerPanel(app: GeoLibreAppAPI): void {
  * @returns True when the archive was added.
  * @throws If the archive could not be loaded (unreachable, not PMTiles, 403).
  */
-export async function addPMTilesLayerFromUrl(app: GeoLibreAppAPI, url: string): Promise<boolean> {
+export async function addPMTilesLayerFromUrl(
+  app: GeoLibreAppAPI,
+  url: string,
+  options: { fit?: boolean } = {},
+): Promise<boolean> {
   const { PMTilesLayerControl: PMTilesLayerControlClass } = await getComponentsConstructors();
 
   pmtilesControl ??= createPMTilesControl(PMTilesLayerControlClass);
@@ -1680,7 +1765,41 @@ export async function addPMTilesLayerFromUrl(app: GeoLibreAppAPI, url: string): 
     pmtilesControl.hide();
   }
 
-  await pmtilesControl.addLayer(url);
+  const map = options.fit === false ? app.getMap?.() : undefined;
+  const readCamera = () =>
+    map
+      ? {
+          center: map.getCenter(),
+          zoom: map.getZoom(),
+          bearing: map.getBearing(),
+          pitch: map.getPitch(),
+        }
+      : null;
+  let camera = readCamera();
+  let userMoving = false;
+  const onMoveStart = (event: { originalEvent?: unknown }) => {
+    if (event.originalEvent) userMoving = true;
+  };
+  const onMoveEnd = () => {
+    if (userMoving) {
+      camera = readCamera();
+      userMoving = false;
+    }
+  };
+  map?.on("movestart", onMoveStart);
+  map?.on("moveend", onMoveEnd);
+  try {
+    await pmtilesControl.addLayer(url);
+  } finally {
+    // Preserve a host user's camera interaction that happened while the archive
+    // header was loading, rather than restoring the older pre-load position.
+    if (userMoving) camera = readCamera();
+    map?.off("movestart", onMoveStart);
+    map?.off("moveend", onMoveEnd);
+  }
+  // The upstream PMTiles control always frames a newly added archive. Restore
+  // the host's camera when a programmatic caller explicitly opts out.
+  if (camera) map?.jumpTo(camera);
   // A failed load does NOT reject: the control catches it, records it on
   // `state.error`, and emits "error" (same convention as CogLayerControl, which
   // addLayerWithCogRasterControl has to check the same way). Without this a
@@ -1999,6 +2118,76 @@ export function openZarrLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneZarrControl(app);
 }
 
+/**
+ * The host's folder picker for the Zarr panel's "Browse folder" button, and the
+ * folders it has opened so far.
+ *
+ * Reading a folder needs a filesystem API the plugins package does not have
+ * (Tauri's `fs`, or the browser's `showDirectoryPicker`), so the app registers
+ * one at startup. It stays null where neither exists, and the panel then shows
+ * no button at all rather than one that cannot deliver.
+ */
+let zarrLocalStoreProvider: ZarrLocalStoreProvider | null = null;
+
+/**
+ * Readers for the local stores opened so far, keyed by the identifier the layer
+ * was added under.
+ *
+ * A local cube's `url` is not an address, so the Time Slider's usual metadata
+ * walk over HTTP has nothing to fetch. Keeping the reader lets
+ * {@link registerZarrTemporalAdapter} read the store's CF `units`/`calendar`
+ * out of the folder instead, for a layer the *panel* added — where, unlike a
+ * programmatic add, the caller has no chance to pass its own context.
+ */
+const zarrLocalStoreReaders = new Map<string, ZarrDirectoryReader>();
+
+/**
+ * Register the host's folder picker for the Zarr panel.
+ *
+ * @param provider - Opens a folder dialog and returns read access to the chosen
+ *   Zarr store, or null when dismissed. Pass null to remove the button.
+ */
+export function setZarrLocalStoreProvider(
+  provider: (() => Promise<ZarrDirectoryReader | null>) | null,
+): void {
+  if (!provider) {
+    zarrLocalStoreProvider = null;
+    return;
+  }
+  zarrLocalStoreProvider = async () => {
+    const reader = await provider();
+    if (!reader) return null;
+    // A reader holds a directory handle — memory, and the capability to read
+    // that folder — so drop the ones no layer is using before taking another.
+    pruneZarrLocalStoreReaders();
+    // Mint the identifier here rather than let the control derive one, so the
+    // reader can be filed under the same string the layer will carry.
+    const url = localZarrStoreUrl(reader.name);
+    zarrLocalStoreReaders.set(url, reader);
+    return { name: reader.name, store: new ZarrDirectoryStore(reader), url };
+  };
+}
+
+/**
+ * Forget the folder readers no live Zarr layer is backed by.
+ *
+ * Run after a layer is removed, and before a new folder is taken: between the
+ * two it also covers a folder the user browsed to and then never added, which
+ * no layer removal would ever account for.
+ */
+function pruneZarrLocalStoreReaders(): void {
+  if (zarrLocalStoreReaders.size === 0) return;
+  const live = new Set(
+    useAppStore
+      .getState()
+      .layers.filter(isZarrControlLayer)
+      .map((layer) => layer.sourcePath),
+  );
+  for (const url of zarrLocalStoreReaders.keys()) {
+    if (!live.has(url)) zarrLocalStoreReaders.delete(url);
+  }
+}
+
 /** Options for {@link addCloudNetcdfLayer}. */
 export interface CloudNetcdfLayerOptions {
   /** URL of the kerchunk reference manifest (JSON) for the NetCDF/HDF file. */
@@ -2014,10 +2203,21 @@ export interface CloudNetcdfLayerOptions {
   selector?: Record<string, number | string>;
   /** Color limits `[min, max]`. */
   clim?: [number, number];
-  /** Colormap (array of hex colors). */
-  colormap?: string[];
+  /**
+   * A named GeoLibre ramp (e.g. `"viridis"`) or an explicit list of hex colors,
+   * matching {@link ZarrRasterLayerOptions.colormap}. An unrecognized name falls
+   * back to the renderer's default ramp.
+   */
+  colormap?: string | string[];
   /** Layer opacity (0-1). */
   opacity?: number;
+  /**
+   * Explicit spatial bounds `[west, south, east, north]`. Recorded on the layer
+   * so "Zoom to layer" and the Metadata panel know where the grid is: the
+   * renderer resolves the extent internally and never reports it back, so
+   * without this the layer has no bounds the host can fly to.
+   */
+  bounds?: [number, number, number, number];
   /** Optional request headers (e.g. for authenticated stores). */
   headers?: Record<string, string>;
 }
@@ -2048,6 +2248,11 @@ export async function addCloudNetcdfLayer(
       throw new Error("Could not add the Zarr control to the map.");
     }
     zarrControlMounted = true;
+    // Mounted only to borrow its render path, exactly as addZarrRasterLayer
+    // does. ZARR_OPTIONS sets `collapsed: false` for the "open the Zarr panel"
+    // flow, so without this the panel unfolds over the map the moment a dialog
+    // add lands — on top of the extent the camera has just been flown to.
+    zarrControl.hide();
   }
 
   // The untiled Zarr renderer draws in Web Mercator; switch off globe first
@@ -2068,19 +2273,568 @@ export async function addCloudNetcdfLayer(
   // which adds the layer to the store. We intentionally do not read
   // getState().error here: the control is shared, so the error may be stale from
   // a prior operation, and addLayer resolves before async chunk loading finishes.
-  await zarrControl.addLayer(options.url, options.variable, {
-    store,
-    zarrVersion: 2,
-    selector: options.selector,
-    clim: options.clim,
-    colormap: options.colormap,
-    opacity: options.opacity,
+  // Queued with every other programmatic add, because the event carries no
+  // correlation id: overlapping adds would each latch onto the other's event.
+  const control = zarrControl;
+  await queueZarrAdd(async () => {
+    // The same event names the new layer, which the temporal registration below
+    // needs so this add's own references reach the time-axis lookup.
+    let addedLayerId: string | null = null;
+    const captureLayerId: ZarrLayerEventHandler = (event) => {
+      if (event.layerId) addedLayerId = event.layerId;
+    };
+    control.on("layeradd", captureLayerId);
+    // Claim this add, so the shared handler leaves the adapter to us.
+    const endAdd = beginProgrammaticZarrAdd(options.url);
+    try {
+      await control.addLayer(options.url, options.variable, {
+        store,
+        zarrVersion: 2,
+        selector: options.selector,
+        clim: options.clim,
+        colormap: resolveZarrColormap(options.colormap),
+        opacity: options.opacity,
+        bounds: options.bounds,
+      });
+    } finally {
+      control.off("layeradd", captureLayerId);
+      endAdd();
+    }
+
+    // The references carry the coordinate attributes inline, which is the only
+    // way to read a NetCDF cube's CF units: its `url` names the kerchunk
+    // manifest, not a Zarr store whose metadata documents could be walked.
+    if (addedLayerId) {
+      registerZarrTemporalAdapter(addedLayerId, options.url, { refs, headers: options.headers });
+      // Record the extent on the layer itself. The control accepts `bounds` as a
+      // render hint but does not always carry it back on the "layeradd" event,
+      // and the renderer never reports the extent it resolved — so without this
+      // write the Layers panel's "Zoom to layer" has nothing to fly to.
+      if (options.bounds) applyZarrLayerBounds(addedLayerId, options.bounds);
+    }
   });
 
   // Unlike openZarrLayerPanel, the dialog-based flow intentionally leaves the
   // Zarr control collapsed/hidden: the layer is managed from the layer and
   // style panels. Users can still open the Zarr panel from the menu to tweak
   // colormap/clim.
+}
+
+/**
+ * Write a layer's spatial extent onto its store record, so the Layers panel's
+ * "Zoom to layer" and the Metadata panel can read it back.
+ *
+ * @param layerId The layer added by the Zarr control.
+ * @param bounds `[west, south, east, north]`.
+ */
+function applyZarrLayerBounds(layerId: string, bounds: [number, number, number, number]): void {
+  const store = useAppStore.getState();
+  const layer = store.layers.find((item) => item.id === layerId);
+  if (!layer) return;
+  store.updateLayer(layerId, {
+    source: { ...layer.source, bounds },
+    metadata: { ...layer.metadata, bounds },
+  });
+}
+
+/** Options for {@link addZarrRasterLayer}. */
+export interface ZarrRasterLayerOptions {
+  /** URL of the Zarr store (Zarr v2/v3, Icechunk over HTTP). */
+  url: string;
+  /** Layer name shown in the Layers panel. Defaults to `<store> - <variable>`. */
+  name?: string;
+  /** Array/variable to render. Required: the renderer cannot guess it. */
+  variable: string;
+  /** Dimension selector for non-spatial dims, e.g. `{ time: 0 }`. */
+  selector?: Record<string, number | string>;
+  /** Color limits `[min, max]`. */
+  clim?: [number, number];
+  /**
+   * A named GeoLibre ramp (e.g. `"viridis"`) or an explicit list of hex colors.
+   * An unrecognized name falls back to the default ramp, as `addCogLayer` does.
+   */
+  colormap?: string | string[];
+  /** Layer opacity (0-1). */
+  opacity?: number;
+  /** Zarr metadata version. Defaults to the renderer's detection. */
+  zarrVersion?: 2 | 3;
+  /** CRS of the store for built-in projections, e.g. `"EPSG:32633"`. */
+  crs?: string;
+  /** proj4 definition for a CRS the renderer does not know built-in. */
+  proj4?: string;
+  /** Explicit spatial bounds `[xMin, yMin, xMax, yMax]` in the store's CRS. */
+  bounds?: [number, number, number, number];
+  /** Override the names of the spatial dimensions when they are not lat/lon. */
+  spatialDimensions?: { lat?: string; lon?: string };
+  /** Request headers for an authenticated store. */
+  headers?: Record<string, string>;
+  /** Insert the new layer directly beneath this layer. */
+  beforeLayerId?: string | null;
+  /**
+   * A zarrita `Readable` to read the store through, instead of fetching `url`.
+   * With one supplied, `url` is only an identifier (see
+   * {@link localZarrStoreUrl}): it names the layer and keys the control's state,
+   * and is never requested. This is how a Zarr store on local disk renders.
+   */
+  store?: ZarrReadableStore;
+  /**
+   * Read the CF `units`/`calendar` of a coordinate, for a store the Time Slider
+   * cannot look up over HTTP (again: a local folder). Consulted in place of the
+   * metadata walk when the layer turns out to have a time axis.
+   */
+  readTimeAttributes?: ZarrTimeAttributesReader;
+}
+
+/** The minimum of zarrita's `Readable` that the renderer calls. */
+export interface ZarrReadableStore {
+  get(key: string): Promise<Uint8Array | undefined>;
+}
+
+/**
+ * Reads one coordinate's CF time attributes out of a store's own metadata.
+ *
+ * @param dimension - The coordinate's name, e.g. `"time"`.
+ * @returns Its `units`/`calendar`, or null when it declares neither.
+ */
+export type ZarrTimeAttributesReader = (dimension: string) => Promise<ZarrTimeAttributes | null>;
+
+/**
+ * Add a Zarr layer through GeoLibre's own `@carbonplan/zarr-layer` instance and
+ * mirror it into the layer store, without opening the Zarr panel.
+ *
+ * This is the Zarr counterpart of {@link addCogRasterLayer}: the host owns the
+ * renderer, so an external plugin does not bundle a second copy of
+ * `@carbonplan/zarr-layer` (plus its numcodecs WASM) and does not have to add a
+ * raw MapLibre custom layer whose paint the Style panel cannot reach
+ * (opengeos/GeoLibre#1445).
+ *
+ * `crs`/`proj4` are forwarded to the renderer, which reprojects on the GPU, so a
+ * store in a projected CRS (a national grid on `EPSG:32633`, say) lands in the
+ * right place instead of being read as WGS84.
+ *
+ * The Zarr control is mounted hidden when this is the first Zarr layer, so the
+ * user does not get a map button they never asked for; a panel they already
+ * opened is left alone.
+ *
+ * @param app The GeoLibre app API.
+ * @param options Store URL, variable, and optional styling/CRS/selector.
+ * @returns The new layer's id (the Layers-panel entry and the native layer id).
+ * @throws If the control cannot be mounted, `variable` is missing, or the store
+ *   fails to load.
+ */
+export async function addZarrRasterLayer(
+  app: GeoLibreAppAPI,
+  options: ZarrRasterLayerOptions,
+): Promise<string> {
+  const url = options.url?.trim();
+  if (!url) {
+    throw new Error("A Zarr store URL is required.");
+  }
+  // The control renders `state.variable` and reports "Please enter a variable
+  // name" on its (hidden) panel when it is empty, so fail here with a message
+  // that names the option instead.
+  const variable = options.variable?.trim();
+  if (!variable) {
+    throw new Error("A Zarr variable is required (pass options.variable).");
+  }
+
+  return queueZarrAdd(() => addZarrLayerExclusively(app, options, url, variable));
+}
+
+// One add at a time: see the queue comment on queueZarrAdd.
+let zarrAddQueue: Promise<void> = Promise.resolve();
+
+/**
+ * Run a Zarr add exclusively.
+ *
+ * The Zarr control is a shared singleton whose url/variable live in one state
+ * slot, and its `layeradd` event carries no correlation id, so two overlapping
+ * adds would each see the other's event and could return (and then patch, or
+ * resolve the time axis of) the wrong layer. **Every** programmatic add goes
+ * through here — both `addZarrRasterLayer` and `addCloudNetcdfLayer`, which
+ * would otherwise overlap each other even for the same store. A failed add must
+ * not break the chain.
+ *
+ * @param run - The add to run once the queue drains.
+ * @returns Whatever the add resolves to.
+ */
+function queueZarrAdd<T>(run: () => Promise<T>): Promise<T> {
+  const result = zarrAddQueue.then(run);
+  zarrAddQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+async function addZarrLayerExclusively(
+  app: GeoLibreAppAPI,
+  options: ZarrRasterLayerOptions,
+  url: string,
+  variable: string,
+): Promise<string> {
+  const { ZarrLayerControl: ZarrLayerControlClass } = await getComponentsConstructors();
+
+  zarrControl ??= createZarrControl(ZarrLayerControlClass);
+  if (!zarrControlMounted) {
+    const added = app.addMapControl(zarrControl, zarrControlPosition);
+    if (!added) {
+      zarrControl = null;
+      throw new Error("Could not add the Zarr control to the map.");
+    }
+    zarrControlMounted = true;
+    // Mounted only to borrow its render path — keep it out of sight.
+    zarrControl.hide();
+  }
+
+  // Zarr renders correctly in globe (proj4js reprojects on the GPU), so — unlike the
+  // COG/deck.gl path — do not force Mercator here. This keeps addZarrLayer consistent
+  // with the Add Data → Zarr panel, which never switched projection. See #1466.
+
+  const control = zarrControl;
+  const headers = options.headers;
+
+  let addedLayerId: string | null = null;
+  let failure: string | null = null;
+  const handleLayerAdd: ZarrLayerEventHandler = (event) => {
+    if (event.layerId) addedLayerId = event.layerId;
+  };
+  const handleError: ZarrLayerEventHandler = (event) => {
+    failure = event.error ?? null;
+  };
+
+  control.on("layeradd", handleLayerAdd);
+  control.on("error", handleError);
+  // Claim this add, so the shared `layeradd` handler leaves the adapter to the
+  // registration below, which knows both the layer id and these headers.
+  const endAdd = beginProgrammaticZarrAdd(url);
+  try {
+    // The control awaits its own load before resolving and reports failure by
+    // emitting "error" rather than rejecting, so both outcomes are already
+    // recorded above by the time this returns.
+    await control.addLayer(url, variable, {
+      selector: options.selector,
+      clim: options.clim,
+      colormap: resolveZarrColormap(options.colormap),
+      opacity: options.opacity,
+      ...(options.store ? { store: options.store } : {}),
+      zarrVersion: options.zarrVersion,
+      crs: options.crs,
+      proj4: options.proj4,
+      bounds: options.bounds,
+      spatialDimensions: options.spatialDimensions,
+      ...(headers && Object.keys(headers).length > 0
+        ? { transformRequest: (requestUrl: string) => ({ url: requestUrl, headers }) }
+        : {}),
+    });
+  } finally {
+    control.off("layeradd", handleLayerAdd);
+    control.off("error", handleError);
+    endAdd();
+  }
+
+  if (!addedLayerId) {
+    throw new Error(failure ?? "Failed to add the Zarr layer.");
+  }
+
+  // A cube with a time axis becomes drivable by the Time Slider. Registered
+  // here rather than from the shared `layeradd` handler so this add's own
+  // headers reach the metadata lookup even when another add of the same store
+  // overlaps it (opengeos/GeoLibre#1448 review).
+  registerZarrTemporalAdapter(addedLayerId, url, {
+    headers,
+    ...(options.readTimeAttributes ? { readAttributes: options.readTimeAttributes } : {}),
+  });
+
+  // `createZarrLayerAddHandler` has already mirrored the layer into the store
+  // (the control emits "layeradd" synchronously) along with the spatial
+  // reference the renderer resolved, so only the fields the caller alone knows
+  // are left to apply.
+  const store = useAppStore.getState();
+  const patch: Partial<GeoLibreLayer> = {};
+  const name = options.name?.trim();
+  if (name) patch.name = name;
+  if (options.beforeLayerId) patch.beforeId = options.beforeLayerId;
+  if (Object.keys(patch).length > 0) {
+    store.updateLayer(addedLayerId, patch);
+  }
+
+  return addedLayerId;
+}
+
+/**
+ * Re-select the non-spatial dimensions of a live Zarr layer, e.g. to step a
+ * plugin's own time slider through `{ time: n }` without rebuilding the layer.
+ *
+ * The renderer keeps the fetched chunks, so this is much cheaper than removing
+ * and re-adding the layer. The new selector is written back to the store layer
+ * so the Metadata panel and the project file show what is on screen.
+ *
+ * @param layerId A layer id returned by {@link addZarrRasterLayer}.
+ * @param selector The dimension selector, e.g. `{ time: 3 }`.
+ * @returns True when the layer accepted the selector, false when there is no
+ *   live Zarr layer with that id.
+ */
+export async function setZarrLayerSelector(
+  layerId: string,
+  selector: Record<string, number | string>,
+): Promise<boolean> {
+  const instance = zarrControl?.getLayersMap().get(layerId) as
+    | { setSelector?: (selector: Record<string, number | string>) => Promise<void> | void }
+    | undefined;
+  if (!instance || typeof instance.setSelector !== "function") return false;
+
+  await instance.setSelector(selector);
+
+  const store = useAppStore.getState();
+  const layer = store.layers.find((item) => item.id === layerId);
+  if (layer) {
+    store.updateLayer(layerId, {
+      source: { ...layer.source, selector },
+      metadata: { ...layer.metadata, selector },
+    });
+  }
+  return true;
+}
+
+/**
+ * Read the data values of a live Zarr layer under a GeoJSON geometry: a `Point`
+ * for click-to-value, a `Polygon`/`MultiPolygon` for region statistics.
+ *
+ * The read side of {@link setZarrLayerSelector}, and the reason a plugin does
+ * not need its own zarrita point reader: the renderer already holds the store's
+ * grid, so it does the CRS reprojection and fill-value masking itself. Pass a
+ * WGS84 `[lng, lat]` straight from a map click; the returned `coordinates` are
+ * in the store's **source** CRS (Web Mercator meters for EPSG:3857, degrees for
+ * EPSG:4326, source units for a custom proj4 dataset).
+ *
+ * The renderer answers with empty value arrays rather than an error when the
+ * geometry falls outside the store's grid, or when the layer has not finished
+ * loading its first chunks — so a query fired immediately after the add can
+ * come back empty even though the id is live. An aborted query rejects.
+ *
+ * `selector` scopes the read only: the layer keeps rendering the slice it is on,
+ * so an Identify readout for another time leaves the map alone. Moving the
+ * display is {@link setZarrLayerSelector}'s job.
+ *
+ * @param layerId A layer id returned by {@link addZarrRasterLayer} (or a layer
+ *   the Zarr panel added).
+ * @param geometry The query geometry, in WGS84.
+ * @param selector Dimensions to read instead of the layer's current selector,
+ *   e.g. `{ time: 12 }`. Omit to read the slice on screen.
+ * @param options `signal` to cancel the read, `includeSpatialCoordinates` to
+ *   drop the per-pixel coordinate arrays (default: included).
+ * @returns The renderer's result, or null when there is no live Zarr layer with
+ *   that id (the counterpart of {@link setZarrLayerSelector} returning false).
+ */
+export async function queryZarrLayer(
+  layerId: string,
+  geometry: QueryGeometry,
+  selector?: Selector,
+  options?: QueryOptions,
+): Promise<QueryResult | null> {
+  const instance = zarrControl?.getLayersMap().get(layerId) as
+    | Pick<ZarrLayer, "queryData">
+    | undefined;
+  if (!instance || typeof instance.queryData !== "function") return null;
+
+  return instance.queryData(geometry, selector, options);
+}
+// ----- Zarr time axis --------------------------------------------------------
+// A Zarr cube's time is an internal dimension, so the Time Slider drives it
+// through a temporal adapter (see `temporal-layers.ts`) rather than by filtering
+// features or swapping sources. Registration is best-effort and silent: a store
+// with no time axis simply never becomes bindable.
+
+/**
+ * What resolving a new layer's time axis needs but the `layeradd` event does not
+ * carry: an authenticated store's request headers, and — for a layer whose `url`
+ * is not something the metadata walk can fetch — a way to read the coordinate
+ * attributes anyway. Cloud-Optimized NetCDF supplies the kerchunk references
+ * whose inline `.zattrs` hold them (its `url` names the manifest); a store on
+ * local disk supplies a reader over the folder.
+ */
+interface ZarrTemporalContext {
+  headers?: Record<string, string>;
+  refs?: KerchunkRefs;
+  readAttributes?: ZarrTimeAttributesReader;
+}
+
+/**
+ * Store URLs with a programmatic add in flight, refcounted.
+ *
+ * The `layeradd` event carries no correlation token, so a handler firing for one
+ * add cannot tell which caller's headers or references belong to it — and two
+ * adds of the *same* URL can overlap, because `addCloudNetcdfLayer` runs off
+ * `addZarrRasterLayer`'s queue. Rather than guess, the shared handler skips any
+ * layer whose URL has a programmatic add running: those callers know both the
+ * layer id and their own context, and register the adapter themselves once the
+ * add resolves. Only the Zarr panel's own adds (which have no context to get
+ * wrong) are registered by the handler.
+ */
+const programmaticZarrAdds = new Map<string, number>();
+
+/** Mark a programmatic add in flight, returning a disposer for its `finally`. */
+function beginProgrammaticZarrAdd(url: string): () => void {
+  programmaticZarrAdds.set(url, (programmaticZarrAdds.get(url) ?? 0) + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const remaining = (programmaticZarrAdds.get(url) ?? 1) - 1;
+    if (remaining > 0) programmaticZarrAdds.set(url, remaining);
+    else programmaticZarrAdds.delete(url);
+  };
+}
+
+// How long to wait for `@carbonplan/zarr-layer` to finish loading its coordinate
+// arrays. `addLayer` resolves once the store's metadata is read, but the
+// dimension values land a moment later, so the read polls rather than assuming.
+const ZARR_DIMENSION_POLL_MS = 250;
+const ZARR_DIMENSION_ATTEMPTS = 24;
+
+/**
+ * The raw non-spatial coordinate values `@carbonplan/zarr-layer` loaded for a
+ * layer.
+ *
+ * `dimensionValues` is a real instance property but is **not** part of the
+ * package's public type surface (it is declared `private`), so this reads it
+ * through a structural cast. If the renderer ever renames it, Zarr layers
+ * quietly stop offering a Time Slider binding rather than failing the build;
+ * `tests/zarr-time-axis.test.ts` asserts the property still exists so the drift
+ * shows up in CI instead.
+ *
+ * @param layerId - A live Zarr layer id.
+ * @returns The coordinate values, or null when the layer went away or loaded none.
+ */
+async function readZarrDimensionValues(
+  layerId: string,
+): Promise<Record<string, (number | string)[]> | null> {
+  for (let attempt = 0; attempt < ZARR_DIMENSION_ATTEMPTS; attempt += 1) {
+    const instance = zarrControl?.getLayersMap().get(layerId) as
+      | { dimensionValues?: Record<string, (number | string)[]> }
+      | undefined;
+    if (!instance) return null;
+    const values = instance.dimensionValues;
+    if (values && Object.keys(values).length > 0) return values;
+    await new Promise((resolve) => setTimeout(resolve, ZARR_DIMENSION_POLL_MS));
+  }
+  return null;
+}
+
+/**
+ * A reader for the CF `units`/`calendar` of a local store's coordinate, or null
+ * when this layer is not folder-backed.
+ *
+ * Coordinates sit beside the data variables, which in a multiscale pyramid is
+ * one level down, so both places are tried.
+ *
+ * @param url - The identifier the layer was added under.
+ * @returns A reader over that folder's coordinate attributes, or null.
+ */
+function localZarrTimeAttributesReader(url: string): ZarrTimeAttributesReader | null {
+  const reader = zarrLocalStoreReaders.get(url);
+  if (!reader) return null;
+  const read = createDirectoryZarrMetadataReader(reader);
+  return async (dimension: string) => {
+    for (const prefix of ["", "0/"]) {
+      for (const key of [`${prefix}${dimension}/.zattrs`, `${prefix}${dimension}/zarr.json`]) {
+        const document = await read(key);
+        const attributes = key.endsWith("zarr.json")
+          ? (document as { attributes?: unknown } | undefined)?.attributes
+          : document;
+        if (!attributes || typeof attributes !== "object") continue;
+        const record = attributes as Record<string, unknown>;
+        const units = typeof record.units === "string" ? record.units : undefined;
+        const calendar = typeof record.calendar === "string" ? record.calendar : undefined;
+        if (units !== undefined || calendar !== undefined) return { units, calendar };
+      }
+    }
+    return null;
+  };
+}
+
+/** Read a coordinate's `units`/`calendar` out of an inline kerchunk `.zattrs`. */
+function zarrTimeAttributesFromRefs(
+  refs: KerchunkRefs | undefined,
+  dimension: string,
+): { units?: string; calendar?: string } | null {
+  const entry = refs?.[`${dimension}/.zattrs`];
+  if (typeof entry !== "string") return null;
+  try {
+    const parsed = JSON.parse(entry) as Record<string, unknown>;
+    const units = typeof parsed.units === "string" ? parsed.units : undefined;
+    const calendar = typeof parsed.calendar === "string" ? parsed.calendar : undefined;
+    return units === undefined && calendar === undefined ? null : { units, calendar };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve a freshly added Zarr layer's time axis and, when it has one, register
+ * the temporal adapter that lets the Time Slider step it via
+ * {@link setZarrLayerSelector}.
+ *
+ * The caller supplies its own {@link ZarrTemporalContext}: the `layeradd` event
+ * carries no correlation token, so context can only be attributed reliably by
+ * the code that started the add.
+ *
+ * @param layerId - The new layer's id.
+ * @param url - The store URL (or kerchunk manifest URL).
+ * @param context - The add's headers, references, or attribute reader, when the
+ *   caller has them.
+ */
+function registerZarrTemporalAdapter(
+  layerId: string,
+  url: string | undefined,
+  context: ZarrTemporalContext = {},
+): void {
+  const { headers, refs } = context;
+  // A folder the panel opened is not something the caller could have passed
+  // context for, so fall back to the reader filed under this layer's own url.
+  const readAttributes =
+    context.readAttributes ?? localZarrTimeAttributesReader(url ?? "") ?? undefined;
+  void (async () => {
+    const dimensionValues = await readZarrDimensionValues(layerId);
+    if (!dimensionValues) return;
+    const dimension = pickTimeDimension(dimensionValues) ?? "time";
+    // Either source of attributes replaces the HTTP metadata walk, which for
+    // these layers would only produce a run of failed requests.
+    const attributes = refs
+      ? zarrTimeAttributesFromRefs(refs, dimension)
+      : readAttributes
+        ? await readAttributes(dimension).catch(() => null)
+        : undefined;
+    const axis = await resolveZarrTimeAxis(url ?? "", dimensionValues, {
+      ...(headers ? { headers } : {}),
+      ...(attributes !== undefined ? { attributes } : {}),
+    });
+    if (!axis) return;
+    // The layer may have been removed while the axis was being resolved.
+    if (!zarrControl?.getLayersMap().has(layerId)) return;
+    registerTemporalLayer(layerId, {
+      dimension: axis.dimension,
+      getTimeValues: () => axis.values,
+      setTime: async (date) => {
+        const index = nearestTimeIndex(axis.values, date.getTime());
+        if (index < 0) return;
+        await setZarrLayerSelector(layerId, { [axis.dimension]: index });
+      },
+    });
+  })();
+}
+
+// The control takes an explicit list of hex colors; the public option also
+// accepts a named GeoLibre ramp so a JS plugin need not spell out the stops.
+// `interpolateRampColors` falls back to the first built-in ramp for an unknown
+// name, mirroring how addCogLayer treats an unrecognized colormap.
+function resolveZarrColormap(colormap: string | string[] | undefined): string[] | undefined {
+  if (colormap === undefined) return undefined;
+  if (Array.isArray(colormap)) return colormap.length > 0 ? colormap : undefined;
+  const name = colormap.trim();
+  if (!name) return undefined;
+  return interpolateRampColors(name, ZARR_COLORMAP_STOPS);
 }
 
 export function openLidarLayerPanel(app: GeoLibreAppAPI): void {
@@ -2415,6 +3169,7 @@ async function openStandaloneViewStateControl(app: GeoLibreAppAPI): Promise<bool
 async function openStandaloneStacSearchControl(app: GeoLibreAppAPI): Promise<boolean> {
   const { StacSearchControl: StacSearchControlClass } = await getComponentsConstructors();
 
+  stacSearchApp = app;
   stacSearchControl ??= createStacSearchControl(StacSearchControlClass);
 
   if (!stacSearchControlMounted) {
@@ -3121,7 +3876,13 @@ function createSplattingControl(
 }
 
 function createZarrControl(ZarrLayerControlClass: ZarrLayerControlConstructor): ZarrLayerControl {
-  const control = new ZarrLayerControlClass(ZARR_OPTIONS);
+  const control = new ZarrLayerControlClass({
+    ...ZARR_OPTIONS,
+    // Only when the host registered one: without the option the panel shows no
+    // Browse folder button, which is what a browser with no directory picker
+    // should see.
+    ...(zarrLocalStoreProvider ? { localStoreProvider: zarrLocalStoreProvider } : {}),
+  });
   control.on("collapse", () => control.hide());
   control.on("layeradd", createZarrLayerAddHandler());
   control.on("layerremove", (event) => {
@@ -3133,42 +3894,51 @@ function createZarrControl(ZarrLayerControlClass: ZarrLayerControlConstructor): 
         ? layer.id === event.layerId
         : !activeLayerIds.has(layer.id);
       if (shouldRemove) {
+        unregisterTemporalLayer(layer.id);
         store.removeLayer(layer.id);
       }
     }
+    pruneZarrLocalStoreReaders();
   });
   zarrStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
 
+    // Visibility and opacity are applied by the paint bridge (see
+    // registerZarrPaintBridge), which layer-sync drives like every other layer
+    // property. Only removal is handled here, because a layer dropped from the
+    // store no longer reaches sync at all.
     for (const layer of previous.layers) {
       if (!isZarrControlLayer(layer)) continue;
-
-      const currentLayer = currentById.get(layer.id);
-      if (!currentLayer) {
-        zarrControl?.removeLayer(layer.id);
-        continue;
-      }
-
-      if (!isZarrControlLayer(currentLayer)) continue;
-
-      if (currentLayer.visible !== layer.visible) {
-        zarrControl?.setLayerVisibility(
-          currentLayer.id,
-          currentLayer.visible,
-          currentLayer.opacity,
-        );
-      }
-
-      if (currentLayer.opacity !== layer.opacity) {
-        if (currentLayer.visible) {
-          zarrControl?.setLayerOpacity(currentLayer.id, currentLayer.opacity);
-        } else {
-          zarrControl?.setLayerVisibility(currentLayer.id, false, currentLayer.opacity);
-        }
-      }
+      if (currentById.has(layer.id)) continue;
+      unregisterTemporalLayer(layer.id);
+      clearExternalNativePaintBridge(layer.id);
+      zarrControl?.removeLayer(layer.id);
     }
+    pruneZarrLocalStoreReaders();
   });
   return control;
+}
+
+// Route the panels' opacity/visibility to the Zarr control's setters. The
+// control expresses "hidden" as opacity 0 (a custom layer has no paint), so a
+// hidden layer's stored opacity has to travel with the visibility call or
+// re-showing it would restore full opacity instead of the user's value.
+function registerZarrPaintBridge(layerId: string): void {
+  setExternalNativePaintBridge(layerId, {
+    setOpacity: (opacity) => {
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+      if (layer && !layer.visible) {
+        zarrControl?.setLayerVisibility(layerId, false, opacity);
+        return;
+      }
+      zarrControl?.setLayerOpacity(layerId, opacity);
+    },
+    setVisibility: (visible) => {
+      const opacity =
+        useAppStore.getState().layers.find((item) => item.id === layerId)?.opacity ?? 1;
+      zarrControl?.setLayerVisibility(layerId, visible, opacity);
+    },
+  });
 }
 
 function createPMTilesControl(
@@ -3596,6 +4366,10 @@ function teardownStacSearchControl(app: GeoLibreAppAPI): void {
   }
   stacSearchControl = null;
   stacSearchControlMounted = false;
+  stacSearchApp = null;
+  // Its deck layers live in the shared overlay, which outlives this control.
+  stacSearchBeforeIds.clear();
+  setSharedDeckLayers("stac-search", []);
 }
 
 function hideSearchControl(): void {
@@ -3938,6 +4712,19 @@ function createZarrLayerAddHandler(): ZarrLayerEventHandler {
 
     const store = useAppStore.getState();
     const layer = createZarrStoreLayer(event.layerId, layerInfo);
+    // The renderer owns the pixels, so the panel's opacity/visibility reach it
+    // through the control's setters rather than MapLibre paint properties.
+    registerZarrPaintBridge(layer.id);
+    // A cube with a time axis becomes drivable by the Time Slider. Resolving the
+    // axis needs the renderer's async metadata load plus a store lookup, so it
+    // runs on its own and registers the adapter whenever it lands.
+    //
+    // Only for the Zarr panel's own adds: a programmatic add knows both its
+    // layer id and its own headers/references, which this event cannot be
+    // attributed to (see `programmaticZarrAdds`), so it registers its own.
+    if (!programmaticZarrAdds.has(layerInfo.url ?? "")) {
+      registerZarrTemporalAdapter(layer.id, layerInfo.url);
+    }
     if (store.layers.some((item) => item.id === layer.id)) {
       store.updateLayer(layer.id, {
         metadata: layer.metadata,
@@ -4622,6 +5409,13 @@ function createZarrStoreLayer(id: string, layerInfo: ZarrLayerInfo): GeoLibreLay
       type: "raster",
       url: layerInfo.url,
       variable: layerInfo.variable,
+      // The spatial reference the renderer actually used, whether it came from
+      // the panel's CRS fields, an addZarrLayer option, or the store's own
+      // metadata. Recorded so the Metadata panel and the project file show how a
+      // projected store was placed.
+      ...(layerInfo.crs ? { crs: layerInfo.crs } : {}),
+      ...(layerInfo.proj4 ? { proj4: layerInfo.proj4 } : {}),
+      ...(layerInfo.bounds ? { bounds: layerInfo.bounds } : {}),
     },
     visible: true,
     opacity: layerInfo.opacity,
@@ -4635,6 +5429,14 @@ function createZarrStoreLayer(id: string, layerInfo: ZarrLayerInfo): GeoLibreLay
       externalNativeLayer: true,
       identifiable: false,
       nativeLayerIds: [layerInfo.id],
+      // A Zarr layer is a MapLibre custom (WebGL) layer with no paint
+      // properties: brightness/saturation/contrast/hue would be inert sliders.
+      // The Style panel therefore shows the generic controls only, and opacity
+      // reaches the renderer through the paint bridge registered alongside this
+      // record (opengeos/GeoLibre#1445).
+      paintMode: "plugin",
+      ...(layerInfo.crs ? { crs: layerInfo.crs } : {}),
+      ...(layerInfo.proj4 ? { proj4: layerInfo.proj4 } : {}),
       selector: layerInfo.selector,
       sourceId: layerInfo.id,
       sourceKind: "zarr-url",
@@ -4687,6 +5489,11 @@ function createStacSearchStoreLayer(
     metadata: {
       collectionId,
       customLayerType: "raster",
+      // The COG variant renders as a deck.gl layer with no MapLibre style layer
+      // to move, so layer-sync must hand its computed `beforeId` to the control
+      // instead of calling `moveLayer` (#1718). The raster-tile variant is a
+      // real style layer and reorders normally.
+      ...(rasterLayerInfo ? {} : { externalDeckLayer: true }),
       externalNativeLayer: true,
       identifiable: false,
       nativeLayerIds,
@@ -4746,7 +5553,7 @@ function createLidarStoreLayer(pointCloud: PointCloudInfo): GeoLibreLayer {
       identifiable: false,
       pointCount: pointCloud.pointCount,
       sourceId: pointCloud.id,
-      sourceKind: "lidar-url",
+      sourceKind: LIDAR_SOURCE_KIND,
       wkt: pointCloud.wkt,
     },
     sourcePath: pointCloud.source,
@@ -4835,7 +5642,7 @@ function isStacSearchControlLayer(layer: GeoLibreLayer): boolean {
 function isLidarControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "lidar" &&
-    layer.metadata.sourceKind === "lidar-url" &&
+    layer.metadata.sourceKind === LIDAR_SOURCE_KIND &&
     layer.metadata.externalNativeLayer === true
   );
 }
@@ -4864,6 +5671,10 @@ function patchStacSearchRemoveLayer(control: StacSearchControl): void {
   mutableControl._removeLayer = (id?: string) => {
     const layerIds = id ? [id] : Array.from(mutableControl._cogLayers?.keys() ?? []);
     removeLayer(id);
+    // Upstream repaints its own overlay, which GeoLibre bypasses, so drop the
+    // removed layers from the shared interleaved overlay here (#1718).
+    for (const layerId of layerIds) stacSearchBeforeIds.delete(layerId);
+    renderStacSearchDeckLayers();
     const store = useAppStore.getState();
     for (const layerId of layerIds) {
       const layer = store.layers.find((item) => item.id === layerId);
@@ -4895,7 +5706,10 @@ function patchStacSearchCogLayer(control: StacSearchControl): void {
 
   mutableControl._addCogLayer = async (url: string, item: StacSearchItem, assetKey: string) => {
     ensureMercatorProjection(mutableControl._map);
-    await mutableControl._ensureOverlay?.();
+    // Deliberately NOT `_ensureOverlay()`: that builds the control's own
+    // non-interleaved overlay, which can never be ordered against the style.
+    // The shared interleaved overlay renders these layers instead (#1718).
+    if (stacSearchApp) await ensureSharedDeckOverlay(stacSearchApp);
     const selectedAsset = getStacSearchSelectedAsset(mutableControl, item, {
       key: assetKey,
       url,
@@ -4922,9 +5736,7 @@ function patchStacSearchCogLayer(control: StacSearchControl): void {
       ...renderProps,
     });
     mutableControl._cogLayers?.set(id, layer as unknown as Layer);
-    mutableControl._deckOverlay?.setProps({
-      layers: Array.from(mutableControl._cogLayers?.values() ?? []) as Layer[],
-    });
+    renderStacSearchDeckLayers();
     if (mutableControl._state) {
       mutableControl._state.hasLayer = true;
       mutableControl._state.layerCount = mutableControl._cogLayers?.size ?? 0;
@@ -5275,15 +6087,57 @@ function setStacSearchControlLayerState(id: string, visible: boolean, opacity: n
     id,
     layer.clone({ opacity: appliedOpacity }) as StacSearchRenderableLayer,
   );
-  mutableControl?._deckOverlay?.setProps({
-    layers: getStacSearchDeckLayers(mutableControl),
-  });
+  renderStacSearchDeckLayers();
 }
 
 function getStacSearchDeckLayers(control: MutableStacSearchControl): Layer[] {
   return Array.from(control._cogLayers?.values() ?? []).filter(
     (layer): layer is Layer => !getStacSearchRasterLayerInfo(layer),
   );
+}
+
+/**
+ * Pushes the STAC Search control's deck.gl COG layers into GeoLibre's shared
+ * interleaved overlay, each carrying the `beforeId` derived from the store's
+ * layer order.
+ *
+ * Upstream renders them through the control's own non-interleaved
+ * `MapboxOverlay`, which owns a separate canvas stacked above the entire
+ * MapLibre style — so STAC imagery covered every vector layer no matter where
+ * the user placed it in the Layers panel (opengeos/GeoLibre#1718). Interleaved
+ * layers are drawn inside the style instead, at the depth their `beforeId`
+ * selects, which is what makes panel order mean anything for them.
+ */
+function renderStacSearchDeckLayers(): void {
+  const control = stacSearchControl as unknown as MutableStacSearchControl | null;
+  if (!control) return;
+  const layers = getStacSearchDeckLayers(control).map((layer) => {
+    const beforeId = stacSearchBeforeIds.get(layer.id);
+    if ((layer.props as { beforeId?: string }).beforeId === beforeId) return layer;
+    return layer.clone({ beforeId } as unknown as Partial<Layer["props"]>);
+  });
+  setSharedDeckLayers("stac-search", layers);
+}
+
+/**
+ * Applies a store-derived draw order to a STAC Search deck.gl COG layer.
+ *
+ * Registered by the app shell as part of the external deck-layer order handler:
+ * such a layer is not a real MapLibre style layer, so `moveLayer` cannot reorder
+ * it and layer-sync forwards the computed `beforeId` here instead.
+ *
+ * @param layerId - The store layer id, which doubles as the deck layer id.
+ * @param beforeId - The style layer to draw beneath, or undefined for the top.
+ * @returns True when the id belongs to the STAC Search control.
+ */
+export function applyStacSearchLayerOrder(layerId: string, beforeId: string | undefined): boolean {
+  const control = stacSearchControl as unknown as MutableStacSearchControl | null;
+  const layer = control?._cogLayers?.get(layerId);
+  if (!layer || getStacSearchRasterLayerInfo(layer)) return false;
+  if (stacSearchBeforeIds.get(layerId) === beforeId) return true;
+  stacSearchBeforeIds.set(layerId, beforeId);
+  renderStacSearchDeckLayers();
+  return true;
 }
 
 function getStacSearchRasterLayerInfo(

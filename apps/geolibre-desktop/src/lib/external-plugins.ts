@@ -19,8 +19,10 @@ import {
 } from "./plugin-archive-unpack";
 import {
   isManagedUrlSource,
+  managedUrlSourcesForIds,
   pluginAssetUrlFromSource,
   resolvePluginAssetUrl,
+  withPluginAssetCacheToken,
 } from "./plugin-asset-url";
 import {
   computePluginBundleHash,
@@ -183,6 +185,25 @@ export function isExternalPluginId(pluginId: string): boolean {
   return externallyLoadedPluginSources.has(pluginId);
 }
 
+/**
+ * The manifest URLs backing the given loaded plugin ids, in the order the ids
+ * are supplied and de-duplicated.
+ *
+ * Only managed URL sources qualify. A filesystem source is a path, and a web
+ * archive source is a synthetic id (see `webPluginSource`) - neither is
+ * something a recipient could fetch, so recording either in a project would
+ * only produce a trust prompt that can never be satisfied. Built-in plugins are
+ * not tracked in the source map at all and contribute nothing.
+ *
+ * Used when serializing a project to record just the plugins that project
+ * actually needs, rather than everything the author happens to have installed.
+ */
+export function pluginManifestUrlsForIds(pluginIds: Iterable<string>): string[] {
+  return managedUrlSourcesForIds(pluginIds, (pluginId) =>
+    externallyLoadedPluginSources.get(pluginId),
+  );
+}
+
 async function loadFilesystemPluginBundles(
   additionalPluginDirectories: string[],
 ): Promise<ExternalPluginBundleLoadResult> {
@@ -272,8 +293,14 @@ async function loadPluginUrlBundle(
     throw new Error("Plugin manifest is invalid.");
   }
 
-  const entryUrl = resolvePluginAssetUrl(manifestUrl, manifest.entry);
-  const styleUrl = manifest.style ? resolvePluginAssetUrl(manifestUrl, manifest.style) : null;
+  const cacheToken = pluginAssetCacheToken(manifestResponse, manifest);
+  const entryUrl = withPluginAssetCacheToken(
+    resolvePluginAssetUrl(manifestUrl, manifest.entry),
+    cacheToken,
+  );
+  const styleUrl = manifest.style
+    ? withPluginAssetCacheToken(resolvePluginAssetUrl(manifestUrl, manifest.style), cacheToken)
+    : null;
   const [entrySource, styleSource] = await Promise.all([
     fetchPluginText(entryUrl, "plugin entry", signal),
     styleUrl ? fetchPluginText(styleUrl, "plugin style", signal) : Promise.resolve(null),
@@ -286,6 +313,21 @@ async function loadPluginUrlBundle(
     entrySource,
     styleSource,
   };
+}
+
+function pluginAssetCacheToken(
+  response: Response,
+  manifest: GeoLibreExternalPluginManifest,
+): string {
+  return [
+    manifest.id,
+    manifest.version,
+    response.headers.get("etag"),
+    response.headers.get("last-modified"),
+  ]
+    .map((value) => value?.trim())
+    .filter(Boolean)
+    .join("|");
 }
 
 async function fetchPluginText(url: string, label: string, signal?: AbortSignal): Promise<string> {

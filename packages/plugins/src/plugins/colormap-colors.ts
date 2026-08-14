@@ -1,4 +1,4 @@
-import { VECTOR_COLOR_RAMPS, getVectorColorRamp } from "@geolibre/core";
+import { VECTOR_COLOR_RAMPS, getVectorColorRamp, rgbToHex } from "@geolibre/core";
 import { sampleColormapStops } from "maplibre-gl-raster";
 
 // Anchor stops sampled from the renderer's colormap sprite -- enough to
@@ -20,6 +20,11 @@ function isBuiltInRamp(name: string): boolean {
  * and the Style-panel preview. Built-in GeoLibre ramps return their exact JS
  * colors synchronously; any other (sprite) colormap returns its cached sampled
  * colors, or null until {@link warmColormapColors} has sampled it.
+ *
+ * Always `#rrggbb`, whichever kind of ramp it came from. The renderer's sprite
+ * sampler hands back `rgb(r, g, b)` strings, which read fine as CSS but parse to
+ * black in every hex-based consumer (the custom-ramp editor, the NetCDF
+ * colormapper); normalizing here keeps one contract for all of them.
  *
  * @param name - The colormap name (a `VECTOR_COLOR_RAMPS` value or sprite key).
  * @returns The anchor colors, or null when a sprite colormap is not yet sampled.
@@ -49,8 +54,9 @@ export function warmColormapColors(name: string): Promise<readonly string[] | nu
         // re-entrant call in the same microtask can't miss both.
         inflight.delete(name);
         if (stops.length >= 2) {
-          anchorCache.set(name, stops);
-          return stops as readonly string[];
+          const hex = stops.map(normalizeRampColor);
+          anchorCache.set(name, hex);
+          return hex as readonly string[];
         }
         return null;
       })
@@ -61,4 +67,30 @@ export function warmColormapColors(name: string): Promise<readonly string[] | nu
     inflight.set(name, pending);
   }
   return pending;
+}
+
+/**
+ * Normalize one color stop to `#rrggbb`. The renderer's sprite sampler emits
+ * `rgb(r, g, b)`; anything already hex (or unrecognized) is passed through.
+ *
+ * Exported so a caller holding colors from somewhere else (a saved project, a
+ * plugin) can put them on the same footing before hex parsing.
+ *
+ * @param color - A sampled color stop.
+ * @returns The color as `#rrggbb` when it could be read, else the input.
+ */
+export function normalizeRampColor(color: string): string {
+  const match = /^rgba?\(\s*([-+]?[\d.]+)\s*,\s*([-+]?[\d.]+)\s*,\s*([-+]?[\d.]+)/i.exec(color);
+  if (!match) return color;
+  // `[\d.]+` also matches junk like "." or "1..2", which `Number` reads as NaN
+  // and `rgbToHex` would emit as "#NaN00…" — worse than leaving it alone, since
+  // that then parses to black downstream.
+  const channels = match.slice(1, 4).map(Number);
+  if (!channels.every((value) => Number.isFinite(value))) return color;
+  const channel = (value: number): number => Math.min(255, Math.max(0, Math.round(value)));
+  return rgbToHex({
+    r: channel(channels[0]),
+    g: channel(channels[1]),
+    b: channel(channels[2]),
+  });
 }

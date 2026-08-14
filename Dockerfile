@@ -2,7 +2,22 @@
 # arch-independent static files, so emulating arm64 with QEMU here only
 # slows down multi-arch builds without changing the result.
 # ($BUILDPLATFORM is a Docker-provided automatic ARG, set by BuildKit.)
-FROM --platform=$BUILDPLATFORM node:22-alpine AS build
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS build
+
+# Debian rather than Alpine because this stage now also runs the JupyterLite
+# build, whose Python dependency tree (jupyterlab, notebook, jupyterlite-core)
+# resolves to prebuilt manylinux wheels here instead of compiling against musl.
+# Only apps/geolibre-desktop/dist is copied into the runtime image, so the larger
+# builder costs nothing in the shipped image.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 python3-venv \
+  && rm -rf /var/lib/apt/lists/*
+
+# A venv keeps pip off the Debian-managed interpreter, which refuses installs
+# under PEP 668.
+ENV VIRTUAL_ENV=/opt/jupyterlite
+RUN python3 -m venv "$VIRTUAL_ENV"
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 WORKDIR /app
 
@@ -12,12 +27,19 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/geolibre-desktop/package.json apps/geolibre-desktop/package.json
 COPY packages/core/package.json packages/core/package.json
+COPY packages/collab-core/package.json packages/collab-core/package.json
 COPY packages/map/package.json packages/map/package.json
 COPY packages/plugins/package.json packages/plugins/package.json
 COPY packages/processing/package.json packages/processing/package.json
 COPY packages/ui/package.json packages/ui/package.json
+COPY scripts/patch-maplibre-read-buffer.mjs scripts/patch-maplibre-read-buffer.mjs
 
 RUN npm ci
+
+# Its own layer, keyed only on the requirements file, so touching app source does
+# not reinstall the Python tree.
+COPY apps/geolibre-desktop/jupyterlite/requirements.txt apps/geolibre-desktop/jupyterlite/requirements.txt
+RUN pip install --no-cache-dir -r apps/geolibre-desktop/jupyterlite/requirements.txt
 
 COPY . .
 
@@ -27,12 +49,48 @@ ARG VITE_MAPILLARY_ACCESS_TOKEN=
 # Set to 1 (or true) to disable the first-launch welcome wizard for the whole
 # deployment; visitors land straight on the map.
 ARG VITE_WELCOME_DISABLED=
+# Comma-separated origins allowed to drive a framed app over the embed
+# postMessage API. Usually set at RUN time instead (-e GEOLIBRE_EMBED_ORIGINS=…),
+# which the entrypoint writes into the runtime config without a rebuild.
+ARG VITE_GEOLIBRE_EMBED_ORIGINS=
+# Self-hosted project sharing server (https://…, or "off" to remove Share and the
+# Project Gallery). Unset uses the public hosted service. Like the embed origins,
+# normally set at RUN time instead (-e GEOLIBRE_SHARE_URL=…) so a prebuilt image
+# can be repointed without a rebuild.
+ARG VITE_GEOLIBRE_SHARE_URL=
+# Self-hosted collaboration relay (wss://…). Unset leaves collaboration dark.
+# Also settable at RUN time (-e GEOLIBRE_COLLAB_URL=…).
+ARG VITE_GEOLIBRE_COLLAB_URL=
+# Set to 1 to strip every external CDN reference (unpkg.com, cdn.jsdelivr.net,
+# …) from the build output, for deployments that may not load third-party
+# hosts. Features that depend on CDN-hosted assets are disabled or degraded —
+# see docs/self-hosting.md. Build-time only: the flag is baked into the bundle,
+# so it cannot be flipped at RUN time the way the embed/share/collab URLs can.
+ARG GEOLIBRE_NO_EXTERNAL_CDN=
 ENV GEOLIBRE_APP_BASE=${GEOLIBRE_APP_BASE}
 ENV VITE_GEE_OAUTH_CLIENT_ID=${VITE_GEE_OAUTH_CLIENT_ID}
 ENV VITE_MAPILLARY_ACCESS_TOKEN=${VITE_MAPILLARY_ACCESS_TOKEN}
 ENV VITE_WELCOME_DISABLED=${VITE_WELCOME_DISABLED}
+ENV VITE_GEOLIBRE_EMBED_ORIGINS=${VITE_GEOLIBRE_EMBED_ORIGINS}
+ENV VITE_GEOLIBRE_SHARE_URL=${VITE_GEOLIBRE_SHARE_URL}
+ENV VITE_GEOLIBRE_COLLAB_URL=${VITE_GEOLIBRE_COLLAB_URL}
+ENV GEOLIBRE_NO_EXTERNAL_CDN=${GEOLIBRE_NO_EXTERNAL_CDN}
+
+# The `prebuild` hook of apps/geolibre-desktop runs scripts/build-jupyterlite.mjs,
+# which generates the site the Notebook panel embeds. That script is best-effort
+# by default: without the `jupyter lite` CLI it warns and exits 0, and the build
+# still succeeds. nginx then answers the panel's iframe URL with index.html
+# through its SPA fallback, so the panel renders a second copy of GeoLibre
+# instead of a notebook, which is how this image shipped for so long
+# (GeoLibre#1851). Make the absence fatal here rather than silent.
+ENV GEOLIBRE_JUPYTERLITE_REQUIRED=1
 
 RUN npm run build
+
+# The site is generated, not committed (public/jupyterlite/ is git-ignored), so
+# assert it reached the output rather than trusting the step above.
+RUN test -f apps/geolibre-desktop/dist/jupyterlite/lab/index.html \
+  || (echo "ERROR: dist/jupyterlite is missing; the Notebook panel would render a second copy of the app." && exit 1)
 
 # Runtime image bundles the static web app (served by nginx) and the optional
 # Python conversion/Whitebox sidecar (uvicorn), reverse-proxied at /sidecar.
@@ -78,6 +136,12 @@ ENV GEOLIBRE_CONVERSION_PYTHON=/usr/local/bin/python \
     GEOLIBRE_CONVERSION_ROOTS=/data
 RUN mkdir -p /data
 
+# For the same reason, the sidecar's PostGIS endpoints refuse every destination
+# until GEOLIBRE_POSTGIS_HOSTS names the allowed databases (comma-separated
+# `host` or `host:port`) — otherwise a same-origin caller could aim them at
+# hosts only this container can reach. Deliberately left unset: set it at
+# `docker run` time to enable PostGIS, or `*` to accept any connection string.
+
 # WARNING: docker/nginx.conf's CSP allows http://localhost:* / http://127.0.0.1:*
 # (and ws:// equivalents) in connect-src for local-dev data sources (PMTiles/COGs
 # from a dev server on another port). This image is intended for local/single-user
@@ -92,7 +156,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
   # Default auth snippet (disabled). entrypoint.sh rewrites it at start based
   # on GEOLIBRE_AUTH_USER/GEOLIBRE_AUTH_PASSWORD; baking a valid default keeps
   # `nginx -t` and non-entrypoint invocations working.
-  && printf '# Basic Auth disabled (GEOLIBRE_AUTH_USER/GEOLIBRE_AUTH_PASSWORD not set).\n' > /etc/nginx/geolibre-auth.conf
+  && printf '# Basic Auth disabled (GEOLIBRE_AUTH_USER/GEOLIBRE_AUTH_PASSWORD not set).\n' > /etc/nginx/geolibre-auth.conf \
+  && printf '# AI proxy disabled (GEOLIBRE_AI_URL not set).\n' > /etc/nginx/geolibre-ai-proxy.conf
 COPY --from=build /app/apps/geolibre-desktop/dist /usr/share/nginx/html
 
 EXPOSE 80

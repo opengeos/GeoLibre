@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "../packages/core/src/index";
 import { legendSwatchesForLayer } from "../apps/geolibre-desktop/src/lib/print-legend";
-import { autoLegendItems, layerSwatchShape } from "../apps/geolibre-desktop/src/lib/layer-swatch";
+import { layerSwatchShape } from "../apps/geolibre-desktop/src/lib/layer-swatch";
 
 function layer(over: Partial<GeoLibreLayer>): GeoLibreLayer {
   return {
@@ -69,43 +69,5 @@ describe("layerSwatchShape", () => {
     assert.notEqual(layerSwatchShape(layer({ type: "3d-tiles", metadata: {} })), "raster");
     assert.notEqual(layerSwatchShape(layer({ type: "lidar", metadata: {} })), "raster");
     assert.notEqual(layerSwatchShape(layer({ type: "video", metadata: {} })), "raster");
-  });
-});
-
-describe("autoLegendItems", () => {
-  it("excludes hidden layers and lists visible ones top-first", () => {
-    const layers = [
-      layer({ id: "a", name: "A", visible: true, metadata: { geometryType: "point" } }),
-      layer({ id: "b", name: "B", visible: false }),
-      layer({ id: "c", name: "C", visible: true, metadata: { geometryType: "line" } }),
-    ];
-    const items = autoLegendItems(layers);
-    // Store is bottom-first; legend is top-first → C then A; B hidden.
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["C", "A"],
-    );
-    assert.equal(items[0].shape, "line");
-    assert.equal(items[1].shape, "circle");
-  });
-
-  it("expands a categorized layer into a name row plus one row per class", () => {
-    const styled = layer({
-      id: "cat",
-      name: "Era",
-      metadata: { geometryType: "polygon" },
-      style: {
-        ...DEFAULT_LAYER_STYLE,
-        vectorStyleMode: "categorized",
-        vectorStyleStops: [
-          { value: "old", color: "#8c2d04" },
-          { value: "new", color: "#08306b" },
-        ],
-      },
-    });
-    const items = autoLegendItems([styled]);
-    assert.equal(items[0].label, "Era"); // name row
-    assert.ok(items.some((i) => i.label === "old" && i.color === "#8c2d04"));
-    assert.ok(items.some((i) => i.label === "new" && i.color === "#08306b"));
   });
 });

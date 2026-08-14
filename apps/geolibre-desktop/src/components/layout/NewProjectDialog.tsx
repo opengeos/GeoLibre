@@ -1,10 +1,12 @@
 import {
   BLANK_BASEMAP,
   createDefaultMapView,
+  detachProjectCopy,
   OPENFREEMAP_BASEMAPS,
   PLANETARY_BASEMAP_GROUPS,
   PLANETARY_BASEMAPS,
   PROTOMAPS_BASEMAPS,
+  REGIONAL_BASEMAPS,
   useAppStore,
   type MapViewState,
 } from "@geolibre/core";
@@ -16,7 +18,9 @@ import {
 } from "../../lib/basemap-presets";
 import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/planetary-sections";
 import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
+import { clearProjectSnapshots } from "../../lib/project-history-store";
 import { CollapsibleSection } from "../CollapsibleSection";
+import { RegionalBasemapSection } from "../panels/RegionalBasemapSection";
 import {
   Button,
   cn,
@@ -52,6 +56,7 @@ type BasemapChoice =
   | (typeof OPENFREEMAP_BASEMAPS)[number]["id"]
   | (typeof PROTOMAPS_BASEMAPS)[number]["id"]
   | (typeof PLANETARY_BASEMAPS)[number]["id"]
+  | (typeof REGIONAL_BASEMAPS)[number]["id"]
   | typeof CUSTOM_BASEMAP_ID
   | typeof BLANK_BASEMAP_ID;
 
@@ -96,6 +101,9 @@ export function NewProjectDialog({
 }: NewProjectDialogProps) {
   const { t } = useTranslation();
   const newProject = useAppStore((s) => s.newProject);
+  const loadProject = useAppStore((s) => s.loadProject);
+  const templateLibrary = useAppStore((s) => s.templateLibrary);
+  const deleteTemplateEntry = useAppStore((s) => s.deleteTemplateEntry);
   const [selectedBasemapId, setSelectedBasemapId] = useState<BasemapChoice>(DEFAULT_BASEMAP_ID);
   const [projectName, setProjectName] = useState(DEFAULT_PROJECT_NAME);
   const [customUrl, setCustomUrl] = useState("");
@@ -149,6 +157,12 @@ export function NewProjectDialog({
     () => PLANETARY_BASEMAPS.find((basemap) => basemap.id === selectedBasemapId),
     [selectedBasemapId],
   );
+  // Regional basemaps are their own list too, but unlike the planetary ones
+  // they cover Earth, so selecting one leaves the project's ellipsoid alone.
+  const selectedRegional = useMemo(
+    () => REGIONAL_BASEMAPS.find((basemap) => basemap.id === selectedBasemapId),
+    [selectedBasemapId],
+  );
   const isCustomUrlValid = useMemo(() => {
     if (!customStyleUrl) return false;
     try {
@@ -160,7 +174,10 @@ export function NewProjectDialog({
   }, [customStyleUrl]);
   const canCreate = isCustomSelected
     ? isCustomUrlValid
-    : isBlankSelected || Boolean(selectedPreset) || Boolean(selectedPlanetary);
+    : isBlankSelected ||
+      Boolean(selectedPreset) ||
+      Boolean(selectedPlanetary) ||
+      Boolean(selectedRegional);
 
   const resetForm = () => {
     setSelectedBasemapId(DEFAULT_BASEMAP_ID);
@@ -185,7 +202,7 @@ export function NewProjectDialog({
         : customStyleUrl
       : isBlankSelected
         ? BLANK_BASEMAP
-        : (selectedPreset ?? selectedPlanetary)?.styleUrl;
+        : (selectedPreset ?? selectedPlanetary ?? selectedRegional)?.styleUrl;
     if (basemapStyleUrl == null) return;
 
     newProject({
@@ -196,6 +213,9 @@ export function NewProjectDialog({
       ellipsoidId: selectedPlanetary?.ellipsoidId,
       mapView: selectedBasemapId === LIBERTY_3D_ID ? THREE_D_MAP_VIEW : createDefaultMapView(),
     });
+    void clearProjectSnapshots().catch((error) =>
+      console.error("Could not clear project history for the new project.", error),
+    );
     onProjectCreated?.();
     onOpenChange(false);
     resetForm();
@@ -221,6 +241,24 @@ export function NewProjectDialog({
     } finally {
       setIsSaving(false);
     }
+  };
+  const handleSelectTemplate = (
+    templateProject: Parameters<typeof detachProjectCopy>[0],
+    templateName: string,
+  ) => {
+    const copy = detachProjectCopy(templateProject, { nameSuffix: "" });
+    const finalName =
+      projectName.trim() !== DEFAULT_PROJECT_NAME && projectName.trim() !== ""
+        ? projectName.trim()
+        : templateName;
+    loadProject({ ...copy, name: finalName }, null);
+    void clearProjectSnapshots().catch((error) =>
+      console.error("Could not clear project history for the new project.", error),
+    );
+    useAppStore.setState({ isDirty: true });
+    onProjectCreated?.();
+    onOpenChange(false);
+    resetForm();
   };
 
   return (
@@ -249,24 +287,25 @@ export function NewProjectDialog({
               >
                 {t("newProject.doNotSave")}
               </Button>
-              <Button type="button" disabled={isSaving} onClick={handleSaveThenContinue}>
-                {isSaving ? t("newProject.saving") : t("common.save")}
+              <Button
+                type="button"
+                disabled={isSaving}
+                onClick={() => void handleSaveThenContinue()}
+              >
+                {t("common.save")}
               </Button>
             </div>
           </>
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>New project</DialogTitle>
-              <DialogDescription>
-                {protomapsPresets.length > 0
-                  ? t("newProject.basemapDescription")
-                  : t("newProject.basemapDescriptionNoProtomaps")}
-              </DialogDescription>
+              <DialogTitle>{t("newProject.title")}</DialogTitle>
+              <DialogDescription>{t("newProject.basemapDescription")}</DialogDescription>
             </DialogHeader>
-            <form className="space-y-5" onSubmit={handleCreate}>
+
+            <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="new-project-name">Project name</Label>
+                <Label htmlFor="new-project-name">{t("newProject.projectName")}</Label>
                 <Input
                   id="new-project-name"
                   autoFocus
@@ -275,8 +314,46 @@ export function NewProjectDialog({
                 />
               </div>
 
+              {templateLibrary.length > 0 ? (
+                <div className="space-y-2">
+                  <Label>{t("newProject.savedTemplates")}</Label>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {templateLibrary.map((template) => (
+                      <div
+                        key={template.id}
+                        className="flex items-center justify-between gap-2 rounded-md border p-2.5 text-start transition-colors hover:bg-accent"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleSelectTemplate(template.project, template.name)}
+                          className="flex-1 text-start"
+                        >
+                          <p className="text-sm font-medium">{template.name}</p>
+                          {template.description ? (
+                            <p className="text-xs text-muted-foreground truncate">
+                              {template.description}
+                            </p>
+                          ) : null}
+                        </button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => deleteTemplateEntry(template.id)}
+                          title={t("newProject.deleteTemplate")}
+                          aria-label={t("newProject.deleteTemplate")}
+                        >
+                          &times;
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="space-y-4">
-                <Label>Basemap</Label>
+                <Label>{t("newProject.basemapLabel")}</Label>
 
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">
@@ -313,6 +390,11 @@ export function NewProjectDialog({
                     </div>
                   </div>
                 ) : null}
+
+                <RegionalBasemapSection
+                  selectedId={selectedBasemapId}
+                  onSelect={(basemap) => setSelectedBasemapId(basemap.id)}
+                />
 
                 {PLANETARY_BASEMAP_GROUPS.map((group) => {
                   const heading = t(planetaryBasemapSectionKey(group.id));
@@ -373,7 +455,7 @@ export function NewProjectDialog({
                   field unlocks only when "Custom URL" is selected above, so it
                   can never compete with a highlighted preset button. */}
               <div className="space-y-2">
-                <Label htmlFor="custom-basemap-url">Custom URL</Label>
+                <Label htmlFor="custom-basemap-url">{t("newProject.customUrlButton")}</Label>
                 <Input
                   id="custom-basemap-url"
                   ref={customUrlRef}
@@ -409,10 +491,10 @@ export function NewProjectDialog({
 
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={!canCreate}>
-                  Create
+                  {t("newProject.create")}
                 </Button>
               </div>
             </form>

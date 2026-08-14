@@ -14,6 +14,7 @@ import { GdbSource } from "./add-data/sources/GdbSource";
 import { GeoRssSource } from "./add-data/sources/GeoRssSource";
 import { GpxSource } from "./add-data/sources/GpxSource";
 import { MbtilesSource } from "./add-data/sources/MbtilesSource";
+import { OgcFeaturesSource } from "./add-data/sources/OgcFeaturesSource";
 import { OgcVectorTilesSource } from "./add-data/sources/OgcVectorTilesSource";
 import { PhotosSource } from "./add-data/sources/PhotosSource";
 import { PostgresSource } from "./add-data/sources/PostgresSource";
@@ -64,6 +65,8 @@ function renderSource(
       return <WfsSource />;
     case "wmts":
       return <WmtsSource />;
+    case "ogc-features":
+      return <OgcFeaturesSource />;
     case "ogc-vector-tiles":
       return <OgcVectorTilesSource />;
     case "gpx":

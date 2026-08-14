@@ -1,0 +1,504 @@
+import { useState, useEffect, useRef } from "react";
+import { useAppStore, type ProjectComment, type CommentReply } from "@geolibre/core";
+import type { MapController } from "@geolibre/map";
+import { Button, Input, ScrollArea, cn } from "@geolibre/ui";
+import {
+  MessageSquare,
+  Plus,
+  MessageCircle,
+  Copy,
+  Link2,
+  KeyRound,
+  Radio,
+  User,
+  Pencil,
+  Check,
+} from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
+import { useTranslation } from "react-i18next";
+import { CommentThread } from "./CommentThread";
+import { resolveCommentCoordinates } from "./CommentMapOverlay";
+import type { CollaborationApi } from "../../hooks/useCollaboration";
+
+const LS_NAME_KEY = "geolibre_author_name";
+
+function getStoredName(): string {
+  try {
+    return (typeof localStorage !== "undefined" && localStorage.getItem(LS_NAME_KEY)) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveStoredName(name: string): void {
+  try {
+    if (typeof localStorage !== "undefined") {
+      if (name.trim()) {
+        localStorage.setItem(LS_NAME_KEY, name.trim());
+      } else {
+        localStorage.removeItem(LS_NAME_KEY);
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+interface CommentsPanelProps {
+  mapControllerRef: React.RefObject<MapController | null>;
+  collaboration?: CollaborationApi;
+  onActivateCommentTool?: () => void;
+  isCommentToolActive?: boolean;
+  /** Called when the resolved-pins visibility should change. Receives `true`
+   *  when the "Resolved" or "All" filter is active, `false` for "Open". */
+  onShowResolvedChange?: (showResolved: boolean) => void;
+  /** Comment selected from its map marker. The matching card is revealed,
+   * highlighted, and scrolled into view. */
+  selectedCommentId?: string | null;
+  onClearSelectedComment?: () => void;
+}
+
+export function CommentsPanel({
+  mapControllerRef,
+  collaboration,
+  onActivateCommentTool,
+  isCommentToolActive,
+  onShowResolvedChange,
+  selectedCommentId,
+  onClearSelectedComment,
+}: CommentsPanelProps) {
+  const { t } = useTranslation();
+  const comments = useAppStore((s) => s.comments);
+  const replyToComment = useAppStore((s) => s.replyToComment);
+  const toggleResolveComment = useAppStore((s) => s.toggleResolveComment);
+  const deleteComment = useAppStore((s) => s.deleteComment);
+  const collab = useAppStore((s) => s.collaboration);
+
+  const [filter, setFilter] = useState<"all" | "open" | "resolved">("open");
+  const commentCardRefs = useRef(new Map<string, HTMLDivElement>());
+  const revealedSelectionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedCommentId) {
+      revealedSelectionRef.current = null;
+      return;
+    }
+    if (revealedSelectionRef.current === selectedCommentId) return;
+    const selected = comments.find((comment) => comment.id === selectedCommentId);
+    if (!selected) return;
+    revealedSelectionRef.current = selectedCommentId;
+
+    // A resolved marker can remain visible after the panel was displaced and
+    // remounted with its default Open filter. Reveal whichever filter contains
+    // the selected card before trying to scroll to it.
+    if ((selected.resolved && filter === "open") || (!selected.resolved && filter === "resolved")) {
+      setFilter(selected.resolved ? "resolved" : "open");
+    }
+  }, [comments, filter, selectedCommentId]);
+
+  useEffect(() => {
+    if (!selectedCommentId) return;
+    const frame = requestAnimationFrame(() => {
+      commentCardRefs.current
+        .get(selectedCommentId)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [filter, selectedCommentId]);
+
+  // Notify parent whenever resolved pins should show/hide so the map overlay
+  // stays in sync with the sidebar filter.
+  useEffect(() => {
+    onShowResolvedChange?.(filter !== "open");
+  }, [filter, onShowResolvedChange]);
+
+  const [joinCodeInput, setJoinCodeInput] = useState<string>("");
+  const [copied, setCopied] = useState<boolean>(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // ── Display name ──────────────────────────────────────────────────────────
+  // When a collab session is active the name comes from the session identity.
+  // When offline, the user sets it here once and it persists to localStorage.
+  const [storedName, setStoredName] = useState<string>(getStoredName);
+  const [editingName, setEditingName] = useState<boolean>(false);
+  const [nameInput, setNameInput] = useState<string>("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const selfAuthorName = collab.isActive && collab.selfName ? collab.selfName : storedName || "";
+  const selfAuthorColor = collab.isActive && collab.selfColor ? collab.selfColor : "#3b82f6";
+
+  const handleEditName = () => {
+    setNameInput(storedName);
+    setEditingName(true);
+    // Focus after state flush
+    setTimeout(() => nameInputRef.current?.focus(), 0);
+  };
+
+  const handleSaveName = () => {
+    const trimmed = nameInput.trim();
+    saveStoredName(trimmed);
+    setStoredName(trimmed);
+    setEditingName(false);
+  };
+
+  const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") handleSaveName();
+    if (e.key === "Escape") setEditingName(false);
+  };
+
+  // The real session code comes from the store once start() has resolved.
+  const activeCode = collab.sessionId ?? "";
+
+  const handleCopySessionUrl = async () => {
+    if (!activeCode) return;
+    try {
+      const sessionUrl = new URL(window.location.href);
+      sessionUrl.searchParams.set("collab", activeCode);
+      await navigator.clipboard.writeText(sessionUrl.toString());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore clipboard error
+    }
+  };
+
+  const handleConnectSession = async () => {
+    const targetCode = joinCodeInput.trim().toUpperCase();
+    if (!targetCode || !collaboration) return;
+    setSessionError(null);
+    setBusy(true);
+    try {
+      await collaboration.join(targetCode, selfAuthorName, selfAuthorColor);
+    } catch (err: unknown) {
+      setSessionError(err instanceof Error ? err.message : t("comments.joinFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleStartHostingSession = async () => {
+    if (!collaboration) return;
+    setSessionError(null);
+    setBusy(true);
+    try {
+      await collaboration.start(selfAuthorName, selfAuthorColor, "co-edit");
+    } catch (err: unknown) {
+      setSessionError(err instanceof Error ? err.message : t("comments.startFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDisconnectSession = () => {
+    collaboration?.leave();
+  };
+
+  const canModifyComments = !collab.isActive || (collaboration?.canEdit() ?? true);
+
+  const handleReply = (commentId: string, body: string) => {
+    if (!canModifyComments) return;
+    const reply: CommentReply = {
+      id: uuidv4(),
+      author: { name: selfAuthorName, color: selfAuthorColor },
+      body,
+      createdAt: new Date().toISOString(),
+    };
+    replyToComment(commentId, reply);
+    if (collab.isActive) {
+      collaboration?.sendCommentMutation({ type: "reply", commentId, reply });
+    }
+  };
+
+  const handleToggleResolve = (commentId: string, resolved: boolean) => {
+    if (!canModifyComments) return;
+    toggleResolveComment(commentId, resolved);
+    if (collab.isActive) {
+      collaboration?.sendCommentMutation({ type: "toggle-resolve", commentId, resolved });
+    }
+  };
+
+  const handleDelete = (commentId: string) => {
+    if (!canModifyComments) return;
+    deleteComment(commentId);
+    if (collab.isActive) {
+      collaboration?.sendCommentMutation({ type: "delete", commentId });
+    }
+  };
+
+  const handleZoomTo = (comment: ProjectComment) => {
+    const map = mapControllerRef.current?.getMap() ?? null;
+    if (!map) return;
+    const coords = resolveCommentCoordinates(comment, map);
+    if (coords) {
+      map.flyTo({ center: coords, zoom: Math.max(map.getZoom(), 15), duration: 800 });
+    }
+  };
+
+  const unresolvedComments = comments.filter((c) => !c.resolved);
+  const resolvedComments = comments.filter((c) => c.resolved);
+  const filteredComments = comments.filter((c) => {
+    if (filter === "open") return !c.resolved;
+    if (filter === "resolved") return c.resolved;
+    return true;
+  });
+
+  return (
+    <div className="flex flex-col h-full bg-background text-foreground overflow-hidden select-none">
+      {/* Panel Header */}
+      <div className="flex items-center justify-between h-10 px-3 border-b border-border bg-card shrink-0">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-primary" />
+          <span className="font-semibold text-xs text-foreground">{t("comments.title")}</span>
+          <span className="inline-flex items-center justify-center h-4 px-1.5 text-[10px] font-bold rounded-full bg-muted text-muted-foreground">
+            {unresolvedComments.length}
+          </span>
+        </div>
+        {onActivateCommentTool && (
+          <Button
+            type="button"
+            variant={isCommentToolActive ? "default" : "secondary"}
+            size="sm"
+            onClick={onActivateCommentTool}
+            className="gap-1 h-7 px-2 text-xs"
+            title={t("comments.addCommentTooltip")}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>{t("comments.addComment")}</span>
+            <kbd className="ms-1 rounded border border-current/25 px-1 font-mono text-[9px] leading-4 opacity-70">
+              C
+            </kbd>
+          </Button>
+        )}
+      </div>
+
+      {/* Display Name — shown when not in an active collab session */}
+      {!collab.isActive && (
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/20 shrink-0">
+          <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          {editingName ? (
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <Input
+                ref={nameInputRef}
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                onKeyDown={handleNameKeyDown}
+                onBlur={handleSaveName}
+                placeholder={t("comments.yourNamePlaceholder")}
+                className="h-6 text-xs flex-1 min-w-0 px-1.5"
+              />
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSaveName();
+                }}
+                className="text-emerald-500 hover:text-emerald-600 shrink-0"
+                title={t("comments.saveName")}
+              >
+                <Check className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              {selfAuthorName ? (
+                <span className="text-[11px] text-foreground font-medium truncate">
+                  {selfAuthorName}
+                </span>
+              ) : (
+                <span className="text-[11px] text-muted-foreground italic truncate">
+                  {t("comments.noNameSet", { name: t("comments.defaultAuthorName") })}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleEditName}
+                className="text-muted-foreground hover:text-foreground shrink-0 ms-auto"
+                title={selfAuthorName ? t("comments.changeNameTooltip") : t("comments.setYourName")}
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Session Controls — only shown when the relay is configured */}
+      {collaboration?.enabled && (
+        <div className="p-2.5 space-y-2 border-b border-border bg-muted/30 shrink-0">
+          {/* Session code — only shown once a session is active */}
+          {collab.isActive && activeCode ? (
+            <div className="flex items-center justify-between gap-2 p-2 rounded-md bg-card border border-border">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  <KeyRound className="h-3 w-3 text-primary shrink-0" />
+                  <span>{t("collaborate.sessionCode")}</span>
+                </div>
+                <div className="font-mono text-xs font-bold text-primary tracking-widest truncate mt-0.5">
+                  {activeCode}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCopySessionUrl}
+                className="h-7 px-2 text-[11px] shrink-0"
+                title={t("collaborate.copyLink")}
+              >
+                <Copy className="h-3 w-3 me-1" />
+                {copied ? t("collaborate.copied") : t("comments.copy")}
+              </Button>
+            </div>
+          ) : (
+            /* Host button — starts a new session */
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleStartHostingSession}
+              disabled={busy || !collaboration}
+              className="w-full h-8 text-xs gap-1.5"
+            >
+              <Radio className="h-3.5 w-3.5 text-emerald-500" />
+              {busy ? t("comments.starting") : t("comments.startLiveSession")}
+            </Button>
+          )}
+
+          {/* Join input — only shown when not already active */}
+          {!collab.isActive && (
+            <div className="flex items-center gap-1.5 p-2 rounded-md bg-card border border-border">
+              <Input
+                value={joinCodeInput}
+                onChange={(e) =>
+                  setJoinCodeInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+                }
+                placeholder={t("comments.sessionCodePlaceholder")}
+                className="h-7 font-mono text-xs uppercase tracking-wider"
+                disabled={busy}
+              />
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={handleConnectSession}
+                disabled={busy || !joinCodeInput.trim() || !collaboration}
+                className="h-7 px-2.5 text-[11px] gap-1 shrink-0"
+              >
+                <Link2 className="h-3 w-3" />
+                <span>{busy ? t("comments.joining") : t("comments.connect")}</span>
+              </Button>
+            </div>
+          )}
+
+          {/* Status indicator */}
+          <div className="flex items-center justify-between p-2 rounded-md bg-card border border-border text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className={cn(
+                  "h-2.5 w-2.5 rounded-full shrink-0",
+                  collab.isActive ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/40",
+                )}
+              />
+              <span className="font-medium text-[11px] truncate">
+                {collab.connecting
+                  ? t("collaborate.connecting")
+                  : collab.isActive
+                    ? t("comments.liveSync", { count: collab.participants?.length ?? 1 })
+                    : t("comments.offlineWorkspace")}
+              </span>
+            </div>
+            {collab.isActive && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleDisconnectSession}
+                className="h-6 px-1.5 text-[10px] text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+              >
+                {t("comments.disconnect")}
+              </Button>
+            )}
+          </div>
+
+          {sessionError && (
+            <div className="text-[11px] text-destructive bg-destructive/10 p-1.5 rounded border border-destructive/30">
+              {sessionError}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Filter Bar */}
+      <div className="flex items-center gap-1 p-2 border-b border-border bg-muted/20 shrink-0">
+        {(["open", "resolved", "all"] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => {
+              onClearSelectedComment?.();
+              setFilter(f);
+            }}
+            className={cn(
+              "flex-1 py-1 px-2 text-[11px] font-medium rounded transition-colors text-center",
+              filter === f
+                ? "bg-card text-foreground shadow-xs border border-border"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+            )}
+          >
+            {f === "open"
+              ? t("comments.filterOpen", { count: unresolvedComments.length })
+              : f === "resolved"
+                ? t("comments.filterResolved", { count: resolvedComments.length })
+                : t("comments.filterAll", { count: comments.length })}
+          </button>
+        ))}
+      </div>
+
+      {/* Threads */}
+      <ScrollArea className="flex-1 p-3">
+        {filteredComments.length === 0 ? (
+          <div className="flex flex-col items-center justify-center min-h-[160px] text-center p-4 border border-dashed border-border/60 rounded-lg bg-card/40 my-2">
+            <MessageCircle className="h-8 w-8 text-muted-foreground/50 mb-2" />
+            <p className="text-xs font-medium text-foreground mb-1">
+              {filter === "resolved" ? t("comments.emptyResolved") : t("comments.emptyOpen")}
+            </p>
+            <p className="text-[11px] text-muted-foreground max-w-[200px]">
+              {t("comments.emptyHint")}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredComments.map((comment) => {
+              const originalIndex = comments.findIndex((c) => c.id === comment.id);
+              const selected = comment.id === selectedCommentId;
+              return (
+                <div
+                  key={comment.id}
+                  ref={(element) => {
+                    if (element) commentCardRefs.current.set(comment.id, element);
+                    else commentCardRefs.current.delete(comment.id);
+                  }}
+                  data-comment-id={comment.id}
+                  data-selected={selected || undefined}
+                  className="rounded-lg"
+                >
+                  <CommentThread
+                    comment={comment}
+                    index={originalIndex >= 0 ? originalIndex : 0}
+                    onReply={handleReply}
+                    onToggleResolve={handleToggleResolve}
+                    onDelete={handleDelete}
+                    onZoomTo={handleZoomTo}
+                    readOnly={!canModifyComments}
+                    selected={selected}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </ScrollArea>
+    </div>
+  );
+}

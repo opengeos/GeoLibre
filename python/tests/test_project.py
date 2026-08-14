@@ -10,6 +10,7 @@ import json
 
 import pytest
 
+import geolibre
 from geolibre import project
 
 POINT_FC = {
@@ -31,6 +32,18 @@ def test_build_empty_project_defaults():
     assert proj["layers"] == []
     # Preferences must be a fresh copy, not the shared default.
     assert proj["preferences"] is not project.DEFAULT_PROJECT_PREFERENCES
+
+
+def test_top_level_package_exports_headless_authoring_api(tmp_path):
+    proj = project.build_empty_project()
+    assert geolibre.basemap_catalog()
+    assert geolibre.builtin_legend_names()
+    assert geolibre.color_ramp_names()
+
+    path = tmp_path / "map.geolibre.json"
+    geolibre.save_project(path, proj)
+    loaded = geolibre.load_project(path)
+    assert geolibre.describe_project(loaded)["layerCount"] == 0
 
 
 def test_build_empty_project_overrides():

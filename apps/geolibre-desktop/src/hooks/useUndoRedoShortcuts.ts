@@ -1,4 +1,10 @@
-import { redo, undo, useAppStore } from "@geolibre/core";
+import {
+  canRedoProjectRestore,
+  canUndoProjectRestore,
+  redo,
+  undo,
+  useAppStore,
+} from "@geolibre/core";
 import { useEffect } from "react";
 
 /** True when focus is in a text-editing surface (let the browser handle undo). */
@@ -27,10 +33,10 @@ export function useUndoRedoShortcuts(): void {
       // Only consume the event when there is actually something to do, so an
       // empty stack doesn't swallow the browser/OS shortcut (e.g. Cmd+Y).
       const temporal = useAppStore.temporal.getState();
-      if (isRedo && temporal.futureStates.length > 0) {
+      if (isRedo && (temporal.futureStates.length > 0 || canRedoProjectRestore())) {
         e.preventDefault();
         redo();
-      } else if (isUndo && temporal.pastStates.length > 0) {
+      } else if (isUndo && (temporal.pastStates.length > 0 || canUndoProjectRestore())) {
         e.preventDefault();
         undo();
       }

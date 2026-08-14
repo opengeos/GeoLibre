@@ -122,3 +122,47 @@ describe("controlOwnsPaint external native layers", () => {
     );
   });
 });
+
+// A store layer can outlive its map layers: restore now keeps a layer whose
+// replay failed (opengeos/GeoLibre discussion #1757), and its saved
+// `nativeLayerIds` still name layers the control never recreated. Styling those
+// raises "Cannot get style of non-existing layer" on the map's error channel,
+// which floods the Diagnostics panel with entries the user cannot act on.
+describe("external native layers whose map layers are missing", () => {
+  it("touches nothing when the native layer is not on the map", () => {
+    // The stub only knows "some-other-layer", so getLayer("mub-deliveries")
+    // returns undefined, standing in for a failed restore.
+    const { map, calls } = makeMapStub("some-other-layer", "circle");
+
+    assert.doesNotThrow(() => syncLayer(map as never, externalNativeLayer()));
+
+    assert.deepEqual(
+      calls.map((call) => call.method),
+      [],
+      "expected no style, visibility, or ordering calls against a layer that is not on the map",
+    );
+  });
+
+  it("still syncs the layers that are present alongside a missing one", () => {
+    const { map, calls } = makeMapStub("mub-deliveries", "circle");
+    const layer = externalNativeLayer({
+      metadata: {
+        externalNativeLayer: true,
+        // The first id is stale; only the second exists on the map.
+        nativeLayerIds: ["mub-deliveries-gone", "mub-deliveries"],
+        sourceIds: ["mub-deliveries"],
+      },
+    });
+
+    syncLayer(map as never, layer);
+
+    const touched = calls.flatMap((call) =>
+      typeof call.args[0] === "string" ? [call.args[0]] : [],
+    );
+    assert.ok(touched.includes("mub-deliveries"), "expected the present layer to still be synced");
+    assert.ok(
+      !touched.includes("mub-deliveries-gone"),
+      "expected the missing layer to be skipped rather than dropping the whole sync",
+    );
+  });
+});

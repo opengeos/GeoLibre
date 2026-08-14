@@ -8,12 +8,61 @@ import {
   resolveThreeDTilesRequestHeaders,
   stripGoogleMapsApiKeyHeader,
 } from "../packages/core/src/three-d-tiles";
+import { deferThreeDTilesRestoreUntilMapIdle } from "../packages/plugins/src/plugins/maplibre-3d-tiles";
 
 // Shared 3D-Tiles header resolution: Google Photorealistic tiles keep their
 // X-GOOG-API-KEY out of the store and have it re-injected at render time. Both
 // the MapLibre and Cesium render paths must resolve it the same way.
 
 const GOOGLE = "https://tile.googleapis.com/v1/3dtiles/root.json";
+
+describe("deferThreeDTilesRestoreUntilMapIdle", () => {
+  it("continues immediately when the style is ready", () => {
+    const map = {
+      isStyleLoaded: () => true,
+      once: () => {
+        throw new Error("style listener should not be registered");
+      },
+    } as unknown as Parameters<typeof deferThreeDTilesRestoreUntilMapIdle>[0];
+
+    assert.equal(
+      deferThreeDTilesRestoreUntilMapIdle(map, () => {}),
+      false,
+    );
+  });
+
+  it("queues one restore until an in-progress style load finishes", () => {
+    const listeners: Array<() => void> = [];
+    const map = {
+      isStyleLoaded: () => false,
+      once: (event: string, listener: () => void) => {
+        assert.equal(event, "idle");
+        listeners.push(listener);
+      },
+    } as unknown as Parameters<typeof deferThreeDTilesRestoreUntilMapIdle>[0];
+    let firstRestoreCount = 0;
+    let duplicateRestoreCount = 0;
+
+    assert.equal(
+      deferThreeDTilesRestoreUntilMapIdle(map, () => {
+        firstRestoreCount += 1;
+      }),
+      true,
+    );
+    assert.equal(
+      deferThreeDTilesRestoreUntilMapIdle(map, () => {
+        duplicateRestoreCount += 1;
+      }),
+      true,
+    );
+    assert.equal(listeners.length, 1);
+
+    listeners[0]();
+
+    assert.equal(firstRestoreCount, 1);
+    assert.equal(duplicateRestoreCount, 0);
+  });
+});
 
 describe("resolveThreeDTilesRequestHeaders", () => {
   it("passes non-Google tileset headers through unchanged", () => {

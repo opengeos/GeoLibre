@@ -1,0 +1,36 @@
+[package]
+name = "tauri-plugin-geolocation"
+description = "Get and track the device's current position"
+version = "2.3.2"
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+links = "tauri-plugin-geolocation"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-linux-android"]
+
+[package.metadata.platforms.support]
+windows = { level = "none", notes = "" }
+linux = { level = "none", notes = "" }
+macos = { level = "none", notes = "" }
+android = { level = "full", notes = "" }
+ios = { level = "full", notes = "" }
+
+[build-dependencies]
+tauri-plugin = { workspace = true, features = ["build"] }
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri = { workspace = true }
+log = { workspace = true }
+thiserror = { workspace = true }
+specta = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+tauri = { workspace = true, features = ["wry"] }
+
+[features]
+specta = ["dep:specta", "tauri/specta"]
