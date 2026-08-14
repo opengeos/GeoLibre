@@ -699,6 +699,7 @@
       "statusTablesFound_other": "ნაპოვნია {{count}} სივრცითი ცხრილი.",
       "statusNoTables": "ამ მონაცემთა ბაზაში სივრცითი ცხრილები ვერ მოიძებნა.",
       "editableTable": "ცხრილი",
+      "geometryColumn": "გეომეტრიის სვეტი",
       "tableReadOnly": "{{table}} (მხოლოდ წასაკითხად: არ აქვს პირველადი გასაღები)",
       "errorSelectTable": "აირჩიეთ ჩასატვირთი ცხრილი.",
       "errorRuntimeMissing": "დამუშავების სერვერზე დაყენებული არ არის PostGIS-ის გარემო (psycopg). რედაქტირებადი შრეების ჩასატვირთად დააყენეთ geolibre-server-ის „postgis“ დანამატი."

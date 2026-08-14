@@ -699,6 +699,7 @@
       "statusTablesFound_other": "Trovate {{count}} tabelle spaziali.",
       "statusNoTables": "Nessuna tabella spaziale trovata in questo database.",
       "editableTable": "Tabella",
+      "geometryColumn": "Colonna geometria",
       "tableReadOnly": "{{table}} (sola lettura: nessuna chiave primaria)",
       "errorSelectTable": "Seleziona una tabella da caricare.",
       "errorRuntimeMissing": "Il server di elaborazione non ha installato il runtime PostGIS (psycopg). Installa l'estensione opzionale 'postgis' di geolibre-server per caricare livelli modificabili."

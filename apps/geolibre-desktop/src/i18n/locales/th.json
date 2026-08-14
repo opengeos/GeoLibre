@@ -683,6 +683,7 @@
       "statusTablesFound_other": "พบตารางเชิงพื้นที่ {{count}} ตาราง",
       "statusNoTables": "ไม่พบตารางเชิงพื้นที่ในฐานข้อมูลนี้",
       "editableTable": "ตาราง",
+      "geometryColumn": "คอลัมน์เรขาคณิต",
       "tableReadOnly": "{{table}} (อ่านอย่างเดียว: ไม่มีคีย์หลัก)",
       "errorSelectTable": "เลือกตารางที่ต้องการโหลด",
       "errorRuntimeMissing": "เซิร์ฟเวอร์ประมวลผลไม่ได้ติดตั้งรันไทม์ PostGIS (psycopg) ไว้ กรุณาติดตั้งส่วนเสริม 'postgis' ของ geolibre-server เพื่อโหลดเลเยอร์ที่แก้ไขได้"

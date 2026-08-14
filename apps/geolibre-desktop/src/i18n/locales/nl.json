@@ -699,6 +699,7 @@
       "statusTablesFound_other": "{{count}} ruimtelijke tabellen gevonden.",
       "statusNoTables": "Er zijn geen ruimtelijke tabellen gevonden in deze database.",
       "editableTable": "Tabel",
+      "geometryColumn": "Geometriekolom",
       "tableReadOnly": "{{table}} (alleen-lezen: geen primaire sleutel)",
       "errorSelectTable": "Selecteer een tabel om te laden.",
       "errorRuntimeMissing": "De verwerkingsserver heeft de PostGIS-runtime (psycopg) niet geïnstalleerd. Installeer de 'postgis'-extra van geolibre-server om bewerkbare lagen te laden."
