@@ -58,11 +58,16 @@ export function ImportWarningList<T extends ImportWarningLike>({
                 >
                   {isExpanded ? t("toolbar.item.hideLayerNames") : t("toolbar.item.showLayerNames")}
                 </button>
-                {isExpanded ? (
-                  <p id={namesId} className="mt-1 break-words text-xs text-muted-foreground">
-                    {group.layerNames.join(", ")}
-                  </p>
-                ) : null}
+                {/* Rendered even when collapsed, and hidden with `hidden`, so
+                    the button's aria-controls always resolves to a real
+                    element. `hidden` keeps it out of the accessibility tree. */}
+                <p
+                  id={namesId}
+                  hidden={!isExpanded}
+                  className="mt-1 break-words text-xs text-muted-foreground"
+                >
+                  {group.layerNames.join(", ")}
+                </p>
               </div>
             ) : null}
           </li>
