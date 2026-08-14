@@ -168,7 +168,11 @@ keytool -genkeypair -v -keystore upload.jks -alias upload -keyalg RSA \
 
 `.github/workflows/android.yml` builds **signed**, per-ABI release APKs on each
 published GitHub release (and on demand via the "Run workflow" button) and
-uploads them as the `geolibre-android-release-apks` artifact. It signs with your release keystore when these repository secrets are
+uploads them as the `geolibre-android-release-apks` artifact. On a published
+release the APKs are **also attached to that release** as downloadable assets —
+but only when they carry a real release signature; debug-signed APKs stay a CI
+artifact and the run logs a warning saying so. It signs with your release
+keystore when these repository secrets are
 set, and otherwise falls back to a throwaway debug key so the artifact is still
 installable for testing:
 
@@ -180,8 +184,13 @@ installable for testing:
 It also builds a universal **AAB** and uploads it as the separate
 `geolibre-android-play-aab` artifact — but *only* on runs that have the real
 release keystore, since Play rejects a debug-signed bundle. Without the keystore
-the AAB build is skipped entirely rather than built and discarded. The AAB is
-not attached to the GitHub Release (an `.aab` is not user-installable).
+the AAB build is skipped entirely rather than built and discarded. On a published
+release the `geolibre-android.aab` is attached to the release alongside the APKs,
+so the exact bundle submitted for a tag stays recoverable after the CI artifact
+expires.
+
+> Sideloading? Take an **`.apk`**. The `.aab` is the Google Play upload format
+> and cannot be installed on a device.
 
 ## Install / test
 
@@ -234,7 +243,8 @@ is one-time Play Console onboarding.
    the actual app signing key and re-signs each bundle. The repository's
    `ANDROID_KEYSTORE_*` secrets are that upload key — keep the keystore backed
    up, since losing it requires a Play support reset.
-3. **Upload the AAB** from the `geolibre-android-play-aab` CI artifact. The
+3. **Upload the AAB** from the `geolibre-android-play-aab` CI artifact, or from
+   the release's `geolibre-android.aab` asset once that artifact has expired. The
    `versionCode` is derived from the version in `tauri.conf.json` and must
    increase on every upload.
 4. **Store listing assets:** 512×512 icon, a **1024×500 feature graphic**, and
