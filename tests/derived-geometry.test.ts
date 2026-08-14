@@ -166,14 +166,16 @@ describe("buildGeneratedGeometry", () => {
       { ...pointAt(10, 0), properties: { radius: "wide" } },
       { ...pointAt(20, 0), properties: {} },
       // A blank string coerces to 0 via Number(""), so it must read as a
-      // missing value rather than a real zero-distance buffer.
+      // missing value rather than a real zero-distance buffer. Number() trims
+      // first, so a whitespace-only value is the same case.
       { ...pointAt(30, 0), properties: { radius: "" } },
+      { ...pointAt(40, 0), properties: { radius: "  " } },
       // Numeric strings are honored, matching the numeric-field pickers.
-      { ...pointAt(40, 0), properties: { radius: "1000" } },
+      { ...pointAt(50, 0), properties: { radius: "1000" } },
     );
     const derived = buildGeneratedGeometry(fc, "buffer", 1000, "radius");
     assert.ok(derived);
-    assert.equal(derived.features.length, 5);
+    assert.equal(derived.features.length, 6);
     const widths = derived.features.map((feature) => {
       const xs = (feature.geometry as Polygon).coordinates[0].map(([x]) => x);
       return Math.max(...xs) - Math.min(...xs);

@@ -725,14 +725,33 @@ export interface ProportionalSizeRange {
  */
 export function proportionalSizeRange(style: LayerStyle): ProportionalSizeRange | null {
   if (!styleValue(style, "proportionalSizeEnabled")) return null;
-  const property = styleValue(style, "proportionalSizeProperty").trim();
+  return validatedSizeRange(
+    styleValue(style, "proportionalSizeProperty"),
+    styleValue(style, "proportionalSizeMinValue"),
+    styleValue(style, "proportionalSizeMaxValue"),
+    styleValue(style, "proportionalSizeMinRadius"),
+    styleValue(style, "proportionalSizeMaxRadius"),
+  );
+}
+
+/**
+ * The validation every field-driven size range shares: a chosen field, a
+ * finite non-degenerate value span, and finite radii. Kept in one place so a
+ * future tightening (rejecting negative radii, say) cannot land on the
+ * layer-wide proportional renderer without also landing on the geometry
+ * generator's centroids.
+ */
+function validatedSizeRange(
+  rawProperty: string,
+  minValue: number,
+  maxValue: number,
+  minRadius: number,
+  maxRadius: number,
+): ProportionalSizeRange | null {
+  const property = rawProperty.trim();
   if (!property) return null;
-  const minValue = styleValue(style, "proportionalSizeMinValue");
-  const maxValue = styleValue(style, "proportionalSizeMaxValue");
   if (!(Number.isFinite(minValue) && Number.isFinite(maxValue))) return null;
   if (maxValue <= minValue) return null;
-  const minRadius = styleValue(style, "proportionalSizeMinRadius");
-  const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
   if (!(Number.isFinite(minRadius) && Number.isFinite(maxRadius))) return null;
   return { property, minValue, maxValue, minRadius, maxRadius };
 }
@@ -780,16 +799,13 @@ function radiusInterpolateExpression(range: ProportionalSizeRange): unknown[] {
  * @returns The validated range, or `null` when field-driven sizing is off.
  */
 export function generatorSizeRange(style: LayerStyle): ProportionalSizeRange | null {
-  const property = styleValue(style, "geometryGeneratorSizeProperty").trim();
-  if (!property) return null;
-  const minValue = styleValue(style, "geometryGeneratorSizeMinValue");
-  const maxValue = styleValue(style, "geometryGeneratorSizeMaxValue");
-  if (!(Number.isFinite(minValue) && Number.isFinite(maxValue))) return null;
-  if (maxValue <= minValue) return null;
-  const minRadius = styleValue(style, "geometryGeneratorSizeMinRadius");
-  const maxRadius = styleValue(style, "geometryGeneratorSizeMaxRadius");
-  if (!(Number.isFinite(minRadius) && Number.isFinite(maxRadius))) return null;
-  return { property, minValue, maxValue, minRadius, maxRadius };
+  return validatedSizeRange(
+    styleValue(style, "geometryGeneratorSizeProperty"),
+    styleValue(style, "geometryGeneratorSizeMinValue"),
+    styleValue(style, "geometryGeneratorSizeMaxValue"),
+    styleValue(style, "geometryGeneratorSizeMinRadius"),
+    styleValue(style, "geometryGeneratorSizeMaxRadius"),
+  );
 }
 
 /**
