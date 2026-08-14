@@ -42,7 +42,31 @@ a few points under the current numbers as a **ratchet** — regressions fail CI,
 and when coverage rises comfortably above a floor, raise the floor to lock in the
 gain. The frontend
 report only counts files a test actually imports, so a module with no test does
-not appear at all rather than as 0%. The backend coverage run (and `npm run ci`,
+not appear at all rather than as 0%.
+
+That last point is the one that bites: writing the *first* test for a large
+untested module reads as a coverage **regression**, because the module and
+everything it imports enter the denominator at once. GeoLibre#1784 added a test
+that imported `usePlugins.ts` and so pulled in the whole built-in plugin
+registry, 39 files, dropping function coverage 72.90% → 60.36% and reddening
+`main`. The fix is to test against a leaf module rather than to lower the floor
+(GeoLibre#1888 extracted `lib/plugin-layer-queries.ts`; `geo-editor-geometry.ts`
+in `@geolibre/plugins` is the same pattern). Check what a new test *transitively*
+imports before assuming a coverage drop means the code got worse.
+
+`test:frontend:coverage` runs through `scripts/coverage-check.mjs` rather than
+calling `node --test` directly. Node still enforces all three floors; the wrapper
+only re-measures once when **line** coverage alone comes up short with every test
+passing. Line coverage is nondeterministic on CI (GeoLibre#1889: two runs over
+byte-identical sources reported 81.82% and 76.47%, 114 of 444 files differing on
+lines and *none* on branches or functions), and it is not reproducible locally on
+either Node 22 or 26. Branch and function shortfalls, and any test failure, fail
+on the spot with no retry, so a real regression still fails fast. `classify()` is
+exported and covered by `tests/coverage-check.test.ts` — change the retry policy
+there, not by loosening a floor. If the retry starts firing regularly, fix the
+measurement instead of widening the mitigation.
+
+The backend coverage run (and `npm run ci`,
 which calls the `:coverage` variants) needs `pytest-cov` from the backend `dev`
 extra. Install the **`test`** extra to run the *full* backend suite — without
 the optional engines (geopandas/rasterio/sedona/httpx) the vector/raster/SQL/ML
