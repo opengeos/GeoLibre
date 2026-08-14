@@ -27,7 +27,6 @@ describe("groupImportWarnings", () => {
     assert.equal(groups.length, 1);
     assert.equal(groups[0].message, "Reason: file-geodatabase.");
     assert.deepEqual(groups[0].layerNames, ["Parcels", "Roads", "Wells"]);
-    assert.equal(groups[0].sample.layerName, "Parcels");
   });
 
   it("sorts the largest group first so the dominant cause leads", () => {

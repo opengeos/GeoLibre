@@ -15,11 +15,9 @@ export interface ImportWarningLike {
   reason: string;
 }
 
-export interface ImportWarningGroup<T extends ImportWarningLike> {
+export interface ImportWarningGroup {
   /** The rendered message shared by every warning in the group. */
   message: string;
-  /** The first warning in the group, kept so callers can read importer-specific fields. */
-  sample: T;
   /** Every affected layer name, in the order the importer reported them. */
   layerNames: string[];
 }
@@ -43,15 +41,15 @@ export interface ImportWarningGroup<T extends ImportWarningLike> {
 export function groupImportWarnings<T extends ImportWarningLike>(
   warnings: readonly T[],
   describe: (warning: T) => string,
-): ImportWarningGroup<T>[] {
-  const groups = new Map<string, ImportWarningGroup<T>>();
+): ImportWarningGroup[] {
+  const groups = new Map<string, ImportWarningGroup>();
   for (const warning of warnings) {
     const message = describe(warning);
     const existing = groups.get(message);
     if (existing) {
       existing.layerNames.push(warning.layerName);
     } else {
-      groups.set(message, { message, sample: warning, layerNames: [warning.layerName] });
+      groups.set(message, { message, layerNames: [warning.layerName] });
     }
   }
   // Map iteration is insertion-ordered and Array#sort is stable, so equal
