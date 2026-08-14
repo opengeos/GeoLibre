@@ -195,7 +195,7 @@ export function DelimitedTextSource() {
           },
         ],
         accept: ".csv,.tsv,.txt,.dat,.xls,.xlsx",
-        readBinary: true,
+        binaryExtensions: ["xls", "xlsx"],
         readText: true,
       });
       if (!result) return;
@@ -209,6 +209,7 @@ export function DelimitedTextSource() {
       if (!worksheets && !result.text) {
         throw new Error(t("addData.delimitedText.errorFileMissing"));
       }
+      if (worksheets) setDelimitedTextDelimiter("comma");
       setSelectedWorksheet(worksheets?.[0]?.name ?? "");
       setSelectedDelimitedText({
         path: result.path,
@@ -588,6 +589,7 @@ export function DelimitedTextSource() {
                   value={selectedWorksheet}
                   onChange={(event) => {
                     setSelectedWorksheet(event.target.value);
+                    setDelimitedTextDelimiter("comma");
                     resetDelimitedTextColumns();
                     resetDelimitedTextCrs();
                   }}

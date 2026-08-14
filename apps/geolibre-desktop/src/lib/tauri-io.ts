@@ -94,6 +94,8 @@ interface LocalDataFileOptions {
   filters: FileDialogFilter[];
   androidFilters?: FileDialogFilter[];
   accept: string;
+  /** Extensions that should be read as bytes instead of text when readText is set. */
+  binaryExtensions?: string[];
   readBinary?: boolean;
   readText?: boolean;
 }
@@ -2549,14 +2551,23 @@ export async function openLocalDataFileWithFallback(options: LocalDataFileOption
   path: string;
   text?: string;
 } | null> {
+  const shouldReadBinaryByExtension = (path: string) => {
+    const extension = path.split(".").pop()?.toLowerCase();
+    return Boolean(
+      extension && options.binaryExtensions?.some((item) => item.toLowerCase() === extension),
+    );
+  };
+
   if (isTauri()) {
     const selected = await open({
       multiple: false,
       filters: nativeFileDialogFilters(options.filters, options.androidFilters),
     });
     if (!selected || typeof selected !== "string") return null;
-    const data = options.readBinary ? toArrayBuffer(await readFile(selected)) : undefined;
-    const text = options.readText ? await readTextFile(selected) : undefined;
+    const binaryByExtension = shouldReadBinaryByExtension(selected);
+    const data =
+      options.readBinary || binaryByExtension ? toArrayBuffer(await readFile(selected)) : undefined;
+    const text = options.readText && !binaryByExtension ? await readTextFile(selected) : undefined;
     return { data, path: selected, text };
   }
 
@@ -2571,8 +2582,9 @@ export async function openLocalDataFileWithFallback(options: LocalDataFileOption
           resolve(null);
           return;
         }
-        const data = options.readBinary ? await file.arrayBuffer() : undefined;
-        const text = options.readText ? await file.text() : undefined;
+        const binaryByExtension = shouldReadBinaryByExtension(file.name);
+        const data = options.readBinary || binaryByExtension ? await file.arrayBuffer() : undefined;
+        const text = options.readText && !binaryByExtension ? await file.text() : undefined;
         resolve({ data, path: file.name, text });
       } catch (error) {
         reject(error);
