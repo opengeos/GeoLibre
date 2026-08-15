@@ -116,6 +116,7 @@ describe("computeFieldStats", () => {
   it("keeps numeric-looking strings as text", () => {
     const data = rows({ fips: "37009" }, { fips: "37005" }, { fips: "37171" });
     const stats = computeFieldStats(data, "fips");
+    assert.ok(stats);
     assert.equal(stats.kind, "text");
     assert.equal(stats.unique, 3);
   });
