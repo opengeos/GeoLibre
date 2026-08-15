@@ -39,7 +39,7 @@ DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayNam
 
 /**
  * Horizontal room a submenu may occupy: the space Radix's `size` middleware
- * measured for the side it settled on, never more than the viewport less an 8px
+ * measured for the side it settled on, never more than the viewport less a 1rem
  * edge buffer, never less than zero.
  *
  * The `max(0px, …)` is not decoration. Floating UI's `availableWidth` goes
@@ -53,59 +53,75 @@ DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayNam
 const SUB_CONTENT_AVAILABLE_WIDTH =
   "max(0px, min(var(--radix-dropdown-menu-content-available-width, 100vw), calc(100vw - 1rem)))";
 
+/** The floor a submenu falls back to when the caller does not ask for a wider one. */
+const SUB_CONTENT_MIN_WIDTH = "8rem";
+
 export const DropdownMenuSubContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
->(({ className, style, ...props }, ref) => (
-  // Portal to the body so a nested submenu is not a DOM descendant of its parent
-  // submenu's scroll box. Without this, the parent's `overflow-y-auto` becomes a
-  // clipping ancestor and Radix's collision detection treats the parent's narrow
-  // width as the available space, flipping a 3rd-level submenu to the left (over
-  // its grandparent) even when there is room on the right.
-  <DropdownMenuPrimitive.Portal>
-    <DropdownMenuPrimitive.SubContent
-      ref={ref}
-      className={cn(
-        // No min-w-[8rem] here, unlike DropdownMenuContent: the floor is set
-        // below so it can yield to the available-width cap on a narrow screen.
-        "z-50 max-w-[calc(100vw-1rem)] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg",
-        className,
-      )}
-      style={{
-        // Cap to the visible viewport on mobile: dvh tracks the dynamic viewport
-        // and subtracting the safe-area insets keeps the menu (and its scrollable
-        // overflow) within the area not covered by the system status/navigation
-        // bars, so long menus scroll instead of clipping under them. On desktop/web
-        // dvh == vh and the insets are 0, so behavior is unchanged.
-        maxHeight:
-          "min(var(--radix-dropdown-menu-content-available-height, 100dvh), calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem))",
-        // The horizontal equivalent, and the only thing keeping a submenu on a
-        // narrow screen. Radix configures Floating UI's shift middleware as
-        // `shift({ mainAxis: true, crossAxis: false })`, and for a right/left
-        // placement the cross axis is the horizontal one — so a submenu that
-        // overflows sideways is never pushed back into view. `flip` picks the
-        // side with less overflow, but on a phone neither side fits: with a
-        // 390px viewport, a 161px parent at x=116 leaves 113px to its right and
-        // 116px to its left for a 185px submenu, so Radix flips left and lands
-        // at x=-64, a quarter of the menu off-screen (GeoLibre#1904 follow-up).
-        // Capping to the space Radix itself measured for the chosen side makes
-        // the submenu shrink to fit instead of overflowing; labels wrap. On
-        // desktop the available width always exceeds the content, so the cap is
-        // inert and nothing changes.
-        maxWidth: SUB_CONTENT_AVAILABLE_WIDTH,
-        // The usual 8rem floor, but it has to lose to the cap above or it just
-        // reintroduces the overflow a few pixels smaller: on a 390px viewport
-        // the submenu lands at x=264 with 126px to spare, and a hard 128px floor
-        // pushes it 2px past the edge. min() lets the floor collapse exactly as
-        // far as the available space demands and no further. Built from the same
-        // expression as maxWidth so the floor can never exceed the cap.
-        minWidth: `min(8rem, ${SUB_CONTENT_AVAILABLE_WIDTH})`,
-        ...style,
-      }}
-      {...props}
-    />
-  </DropdownMenuPrimitive.Portal>
-));
+>(({ className, style, ...props }, ref) => {
+  // A caller's `min-w-*` class cannot widen the floor any more: the inline
+  // `minWidth` below is set via the style prop, which beats a class-based
+  // declaration whatever the specificity, so tailwind-merge no longer decides
+  // the winner. Callers that need a wider floor pass `style={{ minWidth }}`, and
+  // it is folded into the same min() as the default so it still yields to the
+  // available-width cap instead of reintroducing the overflow at a larger size.
+  const { minWidth: minWidthOverride, ...restStyle } = style ?? {};
+  const minWidthFloor =
+    typeof minWidthOverride === "number" ? `${minWidthOverride}px` : minWidthOverride;
+
+  return (
+    // Portal to the body so a nested submenu is not a DOM descendant of its parent
+    // submenu's scroll box. Without this, the parent's `overflow-y-auto` becomes a
+    // clipping ancestor and Radix's collision detection treats the parent's narrow
+    // width as the available space, flipping a 3rd-level submenu to the left (over
+    // its grandparent) even when there is room on the right.
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.SubContent
+        ref={ref}
+        className={cn(
+          // No min-w-[8rem] here, unlike DropdownMenuContent: the floor is set
+          // below so it can yield to the available-width cap on a narrow screen.
+          "z-50 max-w-[calc(100vw-1rem)] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg",
+          className,
+        )}
+        style={{
+          // Cap to the visible viewport on mobile: dvh tracks the dynamic viewport
+          // and subtracting the safe-area insets keeps the menu (and its scrollable
+          // overflow) within the area not covered by the system status/navigation
+          // bars, so long menus scroll instead of clipping under them. On desktop/web
+          // dvh == vh and the insets are 0, so behavior is unchanged.
+          maxHeight:
+            "min(var(--radix-dropdown-menu-content-available-height, 100dvh), calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem))",
+          // The horizontal equivalent, and the only thing keeping a submenu on a
+          // narrow screen. Radix configures Floating UI's shift middleware as
+          // `shift({ mainAxis: true, crossAxis: false })`, and for a right/left
+          // placement the cross axis is the horizontal one — so a submenu that
+          // overflows sideways is never pushed back into view. `flip` picks the
+          // side with less overflow, but on a phone neither side fits: with a
+          // 390px viewport, a 161px parent at x=116 leaves 113px to its right and
+          // 116px to its left for a 185px submenu, so Radix flips left and lands
+          // at x=-64, a quarter of the menu off-screen (GeoLibre#1904 follow-up).
+          // Capping to the space Radix itself measured for the chosen side makes
+          // the submenu shrink to fit instead of overflowing; labels wrap. On
+          // desktop the available width always exceeds the content, so the cap is
+          // inert and nothing changes.
+          maxWidth: SUB_CONTENT_AVAILABLE_WIDTH,
+          // The usual 8rem floor (or whatever the caller asked for), but it has
+          // to lose to the cap above or it just reintroduces the overflow a few
+          // pixels smaller: on a 390px viewport the submenu lands at x=264 with
+          // 126px to spare, and a hard 128px floor pushes it 2px past the edge.
+          // min() lets the floor collapse exactly as far as the available space
+          // demands and no further. Built from the same expression as maxWidth so
+          // the floor can never exceed the cap.
+          minWidth: `min(${minWidthFloor ?? SUB_CONTENT_MIN_WIDTH}, ${SUB_CONTENT_AVAILABLE_WIDTH})`,
+          ...restStyle,
+        }}
+        {...props}
+      />
+    </DropdownMenuPrimitive.Portal>
+  );
+});
 DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayName;
 
 export const DropdownMenuContent = React.forwardRef<

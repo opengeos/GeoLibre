@@ -203,7 +203,11 @@ export function ViewMenu({
               <RotateCcw className="h-3.5 w-3.5 shrink-0" />
               <span className="whitespace-nowrap">{t("toolbar.item.resetOrientation")}</span>
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="min-w-48">
+            {/* The wider floor goes through `style`, not a `min-w-*` class:
+                DropdownMenuSubContent sets minWidth inline so it can yield to the
+                available-width cap on a narrow screen, and an inline declaration
+                beats any class. Passing it here folds 12rem into that same cap. */}
+            <DropdownMenuSubContent style={{ minWidth: "12rem" }}>
               {showResetPitch && (
                 <DropdownMenuItem disabled={pitchIsFlat} onSelect={onResetPitch}>
                   <Mountain className="me-2 h-3.5 w-3.5 shrink-0" />
@@ -244,7 +248,8 @@ export function ViewMenu({
               <LayoutGrid className="h-3.5 w-3.5 shrink-0" />
               <span className="whitespace-nowrap">{t("toolbar.item.splitView")}</span>
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="min-w-48">
+            {/* `style`, not `min-w-48` — see the Reset Orientation submenu above. */}
+            <DropdownMenuSubContent style={{ minWidth: "12rem" }}>
               <DropdownMenuRadioGroup
                 value={gridKey}
                 onValueChange={(value: string) => {
