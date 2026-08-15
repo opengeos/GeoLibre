@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   categoricalColumns,
+  coerceNumericStringRows,
   computeBar,
   computeBox,
   computeHistogram,
@@ -33,6 +34,15 @@ describe("toFiniteNumber", () => {
   });
 });
 
+describe("coerceNumericStringRows", () => {
+  it("adapts numeric strings without mutating text or source rows", () => {
+    const data = rows({ population: "42", code: "A01", blank: "" });
+    const adapted = coerceNumericStringRows(data);
+    assert.deepEqual(adapted[0].properties, { population: 42, code: "A01", blank: "" });
+    assert.equal(data[0].properties.population, "42");
+  });
+});
+
 describe("numericColumns", () => {
   it("keeps columns that are mostly numeric, drops text/id-like ones", () => {
     const data = rows(
@@ -48,9 +58,14 @@ describe("numericColumns", () => {
     assert.deepEqual(numericColumns(data, ["a"]), []);
   });
 
-  it("accepts numeric strings as numeric", () => {
+  it("keeps numeric strings out of numeric columns by default", () => {
     const data = rows({ a: "1" }, { a: "2" }, { a: "3" });
-    assert.deepEqual(numericColumns(data, ["a"]), ["a"]);
+    assert.deepEqual(numericColumns(data, ["a"]), []);
+  });
+
+  it("infers numeric strings after adapting a string-only source", () => {
+    const data = rows({ a: "1" }, { a: "2" }, { a: "3" });
+    assert.deepEqual(numericColumns(coerceNumericStringRows(data), ["a"]), ["a"]);
   });
 });
 

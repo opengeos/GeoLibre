@@ -4,23 +4,19 @@
  * numeric range, and a small distribution) the way MotherDuck's column explorer
  * does. This composes the existing field-statistics and chart helpers rather
  * than recomputing anything. Like Statistics, it respects the primitive value
- * types stored by the layer, so numeric-looking text remains text. Kept free of
- * rendering and React so it can be unit-tested in isolation.
+ * types stored by the layer, so numeric-looking text remains text. String-only
+ * sources can explicitly retain numeric inference. Kept free of rendering and
+ * React so it can be unit-tested in isolation.
  */
 
 import {
   computeHistogram,
+  isNumericFieldValue,
   toFiniteNumber,
   type ChartRow,
   type HistogramResult,
 } from "./attribute-charts";
-import {
-  computeNumericStats,
-  computeTextStats,
-  isBlank,
-  isFiniteNumberValue,
-  type FieldStats,
-} from "./attribute-stats";
+import { computeNumericStats, computeTextStats, isBlank, type FieldStats } from "./attribute-stats";
 
 /** Bins used for a numeric column's distribution sparkline. */
 export const COLUMN_EXPLORER_BINS = 12;
@@ -54,8 +50,8 @@ export interface ColumnSummary {
  * `numericColumns`) and again to extract, which doubled the row-property lookups
  * before the dialog first rendered. Populated means not null and not the empty
  * string. Numeric means at least two finite number-typed values that make up at
- * least half of those populated rows. Numeric-looking strings do not contribute
- * to classification.
+ * least half of those populated rows. Numeric-looking strings contribute only
+ * when the caller adapts a string-only source before summarizing it.
  */
 export function summarizeColumn(rows: ChartRow[], key: string): ColumnSummary | null {
   const values: number[] = [];
@@ -76,7 +72,7 @@ export function summarizeColumn(rows: ChartRow[], key: string): ColumnSummary | 
       continue;
     }
     populated += 1;
-    if (isFiniteNumberValue(raw)) numeric += 1;
+    if (isNumericFieldValue(raw)) numeric += 1;
     const next = toFiniteNumber(raw);
     if (next === null) nonNumeric += 1;
     else values.push(next);

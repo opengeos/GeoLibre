@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ChartRow } from "../apps/geolibre-desktop/src/lib/attribute-charts";
+import {
+  coerceNumericStringRows,
+  type ChartRow,
+} from "../apps/geolibre-desktop/src/lib/attribute-charts";
 import type { NumericFieldStats } from "../apps/geolibre-desktop/src/lib/attribute-stats";
 import {
   COLUMN_EXPLORER_TOP_VALUES,
@@ -50,6 +53,14 @@ describe("summarizeColumn", () => {
     assert.ok(summary);
     assert.equal(summary.stats.kind, "text");
     assert.equal(summary.histogram, null);
+  });
+
+  it("infers numeric strings for a string-only source", () => {
+    const data = rows({ population: "10" }, { population: "20" }, { population: "30" });
+    const summary = summarizeColumn(coerceNumericStringRows(data), "population");
+    assert.ok(summary);
+    assert.equal(summary.stats.kind, "numeric");
+    assert.equal(summary.histogram?.total, 3);
   });
 
   it("lists up to COLUMN_EXPLORER_TOP_VALUES distinct text values", () => {

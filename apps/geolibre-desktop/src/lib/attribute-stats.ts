@@ -6,9 +6,10 @@
  * any rendering or React so they can be unit-tested in isolation. Field type
  * detection respects the primitive types stored in `{ properties }`, so a text
  * field is not reclassified just because every string parses as a number.
+ * String-only sources can explicitly retain their numeric inference behavior.
  */
 
-import { toFiniteNumber, type ChartRow } from "./attribute-charts";
+import { isNumericFieldValue, toFiniteNumber, type ChartRow } from "./attribute-charts";
 
 export interface NumericFieldStats {
   kind: "numeric";
@@ -54,11 +55,6 @@ export const DEFAULT_TOP_VALUES = 5;
 /** True when a value reads as null for statistics: nullish or a blank string. */
 export function isBlank(value: unknown): boolean {
   return value == null || (typeof value === "string" && value.trim() === "");
-}
-
-/** True when a stored value is a finite JavaScript number, without coercion. */
-export function isFiniteNumberValue(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
 }
 
 /**
@@ -156,9 +152,9 @@ export function computeTextStats(
  * Summary statistics for one field, choosing the numeric or text shape from its
  * stored primitive values. A field counts as numeric when at least two populated
  * rows contain finite JavaScript numbers and those values make up at least half
- * of the populated rows. Numeric-looking strings alone therefore remain text.
- * Numeric fields fold their blank and non-numeric row counts into the result.
- * Returns null when a numeric field has no values to summarize.
+ * of the populated rows. Numeric-looking strings alone therefore remain text
+ * unless the caller adapts a string-only source before summarizing it. Numeric
+ * fields fold their blank and non-numeric row counts into the result.
  */
 export function computeFieldStats(
   rows: ChartRow[],
@@ -171,7 +167,7 @@ export function computeFieldStats(
     const raw = row.properties[key];
     if (raw == null || raw === "") continue;
     populated += 1;
-    if (isFiniteNumberValue(raw)) numeric += 1;
+    if (isNumericFieldValue(raw)) numeric += 1;
   }
   const isNumeric = numeric >= 2 && numeric >= populated / 2;
   if (!isNumeric) return computeTextStats(rows, key, topCount);

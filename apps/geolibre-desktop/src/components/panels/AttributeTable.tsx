@@ -106,6 +106,7 @@ import {
   type CalcOutputType,
 } from "../../lib/attribute-expression";
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
+import { coerceNumericStringRows } from "../../lib/attribute-charts";
 import { computeRowSelection } from "../../lib/attribute-selection";
 import { RESERVED_PROPERTY_KEYS } from "../../lib/field-collection";
 import {
@@ -436,6 +437,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const calcExpressionRef = useRef<HTMLTextAreaElement>(null);
 
   const layer = layers.find((l) => l.id === selectedLayerId);
+  const coerceNumericStrings = layer?.metadata.sourceKind === "delimited-text";
   const hasLayer = Boolean(layer);
   // Columns materialized by persistent joins are derived data: every save
   // re-derives them from the join table, so an edit, rename, or delete here
@@ -620,6 +622,15 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     const props = JSON.stringify(properties).toLowerCase();
     return featureId.includes(filterLower) || props.includes(filterLower);
   });
+  // Delimited-text imports preserve every cell as a string. Adapt only the rows
+  // sent to analysis dialogs, leaving the table and exported source data intact.
+  const adaptAnalysisRows = coerceNumericStrings && (chartOpen || statsOpen || explorerOpen);
+  const analysisRows = adaptAnalysisRows ? coerceNumericStringRows(attributeRows) : attributeRows;
+  const analysisFilteredRows = adaptAnalysisRows
+    ? filtered.length === attributeRows.length
+      ? analysisRows
+      : coerceNumericStringRows(filtered)
+    : filtered;
   const sorted = [...filtered].sort((a, b) => {
     const aValue = sort.key === "__featureId" ? a.featureId : a.properties[sort.key];
     const bValue = sort.key === "__featureId" ? b.featureId : b.properties[sort.key];
@@ -2320,23 +2331,23 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       <AttributeChartDialog
         open={chartOpen}
         onOpenChange={setChartOpen}
-        rows={attributeRows}
+        rows={analysisRows}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
       />
       <AttributeStatsDialog
         open={statsOpen}
         onOpenChange={setStatsOpen}
-        rows={attributeRows}
-        filteredRows={filtered}
+        rows={analysisRows}
+        filteredRows={analysisFilteredRows}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
       />
       <ColumnExplorerDialog
         open={explorerOpen}
         onOpenChange={setExplorerOpen}
-        rows={attributeRows}
-        filteredRows={filtered}
+        rows={analysisRows}
+        filteredRows={analysisFilteredRows}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
       />

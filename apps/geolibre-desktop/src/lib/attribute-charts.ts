@@ -41,6 +41,37 @@ export function toFiniteNumber(value: unknown): number | null {
 }
 
 /**
+ * Test whether a stored field value contributes to numeric type inference.
+ * Only explicit numeric values qualify. Callers handling string-only data
+ * sources adapt their analysis rows with {@link coerceNumericStringRows} first.
+ */
+export function isNumericFieldValue(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/**
+ * Convert numeric-looking strings in analysis rows without changing the source
+ * data. Delimited-text layers use this adapter because their parser preserves
+ * every cell as a string, including measurements that summaries should treat as
+ * numeric.
+ */
+export function coerceNumericStringRows(rows: ChartRow[]): ChartRow[] {
+  return rows.map((row) => {
+    let changed = false;
+    const properties: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row.properties)) {
+      const numeric = typeof value === "string" ? toFiniteNumber(value) : null;
+      if (numeric === null) properties[key] = value;
+      else {
+        properties[key] = numeric;
+        changed = true;
+      }
+    }
+    return changed ? { ...row, properties } : row;
+  });
+}
+
+/**
  * The distinct non-empty values of a category field, sorted for display. Used
  * by the selector widget to build its list of value chips.
  *
@@ -109,7 +140,7 @@ export function numericColumns(rows: ChartRow[], columns: string[]): string[] {
       const raw = row.properties[key];
       if (raw == null || raw === "") continue;
       nonNull += 1;
-      if (toFiniteNumber(raw) !== null) numeric += 1;
+      if (isNumericFieldValue(raw)) numeric += 1;
     }
     return numeric >= 2 && numeric >= nonNull / 2;
   });

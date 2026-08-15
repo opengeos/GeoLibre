@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ChartRow } from "../apps/geolibre-desktop/src/lib/attribute-charts";
+import {
+  coerceNumericStringRows,
+  type ChartRow,
+} from "../apps/geolibre-desktop/src/lib/attribute-charts";
 import {
   computeFieldStats,
   computeNumericStats,
@@ -121,9 +124,16 @@ describe("computeFieldStats", () => {
     assert.equal(stats.unique, 3);
   });
 
-  it("returns null for a numeric field with no values", () => {
+  it("infers numeric strings for a string-only source", () => {
+    const data = rows({ population: "10" }, { population: "20" }, { population: "30" });
+    const stats = computeFieldStats(coerceNumericStringRows(data), "population");
+    assert.ok(stats);
+    assert.equal(stats.kind, "numeric");
+    if (stats.kind === "numeric") assert.equal(stats.sum, 60);
+  });
+
+  it("treats a field with fewer than two numeric values as text", () => {
     const data = rows({ v: 1 }, { v: null });
-    // Only one numeric value → not detected as numeric → text stats, not null.
     const stats = computeFieldStats(data, "v");
     assert.equal(stats?.kind, "text");
   });

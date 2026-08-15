@@ -1,7 +1,7 @@
 import { isDuckDBQueryLayer, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { getDuckDBLayerRows } from "@geolibre/plugins";
 import { useMemo } from "react";
-import type { ChartRow } from "../lib/attribute-charts";
+import { coerceNumericStringRows, type ChartRow } from "../lib/attribute-charts";
 
 export interface LayerChartData {
   /** Attribute rows for charting (just the property bag each chart needs). */
@@ -35,11 +35,15 @@ function buildLayerChartData(layer: GeoLibreLayer | null): LayerChartData {
   // Mirror the attribute table's two row sources: DuckDB query layers fetch
   // their rows from the plugin's cache, every other vector layer reads its
   // features straight off `layer.geojson`.
-  const rows: ChartRow[] = isDuckDBQueryLayer(layer)
+  const sourceRows: ChartRow[] = isDuckDBQueryLayer(layer)
     ? getDuckDBLayerRows(layer.id).map((row) => ({ properties: row.properties }))
     : (layer.geojson?.features ?? []).map((feature) => ({
         properties: (feature.properties ?? {}) as Record<string, unknown>,
       }));
+  const rows =
+    layer.metadata.sourceKind === "delimited-text"
+      ? coerceNumericStringRows(sourceRows)
+      : sourceRows;
 
   const keys = new Set<string>();
   for (const row of rows) {
@@ -58,8 +62,8 @@ function buildLayerChartData(layer: GeoLibreLayer | null): LayerChartData {
 }
 
 /**
- * Resolve a layer id to the rows, columns, and name a chart widget renders
- * from. Recomputes when the layer record changes (e.g. attribute edits replace
+ * Resolve a layer id to the rows, columns, and name a chart widget uses.
+ * Recomputes when the layer record changes (e.g. attribute edits replace
  * `layer.geojson`). DuckDB query rows come from the plugin cache and are read
  * once per layer-identity change, matching the attribute table's behavior.
  *
