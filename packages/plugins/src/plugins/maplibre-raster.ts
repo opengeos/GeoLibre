@@ -821,10 +821,7 @@ function patchJpegCogSource(source: unknown): unknown {
           const cb = Number(rasters[1][index]) - 128;
           const cr = Number(rasters[2][index]) - 128;
           red[index] = Math.max(0, Math.min(255, yValue + 1.402 * cr));
-          green[index] = Math.max(
-            0,
-            Math.min(255, yValue - 0.344136 * cb - 0.714136 * cr),
-          );
+          green[index] = Math.max(0, Math.min(255, yValue - 0.344136 * cb - 0.714136 * cr));
           blue[index] = Math.max(0, Math.min(255, yValue + 1.772 * cb));
         }
         return [red, green, blue];
