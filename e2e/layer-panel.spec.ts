@@ -108,3 +108,20 @@ test("long layer names truncate without widening the layer panel", async ({ page
     .poll(() => name.evaluate((element) => element.scrollWidth > element.clientWidth))
     .toBe(true);
 });
+
+test("opens the selected layer in the Style panel from its card", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 720 });
+  await waitForMap(page);
+  await dropGeoJson(page, "first", FIXTURE_TEXT);
+  await expect(layerRow(page, "first")).toBeVisible();
+  await dropGeoJson(page, "second", FIXTURE_TEXT);
+  await expect(layerRow(page, "second")).toBeVisible();
+
+  const stylePanel = page.getByRole("complementary", { name: "Layer style" });
+  await expect(stylePanel).toHaveCount(0);
+
+  await layerRow(page, "first").getByRole("button", { name: "Open Style panel" }).click();
+
+  await expect(stylePanel).toBeVisible();
+  await expect(stylePanel.getByText("Style - first", { exact: true })).toBeVisible();
+});

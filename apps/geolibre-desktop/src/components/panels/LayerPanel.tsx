@@ -3389,7 +3389,7 @@ export function LayerPanel({
                         onChange={(v) => setLayerOpacity(layer.id, v)}
                       />
                     )}
-                    <div className="mt-2 flex gap-1">
+                    <div className="mt-2 flex flex-wrap gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -3449,6 +3449,22 @@ export function LayerPanel({
                       >
                         <MousePointerClick className="h-3.5 w-3.5" />
                       </Button>
+                      {onOpenStylePanel && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title={t("layers.openStylePanel")}
+                          aria-label={t("layers.openStylePanel")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            selectLayer(layer.id);
+                            onOpenStylePanel();
+                          }}
+                        >
+                          <Palette className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
