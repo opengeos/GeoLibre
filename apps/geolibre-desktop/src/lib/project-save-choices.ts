@@ -26,9 +26,7 @@ export function saveChoicesForProject(
   remembered: ProjectSaveChoices | null,
   projectGeneration: number,
 ): ProjectSaveChoices {
-  return remembered?.projectGeneration === projectGeneration
-    ? remembered
-    : { projectGeneration };
+  return remembered?.projectGeneration === projectGeneration ? remembered : { projectGeneration };
 }
 
 /**
