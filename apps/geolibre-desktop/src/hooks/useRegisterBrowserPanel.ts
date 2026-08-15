@@ -1,6 +1,7 @@
 import { collapseRightPanel, openRightPanel, registerRightPanel } from "@geolibre/plugins";
 import { useEffect } from "react";
 import i18n from "../i18n";
+import { useDesktopSettingsStore } from "./useDesktopSettings";
 
 /** Stable id of the Browser (Data Source Manager) right panel. */
 export const BROWSER_PANEL_ID = "browser";
@@ -24,8 +25,10 @@ export const BROWSER_PANEL_ID = "browser";
  * The panel is **on by default but collapsed** onto the shared Layers rail: on
  * mount it is opened and immediately collapsed, so it shows as a rail entry
  * beside Layers rather than covering the map. The user expands it from that
- * rail (or toggles it off in Settings → Layout). It reopens collapsed on the
- * next load, matching the "on by default" behavior of the Layout toggle.
+ * rail (or toggles it off in Settings → Layout). "By default" means the default
+ * of the persisted `layout.browserPanelVisible` setting: turning the panel off
+ * in Settings → Layout keeps it off across restarts rather than having the
+ * toggle silently reset (#1935).
  */
 export function useRegisterBrowserPanel(): void {
   useEffect(() => {
@@ -38,9 +41,15 @@ export function useRegisterBrowserPanel(): void {
       render: () => {},
     });
     // Default on, but docked collapsed to the Layers rail (open then collapse),
-    // so it is present without burying the map on first load.
-    openRightPanel(BROWSER_PANEL_ID);
-    collapseRightPanel(BROWSER_PANEL_ID);
+    // so it is present without burying the map on first load. Read the setting
+    // here rather than subscribing: this seeds the panel's startup state only.
+    // Once mounted the Settings toggle drives the registry directly, so the
+    // user can also close the panel from its own header without that being
+    // written back as a preference.
+    if (useDesktopSettingsStore.getState().desktopSettings.layout.browserPanelVisible) {
+      openRightPanel(BROWSER_PANEL_ID);
+      collapseRightPanel(BROWSER_PANEL_ID);
+    }
     return dispose;
   }, []);
 }

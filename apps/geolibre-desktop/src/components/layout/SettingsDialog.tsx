@@ -417,12 +417,25 @@ export function SettingsDialog({
   const showSettingsItem = (id: string) => isMenuItemVisible(desktopSettings.uiProfile, id);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
-  // The Browser is a dockable right panel (open/close via the registry), not a
-  // persisted layout preference, so its Layout toggle acts on the live registry
-  // state directly rather than through the draft settings.
+  // Browser and Comments are dockable right panels, so their checkboxes read the
+  // live registry state (the user can also close them from their own header)
+  // while the toggle writes the matching persisted layout setting. The setting
+  // is what their registration hooks seed from on the next launch, so the
+  // toggle survives a restart (#1935).
   const rightPanelState = useRightPanelState();
   const browserPanelOpen = rightPanelState.visibleIds.includes(BROWSER_PANEL_ID);
   const commentsPanelOpen = rightPanelState.visibleIds.includes(COMMENTS_PANEL_ID);
+  // These apply live rather than on Save, so the draft is patched alongside the
+  // saved settings: the draft was snapshotted when the dialog opened, and Save
+  // writes it wholesale, which would otherwise revert the toggle the user just
+  // made in this same dialog.
+  const applyPanelVisibility = (
+    key: "browserPanelVisible" | "commentsPanelVisible",
+    visible: boolean,
+  ) => {
+    updateSavedLayoutSettings({ [key]: visible });
+    updateDraftLayoutSettings({ [key]: visible });
+  };
   // Show it collapsed on the shared Layers rail, matching its default state, so
   // re-enabling from Settings doesn't jump to an expanded panel that buries the
   // Layers panel.
@@ -433,6 +446,7 @@ export function SettingsDialog({
     } else {
       closeRightPanel(BROWSER_PANEL_ID);
     }
+    applyPanelVisibility("browserPanelVisible", show);
   };
   // Collapsed for the same reason as Browser above, and to match the state
   // Comments registers itself in on mount.
@@ -443,6 +457,7 @@ export function SettingsDialog({
     } else {
       closeRightPanel(COMMENTS_PANEL_ID);
     }
+    applyPanelVisibility("commentsPanelVisible", show);
   };
   // A field a deep-link asked us to focus once its section renders; cleared
   // after the focus lands so a later open without a focus request stays put.
@@ -932,6 +947,11 @@ export function SettingsDialog({
 
   const resetLayoutSettings = () => {
     updateDraftLayoutSettings(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
+    // The Browser/Comments checkboxes render the live registry state, not the
+    // draft, so reset has to move the panels themselves or those two rows would
+    // ignore the button.
+    toggleBrowserPanel(DEFAULT_DESKTOP_LAYOUT_SETTINGS.browserPanelVisible);
+    toggleCommentsPanel(DEFAULT_DESKTOP_LAYOUT_SETTINGS.commentsPanelVisible);
   };
 
   // The accent scheme applies live (instant preview) rather than waiting for
