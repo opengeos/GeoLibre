@@ -823,10 +823,7 @@ function patchJpegCogSource(source: unknown): unknown {
             : directory?.getValue?.(tag);
           return value as ArrayLike<number> | undefined;
         };
-        const [coefficients, referenceBlackWhite] = await Promise.all([
-          readTag(529),
-          readTag(532),
-        ]);
+        const [coefficients, referenceBlackWhite] = await Promise.all([readTag(529), readTag(532)]);
         return convertTiffYCbCrToRgb(
           rasters[0],
           rasters[1],

@@ -18,8 +18,7 @@ export function convertTiffYCbCrToRgb(
   referenceBlackWhite?: NumericArray,
 ): [Float64Array, Float64Array, Float64Array] {
   const [kr, kg, kb] = finiteValues(coefficients, 3) ?? DEFAULT_COEFFICIENTS;
-  const reference =
-    finiteValues(referenceBlackWhite, 6) ?? DEFAULT_REFERENCE_BLACK_WHITE;
+  const reference = finiteValues(referenceBlackWhite, 6) ?? DEFAULT_REFERENCE_BLACK_WHITE;
   const [blackY, whiteY, blackCb, whiteCb, blackCr, whiteCr] = reference;
   const yRange = whiteY - blackY || 255;
   const cbRange = whiteCb - blackCb || 127;
