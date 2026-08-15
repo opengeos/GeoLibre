@@ -21,6 +21,22 @@ export interface ProjectSaveChoices {
   vectorData?: VectorDataSaveChoice;
   /** Embedded size, in bytes, the user accepted after seeing the large-data warning. */
   acknowledgedEmbedBytes?: number;
+  /** Layers whose data the user accepted discarding with an explicit Save without data. */
+  discardedVectorLayerIds?: readonly string[];
+}
+
+/** What the current save would write, measured against a remembered choice. */
+export interface VectorDataSaveRisk {
+  /** Estimated size of the data this save would embed. */
+  embedBytes: number;
+  /** Threshold at which the large-embed warning applies. */
+  warningBytes: number;
+  /**
+   * Ids of local vector layers whose data this save would drop outright. Only
+   * the web build can lose data this way: on desktop "Save without data" writes
+   * file references that reload from disk, so nothing is discarded there.
+   */
+  discardedLayerIds: readonly string[];
 }
 
 /**
@@ -61,28 +77,50 @@ export function rememberProjectSaveChoices(
 }
 
 /**
- * Returns a remembered vector-data choice when no new size warning is needed.
+ * Returns a remembered vector-data choice when it still covers what this save
+ * would do.
  *
- * An acknowledgement covers the size the user actually saw, plus the ordinary
- * growth of a project being edited. Data that balloons past
+ * An Embed acknowledgement covers the size the user actually saw, plus the
+ * ordinary growth of a project being edited. Data that balloons past
  * {@link EMBED_REACKNOWLEDGE_GROWTH_FACTOR} times that size is a materially
  * different write and is confirmed again.
  *
+ * Save without data is reused only for the layers the user accepted losing.
+ * Dismissing the prompt for one throwaway layer must not silently discard a
+ * layer added afterwards, which is the one branch here that destroys data.
+ *
  * @param remembered - Choices scoped to the current project.
- * @param embedBytes - Estimated size of the data this save would embed.
- * @param warningBytes - Threshold at which the large-embed warning applies.
- * @returns The reusable choice, or undefined when the user must confirm a large embed.
+ * @param risk - What the current save would embed or discard.
+ * @returns The reusable choice, or undefined when the user must confirm again.
  */
 export function reusableVectorDataChoice(
   remembered: ProjectSaveChoices,
-  embedBytes: number,
-  warningBytes: number,
+  risk: VectorDataSaveRisk,
 ): VectorDataSaveChoice | undefined {
-  if (remembered.vectorData !== "embed" || embedBytes < warningBytes) return remembered.vectorData;
-  const acknowledged = remembered.acknowledgedEmbedBytes;
-  return acknowledged != null && embedBytes <= acknowledged * EMBED_REACKNOWLEDGE_GROWTH_FACTOR
-    ? remembered.vectorData
-    : undefined;
+  if (remembered.vectorData === "embed") {
+    if (risk.embedBytes < risk.warningBytes) return remembered.vectorData;
+    const acknowledged = remembered.acknowledgedEmbedBytes;
+    return acknowledged != null &&
+      risk.embedBytes <= acknowledged * EMBED_REACKNOWLEDGE_GROWTH_FACTOR
+      ? remembered.vectorData
+      : undefined;
+  }
+  if (remembered.vectorData === "noembed") {
+    if (risk.discardedLayerIds.length === 0) return remembered.vectorData;
+    const acknowledged = new Set(remembered.discardedVectorLayerIds ?? []);
+    return risk.discardedLayerIds.every((id) => acknowledged.has(id))
+      ? remembered.vectorData
+      : undefined;
+  }
+  return remembered.vectorData;
+}
+
+/** Which credentials the current save would write, from the redaction pass. */
+export interface CredentialSaveRisk {
+  /** Fingerprints of the credentials this save would keep. */
+  fingerprints: readonly string[];
+  /** Whether any credential could not be fingerprinted, and so cannot be compared. */
+  hasUnfingerprintable: boolean;
 }
 
 /**
@@ -92,21 +130,23 @@ export function reusableVectorDataChoice(
  * reused only while every credential this save would write is one the user
  * explicitly accepted. Fingerprints rather than a count, because swapping one
  * credentialed layer for another leaves the count unchanged while putting a
- * secret the user never saw on disk.
+ * secret the user never saw on disk. A credential that could not be
+ * fingerprinted cannot be shown to be unchanged, so it is confirmed again.
  *
  * @param remembered - Choices scoped to the current project.
- * @param credentialFingerprints - Fingerprints of the credentials this save would keep.
+ * @param risk - The credentials this save would keep.
  * @returns The reusable choice, or undefined when Keep must be confirmed again.
  */
 export function reusableCredentialChoice(
   remembered: ProjectSaveChoices,
-  credentialFingerprints: readonly string[],
+  risk: CredentialSaveRisk,
 ): CredentialSaveChoice | undefined {
   if (remembered.credentials !== "keep") return remembered.credentials;
+  if (risk.hasUnfingerprintable) return undefined;
   const acknowledged = remembered.keptCredentialFingerprints;
   if (acknowledged == null) return undefined;
   const covered = new Set(acknowledged);
-  return credentialFingerprints.every((fingerprint) => covered.has(fingerprint))
+  return risk.fingerprints.every((fingerprint) => covered.has(fingerprint))
     ? remembered.credentials
     : undefined;
 }

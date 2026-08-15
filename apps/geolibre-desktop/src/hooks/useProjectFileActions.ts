@@ -868,13 +868,17 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     saveChoicesRef.current = remembered;
     // A remembered Embed choice stays silent until the project crosses the
     // large-data warning threshold, and again whenever the data outgrows the
-    // size that was acknowledged. That material risk deserves a fresh
-    // confirmation even though the ordinary per-project choice is remembered.
-    const rememberedVectorChoice = reusableVectorDataChoice(
-      remembered,
-      bytes,
-      LARGE_EMBED_WARNING_BYTES,
-    );
+    // size that was acknowledged. A remembered Save without data stays silent
+    // only for the layers whose data the user accepted losing. Both are
+    // material risks that deserve a fresh confirmation even though the ordinary
+    // per-project choice is remembered. On desktop that second case cannot
+    // arise: "without data" writes file references, so nothing is discarded.
+    const discardedLayerIds = isTauri() ? [] : [...embeddable.keys()];
+    const rememberedVectorChoice = reusableVectorDataChoice(remembered, {
+      embedBytes: bytes,
+      warningBytes: LARGE_EMBED_WARNING_BYTES,
+      discardedLayerIds,
+    });
     const choice =
       rememberedVectorChoice ??
       (await askEmbedVectorData(count, bytes, isTauri(), state.projectGeneration));
@@ -895,6 +899,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           bytes >= LARGE_EMBED_WARNING_BYTES
             ? bytes
             : remembered.acknowledgedEmbedBytes,
+        // Likewise, only an answered prompt widens the set of layers the user
+        // has agreed to lose.
+        discardedVectorLayerIds:
+          rememberedVectorChoice === undefined && choice === "noembed"
+            ? discardedLayerIds
+            : remembered.discardedVectorLayerIds,
       },
     );
 
@@ -997,10 +1007,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (redacted.redactedPaths.length > 0) {
       const remembered = saveChoicesForProject(saveChoicesRef.current, saveProjectGeneration);
       saveChoicesRef.current = remembered;
-      const rememberedCredentialChoice = reusableCredentialChoice(
-        remembered,
-        redacted.redactedFingerprints,
-      );
+      const rememberedCredentialChoice = reusableCredentialChoice(remembered, {
+        fingerprints: redacted.redactedFingerprints,
+        hasUnfingerprintable: redacted.hasUnfingerprintableCredential,
+      });
       const choice =
         rememberedCredentialChoice ??
         (await askStripCredentials(redacted.redactedCount, saveProjectGeneration));

@@ -58,8 +58,8 @@ export interface CredentialRedactionResult {
   /** Stable project paths removed or rewritten by the redaction pass. */
   redactedPaths: string[];
   /**
-   * One opaque `path=hash` fingerprint per redacted path, identifying *which*
-   * secret sat there. A caller that remembers an explicit "keep credentials"
+   * Opaque `path=hash` fingerprints identifying *which* secret sat at each
+   * redacted path. A caller that remembers an explicit "keep credentials"
    * decision compares these between saves, so a different credential, such as
    * a swapped layer or rotated token, is confirmed again instead of being
    * written to disk under the earlier answer. Paths alone cannot carry that:
@@ -67,6 +67,13 @@ export interface CredentialRedactionResult {
    * replaced.
    */
   redactedFingerprints: string[];
+  /**
+   * Whether any redacted value could not be serialized, and so has no entry in
+   * {@link redactedFingerprints}. Such a value cannot be compared with what the
+   * user accepted, so a caller reusing a remembered decision must ask again
+   * rather than assume the unfingerprintable credential is unchanged.
+   */
+  hasUnfingerprintableCredential: boolean;
   /** Number of individual credential-bearing fields removed or rewritten. */
   redactedCount: number;
 }
@@ -76,30 +83,40 @@ interface RedactionAccumulator {
   paths: string[];
   fingerprints: string[];
   count: number;
+  /** Whether some redacted value could not be serialized, and so not fingerprinted. */
+  unfingerprintable: boolean;
 }
 
 /**
- * Hash a credential value to a short, stable token (FNV-1a).
+ * Hash a credential value to a short, stable token (two FNV-1a lanes, 64 bits).
  *
  * The digest never leaves memory and is only ever compared for equality, so it
  * needs to be stable and cheap rather than cryptographic. Hashing rather than
  * retaining the value keeps the secret itself out of the remembered choices.
+ *
+ * A collision costs a *missed* confirmation, not a spurious one: a caller
+ * comparing fingerprints would treat a different secret as one the user already
+ * accepted. That is why this is 64 bits rather than 32, and why a value that
+ * cannot be serialized returns null rather than hashing a lossy `String(value)`
+ * that would collapse every such value onto `[object Object]`.
+ *
+ * @returns The digest, or null when the value cannot be serialized.
  */
-function fingerprintValue(value: unknown): string {
+function fingerprintValue(value: unknown): string | null {
   let serialized: string;
   try {
     serialized = JSON.stringify(value) ?? String(value);
   } catch {
-    // A circular or otherwise unserializable blob still needs a marker; that it
-    // collides with other unserializable blobs only costs an extra prompt.
-    serialized = String(value);
+    return null;
   }
-  let hash = 0x811c9dc5;
+  let low = 0x811c9dc5;
+  let high = 0x27220a95;
   for (let index = 0; index < serialized.length; index += 1) {
-    hash ^= serialized.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
+    const code = serialized.charCodeAt(index);
+    low = Math.imul(low ^ code, 0x01000193);
+    high = Math.imul(high ^ code, 0x85ebca6b);
   }
-  return (hash >>> 0).toString(36);
+  return `${(low >>> 0).toString(36)}.${(high >>> 0).toString(36)}`;
 }
 
 /** Record one redaction, with the fingerprint of the value being removed. */
@@ -109,8 +126,13 @@ function recordRedaction(
   value: unknown,
   count = 1,
 ): void {
+  const digest = fingerprintValue(value);
   accumulator.paths.push(path);
-  accumulator.fingerprints.push(`${path}=${fingerprintValue(value)}`);
+  // A value that cannot be serialized fails closed: it is reported through
+  // `hasUnfingerprintableCredential` rather than fingerprinted, so a caller
+  // asks again instead of reusing an answer it cannot verify still applies.
+  if (digest === null) accumulator.unfingerprintable = true;
+  else accumulator.fingerprints.push(`${path}=${digest}`);
   accumulator.count += count;
 }
 
@@ -291,7 +313,12 @@ function countLeafValues(value: unknown): number {
  * themselves.
  */
 export function redactProjectCredentials(project: GeoLibreProject): CredentialRedactionResult {
-  const accumulator: RedactionAccumulator = { paths: [], fingerprints: [], count: 0 };
+  const accumulator: RedactionAccumulator = {
+    paths: [],
+    fingerprints: [],
+    count: 0,
+    unfingerprintable: false,
+  };
   const basemapStyleUrl =
     typeof project.basemapStyleUrl === "string"
       ? redactUrlCredentials(project.basemapStyleUrl)
@@ -446,6 +473,7 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
     },
     redactedPaths: [...new Set(accumulator.paths)],
     redactedFingerprints: [...new Set(accumulator.fingerprints)],
+    hasUnfingerprintableCredential: accumulator.unfingerprintable,
     redactedCount: accumulator.count,
   };
 }
