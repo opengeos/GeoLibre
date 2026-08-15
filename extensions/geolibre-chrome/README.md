@@ -9,7 +9,7 @@ the current page and opens selected files together in GeoLibre using repeated
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Choose **Load unpacked**.
-4. Select this `extensions/geolibre-data-opener` directory.
+4. Select this `extensions/geolibre-chrome` directory.
 
 The extension requests `activeTab` and `scripting` only. It scans a page after
 you click its toolbar icon and does not retain page contents or browsing data.

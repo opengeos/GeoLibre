@@ -38,14 +38,14 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: geolibre-chrome-extension
-          path: dist/geolibre-data-opener-*.zip
+          path: dist/geolibre-chrome-*.zip
           if-no-files-found: error
 
       - name: Attach Chrome extension to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" dist/geolibre-data-opener-*.zip --clobber
+        run: gh release upload "$TAG" dist/geolibre-chrome-*.zip --clobber
 
   build:
     name: Build ${{ matrix.name }}

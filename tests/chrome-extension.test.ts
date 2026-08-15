@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseHTML } from "linkedom";
-import { scanDocumentForDatasets } from "../extensions/geolibre-data-opener/scanner.mjs";
-import { buildGeoLibreUrl } from "../extensions/geolibre-data-opener/url-builder.mjs";
+import { scanDocumentForDatasets } from "../extensions/geolibre-chrome/scanner.mjs";
+import { buildGeoLibreUrl } from "../extensions/geolibre-chrome/url-builder.mjs";
 
 function scan(html: string, url = "https://catalog.example.com/page/") {
   const { document } = parseHTML(html);

@@ -8,11 +8,11 @@ The **Open data in GeoLibre** Chrome extension finds supported geospatial data l
 
 Until the extension is available from the Chrome Web Store, install the packaged release manually:
 
-1. Download [`geolibre-data-opener-0.1.0.zip`](https://github.com/opengeos/GeoLibre/releases/download/v2.6.0/geolibre-data-opener-0.1.0.zip) from the [GeoLibre v2.6.0 release](https://github.com/opengeos/GeoLibre/releases/tag/v2.6.0).
+1. Download [`geolibre-chrome-0.1.0.zip`](https://github.com/opengeos/GeoLibre/releases/download/v2.6.0/geolibre-chrome-0.1.0.zip) from the [GeoLibre v2.6.0 release](https://github.com/opengeos/GeoLibre/releases/tag/v2.6.0).
 2. Extract the ZIP archive to a folder you intend to keep. Chrome loads the extension from this folder, so do not delete it after installation.
 3. Open `chrome://extensions` in Chrome.
 4. Turn on **Developer mode**.
-5. Select **Load unpacked** and choose the extracted `geolibre-data-opener-0.1.0` folder.
+5. Select **Load unpacked** and choose the extracted `geolibre-chrome-0.1.0` folder.
 6. Pin **Open data in GeoLibre** to the Chrome toolbar for convenient access.
 
 To update a manually installed copy, download and extract the newer release asset, then select the extension's **Reload** button on `chrome://extensions`. If you extract it to a different folder, remove the old copy and load the new folder instead.
