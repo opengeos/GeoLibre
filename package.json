@@ -14,6 +14,7 @@
     "lite:build": "node scripts/lite-build.mjs",
     "build:jupyterlite": "node scripts/build-jupyterlite.mjs",
     "build:embed": "node scripts/build-embed.mjs",
+    "build:chrome-extension": "node scripts/package-chrome-extension.mjs",
     "typecheck": "npm run build",
     "lint": "eslint apps packages workers tests",
     "test": "npm run test:frontend",

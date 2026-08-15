@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Open data in GeoLibre",
+  "description": "Find geospatial datasets on the current page and open the selected files together in GeoLibre.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "102",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_title": "Open data in GeoLibre",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/geolibre-16.png",
+      "32": "icons/geolibre-32.png"
+    }
+  },
+  "icons": {
+    "16": "icons/geolibre-16.png",
+    "32": "icons/geolibre-32.png",
+    "48": "icons/geolibre-48.png",
+    "128": "icons/geolibre-128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
