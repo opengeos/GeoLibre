@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   exceedsBrowserCogConversionLimit,
   geoTiffSampleCount,
+  LARGE_BROWSER_COG_CONVERSION_SAMPLES,
   MAX_BROWSER_COG_CONVERSION_SAMPLES,
 } from "../apps/geolibre-desktop/src/lib/cog-conversion-limits";
 
@@ -13,6 +14,7 @@ test("counts raster samples across bands", () => {
 });
 
 test("allows the ceiling and rejects larger conversions", () => {
+  assert.ok(LARGE_BROWSER_COG_CONVERSION_SAMPLES < MAX_BROWSER_COG_CONVERSION_SAMPLES);
   assert.equal(exceedsBrowserCogConversionLimit(MAX_BROWSER_COG_CONVERSION_SAMPLES), false);
   assert.equal(exceedsBrowserCogConversionLimit(MAX_BROWSER_COG_CONVERSION_SAMPLES + 1), true);
 });

@@ -183,6 +183,7 @@ import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
 import {
   exceedsBrowserCogConversionLimit,
   geoTiffSampleCount,
+  LARGE_BROWSER_COG_CONVERSION_SAMPLES,
 } from "../../lib/cog-conversion-limits";
 
 /**
@@ -191,14 +192,6 @@ import {
  * `window.confirm` (see the handlers below): a `false` return aborts that one
  * file's load without affecting the rest of a multi-file drop.
  */
-/**
- * Sample count (width × height × bands) above which in-browser COG conversion
- * gets an extra "this may be slow / memory-intensive" confirmation. The
- * converter reads the whole raster into memory as f64, so ~40M samples is
- * roughly where the transient allocation starts to be felt.
- */
-const LARGE_RASTER_SAMPLE_LIMIT = 40_000_000;
-
 function confirmLargeVectorDataset({ name, featureCount }: LargeVectorDataset) {
   return window.confirm(
     i18n.t("toolbar.item.largeVectorDesc", {
@@ -1146,6 +1139,7 @@ export function DesktopShell({
           return;
         }
         const info = await readGeoTiffInfo(bytes);
+        if (!info.ok) throw new Error("Not a readable GeoTIFF.");
         const samples = geoTiffSampleCount(info);
         if (exceedsBrowserCogConversionLimit(samples)) {
           console.warn(
@@ -1158,7 +1152,7 @@ export function DesktopShell({
           // Local file: pick the prompt by size now that the header is cheap to
           // read, then confirm once. (A remote source already confirmed above.)
           const message =
-            samples > LARGE_RASTER_SAMPLE_LIMIT
+            samples > LARGE_BROWSER_COG_CONVERSION_SAMPLES
               ? t("raster.cogConvertLargeConfirm", {
                   name,
                   width: info.width,

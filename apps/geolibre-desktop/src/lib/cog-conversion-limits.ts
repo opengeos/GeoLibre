@@ -11,6 +11,9 @@ import type { GeoTiffInfo } from "@geolibre/processing";
  */
 export const MAX_BROWSER_COG_CONVERSION_SAMPLES = 100_000_000;
 
+/** Sample count above which conversion requires an extra memory warning. */
+export const LARGE_BROWSER_COG_CONVERSION_SAMPLES = 40_000_000;
+
 /** Return the decoded sample count used by the conversion memory guard. */
 export function geoTiffSampleCount(info: Pick<GeoTiffInfo, "width" | "height" | "bands">): number {
   return info.width * info.height * Math.max(info.bands, 1);
