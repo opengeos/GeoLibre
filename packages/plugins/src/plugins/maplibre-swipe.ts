@@ -11,11 +11,14 @@ import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
   getCogRasterMainVisibility,
   getSwipeCogRasters,
+  getSwipeMaplibreRasters,
   setCogRasterMainVisibility,
   subscribeSwipeCogChanges,
   type SwipeCogRasterSnapshot,
 } from "./maplibre-components";
 import { SwipeCogMirror } from "./swipe-cog-mirror";
+import { getRasterMainVisibility, setRasterMainVisibility } from "./maplibre-raster";
+import { SwipeRasterMirror } from "./swipe-raster-mirror";
 
 /**
  * Plugin id for the Layer Swipe control. Exported so the app can coordinate it
@@ -40,6 +43,7 @@ let unsubscribeBasemap: (() => void) | null = null;
 // The comparison-map raster mirror, recreated whenever the swipe control makes a
 // fresh comparison map (basemap change, re-activation).
 let cogMirror: SwipeCogMirror | null = null;
+let rasterMirror: SwipeRasterMirror | null = null;
 // The main-map visibility this provider last forced per raster id (with the
 // opacity to restore when showing it again), so it only toggles on change and
 // can restore visibility on teardown.
@@ -54,7 +58,7 @@ let unsubscribeCogRasterChanges: (() => void) | null = null;
 
 const cogSwipeProvider: SwipeLayerProvider = {
   getLayers: () =>
-    getSwipeCogRasters().map((raster) => ({
+    [...getSwipeCogRasters(), ...getSwipeMaplibreRasters()].map((raster) => ({
       id: raster.id,
       type: "raster",
       visible: raster.visible,
@@ -92,8 +96,16 @@ function reconcileCogSwipe(): void {
     cogMirror?.destroy();
     cogMirror = new SwipeCogMirror(comparisonMap);
   }
+  if (!comparisonMap) {
+    rasterMirror?.destroy();
+    rasterMirror = null;
+  } else if (!rasterMirror || rasterMirror.getMap() !== comparisonMap) {
+    rasterMirror?.destroy();
+    rasterMirror = new SwipeRasterMirror(comparisonMap);
+  }
 
   const rasters = getSwipeCogRasters();
+  const maplibreRasters = getSwipeMaplibreRasters();
 
   // Drop bookkeeping for rasters removed from the store while swiping (the loop
   // below only visits still-present rasters, so their entries would otherwise
@@ -117,6 +129,11 @@ function reconcileCogSwipe(): void {
       rasters.filter((raster) => raster.visible && onComparison(sideFor(raster))),
     );
   }
+  if (rasterMirror) {
+    void rasterMirror.sync(
+      maplibreRasters.filter((raster) => raster.visible && onComparison(sideFor(raster))),
+    );
+  }
 
   // Main map: hide right-only rasters (shown on the comparison side instead);
   // keep every other visible raster on the main map. Rasters the user hid are
@@ -138,17 +155,30 @@ function reconcileCogSwipe(): void {
       opacity: raster.opacity,
     });
   }
+  for (const raster of maplibreRasters) {
+    if (!raster.visible) continue;
+    const wantVisible = sideFor(raster) !== "right";
+    if (getRasterMainVisibility(raster.id) !== wantVisible) {
+      setRasterMainVisibility(raster.id, wantVisible);
+    }
+    cogMainForced.set(raster.id, { visible: wantVisible, opacity: raster.opacity });
+  }
 }
 
 function teardownCogSwipe(): void {
   cogMirror?.destroy();
   cogMirror = null;
+  rasterMirror?.destroy();
+  rasterMirror = null;
   cogPendingSides.clear();
   cogPendingComparisonMap = undefined;
   cogReconcileScheduled = false;
   // Restore any raster this provider hid on the main map.
   for (const [id, forced] of cogMainForced) {
-    if (!forced.visible) setCogRasterMainVisibility(id, true, forced.opacity);
+    if (!forced.visible) {
+      setCogRasterMainVisibility(id, true, forced.opacity);
+      setRasterMainVisibility(id, true);
+    }
   }
   cogMainForced.clear();
 }

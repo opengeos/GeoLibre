@@ -22,6 +22,7 @@ import {
   resetRasterStoreSyncSuspension,
   runWithRasterStoreSyncSuspended,
   savedRasterState,
+  setTransientRasterVisibility,
   syncRasterLayersToStoreWithOptions,
   unwireRasterStoreSync,
   wireRasterStoreSync,
@@ -487,6 +488,18 @@ function applyRgbBandDefaults(
  */
 export function applyRasterLayerOrder(layerId: string, beforeId: string | undefined): void {
   rasterControl?.setRasterBeforeId(layerId, beforeId ?? null);
+}
+
+/** Change the live main-map visibility without mutating the persisted store. */
+export function setRasterMainVisibility(layerId: string, visible: boolean): void {
+  setTransientRasterVisibility(layerId, !visible);
+  rememberControlRasterRenderState(layerId, { visible });
+  runWithRasterStoreSyncSuspended(() => rasterControl?.setVisible(layerId, visible));
+}
+
+/** Read the live main-map visibility used by Layer Swipe. */
+export function getRasterMainVisibility(layerId: string): boolean {
+  return rasterControl?.getRaster(layerId)?.state.visible ?? true;
 }
 
 export function closeRasterLayerPanel(app: GeoLibreAppAPI): void {

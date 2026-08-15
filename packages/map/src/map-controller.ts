@@ -2407,7 +2407,8 @@ export class MapController {
         .filter(
           (layer) =>
             layer.type === "cog" &&
-            layer.metadata.sourceKind === "cog-url" &&
+            (layer.metadata.sourceKind === "cog-url" ||
+              layer.metadata.sourceKind === "maplibre-gl-raster") &&
             layer.metadata.externalNativeLayer === true,
         )
         .map((layer): [string, string] => [layer.id, layer.name]),

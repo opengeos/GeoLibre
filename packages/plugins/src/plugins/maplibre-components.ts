@@ -70,6 +70,7 @@ import type {
   ZarrLocalStoreProvider,
   ZarrLayerInfo,
 } from "maplibre-gl-components";
+import type { RasterLayerState } from "maplibre-gl-raster";
 import type { GaussianSplatControl, GaussianSplatLayerAdapter } from "maplibre-gl-splat";
 import type { LidarControlEventHandler, PointCloudInfo } from "maplibre-gl-lidar";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
@@ -3541,6 +3542,15 @@ export interface SwipeCogRasterSnapshot {
   nodata?: number;
 }
 
+export interface SwipeMaplibreRasterSnapshot {
+  id: string;
+  name: string;
+  url: string;
+  visible: boolean;
+  opacity: number;
+  state: Partial<RasterLayerState>;
+}
+
 // Notified when the set/state of CogLayerControl rasters changes, so the swipe
 // provider can refresh its list and re-mirror. Backed by a single store
 // subscription while at least one listener is registered.
@@ -3566,7 +3576,7 @@ function notifySwipeCogChange(): void {
 function swipeCogFingerprint(layers: GeoLibreLayer[]): string {
   const parts: unknown[][] = [];
   for (const layer of layers) {
-    if (!isCogRasterControlLayer(layer)) continue;
+    if (!isCogRasterControlLayer(layer) && !isMaplibreRasterControlLayer(layer)) continue;
     const source = layer.source as {
       url?: unknown;
       bands?: unknown;
@@ -3668,6 +3678,28 @@ export function getSwipeCogRasters(): SwipeCogRasterSnapshot[] {
     });
   }
   return snapshots;
+}
+
+/** Snapshot the newer maplibre-gl-raster layers, including project restores. */
+export function getSwipeMaplibreRasters(): SwipeMaplibreRasterSnapshot[] {
+  return useAppStore
+    .getState()
+    .layers.filter(isMaplibreRasterControlLayer)
+    .flatMap((layer) => {
+      const url = (layer.source as { url?: unknown }).url;
+      if (typeof url !== "string") return [];
+      const state = layer.metadata.rasterState;
+      return [
+        {
+          id: layer.id,
+          name: layer.name,
+          url,
+          visible: layer.visible,
+          opacity: layer.opacity,
+          state: state && typeof state === "object" ? (state as Partial<RasterLayerState>) : {},
+        },
+      ];
+    });
 }
 
 /**
@@ -5583,6 +5615,14 @@ function isCogRasterControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "cog" &&
     layer.metadata.sourceKind === "cog-url" &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
+function isMaplibreRasterControlLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "cog" &&
+    layer.metadata.sourceKind === "maplibre-gl-raster" &&
     layer.metadata.externalNativeLayer === true
   );
 }
