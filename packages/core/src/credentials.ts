@@ -88,7 +88,9 @@ interface RedactionAccumulator {
 }
 
 /**
- * Hash a credential value to a short, stable token (two FNV-1a lanes, 64 bits).
+ * Hash a credential value to a short, stable 64-bit token: two independent
+ * FNV-1a-style lanes, the first with the canonical FNV prime and the second
+ * with a MurmurHash3 mixing constant so the lanes do not move together.
  *
  * The digest never leaves memory and is only ever compared for equality, so it
  * needs to be stable and cheap rather than cryptographic. Hashing rather than
