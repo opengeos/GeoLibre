@@ -5227,6 +5227,7 @@
     "cogConvertConfirm": "“{{name}}”是普通（条带式）GeoTIFF，无法直接显示。是否立即将其转换为云优化 GeoTIFF 并加载？",
     "cogConvertRemoteConfirm": "“{{name}}”是普通（条带式）GeoTIFF，无法直接显示。要显示它，需要下载整个文件并在浏览器中将其转换为云优化 GeoTIFF，对于大文件而言这可能会很慢且占用大量内存。是否继续？",
     "cogConvertLargeConfirm": "“{{name}}”是一个 {{width}}×{{height}} 的大型 GeoTIFF，并非云优化 GeoTIFF。在浏览器中转换它可能会很慢且占用大量内存。是否仍要转换并加载？",
+    "cogConvertTooLarge": "“{{name}}”过大，无法在浏览器中安全转换。请使用 gdal_translate 或 rio cogeo 将其转换为云优化 GeoTIFF，然后加载转换结果。",
     "cogConvertFailed": "无法将“{{name}}”转换为云优化 GeoTIFF。请尝试使用 gdal_translate 或 rio cogeo 进行转换，然后加载结果。",
     "rasterDownloadFailed": "无法下载“{{name}}”。服务器可能响应缓慢、无法访问或阻止跨域请求，或者文件可能过大而无法保存在内存中。请检查 URL 并重试。",
     "rasterNotGeotiff": "“{{name}}”未返回 GeoTIFF。服务器可能返回了错误或登录页面。请检查 URL 并重试。"

@@ -5302,6 +5302,7 @@
     "cogConvertConfirm": "\"{{name}}\" एक सामान्य (striped) GeoTIFF है, जिसे सीधे प्रदर्शित नहीं किया जा सकता। क्या इसे अभी Cloud-Optimized GeoTIFF में बदलकर लोड करें?",
     "cogConvertRemoteConfirm": "\"{{name}}\" एक सामान्य (striped) GeoTIFF है, जिसे सीधे प्रदर्शित नहीं किया जा सकता। इसे प्रदर्शित करने के लिए पूरी फ़ाइल डाउनलोड करके ब्राउज़र में उसे Cloud-Optimized GeoTIFF में बदलना होगा, जो बड़ी फ़ाइलों के लिए धीमा और मेमोरी-गहन हो सकता है। जारी रखें?",
     "cogConvertLargeConfirm": "\"{{name}}\" एक बड़ी {{width}}×{{height}} GeoTIFF है जो Cloud-Optimized GeoTIFF नहीं है। इसे ब्राउज़र में बदलना धीमा और मेमोरी-गहन हो सकता है। फिर भी बदलकर लोड करें?",
+    "cogConvertTooLarge": "\"{{name}}\" ब्राउज़र में सुरक्षित रूप से बदलने के लिए बहुत बड़ा है। इसे gdal_translate या rio cogeo से Cloud-Optimized GeoTIFF में बदलें, फिर परिणाम लोड करें।",
     "cogConvertFailed": "\"{{name}}\" को Cloud-Optimized GeoTIFF में नहीं बदला जा सका। gdal_translate या rio cogeo से बदलने का प्रयास करें, फिर परिणाम लोड करें।",
     "rasterDownloadFailed": "\"{{name}}\" डाउनलोड नहीं की जा सकी। सर्वर धीमा, अनुपलब्ध, या क्रॉस-ओरिजिन रिक्वेस्ट ब्लॉक कर रहा हो सकता है, या फ़ाइल मेमोरी में रखने के लिए बहुत बड़ी हो सकती है। URL जांचें और पुनः प्रयास करें।",
     "rasterNotGeotiff": "\"{{name}}\" ने GeoTIFF नहीं लौटाई। सर्वर ने इसके बजाय एक त्रुटि या लॉगिन पेज भेजा हो सकता है। URL जांचें और पुनः प्रयास करें।"

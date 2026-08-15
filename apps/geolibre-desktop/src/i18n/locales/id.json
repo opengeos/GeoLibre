@@ -5227,6 +5227,7 @@
     "cogConvertConfirm": "\"{{name}}\" adalah GeoTIFF biasa (bergaris), yang tidak dapat ditampilkan langsung. Konversi ke Cloud-Optimized GeoTIFF sekarang dan muat itu?",
     "cogConvertRemoteConfirm": "\"{{name}}\" adalah GeoTIFF biasa (bergaris), yang tidak dapat ditampilkan langsung. Menampilkannya berarti mengunduh seluruh file dan mengonversinya menjadi Cloud-Optimized GeoTIFF di browser, yang bisa lambat dan menguras memori untuk file besar. Lanjutkan?",
     "cogConvertLargeConfirm": "\"{{name}}\" adalah GeoTIFF {{width}}×{{height}} besar yang bukan Cloud-Optimized GeoTIFF. Mengonversinya di browser mungkin lambat dan menguras memori. Konversi dan muat saja?",
+    "cogConvertTooLarge": "\"{{name}}\" terlalu besar untuk dikonversi dengan aman di browser. Konversikan menjadi Cloud-Optimized GeoTIFF dengan gdal_translate atau rio cogeo, lalu muat hasilnya.",
     "cogConvertFailed": "Tidak dapat mengonversi \"{{name}}\" menjadi Cloud-Optimized GeoTIFF. Coba konversi dengan gdal_translate atau rio cogeo, lalu muat hasilnya.",
     "rasterDownloadFailed": "Tidak dapat mengunduh \"{{name}}\". Server mungkin lambat, tidak dapat dijangkau, atau memblokir permintaan lintas asal, atau file mungkin terlalu besar untuk disimpan dalam memori. Periksa URL dan coba lagi.",
     "rasterNotGeotiff": "\"{{name}}\" tidak mengembalikan GeoTIFF. Server mungkin mengirim halaman kesalahan atau login sebagai gantinya. Periksa URL dan coba lagi."

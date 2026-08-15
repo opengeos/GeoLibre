@@ -5302,6 +5302,7 @@
     "cogConvertConfirm": "\"{{name}}\" é um GeoTIFF simples (em faixas), que não pode ser exibido diretamente. Convertê-lo agora para um GeoTIFF Cloud-Optimized e carregá-lo?",
     "cogConvertRemoteConfirm": "\"{{name}}\" é um GeoTIFF simples (em faixas), que não pode ser exibido diretamente. Exibi-lo significa baixar o arquivo completo e convertê-lo para um GeoTIFF Cloud-Optimized no navegador, o que pode ser lento e consumir muita memória para arquivos grandes. Continuar?",
     "cogConvertLargeConfirm": "\"{{name}}\" é um GeoTIFF grande de {{width}}×{{height}} que não é um GeoTIFF Cloud-Optimized. Convertê-lo no navegador pode ser lento e consumir muita memória. Converter e carregar mesmo assim?",
+    "cogConvertTooLarge": "“{{name}}” é grande demais para ser convertido com segurança no navegador. Converta-o em um GeoTIFF Cloud-Optimized com gdal_translate ou rio cogeo e carregue o resultado.",
     "cogConvertFailed": "Não foi possível converter \"{{name}}\" para um GeoTIFF Cloud-Optimized. Tente convertê-lo com gdal_translate ou rio cogeo e, em seguida, carregue o resultado.",
     "rasterDownloadFailed": "Não foi possível baixar \"{{name}}\". O servidor pode estar lento, inacessível ou bloqueando solicitações entre origens, ou o arquivo pode ser grande demais para caber na memória. Verifique a URL e tente novamente.",
     "rasterNotGeotiff": "\"{{name}}\" não retornou um GeoTIFF. O servidor pode ter enviado uma página de erro ou login em vez disso. Verifique a URL e tente novamente."

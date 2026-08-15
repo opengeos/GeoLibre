@@ -5302,6 +5302,7 @@
     "cogConvertConfirm": "\"{{name}}\" is een gewone (striped) GeoTIFF, die niet rechtstreeks kan worden weergegeven. Nu omzetten naar een Cloud-Optimized GeoTIFF en die laden?",
     "cogConvertRemoteConfirm": "\"{{name}}\" is een gewone (striped) GeoTIFF, die niet rechtstreeks kan worden weergegeven. Om deze weer te geven moet het volledige bestand worden gedownload en in de browser worden omgezet naar een Cloud-Optimized GeoTIFF, wat traag en geheugenintensief kan zijn bij grote bestanden. Doorgaan?",
     "cogConvertLargeConfirm": "\"{{name}}\" is een grote GeoTIFF van {{width}}×{{height}} die geen Cloud-Optimized GeoTIFF is. Omzetten in de browser kan traag en geheugenintensief zijn. Toch omzetten en laden?",
+    "cogConvertTooLarge": "‘{{name}}’ is te groot om veilig in de browser te converteren. Converteer het met gdal_translate of rio cogeo naar een Cloud-Optimized GeoTIFF en laad daarna het resultaat.",
     "cogConvertFailed": "\"{{name}}\" kon niet worden omgezet naar een Cloud-Optimized GeoTIFF. Probeer het te converteren met gdal_translate of rio cogeo en laad vervolgens het resultaat.",
     "rasterDownloadFailed": "\"{{name}}\" kon niet worden gedownload. De server is mogelijk traag, onbereikbaar of blokkeert cross-origin-verzoeken, of het bestand is te groot om in het geheugen te laden. Controleer de URL en probeer het opnieuw.",
     "rasterNotGeotiff": "\"{{name}}\" leverde geen GeoTIFF op. De server heeft mogelijk een foutmelding of inlogpagina teruggestuurd. Controleer de URL en probeer het opnieuw."

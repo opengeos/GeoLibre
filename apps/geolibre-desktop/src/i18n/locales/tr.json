@@ -5302,6 +5302,7 @@
     "cogConvertConfirm": "\"{{name}}\", doğrudan görüntülenemeyen düz (şeritli) bir GeoTIFF'tir. Şimdi Bulut Optimizeli bir GeoTIFF'e dönüştürülüp yüklensin mi?",
     "cogConvertRemoteConfirm": "\"{{name}}\", doğrudan görüntülenemeyen düz (şeritli) bir GeoTIFF'tir. Görüntülemek, tüm dosyayı indirmeyi ve tarayıcıda Bulut Optimizeli bir GeoTIFF'e dönüştürmeyi gerektirir; bu büyük dosyalar için yavaş ve bellek yoğun olabilir. Devam edilsin mi?",
     "cogConvertLargeConfirm": "\"{{name}}\", Bulut Optimizeli bir GeoTIFF olmayan büyük bir {{width}}×{{height}} GeoTIFF'tir. Tarayıcıda dönüştürmek yavaş ve bellek yoğun olabilir. Yine de dönüştürülüp yüklensin mi?",
+    "cogConvertTooLarge": "\"{{name}}\", tarayıcıda güvenli bir şekilde dönüştürülemeyecek kadar büyük. gdal_translate veya rio cogeo ile Cloud-Optimized GeoTIFF'e dönüştürün, ardından sonucu yükleyin.",
     "cogConvertFailed": "\"{{name}}\" bir Bulut Optimizeli GeoTIFF'e dönüştürülemedi. gdal_translate veya rio cogeo ile dönüştürmeyi deneyin, ardından sonucu yükleyin.",
     "rasterDownloadFailed": "\"{{name}}\" indirilemedi. Sunucu yavaş, erişilemez olabilir, çapraz kaynak isteklerini engelliyor olabilir, ya da dosya bellekte tutulamayacak kadar büyük olabilir. URL'yi kontrol edip tekrar deneyin.",
     "rasterNotGeotiff": "\"{{name}}\" bir GeoTIFF döndürmedi. Sunucu, bunun yerine bir hata veya oturum açma sayfası göndermiş olabilir. URL'yi kontrol edip tekrar deneyin."

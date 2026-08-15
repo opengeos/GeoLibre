@@ -5291,6 +5291,7 @@
     "cogConvertConfirm": "Chuyển đổi {{name}}?",
     "cogConvertRemoteConfirm": "Chuyển đổi {{name}}?",
     "cogConvertLargeConfirm": "\"{{name}}\" là {{width}}×{{height}} GeoTIFF lớn không phải là GeoTIFF được tối ưu hóa cho đám mây. Việc chuyển đổi nó trong trình duyệt có thể chậm và tốn nhiều bộ nhớ. Vẫn chuyển đổi và tải nó?",
+    "cogConvertTooLarge": "\"{{name}}\" quá lớn để chuyển đổi an toàn trong trình duyệt. Hãy chuyển đổi tệp thành Cloud-Optimized GeoTIFF bằng gdal_translate hoặc rio cogeo, rồi tải kết quả.",
     "cogConvertFailed": "Không thể chuyển đổi \"{{name}}\" thành GeoTIFF được tối ưu hóa cho đám mây. Hãy thử chuyển đổi nó bằng gdal_translate hoặc rio cogeo, sau đó tải kết quả.",
     "rasterDownloadFailed": "Không thể tải xuống {{name}}.",
     "rasterNotGeotiff": "\"{{name}}\" không trả về GeoTIFF. Thay vào đó, máy chủ có thể đã gửi lỗi hoặc trang đăng nhập. Hãy kiểm tra URL và thử lại."

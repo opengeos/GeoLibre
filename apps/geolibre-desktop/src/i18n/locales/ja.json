@@ -5227,6 +5227,7 @@
     "cogConvertConfirm": "「{{name}}」は通常の(ストライプ形式の)GeoTIFFであり、直接表示できません。今すぐCloud-Optimized GeoTIFFに変換して読み込みますか?",
     "cogConvertRemoteConfirm": "「{{name}}」は通常の(ストライプ形式の)GeoTIFFであり、直接表示できません。表示するにはファイル全体をダウンロードし、ブラウザ内でCloud-Optimized GeoTIFFに変換する必要があります。大きなファイルの場合、処理に時間がかかりメモリを多く消費する可能性があります。続行しますか?",
     "cogConvertLargeConfirm": "「{{name}}」は{{width}}×{{height}}の大きなGeoTIFFで、Cloud-Optimized GeoTIFFではありません。ブラウザ内での変換は時間がかかりメモリを多く消費する可能性があります。それでも変換して読み込みますか?",
+    "cogConvertTooLarge": "「{{name}}」はブラウザーで安全に変換するには大きすぎます。gdal_translateまたはrio cogeoでCloud-Optimized GeoTIFFに変換してから、結果を読み込んでください。",
     "cogConvertFailed": "「{{name}}」をCloud-Optimized GeoTIFFに変換できませんでした。gdal_translateまたはrio cogeoで変換してから、その結果を読み込んでみてください。",
     "rasterDownloadFailed": "「{{name}}」をダウンロードできませんでした。サーバーの応答が遅い、到達できない、クロスオリジンリクエストをブロックしている、またはファイルが大きすぎてメモリに保持できない可能性があります。URLを確認して再試行してください。",
     "rasterNotGeotiff": "「{{name}}」はGeoTIFFを返しませんでした。サーバーがエラーページやログインページを返した可能性があります。URLを確認して再試行してください。"

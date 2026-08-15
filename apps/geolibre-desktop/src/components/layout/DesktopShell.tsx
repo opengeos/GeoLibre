@@ -1147,11 +1147,11 @@ export function DesktopShell({
         }
         const info = await readGeoTiffInfo(bytes);
         const samples = geoTiffSampleCount(info);
-        if (exceedsBrowserCogConversionLimit(info)) {
+        if (exceedsBrowserCogConversionLimit(samples)) {
           console.warn(
             `[GeoLibre] Skipping in-browser COG conversion for "${name}": ${samples.toLocaleString()} decoded samples exceed the safe memory limit.`,
           );
-          window.alert(t("raster.cogConvertFailed", { name }));
+          window.alert(t("raster.cogConvertTooLarge", { name }));
           return;
         }
         if (!bytesAreRemote) {

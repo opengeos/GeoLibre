@@ -5227,6 +5227,7 @@
     "cogConvertConfirm": "\"{{name}}\"은(는) 직접 표시할 수 없는 일반(스트라이프) GeoTIFF입니다. 지금 Cloud-Optimized GeoTIFF로 변환하여 불러오시겠습니까?",
     "cogConvertRemoteConfirm": "\"{{name}}\"은(는) 직접 표시할 수 없는 일반(스트라이프) GeoTIFF입니다. 표시하려면 전체 파일을 다운로드하여 브라우저에서 Cloud-Optimized GeoTIFF로 변환해야 하며, 파일이 클 경우 느리고 메모리를 많이 사용할 수 있습니다. 계속하시겠습니까?",
     "cogConvertLargeConfirm": "\"{{name}}\"은(는) {{width}}×{{height}} 크기의 대용량 GeoTIFF로, Cloud-Optimized GeoTIFF가 아닙니다. 브라우저에서 변환하면 느리고 메모리를 많이 사용할 수 있습니다. 그래도 변환하여 불러오시겠습니까?",
+    "cogConvertTooLarge": "\"{{name}}\"은(는) 브라우저에서 안전하게 변환하기에는 너무 큽니다. gdal_translate 또는 rio cogeo를 사용하여 Cloud-Optimized GeoTIFF로 변환한 후 결과를 불러오세요.",
     "cogConvertFailed": "\"{{name}}\"을(를) Cloud-Optimized GeoTIFF로 변환할 수 없습니다. gdal_translate 또는 rio cogeo로 변환한 후 결과를 불러오세요.",
     "rasterDownloadFailed": "\"{{name}}\"을(를) 다운로드할 수 없습니다. 서버가 느리거나 응답하지 않거나 교차 출처 요청을 차단하고 있을 수 있으며, 또는 파일이 너무 커서 메모리에 담을 수 없을 수 있습니다. URL을 확인한 후 다시 시도하세요.",
     "rasterNotGeotiff": "\"{{name}}\"이(가) GeoTIFF를 반환하지 않았습니다. 서버가 대신 오류 또는 로그인 페이지를 보냈을 수 있습니다. URL을 확인한 후 다시 시도하세요."

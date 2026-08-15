@@ -5601,6 +5601,7 @@
     "cogConvertConfirm": "\"{{name}}\" هو ملف GeoTIFF عادي (شرائطي) لا يمكن عرضه مباشرة. هل تريد تحويله الآن إلى Cloud-Optimized GeoTIFF وتحميل الناتج؟",
     "cogConvertRemoteConfirm": "\"{{name}}\" هو ملف GeoTIFF عادي (شرائطي) لا يمكن عرضه مباشرة. يتطلب عرضه تنزيل الملف كاملًا وتحويله إلى Cloud-Optimized GeoTIFF في المتصفح، وقد يكون ذلك بطيئًا ومستهلكًا للذاكرة مع الملفات الكبيرة. هل تريد المتابعة؟",
     "cogConvertLargeConfirm": "\"{{name}}\" هو ملف GeoTIFF كبير بأبعاد {{width}}×{{height}} وليس Cloud-Optimized GeoTIFF. قد يكون تحويله في المتصفح بطيئًا ومستهلكًا للذاكرة. هل تريد تحويله وتحميله على أي حال؟",
+    "cogConvertTooLarge": "ملف \"{{name}}\" كبير جدًا بحيث لا يمكن تحويله بأمان في المتصفح. حوّله إلى Cloud-Optimized GeoTIFF باستخدام gdal_translate أو rio cogeo، ثم حمّل الناتج.",
     "cogConvertFailed": "تعذر تحويل \"{{name}}\" إلى Cloud-Optimized GeoTIFF. جرّب تحويله باستخدام gdal_translate أو rio cogeo، ثم حمّل الناتج.",
     "rasterDownloadFailed": "تعذر تنزيل \"{{name}}\". قد يكون الخادم بطيئًا أو يتعذر الوصول إليه أو يحظر الطلبات عابرة المصادر، أو قد يكون الملف أكبر من أن يُحفظ في الذاكرة. تحقق من عنوان URL وحاول مرة أخرى.",
     "rasterNotGeotiff": "لم يُرجع \"{{name}}\" ملف GeoTIFF. ربما أرسل الخادم صفحة خطأ أو صفحة تسجيل دخول بدلًا منه. تحقق من عنوان URL وحاول مرة أخرى."

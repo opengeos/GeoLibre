@@ -13,27 +13,10 @@ test("counts raster samples across bands", () => {
 });
 
 test("allows the ceiling and rejects larger conversions", () => {
-  assert.equal(
-    exceedsBrowserCogConversionLimit({
-      width: MAX_BROWSER_COG_CONVERSION_SAMPLES,
-      height: 1,
-      bands: 1,
-    }),
-    false,
-  );
-  assert.equal(
-    exceedsBrowserCogConversionLimit({
-      width: MAX_BROWSER_COG_CONVERSION_SAMPLES + 1,
-      height: 1,
-      bands: 1,
-    }),
-    true,
-  );
+  assert.equal(exceedsBrowserCogConversionLimit(MAX_BROWSER_COG_CONVERSION_SAMPLES), false);
+  assert.equal(exceedsBrowserCogConversionLimit(MAX_BROWSER_COG_CONVERSION_SAMPLES + 1), true);
 });
 
 test("rejects sample counts outside JavaScript's safe integer range", () => {
-  assert.equal(
-    exceedsBrowserCogConversionLimit({ width: Number.MAX_SAFE_INTEGER, height: 2, bands: 1 }),
-    true,
-  );
+  assert.equal(exceedsBrowserCogConversionLimit(Number.MAX_SAFE_INTEGER * 2), true);
 });

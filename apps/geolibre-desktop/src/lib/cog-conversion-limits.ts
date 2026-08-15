@@ -16,10 +16,7 @@ export function geoTiffSampleCount(info: Pick<GeoTiffInfo, "width" | "height" | 
   return info.width * info.height * Math.max(info.bands, 1);
 }
 
-/** Whether converting this striped GeoTIFF would exceed the safe memory cap. */
-export function exceedsBrowserCogConversionLimit(
-  info: Pick<GeoTiffInfo, "width" | "height" | "bands">,
-): boolean {
-  const samples = geoTiffSampleCount(info);
+/** Whether a decoded sample count exceeds the safe conversion memory cap. */
+export function exceedsBrowserCogConversionLimit(samples: number): boolean {
   return !Number.isSafeInteger(samples) || samples > MAX_BROWSER_COG_CONVERSION_SAMPLES;
 }
