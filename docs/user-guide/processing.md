@@ -68,6 +68,8 @@ The pair that trips people up most often:
 
 So the first is *"the vector part of the Whitebox toolbox, filtered to the tools GeoLibre wrote"*, and the second is *"GeoLibre's own vector toolbox"*. Both exist because they are different implementations with different strengths, not because one is a copy of the other.
 
+A few individual **tool** names collide the same way. `Processing → Conversion → GeoLibre (WASM) → Vector to PMTiles` is a WASM catalog tool that opens the Whitebox Toolbox dialog; `Processing → GeoLibre Toolbox → Conversion → Vector to PMTiles` is the Conversion dialog documented [below](#conversion), with its own file pickers and zoom, compression, and layer-name options. `Raster to PMTiles` appears in both places too. When a step in these docs or a tutorial names a Conversion tool, it means the GeoLibre Toolbox one.
+
 !!! tip "Which one should I use?"
     Start with **GeoLibre Toolbox** for everyday work on layers already on the map: fewer tools, guided dialogs, a choice of engine, and the result is added to the map styled and ready. Reach for the **Whitebox Toolbox** when you need something the GeoLibre Toolbox does not have, which is most terrain, hydrology, remote sensing, and LiDAR analysis, or a specific named tool from the full catalog.
 
@@ -224,7 +226,9 @@ See the [Terrain Analysis tutorial](../tutorials/terrain-analysis.md).
 | **Raster to PMTiles** | Render one raster band through a colormap into a PMTiles archive of Web Mercator PNG tiles. |
 | **Raster to COG** | Write a Cloud-Optimized GeoTIFF. |
 
-Every one of these has a client-side engine, so all of them work in the browser and on the Mac App Store build. On desktop they run on the Python sidecar instead, which reads and writes native file paths and, for Vector to Vector, can write any format GDAL supports rather than the browser's shorter list. Raster to PMTiles is the exception: it has no sidecar endpoint at all and always runs in WebAssembly. The dialog names the engine it is about to use in its status line, and the conversion sidecar is hardened with a path allowlist.
+Every one of these has a client-side engine, so all of them work in the browser and on the Mac App Store build. On desktop they run on the Python sidecar instead, which reads and writes native file paths and, for Vector to Vector, can write any format GDAL supports rather than the browser's shorter list. Raster to PMTiles is the exception: it has no sidecar endpoint at all and always runs in WebAssembly. The dialog names the engine it is about to use in its status line.
+
+The sidecar can also confine conversion inputs and outputs to an allowlist of directories, set through `GEOLIBRE_CONVERSION_ROOTS`. It is unset on the desktop app, where the paths are your own filesystem and there is nothing to confine. The Docker image sets it, because there the sidecar is reachable same-origin through the nginx proxy and must not be able to read or overwrite arbitrary container paths. See [Self-Hosting](../self-hosting.md).
 
 !!! note "Not the same as `Processing → Conversion`"
     The bare **Conversion** submenu higher up the menu is the Whitebox toolbox's conversion *category* (format and raster/vector conversion tools from the WASM catalog). The dialogs in this table live under **GeoLibre Toolbox → Conversion**. See [Two toolboxes in one menu](#two-toolboxes-in-one-menu).
