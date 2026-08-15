@@ -37,6 +37,22 @@ export const DropdownMenuSubTrigger = React.forwardRef<
 ));
 DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName;
 
+/**
+ * Horizontal room a submenu may occupy: the space Radix's `size` middleware
+ * measured for the side it settled on, never more than the viewport less an 8px
+ * edge buffer, never less than zero.
+ *
+ * The `max(0px, …)` is not decoration. Floating UI's `availableWidth` goes
+ * negative when the floating element cannot fit its clipping context at all,
+ * and CSS clamps a math function to a property's allowed range rather than
+ * rejecting it, so a raw negative would silently resolve `max-width` to 0 and
+ * collapse the menu. Clamping here keeps the value a real length, and lets
+ * `minWidth` be derived from the same expression so the floor is provably never
+ * above the cap (they meet, at worst, at 0).
+ */
+const SUB_CONTENT_AVAILABLE_WIDTH =
+  "max(0px, min(var(--radix-dropdown-menu-content-available-width, 100vw), calc(100vw - 1rem)))";
+
 export const DropdownMenuSubContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
@@ -76,14 +92,14 @@ export const DropdownMenuSubContent = React.forwardRef<
         // the submenu shrink to fit instead of overflowing; labels wrap. On
         // desktop the available width always exceeds the content, so the cap is
         // inert and nothing changes.
-        maxWidth:
-          "min(var(--radix-dropdown-menu-content-available-width, 100vw), calc(100vw - 1rem))",
+        maxWidth: SUB_CONTENT_AVAILABLE_WIDTH,
         // The usual 8rem floor, but it has to lose to the cap above or it just
         // reintroduces the overflow a few pixels smaller: on a 390px viewport
         // the submenu lands at x=264 with 126px to spare, and a hard 128px floor
         // pushes it 2px past the edge. min() lets the floor collapse exactly as
-        // far as the available space demands and no further.
-        minWidth: "min(8rem, var(--radix-dropdown-menu-content-available-width, 8rem))",
+        // far as the available space demands and no further. Built from the same
+        // expression as maxWidth so the floor can never exceed the cap.
+        minWidth: `min(8rem, ${SUB_CONTENT_AVAILABLE_WIDTH})`,
         ...style,
       }}
       {...props}
