@@ -77,12 +77,15 @@ export class SwipeRasterMirror {
     const control = this.control;
     this.control = null;
     this.controlPromise = null;
-    if (control) {
-      try {
-        this.deps.removeControl(this.map, control);
-      } catch (error) {
-        console.debug("[GeoLibre] swipe raster mirror: removeControl", error);
-      }
+    if (control) this.tryRemoveControl(control);
+  }
+
+  private tryRemoveControl(control: RasterControl): void {
+    try {
+      this.deps.removeControl(this.map, control);
+    } catch (error) {
+      // The comparison map may already be gone (removed by the swipe control).
+      console.debug("[GeoLibre] swipe raster mirror: removeControl", error);
     }
   }
 
@@ -90,7 +93,12 @@ export class SwipeRasterMirror {
     if (this.destroyed) return Promise.resolve(null);
     this.controlPromise ??= this.deps.createControl(this.map).then(
       (control) => {
-        if (this.destroyed) return null;
+        if (this.destroyed) {
+          // Mounted after destroy(): that call saw no control to remove, so
+          // this one has to unmount itself or its overlay stays on the map.
+          if (control) this.tryRemoveControl(control);
+          return null;
+        }
         this.control = control;
         return control;
       },

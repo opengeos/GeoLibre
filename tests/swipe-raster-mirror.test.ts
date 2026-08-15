@@ -140,6 +140,37 @@ describe("SwipeRasterMirror", () => {
     assert.deepEqual(rec.calls, ["add:a=>m1", "remove:m1", "add-fail:a", "add-fail:a"]);
   });
 
+  it("removes a control that finishes mounting after destroy", async () => {
+    const rec = makeDeps();
+    let release: (() => void) | undefined;
+    let started: (() => void) | undefined;
+    const mounted = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const creating = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const deps: SwipeRasterMirrorDeps = {
+      ...rec.deps,
+      createControl: async (map) => {
+        started?.();
+        await mounted;
+        return rec.deps.createControl(map);
+      },
+    };
+    const mirror = new SwipeRasterMirror(fakeMap, deps);
+    const pending = mirror.sync([raster("a")]);
+    await creating;
+    mirror.destroy();
+    // Nothing was mounted when destroy() ran, so it had no control to remove.
+    assert.equal(rec.removedControl, 0);
+    release?.();
+    await pending;
+    assert.equal(rec.created, 1);
+    assert.equal(rec.removedControl, 1);
+    assert.deepEqual(rec.calls, []);
+  });
+
   it("removes the control and stops rendering after destroy", async () => {
     const rec = makeDeps();
     const mirror = new SwipeRasterMirror(fakeMap, rec.deps);
