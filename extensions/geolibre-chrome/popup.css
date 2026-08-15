@@ -26,9 +26,9 @@ body {
   width: 390px;
   min-height: 300px;
   margin: 0;
-  background:
-    linear-gradient(rgba(36, 125, 118, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(36, 125, 118, 0.045) 1px, transparent 1px), #edf4f2;
+  background: linear-gradient(rgba(36, 125, 118, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(36, 125, 118, 0.045) 1px, transparent 1px),
+    #edf4f2;
   background-size: 24px 24px;
 }
 
@@ -361,8 +361,23 @@ footer p {
   text-align: center;
 }
 
+.geolibre-link {
+  display: block;
+  width: fit-content;
+  margin: 5px auto 0;
+  color: var(--teal-dark);
+  font-size: 10px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.geolibre-link:hover {
+  text-decoration: underline;
+}
+
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+.geolibre-link:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
