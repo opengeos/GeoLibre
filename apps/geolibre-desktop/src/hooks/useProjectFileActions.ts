@@ -44,6 +44,11 @@ import { resolveShareBaseUrl } from "../lib/share-geolibre";
 import { shareAuthorizedFetch } from "../lib/share-gallery";
 import { normalizeProjectUrl } from "../lib/urls";
 import { recordExplicitProjectSave } from "../lib/project-history-session";
+import {
+  rememberProjectSaveChoices,
+  saveChoicesForProject,
+  type ProjectSaveChoices,
+} from "../lib/project-save-choices";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import {
   importQgisProject,
@@ -264,6 +269,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // Separate from projectUrlAbortRef so a gallery open and an Open-from-URL
   // submit can't abort each other's in-flight fetch.
   const shareUrlAbortRef = useRef<AbortController | null>(null);
+  // Retain explicit, non-cancel save decisions for this project only. The
+  // generation check clears them synchronously when newProject/loadProject
+  // switches the store, including before React has rendered the new project.
+  const saveChoicesRef = useRef<ProjectSaveChoices | null>(null);
   // Guards against overlapping saves: a second save started while a prompt
   // dialog is open would overwrite the pending prompt and strand the first
   // call's unresolved promise.
@@ -815,8 +824,18 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
     const count = embeddable.size + localFileLayers.length;
     const bytes = estimateEmbedBytes(state.layers, embeddable);
-    const choice = await askEmbedVectorData(count, bytes, isTauri());
+    const remembered = saveChoicesForProject(saveChoicesRef.current, state.projectGeneration);
+    saveChoicesRef.current = remembered;
+    const choice = remembered.vectorData ?? (await askEmbedVectorData(count, bytes, isTauri()));
     if (choice === "cancel") return "cancel";
+    // A project can be opened while a prompt is visible. Do not apply that
+    // prompt's answer to the replacement project or continue saving stale data.
+    if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
+    saveChoicesRef.current = rememberProjectSaveChoices(
+      saveChoicesRef.current,
+      state.projectGeneration,
+      { vectorData: choice },
+    );
 
     if (choice === "embed") {
       // Reuse the map already materialized for the size estimate.
@@ -905,8 +924,17 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const projectToEgress = excludeHiddenFieldsFromProject(project);
     const redacted = redactProjectCredentials(projectToEgress);
     if (redacted.redactedPaths.length > 0) {
-      const choice = await askStripCredentials(redacted.redactedCount);
+      const projectGeneration = useAppStore.getState().projectGeneration;
+      const remembered = saveChoicesForProject(saveChoicesRef.current, projectGeneration);
+      saveChoicesRef.current = remembered;
+      const choice = remembered.credentials ?? (await askStripCredentials(redacted.redactedCount));
       if (choice === "cancel") return false;
+      if (useAppStore.getState().projectGeneration !== projectGeneration) return false;
+      saveChoicesRef.current = rememberProjectSaveChoices(
+        saveChoicesRef.current,
+        projectGeneration,
+        { credentials: choice },
+      );
       contentToSave = serializeForSave(choice === "strip" ? redacted.project : projectToEgress);
     } else {
       contentToSave = serializeForSave(projectToEgress);
