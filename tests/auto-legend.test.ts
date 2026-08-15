@@ -195,6 +195,24 @@ describe("buildAutoLegend — vector layers", () => {
       { ...base, metadata: { ...base.metadata, nativeLayerIds: ["external-fill"] } },
       {
         ...base,
+        metadata: {
+          ...base.metadata,
+          sourceKind: "maplibre-gl-vector",
+          customLayerType: "fill",
+          nativeLayerIds: [],
+        },
+      },
+      {
+        ...base,
+        style: {
+          ...base.style,
+          geometryGenerator: "buffer" as const,
+          geometryGeneratorBufferDistance: 0,
+          geometryGeneratorBufferProperty: "",
+        },
+      },
+      {
+        ...base,
         style: {
           ...base.style,
           vectorStyleMode: "rule-based" as const,

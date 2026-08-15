@@ -21,6 +21,7 @@ import {
   type ProportionalSizeRange,
   type VectorStyleStop,
 } from "@geolibre/core";
+import { buildGeneratedGeometry } from "@geolibre/map/derived-geometry";
 import type { LegendEntry, LegendMarker, LegendSwatch } from "./print-layout";
 
 /** Layer types styled as vectors (colored fills the legend can represent). */
@@ -244,18 +245,33 @@ export function geometryGeneratorLegendParts(
     ruleBasedVisibilityFilter(layer.style) !== null;
   const hasExternalNativeLayers =
     Array.isArray(layer.metadata.nativeLayerIds) && layer.metadata.nativeLayerIds.length > 0;
+  const isVectorControlLayer =
+    layer.metadata.sourceKind === "maplibre-gl-vector" &&
+    typeof layer.metadata.customLayerType === "string";
   if (
     generator === "none" ||
     layer.type !== "geojson" ||
     !layer.geojson ||
-    layer.geojson.features.length === 0 ||
     layer.metadata.externalDeckLayer === true ||
     hasExternalNativeLayers ||
+    isVectorControlLayer ||
     layer.style.extrusionEnabled ||
     hasFeatureFilter
   ) {
     return null;
   }
+
+  // Ask the same cached derivation the renderer uses whether any companion
+  // geometry exists. A non-empty source can still derive nothing, including a
+  // zero-distance buffer, invalid/degenerate features, or a collection above
+  // the synchronous safety cap.
+  const derived = buildGeneratedGeometry(
+    layer.geojson,
+    generator,
+    styleValue(layer.style, "geometryGeneratorBufferDistance"),
+    styleValue(layer.style, "geometryGeneratorBufferProperty"),
+  );
+  if (!derived || derived.features.length === 0) return null;
 
   const label = options.labels?.[generator] ?? DEFAULT_GEOMETRY_GENERATOR_LEGEND_LABELS[generator];
   const color = styleValue(layer.style, "geometryGeneratorFillColor") || NEUTRAL_SWATCH;
