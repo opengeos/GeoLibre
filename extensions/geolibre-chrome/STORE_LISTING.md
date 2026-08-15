@@ -26,8 +26,11 @@ Privacy is deliberately narrow: the extension scans only the active page after
 you click it. It stores no browsing data, runs no analytics, and requests no
 permanent access to websites.
 
-Dataset servers must allow browser access through CORS. Authenticated,
-session-bound, and `blob:` links cannot be transferred to the GeoLibre tab.
+Dataset servers must allow browser access through CORS. Complete HTTP(S) URLs,
+including signed query parameters, are forwarded to GeoLibre. Cookies and other
+browser-session credentials are not forwarded, so cookie-bound or
+session-authenticated links may fail. Temporary `blob:` links cannot be
+transferred.
 
 ## Category
 

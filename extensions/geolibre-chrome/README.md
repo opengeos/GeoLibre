@@ -42,5 +42,7 @@ page/download links. The popup can filter discovered files by vector or raster
 type without changing the current selection.
 
 Remote servers must allow GeoLibre to fetch the selected URLs through CORS.
-Authenticated, `blob:`, browser-internal, and session-bound links cannot be
-transferred to the GeoLibre tab.
+Complete HTTP(S) URLs, including signed query parameters, are forwarded to
+GeoLibre. Cookies and other browser-session credentials are not forwarded, so
+cookie-bound or session-authenticated links may fail. Temporary `blob:` and
+browser-internal links cannot be transferred.

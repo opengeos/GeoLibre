@@ -2,19 +2,34 @@
 
 Last updated: August 15, 2026
 
-Open data in GeoLibre does not collect, retain, sell, or transmit personal
-information, browsing history, page contents, or usage analytics.
+Open data in GeoLibre does not independently collect, retain, or sell personal
+information, browsing history, page contents, or usage analytics. It does
+forward the complete dataset and style URLs that the user explicitly selects,
+as described below.
 
 The extension uses Chrome's `activeTab` permission to inspect links and
 structured metadata on the current page only after the user clicks the
 extension's toolbar icon. Inspection happens locally in the browser. Results
 are held in memory only while the popup is open.
 
-When the user chooses **Open in GeoLibre**, the selected public dataset and
-style URLs are placed in the query string of a new `https://web.geolibre.app/`
-tab. The extension does not fetch or upload the datasets itself. GeoLibre then
-requests the selected URLs directly from their original servers, subject to
-those servers' privacy policies and CORS configuration.
+When the user chooses **Open in GeoLibre**, the complete selected HTTP(S)
+dataset and style URLs are placed in the query string of a new
+`https://web.geolibre.app/` tab. These URLs are forwarded verbatim and may
+contain signed query parameters, access tokens, user identifiers, or other
+personal data. Do not select a URL containing information you do not want to
+send to GeoLibre.
+
+The navigation request exposes its URL and the user's IP address to GeoLibre's
+web-hosting infrastructure, where standard service logs may retain them. The
+navigation may also appear in browser history. See the current
+[GeoLibre privacy policy](https://geolibre.app/privacy/) for the service's data
+practices. The extension itself does not retain the URLs after its popup closes.
+
+The extension does not fetch or upload the datasets. GeoLibre requests them
+directly from their original servers, subject to those servers' privacy
+policies and CORS configuration. Cookies and other browser-session credentials
+from the source page are not forwarded, although credentials embedded directly
+in a selected URL are part of the URL and are forwarded.
 
 The extension uses no remote code, advertising, analytics, tracking pixels,
 cookies, accounts, or extension storage.

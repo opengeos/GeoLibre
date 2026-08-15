@@ -44,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" dist/geolibre-chrome-*.zip --clobber
+        run: gh release upload "$TAG" dist/geolibre-chrome-*.zip
 
   build:
     name: Build ${{ matrix.name }}

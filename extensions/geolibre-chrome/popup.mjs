@@ -13,6 +13,7 @@ const elements = {
   totalLabel: document.querySelector("#total-label"),
   buttonCount: document.querySelector("#button-count"),
   openButton: document.querySelector("#open-button"),
+  openError: document.querySelector("#open-error"),
   selectAll: document.querySelector("#select-all"),
   selectNone: document.querySelector("#select-none"),
   filterTabs: [...document.querySelectorAll(".filter-tab")],
@@ -159,12 +160,17 @@ for (const tab of elements.filterTabs) {
 }
 
 elements.openButton.addEventListener("click", async () => {
+  elements.openError.hidden = true;
   try {
     const url = buildGeoLibreUrl(selectedDatasets());
     await chrome.tabs.create({ url });
     window.close();
   } catch (error) {
-    showError(error);
+    elements.openError.textContent =
+      error instanceof Error && error.message
+        ? error.message
+        : "GeoLibre could not be opened. Please try again.";
+    elements.openError.hidden = false;
   }
 });
 

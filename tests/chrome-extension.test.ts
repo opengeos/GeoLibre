@@ -96,6 +96,20 @@ describe("GeoLibre Chrome extension scanner", () => {
     assert.equal(found.styleUrl, "https://data.source.coop/giswqs/opengeos/roads.style.json");
   });
 
+  it("preserves a discovered style when stronger metadata replaces a dataset", () => {
+    const target = new URL("https://web.geolibre.app/");
+    target.searchParams.append("data", "https://data.example.com/roads.json");
+    target.searchParams.append("style", "https://data.example.com/roads.style.json");
+    const [found] = scan(`
+      <a href="${target.href}" title="Spatial dataset">Open map</a>
+      <script type="application/ld+json">
+        {"@type":"DataDownload","name":"Roads","encodingFormat":"application/geo+json","contentUrl":"https://data.example.com/roads.json"}
+      </script>
+    `);
+    assert.equal(found.format, "GeoJSON");
+    assert.equal(found.styleUrl, "https://data.example.com/roads.style.json");
+  });
+
   it("unpacks data and positional styles from existing GeoLibre links", () => {
     const target = new URL("https://web.geolibre.app/");
     target.searchParams.append("data", "https://data.example.com/roads.geojson");
@@ -127,6 +141,7 @@ describe("GeoLibre Chrome extension scanner", () => {
       `
         <a href="https://source.coop/giswqs/opengeos/roads.geojson">roads.geojson</a>
         <a href="https://data.source.coop/giswqs/opengeos/roads.geojson"></a>
+        <script>window.unrelated = '{\\"path\\":\\"fake.tif\\",\\"type\\":\\"file\\"}'</script>
         <script>self.__next_f.push([1,"{\\"objects\\":[{\\"path\\":\\"roads.geojson\\",\\"type\\":\\"file\\"},{\\"type\\":\\"file\\",\\"path\\":\\"dem.tif\\"},{\\"path\\":\\"notes.txt\\",\\"type\\":\\"file\\"}]}"])</script>
       `,
       "https://source.coop/giswqs/opengeos",

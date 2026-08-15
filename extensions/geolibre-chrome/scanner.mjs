@@ -103,7 +103,7 @@ export function scanDocumentForDatasets() {
       format: kind.format,
       kind: kind.kind,
       confidence: kind.confidence,
-      styleUrl: canonicalHttpUrl(explicitStyle)?.href ?? null,
+      styleUrl: canonicalHttpUrl(explicitStyle)?.href ?? existing?.styleUrl ?? null,
     };
     if (!existing || candidate.confidence > existing.confidence) datasets.set(url.href, candidate);
     else if (!existing.styleUrl && candidate.styleUrl) existing.styleUrl = candidate.styleUrl;
@@ -173,13 +173,16 @@ export function scanDocumentForDatasets() {
     if (account && product) {
       const inventory = [...document.querySelectorAll("script")]
         .map((script) => script.textContent || "")
+        .filter((content) => content.includes("self.__next_f.push"))
         .join("\n");
       const objectPattern = /\{[^{}]*\}/g;
+      let recoveredFiles = 0;
       for (const match of inventory.matchAll(objectPattern)) {
         const object = match[0];
         const pathMatch = object.match(/\\"path\\":\\"([^"]+)\\"/);
         const typeMatch = object.match(/\\"type\\":\\"([^"]+)\\"/);
         if (!pathMatch || typeMatch?.[1] !== "file") continue;
+        recoveredFiles += 1;
         let path = pathMatch[1];
         try {
           path = JSON.parse(`"${path}"`);
@@ -194,6 +197,9 @@ export function scanDocumentForDatasets() {
           path,
           path,
         );
+      }
+      if (recoveredFiles === 0) {
+        console.warn("GeoLibre found no file entries in the Source Cooperative page inventory.");
       }
     }
   }
