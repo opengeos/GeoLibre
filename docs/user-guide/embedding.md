@@ -111,6 +111,17 @@ Use `data` to open public GeoJSON, GeoParquet, PMTiles, Cloud-Optimized GeoTIFF 
 https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson&style=https://assets.geolibre.app/data/sample.style.json
 ```
 
+Repeat `data` to load multiple independent datasets on the same map. Repeat
+`style` in the same order to style each dataset; use an empty `style=` as a
+placeholder when an earlier dataset should use its default style:
+
+```text
+https://web.geolibre.app/?data=https://example.com/roads.geojson&data=https://example.com/dem.tif&style=&style=https://example.com/dem.style.json
+```
+
+GeoLibre loads every entry and fits the map once to their combined stored
+extents. A style applies only to the `data` value at the same position.
+
 `data` may also point to a REST API endpoint that returns either a GeoJSON `FeatureCollection` or a ZIP containing multiple GeoJSON files. ZIP API responses are recognized from their `Content-Type`/`Content-Disposition` headers or their ZIP file signature, so the endpoint does not need a `.zip` suffix. An endpoint that takes its own query parameters is the case that does need percent-encoding, so its `&` separators are not read as GeoLibre's own:
 
 ```text

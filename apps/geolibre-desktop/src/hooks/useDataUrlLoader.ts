@@ -12,12 +12,7 @@ import {
 import type { createAppAPI } from "./usePlugins";
 import type { ProjectUrlLoadState } from "./useProjectUrlLoader";
 
-/**
- * `fitLayerIds` carries only the layers the shell still has to frame. The COG,
- * PMTiles, and GeoParquet loaders move the camera themselves as part of adding
- * their layer, so listing those here would fit twice and show a visible
- * double-take; a store-added GeoJSON layer moves nothing on its own.
- */
+/** `fitLayerIds` carries the layers the shell still has to frame. */
 export type DataUrlLoadState = ProjectUrlLoadState & { fitLayerIds?: string[] };
 
 export interface DataUrlLoadResult {
@@ -139,10 +134,29 @@ export function useDataUrlLoader(
     if (!params || !mapAppAPI) return;
     const controller = new AbortController();
     setState({ error: null, message: "Loading data from URL...", status: "loading" });
-    void loadDataUrl(mapAppAPI, params.dataUrl, {
-      styleUrl: params.styleUrl,
-      signal: controller.signal,
-    })
+    const load = async () => {
+      // Preserve the established one-dataset behavior. For a batch, prevent
+      // each format-specific loader from moving the camera and let the shell
+      // frame the complete set once all entries have finished.
+      if (params.length === 1) {
+        const [entry] = params;
+        return loadDataUrl(mapAppAPI, entry.dataUrl, {
+          styleUrl: entry.styleUrl,
+          signal: controller.signal,
+        });
+      }
+      const layerIds: string[] = [];
+      for (const entry of params) {
+        const result = await loadDataUrl(mapAppAPI, entry.dataUrl, {
+          styleUrl: entry.styleUrl,
+          signal: controller.signal,
+          fit: false,
+        });
+        layerIds.push(...result.layerIds);
+      }
+      return { layerIds, fitLayerIds: layerIds };
+    };
+    void load()
       .then(({ layerIds, fitLayerIds }) => {
         if (controller.signal.aborted) return;
         setState({

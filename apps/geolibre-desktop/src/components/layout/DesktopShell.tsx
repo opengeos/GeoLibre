@@ -612,10 +612,9 @@ export function DesktopShell({
   useEffect(() => () => activeResizeCleanupRef.current?.(), []);
   const mapControllerRef = useRef<MapController | null>(null);
 
-  // Frame the GeoJSON layers a `?data=` deep link added. Only those are listed:
-  // the raster, PMTiles, and GeoParquet loaders move the camera themselves. The
-  // extent comes from the store's own GeoJSON, which is already in memory by the
-  // time the hook publishes the ids, so this needs no wait for layer sync.
+  // Frame layers a `?data=` deep link added. Single non-GeoJSON datasets move
+  // the camera in their format-specific loader; a repeated `data` batch lists
+  // every added layer here so their stored extents are combined into one fit.
   useEffect(() => {
     const fitLayerIds = dataUrlLoadState?.fitLayerIds;
     if (dataUrlLoadState?.status !== "loaded" || !fitLayerIds?.length) return;

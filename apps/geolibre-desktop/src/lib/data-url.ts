@@ -1,7 +1,7 @@
 import type { FeatureCollection } from "geojson";
 import { AsyncUnzipInflate, strFromU8, Unzip, UnzipPassThrough, type UnzipFile } from "fflate";
 
-export interface DataUrlParameters {
+export interface DataUrlParameter {
   dataUrl: string;
   styleUrl: string | null;
 }
@@ -43,11 +43,18 @@ function httpUrl(value: string | null): string | null {
   }
 }
 
-/** Read the remote layer deep link without claiming the project loader's `url` parameter. */
-export function dataUrlParameters(search: string): DataUrlParameters | null {
+/** Read remote-layer deep links without claiming the project loader's `url` parameter. */
+export function dataUrlParameters(search: string): DataUrlParameter[] | null {
   const params = new URLSearchParams(search);
-  const dataUrl = httpUrl(params.get("data"));
-  return dataUrl ? { dataUrl, styleUrl: httpUrl(params.get("style")) } : null;
+  const styles = params.getAll("style");
+  const entries = params
+    .getAll("data")
+    .map((value, index) => {
+      const dataUrl = httpUrl(value);
+      return dataUrl ? { dataUrl, styleUrl: httpUrl(styles[index] ?? null) } : null;
+    })
+    .filter((entry): entry is DataUrlParameter => entry !== null);
+  return entries.length ? entries : null;
 }
 
 export function remoteName(url: string): string {

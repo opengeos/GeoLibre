@@ -109,8 +109,8 @@ describe("data URL deep links", () => {
     const parsed = dataUrlParameters(
       `?data=${encodeURIComponent(endpoint)}&style=${encodeURIComponent(style)}`,
     );
-    assert.equal(parsed?.dataUrl, endpoint);
-    assert.equal(parsed?.styleUrl, style);
+    assert.equal(parsed?.[0]?.dataUrl, endpoint);
+    assert.equal(parsed?.[0]?.styleUrl, style);
   });
 
   it("parses raw, unencoded data and style URLs as documented", () => {
@@ -120,13 +120,51 @@ describe("data URL deep links", () => {
       "?data=https://assets.geolibre.app/data/places.geojson" +
         "&style=https://assets.geolibre.app/data/sample.style.json",
     );
-    assert.equal(parsed?.dataUrl, "https://assets.geolibre.app/data/places.geojson");
-    assert.equal(parsed?.styleUrl, "https://assets.geolibre.app/data/sample.style.json");
+    assert.equal(parsed?.[0]?.dataUrl, "https://assets.geolibre.app/data/places.geojson");
+    assert.equal(parsed?.[0]?.styleUrl, "https://assets.geolibre.app/data/sample.style.json");
 
     // Only the first `=` of each `&`-delimited pair separates name from value,
     // so a nested `=` survives unencoded — the docs tell readers not to escape it.
     const nested = dataUrlParameters("?data=https://api.example.com/features?category=parks");
-    assert.equal(nested?.dataUrl, "https://api.example.com/features?category=parks");
+    assert.equal(nested?.[0]?.dataUrl, "https://api.example.com/features?category=parks");
+  });
+
+  it("parses repeated data URLs and pairs repeated styles by position", () => {
+    assert.deepEqual(
+      dataUrlParameters(
+        "?data=https://example.com/roads.geojson" +
+          "&data=https://example.com/buildings.parquet" +
+          "&style=https://example.com/roads.style.json" +
+          "&style=https://example.com/buildings.style.json",
+      ),
+      [
+        {
+          dataUrl: "https://example.com/roads.geojson",
+          styleUrl: "https://example.com/roads.style.json",
+        },
+        {
+          dataUrl: "https://example.com/buildings.parquet",
+          styleUrl: "https://example.com/buildings.style.json",
+        },
+      ],
+    );
+  });
+
+  it("allows an empty positional style when only a later dataset is styled", () => {
+    assert.deepEqual(
+      dataUrlParameters(
+        "?data=https://example.com/roads.geojson" +
+          "&data=https://example.com/dem.tif" +
+          "&style=&style=https://example.com/dem.style.json",
+      ),
+      [
+        { dataUrl: "https://example.com/roads.geojson", styleUrl: null },
+        {
+          dataUrl: "https://example.com/dem.tif",
+          styleUrl: "https://example.com/dem.style.json",
+        },
+      ],
+    );
   });
 
   it("rejects non-http data URLs", () => {
