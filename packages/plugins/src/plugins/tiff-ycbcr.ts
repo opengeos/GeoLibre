@@ -9,6 +9,24 @@ function finiteValues(values: NumericArray, length: number): number[] | null {
   return result.every(Number.isFinite) ? result : null;
 }
 
+function validCoefficients(values: NumericArray): number[] | null {
+  const coefficients = finiteValues(values, 3);
+  if (!coefficients) return null;
+  const [kr, kg, kb] = coefficients;
+  const sum = kr + kg + kb;
+  return kr >= 0 && kg > 0 && kb >= 0 && kr <= 1 && kg <= 1 && kb <= 1 && Math.abs(sum - 1) <= 1e-6
+    ? coefficients
+    : null;
+}
+
+function validReference(values: NumericArray): number[] | null {
+  const reference = finiteValues(values, 6);
+  if (!reference) return null;
+  return reference[1] > reference[0] && reference[3] > reference[2] && reference[5] > reference[4]
+    ? reference
+    : null;
+}
+
 /** Convert separate TIFF Y/Cb/Cr planes to RGB using tags 529 and 532. */
 export function convertTiffYCbCrToRgb(
   yPlane: ArrayLike<number>,
@@ -17,13 +35,12 @@ export function convertTiffYCbCrToRgb(
   coefficients?: NumericArray,
   referenceBlackWhite?: NumericArray,
 ): [Float64Array, Float64Array, Float64Array] {
-  const [kr, kg, kb] = finiteValues(coefficients, 3) ?? DEFAULT_COEFFICIENTS;
-  const reference = finiteValues(referenceBlackWhite, 6) ?? DEFAULT_REFERENCE_BLACK_WHITE;
+  const [kr, kg, kb] = validCoefficients(coefficients) ?? DEFAULT_COEFFICIENTS;
+  const reference = validReference(referenceBlackWhite) ?? DEFAULT_REFERENCE_BLACK_WHITE;
   const [blackY, whiteY, blackCb, whiteCb, blackCr, whiteCr] = reference;
-  const yRange = whiteY - blackY || 255;
-  const cbRange = whiteCb - blackCb || 127;
-  const crRange = whiteCr - blackCr || 127;
-  const safeKg = kg || DEFAULT_COEFFICIENTS[1];
+  const yRange = whiteY - blackY;
+  const cbRange = whiteCb - blackCb;
+  const crRange = whiteCr - blackCr;
   const size = Math.min(yPlane.length, cbPlane.length, crPlane.length);
   const red = new Float64Array(size);
   const green = new Float64Array(size);
@@ -35,7 +52,7 @@ export function convertTiffYCbCrToRgb(
     const cr = ((Number(crPlane[index]) - blackCr) * 127) / crRange;
     const r = y + (2 - 2 * kr) * cr;
     const b = y + (2 - 2 * kb) * cb;
-    const g = (y - kr * r - kb * b) / safeKg;
+    const g = (y - kr * r - kb * b) / kg;
     red[index] = Math.max(0, Math.min(255, r));
     green[index] = Math.max(0, Math.min(255, g));
     blue[index] = Math.max(0, Math.min(255, b));

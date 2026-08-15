@@ -833,6 +833,9 @@ function patchJpegCogSource(source: unknown): unknown {
         );
       });
       windowCache.set(key, decoded);
+      void decoded.catch(() => {
+        if (windowCache.get(key) === decoded) windowCache.delete(key);
+      });
       if (windowCache.size > 32) windowCache.delete(windowCache.keys().next().value!);
     }
     const rasters = await decoded;

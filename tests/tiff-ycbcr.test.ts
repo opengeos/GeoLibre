@@ -30,4 +30,14 @@ describe("TIFF YCbCr conversion", () => {
       [220.273, 17.866, 135.228],
     );
   });
+
+  it("falls back to defaults for malformed color metadata", () => {
+    const expected = rounded(convertTiffYCbCrToRgb([100], [150], [200]));
+    assert.deepEqual(
+      rounded(
+        convertTiffYCbCrToRgb([100], [150], [200], [0.5, 0, 0.5], [255, 0, 128, 128, 255, 128]),
+      ),
+      expected,
+    );
+  });
 });
