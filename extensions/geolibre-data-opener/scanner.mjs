@@ -6,7 +6,8 @@
 export function scanDocumentForDatasets() {
   const datasets = new Map();
   const styleLinks = [];
-  const geoHint = /geojson|feature\s*collection|geoparquet|pmtiles|geotiff|cloud.?optimized|\bcog\b/i;
+  const geoHint =
+    /geojson|feature\s*collection|geoparquet|pmtiles|geotiff|cloud.?optimized|\bcog\b/i;
   const jsonHint = /geo|spatial|geographic|vector|dataset|features?/i;
 
   const absoluteHttpUrl = (raw) => {
@@ -204,6 +205,8 @@ export function scanDocumentForDatasets() {
   }
 
   return [...datasets.values()]
-    .sort((left, right) => right.confidence - left.confidence || left.name.localeCompare(right.name))
+    .sort(
+      (left, right) => right.confidence - left.confidence || left.name.localeCompare(right.name),
+    )
     .map(({ confidence: _confidence, ...dataset }) => dataset);
 }

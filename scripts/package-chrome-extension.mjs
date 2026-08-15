@@ -20,7 +20,8 @@ const runtimeFiles = [
 ];
 
 const archive = {};
-for (const path of runtimeFiles) archive[path] = new Uint8Array(await readFile(resolve(extensionDir, path)));
+for (const path of runtimeFiles)
+  archive[path] = new Uint8Array(await readFile(resolve(extensionDir, path)));
 
 const outputDir = resolve(root, "dist");
 const output = resolve(outputDir, `geolibre-data-opener-${manifest.version}.zip`);

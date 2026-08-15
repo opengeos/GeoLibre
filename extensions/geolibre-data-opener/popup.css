@@ -23,8 +23,7 @@ body {
   margin: 0;
   background:
     linear-gradient(rgba(36, 125, 118, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(36, 125, 118, 0.045) 1px, transparent 1px),
-    #edf4f2;
+    linear-gradient(90deg, rgba(36, 125, 118, 0.045) 1px, transparent 1px), #edf4f2;
   background-size: 24px 24px;
 }
 
@@ -364,8 +363,12 @@ input:focus-visible {
 }
 
 @keyframes scan {
-  from { left: 4%; }
-  to { left: 96%; }
+  from {
+    left: 4%;
+  }
+  to {
+    left: 96%;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
