@@ -24,6 +24,10 @@ A fresh page load against the latest build resolves the large majority of "the a
 
 If a plugin's **Activate** action seems to do nothing, first rule out the stale-cache cause above with a hard refresh or a private window. Once you are on the latest build, an active plugin shows a checkmark next to its entry in the **Plugins** menu, and map controls (when the plugin provides one) appear at the configured corner of the map.
 
+## The Processing menu shows the same category twice
+
+`Processing → Vector` and `Processing → GeoLibre Toolbox → Vector` are different things, and so are the two `Conversion`, `Network`, and `Raster` entries. The Processing menu carries two independent toolboxes: the Whitebox Toolbox, whose nine category submenus sit at the top of the menu, and the GeoLibre Toolbox, which holds GeoLibre's own built-in tools. Neither list is a subset of the other. [Two toolboxes in one menu](processing.md#two-toolboxes-in-one-menu) explains which is which and when to use each.
+
 ## Desktop-only features in the browser
 
 Some capabilities require the desktop app and are unavailable in the browser build: local filesystem dialogs, local MBTiles, local raster file reads, and project save/open. If one of these is missing, you are likely running GeoLibre Web rather than the desktop app. See [Getting Started](../getting-started.md) for how the web, desktop, and Jupyter builds differ.

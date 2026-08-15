@@ -31,7 +31,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - **[Get it on Google Play](https://play.google.com/store/apps/details?id=org.geolibre.app)** — the native Android app
 - **[Use the Python package](https://geolibre.app/python/)** — embed and control the full app in Jupyter notebooks
 - **[Use the R package](https://r.geolibre.app/)** — build interactive maps in RStudio, Quarto, R Markdown, and Shiny
-- **[1,000+ geoprocessing tools](https://geolibre.app/user-guide/processing/#geoprocessing-toolbox)** — the full toolbox, in the browser
+- **[1,000+ geoprocessing tools](https://geolibre.app/user-guide/processing/#whitebox-toolbox)** — the full toolbox, in the browser
 - **[Get started](https://geolibre.app/getting-started/)** — install, run from source, and configure
 - **[Features](https://geolibre.app/features/)** — the complete feature list
 
@@ -106,7 +106,7 @@ Switch bodies from the planet switcher in the Layers panel. See [Demos](https://
 
 [![The GeoLibre Whitebox toolbox running locally with WebAssembly, listing the full catalog of 1,000+ tools with the Regularize Building Footprints tool selected](https://assets.geolibre.app/images/whitebox.webp)](https://assets.geolibre.app/images/whitebox.webp)
 
-**Processing → Whitebox** opens a toolbox of **1,000+ geoprocessing tools** that
+**Processing → Whitebox Toolbox** opens a toolbox of **1,000+ geoprocessing tools** that
 execute in the browser through a WebAssembly runtime with native raster and
 vector I/O. There is no Python sidecar to install and no server to call — the
 tools, your data, and the results all stay on your machine, so the full toolbox
@@ -130,7 +130,7 @@ the Processing menu:
 | **Projection** | 4 | reprojection for raster and vector data |
 
 Any tool is deep-linkable with a `?tool=` URL parameter that preselects it and
-pre-fills its form. See the [Processing Tools guide](https://geolibre.app/user-guide/processing/#geoprocessing-toolbox)
+pre-fills its form. See the [Processing Tools guide](https://geolibre.app/user-guide/processing/#whitebox-toolbox)
 for details, and [Geoprocessing in the Browser](https://youtu.be/W32bIQO_nG8) for
 a video walkthrough.
 

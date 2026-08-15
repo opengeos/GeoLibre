@@ -30,8 +30,8 @@ Vector files are reprojected to EPSG:4326 on load. In the browser, vector import
     in memory, because that is where memory rather than file size becomes the
     limit — a small GeoParquet can hold millions of rows.
 
-    For very large data, converting first still pays: **Processing → Conversion
-    → Vector to PMTiles** writes a tiled format the map loads one tile at a
+    For very large data, converting first still pays: **Processing → GeoLibre
+    Toolbox → Conversion → Vector to PMTiles** writes a tiled format the map loads one tile at a
     time instead of reading the whole file. Converting to **GeoParquet**
     instead gives a compact columnar format that reads far faster than text,
     though it is not tiled. GeoJSON is the most expensive option at any size —

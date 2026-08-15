@@ -200,7 +200,7 @@ kepler.gl, see the [Comparison](comparison.md).
 - Spatial Statistics toolbox, including Emerging Hot Spot Analysis that builds a space-time cube from timestamped points, runs Getis-Ord Gi\* per time slice, and classifies each cell as a new, intensifying, persistent, diminishing, sporadic, oscillating, or historical hot or cold spot
 - Processing batch runner with model and pipeline chaining, to run a sequence of tools as one job
 - Processing History panel that lists every tool run, re-runs any of them with one click, and copies the equivalent Python code
-- Raster Georeferencer (Processing → Georeferencing) that pins a non-georeferenced image to the map with ground control points using a least-squares affine fit, reporting per-GCP and RMS residuals
+- Raster Georeferencer (Processing → GeoLibre Toolbox → Raster → Georeferencing) that pins a non-georeferenced image to the map with ground control points using a least-squares affine fit, reporting per-GCP and RMS residuals
 - Network analysis tools for isochrones, service areas, origin–destination (OD) cost matrices, and sequential routes (directions) through an ordered set of waypoints
 - Geocoding tools for forward, batch, and reverse geocoding through a multi-provider abstraction
 - AI Segmentation (SamGeo) that turns imagery into vector features with [segment-geospatial](https://github.com/opengeos/segment-geospatial) and Meta's SAM 3 — text prompts ("trees", "buildings") or automatic segmentation, proxied to a separate `samgeo-api` model server (GPU recommended). See [AI Segmentation](user-guide/segmentation.md)

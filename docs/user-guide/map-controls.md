@@ -90,7 +90,7 @@ The same **Quick analysis** submenu also appears in each vector layer's actions 
 - **The result is an image overlay layer** named `Viewshed (5 km)` or similar, so it gets opacity, reordering, zoom-to, and removal like any other layer, and it is saved with the project.
 
 !!! note "What the quick viewshed does not model"
-    Earth curvature and atmospheric refraction are ignored. Over a few kilometres that is immaterial, but at the 50 km ceiling the curvature drop alone reaches roughly 180 m — enough to matter for a radio line-of-sight study, if not for "what can I see from this overlook". The public terrain tiles are also a global, generalized elevation model rather than a survey-grade DEM. For a rigorous analysis against your own DEM and your own station points, use the **Viewshed** tool under [Processing → Whitebox](processing.md), which this quick action deliberately does not replace.
+    Earth curvature and atmospheric refraction are ignored. Over a few kilometres that is immaterial, but at the 50 km ceiling the curvature drop alone reaches roughly 180 m — enough to matter for a radio line-of-sight study, if not for "what can I see from this overlook". The public terrain tiles are also a global, generalized elevation model rather than a survey-grade DEM. For a rigorous analysis against your own DEM and your own station points, use the **Viewshed** tool under [Processing → Whitebox Toolbox](processing.md#whitebox-toolbox), which this quick action deliberately does not replace.
 
 ## Camera, overlay, and recording tools
 
