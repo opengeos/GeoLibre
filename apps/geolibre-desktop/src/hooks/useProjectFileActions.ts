@@ -16,7 +16,7 @@ import {
   materializeEmbeddableVectorLayers,
 } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI, getPluginManager } from "./usePlugins";
 import { pluginManifestUrlsForIds } from "../lib/external-plugins";
@@ -61,6 +61,8 @@ import type { MapControllerRef } from "../components/layout/toolbar/constants";
 /** A pending "strip credentials before saving?" prompt. */
 export interface CredentialStripPrompt {
   count: number;
+  /** Project generation that opened the prompt. */
+  projectGeneration: number;
   resolve: (choice: "strip" | "keep" | "cancel") => void;
 }
 
@@ -108,6 +110,8 @@ export interface EmbedVectorDataPrompt {
    * described differently than on the web (where it discards the data).
    */
   desktop: boolean;
+  /** Project generation that opened the prompt. */
+  projectGeneration: number;
   resolve: (choice: "embed" | "noembed" | "cancel") => void;
 }
 
@@ -244,6 +248,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const rememberRecentProject = useAppStore((s) => s.rememberRecentProject);
   const forgetRecentProject = useAppStore((s) => s.forgetRecentProject);
   const markSaved = useAppStore((s) => s.markSaved);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [qgisImportWarnings, setQgisImportWarnings] = useState<QgisProjectImportWarning[] | null>(
@@ -277,6 +282,20 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // dialog is open would overwrite the pending prompt and strand the first
   // call's unresolved promise.
   const isSavingRef = useRef(false);
+
+  // A project can be replaced by an external open action while a modal save
+  // prompt is visible. Cancel the stale promise immediately so its dialog does
+  // not cover the replacement project and its save guard is released.
+  useEffect(() => {
+    if (credentialStripPrompt && credentialStripPrompt.projectGeneration !== projectGeneration) {
+      credentialStripPrompt.resolve("cancel");
+      setCredentialStripPrompt(null);
+    }
+    if (embedVectorDataPrompt && embedVectorDataPrompt.projectGeneration !== projectGeneration) {
+      embedVectorDataPrompt.resolve("cancel");
+      setEmbedVectorDataPrompt(null);
+    }
+  }, [credentialStripPrompt, embedVectorDataPrompt, projectGeneration]);
 
   const handleOpenFromFile = async () => {
     const result = await openProjectFile();
@@ -733,9 +752,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // Ask whether to strip credentials (environment variables, geocoder keys,
   // layer tokens) before writing the file. The promise resolves when the user
   // picks an option in the dialog.
-  const askStripCredentials = (count: number) =>
+  const askStripCredentials = (count: number, promptProjectGeneration: number) =>
     new Promise<"strip" | "keep" | "cancel">((resolve) => {
-      setCredentialStripPrompt({ count, resolve });
+      setCredentialStripPrompt({ count, projectGeneration: promptProjectGeneration, resolve });
     });
 
   const resolveCredentialStripPrompt = (choice: "strip" | "keep" | "cancel") => {
@@ -746,9 +765,20 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
   // Ask whether to embed local vector layers' data in the saved file. Resolves
   // when the user picks an option in the dialog.
-  const askEmbedVectorData = (count: number, bytes: number, desktop: boolean) =>
+  const askEmbedVectorData = (
+    count: number,
+    bytes: number,
+    desktop: boolean,
+    promptProjectGeneration: number,
+  ) =>
     new Promise<"embed" | "noembed" | "cancel">((resolve) => {
-      setEmbedVectorDataPrompt({ count, bytes, desktop, resolve });
+      setEmbedVectorDataPrompt({
+        count,
+        bytes,
+        desktop,
+        projectGeneration: promptProjectGeneration,
+        resolve,
+      });
     });
 
   const resolveEmbedVectorDataPrompt = (choice: "embed" | "noembed" | "cancel") => {
@@ -826,7 +856,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const bytes = estimateEmbedBytes(state.layers, embeddable);
     const remembered = saveChoicesForProject(saveChoicesRef.current, state.projectGeneration);
     saveChoicesRef.current = remembered;
-    const choice = remembered.vectorData ?? (await askEmbedVectorData(count, bytes, isTauri()));
+    const choice =
+      remembered.vectorData ??
+      (await askEmbedVectorData(count, bytes, isTauri(), state.projectGeneration));
     if (choice === "cancel") return "cancel";
     // A project can be opened while a prompt is visible. Do not apply that
     // prompt's answer to the replacement project or continue saving stale data.
@@ -927,7 +959,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const projectGeneration = useAppStore.getState().projectGeneration;
       const remembered = saveChoicesForProject(saveChoicesRef.current, projectGeneration);
       saveChoicesRef.current = remembered;
-      const choice = remembered.credentials ?? (await askStripCredentials(redacted.redactedCount));
+      const choice =
+        remembered.credentials ??
+        (await askStripCredentials(redacted.redactedCount, projectGeneration));
       if (choice === "cancel") return false;
       if (useAppStore.getState().projectGeneration !== projectGeneration) return false;
       saveChoicesRef.current = rememberProjectSaveChoices(
