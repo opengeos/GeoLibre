@@ -33,6 +33,7 @@ import {
 } from "./raster-symbology-texture";
 import { disposeAllPaletteLegends, disposePaletteLegend } from "./raster-palette";
 import { isNonTiledRasterError } from "./non-tiled-raster-error";
+import { convertTiffYCbCrToRgb } from "./tiff-ycbcr";
 
 const rasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const RASTER_PANEL_CLASS = "geolibre-raster-panel";
@@ -147,6 +148,8 @@ type GeoTiffImage = {
   fileDirectory?: {
     PhotometricInterpretation?: number;
     getValue?: (tag: number) => unknown;
+    hasTag?: (tag: number) => boolean;
+    loadValue?: (tag: number) => Promise<unknown>;
   };
   readRasters: (options: {
     window: [number, number, number, number];
@@ -812,19 +815,25 @@ function patchJpegCogSource(source: unknown): unknown {
         if (photometric !== 6 || rasters.length < 3) {
           return rasters;
         }
-        const size = width * height;
-        const red = new Float64Array(size);
-        const green = new Float64Array(size);
-        const blue = new Float64Array(size);
-        for (let index = 0; index < size; index += 1) {
-          const yValue = Number(rasters[0][index]);
-          const cb = Number(rasters[1][index]) - 128;
-          const cr = Number(rasters[2][index]) - 128;
-          red[index] = Math.max(0, Math.min(255, yValue + 1.402 * cr));
-          green[index] = Math.max(0, Math.min(255, yValue - 0.344136 * cb - 0.714136 * cr));
-          blue[index] = Math.max(0, Math.min(255, yValue + 1.772 * cb));
-        }
-        return [red, green, blue];
+        const directory = image.fileDirectory;
+        const readTag = async (tag: number): Promise<ArrayLike<number> | undefined> => {
+          if (directory?.hasTag?.(tag) === false) return undefined;
+          const value = directory?.loadValue
+            ? await directory.loadValue(tag)
+            : directory?.getValue?.(tag);
+          return value as ArrayLike<number> | undefined;
+        };
+        const [coefficients, referenceBlackWhite] = await Promise.all([
+          readTag(529),
+          readTag(532),
+        ]);
+        return convertTiffYCbCrToRgb(
+          rasters[0],
+          rasters[1],
+          rasters[2],
+          coefficients,
+          referenceBlackWhite,
+        );
       });
       windowCache.set(key, decoded);
       if (windowCache.size > 32) windowCache.delete(windowCache.keys().next().value!);
