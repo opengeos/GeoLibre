@@ -3210,6 +3210,10 @@ export function LayerPanel({
                     aria-pressed={selectedLayerIds.has(layer.id)}
                     onClick={(e) => handleLayerSelection(e, layer.id)}
                     onKeyDown={(e) => {
+                      // Only act on the card itself: preventDefault here would
+                      // otherwise cancel the Enter activation of the action
+                      // buttons nested inside it.
+                      if (e.target !== e.currentTarget) return;
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         setSelectedLayerIds(new Set([layer.id]));
