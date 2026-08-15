@@ -459,4 +459,14 @@ describe("fileOutputTargetExtension", () => {
     // An explicit user-chosen path still wins.
     assert.equal(fileOutputTargetExtension(excelToTable, "report.gpkg"), "gpkg");
   });
+
+  it("ignores a decimal in the prose rather than reading it as an extension", () => {
+    const decimalProse = {
+      name: "file_out",
+      description: "Optional CSV output path; a tolerance of 0.5 recommended for noisy inputs.",
+      data_kind: "table",
+      io_role: "output",
+    };
+    assert.equal(fileOutputTargetExtension(decimalProse, undefined), "csv");
+  });
 });

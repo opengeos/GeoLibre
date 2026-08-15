@@ -432,7 +432,9 @@ export function outputTextFormatHint(param: WhiteboxToolParameter): string | nul
   // format dispatch (same as GeoParquet/GPKG tools), which has no CSV driver
   // -- defaulting a blank path to ".csv" made the tool reject its own default,
   // the same failure mode as #1074.
-  const recommended = (param.description ?? "").match(/\.([a-z0-9]+)\s+recommended/i);
+  // The capture must start with a letter so a decimal in the prose ("a
+  // tolerance of 0.5 recommended") cannot be mistaken for an extension.
+  const recommended = (param.description ?? "").match(/\.([a-z][a-z0-9]*)\s+recommended/i);
   if (recommended) return recommended[1].toLowerCase();
   const hint = `${param.name ?? ""} ${param.description ?? ""} ${param.type ?? ""}`;
   if (/\bcsv\b/i.test(hint)) return "csv";
