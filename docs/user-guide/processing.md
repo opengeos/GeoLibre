@@ -48,7 +48,7 @@ Processing
 └─ Earth Engine
 ```
 
-Everything above the first separator belongs to the **Whitebox Toolbox**; everything under **GeoLibre Toolbox** is GeoLibre's own. Because both toolboxes cover vector, raster, conversion, and network work, several category names appear twice. They are not duplicates, and they do not open the same thing:
+The block between the first and second separators belongs to the **Whitebox Toolbox**; everything under **GeoLibre Toolbox** is GeoLibre's own. Because both toolboxes cover vector, raster, conversion, and network work, several category names appear twice. They are not duplicates, and they do not open the same thing:
 
 | | **Whitebox Toolbox** | **GeoLibre Toolbox** |
 | --- | --- | --- |
@@ -71,7 +71,7 @@ So the first is *"the vector part of the Whitebox toolbox, filtered to the tools
 A few individual **tool** names collide the same way. `Processing → Conversion → GeoLibre (WASM) → Vector to PMTiles` is a WASM catalog tool that opens the Whitebox Toolbox dialog; `Processing → GeoLibre Toolbox → Conversion → Vector to PMTiles` is the Conversion dialog documented [below](#conversion), with its own file pickers and zoom, compression, and layer-name options. `Raster to PMTiles` appears in both places too. When a step in these docs or a tutorial names a Conversion tool, it means the GeoLibre Toolbox one.
 
 !!! tip "Which one should I use?"
-    Start with **GeoLibre Toolbox** for everyday work on layers already on the map: fewer tools, guided dialogs, a choice of engine, and the result is added to the map styled and ready. Reach for the **Whitebox Toolbox** when you need something the GeoLibre Toolbox does not have, which is most terrain, hydrology, remote sensing, and LiDAR analysis, or a specific named tool from the full catalog.
+    Start with **GeoLibre Toolbox** for everyday work on layers already on the map: fewer tools, guided dialogs, and a choice of engine. The analysis tools add their result to the map as a new layer; the Conversion tools write a file instead. Reach for the **Whitebox Toolbox** when you need something the GeoLibre Toolbox does not have, which is most terrain, hydrology, remote sensing, and LiDAR analysis, or a specific named tool from the full catalog.
 
 !!! warning "The dialog's Source filter is a third, narrower thing"
     Inside the Whitebox Toolbox dialog, the **source** dropdown offers *All sources / GeoLibre tools / Whitebox tools*. That filter splits the **Whitebox toolbox catalog only** by who wrote each tool. "GeoLibre tools" there means the same WASM tools that the menu labels `GeoLibre (WASM)`. It never shows the GeoLibre Toolbox dialogs, which are not in that catalog at all.
