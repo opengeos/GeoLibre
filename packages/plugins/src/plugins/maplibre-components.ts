@@ -3598,6 +3598,11 @@ function swipeCogFingerprint(layers: GeoLibreLayer[]): string {
       source.rescaleMin,
       source.rescaleMax,
       source.nodata,
+      // maplibre-gl-raster layers keep their visualization (mode/bands/
+      // colormap/rescale/nodata/...) in metadata.rasterState, not on `source`;
+      // without it a restyle of a mirrored raster would not notify. Always
+      // undefined for cog-url layers, so this is a no-op there.
+      layer.metadata.rasterState,
     ]);
   }
   return JSON.stringify(parts);

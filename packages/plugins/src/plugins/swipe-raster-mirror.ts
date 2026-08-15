@@ -10,6 +10,45 @@ export interface SwipeRasterSnapshot {
   state: Partial<RasterLayerState>;
 }
 
+/**
+ * The mirror-control operations {@link SwipeRasterMirror} depends on. Injectable
+ * so tests can exercise the diffing logic with fakes instead of a real
+ * RasterControl + deck.gl overlay (the same seam SwipeCogMirrorDeps gives the
+ * sibling COG mirror).
+ */
+export interface SwipeRasterMirrorDeps {
+  createControl: (map: MapLibreMap) => Promise<RasterControl | null>;
+  addRaster: (control: RasterControl, snapshot: SwipeRasterSnapshot) => Promise<string | null>;
+  removeRaster: (control: RasterControl, mirrorId: string) => void;
+  removeControl: (map: MapLibreMap, control: RasterControl) => void;
+}
+
+const DEFAULT_DEPS: SwipeRasterMirrorDeps = {
+  createControl: async (map) => {
+    const { RasterControl: RasterControlClass } = await import("maplibre-gl-raster");
+    const control = new RasterControlClass({
+      collapsed: true,
+      engine: "maplibre-gl-raster",
+      interleaved: true,
+    });
+    map.addControl(control);
+    // Hide the panel rather than detaching it, matching hideRasterControl in
+    // maplibre-raster.ts: the mirror only contributes its deck overlay, and
+    // onRemove expects to unmount its own container.
+    const container = control.getContainer();
+    if (container) container.style.display = "none";
+    return control;
+  },
+  addRaster: (control, snapshot) =>
+    control.addRaster(snapshot.url, {
+      name: snapshot.name,
+      state: { ...snapshot.state, visible: true, opacity: snapshot.opacity },
+      zoomTo: false,
+    }),
+  removeRaster: (control, mirrorId) => control.removeRaster(mirrorId),
+  removeControl: (map, control) => map.removeControl(control),
+};
+
 /** Mirrors maplibre-gl-raster's deck.gl rasters onto the swipe comparison map. */
 export class SwipeRasterMirror {
   private control: RasterControl | null = null;
@@ -18,7 +57,10 @@ export class SwipeRasterMirror {
   private syncChain: Promise<void> = Promise.resolve();
   private destroyed = false;
 
-  constructor(private readonly map: MapLibreMap) {}
+  constructor(
+    private readonly map: MapLibreMap,
+    private readonly deps: SwipeRasterMirrorDeps = DEFAULT_DEPS,
+  ) {}
 
   getMap(): MapLibreMap {
     return this.map;
@@ -37,7 +79,7 @@ export class SwipeRasterMirror {
     this.controlPromise = null;
     if (control) {
       try {
-        this.map.removeControl(control);
+        this.deps.removeControl(this.map, control);
       } catch (error) {
         console.debug("[GeoLibre] swipe raster mirror: removeControl", error);
       }
@@ -46,16 +88,9 @@ export class SwipeRasterMirror {
 
   private ensureControl(): Promise<RasterControl | null> {
     if (this.destroyed) return Promise.resolve(null);
-    this.controlPromise ??= import("maplibre-gl-raster").then(
-      ({ RasterControl }) => {
+    this.controlPromise ??= this.deps.createControl(this.map).then(
+      (control) => {
         if (this.destroyed) return null;
-        const control = new RasterControl({
-          collapsed: true,
-          engine: "maplibre-gl-raster",
-          interleaved: true,
-        });
-        this.map.addControl(control);
-        control.getContainer()?.remove();
         this.control = control;
         return control;
       },
@@ -72,7 +107,9 @@ export class SwipeRasterMirror {
     if (this.destroyed) return;
     if (desired.length === 0) {
       if (this.control) {
-        for (const { mirrorId } of this.applied.values()) this.control.removeRaster(mirrorId);
+        for (const { mirrorId } of this.applied.values()) {
+          this.deps.removeRaster(this.control, mirrorId);
+        }
         this.applied.clear();
       }
       return;
@@ -83,7 +120,7 @@ export class SwipeRasterMirror {
     const desiredIds = new Set(desired.map(({ id }) => id));
     for (const [id, entry] of [...this.applied]) {
       if (!desiredIds.has(id)) {
-        control.removeRaster(entry.mirrorId);
+        this.deps.removeRaster(control, entry.mirrorId);
         this.applied.delete(id);
       }
     }
@@ -93,14 +130,16 @@ export class SwipeRasterMirror {
       const fingerprint = JSON.stringify([raster.url, raster.state, raster.opacity]);
       const existing = this.applied.get(raster.id);
       if (existing?.fingerprint === fingerprint) continue;
-      if (existing) control.removeRaster(existing.mirrorId);
+      if (existing) {
+        // Drop the entry with the mirror it names: leaving it would let a later
+        // sync with the same fingerprint skip a raster whose re-add failed
+        // below, so the comparison map would stay missing it.
+        this.deps.removeRaster(control, existing.mirrorId);
+        this.applied.delete(raster.id);
+      }
       try {
-        const mirrorId = await control.addRaster(raster.url, {
-          name: raster.name,
-          state: { ...raster.state, visible: true, opacity: raster.opacity },
-          zoomTo: false,
-        });
-        if (!this.destroyed) this.applied.set(raster.id, { mirrorId, fingerprint });
+        const mirrorId = await this.deps.addRaster(control, raster);
+        if (mirrorId && !this.destroyed) this.applied.set(raster.id, { mirrorId, fingerprint });
       } catch (error) {
         console.debug("[GeoLibre] swipe raster mirror: addRaster", error);
       }

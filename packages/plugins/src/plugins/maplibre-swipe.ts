@@ -18,6 +18,7 @@ import {
 } from "./maplibre-components";
 import { SwipeCogMirror } from "./swipe-cog-mirror";
 import { getRasterMainVisibility, setRasterMainVisibility } from "./maplibre-raster";
+import { setTransientRasterVisibility } from "./raster-layer-sync";
 import { SwipeRasterMirror } from "./swipe-raster-mirror";
 
 /**
@@ -156,7 +157,14 @@ function reconcileCogSwipe(): void {
     });
   }
   for (const raster of maplibreRasters) {
-    if (!raster.visible) continue;
+    if (!raster.visible) {
+      // The user hid it: drop this provider's bookkeeping so teardown does not
+      // show it again, and clear the transient marker so the next control-side
+      // visibility change is mirrored back to the store as a real edit.
+      cogMainForced.delete(raster.id);
+      setTransientRasterVisibility(raster.id, false);
+      continue;
+    }
     const wantVisible = sideFor(raster) !== "right";
     if (getRasterMainVisibility(raster.id) !== wantVisible) {
       setRasterMainVisibility(raster.id, wantVisible);

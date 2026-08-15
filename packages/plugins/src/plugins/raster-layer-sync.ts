@@ -288,6 +288,11 @@ export function syncRasterLayersToStoreWithOptions(
   for (const id of controlRenderState.keys()) {
     if (!infoIds.has(id)) controlRenderState.delete(id);
   }
+  // Same for a swipe's transient hide: a stale id would make a later raster
+  // added under it ignore genuine control-side visibility changes.
+  for (const id of transientControlVisibility) {
+    if (!infoIds.has(id)) transientControlVisibility.delete(id);
+  }
 
   syncingLayersToStore = true;
   try {
