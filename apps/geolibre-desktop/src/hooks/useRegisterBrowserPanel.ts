@@ -1,7 +1,6 @@
-import { collapseRightPanel, openRightPanel, registerRightPanel } from "@geolibre/plugins";
 import { useEffect } from "react";
 import i18n from "../i18n";
-import { useDesktopSettingsStore } from "./useDesktopSettings";
+import { registerPersistedRightPanel } from "../lib/persisted-right-panel";
 
 /** Stable id of the Browser (Data Source Manager) right panel. */
 export const BROWSER_PANEL_ID = "browser";
@@ -26,30 +25,25 @@ export const BROWSER_PANEL_ID = "browser";
  * mount it is opened and immediately collapsed, so it shows as a rail entry
  * beside Layers rather than covering the map. The user expands it from that
  * rail (or toggles it off in Settings → Layout). "By default" means the default
- * of the persisted `layout.browserPanelVisible` setting: turning the panel off
- * in Settings → Layout keeps it off across restarts rather than having the
- * toggle silently reset (#1935).
+ * of the persisted `layout.browserPanelVisible` setting, which
+ * {@link registerPersistedRightPanel} seeds from and then keeps in step with the
+ * panel: turning it off stays off across restarts instead of the toggle silently
+ * resetting on every launch (#1935).
  */
 export function useRegisterBrowserPanel(): void {
-  useEffect(() => {
-    // i18n.t (not the useTranslation hook) so registration carries no
-    // render-time dependency; the body still localizes live via useTranslation.
-    const dispose = registerRightPanel({
-      id: BROWSER_PANEL_ID,
-      title: () => i18n.t("browser.title"),
-      dock: "replace-layers",
-      render: () => {},
-    });
-    // Default on, but docked collapsed to the Layers rail (open then collapse),
-    // so it is present without burying the map on first load. Read the setting
-    // here rather than subscribing: this seeds the panel's startup state only.
-    // Once mounted the Settings toggle drives the registry directly, so the
-    // user can also close the panel from its own header without that being
-    // written back as a preference.
-    if (useDesktopSettingsStore.getState().desktopSettings.layout.browserPanelVisible) {
-      openRightPanel(BROWSER_PANEL_ID);
-      collapseRightPanel(BROWSER_PANEL_ID);
-    }
-    return dispose;
-  }, []);
+  useEffect(
+    () =>
+      registerPersistedRightPanel(
+        {
+          id: BROWSER_PANEL_ID,
+          // i18n.t (not the useTranslation hook) so registration carries no
+          // render-time dependency; the body localizes live via useTranslation.
+          title: () => i18n.t("browser.title"),
+          dock: "replace-layers",
+          render: () => {},
+        },
+        "browserPanelVisible",
+      ),
+    [],
+  );
 }

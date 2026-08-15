@@ -12,6 +12,7 @@
     "./local-netcdf": "./src/plugins/local-netcdf.ts",
     "./maplibre-graticule": "./src/plugins/maplibre-graticule.ts",
     "./raster-symbology": "./src/plugins/raster-symbology.ts",
+    "./right-panel-registry": "./src/right-panel-registry.ts",
     "./zarr-time-axis": "./src/plugins/zarr-time-axis.ts"
   },
   "dependencies": {
