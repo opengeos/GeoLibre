@@ -180,6 +180,10 @@ import { TopToolbar } from "./TopToolbar";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
+import {
+  exceedsBrowserCogConversionLimit,
+  geoTiffSampleCount,
+} from "../../lib/cog-conversion-limits";
 
 /**
  * Confirm loading a vector source whose feature count tripped the loader's
@@ -1141,11 +1145,18 @@ export function DesktopShell({
           window.alert(t("raster.rasterNotGeotiff", { name }));
           return;
         }
+        const info = await readGeoTiffInfo(bytes);
+        const samples = geoTiffSampleCount(info);
+        if (exceedsBrowserCogConversionLimit(info)) {
+          console.warn(
+            `[GeoLibre] Skipping in-browser COG conversion for "${name}": ${samples.toLocaleString()} decoded samples exceed the safe memory limit.`,
+          );
+          window.alert(t("raster.cogConvertFailed", { name }));
+          return;
+        }
         if (!bytesAreRemote) {
           // Local file: pick the prompt by size now that the header is cheap to
           // read, then confirm once. (A remote source already confirmed above.)
-          const info = await readGeoTiffInfo(bytes);
-          const samples = info.width * info.height * Math.max(info.bands, 1);
           const message =
             samples > LARGE_RASTER_SAMPLE_LIMIT
               ? t("raster.cogConvertLargeConfirm", {
