@@ -19,8 +19,17 @@ export interface SwipeRasterSnapshot {
 export interface SwipeRasterMirrorDeps {
   createControl: (map: MapLibreMap) => Promise<RasterControl | null>;
   addRaster: (control: RasterControl, snapshot: SwipeRasterSnapshot) => Promise<string | null>;
+  setOpacity: (control: RasterControl, mirrorId: string, opacity: number) => void;
   removeRaster: (control: RasterControl, mirrorId: string) => void;
   removeControl: (map: MapLibreMap, control: RasterControl) => void;
+}
+
+// The non-opacity part of a mirrored raster; a change here needs a reload
+// (re-add), whereas an opacity-only change is applied in place. The store keeps
+// opacity on the layer, not in metadata.rasterState (see serializableRasterState
+// in raster-layer-sync.ts), so the two never overlap.
+function structuralFingerprint(raster: SwipeRasterSnapshot): string {
+  return JSON.stringify([raster.url, raster.state]);
 }
 
 const DEFAULT_DEPS: SwipeRasterMirrorDeps = {
@@ -45,6 +54,7 @@ const DEFAULT_DEPS: SwipeRasterMirrorDeps = {
       state: { ...snapshot.state, visible: true, opacity: snapshot.opacity },
       zoomTo: false,
     }),
+  setOpacity: (control, mirrorId, opacity) => control.setRasterState(mirrorId, { opacity }),
   removeRaster: (control, mirrorId) => control.removeRaster(mirrorId),
   removeControl: (map, control) => map.removeControl(control),
 };
@@ -53,7 +63,7 @@ const DEFAULT_DEPS: SwipeRasterMirrorDeps = {
 export class SwipeRasterMirror {
   private control: RasterControl | null = null;
   private controlPromise: Promise<RasterControl | null> | null = null;
-  private applied = new Map<string, { mirrorId: string; fingerprint: string }>();
+  private applied = new Map<string, { mirrorId: string; fingerprint: string; opacity: number }>();
   private syncChain: Promise<void> = Promise.resolve();
   private destroyed = false;
 
@@ -135,9 +145,17 @@ export class SwipeRasterMirror {
 
     for (const raster of desired) {
       if (this.destroyed) return;
-      const fingerprint = JSON.stringify([raster.url, raster.state, raster.opacity]);
+      const fingerprint = structuralFingerprint(raster);
       const existing = this.applied.get(raster.id);
-      if (existing?.fingerprint === fingerprint) continue;
+      if (existing?.fingerprint === fingerprint) {
+        // Same data and visualization; only opacity may have changed, and that
+        // is a live patch rather than a reload (no re-fetch, no flash).
+        if (existing.opacity !== raster.opacity) {
+          this.deps.setOpacity(control, existing.mirrorId, raster.opacity);
+          existing.opacity = raster.opacity;
+        }
+        continue;
+      }
       if (existing) {
         // Drop the entry with the mirror it names: leaving it would let a later
         // sync with the same fingerprint skip a raster whose re-add failed
@@ -147,7 +165,9 @@ export class SwipeRasterMirror {
       }
       try {
         const mirrorId = await this.deps.addRaster(control, raster);
-        if (mirrorId && !this.destroyed) this.applied.set(raster.id, { mirrorId, fingerprint });
+        if (mirrorId && !this.destroyed) {
+          this.applied.set(raster.id, { mirrorId, fingerprint, opacity: raster.opacity });
+        }
       } catch (error) {
         console.debug("[GeoLibre] swipe raster mirror: addRaster", error);
       }

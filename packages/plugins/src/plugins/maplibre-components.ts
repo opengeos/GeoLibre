@@ -70,7 +70,6 @@ import type {
   ZarrLocalStoreProvider,
   ZarrLayerInfo,
 } from "maplibre-gl-components";
-import type { RasterLayerState } from "maplibre-gl-raster";
 import type { GaussianSplatControl, GaussianSplatLayerAdapter } from "maplibre-gl-splat";
 import type { LidarControlEventHandler, PointCloudInfo } from "maplibre-gl-lidar";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
@@ -78,6 +77,8 @@ import { ensureMercatorProjection } from "./map-projection-utils";
 import { ensureSharedDeckOverlay, setSharedDeckLayers } from "./shared-deck-overlay";
 import { attachTerrainMeasure, measurePanelElement, type TerrainMapLike } from "./terrain-measure";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
+import { savedRasterState } from "./raster-layer-sync";
+import type { SwipeRasterSnapshot } from "./swipe-raster-mirror";
 import {
   KerchunkReferenceStore,
   loadKerchunkReference,
@@ -3542,14 +3543,10 @@ export interface SwipeCogRasterSnapshot {
   nodata?: number;
 }
 
-export interface SwipeMaplibreRasterSnapshot {
-  id: string;
-  name: string;
-  url: string;
-  visible: boolean;
-  opacity: number;
-  state: Partial<RasterLayerState>;
-}
+// The snapshot getSwipeMaplibreRasters produces is exactly what SwipeRasterMirror
+// consumes, so the mirror owns the shape and this is an alias rather than a
+// second copy to keep in sync by hand.
+export type SwipeMaplibreRasterSnapshot = SwipeRasterSnapshot;
 
 // Notified when the set/state of CogLayerControl rasters changes, so the swipe
 // provider can refresh its list and re-mirror. Backed by a single store
@@ -3693,7 +3690,6 @@ export function getSwipeMaplibreRasters(): SwipeMaplibreRasterSnapshot[] {
     .flatMap((layer) => {
       const url = (layer.source as { url?: unknown }).url;
       if (typeof url !== "string") return [];
-      const state = layer.metadata.rasterState;
       return [
         {
           id: layer.id,
@@ -3701,7 +3697,10 @@ export function getSwipeMaplibreRasters(): SwipeMaplibreRasterSnapshot[] {
           url,
           visible: layer.visible,
           opacity: layer.opacity,
-          state: state && typeof state === "object" ? (state as Partial<RasterLayerState>) : {},
+          // Sanitized the same way the normal restore path does, so a
+          // hand-edited project file cannot push malformed fields straight
+          // into the mirror control's addRaster.
+          state: savedRasterState(layer),
         },
       ];
     });

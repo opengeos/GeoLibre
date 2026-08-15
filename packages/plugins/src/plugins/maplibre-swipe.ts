@@ -47,8 +47,15 @@ let cogMirror: SwipeCogMirror | null = null;
 let rasterMirror: SwipeRasterMirror | null = null;
 // The main-map visibility this provider last forced per raster id (with the
 // opacity to restore when showing it again), so it only toggles on change and
-// can restore visibility on teardown.
-const cogMainForced = new Map<string, { visible: boolean; opacity: number }>();
+// can restore visibility on teardown. `kind` records which control owns the
+// raster -- CogLayerControl or maplibre-gl-raster's RasterControl -- so teardown
+// restores through that one instead of poking both and relying on the other to
+// no-op an id it never managed.
+type ForcedRasterKind = "cog" | "raster";
+const cogMainForced = new Map<
+  string,
+  { kind: ForcedRasterKind; visible: boolean; opacity: number }
+>();
 // Side assignments accumulated during one _updateLayerVisibility pass (the
 // control calls applySide once per provider layer); reconciled together so the
 // comparison mirror syncs in a single pass.
@@ -111,7 +118,7 @@ function reconcileCogSwipe(): void {
   // Drop bookkeeping for rasters removed from the store while swiping (the loop
   // below only visits still-present rasters, so their entries would otherwise
   // linger until teardown).
-  const rasterIds = new Set(rasters.map((raster) => raster.id));
+  const rasterIds = new Set([...rasters, ...maplibreRasters].map((raster) => raster.id));
   for (const id of [...cogMainForced.keys()]) {
     if (!rasterIds.has(id)) cogMainForced.delete(id);
   }
@@ -152,6 +159,7 @@ function reconcileCogSwipe(): void {
       setCogRasterMainVisibility(raster.id, wantVisible, raster.opacity);
     }
     cogMainForced.set(raster.id, {
+      kind: "cog",
       visible: wantVisible,
       opacity: raster.opacity,
     });
@@ -169,7 +177,11 @@ function reconcileCogSwipe(): void {
     if (getRasterMainVisibility(raster.id) !== wantVisible) {
       setRasterMainVisibility(raster.id, wantVisible);
     }
-    cogMainForced.set(raster.id, { visible: wantVisible, opacity: raster.opacity });
+    cogMainForced.set(raster.id, {
+      kind: "raster",
+      visible: wantVisible,
+      opacity: raster.opacity,
+    });
   }
 }
 
@@ -181,12 +193,12 @@ function teardownCogSwipe(): void {
   cogPendingSides.clear();
   cogPendingComparisonMap = undefined;
   cogReconcileScheduled = false;
-  // Restore any raster this provider hid on the main map.
+  // Restore any raster this provider hid on the main map, through the control
+  // that owns it.
   for (const [id, forced] of cogMainForced) {
-    if (!forced.visible) {
-      setCogRasterMainVisibility(id, true, forced.opacity);
-      setRasterMainVisibility(id, true);
-    }
+    if (forced.visible) continue;
+    if (forced.kind === "cog") setCogRasterMainVisibility(id, true, forced.opacity);
+    else setRasterMainVisibility(id, true);
   }
   cogMainForced.clear();
 }

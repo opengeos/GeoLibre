@@ -40,6 +40,9 @@ function makeDeps(failAdd?: (snapshot: SwipeRasterSnapshot) => boolean): Recorde
       calls.push(`add:${snapshot.id}=>${id}`);
       return id;
     },
+    setOpacity: (_control, mirrorId, opacity) => {
+      calls.push(`opacity:${mirrorId}=${opacity}`);
+    },
     removeRaster: (_control, mirrorId) => {
       calls.push(`remove:${mirrorId}`);
     },
@@ -88,12 +91,13 @@ describe("SwipeRasterMirror", () => {
     assert.deepEqual(rec.calls, ["add:a=>m1", "remove:m1", "add:a=>m2"]);
   });
 
-  it("reloads a raster when its opacity changes", async () => {
+  it("applies an opacity-only change in place without re-adding", async () => {
     const rec = makeDeps();
     const mirror = new SwipeRasterMirror(fakeMap, rec.deps);
     await mirror.sync([raster("a")]);
     await mirror.sync([raster("a", { opacity: 0.5 })]);
-    assert.deepEqual(rec.calls, ["add:a=>m1", "remove:m1", "add:a=>m2"]);
+    assert.deepEqual(rec.calls, ["add:a=>m1", "opacity:m1=0.5"]);
+    assert.equal(rec.created, 1);
   });
 
   it("removes a raster dropped from the desired set", async () => {
@@ -129,14 +133,15 @@ describe("SwipeRasterMirror", () => {
   });
 
   it("retries the add on the next sync when a reload fails", async () => {
-    // The reload triggered by the opacity change fails, so the old mirror is
-    // gone with nothing in its place. An unchanged follow-up sync must retry
-    // rather than skip the raster as already-applied.
-    const rec = makeDeps((snapshot) => snapshot.opacity === 0.5);
+    // The reload triggered by the restyle fails, so the old mirror is gone with
+    // nothing in its place. An unchanged follow-up sync must retry rather than
+    // skip the raster as already-applied.
+    const restyled = { state: { mode: "single", colormap: "viridis" } } as const;
+    const rec = makeDeps((snapshot) => snapshot.state.colormap === "viridis");
     const mirror = new SwipeRasterMirror(fakeMap, rec.deps);
     await mirror.sync([raster("a")]);
-    await mirror.sync([raster("a", { opacity: 0.5 })]);
-    await mirror.sync([raster("a", { opacity: 0.5 })]);
+    await mirror.sync([raster("a", restyled)]);
+    await mirror.sync([raster("a", restyled)]);
     assert.deepEqual(rec.calls, ["add:a=>m1", "remove:m1", "add-fail:a", "add-fail:a"]);
   });
 
