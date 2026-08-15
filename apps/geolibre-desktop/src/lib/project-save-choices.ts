@@ -8,6 +8,8 @@ export type VectorDataSaveChoice = "embed" | "noembed";
 export interface ProjectSaveChoices {
   projectGeneration: number;
   credentials?: CredentialSaveChoice;
+  /** Credential count covered by the last explicit Keep choice. */
+  keptCredentialCount?: number;
   vectorData?: VectorDataSaveChoice;
   /** Whether the user accepted embedding after seeing the large-data warning. */
   largeEmbedWarningAcknowledged?: boolean;
@@ -66,4 +68,25 @@ export function reusableVectorDataChoice(
     remembered.largeEmbedWarningAcknowledged !== true
     ? undefined
     : remembered.vectorData;
+}
+
+/**
+ * Returns a remembered credential choice when it covers the current risk.
+ *
+ * Stripping remains safe as more credentials are added. Keeping credentials is
+ * reused only while the project has no more credential-bearing fields than the
+ * user explicitly accepted.
+ *
+ * @param remembered - Choices scoped to the current project.
+ * @param credentialCount - Current number of credential-bearing fields.
+ * @returns The reusable choice, or undefined when Keep must be confirmed again.
+ */
+export function reusableCredentialChoice(
+  remembered: ProjectSaveChoices,
+  credentialCount: number,
+): CredentialSaveChoice | undefined {
+  return remembered.credentials === "keep" &&
+    (remembered.keptCredentialCount == null || credentialCount > remembered.keptCredentialCount)
+    ? undefined
+    : remembered.credentials;
 }

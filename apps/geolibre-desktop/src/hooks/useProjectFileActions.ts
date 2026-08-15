@@ -46,6 +46,7 @@ import { normalizeProjectUrl } from "../lib/urls";
 import { recordExplicitProjectSave } from "../lib/project-history-session";
 import {
   rememberProjectSaveChoices,
+  reusableCredentialChoice,
   reusableVectorDataChoice,
   saveChoicesForProject,
   type ProjectSaveChoices,
@@ -991,14 +992,18 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const remembered = saveChoicesForProject(saveChoicesRef.current, saveProjectGeneration);
       saveChoicesRef.current = remembered;
       const choice =
-        remembered.credentials ??
+        reusableCredentialChoice(remembered, redacted.redactedCount) ??
         (await askStripCredentials(redacted.redactedCount, saveProjectGeneration));
       if (choice === "cancel") return false;
       if (useAppStore.getState().projectGeneration !== saveProjectGeneration) return false;
       saveChoicesRef.current = rememberProjectSaveChoices(
         saveChoicesRef.current,
         saveProjectGeneration,
-        { credentials: choice },
+        {
+          credentials: choice,
+          keptCredentialCount:
+            choice === "keep" ? redacted.redactedCount : remembered.keptCredentialCount,
+        },
       );
       contentToSave = serializeForSave(choice === "strip" ? redacted.project : projectToEgress);
     } else {

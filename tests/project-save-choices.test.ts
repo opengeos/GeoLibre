@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   rememberProjectSaveChoices,
+  reusableCredentialChoice,
   reusableVectorDataChoice,
   saveChoicesForProject,
 } from "../apps/geolibre-desktop/src/lib/project-save-choices";
@@ -50,5 +51,18 @@ describe("project save choices", () => {
       largeEmbedWarningAcknowledged: true,
     });
     assert.equal(reusableVectorDataChoice(acknowledged, true), "embed");
+  });
+
+  it("reconfirms Keep when the project gains more credential-bearing fields", () => {
+    const keep = rememberProjectSaveChoices(null, 4, {
+      credentials: "keep",
+      keptCredentialCount: 2,
+    });
+    assert.equal(reusableCredentialChoice(keep, 2), "keep");
+    assert.equal(reusableCredentialChoice(keep, 1), "keep");
+    assert.equal(reusableCredentialChoice(keep, 3), undefined);
+
+    const strip = rememberProjectSaveChoices(null, 4, { credentials: "strip" });
+    assert.equal(reusableCredentialChoice(strip, 10), "strip");
   });
 });
