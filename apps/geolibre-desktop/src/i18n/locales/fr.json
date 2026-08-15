@@ -2551,7 +2551,7 @@
       "terrain": "Relief",
       "remoteSensing": "Télédétection",
       "projection": "Projection",
-      "geolibre": "GeoLibre",
+      "geolibre": "Boîte à outils GeoLibre",
       "subGroupGeometry": "Géométrie",
       "subGroupOverlay": "Superposition",
       "subGroupJoin": "Jointure",

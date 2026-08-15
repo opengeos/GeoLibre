@@ -2506,7 +2506,7 @@
       "terrain": "Medan",
       "remoteSensing": "Penginderaan Jauh",
       "projection": "Proyeksi",
-      "geolibre": "GeoLibre",
+      "geolibre": "Kotak alat GeoLibre",
       "subGroupGeometry": "Geometri",
       "subGroupOverlay": "Overlay",
       "subGroupJoin": "Gabungan",

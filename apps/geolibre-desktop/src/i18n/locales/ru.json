@@ -2641,7 +2641,7 @@
       "terrain": "Рельеф",
       "remoteSensing": "Дистанционное зондирование",
       "projection": "Проекция",
-      "geolibre": "GeoLibre",
+      "geolibre": "Набор инструментов GeoLibre",
       "subGroupGeometry": "Геометрия",
       "subGroupOverlay": "Наложение",
       "subGroupJoin": "Соединение",

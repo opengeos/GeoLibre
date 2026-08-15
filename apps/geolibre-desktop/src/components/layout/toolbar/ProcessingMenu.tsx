@@ -141,11 +141,12 @@ export function ProcessingMenu({
           </>
         )}
         {/* Heads the toolbox block below: the nine category submenus render as
-            bare siblings of the GeoLibre submenu, so "Conversion" (toolbox) and
-            "GeoLibre → Conversion" (app dialog) otherwise look like peers
-            (GeoLibre#1904). Names the toolbox rather than repeating the bare
-            product name, and says what clicking it does. Reuses the dialog's
-            own heading string, which is already translated in every locale. */}
+            bare siblings of the GeoLibre Toolbox submenu, so "Conversion"
+            (Whitebox) and "GeoLibre Toolbox → Conversion" (app dialog)
+            otherwise look like peers (GeoLibre#1904). Names the toolbox rather
+            than repeating the bare product name, and says what clicking it
+            does; pairs with the GeoLibre Toolbox trigger below. Reuses the
+            dialog's own heading string, already translated in every locale. */}
         {showWhitebox && (
           <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
             {t("processing.whitebox.toolbox")}
@@ -189,10 +190,12 @@ export function ProcessingMenu({
         {showWhitebox && showGeolibre && <DropdownMenuSeparator />}
         {/* GeoLibre's own tools (Turf vector, rasterio raster, format
             conversion, routing, spatial statistics) plus geocoding, batch &
-            models, and AI segmentation. Grouped under a single "GeoLibre"
-            submenu so their category names don't collide with the Whitebox
-            category submenus above. Each child keeps its own visibility gate;
-            the parent shows when any child does. */}
+            models, and AI segmentation. Grouped under a single "GeoLibre
+            Toolbox" submenu so their category names don't collide with the
+            Whitebox category submenus above, and so the label names a toolbox
+            the way its "Whitebox Toolbox" sibling does instead of standing as
+            the bare product name (GeoLibre#1904). Each child keeps its own
+            visibility gate; the parent shows when any child does. */}
         {showGeolibre && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>{t("toolbar.item.geolibre")}</DropdownMenuSubTrigger>

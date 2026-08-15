@@ -2506,7 +2506,7 @@
       "terrain": "ภูมิประเทศ",
       "remoteSensing": "การรับรู้จากระยะไกล",
       "projection": "การฉายแผนที่",
-      "geolibre": "GeoLibre",
+      "geolibre": "กล่องเครื่องมือ GeoLibre",
       "subGroupGeometry": "เรขาคณิต",
       "subGroupOverlay": "การซ้อนทับ",
       "subGroupJoin": "การเชื่อมข้อมูล",

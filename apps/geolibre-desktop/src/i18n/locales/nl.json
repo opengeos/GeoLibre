@@ -2551,7 +2551,7 @@
       "terrain": "Terrein",
       "remoteSensing": "Remote sensing",
       "projection": "Projectie",
-      "geolibre": "GeoLibre",
+      "geolibre": "GeoLibre-toolbox",
       "subGroupGeometry": "Geometrie",
       "subGroupOverlay": "Overlay",
       "subGroupJoin": "Join",
