@@ -285,6 +285,9 @@ function controlVectorLayer(id: string, patch: Partial<GeoLibreLayer> = {}): Geo
 }
 
 const circleId = (id: string) => `layer-${id}-circle`;
+const clusterId = (id: string) => `layer-${id}-cluster`;
+const clusterCountId = (id: string) => `layer-${id}-cluster-count`;
+const heatmapId = (id: string) => `layer-${id}-heatmap`;
 const markerId = (id: string) => `layer-${id}-marker`;
 const rasterId = (id: string) => `layer-${id}-raster`;
 const srcId = (id: string) => `source-${id}`;
@@ -417,6 +420,23 @@ describe("MapController.syncLayers reconciliation", () => {
       fake.calls.some((c) => c.method === "moveLayer"),
       "reorder is applied via moveLayer, not a teardown",
     );
+  });
+
+  it("keeps a lower heatmap beneath every companion of an upper clustered layer", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.syncLayers([
+      pointLayer("heat", {}, { pointRenderer: "heatmap" }),
+      pointLayer("clusters", {}, { pointRenderer: "cluster" }),
+    ]);
+
+    const userOrder = fake.order.filter((id) => id !== "basemap-bg");
+    const heatIndex = userOrder.indexOf(heatmapId("heat"));
+    assert.ok(heatIndex !== -1, "heatmap layer exists");
+    assert.ok(heatIndex < userOrder.indexOf(clusterId("clusters")), "beneath cluster bubbles");
+    assert.ok(heatIndex < userOrder.indexOf(clusterCountId("clusters")), "beneath cluster counts");
+    assert.ok(heatIndex < userOrder.indexOf(circleId("clusters")), "beneath unclustered points");
   });
 
   it("restacks every layer in one pass when a control adds its style layers late", () => {

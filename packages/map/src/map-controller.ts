@@ -27,6 +27,8 @@ import { LayerControl, type CustomLayerAdapter, type LayerState } from "maplibre
 import { CollapsedAttributionControl } from "./collapsed-attribution-control";
 import {
   circleLayerId,
+  clusterCountLayerId,
+  clusterLayerId,
   fillExtrusionLayerId,
   fillLayerId,
   getLayerBounds,
@@ -34,9 +36,12 @@ import {
   highlightFillLayerId,
   highlightLineLayerId,
   highlightSourceId,
+  heatmapLayerId,
+  labelLayerId,
   lineLayerId,
   markerLayerId,
   sourceId,
+  textLayerId,
 } from "./geojson-loader";
 import {
   mbtilesStyleLayerIds,
@@ -2349,8 +2354,13 @@ export class MapController {
         { id: fillExtrusionLayerId(layer.id), suffix: "Extrusions" },
         { id: fillLayerId(layer.id), suffix: "Polygons" },
         { id: lineLayerId(layer.id), suffix: "Lines" },
+        { id: heatmapLayerId(layer.id), suffix: "Heatmap" },
+        { id: clusterLayerId(layer.id), suffix: "Clusters" },
+        { id: clusterCountLayerId(layer.id), suffix: "Cluster counts" },
         { id: circleLayerId(layer.id), suffix: "Points" },
         { id: markerLayerId(layer.id), suffix: "Markers" },
+        { id: textLayerId(layer.id), suffix: "Text" },
+        { id: labelLayerId(layer.id), suffix: "Labels" },
       ];
     }
 
