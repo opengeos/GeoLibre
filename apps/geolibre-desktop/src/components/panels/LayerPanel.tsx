@@ -2881,6 +2881,14 @@ export function LayerPanel({
   }
 
   return (
+    // The two named rows do not have to match the child count: the header takes
+    // the `auto` row, the layer list takes `minmax(0, 1fr)`, and the separator
+    // and place search below it fall into implicit auto rows (the dialogs and
+    // menus after them render through Radix portals, so they take no row at
+    // all). Only the list sits in the flexible row, which is what makes it the
+    // part that shrinks and scrolls once the panel reaches its max height — so
+    // a new direct child added here must not displace the ScrollArea from the
+    // second in-flow position.
     <aside
       aria-label={t("sharedRail.layers")}
       className="relative grid max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 grid-rows-[auto_minmax(0,1fr)] border-b bg-card max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-e"
@@ -2988,12 +2996,15 @@ export function LayerPanel({
         </div>
       </div>
       <ScrollArea
-        className="min-h-0 [&_[data-radix-scroll-area-viewport]]:touch-pan-y [&_[data-radix-scroll-area-viewport]]:overscroll-contain [&_[data-radix-scroll-area-viewport]]:[-webkit-overflow-scrolling:touch] [&_[data-radix-scroll-area-viewport]>div]:block! [&_[data-radix-scroll-area-viewport]>div]:w-full! [&_[data-radix-scroll-area-viewport]>div]:min-w-0!"
+        className="min-h-0 [&_[data-radix-scroll-area-viewport]]:touch-pan-y [&_[data-radix-scroll-area-viewport]]:overscroll-contain [&_[data-radix-scroll-area-viewport]>div]:block! [&_[data-radix-scroll-area-viewport]>div]:w-full! [&_[data-radix-scroll-area-viewport]>div]:min-w-0!"
         // Radix measures scroll content with an injected display:table
         // wrapper. Opt this viewport into block sizing so long layer names
         // cannot establish a wider min-content table. The panel's minmax(0, 1fr)
         // content row constrains overflowing cards without making short lists fill
-        // the mobile panel's maximum height.
+        // the mobile panel's maximum height. `-webkit-overflow-scrolling` is not
+        // set here: Radix already injects it for every viewport, and it is a
+        // legacy iOS property that does nothing on the Android WebView this fix
+        // targets.
       >
         <div className="w-full min-w-0 space-y-1 p-2">
           {layers.length === 0 && (
