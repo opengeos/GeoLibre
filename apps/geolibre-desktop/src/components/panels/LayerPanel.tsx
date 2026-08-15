@@ -2883,7 +2883,7 @@ export function LayerPanel({
   return (
     <aside
       aria-label={t("sharedRail.layers")}
-      className="relative flex h-[min(24rem,42vh)] supports-[height:1dvh]:h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-b bg-card max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-30 max-md:shadow-xl md:h-auto md:w-[var(--layer-panel-width)] md:border-b-0 md:border-e"
+      className="relative grid max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 grid-rows-[auto_minmax(0,1fr)] border-b bg-card max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-e"
     >
       <div
         role="separator"
@@ -2988,12 +2988,12 @@ export function LayerPanel({
         </div>
       </div>
       <ScrollArea
-        className="min-h-0 flex-1 touch-pan-y overscroll-contain [-webkit-overflow-scrolling:touch] [&_[data-radix-scroll-area-viewport]>div]:block! [&_[data-radix-scroll-area-viewport]>div]:w-full! [&_[data-radix-scroll-area-viewport]>div]:min-w-0!"
+        className="min-h-0 touch-pan-y [&_[data-radix-scroll-area-viewport]]:overscroll-contain [&_[data-radix-scroll-area-viewport]]:[-webkit-overflow-scrolling:touch] [&_[data-radix-scroll-area-viewport]>div]:block! [&_[data-radix-scroll-area-viewport]>div]:w-full! [&_[data-radix-scroll-area-viewport]>div]:min-w-0!"
         // Radix measures scroll content with an injected display:table
         // wrapper. Opt this viewport into block sizing so long layer names
-        // cannot establish a wider min-content table. min-h-0 keeps this child
-        // constrained by the mobile panel's definite height, so overflowing cards
-        // remain a real touch-scroll surface on Android.
+        // cannot establish a wider min-content table. The panel's minmax(0, 1fr)
+        // content row constrains overflowing cards without making short lists fill
+        // the mobile panel's maximum height.
       >
         <div className="w-full min-w-0 space-y-1 p-2">
           {layers.length === 0 && (
