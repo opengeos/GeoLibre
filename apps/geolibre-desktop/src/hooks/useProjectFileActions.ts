@@ -122,6 +122,8 @@ export interface EmbedVectorDataPrompt {
  * same component serves both.
  */
 export interface SaveNamePrompt {
+  /** Project generation that opened the prompt. */
+  projectGeneration: number;
   resolve: (name: string | null) => void;
   /** Dialog title. */
   title: string;
@@ -295,7 +297,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       embedVectorDataPrompt.resolve("cancel");
       setEmbedVectorDataPrompt(null);
     }
-  }, [credentialStripPrompt, embedVectorDataPrompt, projectGeneration]);
+    if (saveNamePrompt && saveNamePrompt.projectGeneration !== projectGeneration) {
+      saveNamePrompt.resolve(null);
+      setSaveNamePrompt(null);
+      setSaveNameInput("");
+    }
+  }, [credentialStripPrompt, embedVectorDataPrompt, projectGeneration, saveNamePrompt]);
 
   const handleOpenFromFile = async () => {
     const result = await openProjectFile();
@@ -849,6 +856,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const resolveLayersForSave = async (): Promise<{ layers?: GeoLibreLayer[] } | "cancel"> => {
     const state = useAppStore.getState();
     const embeddable = await materializeEmbeddableVectorLayers(state.layers);
+    if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
     const localFileLayers = isTauri() ? state.layers.filter(isReloadableLocalFileLayer) : [];
     if (embeddable.size === 0 && localFileLayers.length === 0) return {};
 
@@ -921,10 +929,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // the user can control. The caller supplies the dialog copy so the same prompt
   // serves both project saves and HTML exports. Resolves with the name, or null
   // if cancelled.
-  const askSaveName = (defaultName: string, labels: Omit<SaveNamePrompt, "resolve">) =>
+  const askSaveName = (
+    defaultName: string,
+    labels: Omit<SaveNamePrompt, "projectGeneration" | "resolve">,
+    promptProjectGeneration: number,
+  ) =>
     new Promise<string | null>((resolve) => {
       setSaveNameInput(defaultName);
-      setSaveNamePrompt({ resolve, ...labels });
+      setSaveNamePrompt({ projectGeneration: promptProjectGeneration, resolve, ...labels });
     });
 
   const submitSaveNamePrompt = (event?: FormEvent<HTMLFormElement>) => {
@@ -941,10 +953,16 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   };
 
   const runSaveProject = async (options?: { saveAs?: boolean }): Promise<boolean> => {
+    const saveProjectGeneration = useAppStore.getState().projectGeneration;
     // Offer to embed local vector data (or, on desktop, save file references)
     // first, so the serialized content below reflects the user's choice.
     const layersForSave = await resolveLayersForSave();
-    if (layersForSave === "cancel") return false;
+    if (
+      layersForSave === "cancel" ||
+      useAppStore.getState().projectGeneration !== saveProjectGeneration
+    ) {
+      return false;
+    }
     const { project, defaultProjectName, projectPath } = buildCurrentProject(
       undefined,
       layersForSave.layers,
@@ -956,17 +974,16 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const projectToEgress = excludeHiddenFieldsFromProject(project);
     const redacted = redactProjectCredentials(projectToEgress);
     if (redacted.redactedPaths.length > 0) {
-      const projectGeneration = useAppStore.getState().projectGeneration;
-      const remembered = saveChoicesForProject(saveChoicesRef.current, projectGeneration);
+      const remembered = saveChoicesForProject(saveChoicesRef.current, saveProjectGeneration);
       saveChoicesRef.current = remembered;
       const choice =
         remembered.credentials ??
-        (await askStripCredentials(redacted.redactedCount, projectGeneration));
+        (await askStripCredentials(redacted.redactedCount, saveProjectGeneration));
       if (choice === "cancel") return false;
-      if (useAppStore.getState().projectGeneration !== projectGeneration) return false;
+      if (useAppStore.getState().projectGeneration !== saveProjectGeneration) return false;
       saveChoicesRef.current = rememberProjectSaveChoices(
         saveChoicesRef.current,
-        projectGeneration,
+        saveProjectGeneration,
         { credentials: choice },
       );
       contentToSave = serializeForSave(choice === "strip" ? redacted.project : projectToEgress);
@@ -985,15 +1002,20 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const promptForName =
       browserSaveFallsBackToDownload() && (options?.saveAs === true || !existingLocalPath);
     if (promptForName) {
-      const chosen = await askSaveName(saveName, {
-        title: t("toolbar.item.saveProjectAsTitle"),
-        description: t("toolbar.item.saveProjectAsDesc"),
-        label: t("toolbar.item.saveProjectFileName"),
-        placeholder: t("toolbar.item.saveProjectFileNamePlaceholder"),
-      });
+      const chosen = await askSaveName(
+        saveName,
+        {
+          title: t("toolbar.item.saveProjectAsTitle"),
+          description: t("toolbar.item.saveProjectAsDesc"),
+          label: t("toolbar.item.saveProjectFileName"),
+          placeholder: t("toolbar.item.saveProjectFileNamePlaceholder"),
+        },
+        saveProjectGeneration,
+      );
       if (chosen === null) return false;
       saveName = ensureProjectFileName(chosen);
     }
+    if (useAppStore.getState().projectGeneration !== saveProjectGeneration) return false;
     let path: string | null;
     try {
       path =
@@ -1011,6 +1033,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       return false;
     }
     if (!path) return false;
+    // A native picker can remain open while another project arrives through an
+    // external action. The old project may have been written successfully, but
+    // never attach its path or saved state to the replacement project.
+    if (useAppStore.getState().projectGeneration !== saveProjectGeneration) return false;
     setProjectPath(path);
     rememberRecentProject({
       path,
@@ -1042,6 +1068,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (isSavingRef.current) return false;
     isSavingRef.current = true;
     try {
+      const exportProjectGeneration = useAppStore.getState().projectGeneration;
       // Derive the default file name from the project name in the store first,
       // without materializing embedded data, so the prompt can appear right away
       // and a cancel discards no work. This snapshot is passed to
@@ -1061,12 +1088,16 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       // saveTextFileWithFallback below instead.
       let defaultName = `${slug}.html`;
       if (browserSaveFallsBackToDownload()) {
-        const chosen = await askSaveName(defaultName, {
-          title: t("toolbar.item.exportHtmlAsTitle"),
-          description: t("toolbar.item.exportHtmlAsDesc"),
-          label: t("toolbar.item.exportHtmlFileName"),
-          placeholder: t("toolbar.item.exportHtmlFileNamePlaceholder"),
-        });
+        const chosen = await askSaveName(
+          defaultName,
+          {
+            title: t("toolbar.item.exportHtmlAsTitle"),
+            description: t("toolbar.item.exportHtmlAsDesc"),
+            label: t("toolbar.item.exportHtmlFileName"),
+            placeholder: t("toolbar.item.exportHtmlFileNamePlaceholder"),
+          },
+          exportProjectGeneration,
+        );
         if (chosen === null) return false;
         defaultName = ensureHtmlFileName(chosen, slug);
       }
@@ -1077,6 +1108,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       // serve no purpose in a static viewer and are removed inside
       // buildProjectHtml, which runs the central redaction pass.
       const { project, defaultProjectName } = await buildEmbeddedProject(projectName);
+      if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
       const html = buildProjectHtml({
         project,
         title: defaultProjectName,
