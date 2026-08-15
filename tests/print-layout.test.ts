@@ -19,13 +19,19 @@ import {
  */
 function recordingCanvas(): {
   canvas: HTMLCanvasElement;
-  fills: { text: string; textAlign: string; textBaseline: string }[];
+  fills: { text: string; x: number; y: number; textAlign: string; textBaseline: string }[];
   fillRects: { w: number; h: number; fillStyle: string }[];
   imageBoxes: { w: number; h: number }[];
   arcs: number;
   polylines: number[];
 } {
-  const fills: { text: string; textAlign: string; textBaseline: string }[] = [];
+  const fills: {
+    text: string;
+    x: number;
+    y: number;
+    textAlign: string;
+    textBaseline: string;
+  }[] = [];
   // Filled rectangles (swatches, chart bars), with the fill colour in effect.
   const fillRects: { w: number; h: number; fillStyle: string }[] = [];
   // Drawn images (custom SVG marker icons), with the box each was drawn into,
@@ -43,9 +49,11 @@ function recordingCanvas(): {
     get(target, prop) {
       if (prop === "measureText") return () => ({ width: 10 });
       if (prop === "fillText") {
-        return (text: string) =>
+        return (text: string, x: number, y: number) =>
           fills.push({
             text,
+            x,
+            y,
             textAlign: String(target.textAlign),
             textBaseline: String(target.textBaseline),
           });
@@ -404,6 +412,44 @@ describe("drawLayout legend rendering", () => {
     // (Kept under the swatch cap below so this asserts the fit scaling alone.)
     assert.equal(render(400), 57.6);
     assert.equal(render(800), 28.8);
+  });
+
+  it("keeps ordinary rows compact beside a derived proportional ramp", () => {
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        legend: [
+          {
+            id: "regions",
+            name: "Regions",
+            swatches: [
+              { color: "#111111", label: "Low" },
+              { color: "#222222", label: "High" },
+              { color: "#f59e0b", label: "Centroids: 2", size: 4 },
+              { color: "#f59e0b", label: "Centroids: 25", size: 14 },
+              { color: "#f59e0b", label: "Centroids: 48", size: 24 },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const classSwatches = rec.fillRects.filter(
+      (rect) => rect.fillStyle === "#111111" || rect.fillStyle === "#222222",
+    );
+    assert.deepEqual(
+      classSwatches.map((rect) => [rect.w, rect.h]),
+      [
+        [8, 8],
+        [8, 8],
+      ],
+    );
+    const low = rec.fills.find((fill) => fill.text === "Low");
+    const high = rec.fills.find((fill) => fill.text === "High");
+    assert.ok(low && high);
+    assert.ok(high.y - low.y < 20, `ordinary rows were inflated: ${high.y - low.y}`);
+    assert.ok(rec.arcs >= 3, "expected the proportional centroid circles to be drawn");
   });
 
   it("caps an outsized proportional symbol instead of blanking the legend box", () => {
