@@ -1630,7 +1630,14 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         // Height leaves room for the top offset (top-16) plus a bottom margin so
         // the whole panel - including the bottom-right resize grip - stays on
         // screen at small viewport heights.
-        "fixed z-40 flex h-[min(760px,calc(100vh-6rem))] w-[min(72rem,95vw)] flex-col overflow-hidden rounded-lg border bg-background shadow-xl",
+        //
+        // `@container/panel`: the responsive breakpoints inside measure this
+        // panel, not the viewport. They cannot use `sm:`/`md:` because the panel
+        // is draggable *and* resizable - `style.width` above overrides the
+        // w-[min(72rem,95vw)] class - so a viewport media query would keep the
+        // two-column layout after the user has dragged the panel down to 400px
+        // on a desktop, which is the same squeeze as a phone.
+        "@container/panel fixed z-40 flex h-[min(760px,calc(100vh-6rem))] w-[min(72rem,95vw)] flex-col overflow-hidden rounded-lg border bg-background shadow-xl",
         pos ? "" : "left-1/2 top-16 -translate-x-1/2",
       )}
     >
@@ -1701,8 +1708,17 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         </button>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(260px,320px)_minmax(0,1fr)] gap-4 overflow-hidden p-5">
-        <div className="flex min-h-0 flex-col gap-3 border-e pe-4">
+      {/* Tool list beside the parameter form, but only while the panel is wide
+          enough for both. The list column's 260px floor is a hard minimum, so
+          below roughly 576px it ate everything and left the form ~120px, where
+          the label/value rows overflowed the panel entirely (a parameter label
+          wrapped to one word per line and its input ran off the right edge).
+          Under @xl the two stack into equal-height rows instead, each scrolling
+          on its own. */}
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-4 overflow-hidden p-5 @xl/panel:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] @xl/panel:grid-rows-[minmax(0,1fr)]">
+        {/* Divider follows the axis: a bottom rule between stacked rows, an end
+            rule between side-by-side columns. */}
+        <div className="flex min-h-0 flex-col gap-3 border-b pb-4 @xl/panel:border-b-0 @xl/panel:border-e @xl/panel:pb-0 @xl/panel:pe-4">
           <div className="flex gap-2">
             <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1756,38 +1772,61 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
             </Button>
           )}
 
-          <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-            {categories.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </Select>
-
-          {hasGeolibreTools && (
+          {/* Side by side while the panel is stacked, so the two filters cost
+              one row of height instead of two and the tool list keeps most of
+              its half. Back to a column once the list has a column of its own,
+              which is narrower than the panel. Flex, not a 2-col grid, so the
+              category select still fills the row when the source filter is
+              absent (no GeoLibre-authored tools in the catalog). */}
+          <div className="flex gap-2 @xl/panel:flex-col @xl/panel:gap-3">
             <Select
-              value={source}
-              // Reset the category too: a category with no tools in the newly
-              // chosen source would otherwise leave the list empty.
-              onChange={(e) => {
-                setSource(e.target.value);
-                setCategory("All");
-              }}
-              aria-label={t("processing.whitebox.filterBySource")}
+              className="min-w-0 flex-1"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
             >
-              <option value="All">
-                {t("processing.whitebox.allSources")} ({sourceCounts.all})
-              </option>
-              <option value="geolibre">
-                {t("processing.whitebox.geolibreTools")} ({sourceCounts.geolibre})
-              </option>
-              <option value="whitebox">
-                {t("processing.whitebox.whiteboxTools")} ({sourceCounts.whitebox})
-              </option>
+              {categories.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
             </Select>
-          )}
 
-          <ScrollArea className="min-h-0 flex-1 rounded-md border">
+            {hasGeolibreTools && (
+              <Select
+                className="min-w-0 flex-1"
+                value={source}
+                // Reset the category too: a category with no tools in the newly
+                // chosen source would otherwise leave the list empty.
+                onChange={(e) => {
+                  setSource(e.target.value);
+                  setCategory("All");
+                }}
+                aria-label={t("processing.whitebox.filterBySource")}
+              >
+                <option value="All">
+                  {t("processing.whitebox.allSources")} ({sourceCounts.all})
+                </option>
+                <option value="geolibre">
+                  {t("processing.whitebox.geolibreTools")} ({sourceCounts.geolibre})
+                </option>
+                <option value="whitebox">
+                  {t("processing.whitebox.whiteboxTools")} ({sourceCounts.whitebox})
+                </option>
+              </Select>
+            )}
+          </div>
+
+          {/* `[&>div>div]:!block` targets the wrapper Radix puts inside the
+              ScrollArea viewport, which ships as `display: table; min-width:
+              100%`. Table layout sizes to content, so the widest tool name set
+              the list's width and the rows' `truncate` never engaged - at a
+              260px column, "Build Object Hierarchy Multiscale" laid out 330px
+              wide and only the scrollport's clip hid it. As a block it fills the
+              viewport instead and the names ellipsize as intended. Applied here
+              rather than in the shared primitive: 129 call sites use ScrollArea
+              and some legitimately want the content-sized, horizontally
+              scrollable behaviour (the log pane below is one). */}
+          <ScrollArea className="min-h-0 flex-1 rounded-md border [&>div>div]:!block">
             <div className="divide-y">
               {loadingTools ? (
                 <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
@@ -1827,8 +1866,16 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
 
         <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3">
           <div className="min-w-0 border-b pb-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+            {/* Wraps rather than overflowing: the run-local toggle and the two
+                buttons need ~250px between them, so on a narrow panel they drop
+                to their own line under the tool name instead of running past
+                the panel edge. The name asks for 12rem (`basis-48`) so that
+                wrap actually triggers - with `flex-1` its basis is 0, and it
+                would shrink to "Build..." to keep everything on one line rather
+                than let the controls move down. `grow` still lets it take the
+                slack on a wide panel. */}
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+              <div className="min-w-0 grow basis-48">
                 <h3 className="truncate text-base font-semibold">
                   {selectedTool ? toolLabel(selectedTool) : t("processing.whitebox.noToolSelected")}
                 </h3>
@@ -1841,7 +1888,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                   local/server toggle is dropped (WASM is the only runtime). */}
               {!IS_MAS_BUILD && (
                 <label
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                  // whitespace-nowrap: the label is short enough to keep on one
+                  // line, and letting it wrap turned "Run locally (WASM)" into a
+                  // three-line stack squeezed against the buttons.
+                  className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground"
                   title={t("processing.whitebox.runLocalHint")}
                 >
                   <input
@@ -1896,7 +1946,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           </div>
 
           <ScrollArea className="min-h-0">
-            <div className="grid gap-4 pb-2 pe-5">
+            {/* A second container, because the picker/input rows below care
+                about the width of this form, not of the whole panel: once the
+                layout stacks, the form is full width even though the panel is
+                narrow. */}
+            <div className="@container/params grid gap-4 pb-2 pe-5">
               {/* The chosen layers are WGS84 and this tool takes a ground
                   distance, so its distance fields carry a unit picker
                   (GeoLibre#1540). Say once, up front, that the layers are
@@ -2329,7 +2383,7 @@ function ParameterField({
         // above) so a `url` description that happens to contain a word
         // isPathParameter matches (path/file/…) can't shadow this picker into a
         // local file-browse control.
-        <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)] gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2 @sm/params:grid-cols-[minmax(150px,200px)_minmax(0,1fr)]">
           <Select
             aria-label={t("processing.whitebox.fromLayer")}
             value=""
@@ -2388,7 +2442,7 @@ function ParameterField({
         // that layer's attribute names so the column need not be typed from
         // memory (GeoLibre#1459). The text box stays editable alongside the
         // picker, so a column the property sample missed can still be typed.
-        <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)] gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2 @sm/params:grid-cols-[minmax(150px,200px)_minmax(0,1fr)]">
           <Select
             aria-label={t("processing.whitebox.selectField")}
             value={fieldOptions.includes(valueText) ? valueText : ""}
@@ -2690,7 +2744,7 @@ function LayerOrPathInput({
   const { t } = useTranslation();
   const usingLayer = value.startsWith(LAYER_TOKEN_PREFIX);
   return (
-    <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)_2.25rem] gap-2">
+    <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2 @sm/params:grid-cols-[minmax(150px,200px)_minmax(0,1fr)_2.25rem]">
       <Select value={usingLayer ? value : ""} onChange={(event) => onChange(event.target.value)}>
         <option value="">{t("processing.whitebox.optionPath")}</option>
         {layers.map((layer) => (
