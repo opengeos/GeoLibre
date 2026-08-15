@@ -3,12 +3,12 @@
  * detect whether a field reads as numeric or text and compute a compact summary
  * for it (count / nulls / min / max / mean / median / std / sum / unique for
  * numbers; count / nulls / unique / most-frequent values for text). Kept free of
- * any rendering or React so they can be unit-tested in isolation, and built on
- * the same `{ properties }` rows and numeric coercion the Charts panel uses so
- * the two panels agree on what counts as a number.
+ * any rendering or React so they can be unit-tested in isolation. Field type
+ * detection respects the primitive types stored in `{ properties }`, so a text
+ * field is not reclassified just because every string parses as a number.
  */
 
-import { numericColumns, toFiniteNumber, type ChartRow } from "./attribute-charts";
+import { toFiniteNumber, type ChartRow } from "./attribute-charts";
 
 export interface NumericFieldStats {
   kind: "numeric";
@@ -54,6 +54,11 @@ export const DEFAULT_TOP_VALUES = 5;
 /** True when a value reads as null for statistics: nullish or a blank string. */
 export function isBlank(value: unknown): boolean {
   return value == null || (typeof value === "string" && value.trim() === "");
+}
+
+/** True when a stored value is a finite JavaScript number, without coercion. */
+export function isFiniteNumberValue(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 /**
@@ -148,18 +153,27 @@ export function computeTextStats(
 }
 
 /**
- * Summary statistics for one field, choosing the numeric or text shape from the
- * same heuristic the Charts panel uses (`numericColumns`): a field counts as
- * numeric when enough of its populated rows parse as finite numbers. Numeric
- * fields fold their blank and non-numeric row counts into the result. Returns
- * null when `key` is not present, so callers can show an empty state.
+ * Summary statistics for one field, choosing the numeric or text shape from its
+ * stored primitive values. A field counts as numeric when at least two populated
+ * rows contain finite JavaScript numbers and those values make up at least half
+ * of the populated rows. Numeric-looking strings alone therefore remain text.
+ * Numeric fields fold their blank and non-numeric row counts into the result.
+ * Returns null when a numeric field has no values to summarize.
  */
 export function computeFieldStats(
   rows: ChartRow[],
   key: string,
   topCount: number = DEFAULT_TOP_VALUES,
 ): FieldStats | null {
-  const isNumeric = numericColumns(rows, [key]).length > 0;
+  let numeric = 0;
+  let populated = 0;
+  for (const row of rows) {
+    const raw = row.properties[key];
+    if (raw == null || raw === "") continue;
+    populated += 1;
+    if (isFiniteNumberValue(raw)) numeric += 1;
+  }
+  const isNumeric = numeric >= 2 && numeric >= populated / 2;
   if (!isNumeric) return computeTextStats(rows, key, topCount);
 
   const values: number[] = [];

@@ -44,6 +44,14 @@ describe("summarizeColumn", () => {
     }
   });
 
+  it("keeps numeric-looking strings as text without a histogram", () => {
+    const data = rows({ fips: "37009" }, { fips: "37005" }, { fips: "37171" });
+    const summary = summarizeColumn(data, "fips");
+    assert.ok(summary);
+    assert.equal(summary.stats.kind, "text");
+    assert.equal(summary.histogram, null);
+  });
+
   it("lists up to COLUMN_EXPLORER_TOP_VALUES distinct text values", () => {
     const data = rows(...Array.from({ length: 20 }, (_, i) => ({ id: `v${i}` })));
     const summary = summarizeColumn(data, "id");

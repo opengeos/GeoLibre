@@ -113,6 +113,13 @@ describe("computeFieldStats", () => {
     assert.equal(stats.kind, "text");
   });
 
+  it("keeps numeric-looking strings as text", () => {
+    const data = rows({ fips: "37009" }, { fips: "37005" }, { fips: "37171" });
+    const stats = computeFieldStats(data, "fips");
+    assert.equal(stats.kind, "text");
+    assert.equal(stats.unique, 3);
+  });
+
   it("returns null for a numeric field with no values", () => {
     const data = rows({ v: 1 }, { v: null });
     // Only one numeric value → not detected as numeric → text stats, not null.
