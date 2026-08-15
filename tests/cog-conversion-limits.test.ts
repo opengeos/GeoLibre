@@ -6,7 +6,7 @@ import {
   geoTiffSampleCount,
   LARGE_BROWSER_COG_CONVERSION_SAMPLES,
   MAX_BROWSER_COG_CONVERSION_SAMPLES,
-} from "../apps/geolibre-desktop/src/lib/cog-conversion-limits";
+} from "../packages/processing/src/cog-convert";
 
 test("counts raster samples across bands", () => {
   assert.equal(geoTiffSampleCount({ width: 10_000, height: 5_000, bands: 3 }), 150_000_000);

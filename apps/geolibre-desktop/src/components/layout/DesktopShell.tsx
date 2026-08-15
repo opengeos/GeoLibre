@@ -43,7 +43,14 @@ import {
   TIME_SLIDER_PLUGIN_ID,
   VIEWER_BLOCKED_PLUGIN_IDS,
 } from "@geolibre/plugins";
-import { convertGeoTiffToCog, isTiff, readGeoTiffInfo } from "@geolibre/processing";
+import {
+  convertGeoTiffToCog,
+  exceedsBrowserCogConversionLimit,
+  geoTiffSampleCount,
+  isTiff,
+  LARGE_BROWSER_COG_CONVERSION_SAMPLES,
+  readGeoTiffInfo,
+} from "@geolibre/processing";
 import {
   type CSSProperties,
   type DragEvent,
@@ -180,11 +187,6 @@ import { TopToolbar } from "./TopToolbar";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
-import {
-  exceedsBrowserCogConversionLimit,
-  geoTiffSampleCount,
-  LARGE_BROWSER_COG_CONVERSION_SAMPLES,
-} from "../../lib/cog-conversion-limits";
 
 /**
  * Confirm loading a vector source whose feature count tripped the loader's
