@@ -120,7 +120,12 @@ export function AddDataMenu({
           {chrome.renderLabel(t("toolbar.menu.addData"))}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
+      {/* No width class: the primitive's min-w-[8rem] floor plus shrink-to-fit
+          sizes the menu to its longest label, the way Processing/Controls/Help
+          already do. A fixed w-64 pinned it to 256px whatever it held, which
+          left ~100px of dead space to the right of every entry, and would clip
+          a locale whose labels run past 256px instead of growing. */}
+      <DropdownMenuContent align="start">
         <DropdownMenuLabel>{t("toolbar.menu.addData")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {sections.map((group, index) => (
