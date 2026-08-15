@@ -146,13 +146,19 @@ export function useDataUrlLoader(
         });
       }
       const layerIds: string[] = [];
-      for (const entry of params) {
-        const result = await loadDataUrl(mapAppAPI, entry.dataUrl, {
-          styleUrl: entry.styleUrl,
-          signal: controller.signal,
-          fit: false,
-        });
-        layerIds.push(...result.layerIds);
+      try {
+        for (const entry of params) {
+          const result = await loadDataUrl(mapAppAPI, entry.dataUrl, {
+            styleUrl: entry.styleUrl,
+            signal: controller.signal,
+            fit: false,
+          });
+          layerIds.push(...result.layerIds);
+        }
+      } catch (error) {
+        const store = useAppStore.getState();
+        for (const layerId of layerIds) store.removeLayer(layerId);
+        throw error;
       }
       return { layerIds, fitLayerIds: layerIds };
     };
