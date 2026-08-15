@@ -26,5 +26,5 @@ for (const path of runtimeFiles)
 const outputDir = resolve(root, "dist");
 const output = resolve(outputDir, `geolibre-data-opener-${manifest.version}.zip`);
 await mkdir(outputDir, { recursive: true });
-await writeFile(output, zipSync(archive, { level: 9 }));
+await writeFile(output, zipSync(archive, { level: 9, mtime: new Date(1980, 0, 1) }));
 console.log(output);

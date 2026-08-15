@@ -84,6 +84,18 @@ describe("GeoLibre Chrome extension scanner", () => {
     assert.equal(found.styleUrl, "https://catalog.example.com/page/roads.geolibre.style.json");
   });
 
+  it("canonicalizes Source Cooperative dataset and style URLs", () => {
+    const [found] = scan(
+      `
+        <a href="https://source.coop/giswqs/opengeos/roads.geojson">roads.geojson</a>
+        <a href="https://source.coop/giswqs/opengeos/roads.style.json">Road style</a>
+      `,
+      "https://source.coop/giswqs/opengeos",
+    );
+    assert.equal(found.url, "https://data.source.coop/giswqs/opengeos/roads.geojson");
+    assert.equal(found.styleUrl, "https://data.source.coop/giswqs/opengeos/roads.style.json");
+  });
+
   it("unpacks data and positional styles from existing GeoLibre links", () => {
     const target = new URL("https://web.geolibre.app/");
     target.searchParams.append("data", "https://data.example.com/roads.geojson");
@@ -115,7 +127,7 @@ describe("GeoLibre Chrome extension scanner", () => {
       `
         <a href="https://source.coop/giswqs/opengeos/roads.geojson">roads.geojson</a>
         <a href="https://data.source.coop/giswqs/opengeos/roads.geojson"></a>
-        <script>self.__next_f.push([1,"{\\"objects\\":[{\\"path\\":\\"roads.geojson\\",\\"type\\":\\"file\\"},{\\"path\\":\\"dem.tif\\",\\"type\\":\\"file\\"},{\\"path\\":\\"notes.txt\\",\\"type\\":\\"file\\"}]}"])</script>
+        <script>self.__next_f.push([1,"{\\"objects\\":[{\\"path\\":\\"roads.geojson\\",\\"type\\":\\"file\\"},{\\"type\\":\\"file\\",\\"path\\":\\"dem.tif\\"},{\\"path\\":\\"notes.txt\\",\\"type\\":\\"file\\"}]}"])</script>
       `,
       "https://source.coop/giswqs/opengeos",
     );

@@ -39,6 +39,11 @@ export function scanDocumentForDatasets() {
     return canonical;
   };
 
+  const canonicalHttpUrl = (raw) => {
+    const url = absoluteHttpUrl(raw);
+    return url ? canonicalUrl(url) : null;
+  };
+
   const classify = (url, hint = "") => {
     const path = url.pathname.toLowerCase();
     const clue = String(hint).toLowerCase();
@@ -74,7 +79,7 @@ export function scanDocumentForDatasets() {
   };
 
   const addDataset = (raw, hint = "", label = "", explicitStyle = null) => {
-    let url = absoluteHttpUrl(raw);
+    const url = canonicalHttpUrl(raw);
     if (!url) return;
 
     // A page may link to an existing GeoLibre deep link. Unpack it so users can
@@ -88,8 +93,6 @@ export function scanDocumentForDatasets() {
       return;
     }
 
-    url = canonicalUrl(url);
-
     const kind = classify(url, hint);
     if (!kind) return;
     const existing = datasets.get(url.href);
@@ -100,7 +103,7 @@ export function scanDocumentForDatasets() {
       format: kind.format,
       kind: kind.kind,
       confidence: kind.confidence,
-      styleUrl: absoluteHttpUrl(explicitStyle)?.href ?? null,
+      styleUrl: canonicalHttpUrl(explicitStyle)?.href ?? null,
     };
     if (!existing || candidate.confidence > existing.confidence) datasets.set(url.href, candidate);
     else if (!existing.styleUrl && candidate.styleUrl) existing.styleUrl = candidate.styleUrl;
@@ -120,7 +123,7 @@ export function scanDocumentForDatasets() {
     const url = absoluteHttpUrl(raw);
     if (!url) continue;
     if (/(?:\.style|\.geolibre\.style)\.json$/i.test(url.pathname)) {
-      styleLinks.push(url);
+      styleLinks.push(canonicalUrl(url));
       continue;
     }
     addDataset(url.href, hint, element.getAttribute("download") || element.textContent || "");
@@ -171,9 +174,13 @@ export function scanDocumentForDatasets() {
       const inventory = [...document.querySelectorAll("script")]
         .map((script) => script.textContent || "")
         .join("\n");
-      const filePattern = /\\"path\\":\\"([^"]+)\\"[^{}]*?\\"type\\":\\"file\\"/g;
-      for (const match of inventory.matchAll(filePattern)) {
-        let path = match[1];
+      const objectPattern = /\{[^{}]*\}/g;
+      for (const match of inventory.matchAll(objectPattern)) {
+        const object = match[0];
+        const pathMatch = object.match(/\\"path\\":\\"([^"]+)\\"/);
+        const typeMatch = object.match(/\\"type\\":\\"([^"]+)\\"/);
+        if (!pathMatch || typeMatch?.[1] !== "file") continue;
+        let path = pathMatch[1];
         try {
           path = JSON.parse(`"${path}"`);
         } catch {

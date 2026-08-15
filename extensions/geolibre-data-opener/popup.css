@@ -17,6 +17,11 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  overflow: hidden;
+}
+
 body {
   width: 390px;
   min-height: 300px;
@@ -172,7 +177,7 @@ h1 {
 }
 
 .dataset-frame {
-  max-height: 328px;
+  max-height: 280px;
   overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 8px;

@@ -52,6 +52,7 @@ nav:
       - Interface Overview: user-guide/interface.md
       - Projects: user-guide/projects.md
       - Adding Data: user-guide/adding-data.md
+      - Chrome Extension: user-guide/chrome-extension.md
       - Managing Layers: user-guide/layers.md
       - Styling Layers: user-guide/styling.md
       - Attribute Table: user-guide/attribute-table.md

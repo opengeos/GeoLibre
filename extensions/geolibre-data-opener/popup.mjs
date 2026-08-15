@@ -73,7 +73,7 @@ function renderDatasets(found) {
     const input = document.createElement("input");
     input.type = "checkbox";
     input.value = String(index);
-    input.checked = true;
+    input.checked = false;
     input.addEventListener("change", updateSelection);
 
     const copy = document.createElement("span");
