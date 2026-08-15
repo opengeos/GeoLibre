@@ -1140,6 +1140,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         ],
         mimeType: "text/html",
       });
+      if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
       return savedPath !== null;
     } catch (error) {
       setActionError(
