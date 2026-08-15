@@ -11,7 +11,12 @@ import {
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
 } from "@geolibre/core";
-import { closeRightPanel, collapseRightPanel, openRightPanel } from "@geolibre/plugins";
+import {
+  closeRightPanel,
+  collapseRightPanel,
+  isRightPanelVisible,
+  openRightPanel,
+} from "@geolibre/plugins";
 import {
   Button,
   Dialog,
@@ -417,47 +422,45 @@ export function SettingsDialog({
   const showSettingsItem = (id: string) => isMenuItemVisible(desktopSettings.uiProfile, id);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
-  // Browser and Comments are dockable right panels, so their checkboxes read the
-  // live registry state (the user can also close them from their own header)
-  // while the toggle writes the matching persisted layout setting. The setting
-  // is what their registration hooks seed from on the next launch, so the
-  // toggle survives a restart (#1935).
+  // Browser and Comments are dockable right panels: the registry owns whether
+  // they are on screen, and `layout.browserPanelVisible` /
+  // `layout.commentsPanelVisible` persist that across restarts so the toggle no
+  // longer resets on every launch (#1935). The dropdown's checkboxes read the
+  // live registry (they apply on the spot, with no Save to wait for); the
+  // dialog's read its draft like every other row there.
   const rightPanelState = useRightPanelState();
   const browserPanelOpen = rightPanelState.visibleIds.includes(BROWSER_PANEL_ID);
   const commentsPanelOpen = rightPanelState.visibleIds.includes(COMMENTS_PANEL_ID);
-  // These apply live rather than on Save, so the draft is patched alongside the
-  // saved settings: the draft was snapshotted when the dialog opened, and Save
-  // writes it wholesale, which would otherwise revert the toggle the user just
-  // made in this same dialog.
-  const applyPanelVisibility = (
-    key: "browserPanelVisible" | "commentsPanelVisible",
-    visible: boolean,
-  ) => {
-    updateSavedLayoutSettings({ [key]: visible });
-    updateDraftLayoutSettings({ [key]: visible });
-  };
   // Show it collapsed on the shared Layers rail, matching its default state, so
   // re-enabling from Settings doesn't jump to an expanded panel that buries the
   // Layers panel.
-  const toggleBrowserPanel = (show: boolean) => {
+  // Bails out when the panel is already where it is being asked to go, so
+  // saving the dialog without touching these rows cannot collapse a panel the
+  // user had expanded.
+  const applyPanelVisibility = (panelId: string, show: boolean) => {
+    if (isRightPanelVisible(panelId) === show) return;
     if (show) {
-      openRightPanel(BROWSER_PANEL_ID);
-      collapseRightPanel(BROWSER_PANEL_ID);
+      openRightPanel(panelId);
+      collapseRightPanel(panelId);
     } else {
-      closeRightPanel(BROWSER_PANEL_ID);
+      closeRightPanel(panelId);
     }
-    applyPanelVisibility("browserPanelVisible", show);
   };
+  const applyBrowserPanelVisibility = (show: boolean) =>
+    applyPanelVisibility(BROWSER_PANEL_ID, show);
   // Collapsed for the same reason as Browser above, and to match the state
   // Comments registers itself in on mount.
+  const applyCommentsPanelVisibility = (show: boolean) =>
+    applyPanelVisibility(COMMENTS_PANEL_ID, show);
+  // The dropdown toggles have no Save step, so they move the panel and persist
+  // the preference in one go, matching the other live entries in that menu.
+  const toggleBrowserPanel = (show: boolean) => {
+    applyBrowserPanelVisibility(show);
+    updateSavedLayoutSettings({ browserPanelVisible: show });
+  };
   const toggleCommentsPanel = (show: boolean) => {
-    if (show) {
-      openRightPanel(COMMENTS_PANEL_ID);
-      collapseRightPanel(COMMENTS_PANEL_ID);
-    } else {
-      closeRightPanel(COMMENTS_PANEL_ID);
-    }
-    applyPanelVisibility("commentsPanelVisible", show);
+    applyCommentsPanelVisibility(show);
+    updateSavedLayoutSettings({ commentsPanelVisible: show });
   };
   // A field a deep-link asked us to focus once its section renders; cleared
   // after the focus lands so a later open without a focus request stays put.
@@ -617,9 +620,18 @@ export function SettingsDialog({
     }
     const seededPreferences = clonePreferences(useAppStore.getState().preferences);
     setDraftPreferences(seededPreferences);
-    setDraftDesktopSettings(
-      cloneDesktopSettings(useDesktopSettingsStore.getState().desktopSettings),
-    );
+    const seededSettings = cloneDesktopSettings(useDesktopSettingsStore.getState().desktopSettings);
+    // Browser and Comments are dockable panels the user can also close from the
+    // panel's own header, which is a session action that writes no setting. Seed
+    // those two rows from the live registry rather than the stored value so the
+    // dialog opens showing what is actually on screen; Save then persists
+    // exactly what the checkboxes showed.
+    seededSettings.layout = {
+      ...seededSettings.layout,
+      browserPanelVisible: isRightPanelVisible(BROWSER_PANEL_ID),
+      commentsPanelVisible: isRightPanelVisible(COMMENTS_PANEL_ID),
+    };
+    setDraftDesktopSettings(seededSettings);
     // Land the AI section on the first profile's provider, or the first
     // available provider if no profiles exist, so the user sees something
     // relevant without extra clicks.
@@ -947,11 +959,6 @@ export function SettingsDialog({
 
   const resetLayoutSettings = () => {
     updateDraftLayoutSettings(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
-    // The Browser/Comments checkboxes render the live registry state, not the
-    // draft, so reset has to move the panels themselves or those two rows would
-    // ignore the button.
-    toggleBrowserPanel(DEFAULT_DESKTOP_LAYOUT_SETTINGS.browserPanelVisible);
-    toggleCommentsPanel(DEFAULT_DESKTOP_LAYOUT_SETTINGS.commentsPanelVisible);
   };
 
   // The accent scheme applies live (instant preview) rather than waiting for
@@ -1225,6 +1232,11 @@ export function SettingsDialog({
       updates: draftDesktopSettings.updates,
       startup: draftDesktopSettings.startup,
     });
+    // The dockable panels are the one layout row the store cannot apply on its
+    // own: their registration hooks only read the setting at mount, so move the
+    // registry here to match what was just saved.
+    applyBrowserPanelVisibility(draftDesktopSettings.layout.browserPanelVisible);
+    applyCommentsPanelVisibility(draftDesktopSettings.layout.commentsPanelVisible);
     setOpen(false);
   };
 
@@ -1847,8 +1859,12 @@ export function SettingsDialog({
                       <input
                         className="h-4 w-4"
                         type="checkbox"
-                        checked={browserPanelOpen}
-                        onChange={(event) => toggleBrowserPanel(event.target.checked)}
+                        checked={draftDesktopSettings.layout.browserPanelVisible}
+                        onChange={(event) =>
+                          updateDraftLayoutSettings({
+                            browserPanelVisible: event.target.checked,
+                          })
+                        }
                       />
                       <FolderTree className="h-4 w-4 text-muted-foreground" />
                       <span>{t("settings.layout.showBrowserPanel")}</span>
@@ -1857,8 +1873,12 @@ export function SettingsDialog({
                       <input
                         className="h-4 w-4"
                         type="checkbox"
-                        checked={commentsPanelOpen}
-                        onChange={(event) => toggleCommentsPanel(event.target.checked)}
+                        checked={draftDesktopSettings.layout.commentsPanelVisible}
+                        onChange={(event) =>
+                          updateDraftLayoutSettings({
+                            commentsPanelVisible: event.target.checked,
+                          })
+                        }
                       />
                       <MessageSquare className="h-4 w-4 text-muted-foreground" />
                       <span>{t("settings.layout.showCommentsPanel")}</span>
