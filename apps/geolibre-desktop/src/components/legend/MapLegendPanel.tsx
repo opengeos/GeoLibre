@@ -258,6 +258,12 @@ export function MapLegendPanel({
       buildAutoLegend(layers, legend, {
         locale: i18n.language,
         resolveColormapColors: colormapColors,
+        geometryGeneratorLabels: {
+          centroid: t("style.generator.typeCentroid"),
+          "bounding-box": t("style.generator.typeBoundingBox"),
+          "convex-hull": t("style.generator.typeConvexHull"),
+          buffer: t("style.generator.typeBuffer"),
+        },
       }),
     // colormapGeneration re-derives once an async colormap sample lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps

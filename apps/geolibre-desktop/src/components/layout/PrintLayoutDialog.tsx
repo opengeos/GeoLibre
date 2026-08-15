@@ -509,7 +509,18 @@ export function PrintLayoutDialog({
     [],
   );
 
-  const baseLegend = useMemo(() => buildLegend(layers), [layers]);
+  const baseLegend = useMemo(
+    () =>
+      buildLegend(layers, {
+        labels: {
+          centroid: t("style.generator.typeCentroid"),
+          "bounding-box": t("style.generator.typeBoundingBox"),
+          "convex-hull": t("style.generator.typeConvexHull"),
+          buffer: t("style.generator.typeBuffer"),
+        },
+      }),
+    [layers, t],
+  );
   const legend = useMemo(
     () => applyLegendConfig(baseLegend, legendConfig),
     [baseLegend, legendConfig],
