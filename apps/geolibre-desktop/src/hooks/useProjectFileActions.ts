@@ -46,6 +46,7 @@ import { normalizeProjectUrl } from "../lib/urls";
 import { recordExplicitProjectSave } from "../lib/project-history-session";
 import {
   rememberProjectSaveChoices,
+  reusableVectorDataChoice,
   saveChoicesForProject,
   type ProjectSaveChoices,
 } from "../lib/project-save-choices";
@@ -864,8 +865,15 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const bytes = estimateEmbedBytes(state.layers, embeddable);
     const remembered = saveChoicesForProject(saveChoicesRef.current, state.projectGeneration);
     saveChoicesRef.current = remembered;
+    // A remembered Embed choice stays silent until the project first crosses
+    // the large-data warning threshold. That material risk deserves one fresh
+    // confirmation even though the ordinary per-project choice is remembered.
+    const rememberedVectorChoice = reusableVectorDataChoice(
+      remembered,
+      bytes >= LARGE_EMBED_WARNING_BYTES,
+    );
     const choice =
-      remembered.vectorData ??
+      rememberedVectorChoice ??
       (await askEmbedVectorData(count, bytes, isTauri(), state.projectGeneration));
     if (choice === "cancel") return "cancel";
     // A project can be opened while a prompt is visible. Do not apply that
@@ -874,7 +882,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     saveChoicesRef.current = rememberProjectSaveChoices(
       saveChoicesRef.current,
       state.projectGeneration,
-      { vectorData: choice },
+      {
+        vectorData: choice,
+        largeEmbedWarningAcknowledged:
+          choice === "embed" && bytes >= LARGE_EMBED_WARNING_BYTES
+            ? true
+            : remembered.largeEmbedWarningAcknowledged,
+      },
     );
 
     if (choice === "embed") {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   rememberProjectSaveChoices,
+  reusableVectorDataChoice,
   saveChoicesForProject,
 } from "../apps/geolibre-desktop/src/lib/project-save-choices";
 
@@ -21,6 +22,7 @@ describe("project save choices", () => {
     const remembered = rememberProjectSaveChoices(null, 4, {
       credentials: "keep",
       vectorData: "noembed",
+      largeEmbedWarningAcknowledged: true,
     });
 
     assert.deepEqual(saveChoicesForProject(remembered, 5), { projectGeneration: 5 });
@@ -31,5 +33,22 @@ describe("project save choices", () => {
     const secondProject = saveChoicesForProject(firstProject, 5);
 
     assert.deepEqual(saveChoicesForProject(secondProject, 4), { projectGeneration: 4 });
+  });
+
+  it("retains a large-embed warning acknowledgement with the project choices", () => {
+    const vectorChoice = rememberProjectSaveChoices(null, 4, { vectorData: "embed" });
+    assert.equal(reusableVectorDataChoice(vectorChoice, false), "embed");
+    assert.equal(reusableVectorDataChoice(vectorChoice, true), undefined);
+
+    const acknowledged = rememberProjectSaveChoices(vectorChoice, 4, {
+      largeEmbedWarningAcknowledged: true,
+    });
+
+    assert.deepEqual(acknowledged, {
+      projectGeneration: 4,
+      vectorData: "embed",
+      largeEmbedWarningAcknowledged: true,
+    });
+    assert.equal(reusableVectorDataChoice(acknowledged, true), "embed");
   });
 });

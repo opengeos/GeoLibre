@@ -9,6 +9,8 @@ export interface ProjectSaveChoices {
   projectGeneration: number;
   credentials?: CredentialSaveChoice;
   vectorData?: VectorDataSaveChoice;
+  /** Whether the user accepted embedding after seeing the large-data warning. */
+  largeEmbedWarningAcknowledged?: boolean;
 }
 
 /**
@@ -46,4 +48,22 @@ export function rememberProjectSaveChoices(
     ...saveChoicesForProject(remembered, projectGeneration),
     ...choices,
   };
+}
+
+/**
+ * Returns a remembered vector-data choice when no new size warning is needed.
+ *
+ * @param remembered - Choices scoped to the current project.
+ * @param largeEmbedWarningRequired - Whether the current data crosses the warning threshold.
+ * @returns The reusable choice, or undefined when the user must confirm a large embed.
+ */
+export function reusableVectorDataChoice(
+  remembered: ProjectSaveChoices,
+  largeEmbedWarningRequired: boolean,
+): VectorDataSaveChoice | undefined {
+  return remembered.vectorData === "embed" &&
+    largeEmbedWarningRequired &&
+    remembered.largeEmbedWarningAcknowledged !== true
+    ? undefined
+    : remembered.vectorData;
 }
