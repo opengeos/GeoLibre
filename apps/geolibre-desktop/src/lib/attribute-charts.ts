@@ -66,21 +66,45 @@ function isIdentifierFieldName(key: string): boolean {
  * every cell as a string, including measurements that summaries should treat as
  * numeric. Because delimited text carries no declared field types, common
  * identifier headers and integer strings with leading zeroes remain text.
+ *
+ * The decision is per column, not per value: a column is converted only when its
+ * numeric-looking values would carry it past the same threshold the summaries
+ * apply (at least two of them, and at least half of the populated rows). A
+ * mostly-free-text column holding a stray `"3.0"` therefore keeps that cell
+ * verbatim, so its distinct-value counts and top-value labels stay faithful to
+ * what the file says.
  */
 export function coerceNumericStringRows(rows: ChartRow[]): ChartRow[] {
   const textKeys = new Set<string>();
+  const populatedCounts = new Map<string, number>();
+  const numericCounts = new Map<string, number>();
   for (const row of rows) {
     for (const [key, value] of Object.entries(row.properties)) {
+      if (value == null || value === "") continue;
+      populatedCounts.set(key, (populatedCounts.get(key) ?? 0) + 1);
       if (typeof value === "string" && (isIdentifierFieldName(key) || hasLeadingZeroes(value))) {
         textKeys.add(key);
+        continue;
       }
+      // Values already stored as numbers count toward the threshold too, since
+      // they are what the summaries will see after this pass.
+      const countsAsNumeric =
+        isNumericFieldValue(value) || (typeof value === "string" && toFiniteNumber(value) !== null);
+      if (countsAsNumeric) numericCounts.set(key, (numericCounts.get(key) ?? 0) + 1);
     }
   }
+
+  const numericKeys = new Set<string>();
+  for (const [key, numeric] of numericCounts) {
+    if (textKeys.has(key)) continue;
+    if (numeric >= 2 && numeric >= (populatedCounts.get(key) ?? 0) / 2) numericKeys.add(key);
+  }
+  if (numericKeys.size === 0) return rows;
 
   return rows.map((row) => {
     let properties: Record<string, unknown> | null = null;
     for (const [key, value] of Object.entries(row.properties)) {
-      if (textKeys.has(key) || typeof value !== "string") continue;
+      if (!numericKeys.has(key) || typeof value !== "string") continue;
       const numeric = toFiniteNumber(value);
       if (numeric === null) continue;
       properties ??= { ...row.properties };

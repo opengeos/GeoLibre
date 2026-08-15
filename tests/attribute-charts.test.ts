@@ -9,6 +9,7 @@ import {
   computeLine,
   computePie,
   computeScatter,
+  distinctCategoryValues,
   formatAxisValue,
   numericColumns,
   numericValues,
@@ -36,10 +37,27 @@ describe("toFiniteNumber", () => {
 
 describe("coerceNumericStringRows", () => {
   it("adapts numeric strings without mutating text or source rows", () => {
-    const data = rows({ population: "42", label: "A01", blank: "" });
+    const data = rows(
+      { population: "42", label: "A01", blank: "" },
+      { population: "84", label: "A02", blank: "" },
+    );
     const adapted = coerceNumericStringRows(data);
     assert.deepEqual(adapted[0].properties, { population: 42, label: "A01", blank: "" });
     assert.equal(data[0].properties.population, "42");
+  });
+
+  it("leaves a mostly-text column verbatim, stray numeric cells included", () => {
+    const data = rows(
+      { notes: "3" },
+      { notes: "3.0" },
+      { notes: "yes" },
+      { notes: "n/a" },
+      { notes: "pending" },
+    );
+    const adapted = coerceNumericStringRows(data);
+    assert.equal(adapted[0].properties.notes, "3");
+    assert.equal(adapted[1].properties.notes, "3.0");
+    assert.equal(distinctCategoryValues(adapted, "notes").length, 5);
   });
 
   it("preserves common identifiers and columns containing leading zeroes", () => {
