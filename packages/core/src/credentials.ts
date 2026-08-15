@@ -57,8 +57,61 @@ export interface CredentialRedactionResult {
   project: GeoLibreProject;
   /** Stable project paths removed or rewritten by the redaction pass. */
   redactedPaths: string[];
+  /**
+   * One opaque `path=hash` fingerprint per redacted path, identifying *which*
+   * secret sat there. A caller that remembers an explicit "keep credentials"
+   * decision compares these between saves, so a different credential, such as
+   * a swapped layer or rotated token, is confirmed again instead of being
+   * written to disk under the earlier answer. Paths alone cannot carry that:
+   * they are positional, so a replacement layer inherits the path of the one it
+   * replaced.
+   */
+  redactedFingerprints: string[];
   /** Number of individual credential-bearing fields removed or rewritten. */
   redactedCount: number;
+}
+
+/** Collector threaded through the redaction pass. */
+interface RedactionAccumulator {
+  paths: string[];
+  fingerprints: string[];
+  count: number;
+}
+
+/**
+ * Hash a credential value to a short, stable token (FNV-1a).
+ *
+ * The digest never leaves memory and is only ever compared for equality, so it
+ * needs to be stable and cheap rather than cryptographic. Hashing rather than
+ * retaining the value keeps the secret itself out of the remembered choices.
+ */
+function fingerprintValue(value: unknown): string {
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(value) ?? String(value);
+  } catch {
+    // A circular or otherwise unserializable blob still needs a marker; that it
+    // collides with other unserializable blobs only costs an extra prompt.
+    serialized = String(value);
+  }
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < serialized.length; index += 1) {
+    hash ^= serialized.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+/** Record one redaction, with the fingerprint of the value being removed. */
+function recordRedaction(
+  accumulator: RedactionAccumulator,
+  path: string,
+  value: unknown,
+  count = 1,
+): void {
+  accumulator.paths.push(path);
+  accumulator.fingerprints.push(`${path}=${fingerprintValue(value)}`);
+  accumulator.count += count;
 }
 
 /**
@@ -175,29 +228,26 @@ function isGeoJsonPayload(value: Record<string, unknown>): boolean {
 function redactConfigurationValue(
   value: unknown,
   path: string,
-  redactedPaths: string[],
-  redactedCount: { value: number },
+  accumulator: RedactionAccumulator,
   depth = 0,
 ): unknown {
   if (depth >= MAX_REDACT_DEPTH) {
     // Fail closed. A deeply nested configuration shape is not needed to render
     // any built-in layer, and returning it unchanged would let a credential
     // bypass the invariant merely by exceeding the traversal cap.
-    redactedPaths.push(path);
-    redactedCount.value += 1;
+    recordRedaction(accumulator, path, value);
     return undefined;
   }
   if (typeof value === "string") {
     const redacted = redactUrlCredentials(value);
     if (redacted !== value) {
-      redactedPaths.push(path);
-      redactedCount.value += 1;
+      recordRedaction(accumulator, path, value);
     }
     return redacted;
   }
   if (Array.isArray(value)) {
     return value.map((item, index) =>
-      redactConfigurationValue(item, `${path}[${index}]`, redactedPaths, redactedCount, depth + 1),
+      redactConfigurationValue(item, `${path}[${index}]`, accumulator, depth + 1),
     );
   }
   if (!isPlainObject(value)) return value;
@@ -207,17 +257,10 @@ function redactConfigurationValue(
   for (const [key, nested] of Object.entries(value)) {
     const nestedPath = path ? `${path}.${key}` : key;
     if (isCredentialFieldName(key)) {
-      redactedPaths.push(nestedPath);
-      redactedCount.value += 1;
+      recordRedaction(accumulator, nestedPath, nested);
       continue;
     }
-    result[key] = redactConfigurationValue(
-      nested,
-      nestedPath,
-      redactedPaths,
-      redactedCount,
-      depth + 1,
-    );
+    result[key] = redactConfigurationValue(nested, nestedPath, accumulator, depth + 1);
   }
   return result;
 }
@@ -248,15 +291,13 @@ function countLeafValues(value: unknown): number {
  * themselves.
  */
 export function redactProjectCredentials(project: GeoLibreProject): CredentialRedactionResult {
-  const redactedPaths: string[] = [];
-  const redactedCount = { value: 0 };
+  const accumulator: RedactionAccumulator = { paths: [], fingerprints: [], count: 0 };
   const basemapStyleUrl =
     typeof project.basemapStyleUrl === "string"
       ? redactUrlCredentials(project.basemapStyleUrl)
       : project.basemapStyleUrl;
   if (basemapStyleUrl !== project.basemapStyleUrl) {
-    redactedPaths.push("basemapStyleUrl");
-    redactedCount.value += 1;
+    recordRedaction(accumulator, "basemapStyleUrl", project.basemapStyleUrl);
   }
   const geocoding = project.preferences?.geocoding
     ? { ...project.preferences.geocoding, apiKeys: {} }
@@ -268,8 +309,7 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
       const redacted = redactUrlCredentials(endpoint);
       if (redacted !== endpoint) {
         geocoding[field] = redacted;
-        redactedPaths.push(`preferences.geocoding.${field}`);
-        redactedCount.value += 1;
+        recordRedaction(accumulator, `preferences.geocoding.${field}`, endpoint);
       }
     }
   }
@@ -277,15 +317,23 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
     ? { ...project.preferences, environmentVariables: [], geocoding }
     : project.preferences;
   const populatedEnvironmentVariables =
-    project.preferences?.environmentVariables?.filter((variable) => variable.key.trim()).length ??
-    0;
-  if (populatedEnvironmentVariables > 0) {
-    redactedPaths.push("preferences.environmentVariables");
-    redactedCount.value += populatedEnvironmentVariables;
+    project.preferences?.environmentVariables?.filter((variable) => variable.key.trim()) ?? [];
+  if (populatedEnvironmentVariables.length > 0) {
+    recordRedaction(
+      accumulator,
+      "preferences.environmentVariables",
+      populatedEnvironmentVariables,
+      populatedEnvironmentVariables.length,
+    );
   }
-  if (Object.keys(project.preferences?.geocoding?.apiKeys ?? {}).length > 0) {
-    redactedPaths.push("preferences.geocoding.apiKeys");
-    redactedCount.value += Object.keys(project.preferences?.geocoding?.apiKeys ?? {}).length;
+  const geocodingApiKeys = project.preferences?.geocoding?.apiKeys ?? {};
+  if (Object.keys(geocodingApiKeys).length > 0) {
+    recordRedaction(
+      accumulator,
+      "preferences.geocoding.apiKeys",
+      geocodingApiKeys,
+      Object.keys(geocodingApiKeys).length,
+    );
   }
 
   const layers = (project.layers ?? []).map((layer, index) => ({
@@ -293,22 +341,19 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
     source: redactConfigurationValue(
       layer.source,
       `layers[${index}].source`,
-      redactedPaths,
-      redactedCount,
+      accumulator,
     ) as Record<string, unknown>,
     metadata: redactConfigurationValue(
       layer.metadata,
       `layers[${index}].metadata`,
-      redactedPaths,
-      redactedCount,
+      accumulator,
     ) as Record<string, unknown>,
     ...(typeof layer.sourcePath === "string"
       ? {
           sourcePath: redactConfigurationValue(
             layer.sourcePath,
             `layers[${index}].sourcePath`,
-            redactedPaths,
-            redactedCount,
+            accumulator,
           ) as string,
         }
       : {}),
@@ -321,8 +366,7 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
           connection: redactConfigurationValue(
             layer.connection,
             `layers[${index}].connection`,
-            redactedPaths,
-            redactedCount,
+            accumulator,
           ) as LayerConnection,
         }
       : {}),
@@ -333,8 +377,7 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
     const manifestUrls = plugins.manifestUrls.map((url, index) => {
       const redacted = redactUrlCredentials(url);
       if (redacted !== url) {
-        redactedPaths.push(`plugins.manifestUrls[${index}]`);
-        redactedCount.value += 1;
+        recordRedaction(accumulator, `plugins.manifestUrls[${index}]`, url);
       }
       return redacted;
     });
@@ -368,20 +411,17 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
       if (Object.keys(rest).length > 0) dropped[id] = rest;
     }
     if (Object.keys(dropped).length > 0) {
-      redactedPaths.push("plugins.settings");
-      redactedCount.value += countLeafValues(dropped);
+      recordRedaction(accumulator, "plugins.settings", dropped, countLeafValues(dropped));
     }
     // What survives is still swept by the same pass layer configuration gets,
     // so a credentialed URL inside a kept blob is scrubbed rather than trusted.
     plugins = {
       ...plugins,
       manifestUrls,
-      settings: redactConfigurationValue(
-        kept,
-        "plugins.settings",
-        redactedPaths,
-        redactedCount,
-      ) as Record<string, unknown>,
+      settings: redactConfigurationValue(kept, "plugins.settings", accumulator) as Record<
+        string,
+        unknown
+      >,
     };
   }
 
@@ -397,17 +437,16 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
       ...(plugins ? { plugins } : {}),
       ...(project.metadata
         ? {
-            metadata: redactConfigurationValue(
-              project.metadata,
-              "metadata",
-              redactedPaths,
-              redactedCount,
-            ) as Record<string, unknown>,
+            metadata: redactConfigurationValue(project.metadata, "metadata", accumulator) as Record<
+              string,
+              unknown
+            >,
           }
         : {}),
     },
-    redactedPaths: [...new Set(redactedPaths)],
-    redactedCount: redactedCount.value,
+    redactedPaths: [...new Set(accumulator.paths)],
+    redactedFingerprints: [...new Set(accumulator.fingerprints)],
+    redactedCount: accumulator.count,
   };
 }
 

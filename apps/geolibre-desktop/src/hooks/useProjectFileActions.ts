@@ -866,12 +866,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const bytes = estimateEmbedBytes(state.layers, embeddable);
     const remembered = saveChoicesForProject(saveChoicesRef.current, state.projectGeneration);
     saveChoicesRef.current = remembered;
-    // A remembered Embed choice stays silent until the project first crosses
-    // the large-data warning threshold. That material risk deserves one fresh
+    // A remembered Embed choice stays silent until the project crosses the
+    // large-data warning threshold, and again whenever the data outgrows the
+    // size that was acknowledged. That material risk deserves a fresh
     // confirmation even though the ordinary per-project choice is remembered.
     const rememberedVectorChoice = reusableVectorDataChoice(
       remembered,
-      bytes >= LARGE_EMBED_WARNING_BYTES,
+      bytes,
+      LARGE_EMBED_WARNING_BYTES,
     );
     const choice =
       rememberedVectorChoice ??
@@ -885,10 +887,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       state.projectGeneration,
       {
         vectorData: choice,
-        largeEmbedWarningAcknowledged:
-          choice === "embed" && bytes >= LARGE_EMBED_WARNING_BYTES
-            ? true
-            : remembered.largeEmbedWarningAcknowledged,
+        // Only a size the user was actually shown extends the allowance; a
+        // silent reuse must not ratchet it up (or down) on its own.
+        acknowledgedEmbedBytes:
+          rememberedVectorChoice === undefined &&
+          choice === "embed" &&
+          bytes >= LARGE_EMBED_WARNING_BYTES
+            ? bytes
+            : remembered.acknowledgedEmbedBytes,
       },
     );
 
@@ -991,8 +997,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (redacted.redactedPaths.length > 0) {
       const remembered = saveChoicesForProject(saveChoicesRef.current, saveProjectGeneration);
       saveChoicesRef.current = remembered;
+      const rememberedCredentialChoice = reusableCredentialChoice(
+        remembered,
+        redacted.redactedFingerprints,
+      );
       const choice =
-        reusableCredentialChoice(remembered, redacted.redactedCount) ??
+        rememberedCredentialChoice ??
         (await askStripCredentials(redacted.redactedCount, saveProjectGeneration));
       if (choice === "cancel") return false;
       if (useAppStore.getState().projectGeneration !== saveProjectGeneration) return false;
@@ -1001,8 +1011,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         saveProjectGeneration,
         {
           credentials: choice,
-          keptCredentialCount:
-            choice === "keep" ? redacted.redactedCount : remembered.keptCredentialCount,
+          // Keep covers exactly the credentials the user was asked about, so a
+          // later save that would write a different secret asks again.
+          keptCredentialFingerprints:
+            rememberedCredentialChoice === undefined && choice === "keep"
+              ? redacted.redactedFingerprints
+              : remembered.keptCredentialFingerprints,
         },
       );
       contentToSave = serializeForSave(choice === "strip" ? redacted.project : projectToEgress);

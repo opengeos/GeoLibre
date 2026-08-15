@@ -4,15 +4,23 @@ export type CredentialSaveChoice = "strip" | "keep";
 /** How local vector data should be handled when the current project is saved. */
 export type VectorDataSaveChoice = "embed" | "noembed";
 
+/**
+ * How far embedded data may grow past an acknowledged size before the
+ * large-embed warning is shown again. A project gains features between saves,
+ * so re-prompting on any growth would defeat the point of remembering the
+ * choice; doubling is a change of scale the user has not actually agreed to.
+ */
+export const EMBED_REACKNOWLEDGE_GROWTH_FACTOR = 2;
+
 /** Save choices remembered for one loaded project during the current session. */
 export interface ProjectSaveChoices {
   projectGeneration: number;
   credentials?: CredentialSaveChoice;
-  /** Credential count covered by the last explicit Keep choice. */
-  keptCredentialCount?: number;
+  /** Credential fingerprints covered by the last explicit Keep choice. */
+  keptCredentialFingerprints?: readonly string[];
   vectorData?: VectorDataSaveChoice;
-  /** Whether the user accepted embedding after seeing the large-data warning. */
-  largeEmbedWarningAcknowledged?: boolean;
+  /** Embedded size, in bytes, the user accepted after seeing the large-data warning. */
+  acknowledgedEmbedBytes?: number;
 }
 
 /**
@@ -55,38 +63,50 @@ export function rememberProjectSaveChoices(
 /**
  * Returns a remembered vector-data choice when no new size warning is needed.
  *
+ * An acknowledgement covers the size the user actually saw, plus the ordinary
+ * growth of a project being edited. Data that balloons past
+ * {@link EMBED_REACKNOWLEDGE_GROWTH_FACTOR} times that size is a materially
+ * different write and is confirmed again.
+ *
  * @param remembered - Choices scoped to the current project.
- * @param largeEmbedWarningRequired - Whether the current data crosses the warning threshold.
+ * @param embedBytes - Estimated size of the data this save would embed.
+ * @param warningBytes - Threshold at which the large-embed warning applies.
  * @returns The reusable choice, or undefined when the user must confirm a large embed.
  */
 export function reusableVectorDataChoice(
   remembered: ProjectSaveChoices,
-  largeEmbedWarningRequired: boolean,
+  embedBytes: number,
+  warningBytes: number,
 ): VectorDataSaveChoice | undefined {
-  return remembered.vectorData === "embed" &&
-    largeEmbedWarningRequired &&
-    remembered.largeEmbedWarningAcknowledged !== true
-    ? undefined
-    : remembered.vectorData;
+  if (remembered.vectorData !== "embed" || embedBytes < warningBytes) return remembered.vectorData;
+  const acknowledged = remembered.acknowledgedEmbedBytes;
+  return acknowledged != null && embedBytes <= acknowledged * EMBED_REACKNOWLEDGE_GROWTH_FACTOR
+    ? remembered.vectorData
+    : undefined;
 }
 
 /**
  * Returns a remembered credential choice when it covers the current risk.
  *
- * Stripping remains safe as more credentials are added. Keeping credentials is
- * reused only while the project has no more credential-bearing fields than the
- * user explicitly accepted.
+ * Stripping remains safe however the project changes. Keeping credentials is
+ * reused only while every credential this save would write is one the user
+ * explicitly accepted. Fingerprints rather than a count, because swapping one
+ * credentialed layer for another leaves the count unchanged while putting a
+ * secret the user never saw on disk.
  *
  * @param remembered - Choices scoped to the current project.
- * @param credentialCount - Current number of credential-bearing fields.
+ * @param credentialFingerprints - Fingerprints of the credentials this save would keep.
  * @returns The reusable choice, or undefined when Keep must be confirmed again.
  */
 export function reusableCredentialChoice(
   remembered: ProjectSaveChoices,
-  credentialCount: number,
+  credentialFingerprints: readonly string[],
 ): CredentialSaveChoice | undefined {
-  return remembered.credentials === "keep" &&
-    (remembered.keptCredentialCount == null || credentialCount > remembered.keptCredentialCount)
-    ? undefined
-    : remembered.credentials;
+  if (remembered.credentials !== "keep") return remembered.credentials;
+  const acknowledged = remembered.keptCredentialFingerprints;
+  if (acknowledged == null) return undefined;
+  const covered = new Set(acknowledged);
+  return credentialFingerprints.every((fingerprint) => covered.has(fingerprint))
+    ? remembered.credentials
+    : undefined;
 }
