@@ -2745,7 +2745,17 @@ function LayerOrPathInput({
   const usingLayer = value.startsWith(LAYER_TOKEN_PREFIX);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2 @sm/params:grid-cols-[minmax(150px,200px)_minmax(0,1fr)_2.25rem]">
-      <Select value={usingLayer ? value : ""} onChange={(event) => onChange(event.target.value)}>
+      {/* Three children, but the narrow template has only two columns, so the
+          picker has to claim the whole first row explicitly. Left to
+          auto-placement it lands in column 1, the path Input gets squeezed into
+          the 2.25rem browse-button track, and the button wraps to a row of its
+          own. The other two converted rows stack to a single column, where any
+          child count is fine; this is the one that needs saying. */}
+      <Select
+        className="col-span-2 @sm/params:col-span-1"
+        value={usingLayer ? value : ""}
+        onChange={(event) => onChange(event.target.value)}
+      >
         <option value="">{t("processing.whitebox.optionPath")}</option>
         {layers.map((layer) => (
           <option key={layer.id} value={`${LAYER_TOKEN_PREFIX}${layer.id}`}>
