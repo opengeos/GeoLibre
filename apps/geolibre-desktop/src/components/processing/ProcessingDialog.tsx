@@ -1816,17 +1816,20 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
             )}
           </div>
 
-          {/* `[&>div>div]:!block` targets the wrapper Radix puts inside the
+          {/* `[&>div>div]:block!` targets the wrapper Radix puts inside the
               ScrollArea viewport, which ships as `display: table; min-width:
               100%`. Table layout sizes to content, so the widest tool name set
               the list's width and the rows' `truncate` never engaged - at a
               260px column, "Build Object Hierarchy Multiscale" laid out 330px
               wide and only the scrollport's clip hid it. As a block it fills the
-              viewport instead and the names ellipsize as intended. Applied here
-              rather than in the shared primitive: 129 call sites use ScrollArea
-              and some legitimately want the content-sized, horizontally
-              scrollable behaviour (the log pane below is one). */}
-          <ScrollArea className="min-h-0 flex-1 rounded-md border [&>div>div]:!block">
+              viewport instead and the names ellipsize as intended. The bang is
+              load-bearing (Radix sets that display inline) and trails the
+              utility, which is Tailwind v4's syntax and matches the same
+              override in LayerPanel. Applied here rather than in the shared
+              primitive: 129 call sites use ScrollArea and some legitimately want
+              the content-sized, horizontally scrollable behaviour (the log pane
+              below is one). */}
+          <ScrollArea className="min-h-0 flex-1 rounded-md border [&>div>div]:block!">
             <div className="divide-y">
               {loadingTools ? (
                 <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
