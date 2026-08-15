@@ -9,7 +9,7 @@
  * String-only sources can explicitly retain their numeric inference behavior.
  */
 
-import { isNumericFieldValue, toFiniteNumber, type ChartRow } from "./attribute-charts";
+import { isNumericFieldValue, type ChartRow } from "./attribute-charts";
 
 export interface NumericFieldStats {
   kind: "numeric";
@@ -181,9 +181,8 @@ export function computeFieldStats(
       nulls += 1;
       continue;
     }
-    const next = toFiniteNumber(raw);
-    if (next === null) nonNumeric += 1;
-    else values.push(next);
+    if (isNumericFieldValue(raw)) values.push(raw);
+    else nonNumeric += 1;
   }
   return computeNumericStats(values, nulls, nonNumeric);
 }

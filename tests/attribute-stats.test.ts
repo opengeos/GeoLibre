@@ -96,9 +96,10 @@ describe("computeFieldStats", () => {
     const data = rows({ pop: 10 }, { pop: "20" }, { pop: 30 }, { pop: null }, { pop: "" });
     const stats = computeFieldStats(data, "pop") as NumericFieldStats;
     assert.equal(stats.kind, "numeric");
-    assert.equal(stats.count, 3);
+    assert.equal(stats.count, 2);
     assert.equal(stats.nulls, 2);
-    assert.equal(stats.sum, 60);
+    assert.equal(stats.nonNumeric, 1);
+    assert.equal(stats.sum, 40);
   });
 
   it("counts non-numeric non-blank values separately for a numeric field", () => {

@@ -614,23 +614,32 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // O(1) lookups for the multi-selection while rendering thousands of rows.
   const selectedIdSet = useMemo(() => new Set(selectedFeatureIds), [selectedFeatureIds]);
 
-  const filterLower = attributeFilter.toLowerCase();
-  const filtered = attributeRows.filter(({ properties, featureId }) => {
-    // "Show Selected Features" restricts the table to the current selection.
-    if (featureView === "selected" && !selectedIdSet.has(featureId)) return false;
-    if (!filterLower) return true;
-    const props = JSON.stringify(properties).toLowerCase();
-    return featureId.includes(filterLower) || props.includes(filterLower);
-  });
+  const filtered = useMemo(() => {
+    const filterLower = attributeFilter.toLowerCase();
+    return attributeRows.filter(({ properties, featureId }) => {
+      // "Show Selected Features" restricts the table to the current selection.
+      if (featureView === "selected" && !selectedIdSet.has(featureId)) return false;
+      if (!filterLower) return true;
+      const props = JSON.stringify(properties).toLowerCase();
+      return featureId.includes(filterLower) || props.includes(filterLower);
+    });
+  }, [attributeFilter, attributeRows, featureView, selectedIdSet]);
   // Delimited-text imports preserve every cell as a string. Adapt only the rows
   // sent to analysis dialogs, leaving the table and exported source data intact.
   const adaptAnalysisRows = coerceNumericStrings && (chartOpen || statsOpen || explorerOpen);
-  const analysisRows = adaptAnalysisRows ? coerceNumericStringRows(attributeRows) : attributeRows;
-  const analysisFilteredRows = adaptAnalysisRows
-    ? filtered.length === attributeRows.length
-      ? analysisRows
-      : coerceNumericStringRows(filtered)
-    : filtered;
+  const analysisRows = useMemo(
+    () => (adaptAnalysisRows ? coerceNumericStringRows(attributeRows) : attributeRows),
+    [adaptAnalysisRows, attributeRows],
+  );
+  const analysisFilteredRows = useMemo(
+    () =>
+      adaptAnalysisRows
+        ? filtered.length === attributeRows.length
+          ? analysisRows
+          : coerceNumericStringRows(filtered)
+        : filtered,
+    [adaptAnalysisRows, analysisRows, attributeRows.length, filtered],
+  );
   const sorted = [...filtered].sort((a, b) => {
     const aValue = sort.key === "__featureId" ? a.featureId : a.properties[sort.key];
     const bValue = sort.key === "__featureId" ? b.featureId : b.properties[sort.key];

@@ -36,10 +36,30 @@ describe("toFiniteNumber", () => {
 
 describe("coerceNumericStringRows", () => {
   it("adapts numeric strings without mutating text or source rows", () => {
-    const data = rows({ population: "42", code: "A01", blank: "" });
+    const data = rows({ population: "42", label: "A01", blank: "" });
     const adapted = coerceNumericStringRows(data);
-    assert.deepEqual(adapted[0].properties, { population: 42, code: "A01", blank: "" });
+    assert.deepEqual(adapted[0].properties, { population: 42, label: "A01", blank: "" });
     assert.equal(data[0].properties.population, "42");
+  });
+
+  it("preserves common identifiers and columns containing leading zeroes", () => {
+    const data = rows(
+      { FIPS: "37009", population: "42", district: "037009" },
+      { FIPS: "37005", population: "84", district: "37005" },
+    );
+    const adapted = coerceNumericStringRows(data);
+    assert.deepEqual(adapted[0].properties, {
+      FIPS: "37009",
+      population: 42,
+      district: "037009",
+    });
+    assert.equal(adapted[1].properties.FIPS, "37005");
+    assert.equal(adapted[1].properties.district, "37005");
+  });
+
+  it("reuses rows that have no values to coerce", () => {
+    const data = rows({ name: "Alpha", code: "37009" });
+    assert.equal(coerceNumericStringRows(data)[0], data[0]);
   });
 });
 
@@ -72,7 +92,7 @@ describe("numericColumns", () => {
 describe("numericValues", () => {
   it("collects only the finite numeric values", () => {
     const data = rows({ a: 1 }, { a: "2" }, { a: "x" }, { a: null });
-    assert.deepEqual(numericValues(data, "a"), [1, 2]);
+    assert.deepEqual(numericValues(data, "a"), [1]);
   });
 });
 

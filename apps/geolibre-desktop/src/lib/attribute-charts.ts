@@ -45,29 +45,48 @@ export function toFiniteNumber(value: unknown): number | null {
  * Only explicit numeric values qualify. Callers handling string-only data
  * sources adapt their analysis rows with {@link coerceNumericStringRows} first.
  */
-export function isNumericFieldValue(value: unknown): boolean {
+export function isNumericFieldValue(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+/** True when a string encodes an integer with meaningful leading zeroes. */
+function hasLeadingZeroes(value: string): boolean {
+  return /^[+-]?0\d+$/.test(value.trim());
+}
+
+/** True for common delimited-text headers that conventionally hold identifiers. */
+function isIdentifierFieldName(key: string): boolean {
+  const normalized = key.replace(/([a-z\d])([A-Z])/g, "$1_$2").toLowerCase();
+  return /(^|[\s_-])(id|code|fips|zip|zipcode|postal)([\s_-]|$)/.test(normalized);
 }
 
 /**
  * Convert numeric-looking strings in analysis rows without changing the source
  * data. Delimited-text layers use this adapter because their parser preserves
  * every cell as a string, including measurements that summaries should treat as
- * numeric.
+ * numeric. Because delimited text carries no declared field types, common
+ * identifier headers and integer strings with leading zeroes remain text.
  */
 export function coerceNumericStringRows(rows: ChartRow[]): ChartRow[] {
-  return rows.map((row) => {
-    let changed = false;
-    const properties: Record<string, unknown> = {};
+  const textKeys = new Set<string>();
+  for (const row of rows) {
     for (const [key, value] of Object.entries(row.properties)) {
-      const numeric = typeof value === "string" ? toFiniteNumber(value) : null;
-      if (numeric === null) properties[key] = value;
-      else {
-        properties[key] = numeric;
-        changed = true;
+      if (typeof value === "string" && (isIdentifierFieldName(key) || hasLeadingZeroes(value))) {
+        textKeys.add(key);
       }
     }
-    return changed ? { ...row, properties } : row;
+  }
+
+  return rows.map((row) => {
+    let properties: Record<string, unknown> | null = null;
+    for (const [key, value] of Object.entries(row.properties)) {
+      if (textKeys.has(key) || typeof value !== "string") continue;
+      const numeric = toFiniteNumber(value);
+      if (numeric === null) continue;
+      properties ??= { ...row.properties };
+      properties[key] = numeric;
+    }
+    return properties ? { ...row, properties } : row;
   });
 }
 
@@ -150,8 +169,8 @@ export function numericColumns(rows: ChartRow[], columns: string[]): string[] {
 export function numericValues(rows: ChartRow[], key: string): number[] {
   const values: number[] = [];
   for (const row of rows) {
-    const next = toFiniteNumber(row.properties[key]);
-    if (next !== null) values.push(next);
+    const value = row.properties[key];
+    if (isNumericFieldValue(value)) values.push(value);
   }
   return values;
 }
@@ -264,9 +283,9 @@ export function computeScatter(
   let yMin = 0;
   let yMax = 0;
   for (const row of rows) {
-    const x = toFiniteNumber(row.properties[xKey]);
-    const y = toFiniteNumber(row.properties[yKey]);
-    if (x === null || y === null) continue;
+    const x = row.properties[xKey];
+    const y = row.properties[yKey];
+    if (!isNumericFieldValue(x) || !isNumericFieldValue(y)) continue;
     if (all.length === 0) {
       xMin = xMax = x;
       yMin = yMax = y;
@@ -387,8 +406,8 @@ export function computeBar(
     const group = groups.get(label) ?? { count: 0, sum: 0, numericCount: 0 };
     group.count += 1;
     if (aggregation !== "count" && valueKey) {
-      const value = toFiniteNumber(row.properties[valueKey]);
-      if (value !== null) {
+      const value = row.properties[valueKey];
+      if (isNumericFieldValue(value)) {
         group.sum += value;
         group.numericCount += 1;
       }
@@ -459,8 +478,8 @@ export function computePie(
     const group = groups.get(label) ?? { count: 0, sum: 0 };
     group.count += 1;
     if (aggregation !== "count" && valueKey) {
-      const value = toFiniteNumber(row.properties[valueKey]);
-      if (value !== null) group.sum += value;
+      const value = row.properties[valueKey];
+      if (isNumericFieldValue(value)) group.sum += value;
     }
     groups.set(label, group);
   }
@@ -528,8 +547,8 @@ export function computeLine(rows: ChartRow[], key: string): LineResult | null {
   let max = -Infinity;
   let index = 0;
   for (const row of rows) {
-    const value = toFiniteNumber(row.properties[key]);
-    if (value !== null) {
+    const value = row.properties[key];
+    if (isNumericFieldValue(value)) {
       points.push({ index, value });
       if (value < min) min = value;
       if (value > max) max = value;

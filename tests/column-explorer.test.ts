@@ -34,6 +34,18 @@ describe("summarizeColumn", () => {
     assert.equal(summary.total, 5);
   });
 
+  it("excludes numeric-looking text from a mixed numeric field", () => {
+    const data = rows({ pop: 10 }, { pop: "20" }, { pop: 30 });
+    const summary = summarizeColumn(data, "pop");
+    assert.ok(summary);
+    assert.equal(summary.stats.kind, "numeric");
+    assert.equal(summary.histogram?.total, 2);
+    if (summary.stats.kind === "numeric") {
+      assert.equal(summary.stats.sum, 40);
+      assert.equal(summary.stats.nonNumeric, 1);
+    }
+  });
+
   it("summarizes a text field with top values and no histogram", () => {
     const data = rows({ kind: "a" }, { kind: "a" }, { kind: "b" }, { kind: "" });
     const summary = summarizeColumn(data, "kind");

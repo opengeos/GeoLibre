@@ -12,7 +12,6 @@
 import {
   computeHistogram,
   isNumericFieldValue,
-  toFiniteNumber,
   type ChartRow,
   type HistogramResult,
 } from "./attribute-charts";
@@ -72,10 +71,10 @@ export function summarizeColumn(rows: ChartRow[], key: string): ColumnSummary | 
       continue;
     }
     populated += 1;
-    if (isNumericFieldValue(raw)) numeric += 1;
-    const next = toFiniteNumber(raw);
-    if (next === null) nonNumeric += 1;
-    else values.push(next);
+    if (isNumericFieldValue(raw)) {
+      numeric += 1;
+      values.push(raw);
+    } else nonNumeric += 1;
   }
 
   const isNumeric = numeric >= 2 && numeric >= populated / 2;
