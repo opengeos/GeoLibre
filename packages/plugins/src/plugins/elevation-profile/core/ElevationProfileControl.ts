@@ -405,6 +405,10 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     embeddedElevations: number[] | null = null,
   ): Promise<void> {
     if (!this._map) return;
+    // A different line means the remembered hover index no longer refers to
+    // anything the pointer is on, so drop it before the new chart is drawn (a
+    // redraw restores the marker for whatever index is still set).
+    this._clearHover();
     this._state.line = coords.map((c) => [...c] as LngLat);
     this._state.elevations =
       embeddedElevations?.length === coords.length ? [...embeddedElevations] : null;
