@@ -10,9 +10,27 @@ import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopSettings";
 import { loadRecentProjects } from "./useRecentProjectsPersistence";
 
-export function useStartupProject(): string | null {
+export function useStartupProject(): {
+  warning: string | null;
+  restoring: boolean;
+} {
   const { t } = useTranslation();
   const [hasWarning, setHasWarning] = useState(false);
+  // Keep the workspace unmounted while a configured startup project is being
+  // read. Otherwise MapCanvas is created from the empty project's defaults
+  // (notably globe projection), and the asynchronous project restore has to
+  // repair an already-live map. Besides showing the wrong projection during
+  // startup, that lets MapLibre's projection events race the project preference
+  // back into the store. Starting the shell only after loadProject makes the
+  // startup project the map controller's initial state.
+  const [restoring, setRestoring] = useState(() => {
+    if (!isTauri()) return false;
+    if (projectUrlFromLocation() !== null) return false;
+    if (dataUrlParameters(window.location.search) !== null) return false;
+    const settings = useDesktopSettingsStore.getState().desktopSettings.startup;
+    const stored = useAppStore.getState().recentProjects;
+    return startupProjectPath(settings, stored.length > 0 ? stored : loadRecentProjects()) !== null;
+  });
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -80,6 +98,8 @@ export function useStartupProject(): string | null {
         console.warn("Could not restore the startup project.", error);
         setHasWarning(true);
         warningTimer = window.setTimeout(() => setHasWarning(false), 8000);
+      } finally {
+        if (!cancelled) setRestoring(false);
       }
     })();
     return () => {
@@ -92,5 +112,8 @@ export function useStartupProject(): string | null {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return hasWarning ? t("settings.startup.loadWarning") : null;
+  return {
+    warning: hasWarning ? t("settings.startup.loadWarning") : null,
+    restoring,
+  };
 }

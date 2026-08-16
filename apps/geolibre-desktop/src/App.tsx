@@ -48,7 +48,8 @@ export default function App() {
   useDesktopSettingsPersistence();
   useThemeScheme();
   useRecentProjectsPersistence();
-  const startupProjectWarning = useStartupProject();
+  const { warning: startupProjectWarning, restoring: restoringStartupProject } =
+    useStartupProject();
   useStyleLibraryPersistence();
   useLayerLibraryPersistence();
   useTemplateLibraryPersistence();
@@ -58,16 +59,20 @@ export default function App() {
   useWhiteboxToolUrl();
   return (
     <DirectionProvider dir={languageDirection(i18n.language)}>
-      <DesktopShell
-        layoutOptions={layoutOptions}
-        projectUrlLoadState={projectUrlLoadState}
-        dataUrlLoadState={dataUrlLoadState}
-        mapAppAPI={mapAppAPI}
-        themeMode={themeMode}
-        onToggleThemeMode={toggleThemeMode}
-        onMapReady={handleMapReady}
-      />
-      <OnboardingDialog open={showOnboarding} onClose={dismissOnboarding} />
+      {restoringStartupProject ? null : (
+        <>
+          <DesktopShell
+            layoutOptions={layoutOptions}
+            projectUrlLoadState={projectUrlLoadState}
+            dataUrlLoadState={dataUrlLoadState}
+            mapAppAPI={mapAppAPI}
+            themeMode={themeMode}
+            onToggleThemeMode={toggleThemeMode}
+            onMapReady={handleMapReady}
+          />
+          <OnboardingDialog open={showOnboarding} onClose={dismissOnboarding} />
+        </>
+      )}
       <UpdateNotificationModal
         pending={pendingUpdate}
         onRemindLater={remindLater}
