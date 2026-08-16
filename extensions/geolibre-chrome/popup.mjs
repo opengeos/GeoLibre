@@ -132,13 +132,19 @@ async function inspectPage() {
   const pageUrl = new URL(tab.url);
   elements.pageHost.textContent = pageUrl.hostname || pageUrl.protocol;
   elements.pageHost.title = tab.url;
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: scanDocumentForDatasets,
-  });
+  let documentDatasets = [];
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: scanDocumentForDatasets,
+    });
+    documentDatasets = results[0]?.result ?? [];
+  } catch (error) {
+    console.debug("GeoLibre could not scan the current document.", error);
+  }
   const key = `services:${tab.id}`;
   const stored = await chrome.storage.session.get(key);
-  renderDatasets(mergeServiceCandidates(results[0]?.result ?? [], stored[key] ?? []));
+  renderDatasets(mergeServiceCandidates(documentDatasets, stored[key] ?? []));
 }
 
 elements.selectAll.addEventListener("click", () => {

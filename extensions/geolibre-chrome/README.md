@@ -50,24 +50,22 @@ same service appear once.
 
 ## Sample websites for manual testing
 
-Open a sample, wait for its map to load, and pan or zoom to generate network
-requests. Then open the extension and confirm that it lists the expected
-service. Selecting the result should open the matching GeoLibre Add Data dialog
-with the service URL filled in.
+After loading or reloading the unpacked extension, open one of these URLs in a
+new tab and wait for its response to finish. Then open the extension and confirm
+that it lists the expected service. Selecting the result should open the
+matching GeoLibre Add Data dialog with the service URL filled in.
 
 | Service | Sample website | Expected result |
 | --- | --- | --- |
-| XYZ raster tiles | [OpenStreetMap](https://www.openstreetmap.org/) | An XYZ URL template such as `https://tile.openstreetmap.org/{z}/{x}/{y}.png` |
-| PBF/MVT vector tiles | [MapLibre display-a-map demo](https://maplibre.org/maplibre-gl-js/docs/examples/display-a-map/) | A vector tile URL template ending in `.pbf` or `.mvt` |
-| WMTS | [OpenLayers WMTS example](https://openlayers.org/en/latest/examples/wmts.html) | A WMTS service URL without tile-coordinate parameters |
-| WMS | [OpenLayers WMS GetFeatureInfo example](https://openlayers.org/en/latest/examples/getfeatureinfo-tile.html) | A WMS service endpoint without request-specific parameters |
-| WFS | [OpenLayers WFS example](https://openlayers.org/en/latest/examples/vector-wfs.html) | A WFS endpoint without request-specific parameters |
-| OGC API Features | [OpenLayers OGC API Features example](https://openlayers.org/en/latest/examples/mapserver-ogc-features.html) | An OGC API Features collection or items URL |
-| ArcGIS Feature Service | [ArcGIS FeatureLayer sample](https://developers.arcgis.com/javascript/latest/sample-code/layers-featurelayer/) | An ArcGIS `FeatureServer` service or layer URL |
+| WMS | [GeoServer WMS capabilities](https://ahocevar.com/geoserver/wms?service=WMS&request=GetCapabilities) | `https://ahocevar.com/geoserver/wms` |
+| WMTS | [NASA GIBS WMTS capabilities](https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi?SERVICE=WMTS&REQUEST=GetCapabilities) | `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi` |
+| WFS | [GeoServer WFS capabilities](https://ahocevar.com/geoserver/wfs?service=WFS&request=GetCapabilities) | `https://ahocevar.com/geoserver/wfs` |
+| OGC API Features | [pygeoapi collections](https://demo.pygeoapi.io/master/collections) | `https://demo.pygeoapi.io/master/collections` |
+| ArcGIS Feature Service | [USA Major Cities layer](https://services.arcgis.com/P3ePLMYs2RVChkJx/ArcGIS/rest/services/USA_Major_Cities/FeatureServer/0?f=json) | The parent `FeatureServer` URL |
+| XYZ raster tiles | [OpenStreetMap tile](https://tile.openstreetmap.org/0/0/0.png) | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` |
 
-Some samples also use an XYZ basemap, so the target service and a basemap may
-both appear. After selecting a result, add the layer in GeoLibre and verify that
-the browser console does not report a static-file CORS error.
+After selecting a result, add the layer in GeoLibre and verify that the browser
+console does not report a static-file CORS error.
 
 Remote servers must allow GeoLibre to fetch the selected URLs through CORS.
 Complete HTTP(S) URLs, including signed query parameters, are forwarded to
