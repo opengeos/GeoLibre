@@ -22,6 +22,7 @@ import {
 } from "../packages/plugins/src/plugins/elevation-profile/elevation/client";
 import { profileToCsv } from "../packages/plugins/src/plugins/elevation-profile/export/csv";
 import { buildChartGeometry } from "../packages/plugins/src/plugins/elevation-profile/chart/profileChart";
+import { selectedProfileLine } from "../packages/plugins/src/plugins/elevation-profile/elevation/selection";
 import {
   encodeLine,
   parseLine,
@@ -103,6 +104,91 @@ describe("elevation-profile geometry", () => {
       loss: 0,
       totalDistance: 0,
     });
+  });
+});
+
+describe("elevation-profile selected lines", () => {
+  it("uses embedded elevations from a selected GPX-style LineString", () => {
+    const selected = selectedProfileLine([
+      {
+        type: "Feature",
+        properties: { gpx_kind: "track" },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [4.87, 45.82, 267.8],
+            [4.88, 45.83, 274.2],
+          ],
+        },
+      },
+    ]);
+    assert.deepEqual(selected, {
+      coords: [
+        [4.87, 45.82],
+        [4.88, 45.83],
+      ],
+      elevations: [267.8, 274.2],
+    });
+  });
+
+  it("falls back to sampled elevations for a two-dimensional line", () => {
+    const selected = selectedProfileLine([
+      {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
+      },
+    ]);
+    assert.deepEqual(selected, {
+      coords: [
+        [0, 0],
+        [1, 1],
+      ],
+      elevations: null,
+    });
+  });
+
+  it("skips non-line selections and concatenates a selected multi-part line", () => {
+    const selected = selectedProfileLine([
+      {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "Point", coordinates: [0, 0] },
+      },
+      {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "MultiLineString",
+          coordinates: [
+            [
+              [1, 1, 10],
+              [2, 2, 20],
+            ],
+            [
+              [2, 2, 20],
+              [3, 3, 30],
+            ],
+          ],
+        },
+      },
+    ]);
+    assert.deepEqual(selected, {
+      coords: [
+        [1, 1],
+        [2, 2],
+        [2, 2],
+        [3, 3],
+      ],
+      elevations: [10, 20, 20, 30],
+    });
+    assert.equal(selectedProfileLine(undefined), null);
   });
 });
 

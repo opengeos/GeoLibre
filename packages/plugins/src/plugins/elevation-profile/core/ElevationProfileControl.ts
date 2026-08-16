@@ -2,8 +2,9 @@ import type { IControl, Map as MapLibreMap, MapMouseEvent, GeoJSONSource } from 
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 
 import type { LngLat, ProfileStats } from "../elevation/geometry";
-import { resampleLine, computeStats } from "../elevation/geometry";
+import { resampleLine, computeStats, cumulativeDistances } from "../elevation/geometry";
 import { fetchElevations, MAX_POINTS_PER_REQUEST, ElevationFetchError } from "../elevation/client";
+import { selectedProfileLine } from "../elevation/selection";
 import { buildChartGeometry, type ProfilePoint } from "../chart/profileChart";
 import { profileToCsv } from "../export/csv";
 import {
@@ -36,7 +37,12 @@ const HOVER_COLOR = "#ef4444";
 
 const CHART_HEIGHT = 132;
 
-const DEFAULT_OPTIONS: Required<Omit<ElevationProfileControlOptions, "exportTextFile">> = {
+const DEFAULT_OPTIONS: Required<
+  Omit<
+    ElevationProfileControlOptions,
+    "exportTextFile" | "getSelectedFeatures" | "onSelectionChange"
+  >
+> = {
   collapsed: true,
   title: "Elevation Profile",
   panelWidth: 320,
@@ -76,8 +82,15 @@ const pointCollection = (coords: LngLat[]): FeatureCollection<Point> => ({
  * persistence.
  */
 export class ElevationProfileControl implements IControl, DeepLinkConsumer {
-  private _options: Required<Omit<ElevationProfileControlOptions, "exportTextFile">>;
+  private _options: Required<
+    Omit<
+      ElevationProfileControlOptions,
+      "exportTextFile" | "getSelectedFeatures" | "onSelectionChange"
+    >
+  >;
   private _exportTextFile?: ExportTextFile;
+  private _getSelectedFeatures?: ElevationProfileControlOptions["getSelectedFeatures"];
+  private _onSelectionChange?: ElevationProfileControlOptions["onSelectionChange"];
   private _state: ElevationProfileState;
 
   private _map?: MapLibreMap;
@@ -88,6 +101,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   private _statsEl?: HTMLElement;
   private _chartEl?: HTMLElement;
   private _drawButton?: HTMLButtonElement;
+  private _selectedButton?: HTMLButtonElement;
   private _clearButton?: HTMLButtonElement;
   private _unitButton?: HTMLButtonElement;
   private _readoutEl?: HTMLElement;
@@ -104,6 +118,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   private _sampledCoords: LngLat[] = [];
   private _stats: ProfileStats | null = null;
   private _requestToken = 0;
+  private _busy = false;
 
   // Bound handlers retained so they can be detached.
   private _onMapClick = (e: MapMouseEvent): void => this._handleMapClick(e);
@@ -112,13 +127,16 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   private _resizeHandler: (() => void) | null = null;
   private _mapResizeHandler: (() => void) | null = null;
   private _clickOutsideHandler: ((e: MouseEvent) => void) | null = null;
+  private _unsubscribeSelection: (() => void) | null = null;
 
   /**
    * @param options - Optional configuration overrides
    */
   constructor(options?: Partial<ElevationProfileControlOptions>) {
-    const { exportTextFile, ...visual } = options ?? {};
+    const { exportTextFile, getSelectedFeatures, onSelectionChange, ...visual } = options ?? {};
     this._exportTextFile = exportTextFile;
+    this._getSelectedFeatures = getSelectedFeatures;
+    this._onSelectionChange = onSelectionChange;
     this._options = { ...DEFAULT_OPTIONS, ...visual };
     this._options.maxSamples = Math.min(
       MAX_POINTS_PER_REQUEST,
@@ -128,6 +146,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
       collapsed: this._options.collapsed,
       unitSystem: this._options.unitSystem,
       line: null,
+      elevations: null,
     };
   }
 
@@ -141,6 +160,9 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     this._panel = this._createPanel();
     this._mapContainer.appendChild(this._panel);
     this._setupPanelListeners();
+    this._unsubscribeSelection =
+      this._onSelectionChange?.(() => this._syncSelectedButton()) ?? null;
+    this._syncSelectedButton();
 
     if (!this._state.collapsed) {
       this._panel.classList.add("expanded");
@@ -157,7 +179,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
         // the cached stats/chart.
         this._renderLineGeometry(this._state.line);
       } else {
-        void this._profileLine(this._state.line, { fit: false });
+        void this._profileLine(this._state.line, { fit: false }, this._state.elevations);
       }
     }
 
@@ -186,6 +208,8 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
       document.removeEventListener("click", this._clickOutsideHandler);
       this._clickOutsideHandler = null;
     }
+    this._unsubscribeSelection?.();
+    this._unsubscribeSelection = null;
 
     this._panel?.parentNode?.removeChild(this._panel);
     this._container?.parentNode?.removeChild(this._container);
@@ -197,6 +221,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     this._statusEl = undefined;
     this._statsEl = undefined;
     this._chartEl = undefined;
+    this._selectedButton = undefined;
     this._exportEl = undefined;
     this._svgEl = undefined;
   }
@@ -209,6 +234,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
       collapsed: this._state.collapsed,
       unitSystem: this._state.unitSystem,
       line: this._state.line ? this._state.line.map((c) => [...c] as LngLat) : null,
+      elevations: this._state.elevations ? [...this._state.elevations] : null,
     };
   }
 
@@ -219,7 +245,9 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
    * @param newState - Partial state to apply
    */
   setState(newState: Partial<ElevationProfileState>): void {
-    const lineChanged = "line" in newState && newState.line !== this._state.line;
+    const lineChanged =
+      ("line" in newState && newState.line !== this._state.line) ||
+      ("elevations" in newState && newState.elevations !== this._state.elevations);
     this._state = { ...this._state, ...newState };
 
     if (newState.unitSystem) this._syncUnitButton();
@@ -229,7 +257,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
 
     if (lineChanged && this._map) {
       if (this._state.line && this._state.line.length >= 2) {
-        void this._profileLine(this._state.line, { fit: false });
+        void this._profileLine(this._state.line, { fit: false }, this._state.elevations);
       } else {
         this._clearProfile();
       }
@@ -248,7 +276,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   async loadLine(coords: LngLat[]): Promise<void> {
     if (coords.length < 2) return;
     this.expand();
-    await this._profileLine(coords, { fit: true });
+    await this._profileLine(coords, { fit: true }, null);
   }
 
   // --- Panel collapse / expand ------------------------------------------
@@ -350,20 +378,51 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
       this._setStatus("Need at least two points to build a profile.");
       return;
     }
-    void this._profileLine(vertices, { fit: false });
+    void this._profileLine(vertices, { fit: false }, null);
+  }
+
+  private _profileSelection(): void {
+    const selected = selectedProfileLine(this._getSelectedFeatures?.());
+    if (!selected) {
+      this._setStatus("Select a line feature to build its elevation profile.");
+      this._syncSelectedButton();
+      return;
+    }
+    void this._profileLine(selected.coords, { fit: true }, selected.elevations);
   }
 
   // --- Profiling ---------------------------------------------------------
 
-  private async _profileLine(coords: LngLat[], opts: { fit: boolean }): Promise<void> {
+  private async _profileLine(
+    coords: LngLat[],
+    opts: { fit: boolean },
+    embeddedElevations: number[] | null = null,
+  ): Promise<void> {
     if (!this._map) return;
     this._state.line = coords.map((c) => [...c] as LngLat);
+    this._state.elevations =
+      embeddedElevations?.length === coords.length ? [...embeddedElevations] : null;
     this._renderLineGeometry(coords);
     if (opts.fit) this._fitToLine(coords);
 
     const token = ++this._requestToken;
     this._setStatus("Sampling elevation…");
     this._setBusy(true);
+
+    if (this._state.elevations) {
+      const distances = cumulativeDistances(coords);
+      this._sampledCoords = coords.map((coord) => [...coord] as LngLat);
+      this._profilePoints = distances.map((distance, index) => ({
+        distance,
+        elevation: this._state.elevations?.[index] ?? 0,
+      }));
+      this._stats = computeStats(this._state.elevations, distances);
+      this._setStatus("");
+      this._setBusy(false);
+      this._renderProfile();
+      this._syncButtons();
+      return;
+    }
 
     const sampled = resampleLine(coords, this._options.maxSamples);
     try {
@@ -395,6 +454,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   private _clearProfile(): void {
     this._requestToken += 1;
     this._state.line = null;
+    this._state.elevations = null;
     this._drawVertices = [];
     this._profilePoints = [];
     this._sampledCoords = [];
@@ -491,7 +551,15 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     const lineSource = map.getSource(SOURCE_LINE) as GeoJSONSource | undefined;
     const vertexSource = map.getSource(SOURCE_VERTICES) as GeoJSONSource | undefined;
     if (lineSource) lineSource.setData(lineFeature(coords));
-    if (vertexSource) vertexSource.setData(pointCollection(coords));
+    if (vertexSource) {
+      // Dense imported routes such as GPX tracks can contain thousands of
+      // vertices. Drawing a circle at every one obscures the line itself, so a
+      // finished dense route marks only its endpoints. In-progress and typical
+      // hand-drawn lines remain small enough to show every editable vertex.
+      const visibleVertices =
+        !this._drawing && coords.length > 50 ? [coords[0], coords[coords.length - 1]] : coords;
+      vertexSource.setData(pointCollection(visibleVertices));
+    }
   }
 
   /** Render in-progress drawing vertices (line through the clicked points). */
@@ -623,13 +691,20 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     clear.addEventListener("click", () => this._clearProfile());
     this._clearButton = clear;
 
+    const selected = document.createElement("button");
+    selected.type = "button";
+    selected.className = "elevation-profile-button";
+    selected.textContent = "Use selected";
+    selected.addEventListener("click", () => this._profileSelection());
+    this._selectedButton = selected;
+
     const unit = document.createElement("button");
     unit.type = "button";
     unit.className = "elevation-profile-button elevation-profile-unit";
     unit.addEventListener("click", () => this._cycleUnits());
     this._unitButton = unit;
 
-    actions.append(draw, clear, unit);
+    actions.append(draw, selected, clear, unit);
 
     // Status
     const status = document.createElement("div");
@@ -984,10 +1059,22 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     if (this._clearButton) {
       this._clearButton.disabled = !this._state.line && !this._drawing;
     }
+    this._syncSelectedButton();
+  }
+
+  private _syncSelectedButton(): void {
+    if (!this._selectedButton) return;
+    const hasSelectedLine = Boolean(selectedProfileLine(this._getSelectedFeatures?.()));
+    this._selectedButton.disabled = this._busy || this._drawing || !hasSelectedLine;
+    this._selectedButton.title = hasSelectedLine
+      ? "Build a profile from the selected line feature"
+      : "Select a line feature first";
   }
 
   private _setBusy(busy: boolean): void {
+    this._busy = busy;
     if (this._drawButton) this._drawButton.disabled = busy;
+    this._syncSelectedButton();
   }
 
   private _setStatus(message: string): void {

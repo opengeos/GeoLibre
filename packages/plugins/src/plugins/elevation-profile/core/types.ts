@@ -1,3 +1,5 @@
+import type { Feature, Geometry } from "geojson";
+
 import type { LngLat } from "../elevation/geometry";
 import type { UnitSystem } from "../elevation/format";
 
@@ -55,6 +57,10 @@ export interface ElevationProfileControlOptions {
    * browser. Falls back to a browser download when not provided.
    */
   exportTextFile?: ExportTextFile;
+  /** Read the features currently selected in the host application. */
+  getSelectedFeatures?: () => Feature<Geometry | null>[];
+  /** Subscribe to host selection changes. Returns a function that unsubscribes. */
+  onSelectionChange?: (callback: () => void) => () => void;
 }
 
 /** Serializable state persisted with a GeoLibre project. */
@@ -65,4 +71,6 @@ export interface ElevationProfileState {
   unitSystem: UnitSystem;
   /** The profiled line as `[lng, lat]` vertices, or `null` when none is drawn. */
   line: LngLat[] | null;
+  /** Embedded elevations aligned with {@link line}, or null for sampled terrain. */
+  elevations: number[] | null;
 }

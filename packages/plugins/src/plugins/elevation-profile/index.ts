@@ -39,6 +39,10 @@ function createControl(app: GeoLibreAppAPI): ElevationProfileControl {
     exportTextFile: app.exportTextFile
       ? (filename, content, options) => app.exportTextFile?.(filename, content, options)
       : undefined,
+    getSelectedFeatures: app.getSelectedFeatures,
+    onSelectionChange: app.onSelectionChange
+      ? (callback) => app.onSelectionChange?.(() => callback()) ?? (() => undefined)
+      : undefined,
   });
   if (pendingState) next.setState(pendingState);
   return next;
@@ -71,6 +75,16 @@ function isPluginState(value: unknown): value is Partial<ElevationProfileState> 
     return false;
   }
   if ("line" in candidate && candidate.line !== null && !isLngLatArray(candidate.line)) {
+    return false;
+  }
+  if (
+    "elevations" in candidate &&
+    candidate.elevations !== null &&
+    (!Array.isArray(candidate.elevations) ||
+      !candidate.elevations.every(
+        (elevation) => typeof elevation === "number" && Number.isFinite(elevation),
+      ))
+  ) {
     return false;
   }
   return true;
@@ -137,6 +151,7 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
         collapsed: true,
         unitSystem: "metric",
         line: null,
+        elevations: null,
       };
       pendingState = cleared;
       control?.setState(cleared);
