@@ -588,6 +588,23 @@ function applyZoomRange(layer: RawStyleLayer, patch: Partial<Omit<LayerStyle, "l
   if (max !== null) patch.maxZoom = max;
 }
 
+/** Keep the outer layer window wide enough for every recovered stacked rule. */
+function applyStackedZoomRange(
+  layers: RawStyleLayer[],
+  patch: Partial<Omit<LayerStyle, "labels">>,
+): void {
+  const ranges = layers.map((layer) => {
+    const rawMin = clampZoom(layer.minzoom);
+    const rawMax = clampZoom(layer.maxzoom);
+    if (rawMin !== null && rawMax !== null) {
+      return { min: Math.min(rawMin, rawMax), max: Math.max(rawMin, rawMax) };
+    }
+    return { min: rawMin ?? MIN_LAYER_ZOOM, max: rawMax ?? MAX_LAYER_ZOOM };
+  });
+  patch.minZoom = Math.min(...ranges.map((range) => range.min));
+  patch.maxZoom = Math.max(...ranges.map((range) => range.max));
+}
+
 /** Build the label patch from a `symbol` layer's layout/paint. */
 function parseLabelLayer(layer: RawStyleLayer, warnings: string[]): Partial<LabelStyle> {
   const layout = layer.layout ?? {};
@@ -768,7 +785,8 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     }
     const outline = parseStrokeColor(paint["fill-outline-color"]);
     if (outline) patch.strokeColor = outline;
-    applyZoomRange(fill, patch);
+    if (stackedFill) applyStackedZoomRange(byType("fill"), patch);
+    else applyZoomRange(fill, patch);
   }
 
   if (line) {
@@ -798,7 +816,8 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (paint["line-width"] !== undefined) {
       parseLineWidth(paint["line-width"], patch, warnings);
     }
-    applyZoomRange(line, patch);
+    if (appliedStackTypes.has("line")) applyStackedZoomRange(byType("line"), patch);
+    else applyZoomRange(line, patch);
   }
 
   if (circle) {
@@ -845,7 +864,8 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     } else {
       warnUnreadableNumber(paint["circle-stroke-width"], "point stroke width", warnings);
     }
-    applyZoomRange(circle, patch);
+    if (appliedStackTypes.has("circle")) applyStackedZoomRange(byType("circle"), patch);
+    else applyZoomRange(circle, patch);
   }
 
   if (heatmap) {

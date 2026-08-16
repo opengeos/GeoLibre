@@ -860,6 +860,41 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.ok(result.warnings.some((w) => /combined as rules/.test(w)));
   });
 
+  it("uses the union of stacked rule zoom ranges for the outer layer", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        {
+          id: "low-zoom",
+          type: "fill",
+          minzoom: 0,
+          maxzoom: 10,
+          filter: ["==", ["get", "class"], "a"],
+          paint: { "fill-color": "#111111" },
+        },
+        {
+          id: "high-zoom",
+          type: "fill",
+          minzoom: 10,
+          maxzoom: 20,
+          filter: ["==", ["get", "class"], "b"],
+          paint: { "fill-color": "#222222" },
+        },
+      ],
+    });
+
+    assert.equal(result.style.minZoom, 0);
+    assert.equal(result.style.maxZoom, 20);
+    assert.deepEqual(
+      result.style.vectorRules
+        ?.filter((rule) => !rule.isElse)
+        .map((rule) => [rule.minZoom, rule.maxZoom]),
+      [
+        [10, 20],
+        [0, 10],
+      ],
+    );
+  });
+
   it("warns when unfiltered same-type layers cannot be combined as rules", () => {
     const result = parseMapboxStyle({
       layers: [
