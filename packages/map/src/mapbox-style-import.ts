@@ -340,7 +340,9 @@ function parseCase(array: unknown[]): ParsedColor {
  */
 function isLegacyLayerFilter(filter: unknown[]): boolean {
   const operator = filter[0];
-  if (operator === "all" || operator === "any" || operator === "none") {
+  // `none` has no expression counterpart, so it is legacy whatever it wraps.
+  if (operator === "none") return true;
+  if (operator === "all" || operator === "any") {
     return filter.slice(1).some((child) => {
       const array = asArray(child);
       return array !== null && isLegacyLayerFilter(array);

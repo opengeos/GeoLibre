@@ -978,6 +978,30 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.ok(result.warnings.some((warning) => /only the first was imported/.test(warning)));
   });
 
+  it("does not combine legacy none filters wrapping expression children", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        {
+          id: "no-class",
+          type: "fill",
+          filter: ["none", ["has", "class"]],
+          paint: { "fill-color": "#111111" },
+        },
+        {
+          id: "parks",
+          type: "fill",
+          filter: ["==", ["get", "class"], "park"],
+          paint: { "fill-color": "#222222" },
+        },
+      ],
+    });
+
+    assert.equal(result.matchedLayerCount, 1);
+    assert.equal(result.style.vectorStyleMode, "single");
+    assert.equal(result.style.fillColor, "#111111");
+    assert.ok(result.warnings.some((warning) => /only the first was imported/.test(warning)));
+  });
+
   it("combines a modern in filter with a string needle", () => {
     const result = parseMapboxStyle({
       layers: [
