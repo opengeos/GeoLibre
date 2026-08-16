@@ -39,12 +39,12 @@ const URL_PLACEHOLDER_KEYS = {
   "image-service": "addData.arcgis.imageServiceUrlPlaceholder",
 } as const satisfies Record<ArcGISLayerType, string>;
 
-export function ArcGISSource() {
+export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.arcgis.defaultName"));
   const [arcgisLayerType, setArcgisLayerType] = useState<ArcGISLayerType>("feature");
   const [arcgisSourceType, setArcgisSourceType] = useState<ArcGISSourceType>("url");
-  const [arcgisUrl, setArcgisUrl] = useState("");
+  const [arcgisUrl, setArcgisUrl] = useState(initialUrl);
   const [arcgisItemId, setArcgisItemId] = useState("");
   const [arcgisPortalUrl, setArcgisPortalUrl] = useState("");
   const [arcgisAccessToken, setArcgisAccessToken] = useState("");

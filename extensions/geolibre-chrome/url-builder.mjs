@@ -7,6 +7,27 @@ export function buildGeoLibreUrl(datasets, baseUrl = GEOLIBRE_WEB_URL) {
   }
   const target = new URL(baseUrl);
   target.search = "";
+  const serviceKinds = {
+    "XYZ / TMS": "xyz",
+    WMS: "wms",
+    WMTS: "wmts",
+    WFS: "wfs",
+    "OGC API": "ogc-features",
+    "ArcGIS Feature Service": "arcgis",
+    "Vector tiles": "ogc-vector-tiles",
+  };
+  const services = datasets.filter((dataset) => serviceKinds[dataset.format]);
+  if (services.length) {
+    if (datasets.length !== 1) throw new Error("Open one map service at a time.");
+    const service = services[0];
+    const serviceUrl = new URL(service.url);
+    if (serviceUrl.protocol !== "http:" && serviceUrl.protocol !== "https:") {
+      throw new Error("GeoLibre can only open HTTP or HTTPS service links.");
+    }
+    target.searchParams.set("add", serviceKinds[service.format]);
+    target.searchParams.set("serviceUrl", service.url);
+    return target.href;
+  }
   const entries = datasets.map((dataset) => {
     const dataUrl = new URL(dataset.url);
     if (dataUrl.protocol !== "http:" && dataUrl.protocol !== "https:") {

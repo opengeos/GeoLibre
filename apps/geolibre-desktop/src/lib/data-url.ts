@@ -5,6 +5,23 @@ export interface DataUrlParameter {
   dataUrl: string;
   styleUrl: string | null;
 }
+const SERVICE_KINDS = new Set([
+  "xyz",
+  "wms",
+  "wmts",
+  "wfs",
+  "ogc-features",
+  "ogc-vector-tiles",
+  "arcgis",
+]);
+
+export function serviceUrlParameter(search: string): { kind: string; url: string } | null {
+  const params = new URLSearchParams(search);
+  const kind = params.get("add");
+  const rawUrl = params.get("serviceUrl");
+  const url = httpUrl(rawUrl)?.replaceAll("%7B", "{").replaceAll("%7D", "}") ?? null;
+  return kind && SERVICE_KINDS.has(kind) && url ? { kind, url } : null;
+}
 export interface RemoteGeoJsonLayer {
   data: FeatureCollection;
   name: string;

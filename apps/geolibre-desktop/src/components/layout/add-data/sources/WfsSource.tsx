@@ -31,10 +31,10 @@ interface WfsFormCache {
 }
 let wfsFormCache: WfsFormCache | null = null;
 
-export function WfsSource() {
+export function WfsSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wfs.defaultName"));
-  const [wfsEndpoint, setWfsEndpoint] = useState(wfsFormCache?.endpoint ?? "");
+  const [wfsEndpoint, setWfsEndpoint] = useState(initialUrl || wfsFormCache?.endpoint || "");
   const [wfsTypeName, setWfsTypeName] = useState(wfsFormCache?.typeName ?? "");
   const [wfsVersion, setWfsVersion] = useState(wfsFormCache?.version ?? "2.0.0");
   const [wfsOutputFormat, setWfsOutputFormat] = useState(

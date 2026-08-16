@@ -114,6 +114,7 @@ import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { masHidesDataSource } from "../../lib/mas-build";
 import { IS_STORE_BUILD } from "../../lib/updates";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
+import { serviceUrlParameter } from "../../lib/data-url";
 import {
   OPEN_ADD_DATA_EVENT,
   type OpenAddDataDetail,
@@ -1029,7 +1030,13 @@ export function TopToolbar({
       {} as Record<ToolbarMapControl, boolean>,
     ),
   );
-  const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
+  const initialService = useMemo(
+    () => (typeof window === "undefined" ? null : serviceUrlParameter(window.location.search)),
+    [],
+  );
+  const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(
+    () => (initialService?.kind as AddDataKind | undefined) ?? null,
+  );
   const [addDataTargetGroupId, setAddDataTargetGroupId] = useState<string | null>(null);
   const addDataInitialLayerIdsRef = useRef<Set<string>>(new Set());
   // Every path that opens the dialog outside the OPEN_ADD_DATA_EVENT listener
@@ -2085,6 +2092,7 @@ export function TopToolbar({
         mapControllerRef={mapControllerRef}
         initialDeckVizKind={addDataDeckVizKind}
         initialPostgres={addDataPostgres}
+        initialUrl={addDataKind === initialService?.kind ? initialService.url : undefined}
         onOpenChange={(open: boolean) => {
           if (!open) {
             if (addDataTargetGroupId) {

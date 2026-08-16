@@ -4,6 +4,7 @@ import { parseHTML } from "linkedom";
 import { scanDocumentForDatasets } from "../extensions/geolibre-chrome/scanner.mjs";
 import {
   classifyServiceRequest,
+  createTabTaskQueue,
   mergeServiceCandidates,
 } from "../extensions/geolibre-chrome/service-scanner.mjs";
 import { buildGeoLibreUrl } from "../extensions/geolibre-chrome/url-builder.mjs";
@@ -299,6 +300,23 @@ describe("GeoLibre Chrome extension URL builder", () => {
     assert.throws(() => buildGeoLibreUrl([]), /Select at least one/);
     assert.throws(() => buildGeoLibreUrl([{ url: "file:///tmp/roads.geojson" }]), /HTTP or HTTPS/);
   });
+
+  it("routes detected services to the matching prefilled Add Data dialog", () => {
+    const result = new URL(
+      buildGeoLibreUrl([
+        {
+          url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+          format: "XYZ / TMS",
+        },
+      ]),
+    );
+    assert.equal(result.searchParams.get("add"), "xyz");
+    assert.equal(
+      result.searchParams.get("serviceUrl"),
+      "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    );
+    assert.equal(result.searchParams.has("data"), false);
+  });
 });
 
 describe("GeoLibre Chrome extension service request scanner", () => {
@@ -346,5 +364,40 @@ describe("GeoLibre Chrome extension service request scanner", () => {
       "https://maps.example.com/wms?service=WMS&request=GetCapabilities",
     );
     assert.deepEqual(mergeServiceCandidates([service], [service]), [service]);
+  });
+
+  it("deduplicates WMTS requests with different tile coordinates", () => {
+    const first = classifyServiceRequest(
+      "https://maps.example.com/wmts?SERVICE=WMTS&REQUEST=GetTile&LAYER=roads&TILEMATRIXSET=web&TILEMATRIX=4&TILEROW=7&TILECOL=9",
+    );
+    const second = classifyServiceRequest(
+      "https://maps.example.com/wmts?SERVICE=WMTS&REQUEST=GetTile&LAYER=roads&TILEMATRIXSET=web&TILEMATRIX=4&TILEROW=8&TILECOL=10",
+    );
+    assert.equal(first?.url, second?.url);
+  });
+
+  it("serializes asynchronous work independently per tab", async () => {
+    const enqueue = createTabTaskQueue();
+    const order: string[] = [];
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = enqueue(7, async () => {
+      order.push("first:start");
+      await blocked;
+      order.push("first:end");
+    });
+    const second = enqueue(7, async () => {
+      order.push("second");
+    });
+    const other = enqueue(8, async () => {
+      order.push("other");
+    });
+    await other;
+    assert.deepEqual(order, ["first:start", "other"]);
+    release();
+    await Promise.all([first, second]);
+    assert.deepEqual(order, ["first:start", "other", "first:end", "second"]);
   });
 });

@@ -18,10 +18,10 @@ interface OgcSample {
  * API TileJSON often omits them). Rendering uses GeoLibre's default per-source
  * layer styling; the style's own paint is not applied.
  */
-export function OgcVectorTilesSource() {
+export function OgcVectorTilesSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.ogcVectorTiles.defaultName"));
-  const [tilesUrl, setTilesUrl] = useState("");
+  const [tilesUrl, setTilesUrl] = useState(initialUrl);
   const [styleUrl, setStyleUrl] = useState("");
   const [sourceLayersText, setSourceLayersText] = useState("");
 

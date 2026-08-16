@@ -43,10 +43,10 @@ interface OgcFeaturesSample {
  * feature count is reached, because a single `/items` request returns only one
  * server-sized page.
  */
-export function OgcFeaturesSource() {
+export function OgcFeaturesSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.ogcFeatures.defaultName"));
-  const [endpoint, setEndpoint] = useState(ogcFeaturesFormCache?.endpoint ?? "");
+  const [endpoint, setEndpoint] = useState(initialUrl || ogcFeaturesFormCache?.endpoint || "");
   const [collectionId, setCollectionId] = useState(ogcFeaturesFormCache?.collectionId ?? "");
   const [maxFeatures, setMaxFeatures] = useState(
     ogcFeaturesFormCache?.maxFeatures ?? String(DEFAULT_OGC_FEATURES_MAX_FEATURES),

@@ -44,6 +44,8 @@ interface AddDataDialogProps {
    * clicked PostGIS table.
    */
   initialPostgres?: OpenAddDataPostgres;
+  /** Service URL supplied by a browser-extension deep link. */
+  initialUrl?: string;
 }
 
 /**
@@ -55,20 +57,21 @@ function renderSource(
   kind: AddDataKind,
   initialDeckVizKind: string | undefined,
   initialPostgres: OpenAddDataPostgres | undefined,
+  initialUrl: string | undefined,
 ) {
   switch (kind) {
     case "xyz":
-      return <XyzSource />;
+      return <XyzSource initialUrl={initialUrl} />;
     case "wms":
-      return <WmsSource />;
+      return <WmsSource initialUrl={initialUrl} />;
     case "wfs":
-      return <WfsSource />;
+      return <WfsSource initialUrl={initialUrl} />;
     case "wmts":
-      return <WmtsSource />;
+      return <WmtsSource initialUrl={initialUrl} />;
     case "ogc-features":
-      return <OgcFeaturesSource />;
+      return <OgcFeaturesSource initialUrl={initialUrl} />;
     case "ogc-vector-tiles":
-      return <OgcVectorTilesSource />;
+      return <OgcVectorTilesSource initialUrl={initialUrl} />;
     case "gpx":
       return <GpxSource />;
     case "georss":
@@ -84,7 +87,7 @@ function renderSource(
     case "mbtiles":
       return <MbtilesSource />;
     case "arcgis":
-      return <ArcGISSource />;
+      return <ArcGISSource initialUrl={initialUrl} />;
     case "postgres":
       return <PostgresSource initialPostgres={initialPostgres} />;
     case "video":
@@ -107,6 +110,7 @@ export function AddDataDialog({
   onOpenChange,
   initialDeckVizKind,
   initialPostgres,
+  initialUrl,
 }: AddDataDialogProps) {
   const { t } = useTranslation();
   const open = kind !== null;
@@ -158,7 +162,7 @@ export function AddDataDialog({
 
         {kind ? (
           <AddDataShellProvider value={contextValue}>
-            {renderSource(kind, initialDeckVizKind, initialPostgres)}
+            {renderSource(kind, initialDeckVizKind, initialPostgres, initialUrl)}
           </AddDataShellProvider>
         ) : null}
       </DialogContent>

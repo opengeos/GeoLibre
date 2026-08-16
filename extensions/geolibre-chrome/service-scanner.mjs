@@ -6,11 +6,17 @@ const OGC_OPERATION_PARAMS = new Set([
   "height",
   "info_format",
   "layers",
+  "layer",
   "query_layers",
   "request",
   "service",
   "srs",
   "styles",
+  "style",
+  "tilecol",
+  "tilematrix",
+  "tilematrixset",
+  "tilerow",
   "transparent",
   "version",
   "width",
@@ -99,4 +105,18 @@ export function mergeServiceCandidates(...groups) {
     if (entry?.url && !merged.has(entry.url)) merged.set(entry.url, entry);
   }
   return [...merged.values()];
+}
+
+/** Serialize asynchronous mutations independently for each browser tab. */
+export function createTabTaskQueue() {
+  const pending = new Map();
+  return (tabId, task) => {
+    const previous = pending.get(tabId) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(task);
+    pending.set(tabId, next);
+    void next.finally(() => {
+      if (pending.get(tabId) === next) pending.delete(tabId);
+    });
+    return next;
+  };
 }

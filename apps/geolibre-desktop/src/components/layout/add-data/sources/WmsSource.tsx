@@ -38,10 +38,10 @@ interface WmsFormCache {
 }
 let wmsFormCache: WmsFormCache | null = null;
 
-export function WmsSource() {
+export function WmsSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wms.defaultName"));
-  const [wmsEndpoint, setWmsEndpoint] = useState(wmsFormCache?.endpoint ?? "");
+  const [wmsEndpoint, setWmsEndpoint] = useState(initialUrl || wmsFormCache?.endpoint || "");
   const [wmsLayers, setWmsLayers] = useState(wmsFormCache?.layers ?? "");
   const [wmsStyles, setWmsStyles] = useState(wmsFormCache?.styles ?? "");
   const [wmsFormat, setWmsFormat] = useState(wmsFormCache?.format ?? "image/png");

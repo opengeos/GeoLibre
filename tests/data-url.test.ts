@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { strToU8, zipSync } from "fflate";
 import {
   dataUrlParameters,
+  serviceUrlParameter,
   fetchRemoteData,
   mapboxStyleForDataLayer,
   parseRasterUrlStyle,
@@ -11,6 +12,22 @@ import {
 const collection = (id: string) => ({
   type: "FeatureCollection" as const,
   features: [{ type: "Feature" as const, id, properties: {}, geometry: null }],
+});
+
+describe("serviceUrlParameter", () => {
+  it("accepts supported service-prefill links", () => {
+    assert.deepEqual(
+      serviceUrlParameter(
+        "?add=xyz&serviceUrl=https%3A%2F%2Ftiles.example.com%2F%7Bz%7D%2F%7Bx%7D%2F%7By%7D.png",
+      ),
+      { kind: "xyz", url: "https://tiles.example.com/{z}/{x}/{y}.png" },
+    );
+  });
+
+  it("rejects unsupported kinds and non-web URLs", () => {
+    assert.equal(serviceUrlParameter("?add=bogus&serviceUrl=https://example.com"), null);
+    assert.equal(serviceUrlParameter("?add=xyz&serviceUrl=file:///tmp/tiles"), null);
+  });
 });
 
 describe("per-file ZIP styles", () => {

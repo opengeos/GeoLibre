@@ -12,10 +12,10 @@ import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldBoolean, serviceFieldString, type ServiceFields } from "../service-library";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
-export function XyzSource() {
+export function XyzSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.xyz.defaultName"));
-  const [xyzUrl, setXyzUrl] = useState("");
+  const [xyzUrl, setXyzUrl] = useState(initialUrl);
   const [xyzTileSize, setXyzTileSize] = useState("256");
   const [xyzShortUrl, setXyzShortUrl] = useState(false);
 
