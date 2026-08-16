@@ -10,6 +10,36 @@ import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopSettings";
 import { loadRecentProjects } from "./useRecentProjectsPersistence";
 
+/**
+ * How long the shell stays unmounted waiting for a startup restore. The read and
+ * the XYZ probes below have no deadline of their own, so without this a project
+ * whose tile host black-holes the connection would leave the window blank with
+ * no way to reach Settings and change the startup project. On expiry the shell
+ * mounts over the default workspace and the restore is allowed to keep going --
+ * that is the pre-restore-gate behavior, so the worst case is the projection
+ * flash this hook exists to avoid, not a hang.
+ */
+const RESTORE_GATE_TIMEOUT_MS = 10_000;
+
+/**
+ * Whether the launch carried an explicit project payload, which takes precedence
+ * over the device default. Without this guard, the startup read and a shared
+ * project deep link could race, with whichever request happened to finish last
+ * replacing the other. Ask the loaders' own parsers rather than naming query
+ * keys here, so this guard can never disagree with them about what counts as an
+ * explicit payload: `projectUrlFromLocation` covers every key in
+ * `PROJECT_URL_PARAMS` plus a bare `?https://...` query, and `dataUrlParameters`
+ * only claims a `?data=` that is an absolute http(s) URL -- a malformed one
+ * leaves `useDataUrlLoader` a no-op, so yielding to it would strand the user on
+ * an empty workspace. Shared by the restore gate's initial value and the effect
+ * that performs the restore, so the two cannot drift apart.
+ */
+function hasExplicitLaunchPayload(): boolean {
+  if (projectUrlFromLocation() !== null) return true;
+  if (dataUrlParameters(window.location.search) !== null) return true;
+  return false;
+}
+
 export function useStartupProject(): {
   warning: string | null;
   restoring: boolean;
@@ -23,33 +53,19 @@ export function useStartupProject(): {
   // startup, that lets MapLibre's projection events race the project preference
   // back into the store. Starting the shell only after loadProject makes the
   // startup project the map controller's initial state.
-  const [restoring, setRestoring] = useState(() => {
-    if (!isTauri()) return false;
-    if (projectUrlFromLocation() !== null) return false;
-    if (dataUrlParameters(window.location.search) !== null) return false;
-    return true;
-  });
+  const [restoring, setRestoring] = useState(() => !hasExplicitLaunchPayload());
 
   useEffect(() => {
-    if (!isTauri()) return;
-    // Explicit launch payloads take precedence over the device default. Without
-    // this guard, the startup read and a shared project deep link could race,
-    // with whichever request happened to finish last replacing the other. Ask
-    // the loaders' own parsers rather than naming query keys here, so this guard
-    // can never disagree with them about what counts as an explicit payload:
-    // `projectUrlFromLocation` covers every key in `PROJECT_URL_PARAMS` plus a
-    // bare `?https://...` query, and `dataUrlParameters` only claims a `?data=`
-    // that is an absolute http(s) URL -- a malformed one leaves `useDataUrlLoader`
-    // a no-op, so yielding to it would strand the user on an empty workspace.
-    if (projectUrlFromLocation() !== null) return;
-    if (dataUrlParameters(window.location.search) !== null) return;
+    if (hasExplicitLaunchPayload()) return;
     const settings = useDesktopSettingsStore.getState().desktopSettings.startup;
     // `useRecentProjectsPersistence` hydrates the store from localStorage in its
     // own mount effect. Fall back to reading storage directly when that has not
     // happened yet, so "last project" mode does not silently no-op if this hook
     // is ever ordered above it in `App.tsx`.
     const stored = useAppStore.getState().recentProjects;
-    const path = startupProjectPath(settings, stored.length > 0 ? stored : loadRecentProjects());
+    const path = isTauri()
+      ? startupProjectPath(settings, stored.length > 0 ? stored : loadRecentProjects())
+      : null;
     const openDefaultWorkspace = () => {
       useAppStore.setState((state) => ({
         preferences: {
@@ -68,9 +84,11 @@ export function useStartupProject(): {
     }
 
     // The workspace this restore is allowed to replace. The XYZ probes below
-    // reach the network and the shell is interactive throughout, so the user can
-    // open their own project first; `loadProject` swaps the whole store with no
-    // unsaved-work prompt, so a restore that lost that race must stand down.
+    // reach the network, and the shell becomes interactive as soon as the gate
+    // above expires (and immediately, on the browser paths that never gate), so
+    // the user can open their own project first; `loadProject` swaps the whole
+    // store with no unsaved-work prompt, so a restore that lost that race must
+    // stand down.
     // `projectGeneration` is the discriminator rather than `projectPath`, which
     // File > New resets to the same `null` the app started on -- a restore
     // landing after that would clobber the new project and look identical to
@@ -79,6 +97,14 @@ export function useStartupProject(): {
 
     let cancelled = false;
     let warningTimer: number | undefined;
+    // Bounded gate: mount the shell over the default workspace if the restore
+    // has not settled in time. The restore itself is left running -- it can
+    // still land, guarded by `restoringOver`/`isDirty` below -- so a merely slow
+    // project is not lost, while a stalled one no longer holds a blank window.
+    const gateTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      openDefaultWorkspace();
+    }, RESTORE_GATE_TIMEOUT_MS);
     // `cancelled` alone would leave a discarded run's read and XYZ probes in
     // flight; the signal ends them, matching `useProjectUrlLoader`.
     const abortController = new AbortController();
@@ -102,9 +128,18 @@ export function useStartupProject(): {
           // choice because an older path turned out to be gone would be wrong.
           const current = useDesktopSettingsStore.getState().desktopSettings;
           if (current.startup.mode === "specific" && current.startup.projectPath === path) {
+            // Clear only the project selection. `globeByDefault` describes the
+            // empty workspace, not the missing file, so resetting the whole
+            // block would silently flip a saved Mercator preference back to
+            // globe on the next launch.
             useDesktopSettingsStore.getState().setDesktopSettings({
               ...current,
-              startup: DEFAULT_STARTUP_SETTINGS,
+              startup: {
+                ...current.startup,
+                mode: DEFAULT_STARTUP_SETTINGS.mode,
+                projectPath: DEFAULT_STARTUP_SETTINGS.projectPath,
+                projectName: DEFAULT_STARTUP_SETTINGS.projectName,
+              },
             });
           }
         }
@@ -113,12 +148,14 @@ export function useStartupProject(): {
         warningTimer = window.setTimeout(() => setHasWarning(false), 8000);
         openDefaultWorkspace();
       } finally {
+        window.clearTimeout(gateTimer);
         if (!cancelled) setRestoring(false);
       }
     })();
     return () => {
       cancelled = true;
       abortController.abort();
+      window.clearTimeout(gateTimer);
       if (warningTimer !== undefined) window.clearTimeout(warningTimer);
     };
     // Startup restoration is intentionally one-shot. In particular, changing

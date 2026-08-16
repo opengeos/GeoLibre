@@ -25,7 +25,13 @@ const DESKTOP_PATH = "/home/user/projects/General_Project.geolibre.json";
 const PROJECT_TEXT = '{"name":"General Project","layers":[]}';
 
 function settings(patch: Partial<StartupSettings> = {}): StartupSettings {
-  return { mode: "default", projectPath: null, projectName: null, ...patch };
+  return {
+    mode: "default",
+    projectPath: null,
+    projectName: null,
+    globeByDefault: true,
+    ...patch,
+  };
 }
 
 function makeStorage(initial?: Record<string, string>): SnapshotStorage & {

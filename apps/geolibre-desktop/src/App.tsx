@@ -1,4 +1,5 @@
 import { DirectionProvider } from "@geolibre/ui";
+import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useCallback, useState } from "react";
 import { DesktopShell } from "./components/layout/DesktopShell";
@@ -29,7 +30,7 @@ export default function App() {
   useLastBasemapPersistence();
   // Re-renders on language change, so Radix primitives (menus, sliders, tabs)
   // pick up the right-to-left direction together with the document `dir`.
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const layoutOptions = useLayoutOptions();
   const { themeMode, toggleThemeMode } = useThemeMode();
   // `onMapReady` fires again on every basemap swap (MapCanvas re-emits
@@ -59,7 +60,19 @@ export default function App() {
   useWhiteboxToolUrl();
   return (
     <DirectionProvider dir={languageDirection(i18n.language)}>
-      {restoringStartupProject ? null : (
+      {restoringStartupProject ? (
+        // The shell is deliberately unmounted while the startup project loads
+        // (see `useStartupProject`), so say what the window is waiting on rather
+        // than leaving it blank. `useStartupProject` bounds this state, so it
+        // cannot become a permanent splash screen.
+        <div
+          role="status"
+          className="flex h-screen w-screen items-center justify-center gap-3 bg-background text-sm text-muted-foreground"
+        >
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {t("settings.startup.restoring")}
+        </div>
+      ) : (
         <>
           <DesktopShell
             layoutOptions={layoutOptions}

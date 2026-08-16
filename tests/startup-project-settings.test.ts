@@ -83,7 +83,12 @@ describe("startupProjectPath", () => {
   it("uses the configured path in specific mode, ignoring recent projects", () => {
     assert.equal(
       startupProjectPath(
-        { mode: "specific", projectPath: "/tmp/pinned.geolibre.json", projectName: "Pinned" },
+        {
+          mode: "specific",
+          projectPath: "/tmp/pinned.geolibre.json",
+          projectName: "Pinned",
+          globeByDefault: true,
+        },
         recent("/tmp/other.geolibre.json"),
       ),
       "/tmp/pinned.geolibre.json",
@@ -93,7 +98,7 @@ describe("startupProjectPath", () => {
   it("reopens the most recent project in last mode", () => {
     assert.equal(
       startupProjectPath(
-        { mode: "last", projectPath: null, projectName: null },
+        { mode: "last", projectPath: null, projectName: null, globeByDefault: true },
         recent("/tmp/newest.geolibre.json", "/tmp/older.geolibre.json"),
       ),
       "/tmp/newest.geolibre.json",
@@ -106,7 +111,7 @@ describe("startupProjectPath", () => {
     // setting's own copy ("most recently used local project") does not promise.
     assert.equal(
       startupProjectPath(
-        { mode: "last", projectPath: null, projectName: null },
+        { mode: "last", projectPath: null, projectName: null, globeByDefault: true },
         recent("https://share.geolibre.app/p/abc", "/tmp/local.geolibre.json"),
       ),
       "/tmp/local.geolibre.json",
@@ -121,7 +126,10 @@ describe("startupProjectPath", () => {
     const uri =
       "content://com.android.externalstorage.documents/document/primary%3ADocuments%2Fjson%2FGeneral_Project.geolibre.json";
     assert.equal(
-      startupProjectPath({ mode: "last", projectPath: null, projectName: null }, recent(uri)),
+      startupProjectPath(
+        { mode: "last", projectPath: null, projectName: null, globeByDefault: true },
+        recent(uri),
+      ),
       uri,
     );
   });
@@ -129,7 +137,7 @@ describe("startupProjectPath", () => {
   it("restores nothing when every recent project is remote", () => {
     assert.equal(
       startupProjectPath(
-        { mode: "last", projectPath: null, projectName: null },
+        { mode: "last", projectPath: null, projectName: null, globeByDefault: true },
         recent("https://share.geolibre.app/p/abc"),
       ),
       null,
@@ -138,7 +146,10 @@ describe("startupProjectPath", () => {
 
   it("restores nothing in last mode with no history", () => {
     assert.equal(
-      startupProjectPath({ mode: "last", projectPath: null, projectName: null }, []),
+      startupProjectPath(
+        { mode: "last", projectPath: null, projectName: null, globeByDefault: true },
+        [],
+      ),
       null,
     );
   });
@@ -156,18 +167,23 @@ describe("startupSettingsAfterForcedSaveAs", () => {
   it("follows a pinned project to the document the save actually created", () => {
     assert.deepEqual(
       startupSettingsAfterForcedSaveAs(
-        { mode: "specific", projectPath: PICKED, projectName: "General" },
+        { mode: "specific", projectPath: PICKED, projectName: "General", globeByDefault: true },
         PICKED,
         CREATED,
       ),
-      { mode: "specific", projectPath: CREATED, projectName: "General" },
+      { mode: "specific", projectPath: CREATED, projectName: "General", globeByDefault: true },
     );
   });
 
   it("leaves a preference pinned to some other project alone", () => {
     assert.equal(
       startupSettingsAfterForcedSaveAs(
-        { mode: "specific", projectPath: "/tmp/pinned.geolibre.json", projectName: "Pinned" },
+        {
+          mode: "specific",
+          projectPath: "/tmp/pinned.geolibre.json",
+          projectName: "Pinned",
+          globeByDefault: true,
+        },
         PICKED,
         CREATED,
       ),
@@ -178,7 +194,7 @@ describe("startupSettingsAfterForcedSaveAs", () => {
   it("does nothing for the modes that resolve a path of their own", () => {
     assert.equal(
       startupSettingsAfterForcedSaveAs(
-        { mode: "last", projectPath: null, projectName: null },
+        { mode: "last", projectPath: null, projectName: null, globeByDefault: true },
         PICKED,
         CREATED,
       ),
@@ -191,7 +207,7 @@ describe("startupSettingsAfterForcedSaveAs", () => {
     // The desktop case: a plain Save writes the file it opened, every time.
     assert.equal(
       startupSettingsAfterForcedSaveAs(
-        { mode: "specific", projectPath: PICKED, projectName: "General" },
+        { mode: "specific", projectPath: PICKED, projectName: "General", globeByDefault: true },
         PICKED,
         PICKED,
       ),
@@ -199,7 +215,7 @@ describe("startupSettingsAfterForcedSaveAs", () => {
     );
     assert.equal(
       startupSettingsAfterForcedSaveAs(
-        { mode: "specific", projectPath: PICKED, projectName: "General" },
+        { mode: "specific", projectPath: PICKED, projectName: "General", globeByDefault: true },
         null,
         CREATED,
       ),

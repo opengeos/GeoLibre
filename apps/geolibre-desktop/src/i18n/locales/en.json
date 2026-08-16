@@ -1861,6 +1861,7 @@
       "globeByDefault": "Enable 3D globe by default",
       "globeByDefaultHint": "Used for the untitled workspace when no startup project or project link is provided.",
       "selectError": "The selected project could not be read.",
+      "restoring": "Opening your startup project…",
       "loadWarning": "The startup project is unavailable. GeoLibre opened the default workspace instead."
     },
     "map": {
