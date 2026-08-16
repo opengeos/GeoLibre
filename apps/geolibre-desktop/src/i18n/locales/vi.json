@@ -1772,7 +1772,7 @@
     },
     "startup": {
       "loadWarning": "Dự án khởi động không có sẵn. Thay vào đó, GeoLibre đã mở không gian làm việc mặc định.",
-      "title": "Dự án khởi động không có sẵn. Thay vào đó, GeoLibre đã mở không gian làm việc mặc định.",
+      "title": "Dự án khởi động",
       "description": "Chọn không gian làm việc GeoLibre mở ra khi ứng dụng gốc khởi động.",
       "mode": {
         "default": "Mở không gian làm việc mặc định",
@@ -1785,7 +1785,10 @@
       },
       "chooseProject": "Chọn dự án",
       "noProjectSelected": "Không có dự án nào được chọn",
-      "selectError": "Không thể đọc được dự án đã chọn."
+      "globeByDefault": "Bật khối cầu 3D theo mặc định",
+      "globeByDefaultHint": "Được dùng cho không gian làm việc chưa đặt tên khi không có dự án khởi động hoặc liên kết dự án.",
+      "selectError": "Không thể đọc được dự án đã chọn.",
+      "restoring": "Đang mở dự án khởi động của bạn…"
     },
     "map": {
       "constraintsTitle": "Hạn chế về bản đồ",
@@ -1831,11 +1834,12 @@
       "mapPreferences": "Tham số bố cục URL ghi đè cài đặt đã lưu.",
       "layoutSettings": "Cài đặt bố cục",
       "appearanceSettings": "Cài đặt giao diện",
-      "interfaceSettings": "Mã hex màu tùy chỉnh",
+      "interfaceSettings": "Cài đặt giao diện người dùng",
       "geocoding": "Mã hóa địa lý",
       "ai": "Nhà cung cấp AI",
       "environmentVariables": "Biến môi trường",
       "updates": "Cập nhật cài đặt",
+      "startupSettings": "Cài đặt khởi động",
       "managePlugins": "Quản lý plugin",
       "styleManager": "Trình quản lý phong cách",
       "urlOverrideNote": "Tham số bố cục URL ghi đè cài đặt đã lưu."
@@ -3367,7 +3371,10 @@
     "drawnBbox": "Hộp rút: {{bbox}}",
     "drawnBboxCleared": "Đã xóa bbox vẽ.",
     "mapNotReady": "Bản đồ chưa sẵn sàng để vẽ.",
-    "startDate": "Ngày bắt đầu"
+    "startDate": "Ngày bắt đầu",
+    "noMatchesHere": "Không có kết quả phù hợp ở phần đó của danh mục. Tải thêm để tiếp tục tìm kiếm.",
+    "treeEmpty": "Trống",
+    "treeOpenFailed": "Không thể mở danh mục này"
   },
   "earthdataGis": {
     "showing": "Đang hiển thị {{shown}} trong số {{total}} dịch vụ.",
@@ -3600,7 +3607,7 @@
       "arrow": "Mũi tên",
       "rectangle": "Điểm nổi bật hình chữ nhật",
       "ellipse": "Làm nổi bật hình elip",
-      "freehand": "Xóa tất cả chú thích",
+      "freehand": "Đánh dấu nét vẽ tự do",
       "pin": "Ghim điểm đánh dấu",
       "sticky_note": "Giấy dán ghi chú",
       "placed_image": "Đã đặt hình ảnh"
@@ -4950,6 +4957,13 @@
     "identifyDeactivate": "Dán kiểu",
     "identifyInspectPixels": "Kiểm tra giá trị pixel",
     "identifyStopInspectPixels": "Dừng kiểm tra giá trị pixel",
+    "selectFeaturesMenu": "Chọn tính năng",
+    "selectFeaturesSingle": "Chọn tính năng bằng cách nhấp",
+    "selectFeaturesRectangle": "Chọn tính năng bằng hình chữ nhật",
+    "selectFeaturesPolygon": "Chọn tính năng bằng đa giác",
+    "selectFeaturesFreehand": "Chọn tính năng bằng nét vẽ tự do",
+    "selectFeaturesRadius": "Chọn tính năng bằng bán kính",
+    "selectFeaturesModifiers": "Shift để thêm, Alt để bớt, Shift+Alt để lấy phần giao. Nhấn Esc để hủy.",
     "openAttributeTable": "Mở bảng thuộc tính",
     "openRasterAttributeTable": "Mở bảng thuộc tính raster",
     "export": "Xuất khẩu",
