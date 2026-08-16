@@ -282,8 +282,7 @@ function normalizeStartupSettings(startup: unknown): StartupSettings {
     mode: mode === "specific" && !projectPath ? "default" : mode,
     projectPath,
     projectName,
-    globeByDefault:
-      typeof candidate.globeByDefault === "boolean" ? candidate.globeByDefault : true,
+    globeByDefault: typeof candidate.globeByDefault === "boolean" ? candidate.globeByDefault : true,
   };
 }
 
