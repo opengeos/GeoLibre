@@ -1444,6 +1444,12 @@ export const MapCanvas = memo(function MapCanvas({
       };
       const polygonFromPoints = (): Polygon | null => {
         let ring = points;
+        // A click with no drag leaves the two points coincident, which would
+        // otherwise build a zero-area rectangle or a zero-radius circle. Say
+        // "no shape was drawn" outright rather than leaning on Turf to reject
+        // the degenerate ring.
+        const twoPointShape = request.shape === "rectangle" || request.shape === "radius";
+        if (twoPointShape && (points.length < 2 || points[0].equals(points[1]))) return null;
         if (request.shape === "rectangle" && points.length >= 2) {
           const [a, b] = points;
           ring = [a, new maplibregl.Point(b.x, a.y), b, new maplibregl.Point(a.x, b.y)];
@@ -1469,10 +1475,25 @@ export const MapCanvas = memo(function MapCanvas({
 
       const cleanups: Array<() => void> = [];
       const finish = (event: { shiftKey?: boolean; altKey?: boolean }) => {
+        // Re-read the layer rather than trusting the snapshot taken at gesture
+        // start: a polygon or freehand gesture stays open for as long as the
+        // user keeps drawing, long enough for a connection refresh to replace
+        // the features, for the layer to be hidden, or for it to be removed
+        // outright. Matching a deleted layer would also point selectedLayerId
+        // at something that no longer exists.
+        const store = useAppStore.getState();
+        const live = store.layers.find((item) => item.id === layer.id);
+        if (
+          !live?.geojson?.features ||
+          !effectiveLayerRenderState(live, store.layerGroups).visible
+        ) {
+          cancelFeatureSelection.current?.();
+          return;
+        }
         let matched: string[] = [];
         if (request.shape === "single" && points[0]) {
           const point = points[0];
-          const queryIds = identifyStyleLayerIds(layer).filter((id) => map.getLayer(id));
+          const queryIds = identifyStyleLayerIds(live).filter((id) => map.getLayer(id));
           const rendered = map.queryRenderedFeatures(
             [
               [point.x - 4, point.y - 4],
@@ -1480,13 +1501,12 @@ export const MapCanvas = memo(function MapCanvas({
             ],
             { layers: queryIds },
           );
-          const id = rendered[0] ? findFeatureId(layer, rendered[0]) : null;
+          const id = rendered[0] ? findFeatureId(live, rendered[0]) : null;
           if (id != null) matched = [id];
         } else {
           const polygon = polygonFromPoints();
-          if (polygon) matched = featuresIntersectingPolygon(layer.geojson!.features, polygon);
+          if (polygon) matched = featuresIntersectingPolygon(live.geojson.features, polygon);
         }
-        const store = useAppStore.getState();
         const current = store.selectedLayerId === layer.id ? store.selectedFeatureIds : [];
         const mode = selectionModeFromModifiers(
           Boolean(event.shiftKey),
