@@ -930,6 +930,29 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.ok(result.warnings.some((warning) => /only the first was imported/.test(warning)));
   });
 
+  it("does not combine legacy !has filters into expression rules", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        {
+          id: "missing-class",
+          type: "fill",
+          filter: ["!has", "class"],
+          paint: { "fill-color": "#111111" },
+        },
+        {
+          id: "parks",
+          type: "fill",
+          filter: ["==", ["get", "class"], "park"],
+          paint: { "fill-color": "#222222" },
+        },
+      ],
+    });
+
+    assert.equal(result.matchedLayerCount, 1);
+    assert.equal(result.style.vectorStyleMode, "single");
+    assert.ok(result.warnings.some((warning) => /only the first was imported/.test(warning)));
+  });
+
   it("does not report stacked line rules as combined when a circle claims color", () => {
     const result = parseMapboxStyle({
       layers: [

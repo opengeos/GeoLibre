@@ -346,6 +346,7 @@ function isLegacyLayerFilter(filter: unknown[]): boolean {
       return array !== null && isLegacyLayerFilter(array);
     });
   }
+  if (operator === "!has") return true;
   return (
     ["==", "!=", ">", ">=", "<", "<=", "in", "!in"].includes(String(operator)) &&
     typeof filter[1] === "string"
