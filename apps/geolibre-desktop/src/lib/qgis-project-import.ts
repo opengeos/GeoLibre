@@ -187,6 +187,7 @@ export function importQgisProject(
 
     if (isSupportedRasterLayer(element, provider, source)) {
       const state = parseRasterState(element);
+      const beforeId = nextLayerId(id, orderedIds);
       rasters.push({
         id,
         name,
@@ -194,7 +195,7 @@ export function importQgisProject(
         visible: visibilityByLayerId.get(id) ?? true,
         opacity: parseOpacity(element),
         ...(groupByLayerId.get(id) ? { groupId: groupByLayerId.get(id) } : {}),
-        ...(nextLayerId(id, orderedIds) ? { beforeId: nextLayerId(id, orderedIds) } : {}),
+        ...(beforeId ? { beforeId } : {}),
         ...(state ? { state } : {}),
       });
       continue;
