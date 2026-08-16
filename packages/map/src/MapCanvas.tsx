@@ -2,6 +2,7 @@ import {
   applySelectionMode,
   applyGroupEffects,
   createPointerElevationResolver,
+  effectiveLayerRenderState,
   getActiveEllipsoid,
   isDuckDBQueryLayer,
   NETCDF_IMAGE_SOURCE_KIND,
@@ -1116,6 +1117,10 @@ export const MapCanvas = memo(function MapCanvas({
   const previousDuckDBSelectionLayerId = useRef<string | null>(null);
   const identifyPopup = useRef<maplibregl.Popup | null>(null);
   const photoPopup = useRef<maplibregl.Popup | null>(null);
+  // Set for the duration of a map selection gesture. The other click handlers
+  // bound to the same map (Identify, geotagged-photo popups) read it and bail,
+  // so a rectangle drag or a polygon vertex click never also opens a popup.
+  const featureSelectionActive = useRef(false);
 
   useEffect(() => {
     if (!containerRef.current || controller.current) return;
@@ -1329,8 +1334,15 @@ export const MapCanvas = memo(function MapCanvas({
     let cancelActive: (() => void) | null = null;
     const begin = (request: FeatureSelectionRequest) => {
       cancelActive?.();
-      const layer = useAppStore.getState().layers.find((item) => item.id === request.layerId);
+      const state = useAppStore.getState();
+      const layer = state.layers.find((item) => item.id === request.layerId);
       if (!layer?.geojson?.features) return;
+      // A gesture on a hidden layer would match features the user cannot see —
+      // and the `single` shape, which queries rendered features, would match
+      // none at all. Folded through the group chain, so a layer hidden only by
+      // its group counts as hidden. LayerPanel disables the menu items; this is
+      // the guard for a layer hidden between opening the menu and drawing.
+      if (!effectiveLayerRenderState(layer, state.layerGroups).visible) return;
 
       const canvas = map.getCanvas();
       const container = map.getContainer();
@@ -1361,6 +1373,7 @@ export const MapCanvas = memo(function MapCanvas({
         map.doubleClickZoom.disable();
       }
       canvas.style.cursor = "crosshair";
+      featureSelectionActive.current = true;
 
       let points: maplibregl.Point[] = [];
       let dragging = false;
@@ -1464,7 +1477,10 @@ export const MapCanvas = memo(function MapCanvas({
       const onMouseUp = (event: maplibregl.MapMouseEvent) => {
         if (!dragging) return;
         dragging = false;
-        if (request.shape === "freehand" && points.at(-1) !== event.point) points.push(event.point);
+        // `.equals()`, not `!==`: every mouse event carries a freshly built
+        // Point, so a reference check would never skip the duplicate.
+        if (request.shape === "freehand" && !points.at(-1)?.equals(event.point))
+          points.push(event.point);
         else if (request.shape !== "freehand") points = [points[0], event.point];
         finish(event.originalEvent);
       };
@@ -1506,6 +1522,7 @@ export const MapCanvas = memo(function MapCanvas({
         if (boxZoomEnabled) map.boxZoom.enable();
         if (doubleClickZoomEnabled) map.doubleClickZoom.enable();
         canvas.style.cursor = "";
+        featureSelectionActive.current = false;
         cancelActive = null;
       };
     };
@@ -1592,6 +1609,8 @@ export const MapCanvas = memo(function MapCanvas({
     let pixelIdentifyAbortController: AbortController | null = null;
 
     const handleIdentifyClick = (event: maplibregl.MapMouseEvent) => {
+      // A selection gesture owns the map clicks while it runs.
+      if (featureSelectionActive.current) return;
       const clearIdentifyResult = () => {
         wmsIdentifyAbortController?.abort();
         wmsIdentifyAbortController = null;
@@ -1757,7 +1776,10 @@ export const MapCanvas = memo(function MapCanvas({
       map.off("click", handleIdentifyClick);
       identifyPopup.current?.remove();
       identifyPopup.current = null;
-      map.getCanvas().style.cursor = "";
+      // Starting a selection gesture turns Identify off, so this cleanup runs
+      // after the gesture has already claimed the crosshair — leave its cursor
+      // alone rather than resetting it out from under the drawing.
+      if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
     };
   }, [identifyLayerId, layers, selectFeature]);
 
@@ -1777,8 +1799,9 @@ export const MapCanvas = memo(function MapCanvas({
 
     const handleClick = (event: maplibregl.MapLayerMouseEvent) => {
       // The Identify tool already renders the photo in its own popup; skip ours
-      // so one click never opens two popups.
-      if (useAppStore.getState().identifyLayerId) return;
+      // so one click never opens two popups. Likewise while a selection gesture
+      // is drawing, where a click is a vertex rather than a pick.
+      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
       const feature = event.features?.[0];
       if (!feature) return;
       // Anchor to the feature's own coordinate rather than the click point, so
@@ -1799,11 +1822,11 @@ export const MapCanvas = memo(function MapCanvas({
         .addTo(map);
     };
     const handleEnter = () => {
-      if (useAppStore.getState().identifyLayerId) return;
+      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
       map.getCanvas().style.cursor = "pointer";
     };
     const handleLeave = () => {
-      if (useAppStore.getState().identifyLayerId) return;
+      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
       map.getCanvas().style.cursor = "";
     };
 

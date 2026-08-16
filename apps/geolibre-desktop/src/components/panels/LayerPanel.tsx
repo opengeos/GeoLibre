@@ -3036,8 +3036,8 @@ export function LayerPanel({
             // immediate parent, so a hidden grandparent gets the cue too. Given
             // the memoized `groupById` rather than the array, so folding every
             // row does not rebuild that map once per layer.
-            const groupHidden =
-              layer.visible && !effectiveLayerRenderState(layer, groupById).visible;
+            const layerRendered = effectiveLayerRenderState(layer, groupById).visible;
+            const groupHidden = layer.visible && !layerRendered;
             const visibilityToggleLabel = groupHidden
               ? `${t("layers.hiddenByGroup")} — ${t("layers.hideLayer")}`
               : layer.visible
@@ -3764,6 +3764,11 @@ export function LayerPanel({
                                   ).map(([shape, Icon, label]) => (
                                     <DropdownMenuItem
                                       key={shape}
+                                      // Drawing on the map only makes sense
+                                      // against features the user can see, and
+                                      // a click gesture on a hidden layer would
+                                      // match nothing at all.
+                                      disabled={!layerRendered}
                                       onSelect={() => {
                                         if (identifyActive) setIdentifyLayer(null);
                                         startFeatureSelection({
