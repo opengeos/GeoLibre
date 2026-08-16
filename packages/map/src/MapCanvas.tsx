@@ -32,6 +32,7 @@ import {
   featuresIntersectingPolygon,
   selectionModeFromModifiers,
   type FeatureSelectionRequest,
+  type FeatureSelectionShape,
 } from "./feature-selection";
 import { createMapController, type MapController } from "./map-controller";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -1365,6 +1366,24 @@ export const MapCanvas = memo(function MapCanvas({
     const map = controller.current?.getMap();
     if (!map) return;
 
+    // Only the drawn shapes scan the layer; `single` goes through
+    // queryRenderedFeatures, which is bounded by what is on screen. Checked
+    // both when the gesture starts — so the user is not left waiting on a scan
+    // that was never going to finish promptly — and again when it completes,
+    // since a connection-backed layer can refresh past the limit while a
+    // polygon or freehand gesture is still open.
+    const tooManyToScan = (candidate: GeoLibreLayer, shape: FeatureSelectionShape) => {
+      const featureCount = candidate.geojson?.features?.length ?? 0;
+      if (shape === "single" || featureCount <= MAX_SELECTION_SCAN_FEATURES) return false;
+      onMapDiagnosticEventRef.current?.({
+        message: `Selecting by shape would test ${featureCount} features (limit ${MAX_SELECTION_SCAN_FEATURES})`,
+        detail:
+          "Use Select by expression or Select by location on this layer instead — they run the same match without blocking the map.",
+        source: candidate.name,
+      });
+      return true;
+    };
+
     const begin = (request: FeatureSelectionRequest) => {
       cancelFeatureSelection.current?.();
       const state = useAppStore.getState();
@@ -1376,20 +1395,7 @@ export const MapCanvas = memo(function MapCanvas({
       // its group counts as hidden. LayerPanel disables the menu items; this is
       // the guard for a layer hidden between opening the menu and drawing.
       if (!effectiveLayerRenderState(layer, state.layerGroups).visible) return;
-      // Only the drawn shapes scan the layer; `single` goes through
-      // queryRenderedFeatures, which is bounded by what is on screen. Refuse up
-      // front rather than after the drawing, so the user is not left waiting on
-      // a scan that was never going to finish promptly.
-      const featureCount = layer.geojson.features.length;
-      if (request.shape !== "single" && featureCount > MAX_SELECTION_SCAN_FEATURES) {
-        onMapDiagnosticEventRef.current?.({
-          message: `Selecting by shape would test ${featureCount} features (limit ${MAX_SELECTION_SCAN_FEATURES})`,
-          detail:
-            "Use Select by expression or Select by location on this layer instead — they run the same match without blocking the map.",
-          source: layer.name,
-        });
-        return;
-      }
+      if (tooManyToScan(layer, request.shape)) return;
 
       const canvas = map.getCanvas();
       const container = map.getContainer();
@@ -1502,7 +1508,8 @@ export const MapCanvas = memo(function MapCanvas({
         const live = store.layers.find((item) => item.id === layer.id);
         if (
           !live?.geojson?.features ||
-          !effectiveLayerRenderState(live, store.layerGroups).visible
+          !effectiveLayerRenderState(live, store.layerGroups).visible ||
+          tooManyToScan(live, request.shape)
         ) {
           cancelFeatureSelection.current?.();
           return;
@@ -1708,7 +1715,9 @@ export const MapCanvas = memo(function MapCanvas({
     if (!map || !layer) {
       identifyPopup.current?.remove();
       identifyPopup.current = null;
-      if (map) map.getCanvas().style.cursor = "";
+      // Same guard as the cleanup below: picking a gesture turns Identify off,
+      // and begin() has already claimed the crosshair by the time this runs.
+      if (map && !featureSelectionActive.current) map.getCanvas().style.cursor = "";
       return;
     }
 
