@@ -160,6 +160,38 @@ describe("GeoLibre Chrome extension scanner", () => {
     );
   });
 
+  it("falls back to a shallower Hugging Face route when the deeper one cannot parse", () => {
+    const found = scan(
+      `
+        <a href="https://huggingface.co/gpt2/blob/main/grid.geojson">namespaceless model</a>
+        <a href="https://huggingface.co/datasets/glue/blob/resolve/legacy.tif">revision named resolve</a>
+      `,
+      "https://huggingface.co/gpt2",
+    );
+    assert.deepEqual(
+      found.map((dataset) => dataset.url),
+      [
+        "https://huggingface.co/gpt2/resolve/main/grid.geojson",
+        "https://huggingface.co/datasets/glue/resolve/resolve/legacy.tif",
+      ],
+    );
+  });
+
+  it("drops a Hugging Face line anchor so it does not split one file in two", () => {
+    const repo = "https://huggingface.co/datasets/giswqs/opengeos";
+    const found = scan(
+      `
+        <a href="${repo}/blob/main/roads.geojson#L10">roads</a>
+        <a href="${repo}/resolve/main/roads.geojson?download=true">Download</a>
+      `,
+      `${repo}/tree/main`,
+    );
+    assert.deepEqual(
+      found.map((dataset) => dataset.url),
+      [`${repo}/resolve/main/roads.geojson`],
+    );
+  });
+
   it("pairs a Hugging Face style file with its dataset across routes", () => {
     const repo = "https://huggingface.co/datasets/giswqs/opengeos";
     const [found] = scan(

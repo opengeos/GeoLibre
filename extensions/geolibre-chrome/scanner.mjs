@@ -41,15 +41,22 @@ export function scanDocumentForDatasets() {
     const parts = url.pathname.split("/").filter(Boolean);
     const isRoute = (part) => /^(?:blob|raw|blame|edit|delete|commits|resolve)$/.test(part ?? "");
     // /<owner>/<repo>/<route>/<revision>/<path> for models, one segment deeper
-    // for /datasets and /spaces (which still carry namespaceless legacy repos).
-    // Read the route from its fixed position rather than scanning, so an owner
-    // or repository named after a route cannot stand in for one.
-    const route = /^(?:datasets|spaces)$/.test(parts[0]) && isRoute(parts[3]) ? 3 : 2;
-    if (!isRoute(parts[route]) || parts.length < route + 3) return null;
+    // under /datasets and /spaces, and one shallower for the namespaceless
+    // legacy repos both shapes still carry. Read the route from the positions
+    // the grammar allows rather than scanning for the first keyword, so an
+    // owner, repository or revision named after a route cannot stand in for
+    // one, and prefer the deeper position since namespaced repos are the norm.
+    const route = (/^(?:datasets|spaces)$/.test(parts[0]) ? [3, 2] : [2, 1]).find(
+      (index) => isRoute(parts[index]) && parts.length >= index + 3,
+    );
+    if (route === undefined) return null;
     parts[route] = "resolve";
     const canonical = new URL(url.href);
     canonical.pathname = `/${parts.join("/")}`;
     canonical.searchParams.delete("download");
+    // A line anchor off a blob page would otherwise split one file into two
+    // entries that the CDN serves identically.
+    canonical.hash = "";
     return canonical;
   };
 
