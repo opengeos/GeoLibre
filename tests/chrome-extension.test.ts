@@ -141,6 +141,25 @@ describe("GeoLibre Chrome extension scanner", () => {
     );
   });
 
+  it("reads the Hugging Face route from its position, not the first matching segment", () => {
+    const found = scan(
+      `
+        <a href="https://huggingface.co/datasets/giswqs/blob/resolve/main/roads.geojson">repo named blob</a>
+        <a href="https://huggingface.co/raw/model/blob/main/dem.tif">owner named raw</a>
+        <a href="https://huggingface.co/datasets/glue/blob/main/grid.pmtiles">legacy repo</a>
+      `,
+      "https://huggingface.co/giswqs",
+    );
+    assert.deepEqual(
+      found.map((dataset) => dataset.url),
+      [
+        "https://huggingface.co/raw/model/resolve/main/dem.tif",
+        "https://huggingface.co/datasets/glue/resolve/main/grid.pmtiles",
+        "https://huggingface.co/datasets/giswqs/blob/resolve/main/roads.geojson",
+      ],
+    );
+  });
+
   it("pairs a Hugging Face style file with its dataset across routes", () => {
     const repo = "https://huggingface.co/datasets/giswqs/opengeos";
     const [found] = scan(

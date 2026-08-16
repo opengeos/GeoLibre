@@ -39,12 +39,13 @@ export function scanDocumentForDatasets() {
   const huggingFaceFileUrl = (url) => {
     if (!huggingFaceHost(url)) return null;
     const parts = url.pathname.split("/").filter(Boolean);
+    const isRoute = (part) => /^(?:blob|raw|blame|edit|delete|commits|resolve)$/.test(part ?? "");
     // /<owner>/<repo>/<route>/<revision>/<path> for models, one segment deeper
-    // for /datasets and /spaces. Anything else is not a file route.
-    const route = parts.findIndex((part) =>
-      /^(?:blob|raw|blame|edit|delete|commits|resolve)$/.test(part),
-    );
-    if (route < 2 || route > 3 || parts.length < route + 3) return null;
+    // for /datasets and /spaces (which still carry namespaceless legacy repos).
+    // Read the route from its fixed position rather than scanning, so an owner
+    // or repository named after a route cannot stand in for one.
+    const route = /^(?:datasets|spaces)$/.test(parts[0]) && isRoute(parts[3]) ? 3 : 2;
+    if (!isRoute(parts[route]) || parts.length < route + 3) return null;
     parts[route] = "resolve";
     const canonical = new URL(url.href);
     canonical.pathname = `/${parts.join("/")}`;
@@ -119,14 +120,15 @@ export function scanDocumentForDatasets() {
     // Every Hub route other than a file route is a UI page -- tree, viewer, the
     // "Auto-converted to Parquet" branch -- so a hint-based match there would
     // offer HTML as data.
-    if (huggingFaceHost(url) && !huggingFaceFileUrl(url)) return;
+    const onHub = huggingFaceHost(url);
+    if (onHub && !huggingFaceFileUrl(url)) return;
 
     const kind = classify(url, hint);
     if (!kind) return;
     const existing = datasets.get(url.href);
     // Hub links carry UI chrome as their text ("Download", "History", "308 kB
     // xet"), so the file name has to come from the path.
-    const name = (huggingFaceHost(url) ? "" : label.trim()) || cleanName(url);
+    const name = (onHub ? "" : label.trim()) || cleanName(url);
     const candidate = {
       url: url.href,
       name,
