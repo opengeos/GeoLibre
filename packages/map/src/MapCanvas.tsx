@@ -54,6 +54,19 @@ const WMS_IDENTIFY_INFO_FORMATS = ["application/json", "text/html", "text/plain"
  * curve, large enough that a slow drag cannot grow the ring without bound.
  */
 const FREEHAND_MIN_POINT_DISTANCE = 3;
+/**
+ * How close, in screen pixels, the two clicks a browser fires before `dblclick`
+ * have to land to count as the same vertex. Small: it only has to absorb the
+ * hand tremor within one double-click, never two deliberate vertices.
+ */
+const DOUBLE_CLICK_VERTEX_TOLERANCE = 2;
+/**
+ * Upper bound on the features a drawn selection will test on the main thread.
+ * Mirrors MAX_CLIENT_PAIRS in @geolibre/processing's vector tools, which caps
+ * the same kind of pairwise Turf loop so a very large layer cannot freeze the
+ * tab; Select by expression and Select by location handle the bigger jobs.
+ */
+const MAX_SELECTION_SCAN_FEATURES = 250_000;
 
 export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
@@ -1127,6 +1140,10 @@ export const MapCanvas = memo(function MapCanvas({
   // bound to the same map (Identify, geotagged-photo popups) read it and bail,
   // so a rectangle drag or a polygon vertex click never also opens a popup.
   const featureSelectionActive = useRef(false);
+  // Tears down the gesture in progress, if any. Held at component scope so the
+  // Identify effect can end a half-drawn selection when the user switches
+  // tools instead of finishing or pressing Esc.
+  const cancelFeatureSelection = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || controller.current) return;
@@ -1337,9 +1354,8 @@ export const MapCanvas = memo(function MapCanvas({
     const map = controller.current?.getMap();
     if (!map) return;
 
-    let cancelActive: (() => void) | null = null;
     const begin = (request: FeatureSelectionRequest) => {
-      cancelActive?.();
+      cancelFeatureSelection.current?.();
       const state = useAppStore.getState();
       const layer = state.layers.find((item) => item.id === request.layerId);
       if (!layer?.geojson?.features) return;
@@ -1349,6 +1365,20 @@ export const MapCanvas = memo(function MapCanvas({
       // its group counts as hidden. LayerPanel disables the menu items; this is
       // the guard for a layer hidden between opening the menu and drawing.
       if (!effectiveLayerRenderState(layer, state.layerGroups).visible) return;
+      // Only the drawn shapes scan the layer; `single` goes through
+      // queryRenderedFeatures, which is bounded by what is on screen. Refuse up
+      // front rather than after the drawing, so the user is not left waiting on
+      // a scan that was never going to finish promptly.
+      const featureCount = layer.geojson.features.length;
+      if (request.shape !== "single" && featureCount > MAX_SELECTION_SCAN_FEATURES) {
+        onMapDiagnosticEventRef.current?.({
+          message: `Selecting by shape would test ${featureCount} features (limit ${MAX_SELECTION_SCAN_FEATURES})`,
+          detail:
+            "Use Select by expression or Select by location on this layer instead — they run the same match without blocking the map.",
+          source: layer.name,
+        });
+        return;
+      }
 
       const canvas = map.getCanvas();
       const container = map.getContainer();
@@ -1466,7 +1496,7 @@ export const MapCanvas = memo(function MapCanvas({
         const next = applySelectionMode(current, matched, mode);
         if (store.selectedLayerId !== layer.id) store.selectLayer(layer.id);
         store.selectFeatures(next);
-        cancelActive?.();
+        cancelFeatureSelection.current?.();
       };
       const onMouseDown = (event: maplibregl.MapMouseEvent) => {
         if (request.shape === "polygon" || request.shape === "single") return;
@@ -1509,10 +1539,14 @@ export const MapCanvas = memo(function MapCanvas({
       const onDoubleClick = (event: maplibregl.MapMouseEvent) => {
         if (request.shape !== "polygon") return;
         event.preventDefault();
+        // A double-click fires two clicks first; drop the duplicate tail vertex
+        // they leave behind (same fix as ElevationProfileControl's drawing).
+        const [last, previous] = [points.at(-1), points.at(-2)];
+        if (last && previous && last.dist(previous) <= DOUBLE_CLICK_VERTEX_TOLERANCE) points.pop();
         if (points.length > 2) finish(event.originalEvent);
       };
       const onKeyDown = (event: KeyboardEvent) => {
-        if (event.key === "Escape") cancelActive?.();
+        if (event.key === "Escape") cancelFeatureSelection.current?.();
       };
       map.on("mousedown", onMouseDown);
       map.on("mousemove", onMouseMove);
@@ -1528,7 +1562,7 @@ export const MapCanvas = memo(function MapCanvas({
         () => map.off("dblclick", onDoubleClick),
         () => window.removeEventListener("keydown", onKeyDown),
       );
-      cancelActive = () => {
+      cancelFeatureSelection.current = () => {
         cleanups.forEach((cleanup) => cleanup());
         overlay.remove();
         if (panEnabled) map.dragPan.enable();
@@ -1536,7 +1570,7 @@ export const MapCanvas = memo(function MapCanvas({
         if (doubleClickZoomEnabled) map.doubleClickZoom.enable();
         canvas.style.cursor = "";
         featureSelectionActive.current = false;
-        cancelActive = null;
+        cancelFeatureSelection.current = null;
       };
     };
     const onRequest = (event: Event) =>
@@ -1544,7 +1578,7 @@ export const MapCanvas = memo(function MapCanvas({
     window.addEventListener(FEATURE_SELECTION_EVENT, onRequest);
     return () => {
       window.removeEventListener(FEATURE_SELECTION_EVENT, onRequest);
-      cancelActive?.();
+      cancelFeatureSelection.current?.();
     };
   }, []);
 
@@ -1605,6 +1639,11 @@ export const MapCanvas = memo(function MapCanvas({
       if (map) map.getCanvas().style.cursor = "";
       return;
     }
+
+    // Switching to Identify ends a half-drawn selection. Without this the
+    // gesture stays live and its handlers keep swallowing map clicks, so the
+    // Identify button would light up while Identify itself did nothing.
+    cancelFeatureSelection.current?.();
 
     // COG layers are identified by the raster control's pixel inspector (driven
     // by useRasterIdentify in the desktop app), not this vector/WMS feature
