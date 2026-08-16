@@ -170,6 +170,33 @@ function writeStartupSnapshotIndex(
 }
 
 /**
+ * The write in flight for each slot, so copies land in the order they were
+ * asked for.
+ *
+ * Callers fire these off without awaiting them, alongside opening or saving a
+ * project. Two projects can therefore be racing for the same slot -- open one
+ * project, open another before the first copy has landed -- and whichever write
+ * finished last would win the slot. The recent list is updated synchronously as
+ * each project opens, so a slow first write finishing last would leave the slot
+ * holding a project the preference no longer resolves to, and the next cold
+ * start would find no copy matching the path it asks for. Chaining per slot
+ * makes the last write *started* the one that wins, which is the one the
+ * preference agrees with.
+ */
+const slotWrites = new Map<StartupSnapshotSlot, Promise<unknown>>();
+
+function queueSlotWrite<T>(slot: StartupSnapshotSlot, task: () => Promise<T>): Promise<T> {
+  const next = (slotWrites.get(slot) ?? Promise.resolve()).then(task);
+  // The stored link never rejects, so one failed copy cannot strand every later
+  // one behind it; the caller still sees the real result through `next`.
+  slotWrites.set(
+    slot,
+    next.catch(() => undefined),
+  );
+  return next;
+}
+
+/**
  * The slot a project should be copied into, or null when it is not one the
  * startup preference would reopen.
  *
@@ -222,23 +249,25 @@ export async function writeStartupSnapshot(
     return null;
   }
 
-  const file = startupSnapshotFile(slot);
-  try {
-    await io.write(file, text);
-  } catch (error) {
-    console.warn("Could not keep a restorable copy of the startup project.", error);
-    return null;
-  }
+  return queueSlotWrite(slot, async () => {
+    const file = startupSnapshotFile(slot);
+    try {
+      await io.write(file, text);
+    } catch (error) {
+      console.warn("Could not keep a restorable copy of the startup project.", error);
+      return null;
+    }
 
-  const storage = options?.storage === undefined ? defaultStorage() : options.storage;
-  writeStartupSnapshotIndex(
-    {
-      ...readStartupSnapshotIndex(storage),
-      [slot]: { sourcePath: path, file, savedAt: new Date().toISOString() },
-    },
-    storage,
-  );
-  return slot;
+    const storage = options?.storage === undefined ? defaultStorage() : options.storage;
+    writeStartupSnapshotIndex(
+      {
+        ...readStartupSnapshotIndex(storage),
+        [slot]: { sourcePath: path, file, savedAt: new Date().toISOString() },
+      },
+      storage,
+    );
+    return slot;
+  });
 }
 
 /**

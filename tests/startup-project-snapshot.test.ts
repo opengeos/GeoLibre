@@ -215,6 +215,39 @@ describe("writeStartupSnapshot", () => {
     assert.equal(warnings.length, 1);
   });
 
+  it("lets the last copy asked for win the slot, not the last one to land", async () => {
+    // Open one project, open another before the first copy has landed. The
+    // recent list already says the second is the most recent, so the slot has to
+    // agree with it however slowly the first write finishes.
+    const storage = makeStorage();
+    const files = new Map<string, string>();
+    const delays = [40, 0];
+    const io = {
+      write: async (file: string, content: string) => {
+        await new Promise((resolve) => setTimeout(resolve, delays.shift() ?? 0));
+        files.set(file, content);
+      },
+      read: async (file: string) => files.get(file) ?? Promise.reject(new Error("missing")),
+    };
+
+    const first = writeStartupSnapshot(CONTENT_URI, "first", settings({ mode: "last" }), io, {
+      storage,
+    });
+    const second = writeStartupSnapshot(
+      OTHER_CONTENT_URI,
+      "second",
+      settings({ mode: "last" }),
+      io,
+      {
+        storage,
+      },
+    );
+    await Promise.all([first, second]);
+
+    assert.equal(files.get(startupSnapshotFile("last")), "second");
+    assert.equal(readStartupSnapshotIndex(storage).last?.sourcePath, OTHER_CONTENT_URI);
+  });
+
   it("swallows a write failure so it cannot fail the save that triggered it", async () => {
     const storage = makeStorage();
     const { io } = makeIo({ writeError: new Error("No space left on device") });
