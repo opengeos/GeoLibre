@@ -144,6 +144,14 @@ export function useStartupProject(): {
           }
         }
         console.warn("Could not restore the startup project.", error);
+        // Same ownership test as the success path. Once the gate above expires
+        // the shell is live, so a failure arriving after that must not reset the
+        // projection of a workspace the user has since opened or edited -- nor
+        // claim in the banner that the default workspace was opened for them.
+        // Both cleanups above are unconditional on purpose: a project file that
+        // is gone stays gone whoever owns the workspace now.
+        const { projectGeneration, isDirty } = useAppStore.getState();
+        if (projectGeneration !== restoringOver || isDirty) return;
         setHasWarning(true);
         warningTimer = window.setTimeout(() => setHasWarning(false), 8000);
         openDefaultWorkspace();
