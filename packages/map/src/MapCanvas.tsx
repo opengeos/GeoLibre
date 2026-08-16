@@ -1,6 +1,6 @@
 import {
-  applySelectionMode,
   applyGroupEffects,
+  applyMatchedSelection,
   createPointerElevationResolver,
   effectiveLayerRenderState,
   getActiveEllipsoid,
@@ -67,6 +67,17 @@ const DOUBLE_CLICK_VERTEX_TOLERANCE = 2;
  * tab; Select by expression and Select by location handle the bigger jobs.
  */
 const MAX_SELECTION_SCAN_FEATURES = 250_000;
+/** The camera interactions a drawing gesture suspends while it is running. */
+const CAMERA_HANDLERS = [
+  "dragPan",
+  "boxZoom",
+  "doubleClickZoom",
+  "scrollZoom",
+  "keyboard",
+  "dragRotate",
+  "touchZoomRotate",
+  "touchPitch",
+] as const;
 
 export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
@@ -1400,13 +1411,19 @@ export const MapCanvas = memo(function MapCanvas({
       overlay.append(shape);
       container.append(overlay);
 
-      const panEnabled = map.dragPan.isEnabled();
-      const boxZoomEnabled = map.boxZoom.isEnabled();
-      const doubleClickZoomEnabled = map.doubleClickZoom.isEnabled();
+      // Freeze every camera interaction for the gesture, not only the ones that
+      // would fight the drag. Vertices are recorded in screen space and are
+      // unprojected once, at finish(); a scroll-wheel zoom or an arrow-key pan
+      // placed between two polygon clicks would leave the earlier vertices
+      // pointing at different ground than the user aimed at.
+      const restoreCamera: Array<() => void> = [];
       if (request.shape !== "single") {
-        map.dragPan.disable();
-        map.boxZoom.disable();
-        map.doubleClickZoom.disable();
+        for (const name of CAMERA_HANDLERS) {
+          const handler = map[name];
+          if (!handler.isEnabled()) continue;
+          handler.disable();
+          restoreCamera.push(() => handler.enable());
+        }
       }
       canvas.style.cursor = "crosshair";
       featureSelectionActive.current = true;
@@ -1505,17 +1522,21 @@ export const MapCanvas = memo(function MapCanvas({
           if (id != null) matched = [id];
         } else {
           const polygon = polygonFromPoints();
-          if (polygon) matched = featuresIntersectingPolygon(live.geojson.features, polygon);
+          // Nothing was drawn — a stray click rather than a drag. Leave the
+          // selection as it was instead of letting mode "new" replace it with
+          // the empty match. (Click-to-deselect stays the `single` shape's job,
+          // where an empty click is the deliberate gesture.)
+          if (!polygon) {
+            cancelFeatureSelection.current?.();
+            return;
+          }
+          matched = featuresIntersectingPolygon(live.geojson.features, polygon);
         }
-        const current = store.selectedLayerId === layer.id ? store.selectedFeatureIds : [];
-        const mode = selectionModeFromModifiers(
-          Boolean(event.shiftKey),
-          Boolean(event.altKey),
-          request.mode,
+        applyMatchedSelection(
+          layer.id,
+          matched,
+          selectionModeFromModifiers(Boolean(event.shiftKey), Boolean(event.altKey), request.mode),
         );
-        const next = applySelectionMode(current, matched, mode);
-        if (store.selectedLayerId !== layer.id) store.selectLayer(layer.id);
-        store.selectFeatures(next);
         cancelFeatureSelection.current?.();
       };
       const onMouseDown = (event: maplibregl.MapMouseEvent) => {
@@ -1618,9 +1639,7 @@ export const MapCanvas = memo(function MapCanvas({
       cancelFeatureSelection.current = () => {
         cleanups.forEach((cleanup) => cleanup());
         overlay.remove();
-        if (panEnabled) map.dragPan.enable();
-        if (boxZoomEnabled) map.boxZoom.enable();
-        if (doubleClickZoomEnabled) map.doubleClickZoom.enable();
+        restoreCamera.forEach((restore) => restore());
         canvas.style.cursor = "";
         featureSelectionActive.current = false;
         cancelFeatureSelection.current = null;

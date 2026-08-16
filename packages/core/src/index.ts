@@ -16,6 +16,7 @@ export * from "./attribute-form";
 export * from "./joins";
 export * from "./virtual-fields";
 export * from "./selection";
+export * from "./selection-actions";
 export * from "./scale-units";
 export * from "./elevation";
 export * from "./camera-altitude";

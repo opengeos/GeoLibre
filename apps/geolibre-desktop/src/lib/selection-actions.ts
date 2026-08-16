@@ -1,10 +1,8 @@
 import {
-  applySelectionMode,
   featureSelectionId,
   invertSelection,
   useAppStore,
   type GeoLibreLayer,
-  type SelectionMode,
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import type { Feature, FeatureCollection } from "geojson";
@@ -34,28 +32,11 @@ function selectedFeatures(): { layer: GeoLibreLayer; features: Feature[] } | nul
 }
 
 /**
- * Applies a matched id set to the live selection under the given mode and
- * returns the resulting selection size. Combines with the current selection
- * only when the target layer already holds it (ids are per-layer, so a
- * cross-layer combine would mix unrelated features). Otherwise `current` is
- * empty: "new"/"add" start a fresh selection on the target layer, while
- * "remove"/"intersect" necessarily yield an empty one — the dialogs guard
- * this by forcing mode "new" when the target layer does not hold the
- * selection (SelectionModeField's disableCombineModes). `selectLayer` runs
- * before `selectFeatures` because it clears the selection as a side effect.
+ * Re-exported from `@geolibre/core`, where it lives so the map's drawing
+ * gestures share the one implementation. Kept exported here because the
+ * dialogs and menus in this app import it from this module.
  */
-export function applyMatchedSelection(
-  targetLayerId: string,
-  matchedIds: string[],
-  mode: SelectionMode,
-): number {
-  const store = useAppStore.getState();
-  const current = store.selectedLayerId === targetLayerId ? store.selectedFeatureIds : [];
-  const next = applySelectionMode(current, matchedIds, mode);
-  if (store.selectedLayerId !== targetLayerId) store.selectLayer(targetLayerId);
-  store.selectFeatures(next);
-  return next.length;
-}
+export { applyMatchedSelection } from "@geolibre/core";
 
 /**
  * QGIS "Invert selection": select every unselected feature of the active
