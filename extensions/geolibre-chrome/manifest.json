@@ -4,7 +4,7 @@
   "description": "Find geospatial datasets and services used by the current page and open them in GeoLibre.",
   "version": "0.2.0",
   "homepage_url": "https://geolibre.app/",
-  "minimum_chrome_version": "105",
+  "minimum_chrome_version": "106",
   "permissions": ["activeTab", "scripting", "storage", "webRequest"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "background": {

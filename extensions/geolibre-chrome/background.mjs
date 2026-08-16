@@ -1,23 +1,34 @@
-import { classifyServiceRequest, createTabTaskQueue } from "./service-scanner.mjs";
+import {
+  classifyServiceRequest,
+  createTabTaskQueue,
+  requestBelongsToDocument,
+} from "./service-scanner.mjs";
 
 const MAX_REQUESTS_PER_TAB = 100;
 const enqueue = createTabTaskQueue();
-const removedTabs = new Set();
+const activeDocuments = new Map();
+
+function runForTab(tabId, task) {
+  void enqueue(tabId, task).catch((error) =>
+    console.warn("GeoLibre could not update detected services.", error),
+  );
+}
 
 chrome.webRequest.onCompleted.addListener(
-  ({ tabId, url, type }) => {
+  ({ tabId, url, type, documentId }) => {
     if (type === "main_frame" && tabId >= 0) {
-      removedTabs.delete(tabId);
-      void enqueue(tabId, () => chrome.storage.session.remove(`services:${tabId}`));
+      activeDocuments.set(tabId, documentId);
+      runForTab(tabId, () => chrome.storage.session.remove(`services:${tabId}`));
     }
-    if (tabId < 0 || removedTabs.has(tabId)) return;
+    if (tabId < 0 || !requestBelongsToDocument(activeDocuments.get(tabId), documentId)) return;
     const service = classifyServiceRequest(url);
     if (!service) return;
-    void enqueue(tabId, async () => {
-      if (removedTabs.has(tabId)) return;
+    runForTab(tabId, async () => {
+      if (activeDocuments.get(tabId) !== documentId) return;
       const key = `services:${tabId}`;
       const stored = await chrome.storage.session.get(key);
       const existing = Array.isArray(stored[key]) ? stored[key] : [];
+      if (existing[0]?.url === service.url) return;
       const next = [service, ...existing.filter((entry) => entry.url !== service.url)].slice(
         0,
         MAX_REQUESTS_PER_TAB,
@@ -29,6 +40,6 @@ chrome.webRequest.onCompleted.addListener(
 );
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  removedTabs.add(tabId);
-  void enqueue(tabId, () => chrome.storage.session.remove(`services:${tabId}`));
+  activeDocuments.delete(tabId);
+  runForTab(tabId, () => chrome.storage.session.remove(`services:${tabId}`));
 });

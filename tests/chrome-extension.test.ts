@@ -6,6 +6,7 @@ import {
   classifyServiceRequest,
   createTabTaskQueue,
   mergeServiceCandidates,
+  requestBelongsToDocument,
 } from "../extensions/geolibre-chrome/service-scanner.mjs";
 import { buildGeoLibreUrl } from "../extensions/geolibre-chrome/url-builder.mjs";
 
@@ -378,7 +379,8 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     const second = classifyServiceRequest(
       "https://maps.example.com/wmts?SERVICE=WMTS&REQUEST=GetTile&LAYER=roads&TILEMATRIXSET=web&TILEMATRIX=4&TILEROW=8&TILECOL=10",
     );
-    assert.equal(first?.url, second?.url);
+    assert.ok(first && second);
+    assert.equal(first.url, second.url);
   });
 
   it("serializes asynchronous work independently per tab", async () => {
@@ -404,5 +406,10 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     release();
     await Promise.all([first, second]);
     assert.deepEqual(order, ["first:start", "other", "first:end", "second"]);
+  });
+
+  it("rejects completions from the previous document after navigation", () => {
+    assert.equal(requestBelongsToDocument("new-document", "old-document"), false);
+    assert.equal(requestBelongsToDocument("new-document", "new-document"), true);
   });
 });

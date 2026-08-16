@@ -1,8 +1,8 @@
 # Open data in GeoLibre
 
 A Manifest V3 Chrome extension that finds supported geospatial dataset links on
-the current page and opens selected files together in GeoLibre using repeated
-`data` query parameters.
+the current page, observes geospatial service requests made by interactive maps,
+and opens selected data in GeoLibre.
 
 ## Install locally
 
@@ -47,6 +47,26 @@ The request watcher recognizes WMS, WMTS, WFS, OGC API Features, ArcGIS Feature
 Services, XYZ/TMS image tiles, and PBF/MVT vector tiles. Tile requests are
 collapsed into reusable `{z}/{x}/{y}` templates, and repeated requests from the
 same service appear once.
+
+## Sample websites for manual testing
+
+Open a sample, wait for its map to load, and pan or zoom to generate network
+requests. Then open the extension and confirm that it lists the expected
+service. Selecting the result should open the matching GeoLibre Add Data dialog
+with the service URL filled in.
+
+| Service | Sample website | Expected result |
+| --- | --- | --- |
+| XYZ raster tiles | [OpenStreetMap](https://www.openstreetmap.org/) | An XYZ URL template such as `https://tile.openstreetmap.org/{z}/{x}/{y}.png` |
+| PBF/MVT vector tiles | [MapLibre GL JS](https://maplibre.org/maplibre-gl-js/docs/) | A vector tile URL template ending in `.pbf` or `.mvt` |
+| WMTS | [OpenLayers WMTS example](https://openlayers.org/en/latest/examples/wmts.html) | A WMTS service URL without tile-coordinate parameters |
+| WMS | [OpenLayers WMS GetFeatureInfo example](https://openlayers.org/en/latest/examples/getfeatureinfo-tile.html) | A WMS service endpoint without request-specific parameters |
+| OGC API Features | [OpenLayers OGC API Features example](https://openlayers.org/en/latest/examples/mapserver-ogc-features.html) | An OGC API Features collection or items URL |
+| ArcGIS Feature Service | [ArcGIS FeatureLayer sample](https://developers.arcgis.com/javascript/latest/sample-code/layers-featurelayer/) | An ArcGIS `FeatureServer` service or layer URL |
+
+Some samples also use an XYZ basemap, so the target service and a basemap may
+both appear. After selecting a result, add the layer in GeoLibre and verify that
+the browser console does not report a static-file CORS error.
 
 Remote servers must allow GeoLibre to fetch the selected URLs through CORS.
 Complete HTTP(S) URLs, including signed query parameters, are forwarded to

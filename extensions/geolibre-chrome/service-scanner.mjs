@@ -117,9 +117,17 @@ export function createTabTaskQueue() {
     const previous = pending.get(tabId) ?? Promise.resolve();
     const next = previous.catch(() => undefined).then(task);
     pending.set(tabId, next);
-    void next.finally(() => {
-      if (pending.get(tabId) === next) pending.delete(tabId);
-    });
+    void next
+      .catch(() => undefined)
+      .finally(() => {
+        if (pending.get(tabId) === next) pending.delete(tabId);
+      });
     return next;
   };
+}
+
+export function requestBelongsToDocument(activeDocumentId, requestDocumentId) {
+  return (
+    Boolean(requestDocumentId) && (!activeDocumentId || activeDocumentId === requestDocumentId)
+  );
 }

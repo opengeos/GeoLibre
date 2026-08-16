@@ -1030,9 +1030,8 @@ export function TopToolbar({
       {} as Record<ToolbarMapControl, boolean>,
     ),
   );
-  const initialService = useMemo(
-    () => (typeof window === "undefined" ? null : serviceUrlParameter(window.location.search)),
-    [],
+  const [initialService, setInitialService] = useState(() =>
+    viewer || typeof window === "undefined" ? null : serviceUrlParameter(window.location.search),
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(
     () => (initialService?.kind as AddDataKind | undefined) ?? null,
@@ -2105,6 +2104,7 @@ export function TopToolbar({
               }
             }
             setAddDataKind(null);
+            setInitialService(null);
             setAddDataTargetGroupId(null);
             setAddDataDeckVizKind(undefined);
             setAddDataPostgres(undefined);

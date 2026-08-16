@@ -19,7 +19,7 @@ export function serviceUrlParameter(search: string): { kind: string; url: string
   const params = new URLSearchParams(search);
   const kind = params.get("add");
   const rawUrl = params.get("serviceUrl");
-  const url = httpUrl(rawUrl)?.replaceAll("%7B", "{").replaceAll("%7D", "}") ?? null;
+  const url = httpUrl(rawUrl)?.replace(/%7B/gi, "{").replace(/%7D/gi, "}") ?? null;
   return kind && SERVICE_KINDS.has(kind) && url ? { kind, url } : null;
 }
 export interface RemoteGeoJsonLayer {

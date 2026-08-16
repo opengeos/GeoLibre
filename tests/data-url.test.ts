@@ -24,6 +24,15 @@ describe("serviceUrlParameter", () => {
     );
   });
 
+  it("restores lower-case encoded tile-template braces", () => {
+    assert.deepEqual(
+      serviceUrlParameter(
+        "?add=xyz&serviceUrl=https://tiles.example.com/%257bz%257d/%257bx%257d/%257by%257d.png",
+      ),
+      { kind: "xyz", url: "https://tiles.example.com/{z}/{x}/{y}.png" },
+    );
+  });
+
   it("rejects unsupported kinds and non-web URLs", () => {
     assert.equal(serviceUrlParameter("?add=bogus&serviceUrl=https://example.com"), null);
     assert.equal(serviceUrlParameter("?add=xyz&serviceUrl=file:///tmp/tiles"), null);
