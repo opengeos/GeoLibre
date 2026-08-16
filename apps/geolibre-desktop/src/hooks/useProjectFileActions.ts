@@ -33,8 +33,10 @@ import {
   RecentProjectGoneError,
   saveProjectFile,
   saveProjectFileToPath,
+  saveStartupProjectSnapshot,
   saveTextFileWithFallback,
 } from "../lib/tauri-io";
+import { useDesktopSettingsStore } from "./useDesktopSettings";
 import { buildProjectHtml } from "../lib/html-export";
 import { ensureHtmlFileName, ensureProjectFileName } from "../lib/file-names";
 import { mergeStringLists } from "../lib/string-lists";
@@ -338,6 +340,19 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     settleSaveNamePrompt,
   ]);
 
+  // On Android a project lives behind a `content://` URI whose read grant dies
+  // with the process, so the startup restore has nothing to reopen on the next
+  // launch (GeoLibre#1948). Keep a copy in the app's own storage whenever the
+  // startup preference points at the project being opened or saved. Fire and
+  // forget: a failed copy is logged inside and must not fail the open or save.
+  const rememberStartupProjectSnapshot = (path: string, text: string) => {
+    void saveStartupProjectSnapshot(
+      path,
+      text,
+      useDesktopSettingsStore.getState().desktopSettings.startup,
+    );
+  };
+
   const handleOpenFromFile = async () => {
     const result = await openProjectFile();
     if (result) {
@@ -345,6 +360,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         loadProject(await resolveProjectXyzLayers(result.project), result.path, {
           rememberRecent: isTauri(),
         });
+        rememberStartupProjectSnapshot(result.path, result.text);
       } catch (error) {
         console.error("Failed to open project", error);
         setActionError(
@@ -1107,6 +1123,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       name: project.name,
       openedAt: new Date().toISOString(),
     });
+    // Refresh the restorable copy so a startup restore reopens what was just
+    // saved rather than the state the project was opened in.
+    rememberStartupProjectSnapshot(path, contentToSave);
     markSaved();
     recordExplicitProjectSave();
     return true;

@@ -96,7 +96,7 @@ import { THEME_SCHEMES, normalizeHexColor, type ThemeScheme } from "../../lib/th
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { resolveShareHost, shareHostLabel } from "../../lib/share-geolibre";
 import { IS_STORE_BUILD, type UpdateNotificationLevel } from "../../lib/updates";
-import { openProjectFile } from "../../lib/tauri-io";
+import { ensureStartupProjectSnapshot, openProjectFile } from "../../lib/tauri-io";
 import {
   DATA_SOURCE_CATALOG,
   DATA_SOURCE_SECTION_LABEL_KEYS,
@@ -1189,6 +1189,13 @@ export function SettingsDialog({
       updates: draftDesktopSettings.updates,
       startup: draftDesktopSettings.startup,
     });
+    // On Android the project behind the preference just saved is reachable only
+    // until this process ends, so keep a copy the next launch can open
+    // (GeoLibre#1948). A no-op on every other platform.
+    void ensureStartupProjectSnapshot(
+      draftDesktopSettings.startup,
+      useAppStore.getState().recentProjects,
+    );
     // The dockable panels are the one layout row nothing renders from the store:
     // the registry owns what is on screen, so move it to match what was just
     // saved (a no-op for a panel already there, so an untouched Save cannot

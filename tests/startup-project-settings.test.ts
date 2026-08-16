@@ -88,6 +88,19 @@ describe("startupProjectPath", () => {
     );
   });
 
+  it("treats an Android content URI as a local project", () => {
+    // The Android document picker identifies a project on the device by a
+    // `content://` URI, not a path. It is not a remote host, so last mode must
+    // still restore it -- `openRecentProjectFile` reads it through the copy kept
+    // for exactly that case (GeoLibre#1948).
+    const uri =
+      "content://com.android.externalstorage.documents/document/primary%3ADocuments%2Fjson%2FGeneral_Project.geolibre.json";
+    assert.equal(
+      startupProjectPath({ mode: "last", projectPath: null, projectName: null }, recent(uri)),
+      uri,
+    );
+  });
+
   it("restores nothing when every recent project is remote", () => {
     assert.equal(
       startupProjectPath(

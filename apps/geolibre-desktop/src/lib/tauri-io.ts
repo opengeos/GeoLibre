@@ -7,6 +7,8 @@ import {
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
+  BaseDirectory,
+  mkdir,
   readDir,
   readFile,
   readTextFile,
@@ -15,6 +17,7 @@ import {
   writeFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import type { StartupSettings } from "../hooks/useDesktopSettings";
 import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import i18next from "i18next";
@@ -30,7 +33,15 @@ import {
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "./delimited-text";
-import { writeInPlaceWithAndroidFallback } from "./android-content-uri";
+import { isAndroidContentUri, writeInPlaceWithAndroidFallback } from "./android-content-uri";
+import { startupProjectPath } from "./startup-project";
+import {
+  readStartupSnapshot,
+  STARTUP_SNAPSHOT_DIR,
+  writeStartupSnapshot,
+  type StartupSnapshotIo,
+  type StartupSnapshotSlot,
+} from "./startup-project-snapshot";
 import { IS_MAS_BUILD } from "./build-flags";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import {
@@ -2379,6 +2390,7 @@ async function readShapefileCompanionFiles(path: string, selectedPaths: string[]
 async function openProjectFileBrowser(): Promise<{
   project: GeoLibreProject;
   path: string;
+  text: string;
 } | null> {
   const pickerWindow = window as BrowserFilePickerWindow;
   if (pickerWindow.showOpenFilePicker) {
@@ -2390,9 +2402,11 @@ async function openProjectFileBrowser(): Promise<{
       });
       if (!handle) return null;
       const file = await handle.getFile();
+      const text = await file.text();
       return {
-        project: parseProject(await file.text()),
+        project: parseProject(text),
         path: handle.name || file.name,
+        text,
       };
     } catch (error) {
       if (isAbortError(error)) return null;
@@ -2409,6 +2423,7 @@ async function openProjectFileBrowser(): Promise<{
   return {
     project: parseProject(result.text),
     path: result.path,
+    text: result.text,
   };
 }
 
@@ -2681,9 +2696,17 @@ export async function openGeoJsonFile(): Promise<{
   return { data, path: selected };
 }
 
+/**
+ * Pick a GeoLibre project and parse it.
+ *
+ * @returns The parsed project, the path it came from, and the raw text — which
+ *   {@link saveStartupProjectSnapshot} copies verbatim rather than re-serializing
+ *   the parsed form. Null if the picker was cancelled.
+ */
 export async function openProjectFile(): Promise<{
   project: GeoLibreProject;
   path: string;
+  text: string;
 } | null> {
   if (!isTauri()) {
     return openProjectFileBrowser();
@@ -2696,7 +2719,7 @@ export async function openProjectFile(): Promise<{
   if (!selected || typeof selected !== "string") return null;
   const text = await readTextFile(selected);
   const project = parseProject(text);
-  return { project, path: selected };
+  return { project, path: selected, text };
 }
 
 /** Pick a QGIS project and return its raw bytes for the import converter. */
@@ -2738,6 +2761,80 @@ export class RecentProjectGoneError extends Error {
     super(message);
     this.name = "RecentProjectGoneError";
   }
+}
+
+/**
+ * Snapshot files live in the app's private data directory, the one place the
+ * `fs` plugin's default scope allows without a dialog having handed us the path
+ * — and on Android the one place still readable after the process restart that
+ * kills a `content://` grant.
+ */
+const startupSnapshotIo: StartupSnapshotIo = {
+  write: async (file, content) => {
+    await mkdir(STARTUP_SNAPSHOT_DIR, { baseDir: BaseDirectory.AppLocalData, recursive: true });
+    await writeTextFile(`${STARTUP_SNAPSHOT_DIR}/${file}`, content, {
+      baseDir: BaseDirectory.AppLocalData,
+    });
+  },
+  read: (file) =>
+    readTextFile(`${STARTUP_SNAPSHOT_DIR}/${file}`, { baseDir: BaseDirectory.AppLocalData }),
+};
+
+/**
+ * Keep a restorable copy of a project the startup preference will reopen
+ * (GeoLibre#1948). A no-op unless the path is an Android `content://` URI, whose
+ * read grant does not survive the process — every other path can simply be
+ * re-read.
+ *
+ * @param path - The path or content URI the project was opened from or saved to.
+ * @param text - The serialized project.
+ * @param settings - The committed startup preference.
+ * @returns The slot written, or null when nothing was.
+ */
+export async function saveStartupProjectSnapshot(
+  path: string,
+  text: string,
+  settings: StartupSettings,
+): Promise<StartupSnapshotSlot | null> {
+  if (!isTauri()) return null;
+  return writeStartupSnapshot(path, text, settings, startupSnapshotIo);
+}
+
+/**
+ * Make sure the project a *newly saved* startup preference points at has a
+ * restorable copy, reading it now rather than waiting for the next open or save.
+ *
+ * This is the moment the user's own steps land on: open a project from device
+ * storage, then go to Settings and ask for it back on the next launch. Nothing
+ * re-reads the project in between, so without this the preference would be
+ * saved with no copy behind it and the next launch would still come up empty.
+ * Reading works here and only here, because the picker's `content://` grant is
+ * alive until this process ends -- which is exactly what the copy outlives.
+ *
+ * @param settings - The startup preference being committed.
+ * @param recentProjects - Recent projects, to resolve "reopen the last project".
+ * @returns The slot written, or null when there was nothing to copy.
+ */
+export async function ensureStartupProjectSnapshot(
+  settings: StartupSettings,
+  recentProjects: readonly { path: string }[],
+): Promise<StartupSnapshotSlot | null> {
+  if (!isTauri()) return null;
+  const path = startupProjectPath(settings, recentProjects);
+  // Only a content URI needs a copy; every other path can be re-read on its own.
+  if (!path || !isAndroidContentUri(path)) return null;
+  let text: string;
+  try {
+    text = await readTextFile(path);
+  } catch (error) {
+    // The grant is already gone -- the project was opened in an earlier session
+    // and only reopened from the recent list, say. Nothing to copy, so the next
+    // launch reports the unavailable-project banner and the copy is made the
+    // next time the project is actually opened or saved.
+    console.warn("Could not read the startup project to keep a restorable copy.", error);
+    return null;
+  }
+  return writeStartupSnapshot(path, text, settings, startupSnapshotIo);
 }
 
 // Refuse to buffer absurdly large responses into memory (25 MB).
@@ -2796,12 +2893,25 @@ export async function openRecentProjectFile(
 
   let text: string;
   try {
-    text = await invoke<string>("read_project_file", { path });
+    // A content URI is not a filesystem path, so `read_project_file` refuses it
+    // outright; the `fs` plugin resolves it through Android's ContentResolver
+    // instead. That succeeds while the picker's read grant is still alive —
+    // reopening from Open Recent in the same session — and fails once the
+    // process has restarted, which the stored copy below covers.
+    text = isAndroidContentUri(path)
+      ? await readTextFile(path)
+      : await invoke<string>("read_project_file", { path });
   } catch (error) {
     if (isFileMissingError(error)) {
       throw new RecentProjectGoneError(`Project file no longer exists: ${path}`);
     }
-    throw error;
+    // Fall back to the copy kept for exactly this project, if there is one
+    // (GeoLibre#1948). Only Android content URIs ever have one, and the source
+    // path has to match, so this can never substitute a different project.
+    const snapshot = await readStartupSnapshot(path, startupSnapshotIo);
+    if (snapshot === null) throw error;
+    console.warn(`Reopening the stored copy of "${path}"; the original could not be read.`, error);
+    text = snapshot;
   }
 
   return { project: parseProject(text), path };

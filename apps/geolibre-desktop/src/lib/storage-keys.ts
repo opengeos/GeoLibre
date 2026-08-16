@@ -24,3 +24,10 @@ export const UPDATE_DISMISSED_VERSION_STORAGE_KEY = "geolibre.updateDismissedVer
  * exhaust the per-IP rate limit (desktop only).
  */
 export const UPDATE_LAST_CHECK_STORAGE_KEY = "geolibre.lastUpdateCheck";
+
+/**
+ * Which project each durable startup snapshot was copied from. Only the index
+ * lives here; the project text itself is a file in the app's private data
+ * directory. See `lib/startup-project-snapshot.ts`.
+ */
+export const STARTUP_SNAPSHOTS_STORAGE_KEY = "geolibre.startupProjectSnapshots";
