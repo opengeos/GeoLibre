@@ -93,6 +93,8 @@ export interface StartupSettings {
   mode: StartupProjectMode;
   projectPath: string | null;
   projectName: string | null;
+  /** Projection used when startup does not restore or receive a project. */
+  globeByDefault: boolean;
 }
 
 export interface ThemeSettings {
@@ -200,6 +202,7 @@ export const DEFAULT_STARTUP_SETTINGS: StartupSettings = {
   mode: "default",
   projectPath: null,
   projectName: null,
+  globeByDefault: true,
 };
 
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
@@ -279,6 +282,8 @@ function normalizeStartupSettings(startup: unknown): StartupSettings {
     mode: mode === "specific" && !projectPath ? "default" : mode,
     projectPath,
     projectName,
+    globeByDefault:
+      typeof candidate.globeByDefault === "boolean" ? candidate.globeByDefault : true,
   };
 }
 

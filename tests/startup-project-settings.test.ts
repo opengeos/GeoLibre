@@ -5,6 +5,7 @@ import {
   normalizeDesktopSettings,
 } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
 import {
+  startupDefaultProjection,
   startupProjectPath,
   startupSettingsAfterForcedSaveAs,
 } from "../apps/geolibre-desktop/src/lib/startup-project";
@@ -15,6 +16,7 @@ describe("startup project settings", () => {
       mode: "default",
       projectPath: null,
       projectName: null,
+      globeByDefault: true,
     });
   });
 
@@ -25,13 +27,23 @@ describe("startup project settings", () => {
           mode: "specific",
           projectPath: " /tmp/field.geolibre.json ",
           projectName: " Field ",
+          globeByDefault: false,
         },
       }).startup,
       {
         mode: "specific",
         projectPath: "/tmp/field.geolibre.json",
         projectName: "Field",
+        globeByDefault: false,
       },
+    );
+  });
+
+  it("defaults invalid or missing empty-workspace projection settings to globe", () => {
+    assert.equal(normalizeDesktopSettings({ startup: {} }).startup.globeByDefault, true);
+    assert.equal(
+      normalizeDesktopSettings({ startup: { globeByDefault: "no" } }).startup.globeByDefault,
+      true,
     );
   });
 
@@ -43,6 +55,16 @@ describe("startup project settings", () => {
     assert.equal(
       normalizeDesktopSettings({ startup: { mode: "tampered" } }).startup.mode,
       "default",
+    );
+  });
+});
+
+describe("startupDefaultProjection", () => {
+  it("uses the empty-workspace globe preference", () => {
+    assert.equal(startupDefaultProjection(DEFAULT_STARTUP_SETTINGS), "globe");
+    assert.equal(
+      startupDefaultProjection({ ...DEFAULT_STARTUP_SETTINGS, globeByDefault: false }),
+      "mercator",
     );
   });
 });

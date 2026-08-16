@@ -1,3 +1,4 @@
+import type { MapProjection } from "@geolibre/core";
 import type { StartupSettings } from "../hooks/useDesktopSettings";
 
 /**
@@ -37,6 +38,11 @@ export function startupProjectPath(
   // a startup preference into a background request to a third-party host --
   // plus the failure banner on any launch where that host is unreachable.
   return recentProjects.find((entry) => !isRemotePath(entry.path))?.path ?? null;
+}
+
+/** Projection for the empty workspace shown when startup has no project to load. */
+export function startupDefaultProjection(settings: StartupSettings): MapProjection {
+  return settings.globeByDefault ? "globe" : "mercator";
 }
 
 /**

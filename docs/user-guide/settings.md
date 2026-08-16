@@ -78,6 +78,8 @@ The project name is edited in place on the right of the toolbar, and it is saved
 | **Reopen the last project** | Open the most recently used *local* project. |
 | **Open a specific project** | Always open one chosen project. Use **Choose Project** to pick the file; the mode stays unavailable until you have. |
 
+**Enable 3D globe by default** controls the projection of the new, untitled workspace shown when no project is provided. Turn it off to start that workspace in Mercator. A restored project or project link always uses the projection saved in that project instead.
+
 If the startup project has been moved or deleted, GeoLibre opens the default workspace instead, says so in a banner, and drops the missing file from the recent-projects list.
 
 !!! note "Desktop only"

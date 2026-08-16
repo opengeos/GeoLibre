@@ -2590,6 +2590,22 @@ export function SettingsDialog({
                       </Button>
                     </label>
                   </div>
+                  <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                    <input
+                      className="mt-0.5 h-4 w-4"
+                      type="checkbox"
+                      checked={draftDesktopSettings.startup.globeByDefault}
+                      onChange={(event) =>
+                        updateDraftStartupSettings({ globeByDefault: event.target.checked })
+                      }
+                    />
+                    <span className="space-y-1">
+                      <span className="block">{t("settings.startup.globeByDefault")}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {t("settings.startup.globeByDefaultHint")}
+                      </span>
+                    </span>
+                  </label>
                 </div>
               ) : null}
               {effectiveSection === "updates" ? (

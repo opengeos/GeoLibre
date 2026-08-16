@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { dataUrlParameters } from "../lib/data-url";
 import { isTauri } from "../lib/is-tauri";
 import { projectUrlFromLocation } from "../lib/project-url";
-import { startupProjectPath } from "../lib/startup-project";
+import { startupDefaultProjection, startupProjectPath } from "../lib/startup-project";
 import { openRecentProjectFile, RecentProjectGoneError } from "../lib/tauri-io";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopSettings";
@@ -27,9 +27,7 @@ export function useStartupProject(): {
     if (!isTauri()) return false;
     if (projectUrlFromLocation() !== null) return false;
     if (dataUrlParameters(window.location.search) !== null) return false;
-    const settings = useDesktopSettingsStore.getState().desktopSettings.startup;
-    const stored = useAppStore.getState().recentProjects;
-    return startupProjectPath(settings, stored.length > 0 ? stored : loadRecentProjects()) !== null;
+    return true;
   });
 
   useEffect(() => {
@@ -52,7 +50,22 @@ export function useStartupProject(): {
     // is ever ordered above it in `App.tsx`.
     const stored = useAppStore.getState().recentProjects;
     const path = startupProjectPath(settings, stored.length > 0 ? stored : loadRecentProjects());
-    if (!path) return;
+    const openDefaultWorkspace = () => {
+      useAppStore.setState((state) => ({
+        preferences: {
+          ...state.preferences,
+          map: {
+            ...state.preferences.map,
+            projection: startupDefaultProjection(settings),
+          },
+        },
+      }));
+      setRestoring(false);
+    };
+    if (!path) {
+      openDefaultWorkspace();
+      return;
+    }
 
     // The workspace this restore is allowed to replace. The XYZ probes below
     // reach the network and the shell is interactive throughout, so the user can
@@ -98,6 +111,7 @@ export function useStartupProject(): {
         console.warn("Could not restore the startup project.", error);
         setHasWarning(true);
         warningTimer = window.setTimeout(() => setHasWarning(false), 8000);
+        openDefaultWorkspace();
       } finally {
         if (!cancelled) setRestoring(false);
       }
