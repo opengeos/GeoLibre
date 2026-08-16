@@ -334,6 +334,25 @@ function parseCase(array: unknown[]): ParsedColor {
 }
 
 /**
+ * Whether a top-level layer filter uses the legacy property-name syntax, such
+ * as `["==", "class", "park"]`. GeoLibre rules are MapLibre expressions, where
+ * that property must instead be `["get", "class"]`.
+ */
+function isLegacyLayerFilter(filter: unknown[]): boolean {
+  const operator = filter[0];
+  if (operator === "all" || operator === "any" || operator === "none") {
+    return filter.slice(1).some((child) => {
+      const array = asArray(child);
+      return array !== null && isLegacyLayerFilter(array);
+    });
+  }
+  return (
+    ["==", "!=", ">", ">=", "<", "<=", "in", "!in"].includes(String(operator)) &&
+    typeof filter[1] === "string"
+  );
+}
+
+/**
  * Combine a stack of filtered, flat-color Mapbox layers into GeoLibre rules.
  * Mapbox draws later layers over earlier ones, so reverse the stack to preserve
  * that precedence in GeoLibre's first-match-wins rule evaluator. An off else
@@ -351,7 +370,13 @@ function parseStackedLayerColors(
     minZoom: clampZoom(layer.minzoom),
     maxZoom: clampZoom(layer.maxzoom),
   }));
-  if (entries.some((entry) => !entry.filter || entry.color === null)) return null;
+  if (
+    entries.some(
+      (entry) => !entry.filter || isLegacyLayerFilter(entry.filter) || entry.color === null,
+    )
+  ) {
+    return null;
+  }
 
   const rules: NonNullable<LayerStyle["vectorRules"]> = entries.reverse().map((entry, index) => ({
     id: `import-layer-${index}`,
