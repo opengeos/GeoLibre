@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import type { StartupSettings } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
 import { STARTUP_SNAPSHOTS_STORAGE_KEY } from "../apps/geolibre-desktop/src/lib/storage-keys";
 import {
+  exceedsStartupSnapshotLimit,
   MAX_STARTUP_SNAPSHOT_BYTES,
   readStartupSnapshot,
   readStartupSnapshotIndex,
@@ -92,6 +93,27 @@ describe("startupSnapshotSlot", () => {
   });
 });
 
+describe("exceedsStartupSnapshotLimit", () => {
+  it("measures the bytes the file will hold, not the code units of the string", () => {
+    // The file is written as UTF-8, so a project of three-byte characters is
+    // over the limit at a third of the string length that ASCII would need.
+    const thirdOfLimit = Math.floor(MAX_STARTUP_SNAPSHOT_BYTES / 3);
+    assert.equal(exceedsStartupSnapshotLimit("a".repeat(thirdOfLimit)), false);
+    assert.equal(exceedsStartupSnapshotLimit("\u20ac".repeat(thirdOfLimit + 1)), true);
+    // A surrogate pair is four bytes over two code units, so it costs two bytes
+    // per code unit rather than three: this many is 20 MB, still under.
+    assert.equal(
+      exceedsStartupSnapshotLimit("\u{1f600}".repeat(Math.floor(MAX_STARTUP_SNAPSHOT_BYTES / 5))),
+      false,
+    );
+  });
+
+  it("accepts and rejects at the ASCII boundary", () => {
+    assert.equal(exceedsStartupSnapshotLimit("a".repeat(MAX_STARTUP_SNAPSHOT_BYTES)), false);
+    assert.equal(exceedsStartupSnapshotLimit("a".repeat(MAX_STARTUP_SNAPSHOT_BYTES + 1)), true);
+  });
+});
+
 describe("writeStartupSnapshot", () => {
   const warnings: unknown[][] = [];
   const originalWarn = console.warn;
@@ -168,6 +190,22 @@ describe("writeStartupSnapshot", () => {
     const slot = await writeStartupSnapshot(
       CONTENT_URI,
       "x".repeat(MAX_STARTUP_SNAPSHOT_BYTES + 1),
+      settings({ mode: "last" }),
+      io,
+      { storage },
+    );
+    assert.equal(slot, null);
+    assert.equal(writes.length, 0);
+    assert.equal(warnings.length, 1);
+  });
+
+  it("skips one that is only too large once encoded as UTF-8", async () => {
+    const storage = makeStorage();
+    const { io, writes } = makeIo();
+    // Well under the limit counted as code units, well over it as bytes.
+    const slot = await writeStartupSnapshot(
+      CONTENT_URI,
+      "\u20ac".repeat(Math.floor(MAX_STARTUP_SNAPSHOT_BYTES / 2)),
       settings({ mode: "last" }),
       io,
       { storage },

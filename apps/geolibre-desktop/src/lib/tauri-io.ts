@@ -2850,12 +2850,23 @@ function isFileMissingError(error: unknown): boolean {
   );
 }
 
+/**
+ * Reopen a project from a remembered path, URL, or Android content URI.
+ *
+ * @param path - The remembered location.
+ * @param signal - Abort signal for the URL branch's fetch.
+ * @returns The parsed project, the path it came from, and the raw text -- which
+ *   callers hand to {@link saveStartupProjectSnapshot} so reopening from Open
+ *   Recent keeps the restorable copy pointing at the project that is now the
+ *   most recent one.
+ */
 export async function openRecentProjectFile(
   path: string,
   signal?: AbortSignal,
 ): Promise<{
   project: GeoLibreProject;
   path: string;
+  text: string;
 }> {
   if (isHttpUrl(path)) {
     const response = await fetch(path, {
@@ -2884,7 +2895,8 @@ export async function openRecentProjectFile(
       );
     }
 
-    return { project: parseProject(await response.text()), path };
+    const body = await response.text();
+    return { project: parseProject(body), path, text: body };
   }
 
   if (!isTauri()) {
@@ -2914,7 +2926,7 @@ export async function openRecentProjectFile(
     text = snapshot;
   }
 
-  return { project: parseProject(text), path };
+  return { project: parseProject(text), path, text };
 }
 
 export async function saveProjectFile(

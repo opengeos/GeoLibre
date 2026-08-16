@@ -59,8 +59,12 @@ export const STARTUP_SNAPSHOT_DIR = "startup-projects";
  * Above this the copy is skipped and the restore keeps today's behaviour (the
  * "startup project is unavailable" banner). A project with embedded vector data
  * can run to hundreds of megabytes, and silently doubling that on a phone's
- * internal storage would be a worse bug than the one being fixed. Matches the
- * ceiling `openRecentProjectFile` already applies to a project fetched by URL.
+ * internal storage would be a worse bug than the one being fixed.
+ *
+ * Its own limit, deliberately: `openRecentProjectFile` happens to cap a project
+ * fetched by URL at the same number, but that one bounds a download buffered
+ * into memory and this one bounds a file kept on disk. Neither has to move when
+ * the other does.
  */
 export const MAX_STARTUP_SNAPSHOT_BYTES = 25 * 1024 * 1024;
 
@@ -81,6 +85,28 @@ export interface StartupSnapshotIo {
 /** The snapshot file name for a slot. `.geolibre.json` so the copy is recognizable on disk. */
 export function startupSnapshotFile(slot: StartupSnapshotSlot): string {
   return `${slot}.geolibre.json`;
+}
+
+/**
+ * Whether a project is too large to keep a copy of, measured as the UTF-8 bytes
+ * the file would actually occupy.
+ *
+ * `text.length` counts UTF-16 code units, so a project full of non-ASCII (CJK
+ * layer names, accented attribute values in embedded GeoJSON) can be up to three
+ * times the size of the string that passed the check. The bounds below settle
+ * most projects without encoding anything: the byte count is never below the
+ * code-unit count and never above three times it, and encoding is a full second
+ * copy of the text -- which for the very projects this guard exists to reject
+ * would mean allocating hundreds of megabytes on a phone just to confirm they
+ * are too big.
+ *
+ * @param text - The serialized project.
+ * @returns True when the copy would exceed {@link MAX_STARTUP_SNAPSHOT_BYTES}.
+ */
+export function exceedsStartupSnapshotLimit(text: string): boolean {
+  if (text.length > MAX_STARTUP_SNAPSHOT_BYTES) return true;
+  if (text.length * 3 <= MAX_STARTUP_SNAPSHOT_BYTES) return false;
+  return new TextEncoder().encode(text).byteLength > MAX_STARTUP_SNAPSHOT_BYTES;
 }
 
 function defaultStorage(): SnapshotStorage | null {
@@ -188,9 +214,9 @@ export async function writeStartupSnapshot(
 ): Promise<StartupSnapshotSlot | null> {
   const slot = startupSnapshotSlot(path, settings);
   if (!slot) return null;
-  if (text.length > MAX_STARTUP_SNAPSHOT_BYTES) {
+  if (exceedsStartupSnapshotLimit(text)) {
     console.warn(
-      `Startup project is too large to keep a restorable copy (${text.length} bytes).`,
+      `Startup project is too large to keep a restorable copy (over ${MAX_STARTUP_SNAPSHOT_BYTES} bytes).`,
       path,
     );
     return null;

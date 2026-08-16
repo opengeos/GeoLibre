@@ -701,6 +701,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const project = await resolveProjectXyzLayers(result.project, controller.signal);
       if (controller.signal.aborted) return null;
       loadProject(project, result.path);
+      // `loadProject` moves this path to the front of the recent list, so in
+      // "last" mode it is now the project the next launch will reopen. Without
+      // this, reopening an older project from the recent list would leave the
+      // copy on disk holding whichever project was opened through the picker
+      // last, and the next cold start would find no copy matching the path it
+      // resolves (GeoLibre#1948 review).
+      rememberStartupProjectSnapshot(result.path, result.text);
       return null;
     } catch (error) {
       if (controller.signal.aborted) return null;
