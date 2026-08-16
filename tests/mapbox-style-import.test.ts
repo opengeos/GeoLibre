@@ -699,6 +699,16 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.deepEqual(result.warnings, []);
   });
 
+  it("preserves a coalesce object lookup with a literal property key", () => {
+    const color = ["coalesce", ["get", "Qa", ["literal", { Qa: "#fdfced" }]], "#000000"];
+    const result = parseMapboxStyle({
+      layers: [{ id: "units", type: "fill", paint: { "fill-color": color } }],
+    });
+
+    assert.equal(result.style.vectorStyleMode, "expression");
+    assert.equal(result.style.vectorStyleExpression, JSON.stringify(color));
+  });
+
   it("recovers fill opacity from a point layer's circle-opacity", () => {
     const { style: result } = roundTrip(style({ fillOpacity: 0.5 }), points());
     assert.equal(result.fillOpacity, 0.5);
@@ -859,6 +869,31 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     });
     assert.equal(result.style.fillColor, "#111111");
     assert.ok(result.warnings.some((warning) => /only the first was imported/.test(warning)));
+  });
+
+  it("does not report stacked line rules as combined when a circle claims color", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        {
+          id: "line-a",
+          type: "line",
+          filter: ["==", ["get", "class"], "a"],
+          paint: { "line-color": "#111111" },
+        },
+        {
+          id: "line-b",
+          type: "line",
+          filter: ["==", ["get", "class"], "b"],
+          paint: { "line-color": "#222222" },
+        },
+        { id: "points", type: "circle", paint: { "circle-color": "#333333" } },
+      ],
+    });
+
+    assert.equal(result.matchedLayerCount, 2);
+    assert.equal(result.style.vectorStyleMode, "single");
+    assert.ok(result.warnings.some((warning) => /multiple line layers/.test(warning)));
+    assert.ok(result.warnings.every((warning) => !/combined as rules/.test(warning)));
   });
 
   it("recognizes a bare [get] match input and text-field", () => {

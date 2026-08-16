@@ -108,6 +108,13 @@ function getProperty(node: unknown): string | null {
   return asString(array[1]);
 }
 
+/** Match a feature-property `get`, excluding the 3-argument object lookup. */
+function getFeatureProperty(node: unknown): string | null {
+  const array = asArray(node);
+  if (!array || array.length !== 2) return null;
+  return getProperty(array);
+}
+
 /**
  * Match the field text-field / categorized input shapes the exporter emits,
  * returning the underlying property name:
@@ -152,7 +159,7 @@ function parseColorValue(value: unknown, warnings: string[]): ParsedColor {
 
   // Unwrap the simplestyle per-feature override the exporter wraps colors in
   // (`["coalesce", ["get", key], base]`) and read the base renderer.
-  if (array[0] === "coalesce" && array.length === 3 && getProperty(array[1]) !== null) {
+  if (array[0] === "coalesce" && array.length === 3 && getFeatureProperty(array[1]) !== null) {
     return parseColorValue(array[2], warnings);
   }
 
@@ -388,7 +395,12 @@ function parseStrokeColor(value: unknown): string | null {
   // Unwrap the simplestyle per-feature override the exporter wraps line/outline
   // colors in (`["coalesce", ["get","stroke"], base]`) when simpleStyleEnabled,
   // matching parseColorValue, so the flat stroke is still recovered.
-  if (array && array[0] === "coalesce" && array.length === 3 && getProperty(array[1]) !== null) {
+  if (
+    array &&
+    array[0] === "coalesce" &&
+    array.length === 3 &&
+    getFeatureProperty(array[1]) !== null
+  ) {
     return parseStrokeColor(array[2]);
   }
   const flat = asString(value);
@@ -679,22 +691,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
   const stackedFill = parseStackedLayerColors(byType("fill"), "fill-color");
   const stackedLine = parseStackedLayerColors(byType("line"), "line-color");
   const stackedCircle = parseStackedLayerColors(byType("circle"), "circle-color");
-
-  // Filtered flat-color stacks can be represented exactly as rules. Other
-  // same-type stacks still contribute only their first layer, so flag the loss.
-  for (const type of ["fill", "fill-extrusion", "line", "circle", "symbol"]) {
-    const recoveredAsRules =
-      (type === "fill" && stackedFill !== null) ||
-      (type === "line" && stackedLine !== null) ||
-      (type === "circle" && stackedCircle !== null);
-    if (byType(type).length > 1 && !recoveredAsRules) {
-      warnings.push(`The style has multiple ${type} layers; only the first was imported.`);
-    } else if (byType(type).length > 1) {
-      warnings.push(
-        `The style's multiple ${type} layers were combined as rules; paint properties other than color come from the first layer.`,
-      );
-    }
-  }
+  const appliedStackTypes = new Set<string>();
 
   const [fill] = byType("fill");
   const [extrusion] = byType("fill-extrusion");
@@ -728,6 +725,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     applyZoomRange(extrusion, patch);
   } else if (fill) {
     matchedLayerCount += stackedFill ? byType("fill").length : 1;
+    if (stackedFill) appliedStackTypes.add("fill");
     patch.extrusionEnabled = false;
     const paint = fill.paint ?? {};
     const fillColor = stackedFill ?? parseColorValue(paint["fill-color"], warnings);
@@ -749,7 +747,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
   }
 
   if (line) {
-    matchedLayerCount += stackedLine ? byType("line").length : 1;
+    matchedLayerCount += 1;
     const paint = line.paint ?? {};
     const stroke = parseStrokeColor(paint["line-color"]);
     if (stroke) patch.strokeColor = stroke;
@@ -761,6 +759,10 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (!colorClaimed && !circle) {
       const color = stackedLine ?? parseColorValue(paint["line-color"], warnings);
       if (color.mode && color.mode !== "single") {
+        if (stackedLine) {
+          appliedStackTypes.add("line");
+          matchedLayerCount += byType("line").length - 1;
+        }
         // Take the renderer (mode/property/stops/rules), but not the fallback
         // color: line-color's baked fallback is strokeColor (already recovered
         // above), whereas applyColorRenderer would route it into fillColor.
@@ -775,11 +777,15 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
   }
 
   if (circle) {
-    matchedLayerCount += stackedCircle ? byType("circle").length : 1;
+    matchedLayerCount += 1;
     patch.pointRenderer = "single";
     const paint = circle.paint ?? {};
     if (!colorClaimed) {
       applyColorRenderer(stackedCircle ?? parseColorValue(paint["circle-color"], warnings), patch);
+      if (stackedCircle) {
+        appliedStackTypes.add("circle");
+        matchedLayerCount += byType("circle").length - 1;
+      }
       colorClaimed = true;
     }
     const radius = paint["circle-radius"];
@@ -838,6 +844,19 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
   if (symbol) {
     matchedLayerCount += 1;
     labels = parseLabelLayer(symbol, warnings);
+  }
+
+  // Filtered flat-color stacks can be represented exactly as rules only when
+  // that geometry actually claims the shared renderer. Flag every other stack.
+  for (const type of ["fill", "fill-extrusion", "line", "circle", "symbol"]) {
+    if (byType(type).length < 2) continue;
+    if (appliedStackTypes.has(type)) {
+      warnings.push(
+        `The style's multiple ${type} layers were combined as rules; paint properties other than color come from the first layer.`,
+      );
+    } else {
+      warnings.push(`The style has multiple ${type} layers; only the first was imported.`);
+    }
   }
 
   if (matchedLayerCount === 0) {
