@@ -134,10 +134,10 @@ import {
 } from "@geolibre/ui";
 import {
   CalendarClock,
-  CircleDashed,
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  CircleDashed,
   ClipboardPaste,
   Copy,
   Database,
@@ -151,10 +151,10 @@ import {
   FolderPlus,
   GripVertical,
   Info,
+  LassoSelect,
   Layers,
   Library,
   Locate,
-  LassoSelect,
   Lock,
   Map as MapIcon,
   MoreHorizontal,

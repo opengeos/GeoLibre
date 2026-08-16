@@ -1504,7 +1504,18 @@ export const MapCanvas = memo(function MapCanvas({
         points = [event.point];
         render();
       };
-      const onMouseMove = (event: maplibregl.MapMouseEvent) => {
+      // The map's own mouse events stop at the canvas, so a drag released over
+      // the layer panel or the browser chrome would never deliver a mouseup and
+      // would leave the gesture armed with pan/zoom still disabled. Window
+      // listeners extend tracking past the canvas edge, the same way
+      // print-extent.ts does for its rubber band. Both sources feed the two
+      // helpers below, which are idempotent so the duplicate events a release
+      // inside the canvas produces cost nothing.
+      const canvasPoint = (clientX: number, clientY: number) => {
+        const rect = canvas.getBoundingClientRect();
+        return new maplibregl.Point(clientX - rect.left, clientY - rect.top);
+      };
+      const moveTo = (point: maplibregl.Point) => {
         if (!dragging) return;
         if (request.shape === "freehand") {
           // Sample rather than take every mousemove: a slow trace would
@@ -1512,21 +1523,30 @@ export const MapCanvas = memo(function MapCanvas({
           // both render() (which rebuilds the whole path string) and the
           // closing intersection test scale with the ring.
           const last = points.at(-1);
-          if (last && last.dist(event.point) < FREEHAND_MIN_POINT_DISTANCE) return;
-          points.push(event.point);
-        } else points = [points[0], event.point];
+          if (last && last.dist(point) < FREEHAND_MIN_POINT_DISTANCE) return;
+          points.push(point);
+        } else {
+          if (points[1]?.equals(point)) return;
+          points = [points[0], point];
+        }
         render();
       };
-      const onMouseUp = (event: maplibregl.MapMouseEvent) => {
+      const endDrag = (point: maplibregl.Point, modifiers: MouseEvent) => {
         if (!dragging) return;
         dragging = false;
         // `.equals()`, not `!==`: every mouse event carries a freshly built
         // Point, so a reference check would never skip the duplicate.
-        if (request.shape === "freehand" && !points.at(-1)?.equals(event.point))
-          points.push(event.point);
-        else if (request.shape !== "freehand") points = [points[0], event.point];
-        finish(event.originalEvent);
+        if (request.shape === "freehand" && !points.at(-1)?.equals(point)) points.push(point);
+        else if (request.shape !== "freehand") points = [points[0], point];
+        finish(modifiers);
       };
+      const onMouseMove = (event: maplibregl.MapMouseEvent) => moveTo(event.point);
+      const onWindowMouseMove = (event: MouseEvent) =>
+        moveTo(canvasPoint(event.clientX, event.clientY));
+      const onMouseUp = (event: maplibregl.MapMouseEvent) =>
+        endDrag(event.point, event.originalEvent);
+      const onWindowMouseUp = (event: MouseEvent) =>
+        endDrag(canvasPoint(event.clientX, event.clientY), event);
       const onClick = (event: maplibregl.MapMouseEvent) => {
         if (request.shape === "single") {
           points = [event.point];
@@ -1548,19 +1568,32 @@ export const MapCanvas = memo(function MapCanvas({
       const onKeyDown = (event: KeyboardEvent) => {
         if (event.key === "Escape") cancelFeatureSelection.current?.();
       };
+      // Only while a drag is in flight: that is the case where losing focus
+      // (Alt+Tab, a system dialog) means the mouseup never arrives. A polygon
+      // is drawn click by click with no armed state, so blurring away to check
+      // something must not throw away the vertices already placed.
+      const onBlur = () => {
+        if (dragging) cancelFeatureSelection.current?.();
+      };
       map.on("mousedown", onMouseDown);
       map.on("mousemove", onMouseMove);
       map.on("mouseup", onMouseUp);
       map.on("click", onClick);
       map.on("dblclick", onDoubleClick);
+      window.addEventListener("mousemove", onWindowMouseMove);
+      window.addEventListener("mouseup", onWindowMouseUp);
       window.addEventListener("keydown", onKeyDown);
+      window.addEventListener("blur", onBlur);
       cleanups.push(
         () => map.off("mousedown", onMouseDown),
         () => map.off("mousemove", onMouseMove),
         () => map.off("mouseup", onMouseUp),
         () => map.off("click", onClick),
         () => map.off("dblclick", onDoubleClick),
+        () => window.removeEventListener("mousemove", onWindowMouseMove),
+        () => window.removeEventListener("mouseup", onWindowMouseUp),
         () => window.removeEventListener("keydown", onKeyDown),
+        () => window.removeEventListener("blur", onBlur),
       );
       cancelFeatureSelection.current = () => {
         cleanups.forEach((cleanup) => cleanup());
