@@ -30,7 +30,30 @@ export function scanDocumentForDatasets() {
     }
   };
 
+  const huggingFaceHost = (url) => /^(?:huggingface\.co|hf\.co)$/i.test(url.hostname);
+
+  // The Hub links one file from seven routes -- blob, raw, blame, edit, delete,
+  // commits and the ?download=true button -- and every one of them ends in the
+  // file's own extension, so a repository page yields near-duplicate hits where
+  // only `resolve` (which 302s to the CDN) serves bytes a map source can read.
+  const huggingFaceFileUrl = (url) => {
+    if (!huggingFaceHost(url)) return null;
+    const parts = url.pathname.split("/").filter(Boolean);
+    // /<owner>/<repo>/<route>/<revision>/<path> for models, one segment deeper
+    // for /datasets and /spaces. Anything else is not a file route.
+    const route = parts.findIndex((part) =>
+      /^(?:blob|raw|blame|edit|delete|commits|resolve)$/.test(part),
+    );
+    if (route < 2 || route > 3 || parts.length < route + 3) return null;
+    parts[route] = "resolve";
+    const canonical = new URL(url.href);
+    canonical.pathname = `/${parts.join("/")}`;
+    canonical.searchParams.delete("download");
+    return canonical;
+  };
+
   const canonicalUrl = (url) => {
+    if (huggingFaceHost(url)) return huggingFaceFileUrl(url) ?? url;
     if (url.hostname !== "source.coop") return url;
     const parts = url.pathname.split("/").filter(Boolean);
     if (parts.length < 3) return url;
@@ -93,10 +116,17 @@ export function scanDocumentForDatasets() {
       return;
     }
 
+    // Every Hub route other than a file route is a UI page -- tree, viewer, the
+    // "Auto-converted to Parquet" branch -- so a hint-based match there would
+    // offer HTML as data.
+    if (huggingFaceHost(url) && !huggingFaceFileUrl(url)) return;
+
     const kind = classify(url, hint);
     if (!kind) return;
     const existing = datasets.get(url.href);
-    const name = label.trim() || cleanName(url);
+    // Hub links carry UI chrome as their text ("Download", "History", "308 kB
+    // xet"), so the file name has to come from the path.
+    const name = (huggingFaceHost(url) ? "" : label.trim()) || cleanName(url);
     const candidate = {
       url: url.href,
       name,
