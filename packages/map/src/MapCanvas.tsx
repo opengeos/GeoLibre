@@ -48,6 +48,12 @@ const MAPLIBRE_TILE_SIZE = 512;
 const WMS_IDENTIFY_QUERY_SIZE = 101;
 const WMS_IDENTIFY_QUERY_CENTER = Math.floor(WMS_IDENTIFY_QUERY_SIZE / 2);
 const WMS_IDENTIFY_INFO_FORMATS = ["application/json", "text/html", "text/plain"];
+/**
+ * Minimum screen distance, in pixels, between two vertices of a freehand
+ * selection ring. Small enough that the traced outline still reads as a smooth
+ * curve, large enough that a slow drag cannot grow the ring without bound.
+ */
+const FREEHAND_MIN_POINT_DISTANCE = 3;
 
 export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
@@ -1470,8 +1476,15 @@ export const MapCanvas = memo(function MapCanvas({
       };
       const onMouseMove = (event: maplibregl.MapMouseEvent) => {
         if (!dragging) return;
-        if (request.shape === "freehand") points.push(event.point);
-        else points = [points[0], event.point];
+        if (request.shape === "freehand") {
+          // Sample rather than take every mousemove: a slow trace would
+          // otherwise accumulate thousands of near-coincident vertices, and
+          // both render() (which rebuilds the whole path string) and the
+          // closing intersection test scale with the ring.
+          const last = points.at(-1);
+          if (last && last.dist(event.point) < FREEHAND_MIN_POINT_DISTANCE) return;
+          points.push(event.point);
+        } else points = [points[0], event.point];
         render();
       };
       const onMouseUp = (event: maplibregl.MapMouseEvent) => {
