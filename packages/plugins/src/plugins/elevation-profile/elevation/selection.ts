@@ -49,7 +49,8 @@ export function selectedProfileLine(
     if (coords.length >= 2) {
       return {
         coords,
-        elevations: hasCompleteElevations && elevations.length === coords.length ? elevations : null,
+        elevations:
+          hasCompleteElevations && elevations.length === coords.length ? elevations : null,
       };
     }
   }
