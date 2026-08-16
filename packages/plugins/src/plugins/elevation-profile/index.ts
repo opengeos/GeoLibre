@@ -100,6 +100,17 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
   version: "0.1.0",
   urlParameterNames: [ELEVATION_LINE_PARAM],
 
+  // The panel's `collapsed` flag round-trips through getProjectState, so the
+  // saved project decides whether it opens. Without this exemption the host's
+  // restore-time collapse sweep (`collapseRestoredPanel` in plugin-manager.ts)
+  // closes the panel on every project load — it defers its collapse twice
+  // precisely to land after a plugin's own `setTimeout(0)` expand, so the
+  // `openPanel` logic in `activate` below would always lose. Worse, `collapse()`
+  // mutates the control, so the next save would write `collapsed: true` back and
+  // the user's preference would be lost for good. maplibre-time-slider carries
+  // the same flag for the same reason.
+  restoresPanelCollapseState: true,
+
   activate(app) {
     // Whether the panel should end up open. Only a project file can ask for it
     // closed: `restoreProjectState` calls applyProjectState immediately before
