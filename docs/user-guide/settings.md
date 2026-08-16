@@ -89,7 +89,9 @@ Two deliberate limits are worth knowing:
 - **A URL always wins.** Launching with a project or `?data=` parameter in the URL skips the startup restore entirely, and so does opening your own project before the restore finishes.
 
 !!! note "Android reopens its own copy"
-    Android identifies a project picked from device storage by a temporary reference that stops working once the app's process ends — which is exactly when the startup restore runs. So on Android GeoLibre keeps a copy of the startup project in its own private storage and reopens that copy, refreshing it every time you open or save the project. Practically this means a project edited in another app after you last saved it in GeoLibre reopens as GeoLibre last saw it; open it again from **File → Open** to pick the newer contents back up.
+    Android identifies a project picked from device storage by a temporary reference that stops working once the app's process ends — which is exactly when the startup restore runs. So on Android GeoLibre keeps a copy of the startup project in its own private storage and reopens that copy, refreshing it every time you open or save the project. Two consequences worth knowing: a project edited in another app after you last saved it in GeoLibre reopens as GeoLibre last saw it (open it again from **File → Open** to pick the newer contents back up), and a project deleted from the device still reopens from GeoLibre's copy rather than dropping out of the startup preference, because Android reports a deleted file and an expired reference the same way.
+
+    Saving a project you opened from device storage asks you where to save it, once — Android does not grant write access to a file you only picked to read. If your startup project is that project, the preference follows it to the file that save creates, so it keeps opening the copy you are actually working in.
 
 ## Updates
 

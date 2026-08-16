@@ -4,7 +4,10 @@ import {
   DEFAULT_STARTUP_SETTINGS,
   normalizeDesktopSettings,
 } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
-import { startupProjectPath } from "../apps/geolibre-desktop/src/lib/startup-project";
+import {
+  startupProjectPath,
+  startupSettingsAfterForcedSaveAs,
+} from "../apps/geolibre-desktop/src/lib/startup-project";
 
 describe("startup project settings", () => {
   it("defaults to the normal untitled workspace", () => {
@@ -114,6 +117,70 @@ describe("startupProjectPath", () => {
   it("restores nothing in last mode with no history", () => {
     assert.equal(
       startupProjectPath({ mode: "last", projectPath: null, projectName: null }, []),
+      null,
+    );
+  });
+});
+
+describe("startupSettingsAfterForcedSaveAs", () => {
+  // Saving a project opened through the Android document picker is refused in
+  // place and falls back to the save dialog, which creates a new document: on
+  // the emulator, saving over General_Project.geolibre.json lands on a URI
+  // ending "General_Project.geolibre.json (1)".
+  const PICKED =
+    "content://com.android.externalstorage.documents/document/primary%3AGeneral.geolibre.json";
+  const CREATED = `${PICKED}%20(1)`;
+
+  it("follows a pinned project to the document the save actually created", () => {
+    assert.deepEqual(
+      startupSettingsAfterForcedSaveAs(
+        { mode: "specific", projectPath: PICKED, projectName: "General" },
+        PICKED,
+        CREATED,
+      ),
+      { mode: "specific", projectPath: CREATED, projectName: "General" },
+    );
+  });
+
+  it("leaves a preference pinned to some other project alone", () => {
+    assert.equal(
+      startupSettingsAfterForcedSaveAs(
+        { mode: "specific", projectPath: "/tmp/pinned.geolibre.json", projectName: "Pinned" },
+        PICKED,
+        CREATED,
+      ),
+      null,
+    );
+  });
+
+  it("does nothing for the modes that resolve a path of their own", () => {
+    assert.equal(
+      startupSettingsAfterForcedSaveAs(
+        { mode: "last", projectPath: null, projectName: null },
+        PICKED,
+        CREATED,
+      ),
+      null,
+    );
+    assert.equal(startupSettingsAfterForcedSaveAs(DEFAULT_STARTUP_SETTINGS, PICKED, CREATED), null);
+  });
+
+  it("does nothing when the save stayed where it was, or had nowhere to start", () => {
+    // The desktop case: a plain Save writes the file it opened, every time.
+    assert.equal(
+      startupSettingsAfterForcedSaveAs(
+        { mode: "specific", projectPath: PICKED, projectName: "General" },
+        PICKED,
+        PICKED,
+      ),
+      null,
+    );
+    assert.equal(
+      startupSettingsAfterForcedSaveAs(
+        { mode: "specific", projectPath: PICKED, projectName: "General" },
+        null,
+        CREATED,
+      ),
       null,
     );
   });

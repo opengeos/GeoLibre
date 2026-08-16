@@ -53,6 +53,7 @@ import {
   saveChoicesForProject,
   type ProjectSaveChoices,
 } from "../lib/project-save-choices";
+import { startupSettingsAfterForcedSaveAs } from "../lib/startup-project";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import {
   importQgisProject,
@@ -1130,6 +1131,20 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       name: project.name,
       openedAt: new Date().toISOString(),
     });
+    // An ordinary Save that landed somewhere else is Android refusing to write
+    // the picked document and the save dialog creating a new one in its place
+    // (GeoLibre#1833). Move a startup preference pinned to the old document
+    // across, or it keeps naming one nothing can open again. Before the copy
+    // below, so that copy lands in the slot the moved preference resolves to.
+    const startupSettings = useDesktopSettingsStore.getState().desktopSettings;
+    const movedStartup = options?.saveAs
+      ? null
+      : startupSettingsAfterForcedSaveAs(startupSettings.startup, existingLocalPath, path);
+    if (movedStartup) {
+      useDesktopSettingsStore
+        .getState()
+        .setDesktopSettings({ ...startupSettings, startup: movedStartup });
+    }
     // Refresh the restorable copy so a startup restore reopens what was just
     // saved rather than the state the project was opened in.
     rememberStartupProjectSnapshot(path, contentToSave);
