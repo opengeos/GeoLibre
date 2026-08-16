@@ -346,6 +346,10 @@ function isLegacyLayerFilter(filter: unknown[]): boolean {
       return array !== null && isLegacyLayerFilter(array);
     });
   }
+  if (operator === "!") {
+    const child = asArray(filter[1]);
+    return child !== null && isLegacyLayerFilter(child);
+  }
   if (operator === "!has") return true;
   return (
     ["==", "!=", ">", ">=", "<", "<=", "in", "!in"].includes(String(operator)) &&
@@ -898,7 +902,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (byType(type).length < 2) continue;
     if (appliedStackTypes.has(type)) {
       warnings.push(
-        `The style's multiple ${type} layers were combined as rules; paint properties other than color come from the first layer.`,
+        `The style's multiple ${type} layers were combined as rules; paint properties other than color come from the bottom-most layer.`,
       );
     } else {
       warnings.push(`The style has multiple ${type} layers; only the first was imported.`);
