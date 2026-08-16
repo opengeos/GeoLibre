@@ -4993,7 +4993,7 @@
     "selectFeaturesPolygon": "Objekte per Polygon auswählen",
     "selectFeaturesFreehand": "Objekte per Freihandzeichnung auswählen",
     "selectFeaturesRadius": "Objekte per Radius auswählen",
-    "selectFeaturesModifiers": "Shift fügt hinzu, Alt entfernt und Shift+Alt schneidet. Drücken Sie Esc zum Abbrechen.",
+    "selectFeaturesModifiers": "Shift fügt hinzu, Alt entfernt und Shift+Alt bildet die Schnittmenge. Drücken Sie Esc zum Abbrechen.",
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "Teilmenge extrahieren…",
     "stylesMenu": "Stile",
