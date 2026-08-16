@@ -3777,7 +3777,14 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   stroke-width: 1.5;
 }
 
-/* Hover readout */
+/* Hover readout. Its box must measure exactly one line whether or not it holds
+   text: the chart above it is `flex: 1 1 auto`, so any height the readout gains
+   on hover is taken out of the chart, which retriggers the chart's
+   ResizeObserver, which redraws and clears the readout again — the pointer sees
+   a flickering chart and a value that never settles. Hence an explicit
+   line-height matching min-height (the inherited 1.4 would make a filled line
+   15.4px against a 14px empty box) and nowrap, so a long
+   "distance · elevation" string in a narrow panel cannot wrap to two lines. */
 .elevation-profile-readout {
   margin-top: 6px;
   text-align: center;
@@ -3785,6 +3792,10 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   font-weight: 500;
   color: var(--ep-text);
   min-height: 14px;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .elevation-profile-readout:empty {

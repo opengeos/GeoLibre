@@ -110,6 +110,10 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   private _chartResizeObserver?: ResizeObserver;
   private _chartRenderQueued = false;
   private _styleReadyQueued = false;
+  /** Host size the current chart was drawn at, used to skip no-op redraws. */
+  private _renderedChartSize?: { width: number; height: number };
+  /** Sample index under the pointer, so a redraw can restore the hover marker. */
+  private _hoverIndex: number | null = null;
 
   // Drawing / profiling runtime state (not serialized).
   private _drawing = false;
@@ -195,6 +199,8 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     this._styleReadyQueued = false;
     this._chartResizeObserver?.disconnect();
     this._chartResizeObserver = undefined;
+    this._renderedChartSize = undefined;
+    this._hoverIndex = null;
 
     if (this._resizeHandler) {
       window.removeEventListener("resize", this._resizeHandler);
@@ -774,6 +780,20 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     this._chartRenderQueued = true;
     requestAnimationFrame(() => {
       this._chartRenderQueued = false;
+      // Skip the redraw when the host still measures what the chart was drawn
+      // at. ResizeObserver reports sub-pixel changes, and redrawing rebuilds the
+      // SVG (dropping the hover marker), so an observation that carries no new
+      // pixels must not disturb a pointer that is sitting on the chart.
+      const host = this._chartEl;
+      const last = this._renderedChartSize;
+      if (
+        host &&
+        last &&
+        Math.round(host.clientWidth) === last.width &&
+        Math.round(host.clientHeight) === last.height
+      ) {
+        return;
+      }
       this._renderChart();
     });
   }
@@ -817,6 +837,8 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     if (this._profilePoints.length < 2) {
       host.textContent = "";
       host.style.display = "none"; // hide so it does not reserve empty space
+      this._renderedChartSize = undefined;
+      this._hoverIndex = null;
       return;
     }
 
@@ -829,8 +851,11 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     const fallbackWidth = this._panel
       ? this._panel.clientWidth - 20
       : this._options.panelWidth - 24;
-    const width = Math.max(160, Math.round(host.clientWidth) || fallbackWidth);
-    const height = Math.max(120, Math.round(host.clientHeight) || CHART_HEIGHT);
+    const hostWidth = Math.round(host.clientWidth);
+    const hostHeight = Math.round(host.clientHeight);
+    const width = Math.max(160, hostWidth || fallbackWidth);
+    const height = Math.max(120, hostHeight || CHART_HEIGHT);
+    this._renderedChartSize = { width: hostWidth, height: hostHeight };
     const geometry = buildChartGeometry(this._profilePoints, width, height);
     const system = this._state.unitSystem;
 
@@ -880,12 +905,9 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     svg.append(area, line, maxLabel, minLabel, hoverGroup);
     host.appendChild(svg);
 
-    const onMove = (event: MouseEvent): void => {
-      const rect = svg.getBoundingClientRect();
-      const px = ((event.clientX - rect.left) / rect.width) * width;
-      const index = geometry.indexForX(px);
-      if (index < 0) return;
+    const showHoverAtIndex = (index: number): void => {
       const point = this._profilePoints[index];
+      if (!point) return;
       const x = geometry.xScale(point.distance);
       const y = geometry.yScale(point.elevation);
       hoverGroup.style.display = "";
@@ -898,6 +920,15 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
         this._readoutEl.textContent = `${formatDistance(point.distance, system)} · ${formatElevation(point.elevation, system)}`;
       }
     };
+
+    const onMove = (event: MouseEvent): void => {
+      const rect = svg.getBoundingClientRect();
+      const px = ((event.clientX - rect.left) / rect.width) * width;
+      const index = geometry.indexForX(px);
+      if (index < 0) return;
+      this._hoverIndex = index;
+      showHoverAtIndex(index);
+    };
     const onLeave = (): void => {
       hoverGroup.style.display = "none";
       this._clearHover();
@@ -905,6 +936,15 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     };
     svg.addEventListener("mousemove", onMove);
     svg.addEventListener("mouseleave", onLeave);
+
+    // A resize (or any other redraw) replaces the SVG built above, so re-apply
+    // the marker for the sample the pointer is still on. Without this the
+    // readout blanks until the pointer happens to move again.
+    if (this._hoverIndex !== null && this._hoverIndex < this._profilePoints.length) {
+      showHoverAtIndex(this._hoverIndex);
+    } else {
+      this._hoverIndex = null;
+    }
   }
 
   private _axisLabel(
@@ -923,6 +963,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   }
 
   private _clearHover(): void {
+    this._hoverIndex = null;
     this._setHoverPoint(null);
   }
 
