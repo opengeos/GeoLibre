@@ -1399,6 +1399,18 @@ export const MapCanvas = memo(function MapCanvas({
 
       const canvas = map.getCanvas();
       const container = map.getContainer();
+
+      // Every side effect below registers its own rollback as it happens, and
+      // the teardown is armed before the first of them. Arming it at the end
+      // instead would leave a throw part-way through to strand the overlay in
+      // the DOM with the camera handlers disabled and no way back.
+      const cleanups: Array<() => void> = [];
+      cancelFeatureSelection.current = () => {
+        cleanups.forEach((cleanup) => cleanup());
+        featureSelectionActive.current = false;
+        cancelFeatureSelection.current = null;
+      };
+
       const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       overlay.setAttribute("aria-hidden", "true");
       Object.assign(overlay.style, {
@@ -1416,22 +1428,25 @@ export const MapCanvas = memo(function MapCanvas({
       shape.setAttribute("stroke-dasharray", "6 4");
       overlay.append(shape);
       container.append(overlay);
+      cleanups.push(() => overlay.remove());
 
       // Freeze every camera interaction for the gesture, not only the ones that
       // would fight the drag. Vertices are recorded in screen space and are
       // unprojected once, at finish(); a scroll-wheel zoom or an arrow-key pan
       // placed between two polygon clicks would leave the earlier vertices
       // pointing at different ground than the user aimed at.
-      const restoreCamera: Array<() => void> = [];
       if (request.shape !== "single") {
         for (const name of CAMERA_HANDLERS) {
           const handler = map[name];
           if (!handler.isEnabled()) continue;
           handler.disable();
-          restoreCamera.push(() => handler.enable());
+          cleanups.push(() => handler.enable());
         }
       }
       canvas.style.cursor = "crosshair";
+      cleanups.push(() => {
+        canvas.style.cursor = "";
+      });
       featureSelectionActive.current = true;
 
       let points: maplibregl.Point[] = [];
@@ -1496,7 +1511,6 @@ export const MapCanvas = memo(function MapCanvas({
         return { type: "Polygon", coordinates: [coordinates] };
       };
 
-      const cleanups: Array<() => void> = [];
       const finish = (event: { shiftKey?: boolean; altKey?: boolean }) => {
         // Re-read the layer rather than trusting the snapshot taken at gesture
         // start: a polygon or freehand gesture stays open for as long as the
@@ -1643,14 +1657,6 @@ export const MapCanvas = memo(function MapCanvas({
         () => window.removeEventListener("keydown", onKeyDown),
         () => window.removeEventListener("blur", onBlur),
       );
-      cancelFeatureSelection.current = () => {
-        cleanups.forEach((cleanup) => cleanup());
-        overlay.remove();
-        restoreCamera.forEach((restore) => restore());
-        canvas.style.cursor = "";
-        featureSelectionActive.current = false;
-        cancelFeatureSelection.current = null;
-      };
     };
     const onRequest = (event: Event) =>
       begin((event as CustomEvent<FeatureSelectionRequest>).detail);

@@ -296,4 +296,28 @@ describe("map feature selection", () => {
     };
     assert.deepEqual(featuresIntersectingPolygon(features, selectionPolygon), ["point", "line"]);
   });
+
+  it("falls back to the feature index for an id-less match and skips null geometry", () => {
+    const features: Feature[] = [
+      point([1, 1], {}, "explicit"),
+      // No id: featureSelectionId falls back to the array index, "1".
+      point([1.5, 1.5]),
+      // Inside the polygon's bounds but carrying no geometry to test.
+      { type: "Feature", id: "no-geometry", properties: {}, geometry: null },
+      point([5, 5], {}, "outside"),
+    ];
+    const selectionPolygon: Polygon = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [2, 0],
+          [2, 2],
+          [0, 2],
+          [0, 0],
+        ],
+      ],
+    };
+    assert.deepEqual(featuresIntersectingPolygon(features, selectionPolygon), ["explicit", "1"]);
+  });
 });

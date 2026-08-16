@@ -4994,7 +4994,7 @@
     "identifyStopInspectPixels": "Stop inspecting pixel values",
     "identifyUnavailable": "Identify is only available for vector, WMS, and COG layers",
     "selectFeaturesMenu": "Select features",
-    "selectFeaturesSingle": "Select feature(s)",
+    "selectFeaturesSingle": "Select features by click",
     "selectFeaturesRectangle": "Select features by rectangle",
     "selectFeaturesPolygon": "Select features by polygon",
     "selectFeaturesFreehand": "Select features by freehand",

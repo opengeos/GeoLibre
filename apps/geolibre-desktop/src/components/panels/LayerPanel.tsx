@@ -61,11 +61,7 @@ import {
   type TimePropertyCandidate,
   type TimePropertyRecord,
 } from "@geolibre/plugins";
-import {
-  startFeatureSelection,
-  type FeatureSelectionShape,
-  type MapController,
-} from "@geolibre/map";
+import { startFeatureSelection, type MapController } from "@geolibre/map";
 import {
   applyMapboxStyleImport,
   applyQmlImport,
@@ -3773,7 +3769,7 @@ export function LayerPanel({
                                         if (identifyActive) setIdentifyLayer(null);
                                         startFeatureSelection({
                                           layerId: layer.id,
-                                          shape: shape as FeatureSelectionShape,
+                                          shape,
                                         });
                                       }}
                                     >
