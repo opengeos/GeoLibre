@@ -2,7 +2,12 @@ import type { IControl, Map as MapLibreMap, MapMouseEvent, GeoJSONSource } from 
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 
 import type { LngLat, ProfileStats } from "../elevation/geometry";
-import { resampleLine, computeStats, cumulativeDistances } from "../elevation/geometry";
+import {
+  resampleLine,
+  computeStats,
+  cumulativeDistances,
+  thinIndices,
+} from "../elevation/geometry";
 import { fetchElevations, MAX_POINTS_PER_REQUEST, ElevationFetchError } from "../elevation/client";
 import { selectedProfileLine } from "../elevation/selection";
 import { buildChartGeometry, type ProfilePoint } from "../chart/profileChart";
@@ -36,6 +41,15 @@ const LINE_COLOR = "#f97316";
 const HOVER_COLOR = "#ef4444";
 
 const CHART_HEIGHT = 132;
+
+/**
+ * Most points the chart will plot for a line that carries its own elevations.
+ * The panel is at most a few hundred CSS pixels wide, so this is far more
+ * detail than the SVG can show while keeping the path and the per-mousemove
+ * nearest-sample scan bounded. Lines without embedded elevations are already
+ * capped by `resampleLine(coords, maxSamples)`.
+ */
+const MAX_CHART_POINTS = 2000;
 
 const DEFAULT_OPTIONS: Required<
   Omit<
@@ -420,13 +434,23 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     this._setBusy(true);
 
     if (this._state.elevations) {
+      const elevations = this._state.elevations;
       const distances = cumulativeDistances(coords);
-      this._sampledCoords = coords.map((coord) => [...coord] as LngLat);
-      this._profilePoints = distances.map((distance, index) => ({
-        distance,
-        elevation: this._state.elevations?.[index] ?? 0,
+      // Stats read every recorded vertex, so ascent/descent are not understated
+      // by the thinning below.
+      this._stats = computeStats(elevations, distances);
+      // The chart is capped the way the fetched path is capped by resampleLine.
+      // A multi-day GPX track can carry tens of thousands of trackpoints, and
+      // each one costs an SVG path segment plus a step of the linear
+      // nearest-sample scan that runs on every mousemove — enough to make
+      // hovering janky. The cap sits well above the chart's pixel width, so
+      // nothing visible is lost.
+      const indices = thinIndices(coords.length, MAX_CHART_POINTS);
+      this._sampledCoords = indices.map((index) => [...coords[index]] as LngLat);
+      this._profilePoints = indices.map((index) => ({
+        distance: distances[index],
+        elevation: elevations[index] ?? 0,
       }));
-      this._stats = computeStats(this._state.elevations, distances);
       this._setStatus("");
       this._setBusy(false);
       this._renderProfile();

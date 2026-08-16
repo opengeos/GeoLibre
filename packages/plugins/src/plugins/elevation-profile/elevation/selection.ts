@@ -16,8 +16,15 @@ export interface SelectedProfileLine {
  * LineString and MultiLineString geometries are supported. Multi-part lines are
  * concatenated in their source order, matching how GeoLibre's route tools treat
  * them. Embedded elevations are returned only when every retained vertex has a
- * finite Z value. This lets GPX tracks use their recorded `<ele>` values while
- * ordinary two-dimensional lines fall back to the elevation service.
+ * finite Z value and at least one of them is non-zero. This lets GPX tracks use
+ * their recorded `<ele>` values while ordinary two-dimensional lines fall back
+ * to the elevation service.
+ *
+ * The all-zero exclusion matters because many GPX/GeoJSON producers write `0`
+ * as a placeholder Z instead of omitting the third ordinate, so a genuinely 2D
+ * line arrives as `[x, y, 0]` vertices. Charting those would draw a flat 0 m
+ * profile instead of the real terrain. `geojsonHasZCoordinates` in
+ * `@geolibre/core` rejects all-zero Z for the same reason.
  *
  * @param features - The features currently selected in GeoLibre.
  * @returns The first usable selected line, or null when none is selected.
@@ -33,6 +40,7 @@ export function selectedProfileLine(
     const coords: LngLat[] = [];
     const elevations: number[] = [];
     let hasCompleteElevations = true;
+    let hasNonZeroElevation = false;
     for (const position of positions) {
       const longitude = position[0];
       const latitude = position[1];
@@ -41,6 +49,7 @@ export function selectedProfileLine(
       const elevation = position[2];
       if (typeof elevation === "number" && Number.isFinite(elevation)) {
         elevations.push(elevation);
+        if (elevation !== 0) hasNonZeroElevation = true;
       } else {
         hasCompleteElevations = false;
       }
@@ -50,7 +59,9 @@ export function selectedProfileLine(
       return {
         coords,
         elevations:
-          hasCompleteElevations && elevations.length === coords.length ? elevations : null,
+          hasCompleteElevations && hasNonZeroElevation && elevations.length === coords.length
+            ? elevations
+            : null,
       };
     }
   }

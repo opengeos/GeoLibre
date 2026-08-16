@@ -118,8 +118,16 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
     // still propagating, and the control's click-outside handler (registered
     // during onAdd) would see it land outside the panel and collapse it again.
     // The other panel plugins (Street View, EnviroAtlas, National Map…) defer
-    // their expand for the same reason.
-    if (openPanel) setTimeout(() => control?.expand(), 0);
+    // their expand for the same reason. Pin the expand to the control this call
+    // activated: a deactivate (or a deactivate plus a project restore that asks
+    // for a collapsed panel) landing inside that tick would otherwise open the
+    // replacement control against its own restored state.
+    const activated = control;
+    if (openPanel) {
+      setTimeout(() => {
+        if (control === activated) activated.expand();
+      }, 0);
+    }
   },
 
   // Deep link: GeoLibre auto-activates the plugin for a URL like
@@ -173,6 +181,10 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
       };
       pendingState = cleared;
       control?.setState(cleared);
+      // setState only toggles the expanded class; expand() also re-anchors the
+      // panel to its control button, which a panel that was collapsed until now
+      // has never had done.
+      control?.expand();
       return;
     }
     pendingState = state as Partial<ElevationProfileState> & {
