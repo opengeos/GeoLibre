@@ -34,6 +34,7 @@ import {
   type FeatureSelectionRequest,
   type FeatureSelectionShape,
 } from "./feature-selection";
+import { isGlobeControlToggleClick } from "./globe-control-toggle";
 import { createMapController, type MapController } from "./map-controller";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
@@ -1226,11 +1227,10 @@ export const MapCanvas = memo(function MapCanvas({
     };
     map.on("moveend", updateView);
 
-    // Persist user clicks on MapLibre's GlobeControl into project preferences
-    // so a project reopens with the projection it was saved in. Listening to
-    // projectiontransition itself is unsafe: style initialization and project
-    // reconciliation emit the same event, and a stale one can overwrite the
-    // projection from a project that has just loaded.
+    // Persist user clicks on MapLibre's GlobeControl into project preferences so
+    // a project reopens with the projection it was saved in. See
+    // `globe-control-toggle.ts` for why the click, and not MapLibre's
+    // `projectiontransition` event, is what this listens to.
     const updateProjection = () => {
       const projection = mc.readProjection();
       // Functional update so a concurrent preference change (zoom-limit edit,
@@ -1247,9 +1247,10 @@ export const MapCanvas = memo(function MapCanvas({
       });
     };
     const handleProjectionControlClick = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (!target.closest(".maplibregl-ctrl-globe, .maplibregl-ctrl-globe-enabled")) return;
+      // The control's own handler runs on the button before the event reaches
+      // this container-level listener, and `setProjection` is synchronous, so
+      // `readProjection()` already reflects the toggle.
+      if (!isGlobeControlToggleClick(event.target)) return;
       updateProjection();
     };
     map.getContainer().addEventListener("click", handleProjectionControlClick);

@@ -5,6 +5,7 @@ import {
   normalizeDesktopSettings,
 } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
 import {
+  planStartup,
   startupDefaultProjection,
   startupProjectPath,
   startupSettingsAfterForcedSaveAs,
@@ -65,6 +66,78 @@ describe("startupDefaultProjection", () => {
     assert.equal(
       startupDefaultProjection({ ...DEFAULT_STARTUP_SETTINGS, globeByDefault: false }),
       "mercator",
+    );
+  });
+});
+
+describe("planStartup", () => {
+  const recent = (...paths: string[]) =>
+    paths.map((path) => ({ path, name: path, openedAt: "2026-01-01T00:00:00.000Z" }));
+  const PINNED = "/tmp/pinned.geolibre.json";
+  const pinned = { ...DEFAULT_STARTUP_SETTINGS, mode: "specific" as const, projectPath: PINNED };
+
+  it("yields to an explicit project or data URL without touching preferences", () => {
+    // The URL loaders bring a projection of their own, so a plan that also
+    // seeded one would race them. Even a configured startup project stands down.
+    assert.deepEqual(
+      planStartup({
+        explicitPayload: true,
+        desktop: true,
+        settings: pinned,
+        recentProjects: recent(PINNED),
+      }),
+      { kind: "payload" },
+    );
+  });
+
+  it("restores a configured project on the desktop", () => {
+    assert.deepEqual(
+      planStartup({
+        explicitPayload: false,
+        desktop: true,
+        settings: pinned,
+        recentProjects: [],
+      }),
+      { kind: "restore", path: PINNED },
+    );
+  });
+
+  it("never restores off the desktop, but still honors the projection there", () => {
+    // The browser build and the Jupyter embed have no persistent local file to
+    // reopen, so the same pinned preference must not gate their shell -- but the
+    // empty-workspace projection setting is offered to them and has to apply.
+    for (const globeByDefault of [true, false]) {
+      assert.deepEqual(
+        planStartup({
+          explicitPayload: false,
+          desktop: false,
+          settings: { ...pinned, globeByDefault },
+          recentProjects: recent(PINNED),
+        }),
+        { kind: "default", projection: globeByDefault ? "globe" : "mercator" },
+      );
+    }
+  });
+
+  it("falls back to the empty workspace when no project resolves", () => {
+    // "Reopen the last project" with an empty history, and the default mode.
+    assert.deepEqual(
+      planStartup({
+        explicitPayload: false,
+        desktop: true,
+        settings: { ...DEFAULT_STARTUP_SETTINGS, mode: "last" },
+        recentProjects: [],
+      }),
+      { kind: "default", projection: "globe" },
+    );
+    assert.deepEqual(
+      planStartup({
+        explicitPayload: false,
+        desktop: true,
+        settings: { ...DEFAULT_STARTUP_SETTINGS, globeByDefault: false },
+        recentProjects: recent(PINNED),
+      }),
+      { kind: "default", projection: "mercator" },
     );
   });
 });

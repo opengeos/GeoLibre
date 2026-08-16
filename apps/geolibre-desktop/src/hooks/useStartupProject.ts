@@ -1,10 +1,10 @@
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, type MapProjection } from "@geolibre/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dataUrlParameters } from "../lib/data-url";
 import { isTauri } from "../lib/is-tauri";
 import { projectUrlFromLocation } from "../lib/project-url";
-import { startupDefaultProjection, startupProjectPath } from "../lib/startup-project";
+import { planStartup, startupDefaultProjection, type StartupPlan } from "../lib/startup-project";
 import { openRecentProjectFile, RecentProjectGoneError } from "../lib/tauri-io";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopSettings";
@@ -31,13 +31,45 @@ const RESTORE_GATE_TIMEOUT_MS = 10_000;
  * `PROJECT_URL_PARAMS` plus a bare `?https://...` query, and `dataUrlParameters`
  * only claims a `?data=` that is an absolute http(s) URL -- a malformed one
  * leaves `useDataUrlLoader` a no-op, so yielding to it would strand the user on
- * an empty workspace. Shared by the restore gate's initial value and the effect
- * that performs the restore, so the two cannot drift apart.
+ * an empty workspace.
  */
 function hasExplicitLaunchPayload(): boolean {
   if (projectUrlFromLocation() !== null) return true;
   if (dataUrlParameters(window.location.search) !== null) return true;
   return false;
+}
+
+/**
+ * This launch's startup plan, read from the live stores.
+ *
+ * Called from both the render-time gate and the effect below; `planStartup` is
+ * the single decision, so the two cannot disagree about whether a restore is
+ * happening. Every source it reads is synchronous and settled before the first
+ * render (`useDesktopSettingsStore` hydrates from localStorage at store-creation
+ * time), so both calls see the same answer.
+ */
+function currentStartupPlan(): StartupPlan {
+  // `useRecentProjectsPersistence` hydrates the store from localStorage in its
+  // own mount effect. Fall back to reading storage directly when that has not
+  // happened yet, so "last project" mode does not silently no-op if this hook is
+  // ever ordered above it in `App.tsx`.
+  const stored = useAppStore.getState().recentProjects;
+  return planStartup({
+    explicitPayload: hasExplicitLaunchPayload(),
+    desktop: isTauri(),
+    settings: useDesktopSettingsStore.getState().desktopSettings.startup,
+    recentProjects: stored.length > 0 ? stored : loadRecentProjects(),
+  });
+}
+
+/** Seed the empty workspace's projection, without marking the project dirty. */
+function applyDefaultProjection(projection: MapProjection): void {
+  useAppStore.setState((state) => ({
+    preferences: {
+      ...state.preferences,
+      map: { ...state.preferences.map, projection },
+    },
+  }));
 }
 
 export function useStartupProject(): {
@@ -53,35 +85,31 @@ export function useStartupProject(): {
   // startup, that lets MapLibre's projection events race the project preference
   // back into the store. Starting the shell only after loadProject makes the
   // startup project the map controller's initial state.
-  const [restoring, setRestoring] = useState(() => !hasExplicitLaunchPayload());
+  //
+  // Only a real restore gates the shell. The empty workspace needs its
+  // projection applied before MapCanvas creates the map, but MapCanvas does that
+  // in its own mount effect, which React runs *before* this component's -- so
+  // the store is seeded here during the first render instead, and the launches
+  // with nothing to restore (every browser and Jupyter-embed load, and desktop's
+  // default mode) mount straight away with no spinner. Writing to the store
+  // during render is safe here: it happens once, before any subscriber has
+  // rendered, and re-running the initializer would set the same value.
+  const [restoring, setRestoring] = useState(() => {
+    const plan = currentStartupPlan();
+    if (plan.kind === "default") applyDefaultProjection(plan.projection);
+    return plan.kind === "restore";
+  });
 
   useEffect(() => {
-    if (hasExplicitLaunchPayload()) return;
+    const plan = currentStartupPlan();
+    // Both other cases were settled by the initializer above.
+    if (plan.kind !== "restore") return;
+    const path = plan.path;
     const settings = useDesktopSettingsStore.getState().desktopSettings.startup;
-    // `useRecentProjectsPersistence` hydrates the store from localStorage in its
-    // own mount effect. Fall back to reading storage directly when that has not
-    // happened yet, so "last project" mode does not silently no-op if this hook
-    // is ever ordered above it in `App.tsx`.
-    const stored = useAppStore.getState().recentProjects;
-    const path = isTauri()
-      ? startupProjectPath(settings, stored.length > 0 ? stored : loadRecentProjects())
-      : null;
     const openDefaultWorkspace = () => {
-      useAppStore.setState((state) => ({
-        preferences: {
-          ...state.preferences,
-          map: {
-            ...state.preferences.map,
-            projection: startupDefaultProjection(settings),
-          },
-        },
-      }));
+      applyDefaultProjection(startupDefaultProjection(settings));
       setRestoring(false);
     };
-    if (!path) {
-      openDefaultWorkspace();
-      return;
-    }
 
     // The workspace this restore is allowed to replace. The XYZ probes below
     // reach the network, and the shell becomes interactive as soon as the gate
@@ -101,6 +129,11 @@ export function useStartupProject(): {
     // has not settled in time. The restore itself is left running -- it can
     // still land, guarded by `restoringOver`/`isDirty` below -- so a merely slow
     // project is not lost, while a stalled one no longer holds a blank window.
+    // No `projectGeneration`/`isDirty` check here, unlike the two paths below:
+    // while the gate is up the shell is unmounted, so there is nothing the user
+    // could have opened or edited for this to overwrite. That invariant is what
+    // makes the omission safe -- rendering anything interactive behind the
+    // spinner would break it, and this call would need the same guard.
     const gateTimer = window.setTimeout(() => {
       if (cancelled) return;
       openDefaultWorkspace();

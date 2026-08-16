@@ -46,6 +46,49 @@ export function startupDefaultProjection(settings: StartupSettings): MapProjecti
 }
 
 /**
+ * What a launch has to settle before the shell may mount.
+ *
+ * - `payload` -- a `?project=`/`?data=` URL owns this launch. Its own loader
+ *   brings a projection with it, so nothing here touches preferences.
+ * - `restore` -- open this project first, with the shell held back so the map
+ *   controller is built from the restored project rather than repaired after.
+ * - `default` -- nothing to restore, so this launch shows the empty workspace in
+ *   `projection`. The shell can mount immediately, provided the preference is
+ *   applied before the map is created.
+ */
+export type StartupPlan =
+  | { kind: "payload" }
+  | { kind: "restore"; path: string }
+  | { kind: "default"; projection: MapProjection };
+
+/**
+ * Decide a launch's startup plan.
+ *
+ * The single source of truth for that decision, so the render-time gate and the
+ * effect that performs the restore cannot drift apart, and so the precedence
+ * between an explicit payload, a configured startup project and the empty
+ * workspace is testable without a React renderer.
+ *
+ * @param explicitPayload - Whether the URL carries a project or data payload.
+ * @param desktop - Whether this is the Tauri build. Only it can reopen a local
+ *   file; the browser and the Jupyter embed have no persistent path, but they do
+ *   honor the empty-workspace projection.
+ */
+export function planStartup(options: {
+  explicitPayload: boolean;
+  desktop: boolean;
+  settings: StartupSettings;
+  recentProjects: readonly RecentPath[];
+}): StartupPlan {
+  if (options.explicitPayload) return { kind: "payload" };
+  const path = options.desktop
+    ? startupProjectPath(options.settings, options.recentProjects)
+    : null;
+  if (path) return { kind: "restore", path };
+  return { kind: "default", projection: startupDefaultProjection(options.settings) };
+}
+
+/**
  * Follow a pinned startup project to the new path an ordinary Save landed on,
  * or null when the preference should stay as it is.
  *
