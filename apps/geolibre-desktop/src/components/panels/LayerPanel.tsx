@@ -3777,6 +3777,14 @@ export function LayerPanel({
                                     </DropdownMenuItem>
                                   ))}
                                   <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    disabled={!holdsSelection}
+                                    onSelect={clearFeatureSelection}
+                                  >
+                                    <X className="me-2 h-3.5 w-3.5" />
+                                    {t("toolbar.item.clearSelection")}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
                                   <DropdownMenuLabel className="max-w-64 whitespace-normal text-xs font-normal text-muted-foreground">
                                     {t("layers.selectFeaturesModifiers")}
                                   </DropdownMenuLabel>
