@@ -70,7 +70,7 @@ The project name is edited in place on the right of the toolbar, and it is saved
 
 ## Startup
 
-**Settings → Startup** chooses the workspace the desktop app opens with:
+**Settings → Startup** chooses how GeoLibre opens a new session. The installed desktop app also offers project restoration modes:
 
 | Mode | Behavior |
 | --- | --- |
@@ -82,8 +82,8 @@ The project name is edited in place on the right of the toolbar, and it is saved
 
 If the startup project has been moved or deleted, GeoLibre opens the default workspace instead, says so in a banner, and drops the missing file from the recent-projects list.
 
-!!! note "Desktop only"
-    This section appears only in the installed desktop app. The browser build has no persistent local file to reopen.
+!!! note "Project restoration is desktop only"
+    The browser build includes the empty-workspace projection option, but has no persistent local file to reopen, so the three project modes appear only in the installed desktop app.
 
 Two deliberate limits are worth knowing:
 

@@ -1226,10 +1226,11 @@ export const MapCanvas = memo(function MapCanvas({
     };
     map.on("moveend", updateView);
 
-    // Persist projection toggles (the GlobeControl) into project preferences so
-    // a project reopens with the projection it was saved in. getProjection()
-    // returns the configured type, so the internal globe→mercator switch at high
-    // zoom (which also fires this event) leaves the stored preference unchanged.
+    // Persist user clicks on MapLibre's GlobeControl into project preferences
+    // so a project reopens with the projection it was saved in. Listening to
+    // projectiontransition itself is unsafe: style initialization and project
+    // reconciliation emit the same event, and a stale one can overwrite the
+    // projection from a project that has just loaded.
     const updateProjection = () => {
       const projection = mc.readProjection();
       // Functional update so a concurrent preference change (zoom-limit edit,
@@ -1245,7 +1246,13 @@ export const MapCanvas = memo(function MapCanvas({
         };
       });
     };
-    map.on("projectiontransition", updateProjection);
+    const handleProjectionControlClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (!target.closest(".maplibregl-ctrl-globe, .maplibregl-ctrl-globe-enabled")) return;
+      updateProjection();
+    };
+    map.getContainer().addEventListener("click", handleProjectionControlClick);
     map.on("load", () => {
       const state = useAppStore.getState();
       mc.setBasemapVisible(state.basemapVisible);
@@ -1304,6 +1311,7 @@ export const MapCanvas = memo(function MapCanvas({
         window.cancelAnimationFrame(resizeFrame);
       }
       pointerElevation.dispose();
+      map.getContainer().removeEventListener("click", handleProjectionControlClick);
       mc.destroy();
       controller.current = null;
       if (controllerRef) controllerRef.current = null;

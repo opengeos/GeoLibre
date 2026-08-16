@@ -1826,6 +1826,7 @@
       "ai": "AI Providers",
       "environmentVariables": "Environment Variables",
       "updates": "Update Settings",
+      "startupSettings": "Startup Settings",
       "managePlugins": "Manage Plugins",
       "styleManager": "Style Manager",
       "urlOverrideNote": "URL layout parameters override saved settings."
@@ -1845,7 +1846,7 @@
     },
     "startup": {
       "title": "Startup project",
-      "description": "Choose the workspace GeoLibre opens when the native app starts.",
+      "description": "Choose how GeoLibre opens a new session.",
       "mode": {
         "default": "Open the default workspace",
         "last": "Reopen the last project",
