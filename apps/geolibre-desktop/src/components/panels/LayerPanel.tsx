@@ -61,7 +61,11 @@ import {
   type TimePropertyCandidate,
   type TimePropertyRecord,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
+import {
+  startFeatureSelection,
+  type FeatureSelectionShape,
+  type MapController,
+} from "@geolibre/map";
 import {
   applyMapboxStyleImport,
   applyQmlImport,
@@ -130,6 +134,7 @@ import {
 } from "@geolibre/ui";
 import {
   CalendarClock,
+  CircleDashed,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -149,6 +154,7 @@ import {
   Layers,
   Library,
   Locate,
+  LassoSelect,
   Lock,
   Map as MapIcon,
   MoreHorizontal,
@@ -160,6 +166,7 @@ import {
   Pencil,
   PencilRuler,
   PenTool,
+  Pentagon,
   RefreshCw,
   Save,
   Shuffle,
@@ -1525,7 +1532,9 @@ export function LayerPanel({
           updateLayer(layer.id, {
             ...setLayerConnectionResult(latest, { error: message }),
             ...(latest.connection?.onFailure === "clear" && latest.geojson
-              ? { geojson: { type: "FeatureCollection" as const, features: [] } }
+              ? {
+                  geojson: { type: "FeatureCollection" as const, features: [] },
+                }
               : {}),
           });
         }
@@ -1730,7 +1739,9 @@ export function LayerPanel({
           return { text: mapboxStyleToJson(result), warnings: result.warnings };
         },
         {
-          defaultName: `${sanitizeExportFileName(geoLibreStyleSourceName(layer))}.geolibre.style.json`,
+          defaultName: `${sanitizeExportFileName(
+            geoLibreStyleSourceName(layer),
+          )}.geolibre.style.json`,
           filters: [{ name: "GeoLibre URL style", extensions: ["json"] }],
           browserTypes: [
             {
@@ -3307,7 +3318,9 @@ export function LayerPanel({
                             isLayerLocked
                               ? t("collaborate.layerLockedHint")
                               : groupHidden
-                                ? `${t("layers.hiddenByGroup")} — ${t("layers.doubleClickToRename")}`
+                                ? `${t("layers.hiddenByGroup")} — ${t(
+                                    "layers.doubleClickToRename",
+                                  )}`
                                 : t("layers.doubleClickToRename")
                           }
                           onDoubleClick={(e: ReactMouseEvent) => {
@@ -3734,6 +3747,41 @@ export function LayerPanel({
                           )}
                           {canSelectFeatures && (
                             <>
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                  <MousePointerClick className="h-3.5 w-3.5" />
+                                  {t("layers.selectFeaturesMenu")}
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                  {(
+                                    [
+                                      ["single", MousePointerClick, "layers.selectFeaturesSingle"],
+                                      ["rectangle", SquareDashed, "layers.selectFeaturesRectangle"],
+                                      ["polygon", Pentagon, "layers.selectFeaturesPolygon"],
+                                      ["freehand", LassoSelect, "layers.selectFeaturesFreehand"],
+                                      ["radius", CircleDashed, "layers.selectFeaturesRadius"],
+                                    ] as const
+                                  ).map(([shape, Icon, label]) => (
+                                    <DropdownMenuItem
+                                      key={shape}
+                                      onSelect={() => {
+                                        if (identifyActive) setIdentifyLayer(null);
+                                        startFeatureSelection({
+                                          layerId: layer.id,
+                                          shape: shape as FeatureSelectionShape,
+                                        });
+                                      }}
+                                    >
+                                      <Icon className="me-2 h-3.5 w-3.5" />
+                                      {t(label)}
+                                    </DropdownMenuItem>
+                                  ))}
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuLabel className="max-w-64 whitespace-normal text-xs font-normal text-muted-foreground">
+                                    {t("layers.selectFeaturesModifiers")}
+                                  </DropdownMenuLabel>
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
                               {/* Not selectLayer() + open: that would clear the
                               live selection the dialogs' add/remove/intersect
                               modes combine with, so the target travels via the

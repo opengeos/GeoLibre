@@ -1,4 +1,12 @@
 export { MapCanvas, type MapCanvasProps, type MapDiagnosticEvent } from "./MapCanvas";
+export {
+  FEATURE_SELECTION_EVENT,
+  featuresIntersectingPolygon,
+  selectionModeFromModifiers,
+  startFeatureSelection,
+  type FeatureSelectionRequest,
+  type FeatureSelectionShape,
+} from "./feature-selection";
 export { SecondaryMapCanvas, type SecondaryMapCanvasProps } from "./SecondaryMapCanvas";
 export { CesiumCanvas, type CesiumCanvasProps } from "./CesiumCanvas";
 export { isCesiumSupportedLayerType } from "./cesium-layer-sync";

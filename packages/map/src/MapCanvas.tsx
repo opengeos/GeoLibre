@@ -1,4 +1,5 @@
 import {
+  applySelectionMode,
   applyGroupEffects,
   createPointerElevationResolver,
   getActiveEllipsoid,
@@ -11,6 +12,7 @@ import {
   type PointerElevationResolver,
 } from "@geolibre/core";
 import * as maplibregl from "maplibre-gl";
+import type { Polygon } from "geojson";
 import { memo, useEffect, useMemo, useRef } from "react";
 import {
   circleLayerId,
@@ -24,6 +26,12 @@ import {
   mbtilesStyleLayerIds,
   vectorTileStyleLayerIds,
 } from "./layer-sync";
+import {
+  FEATURE_SELECTION_EVENT,
+  featuresIntersectingPolygon,
+  selectionModeFromModifiers,
+  type FeatureSelectionRequest,
+} from "./feature-selection";
 import { createMapController, type MapController } from "./map-controller";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
@@ -652,8 +660,11 @@ function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
 function timeSliderBridge(): GeoLibreTimeSliderBridge | undefined {
   return typeof window === "undefined"
     ? undefined
-    : (window as Window & { __GEOLIBRE_TIME_SLIDER__?: GeoLibreTimeSliderBridge })
-        .__GEOLIBRE_TIME_SLIDER__;
+    : (
+        window as Window & {
+          __GEOLIBRE_TIME_SLIDER__?: GeoLibreTimeSliderBridge;
+        }
+      ).__GEOLIBRE_TIME_SLIDER__;
 }
 
 /**
@@ -1310,6 +1321,202 @@ export const MapCanvas = memo(function MapCanvas({
   useEffect(() => {
     controller.current?.waitAndSyncLayers(renderLayers);
   }, [renderLayers]);
+
+  useEffect(() => {
+    const map = controller.current?.getMap();
+    if (!map) return;
+
+    let cancelActive: (() => void) | null = null;
+    const begin = (request: FeatureSelectionRequest) => {
+      cancelActive?.();
+      const layer = useAppStore.getState().layers.find((item) => item.id === request.layerId);
+      if (!layer?.geojson?.features) return;
+
+      const canvas = map.getCanvas();
+      const container = map.getContainer();
+      const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      overlay.setAttribute("aria-hidden", "true");
+      Object.assign(overlay.style, {
+        position: "absolute",
+        inset: "0",
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+        zIndex: "5",
+      });
+      const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      shape.setAttribute("fill", "rgba(37, 99, 235, 0.16)");
+      shape.setAttribute("stroke", "#2563eb");
+      shape.setAttribute("stroke-width", "2");
+      shape.setAttribute("stroke-dasharray", "6 4");
+      overlay.append(shape);
+      container.append(overlay);
+
+      const panEnabled = map.dragPan.isEnabled();
+      const boxZoomEnabled = map.boxZoom.isEnabled();
+      const doubleClickZoomEnabled = map.doubleClickZoom.isEnabled();
+      if (request.shape !== "single") {
+        map.dragPan.disable();
+        map.boxZoom.disable();
+        map.doubleClickZoom.disable();
+      }
+      canvas.style.cursor = "crosshair";
+
+      let points: maplibregl.Point[] = [];
+      let dragging = false;
+      const render = () => {
+        if (points.length === 0) return shape.setAttribute("d", "");
+        if (request.shape === "rectangle" && points.length > 1) {
+          const [a, b] = points;
+          shape.setAttribute(
+            "d",
+            `M ${a.x} ${a.y} L ${b.x} ${a.y} L ${b.x} ${b.y} L ${a.x} ${b.y} Z`,
+          );
+          return;
+        }
+        if (request.shape === "radius" && points.length > 1) {
+          const [center, edge] = points;
+          const radius = center.dist(edge);
+          shape.setAttribute(
+            "d",
+            `M ${center.x - radius} ${center.y} a ${radius} ${radius} 0 1 0 ${
+              radius * 2
+            } 0 a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`,
+          );
+          return;
+        }
+        const closed = request.shape !== "freehand" || !dragging;
+        shape.setAttribute(
+          "d",
+          `${points
+            .map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`)
+            .join(" ")}${closed && points.length > 2 ? " Z" : ""}`,
+        );
+      };
+      const polygonFromPoints = (): Polygon | null => {
+        let ring = points;
+        if (request.shape === "rectangle" && points.length >= 2) {
+          const [a, b] = points;
+          ring = [a, new maplibregl.Point(b.x, a.y), b, new maplibregl.Point(a.x, b.y)];
+        } else if (request.shape === "radius" && points.length >= 2) {
+          const [center, edge] = points;
+          const radius = center.dist(edge);
+          ring = Array.from({ length: 64 }, (_, index) => {
+            const angle = (index / 64) * Math.PI * 2;
+            return new maplibregl.Point(
+              center.x + Math.cos(angle) * radius,
+              center.y + Math.sin(angle) * radius,
+            );
+          });
+        }
+        if (ring.length < 3) return null;
+        const coordinates = ring.map((point) => {
+          const lngLat = map.unproject(point);
+          return [lngLat.lng, lngLat.lat] as [number, number];
+        });
+        coordinates.push(coordinates[0]);
+        return { type: "Polygon", coordinates: [coordinates] };
+      };
+
+      const cleanups: Array<() => void> = [];
+      const finish = (event: { shiftKey?: boolean; altKey?: boolean }) => {
+        let matched: string[] = [];
+        if (request.shape === "single" && points[0]) {
+          const point = points[0];
+          const queryIds = identifyStyleLayerIds(layer).filter((id) => map.getLayer(id));
+          const rendered = map.queryRenderedFeatures(
+            [
+              [point.x - 4, point.y - 4],
+              [point.x + 4, point.y + 4],
+            ],
+            { layers: queryIds },
+          );
+          const id = rendered[0] ? findFeatureId(layer, rendered[0]) : null;
+          if (id != null) matched = [id];
+        } else {
+          const polygon = polygonFromPoints();
+          if (polygon) matched = featuresIntersectingPolygon(layer.geojson!.features, polygon);
+        }
+        const store = useAppStore.getState();
+        const current = store.selectedLayerId === layer.id ? store.selectedFeatureIds : [];
+        const mode = selectionModeFromModifiers(
+          Boolean(event.shiftKey),
+          Boolean(event.altKey),
+          request.mode,
+        );
+        const next = applySelectionMode(current, matched, mode);
+        if (store.selectedLayerId !== layer.id) store.selectLayer(layer.id);
+        store.selectFeatures(next);
+        cancelActive?.();
+      };
+      const onMouseDown = (event: maplibregl.MapMouseEvent) => {
+        if (request.shape === "polygon" || request.shape === "single") return;
+        dragging = true;
+        points = [event.point];
+        render();
+      };
+      const onMouseMove = (event: maplibregl.MapMouseEvent) => {
+        if (!dragging) return;
+        if (request.shape === "freehand") points.push(event.point);
+        else points = [points[0], event.point];
+        render();
+      };
+      const onMouseUp = (event: maplibregl.MapMouseEvent) => {
+        if (!dragging) return;
+        dragging = false;
+        if (request.shape === "freehand" && points.at(-1) !== event.point) points.push(event.point);
+        else if (request.shape !== "freehand") points = [points[0], event.point];
+        finish(event.originalEvent);
+      };
+      const onClick = (event: maplibregl.MapMouseEvent) => {
+        if (request.shape === "single") {
+          points = [event.point];
+          finish(event.originalEvent);
+        } else if (request.shape === "polygon") {
+          points.push(event.point);
+          render();
+        }
+      };
+      const onDoubleClick = (event: maplibregl.MapMouseEvent) => {
+        if (request.shape !== "polygon") return;
+        event.preventDefault();
+        if (points.length > 2) finish(event.originalEvent);
+      };
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") cancelActive?.();
+      };
+      map.on("mousedown", onMouseDown);
+      map.on("mousemove", onMouseMove);
+      map.on("mouseup", onMouseUp);
+      map.on("click", onClick);
+      map.on("dblclick", onDoubleClick);
+      window.addEventListener("keydown", onKeyDown);
+      cleanups.push(
+        () => map.off("mousedown", onMouseDown),
+        () => map.off("mousemove", onMouseMove),
+        () => map.off("mouseup", onMouseUp),
+        () => map.off("click", onClick),
+        () => map.off("dblclick", onDoubleClick),
+        () => window.removeEventListener("keydown", onKeyDown),
+      );
+      cancelActive = () => {
+        cleanups.forEach((cleanup) => cleanup());
+        overlay.remove();
+        if (panEnabled) map.dragPan.enable();
+        if (boxZoomEnabled) map.boxZoom.enable();
+        if (doubleClickZoomEnabled) map.doubleClickZoom.enable();
+        canvas.style.cursor = "";
+        cancelActive = null;
+      };
+    };
+    const onRequest = (event: Event) =>
+      begin((event as CustomEvent<FeatureSelectionRequest>).detail);
+    window.addEventListener(FEATURE_SELECTION_EVENT, onRequest);
+    return () => {
+      window.removeEventListener(FEATURE_SELECTION_EVENT, onRequest);
+      cancelActive?.();
+    };
+  }, []);
 
   // Stable key over just the geotagged-photo layer ids, so the photo-click
   // effect re-binds only when such a layer is added/removed, not on every
