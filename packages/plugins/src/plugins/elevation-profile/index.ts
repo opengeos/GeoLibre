@@ -31,7 +31,11 @@ let pendingState: Partial<ElevationProfileState> | null = null;
 
 function createControl(app: GeoLibreAppAPI): ElevationProfileControl {
   const next = new ElevationProfileControl({
-    collapsed: pendingState?.collapsed ?? true,
+    // The panel always mounts closed and `activate` opens it a tick later (see
+    // there). Mounting it already expanded would show it for a frame before the
+    // control's own click-outside handler saw the very click that enabled the
+    // plugin and closed it again.
+    collapsed: true,
     unitSystem: pendingState?.unitSystem ?? "metric",
     // Bind the host's file save so CSV/SVG export uses Tauri's native dialog on
     // the desktop (and a browser download on the web); the control falls back
@@ -44,7 +48,7 @@ function createControl(app: GeoLibreAppAPI): ElevationProfileControl {
       ? (callback) => app.onSelectionChange?.(() => callback()) ?? (() => undefined)
       : undefined,
   });
-  if (pendingState) next.setState(pendingState);
+  if (pendingState) next.setState({ ...pendingState, collapsed: true });
   return next;
 }
 
@@ -97,12 +101,25 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
   urlParameterNames: [ELEVATION_LINE_PARAM],
 
   activate(app) {
+    // Whether the panel should end up open. Only a project file can ask for it
+    // closed: `restoreProjectState` calls applyProjectState immediately before
+    // activate, so a saved `collapsed: true` is already in pendingState here.
+    // Every other route in (a first activation, a session deactivate, a New
+    // Project reset) leaves it open, so enabling the plugin shows the panel
+    // instead of just the collapsed mountain button.
+    const openPanel = !(pendingState?.collapsed ?? false);
     control = control ?? createControl(app);
     const added = app.addMapControl(control, position);
     if (!added) {
       control = null;
       return false;
     }
+    // Deferred a tick: the click that chose "Activate" in the Plugins menu is
+    // still propagating, and the control's click-outside handler (registered
+    // during onAdd) would see it land outside the panel and collapse it again.
+    // The other panel plugins (Street View, EnviroAtlas, National Map…) defer
+    // their expand for the same reason.
+    if (openPanel) setTimeout(() => control?.expand(), 0);
   },
 
   // Deep link: GeoLibre auto-activates the plugin for a URL like
@@ -113,8 +130,9 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
 
   deactivate(app) {
     if (!control) return;
-    // Capture the drawn line / unit / collapse so re-activating restores it.
-    pendingState = control.getState();
+    // Capture the drawn line / unit so re-activating restores it, but not the
+    // collapse: turning the plugin back on is a request to see the panel.
+    pendingState = { ...control.getState(), collapsed: false };
     app.removeMapControl(control);
     control = null;
   },
@@ -148,7 +166,7 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
       // the previous project's profile. Mirrors maplibre-swipe /
       // maplibre-graticule, whose normalizers reset to defaults on undefined.
       const cleared: ElevationProfileState = {
-        collapsed: true,
+        collapsed: false,
         unitSystem: "metric",
         line: null,
         elevations: null,
