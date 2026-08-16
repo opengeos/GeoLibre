@@ -280,8 +280,9 @@ export async function writeStartupSnapshot(
  *
  * Both slots can hold the same project -- run in "specific" mode on project X
  * for a while, switch to "last" mode and keep working on X, and each mode only
- * ever refreshes its own slot -- so the newest copy wins rather than whichever
- * slot is looked at first.
+ * ever refreshes its own slot -- so the newest copy is tried first, and an older
+ * one is still tried when the newest slot's file has gone missing. Something
+ * from the right project always beats the unavailable-project banner.
  *
  * @param path - The path or content URI the restore could not read.
  * @param io - Snapshot file access.
@@ -294,17 +295,19 @@ export async function readStartupSnapshot(
   storage: SnapshotStorage | null = defaultStorage(),
 ): Promise<string | null> {
   const index = readStartupSnapshotIndex(storage);
-  const entry = Object.values(index)
+  const entries = Object.values(index)
     .filter((candidate) => candidate.sourcePath === path)
     // `savedAt` is an ISO-8601 UTC timestamp, so it sorts lexicographically.
-    .sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0];
-  if (!entry) return null;
-  try {
-    return await io.read(entry.file);
-  } catch (error) {
-    // The index outlived its file (cleared app storage, a write that never
-    // landed). Nothing to restore, so let the caller report the real failure.
-    console.warn("Could not read the stored copy of the startup project.", error);
-    return null;
+    .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  for (const entry of entries) {
+    try {
+      return await io.read(entry.file);
+    } catch (error) {
+      // The index outlived its file (cleared app storage, a write that never
+      // landed). Try the next copy of the same project, if there is one.
+      console.warn("Could not read the stored copy of the startup project.", error);
+    }
   }
+  // Nothing to restore, so let the caller report the real failure.
+  return null;
 }

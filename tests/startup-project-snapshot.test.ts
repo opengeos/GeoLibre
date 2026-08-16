@@ -354,6 +354,28 @@ describe("readStartupSnapshot", () => {
     assert.equal(await readStartupSnapshot(CONTENT_URI, io, storage), "fresh");
   });
 
+  it("falls through to an older copy when the newest slot's file is gone", async () => {
+    const storage = makeStorage({
+      [STARTUP_SNAPSHOTS_STORAGE_KEY]: JSON.stringify({
+        specific: {
+          sourcePath: CONTENT_URI,
+          file: "specific.geolibre.json",
+          savedAt: "2026-08-01T00:00:00.000Z",
+        },
+        last: {
+          sourcePath: CONTENT_URI,
+          file: "last.geolibre.json",
+          savedAt: "2026-08-15T00:00:00.000Z",
+        },
+      }),
+    });
+    // Only the older slot's file survived. An older copy of the right project
+    // still beats reporting the project as unavailable.
+    const { io } = makeIo({ files: { "specific.geolibre.json": "older" } });
+    assert.equal(await readStartupSnapshot(CONTENT_URI, io, storage), "older");
+    assert.equal(warnings.length, 1);
+  });
+
   it("returns null when there is no copy at all", async () => {
     const { io } = makeIo();
     assert.equal(await readStartupSnapshot(CONTENT_URI, io, makeStorage()), null);
