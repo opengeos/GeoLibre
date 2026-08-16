@@ -950,6 +950,7 @@ describe("parseMapboxStyle imports hand-written styles", () => {
 
     assert.equal(result.matchedLayerCount, 1);
     assert.equal(result.style.vectorStyleMode, "single");
+    assert.equal(result.style.fillColor, "#111111");
     assert.ok(result.warnings.some((warning) => /only the first was imported/.test(warning)));
   });
 
@@ -973,7 +974,31 @@ describe("parseMapboxStyle imports hand-written styles", () => {
 
     assert.equal(result.matchedLayerCount, 1);
     assert.equal(result.style.vectorStyleMode, "single");
+    assert.equal(result.style.fillColor, "#111111");
     assert.ok(result.warnings.some((warning) => /only the first was imported/.test(warning)));
+  });
+
+  it("combines a modern in filter with a string needle", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        {
+          id: "parks",
+          type: "fill",
+          filter: ["in", "park", ["get", "classes"]],
+          paint: { "fill-color": "#111111" },
+        },
+        {
+          id: "schools",
+          type: "fill",
+          filter: ["in", "school", ["get", "classes"]],
+          paint: { "fill-color": "#222222" },
+        },
+      ],
+    });
+
+    assert.equal(result.matchedLayerCount, 2);
+    assert.equal(result.style.vectorStyleMode, "rule-based");
+    assert.ok(result.warnings.some((warning) => /combined as rules/.test(warning)));
   });
 
   it("does not report stacked line rules as combined when a circle claims color", () => {

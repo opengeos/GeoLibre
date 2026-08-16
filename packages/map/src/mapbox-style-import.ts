@@ -351,9 +351,14 @@ function isLegacyLayerFilter(filter: unknown[]): boolean {
     return child !== null && isLegacyLayerFilter(child);
   }
   if (operator === "!has") return true;
+  if (operator === "!in") return true;
+  if (operator === "in") {
+    // Modern `in` is exactly ["in", needle, haystack]. An expression-array
+    // haystack is unambiguously modern even when the needle is a string.
+    return filter.length !== 3 || (typeof filter[1] === "string" && !Array.isArray(filter[2]));
+  }
   return (
-    ["==", "!=", ">", ">=", "<", "<=", "in", "!in"].includes(String(operator)) &&
-    typeof filter[1] === "string"
+    ["==", "!=", ">", ">=", "<", "<="].includes(String(operator)) && typeof filter[1] === "string"
   );
 }
 
