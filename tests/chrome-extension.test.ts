@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseHTML } from "linkedom";
 import { scanDocumentForDatasets } from "../extensions/geolibre-chrome/scanner.mjs";
+import {
+  classifyServiceRequest,
+  mergeServiceCandidates,
+} from "../extensions/geolibre-chrome/service-scanner.mjs";
 import { buildGeoLibreUrl } from "../extensions/geolibre-chrome/url-builder.mjs";
 
 function scan(html: string, url = "https://catalog.example.com/page/") {
@@ -294,5 +298,53 @@ describe("GeoLibre Chrome extension URL builder", () => {
   it("rejects an empty selection and non-web URLs", () => {
     assert.throws(() => buildGeoLibreUrl([]), /Select at least one/);
     assert.throws(() => buildGeoLibreUrl([{ url: "file:///tmp/roads.geojson" }]), /HTTP or HTTPS/);
+  });
+});
+
+describe("GeoLibre Chrome extension service request scanner", () => {
+  it("recognizes OGC web services and removes operation parameters", () => {
+    const cases = [
+      ["WMS", "GetMap", "WMS", "raster"],
+      ["WMTS", "GetTile", "WMTS", "raster"],
+      ["WFS", "GetFeature", "WFS", "vector"],
+    ];
+    for (const [service, request, format, kind] of cases) {
+      const found = classifyServiceRequest(
+        `https://maps.example.com/ows?token=keep&SERVICE=${service}&REQUEST=${request}&BBOX=1,2,3,4`,
+      );
+      assert.equal(found?.url, "https://maps.example.com/ows?token=keep");
+      assert.equal(found?.format, format);
+      assert.equal(found?.kind, kind);
+    }
+  });
+
+  it("recognizes OGC API Features and ArcGIS feature service requests", () => {
+    assert.equal(
+      classifyServiceRequest("https://api.example.com/ogc/collections/roads/items?f=json")?.format,
+      "OGC API",
+    );
+    assert.equal(
+      classifyServiceRequest(
+        "https://services.example.com/arcgis/rest/services/Roads/FeatureServer/2/query?f=geojson",
+      )?.url,
+      "https://services.example.com/arcgis/rest/services/Roads/FeatureServer",
+    );
+  });
+
+  it("turns raster and vector tile coordinates into reusable templates", () => {
+    const raster = classifyServiceRequest("https://tiles.example.com/base/6/17/25.png?key=abc");
+    assert.equal(raster?.url, "https://tiles.example.com/base/{z}/{x}/{y}.png?key=abc");
+    assert.equal(raster?.format, "XYZ / TMS");
+    const vector = classifyServiceRequest("https://tiles.example.com/roads/6/17/25.pbf");
+    assert.equal(vector?.format, "Vector tiles");
+    assert.equal(vector?.kind, "vector");
+  });
+
+  it("ignores ordinary requests and deduplicates services", () => {
+    assert.equal(classifyServiceRequest("https://example.com/app.js"), null);
+    const service = classifyServiceRequest(
+      "https://maps.example.com/wms?service=WMS&request=GetCapabilities",
+    );
+    assert.deepEqual(mergeServiceCandidates([service], [service]), [service]);
   });
 });

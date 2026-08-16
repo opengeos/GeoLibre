@@ -1,11 +1,16 @@
 {
   "manifest_version": 3,
   "name": "Open data in GeoLibre",
-  "description": "Find geospatial datasets on the current page and open the selected files together in GeoLibre.",
-  "version": "0.1.0",
+  "description": "Find geospatial datasets and services used by the current page and open them in GeoLibre.",
+  "version": "0.2.0",
   "homepage_url": "https://geolibre.app/",
   "minimum_chrome_version": "105",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage", "webRequest"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.mjs",
+    "type": "module"
+  },
   "action": {
     "default_title": "Open data in GeoLibre",
     "default_popup": "popup.html",

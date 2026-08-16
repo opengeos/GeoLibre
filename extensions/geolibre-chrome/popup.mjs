@@ -1,4 +1,5 @@
 import { scanDocumentForDatasets } from "./scanner.mjs";
+import { mergeServiceCandidates } from "./service-scanner.mjs";
 import { buildGeoLibreUrl } from "./url-builder.mjs";
 
 const elements = {
@@ -135,7 +136,9 @@ async function inspectPage() {
     target: { tabId: tab.id },
     func: scanDocumentForDatasets,
   });
-  renderDatasets(results[0]?.result ?? []);
+  const key = `services:${tab.id}`;
+  const stored = await chrome.storage.session.get(key);
+  renderDatasets(mergeServiceCandidates(results[0]?.result ?? [], stored[key] ?? []));
 }
 
 elements.selectAll.addEventListener("click", () => {

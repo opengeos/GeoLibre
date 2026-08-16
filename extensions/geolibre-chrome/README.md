@@ -11,8 +11,10 @@ the current page and opens selected files together in GeoLibre using repeated
 3. Choose **Load unpacked**.
 4. Select this `extensions/geolibre-chrome` directory.
 
-The extension requests `activeTab` and `scripting` only. It scans a page after
-you click its toolbar icon and does not retain page contents or browsing data.
+The extension scans document links after you click its toolbar icon. It also
+observes completed HTTP(S) requests locally so it can recognize services used
+by interactive web maps. Detected service URLs remain only in session storage
+for the lifetime of their tab.
 
 ## Package for the Chrome Web Store
 
@@ -40,6 +42,11 @@ reads the complete embedded file inventory even when the visible table is
 virtualized, canonicalizes links to `data.source.coop`, and removes duplicate
 page/download links. The popup can filter discovered files by vector or raster
 type without changing the current selection.
+
+The request watcher recognizes WMS, WMTS, WFS, OGC API Features, ArcGIS Feature
+Services, XYZ/TMS image tiles, and PBF/MVT vector tiles. Tile requests are
+collapsed into reusable `{z}/{x}/{y}` templates, and repeated requests from the
+same service appear once.
 
 Remote servers must allow GeoLibre to fetch the selected URLs through CORS.
 Complete HTTP(S) URLs, including signed query parameters, are forwarded to
