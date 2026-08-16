@@ -126,8 +126,6 @@ export function createTabTaskQueue() {
   };
 }
 
-export function requestBelongsToDocument(activeDocumentId, requestDocumentId) {
-  return (
-    Boolean(requestDocumentId) && (!activeDocumentId || activeDocumentId === requestDocumentId)
-  );
+export function requestBelongsToPage(activeDocumentIds, requestDocumentId) {
+  return Boolean(requestDocumentId) && activeDocumentIds?.has(requestDocumentId);
 }

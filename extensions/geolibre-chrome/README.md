@@ -58,9 +58,10 @@ with the service URL filled in.
 | Service | Sample website | Expected result |
 | --- | --- | --- |
 | XYZ raster tiles | [OpenStreetMap](https://www.openstreetmap.org/) | An XYZ URL template such as `https://tile.openstreetmap.org/{z}/{x}/{y}.png` |
-| PBF/MVT vector tiles | [MapLibre GL JS](https://maplibre.org/maplibre-gl-js/docs/) | A vector tile URL template ending in `.pbf` or `.mvt` |
+| PBF/MVT vector tiles | [MapLibre display-a-map demo](https://maplibre.org/maplibre-gl-js/docs/examples/display-a-map/) | A vector tile URL template ending in `.pbf` or `.mvt` |
 | WMTS | [OpenLayers WMTS example](https://openlayers.org/en/latest/examples/wmts.html) | A WMTS service URL without tile-coordinate parameters |
 | WMS | [OpenLayers WMS GetFeatureInfo example](https://openlayers.org/en/latest/examples/getfeatureinfo-tile.html) | A WMS service endpoint without request-specific parameters |
+| WFS | [OpenLayers WFS example](https://openlayers.org/en/latest/examples/vector-wfs.html) | A WFS endpoint without request-specific parameters |
 | OGC API Features | [OpenLayers OGC API Features example](https://openlayers.org/en/latest/examples/mapserver-ogc-features.html) | An OGC API Features collection or items URL |
 | ArcGIS Feature Service | [ArcGIS FeatureLayer sample](https://developers.arcgis.com/javascript/latest/sample-code/layers-featurelayer/) | An ArcGIS `FeatureServer` service or layer URL |
 

@@ -1,7 +1,7 @@
 import {
   classifyServiceRequest,
   createTabTaskQueue,
-  requestBelongsToDocument,
+  requestBelongsToPage,
 } from "./service-scanner.mjs";
 
 const MAX_REQUESTS_PER_TAB = 100;
@@ -15,16 +15,25 @@ function runForTab(tabId, task) {
 }
 
 chrome.webRequest.onCompleted.addListener(
-  ({ tabId, url, type, documentId }) => {
+  ({ tabId, url, type, documentId, parentDocumentId }) => {
     if (type === "main_frame" && tabId >= 0) {
-      activeDocuments.set(tabId, documentId);
+      activeDocuments.set(tabId, new Set(documentId ? [documentId] : []));
       runForTab(tabId, () => chrome.storage.session.remove(`services:${tabId}`));
     }
-    if (tabId < 0 || !requestBelongsToDocument(activeDocuments.get(tabId), documentId)) return;
+    const documents = activeDocuments.get(tabId);
+    if (
+      type === "sub_frame" &&
+      documentId &&
+      parentDocumentId &&
+      documents?.has(parentDocumentId)
+    ) {
+      documents.add(documentId);
+    }
+    if (tabId < 0 || !requestBelongsToPage(documents, documentId)) return;
     const service = classifyServiceRequest(url);
     if (!service) return;
     runForTab(tabId, async () => {
-      if (activeDocuments.get(tabId) !== documentId) return;
+      if (!requestBelongsToPage(activeDocuments.get(tabId), documentId)) return;
       const key = `services:${tabId}`;
       const stored = await chrome.storage.session.get(key);
       const existing = Array.isArray(stored[key]) ? stored[key] : [];

@@ -6,7 +6,7 @@ import {
   classifyServiceRequest,
   createTabTaskQueue,
   mergeServiceCandidates,
-  requestBelongsToDocument,
+  requestBelongsToPage,
 } from "../extensions/geolibre-chrome/service-scanner.mjs";
 import { buildGeoLibreUrl } from "../extensions/geolibre-chrome/url-builder.mjs";
 
@@ -408,8 +408,10 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     assert.deepEqual(order, ["first:start", "other", "first:end", "second"]);
   });
 
-  it("rejects completions from the previous document after navigation", () => {
-    assert.equal(requestBelongsToDocument("new-document", "old-document"), false);
-    assert.equal(requestBelongsToDocument("new-document", "new-document"), true);
+  it("accepts active top-level and child-frame documents", () => {
+    const documents = new Set(["top-document", "child-document"]);
+    assert.equal(requestBelongsToPage(documents, "top-document"), true);
+    assert.equal(requestBelongsToPage(documents, "child-document"), true);
+    assert.equal(requestBelongsToPage(documents, "old-document"), false);
   });
 });
