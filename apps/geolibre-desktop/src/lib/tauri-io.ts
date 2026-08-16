@@ -2914,16 +2914,31 @@ export async function openRecentProjectFile(
       ? await readTextFile(path)
       : await invoke<string>("read_project_file", { path });
   } catch (error) {
-    if (isFileMissingError(error)) {
-      throw new RecentProjectGoneError(`Project file no longer exists: ${path}`);
-    }
     // Fall back to the copy kept for exactly this project, if there is one
     // (GeoLibre#1948). Only Android content URIs ever have one, and the source
     // path has to match, so this can never substitute a different project.
+    //
+    // Deliberately ahead of the missing-file check. On a real filesystem "no
+    // such file" means the project is gone and the entry can be dropped; on a
+    // dead SAF grant it means nothing reliable, because content providers differ
+    // in how they report one -- the emulator's ExternalStorageProvider raises a
+    // SecurityException, but Drive, Downloads and some OEM file managers are
+    // known to report a revoked URI as a FileNotFoundException. Treating that as
+    // "gone" would make `useStartupProject` forget the recent entry and reset a
+    // "specific" preference to the default, silently wiping the user's chosen
+    // startup project on exactly the failure this copy exists to survive.
     const snapshot = await readStartupSnapshot(path, startupSnapshotIo);
-    if (snapshot === null) throw error;
-    console.warn(`Reopening the stored copy of "${path}"; the original could not be read.`, error);
-    text = snapshot;
+    if (snapshot !== null) {
+      console.warn(
+        `Reopening the stored copy of "${path}"; the original could not be read.`,
+        error,
+      );
+      return { project: parseProject(snapshot), path, text: snapshot };
+    }
+    if (isFileMissingError(error)) {
+      throw new RecentProjectGoneError(`Project file no longer exists: ${path}`);
+    }
+    throw error;
   }
 
   return { project: parseProject(text), path, text };

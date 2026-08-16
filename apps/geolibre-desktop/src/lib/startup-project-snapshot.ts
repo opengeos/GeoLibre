@@ -170,29 +170,30 @@ function writeStartupSnapshotIndex(
 }
 
 /**
- * The write in flight for each slot, so copies land in the order they were
- * asked for.
+ * The copy in flight, so copies land in the order they were asked for.
  *
  * Callers fire these off without awaiting them, alongside opening or saving a
- * project. Two projects can therefore be racing for the same slot -- open one
- * project, open another before the first copy has landed -- and whichever write
- * finished last would win the slot. The recent list is updated synchronously as
- * each project opens, so a slow first write finishing last would leave the slot
- * holding a project the preference no longer resolves to, and the next cold
- * start would find no copy matching the path it asks for. Chaining per slot
- * makes the last write *started* the one that wins, which is the one the
- * preference agrees with.
+ * project, so two can overlap. Within a slot that decides which project wins
+ * it: open one project, open another before the first copy has landed, and
+ * whichever write finished last would take the slot -- while the recent list,
+ * updated synchronously as each project opens, already points at the second. The
+ * slot would hold a project the preference no longer resolves to, and the next
+ * cold start would find no copy matching the path it asks for.
+ *
+ * One queue for both slots rather than one each, because the two share an index:
+ * each write reads the whole index and writes it back after its own file write,
+ * so a "last" copy and a "specific" copy in flight together could both read the
+ * index before either stored it, and the one finishing last would drop the
+ * other's entry -- leaving a perfectly good copy on disk that nothing points at.
+ * Copies are small and rare enough that serializing them costs nothing.
  */
-const slotWrites = new Map<StartupSnapshotSlot, Promise<unknown>>();
+let pendingWrite: Promise<unknown> = Promise.resolve();
 
-function queueSlotWrite<T>(slot: StartupSnapshotSlot, task: () => Promise<T>): Promise<T> {
-  const next = (slotWrites.get(slot) ?? Promise.resolve()).then(task);
+function queueSnapshotWrite<T>(task: () => Promise<T>): Promise<T> {
+  const next = pendingWrite.then(task);
   // The stored link never rejects, so one failed copy cannot strand every later
   // one behind it; the caller still sees the real result through `next`.
-  slotWrites.set(
-    slot,
-    next.catch(() => undefined),
-  );
+  pendingWrite = next.catch(() => undefined);
   return next;
 }
 
@@ -249,7 +250,7 @@ export async function writeStartupSnapshot(
     return null;
   }
 
-  return queueSlotWrite(slot, async () => {
+  return queueSnapshotWrite(async () => {
     const file = startupSnapshotFile(slot);
     try {
       await io.write(file, text);
@@ -277,6 +278,11 @@ export async function writeStartupSnapshot(
  * stand-in for the one the user asked for, so a stale slot yields null and the
  * caller reports the original read failure.
  *
+ * Both slots can hold the same project -- run in "specific" mode on project X
+ * for a while, switch to "last" mode and keep working on X, and each mode only
+ * ever refreshes its own slot -- so the newest copy wins rather than whichever
+ * slot is looked at first.
+ *
  * @param path - The path or content URI the restore could not read.
  * @param io - Snapshot file access.
  * @param storage - Storage holding the index; defaults to `window.localStorage`.
@@ -288,7 +294,10 @@ export async function readStartupSnapshot(
   storage: SnapshotStorage | null = defaultStorage(),
 ): Promise<string | null> {
   const index = readStartupSnapshotIndex(storage);
-  const entry = Object.values(index).find((candidate) => candidate.sourcePath === path);
+  const entry = Object.values(index)
+    .filter((candidate) => candidate.sourcePath === path)
+    // `savedAt` is an ISO-8601 UTC timestamp, so it sorts lexicographically.
+    .sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0];
   if (!entry) return null;
   try {
     return await io.read(entry.file);

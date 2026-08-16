@@ -248,6 +248,38 @@ describe("writeStartupSnapshot", () => {
     assert.equal(readStartupSnapshotIndex(storage).last?.sourcePath, OTHER_CONTENT_URI);
   });
 
+  it("keeps both slots in the index when their writes overlap", async () => {
+    // Opening a project fires a "last" copy; committing a "specific" preference
+    // before it lands fires another. Both read the shared index, so without a
+    // single queue the later one would write back only its own entry and orphan
+    // the other slot's file.
+    const storage = makeStorage();
+    const files = new Map<string, string>();
+    const delays = [40, 0];
+    const io = {
+      write: async (file: string, content: string) => {
+        await new Promise((resolve) => setTimeout(resolve, delays.shift() ?? 0));
+        files.set(file, content);
+      },
+      read: async (file: string) => files.get(file) ?? Promise.reject(new Error("missing")),
+    };
+
+    await Promise.all([
+      writeStartupSnapshot(CONTENT_URI, "for last", settings({ mode: "last" }), io, { storage }),
+      writeStartupSnapshot(
+        OTHER_CONTENT_URI,
+        "for specific",
+        settings({ mode: "specific", projectPath: OTHER_CONTENT_URI }),
+        io,
+        { storage },
+      ),
+    ]);
+
+    const index = readStartupSnapshotIndex(storage);
+    assert.equal(index.last?.sourcePath, CONTENT_URI);
+    assert.equal(index.specific?.sourcePath, OTHER_CONTENT_URI);
+  });
+
   it("swallows a write failure so it cannot fail the save that triggered it", async () => {
     const storage = makeStorage();
     const { io } = makeIo({ writeError: new Error("No space left on device") });
@@ -297,6 +329,29 @@ describe("readStartupSnapshot", () => {
       storage,
     });
     assert.equal(await readStartupSnapshot(OTHER_CONTENT_URI, io, storage), null);
+  });
+
+  it("prefers the newest copy when both slots hold the same project", async () => {
+    // Running in "specific" mode on a project and later switching to "last"
+    // leaves a copy in each slot, and only the active mode's slot is refreshed.
+    const storage = makeStorage({
+      [STARTUP_SNAPSHOTS_STORAGE_KEY]: JSON.stringify({
+        specific: {
+          sourcePath: CONTENT_URI,
+          file: "specific.geolibre.json",
+          savedAt: "2026-08-01T00:00:00.000Z",
+        },
+        last: {
+          sourcePath: CONTENT_URI,
+          file: "last.geolibre.json",
+          savedAt: "2026-08-15T00:00:00.000Z",
+        },
+      }),
+    });
+    const { io } = makeIo({
+      files: { "specific.geolibre.json": "stale", "last.geolibre.json": "fresh" },
+    });
+    assert.equal(await readStartupSnapshot(CONTENT_URI, io, storage), "fresh");
   });
 
   it("returns null when there is no copy at all", async () => {
