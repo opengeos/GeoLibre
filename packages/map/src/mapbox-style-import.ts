@@ -56,6 +56,7 @@ export interface MapboxStyleImportResult {
 
 /** A minimal structural view of a Mapbox GL layer, so tests need no full spec. */
 interface RawStyleLayer {
+  id?: unknown;
   type?: unknown;
   paint?: Record<string, unknown> | null;
   layout?: Record<string, unknown> | null;
@@ -151,7 +152,7 @@ function parseColorValue(value: unknown, warnings: string[]): ParsedColor {
 
   // Unwrap the simplestyle per-feature override the exporter wraps colors in
   // (`["coalesce", ["get", key], base]`) and read the base renderer.
-  if (array[0] === "coalesce" && array.length === 3) {
+  if (array[0] === "coalesce" && array.length === 3 && getProperty(array[1]) !== null) {
     return parseColorValue(array[2], warnings);
   }
 
@@ -326,6 +327,46 @@ function parseCase(array: unknown[]): ParsedColor {
 }
 
 /**
+ * Combine a stack of filtered, flat-color Mapbox layers into GeoLibre rules.
+ * Mapbox draws later layers over earlier ones, so reverse the stack to preserve
+ * that precedence in GeoLibre's first-match-wins rule evaluator. An off else
+ * rule keeps features outside every source-layer filter hidden.
+ */
+function parseStackedLayerColors(
+  layers: RawStyleLayer[],
+  paintProperty: string,
+): ParsedColor | null {
+  if (layers.length < 2) return null;
+  const entries = layers.map((layer) => ({
+    id: asString(layer.id),
+    filter: asArray(layer.filter),
+    color: asString((layer.paint ?? {})[paintProperty]),
+    minZoom: clampZoom(layer.minzoom),
+    maxZoom: clampZoom(layer.maxzoom),
+  }));
+  if (entries.some((entry) => !entry.filter || entry.color === null)) return null;
+
+  const rules: NonNullable<LayerStyle["vectorRules"]> = entries.reverse().map((entry, index) => ({
+    id: `import-layer-${index}`,
+    label: entry.id ?? "",
+    filter: JSON.stringify(entry.filter),
+    color: entry.color!,
+    isElse: false,
+    ...(entry.minZoom === null ? {} : { minZoom: entry.minZoom }),
+    ...(entry.maxZoom === null ? {} : { maxZoom: entry.maxZoom }),
+  }));
+  rules.push({
+    id: "import-layer-else",
+    label: "",
+    filter: "",
+    color: DEFAULT_LAYER_STYLE.fillColor,
+    isElse: true,
+    enabled: false,
+  });
+  return { mode: "rule-based", rules };
+}
+
+/**
  * Apply a parsed color renderer to the style patch. `single`/`expression` leave
  * the flat fallback in `fillColor`; the attribute-driven modes carry the
  * property, stops, or rules across.
@@ -347,7 +388,7 @@ function parseStrokeColor(value: unknown): string | null {
   // Unwrap the simplestyle per-feature override the exporter wraps line/outline
   // colors in (`["coalesce", ["get","stroke"], base]`) when simpleStyleEnabled,
   // matching parseColorValue, so the flat stroke is still recovered.
-  if (array && array[0] === "coalesce" && array.length === 3) {
+  if (array && array[0] === "coalesce" && array.length === 3 && getProperty(array[1]) !== null) {
     return parseStrokeColor(array[2]);
   }
   const flat = asString(value);
@@ -635,12 +676,23 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
   // stroke/radius. Track whether the color mode has been claimed.
   let colorClaimed = false;
 
-  // Only the first render layer of each type feeds the single GeoLibre style, so
-  // warn when a style stacks several (a sub-styled fill, multiple label configs)
-  // rather than dropping the extras silently.
+  const stackedFill = parseStackedLayerColors(byType("fill"), "fill-color");
+  const stackedLine = parseStackedLayerColors(byType("line"), "line-color");
+  const stackedCircle = parseStackedLayerColors(byType("circle"), "circle-color");
+
+  // Filtered flat-color stacks can be represented exactly as rules. Other
+  // same-type stacks still contribute only their first layer, so flag the loss.
   for (const type of ["fill", "fill-extrusion", "line", "circle", "symbol"]) {
-    if (byType(type).length > 1) {
+    const recoveredAsRules =
+      (type === "fill" && stackedFill !== null) ||
+      (type === "line" && stackedLine !== null) ||
+      (type === "circle" && stackedCircle !== null);
+    if (byType(type).length > 1 && !recoveredAsRules) {
       warnings.push(`The style has multiple ${type} layers; only the first was imported.`);
+    } else if (byType(type).length > 1) {
+      warnings.push(
+        `The style's multiple ${type} layers were combined as rules; paint properties other than color come from the first layer.`,
+      );
     }
   }
 
@@ -675,10 +727,10 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (base !== null) patch.extrusionBase = base;
     applyZoomRange(extrusion, patch);
   } else if (fill) {
-    matchedLayerCount += 1;
+    matchedLayerCount += stackedFill ? byType("fill").length : 1;
     patch.extrusionEnabled = false;
     const paint = fill.paint ?? {};
-    const fillColor = parseColorValue(paint["fill-color"], warnings);
+    const fillColor = stackedFill ?? parseColorValue(paint["fill-color"], warnings);
     applyColorRenderer(fillColor, patch);
     // Only claim the shared renderer when fill-color actually yielded one, so a
     // fill layer with a missing/unparseable color does not block a later
@@ -697,7 +749,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
   }
 
   if (line) {
-    matchedLayerCount += 1;
+    matchedLayerCount += stackedLine ? byType("line").length : 1;
     const paint = line.paint ?? {};
     const stroke = parseStrokeColor(paint["line-color"]);
     if (stroke) patch.strokeColor = stroke;
@@ -707,7 +759,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // point+line export's circle claim the renderer keeps fillColor correct; a
     // line-only layer still claims here (its fillColor is not rendered anyway).
     if (!colorClaimed && !circle) {
-      const color = parseColorValue(paint["line-color"], warnings);
+      const color = stackedLine ?? parseColorValue(paint["line-color"], warnings);
       if (color.mode && color.mode !== "single") {
         // Take the renderer (mode/property/stops/rules), but not the fallback
         // color: line-color's baked fallback is strokeColor (already recovered
@@ -723,11 +775,11 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
   }
 
   if (circle) {
-    matchedLayerCount += 1;
+    matchedLayerCount += stackedCircle ? byType("circle").length : 1;
     patch.pointRenderer = "single";
     const paint = circle.paint ?? {};
     if (!colorClaimed) {
-      applyColorRenderer(parseColorValue(paint["circle-color"], warnings), patch);
+      applyColorRenderer(stackedCircle ?? parseColorValue(paint["circle-color"], warnings), patch);
       colorClaimed = true;
     }
     const radius = paint["circle-radius"];
