@@ -80,6 +80,9 @@ export function classifyServiceRequest(rawUrl) {
 
   const tile = path.match(/^(.*\/)(\d+)\/(\d+)\/(\d+)(\.(?:png|jpe?g|webp|gif|pbf|mvt))(?:\/)?$/i);
   if (tile) {
+    const [zoom, column, row] = tile.slice(2, 5).map(Number);
+    const dimension = 2 ** zoom;
+    if (zoom > 30 || column >= dimension || row >= dimension) return null;
     const template = new URL(url.href);
     template.pathname = `${tile[1]}{z}/{x}/{y}${tile[5]}`;
     const templateUrl = template.href.replaceAll("%7B", "{").replaceAll("%7D", "}");

@@ -5,7 +5,11 @@ const enqueue = createTabTaskQueue();
 const removedTabs = new Set();
 
 chrome.webRequest.onCompleted.addListener(
-  ({ tabId, url }) => {
+  ({ tabId, url, type }) => {
+    if (type === "main_frame" && tabId >= 0) {
+      removedTabs.delete(tabId);
+      void enqueue(tabId, () => chrome.storage.session.remove(`services:${tabId}`));
+    }
     if (tabId < 0 || removedTabs.has(tabId)) return;
     const service = classifyServiceRequest(url);
     if (!service) return;

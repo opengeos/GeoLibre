@@ -358,6 +358,11 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     assert.equal(vector?.kind, "vector");
   });
 
+  it("does not mistake date-organized assets for map tiles", () => {
+    assert.equal(classifyServiceRequest("https://cdn.example.com/uploads/2024/03/15.png"), null);
+    assert.equal(classifyServiceRequest("https://cdn.example.com/items/4/17/25.png"), null);
+  });
+
   it("ignores ordinary requests and deduplicates services", () => {
     assert.equal(classifyServiceRequest("https://example.com/app.js"), null);
     const service = classifyServiceRequest(
