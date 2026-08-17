@@ -94,6 +94,35 @@ function explodeToPolygons(features: Feature[]): Feature<Polygon>[] {
   return result;
 }
 
+/** Reassemble Turf dissolve parts into one Polygon/MultiPolygon per group. */
+function collectDissolveParts(
+  dissolved: FeatureCollection<Polygon>,
+  field?: string,
+): FeatureCollection<Polygon | MultiPolygon> {
+  const groups = new Map<string, Feature<Polygon>[]>();
+  for (const feature of dissolved.features) {
+    const key = field ? String(feature.properties?.[field]) : "";
+    const group = groups.get(key);
+    if (group) group.push(feature);
+    else groups.set(key, [feature]);
+  }
+
+  const features: Feature<Polygon | MultiPolygon>[] = [...groups.entries()].map(
+    ([value, parts]) => {
+      if (parts.length === 1) return parts[0];
+      return {
+        type: "Feature" as const,
+        properties: field ? { [field]: value } : {},
+        geometry: {
+          type: "MultiPolygon" as const,
+          coordinates: parts.map((part) => part.geometry.coordinates),
+        },
+      };
+    },
+  );
+  return featureCollection(features);
+}
+
 /** Merge all polygons of a collection into a single (multi)polygon feature. */
 function mergePolygons(fc: FeatureCollection): Feature<Polygon | MultiPolygon> | null {
   const polys = polygonFeatures(fc);
@@ -266,9 +295,10 @@ export const dissolveTool: ProcessingAlgorithm = {
       return;
     }
     const field = (ctx.parameters.field as string)?.trim();
-    const dissolved = dissolve(featureCollection(polys), {
+    const dissolvedParts = dissolve(featureCollection(polys), {
       propertyName: field || undefined,
     });
+    const dissolved = collectDissolveParts(dissolvedParts, field || undefined);
     ctx.log(`Dissolved ${polys.length} polygon(s) into ${dissolved.features.length} feature(s)`);
     ctx.addResultLayer?.("Dissolve", dissolved);
   },

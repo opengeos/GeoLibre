@@ -52,6 +52,51 @@ describe("processing registry", () => {
     assert.deepEqual(messages, ["Feature count: 2"]);
   });
 
+  it("dissolves disconnected polygons into one feature per attribute value", () => {
+    const square = (x: number, group: string) => ({
+      type: "Feature" as const,
+      properties: { group },
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [
+          [
+            [x, 0],
+            [x + 1, 0],
+            [x + 1, 1],
+            [x, 1],
+            [x, 0],
+          ],
+        ],
+      },
+    });
+    const polygons: GeoLibreLayer = {
+      ...layer,
+      id: "polygons",
+      geojson: {
+        type: "FeatureCollection",
+        features: [square(0, "A"), square(3, "A"), square(6, "B")],
+      },
+    };
+    const messages: string[] = [];
+    let result: FeatureCollection | null = null;
+
+    getVectorTool("dissolve")!.run({
+      layers: [polygons],
+      parameters: { layer: "polygons", field: "group" },
+      log: (message) => messages.push(message),
+      addResultLayer: (_name, geojson) => {
+        result = geojson;
+      },
+    });
+
+    assert.equal(result!.features.length, 2);
+    assert.equal(
+      result!.features.find((feature) => feature.properties?.group === "A")?.geometry.type,
+      "MultiPolygon",
+    );
+    assert.deepEqual(messages, ["Dissolved 3 polygon(s) into 2 feature(s)"]);
+  });
+
   it("spatially joins zone attributes onto points", () => {
     const zone: GeoLibreLayer = {
       ...layer,
