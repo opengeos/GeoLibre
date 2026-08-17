@@ -8,11 +8,23 @@ import { waitForMap } from "./helpers";
 const API = "https://api.stac.test/v1";
 
 const COLLECTIONS = [
-  { id: "sentinel-2", title: "Sentinel-2 L2A", extent: { spatial: { bbox: [[4, 50, 6, 52]] } } },
-  { id: "landsat-9", title: "Landsat 9", extent: { spatial: { bbox: [[-114, 37, -109, 42]] } } },
+  {
+    id: "sentinel-2",
+    title: "Sentinel-2 L2A",
+    extent: { spatial: { bbox: [[4, 50, 6, 52]] } },
+  },
+  {
+    id: "landsat-9",
+    title: "Landsat 9",
+    extent: { spatial: { bbox: [[-114, 37, -109, 42]] } },
+  },
 ];
 
-function item(id: string, collection: string): Record<string, unknown> {
+function item(
+  id: string,
+  collection: string,
+  assets: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     type: "Feature",
     stac_version: "1.0.0",
@@ -32,18 +44,26 @@ function item(id: string, collection: string): Record<string, unknown> {
       ],
     },
     properties: { datetime: "2024-05-01T00:00:00Z" },
-    assets: {},
+    assets,
     links: [],
   };
 }
 
 /** A STAC API that answers item search, and a hierarchy underneath it that must not be offered. */
-async function serveApi(page: Page, searches: string[]): Promise<void> {
+async function serveApi(
+  page: Page,
+  searches: string[],
+  assets: Record<string, unknown> = {},
+): Promise<void> {
   await page.route("https://api.stac.test/**", async (route) => {
     const request = route.request();
     const url = request.url();
     const json = (body: unknown) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
 
     if (url.endsWith("/collections")) return json({ collections: COLLECTIONS });
     if (url.includes("/search")) {
@@ -52,7 +72,10 @@ async function serveApi(page: Page, searches: string[]): Promise<void> {
       const collection = asked.collections?.[0] ?? "sentinel-2";
       return json({
         type: "FeatureCollection",
-        features: [item(`${collection}-1`, collection), item(`${collection}-2`, collection)],
+        features: [
+          item(`${collection}-1`, collection, assets),
+          item(`${collection}-2`, collection, assets),
+        ],
         numberMatched: 2,
         links: [],
       });
@@ -74,6 +97,50 @@ async function serveApi(page: Page, searches: string[]): Promise<void> {
     });
   });
 }
+
+test("asset options identify their format and whether they can be added", async ({ page }) => {
+  const searches: string[] = [];
+  await serveApi(page, searches, {
+    red: {
+      href: "https://data.test/red.tif",
+      type: "image/tiff",
+      title: "Red Band",
+    },
+    boundaries: {
+      href: "https://data.test/boundaries.geojson",
+      type: "application/geo+json",
+      title: "Boundaries",
+    },
+    tiles: {
+      href: "https://data.test/tiles.pmtiles",
+      type: "application/vnd.pmtiles",
+      title: "Vector tiles",
+    },
+    data: {
+      href: "https://data.test/data.parquet",
+      type: "application/vnd.apache.parquet",
+      title: "Dataset root",
+    },
+    metadata: { href: "https://data.test/metadata.bin", title: "Metadata" },
+  });
+  await waitForMap(page);
+  await connect(page, API);
+
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+
+  const assets = page
+    .locator("select")
+    .filter({ has: page.locator('option[value="red"]') })
+    .first();
+  await expect(assets.getByRole("option")).toHaveText([
+    "Red Band — COG",
+    "Boundaries — GeoJSON",
+    "Vector tiles — PMTiles",
+    "Dataset root — Parquet (not addable)",
+    "Metadata — Unknown format (not addable)",
+  ]);
+});
 
 async function connect(page: Page, url: string): Promise<void> {
   await page.getByRole("button", { name: "Plugins", exact: true }).click();
@@ -157,7 +224,13 @@ test("connecting to an API after a static catalog clears the tree", async ({ pag
               type: "Catalog",
               id: "static",
               title: "E2E Static",
-              links: [{ rel: "child", href: "./hazards/collection.json", title: "Hazards" }],
+              links: [
+                {
+                  rel: "child",
+                  href: "./hazards/collection.json",
+                  title: "Hazards",
+                },
+              ],
             },
       ),
     });

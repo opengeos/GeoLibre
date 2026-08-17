@@ -352,7 +352,11 @@ function showDrawBox(map: MapLibreMap, bbox: [number, number, number, number]): 
     id: DRAW_LINE,
     type: "line",
     source: DRAW_SOURCE,
-    paint: { "line-color": "#f59e0b", "line-width": 2, "line-dasharray": [2, 1] },
+    paint: {
+      "line-color": "#f59e0b",
+      "line-width": 2,
+      "line-dasharray": [2, 1],
+    },
   });
 }
 
@@ -499,6 +503,27 @@ function footprintStyleLayers(map: MapLibreMap): string[] {
 
 function assetLabel(key: string, asset: StacAsset): string {
   return asset.title || key;
+}
+
+function assetFormatLabel(asset: StacAsset): string {
+  switch (assetFormat(asset)) {
+    case "cog":
+      return "COG";
+    case "geojson":
+      return "GeoJSON";
+    case "pmtiles":
+      return "PMTiles";
+    case null: {
+      const mediaType = (asset.type ?? "").toLowerCase();
+      if (mediaType.includes("parquet") || /\.parquet($|\?)/i.test(asset.href)) return "Parquet";
+      return "Unknown format";
+    }
+  }
+}
+
+function assetOptionLabel(key: string, asset: StacAsset): string {
+  const addability = isVisualizableAsset(asset) ? "" : " (not addable)";
+  return `${assetLabel(key, asset)} — ${assetFormatLabel(asset)}${addability}`;
 }
 
 async function visualizeAsset(
@@ -822,7 +847,7 @@ function buildPanel(container: HTMLElement): () => void {
         const assetSelect = el("select");
         assetSelect.style.cssText = `${style.input}flex:1 1 140px;width:auto;`;
         for (const [key, asset] of assets) {
-          const option = el("option", assetLabel(key, asset));
+          const option = el("option", assetOptionLabel(key, asset));
           option.value = key;
           assetSelect.append(option);
         }
