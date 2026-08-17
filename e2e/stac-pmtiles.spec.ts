@@ -114,7 +114,14 @@ test("a PMTiles asset from a STAC item reaches the map", async ({ page }) => {
   await collection.dblclick();
   await expect(page.getByText(/Showing \d+ of \d+ items\./)).toBeVisible();
 
-  // The panel offers the archive rather than the parquet beside it, and Add is live.
+  // The parquet beside the archive is addable too, and being listed first it is the one the
+  // panel preselects, so the archive is chosen explicitly rather than taken as the default.
+  const assets = page
+    .locator("select")
+    .filter({ has: page.locator('option[value="pmtiles"]') })
+    .first();
+  await assets.selectOption("pmtiles");
+
   const add = page.getByRole("button", { name: "Add", exact: true }).first();
   await expect(add).toBeEnabled();
   await add.click();

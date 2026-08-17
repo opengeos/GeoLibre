@@ -137,7 +137,7 @@ test("asset options identify their format and whether they can be added", async 
     "Red Band — COG",
     "Boundaries — GeoJSON",
     "Vector tiles — PMTiles",
-    "Dataset root — Parquet (not addable)",
+    "Dataset root — Parquet",
     "Metadata — Unknown format (not addable)",
   ]);
 });
