@@ -163,7 +163,15 @@ export function classifyServiceRequest(rawUrl) {
     );
   }
 
-  if (/\/collections(?:\/[^/]+\/items)?\/?$/i.test(path)) {
+  // `/collections/<id>/items` is specific enough to stand on its own, but a
+  // bare `/collections` is an ordinary REST and storefront route as well (a
+  // shop's collection index sits at exactly that path), so it counts only with
+  // an OGC format parameter alongside it. Response bodies are never read, so
+  // the URL is all there is to judge by.
+  if (
+    /\/collections\/[^/]+\/items\/?$/i.test(path) ||
+    (/\/collections\/?$/i.test(path) && params.has("f"))
+  ) {
     const api = new URL(url.href);
     api.search = "";
     api.hash = "";
@@ -285,18 +293,42 @@ export function createPageScope() {
   const stateFor = (tabId) => {
     let state = tabs.get(tabId);
     if (!state) {
-      state = { generation: 0, seen: new Set(), retired: new Set() };
+      state = {
+        generation: 0,
+        seen: new Set(),
+        leaving: new Set(),
+        retired: new Set(),
+        navigating: false,
+      };
       tabs.set(tabId, state);
     }
     return state;
   };
 
   return {
+    /**
+     * A navigation has started. Everything seen so far belongs to the page
+     * being left, so mark it for retirement now rather than when the navigation
+     * completes: a small tile or service request made by the *incoming* page
+     * can finish before its own HTML does, and retiring at completion would
+     * sweep up that new document along with the old ones.
+     */
+    beginPage(tabId) {
+      const state = stateFor(tabId);
+      for (const documentId of state.seen) remember(state.leaving, documentId);
+      state.seen = new Set();
+      state.navigating = true;
+    },
     /** Retire the outgoing page's documents and open a new generation. */
     startPage(tabId) {
       const state = stateFor(tabId);
-      for (const documentId of state.seen) remember(state.retired, documentId);
-      state.seen = new Set();
+      // Without an observed navigation start there is no separate set to
+      // retire, so fall back to retiring everything seen.
+      const outgoing = state.navigating ? state.leaving : state.seen;
+      for (const documentId of outgoing) remember(state.retired, documentId);
+      state.leaving = new Set();
+      if (!state.navigating) state.seen = new Set();
+      state.navigating = false;
       state.generation += 1;
       return state.generation;
     },

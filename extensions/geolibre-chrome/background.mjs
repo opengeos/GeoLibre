@@ -26,6 +26,16 @@ function runForTab(tabId, task) {
   );
 }
 
+// The page boundary is drawn when a navigation starts, not when it finishes,
+// so the incoming page's own early requests are not retired along with the
+// outgoing page's.
+chrome.webRequest.onBeforeRequest.addListener(
+  ({ tabId, type }) => {
+    if (tabId >= 0 && type === "main_frame") scope.beginPage(tabId);
+  },
+  { urls: ["http://*/*", "https://*/*"] },
+);
+
 chrome.webRequest.onCompleted.addListener(
   ({ tabId, url, type, documentId }) => {
     if (tabId < 0) return;

@@ -94,7 +94,7 @@ Navigating the same tab elsewhere replaces the list, so a page with no services
 it.
 
 After selecting a result, add the layer in GeoLibre and verify that the browser
-console does not report a static-file CORS error.
+console does not report a CORS error while fetching the service.
 
 Remote servers must allow GeoLibre to fetch the selected URLs through CORS.
 Complete HTTP(S) URLs, including signed query parameters, are forwarded to

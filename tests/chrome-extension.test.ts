@@ -325,6 +325,18 @@ describe("GeoLibre Chrome extension URL builder", () => {
     assert.throws(() => buildGeoLibreUrl([{ url: "file:///tmp/roads.geojson" }]), /HTTP or HTTPS/);
   });
 
+  it("tells a mixed selection apart from two services", () => {
+    const service = { url: "https://maps.example.com/wms", format: "WMS" };
+    assert.throws(
+      () => buildGeoLibreUrl([service, { url: "https://maps.example.com/wfs", format: "WFS" }]),
+      /one map service at a time/,
+    );
+    assert.throws(
+      () => buildGeoLibreUrl([service, { url: "https://data.example.com/roads.geojson" }]),
+      /cannot be opened together with other data/,
+    );
+  });
+
   it("routes detected services to the matching prefilled Add Data dialog", () => {
     const result = new URL(
       buildGeoLibreUrl([
@@ -440,6 +452,14 @@ describe("GeoLibre Chrome extension service request scanner", () => {
       classifyServiceRequest("https://api.example.com/ogc/collections/roads/items?f=json")?.format,
       "OGC API",
     );
+    // A bare `/collections` is an ordinary storefront and REST route too, so it
+    // counts only alongside an OGC format parameter.
+    assert.equal(
+      classifyServiceRequest("https://api.example.com/ogc/collections?f=json")?.format,
+      "OGC API",
+    );
+    assert.equal(classifyServiceRequest("https://shop.example.com/collections"), null);
+    assert.equal(classifyServiceRequest("https://shop.example.com/collections?page=2"), null);
     // The layer index stays on the URL: handed a bare service, GeoLibre falls
     // back to its first feature layer, which is the wrong one for any page
     // showing another.
@@ -553,6 +573,19 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     assert.equal(scope.accepts(7, undefined), true);
     assert.equal(scope.accepts(7, "top-document"), true);
     assert.equal(scope.accepts(7, "child-document"), true);
+  });
+
+  it("keeps a document the incoming page created before its own navigation finished", () => {
+    const scope = createPageScope();
+    scope.startPage(4);
+    scope.accepts(4, "old-document");
+    // A tile the next page requests can complete before that page's HTML does,
+    // so the boundary is drawn when the navigation starts.
+    scope.beginPage(4);
+    assert.equal(scope.accepts(4, "new-document"), true);
+    scope.startPage(4);
+    assert.equal(scope.accepts(4, "new-document"), true);
+    assert.equal(scope.accepts(4, "old-document"), false);
   });
 
   it("refuses a request left in flight by the page that was navigated away from", () => {

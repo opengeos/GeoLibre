@@ -1033,9 +1033,13 @@ export function TopToolbar({
   const [initialService, setInitialService] = useState(() =>
     viewer || typeof window === "undefined" ? null : serviceUrlParameter(window.location.search),
   );
-  const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(
-    () => (initialService?.kind as AddDataKind | undefined) ?? null,
-  );
+  const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(() => {
+    const kind = initialService?.kind as AddDataKind | undefined;
+    // Every other path that opens this dialog from outside the component
+    // filters MAS-hidden sources first; a deep link must not be the way around
+    // that, even though no service kind is hidden today.
+    return kind && !masHidesDataSource(kind) ? kind : null;
+  });
   const [addDataTargetGroupId, setAddDataTargetGroupId] = useState<string | null>(null);
   const addDataInitialLayerIdsRef = useRef<Set<string>>(new Set());
   // Every path that opens the dialog outside the OPEN_ADD_DATA_EVENT listener

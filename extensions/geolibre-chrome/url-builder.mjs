@@ -18,7 +18,12 @@ export function buildGeoLibreUrl(datasets, baseUrl = GEOLIBRE_WEB_URL) {
   };
   const services = datasets.filter((dataset) => serviceKinds[dataset.format]);
   if (services.length) {
-    if (datasets.length !== 1) throw new Error("Open one map service at a time.");
+    if (services.length > 1) throw new Error("Open one map service at a time.");
+    // Nothing stops a selection holding a service and a file at once, and the
+    // two open through different GeoLibre entry points.
+    if (datasets.length !== 1) {
+      throw new Error("A map service cannot be opened together with other data.");
+    }
     const service = services[0];
     const serviceUrl = new URL(service.url);
     if (serviceUrl.protocol !== "http:" && serviceUrl.protocol !== "https:") {
