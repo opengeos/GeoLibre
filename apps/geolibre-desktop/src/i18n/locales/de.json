@@ -1624,6 +1624,16 @@
     "exportCsv": "CSV exportieren",
     "exportGeoParquet": "GeoParquet exportieren"
   },
+  "auth": {
+    "unavailableTitle": "Anmeldung ist nicht verfügbar",
+    "unavailableDescription": "GeoLibre konnte den Anmeldedienst nicht erreichen und kann daher nicht feststellen, ob Sie angemeldet sind. Das ist meist vorübergehend; falls es weiterhin auftritt, müssen möglicherweise die Authentifizierungseinstellungen dieser Bereitstellung geprüft werden.",
+    "retry": "Erneut versuchen",
+    "signInTitle": "Bei GeoLibre anmelden",
+    "signInDescription": "Diese Bereitstellung erfordert ein Konto. Sie werden zu einer sicheren Anmeldeseite weitergeleitet und danach hierher zurückgebracht.",
+    "signIn": "Anmelden",
+    "signOut": "Abmelden",
+    "account": "Konto"
+  },
   "basemapExtract": {
     "title": "Offline-Basiskarte extrahieren",
     "url": "Basiskarten-URL",
@@ -4045,6 +4055,9 @@
       "addStep": "Schritt hinzufügen",
       "runModel": "Modell ausführen",
       "deleteModel": "Löschen",
+      "canvas": "Arbeitsablauf-Canvas",
+      "importPipeline": "Pipeline importieren",
+      "exportPipeline": "Pipeline exportieren",
       "inputPreviousStep": "Eingabe: ← Ausgabe des vorherigen Schritts",
       "unknownTool": "Unbekanntes Werkzeug „{{id}}“",
       "noParameters": "Keine Parameter."
@@ -5585,15 +5598,5 @@
     "mapPoint": "Kartenpunkt",
     "reply": "Antworten",
     "replyPlaceholder": "Antwort schreiben..."
-  },
-  "auth": {
-    "unavailableTitle": "Anmeldung ist nicht verfügbar",
-    "unavailableDescription": "GeoLibre konnte den Anmeldedienst nicht erreichen und kann daher nicht feststellen, ob Sie angemeldet sind. Das ist meist vorübergehend; falls es weiterhin auftritt, müssen möglicherweise die Authentifizierungseinstellungen dieser Bereitstellung geprüft werden.",
-    "retry": "Erneut versuchen",
-    "signInTitle": "Bei GeoLibre anmelden",
-    "signInDescription": "Diese Bereitstellung erfordert ein Konto. Sie werden zu einer sicheren Anmeldeseite weitergeleitet und danach hierher zurückgebracht.",
-    "signIn": "Anmelden",
-    "signOut": "Abmelden",
-    "account": "Konto"
   }
 }

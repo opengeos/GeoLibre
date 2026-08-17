@@ -4055,6 +4055,9 @@
       "addStep": "Add step",
       "runModel": "Run model",
       "deleteModel": "Delete",
+      "canvas": "Spatial workflow canvas",
+      "importPipeline": "Import pipeline",
+      "exportPipeline": "Export pipeline",
       "inputPreviousStep": "Input: ← previous step output",
       "unknownTool": "Unknown tool \"{{id}}\"",
       "noParameters": "No parameters."

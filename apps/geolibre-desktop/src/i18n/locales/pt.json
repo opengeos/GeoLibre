@@ -1624,6 +1624,16 @@
     "exportCsv": "Exportar CSV",
     "exportGeoParquet": "Exportar GeoParquet"
   },
+  "auth": {
+    "unavailableTitle": "O login não está disponível",
+    "unavailableDescription": "O GeoLibre não conseguiu acessar o serviço de login, portanto não sabe se você está conectado. Isso costuma ser temporário; se persistir, as configurações de autenticação desta implantação podem precisar de atenção.",
+    "retry": "Tentar novamente",
+    "signInTitle": "Faça login no GeoLibre",
+    "signInDescription": "Esta implantação requer uma conta. Você será levado a uma página de login segura e retornará para cá.",
+    "signIn": "Entrar",
+    "signOut": "Sair",
+    "account": "Conta"
+  },
   "basemapExtract": {
     "title": "Extrair mapa base offline",
     "url": "URL do mapa base",
@@ -4045,6 +4055,9 @@
       "addStep": "Adicionar etapa",
       "runModel": "Executar o modelo",
       "deleteModel": "Excluir",
+      "canvas": "Tela de fluxo de trabalho espacial",
+      "importPipeline": "Importar pipeline",
+      "exportPipeline": "Exportar pipeline",
       "inputPreviousStep": "Entrada: ← saída da etapa anterior",
       "unknownTool": "Ferramenta desconhecida “{{id}}”",
       "noParameters": "Sem parâmetros."
@@ -5585,15 +5598,5 @@
     "mapPoint": "Ponto do mapa",
     "reply": "Responder",
     "replyPlaceholder": "Escreva uma resposta..."
-  },
-  "auth": {
-    "unavailableTitle": "O login não está disponível",
-    "unavailableDescription": "O GeoLibre não conseguiu acessar o serviço de login, portanto não sabe se você está conectado. Isso costuma ser temporário; se persistir, as configurações de autenticação desta implantação podem precisar de atenção.",
-    "retry": "Tentar novamente",
-    "signInTitle": "Faça login no GeoLibre",
-    "signInDescription": "Esta implantação requer uma conta. Você será levado a uma página de login segura e retornará para cá.",
-    "signIn": "Entrar",
-    "signOut": "Sair",
-    "account": "Conta"
   }
 }

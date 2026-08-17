@@ -17,6 +17,7 @@ import {
   type RunnerHost,
 } from "@geolibre/processing";
 import { createDuckDbCapability } from "../../lib/duckdb-processing";
+import { modelToPipeline, pipelineToModel } from "../../lib/processing-pipeline";
 import {
   Button,
   Dialog,
@@ -35,12 +36,14 @@ import { ParameterField } from "./ParameterField";
 import {
   ArrowDown,
   ArrowUp,
+  Download,
   Layers,
   Loader2,
   Play,
   Plus,
   Save,
   Trash2,
+  Upload,
   Workflow,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
@@ -176,7 +179,7 @@ export function ModelBuilderDialog({ mapControllerRef }: ModelBuilderDialogProps
         if (!next) setOpen(false);
       }}
     >
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-5xl">
         <DialogHeader>
           <DialogTitle>{t("processing.modelBuilder.title")}</DialogTitle>
           <DialogDescription>{t("processing.modelBuilder.description")}</DialogDescription>
@@ -499,6 +502,8 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
   const [addToolId, setAddToolId] = useState<string>(VECTOR_TOOLS[0].id);
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const appendLog = useCallback((message: string) => setLog((prev) => [...prev, message]), []);
   const fieldsByLayer = useFieldsByLayer(layers, true);
@@ -506,6 +511,7 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
 
   const newDraft = useCallback(() => {
     setDraft({ id: createId(), name: "Untitled model", steps: [] });
+    setSelectedStepId(null);
     setLog([]);
   }, []);
 
@@ -516,16 +522,19 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
       name: model.name,
       steps: model.steps.map((s) => ({ ...s, parameters: { ...s.parameters } })),
     });
+    setSelectedStepId(model.steps[0]?.id ?? null);
     setLog([]);
   }, []);
 
   const addStep = useCallback(() => {
     const tool = getVectorTool(addToolId);
     if (!tool) return;
+    const id = createId();
     setDraft((prev) => ({
       ...prev,
-      steps: [...prev.steps, { id: createId(), toolId: tool.id, parameters: defaultParams(tool) }],
+      steps: [...prev.steps, { id, toolId: tool.id, parameters: defaultParams(tool) }],
     }));
+    setSelectedStepId(id);
   }, [addToolId]);
 
   const removeStep = useCallback((stepId: string) => {
@@ -533,7 +542,41 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
       ...prev,
       steps: prev.steps.filter((s) => s.id !== stepId),
     }));
+    setSelectedStepId((current) => (current === stepId ? null : current));
   }, []);
+
+  const handleExport = useCallback(() => {
+    const json = JSON.stringify(modelToPipeline(draft), null, 2);
+    const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    const slug = draft.name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+    anchor.href = url;
+    anchor.download = `${slug || "pipeline"}.pipeline.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    appendLog(`Exported ${anchor.download}`);
+  }, [draft, appendLog]);
+
+  const handleImport = useCallback(
+    async (file: File) => {
+      try {
+        const model = pipelineToModel(JSON.parse(await file.text()), createId);
+        for (const step of model.steps) {
+          if (!getVectorTool(step.toolId)) throw new Error(`Unknown vector tool "${step.toolId}"`);
+        }
+        setDraft(model);
+        setSelectedStepId(model.steps[0]?.id ?? null);
+        setLog([`Imported ${file.name}`]);
+      } catch (error) {
+        appendLog(`Error: ${(error as Error).message}`);
+      }
+    },
+    [appendLog],
+  );
 
   const moveStep = useCallback((stepId: string, dir: -1 | 1) => {
     setDraft((prev) => {
@@ -668,6 +711,12 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
           />
         </div>
 
+        <WorkflowCanvas
+          steps={draft.steps}
+          selectedStepId={selectedStepId}
+          onSelect={setSelectedStepId}
+        />
+
         <ScrollArea className="h-56 rounded-md border p-2">
           {draft.steps.length === 0 ? (
             <p className="p-2 text-xs text-muted-foreground">
@@ -686,6 +735,8 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
                   onParamChange={(paramId, value) => updateStepParam(step.id, paramId, value)}
                   onRemove={() => removeStep(step.id)}
                   onMove={(dir) => moveStep(step.id, dir)}
+                  selected={step.id === selectedStepId}
+                  onSelect={() => setSelectedStepId(step.id)}
                 />
               ))}
             </div>
@@ -714,6 +765,23 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
           <Button variant="outline" className="gap-2" onClick={handleSave}>
             <Save className="h-4 w-4" /> {t("common.save")}
           </Button>
+          <Button variant="outline" className="gap-2" onClick={() => importRef.current?.click()}>
+            <Upload className="h-4 w-4" /> {t("processing.modelBuilder.importPipeline")}
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={handleExport}>
+            <Download className="h-4 w-4" /> {t("processing.modelBuilder.exportPipeline")}
+          </Button>
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void handleImport(file);
+              event.target.value = "";
+            }}
+          />
           <Button variant="outline" className="gap-2" onClick={handleDelete} disabled={!isSaved}>
             <Trash2 className="h-4 w-4" /> {t("processing.modelBuilder.deleteModel")}
           </Button>
@@ -721,6 +789,63 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
 
         <LogView log={log} />
       </div>
+    </div>
+  );
+}
+
+/** Compact node-and-edge canvas for the ordered graph executed by the model runner. */
+function WorkflowCanvas({
+  steps,
+  selectedStepId,
+  onSelect,
+}: {
+  steps: ProcessingModelStep[];
+  selectedStepId: string | null;
+  onSelect: (id: string) => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <div
+      className="min-h-28 overflow-x-auto rounded-md border bg-muted/20 p-4"
+      aria-label={t("processing.modelBuilder.canvas")}
+    >
+      {steps.length === 0 ? (
+        <p className="py-6 text-center text-xs text-muted-foreground">
+          {t("processing.modelBuilder.emptyPipelineHint")}
+        </p>
+      ) : (
+        <div className="flex min-w-max items-center py-2">
+          {steps.map((step, index) => {
+            const tool = getVectorTool(step.toolId);
+            return (
+              <div key={step.id} className="flex items-center">
+                {index > 0 ? (
+                  <div className="flex w-12 items-center" aria-hidden="true">
+                    <div className="h-px flex-1 bg-primary/60" />
+                    <div className="h-0 w-0 border-y-4 border-s-8 border-y-transparent border-s-primary/60" />
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onSelect(step.id)}
+                  className={cn(
+                    "w-40 rounded-lg border bg-card px-3 py-2 text-start shadow-sm transition-colors hover:bg-accent",
+                    selectedStepId === step.id && "border-primary ring-2 ring-primary/30",
+                  )}
+                  aria-pressed={selectedStepId === step.id}
+                >
+                  <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {index + 1}. transform
+                  </span>
+                  <span className="block truncate text-sm font-medium">
+                    {tool?.name ?? step.toolId}
+                  </span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -734,6 +859,8 @@ interface StepCardProps {
   onParamChange: (paramId: string, value: unknown) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
+  selected: boolean;
+  onSelect: () => void;
 }
 
 /** One step in the model editor: its tool, parameters, and reorder controls. */
@@ -746,6 +873,8 @@ function StepCard({
   onParamChange,
   onRemove,
   onMove,
+  selected,
+  onSelect,
 }: StepCardProps): ReactElement {
   const { t } = useTranslation();
   const tool = getVectorTool(step.toolId);
@@ -775,7 +904,10 @@ function StepCard({
   };
 
   return (
-    <div className="rounded-md border p-2">
+    <div
+      className={cn("rounded-md border p-2", selected && "border-primary ring-1 ring-primary")}
+      onClick={onSelect}
+    >
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="truncate text-sm font-medium">
           {index + 1}. {tool?.name ?? step.toolId}
