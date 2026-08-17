@@ -4049,6 +4049,7 @@
       "importPipeline": "კონვეიერის იმპორტი",
       "exportPipeline": "კონვეიერის ექსპორტი",
       "stepKindTransform": "გარდაქმნა",
+      "canvasEmpty": "ჯერ არ არის ნაბიჯები — დაამატეთ ერთი სამუშაო ნაკადის ასაგებად.",
       "inputPreviousStep": "შესატანი: ← წინა ნაბიჯის შედეგი",
       "unknownTool": "უცნობი ხელსაწყო „{{id}}“",
       "noParameters": "პარამეტრები არ არის."

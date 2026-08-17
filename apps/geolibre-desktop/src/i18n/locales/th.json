@@ -3982,6 +3982,7 @@
       "importPipeline": "นำเข้าไปป์ไลน์",
       "exportPipeline": "ส่งออกไปป์ไลน์",
       "stepKindTransform": "การแปลง",
+      "canvasEmpty": "ยังไม่มีขั้นตอน — เพิ่มขั้นตอนเพื่อสร้างเวิร์กโฟลว์",
       "inputPreviousStep": "ข้อมูลนำเข้า: ← ผลลัพธ์จากขั้นตอนก่อนหน้า",
       "unknownTool": "ไม่รู้จักเครื่องมือ \"{{id}}\"",
       "noParameters": "ไม่มีพารามิเตอร์"

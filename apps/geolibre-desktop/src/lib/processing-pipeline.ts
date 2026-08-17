@@ -78,8 +78,11 @@ export function pipelineToModel(value: unknown, createId: () => string): Process
     if (!nodeById.has(edge?.from) || !nodeById.has(edge?.to) || edge.from === edge.to) {
       throw new Error("Pipeline contains an invalid edge");
     }
-    if (next.has(edge.from) || (incoming.get(edge.to) ?? 0) > 0) {
+    if (next.has(edge.from)) {
       throw new Error("Branching pipelines are not supported yet");
+    }
+    if ((incoming.get(edge.to) ?? 0) > 0) {
+      throw new Error("Merging pipelines are not supported yet");
     }
     next.set(edge.from, edge.to);
     incoming.set(edge.to, 1);

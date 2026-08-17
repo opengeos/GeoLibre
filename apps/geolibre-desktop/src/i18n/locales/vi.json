@@ -4052,6 +4052,7 @@
       "importPipeline": "Nhập quy trình",
       "exportPipeline": "Xuất quy trình",
       "stepKindTransform": "Biến đổi",
+      "canvasEmpty": "Chưa có bước nào — thêm một bước để dựng quy trình.",
       "inputPreviousStep": "Đầu vào: ← đầu ra của bước trước",
       "unknownTool": "Công cụ không xác định \"{{id}}\"",
       "noParameters": "Không có tham số.",

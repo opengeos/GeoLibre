@@ -3982,6 +3982,7 @@
       "importPipeline": "导入管道",
       "exportPipeline": "导出管道",
       "stepKindTransform": "转换",
+      "canvasEmpty": "尚无步骤 — 添加一个以构建工作流。",
       "inputPreviousStep": "输入：← 上一步的输出",
       "unknownTool": "未知工具“{{id}}”",
       "noParameters": "没有参数。"

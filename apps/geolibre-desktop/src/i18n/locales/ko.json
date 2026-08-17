@@ -3982,6 +3982,7 @@
       "importPipeline": "파이프라인 가져오기",
       "exportPipeline": "파이프라인 내보내기",
       "stepKindTransform": "변환",
+      "canvasEmpty": "아직 단계가 없습니다 — 워크플로를 만들려면 추가하세요.",
       "inputPreviousStep": "입력: ← 이전 단계의 출력",
       "unknownTool": "알 수 없는 도구 \"{{id}}\"",
       "noParameters": "매개변수가 없습니다."

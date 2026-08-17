@@ -4059,6 +4059,7 @@
       "importPipeline": "Import pipeline",
       "exportPipeline": "Export pipeline",
       "stepKindTransform": "Transform",
+      "canvasEmpty": "No steps yet — add one to build the workflow.",
       "inputPreviousStep": "Input: ← previous step output",
       "unknownTool": "Unknown tool \"{{id}}\"",
       "noParameters": "No parameters."

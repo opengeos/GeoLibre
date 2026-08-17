@@ -3982,6 +3982,7 @@
       "importPipeline": "Impor pipeline",
       "exportPipeline": "Ekspor pipeline",
       "stepKindTransform": "Transformasi",
+      "canvasEmpty": "Belum ada langkah — tambahkan satu untuk membangun alur kerja.",
       "inputPreviousStep": "Masukan: ← keluaran langkah sebelumnya",
       "unknownTool": "Alat tidak dikenal \"{{id}}\"",
       "noParameters": "Tidak ada parameter."

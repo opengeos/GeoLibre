@@ -4049,6 +4049,7 @@
       "importPipeline": "Pipeline importeren",
       "exportPipeline": "Pipeline exporteren",
       "stepKindTransform": "Transformatie",
+      "canvasEmpty": "Nog geen stappen — voeg er een toe om de workflow op te bouwen.",
       "inputPreviousStep": "Invoer: ← uitvoer van de vorige stap",
       "unknownTool": "Onbekend gereedschap ‘{{id}}’",
       "noParameters": "Geen parameters."

@@ -88,6 +88,47 @@ describe("processing pipeline JSON", () => {
         ),
       /connected chain/,
     );
+    // Edge count matches a chain, but b and c form a loop the walk never enters.
+    assert.throws(
+      () =>
+        pipelineToModel(
+          {
+            ...base,
+            nodes: [node("a"), node("b"), node("c")],
+            edges: [
+              { from: "b", to: "c" },
+              { from: "c", to: "b" },
+            ],
+          },
+          () => "id",
+        ),
+      /Pipeline contains a cycle/,
+    );
+  });
+
+  it("rejects fan-in with a merge-specific message", () => {
+    assert.throws(
+      () =>
+        pipelineToModel(
+          {
+            $schema: "https://geolibre.app/schemas/pipeline-v1.json",
+            version: "1.0.0",
+            name: "Merge",
+            nodes: ["a", "b", "c"].map((id) => ({
+              id,
+              type: "transform.vector.buffer",
+              name: id,
+              params: {},
+            })),
+            edges: [
+              { from: "a", to: "c" },
+              { from: "b", to: "c" },
+            ],
+          },
+          () => "id",
+        ),
+      /Merging pipelines/,
+    );
   });
 
   it("rejects malformed node properties with a stable validation error", () => {

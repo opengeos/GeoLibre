@@ -811,7 +811,7 @@ function WorkflowCanvas({
     >
       {steps.length === 0 ? (
         <p className="py-6 text-center text-xs text-muted-foreground">
-          {t("processing.modelBuilder.emptyPipelineHint")}
+          {t("processing.modelBuilder.canvasEmpty")}
         </p>
       ) : (
         <div className="flex min-w-max items-center py-2">
@@ -909,9 +909,17 @@ function StepCard({
       onClick={onSelect}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="truncate text-sm font-medium">
+        <button
+          type="button"
+          className="truncate rounded text-start text-sm font-medium"
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelect();
+          }}
+          aria-pressed={selected}
+        >
           {index + 1}. {tool?.name ?? step.toolId}
-        </span>
+        </button>
         <div className="flex items-center gap-0.5">
           <button
             type="button"

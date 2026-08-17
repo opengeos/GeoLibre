@@ -4049,6 +4049,7 @@
       "importPipeline": "Importar pipeline",
       "exportPipeline": "Exportar pipeline",
       "stepKindTransform": "Transformação",
+      "canvasEmpty": "Ainda não há etapas — adicione uma para criar o fluxo de trabalho.",
       "inputPreviousStep": "Entrada: ← saída da etapa anterior",
       "unknownTool": "Ferramenta desconhecida “{{id}}”",
       "noParameters": "Sem parâmetros."

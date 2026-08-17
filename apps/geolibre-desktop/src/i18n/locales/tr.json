@@ -4049,6 +4049,7 @@
       "importPipeline": "İşlem hattını içe aktar",
       "exportPipeline": "İşlem hattını dışa aktar",
       "stepKindTransform": "Dönüşüm",
+      "canvasEmpty": "Henüz adım yok — iş akışını oluşturmak için bir adım ekleyin.",
       "inputPreviousStep": "Girdi: ← önceki adımın çıktısı",
       "unknownTool": "Bilinmeyen araç \"{{id}}\"",
       "noParameters": "Parametre yok."

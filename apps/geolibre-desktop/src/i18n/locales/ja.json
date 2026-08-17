@@ -3982,6 +3982,7 @@
       "importPipeline": "パイプラインをインポート",
       "exportPipeline": "パイプラインをエクスポート",
       "stepKindTransform": "変換",
+      "canvasEmpty": "ステップがありません — 追加してワークフローを作成します。",
       "inputPreviousStep": "入力: ← 前のステップの出力",
       "unknownTool": "不明なツール「{{id}}」",
       "noParameters": "パラメータはありません。"

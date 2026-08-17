@@ -4049,6 +4049,7 @@
       "importPipeline": "पाइपलाइन आयात करें",
       "exportPipeline": "पाइपलाइन निर्यात करें",
       "stepKindTransform": "रूपांतरण",
+      "canvasEmpty": "अभी कोई चरण नहीं — वर्कफ़्लो बनाने के लिए एक जोड़ें।",
       "inputPreviousStep": "इनपुट: ← पिछले चरण का आउटपुट",
       "unknownTool": "अज्ञात टूल \"{{id}}\"",
       "noParameters": "कोई पैरामीटर नहीं।"

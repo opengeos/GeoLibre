@@ -4316,6 +4316,7 @@
       "importPipeline": "استيراد خط الأنابيب",
       "exportPipeline": "تصدير خط الأنابيب",
       "stepKindTransform": "تحويل",
+      "canvasEmpty": "لا توجد خطوات بعد — أضف خطوة لبناء سير العمل.",
       "inputPreviousStep": "الإدخال: → ناتج الخطوة السابقة",
       "unknownTool": "أداة غير معروفة \"{{id}}\"",
       "noParameters": "لا توجد معاملات."
