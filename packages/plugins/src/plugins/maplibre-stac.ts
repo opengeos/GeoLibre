@@ -562,10 +562,16 @@ function planetaryComputerSigner(): Promise<SasSigner> {
  * added rather than when the item is parsed, and the upstream manager caches them. Anything
  * that is not an Azure blob, or that cannot be signed, is read unsigned.
  *
- * Only the GeoParquet path signs. The formats that keep a URL as their layer source — PMTiles
- * and COG store the href verbatim in the store, which is what a saved project is written from —
- * would bake an expiring token into `.geolibre.json`, so they read unsigned exactly as they did
- * before GeoParquet was addable. Signing those wants the token minted per request instead.
+ * Only the GeoParquet path signs, because that is the one this branch made addable and it cannot
+ * read a private container at all unsigned. PMTiles and COG read unsigned exactly as they did
+ * before, rather than gaining a token they never had.
+ *
+ * Every one of these formats persists whatever URL it is handed: PMTiles and COG through the
+ * store layer they create, and the vector control through `createVectorStoreLayer`, which records
+ * the URL as both `source.url` and `sourcePath`. A project saved with a signed GeoParquet layer
+ * therefore holds a token that `restoreVectorLayers` replays as-is and never re-signs, so the
+ * layer stops reloading once the token lapses (about an hour). Fixing that properly means minting
+ * the token per request, or re-signing on restore, rather than baking one in at add time.
  */
 async function readableHref(item: StacItem, href: string): Promise<string> {
   if (!isAzureBlobHref(href) || !item.collection) return href;

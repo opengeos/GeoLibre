@@ -614,9 +614,25 @@ export function assetDisplayFormat(asset: StacAsset): StacAssetDisplayFormat | n
 /**
  * Which format an asset is, or null when the panel cannot draw it. Both the enabled state of Add
  * and the routing behind it read this, so the button and the click cannot disagree.
+ *
+ * Narrower than {@link assetDisplayFormat}: an asset is named by its format even when it cannot
+ * be reached. {@link browserAssetHref} leaves an object-store URI alone when nothing resolves it
+ * — an `abfs://` href whose catalog omits `table:storage_options`, say — and none of the readers
+ * behind Add speak those schemes, so such an asset is labelled but not offered.
  */
 export function assetFormat(asset: StacAsset): StacAssetFormat | null {
+  if (!isFetchableHref(asset.href)) return null;
   return assetDisplayFormat(asset);
+}
+
+/** Whether an href is one the readers behind Add can actually open. */
+function isFetchableHref(href: string): boolean {
+  try {
+    const { protocol } = new URL(href);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 export function isVisualizableAsset(asset: StacAsset): boolean {

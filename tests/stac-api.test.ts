@@ -54,6 +54,18 @@ test("browserAssetHref resolves Azure hrefs against the account named beside the
   );
 });
 
+test("an Azure asset with nothing to resolve it against is named but not offered", () => {
+  // browserAssetHref leaves the href alone when no account names the container, and none of the
+  // readers behind Add speak abfs://, so the panel must not enable Add for it.
+  const asset = { href: "abfs://us-census/2020/x.parquet", type: "application/x-parquet" };
+  assert.equal(assetDisplayFormat(asset), "parquet");
+  assert.equal(assetFormat(asset), null);
+  assert.equal(isVisualizableAsset(asset), false);
+  // Once resolved, the same asset is addable.
+  const resolved = { ...asset, href: browserAssetHref(asset.href, "https://x.test/", "acct") };
+  assert.equal(assetFormat(resolved), "parquet");
+});
+
 test("isAzureBlobHref recognizes only blob-storage URLs", () => {
   assert.equal(
     isAzureBlobHref("https://ai4edataeuwest.blob.core.windows.net/us-census/x.parquet"),
@@ -739,6 +751,46 @@ test("a searched item's Azure asset arrives resolved against its storage options
   assert.equal(
     result.items[0].assets.data.href,
     "https://ai4edataeuwest.blob.core.windows.net/us-census/2020/cb_2020_us_state_500k.parquet",
+  );
+});
+
+test("storage options on the item resolve an asset that carries none of its own", async () => {
+  // The table extension allows the options to sit once on the item rather than on every asset.
+  const fetcher = (async () =>
+    jsonResponse({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: "shared-options",
+          geometry: null,
+          collection: "us-census",
+          properties: {
+            datetime: "2021-08-01T00:00:00Z",
+            "table:storage_options": { account_name: "ai4edataeuwest" },
+          },
+          assets: {
+            data: { href: "abfs://us-census/2020/a.parquet", type: "application/x-parquet" },
+          },
+        },
+      ],
+      links: [],
+    })) as typeof fetch;
+  const result = await searchStacApi(
+    {
+      url: "https://planetarycomputer.microsoft.com/api/stac/v1/",
+      title: "Planetary Computer",
+      isApi: true,
+      searchUrl: "https://planetarycomputer.microsoft.com/api/stac/v1/search",
+      collections: [],
+      root: {},
+    },
+    { limit: 10 },
+    fetcher,
+  );
+  assert.equal(
+    result.items[0].assets.data.href,
+    "https://ai4edataeuwest.blob.core.windows.net/us-census/2020/a.parquet",
   );
 });
 
