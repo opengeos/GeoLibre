@@ -90,13 +90,23 @@ describe("GeoLibre Chrome extension scanner", () => {
           <a href="https://maplibre.org/docs/examples/add-a-geojson-line/">Add a GeoJSON line</a>
           <a href="https://maplibre.org/docs/examples/cog-raster-source.html">Add a COG raster source</a>
           <a href="https://api.example.com/export?id=7" title="GeoJSON">County boundaries</a>
+          <a href="https://api.example.com/datasets/123/" title="GeoJSON">Elevation extract</a>
         `,
         "https://maplibre.org/docs/examples/",
       ),
+      // The trailing-slash REST endpoint keeps its hint: only a slug the link
+      // text reads back marks a URL as a page about the format.
       [
         {
           url: "https://api.example.com/export?id=7",
           name: "County boundaries",
+          format: "GeoJSON",
+          kind: "vector",
+          styleUrl: null,
+        },
+        {
+          url: "https://api.example.com/datasets/123/",
+          name: "Elevation extract",
           format: "GeoJSON",
           kind: "vector",
           styleUrl: null,
@@ -623,5 +633,83 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     scope.forget(9);
     assert.equal(scope.generation(9), 0);
     assert.equal(scope.accepts(9, "document"), true);
+  });
+});
+
+describe("GeoLibre Chrome extension request watcher", () => {
+  interface Details {
+    tabId?: number;
+    type?: string;
+    url: string;
+    documentId?: string;
+  }
+  type Listener = (details: Details) => void;
+
+  // `background.mjs` registers its listeners against the extension APIs at
+  // import time, so the module is exercised through a stub of them.
+  async function loadWatcher() {
+    const store = new Map<string, unknown>();
+    const completed: Listener[] = [];
+    const navigations: Listener[] = [];
+    let writes = 0;
+    const addListener = (list: Listener[]) => (fn: Listener) => list.push(fn);
+    Object.assign(globalThis, {
+      chrome: {
+        webRequest: {
+          onCompleted: { addListener: addListener(completed) },
+          onBeforeRequest: { addListener: addListener(navigations) },
+        },
+        tabs: { onRemoved: { addListener: () => undefined } },
+        storage: {
+          session: {
+            get: async (key: string) => ({ [key]: store.get(key) }),
+            set: async (items: Record<string, unknown>) => {
+              writes += 1;
+              for (const [name, value] of Object.entries(items)) store.set(name, value);
+            },
+            remove: async (key: string) => {
+              store.delete(key);
+            },
+          },
+        },
+      },
+    });
+    await import("../extensions/geolibre-chrome/background.mjs");
+    const settle = async () => {
+      for (let turn = 0; turn < 8; turn += 1) await new Promise((r) => setTimeout(r, 0));
+    };
+    return {
+      services: () => (store.get("services:1") ?? []) as { url: string; styleUrl: string | null }[],
+      writes: () => writes,
+      async request(details: Details) {
+        const event = { tabId: 1, type: "xmlhttprequest", documentId: "doc", ...details };
+        if (event.type === "main_frame") for (const fn of navigations) fn(event);
+        for (const fn of completed) fn(event);
+        await settle();
+      },
+    };
+  }
+
+  it("fills in a style that arrives after the tiles it describes", async () => {
+    const watcher = await loadWatcher();
+    await watcher.request({ type: "main_frame", url: "https://maps.example.com/", documentId: "" });
+    await watcher.request({ url: "https://tiles.example.com/roads/4/5/6.pbf" });
+    assert.deepEqual(
+      watcher.services().map((entry) => entry.styleUrl),
+      [null],
+    );
+    // The style is a separate request and can finish after the first tile.
+    await watcher.request({ url: "https://tiles.example.com/style.json" });
+    assert.deepEqual(
+      watcher.services().map((entry) => entry.styleUrl),
+      ["https://tiles.example.com/style.json"],
+    );
+
+    // Panning a map repeats one candidate; that must not keep rewriting it.
+    const before = watcher.writes();
+    await watcher.request({ url: "https://tiles.example.com/roads/7/8/9.pbf" });
+    await watcher.request({ url: "https://tiles.example.com/roads/1/2/3.pbf" });
+    assert.equal(watcher.writes(), before);
+    assert.equal(watcher.services().length, 1);
   });
 });

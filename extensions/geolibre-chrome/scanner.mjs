@@ -75,14 +75,38 @@ export function scanDocumentForDatasets() {
     return url ? canonicalUrl(url) : null;
   };
 
+  const wordsIn = (value) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(" ")
+      .filter(Boolean);
+
+  /**
+   * True when the link text reads back the URL's last path segment. A site
+   * root has no segment to read back and is never a dataset either way, so it
+   * counts as a page outright.
+   */
+  const echoesSlug = (path, clue) => {
+    const slug = wordsIn(path.split("/").filter(Boolean).pop() ?? "");
+    if (!slug.length) return true;
+    const said = wordsIn(clue);
+    return slug.every((word) => said.includes(word));
+  };
+
   const classify = (url, hint = "") => {
     const path = url.pathname.toLowerCase();
     const clue = String(hint).toLowerCase();
     // A hint alone identifies an extensionless download endpoint, but on a URL
-    // that is plainly a web page the same words are describing the page rather
-    // than naming data it serves: a documentation site links "Add a GeoJSON
-    // line" to `/examples/add-a-geojson-line/`, which is HTML.
-    const isPage = /\/$/.test(path) || /\.(?:html?|php|aspx?|jsp)$/.test(path);
+    // that is plainly a web page the same words describe the page rather than
+    // name data it serves: a documentation site links "Add a GeoJSON line" to
+    // `/examples/add-a-geojson-line/`, which is HTML. A page extension says so
+    // outright; a directory-style URL says so only when the link text is the
+    // slug read back, which is what a page *about* a format looks like. An
+    // endpoint that merely ends in a slash (`/api/datasets/123/`) keeps its
+    // hint, since its slug names a resource rather than echoing the words.
+    const isPage =
+      /\.(?:html?|php|aspx?|jsp)$/.test(path) || (/\/$/.test(path) && echoesSlug(path, clue));
     const says = (pattern) => !isPage && pattern.test(clue);
     if (/\.geojson$/.test(path) || says(/geo\+json|geojson|feature\s*collection/)) {
       return { format: "GeoJSON", kind: "vector", confidence: 3 };
