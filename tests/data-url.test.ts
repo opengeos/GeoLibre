@@ -54,6 +54,23 @@ describe("serviceUrlParameter", () => {
     );
   });
 
+  it("restores tile-template braces only for the kinds that use them", () => {
+    // A WMS token that legitimately encodes a brace must reach the server as it
+    // was signed, not as a literal brace.
+    assert.equal(
+      serviceUrlParameter(
+        "?add=wms&serviceUrl=https%3A%2F%2Fmaps.example.com%2Fwms%3Ftoken%3Da%257Bb%257Dc",
+      )?.url,
+      "https://maps.example.com/wms?token=a%7Bb%7Dc",
+    );
+    assert.equal(
+      serviceUrlParameter(
+        "?add=wmts&serviceUrl=https%3A%2F%2Ftiles.example.com%2Fwmts%3FTileMatrix%3D%257Bz%257D",
+      )?.url,
+      "https://tiles.example.com/wmts?TileMatrix={z}",
+    );
+  });
+
   it("ignores a blank layer and a non-web style link", () => {
     assert.deepEqual(
       serviceUrlParameter(
