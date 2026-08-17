@@ -556,8 +556,12 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
       .replace(/^-|-$/g, "");
     anchor.href = url;
     anchor.download = `${slug || "pipeline"}.pipeline.json`;
+    document.body.appendChild(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
+    anchor.remove();
+    // Defer revoke so the browser can fetch the blob first (Firefox races and
+    // silently drops the download if the URL is revoked synchronously).
+    setTimeout(() => URL.revokeObjectURL(url), 0);
     appendLog(`Exported ${anchor.download}`);
   }, [draft, appendLog]);
 

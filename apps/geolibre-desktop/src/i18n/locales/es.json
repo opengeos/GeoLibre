@@ -4049,7 +4049,7 @@
       "importPipeline": "Importar canalización",
       "exportPipeline": "Exportar canalización",
       "stepKindTransform": "Transformación",
-      "canvasEmpty": "Aún no hay pasos: añade uno para crear el flujo de trabajo.",
+      "canvasEmpty": "Aún no hay pasos: añada uno para crear el flujo de trabajo.",
       "inputPreviousStep": "Entrada: ← salida del paso anterior",
       "unknownTool": "Herramienta desconocida «{{id}}»",
       "noParameters": "Sin parámetros."

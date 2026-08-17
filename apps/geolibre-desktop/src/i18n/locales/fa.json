@@ -4049,7 +4049,7 @@
       "importPipeline": "درون‌ریزی خط لوله",
       "exportPipeline": "برون‌بری خط لوله",
       "stepKindTransform": "تبدیل",
-      "canvasEmpty": "هنوز مرحله‌ای وجود ندارد — برای ساخت گردش کار یکی اضافه کنید.",
+      "canvasEmpty": "هنوز گامی وجود ندارد — برای ساخت گردش کار یکی اضافه کنید.",
       "inputPreviousStep": "ورودی: → خروجی گام پیشین",
       "unknownTool": "ابزار ناشناختهٔ «{{id}}»",
       "noParameters": "بدون پارامتر."
