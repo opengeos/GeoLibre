@@ -3421,7 +3421,13 @@
     "addUnsupported": "मानचित्र में केवल GeoTIFF/COG, GeoJSON और PMTiles एसेट जोड़ी जा सकती हैं",
     "addFailed": "एसेट नहीं जोड़ी जा सकी",
     "addNoSourceLayers": "इस संग्रह में बनाने के लिए कोई लेयर सूचीबद्ध नहीं है",
-    "cogUnsupported": "यह GeoLibre होस्ट दूरस्थ GeoTIFF एसेट प्रदर्शित नहीं कर सकता"
+    "cogUnsupported": "यह GeoLibre होस्ट दूरस्थ GeoTIFF एसेट प्रदर्शित नहीं कर सकता",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "अज्ञात प्रारूप",
+    "notAddable": "जोड़ा नहीं जा सकता"
   },
   "earthdataGis": {
     "hint": "इमेजरी, मानचित्र और फ़ीचर सेवाओं के लिए NASA Earthdata GIS खोजें।",

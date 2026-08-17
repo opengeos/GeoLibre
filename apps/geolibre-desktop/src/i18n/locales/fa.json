@@ -3421,7 +3421,13 @@
     "addUnsupported": "تنها دارایی‌های GeoTIFF/COG، GeoJSON و PMTiles را می‌توان به نقشه افزود",
     "addFailed": "افزودن دارایی با شکست مواجه شد",
     "addNoSourceLayers": "این بایگانی هیچ لایه‌ای برای ترسیم فهرست نکرده است",
-    "cogUnsupported": "این میزبان GeoLibre نمی‌تواند دارایی‌های GeoTIFF دوردست را نمایش دهد"
+    "cogUnsupported": "این میزبان GeoLibre نمی‌تواند دارایی‌های GeoTIFF دوردست را نمایش دهد",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "قالب ناشناخته",
+    "notAddable": "قابل افزودن نیست"
   },
   "earthdataGis": {
     "hint": "NASA Earthdata GIS را برای سرویس‌های تصویری، نقشه و عارضه جستجو کنید.",

@@ -3421,7 +3421,13 @@
     "addUnsupported": "Alleen GeoTIFF/COG-, GeoJSON- en PMTiles-assets kunnen aan de kaart worden toegevoegd",
     "addFailed": "Kan asset niet toevoegen",
     "addNoSourceLayers": "Dit archief bevat geen tekenbare lagen",
-    "cogUnsupported": "Deze GeoLibre-host kan externe GeoTIFF-assets niet weergeven"
+    "cogUnsupported": "Deze GeoLibre-host kan externe GeoTIFF-assets niet weergeven",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "Onbekend formaat",
+    "notAddable": "kan niet worden toegevoegd"
   },
   "earthdataGis": {
     "hint": "Doorzoek NASA Earthdata GIS naar beeld-, kaart- en featureservices.",

@@ -3421,7 +3421,13 @@
     "addUnsupported": "Nur GeoTIFF/COG-, GeoJSON- und PMTiles-Assets können zur Karte hinzugefügt werden",
     "addFailed": "Asset konnte nicht hinzugefügt werden",
     "addNoSourceLayers": "Dieses Archiv führt keine zeichenbaren Ebenen auf",
-    "cogUnsupported": "Dieser GeoLibre-Host kann entfernte GeoTIFF-Assets nicht darstellen"
+    "cogUnsupported": "Dieser GeoLibre-Host kann entfernte GeoTIFF-Assets nicht darstellen",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "Unbekanntes Format",
+    "notAddable": "nicht hinzufügbar"
   },
   "earthdataGis": {
     "hint": "Durchsuchen Sie NASA Earthdata GIS nach Bild-, Karten- und Feature-Diensten.",

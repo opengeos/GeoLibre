@@ -5,6 +5,7 @@ import type { GeoJSONSource, MapMouseEvent, Map as MapLibreMap } from "maplibre-
 import type { GeoLibreAppAPI, GeoLibreCogLayerOptions, GeoLibrePlugin } from "../types";
 import { addPMTilesAsset } from "./stac-layers";
 import {
+  assetDisplayFormat,
   assetFormat,
   connectStac,
   horizontalBbox,
@@ -143,6 +144,12 @@ export interface StacLabels {
   addFailed: string;
   addNoSourceLayers: string;
   cogUnsupported: string;
+  formatCog: string;
+  formatGeoJson: string;
+  formatPmtiles: string;
+  formatParquet: string;
+  formatUnknown: string;
+  notAddable: string;
   showing: (count: number) => string;
   showingOfMatched: (count: number, matched: number) => string;
   adding: (asset: string) => string;
@@ -216,6 +223,12 @@ let labels: StacLabels = {
   addFailed: "Could not add asset",
   addNoSourceLayers: "This archive lists no layers to draw",
   cogUnsupported: "This GeoLibre host cannot visualize remote GeoTIFF assets",
+  formatCog: "COG",
+  formatGeoJson: "GeoJSON",
+  formatPmtiles: "PMTiles",
+  formatParquet: "Parquet",
+  formatUnknown: "Unknown format",
+  notAddable: "not addable",
   showing: (count) => `Showing ${count} items.`,
   showingOfMatched: (count, matched) => `Showing ${count} of ${matched} items.`,
   adding: (asset) => `Adding ${asset}…`,
@@ -506,23 +519,22 @@ function assetLabel(key: string, asset: StacAsset): string {
 }
 
 function assetFormatLabel(asset: StacAsset): string {
-  switch (assetFormat(asset)) {
+  switch (assetDisplayFormat(asset)) {
     case "cog":
-      return "COG";
+      return labels.formatCog;
     case "geojson":
-      return "GeoJSON";
+      return labels.formatGeoJson;
     case "pmtiles":
-      return "PMTiles";
-    case null: {
-      const mediaType = (asset.type ?? "").toLowerCase();
-      if (mediaType.includes("parquet") || /\.parquet($|\?)/i.test(asset.href)) return "Parquet";
-      return "Unknown format";
-    }
+      return labels.formatPmtiles;
+    case "parquet":
+      return labels.formatParquet;
+    case null:
+      return labels.formatUnknown;
   }
 }
 
 function assetOptionLabel(key: string, asset: StacAsset): string {
-  const addability = isVisualizableAsset(asset) ? "" : " (not addable)";
+  const addability = isVisualizableAsset(asset) ? "" : ` (${labels.notAddable})`;
   return `${assetLabel(key, asset)} — ${assetFormatLabel(asset)}${addability}`;
 }
 

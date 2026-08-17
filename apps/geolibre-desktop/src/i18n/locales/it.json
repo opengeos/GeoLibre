@@ -3421,7 +3421,13 @@
     "addUnsupported": "Solo le risorse GeoTIFF/COG, GeoJSON e PMTiles possono essere aggiunte alla mappa",
     "addFailed": "Impossibile aggiungere la risorsa",
     "addNoSourceLayers": "Questo archivio non elenca livelli da disegnare",
-    "cogUnsupported": "Questo host GeoLibre non può visualizzare risorse GeoTIFF remote"
+    "cogUnsupported": "Questo host GeoLibre non può visualizzare risorse GeoTIFF remote",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "Formato sconosciuto",
+    "notAddable": "non aggiungibile"
   },
   "earthdataGis": {
     "hint": "Cerca servizi di immagini, mappe ed elementi in NASA Earthdata GIS.",

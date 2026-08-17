@@ -3431,7 +3431,13 @@
     "addUnsupported": "Only GeoTIFF/COG, GeoJSON, and PMTiles assets can be added to the map",
     "addFailed": "Could not add asset",
     "addNoSourceLayers": "This archive lists no layers to draw",
-    "cogUnsupported": "This GeoLibre host cannot visualize remote GeoTIFF assets"
+    "cogUnsupported": "This GeoLibre host cannot visualize remote GeoTIFF assets",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "Unknown format",
+    "notAddable": "not addable"
   },
   "earthdataGis": {
     "hint": "Search NASA Earthdata GIS for imagery, map, and feature services.",

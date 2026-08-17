@@ -3365,7 +3365,13 @@
     "addUnsupported": "GeoTIFF/COG, GeoJSON 및 PMTiles 자산만 지도에 추가할 수 있습니다",
     "addFailed": "자산을 추가하지 못했습니다",
     "addNoSourceLayers": "이 아카이브에는 그릴 레이어가 없습니다",
-    "cogUnsupported": "이 GeoLibre 호스트는 원격 GeoTIFF 자산을 표시할 수 없습니다"
+    "cogUnsupported": "이 GeoLibre 호스트는 원격 GeoTIFF 자산을 표시할 수 없습니다",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "알 수 없는 형식",
+    "notAddable": "추가할 수 없음"
   },
   "earthdataGis": {
     "hint": "NASA Earthdata GIS에서 영상, 지도, 피처 서비스를 검색하세요.",

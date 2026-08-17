@@ -3365,7 +3365,13 @@
     "addUnsupported": "只有 GeoTIFF/COG、GeoJSON 和 PMTiles 资源可以添加到地图",
     "addFailed": "无法添加资源",
     "addNoSourceLayers": "此归档未列出可绘制的图层",
-    "cogUnsupported": "此 GeoLibre 主机无法可视化远程 GeoTIFF 资源"
+    "cogUnsupported": "此 GeoLibre 主机无法可视化远程 GeoTIFF 资源",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "未知格式",
+    "notAddable": "无法添加"
   },
   "earthdataGis": {
     "hint": "在 NASA Earthdata GIS 中搜索影像服务、地图服务和要素服务。",

@@ -551,35 +551,39 @@ export function itemBbox(item: StacItem): [number, number, number, number] | und
 
 /** A format {@link assetFormat} recognizes, and {@link visualizeAsset} knows how to add. */
 export type StacAssetFormat = "pmtiles" | "geojson" | "cog";
+export type StacAssetDisplayFormat = StacAssetFormat | "parquet";
 
 interface AssetFormatRule {
-  format: StacAssetFormat;
+  format: StacAssetDisplayFormat;
   /** Matched within the asset's media type, which catalogs write with varying parameters. */
   mediaType: string;
   /** Read only when no rule's media type matched, for a catalog that omits the type. */
   extension: RegExp;
 }
 
-/** The formats the panel can put on the map, and the two ways an asset can name each of them. */
-const VISUALIZABLE_FORMATS: readonly AssetFormatRule[] = [
+/** Formats the panel labels, and the two ways an asset can name each of them. */
+const ASSET_FORMATS: readonly AssetFormatRule[] = [
   { format: "pmtiles", mediaType: "pmtiles", extension: /\.pmtiles($|\?)/i },
   { format: "geojson", mediaType: "geo+json", extension: /\.geojson($|\?)/i },
   { format: "cog", mediaType: "geotiff", extension: /\.tiff?($|\?)/i },
+  { format: "parquet", mediaType: "parquet", extension: /\.parquet($|\?)/i },
 ];
+
+export function assetDisplayFormat(asset: StacAsset): StacAssetDisplayFormat | null {
+  const mediaType = (asset.type ?? "").toLowerCase();
+  const declared = ASSET_FORMATS.find((rule) => mediaType.includes(rule.mediaType));
+  if (declared) return declared.format;
+
+  return ASSET_FORMATS.find((rule) => rule.extension.test(asset.href))?.format ?? null;
+}
 
 /**
  * Which format an asset is, or null when the panel cannot draw it. Both the enabled state of Add
  * and the routing behind it read this, so the button and the click cannot disagree.
  */
 export function assetFormat(asset: StacAsset): StacAssetFormat | null {
-  const mediaType = (asset.type ?? "").toLowerCase();
-
-  // Every declared media type outranks every extension: a catalog calling a `.pmtiles` href
-  // GeoJSON is describing its own asset.
-  const declared = VISUALIZABLE_FORMATS.find((rule) => mediaType.includes(rule.mediaType));
-  if (declared) return declared.format;
-
-  return VISUALIZABLE_FORMATS.find((rule) => rule.extension.test(asset.href))?.format ?? null;
+  const format = assetDisplayFormat(asset);
+  return format === "parquet" ? null : format;
 }
 
 export function isVisualizableAsset(asset: StacAsset): boolean {

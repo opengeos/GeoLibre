@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   browserAssetHref,
   connectStac,
+  assetDisplayFormat,
   assetFormat,
   isVisualizableAsset,
   itemBbox,
@@ -1155,6 +1156,14 @@ test("an asset's format comes from its media type, or its extension when there i
     "geojson",
   );
   assert.equal(assetFormat({ href: "https://example.com/data.bin" }), null);
+  assert.equal(
+    assetDisplayFormat({
+      href: "https://example.com/data.bin",
+      type: "application/vnd.apache.parquet",
+    }),
+    "parquet",
+  );
+  assert.equal(assetDisplayFormat({ href: "https://example.com/data.parquet" }), "parquet");
 
   // Archives under a directory named for another format are read by the asset, not the path.
   assert.equal(assetFormat({ href: "https://example.com/geotiff/a.pmtiles" }), "pmtiles");

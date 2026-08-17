@@ -3365,7 +3365,13 @@
     "addUnsupported": "地図に追加できるのは GeoTIFF/COG、GeoJSON、PMTiles のアセットのみです",
     "addFailed": "アセットを追加できませんでした",
     "addNoSourceLayers": "このアーカイブには描画できるレイヤーがありません",
-    "cogUnsupported": "この GeoLibre ホストはリモートの GeoTIFF アセットを表示できません"
+    "cogUnsupported": "この GeoLibre ホストはリモートの GeoTIFF アセットを表示できません",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "不明な形式",
+    "notAddable": "追加不可"
   },
   "earthdataGis": {
     "hint": "NASA Earthdata GIS で画像・地図・フィーチャの各サービスを検索します。",

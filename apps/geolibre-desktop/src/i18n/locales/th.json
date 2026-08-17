@@ -3365,7 +3365,13 @@
     "addUnsupported": "เพิ่มลงแผนที่ได้เฉพาะแอสเซตแบบ GeoTIFF/COG, GeoJSON และ PMTiles เท่านั้น",
     "addFailed": "ไม่สามารถเพิ่มแอสเซตได้",
     "addNoSourceLayers": "ไฟล์เก็บถาวรนี้ไม่มีเลเยอร์ให้วาด",
-    "cogUnsupported": "โฮสต์ GeoLibre นี้ไม่สามารถแสดงผลแอสเซต GeoTIFF จากระยะไกลได้"
+    "cogUnsupported": "โฮสต์ GeoLibre นี้ไม่สามารถแสดงผลแอสเซต GeoTIFF จากระยะไกลได้",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "รูปแบบที่ไม่รู้จัก",
+    "notAddable": "ไม่สามารถเพิ่มได้"
   },
   "earthdataGis": {
     "hint": "ค้นหาบริการภาพถ่าย แผนที่ และฟีเจอร์จาก NASA Earthdata GIS",

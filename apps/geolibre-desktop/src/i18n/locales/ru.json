@@ -3533,7 +3533,13 @@
     "addUnsupported": "На карту можно добавить только ресурсы GeoTIFF/COG, GeoJSON и PMTiles",
     "addFailed": "Не удалось добавить ресурс",
     "addNoSourceLayers": "В этом архиве нет слоёв для отрисовки",
-    "cogUnsupported": "Этот хост GeoLibre не может отображать удалённые ресурсы GeoTIFF"
+    "cogUnsupported": "Этот хост GeoLibre не может отображать удалённые ресурсы GeoTIFF",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "Неизвестный формат",
+    "notAddable": "нельзя добавить"
   },
   "earthdataGis": {
     "hint": "Ищите в NASA Earthdata GIS сервисы изображений, карт и объектов.",

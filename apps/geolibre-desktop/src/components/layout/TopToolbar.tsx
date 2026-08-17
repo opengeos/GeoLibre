@@ -936,6 +936,12 @@ export function TopToolbar({
       addFailed: t("stacPlugin.addFailed"),
       addNoSourceLayers: t("stacPlugin.addNoSourceLayers"),
       cogUnsupported: t("stacPlugin.cogUnsupported"),
+      formatCog: t("stacPlugin.formatCog"),
+      formatGeoJson: t("stacPlugin.formatGeoJson"),
+      formatPmtiles: t("stacPlugin.formatPmtiles"),
+      formatParquet: t("stacPlugin.formatParquet"),
+      formatUnknown: t("stacPlugin.formatUnknown"),
+      notAddable: t("stacPlugin.notAddable"),
     });
   }, [t]);
 

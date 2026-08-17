@@ -3421,7 +3421,13 @@
     "addUnsupported": "რუკაზე შეიძლება დაემატოს მხოლოდ GeoTIFF/COG, GeoJSON და PMTiles აქტივები",
     "addFailed": "აქტივის დამატება ვერ მოხერხდა",
     "addNoSourceLayers": "ეს არქივი არ შეიცავს დასახატ ფენებს",
-    "cogUnsupported": "ამ GeoLibre ჰოსტს არ შეუძლია დისტანციური GeoTIFF აქტივების ვიზუალიზაცია"
+    "cogUnsupported": "ამ GeoLibre ჰოსტს არ შეუძლია დისტანციური GeoTIFF აქტივების ვიზუალიზაცია",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "უცნობი ფორმატი",
+    "notAddable": "დამატება შეუძლებელია"
   },
   "earthdataGis": {
     "hint": "მოძებნეთ NASA Earthdata GIS-ში სურათების, რუკებისა და ობიექტების სერვისები.",

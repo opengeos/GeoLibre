@@ -3375,7 +3375,13 @@
     "startDate": "Ngày bắt đầu",
     "noMatchesHere": "Không có kết quả phù hợp ở phần đó của danh mục. Tải thêm để tiếp tục tìm kiếm.",
     "treeEmpty": "Trống",
-    "treeOpenFailed": "Không thể mở danh mục này"
+    "treeOpenFailed": "Không thể mở danh mục này",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatUnknown": "Định dạng không xác định",
+    "notAddable": "không thể thêm"
   },
   "earthdataGis": {
     "showing": "Đang hiển thị {{shown}} trong số {{total}} dịch vụ.",
