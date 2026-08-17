@@ -9,6 +9,7 @@ import {
   assetFormat,
   connectStac,
   horizontalBbox,
+  isAzureBlobHref,
   isVisualizableAsset,
   itemBbox,
   loadStacIndex,
@@ -540,6 +541,36 @@ function assetOptionLabel(key: string, asset: StacAsset): string {
   return `${assetLabel(key, asset)} — ${assetFormatLabel(asset)}${addability}`;
 }
 
+type SasSigner = { signUrl(url: string, collectionId: string): Promise<string> };
+let sasManager: Promise<SasSigner> | null = null;
+
+function planetaryComputerSigner(): Promise<SasSigner> {
+  sasManager ??= import("maplibre-gl-planetary-computer")
+    .then((module) => new module.SASTokenManager())
+    .catch((error) => {
+      // Don't let one failed import disable signing for the rest of the session.
+      sasManager = null;
+      throw error;
+    });
+  return sasManager;
+}
+
+/**
+ * Planetary Computer serves several collections — most of the GeoParquet ones — from private
+ * containers that answer 409 without a SAS token, while others (NAIP) read fine anonymously.
+ * Tokens are per-collection and expire within the hour, so they are minted when the asset is
+ * added rather than when the item is parsed, and the upstream manager caches them. Anything
+ * that is not an Azure blob, or that cannot be signed, is read unsigned.
+ */
+async function readableHref(item: StacItem, href: string): Promise<string> {
+  if (!isAzureBlobHref(href) || !item.collection) return href;
+  try {
+    return await (await planetaryComputerSigner()).signUrl(href, item.collection);
+  } catch {
+    return href;
+  }
+}
+
 async function visualizeAsset(
   item: StacItem,
   key: string,
@@ -549,35 +580,37 @@ async function visualizeAsset(
 ): Promise<void> {
   const name = `${item.id} — ${assetLabel(key, asset)}`;
   const format = assetFormat(asset);
+  const href = await readableHref(item, asset.href);
   switch (format) {
     case "pmtiles": {
       // No appRef check: the layer goes to the store, not through the app API.
-      if (!(await addPMTilesAsset(asset.href, name, signal))) {
+      if (!(await addPMTilesAsset(href, name, signal))) {
         throw new Error(labels.addNoSourceLayers);
       }
       return;
     }
     case "geojson": {
       if (!appRef) throw new Error(labels.addFailed);
-      const response = await fetch(asset.href, {
+      const response = await fetch(href, {
         headers: { Accept: "application/geo+json, application/json" },
         signal,
       });
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
       const data = (await response.json()) as FeatureCollection;
+      // Provenance keeps the unsigned href so no expiring token is saved into the project.
       appRef.addGeoJsonLayer(name, data, asset.href);
       return;
     }
     case "parquet": {
       if (!appRef) throw new Error(labels.addFailed);
-      if (!(await addVectorLayerFromUrl(appRef, asset.href, { name }))) {
+      if (!(await addVectorLayerFromUrl(appRef, href, { name }))) {
         throw new Error(labels.addFailed);
       }
       return;
     }
     case "cog": {
       if (!appRef?.addCogLayer) throw new Error(labels.cogUnsupported);
-      await appRef.addCogLayer(name, asset.href, cogOptions);
+      await appRef.addCogLayer(name, href, cogOptions);
       return;
     }
     case null:

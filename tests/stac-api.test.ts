@@ -5,6 +5,7 @@ import {
   connectStac,
   assetDisplayFormat,
   assetFormat,
+  isAzureBlobHref,
   isVisualizableAsset,
   itemBbox,
   openCatalogNode,
@@ -28,6 +29,40 @@ test("browserAssetHref converts anonymous S3 STAC assets to fetchable HTTPS URLs
     browserAssetHref("./data.tif", "https://example.com/catalog/item.json"),
     "https://example.com/catalog/data.tif",
   );
+});
+
+test("browserAssetHref resolves Azure hrefs against the account named beside them", () => {
+  // abfs names the container first and carries the account in table:storage_options, so the
+  // account is prepended as the host rather than read out of the href (GeoLibre#1976).
+  assert.equal(
+    browserAssetHref(
+      "abfs://us-census/2020/cb_2020_us_state_500k.parquet",
+      "https://planetarycomputer.microsoft.com/api/stac/v1/",
+      "ai4edataeuwest",
+    ),
+    "https://ai4edataeuwest.blob.core.windows.net/us-census/2020/cb_2020_us_state_500k.parquet",
+  );
+  assert.equal(
+    browserAssetHref("az://container/a.parquet", "https://example.com/", "acct"),
+    "https://acct.blob.core.windows.net/container/a.parquet",
+  );
+  // With no account there is nothing to resolve against, so the href is left alone rather
+  // than guessed at.
+  assert.equal(
+    browserAssetHref("abfs://us-census/2020/x.parquet", "https://example.com/"),
+    "abfs://us-census/2020/x.parquet",
+  );
+});
+
+test("isAzureBlobHref recognizes only blob-storage URLs", () => {
+  assert.equal(
+    isAzureBlobHref("https://ai4edataeuwest.blob.core.windows.net/us-census/x.parquet"),
+    true,
+  );
+  assert.equal(isAzureBlobHref("https://example.com/x.parquet"), false);
+  // A host merely ending in the suffix as a substring must not match.
+  assert.equal(isAzureBlobHref("https://notblob.core.windows.net.evil.com/x"), false);
+  assert.equal(isAzureBlobHref("not a url"), false);
 });
 
 test("connectStac discovers relative API links and collections", async () => {
@@ -664,6 +699,46 @@ test("a tree selection narrows where the search starts without voiding the colle
     narrowed.items.map((item) => item.id),
     ["L9"],
     "both filters apply; neither is silently dropped",
+  );
+});
+
+test("a searched item's Azure asset arrives resolved against its storage options", async () => {
+  const fetcher = (async () =>
+    jsonResponse({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: "2020-census-states",
+          geometry: null,
+          collection: "us-census",
+          properties: { datetime: "2021-08-01T00:00:00Z" },
+          assets: {
+            data: {
+              href: "abfs://us-census/2020/cb_2020_us_state_500k.parquet",
+              type: "application/x-parquet",
+              "table:storage_options": { account_name: "ai4edataeuwest" },
+            },
+          },
+        },
+      ],
+      links: [],
+    })) as typeof fetch;
+  const result = await searchStacApi(
+    {
+      url: "https://planetarycomputer.microsoft.com/api/stac/v1/",
+      title: "Planetary Computer",
+      isApi: true,
+      searchUrl: "https://planetarycomputer.microsoft.com/api/stac/v1/search",
+      collections: [],
+      root: {},
+    },
+    { limit: 10 },
+    fetcher,
+  );
+  assert.equal(
+    result.items[0].assets.data.href,
+    "https://ai4edataeuwest.blob.core.windows.net/us-census/2020/cb_2020_us_state_500k.parquet",
   );
 });
 
