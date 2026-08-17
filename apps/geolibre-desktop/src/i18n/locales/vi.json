@@ -3349,7 +3349,7 @@
     "collectionsHint": "Giữ Ctrl/Cmd để chọn nhiều bộ sưu tập; kéo cạnh dưới để thay đổi kích thước",
     "limitToExtent": "Giới hạn tìm kiếm trong phạm vi bản đồ hiện tại",
     "bboxLabel": "Hộp giới hạn (tây, nam, đông, bắc)",
-    "addUnsupported": "Chỉ có thể thêm nội dung GeoTIFF/COG, GeoJSON và PMTiles vào bản đồ",
+    "addUnsupported": "Chỉ có thể thêm nội dung GeoTIFF/COG, GeoJSON, GeoParquet và PMTiles vào bản đồ",
     "addFailed": "Không thể thêm nội dung",
     "addNoSourceLayers": "Kho lưu trữ này không liệt kê lớp nào để vẽ",
     "cogUnsupported": "Máy chủ GeoLibre này không thể hiển thị nội dung GeoTIFF từ xa",

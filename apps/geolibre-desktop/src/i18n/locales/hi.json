@@ -3418,7 +3418,7 @@
     "download": "डाउनलोड करें",
     "adding": "{{asset}} जोड़ा जा रहा है…",
     "added": "{{asset}} मानचित्र में जोड़ा गया।",
-    "addUnsupported": "मानचित्र में केवल GeoTIFF/COG, GeoJSON और PMTiles एसेट जोड़ी जा सकती हैं",
+    "addUnsupported": "मानचित्र में केवल GeoTIFF/COG, GeoJSON, GeoParquet और PMTiles एसेट जोड़ी जा सकती हैं",
     "addFailed": "एसेट नहीं जोड़ी जा सकी",
     "addNoSourceLayers": "इस संग्रह में बनाने के लिए कोई लेयर सूचीबद्ध नहीं है",
     "cogUnsupported": "यह GeoLibre होस्ट दूरस्थ GeoTIFF एसेट प्रदर्शित नहीं कर सकता",

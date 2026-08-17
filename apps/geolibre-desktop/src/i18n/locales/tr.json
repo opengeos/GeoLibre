@@ -3418,7 +3418,7 @@
     "download": "İndir",
     "adding": "{{asset}} ekleniyor…",
     "added": "{{asset}} haritaya eklendi.",
-    "addUnsupported": "Haritaya yalnızca GeoTIFF/COG, GeoJSON ve PMTiles varlıkları eklenebilir",
+    "addUnsupported": "Haritaya yalnızca GeoTIFF/COG, GeoJSON, GeoParquet ve PMTiles varlıkları eklenebilir",
     "addFailed": "Varlık eklenemedi",
     "addNoSourceLayers": "Bu arşiv çizilecek katman listelemiyor",
     "cogUnsupported": "Bu GeoLibre ana bilgisayarı uzak GeoTIFF varlıklarını görselleştiremiyor",

@@ -3362,7 +3362,7 @@
     "download": "ดาวน์โหลด",
     "adding": "กำลังเพิ่ม {{asset}}…",
     "added": "เพิ่ม {{asset}} ลงในแผนที่แล้ว",
-    "addUnsupported": "เพิ่มลงแผนที่ได้เฉพาะแอสเซตแบบ GeoTIFF/COG, GeoJSON และ PMTiles เท่านั้น",
+    "addUnsupported": "เพิ่มลงแผนที่ได้เฉพาะแอสเซตแบบ GeoTIFF/COG, GeoJSON, GeoParquet และ PMTiles เท่านั้น",
     "addFailed": "ไม่สามารถเพิ่มแอสเซตได้",
     "addNoSourceLayers": "ไฟล์เก็บถาวรนี้ไม่มีเลเยอร์ให้วาด",
     "cogUnsupported": "โฮสต์ GeoLibre นี้ไม่สามารถแสดงผลแอสเซต GeoTIFF จากระยะไกลได้",

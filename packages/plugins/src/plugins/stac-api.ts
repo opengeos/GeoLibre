@@ -550,8 +550,8 @@ export function itemBbox(item: StacItem): [number, number, number, number] | und
 }
 
 /** A format {@link assetFormat} recognizes, and {@link visualizeAsset} knows how to add. */
-export type StacAssetFormat = "pmtiles" | "geojson" | "cog";
-export type StacAssetDisplayFormat = StacAssetFormat | "parquet";
+export type StacAssetFormat = "pmtiles" | "geojson" | "cog" | "parquet";
+export type StacAssetDisplayFormat = StacAssetFormat;
 
 interface AssetFormatRule {
   format: StacAssetDisplayFormat;
@@ -582,8 +582,7 @@ export function assetDisplayFormat(asset: StacAsset): StacAssetDisplayFormat | n
  * and the routing behind it read this, so the button and the click cannot disagree.
  */
 export function assetFormat(asset: StacAsset): StacAssetFormat | null {
-  const format = assetDisplayFormat(asset);
-  return format === "parquet" ? null : format;
+  return assetDisplayFormat(asset);
 }
 
 export function isVisualizableAsset(asset: StacAsset): boolean {

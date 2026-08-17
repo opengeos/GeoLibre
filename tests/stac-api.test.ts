@@ -1164,6 +1164,11 @@ test("an asset's format comes from its media type, or its extension when there i
     "parquet",
   );
   assert.equal(assetDisplayFormat({ href: "https://example.com/data.parquet" }), "parquet");
+  assert.equal(
+    assetFormat({ href: "https://example.com/data.bin", type: "application/vnd.apache.parquet" }),
+    "parquet",
+  );
+  assert.equal(assetFormat({ href: "https://example.com/data.parquet" }), "parquet");
 
   // Archives under a directory named for another format are read by the asset, not the path.
   assert.equal(assetFormat({ href: "https://example.com/geotiff/a.pmtiles" }), "pmtiles");
@@ -1180,6 +1185,13 @@ test("an asset's format comes from its media type, or its extension when there i
 
   assert.equal(
     isVisualizableAsset({ href: "https://example.com/a.pmtiles", type: "application/vnd.pmtiles" }),
+    true,
+  );
+  assert.equal(
+    isVisualizableAsset({
+      href: "https://example.com/data.bin",
+      type: "application/vnd.apache.parquet",
+    }),
     true,
   );
 });

@@ -3418,7 +3418,7 @@
     "download": "Herunterladen",
     "adding": "{{asset}} wird hinzugefügt…",
     "added": "{{asset}} zur Karte hinzugefügt.",
-    "addUnsupported": "Nur GeoTIFF/COG-, GeoJSON- und PMTiles-Assets können zur Karte hinzugefügt werden",
+    "addUnsupported": "Nur GeoTIFF/COG-, GeoJSON-, GeoParquet- und PMTiles-Assets können zur Karte hinzugefügt werden",
     "addFailed": "Asset konnte nicht hinzugefügt werden",
     "addNoSourceLayers": "Dieses Archiv führt keine zeichenbaren Ebenen auf",
     "cogUnsupported": "Dieser GeoLibre-Host kann entfernte GeoTIFF-Assets nicht darstellen",

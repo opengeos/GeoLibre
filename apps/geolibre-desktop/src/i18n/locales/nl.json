@@ -3418,7 +3418,7 @@
     "download": "Downloaden",
     "adding": "{{asset}} wordt toegevoegd…",
     "added": "{{asset}} toegevoegd aan de kaart.",
-    "addUnsupported": "Alleen GeoTIFF/COG-, GeoJSON- en PMTiles-assets kunnen aan de kaart worden toegevoegd",
+    "addUnsupported": "Alleen GeoTIFF/COG-, GeoJSON-, GeoParquet- en PMTiles-assets kunnen aan de kaart worden toegevoegd",
     "addFailed": "Kan asset niet toevoegen",
     "addNoSourceLayers": "Dit archief bevat geen tekenbare lagen",
     "cogUnsupported": "Deze GeoLibre-host kan externe GeoTIFF-assets niet weergeven",

@@ -25,6 +25,7 @@ import {
 } from "./stac-api";
 import { buildCatalogTree } from "./stac-catalog-tree";
 import { el, setDisabled } from "../panel-dom";
+import { addVectorLayerFromUrl } from "./maplibre-vector";
 
 export const STAC_PLUGIN_ID = "geolibre-stac-catalogs";
 const PANEL_ID = STAC_PLUGIN_ID;
@@ -219,7 +220,8 @@ let labels: StacLabels = {
   zoom: "Zoom",
   add: "Add",
   download: "Download",
-  addUnsupported: "Only GeoTIFF/COG, GeoJSON, and PMTiles assets can be added to the map",
+  addUnsupported:
+    "Only GeoTIFF/COG, GeoJSON, GeoParquet, and PMTiles assets can be added to the map",
   addFailed: "Could not add asset",
   addNoSourceLayers: "This archive lists no layers to draw",
   cogUnsupported: "This GeoLibre host cannot visualize remote GeoTIFF assets",
@@ -564,6 +566,13 @@ async function visualizeAsset(
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
       const data = (await response.json()) as FeatureCollection;
       appRef.addGeoJsonLayer(name, data, asset.href);
+      return;
+    }
+    case "parquet": {
+      if (!appRef) throw new Error(labels.addFailed);
+      if (!(await addVectorLayerFromUrl(appRef, asset.href, { name }))) {
+        throw new Error(labels.addFailed);
+      }
       return;
     }
     case "cog": {

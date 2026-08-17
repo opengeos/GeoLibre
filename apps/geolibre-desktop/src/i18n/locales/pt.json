@@ -3418,7 +3418,7 @@
     "download": "Baixar",
     "adding": "Adicionando {{asset}}…",
     "added": "{{asset}} adicionado ao mapa.",
-    "addUnsupported": "Apenas recursos GeoTIFF/COG, GeoJSON e PMTiles podem ser adicionados ao mapa",
+    "addUnsupported": "Apenas recursos GeoTIFF/COG, GeoJSON, GeoParquet e PMTiles podem ser adicionados ao mapa",
     "addFailed": "Não foi possível adicionar o recurso",
     "addNoSourceLayers": "Este arquivo não lista camadas para desenhar",
     "cogUnsupported": "Este host do GeoLibre não consegue visualizar recursos GeoTIFF remotos",

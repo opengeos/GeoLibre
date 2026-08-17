@@ -3362,7 +3362,7 @@
     "download": "下载",
     "adding": "正在添加 {{asset}}…",
     "added": "已将 {{asset}} 添加到地图。",
-    "addUnsupported": "只有 GeoTIFF/COG、GeoJSON 和 PMTiles 资源可以添加到地图",
+    "addUnsupported": "只有 GeoTIFF/COG、GeoJSON、GeoParquet 和 PMTiles 资源可以添加到地图",
     "addFailed": "无法添加资源",
     "addNoSourceLayers": "此归档未列出可绘制的图层",
     "cogUnsupported": "此 GeoLibre 主机无法可视化远程 GeoTIFF 资源",

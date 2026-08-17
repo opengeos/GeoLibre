@@ -3418,7 +3418,7 @@
     "download": "ჩამოტვირთვა",
     "adding": "მიმდინარეობს {{asset}}-ის დამატება…",
     "added": "{{asset}} დაემატა რუკაზე.",
-    "addUnsupported": "რუკაზე შეიძლება დაემატოს მხოლოდ GeoTIFF/COG, GeoJSON და PMTiles აქტივები",
+    "addUnsupported": "რუკაზე შეიძლება დაემატოს მხოლოდ GeoTIFF/COG, GeoJSON, GeoParquet და PMTiles აქტივები",
     "addFailed": "აქტივის დამატება ვერ მოხერხდა",
     "addNoSourceLayers": "ეს არქივი არ შეიცავს დასახატ ფენებს",
     "cogUnsupported": "ამ GeoLibre ჰოსტს არ შეუძლია დისტანციური GeoTIFF აქტივების ვიზუალიზაცია",

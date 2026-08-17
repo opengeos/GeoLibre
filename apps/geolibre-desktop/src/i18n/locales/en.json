@@ -3428,7 +3428,7 @@
     "download": "Download",
     "adding": "Adding {{asset}}…",
     "added": "Added {{asset}} to the map.",
-    "addUnsupported": "Only GeoTIFF/COG, GeoJSON, and PMTiles assets can be added to the map",
+    "addUnsupported": "Only GeoTIFF/COG, GeoJSON, GeoParquet, and PMTiles assets can be added to the map",
     "addFailed": "Could not add asset",
     "addNoSourceLayers": "This archive lists no layers to draw",
     "cogUnsupported": "This GeoLibre host cannot visualize remote GeoTIFF assets",

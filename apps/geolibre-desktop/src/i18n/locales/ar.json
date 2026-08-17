@@ -3641,7 +3641,7 @@
     "download": "تنزيل",
     "adding": "جارٍ إضافة {{asset}}…",
     "added": "تمت إضافة {{asset}} إلى الخريطة.",
-    "addUnsupported": "يمكن إضافة أصول GeoTIFF/COG وGeoJSON وPMTiles فقط إلى الخريطة",
+    "addUnsupported": "يمكن إضافة أصول GeoTIFF/COG وGeoJSON وGeoParquet وPMTiles فقط إلى الخريطة",
     "addFailed": "تعذّرت إضافة الأصل",
     "addNoSourceLayers": "لا يسرد هذا الأرشيف أي طبقات لرسمها",
     "cogUnsupported": "لا يستطيع مضيف GeoLibre هذا عرض أصول GeoTIFF البعيدة",
