@@ -1624,16 +1624,6 @@
     "exportCsv": "Esporta CSV",
     "exportGeoParquet": "Esporta GeoParquet"
   },
-  "auth": {
-    "unavailableTitle": "Accesso non disponibile",
-    "unavailableDescription": "GeoLibre non è riuscito a raggiungere il servizio di accesso, quindi non può sapere se hai effettuato l'accesso. Di solito è un problema temporaneo; se persiste, le impostazioni di autenticazione di questo deployment potrebbero richiedere attenzione.",
-    "retry": "Riprova",
-    "signInTitle": "Accedi a GeoLibre",
-    "signInDescription": "Questo deployment richiede un account. Verrai portato a una pagina di accesso sicura e poi riportato qui.",
-    "signIn": "Accedi",
-    "signOut": "Esci",
-    "account": "Account"
-  },
   "basemapExtract": {
     "title": "Estrai mappa di base offline",
     "url": "URL della mappa di base",
@@ -4058,6 +4048,7 @@
       "canvas": "Area del flusso di lavoro spaziale",
       "importPipeline": "Importa pipeline",
       "exportPipeline": "Esporta pipeline",
+      "stepKindTransform": "Trasformazione",
       "inputPreviousStep": "Input: ← output del passaggio precedente",
       "unknownTool": "Strumento sconosciuto «{{id}}»",
       "noParameters": "Nessun parametro."
@@ -5598,5 +5589,15 @@
     "mapPoint": "Punto sulla mappa",
     "reply": "Rispondi",
     "replyPlaceholder": "Scrivi una risposta..."
+  },
+  "auth": {
+    "unavailableTitle": "Accesso non disponibile",
+    "unavailableDescription": "GeoLibre non è riuscito a raggiungere il servizio di accesso, quindi non può sapere se hai effettuato l'accesso. Di solito è un problema temporaneo; se persiste, le impostazioni di autenticazione di questo deployment potrebbero richiedere attenzione.",
+    "retry": "Riprova",
+    "signInTitle": "Accedi a GeoLibre",
+    "signInDescription": "Questo deployment richiede un account. Verrai portato a una pagina di accesso sicura e poi riportato qui.",
+    "signIn": "Accedi",
+    "signOut": "Esci",
+    "account": "Account"
   }
 }

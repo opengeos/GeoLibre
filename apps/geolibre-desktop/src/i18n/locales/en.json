@@ -4058,6 +4058,7 @@
       "canvas": "Spatial workflow canvas",
       "importPipeline": "Import pipeline",
       "exportPipeline": "Export pipeline",
+      "stepKindTransform": "Transform",
       "inputPreviousStep": "Input: ← previous step output",
       "unknownTool": "Unknown tool \"{{id}}\"",
       "noParameters": "No parameters."

@@ -1624,16 +1624,6 @@
     "exportCsv": "CSV exporteren",
     "exportGeoParquet": "GeoParquet exporteren"
   },
-  "auth": {
-    "unavailableTitle": "Aanmelden is niet beschikbaar",
-    "unavailableDescription": "GeoLibre kon de aanmeldservice niet bereiken en kan daarom niet vaststellen of u bent aangemeld. Dit is meestal tijdelijk; als het aanhoudt, vragen de authenticatie-instellingen van deze implementatie mogelijk om aandacht.",
-    "retry": "Opnieuw proberen",
-    "signInTitle": "Aanmelden bij GeoLibre",
-    "signInDescription": "Deze implementatie vereist een account. U wordt naar een beveiligde aanmeldpagina geleid en daarna hier teruggebracht.",
-    "signIn": "Aanmelden",
-    "signOut": "Afmelden",
-    "account": "Account"
-  },
   "basemapExtract": {
     "title": "Offline basiskaart extraheren",
     "url": "Basiskaart-URL",
@@ -4058,6 +4048,7 @@
       "canvas": "Canvas voor ruimtelijke workflow",
       "importPipeline": "Pipeline importeren",
       "exportPipeline": "Pipeline exporteren",
+      "stepKindTransform": "Transformatie",
       "inputPreviousStep": "Invoer: ← uitvoer van de vorige stap",
       "unknownTool": "Onbekend gereedschap ‘{{id}}’",
       "noParameters": "Geen parameters."
@@ -5598,5 +5589,15 @@
     "mapPoint": "Kaartpunt",
     "reply": "Beantwoorden",
     "replyPlaceholder": "Schrijf een antwoord..."
+  },
+  "auth": {
+    "unavailableTitle": "Aanmelden is niet beschikbaar",
+    "unavailableDescription": "GeoLibre kon de aanmeldservice niet bereiken en kan daarom niet vaststellen of u bent aangemeld. Dit is meestal tijdelijk; als het aanhoudt, vragen de authenticatie-instellingen van deze implementatie mogelijk om aandacht.",
+    "retry": "Opnieuw proberen",
+    "signInTitle": "Aanmelden bij GeoLibre",
+    "signInDescription": "Deze implementatie vereist een account. U wordt naar een beveiligde aanmeldpagina geleid en daarna hier teruggebracht.",
+    "signIn": "Aanmelden",
+    "signOut": "Afmelden",
+    "account": "Account"
   }
 }

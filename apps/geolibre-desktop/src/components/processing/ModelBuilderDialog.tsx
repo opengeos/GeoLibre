@@ -835,7 +835,7 @@ function WorkflowCanvas({
                   aria-pressed={selectedStepId === step.id}
                 >
                   <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    {index + 1}. transform
+                    {index + 1}. {t("processing.modelBuilder.stepKindTransform")}
                   </span>
                   <span className="block truncate text-sm font-medium">
                     {tool?.name ?? step.toolId}

@@ -1624,16 +1624,6 @@
     "exportCsv": "Exporter en CSV",
     "exportGeoParquet": "Exporter en GeoParquet"
   },
-  "auth": {
-    "unavailableTitle": "La connexion est indisponible",
-    "unavailableDescription": "GeoLibre n'a pas pu joindre le service de connexion et ne peut donc pas savoir si vous êtes connecté. Ce problème est généralement temporaire ; s'il persiste, les paramètres d'authentification de ce déploiement méritent peut-être une vérification.",
-    "retry": "Réessayer",
-    "signInTitle": "Connectez-vous à GeoLibre",
-    "signInDescription": "Ce déploiement nécessite un compte. Vous serez redirigé vers une page de connexion sécurisée, puis ramené ici.",
-    "signIn": "Se connecter",
-    "signOut": "Se déconnecter",
-    "account": "Compte"
-  },
   "basemapExtract": {
     "title": "Extraire un fond de carte hors ligne",
     "url": "URL du fond de carte",
@@ -4058,6 +4048,7 @@
       "canvas": "Canevas de flux de travail spatial",
       "importPipeline": "Importer le pipeline",
       "exportPipeline": "Exporter le pipeline",
+      "stepKindTransform": "Transformation",
       "inputPreviousStep": "Entrée : ← sortie de l'étape précédente",
       "unknownTool": "Outil inconnu « {{id}} »",
       "noParameters": "Aucun paramètre."
@@ -5598,5 +5589,15 @@
     "mapPoint": "Point de la carte",
     "reply": "Répondre",
     "replyPlaceholder": "Écrire une réponse..."
+  },
+  "auth": {
+    "unavailableTitle": "La connexion est indisponible",
+    "unavailableDescription": "GeoLibre n'a pas pu joindre le service de connexion et ne peut donc pas savoir si vous êtes connecté. Ce problème est généralement temporaire ; s'il persiste, les paramètres d'authentification de ce déploiement méritent peut-être une vérification.",
+    "retry": "Réessayer",
+    "signInTitle": "Connectez-vous à GeoLibre",
+    "signInDescription": "Ce déploiement nécessite un compte. Vous serez redirigé vers une page de connexion sécurisée, puis ramené ici.",
+    "signIn": "Se connecter",
+    "signOut": "Se déconnecter",
+    "account": "Compte"
   }
 }

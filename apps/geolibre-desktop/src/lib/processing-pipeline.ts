@@ -56,7 +56,7 @@ export function pipelineToModel(value: unknown, createId: () => string): Process
   const nodes = pipeline.nodes;
   const nodeById = new Map<string, ProcessingPipelineNode>();
   for (const node of nodes) {
-    if (!node || typeof node.id !== "string" || nodeById.has(node.id)) {
+    if (!node || typeof node.id !== "string" || !node.id || nodeById.has(node.id)) {
       throw new Error("Every pipeline node must have a unique id");
     }
     if (
@@ -64,7 +64,8 @@ export function pipelineToModel(value: unknown, createId: () => string): Process
       !node.type.startsWith("transform.vector.") ||
       !node.params ||
       typeof node.params !== "object" ||
-      Array.isArray(node.params)
+      Array.isArray(node.params) ||
+      (node.inputParam !== undefined && typeof node.inputParam !== "string")
     ) {
       throw new Error(`Unsupported pipeline node "${node.id}"`);
     }
@@ -99,7 +100,7 @@ export function pipelineToModel(value: unknown, createId: () => string): Process
   if (ordered.length !== nodes.length) throw new Error("Pipeline contains a cycle");
 
   const steps: ProcessingModelStep[] = ordered.map((node) => ({
-    id: node.id || createId(),
+    id: node.id,
     toolId: node.type.slice("transform.vector.".length),
     parameters: { ...node.params },
     ...(node.inputParam ? { inputParam: node.inputParam } : {}),

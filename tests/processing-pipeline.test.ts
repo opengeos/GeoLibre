@@ -100,11 +100,37 @@ describe("processing pipeline JSON", () => {
     for (const node of [
       { id: "a", type: 42, params: {} },
       { id: "a", type: "transform.vector.buffer", params: [] },
+      { id: "a", type: "transform.vector.buffer", params: {}, inputParam: 7 },
     ]) {
       assert.throws(
         () => pipelineToModel({ ...base, nodes: [node] }, () => "id"),
         /Unsupported pipeline node/,
       );
     }
+    assert.throws(
+      () =>
+        pipelineToModel(
+          { ...base, nodes: [{ id: "", type: "transform.vector.buffer", params: {} }] },
+          () => "id",
+        ),
+      /unique id/,
+    );
+  });
+
+  it("keeps the imported node id rather than minting a new one", () => {
+    const model = pipelineToModel(
+      {
+        $schema: "https://geolibre.app/schemas/pipeline-v1.json",
+        version: "1.0.0",
+        name: "Single",
+        nodes: [{ id: "buffer-1", type: "transform.vector.buffer", params: { distance: 5 } }],
+        edges: [],
+      },
+      () => "minted",
+    );
+    assert.deepEqual(
+      model.steps.map((step) => step.id),
+      ["buffer-1"],
+    );
   });
 });
