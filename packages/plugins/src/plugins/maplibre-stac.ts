@@ -561,6 +561,11 @@ function planetaryComputerSigner(): Promise<SasSigner> {
  * Tokens are per-collection and expire within the hour, so they are minted when the asset is
  * added rather than when the item is parsed, and the upstream manager caches them. Anything
  * that is not an Azure blob, or that cannot be signed, is read unsigned.
+ *
+ * Only the GeoParquet path signs. The formats that keep a URL as their layer source — PMTiles
+ * and COG store the href verbatim in the store, which is what a saved project is written from —
+ * would bake an expiring token into `.geolibre.json`, so they read unsigned exactly as they did
+ * before GeoParquet was addable. Signing those wants the token minted per request instead.
  */
 async function readableHref(item: StacItem, href: string): Promise<string> {
   if (!isAzureBlobHref(href) || !item.collection) return href;
@@ -580,37 +585,35 @@ async function visualizeAsset(
 ): Promise<void> {
   const name = `${item.id} — ${assetLabel(key, asset)}`;
   const format = assetFormat(asset);
-  const href = await readableHref(item, asset.href);
   switch (format) {
     case "pmtiles": {
       // No appRef check: the layer goes to the store, not through the app API.
-      if (!(await addPMTilesAsset(href, name, signal))) {
+      if (!(await addPMTilesAsset(asset.href, name, signal))) {
         throw new Error(labels.addNoSourceLayers);
       }
       return;
     }
     case "geojson": {
       if (!appRef) throw new Error(labels.addFailed);
-      const response = await fetch(href, {
+      const response = await fetch(asset.href, {
         headers: { Accept: "application/geo+json, application/json" },
         signal,
       });
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
       const data = (await response.json()) as FeatureCollection;
-      // Provenance keeps the unsigned href so no expiring token is saved into the project.
       appRef.addGeoJsonLayer(name, data, asset.href);
       return;
     }
     case "parquet": {
       if (!appRef) throw new Error(labels.addFailed);
-      if (!(await addVectorLayerFromUrl(appRef, href, { name }))) {
+      if (!(await addVectorLayerFromUrl(appRef, await readableHref(item, asset.href), { name }))) {
         throw new Error(labels.addFailed);
       }
       return;
     }
     case "cog": {
       if (!appRef?.addCogLayer) throw new Error(labels.cogUnsupported);
-      await appRef.addCogLayer(name, href, cogOptions);
+      await appRef.addCogLayer(name, asset.href, cogOptions);
       return;
     }
     case null:
