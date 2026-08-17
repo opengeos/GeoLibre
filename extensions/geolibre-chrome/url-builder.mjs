@@ -26,6 +26,16 @@ export function buildGeoLibreUrl(datasets, baseUrl = GEOLIBRE_WEB_URL) {
     }
     target.searchParams.set("add", serviceKinds[service.format]);
     target.searchParams.set("serviceUrl", service.url);
+    // The layer and style the page was rendering: without them the dialog opens
+    // on an endpoint whose layer field is empty and cannot be submitted.
+    if (service.layer) target.searchParams.set("serviceLayer", service.layer);
+    if (service.styleUrl) {
+      const styleUrl = new URL(service.styleUrl);
+      if (styleUrl.protocol !== "http:" && styleUrl.protocol !== "https:") {
+        throw new Error("GeoLibre can only open HTTP or HTTPS style links.");
+      }
+      target.searchParams.set("serviceStyle", styleUrl.href);
+    }
     return target.href;
   }
   const entries = datasets.map((dataset) => {

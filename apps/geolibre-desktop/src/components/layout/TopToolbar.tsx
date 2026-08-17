@@ -2092,6 +2092,12 @@ export function TopToolbar({
         initialDeckVizKind={addDataDeckVizKind}
         initialPostgres={addDataPostgres}
         initialUrl={addDataKind === initialService?.kind ? initialService.url : undefined}
+        initialLayer={
+          addDataKind === initialService?.kind ? (initialService.layer ?? undefined) : undefined
+        }
+        initialStyleUrl={
+          addDataKind === initialService?.kind ? (initialService.styleUrl ?? undefined) : undefined
+        }
         onOpenChange={(open: boolean) => {
           if (!open) {
             if (addDataTargetGroupId) {

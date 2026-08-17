@@ -78,19 +78,25 @@ export function scanDocumentForDatasets() {
   const classify = (url, hint = "") => {
     const path = url.pathname.toLowerCase();
     const clue = String(hint).toLowerCase();
-    if (/\.geojson$/.test(path) || /geo\+json|geojson|feature\s*collection/.test(clue)) {
+    // A hint alone identifies an extensionless download endpoint, but on a URL
+    // that is plainly a web page the same words are describing the page rather
+    // than naming data it serves: a documentation site links "Add a GeoJSON
+    // line" to `/examples/add-a-geojson-line/`, which is HTML.
+    const isPage = /\/$/.test(path) || /\.(?:html?|php|aspx?|jsp)$/.test(path);
+    const says = (pattern) => !isPage && pattern.test(clue);
+    if (/\.geojson$/.test(path) || says(/geo\+json|geojson|feature\s*collection/)) {
       return { format: "GeoJSON", kind: "vector", confidence: 3 };
     }
-    if (/\.(?:geoparquet|parquet)$/.test(path) || /geoparquet|parquet/.test(clue)) {
+    if (/\.(?:geoparquet|parquet)$/.test(path) || says(/geoparquet|parquet/)) {
       return { format: "GeoParquet", kind: "vector", confidence: 3 };
     }
-    if (/\.pmtiles$/.test(path) || /pmtiles/.test(clue)) {
+    if (/\.pmtiles$/.test(path) || says(/pmtiles/)) {
       return { format: "PMTiles", kind: "vector", confidence: 3 };
     }
-    if (/\.(?:tif|tiff|cog)$/.test(path) || /geotiff|cloud.?optimized|\bcog\b/.test(clue)) {
+    if (/\.(?:tif|tiff|cog)$/.test(path) || says(/geotiff|cloud.?optimized|\bcog\b/)) {
       return { format: "GeoTIFF", kind: "raster", confidence: 3 };
     }
-    if (/\.zip$/.test(path) || /application\/zip|geojson.*zip|zip.*geojson/.test(clue)) {
+    if (/\.zip$/.test(path) || says(/application\/zip|geojson.*zip|zip.*geojson/)) {
       return { format: "ZIP", kind: "vector", confidence: 2 };
     }
     if (
@@ -100,7 +106,7 @@ export function scanDocumentForDatasets() {
     ) {
       return { format: "JSON", kind: "vector", confidence: 1 };
     }
-    return geoHint.test(clue)
+    return says(geoHint)
       ? {
           format: "Data API",
           kind: /geotiff|cloud.?optimized|\bcog\b/.test(clue) ? "raster" : "vector",

@@ -82,7 +82,9 @@ function renderDatasets(found) {
     copy.className = "dataset-copy";
     const name = document.createElement("span");
     name.className = "dataset-name";
-    name.textContent = dataset.name;
+    // Naming the layer keeps several layers of one service apart, which their
+    // shared endpoint URL cannot do.
+    name.textContent = dataset.layer ? `${dataset.name}: ${dataset.layer}` : dataset.name;
     const host = document.createElement("span");
     host.className = "dataset-host";
     host.textContent = new URL(dataset.url).hostname;

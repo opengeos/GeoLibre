@@ -4,9 +4,10 @@ import { parseHTML } from "linkedom";
 import { scanDocumentForDatasets } from "../extensions/geolibre-chrome/scanner.mjs";
 import {
   classifyServiceRequest,
+  classifyStyleRequest,
+  createPageScope,
   createTabTaskQueue,
   mergeServiceCandidates,
-  requestBelongsToPage,
 } from "../extensions/geolibre-chrome/service-scanner.mjs";
 import { buildGeoLibreUrl } from "../extensions/geolibre-chrome/url-builder.mjs";
 
@@ -80,6 +81,28 @@ describe("GeoLibre Chrome extension scanner", () => {
         styleUrl: null,
       },
     ]);
+  });
+
+  it("does not read a documentation link's wording as a dataset", () => {
+    assert.deepEqual(
+      scan(
+        `
+          <a href="https://maplibre.org/docs/examples/add-a-geojson-line/">Add a GeoJSON line</a>
+          <a href="https://maplibre.org/docs/examples/cog-raster-source.html">Add a COG raster source</a>
+          <a href="https://api.example.com/export?id=7" title="GeoJSON">County boundaries</a>
+        `,
+        "https://maplibre.org/docs/examples/",
+      ),
+      [
+        {
+          url: "https://api.example.com/export?id=7",
+          name: "County boundaries",
+          format: "GeoJSON",
+          kind: "vector",
+          styleUrl: null,
+        },
+      ],
+    );
   });
 
   it("pairs a neighboring style by filename stem", () => {
@@ -318,13 +341,34 @@ describe("GeoLibre Chrome extension URL builder", () => {
     );
     assert.equal(result.searchParams.has("data"), false);
   });
+
+  it("hands over the layer and style a service needs to be addable", () => {
+    const result = new URL(
+      buildGeoLibreUrl([
+        {
+          url: "https://tiles.example.com/{z}/{x}/{y}.pbf",
+          format: "Vector tiles",
+          layer: "water",
+          styleUrl: "https://tiles.example.com/style.json",
+        },
+      ]),
+    );
+    assert.equal(result.searchParams.get("serviceLayer"), "water");
+    assert.equal(result.searchParams.get("serviceStyle"), "https://tiles.example.com/style.json");
+    // Nothing extra when the service was not asked for a specific layer.
+    const bare = new URL(
+      buildGeoLibreUrl([{ url: "https://maps.example.com/wms", format: "WMS" }]),
+    );
+    assert.equal(bare.searchParams.has("serviceLayer"), false);
+    assert.equal(bare.searchParams.has("serviceStyle"), false);
+  });
 });
 
 describe("GeoLibre Chrome extension service request scanner", () => {
   it("recognizes OGC web services and removes operation parameters", () => {
     const cases = [
       ["WMS", "GetMap", "WMS", "raster"],
-      ["WMTS", "GetTile", "WMTS", "raster"],
+      ["WMTS", "GetCapabilities", "WMTS", "raster"],
       ["WFS", "GetFeature", "WFS", "vector"],
     ];
     for (const [service, request, format, kind] of cases) {
@@ -337,17 +381,84 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     }
   });
 
+  it("carries the layer each service was asked for", () => {
+    assert.equal(
+      classifyServiceRequest(
+        "https://maps.example.com/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=topp:states&BBOX=1,2,3,4",
+      )?.layer,
+      "topp:states",
+    );
+    // A WFS request names its feature type and encoding beside the operation;
+    // both belong in the form's own fields, not in the endpoint.
+    const wfs = classifyServiceRequest(
+      "https://maps.example.com/wfs?service=WFS&request=GetFeature&typename=osm:water_areas&outputFormat=application/json&srsname=EPSG:3857&key=keep",
+    );
+    assert.equal(wfs?.url, "https://maps.example.com/wfs?key=keep");
+    assert.equal(wfs?.layer, "osm:water_areas");
+    assert.equal(
+      classifyServiceRequest(
+        "https://maps.example.com/wfs?service=WFS&request=GetFeature&TYPENAMES=ns:roads",
+      )?.layer,
+      "ns:roads",
+    );
+  });
+
+  it("rewrites a WMTS tile request into the template that produced it", () => {
+    const tile = classifyServiceRequest(
+      "https://maps.example.com/wmts?layer=sgmc2&style=default&tilematrixset=GoogleMapsCompatible&Service=WMTS&Request=GetTile&Format=image/png&TileMatrix=4&TileCol=9&TileRow=7",
+    );
+    assert.equal(tile?.layer, "sgmc2");
+    assert.match(tile?.url ?? "", /TileMatrix=\{z\}/);
+    assert.match(tile?.url ?? "", /TileCol=\{x\}/);
+    assert.match(tile?.url ?? "", /TileRow=\{y\}/);
+    // A capabilities request names no tile, so it stays the plain endpoint.
+    assert.equal(
+      classifyServiceRequest("https://maps.example.com/wmts?SERVICE=WMTS&REQUEST=GetCapabilities")
+        ?.url,
+      "https://maps.example.com/wmts",
+    );
+  });
+
+  it("recognizes the style document a vector tileset renders through", () => {
+    assert.deepEqual(classifyStyleRequest("https://tiles.example.com/style.json"), {
+      origin: "https://tiles.example.com",
+      url: "https://tiles.example.com/style.json",
+    });
+    assert.equal(
+      classifyStyleRequest("https://api.example.com/maps/streets/style.json?key=abc")?.url,
+      "https://api.example.com/maps/streets/style.json?key=abc",
+    );
+    assert.ok(
+      classifyStyleRequest("https://tiles.example.com/VectorTileServer/resources/styles/root.json"),
+    );
+    assert.equal(classifyStyleRequest("https://example.com/data/roads.json"), null);
+    assert.equal(classifyStyleRequest("https://example.com/style.json.txt"), null);
+  });
+
   it("recognizes OGC API Features and ArcGIS feature service requests", () => {
     assert.equal(
       classifyServiceRequest("https://api.example.com/ogc/collections/roads/items?f=json")?.format,
       "OGC API",
     );
+    // The layer index stays on the URL: handed a bare service, GeoLibre falls
+    // back to its first feature layer, which is the wrong one for any page
+    // showing another.
+    const sublayer = classifyServiceRequest(
+      "https://services.example.com/arcgis/rest/services/Roads/FeatureServer/2/query?f=geojson",
+    );
     assert.equal(
-      classifyServiceRequest(
-        "https://services.example.com/arcgis/rest/services/Roads/FeatureServer/2/query?f=geojson",
-      )?.url,
+      sublayer?.url,
+      "https://services.example.com/arcgis/rest/services/Roads/FeatureServer/2",
+    );
+    assert.equal(sublayer?.layer, "2");
+    const service = classifyServiceRequest(
       "https://services.example.com/arcgis/rest/services/Roads/FeatureServer",
     );
+    assert.equal(
+      service?.url,
+      "https://services.example.com/arcgis/rest/services/Roads/FeatureServer",
+    );
+    assert.equal(service?.layer, null);
   });
 
   it("turns raster and vector tile coordinates into reusable templates", () => {
@@ -357,6 +468,21 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     const vector = classifyServiceRequest("https://tiles.example.com/roads/6/17/25.pbf");
     assert.equal(vector?.format, "Vector tiles");
     assert.equal(vector?.kind, "vector");
+  });
+
+  it("does not mistake a style's glyph ranges for a vector tile service", () => {
+    assert.equal(
+      classifyServiceRequest(
+        "https://demotiles.maplibre.org/font/Open%20Sans%20Semibold/0-255.pbf",
+      ),
+      null,
+    );
+    assert.equal(classifyServiceRequest("https://tiles.example.com/fonts/Roboto/0-255.pbf"), null);
+    // A tileset that carries its coordinates in the query string still counts.
+    assert.equal(
+      classifyServiceRequest("https://tiles.example.com/roads.pbf?x=17&y=25&z=6")?.format,
+      "Vector tiles",
+    );
   });
 
   it("does not mistake date-organized assets for map tiles", () => {
@@ -370,6 +496,17 @@ describe("GeoLibre Chrome extension service request scanner", () => {
       "https://maps.example.com/wms?service=WMS&request=GetCapabilities",
     );
     assert.deepEqual(mergeServiceCandidates([service], [service]), [service]);
+  });
+
+  it("keeps two layers of one service apart despite their shared endpoint", () => {
+    const roads = classifyServiceRequest(
+      "https://maps.example.com/wms?service=WMS&request=GetMap&layers=roads",
+    );
+    const rivers = classifyServiceRequest(
+      "https://maps.example.com/wms?service=WMS&request=GetMap&layers=rivers",
+    );
+    assert.equal(roads?.url, rivers?.url);
+    assert.deepEqual(mergeServiceCandidates([roads, rivers], [roads]), [roads, rivers]);
   });
 
   it("deduplicates WMTS requests with different tile coordinates", () => {
@@ -408,10 +545,50 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     assert.deepEqual(order, ["first:start", "other", "first:end", "second"]);
   });
 
-  it("accepts active top-level and child-frame documents", () => {
-    const documents = new Set(["top-document", "child-document"]);
-    assert.equal(requestBelongsToPage(documents, "top-document"), true);
-    assert.equal(requestBelongsToPage(documents, "child-document"), true);
-    assert.equal(requestBelongsToPage(documents, "old-document"), false);
+  it("accepts the documents of the current page, including frames it opens later", () => {
+    const scope = createPageScope();
+    scope.startPage(7);
+    // Chrome sends no documentId on the navigation itself; the ids arrive on
+    // the requests the page then makes, the top document and its frames alike.
+    assert.equal(scope.accepts(7, undefined), true);
+    assert.equal(scope.accepts(7, "top-document"), true);
+    assert.equal(scope.accepts(7, "child-document"), true);
+  });
+
+  it("refuses a request left in flight by the page that was navigated away from", () => {
+    const scope = createPageScope();
+    scope.startPage(3);
+    assert.equal(scope.accepts(3, "old-document"), true);
+    scope.startPage(3);
+    assert.equal(scope.accepts(3, "old-document"), false);
+    assert.equal(scope.accepts(3, "new-document"), true);
+    // A second navigation retires the page between, not only the first one.
+    scope.startPage(3);
+    assert.equal(scope.accepts(3, "new-document"), false);
+  });
+
+  it("scopes documents and generations to their own tab", () => {
+    const scope = createPageScope();
+    scope.startPage(1);
+    scope.accepts(1, "shared-id");
+    const generation = scope.generation(1);
+    scope.startPage(2);
+    assert.equal(scope.generation(1), generation);
+    assert.equal(scope.accepts(2, "shared-id"), true);
+    scope.startPage(1);
+    assert.notEqual(scope.generation(1), generation);
+    assert.equal(scope.accepts(1, "shared-id"), false);
+    assert.equal(scope.accepts(2, "shared-id"), true);
+  });
+
+  it("forgets a closed tab rather than growing a set per tab that ever existed", () => {
+    const scope = createPageScope();
+    scope.startPage(9);
+    scope.accepts(9, "document");
+    scope.startPage(9);
+    assert.equal(scope.accepts(9, "document"), false);
+    scope.forget(9);
+    assert.equal(scope.generation(9), 0);
+    assert.equal(scope.accepts(9, "document"), true);
   });
 });

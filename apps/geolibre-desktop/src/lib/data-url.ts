@@ -15,12 +15,27 @@ const SERVICE_KINDS = new Set([
   "arcgis",
 ]);
 
-export function serviceUrlParameter(search: string): { kind: string; url: string } | null {
+export interface ServiceUrlParameter {
+  kind: string;
+  url: string;
+  /** The requested layer: WMS `LAYERS`, WFS `typeName`, a tile source layer. */
+  layer: string | null;
+  /** A style document naming the source layers of a vector tileset. */
+  styleUrl: string | null;
+}
+
+export function serviceUrlParameter(search: string): ServiceUrlParameter | null {
   const params = new URLSearchParams(search);
   const kind = params.get("add");
   const rawUrl = params.get("serviceUrl");
   const url = httpUrl(rawUrl)?.replace(/%7B/gi, "{").replace(/%7D/gi, "}") ?? null;
-  return kind && SERVICE_KINDS.has(kind) && url ? { kind, url } : null;
+  if (!kind || !SERVICE_KINDS.has(kind) || !url) return null;
+  return {
+    kind,
+    url,
+    layer: params.get("serviceLayer")?.trim() || null,
+    styleUrl: httpUrl(params.get("serviceStyle")),
+  };
 }
 export interface RemoteGeoJsonLayer {
   data: FeatureCollection;

@@ -20,7 +20,46 @@ describe("serviceUrlParameter", () => {
       serviceUrlParameter(
         "?add=xyz&serviceUrl=https%3A%2F%2Ftiles.example.com%2F%7Bz%7D%2F%7Bx%7D%2F%7By%7D.png",
       ),
-      { kind: "xyz", url: "https://tiles.example.com/{z}/{x}/{y}.png" },
+      {
+        kind: "xyz",
+        url: "https://tiles.example.com/{z}/{x}/{y}.png",
+        layer: null,
+        styleUrl: null,
+      },
+    );
+  });
+
+  it("carries the requested layer and a vector tileset's style", () => {
+    assert.deepEqual(
+      serviceUrlParameter(
+        "?add=wfs&serviceUrl=https%3A%2F%2Fmaps.example.com%2Fwfs&serviceLayer=osm%3Awater_areas",
+      ),
+      {
+        kind: "wfs",
+        url: "https://maps.example.com/wfs",
+        layer: "osm:water_areas",
+        styleUrl: null,
+      },
+    );
+    assert.deepEqual(
+      serviceUrlParameter(
+        "?add=ogc-vector-tiles&serviceUrl=https%3A%2F%2Ftiles.example.com%2F%7Bz%7D%2F%7Bx%7D%2F%7By%7D.pbf&serviceStyle=https%3A%2F%2Ftiles.example.com%2Fstyle.json",
+      ),
+      {
+        kind: "ogc-vector-tiles",
+        url: "https://tiles.example.com/{z}/{x}/{y}.pbf",
+        layer: null,
+        styleUrl: "https://tiles.example.com/style.json",
+      },
+    );
+  });
+
+  it("ignores a blank layer and a non-web style link", () => {
+    assert.deepEqual(
+      serviceUrlParameter(
+        "?add=wms&serviceUrl=https://maps.example.com/wms&serviceLayer=%20&serviceStyle=file:///tmp/style.json",
+      ),
+      { kind: "wms", url: "https://maps.example.com/wms", layer: null, styleUrl: null },
     );
   });
 
@@ -29,7 +68,12 @@ describe("serviceUrlParameter", () => {
       serviceUrlParameter(
         "?add=xyz&serviceUrl=https://tiles.example.com/%257bz%257d/%257bx%257d/%257by%257d.png",
       ),
-      { kind: "xyz", url: "https://tiles.example.com/{z}/{x}/{y}.png" },
+      {
+        kind: "xyz",
+        url: "https://tiles.example.com/{z}/{x}/{y}.png",
+        layer: null,
+        styleUrl: null,
+      },
     );
   });
 

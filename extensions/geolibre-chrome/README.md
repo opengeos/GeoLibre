@@ -48,21 +48,50 @@ Services, XYZ/TMS image tiles, and PBF/MVT vector tiles. Tile requests are
 collapsed into reusable `{z}/{x}/{y}` templates, and repeated requests from the
 same service appear once.
 
+A service endpoint on its own is rarely enough to add a layer, so each result
+also carries what the page asked that service *for*: the WMS `LAYERS` value, the
+WFS `typeName`, the WMTS layer, and — for a vector tileset, whose source layers
+live in its style rather than its URL — the style document the page loaded from
+the same origin. These arrive in GeoLibre as `serviceLayer` and `serviceStyle`
+and land in the matching form fields, so the dialog opens ready to submit rather
+than on an endpoint with an empty layer field. Because one endpoint can serve
+many layers, results are listed per layer (`WMS service: topp:states`) instead of
+collapsing into a single entry per URL.
+
 ## Sample websites for manual testing
 
-After loading or reloading the unpacked extension, open one of these URLs in a
-new tab and wait for its response to finish. Then open the extension and confirm
-that it lists the expected service. Selecting the result should open the
-matching GeoLibre Add Data dialog with the service URL filled in.
+After loading or reloading the unpacked extension, open one of these websites in
+a new tab, let its map finish drawing, then open the extension and confirm it
+lists the expected service. Selecting the result opens the matching GeoLibre Add
+Data dialog with the service URL filled in. Each row below is a live third-party
+map, so what it detects is what a real page hands the request watcher.
 
-| Service | Sample website | Expected result |
-| --- | --- | --- |
-| WMS | [GeoServer WMS capabilities](https://ahocevar.com/geoserver/wms?service=WMS&request=GetCapabilities) | `https://ahocevar.com/geoserver/wms` |
-| WMTS | [NASA GIBS WMTS capabilities](https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi?SERVICE=WMTS&REQUEST=GetCapabilities) | `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi` |
-| WFS | [GeoServer WFS capabilities](https://ahocevar.com/geoserver/wfs?service=WFS&request=GetCapabilities) | `https://ahocevar.com/geoserver/wfs` |
-| OGC API Features | [pygeoapi collections](https://demo.pygeoapi.io/master/collections) | `https://demo.pygeoapi.io/master/collections` |
-| ArcGIS Feature Service | [USA Major Cities layer](https://services.arcgis.com/P3ePLMYs2RVChkJx/ArcGIS/rest/services/USA_Major_Cities/FeatureServer/0?f=json) | The parent `FeatureServer` URL |
-| XYZ raster tiles | [OpenStreetMap tile](https://tile.openstreetmap.org/0/0/0.png) | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` |
+| Service | Website | Detected service | Layer carried over |
+| --- | --- | --- | --- |
+| WMS | [OpenLayers "Image WMS" example](https://openlayers.org/en/latest/examples/wms-image.html) | `https://ahocevar.com/geoserver/wms` | `topp:states` |
+| WMTS | [OpenLayers "WMTS" example](https://openlayers.org/en/latest/examples/wmts.html) | The `GetTile` request as a tile template | `sgmc2` |
+| WFS | [OpenLayers "WFS" example](https://openlayers.org/en/latest/examples/vector-wfs.html) | `https://ahocevar.com/geoserver/wfs` | `osm:water_areas` |
+| OGC API Features | [pygeoapi lakes collection](https://demo.pygeoapi.io/master/collections/lakes/items?f=html) | `https://demo.pygeoapi.io/master/collections/lakes/items` | — |
+| ArcGIS Feature Service | [OpenLayers "Vector ESRI" example](https://openlayers.org/en/latest/examples/vector-esri.html) | The `…/FeatureServer/0` layer URL | `0` |
+| XYZ raster tiles | [openstreetmap.org](https://www.openstreetmap.org/) | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | — |
+| Vector tiles, in an `iframe` | [MapLibre "Display a map" example](https://maplibre.org/maplibre-gl-js/docs/examples/display-a-map/) | `https://demotiles.maplibre.org/tiles/{z}/{x}/{y}.pbf` | style `…/style.json` |
+
+Each row above adds a layer that draws, with no further typing: that is the bar
+for this table. A row that opens the dialog but leaves a required field empty is
+a bug, not an expected extra step.
+
+The MapLibre row is worth keeping in the set: the map runs inside an `iframe`, so
+it covers services a page reaches only through an embedded frame. It also carries
+a style whose glyph ranges are served as `.pbf`; those are fonts, not a tileset,
+and must not be offered.
+
+Opening a service URL directly is detected too — the response is the page, so
+[a WMS GetCapabilities document](https://ows.terrestris.de/osm/service?SERVICE=WMS&REQUEST=GetCapabilities)
+lists `https://ows.terrestris.de/osm/service`.
+
+Navigating the same tab elsewhere replaces the list, so a page with no services
+(`https://example.com`) must come up empty rather than inheriting the page before
+it.
 
 After selecting a result, add the layer in GeoLibre and verify that the browser
 console does not report a static-file CORS error.
