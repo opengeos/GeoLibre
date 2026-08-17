@@ -160,12 +160,18 @@ export function browserAssetHref(href: string, base: string, accountName?: strin
     return `https://${bucket}.s3.amazonaws.com${url.pathname}${url.search}${url.hash}`;
   }
   if (AZURE_SCHEMES.has(url.protocol)) {
-    const container = url.hostname;
-    if (!container || !accountName) return resolved;
-    return `https://${accountName}.blob.core.windows.net/${container}${url.pathname}${url.search}${url.hash}`;
+    // Canonical form names both parts: abfs[s]://<container>@<account>.dfs.core.windows.net/<path>.
+    // The shorthand names only the container and leans on the account beside it.
+    const canonical = url.hostname.endsWith(DFS_SUFFIX);
+    const container = canonical ? decodeURIComponent(url.username) : url.hostname;
+    const account = canonical ? url.hostname.slice(0, -DFS_SUFFIX.length) : accountName;
+    if (!container || !account) return resolved;
+    return `https://${account}.blob.core.windows.net/${container}${url.pathname}${url.search}${url.hash}`;
   }
   return resolved;
 }
+
+const DFS_SUFFIX = ".dfs.core.windows.net";
 
 /** fsspec/adlfs spellings for an Azure blob path, all container-first. */
 const AZURE_SCHEMES = new Set(["abfs:", "abfss:", "az:"]);

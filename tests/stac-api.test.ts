@@ -54,6 +54,32 @@ test("browserAssetHref resolves Azure hrefs against the account named beside the
   );
 });
 
+test("browserAssetHref reads the canonical ABFS form, which names its own account", () => {
+  // abfs[s]://<container>@<account>.dfs.core.windows.net/<path> carries both parts, so it
+  // resolves without storage options and must not be read as if the host were the container.
+  assert.equal(
+    browserAssetHref(
+      "abfss://container@acct.dfs.core.windows.net/dir/a.parquet",
+      "https://x.test/",
+    ),
+    "https://acct.blob.core.windows.net/container/dir/a.parquet",
+  );
+  // An account named beside it does not override the one the URI states.
+  assert.equal(
+    browserAssetHref(
+      "abfs://container@acct.dfs.core.windows.net/a.parquet",
+      "https://x.test/",
+      "other",
+    ),
+    "https://acct.blob.core.windows.net/container/a.parquet",
+  );
+  // The canonical host with no container is not resolvable, so it is left alone.
+  assert.equal(
+    browserAssetHref("abfss://acct.dfs.core.windows.net/a.parquet", "https://x.test/"),
+    "abfss://acct.dfs.core.windows.net/a.parquet",
+  );
+});
+
 test("an Azure asset with nothing to resolve it against is named but not offered", () => {
   // browserAssetHref leaves the href alone when no account names the container, and none of the
   // readers behind Add speak abfs://, so the panel must not enable Add for it.
