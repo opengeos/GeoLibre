@@ -23,7 +23,7 @@ import {
   type StacSearchCursor,
 } from "./stac-api";
 import { buildCatalogTree } from "./stac-catalog-tree";
-import { el } from "../panel-dom";
+import { el, setDisabled } from "../panel-dom";
 
 export const STAC_PLUGIN_ID = "geolibre-stac-catalogs";
 const PANEL_ID = STAC_PLUGIN_ID;
@@ -623,8 +623,10 @@ function buildPanel(container: HTMLElement): () => void {
   searchButton.style.cssText = `${style.primary}flex:1 1 0;`;
   const clearResultsButton = el("button", labels.clearResults);
   clearResultsButton.type = "button";
-  clearResultsButton.disabled = true;
+  // cssText first: it replaces the whole inline declaration, so setting the
+  // disabled look before it would be wiped out.
   clearResultsButton.style.cssText = `${style.button}flex:1 1 0;`;
+  setDisabled(clearResultsButton, true);
   searchActions.append(searchButton, clearResultsButton);
   searchSection.append(
     catalogInfo,
@@ -761,8 +763,8 @@ function buildPanel(container: HTMLElement): () => void {
     selectItem(null, false);
     removeFootprints();
     loadMore.hidden = true;
-    clearResultsButton.disabled = true;
-    searchButton.disabled = false;
+    setDisabled(clearResultsButton, true);
+    setDisabled(searchButton, false);
     if (announce) setStatus(labels.resultsCleared);
   };
 
@@ -842,7 +844,7 @@ function buildPanel(container: HTMLElement): () => void {
           const addable = isVisualizableAsset(asset);
           assetSelect.title = asset.href;
           download.title = asset.href;
-          add.disabled = adding || !addable;
+          setDisabled(add, adding || !addable);
           add.title = addable ? asset.href : labels.addUnsupported;
         };
 
@@ -939,8 +941,8 @@ function buildPanel(container: HTMLElement): () => void {
     if (!connection) return;
     const search = generation ?? ++searchGeneration;
 
-    searchButton.disabled = true;
-    loadMore.disabled = true;
+    setDisabled(searchButton, true);
+    setDisabled(loadMore, true);
     setStatus(append ? labels.loadingMore : labels.searching);
     try {
       const selectedCollections = Array.from(collectionSelect.selectedOptions)
@@ -976,7 +978,7 @@ function buildPanel(container: HTMLElement): () => void {
       showFootprints(allItems);
       applySelection(false);
       loadMore.hidden = !nextPage && !searchCursor;
-      clearResultsButton.disabled = allItems.length === 0;
+      setDisabled(clearResultsButton, allItems.length === 0);
       setStatus(searchStatus(response));
     } catch (error) {
       // A search the user has moved on from must not report its failure over the current one.
@@ -984,8 +986,8 @@ function buildPanel(container: HTMLElement): () => void {
       setStatus(error instanceof Error ? error.message : labels.searchFailed, true);
     } finally {
       if (search === searchGeneration) {
-        searchButton.disabled = false;
-        loadMore.disabled = false;
+        setDisabled(searchButton, false);
+        setDisabled(loadMore, false);
       }
     }
   }
@@ -996,7 +998,7 @@ function buildPanel(container: HTMLElement): () => void {
   });
   connectButton.addEventListener("click", async () => {
     const url = urlField.input.value.trim();
-    connectButton.disabled = true;
+    setDisabled(connectButton, true);
     setStatus(labels.connecting);
     try {
       connection = await connectStac(url, fetch, controller.signal);
@@ -1028,7 +1030,7 @@ function buildPanel(container: HTMLElement): () => void {
       renderSection.hidden = true;
       setStatus(error instanceof Error ? error.message : labels.connectFailed, true);
     } finally {
-      connectButton.disabled = false;
+      setDisabled(connectButton, false);
     }
   });
   searchButton.addEventListener("click", () => void runSearch(false));
