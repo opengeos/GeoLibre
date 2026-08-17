@@ -916,7 +916,10 @@ function StepCard({
           <button
             type="button"
             className="rounded p-1 text-muted-foreground hover:bg-accent disabled:opacity-30"
-            onClick={() => onMove(-1)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onMove(-1);
+            }}
             disabled={index === 0}
             aria-label={t("processing.modelBuilder.moveStepUp")}
           >
@@ -925,7 +928,10 @@ function StepCard({
           <button
             type="button"
             className="rounded p-1 text-muted-foreground hover:bg-accent disabled:opacity-30"
-            onClick={() => onMove(1)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onMove(1);
+            }}
             disabled={index === total - 1}
             aria-label={t("processing.modelBuilder.moveStepDown")}
           >
@@ -934,7 +940,10 @@ function StepCard({
           <button
             type="button"
             className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            onClick={onRemove}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemove();
+            }}
             aria-label={t("processing.modelBuilder.removeStep")}
           >
             <Trash2 className="h-3.5 w-3.5" />

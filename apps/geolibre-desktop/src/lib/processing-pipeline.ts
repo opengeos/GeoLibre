@@ -60,9 +60,11 @@ export function pipelineToModel(value: unknown, createId: () => string): Process
       throw new Error("Every pipeline node must have a unique id");
     }
     if (
-      !node.type?.startsWith("transform.vector.") ||
+      typeof node.type !== "string" ||
+      !node.type.startsWith("transform.vector.") ||
       !node.params ||
-      typeof node.params !== "object"
+      typeof node.params !== "object" ||
+      Array.isArray(node.params)
     ) {
       throw new Error(`Unsupported pipeline node "${node.id}"`);
     }

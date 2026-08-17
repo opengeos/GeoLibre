@@ -48,4 +48,63 @@ describe("processing pipeline JSON", () => {
       /Branching pipelines/,
     );
   });
+
+  it("rejects cycles and disconnected chains", () => {
+    const node = (id: string) => ({
+      id,
+      type: "transform.vector.buffer",
+      name: id,
+      params: {},
+    });
+    const base = {
+      $schema: "https://geolibre.app/schemas/pipeline-v1.json",
+      version: "1.0.0",
+      name: "Invalid graph",
+    };
+    assert.throws(
+      () =>
+        pipelineToModel(
+          {
+            ...base,
+            nodes: [node("a"), node("b")],
+            edges: [
+              { from: "a", to: "b" },
+              { from: "b", to: "a" },
+            ],
+          },
+          () => "id",
+        ),
+      /connected chain/,
+    );
+    assert.throws(
+      () =>
+        pipelineToModel(
+          {
+            ...base,
+            nodes: [node("a"), node("b"), node("c")],
+            edges: [{ from: "a", to: "b" }],
+          },
+          () => "id",
+        ),
+      /connected chain/,
+    );
+  });
+
+  it("rejects malformed node properties with a stable validation error", () => {
+    const base = {
+      $schema: "https://geolibre.app/schemas/pipeline-v1.json",
+      version: "1.0.0",
+      name: "Malformed",
+      edges: [],
+    };
+    for (const node of [
+      { id: "a", type: 42, params: {} },
+      { id: "a", type: "transform.vector.buffer", params: [] },
+    ]) {
+      assert.throws(
+        () => pipelineToModel({ ...base, nodes: [node] }, () => "id"),
+        /Unsupported pipeline node/,
+      );
+    }
+  });
 });
