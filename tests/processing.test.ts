@@ -53,7 +53,7 @@ describe("processing registry", () => {
   });
 
   it("dissolves disconnected polygons into one feature per attribute value", () => {
-    const square = (x: number, group: string) => ({
+    const square = (x: number, group: string | number) => ({
       type: "Feature" as const,
       properties: { group },
       geometry: {
@@ -74,7 +74,7 @@ describe("processing registry", () => {
       id: "polygons",
       geojson: {
         type: "FeatureCollection",
-        features: [square(0, "A"), square(3, "A"), square(6, "B")],
+        features: [square(0, 5), square(3, 5), square(6, "B")],
       },
     };
     const messages: string[] = [];
@@ -90,11 +90,67 @@ describe("processing registry", () => {
     });
 
     assert.equal(result!.features.length, 2);
-    assert.equal(
-      result!.features.find((feature) => feature.properties?.group === "A")?.geometry.type,
-      "MultiPolygon",
-    );
+    const numericGroup = result!.features.find((feature) => feature.properties?.group === 5);
+    assert.equal(numericGroup?.properties?.group, 5);
+    assert.equal(numericGroup?.geometry.type, "MultiPolygon");
     assert.deepEqual(messages, ["Dissolved 3 polygon(s) into 2 feature(s)"]);
+  });
+
+  it("dissolves all disconnected polygons into one feature without a field", () => {
+    const polygons: GeoLibreLayer = {
+      ...layer,
+      id: "polygons",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "first" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+          {
+            type: "Feature",
+            properties: { name: "second" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [3, 0],
+                  [4, 0],
+                  [4, 1],
+                  [3, 1],
+                  [3, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    let result: FeatureCollection | null = null;
+
+    getVectorTool("dissolve")!.run({
+      layers: [polygons],
+      parameters: { layer: "polygons" },
+      log: () => {},
+      addResultLayer: (_name, geojson) => {
+        result = geojson;
+      },
+    });
+
+    assert.equal(result!.features.length, 1);
+    assert.equal(result!.features[0].geometry.type, "MultiPolygon");
   });
 
   it("spatially joins zone attributes onto points", () => {

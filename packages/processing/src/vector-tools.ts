@@ -98,6 +98,7 @@ function explodeToPolygons(features: Feature[]): Feature<Polygon>[] {
 function collectDissolveParts(
   dissolved: FeatureCollection<Polygon>,
   field?: string,
+  originalValues?: ReadonlyMap<string, unknown>,
 ): FeatureCollection<Polygon | MultiPolygon> {
   const groups = new Map<string, Feature<Polygon>[]>();
   for (const feature of dissolved.features) {
@@ -109,10 +110,15 @@ function collectDissolveParts(
 
   const features: Feature<Polygon | MultiPolygon>[] = [...groups.entries()].map(
     ([value, parts]) => {
-      if (parts.length === 1) return parts[0];
+      const fieldValue = originalValues?.has(value)
+        ? originalValues.get(value)
+        : parts[0].properties?.[field ?? ""];
+      if (parts.length === 1) {
+        return field ? { ...parts[0], properties: { [field]: fieldValue } } : parts[0];
+      }
       return {
         type: "Feature" as const,
-        properties: field ? { [field]: value } : {},
+        properties: field ? { [field]: fieldValue } : {},
         geometry: {
           type: "MultiPolygon" as const,
           coordinates: parts.map((part) => part.geometry.coordinates),
@@ -295,10 +301,18 @@ export const dissolveTool: ProcessingAlgorithm = {
       return;
     }
     const field = (ctx.parameters.field as string)?.trim();
+    const originalValues = new Map<string, unknown>();
+    if (field) {
+      for (const polygon of polys) {
+        const value = polygon.properties?.[field];
+        const key = String(value);
+        if (!originalValues.has(key)) originalValues.set(key, value);
+      }
+    }
     const dissolvedParts = dissolve(featureCollection(polys), {
       propertyName: field || undefined,
     });
-    const dissolved = collectDissolveParts(dissolvedParts, field || undefined);
+    const dissolved = collectDissolveParts(dissolvedParts, field || undefined, originalValues);
     ctx.log(`Dissolved ${polys.length} polygon(s) into ${dissolved.features.length} feature(s)`);
     ctx.addResultLayer?.("Dissolve", dissolved);
   },
