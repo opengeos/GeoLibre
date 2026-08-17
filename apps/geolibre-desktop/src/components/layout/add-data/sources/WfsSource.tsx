@@ -41,7 +41,11 @@ export function WfsSource({
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wfs.defaultName"));
   const [wfsEndpoint, setWfsEndpoint] = useState(initialUrl || wfsFormCache?.endpoint || "");
-  const [wfsTypeName, setWfsTypeName] = useState(initialTypeName || (wfsFormCache?.typeName ?? ""));
+  // See WmsSource: a deep link's endpoint must not inherit the feature type
+  // cached from an unrelated service.
+  const [wfsTypeName, setWfsTypeName] = useState(
+    initialTypeName || (initialUrl ? "" : (wfsFormCache?.typeName ?? "")),
+  );
   const [wfsVersion, setWfsVersion] = useState(wfsFormCache?.version ?? "2.0.0");
   const [wfsOutputFormat, setWfsOutputFormat] = useState(
     wfsFormCache?.outputFormat ?? "application/json",

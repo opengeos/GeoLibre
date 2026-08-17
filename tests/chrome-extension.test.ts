@@ -598,6 +598,18 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     assert.equal(scope.accepts(4, "old-document"), false);
   });
 
+  it("retires an outgoing document even if it reports in mid-navigation", () => {
+    const scope = createPageScope();
+    scope.startPage(6);
+    scope.accepts(6, "old-document");
+    scope.beginPage(6);
+    // Still the page on screen, so the request counts, but the document must
+    // not escape retirement by reporting during the transition.
+    assert.equal(scope.accepts(6, "old-document"), true);
+    scope.startPage(6);
+    assert.equal(scope.accepts(6, "old-document"), false);
+  });
+
   it("refuses a request left in flight by the page that was navigated away from", () => {
     const scope = createPageScope();
     scope.startPage(3);

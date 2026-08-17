@@ -48,8 +48,14 @@ export function WmsSource({
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wms.defaultName"));
   const [wmsEndpoint, setWmsEndpoint] = useState(initialUrl || wmsFormCache?.endpoint || "");
-  const [wmsLayers, setWmsLayers] = useState(initialLayers || (wmsFormCache?.layers ?? ""));
-  const [wmsStyles, setWmsStyles] = useState(wmsFormCache?.styles ?? "");
+  // A deep link brings its own service, so the layer and style left over from
+  // whichever service this dialog was last used for do not apply to it: pairing
+  // a fresh endpoint with a stale layer name would request a layer the service
+  // does not have.
+  const [wmsLayers, setWmsLayers] = useState(
+    initialLayers || (initialUrl ? "" : (wmsFormCache?.layers ?? "")),
+  );
+  const [wmsStyles, setWmsStyles] = useState(initialUrl ? "" : (wmsFormCache?.styles ?? ""));
   const [wmsFormat, setWmsFormat] = useState(wmsFormCache?.format ?? "image/png");
   const [wmsTransparent, setWmsTransparent] = useState(wmsFormCache?.transparent ?? true);
   const [wmsTileSize, setWmsTileSize] = useState(wmsFormCache?.tileSize ?? "256");

@@ -340,7 +340,11 @@ export function createPageScope() {
       const state = stateFor(tabId);
       if (!documentId) return true;
       if (state.retired.has(documentId)) return false;
-      remember(state.seen, documentId);
+      // A request from the outgoing page can still complete while its
+      // replacement loads. It belongs to the page on screen, so it is accepted,
+      // but its document stays marked for retirement: moving it back among the
+      // incoming page's documents would let it outlive the navigation.
+      if (!state.leaving.has(documentId)) remember(state.seen, documentId);
       return true;
     },
     forget(tabId) {
