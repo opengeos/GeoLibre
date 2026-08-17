@@ -53,9 +53,9 @@ describe("processing registry", () => {
   });
 
   it("dissolves disconnected polygons into one feature per attribute value", () => {
-    const square = (x: number, group: string | number) => ({
+    const square = (x: number, group: string | number, name = `square-${x}`) => ({
       type: "Feature" as const,
-      properties: { group },
+      properties: { group, name },
       geometry: {
         type: "Polygon" as const,
         coordinates: [
@@ -93,6 +93,11 @@ describe("processing registry", () => {
     const numericGroup = result!.features.find((feature) => feature.properties?.group === 5);
     assert.equal(numericGroup?.properties?.group, 5);
     assert.equal(numericGroup?.geometry.type, "MultiPolygon");
+    // Merged groups keep the first source feature's other attributes, matching
+    // the sidecar's GeoPandas dissolve.
+    assert.equal(numericGroup?.properties?.name, "square-0");
+    const connectedGroup = result!.features.find((feature) => feature.properties?.group === "B");
+    assert.equal(connectedGroup?.properties?.name, "square-6");
     assert.deepEqual(messages, ["Dissolved 3 polygon(s) into 2 feature(s)"]);
   });
 
@@ -151,6 +156,7 @@ describe("processing registry", () => {
 
     assert.equal(result!.features.length, 1);
     assert.equal(result!.features[0].geometry.type, "MultiPolygon");
+    assert.equal(result!.features[0].properties?.name, "first");
   });
 
   it("spatially joins zone attributes onto points", () => {

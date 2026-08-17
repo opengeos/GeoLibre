@@ -98,7 +98,7 @@ function explodeToPolygons(features: Feature[]): Feature<Polygon>[] {
 function collectDissolveParts(
   dissolved: FeatureCollection<Polygon>,
   field?: string,
-  originalValues?: ReadonlyMap<string, unknown>,
+  originalProperties?: ReadonlyMap<string, GeoJsonProperties>,
 ): FeatureCollection<Polygon | MultiPolygon> {
   const groups = new Map<string, Feature<Polygon>[]>();
   for (const feature of dissolved.features) {
@@ -108,24 +108,25 @@ function collectDissolveParts(
     else groups.set(key, [feature]);
   }
 
-  const features: Feature<Polygon | MultiPolygon>[] = [...groups.entries()].map(
-    ([value, parts]) => {
-      const fieldValue = originalValues?.has(value)
-        ? originalValues.get(value)
-        : parts[0].properties?.[field ?? ""];
-      if (parts.length === 1) {
-        return field ? { ...parts[0], properties: { [field]: fieldValue } } : parts[0];
-      }
-      return {
-        type: "Feature" as const,
-        properties: field ? { [field]: fieldValue } : {},
-        geometry: {
-          type: "MultiPolygon" as const,
-          coordinates: parts.map((part) => part.geometry.coordinates),
-        },
-      };
-    },
-  );
+  const features: Feature<Polygon | MultiPolygon>[] = [...groups.entries()].map(([key, parts]) => {
+    // Mirror GeoPandas' `dissolve` (aggfunc="first"): every merged feature keeps
+    // the first source feature's whole attribute set, so the dissolve field keeps
+    // its original type and the other attributes survive the merge — whether or
+    // not the group happened to stay connected.
+    const source = originalProperties?.get(key) ?? parts[0].properties;
+    const properties: GeoJsonProperties = source ? { ...source } : {};
+    if (parts.length === 1) {
+      return { ...parts[0], properties };
+    }
+    return {
+      type: "Feature" as const,
+      properties,
+      geometry: {
+        type: "MultiPolygon" as const,
+        coordinates: parts.map((part) => part.geometry.coordinates),
+      },
+    };
+  });
   return featureCollection(features);
 }
 
@@ -301,18 +302,17 @@ export const dissolveTool: ProcessingAlgorithm = {
       return;
     }
     const field = (ctx.parameters.field as string)?.trim();
-    const originalValues = new Map<string, unknown>();
-    if (field) {
-      for (const polygon of polys) {
-        const value = polygon.properties?.[field];
-        const key = String(value);
-        if (!originalValues.has(key)) originalValues.set(key, value);
-      }
+    // Remember the first source feature of each group so the merged output can
+    // carry its attributes through, the way the sidecar's GeoPandas dissolve does.
+    const originalProperties = new Map<string, GeoJsonProperties>();
+    for (const polygon of polys) {
+      const key = field ? String(polygon.properties?.[field]) : "";
+      if (!originalProperties.has(key)) originalProperties.set(key, polygon.properties);
     }
     const dissolvedParts = dissolve(featureCollection(polys), {
       propertyName: field || undefined,
     });
-    const dissolved = collectDissolveParts(dissolvedParts, field || undefined, originalValues);
+    const dissolved = collectDissolveParts(dissolvedParts, field || undefined, originalProperties);
     ctx.log(`Dissolved ${polys.length} polygon(s) into ${dissolved.features.length} feature(s)`);
     ctx.addResultLayer?.("Dissolve", dissolved);
   },
