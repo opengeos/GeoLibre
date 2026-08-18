@@ -280,18 +280,40 @@ export function autoLayout(graph: ProcessingModelGraph): ProcessingModelGraph {
     list.push(edge.from);
     incoming.set(edge.to, list);
   }
-  const resolveDepth = (nodeId: string, seen: Set<string>): number => {
-    if (depth.has(nodeId)) return depth.get(nodeId) as number;
-    if (seen.has(nodeId)) return 0;
-    seen.add(nodeId);
-    const parents = incoming.get(nodeId) ?? [];
-    const value = parents.length
-      ? Math.max(...parents.map((parent) => resolveDepth(parent, seen) + 1))
-      : 0;
-    depth.set(nodeId, value);
-    return value;
+  // Iterative rather than recursive: this runs on an imported file before any
+  // size or cycle check, so a very long ancestor chain would otherwise exhaust
+  // the call stack instead of failing gracefully.
+  const resolveDepth = (start: string): number => {
+    const stack: string[] = [start];
+    const onStack = new Set<string>([start]);
+    while (stack.length > 0) {
+      const nodeId = stack[stack.length - 1];
+      if (depth.has(nodeId)) {
+        stack.pop();
+        onStack.delete(nodeId);
+        continue;
+      }
+      const parents = incoming.get(nodeId) ?? [];
+      // A parent still on the stack is a cycle; treat it as contributing no
+      // depth rather than looping forever.
+      const pending = parents.filter((parent) => !depth.has(parent) && !onStack.has(parent));
+      if (pending.length > 0) {
+        for (const parent of pending) {
+          stack.push(parent);
+          onStack.add(parent);
+        }
+        continue;
+      }
+      const value = parents.length
+        ? Math.max(0, ...parents.map((parent) => (depth.get(parent) ?? 0) + 1))
+        : 0;
+      depth.set(nodeId, value);
+      stack.pop();
+      onStack.delete(nodeId);
+    }
+    return depth.get(start) ?? 0;
   };
-  for (const node of graph.nodes) resolveDepth(node.id, new Set());
+  for (const node of graph.nodes) resolveDepth(node.id);
   const perColumn = new Map<number, number>();
   return {
     ...graph,

@@ -17,7 +17,13 @@ export type ModelValue =
   | { kind: "vector"; geojson: FeatureCollection }
   | { kind: "raster"; bytes: Uint8Array; name?: string };
 
-/** One connection point on a {@link ModelToolDescriptor}. */
+/**
+ * One connection point on a {@link ModelToolDescriptor}.
+ *
+ * `label` is a stable identifier, not display text: this package has no i18n
+ * access, so a hardcoded English word here would reach the rendered port title
+ * untranslated in every locale. The UI layer resolves it for display.
+ */
 export interface ModelToolPort {
   /**
    * For an input port this is the underlying tool parameter id, so wiring an
@@ -85,7 +91,13 @@ export interface ModelGraphIssue {
     | "dangling-edge";
   nodeId?: string;
   edgeId?: string;
-  /** English fallback describing the problem. */
+  /**
+   * The one piece of data the message names — a port label or a tool id — so
+   * the UI can interpolate it into a translated string instead of parsing it
+   * back out of {@link message}.
+   */
+  detail?: string;
+  /** English fallback, for a caller with no translation for {@link code}. */
   message: string;
 }
 
@@ -139,11 +151,11 @@ function portsFor(
   descriptor: ModelToolDescriptor | undefined,
 ): { inputs: ModelToolPort[]; outputs: ModelToolPort[] } {
   if (node.kind === "input") {
-    return { inputs: [], outputs: [{ id: INPUT_NODE_PORT, label: "Output", kind: "any" }] };
+    return { inputs: [], outputs: [{ id: INPUT_NODE_PORT, label: INPUT_NODE_PORT, kind: "any" }] };
   }
   if (node.kind === "output") {
     return {
-      inputs: [{ id: OUTPUT_NODE_PORT, label: "Input", kind: "any", required: true }],
+      inputs: [{ id: OUTPUT_NODE_PORT, label: OUTPUT_NODE_PORT, kind: "any", required: true }],
       outputs: [],
     };
   }
@@ -196,6 +208,7 @@ export function validateModelGraph(
       issues.push({
         code: "unknown-tool",
         nodeId: node.id,
+        detail: node.toolId ?? "",
         message: `Unknown tool "${node.toolId ?? ""}"`,
       });
     }
@@ -250,6 +263,7 @@ export function validateModelGraph(
       issues.push({
         code: "duplicate-input",
         edgeId: edge.id,
+        detail: toPort.label,
         message: `"${toPort.label}" already has an incoming connection.`,
       });
     }
@@ -269,6 +283,7 @@ export function validateModelGraph(
       issues.push({
         code: "missing-input",
         nodeId: node.id,
+        detail: port.label,
         message: `"${port.label}" needs a connection or a value.`,
       });
     }

@@ -16,6 +16,8 @@ import {
   mergeWasmToolManifests,
   runAlgorithmCapture,
   runModelGraph,
+  INPUT_NODE_PORT,
+  OUTPUT_NODE_PORT,
   runWhiteboxToolWasm,
   validateModelGraph,
   graphToLinearSteps,
@@ -40,6 +42,7 @@ import {
   type ReactElement,
 } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { clamp } from "../../../lib/clamp";
 import { createDuckDbCapability } from "../../../lib/duckdb-processing";
 import {
@@ -71,6 +74,9 @@ const TOOL_DRAG_TYPE = "application/x-geolibre-model-tool";
 /** Identifies an exported Model Builder file, so a stray JSON is rejected. */
 const MODEL_SCHEMA = "https://geolibre.app/schemas/model-graph-v1.json";
 const MODEL_VERSION = "1.0.0";
+/** Sanity bounds on an imported file; a hand-built model is nowhere near these. */
+const MAX_IMPORT_NODES = 2000;
+const MAX_IMPORT_EDGES = 4000;
 
 const MIN_WIDTH = 820;
 const MIN_HEIGHT = 420;
@@ -125,6 +131,7 @@ export function ModelBuilderPanel({
   const [graph, setGraph] = useState<ProcessingModelGraph>(emptyModelGraph);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<ModelToolDescriptor[]>([]);
+  const [catalogFailed, setCatalogFailed] = useState(false);
   const [search, setSearch] = useState("");
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
@@ -187,6 +194,9 @@ export function ModelBuilderPanel({
       setCatalog(
         buildModelToolCatalog(VECTOR_TOOLS, mergeWasmToolManifests(catalogTools, wasmTools)),
       );
+      // Both registries failing leaves a palette that can resolve nothing, which
+      // must not read as "no problems found" on a canvas full of tool nodes.
+      setCatalogFailed(catalogResult.status === "rejected" && wasmResult.status === "rejected");
     })();
     return () => {
       cancelled = true;
@@ -237,6 +247,9 @@ export function ModelBuilderPanel({
 
   const resetRunState = useCallback(() => {
     abortRun();
+    // abortRun() clears the ref, so the in-flight run's `finally` no longer
+    // matches its own controller and will not clear this itself.
+    setRunning(false);
     setNodeStatus({});
     setLog([]);
   }, [abortRun]);
@@ -315,6 +328,12 @@ export function ModelBuilderPanel({
         // of render, past this try/catch, into the panel's error boundary.
         const graph = normalizeModelGraph(parsed.graph);
         if (!graph) throw new Error(t("processing.modelBuilder.importInvalid"));
+        // A canvas is hand-built; anything this large is a corrupt or crafted
+        // file, and laying it out would stall the panel before the user could
+        // even see what went wrong.
+        if (graph.nodes.length > MAX_IMPORT_NODES || graph.edges.length > MAX_IMPORT_EDGES) {
+          throw new Error(t("processing.modelBuilder.importTooLarge"));
+        }
         setModelName(typeof parsed.name === "string" ? parsed.name : "");
         setGraph(autoLayout(graph));
         setSelectedNodeId(null);
@@ -356,6 +375,16 @@ export function ModelBuilderPanel({
       setSelectedNodeId(next.nodeId);
     },
     [descriptorByKey, graph, canvasPoint],
+  );
+
+  /** Drop a palette tool onto the canvas without a pointer drag. */
+  const addToolAtDefault = useCallback(
+    (descriptor: ModelToolDescriptor) => {
+      const next = addToolNode(graph, descriptor, { x: 24 + NODE_WIDTH + 72, y: 24 }, createId);
+      setGraph(next.graph);
+      setSelectedNodeId(next.nodeId);
+    },
+    [graph],
   );
 
   const addNode = useCallback(
@@ -485,6 +514,9 @@ export function ModelBuilderPanel({
     setRunning(true);
     setNodeStatus({});
     const duckdb = createDuckDbCapability();
+    // Outputs the host refused after the graph itself finished, so the summary
+    // does not claim success for a layer that never reached the map.
+    const failedOutputs: string[] = [];
     try {
       const result = await runModelGraph(graph, {
         resolveDescriptor,
@@ -495,7 +527,18 @@ export function ModelBuilderPanel({
           if (value.kind === "vector") {
             addGeoJsonLayer(name, value.geojson);
           } else if (onAddRaster) {
-            void onAddRaster(value.bytes, name, `${name.replace(/\s+/g, "_")}.tif`);
+            void Promise.resolve(
+              onAddRaster(value.bytes, name, `${name.replace(/\s+/g, "_")}.tif`),
+            ).catch((err: unknown) => {
+              // Otherwise this is an unhandled rejection and the run still
+              // reports success for an output that never reached the map.
+              failedOutputs.push(name);
+              appendLog(
+                `${t("processing.modelBuilder.outputAddFailed", { name })}: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
+            });
           } else {
             appendLog(t("processing.modelBuilder.rasterOutputUnsupported", { name }));
           }
@@ -524,7 +567,7 @@ export function ModelBuilderPanel({
           result.error
             ? `${t("processing.modelBuilder.runFailed")}: ${result.error.message}`
             : t("processing.modelBuilder.runFinished", {
-                outputs: Object.keys(result.outputs).length,
+                outputs: Object.keys(result.outputs).length - failedOutputs.length,
               }),
         );
       }
@@ -682,7 +725,7 @@ export function ModelBuilderPanel({
               size="sm"
               className="h-7 gap-1 px-2"
               onClick={() => void handleRun()}
-              disabled={issues.length > 0}
+              disabled={issues.length > 0 || catalogFailed || graph.nodes.length === 0}
             >
               <Play className="h-3.5 w-3.5" />
               {t("processing.modelBuilder.runModel")}
@@ -763,18 +806,25 @@ export function ModelBuilderPanel({
                     {group.group}
                   </p>
                   {group.tools.map((tool) => (
-                    <div
+                    // A real button, not a bare draggable div: dragging is the
+                    // only other way to add a tool node, so a div here would put
+                    // the panel's core interaction out of reach of the keyboard
+                    // entirely. Activating it drops the node onto the canvas.
+                    <button
                       key={tool.key}
+                      type="button"
                       draggable
                       onDragStart={(event) => {
                         event.dataTransfer.setData(TOOL_DRAG_TYPE, tool.key);
                         event.dataTransfer.effectAllowed = "copy";
                       }}
+                      onClick={() => addToolAtDefault(tool)}
                       title={tool.description ?? tool.name}
-                      className="cursor-grab truncate rounded px-1.5 py-1 text-xs hover:bg-accent active:cursor-grabbing"
+                      aria-label={t("processing.modelBuilder.addToolNode", { tool: tool.name })}
+                      className="w-full cursor-grab truncate rounded px-1.5 py-1 text-start text-xs hover:bg-accent active:cursor-grabbing"
                     >
                       {tool.name}
-                    </div>
+                    </button>
                   ))}
                 </div>
               ))
@@ -886,9 +936,14 @@ export function ModelBuilderPanel({
       {/* Issues + log */}
       <div className="h-24 shrink-0 border-t">
         <ScrollArea className="h-full p-2 font-mono text-[11px]">
+          {catalogFailed && (
+            <div className="text-destructive">
+              {t("processing.modelBuilder.catalogUnavailable")}
+            </div>
+          )}
           {issues.map((issue, index) => (
             <div key={index} className="text-destructive">
-              {issue.message}
+              {translateIssue(t, issue)}
             </div>
           ))}
           {log.map((line, index) => (
@@ -896,7 +951,7 @@ export function ModelBuilderPanel({
               {line}
             </div>
           ))}
-          {issues.length === 0 && log.length === 0 && (
+          {issues.length === 0 && log.length === 0 && !catalogFailed && (
             <span className="text-muted-foreground">
               {t("processing.modelBuilder.outputPlaceholder")}
             </span>
@@ -913,6 +968,49 @@ export function ModelBuilderPanel({
       />
     </section>
   );
+}
+
+/**
+ * Resolve a validation issue to the user's language.
+ *
+ * `ModelGraphIssue` carries a machine-readable `code` precisely so the UI can
+ * translate rather than print the engine's English `message`; rendering the
+ * message verbatim left every validation problem English-only in all 19
+ * locales. Port names and tool ids inside a message are data, so they are
+ * interpolated rather than translated.
+ */
+function translateIssue(t: TFunction, issue: ModelGraphIssue): string {
+  switch (issue.code) {
+    case "missing-layer":
+      return t("processing.modelBuilder.issueMissingLayer");
+    case "unknown-tool":
+      return t("processing.modelBuilder.issueUnknownTool", { tool: issue.detail ?? "" });
+    case "missing-input":
+      return t("processing.modelBuilder.issueMissingInput", { port: issue.detail ?? "" });
+    case "unknown-port":
+      return t("processing.modelBuilder.issueUnknownPort");
+    case "duplicate-input":
+      return t("processing.modelBuilder.issueDuplicateInput", { port: issue.detail ?? "" });
+    case "type-mismatch":
+      return t("processing.modelBuilder.issueTypeMismatch");
+    case "cycle":
+      return t("processing.modelBuilder.issueCycle");
+    case "no-output":
+      return t("processing.modelBuilder.issueNoOutput");
+    case "duplicate-node":
+      return t("processing.modelBuilder.issueDuplicateNode");
+    case "dangling-edge":
+      return t("processing.modelBuilder.issueDanglingEdge");
+    default:
+      return issue.message;
+  }
+}
+
+/** Display name for a port, translating the two synthetic node ports. */
+function portLabel(t: TFunction, label: string): string {
+  if (label === INPUT_NODE_PORT) return t("processing.modelBuilder.outputNode");
+  if (label === OUTPUT_NODE_PORT) return t("processing.modelBuilder.inputNode");
+  return label;
 }
 
 /** SVG layer drawing every connection, plus the in-progress link. */
@@ -1060,8 +1158,8 @@ function GraphNodeCard({
             data-port="in"
             data-node-id={node.id}
             data-port-id={port.id}
-            title={port.label}
-            aria-label={t("processing.modelBuilder.inputPort", { port: port.label })}
+            title={portLabel(t, port.label)}
+            aria-label={t("processing.modelBuilder.inputPort", { port: portLabel(t, port.label) })}
             style={{ left: -6, top: at.y - node.y - 5 }}
             className="absolute h-2.5 w-2.5 rounded-full border border-primary bg-background"
           />
@@ -1076,8 +1174,8 @@ function GraphNodeCard({
             data-port="out"
             data-node-id={node.id}
             data-port-id={port.id}
-            title={port.label}
-            aria-label={t("processing.modelBuilder.outputPort", { port: port.label })}
+            title={portLabel(t, port.label)}
+            aria-label={t("processing.modelBuilder.outputPort", { port: portLabel(t, port.label) })}
             onPointerDown={(event) => onPortPointerDown(event, node.id, port.id)}
             style={{ right: -6, top: at.y - node.y - 5 }}
             className="absolute h-2.5 w-2.5 cursor-crosshair rounded-full border border-primary bg-primary"
@@ -1138,7 +1236,7 @@ function NodeInspector({
 
       {issues.map((issue, index) => (
         <p key={index} className="text-[11px] text-destructive">
-          {issue.message}
+          {translateIssue(t, issue)}
         </p>
       ))}
 

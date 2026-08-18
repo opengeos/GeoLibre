@@ -231,6 +231,29 @@ describe("model graph validation", () => {
     assert.ok(codes.includes("dangling-edge"));
   });
 
+  it("carries the offending port or tool id as `detail` for interpolation", () => {
+    // The UI translates by `code` and interpolates `detail`; without it the port
+    // name would have to be parsed back out of the English message.
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "c", kind: "tool", x: 0, y: 0, provider: "vector", toolId: "clip" },
+        { id: "o", kind: "output", x: 0, y: 0, name: "Out" },
+      ],
+      edges: [{ id: "e1", from: "c", fromPort: "out", to: "o", toPort: "in" }],
+    };
+    const details = validateModelGraph(graph, resolve)
+      .filter((issue) => issue.code === "missing-input")
+      .map((issue) => issue.detail);
+    assert.deepEqual(details.sort(), ["Clip layer", "Input"]);
+
+    const unknown = chainGraph();
+    unknown.nodes[1].toolId = "nope";
+    assert.equal(
+      validateModelGraph(unknown, resolve).find((i) => i.code === "unknown-tool")?.detail,
+      "nope",
+    );
+  });
+
   it("requires an output node so a run keeps something", () => {
     const graph = chainGraph();
     graph.nodes = graph.nodes.filter((node) => node.kind !== "output");

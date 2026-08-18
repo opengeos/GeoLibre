@@ -18,11 +18,9 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  Input,
   Label,
   ScrollArea,
   Select,
-  cn,
 } from "@geolibre/ui";
 import { ParameterField } from "./ParameterField";
 import { Download, Layers, Loader2, Play, Plus } from "lucide-react";
@@ -38,12 +36,6 @@ const PRIMARY_INPUT_PARAM = "layer";
 const FIELD_SCAN_SAMPLE = 1000;
 
 /** A best-effort unique id (webview always has crypto.randomUUID). */
-function createId(): string {
-  return typeof crypto !== "undefined" && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `id-${Math.floor(performance.now())}-${VECTOR_TOOLS.length}`;
-}
-
 /** Vector tools grouped by their `group` label, preserving registry order. */
 function groupedTools(): { group: string; tools: ProcessingAlgorithm[] }[] {
   const groups: { group: string; tools: ProcessingAlgorithm[] }[] = [];
@@ -139,12 +131,9 @@ function viewportBoundsReader(
 }
 
 /**
- * Batch and pipeline runner UI (issue #344). Two modes share the vector-tools
- * registry and run on the client engine:
- *
- * - **Batch**: apply one tool across many input layers with shared parameters.
- * - **Models**: chain tools so each step's output feeds the next; saved with the
- *   project and re-runnable.
+ * Batch runner UI (issue #344): apply one vector tool across many input layers
+ * with shared parameters, on the client engine. Chaining tools into a model
+ * moved to the Model Builder canvas (`model-builder/ModelBuilderPanel.tsx`).
  */
 export function BatchToolsDialog({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
   const { t } = useTranslation();

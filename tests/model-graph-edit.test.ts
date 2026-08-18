@@ -282,6 +282,45 @@ describe("auto layout", () => {
     assert.deepEqual(autoLayout(graph), graph);
   });
 
+  it("handles a long chain iteratively instead of exhausting the stack", () => {
+    // An imported file is laid out before any size or cycle check, so depth
+    // resolution has to survive a chain far longer than the call stack allows.
+    const n = 20000;
+    const nodes = Array.from({ length: n }, (_, i) => ({
+      id: `n${i}`,
+      kind: "tool" as const,
+      x: 0,
+      y: 0,
+      provider: "vector" as const,
+      toolId: "buffer",
+    }));
+    const edges = Array.from({ length: n - 1 }, (_, i) => ({
+      id: `e${i}`,
+      from: `n${i}`,
+      fromPort: "out",
+      to: `n${i + 1}`,
+      toPort: "layer",
+    }));
+    const laid = autoLayout({ nodes, edges });
+    assert.equal(laid.nodes.length, n);
+    // Depth increases along the chain, so the last node sits far to the right.
+    assert.ok(laid.nodes[n - 1].x > laid.nodes[0].x);
+  });
+
+  it("does not hang on a cycle with no root to start from", () => {
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "a", kind: "tool", x: 0, y: 0, provider: "vector", toolId: "buffer" },
+        { id: "b", kind: "tool", x: 0, y: 0, provider: "vector", toolId: "buffer" },
+      ],
+      edges: [
+        { id: "e1", from: "a", fromPort: "out", to: "b", toPort: "layer" },
+        { id: "e2", from: "b", fromPort: "out", to: "a", toPort: "layer" },
+      ],
+    };
+    assert.equal(autoLayout(graph).nodes.length, 2);
+  });
+
   it("stacks siblings of the same depth into separate rows", () => {
     const graph: ProcessingModelGraph = {
       nodes: [
