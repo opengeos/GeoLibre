@@ -5,6 +5,11 @@ export const PIPELINE_SCHEMA = "https://geolibre.app/schemas/pipeline-v1.json";
 export interface ProcessingPipelineNode {
   id: string;
   type: string;
+  /**
+   * Human-readable label for the exported file only. It is deliberately
+   * decorative: import neither validates it nor reads it back into the step,
+   * which resolves its name from `type` via the tool registry.
+   */
   name: string;
   params: Record<string, unknown>;
   inputParam?: string;
