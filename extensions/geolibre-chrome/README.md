@@ -4,7 +4,13 @@ A Manifest V3 Chrome extension that finds supported geospatial dataset links on
 the current page, observes geospatial service requests made by interactive maps,
 and opens selected data in GeoLibre.
 
-## Install locally
+## Install
+
+The published extension is on the Chrome Web Store:
+
+[Open data in GeoLibre](https://chromewebstore.google.com/detail/open-data-in-geolibre/joinecgbfoldanidcoakpjgkbaceaooj)
+
+## Install locally (development)
 
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.

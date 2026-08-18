@@ -314,6 +314,22 @@ See [iOS](ios.md) for the full list.
     (`org.geolibre.desktop`); the two are different apps with different feature
     sets.
 
+## Chrome extension
+
+**Open data in GeoLibre** is a companion browser extension that finds supported
+geospatial dataset links and map services on the page you are viewing and opens
+the ones you pick in GeoLibre. It is published on the Chrome Web Store, so it
+installs in one click and updates automatically:
+
+[Get Open data in GeoLibre from the Chrome Web Store](https://chromewebstore.google.com/detail/open-data-in-geolibre/joinecgbfoldanidcoakpjgkbaceaooj){ .md-button .md-button--primary }
+
+It works in any Chromium-based browser that can install from the Chrome Web
+Store, including Chrome, Edge, Brave, Vivaldi, Opera, and Arc. A packaged ZIP is
+also attached to each [GitHub release](https://github.com/opengeos/GeoLibre/releases)
+(the asset whose name starts with `geolibre-chrome-`) if you prefer to load it
+unpacked. See the [Chrome Extension](user-guide/chrome-extension.md) guide for
+both installation paths and what the extension detects.
+
 ## Build from source
 
 ```bash

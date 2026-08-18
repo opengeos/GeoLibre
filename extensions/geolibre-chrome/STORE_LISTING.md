@@ -1,5 +1,8 @@
 # Chrome Web Store listing
 
+Published listing:
+<https://chromewebstore.google.com/detail/open-data-in-geolibre/joinecgbfoldanidcoakpjgkbaceaooj>
+
 ## Name
 
 Open data in GeoLibre
