@@ -132,6 +132,9 @@ export function ModelBuilderPanel({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<ModelToolDescriptor[]>([]);
   const [catalogFailed, setCatalogFailed] = useState(false);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+  /** Bumped to re-run the catalog load after a failure. */
+  const [retryToken, setRetryToken] = useState(0);
   const [search, setSearch] = useState("");
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
@@ -169,7 +172,7 @@ export function ModelBuilderPanel({
   // concurrently and each degrades independently: losing one still leaves a
   // usable palette built from the other.
   useEffect(() => {
-    if (!open || catalog.length > 0) return;
+    if (!open || catalogLoaded) return;
     let cancelled = false;
     void (async () => {
       const [catalogResult, wasmResult] = await Promise.allSettled([
@@ -196,12 +199,18 @@ export function ModelBuilderPanel({
       );
       // Both registries failing leaves a palette that can resolve nothing, which
       // must not read as "no problems found" on a canvas full of tool nodes.
-      setCatalogFailed(catalogResult.status === "rejected" && wasmResult.status === "rejected");
+      const bothFailed = catalogResult.status === "rejected" && wasmResult.status === "rejected";
+      setCatalogFailed(bothFailed);
+      // Only a successful load closes the door on retrying. Gating on
+      // `catalog.length` instead would latch after the first attempt, since
+      // VECTOR_TOOLS alone makes the catalog non-empty even when both remote
+      // sources failed — leaving no way back short of reloading the app.
+      setCatalogLoaded(!bothFailed);
     })();
     return () => {
       cancelled = true;
     };
-  }, [open, catalog.length]);
+  }, [open, catalogLoaded, retryToken]);
 
   const descriptorByKey = useMemo(
     () => new Map(catalog.map((descriptor) => [descriptor.key, descriptor])),
@@ -515,8 +524,11 @@ export function ModelBuilderPanel({
     setNodeStatus({});
     const duckdb = createDuckDbCapability();
     // Outputs the host refused after the graph itself finished, so the summary
-    // does not claim success for a layer that never reached the map.
+    // does not claim success for a layer that never reached the map. The adds
+    // are awaited before the summary is logged, since they settle after
+    // runModelGraph returns.
     const failedOutputs: string[] = [];
+    const pendingAdds: Promise<unknown>[] = [];
     try {
       const result = await runModelGraph(graph, {
         resolveDescriptor,
@@ -527,18 +539,20 @@ export function ModelBuilderPanel({
           if (value.kind === "vector") {
             addGeoJsonLayer(name, value.geojson);
           } else if (onAddRaster) {
-            void Promise.resolve(
-              onAddRaster(value.bytes, name, `${name.replace(/\s+/g, "_")}.tif`),
-            ).catch((err: unknown) => {
-              // Otherwise this is an unhandled rejection and the run still
-              // reports success for an output that never reached the map.
-              failedOutputs.push(name);
-              appendLog(
-                `${t("processing.modelBuilder.outputAddFailed", { name })}: ${
-                  err instanceof Error ? err.message : String(err)
-                }`,
-              );
-            });
+            pendingAdds.push(
+              Promise.resolve(
+                onAddRaster(value.bytes, name, `${name.replace(/\s+/g, "_")}.tif`),
+              ).catch((err: unknown) => {
+                // Otherwise this is an unhandled rejection and the run still
+                // reports success for an output that never reached the map.
+                failedOutputs.push(name);
+                appendLog(
+                  `${t("processing.modelBuilder.outputAddFailed", { name })}: ${
+                    err instanceof Error ? err.message : String(err)
+                  }`,
+                );
+              }),
+            );
           } else {
             appendLog(t("processing.modelBuilder.rasterOutputUnsupported", { name }));
           }
@@ -562,6 +576,9 @@ export function ModelBuilderPanel({
             log: appendLog,
           }),
       });
+      // Wait for the host's raster adds before summarising: they settle after
+      // runModelGraph returns, so counting failures first would always read 0.
+      await Promise.allSettled(pendingAdds);
       if (!controller.signal.aborted) {
         appendLog(
           result.error
@@ -937,8 +954,19 @@ export function ModelBuilderPanel({
       <div className="h-24 shrink-0 border-t">
         <ScrollArea className="h-full p-2 font-mono text-[11px]">
           {catalogFailed && (
-            <div className="text-destructive">
-              {t("processing.modelBuilder.catalogUnavailable")}
+            <div className="flex items-center gap-2 text-destructive">
+              <span>{t("processing.modelBuilder.catalogUnavailable")}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-5 px-1.5 text-[11px]"
+                onClick={() => {
+                  setCatalogFailed(false);
+                  setRetryToken((token) => token + 1);
+                }}
+              >
+                {t("common.retry")}
+              </Button>
             </div>
           )}
           {issues.map((issue, index) => (

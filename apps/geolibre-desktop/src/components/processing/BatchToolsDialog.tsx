@@ -23,7 +23,7 @@ import {
   Select,
 } from "@geolibre/ui";
 import { ParameterField } from "./ParameterField";
-import { Download, Layers, Loader2, Play, Plus } from "lucide-react";
+import { Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 interface BatchToolsDialogProps {
