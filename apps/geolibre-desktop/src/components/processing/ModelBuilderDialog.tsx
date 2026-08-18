@@ -179,7 +179,9 @@ export function ModelBuilderDialog({ mapControllerRef }: ModelBuilderDialogProps
         if (!next) setOpen(false);
       }}
     >
-      <DialogContent className="max-w-5xl">
+      {/* Only the Models tab needs the extra width for the workflow canvas; the
+          Batch tab keeps its original two-column width. */}
+      <DialogContent className={mode === "models" ? "max-w-5xl" : "max-w-3xl"}>
         <DialogHeader>
           <DialogTitle>{t("processing.modelBuilder.title")}</DialogTitle>
           <DialogDescription>{t("processing.modelBuilder.description")}</DialogDescription>
