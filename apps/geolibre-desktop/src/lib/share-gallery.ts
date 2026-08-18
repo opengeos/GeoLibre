@@ -664,12 +664,10 @@ export async function fetchMyOrganizations(
  */
 export async function fetchMyGroups(options: FetchGroupsOptions): Promise<ShareGroup[]> {
   const base = requireShareBase(options.baseUrl);
-  const payload = (await shareAuthorizedJsonRequest(
-    "/api/groups/mine",
-    options.token,
-    base,
-    { signal: options.signal, fetchImpl: options.fetchImpl },
-  )) as { groups?: unknown[] } | null;
+  const payload = (await shareAuthorizedJsonRequest("/api/groups/mine", options.token, base, {
+    signal: options.signal,
+    fetchImpl: options.fetchImpl,
+  })) as { groups?: unknown[] } | null;
   const raw = Array.isArray(payload?.groups) ? payload.groups : [];
   return raw
     .map((g): ShareGroup | null => {
