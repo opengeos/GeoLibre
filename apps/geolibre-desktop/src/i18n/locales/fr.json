@@ -187,7 +187,7 @@
     "partialData": "Certains échantillons n'avaient pas de données de terrain",
     "heading": "Cap",
     "finalHeading": "Cap final",
-    "bodyNote": "Mesuré sur {{body}} (approximation sphérique)"
+    "bodyNote": "Mesuré sur : {{body}} (approximation sphérique)"
   },
   "statusBar": {
     "elevation": "Alt",

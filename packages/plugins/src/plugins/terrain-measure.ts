@@ -116,8 +116,14 @@ const terrainMeasureLabels = {
   partialData: "Some samples had no terrain data",
   heading: "Heading",
   finalHeading: "Final heading",
-  /** `{{body}}` is replaced with the active celestial body's name. */
-  bodyNote: "Measured on {{body}} (spherical approximation)",
+  /**
+   * `{{body}}` is replaced with the active celestial body's name. The name is a
+   * standalone token after a colon rather than the object of a preposition,
+   * because no single inline form can be right for every body in every
+   * language (Georgian needs "მარსზე" not "მარსი-ზე"; German "auf dem Mars",
+   * French "sur la Lune", Russian "на Марсе" all inflect or take an article).
+   */
+  bodyNote: "Measured on: {{body}} (spherical approximation)",
 };
 
 /**

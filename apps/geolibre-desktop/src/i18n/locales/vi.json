@@ -185,7 +185,7 @@
     "partialData": "Một số mẫu không có dữ liệu địa hình",
     "heading": "tiêu đề",
     "finalHeading": "Tiêu đề cuối cùng",
-    "bodyNote": "Đo trên {{body}} (xấp xỉ hình cầu)"
+    "bodyNote": "Đo trên: {{body}} (xấp xỉ hình cầu)"
   },
   "addData": {
     "kind": {

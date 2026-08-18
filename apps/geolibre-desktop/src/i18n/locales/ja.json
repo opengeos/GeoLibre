@@ -185,7 +185,7 @@
     "partialData": "一部のサンプルに地形データがありませんでした",
     "heading": "方位",
     "finalHeading": "最終方位",
-    "bodyNote": "{{body}} 上で計測（球体近似）"
+    "bodyNote": "計測対象: {{body}}（球体近似）"
   },
   "statusBar": {
     "elevation": "標高",

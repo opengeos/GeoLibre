@@ -14,7 +14,7 @@
  * scale bar and the measurement tools read.
  */
 
-import { EARTH_MEAN_RADIUS_METERS, getActiveMeanRadiusMeters } from "./ellipsoids";
+import { getActiveBodyRadiusRatio } from "./ellipsoids";
 import { scaleDenomination } from "./scale-units";
 import type { MapScaleUnit } from "./types";
 
@@ -28,7 +28,7 @@ import type { MapScaleUnit } from "./types";
  */
 export function scaleAltitudeToActiveBody(earthAltitudeMeters: number | null): number | null {
   if (earthAltitudeMeters === null || !Number.isFinite(earthAltitudeMeters)) return null;
-  return earthAltitudeMeters * (getActiveMeanRadiusMeters() / EARTH_MEAN_RADIUS_METERS);
+  return earthAltitudeMeters * getActiveBodyRadiusRatio();
 }
 
 /**
