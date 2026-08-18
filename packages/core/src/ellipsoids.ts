@@ -196,9 +196,13 @@ export function getActiveBodyRadiusRatio(): number {
  * length. A no-op on Earth.
  *
  * Use on anything Turf *returns* — a distance, a length, a perimeter.
+ *
+ * The correction is a dimensionless ratio, so it is unit-agnostic: pass the
+ * length in whatever unit Turf gave it back (metres, kilometres, miles) and the
+ * result is in that same unit. There is no hidden unit conversion here.
  */
-export function earthLengthToBody(meters: number): number {
-  return meters * getActiveBodyRadiusRatio();
+export function earthLengthToBody(length: number): number {
+  return length * getActiveBodyRadiusRatio();
 }
 
 /**
@@ -206,11 +210,14 @@ export function earthLengthToBody(meters: number): number {
  * length to hand Turf.js. A no-op on Earth.
  *
  * Use on anything passed *into* Turf as a distance — a buffer width, a circle
- * or sector radius, a search distance — so the resulting geometry spans that
- * many metres on this body rather than on Earth.
+ * or sector radius, a search threshold — so the resulting geometry spans that
+ * distance on this body rather than on Earth.
+ *
+ * Unit-agnostic like {@link earthLengthToBody}: pass the length in whatever
+ * unit you are about to hand Turf alongside it, and the result is in that unit.
  */
-export function bodyLengthToEarth(meters: number): number {
-  return meters / getActiveBodyRadiusRatio();
+export function bodyLengthToEarth(length: number): number {
+  return length / getActiveBodyRadiusRatio();
 }
 
 /**
@@ -218,11 +225,12 @@ export function bodyLengthToEarth(meters: number): number {
  * area. A no-op on Earth.
  *
  * Areas scale with the *square* of the radius ratio, so this is not the same
- * correction as {@link earthLengthToBody}.
+ * correction as {@link earthLengthToBody}. Unit-agnostic in the same way, for
+ * whatever squared unit the area is expressed in.
  */
-export function earthAreaToBody(squareMeters: number): number {
+export function earthAreaToBody(area: number): number {
   const ratio = getActiveBodyRadiusRatio();
-  return squareMeters * ratio * ratio;
+  return area * ratio * ratio;
 }
 
 // --- Planetary basemaps ----------------------------------------------------
