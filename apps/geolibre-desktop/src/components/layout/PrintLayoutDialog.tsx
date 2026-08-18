@@ -1603,35 +1603,42 @@ export function PrintLayoutDialog({
   // switched on without one selected, or when the selected layer disappears
   // (e.g. removed from the Layers panel while the dialog is open) — a stale
   // id would leave the Select valueless and the series silently empty.
+  //
+  // Gated on `open` like the auto-drive effect below: the dialog stays mounted
+  // when closed, and since the composer's settings are now project state, an
+  // ungated reassignment would rewrite (and dirty) the saved layout in the
+  // background when a layer is deleted from the Layers panel, with the
+  // composer never opened. Reopening it re-runs this and defaults then.
   useEffect(() => {
-    if (!atlasEnabled || atlasLayers.length === 0) return;
+    if (!open || !atlasEnabled || atlasLayers.length === 0) return;
     if (!atlasLayers.some((l) => l.id === atlasLayerId)) {
       setAtlasLayerId(atlasLayers[0].id);
       setAtlasNameField("");
       setAtlasSortField("");
       setAtlasIndex(0);
     }
-  }, [atlasEnabled, atlasLayerId, atlasLayers]);
+  }, [open, atlasEnabled, atlasLayerId, atlasLayers]);
 
-  // Same defaulting for the data blocks' layers (GH #1324): fill in the first
-  // eligible layer when a block is enabled without one, or when its selected
-  // layer disappears; the field choices belong to the old layer, so drop them.
+  // Same defaulting (and the same `open` gate) for the data blocks' layers
+  // (GH #1324): fill in the first eligible layer when a block is enabled
+  // without one, or when its selected layer disappears; the field choices
+  // belong to the old layer, so drop them.
   useEffect(() => {
-    if (!showDataTable || atlasLayers.length === 0) return;
+    if (!open || !showDataTable || atlasLayers.length === 0) return;
     if (!atlasLayers.some((l) => l.id === tableLayerId)) {
       setTableLayerId(atlasLayers[0].id);
       setTableColumns([]);
       setTableSortField("");
     }
-  }, [showDataTable, tableLayerId, atlasLayers]);
+  }, [open, showDataTable, tableLayerId, atlasLayers]);
   useEffect(() => {
-    if (!showDataChart || atlasLayers.length === 0) return;
+    if (!open || !showDataChart || atlasLayers.length === 0) return;
     if (!atlasLayers.some((l) => l.id === chartLayerId)) {
       setChartLayerId(atlasLayers[0].id);
       setChartCategoryField("");
       setChartValueField("");
     }
-  }, [showDataChart, chartLayerId, atlasLayers]);
+  }, [open, showDataChart, chartLayerId, atlasLayers]);
 
   // Latest page index for the auto-drive effect below, so stepping (which
   // sets the index) does not itself re-trigger a capture.
