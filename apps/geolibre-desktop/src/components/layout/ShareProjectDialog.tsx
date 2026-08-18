@@ -189,13 +189,18 @@ export function ShareProjectDialog({
   const publicBlocked = isPublicSharingBlocked(visibility, selectedOrganization);
   const organizationRequired = visibility === "organization" && !selectedOrganization;
 
-  // Reset transient state whenever the dialog is (re)opened so a prior result or
-  // error never lingers into a new share. Seed the title from the current
-  // project name, but leave it blank when the project still has its default
-  // placeholder name so the field reads as a prompt.
+  // Seed the title from the current project name, but leave it blank when the
+  // project still has its default placeholder name so the field reads as a prompt.
   useEffect(() => {
     if (open) {
       setTitle(isShareableTitle(currentTitle) ? currentTitle.trim() : "");
+    }
+  }, [open, currentTitle]);
+
+  // Reset transient state whenever the dialog is (re)opened so a prior result or
+  // error never lingers into a new share.
+  useEffect(() => {
+    if (open) {
       setVisibility("unlisted");
       setStatus("idle");
       setError(null);
@@ -247,7 +252,7 @@ export function ShareProjectDialog({
       uploadAbortRef.current?.abort();
       uploadAbortRef.current = null;
     }
-  }, [open, currentTitle, hasToken, shareToken]);
+  }, [open, hasToken, shareToken]);
 
   // Pre-flight the project's data sources when the dialog opens, so the author
   // learns that a layer will be empty for everyone else *before* the upload
@@ -541,7 +546,7 @@ export function ShareProjectDialog({
               </div>
             ) : null}
 
-            {groups.length > 0 ? (
+            {groups.length > 0 || groupLoading ? (
               <div className="space-y-1.5">
                 <Label htmlFor="share-groups">{t("share.groups")}</Label>
                 <Select

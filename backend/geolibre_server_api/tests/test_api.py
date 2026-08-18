@@ -1446,7 +1446,7 @@ def test_shared_sources_filter_before_pagination_and_report_can_edit(client):
         json={"username": "member", "role": "member"},
     )
 
-    def create(token, title, visibility, organization_id=None, group_ids=None):
+    def create(token, title, visibility, organization_id=None, group_ids=None) -> dict[str, object]:
         return client.post(
             "/api/projects",
             headers=auth(token),

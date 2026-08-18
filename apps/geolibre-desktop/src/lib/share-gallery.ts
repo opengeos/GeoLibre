@@ -285,22 +285,18 @@ export async function fetchSharedProjects(
   return { projects, hasMore, rawCount: rawProjects.length };
 }
 
-/** Fetch one authenticated page of projects shared through the user's organizations or groups. */
-export async function fetchProjectsSharedWithMe(
-  options: FetchProjectsSharedWithMeOptions,
-): Promise<FetchSharedProjectsResult> {
-  const base = requireShareBase(options.baseUrl);
-  const params = new URLSearchParams({ shared_with_me: "true" });
-  if (options.source) params.set("shared_source", options.source);
-  if (options.limit != null) params.set("limit", String(options.limit));
-  if (options.offset) params.set("offset", String(options.offset));
-  const authFetch = shareAuthorizedFetch(options.token, base, options.fetchImpl ?? getShareFetch());
+async function shareAuthorizedJsonRequest(
+  path: string,
+  token: string,
+  base: string,
+  options: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {},
+): Promise<unknown> {
+  const authFetch = shareAuthorizedFetch(token, base, options.fetchImpl ?? getShareFetch());
   const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-
   let response: Response;
   try {
-    response = await authFetch(`${base}/api/projects?${params}`, {
+    response = await authFetch(`${base}${path}`, {
       headers: { Accept: "application/json" },
       signal,
     });
@@ -314,14 +310,33 @@ export async function fetchProjectsSharedWithMe(
   if (response.status === 401 || response.status === 403) {
     throw new GalleryError("unauthorized");
   }
-  if (!response.ok) throw new GalleryError("http", response.status);
-
-  let payload: { projects?: RawSharedProject[]; total?: unknown } | null;
+  if (!response.ok) {
+    throw new GalleryError("http", response.status);
+  }
   try {
-    payload = (await response.json()) as typeof payload;
+    return (await response.json()) as unknown;
   } catch {
     throw new GalleryError("invalid-response");
   }
+}
+
+/** Fetch one authenticated page of projects shared through the user's organizations or groups. */
+export async function fetchProjectsSharedWithMe(
+  options: FetchProjectsSharedWithMeOptions,
+): Promise<FetchSharedProjectsResult> {
+  const base = requireShareBase(options.baseUrl);
+  const params = new URLSearchParams({ shared_with_me: "true" });
+  if (options.source) params.set("shared_source", options.source);
+  if (options.limit != null) params.set("limit", String(options.limit));
+  if (options.offset) params.set("offset", String(options.offset));
+
+  const payload = (await shareAuthorizedJsonRequest(
+    `/api/projects?${params}`,
+    options.token,
+    base,
+    { signal: options.signal, fetchImpl: options.fetchImpl },
+  )) as { projects?: RawSharedProject[]; total?: unknown } | null;
+
   const rawProjects = Array.isArray(payload?.projects) ? payload.projects : [];
   const projects = rawProjects
     .map((raw) => normalizeProject(raw, base))
@@ -380,7 +395,7 @@ export function shareAuthorizedFetch(
   } catch {
     baseOrigin = null;
   }
-  return (input: RequestInfo | URL, init: RequestInit = {}) => {
+  return ((input: RequestInfo | URL, init: RequestInit = {}) => {
     const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     let sameHost = false;
     try {
@@ -392,7 +407,7 @@ export function shareAuthorizedFetch(
     const headers = new Headers(init.headers);
     headers.set("Authorization", `Bearer ${token}`);
     return baseFetch(input, { ...init, headers });
-  };
+  }) as typeof fetch;
 }
 
 export interface SharedThumbnailResult {
@@ -421,7 +436,18 @@ export async function loadSharedProjectThumbnail(
 
   const base = requireShareBase(options.baseUrl);
   const authFetch = shareAuthorizedFetch(options.token, base, options.fetchImpl ?? getShareFetch());
-  const response = await authFetch(project.thumbnailUrl, { signal: options.signal });
+  const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  let response: Response;
+  try {
+    response = await authFetch(project.thumbnailUrl, { signal });
+  } catch (error) {
+    if (error instanceof DOMException) {
+      if (error.name === "AbortError") throw error;
+      if (error.name === "TimeoutError") throw new GalleryError("timeout");
+    }
+    throw new GalleryError("network");
+  }
   if (!response.ok) throw new GalleryError("http", response.status);
   const blob = await response.blob();
   return {
@@ -443,42 +469,10 @@ export async function loadSharedProjectThumbnail(
  */
 export async function fetchMyProjects(options: FetchMyProjectsOptions): Promise<SharedProject[]> {
   const base = requireShareBase(options.baseUrl);
-  // One auth path for both production and tests: the injected fetch (or the
-  // share fetch, which the desktop build routes natively to bypass CORS — see
-  // share-fetch.ts) flows through the same same-origin token gating.
-  const authFetch = shareAuthorizedFetch(options.token, base, options.fetchImpl ?? getShareFetch());
-
-  const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
-  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-
-  const request = async (path: string): Promise<unknown> => {
-    let response: Response;
-    try {
-      response = await authFetch(`${base}${path}`, {
-        headers: { Accept: "application/json" },
-        signal,
-      });
-    } catch (error) {
-      if (error instanceof DOMException) {
-        if (error.name === "AbortError") throw error;
-        if (error.name === "TimeoutError") throw new GalleryError("timeout");
-      }
-      throw new GalleryError("network");
-    }
-    if (response.status === 401 || response.status === 403) {
-      throw new GalleryError("unauthorized");
-    }
-    if (!response.ok) {
-      throw new GalleryError("http", response.status);
-    }
-    try {
-      return (await response.json()) as unknown;
-    } catch {
-      throw new GalleryError("invalid-response");
-    }
-  };
-
-  const me = (await request("/api/users/me")) as {
+  const me = (await shareAuthorizedJsonRequest("/api/users/me", options.token, base, {
+    signal: options.signal,
+    fetchImpl: options.fetchImpl,
+  })) as {
     user?: { username?: string | null };
   } | null;
   const username = me?.user?.username;
@@ -487,14 +481,32 @@ export async function fetchMyProjects(options: FetchMyProjectsOptions): Promise<
   }
 
   const pageSize = 100;
+  const maxPages = 1000;
   const rawProjects: RawSharedProject[] = [];
-  for (let offset = 0; ; offset += pageSize) {
-    const payload = (await request(
+  let previousPageIds: Set<string> | null = null;
+  for (let page = 0; page < maxPages; page++) {
+    const offset = page * pageSize;
+    const payload = (await shareAuthorizedJsonRequest(
       `/api/users/${encodeURIComponent(username)}/projects?limit=${pageSize}&offset=${offset}`,
+      options.token,
+      base,
+      { signal: options.signal, fetchImpl: options.fetchImpl },
     )) as { projects?: RawSharedProject[] } | null;
-    const page = Array.isArray(payload?.projects) ? payload.projects : [];
-    rawProjects.push(...page);
-    if (page.length < pageSize) break;
+    const items = Array.isArray(payload?.projects) ? payload.projects : [];
+    const currentIds = new Set(
+      items.map((p) => (p && typeof p.id === "string" ? p.id : "")).filter(Boolean),
+    );
+    if (
+      previousPageIds &&
+      currentIds.size > 0 &&
+      currentIds.size === previousPageIds.size &&
+      [...currentIds].every((id) => previousPageIds?.has(id))
+    ) {
+      break;
+    }
+    previousPageIds = currentIds;
+    rawProjects.push(...items);
+    if (items.length < pageSize) break;
   }
   return rawProjects
     .map((raw) => normalizeProject(raw, base))
@@ -584,30 +596,10 @@ export interface FetchGroupsOptions {
 /** Resolve the signed-in username so owner permissions hold across every gallery tab. */
 export async function fetchMyShareUsername(options: FetchMyProjectsOptions): Promise<string> {
   const base = requireShareBase(options.baseUrl);
-  const authFetch = shareAuthorizedFetch(options.token, base, options.fetchImpl ?? getShareFetch());
-  const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
-  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-  let response: Response;
-  try {
-    response = await authFetch(`${base}/api/users/me`, {
-      headers: { Accept: "application/json" },
-      signal,
-    });
-  } catch (error) {
-    if (error instanceof DOMException) {
-      if (error.name === "AbortError") throw error;
-      if (error.name === "TimeoutError") throw new GalleryError("timeout");
-    }
-    throw new GalleryError("network");
-  }
-  if (response.status === 401 || response.status === 403) throw new GalleryError("unauthorized");
-  if (!response.ok) throw new GalleryError("http", response.status);
-  let payload: { user?: { username?: unknown } } | null;
-  try {
-    payload = (await response.json()) as typeof payload;
-  } catch {
-    throw new GalleryError("invalid-response");
-  }
+  const payload = (await shareAuthorizedJsonRequest("/api/users/me", options.token, base, {
+    signal: options.signal,
+    fetchImpl: options.fetchImpl,
+  })) as { user?: { username?: unknown } } | null;
   if (typeof payload?.user?.username !== "string" || !payload.user.username) {
     throw new GalleryError("username-required");
   }
@@ -621,73 +613,50 @@ export async function fetchMyOrganizations(
   options: FetchOrganizationsOptions,
 ): Promise<ShareOrganization[]> {
   const base = requireShareBase(options.baseUrl);
-  const authFetch = shareAuthorizedFetch(options.token, base, options.fetchImpl ?? getShareFetch());
-
-  const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
-  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-
-  let response: Response;
-  try {
-    response = await authFetch(`${base}/api/organizations/mine`, {
-      headers: { Accept: "application/json" },
-      signal,
-    });
-  } catch (error) {
-    if (error instanceof DOMException) {
-      if (error.name === "AbortError") throw error;
-      if (error.name === "TimeoutError") throw new GalleryError("timeout");
-    }
-    throw new GalleryError("network");
-  }
-  if (response.status === 401 || response.status === 403) {
-    throw new GalleryError("unauthorized");
-  }
-  if (!response.ok) {
-    throw new GalleryError("http", response.status);
-  }
-  try {
-    const payload = (await response.json()) as {
-      organizations?: unknown[];
-    } | null;
-    const raw = Array.isArray(payload?.organizations) ? payload.organizations : [];
-    return raw
-      .map((o): ShareOrganization | null => {
-        if (!o || typeof o !== "object") return null;
-        const org = o as Record<string, unknown>;
-        if (
-          typeof org.id !== "string" ||
-          typeof org.slug !== "string" ||
-          typeof org.name !== "string"
-        ) {
-          return null;
-        }
-        return {
-          id: org.id,
-          slug: org.slug,
-          name: org.name,
-          publicSharingPolicy:
-            org.publicSharingPolicy === "yes" ||
-            org.publicSharingPolicy === "publishers" ||
-            org.publicSharingPolicy === "no"
-              ? org.publicSharingPolicy
-              : "yes",
-          defaultVisibility:
-            org.defaultVisibility === "public" ||
-            org.defaultVisibility === "unlisted" ||
-            org.defaultVisibility === "private" ||
-            org.defaultVisibility === "organization"
-              ? org.defaultVisibility
-              : "organization",
-          categories: Array.isArray(org.categories)
-            ? org.categories.filter((c): c is string => typeof c === "string")
-            : [],
-          role: typeof org.role === "string" ? org.role : null,
-        };
-      })
-      .filter((o): o is ShareOrganization => o !== null);
-  } catch {
-    throw new GalleryError("invalid-response");
-  }
+  const payload = (await shareAuthorizedJsonRequest(
+    "/api/organizations/mine",
+    options.token,
+    base,
+    { signal: options.signal, fetchImpl: options.fetchImpl },
+  )) as {
+    organizations?: unknown[];
+  } | null;
+  const raw = Array.isArray(payload?.organizations) ? payload.organizations : [];
+  return raw
+    .map((o): ShareOrganization | null => {
+      if (!o || typeof o !== "object") return null;
+      const org = o as Record<string, unknown>;
+      if (
+        typeof org.id !== "string" ||
+        typeof org.slug !== "string" ||
+        typeof org.name !== "string"
+      ) {
+        return null;
+      }
+      return {
+        id: org.id,
+        slug: org.slug,
+        name: org.name,
+        publicSharingPolicy:
+          org.publicSharingPolicy === "yes" ||
+          org.publicSharingPolicy === "publishers" ||
+          org.publicSharingPolicy === "no"
+            ? org.publicSharingPolicy
+            : "yes",
+        defaultVisibility:
+          org.defaultVisibility === "public" ||
+          org.defaultVisibility === "unlisted" ||
+          org.defaultVisibility === "private" ||
+          org.defaultVisibility === "organization"
+            ? org.defaultVisibility
+            : "organization",
+        categories: Array.isArray(org.categories)
+          ? org.categories.filter((c): c is string => typeof c === "string")
+          : [],
+        role: typeof org.role === "string" ? org.role : null,
+      };
+    })
+    .filter((o): o is ShareOrganization => o !== null);
 }
 
 /**
@@ -695,57 +664,34 @@ export async function fetchMyOrganizations(
  */
 export async function fetchMyGroups(options: FetchGroupsOptions): Promise<ShareGroup[]> {
   const base = requireShareBase(options.baseUrl);
-  const authFetch = shareAuthorizedFetch(options.token, base, options.fetchImpl ?? getShareFetch());
-
-  const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
-  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-
-  let response: Response;
-  try {
-    response = await authFetch(`${base}/api/groups/mine`, {
-      headers: { Accept: "application/json" },
-      signal,
-    });
-  } catch (error) {
-    if (error instanceof DOMException) {
-      if (error.name === "AbortError") throw error;
-      if (error.name === "TimeoutError") throw new GalleryError("timeout");
-    }
-    throw new GalleryError("network");
-  }
-  if (response.status === 401 || response.status === 403) {
-    throw new GalleryError("unauthorized");
-  }
-  if (!response.ok) {
-    throw new GalleryError("http", response.status);
-  }
-  try {
-    const payload = (await response.json()) as { groups?: unknown[] } | null;
-    const raw = Array.isArray(payload?.groups) ? payload.groups : [];
-    return raw
-      .map((g): ShareGroup | null => {
-        if (!g || typeof g !== "object") return null;
-        const group = g as Record<string, unknown>;
-        if (typeof group.id !== "string" || typeof group.name !== "string") {
-          return null;
-        }
-        return {
-          id: group.id,
-          name: group.name,
-          description: typeof group.description === "string" ? group.description : "",
-          organizationId: typeof group.organizationId === "string" ? group.organizationId : null,
-          joinPolicy:
-            group.joinPolicy === "invite" ||
-            group.joinPolicy === "request" ||
-            group.joinPolicy === "open"
-              ? group.joinPolicy
-              : "invite",
-          sharedUpdate: group.sharedUpdate === true,
-          role: typeof group.role === "string" ? group.role : null,
-        };
-      })
-      .filter((g): g is ShareGroup => g !== null);
-  } catch {
-    throw new GalleryError("invalid-response");
-  }
+  const payload = (await shareAuthorizedJsonRequest(
+    "/api/groups/mine",
+    options.token,
+    base,
+    { signal: options.signal, fetchImpl: options.fetchImpl },
+  )) as { groups?: unknown[] } | null;
+  const raw = Array.isArray(payload?.groups) ? payload.groups : [];
+  return raw
+    .map((g): ShareGroup | null => {
+      if (!g || typeof g !== "object") return null;
+      const group = g as Record<string, unknown>;
+      if (typeof group.id !== "string" || typeof group.name !== "string") {
+        return null;
+      }
+      return {
+        id: group.id,
+        name: group.name,
+        description: typeof group.description === "string" ? group.description : "",
+        organizationId: typeof group.organizationId === "string" ? group.organizationId : null,
+        joinPolicy:
+          group.joinPolicy === "invite" ||
+          group.joinPolicy === "request" ||
+          group.joinPolicy === "open"
+            ? group.joinPolicy
+            : "invite",
+        sharedUpdate: group.sharedUpdate === true,
+        role: typeof group.role === "string" ? group.role : null,
+      };
+    })
+    .filter((g): g is ShareGroup => g !== null);
 }

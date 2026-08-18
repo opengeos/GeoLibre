@@ -188,7 +188,7 @@ Routes:
   only. The creation response alone includes the opaque `token`.
 - `DELETE /api/organizations/{id}/invitations/{invitationId}` changes a pending
   invitation to `revoked`; administrator only.
-  `POST /api/organizations/invitations/{token}/accept` requires sign-in, verifies
+- `POST /api/organizations/invitations/{token}/accept` requires sign-in, verifies
   the account's username or email, adds the member with the invited role, and
   changes the invitation to `accepted`.
 - `GET /api/organizations/{id}/projects` returns the organization gallery. A
@@ -389,7 +389,7 @@ return the immutable project document itself.
 
 ### `PATCH /api/projects/{id}`
 
-Requires ownership. Accepted fields are `title`, `description`, `visibility`,
+Requires ownership, or organization administrator / active organization creator access for organization-owned projects. Accepted fields are `title`, `description`, `visibility`,
 `tags`, `organizationId`, and `groupIds`. Response: `{"project": <project>}`.
 
 ### `PUT /api/projects/{id}/content`

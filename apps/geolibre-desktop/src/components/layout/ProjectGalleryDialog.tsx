@@ -315,11 +315,10 @@ export function ProjectGalleryDialog({
     const controller = new AbortController();
     membershipAbortRef.current = controller;
     const fetchOptions = { token: trimmedToken, signal: controller.signal };
-    void Promise.all([fetchMyOrganizations(fetchOptions), fetchMyGroups(fetchOptions)])
-      .then(([orgs, grps]) => {
+    void fetchMyOrganizations(fetchOptions)
+      .then((orgs) => {
         if (controller.signal.aborted) return;
         setOrganizations(orgs);
-        setGroups(grps);
         if (defaultScopePendingRef.current) {
           setScope(orgs.length > 0 ? "organizations" : "featured");
           defaultScopePendingRef.current = false;
@@ -328,6 +327,14 @@ export function ProjectGalleryDialog({
       .catch(() => {
         if (controller.signal.aborted) return;
         setOrganizations([]);
+      });
+    void fetchMyGroups(fetchOptions)
+      .then((grps) => {
+        if (controller.signal.aborted) return;
+        setGroups(grps);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
         setGroups([]);
       });
     return () => {
@@ -609,7 +616,7 @@ function VisibilityBadge({ visibility }: { visibility: string }) {
       {isPrivate
         ? t("gallery.visibilityPrivate")
         : isOrganization
-          ? t("share.visibilityOrganization")
+          ? t("gallery.visibilityOrganization")
           : t("gallery.visibilityUnlisted")}
     </span>
   );

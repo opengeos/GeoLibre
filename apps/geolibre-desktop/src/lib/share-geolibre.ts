@@ -455,10 +455,19 @@ export async function fetchSharedProjectVersions(
   const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   const url = `${base}/api/projects/${encodeURIComponent(options.projectId)}/versions`;
-  const response = await (options.fetchImpl ?? getShareFetch())(url, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    signal,
-  });
+  let response: Response;
+  try {
+    response = await (options.fetchImpl ?? getShareFetch())(url, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException) {
+      if (error.name === "AbortError") throw error;
+      if (error.name === "TimeoutError") throw new Error("Load timed out. Please try again.");
+    }
+    throw new Error(`Could not reach ${hostOf(base)}. Check your internet connection.`);
+  }
   if (!response.ok) {
     const { message } = await uploadErrorInfo(response);
     throw new Error(message);

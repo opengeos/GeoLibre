@@ -421,6 +421,23 @@ describe("updateSharedProjectContent", () => {
     });
     assert.equal(result.warning, null);
   });
+
+  it("rejects with ShareUploadError when the server returns a non-ok status", async () => {
+    const { fn } = fakeFetch(400, { error: "Version conflict detected" });
+    await assert.rejects(
+      () =>
+        updateSharedProjectContent({
+          token: "glb_secrettoken",
+          projectId: "project-1",
+          content: baseArgs.content,
+          expectedVersion: 2,
+          baseUrl: baseArgs.baseUrl,
+          fetchImpl: fn,
+        }),
+      (err: unknown) =>
+        err instanceof ShareUploadError && /Version conflict detected/.test(err.message),
+    );
+  });
 });
 
 describe("sharedProjectContentMatches", () => {
@@ -468,6 +485,34 @@ describe("fetchSharedProjectVersions", () => {
         [3, `${BASE}/api/projects/project%2Fid/versions/3`],
         [1, `${BASE}/api/projects/project%2Fid/versions/1`],
       ],
+    );
+  });
+
+  it("rejects when the versions payload is not an array", async () => {
+    const { fn } = fakeFetch(200, { versions: "invalid" });
+    await assert.rejects(
+      () =>
+        fetchSharedProjectVersions({
+          token: "glb_secrettoken",
+          projectId: "project/id",
+          baseUrl: BASE,
+          fetchImpl: fn,
+        }),
+      /unexpected response/i,
+    );
+  });
+
+  it("surfaces the server error message for non-ok responses", async () => {
+    const { fn } = fakeFetch(404, { error: "Project history not found" });
+    await assert.rejects(
+      () =>
+        fetchSharedProjectVersions({
+          token: "glb_secrettoken",
+          projectId: "project/id",
+          baseUrl: BASE,
+          fetchImpl: fn,
+        }),
+      /Project history not found/,
     );
   });
 });
