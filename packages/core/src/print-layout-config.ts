@@ -292,13 +292,27 @@ function legendEntries(
 ): PrintLayoutLegendEntry[] {
   if (!Array.isArray(value)) return fallback.map((entry) => ({ ...entry }));
   const entries: PrintLayoutLegendEntry[] = [];
+  // The editor keys its swatch rows by id, so two entries sharing one would
+  // make an edit to either apply to both. A hand-edited file can omit an id or
+  // repeat one, so ids are made unique here rather than trusted.
+  const used = new Set<string>();
   for (const [index, item] of value.entries()) {
     if (!item || typeof item !== "object" || Array.isArray(item)) continue;
     const entry = item as Partial<PrintLayoutLegendEntry>;
-    // A hand-edited file can omit the id; synthesize one rather than drop an
-    // otherwise usable swatch, since ids are internal to the editor list.
+    const given = typeof entry.id === "string" ? entry.id.trim() : "";
+    let id = given;
+    if (!id || used.has(id)) {
+      // Synthesize past whatever is already taken, including ids claimed later
+      // in the array, so the fallback cannot collide with an explicit one.
+      let candidate = index + 1;
+      while (used.has(`cl-${candidate}`) || claimsId(value, index, `cl-${candidate}`)) {
+        candidate += 1;
+      }
+      id = `cl-${candidate}`;
+    }
+    used.add(id);
     entries.push({
-      id: typeof entry.id === "string" && entry.id.trim() ? entry.id : `cl-${index + 1}`,
+      id,
       label: str(entry.label, ""),
       color: str(entry.color, "#2563eb"),
     });
@@ -306,10 +320,25 @@ function legendEntries(
   return entries;
 }
 
+/** Whether any entry after `index` explicitly carries `id`. */
+function claimsId(value: unknown[], index: number, id: string): boolean {
+  for (let i = index + 1; i < value.length; i += 1) {
+    const item = value[i];
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const candidate = (item as Partial<PrintLayoutLegendEntry>).id;
+    if (typeof candidate === "string" && candidate.trim() === id) return true;
+  }
+  return false;
+}
+
 function extent(value: unknown): [number, number, number, number] | null {
   if (!Array.isArray(value) || value.length !== 4) return null;
   if (!value.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
   const [west, south, east, north] = value as number[];
+  // The draw tool orders its corners, so an inverted or zero-area box only
+  // reaches here from a hand-edited file; capturing it would produce an empty
+  // image, so treat it as unset (mirrors `normalizeBounds` in project.ts).
+  if (west >= east || south >= north) return null;
   return [west, south, east, north];
 }
 
@@ -344,7 +373,9 @@ export function normalizePrintLayoutConfig(value: unknown): PrintLayoutConfig | 
     pageMargin: oneOf(raw.pageMargin, ["normal", "narrow", "none"] as const, d.pageMargin),
     showPageBorder: bool(raw.showPageBorder, d.showPageBorder),
     pageBorderColor: str(raw.pageBorderColor, d.pageBorderColor),
-    pageBorderWidth: num(raw.pageBorderWidth, d.pageBorderWidth, 0, 20),
+    // A page border is drawn only when `showPageBorder` is on, so a zero width
+    // would be an invisible "visible" border; the editor's own floor is 1.
+    pageBorderWidth: num(raw.pageBorderWidth, d.pageBorderWidth, 1, 20),
 
     mapBorderColor: str(raw.mapBorderColor, d.mapBorderColor),
     mapBorderWidth: num(raw.mapBorderWidth, d.mapBorderWidth, 0, 10),

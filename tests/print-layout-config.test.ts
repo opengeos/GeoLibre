@@ -118,6 +118,34 @@ describe("normalizePrintLayoutConfig", () => {
     ]);
   });
 
+  it("keeps synthesized legend ids clear of ids claimed elsewhere in the array", () => {
+    // The editor keys swatch rows by id, so a duplicate would make an edit to
+    // one row apply to the other. The entry missing an id would otherwise be
+    // synthesized as "cl-1", which the second entry already claims.
+    const config = normalizePrintLayoutConfig({
+      customLegendEntries: [
+        { label: "First", color: "#111111" },
+        { id: "cl-1", label: "Second", color: "#222222" },
+      ],
+    });
+    assert.deepEqual(
+      config?.customLegendEntries.map((entry) => entry.id),
+      ["cl-2", "cl-1"],
+    );
+
+    // A file that simply repeats an id gets the later one renamed.
+    const repeated = normalizePrintLayoutConfig({
+      customLegendEntries: [
+        { id: "cl-3", label: "A", color: "#111111" },
+        { id: "cl-3", label: "B", color: "#222222" },
+      ],
+    });
+    assert.deepEqual(
+      repeated?.customLegendEntries.map((entry) => entry.id),
+      ["cl-3", "cl-2"],
+    );
+  });
+
   it("drops a malformed print extent rather than drawing from it", () => {
     assert.equal(normalizePrintLayoutConfig({ extentBbox: [1, 2, 3] })?.extentBbox, null);
     assert.equal(normalizePrintLayoutConfig({ extentBbox: [1, 2, "3", 4] })?.extentBbox, null);
@@ -125,6 +153,18 @@ describe("normalizePrintLayoutConfig", () => {
       normalizePrintLayoutConfig({ extentBbox: [1, 2, 3, 4] })?.extentBbox,
       [1, 2, 3, 4],
     );
+  });
+
+  it("drops an inverted or zero-area extent, which would capture nothing", () => {
+    assert.equal(normalizePrintLayoutConfig({ extentBbox: [9, 2, 1, 4] })?.extentBbox, null);
+    assert.equal(normalizePrintLayoutConfig({ extentBbox: [1, 9, 3, 4] })?.extentBbox, null);
+    assert.equal(normalizePrintLayoutConfig({ extentBbox: [1, 2, 1, 4] })?.extentBbox, null);
+    assert.equal(normalizePrintLayoutConfig({ extentBbox: [1, 2, 3, 2] })?.extentBbox, null);
+  });
+
+  it("keeps a page border at a width that actually draws", () => {
+    assert.equal(normalizePrintLayoutConfig({ pageBorderWidth: 0 })?.pageBorderWidth, 1);
+    assert.equal(normalizePrintLayoutConfig({ pageBorderWidth: 4 })?.pageBorderWidth, 4);
   });
 
   it("filters non-string table columns", () => {
