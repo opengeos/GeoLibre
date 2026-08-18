@@ -549,10 +549,13 @@ function ModelPanel({ mapControllerRef }: ModelBuilderDialogProps): ReactElement
     const json = JSON.stringify(modelToPipeline(draft), null, 2);
     const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
     const anchor = document.createElement("a");
+    // Keep Unicode letters/digits: an ASCII-only slug empties out for a model
+    // named in any of the non-Latin scripts this app ships locales for, so the
+    // export silently falls back to the generic name.
     const slug = draft.name
       .trim()
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/[^\p{L}\p{N}]+/gu, "-")
       .replace(/^-|-$/g, "");
     anchor.href = url;
     anchor.download = `${slug || "pipeline"}.pipeline.json`;
