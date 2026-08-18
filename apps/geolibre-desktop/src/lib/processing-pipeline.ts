@@ -113,5 +113,7 @@ export function pipelineToModel(value: unknown, createId: () => string): Process
     parameters: { ...node.params },
     ...(node.inputParam ? { inputParam: node.inputParam } : {}),
   }));
-  return { id: createId(), name: String(pipeline.name || "Imported model"), steps };
+  const name =
+    typeof pipeline.name === "string" && pipeline.name ? pipeline.name : "Imported model";
+  return { id: createId(), name, steps };
 }
