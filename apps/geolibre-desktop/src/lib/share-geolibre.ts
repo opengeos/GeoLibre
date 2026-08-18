@@ -15,7 +15,8 @@ import {
 import { readDeploymentEnvValue, type EnvRecord } from "./deployment-env";
 import { getShareFetch } from "./share-fetch";
 
-export type ShareVisibility = "public" | "unlisted" | "private";
+/** `organization` is readable by every signed-in member of the owning organization. */
+export type ShareVisibility = "public" | "unlisted" | "private" | "organization";
 
 /**
  * Machine-readable cause for an upload failure the dialog can react to. Only
@@ -62,10 +63,46 @@ export interface ShareUploadOptions {
   filename: string;
   content: string;
   visibility: ShareVisibility;
+  /** Optional owning organization. Required by the server for `organization` visibility. */
+  organizationId?: string;
+  /** Groups that may read this project even when it is private. */
+  groupIds?: string[];
   /** Override the share host; defaults to the configured/production URL. */
   baseUrl?: string;
   signal?: AbortSignal;
   /** Injected for testing; defaults to the share fetch (see share-fetch.ts). */
+  fetchImpl?: typeof fetch;
+}
+
+export interface SharedProjectUpdateOptions {
+  token: string;
+  projectId: string;
+  content: string;
+  expectedVersion: number;
+  baseUrl?: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}
+
+export interface SharedProjectUpdateResult {
+  version: number;
+  versionCount: number;
+  warning: string | null;
+  /** Exact sanitized project content sent in the PUT request. */
+  savedContent: string;
+}
+
+export interface SharedProjectVersion {
+  number: number;
+  createdAt: string;
+  rawUrl: string;
+}
+
+export interface FetchSharedProjectVersionsOptions {
+  token: string;
+  projectId: string;
+  baseUrl?: string;
+  signal?: AbortSignal;
   fetchImpl?: typeof fetch;
 }
 
@@ -97,6 +134,20 @@ export function isShareableTitle(title: string): boolean {
     trimmed.length <= MAX_PROJECT_TITLE_LENGTH &&
     trimmed !== DEFAULT_PROJECT_TITLE
   );
+}
+
+/** Canonicalize and redact project content exactly as the share write path does. */
+export function sanitizeSharedProjectContent(content: string): string {
+  return serializeProject(redactCredentials(parseProject(content)));
+}
+
+/** True only when the live project still equals the exact content sent remotely. */
+export function sharedProjectContentMatches(savedContent: string, liveContent: string): boolean {
+  try {
+    return sanitizeSharedProjectContent(savedContent) === sanitizeSharedProjectContent(liveContent);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -166,7 +217,11 @@ export function resolveShareHost(configured?: unknown, deploymentEnv?: EnvRecord
   const raw =
     configured !== undefined ? configured : readDeploymentEnvValue(SHARE_URL_ENV, deploymentEnv);
   if (typeof raw !== "string" || !raw.trim()) {
-    return { status: "default", baseUrl: DEFAULT_SHARE_BASE_URL, configured: null };
+    return {
+      status: "default",
+      baseUrl: DEFAULT_SHARE_BASE_URL,
+      configured: null,
+    };
   }
   const trimmed = raw.trim().replace(/\/+$/, "");
   if (trimmed.toLowerCase() === SHARE_DISABLED_VALUE) {
@@ -268,7 +323,7 @@ export async function uploadProjectToShare(
 
   let safeContent: string;
   try {
-    safeContent = serializeProject(redactCredentials(parseProject(options.content)));
+    safeContent = sanitizeSharedProjectContent(options.content);
   } catch {
     throw new Error("The project could not be validated before sharing.");
   }
@@ -285,6 +340,8 @@ export async function uploadProjectToShare(
         filename: options.filename,
         content: safeContent,
         visibility: options.visibility,
+        ...(options.organizationId ? { organizationId: options.organizationId } : {}),
+        ...(options.groupIds?.length ? { groupIds: options.groupIds } : {}),
       }),
       signal,
     });
@@ -318,6 +375,119 @@ export async function uploadProjectToShare(
   };
 }
 
+/** Save a new version of an editable project already hosted by the share server. */
+export async function updateSharedProjectContent(
+  options: SharedProjectUpdateOptions,
+): Promise<SharedProjectUpdateResult> {
+  const token = options.token.trim();
+  if (!token) throw new Error("Add a share API token in Settings before saving.");
+  const resolved = options.baseUrl ?? resolveShareBaseUrl();
+  if (!resolved) throw new Error("No share server is configured for this deployment.");
+  const base = resolved.replace(/\/+$/, "");
+  const fetchImpl = options.fetchImpl ?? getShareFetch();
+  const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+
+  let safeContent: string;
+  try {
+    safeContent = sanitizeSharedProjectContent(options.content);
+  } catch {
+    throw new Error("The project could not be validated before saving.");
+  }
+
+  let response: Response;
+  try {
+    response = await fetchImpl(
+      `${base}/api/projects/${encodeURIComponent(options.projectId)}/content`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          content: safeContent,
+          expectedVersion: options.expectedVersion,
+        }),
+        signal,
+      },
+    );
+  } catch (error) {
+    if (error instanceof DOMException) {
+      if (error.name === "AbortError") throw error;
+      if (error.name === "TimeoutError") throw new Error("Save timed out. Please try again.");
+    }
+    throw new Error(`Could not reach ${hostOf(base)}. Check your internet connection.`);
+  }
+  if (!response.ok) {
+    const { message, code } = await uploadErrorInfo(response);
+    throw new ShareUploadError(message, code);
+  }
+  const payload = (await response.json().catch(() => null)) as {
+    project?: { versionCount?: unknown };
+    version?: unknown;
+    warning?: unknown;
+  } | null;
+  if (typeof payload?.version !== "number" || !Number.isFinite(payload.version)) {
+    throw new Error(`${hostOf(base)} returned an unexpected response.`);
+  }
+  return {
+    version: payload.version,
+    versionCount:
+      typeof payload.project?.versionCount === "number" &&
+      Number.isFinite(payload.project.versionCount)
+        ? payload.project.versionCount
+        : payload.version,
+    warning: typeof payload.warning === "string" && payload.warning ? payload.warning : null,
+    savedContent: safeContent,
+  };
+}
+
+/** Fetch the authoritative version history retained by the share server. */
+export async function fetchSharedProjectVersions(
+  options: FetchSharedProjectVersionsOptions,
+): Promise<SharedProjectVersion[]> {
+  const token = options.token.trim();
+  if (!token) throw new Error("Add a share API token in Settings before loading versions.");
+  const resolved = options.baseUrl ?? resolveShareBaseUrl();
+  if (!resolved) throw new Error("No share server is configured for this deployment.");
+  const base = resolved.replace(/\/+$/, "");
+  const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  const url = `${base}/api/projects/${encodeURIComponent(options.projectId)}/versions`;
+  const response = await (options.fetchImpl ?? getShareFetch())(url, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    const { message } = await uploadErrorInfo(response);
+    throw new Error(message);
+  }
+  const payload = (await response.json().catch(() => null)) as { versions?: unknown } | null;
+  if (!Array.isArray(payload?.versions)) {
+    throw new Error(`${hostOf(base)} returned an unexpected response.`);
+  }
+  return payload.versions
+    .map((value): SharedProjectVersion | null => {
+      if (!value || typeof value !== "object") return null;
+      const raw = value as Record<string, unknown>;
+      const number =
+        typeof raw.number === "number"
+          ? raw.number
+          : typeof raw.version === "number"
+            ? raw.version
+            : null;
+      if (number === null || !Number.isFinite(number)) return null;
+      return {
+        number,
+        createdAt: typeof raw.createdAt === "string" ? raw.createdAt : "",
+        rawUrl: `${url}/${number}`,
+      };
+    })
+    .filter((version): version is SharedProjectVersion => version !== null)
+    .sort((a, b) => b.number - a.number);
+}
+
 async function uploadErrorInfo(
   response: Response,
 ): Promise<{ message: string; code?: ShareUploadErrorCode }> {
@@ -330,7 +500,9 @@ async function uploadErrorInfo(
   if (response.status === 429) {
     return { message: "Too many uploads. Please wait a while and try again." };
   }
-  const body = (await response.json().catch(() => null)) as { error?: string } | null;
+  const body = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
   // Cap the server-provided string so a misconfigured host or MITM on a
   // non-HTTPS share URL cannot render a wall of text in the dialog. Slice by
   // code point so the cap can't orphan a UTF-16 surrogate pair.

@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  fetchMyGroups,
+  fetchMyOrganizations,
   fetchMyProjects,
+  fetchMyShareUsername,
+  fetchProjectsSharedWithMe,
   fetchSharedProjects,
   GalleryError,
+  isPublicSharingBlocked,
+  isProjectInMyGroups,
+  isProjectInMyOrganizations,
+  loadSharedProjectThumbnail,
   projectOpenToken,
+  publicSharingRestriction,
   resolveThumbnailUrl,
   shareAuthorizedFetch,
 } from "../apps/geolibre-desktop/src/lib/share-gallery";
@@ -78,6 +87,18 @@ describe("fetchSharedProjects", () => {
     assert.equal(projects[0].views, 7);
     assert.deepEqual(projects[0].tags, ["water", "ocean"]);
     assert.equal(projects[0].thumbnailUrl, `${BASE}/api/thumbnails/abc-123?v=1`);
+    assert.equal(projects[0].canEdit, false);
+  });
+
+  it("uses authoritative canEdit metadata and defaults missing values to false", async () => {
+    const { fn } = fakeFetch(200, {
+      projects: [rawProject({ id: "editable", canEdit: true }), rawProject({ id: "safe" })],
+    });
+    const { projects } = await fetchSharedProjects({ baseUrl: BASE, fetchImpl: fn });
+    assert.deepEqual(
+      projects.map((project) => project.canEdit),
+      [true, false],
+    );
   });
 
   it("sends limit and offset as query params", async () => {
@@ -101,7 +122,11 @@ describe("fetchSharedProjects", () => {
 
   it("adds featured=true only when requested", async () => {
     const plain = fakeFetch(200, { projects: [] });
-    await fetchSharedProjects({ baseUrl: BASE, limit: 10, fetchImpl: plain.fn });
+    await fetchSharedProjects({
+      baseUrl: BASE,
+      limit: 10,
+      fetchImpl: plain.fn,
+    });
     assert.ok(!plain.calls[0].includes("featured"));
 
     const feat = fakeFetch(200, { projects: [] });
@@ -249,6 +274,28 @@ describe("fetchMyProjects", () => {
     assert.ok(auth.every((a) => a === "Bearer glb_tok"));
   });
 
+  it("loads every page instead of silently stopping at the server default", async () => {
+    const offsets: string[] = [];
+    const fn = (async (url: string) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === "/api/users/me") {
+        return new Response(JSON.stringify({ user: { username: "giswqs" } }));
+      }
+      offsets.push(parsed.searchParams.get("offset") ?? "");
+      const offset = Number(parsed.searchParams.get("offset"));
+      const projects =
+        offset === 0
+          ? Array.from({ length: 100 }, (_, index) => rawProject({ id: `p${index}` }))
+          : [rawProject({ id: "p100" })];
+      return new Response(JSON.stringify({ projects }));
+    }) as typeof fetch;
+
+    const projects = await fetchMyProjects({ token: "glb_tok", baseUrl: BASE, fetchImpl: fn });
+
+    assert.equal(projects.length, 101);
+    assert.deepEqual(offsets, ["0", "100"]);
+  });
+
   it("throws a 'username-required' GalleryError when the account has no username", async () => {
     const { fn } = routedFetch({
       "/api/users/me": { status: 200, body: { user: { username: null } } },
@@ -267,6 +314,164 @@ describe("fetchMyProjects", () => {
       () => fetchMyProjects({ token: "bad", baseUrl: BASE, fetchImpl: fn }),
       (err: unknown) => err instanceof GalleryError && err.code === "unauthorized",
     );
+  });
+});
+
+describe("authenticated sharing APIs", () => {
+  it("paginates shared_with_me with the bearer token", async () => {
+    const seen: { url: string; auth: string | null }[] = [];
+    const fn = (async (url: string, init: RequestInit = {}) => {
+      seen.push({ url, auth: new Headers(init.headers).get("Authorization") });
+      return new Response(
+        JSON.stringify({
+          projects: [rawProject({ visibility: "organization" })],
+          total: 3,
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+    const result = await fetchProjectsSharedWithMe({
+      token: "glb_tok",
+      source: "organizations",
+      baseUrl: BASE,
+      limit: 1,
+      offset: 1,
+      fetchImpl: fn,
+    });
+    const url = new URL(seen[0].url);
+    assert.equal(url.searchParams.get("shared_with_me"), "true");
+    assert.equal(url.searchParams.get("shared_source"), "organizations");
+    assert.equal(url.searchParams.get("limit"), "1");
+    assert.equal(url.searchParams.get("offset"), "1");
+    assert.equal(seen[0].auth, "Bearer glb_tok");
+    assert.equal(result.hasMore, true);
+    assert.equal(result.rawCount, 1);
+  });
+
+  it("normalizes organization and group memberships", async () => {
+    const { fn } = routedFetch({
+      "/api/organizations/mine": {
+        status: 200,
+        body: {
+          organizations: [
+            {
+              id: "org-1",
+              slug: "maps",
+              name: "Maps",
+              role: "publisher",
+              publicSharingPolicy: "publishers",
+              defaultVisibility: "private",
+            },
+          ],
+        },
+      },
+      "/api/groups/mine": {
+        status: 200,
+        body: {
+          groups: [{ id: "group-1", name: "Editors", sharedUpdate: true }],
+        },
+      },
+    });
+    const options = { token: "glb_tok", baseUrl: BASE, fetchImpl: fn };
+    const [organizations, groups] = await Promise.all([
+      fetchMyOrganizations(options),
+      fetchMyGroups(options),
+    ]);
+    assert.equal(organizations[0].defaultVisibility, "private");
+    assert.equal(organizations[0].role, "publisher");
+    assert.equal(groups[0].sharedUpdate, true);
+  });
+
+  it("resolves the current username for owner permissions in shared tabs", async () => {
+    const { fn } = routedFetch({
+      "/api/users/me": { status: 200, body: { user: { username: "giswqs" } } },
+    });
+    assert.equal(
+      await fetchMyShareUsername({ token: "glb_tok", baseUrl: BASE, fetchImpl: fn }),
+      "giswqs",
+    );
+  });
+});
+
+describe("shared project membership logic", () => {
+  const organization = {
+    id: "org-1",
+    slug: "maps",
+    name: "Maps",
+    publicSharingPolicy: "publishers" as const,
+    defaultVisibility: "organization" as const,
+    categories: [],
+    role: "member",
+  };
+  const group = {
+    id: "group-1",
+    name: "Editors",
+    description: "",
+    organizationId: "org-1",
+    joinPolicy: "invite" as const,
+    sharedUpdate: true,
+    role: "member",
+  };
+  const project = {
+    organization: { id: "org-1", slug: "maps", name: "Maps" },
+    groupIds: ["group-1"],
+  };
+
+  it("filters organization and group tabs by actual memberships", () => {
+    assert.equal(isProjectInMyOrganizations(project, [organization]), true);
+    assert.equal(isProjectInMyGroups(project, [group]), true);
+    assert.equal(isProjectInMyGroups(project, [{ ...group, id: "other" }]), false);
+  });
+
+  it("blocks only public organization sharing when policy denies it", () => {
+    assert.equal(publicSharingRestriction(null), null);
+    assert.equal(publicSharingRestriction(organization), "publisher-required");
+    assert.equal(publicSharingRestriction({ ...organization, role: "publisher" }), null);
+    assert.equal(
+      publicSharingRestriction({ ...organization, publicSharingPolicy: "no" }),
+      "organization-disabled",
+    );
+    assert.equal(
+      publicSharingRestriction({
+        ...organization,
+        role: "administrator",
+        publicSharingPolicy: "no",
+      }),
+      null,
+    );
+    assert.equal(isPublicSharingBlocked("public", organization), true);
+    for (const visibility of ["organization", "private", "unlisted"]) {
+      assert.equal(isPublicSharingBlocked(visibility, organization), false);
+    }
+  });
+});
+
+describe("loadSharedProjectThumbnail", () => {
+  it("keeps public and unlisted thumbnails as direct URLs", async () => {
+    const result = await loadSharedProjectThumbnail(
+      { thumbnailUrl: `${BASE}/thumb.png`, visibility: "public" },
+      { token: "glb_tok", fetchImpl: () => assert.fail("must not fetch") },
+    );
+    assert.deepEqual(result, { url: `${BASE}/thumb.png`, objectUrl: false });
+  });
+
+  it("fetches protected thumbnails with authorization and returns an object URL", async () => {
+    let authorization: string | null = null;
+    const fetchImpl = (async (_url: string, init: RequestInit = {}) => {
+      authorization = new Headers(init.headers).get("Authorization");
+      return new Response(new Blob(["image"]), { status: 200 });
+    }) as typeof fetch;
+    const result = await loadSharedProjectThumbnail(
+      { thumbnailUrl: `${BASE}/api/projects/private/thumbnail`, visibility: "private" },
+      {
+        token: "glb_tok",
+        baseUrl: BASE,
+        fetchImpl,
+        createObjectUrl: () => "blob:test-thumbnail",
+      },
+    );
+    assert.equal(authorization, "Bearer glb_tok");
+    assert.deepEqual(result, { url: "blob:test-thumbnail", objectUrl: true });
   });
 });
 
@@ -359,6 +564,10 @@ describe("projectOpenToken", () => {
 
   it("sends the token for private projects, which are owner-only", () => {
     assert.equal(projectOpenToken({ visibility: "private" }, "glb_tok"), "glb_tok");
+  });
+
+  it("sends the token for organization projects", () => {
+    assert.equal(projectOpenToken({ visibility: "organization" }, "glb_tok"), "glb_tok");
   });
 
   it("sends nothing when there is no token to send", () => {

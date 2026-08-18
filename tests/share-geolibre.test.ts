@@ -4,13 +4,16 @@ import { createEmptyProject, serializeProject } from "@geolibre/core";
 import {
   DEFAULT_PROJECT_TITLE,
   DEFAULT_SHARE_BASE_URL,
+  fetchSharedProjectVersions,
   isShareableTitle,
   MAX_PROJECT_TITLE_LENGTH,
   resolveShareBaseUrl,
   resolveShareHost,
   SHARE_URL_ENV,
+  sharedProjectContentMatches,
   shareHostLabel,
   ShareUploadError,
+  updateSharedProjectContent,
   uploadProjectToShare,
 } from "../apps/geolibre-desktop/src/lib/share-geolibre";
 
@@ -21,6 +24,7 @@ const PROJECT_DTO = {
   viewerUrl: "https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/my-map.geolibre.json",
   rawJsonUrl: "https://share.geolibre.app/giswqs/my-map.geolibre.json",
 };
+const BASE = "https://share.geolibre.app";
 
 function fakeFetch(
   status: number,
@@ -260,6 +264,23 @@ describe("uploadProjectToShare", () => {
     assert.equal(result.rawJsonUrl, PROJECT_DTO.rawJsonUrl);
   });
 
+  it("sends organization ownership and additive group shares", async () => {
+    const { fn, calls } = fakeFetch(201, { project: PROJECT_DTO });
+    await uploadProjectToShare({
+      ...baseArgs,
+      visibility: "organization",
+      organizationId: "org-1",
+      groupIds: ["group-1", "group-2"],
+      fetchImpl: fn,
+    });
+    const body = JSON.parse(String(calls[0].init.body)) as {
+      organizationId: string;
+      groupIds: string[];
+    };
+    assert.equal(body.organizationId, "org-1");
+    assert.deepEqual(body.groupIds, ["group-1", "group-2"]);
+  });
+
   it("maps 401 to an invalid-token message", async () => {
     const { fn } = fakeFetch(401, { error: "Unauthorized" });
     await assert.rejects(
@@ -354,5 +375,99 @@ describe("uploadProjectToShare", () => {
     assert.equal(result.username, "");
     assert.equal(result.slug, "");
     assert.equal(result.viewerUrl, "");
+  });
+});
+
+describe("updateSharedProjectContent", () => {
+  it("PUTs content with expectedVersion and returns a stale-version warning", async () => {
+    const { fn, calls } = fakeFetch(201, {
+      project: { versionCount: 4 },
+      version: 4,
+      warning: "version conflict",
+    });
+    const result = await updateSharedProjectContent({
+      token: "glb_secrettoken",
+      projectId: "project/id",
+      content: baseArgs.content,
+      expectedVersion: 2,
+      baseUrl: baseArgs.baseUrl,
+      fetchImpl: fn,
+    });
+    assert.equal(calls[0].url, "https://share.geolibre.app/api/projects/project%2Fid/content");
+    assert.equal(calls[0].init.method, "PUT");
+    assert.equal(
+      (calls[0].init.headers as Record<string, string>).Authorization,
+      "Bearer glb_secrettoken",
+    );
+    const body = JSON.parse(String(calls[0].init.body)) as {
+      content: string;
+      expectedVersion: number;
+    };
+    assert.equal(body.expectedVersion, 2);
+    assert.equal(result.versionCount, 4);
+    assert.equal(result.warning, "version conflict");
+    assert.equal(result.savedContent, body.content);
+  });
+
+  it("returns no warning after an ordinary update", async () => {
+    const { fn } = fakeFetch(201, { project: { versionCount: 3 }, version: 3 });
+    const result = await updateSharedProjectContent({
+      token: "glb_secrettoken",
+      projectId: "project-1",
+      content: baseArgs.content,
+      expectedVersion: 2,
+      baseUrl: baseArgs.baseUrl,
+      fetchImpl: fn,
+    });
+    assert.equal(result.warning, null);
+  });
+});
+
+describe("sharedProjectContentMatches", () => {
+  it("matches canonical sanitized content but detects edits made during a save", () => {
+    const sent = createEmptyProject("Remote map");
+    sent.preferences.geocoding.apiKeys.mapbox = "secret-a";
+    const same = structuredClone(sent);
+    same.preferences.geocoding.apiKeys.mapbox = "secret-b";
+    assert.equal(sharedProjectContentMatches(serializeProject(sent), serializeProject(same)), true);
+
+    same.name = "Edited while saving";
+    assert.equal(
+      sharedProjectContentMatches(serializeProject(sent), serializeProject(same)),
+      false,
+    );
+  });
+
+  it("fails safely for invalid live content", () => {
+    assert.equal(sharedProjectContentMatches(baseArgs.content, "not json"), false);
+  });
+});
+
+describe("fetchSharedProjectVersions", () => {
+  it("fetches, normalizes, and sorts authoritative server versions", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      versions: [
+        { number: 1, createdAt: "2026-01-01T00:00:00Z" },
+        { version: 3, createdAt: "2026-01-03T00:00:00Z" },
+      ],
+    });
+    const versions = await fetchSharedProjectVersions({
+      token: "glb_secrettoken",
+      projectId: "project/id",
+      baseUrl: BASE,
+      fetchImpl: fn,
+    });
+    assert.equal(calls[0].url, `${BASE}/api/projects/project%2Fid/versions`);
+    assert.equal(
+      (calls[0].init.headers as Record<string, string>).Authorization,
+      "Bearer glb_secrettoken",
+    );
+    assert.deepEqual(
+      versions.map((version) => [version.number, version.rawUrl]),
+      [
+        [3, `${BASE}/api/projects/project%2Fid/versions/3`],
+        [1, `${BASE}/api/projects/project%2Fid/versions/1`],
+      ],
+    );
   });
 });

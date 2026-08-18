@@ -19,6 +19,8 @@ import {
   Search,
   Star,
   User,
+  UserPlus,
+  Users,
 } from "lucide-react";
 import {
   useCallback,
@@ -33,15 +35,21 @@ import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { openExternalLink } from "../../lib/open-external";
 import {
   fetchMyProjects,
+  fetchMyGroups,
+  fetchMyOrganizations,
+  fetchProjectsSharedWithMe,
   fetchSharedProjects,
   GalleryError,
+  loadSharedProjectThumbnail,
   projectOpenToken,
   type SharedProject,
+  type ShareOrganization,
+  type ShareGroup,
 } from "../../lib/share-gallery";
-import { shareHostLabel } from "../../lib/share-geolibre";
+import { resolveShareBaseUrl, shareHostLabel } from "../../lib/share-geolibre";
 import type { TFunction } from "i18next";
 
-type GalleryScope = "featured" | "all" | "mine";
+type GalleryScope = "featured" | "all" | "mine" | "organizations" | "groups";
 
 interface ProjectGalleryDialogProps {
   open: boolean;
@@ -55,7 +63,16 @@ interface ProjectGalleryDialogProps {
   onOpenProject: (
     rawJsonUrl: string,
     authToken?: string,
-    options?: { asCopy?: boolean },
+    options?: {
+      asCopy?: boolean;
+      remoteProject?: {
+        id: string;
+        versionCount: number;
+        canEdit: boolean;
+        token: string;
+        baseUrl: string;
+      };
+    },
   ) => Promise<void>;
 }
 
@@ -84,7 +101,9 @@ function galleryErrorMessage(error: unknown, t: TFunction): string {
       case "unauthorized":
         return t("gallery.errorUnauthorized", { shareHost: shareHostLabel() });
       case "username-required":
-        return t("gallery.errorUsernameRequired", { shareHost: shareHostLabel() });
+        return t("gallery.errorUsernameRequired", {
+          shareHost: shareHostLabel(),
+        });
       case "not-configured":
         return t("gallery.errorNotConfigured");
       case "http":
@@ -120,15 +139,22 @@ export function ProjectGalleryDialog({
   // otherwise undershoot the offset and re-deliver already-seen entries).
   const [rawOffset, setRawOffset] = useState(0);
   const [query, setQuery] = useState("");
-  const [openingState, setOpeningState] = useState<{ id: string; action: "open" | "copy" } | null>(
-    null,
-  );
+  const [openingState, setOpeningState] = useState<{
+    id: string;
+    action: "open" | "copy";
+  } | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const membershipAbortRef = useRef<AbortController | null>(null);
+  const defaultScopePendingRef = useRef(true);
 
-  // Without a token, the "My projects" scope isn't available; fall back to the
-  // featured tab.
-  const effectiveScope: GalleryScope = scope === "mine" && !hasToken ? "featured" : scope;
+  const [organizations, setOrganizations] = useState<ShareOrganization[]>([]);
+  const [groups, setGroups] = useState<ShareGroup[]>([]);
+
+  // Authenticated scopes disappear with the token; fall back instead of making
+  // an empty-token request if Settings changes while the dialog is open.
+  const authenticatedScope = scope === "mine" || scope === "organizations" || scope === "groups";
+  const effectiveScope: GalleryScope = authenticatedScope && !hasToken ? "featured" : scope;
 
   // Explicit dialog size once the user drags the corner grip (null = the
   // default responsive size). `dialogRef` reads the live element size at the
@@ -140,6 +166,13 @@ export function ProjectGalleryDialog({
   } | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => resizeCleanupRef.current?.(), []);
+
+  useEffect(() => {
+    if (open) {
+      defaultScopePendingRef.current = true;
+      setScope("featured");
+    }
+  }, [open]);
 
   // Resize the whole dialog from its bottom-right grip. The dialog is centred
   // via a -50% transform, so each edge moves by half the size change; growing
@@ -214,6 +247,18 @@ export function ProjectGalleryDialog({
           if (controller.signal.aborted) return;
           setProjects(mine);
           setHasMore(false);
+        } else if (effectiveScope === "organizations" || effectiveScope === "groups") {
+          const result = await fetchProjectsSharedWithMe({
+            token: trimmedToken,
+            source: effectiveScope,
+            limit: PAGE_SIZE,
+            offset,
+            signal: controller.signal,
+          });
+          if (controller.signal.aborted) return;
+          setProjects((prev) => (offset === 0 ? result.projects : [...prev, ...result.projects]));
+          setHasMore(result.hasMore);
+          setRawOffset(offset + result.rawCount);
         } else {
           // "featured" and "all" both page through the public listing; featured
           // adds the ?featured=true filter.
@@ -261,16 +306,59 @@ export function ProjectGalleryDialog({
     }
   }, [open, loadPage]);
 
+  useEffect(() => {
+    if (!open || !hasToken) {
+      setOrganizations([]);
+      setGroups([]);
+      return;
+    }
+    const controller = new AbortController();
+    membershipAbortRef.current = controller;
+    const fetchOptions = { token: trimmedToken, signal: controller.signal };
+    void Promise.all([fetchMyOrganizations(fetchOptions), fetchMyGroups(fetchOptions)])
+      .then(([orgs, grps]) => {
+        if (controller.signal.aborted) return;
+        setOrganizations(orgs);
+        setGroups(grps);
+        if (defaultScopePendingRef.current) {
+          setScope(orgs.length > 0 ? "organizations" : "featured");
+          defaultScopePendingRef.current = false;
+        }
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setOrganizations([]);
+        setGroups([]);
+      });
+    return () => {
+      controller.abort();
+      if (membershipAbortRef.current === controller) membershipAbortRef.current = null;
+    };
+  }, [open, hasToken, trimmedToken]);
+
+  const selectScope = (nextScope: GalleryScope) => {
+    defaultScopePendingRef.current = false;
+    setScope(nextScope);
+  };
+
   const handleOpen = async (project: SharedProject, options: { asCopy?: boolean } = {}) => {
     const action = options.asCopy ? "copy" : "open";
     setOpeningState({ id: project.id, action });
     setOpenError(null);
     try {
-      await onOpenProject(
-        project.rawJsonUrl,
-        effectiveScope === "mine" ? projectOpenToken(project, trimmedToken) : undefined,
-        options,
-      );
+      const asCopy = options.asCopy === true;
+      await onOpenProject(project.rawJsonUrl, projectOpenToken(project, trimmedToken), {
+        asCopy,
+        remoteProject: asCopy
+          ? undefined
+          : {
+              id: project.id,
+              versionCount: project.versionCount,
+              canEdit: project.canEdit,
+              token: trimmedToken,
+              baseUrl: resolveShareBaseUrl() ?? "",
+            },
+      });
       onOpenChange(false);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -334,23 +422,37 @@ export function ProjectGalleryDialog({
         <div className="flex w-full gap-1 rounded-md bg-muted p-1 sm:w-auto sm:self-start">
           <ScopeTab
             active={effectiveScope === "featured"}
-            onClick={() => setScope("featured")}
+            onClick={() => selectScope("featured")}
             icon={<Star className="h-3.5 w-3.5" />}
             label={t("gallery.scopeFeatured")}
           />
           <ScopeTab
             active={effectiveScope === "all"}
-            onClick={() => setScope("all")}
+            onClick={() => selectScope("all")}
             icon={<Globe2 className="h-3.5 w-3.5" />}
             label={t("gallery.scopeAll")}
           />
           {hasToken ? (
-            <ScopeTab
-              active={effectiveScope === "mine"}
-              onClick={() => setScope("mine")}
-              icon={<User className="h-3.5 w-3.5" />}
-              label={t("gallery.scopeMine")}
-            />
+            <>
+              <ScopeTab
+                active={effectiveScope === "organizations"}
+                onClick={() => selectScope("organizations")}
+                icon={<Users className="h-3.5 w-3.5" />}
+                label={t("gallery.scopeOrganizations")}
+              />
+              <ScopeTab
+                active={effectiveScope === "groups"}
+                onClick={() => selectScope("groups")}
+                icon={<UserPlus className="h-3.5 w-3.5" />}
+                label={t("gallery.scopeGroups")}
+              />
+              <ScopeTab
+                active={effectiveScope === "mine"}
+                onClick={() => selectScope("mine")}
+                icon={<User className="h-3.5 w-3.5" />}
+                label={t("gallery.scopeMine")}
+              />
+            </>
           ) : null}
         </div>
 
@@ -401,31 +503,38 @@ export function ProjectGalleryDialog({
                 {t("gallery.retry")}
               </Button>
             </div>
-          ) : showEmpty ? (
-            <p className="py-16 text-center text-sm text-muted-foreground">
-              {trimmedQuery
-                ? t("gallery.noMatches")
-                : effectiveScope === "mine"
-                  ? t("gallery.emptyMine")
-                  : effectiveScope === "featured"
-                    ? t("gallery.emptyFeatured")
-                    : t("gallery.empty")}
-            </p>
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {visibleProjects.map((project) => (
-                  <GalleryCard
-                    key={project.id}
-                    project={project}
-                    openingAction={openingState?.id === project.id ? openingState.action : null}
-                    disabled={openingState !== null}
-                    onOpen={() => void handleOpen(project)}
-                    onOpenCopy={() => void handleOpen(project, { asCopy: true })}
-                  />
-                ))}
-              </div>
-              {hasMore && !trimmedQuery ? (
+              {showEmpty ? (
+                <p className="py-16 text-center text-sm text-muted-foreground">
+                  {trimmedQuery
+                    ? t("gallery.noMatches")
+                    : effectiveScope === "mine"
+                      ? t("gallery.emptyMine")
+                      : effectiveScope === "organizations"
+                        ? t("gallery.emptyOrganizations")
+                        : effectiveScope === "groups"
+                          ? t("gallery.emptyGroups")
+                          : effectiveScope === "featured"
+                            ? t("gallery.emptyFeatured")
+                            : t("gallery.empty")}
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {visibleProjects.map((project) => (
+                    <GalleryCard
+                      key={project.id}
+                      project={project}
+                      token={trimmedToken}
+                      openingAction={openingState?.id === project.id ? openingState.action : null}
+                      disabled={openingState !== null}
+                      onOpen={() => void handleOpen(project)}
+                      onOpenCopy={() => void handleOpen(project, { asCopy: true })}
+                    />
+                  ))}
+                </div>
+              )}
+              {hasMore ? (
                 <div className="flex justify-center py-4">
                   <Button
                     variant="outline"
@@ -480,30 +589,79 @@ function ScopeTab({
   );
 }
 
-/** A small badge marking unlisted/private projects; public renders nothing. */
+/** A small badge marking non-public projects; public renders nothing. */
 function VisibilityBadge({ visibility }: { visibility: string }) {
   const { t } = useTranslation();
-  if (visibility !== "unlisted" && visibility !== "private") return null;
+  if (visibility !== "unlisted" && visibility !== "private" && visibility !== "organization") {
+    return null;
+  }
   const isPrivate = visibility === "private";
+  const isOrganization = visibility === "organization";
   return (
     <span className="absolute start-1.5 top-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground shadow-sm">
-      {isPrivate ? <Lock className="h-2.5 w-2.5" /> : <EyeOff className="h-2.5 w-2.5" />}
-      {isPrivate ? t("gallery.visibilityPrivate") : t("gallery.visibilityUnlisted")}
+      {isPrivate ? (
+        <Lock className="h-2.5 w-2.5" />
+      ) : isOrganization ? (
+        <Users className="h-2.5 w-2.5" />
+      ) : (
+        <EyeOff className="h-2.5 w-2.5" />
+      )}
+      {isPrivate
+        ? t("gallery.visibilityPrivate")
+        : isOrganization
+          ? t("share.visibilityOrganization")
+          : t("gallery.visibilityUnlisted")}
     </span>
   );
 }
 
 interface GalleryCardProps {
   project: SharedProject;
+  token: string;
   openingAction: "open" | "copy" | null;
   disabled: boolean;
   onOpen: () => void;
   onOpenCopy: () => void;
 }
 
-function GalleryCard({ project, openingAction, disabled, onOpen, onOpenCopy }: GalleryCardProps) {
+function GalleryCard({
+  project,
+  token,
+  openingAction,
+  disabled,
+  onOpen,
+  onOpenCopy,
+}: GalleryCardProps) {
   const { t } = useTranslation();
   const [thumbBroken, setThumbBroken] = useState(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    setThumbBroken(false);
+    setThumbnailUrl(null);
+    void loadSharedProjectThumbnail(project, { token, signal: controller.signal })
+      .then((result) => {
+        if (!result) return;
+        if (controller.signal.aborted) {
+          if (result.objectUrl) URL.revokeObjectURL(result.url);
+          return;
+        }
+        objectUrl = result.objectUrl ? result.url : null;
+        setThumbnailUrl(result.url);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          console.error("Failed to load shared project thumbnail", error);
+          setThumbBroken(true);
+        }
+      });
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [project, token]);
 
   return (
     <div className="flex flex-col overflow-hidden rounded-lg border bg-card">
@@ -514,9 +672,9 @@ function GalleryCard({ project, openingAction, disabled, onOpen, onOpenCopy }: G
         className="group relative block aspect-video w-full overflow-hidden bg-muted disabled:cursor-not-allowed"
         title={t("gallery.open")}
       >
-        {project.thumbnailUrl && !thumbBroken ? (
+        {thumbnailUrl && !thumbBroken ? (
           <img
-            src={project.thumbnailUrl}
+            src={thumbnailUrl}
             alt=""
             loading="lazy"
             className="h-full w-full object-cover transition-transform group-hover:scale-105"

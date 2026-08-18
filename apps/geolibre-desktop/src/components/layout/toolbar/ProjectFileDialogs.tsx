@@ -9,14 +9,17 @@ import {
   Input,
   Label,
 } from "@geolibre/ui";
-import { useCallback, useRef } from "react";
+import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   LARGE_EMBED_WARNING_BYTES,
+  type RemoteSharedProjectTarget,
   type ProjectFileActions,
 } from "../../../hooks/useProjectFileActions";
 import type { ArcgisProjectImportWarning } from "../../../lib/arcgis-project-import";
 import type { QgisProjectImportWarning } from "../../../lib/qgis-project-import";
+import { fetchSharedProjectVersions, type SharedProjectVersion } from "../../../lib/share-geolibre";
 import { SaveTemplateDialog } from "../SaveTemplateDialog";
 import { ImportWarningList } from "./ImportWarningList";
 
@@ -142,6 +145,13 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           </div>
         </DialogContent>
       </Dialog>
+      <SharedProjectVersionsDialog
+        target={projectFiles.remoteSaveWarning}
+        onClose={projectFiles.clearRemoteSaveWarning}
+        onOpenVersion={(rawUrl, token) =>
+          projectFiles.openProjectFromShareUrl(rawUrl, { authToken: token, asCopy: true })
+        }
+      />
       <Dialog
         open={projectFiles.qgisImportWarnings !== null}
         onOpenChange={(open: boolean) => {
@@ -303,6 +313,131 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
         }}
       />
     </>
+  );
+}
+
+function SharedProjectVersionsDialog({
+  target,
+  onClose,
+  onOpenVersion,
+}: {
+  target: RemoteSharedProjectTarget | null;
+  onClose: () => void;
+  onOpenVersion: (rawUrl: string, token: string) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [versions, setVersions] = useState<SharedProjectVersion[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const handleClose = () => {
+    setShowHistory(false);
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!target || !showHistory) return;
+    const controller = new AbortController();
+    setVersions([]);
+    setError(null);
+    setLoading(true);
+    void fetchSharedProjectVersions({
+      token: target.token,
+      projectId: target.id,
+      baseUrl: target.baseUrl,
+      signal: controller.signal,
+    })
+      .then((items) => {
+        if (!controller.signal.aborted) setVersions(items);
+      })
+      .catch((caught) => {
+        if (!controller.signal.aborted) {
+          setError(caught instanceof Error ? caught.message : t("toolbar.item.serverHistoryError"));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [target, showHistory, t]);
+
+  return (
+    <Dialog open={target !== null} onOpenChange={(open: boolean) => !open && handleClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            {t(
+              showHistory
+                ? "toolbar.item.serverHistoryTitle"
+                : "toolbar.item.sharedSaveWarningTitle",
+            )}
+          </DialogTitle>
+          <DialogDescription>
+            {t(
+              showHistory
+                ? "toolbar.item.serverHistoryDescription"
+                : "toolbar.item.sharedSaveWarningDescription",
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        {!showHistory ? null : loading ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {t("toolbar.item.loadingServerHistory")}
+          </p>
+        ) : error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : versions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("toolbar.item.emptyServerHistory")}</p>
+        ) : (
+          <ul className="max-h-72 divide-y overflow-y-auto rounded-md border">
+            {versions.map((version) => (
+              <li key={version.number} className="flex items-center gap-3 p-3 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">
+                    {t("toolbar.item.serverVersion", { version: version.number })}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {version.createdAt
+                      ? new Date(version.createdAt).toLocaleString()
+                      : t("toolbar.item.serverVersionDateUnknown")}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (!target) return;
+                    void onOpenVersion(version.rawUrl, target.token)
+                      .then(handleClose)
+                      .catch((caught) => {
+                        setError(
+                          caught instanceof Error
+                            ? caught.message
+                            : t("toolbar.item.serverHistoryError"),
+                        );
+                      });
+                  }}
+                >
+                  {t("gallery.openCopy")}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button variant={showHistory ? "default" : "outline"} onClick={handleClose}>
+            {t("toolbar.item.dismiss")}
+          </Button>
+          {!showHistory ? (
+            <Button onClick={() => setShowHistory(true)}>
+              {t("toolbar.item.openServerHistory")}
+            </Button>
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
