@@ -16,6 +16,7 @@ Projects are saved as **`.geolibre.json`** files.
 | `styles`          | object  | Map of layer id → `LayerStyle`                                                                               |
 | `plugins`         | object  | Optional external plugin manifest URLs, active plugin IDs, plugin map-control positions, and plugin settings |
 | `legend`          | object  | Optional Print Layout legend customizations (title, grouping, ordering, per-item rename/hide)                |
+| `printLayout`     | object  | Optional Print Layout composer settings (title, page size, orientation, blocks, atlas); omitted when default  |
 | `storymap`        | object  | Optional scroll-driven story map (chapters and presentation settings); omitted when there are no chapters    |
 | `widgets`         | array   | Optional Dashboard panel chart widgets (see below); omitted when there are none                              |
 | `dashboardColumns`| number  | Optional Dashboard widget-grid column count (1-6, default 2); omitted when default                          |
@@ -77,6 +78,48 @@ survive layer additions and removals.
 
 Projects without a `legend` section open with the default legend (auto-generated
 from the layers, titled "Legend").
+
+## Print layout
+
+The Print Layout composer (Project -> Print Layout) belongs to the project, so
+the page it composes reopens as it was saved. The section is written only once
+a setting differs from the defaults, so a project that never opened the composer
+carries no `printLayout` key.
+
+```json
+{
+  "title": "Dentists by region",
+  "subtitle": "2026",
+  "paperSize": "a3",
+  "orientation": "portrait",
+  "pageMargin": "normal",
+  "showLegend": true,
+  "showScaleBar": true,
+  "showNorthArrow": true,
+  "showDataTable": true,
+  "tableLayerId": "layer-a",
+  "tableColumns": ["name", "count"],
+  "atlasEnabled": false
+}
+```
+
+- Title block: `title`, `subtitle`, `titlePlacement`, `titleAlign`. A blank
+  `title` follows the project name rather than freezing a copy of it.
+- Page: `paperSize` (`a4`, `a3`, `letter`, `legal`, `tabloid`, `fullhd`, `hd`,
+  `uhd4k`, `square`, `custom`), `orientation`, `customWidth` / `customHeight` /
+  `customUnit` for `custom`, `pageMargin`, and the page/map frame colours.
+- Elements: the `show*` toggles for legend, scale bar, north arrow, footer,
+  date, attribution, colorbar, custom legend and info block, with their
+  per-element settings.
+- Data blocks: `tableLayerId` / `chartLayerId` name a project layer; a block
+  whose layer is missing from the project opens cleared rather than blank.
+- Atlas: `atlasEnabled` plus the coverage layer, extent mode, sorting, filter
+  and filename pattern for the map series.
+
+Unknown or malformed values fall back to the default for that field, so a
+hand-edited file never leaves the composer in an unusable state. Per-session
+state (the captured map image, the current atlas page, the dialog's panel
+widths) is deliberately not stored.
 
 ## Story map
 

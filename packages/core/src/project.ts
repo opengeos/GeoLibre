@@ -51,6 +51,13 @@ import {
 } from "./types";
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
 import { normalizeStyleLibraryEntries } from "./style-library";
+import {
+  createDefaultPrintLayout,
+  isDefaultPrintLayout,
+  normalizePrintLayoutConfig,
+  scrubPrintLayoutForLayers,
+  type PrintLayoutConfig,
+} from "./print-layout-config";
 import { getEllipsoid } from "./ellipsoids";
 import {
   scrubWidgetsForRemovedLayers,
@@ -280,6 +287,7 @@ export function parseProject(json: string): GeoLibreProject {
     preferences: normalizeProjectPreferences(data.preferences),
     plugins: normalizeProjectPlugins(data.plugins) ?? undefined,
     legend: normalizeLegendConfig(data.legend),
+    printLayout: normalizePrintLayoutConfig(data.printLayout) ?? undefined,
     storymap: normalizeStoryMap(data.storymap) ?? undefined,
     models: normalizeModels(data.models) ?? undefined,
     processingHistory: normalizeProcessingHistory(data.processingHistory) ?? undefined,
@@ -1428,6 +1436,7 @@ export function projectFromStore(state: {
   preferences: ProjectPreferences;
   plugins?: ProjectPluginState | null;
   legend?: LegendConfig | null;
+  printLayout?: PrintLayoutConfig | null;
   storymap?: StoryMap | null;
   models?: ProcessingModel[] | null;
   processingHistory?: ProcessingRun[] | null;
@@ -1447,6 +1456,9 @@ export function projectFromStore(state: {
   }
   const plugins = normalizeProjectPlugins(state.plugins);
   const legend = normalizeLegendConfig(state.legend);
+  // Persist the composer only once it differs from the defaults, so a project
+  // that never opened Print Layout keeps its previous byte-for-byte shape.
+  const printLayout = normalizePrintLayoutConfig(state.printLayout);
   const storymap = normalizeStoryMap(state.storymap);
   const models = normalizeModels(state.models);
   const processingHistory = normalizeProcessingHistory(state.processingHistory);
@@ -1493,6 +1505,7 @@ export function projectFromStore(state: {
     preferences: state.preferences,
     ...(plugins ? { plugins } : {}),
     ...(legend ? { legend } : {}),
+    ...(printLayout && !isDefaultPrintLayout(printLayout) ? { printLayout } : {}),
     ...(storymap ? { storymap } : {}),
     ...(models ? { models } : {}),
     ...(processingHistory ? { processingHistory } : {}),
@@ -1611,6 +1624,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   preferences: ProjectPreferences;
   projectPlugins: ProjectPluginState | null;
   legend: LegendConfig;
+  printLayout: PrintLayoutConfig;
   storymap: StoryMap | null;
   models: ProcessingModel[];
   processingHistory: ProcessingRun[];
@@ -1689,6 +1703,12 @@ export function applyProjectToStore(project: GeoLibreProject): {
     orphanIds.size > 0 ? scrubCommentsForRemovedLayers(comments, orphanIds) : comments;
   const scrubbedLegend =
     orphanIds.size > 0 ? scrubLegendForRemovedLayers(legend, orphanIds) : legend;
+  // The composer's data/atlas blocks name a layer directly rather than through
+  // `allReferencedIds`, so they are scrubbed against the surviving layer set.
+  const printLayout = scrubPrintLayoutForLayers(
+    normalizePrintLayoutConfig(project.printLayout) ?? createDefaultPrintLayout(),
+    existingLayerIds,
+  );
 
   return {
     projectName: project.name,
@@ -1701,6 +1721,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     preferences: normalizeProjectPreferences(project.preferences),
     projectPlugins: normalizeProjectPlugins(project.plugins),
     legend: scrubbedLegend,
+    printLayout,
     storymap: normalizeStoryMap(project.storymap),
     models: normalizeModels(project.models) ?? [],
     processingHistory: normalizeProcessingHistory(project.processingHistory) ?? [],

@@ -1,4 +1,5 @@
 import type { FeatureCollection } from "geojson";
+import type { PrintLayoutConfig } from "./print-layout-config";
 
 export const OPENFREEMAP_BASEMAPS = [
   {
@@ -1861,6 +1862,12 @@ export interface GeoLibreProject {
   plugins?: ProjectPluginState;
   /** User customizations for the Print Layout legend. */
   legend?: LegendConfig;
+  /**
+   * Print Layout composer settings (title, page size, orientation, blocks,
+   * atlas). Omitted while the composer is untouched, so projects that never
+   * opened it are unaffected (GeoLibre discussion #1992).
+   */
+  printLayout?: PrintLayoutConfig;
   storymap?: StoryMap;
   /** Saved processing pipelines (batch/model chaining; issue #344). */
   models?: ProcessingModel[];

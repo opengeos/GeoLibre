@@ -4,6 +4,7 @@ import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
   DEFAULT_STORY_MAP,
+  createDefaultPrintLayout,
   createEmptyProject,
   createSampleStoryMap,
   parseProject,
@@ -1470,5 +1471,98 @@ describe("primary mapView normalization", () => {
     assert.equal(applied.mapView.zoom, 0);
     assert.equal(applied.mapView.pitch, 85);
     assert.equal(applied.mapView.bearing, 270);
+  });
+});
+
+describe("print layout persistence", () => {
+  beforeEach(() => {
+    useAppStore.getState().newProject({ name: "Layout Project" });
+  });
+
+  it("omits an untouched composer so the saved file is unchanged by this feature", () => {
+    const project = projectFromStore({
+      ...useAppStore.getState(),
+      metadata: {},
+    });
+    assert.equal(project.printLayout, undefined);
+  });
+
+  it("saves the composer settings once they differ from the defaults", () => {
+    useAppStore.getState().setPrintLayout({
+      ...createDefaultPrintLayout(),
+      title: "Filière dentaire par régions",
+      paperSize: "a3",
+      orientation: "portrait",
+    });
+    const saved = parseProject(
+      serializeProject(projectFromStore({ ...useAppStore.getState(), metadata: {} })),
+    );
+    assert.equal(saved.printLayout?.title, "Filière dentaire par régions");
+    assert.equal(saved.printLayout?.paperSize, "a3");
+    assert.equal(saved.printLayout?.orientation, "portrait");
+  });
+
+  it("restores the saved composer settings when the project is loaded", () => {
+    const project = {
+      ...createEmptyProject("Saved layout"),
+      printLayout: {
+        ...createDefaultPrintLayout(),
+        title: "Saved title",
+        orientation: "portrait" as const,
+        showNorthArrow: false,
+      },
+    };
+    useAppStore.getState().loadProject(project);
+    const restored = useAppStore.getState().printLayout;
+    assert.equal(restored.title, "Saved title");
+    assert.equal(restored.orientation, "portrait");
+    assert.equal(restored.showNorthArrow, false);
+  });
+
+  it("resets to the defaults for a project saved without a layout", () => {
+    useAppStore.getState().setPrintLayout({
+      ...createDefaultPrintLayout(),
+      title: "Previous project",
+      paperSize: "a3",
+    });
+    // The bug behind discussion #1992: opening another project must not leave
+    // the previous project's composer settings in place.
+    useAppStore.getState().loadProject(createEmptyProject("Next"));
+    assert.deepEqual(useAppStore.getState().printLayout, createDefaultPrintLayout());
+
+    useAppStore.getState().setPrintLayout({
+      ...createDefaultPrintLayout(),
+      title: "Previous project",
+    });
+    useAppStore.getState().newProject({ name: "Fresh" });
+    assert.deepEqual(useAppStore.getState().printLayout, createDefaultPrintLayout());
+  });
+
+  it("clears composer blocks that name a layer the loaded project does not carry", () => {
+    const layer = geojsonLayer({ id: "kept" });
+    const applied = applyProjectToStore({
+      ...createEmptyProject("Orphans"),
+      layers: [layer],
+      printLayout: {
+        ...createDefaultPrintLayout(),
+        showDataTable: true,
+        tableLayerId: "deleted",
+        showDataChart: true,
+        chartLayerId: "kept",
+      },
+    });
+    assert.equal(applied.printLayout.tableLayerId, "");
+    assert.equal(applied.printLayout.showDataTable, false);
+    assert.equal(applied.printLayout.chartLayerId, "kept");
+  });
+
+  it("ignores a write that changes nothing, so opening the composer is not an edit", () => {
+    assert.equal(useAppStore.getState().isDirty, false);
+    // The dialog replays its seeded values into the store on mount.
+    useAppStore.getState().setPrintLayout(createDefaultPrintLayout());
+    assert.equal(useAppStore.getState().isDirty, false);
+
+    useAppStore.getState().setPrintLayout({ ...createDefaultPrintLayout(), title: "Edited" });
+    assert.equal(useAppStore.getState().isDirty, true);
   });
 });

@@ -26,6 +26,7 @@ export * from "./layer-library";
 export * from "./layer-defaults";
 export * from "./layer-style-clipboard";
 export * from "./layer-groups";
+export * from "./print-layout-config";
 export { createSampleStoryMap } from "./storymap-sample";
 export {
   scrubWidgetsForRemovedLayers,

@@ -5,6 +5,7 @@ import {
   getVectorColorRamp,
   useAppStore,
   VECTOR_COLOR_RAMPS,
+  type PrintLayoutConfig,
 } from "@geolibre/core";
 import { loadMarkerSvgImage, type MapController } from "@geolibre/map";
 import { GRATICULE_LABEL_LAYER_ID } from "@geolibre/plugins";
@@ -187,40 +188,53 @@ export function PrintLayoutDialog({
   // Follow the map's scale-bar unit preference so the printed bar matches the
   // on-screen one (metric / imperial / nautical).
   const scaleUnit = useAppStore((s) => s.preferences.map.scaleUnit);
+  const setPrintLayout = useAppStore((s) => s.setPrintLayout);
+  // The composer's settings belong to the project, so the controls start from
+  // what it was saved with. Read once per mount: the dialog is remounted on
+  // every project load (see the `key` at its render site), which is what makes
+  // an opened project's layout reach these controls instead of the previous
+  // project's (GeoLibre discussion #1992).
+  const [initialLayout] = useState<PrintLayoutConfig>(() => useAppStore.getState().printLayout);
 
-  const [title, setTitle] = useState("");
-  const [subtitle, setSubtitle] = useState("");
-  const [titlePlacement, setTitlePlacement] = useState<"outside" | "inside">("outside");
-  const [titleAlign, setTitleAlign] = useState<"left" | "center" | "right">("center");
-  const [paperSize, setPaperSize] = useState<PaperSizeId>("a4");
-  const [orientation, setOrientation] = useState<Orientation>("landscape");
-  const [customWidth, setCustomWidth] = useState(1280);
-  const [customHeight, setCustomHeight] = useState(720);
-  const [customUnit, setCustomUnit] = useState<SizeUnit>("px");
-  const [showTitle, setShowTitle] = useState(true);
-  const [showSubtitle, setShowSubtitle] = useState(true);
-  const [showLegend, setShowLegend] = useState(true);
-  const [showScaleBar, setShowScaleBar] = useState(true);
-  const [showNorthArrow, setShowNorthArrow] = useState(true);
-  const [navigationGrouped, setNavigationGrouped] = useState(true);
-  const [showFooter, setShowFooter] = useState(false);
-  const [footerText, setFooterText] = useState("");
-  const [showDate, setShowDate] = useState(true);
-  const [dateText, setDateText] = useState("");
-  const [showAttribution, setShowAttribution] = useState(true);
-  const [pageMargin, setPageMargin] = useState<"normal" | "narrow" | "none">("normal");
-  const [showPageBorder, setShowPageBorder] = useState(false);
-  const [pageBorderColor, setPageBorderColor] = useState("#111827");
-  const [pageBorderWidth, setPageBorderWidth] = useState(2);
+  const [title, setTitle] = useState(initialLayout.title);
+  const [subtitle, setSubtitle] = useState(initialLayout.subtitle);
+  const [titlePlacement, setTitlePlacement] = useState<"outside" | "inside">(
+    initialLayout.titlePlacement,
+  );
+  const [titleAlign, setTitleAlign] = useState<"left" | "center" | "right">(
+    initialLayout.titleAlign,
+  );
+  const [paperSize, setPaperSize] = useState<PaperSizeId>(initialLayout.paperSize);
+  const [orientation, setOrientation] = useState<Orientation>(initialLayout.orientation);
+  const [customWidth, setCustomWidth] = useState(initialLayout.customWidth);
+  const [customHeight, setCustomHeight] = useState(initialLayout.customHeight);
+  const [customUnit, setCustomUnit] = useState<SizeUnit>(initialLayout.customUnit);
+  const [showTitle, setShowTitle] = useState(initialLayout.showTitle);
+  const [showSubtitle, setShowSubtitle] = useState(initialLayout.showSubtitle);
+  const [showLegend, setShowLegend] = useState(initialLayout.showLegend);
+  const [showScaleBar, setShowScaleBar] = useState(initialLayout.showScaleBar);
+  const [showNorthArrow, setShowNorthArrow] = useState(initialLayout.showNorthArrow);
+  const [navigationGrouped, setNavigationGrouped] = useState(initialLayout.navigationGrouped);
+  const [showFooter, setShowFooter] = useState(initialLayout.showFooter);
+  const [footerText, setFooterText] = useState(initialLayout.footerText);
+  const [showDate, setShowDate] = useState(initialLayout.showDate);
+  const [dateText, setDateText] = useState(initialLayout.dateText);
+  const [showAttribution, setShowAttribution] = useState(initialLayout.showAttribution);
+  const [pageMargin, setPageMargin] = useState<"normal" | "narrow" | "none">(
+    initialLayout.pageMargin,
+  );
+  const [showPageBorder, setShowPageBorder] = useState(initialLayout.showPageBorder);
+  const [pageBorderColor, setPageBorderColor] = useState(initialLayout.pageBorderColor);
+  const [pageBorderWidth, setPageBorderWidth] = useState(initialLayout.pageBorderWidth);
   // Map frame (the border around the map body). Width is a 0–10 scale; 0 hides
   // the frame. Defaults match the original hardcoded hairline (GH #749).
-  const [mapBorderColor, setMapBorderColor] = useState("#9ca3af");
-  const [mapBorderWidth, setMapBorderWidth] = useState(1);
-  const [mapBackground, setMapBackground] = useState("#e5e7eb");
+  const [mapBorderColor, setMapBorderColor] = useState(initialLayout.mapBorderColor);
+  const [mapBorderWidth, setMapBorderWidth] = useState(initialLayout.mapBorderWidth);
+  const [mapBackground, setMapBackground] = useState(initialLayout.mapBackground);
   // Draft for the free-form hex field; only complete #RGB / #RRGGBB values are
   // committed to mapBackground (which also drives <input type="color"> and the
   // canvas fillStyle), so a half-typed "#" never corrupts the layout colour.
-  const [mapBackgroundDraft, setMapBackgroundDraft] = useState("#e5e7eb");
+  const [mapBackgroundDraft, setMapBackgroundDraft] = useState(initialLayout.mapBackground);
   const commitMapBackground = useCallback((value: string) => {
     setMapBackgroundDraft(value);
     if (/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value.trim())) {
@@ -228,29 +242,33 @@ export function PrintLayoutDialog({
     }
   }, []);
   // Native colorbar composed in the dialog (GH follow-up).
-  const [showColorbar, setShowColorbar] = useState(false);
-  const [colorbarRamp, setColorbarRamp] = useState("viridis");
-  const [colorbarMin, setColorbarMin] = useState("0");
-  const [colorbarMax, setColorbarMax] = useState("100");
-  const [colorbarLabel, setColorbarLabel] = useState("");
+  const [showColorbar, setShowColorbar] = useState(initialLayout.showColorbar);
+  const [colorbarRamp, setColorbarRamp] = useState(initialLayout.colorbarRamp);
+  const [colorbarMin, setColorbarMin] = useState(initialLayout.colorbarMin);
+  const [colorbarMax, setColorbarMax] = useState(initialLayout.colorbarMax);
+  const [colorbarLabel, setColorbarLabel] = useState(initialLayout.colorbarLabel);
   const [colorbarOrientation, setColorbarOrientation] = useState<"vertical" | "horizontal">(
-    "vertical",
+    initialLayout.colorbarOrientation,
   );
   // Bar length as a percentage of the body width/height.
-  const [colorbarLength, setColorbarLength] = useState(34);
+  const [colorbarLength, setColorbarLength] = useState(initialLayout.colorbarLength);
   // User-defined legend composed in the dialog (like Controls -> Legend).
-  const [showCustomLegend, setShowCustomLegend] = useState(false);
-  const [customLegendTitle, setCustomLegendTitle] = useState("Legend");
+  const [showCustomLegend, setShowCustomLegend] = useState(initialLayout.showCustomLegend);
+  const [customLegendTitle, setCustomLegendTitle] = useState(initialLayout.customLegendTitle);
   const [customLegendEntries, setCustomLegendEntries] = useState<
     { id: string; label: string; color: string }[]
-  >([
-    { id: "cl-1", label: "Class 1", color: "#2563eb" },
-    { id: "cl-2", label: "Class 2", color: "#16a34a" },
-  ]);
+  >(initialLayout.customLegendEntries);
   const [customLegendPosition, setCustomLegendPosition] = useState<
     "top-left" | "top-right" | "bottom-left" | "bottom-right"
-  >("top-left");
-  const customLegendId = useRef(2);
+  >(initialLayout.customLegendPosition);
+  // Continue the id sequence past whatever the project restored, so a new
+  // swatch never collides with a saved one.
+  const customLegendId = useRef(
+    initialLayout.customLegendEntries.reduce((max, entry) => {
+      const parsed = Number(/^cl-(\d+)$/.exec(entry.id)?.[1]);
+      return Number.isFinite(parsed) && parsed > max ? parsed : max;
+    }, initialLayout.customLegendEntries.length),
+  );
   const [legendDict, setLegendDict] = useState("");
   const [legendDictError, setLegendDictError] = useState<string | null>(null);
 
@@ -283,58 +301,70 @@ export function PrintLayoutDialog({
   // Default away from the bottom-right nav duo and top-left legend.
   const [colorbarPosition, setColorbarPosition] = useState<
     "top-left" | "top-right" | "bottom-left" | "bottom-right"
-  >("top-right");
+  >(initialLayout.colorbarPosition);
   // Data blocks: attribute table + chart composed on the page (GH #1324).
-  const [showDataTable, setShowDataTable] = useState(false);
-  const [tableLayerId, setTableLayerId] = useState("");
-  const [tableTitle, setTableTitle] = useState("");
+  const [showDataTable, setShowDataTable] = useState(initialLayout.showDataTable);
+  const [tableLayerId, setTableLayerId] = useState(initialLayout.tableLayerId);
+  const [tableTitle, setTableTitle] = useState(initialLayout.tableTitle);
   // Explicitly checked columns; empty = the layer's first few fields.
-  const [tableColumns, setTableColumns] = useState<string[]>([]);
-  const [tableSortField, setTableSortField] = useState("");
-  const [tableSortDesc, setTableSortDesc] = useState(false);
-  const [tableMaxRows, setTableMaxRows] = useState(DEFAULT_TABLE_ROWS);
-  const [tableFitRows, setTableFitRows] = useState(false);
-  const [tablePosition, setTablePosition] = useState<BodyCorner>("bottom-left");
-  const [tablePageFilter, setTablePageFilter] = useState<PageFilterMode>("contained");
-  const [tableFilterToAtlasFeature, setTableFilterToAtlasFeature] = useState(false);
-  const [showDataChart, setShowDataChart] = useState(false);
-  const [chartLayerId, setChartLayerId] = useState("");
-  const [chartTitle, setChartTitle] = useState("");
-  const [chartType, setChartType] = useState<ChartBlockType>("bar");
-  const [chartCategoryField, setChartCategoryField] = useState("");
-  const [chartAggregation, setChartAggregation] = useState<BarAggregation>("count");
-  const [chartValueField, setChartValueField] = useState("");
+  const [tableColumns, setTableColumns] = useState<string[]>(initialLayout.tableColumns);
+  const [tableSortField, setTableSortField] = useState(initialLayout.tableSortField);
+  const [tableSortDesc, setTableSortDesc] = useState(initialLayout.tableSortDesc);
+  const [tableMaxRows, setTableMaxRows] = useState(initialLayout.tableMaxRows);
+  const [tableFitRows, setTableFitRows] = useState(initialLayout.tableFitRows);
+  const [tablePosition, setTablePosition] = useState<BodyCorner>(initialLayout.tablePosition);
+  const [tablePageFilter, setTablePageFilter] = useState<PageFilterMode>(
+    initialLayout.tablePageFilter,
+  );
+  const [tableFilterToAtlasFeature, setTableFilterToAtlasFeature] = useState(
+    initialLayout.tableFilterToAtlasFeature,
+  );
+  const [showDataChart, setShowDataChart] = useState(initialLayout.showDataChart);
+  const [chartLayerId, setChartLayerId] = useState(initialLayout.chartLayerId);
+  const [chartTitle, setChartTitle] = useState(initialLayout.chartTitle);
+  const [chartType, setChartType] = useState<ChartBlockType>(initialLayout.chartType);
+  const [chartCategoryField, setChartCategoryField] = useState(initialLayout.chartCategoryField);
+  const [chartAggregation, setChartAggregation] = useState<BarAggregation>(
+    initialLayout.chartAggregation,
+  );
+  const [chartValueField, setChartValueField] = useState(initialLayout.chartValueField);
   // Top-right by default: the scale bar + north arrow duo occupies the
   // bottom-right corner out of the box.
-  const [chartPosition, setChartPosition] = useState<BodyCorner>("top-right");
-  const [chartPageFilter, setChartPageFilter] = useState<PageFilterMode>("contained");
+  const [chartPosition, setChartPosition] = useState<BodyCorner>(initialLayout.chartPosition);
+  const [chartPageFilter, setChartPageFilter] = useState<PageFilterMode>(
+    initialLayout.chartPageFilter,
+  );
   // Cartographic title block ("stempel") fields (GH #522).
-  const [showInfoBlock, setShowInfoBlock] = useState(false);
-  const [author, setAuthor] = useState("");
-  const [projectNumber, setProjectNumber] = useState("");
-  const [crs, setCrs] = useState("");
-  const [revision, setRevision] = useState("");
+  const [showInfoBlock, setShowInfoBlock] = useState(initialLayout.showInfoBlock);
+  const [author, setAuthor] = useState(initialLayout.author);
+  const [projectNumber, setProjectNumber] = useState(initialLayout.projectNumber);
+  const [crs, setCrs] = useState(initialLayout.crs);
+  const [revision, setRevision] = useState(initialLayout.revision);
   // Custom print extent drawn on the map (GH #523).
-  const [captureMode, setCaptureMode] = useState<"viewport" | "extent">("viewport");
-  const [extentBbox, setExtentBbox] = useState<PrintExtent | null>(null);
+  const [captureMode, setCaptureMode] = useState<"viewport" | "extent">(initialLayout.captureMode);
+  const [extentBbox, setExtentBbox] = useState<PrintExtent | null>(initialLayout.extentBbox);
   const [drawingExtent, setDrawingExtent] = useState(false);
   // Atlas / map series: one page per coverage-layer feature (GH #1291).
-  const [atlasEnabled, setAtlasEnabled] = useState(false);
-  const [atlasLayerId, setAtlasLayerId] = useState("");
+  const [atlasEnabled, setAtlasEnabled] = useState(initialLayout.atlasEnabled);
+  const [atlasLayerId, setAtlasLayerId] = useState(initialLayout.atlasLayerId);
   // Coverage strategy: one page per feature, or pages tiling the layer's line
   // features in fixed-length stretches (GH #1291 follow-up).
-  const [atlasCoverage, setAtlasCoverage] = useState<"features" | "line">("features");
-  const [atlasSegmentKm, setAtlasSegmentKm] = useState("20");
-  const [atlasNameField, setAtlasNameField] = useState("");
-  const [atlasExtentMode, setAtlasExtentMode] = useState<"margin" | "scale">("margin");
-  const [atlasMarginPct, setAtlasMarginPct] = useState(10);
-  const [atlasMaskEnabled, setAtlasMaskEnabled] = useState(false);
-  const [atlasScale, setAtlasScale] = useState("50000");
-  const [atlasSortField, setAtlasSortField] = useState("");
-  const [atlasSortDescending, setAtlasSortDescending] = useState(false);
-  const [atlasFilter, setAtlasFilter] = useState("");
+  const [atlasCoverage, setAtlasCoverage] = useState<"features" | "line">(
+    initialLayout.atlasCoverage,
+  );
+  const [atlasSegmentKm, setAtlasSegmentKm] = useState(initialLayout.atlasSegmentKm);
+  const [atlasNameField, setAtlasNameField] = useState(initialLayout.atlasNameField);
+  const [atlasExtentMode, setAtlasExtentMode] = useState<"margin" | "scale">(
+    initialLayout.atlasExtentMode,
+  );
+  const [atlasMarginPct, setAtlasMarginPct] = useState(initialLayout.atlasMarginPct);
+  const [atlasMaskEnabled, setAtlasMaskEnabled] = useState(initialLayout.atlasMaskEnabled);
+  const [atlasScale, setAtlasScale] = useState(initialLayout.atlasScale);
+  const [atlasSortField, setAtlasSortField] = useState(initialLayout.atlasSortField);
+  const [atlasSortDescending, setAtlasSortDescending] = useState(initialLayout.atlasSortDescending);
+  const [atlasFilter, setAtlasFilter] = useState(initialLayout.atlasFilter);
   const [atlasFilenamePattern, setAtlasFilenamePattern] = useState(
-    "{atlas.pagenumber}-{atlas.name}",
+    initialLayout.atlasFilenamePattern,
   );
   const [atlasIndex, setAtlasIndex] = useState(0);
   // True while the atlas is driving the live map (stepping or exporting), so
@@ -621,9 +651,9 @@ export function PrintLayoutDialog({
     [mapControllerRef, t, captureMode, extentBbox],
   );
 
-  // Capture the map and seed defaults only on the closed -> open transition, so
-  // a background project-name change while the dialog is open does not replace
-  // the snapshot the user is composing.
+  // Capture the map only on the closed -> open transition, so a background
+  // change while the dialog is open does not replace the snapshot the user is
+  // composing.
   useEffect(() => {
     const map = mapControllerRef.current?.getMap();
     if (open && !wasOpenRef.current) {
@@ -640,8 +670,6 @@ export function PrintLayoutDialog({
         copiedTimeoutRef.current = null;
       }
       setCopied(false);
-      setTitle((prev) => prev || (projectName ?? "").trim());
-      setDateText((prev) => prev || new Date().toLocaleDateString());
       // Re-show a previously drawn extent box while composing.
       if (map && extentBbox) showPrintExtent(map, extentBbox);
       // With an active atlas persisting from a prior session, skip the plain
@@ -657,7 +685,7 @@ export function PrintLayoutDialog({
       }
     }
     wasOpenRef.current = open;
-  }, [open, projectName, recapture, mapControllerRef, extentBbox]);
+  }, [open, recapture, mapControllerRef, extentBbox]);
 
   // Clean up if the dialog unmounts: abort an in-progress draw (so its window
   // listeners are torn down and it does not setState on an unmounted component)
@@ -693,9 +721,194 @@ export function PrintLayoutDialog({
     [isCustom, customWidth, customHeight, customUnit],
   );
 
-  const options = useMemo<LayoutOptions>(
+  // Everything the composer holds that describes the project's map document,
+  // in the shape the project file stores. The literal is checked against
+  // `PrintLayoutConfig` both ways: assigning these control values in, and the
+  // seeding above assigning them back out, so this and the storage contract in
+  // `@geolibre/core` cannot drift apart without failing the build.
+  const layoutConfig = useMemo<PrintLayoutConfig>(
     () => ({
       title,
+      subtitle,
+      titlePlacement,
+      titleAlign,
+      paperSize,
+      orientation,
+      customWidth,
+      customHeight,
+      customUnit,
+      pageMargin,
+      showPageBorder,
+      pageBorderColor,
+      pageBorderWidth,
+      mapBorderColor,
+      mapBorderWidth,
+      mapBackground,
+      showTitle,
+      showSubtitle,
+      showLegend,
+      showScaleBar,
+      showNorthArrow,
+      navigationGrouped,
+      showFooter,
+      footerText,
+      showDate,
+      dateText,
+      showAttribution,
+      showColorbar,
+      colorbarRamp,
+      colorbarMin,
+      colorbarMax,
+      colorbarLabel,
+      colorbarOrientation,
+      colorbarLength,
+      colorbarPosition,
+      showCustomLegend,
+      customLegendTitle,
+      customLegendEntries,
+      customLegendPosition,
+      showDataTable,
+      tableLayerId,
+      tableTitle,
+      tableColumns,
+      tableSortField,
+      tableSortDesc,
+      tableMaxRows,
+      tableFitRows,
+      tablePosition,
+      tablePageFilter,
+      tableFilterToAtlasFeature,
+      showDataChart,
+      chartLayerId,
+      chartTitle,
+      chartType,
+      chartCategoryField,
+      chartAggregation,
+      chartValueField,
+      chartPosition,
+      chartPageFilter,
+      showInfoBlock,
+      author,
+      projectNumber,
+      crs,
+      revision,
+      captureMode,
+      extentBbox,
+      atlasEnabled,
+      atlasLayerId,
+      atlasCoverage,
+      atlasSegmentKm,
+      atlasNameField,
+      atlasExtentMode,
+      atlasMarginPct,
+      atlasMaskEnabled,
+      atlasScale,
+      atlasSortField,
+      atlasSortDescending,
+      atlasFilter,
+      atlasFilenamePattern,
+    }),
+    [
+      title,
+      subtitle,
+      titlePlacement,
+      titleAlign,
+      paperSize,
+      orientation,
+      customWidth,
+      customHeight,
+      customUnit,
+      pageMargin,
+      showPageBorder,
+      pageBorderColor,
+      pageBorderWidth,
+      mapBorderColor,
+      mapBorderWidth,
+      mapBackground,
+      showTitle,
+      showSubtitle,
+      showLegend,
+      showScaleBar,
+      showNorthArrow,
+      navigationGrouped,
+      showFooter,
+      footerText,
+      showDate,
+      dateText,
+      showAttribution,
+      showColorbar,
+      colorbarRamp,
+      colorbarMin,
+      colorbarMax,
+      colorbarLabel,
+      colorbarOrientation,
+      colorbarLength,
+      colorbarPosition,
+      showCustomLegend,
+      customLegendTitle,
+      customLegendEntries,
+      customLegendPosition,
+      showDataTable,
+      tableLayerId,
+      tableTitle,
+      tableColumns,
+      tableSortField,
+      tableSortDesc,
+      tableMaxRows,
+      tableFitRows,
+      tablePosition,
+      tablePageFilter,
+      tableFilterToAtlasFeature,
+      showDataChart,
+      chartLayerId,
+      chartTitle,
+      chartType,
+      chartCategoryField,
+      chartAggregation,
+      chartValueField,
+      chartPosition,
+      chartPageFilter,
+      showInfoBlock,
+      author,
+      projectNumber,
+      crs,
+      revision,
+      captureMode,
+      extentBbox,
+      atlasEnabled,
+      atlasLayerId,
+      atlasCoverage,
+      atlasSegmentKm,
+      atlasNameField,
+      atlasExtentMode,
+      atlasMarginPct,
+      atlasMaskEnabled,
+      atlasScale,
+      atlasSortField,
+      atlasSortDescending,
+      atlasFilter,
+      atlasFilenamePattern,
+    ],
+  );
+
+  // Push composer edits into the project so Save writes them and reopening the
+  // project restores them. `setPrintLayout` ignores a config equal to the one
+  // already stored, so this effect's first run (which replays exactly what the
+  // controls were seeded with) does not mark the project dirty.
+  useEffect(() => {
+    setPrintLayout(layoutConfig);
+  }, [layoutConfig, setPrintLayout]);
+
+  // Blank title / date follow the project rather than being written into the
+  // controls: seeding them on open would edit the saved layout (and mark the
+  // project dirty) just because the composer was opened, and a title seeded
+  // once would go stale when the project is renamed.
+  const resolvedTitle = title.trim() ? title : (projectName ?? "").trim();
+  const resolvedDateText = dateText.trim() ? dateText : new Date().toLocaleDateString();
+
+  const options = useMemo<LayoutOptions>(
+    () => ({
+      title: resolvedTitle,
       subtitle,
       paperSize,
       orientation,
@@ -712,7 +925,7 @@ export function PrintLayoutDialog({
       showFooter,
       footerText,
       showDate,
-      dateText,
+      dateText: resolvedDateText,
       showAttribution,
       pageMargin,
       showPageBorder,
@@ -770,7 +983,7 @@ export function PrintLayoutDialog({
       mapFit,
     }),
     [
-      title,
+      resolvedTitle,
       subtitle,
       paperSize,
       orientation,
@@ -787,7 +1000,7 @@ export function PrintLayoutDialog({
       showFooter,
       footerText,
       showDate,
-      dateText,
+      resolvedDateText,
       showAttribution,
       pageMargin,
       showPageBorder,
@@ -1858,7 +2071,7 @@ export function PrintLayoutDialog({
                 id="layout-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder={t("printLayout.titlePlaceholder")}
+                placeholder={(projectName ?? "").trim() || t("printLayout.titlePlaceholder")}
               />
             </div>
             <div className="space-y-1.5">
