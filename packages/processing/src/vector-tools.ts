@@ -33,6 +33,7 @@ import type {
 import {
   bodyLengthToEarth,
   earthLengthToBody,
+  getActiveBodyRadiusRatio,
   layerJoinKey,
   type GeoLibreLayer,
 } from "@geolibre/core";
@@ -2314,13 +2315,15 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
     }
     const { groups, skipped, skippedNoId } = collectTimedPoints(fc, timeField, idField);
     const segments: Feature<LineString>[] = [];
+    // turf measures on Earth; rescale to this body's ground distance
+    // (GeoLibre#1128) so the derived speeds are correct off Earth too. Read the
+    // ratio once rather than per segment.
+    const bodyRatio = getActiveBodyRadiusRatio();
     for (const [key, pts] of groups) {
       for (let i = 1; i < pts.length; i += 1) {
         const a = pts[i - 1];
         const b = pts[i];
-        // turf measures on Earth; rescale to this body's ground distance
-        // (GeoLibre#1128) so the derived speeds are correct off Earth too.
-        const meters = earthLengthToBody(distance(a.coord, b.coord, { units: "meters" }));
+        const meters = distance(a.coord, b.coord, { units: "meters" }) * bodyRatio;
         const seconds = (b.time - a.time) / 1000;
         // Equal timestamps (the only non-positive gap after sorting) give an
         // undefined speed; emit the segment with null rather than Infinity.
@@ -2460,6 +2463,10 @@ export const detectStopsTool: ProcessingAlgorithm = {
       return;
     }
     const stops: Feature<Point>[] = [];
+    // Convert the threshold into turf's Earth-based units once, rather than
+    // converting every measured distance inside the O(n²) scan below
+    // (GeoLibre#1128). Equivalent comparison, no per-iteration ellipsoid lookup.
+    const maxTurfDistance = bodyLengthToEarth(maxDistance);
     for (const [key, pts] of groups) {
       let i = 0;
       while (i < pts.length) {
@@ -2472,15 +2479,11 @@ export const detectStopsTool: ProcessingAlgorithm = {
         // Extend the run while each later fix stays within maxDistance of the
         // anchor (the run's first fix), so brief GPS scatter around one spot is
         // absorbed into a single stop.
-        // The threshold is a ground distance on the project's body, so rescale
-        // turf's Earth measurement before comparing (GeoLibre#1128).
         while (
           j < pts.length &&
-          earthLengthToBody(
-            distance(pts[i].coord, pts[j].coord, {
-              units: distanceUnits as LinearUnit,
-            }),
-          ) <= maxDistance
+          distance(pts[i].coord, pts[j].coord, {
+            units: distanceUnits as LinearUnit,
+          }) <= maxTurfDistance
         ) {
           j += 1;
         }
@@ -2695,19 +2698,21 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
     // Sort by time so the inner loop can stop once the time gap is exceeded.
     timed.sort((a, b) => a.time - b.time);
     const pairs: Feature<LineString>[] = [];
+    // As in stop detection: convert the threshold into turf's Earth-based units
+    // once so the O(n²) candidate scan does no per-iteration conversion
+    // (GeoLibre#1128). Only the pairs that survive the test are converted back
+    // to this body's ground distance for the reported `distance` property.
+    const maxTurfDistance = bodyLengthToEarth(maxDistance);
     for (let i = 0; i < n; i += 1) {
       for (let j = i + 1; j < n; j += 1) {
         const dt = timed[j].time - timed[i].time; // >= 0 (sorted)
         if (dt > maxTimeMs) break; // later j only widens the gap
         if (idField && timed[i].id === timed[j].id) continue;
-        // Both the threshold below and the reported `distance` property are
-        // ground distances on the project's body (GeoLibre#1128).
-        const dist = earthLengthToBody(
-          distance(timed[i].coord, timed[j].coord, {
-            units: distanceUnits as LinearUnit,
-          }),
-        );
-        if (dist > maxDistance) continue;
+        const turfDistance = distance(timed[i].coord, timed[j].coord, {
+          units: distanceUnits as LinearUnit,
+        });
+        if (turfDistance > maxTurfDistance) continue;
+        const dist = earthLengthToBody(turfDistance);
         pairs.push({
           type: "Feature",
           properties: {
