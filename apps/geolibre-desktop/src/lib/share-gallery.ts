@@ -642,7 +642,7 @@ export async function fetchMyOrganizations(
           org.publicSharingPolicy === "publishers" ||
           org.publicSharingPolicy === "no"
             ? org.publicSharingPolicy
-            : "yes",
+            : "publishers",
         defaultVisibility:
           org.defaultVisibility === "public" ||
           org.defaultVisibility === "unlisted" ||

@@ -31,7 +31,7 @@ describe("share fetch override", () => {
       globalThis.fetch = (() => {
         calledDefault += 1;
         return Promise.resolve(new Response("ok"));
-      }) as typeof fetch;
+      }) as unknown as typeof fetch;
 
       // Default share fetch delegates to whatever globalThis.fetch is.
       await getShareFetch()("https://example.com/");
@@ -42,7 +42,7 @@ describe("share fetch override", () => {
       setShareFetch((() => {
         calledOverride += 1;
         return Promise.resolve(new Response("ok"));
-      }) as typeof fetch);
+      }) as unknown as typeof fetch);
       await getShareFetch()("https://example.com/");
       assert.equal(calledOverride, 1);
       assert.equal(calledDefault, 1);
@@ -71,7 +71,7 @@ describe("share fetch override", () => {
           },
         }),
       );
-    }) as typeof fetch);
+    }) as unknown as typeof fetch);
 
     await uploadProjectToShare({
       token: "tok",
@@ -87,7 +87,7 @@ describe("share fetch override", () => {
     setShareFetch(((input: RequestInfo | URL) => {
       seen = typeof input === "string" ? input : input.toString();
       return Promise.resolve(jsonResponse({ projects: [] }));
-    }) as typeof fetch);
+    }) as unknown as typeof fetch);
 
     await fetchSharedProjects();
     assert.equal(seen, "https://share.geolibre.app/api/projects");
@@ -100,16 +100,16 @@ describe("share fetch override", () => {
       const url = typeof input === "string" ? input : input.toString();
       seen.push(url);
       auth = new Headers(init?.headers).get("Authorization");
-      if (url.endsWith("/api/users/me")) {
+      if (url.includes("/api/users/me")) {
         return Promise.resolve(jsonResponse({ user: { username: "giswqs" } }));
       }
       return Promise.resolve(jsonResponse({ projects: [] }));
-    }) as typeof fetch);
+    }) as unknown as typeof fetch);
 
     await fetchMyProjects({ token: "tok" });
     assert.deepEqual(seen, [
       "https://share.geolibre.app/api/users/me",
-      "https://share.geolibre.app/api/users/giswqs/projects",
+      "https://share.geolibre.app/api/users/giswqs/projects?limit=100&offset=0",
     ]);
     // The share-host request carries the bearer token via shareAuthorizedFetch.
     assert.equal(auth, "Bearer tok");

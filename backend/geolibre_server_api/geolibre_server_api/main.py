@@ -9,10 +9,12 @@ import re
 import secrets
 import shutil
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import quote
+
+UTC = getattr(timezone, "utc", timezone.utc)
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -1702,7 +1704,11 @@ def create_app(
         )
         invitation.status = "accepted"
         invitation.accepted_at = now()
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            raise HTTPException(409, "user is already an organization member") from None
 
     @app.get("/api/organizations/{organization_id}/projects")
     def list_organization_projects(
@@ -2052,7 +2058,11 @@ def create_app(
             member.status = "accepted"
         invitation.status = "accepted"
         invitation.accepted_at = now()
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            raise HTTPException(409, "already a group member") from None
 
     @app.post("/api/groups/{group_id}/join", status_code=204)
     def join_group(
@@ -2082,7 +2092,11 @@ def create_app(
         else:
             existing.status = status
             existing.role = "member"
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            raise HTTPException(409, "already a group member") from None
 
     @app.post("/api/groups/{group_id}/members/{username}/decide", status_code=204)
     def decide_group_join_request(
@@ -2107,6 +2121,8 @@ def create_app(
     def list_group_projects(
         group_id: str,
         response: Response,
+        limit: Annotated[int, Query(ge=1, le=100)] = 24,
+        offset: Annotated[int, Query(ge=0)] = 0,
         account: Account = Depends(required_account),
         session: Session = Depends(db),
     ):
@@ -2119,6 +2135,8 @@ def create_app(
             .where(ProjectGroup.group_id == group_id)
             .options(*LISTING_EAGER_LOADS)
             .order_by(Project.updated_at.desc())
+            .limit(limit)
+            .offset(offset)
         ).all()
         response.headers["Cache-Control"] = "private, no-store"
         return {"projects": [project_json(project, session, account) for project in projects]}
