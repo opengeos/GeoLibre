@@ -261,16 +261,30 @@ const VectorToolsDialog = lazy(() =>
     }),
 );
 
-const ModelBuilderDialog = lazy(() =>
-  import("../processing/ModelBuilderDialog")
+const BatchToolsDialog = lazy(() =>
+  import("../processing/BatchToolsDialog")
     .then((module) => ({
-      default: module.ModelBuilderDialog,
+      default: module.BatchToolsDialog,
     }))
     .catch((error) => {
       // Same chunk-load fallback rationale as ProcessingDialog above.
-      console.error("Failed to load ModelBuilderDialog", error);
+      console.error("Failed to load BatchToolsDialog", error);
       const Fallback = (() =>
-        null) as unknown as typeof import("../processing/ModelBuilderDialog").ModelBuilderDialog;
+        null) as unknown as typeof import("../processing/BatchToolsDialog").BatchToolsDialog;
+      return { default: Fallback };
+    }),
+);
+
+const ModelBuilderPanel = lazy(() =>
+  import("../processing/model-builder/ModelBuilderPanel")
+    .then((module) => ({
+      default: module.ModelBuilderPanel,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load ModelBuilderPanel", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/model-builder/ModelBuilderPanel").ModelBuilderPanel;
       return { default: Fallback };
     }),
 );
@@ -2446,6 +2460,23 @@ export function DesktopShell({
           >
             <FloatingPanels />
           </SectionErrorBoundary>
+          {/* Mounted inside the map area (like FloatingPanels) so the canvas
+              floats over the map and drag-clamps to it, not to the whole
+              window — the user keeps their layers in view while building. */}
+          <SectionErrorBoundary label="Model Builder" displayName={t("shell.section.modelBuilder")}>
+            <Suspense fallback={null}>
+              <ModelBuilderPanel
+                mapControllerRef={mapControllerRef}
+                onAddRaster={async (bytes, name, fileName) => {
+                  // Same Uint8Array -> BlobPart cast as ProcessingDialog below.
+                  const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
+                    type: "image/tiff",
+                  });
+                  await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
+                }}
+              />
+            </Suspense>
+          </SectionErrorBoundary>
           {/* Mounted here (inside the map area, like FloatingPanels) so the
               selection panels anchor to the map canvas's top-left corner and
               drag-clamp to the map, not the whole window (#1314). */}
@@ -2727,7 +2758,7 @@ export function DesktopShell({
         <NetworkToolsDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <Suspense fallback={null}>
-        <ModelBuilderDialog mapControllerRef={mapControllerRef} />
+        <BatchToolsDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <Suspense fallback={null}>
         <StatisticsToolsDialog mapControllerRef={mapControllerRef} />

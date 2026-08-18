@@ -339,3 +339,20 @@ export {
   type ViewshedObserver,
   type ViewshedResult,
 } from "./terrain-viewshed";
+export {
+  INPUT_NODE_PORT,
+  OUTPUT_NODE_PORT,
+  graphToLinearSteps,
+  portKindsCompatible,
+  runModelGraph,
+  topologicalOrder,
+  validateModelGraph,
+  type DescriptorResolver,
+  type ModelGraphIssue,
+  type ModelGraphRunResult,
+  type ModelToolDescriptor,
+  type ModelToolExecutor,
+  type ModelToolPort,
+  type ModelValue,
+  type RunModelGraphOptions,
+} from "./model-graph";

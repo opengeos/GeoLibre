@@ -1584,14 +1584,94 @@ export interface ProcessingModelStep {
 }
 
 /**
- * A reusable, sequential processing pipeline ("model" in QGIS Graphical Modeler
- * / ArcGIS ModelBuilder terms). Steps run in order; each step's result feeds the
- * next. Saved in the project file so it can be reloaded and re-run.
+ * What flows along a model edge. Vector nodes exchange FeatureCollections;
+ * raster nodes exchange GeoTIFF bytes. A port declaring `"any"` accepts either
+ * and is resolved to a concrete kind at run time by whatever is wired into it.
+ */
+export type ModelPortKind = "vector" | "raster" | "any";
+
+/** One connection point on a {@link ModelGraphNode}. */
+export interface ModelGraphPort {
+  /**
+   * Port id, unique within its node and direction. For a tool node's inputs
+   * this is the underlying tool parameter id, so wiring an edge and setting the
+   * parameter by hand are the same operation.
+   */
+  id: string;
+  label: string;
+  kind: ModelPortKind;
+  /** Inputs only: the run fails when nothing is wired in and no value is set. */
+  required?: boolean;
+}
+
+/**
+ * What a node does. `input` sources an existing project layer, `tool` runs a
+ * processing algorithm, and `output` names a result to add back to the map.
+ */
+export type ModelGraphNodeKind = "input" | "tool" | "output";
+
+/** One node on the Model Builder canvas. */
+export interface ModelGraphNode {
+  /** Stable id, unique within the graph; referenced by {@link ModelGraphEdge}. */
+  id: string;
+  kind: ModelGraphNodeKind;
+  /** Canvas position in graph coordinates (unscaled by zoom). */
+  x: number;
+  y: number;
+  /** `input` nodes: the project layer id this node sources. */
+  layerId?: string;
+  /**
+   * `tool` nodes: the tool's id within {@link provider}'s registry. Kept
+   * separate from the provider so the same short id can exist in both.
+   */
+  toolId?: string;
+  /** `tool` nodes: which registry resolves {@link toolId}. */
+  provider?: ModelToolProvider;
+  /** `tool` nodes: parameter values for everything not supplied by an edge. */
+  parameters?: Record<string, unknown>;
+  /** `output` nodes: the layer name given to the result added to the map. */
+  name?: string;
+}
+
+/**
+ * A directed connection from one node's output port to another node's input
+ * port. Ports are named, so a tool with several inputs (Clip's target and
+ * overlay, say) wires each one unambiguously.
+ */
+export interface ModelGraphEdge {
+  id: string;
+  from: string;
+  fromPort: string;
+  to: string;
+  toPort: string;
+}
+
+/** The node-and-edge graph authored on the Model Builder canvas. */
+export interface ProcessingModelGraph {
+  nodes: ModelGraphNode[];
+  edges: ModelGraphEdge[];
+}
+
+/** Which registry a {@link ModelGraphNode.toolId} is resolved against. */
+export type ModelToolProvider = "vector" | "whitebox";
+
+/**
+ * A reusable processing pipeline ("model" in QGIS Graphical Modeler / ArcGIS
+ * ModelBuilder terms), saved in the project file so it can be reloaded and
+ * re-run.
+ *
+ * Two shapes coexist. {@link steps} is the original strictly linear chain, and
+ * remains the only thing older builds understand. {@link graph} is the
+ * Model Builder's directed graph, which supports multi-input tools, branches
+ * and merges. When both are present `graph` wins; a model saved by the canvas
+ * also writes a `steps` projection whenever its graph happens to be a single
+ * chain, so older builds can still run it.
  */
 export interface ProcessingModel {
   id: string;
   name: string;
   steps: ProcessingModelStep[];
+  graph?: ProcessingModelGraph;
 }
 
 /**

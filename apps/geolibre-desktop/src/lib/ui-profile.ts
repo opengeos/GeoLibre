@@ -460,6 +460,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   {
+    id: "processing.batchTools",
+    menuId: "processing",
+    labelKey: "toolbar.item.batchTools",
+    tier: "advanced",
+  },
+  {
     id: "processing.modelBuilder",
     menuId: "processing",
     labelKey: "toolbar.item.modelBuilder",

@@ -54,6 +54,7 @@ export function ProcessingMenu({
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const setStatisticsToolOpen = useAppStore((s) => s.setStatisticsToolOpen);
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
+  const setBatchToolsOpen = useAppStore((s) => s.setBatchToolsOpen);
   const setModelBuilderOpen = useAppStore((s) => s.setModelBuilderOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
@@ -102,6 +103,7 @@ export function ProcessingMenu({
     (!mobile && show("processing.raster"));
   const showGeolibreActions =
     show("processing.geocode") ||
+    show("processing.batchTools") ||
     show("processing.modelBuilder") ||
     (!mobile && show("processing.segmentation")) ||
     show("processing.objectDetection") ||
@@ -496,6 +498,11 @@ export function ProcessingMenu({
               {show("processing.geocode") && (
                 <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
                   {t("toolbar.item.geocode")}
+                </DropdownMenuItem>
+              )}
+              {show("processing.batchTools") && (
+                <DropdownMenuItem onSelect={() => setBatchToolsOpen(true)}>
+                  {t("toolbar.item.batchTools")}
                 </DropdownMenuItem>
               )}
               {show("processing.modelBuilder") && (

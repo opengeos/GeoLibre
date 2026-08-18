@@ -27,7 +27,12 @@ import {
   type MapScaleUnit,
   type MapViewState,
   MAX_PROCESSING_HISTORY,
+  type ModelGraphEdge,
+  type ModelGraphNode,
+  type ModelGraphNodeKind,
+  type ModelToolProvider,
   type ProcessingModel,
+  type ProcessingModelGraph,
   type ProcessingRun,
   type ProcessingRunKind,
   type SecondaryMapView,
@@ -660,9 +665,87 @@ export function normalizeModels(value: unknown): ProcessingModel[] | null {
       });
     }
     seen.add(id);
-    models.push({ id, name: normalizeString(candidate.name), steps });
+    const graph = normalizeModelGraph((candidate as { graph?: unknown }).graph);
+    models.push({
+      id,
+      name: normalizeString(candidate.name),
+      steps,
+      ...(graph ? { graph } : {}),
+    });
   }
   return models.length > 0 ? models : null;
+}
+
+const MODEL_NODE_KINDS = new Set<ModelGraphNodeKind>(["input", "tool", "output"]);
+const MODEL_TOOL_PROVIDERS = new Set<ModelToolProvider>(["vector", "whitebox"]);
+
+/** Coerce an untrusted number to a finite canvas coordinate. */
+function normalizeCoordinate(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+/**
+ * Coerce an untrusted `graph` value into a {@link ProcessingModelGraph}. Drops
+ * nodes without a usable id or an unknown kind, de-duplicates node ids, and
+ * drops edges that do not connect two surviving nodes or that name an empty
+ * port. Self-edges are dropped too, since a node cannot feed itself.
+ *
+ * Structural validity beyond this (cycles, type mismatches, missing required
+ * inputs) is the runner's job — those depend on the tool registries, which the
+ * project layer deliberately does not import.
+ *
+ * @param value Raw `graph` value from the project JSON.
+ * @returns The normalized graph, or `null` when it has no usable nodes.
+ */
+export function normalizeModelGraph(value: unknown): ProcessingModelGraph | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<ProcessingModelGraph>;
+  const nodes: ModelGraphNode[] = [];
+  const nodeIds = new Set<string>();
+  for (const entry of Array.isArray(raw.nodes) ? raw.nodes : []) {
+    if (!entry || typeof entry !== "object") continue;
+    const node = entry as Partial<ModelGraphNode>;
+    const nodeId = normalizeString(node.id).trim();
+    const kind = node.kind as ModelGraphNodeKind;
+    if (!nodeId || nodeIds.has(nodeId) || !MODEL_NODE_KINDS.has(kind)) continue;
+    nodeIds.add(nodeId);
+    const layerId = normalizeString(node.layerId).trim();
+    const toolId = normalizeString(node.toolId).trim();
+    const name = normalizeString(node.name).trim();
+    const provider = node.provider as ModelToolProvider;
+    nodes.push({
+      id: nodeId,
+      kind,
+      x: normalizeCoordinate(node.x),
+      y: normalizeCoordinate(node.y),
+      ...(layerId ? { layerId } : {}),
+      ...(toolId ? { toolId } : {}),
+      ...(MODEL_TOOL_PROVIDERS.has(provider) ? { provider } : {}),
+      ...(node.parameters && typeof node.parameters === "object" && !Array.isArray(node.parameters)
+        ? { parameters: node.parameters as Record<string, unknown> }
+        : {}),
+      ...(name ? { name } : {}),
+    });
+  }
+  if (nodes.length === 0) return null;
+
+  const edges: ModelGraphEdge[] = [];
+  const edgeIds = new Set<string>();
+  for (const entry of Array.isArray(raw.edges) ? raw.edges : []) {
+    if (!entry || typeof entry !== "object") continue;
+    const edge = entry as Partial<ModelGraphEdge>;
+    const edgeId = normalizeString(edge.id).trim();
+    const from = normalizeString(edge.from).trim();
+    const to = normalizeString(edge.to).trim();
+    const fromPort = normalizeString(edge.fromPort).trim();
+    const toPort = normalizeString(edge.toPort).trim();
+    if (!edgeId || edgeIds.has(edgeId)) continue;
+    if (!nodeIds.has(from) || !nodeIds.has(to) || from === to) continue;
+    if (!fromPort || !toPort) continue;
+    edgeIds.add(edgeId);
+    edges.push({ id: edgeId, from, fromPort, to, toPort });
+  }
+  return { nodes, edges };
 }
 
 const PROCESSING_RUN_KINDS = new Set<ProcessingRunKind>([
