@@ -14,8 +14,6 @@ from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import quote
 
-UTC = getattr(timezone, "utc", timezone.utc)
-
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +47,8 @@ from sqlalchemy.orm import (
     selectinload,
     sessionmaker,
 )
+
+UTC = getattr(timezone, "utc", timezone.utc)
 
 Visibility = Literal["public", "unlisted", "private", "organization"]
 OrganizationRole = Literal["administrator", "publisher", "member", "viewer"]

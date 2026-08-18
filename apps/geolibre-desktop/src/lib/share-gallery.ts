@@ -469,16 +469,7 @@ export async function loadSharedProjectThumbnail(
  */
 export async function fetchMyProjects(options: FetchMyProjectsOptions): Promise<SharedProject[]> {
   const base = requireShareBase(options.baseUrl);
-  const me = (await shareAuthorizedJsonRequest("/api/users/me", options.token, base, {
-    signal: options.signal,
-    fetchImpl: options.fetchImpl,
-  })) as {
-    user?: { username?: string | null };
-  } | null;
-  const username = me?.user?.username;
-  if (!username) {
-    throw new GalleryError("username-required");
-  }
+  const username = await fetchMyShareUsername(options);
 
   const pageSize = 100;
   const maxPages = 1000;
