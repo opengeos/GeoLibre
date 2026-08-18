@@ -2504,19 +2504,21 @@ export function LayerPanel({
 
   useEffect(() => {
     const watchers = watchUnsubsRef.current;
+    const refreshTimers = refreshTimersRef.current;
+    const refreshStatusTimers = refreshStatusTimersRef.current;
     return () => {
       for (const entry of watchers.values()) {
         entry.unwatch();
       }
       watchers.clear();
-      for (const entry of refreshTimersRef.current.values()) {
+      for (const entry of refreshTimers.values()) {
         window.clearInterval(entry.timer);
       }
-      refreshTimersRef.current.clear();
-      for (const timer of refreshStatusTimersRef.current.values()) {
+      refreshTimers.clear();
+      for (const timer of refreshStatusTimers.values()) {
         window.clearTimeout(timer);
       }
-      refreshStatusTimersRef.current.clear();
+      refreshStatusTimers.clear();
     };
   }, []);
 
