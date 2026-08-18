@@ -2170,7 +2170,8 @@
       "dashboard": "ダッシュボード",
       "assistant": "AIアシスタント",
       "geocode": "住所をジオコーディング",
-      "modelBuilder": "バッチ処理とモデル",
+      "batchTools": "バッチツール",
+      "modelBuilder": "モデルビルダー",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AIセグメンテーション",
@@ -3958,6 +3959,7 @@
     "batchTools": {
       "title": "バッチツール",
       "description": "1 つのベクターツールを多数のレイヤーに一括で実行します。",
+      "runBatch": "バッチを実行",
       "tool": "ツール",
       "sharedParameters": "共通パラメータ",
       "noExtraParameters": "このツールに追加のパラメータはありません。",

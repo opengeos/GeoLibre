@@ -2215,7 +2215,8 @@
       "dashboard": "Tableau de bord",
       "assistant": "Assistant IA",
       "geocode": "Géocoder des adresses",
-      "modelBuilder": "Lots et modèles",
+      "batchTools": "Outils par lot",
+      "modelBuilder": "Générateur de modèles",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "Segmentation IA",
@@ -4025,6 +4026,7 @@
     "batchTools": {
       "title": "Outils par lot",
       "description": "Exécuter un outil vectoriel sur plusieurs couches à la fois.",
+      "runBatch": "Exécuter le lot",
       "tool": "Outil",
       "sharedParameters": "Paramètres partagés",
       "noExtraParameters": "Cet outil n'a pas de paramètres supplémentaires.",

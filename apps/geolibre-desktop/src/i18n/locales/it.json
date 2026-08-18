@@ -2215,7 +2215,8 @@
       "dashboard": "Dashboard",
       "assistant": "Assistente IA",
       "geocode": "Geocodifica indirizzi",
-      "modelBuilder": "Batch e modelli",
+      "batchTools": "Strumenti in blocco",
+      "modelBuilder": "Generatore di modelli",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "Segmentazione IA",
@@ -4025,6 +4026,7 @@
     "batchTools": {
       "title": "Strumenti in blocco",
       "description": "Esegui uno strumento vettoriale su molti livelli in una volta.",
+      "runBatch": "Esegui in blocco",
       "tool": "Strumento",
       "sharedParameters": "Parametri condivisi",
       "noExtraParameters": "Questo strumento non ha parametri aggiuntivi.",

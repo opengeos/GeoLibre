@@ -2305,7 +2305,8 @@
       "dashboard": "Панель мониторинга",
       "assistant": "ИИ-ассистент",
       "geocode": "Геокодировать адреса",
-      "modelBuilder": "Пакеты и модели",
+      "batchTools": "Пакетные инструменты",
+      "modelBuilder": "Конструктор моделей",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "ИИ-сегментация",
@@ -4159,6 +4160,7 @@
     "batchTools": {
       "title": "Пакетные инструменты",
       "description": "Запустить один векторный инструмент сразу для многих слоёв.",
+      "runBatch": "Запустить пакет",
       "tool": "Инструмент",
       "sharedParameters": "Общие параметры",
       "noExtraParameters": "У этого инструмента нет дополнительных параметров.",

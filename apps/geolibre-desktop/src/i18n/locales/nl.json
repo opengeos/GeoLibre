@@ -2215,7 +2215,8 @@
       "dashboard": "Dashboard",
       "assistant": "AI-assistent",
       "geocode": "Adressen geocoderen",
-      "modelBuilder": "Batches & modellen",
+      "batchTools": "Batchgereedschappen",
+      "modelBuilder": "Modelbouwer",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI-segmentatie",
@@ -4025,6 +4026,7 @@
     "batchTools": {
       "title": "Batchgereedschappen",
       "description": "Eén vectorgereedschap op meerdere lagen tegelijk uitvoeren.",
+      "runBatch": "Batch uitvoeren",
       "tool": "Gereedschap",
       "sharedParameters": "Gedeelde parameters",
       "noExtraParameters": "Dit gereedschap heeft geen extra parameters.",

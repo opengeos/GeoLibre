@@ -2225,7 +2225,8 @@
       "dashboard": "Dashboard",
       "assistant": "AI Assistant",
       "geocode": "Geocode Addresses",
-      "modelBuilder": "Batch & Models",
+      "batchTools": "Batch tools",
+      "modelBuilder": "Model Builder",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI Segmentation",
@@ -4035,6 +4036,7 @@
     "batchTools": {
       "title": "Batch tools",
       "description": "Run one vector tool across many layers at once.",
+      "runBatch": "Run batch",
       "tool": "Tool",
       "sharedParameters": "Shared parameters",
       "noExtraParameters": "This tool has no extra parameters.",

@@ -2170,7 +2170,8 @@
       "dashboard": "Dasbor",
       "assistant": "Asisten AI",
       "geocode": "Geocode Alamat",
-      "modelBuilder": "Batch & Model",
+      "batchTools": "Alat massal",
+      "modelBuilder": "Pembuat Model",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "Segmentasi AI",
@@ -3958,6 +3959,7 @@
     "batchTools": {
       "title": "Alat massal",
       "description": "Jalankan satu alat vektor pada banyak lapisan sekaligus.",
+      "runBatch": "Jalankan massal",
       "tool": "Alat",
       "sharedParameters": "Parameter bersama",
       "noExtraParameters": "Alat ini tidak memiliki parameter tambahan.",

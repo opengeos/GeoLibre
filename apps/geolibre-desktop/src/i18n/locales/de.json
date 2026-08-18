@@ -2215,7 +2215,8 @@
       "dashboard": "Dashboard",
       "assistant": "KI-Assistent",
       "geocode": "Adressen geokodieren",
-      "modelBuilder": "Stapel & Modelle",
+      "batchTools": "Stapelwerkzeuge",
+      "modelBuilder": "Modellbaukasten",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "KI-Segmentierung",
@@ -4025,6 +4026,7 @@
     "batchTools": {
       "title": "Stapelwerkzeuge",
       "description": "Ein Vektorwerkzeug auf viele Ebenen gleichzeitig anwenden.",
+      "runBatch": "Stapel ausführen",
       "tool": "Werkzeug",
       "sharedParameters": "Gemeinsame Parameter",
       "noExtraParameters": "Dieses Werkzeug hat keine zusätzlichen Parameter.",

@@ -2170,7 +2170,8 @@
       "dashboard": "대시보드",
       "assistant": "AI 어시스턴트",
       "geocode": "주소 지오코딩",
-      "modelBuilder": "배치 및 모델",
+      "batchTools": "일괄 도구",
+      "modelBuilder": "모델 빌더",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI 분할",
@@ -3958,6 +3959,7 @@
     "batchTools": {
       "title": "일괄 도구",
       "description": "하나의 벡터 도구를 여러 레이어에 한 번에 실행합니다.",
+      "runBatch": "일괄 실행",
       "tool": "도구",
       "sharedParameters": "공통 매개변수",
       "noExtraParameters": "이 도구에는 추가 매개변수가 없습니다.",

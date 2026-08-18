@@ -2215,7 +2215,8 @@
       "dashboard": "Painel",
       "assistant": "Assistente de IA",
       "geocode": "Geocodificar endereços",
-      "modelBuilder": "Lotes e modelos",
+      "batchTools": "Ferramentas em lote",
+      "modelBuilder": "Construtor de modelos",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "Segmentação por IA",
@@ -4025,6 +4026,7 @@
     "batchTools": {
       "title": "Ferramentas em lote",
       "description": "Executar uma ferramenta vetorial em várias camadas de uma vez.",
+      "runBatch": "Executar lote",
       "tool": "Ferramenta",
       "sharedParameters": "Parâmetros compartilhados",
       "noExtraParameters": "Esta ferramenta não tem parâmetros adicionais.",

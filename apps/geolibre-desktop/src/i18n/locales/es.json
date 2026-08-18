@@ -2215,7 +2215,8 @@
       "dashboard": "Panel de control",
       "assistant": "Asistente de IA",
       "geocode": "Geocodificar direcciones",
-      "modelBuilder": "Lotes y modelos",
+      "batchTools": "Herramientas por lotes",
+      "modelBuilder": "Constructor de modelos",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "Segmentación con IA",
@@ -4025,6 +4026,7 @@
     "batchTools": {
       "title": "Herramientas por lotes",
       "description": "Ejecutar una herramienta vectorial sobre muchas capas a la vez.",
+      "runBatch": "Ejecutar lote",
       "tool": "Herramienta",
       "sharedParameters": "Parámetros compartidos",
       "noExtraParameters": "Esta herramienta no tiene parámetros adicionales.",

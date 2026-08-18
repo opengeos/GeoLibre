@@ -2394,7 +2394,8 @@
       "dashboard": "لوحة المعلومات",
       "assistant": "مساعد الذكاء الاصطناعي",
       "geocode": "الترميز الجغرافي للعناوين",
-      "modelBuilder": "المعالجة الدفعية والنماذج",
+      "batchTools": "أدوات الدفعات",
+      "modelBuilder": "منشئ النماذج",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "التجزئة بالذكاء الاصطناعي",
@@ -4292,6 +4293,7 @@
     "batchTools": {
       "title": "أدوات الدفعات",
       "description": "تشغيل أداة متجهية واحدة على عدة طبقات دفعة واحدة.",
+      "runBatch": "تشغيل الدفعة",
       "tool": "الأداة",
       "sharedParameters": "المعاملات المشتركة",
       "noExtraParameters": "لا تحتوي هذه الأداة على معاملات إضافية.",

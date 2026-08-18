@@ -2215,7 +2215,8 @@
       "dashboard": "डैशबोर्ड",
       "assistant": "AI सहायक",
       "geocode": "पते जियोकोड करें",
-      "modelBuilder": "बैच और मॉडल",
+      "batchTools": "बैच उपकरण",
+      "modelBuilder": "मॉडल बिल्डर",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI सेगमेंटेशन",
@@ -4025,6 +4026,7 @@
     "batchTools": {
       "title": "बैच उपकरण",
       "description": "एक ही वेक्टर उपकरण को कई परतों पर एक साथ चलाएँ।",
+      "runBatch": "बैच चलाएँ",
       "tool": "टूल",
       "sharedParameters": "साझा पैरामीटर",
       "noExtraParameters": "इस टूल में कोई अतिरिक्त पैरामीटर नहीं है।",

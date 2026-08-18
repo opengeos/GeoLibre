@@ -2167,7 +2167,8 @@
       "dashboard": "Trang tổng quan",
       "assistant": "Trợ lý AI",
       "geocode": "Mã hóa địa lý địa chỉ",
-      "modelBuilder": "Xử lý hàng loạt & Mô hình",
+      "batchTools": "Công cụ hàng loạt",
+      "modelBuilder": "Trình dựng mô hình",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "Phân đoạn AI",
@@ -4044,6 +4045,7 @@
     "batchTools": {
       "title": "Công cụ hàng loạt",
       "description": "Chạy một công cụ vector trên nhiều lớp cùng lúc.",
+      "runBatch": "Chạy hàng loạt",
       "tool": "Dụng cụ",
       "sharedParameters": "Thông số được chia sẻ",
       "noExtraParameters": "Công cụ này không có tham số bổ sung.",

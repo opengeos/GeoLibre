@@ -1114,8 +1114,14 @@ function portsOf(
   node: ModelGraphNode,
   descriptor: ModelToolDescriptor | undefined,
 ): { inputs: { id: string; label: string }[]; outputs: { id: string; label: string }[] } {
-  if (node.kind === "input") return { inputs: [], outputs: [{ id: "out", label: "Output" }] };
-  if (node.kind === "output") return { inputs: [{ id: "in", label: "Input" }], outputs: [] };
+  // Stable ids, matching the engine's own portsFor: portLabel() resolves these
+  // for display, and a hardcoded English word here would slip past it.
+  if (node.kind === "input") {
+    return { inputs: [], outputs: [{ id: INPUT_NODE_PORT, label: INPUT_NODE_PORT }] };
+  }
+  if (node.kind === "output") {
+    return { inputs: [{ id: OUTPUT_NODE_PORT, label: OUTPUT_NODE_PORT }], outputs: [] };
+  }
   return { inputs: descriptor?.inputs ?? [], outputs: descriptor?.outputs ?? [] };
 }
 

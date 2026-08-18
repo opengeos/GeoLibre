@@ -2215,7 +2215,8 @@
       "dashboard": "დაფა",
       "assistant": "AI ასისტენტი",
       "geocode": "მისამართების გეოკოდირება",
-      "modelBuilder": "პაკეტები და მოდელები",
+      "batchTools": "სერიული ხელსაწყოები",
+      "modelBuilder": "მოდელის შემქმნელი",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI სეგმენტაცია",
@@ -4025,6 +4026,7 @@
     "batchTools": {
       "title": "სერიული ხელსაწყოები",
       "description": "ერთი ვექტორული ხელსაწყოს გაშვება მრავალ ფენაზე ერთდროულად.",
+      "runBatch": "სერიის გაშვება",
       "tool": "ხელსაწყო",
       "sharedParameters": "საერთო პარამეტრები",
       "noExtraParameters": "ამ ხელსაწყოს დამატებითი პარამეტრები არ აქვს.",

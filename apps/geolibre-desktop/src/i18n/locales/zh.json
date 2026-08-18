@@ -2170,7 +2170,8 @@
       "dashboard": "仪表盘",
       "assistant": "AI 助手",
       "geocode": "地理编码地址",
-      "modelBuilder": "批处理与模型",
+      "batchTools": "批处理工具",
+      "modelBuilder": "模型构建器",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI 分割",
@@ -3958,6 +3959,7 @@
     "batchTools": {
       "title": "批处理工具",
       "description": "对多个图层一次性运行同一个矢量工具。",
+      "runBatch": "运行批处理",
       "tool": "工具",
       "sharedParameters": "共享参数",
       "noExtraParameters": "此工具没有额外参数。",

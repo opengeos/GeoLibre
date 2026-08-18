@@ -2170,7 +2170,8 @@
       "dashboard": "แดชบอร์ด",
       "assistant": "ผู้ช่วย AI",
       "geocode": "แปลงที่อยู่เป็นพิกัด",
-      "modelBuilder": "งานแบบชุดและโมเดล",
+      "batchTools": "เครื่องมือแบบกลุ่ม",
+      "modelBuilder": "ตัวสร้างแบบจำลอง",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "การแบ่งส่วนภาพด้วย AI",
@@ -3958,6 +3959,7 @@
     "batchTools": {
       "title": "เครื่องมือแบบกลุ่ม",
       "description": "เรียกใช้เครื่องมือเวกเตอร์เดียวกับหลายชั้นข้อมูลพร้อมกัน",
+      "runBatch": "เรียกใช้แบบกลุ่ม",
       "tool": "เครื่องมือ",
       "sharedParameters": "พารามิเตอร์ที่ใช้ร่วมกัน",
       "noExtraParameters": "เครื่องมือนี้ไม่มีพารามิเตอร์เพิ่มเติม",

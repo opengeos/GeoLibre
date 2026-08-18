@@ -2215,7 +2215,8 @@
       "dashboard": "داشبورد",
       "assistant": "دستیار هوش مصنوعی",
       "geocode": "مکان‌یابی نشانی‌ها",
-      "modelBuilder": "دسته‌ای و مدل‌ها",
+      "batchTools": "ابزارهای دسته‌ای",
+      "modelBuilder": "سازندهٔ مدل",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "قطعه‌بندی هوش مصنوعی",
@@ -4025,6 +4026,7 @@
     "batchTools": {
       "title": "ابزارهای دسته‌ای",
       "description": "اجرای یک ابزار برداری روی چند لایه به‌صورت یکجا.",
+      "runBatch": "اجرای دسته",
       "tool": "ابزار",
       "sharedParameters": "پارامترهای مشترک",
       "noExtraParameters": "این ابزار پارامتر افزوده‌ای ندارد.",

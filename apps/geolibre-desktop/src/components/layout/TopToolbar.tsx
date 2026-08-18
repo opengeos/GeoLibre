@@ -86,6 +86,7 @@ import {
   Save,
   Sparkles,
   Sun,
+  Layers,
   Workflow,
   Wrench,
   ZoomIn,
@@ -950,6 +951,7 @@ export function TopToolbar({
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
   const setModelBuilderOpen = useAppStore((s) => s.setModelBuilderOpen);
+  const setBatchToolsOpen = useAppStore((s) => s.setBatchToolsOpen);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
@@ -1426,9 +1428,17 @@ export function TopToolbar({
       id: "proc.modelBuilder",
       title: t("toolbar.command.modelBuilder"),
       group: t("toolbar.commandGroup.processing"),
-      keywords: "batch model pipeline chain modeler workflow graphical",
+      keywords: "model builder pipeline chain modeler workflow graph canvas node",
       icon: Workflow,
       run: () => setModelBuilderOpen(true),
+    },
+    {
+      id: "proc.batchTools",
+      title: t("toolbar.command.batchTools"),
+      group: t("toolbar.commandGroup.processing"),
+      keywords: "batch bulk many layers repeat vector tool",
+      icon: Layers,
+      run: () => setBatchToolsOpen(true),
     },
     // The Mac App Store build omits AI Segmentation: it is sidecar-only (the
     // App Sandbox forbids the sidecar) and has no client-side fallback.

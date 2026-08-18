@@ -2215,7 +2215,8 @@
       "dashboard": "Gösterge Paneli",
       "assistant": "AI Asistanı",
       "geocode": "Adresleri Coğrafi Kodla",
-      "modelBuilder": "Toplu İşler & Modeller",
+      "batchTools": "Toplu araçlar",
+      "modelBuilder": "Model Oluşturucu",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI Segmentasyonu",
@@ -4025,6 +4026,7 @@
     "batchTools": {
       "title": "Toplu araçlar",
       "description": "Tek bir vektör aracını birçok katmanda aynı anda çalıştırın.",
+      "runBatch": "Toplu çalıştır",
       "tool": "Araç",
       "sharedParameters": "Ortak parametreler",
       "noExtraParameters": "Bu aracın ek parametresi yok.",
