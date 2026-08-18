@@ -48,6 +48,14 @@ export interface ModelToolDescriptor {
   outputs: ModelToolPort[];
   /** Everything not supplied by an edge, rendered in the properties panel. */
   parameters: AlgorithmParameter[];
+  /**
+   * The provider's own tool record, carried through verbatim so the executor
+   * can hand it back to that provider's runner. The Whitebox WASM runner builds
+   * its CLI arguments by walking this manifest's params, so a node that loses it
+   * runs with no arguments at all and the binary rejects it as missing a
+   * required parameter. Opaque here to keep the graph engine provider-agnostic.
+   */
+  native?: unknown;
 }
 
 /** The single output port every `input` node exposes. */
@@ -261,8 +269,11 @@ export interface RunModelGraphOptions {
   resolveDescriptor: DescriptorResolver;
   /** Run one tool node. */
   executeTool: ModelToolExecutor;
-  /** Resolve an `input` node's layer to a value, or `null` when unusable. */
-  resolveInput: (layerId: string) => ModelValue | null;
+  /**
+   * Resolve an `input` node's layer to a value, or `null` when unusable.
+   * Async because a raster layer's bytes have to be fetched.
+   */
+  resolveInput: (layerId: string) => Promise<ModelValue | null> | ModelValue | null;
   /** Deliver a finished `output` node's value (adds it to the map). */
   emitOutput: (name: string, value: ModelValue, node: ModelGraphNode) => void;
   log: (message: string) => void;
@@ -328,7 +339,7 @@ export async function runModelGraph(
     try {
       if (node.kind === "input") {
         options.onNodeStatus?.(node.id, "running");
-        const value = node.layerId ? options.resolveInput(node.layerId) : null;
+        const value = node.layerId ? await options.resolveInput(node.layerId) : null;
         if (!value) {
           const message = `Input layer "${node.layerId ?? ""}" has no usable data.`;
           options.log(`Error: ${message}`);
@@ -370,7 +381,7 @@ export async function runModelGraph(
         if (inputs[port.id]) continue;
         const typed = node.parameters?.[port.id];
         if (typeof typed !== "string" || !typed) continue;
-        const value = options.resolveInput(typed);
+        const value = await options.resolveInput(typed);
         if (value) inputs[port.id] = value;
       }
 

@@ -22,6 +22,7 @@ import {
   type ModelToolDescriptor,
   type ModelValue,
   type WhiteboxLayerInput,
+  type WhiteboxTool,
 } from "@geolibre/processing";
 import { Button, Input, Label, ScrollArea, Select, cn } from "@geolibre/ui";
 import { Download, GripVertical, Loader2, Play, Plus, Save, Trash2, Upload, X } from "lucide-react";
@@ -59,6 +60,7 @@ import {
   setNodeField,
   setNodeParameter,
 } from "../../../lib/model-graph-edit";
+import { fetchLayerBytes } from "../../../lib/whitebox-layer-inputs";
 import { ParameterField } from "../ParameterField";
 
 /** MIME type carrying a palette tool key through an HTML5 drag. */
@@ -1185,11 +1187,29 @@ function stepsToGraph(model: ProcessingModel): ProcessingModelGraph {
   return { nodes, edges };
 }
 
-/** Wrap a project layer as a model value the graph runner can carry. */
-function layerToModelValue(layers: GeoLibreLayer[], layerId: string): ModelValue | null {
+/**
+ * Wrap a project layer as a model value the graph runner can carry.
+ *
+ * A vector layer hands over its in-memory GeoJSON directly. A raster layer has
+ * to have its bytes fetched — the same path the Whitebox toolbox uses for a
+ * `raster_in`, so a locally loaded GeoTIFF resolves through its blob URL rather
+ * than a file path the browser cannot read.
+ *
+ * @param layers The project layers.
+ * @param layerId The layer an input node points at.
+ * @returns The value, or `null` when the layer holds nothing runnable.
+ */
+async function layerToModelValue(
+  layers: GeoLibreLayer[],
+  layerId: string,
+): Promise<ModelValue | null> {
   const layer = layers.find((entry) => entry.id === layerId);
   if (!layer) return null;
   if (layer.geojson) return { kind: "vector", geojson: layer.geojson };
+  if (["raster", "cog", "wms", "wmts", "xyz", "zarr"].includes(layer.type)) {
+    const bytes = await fetchLayerBytes(layer);
+    if (bytes) return { kind: "raster", bytes, name: layer.name };
+  }
   return null;
 }
 
@@ -1254,6 +1274,10 @@ async function executeModelTool({
   const job = await runWhiteboxToolWasm({
     tool_id: descriptor.toolId,
     parameters: { ...(node.parameters ?? {}) },
+    // The WASM runner builds its CLI arguments by walking `tool.params`; without
+    // the manifest it passes none and the binary rejects the run as missing a
+    // required parameter.
+    tool: descriptor.native as WhiteboxTool | undefined,
     layer_inputs: layerInputs,
     include_pro: false,
     tier: "open",

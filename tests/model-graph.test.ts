@@ -350,6 +350,24 @@ describe("running a model graph", () => {
     assert.equal(emitted[0].value.kind, "raster");
   });
 
+  it("awaits an async input resolver, since raster bytes have to be fetched", async () => {
+    const { options, emitted } = baseOptions();
+    const result = await runModelGraph(chainGraph(), {
+      ...options,
+      resolveInput: async (layerId: string) => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return { kind: "raster", bytes: new Uint8Array([1, 2]), name: layerId };
+      },
+      executeTool: async ({ inputs }) => {
+        // A resolver that was not awaited would deliver a Promise here.
+        assert.equal(inputs.layer.kind, "raster");
+        return { out: { kind: "raster", bytes: new Uint8Array([3]), name: "o" } };
+      },
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(emitted[0].value.kind, "raster");
+  });
+
   it("resolves an unwired input port from a layer id typed into the node", async () => {
     const graph: ProcessingModelGraph = {
       nodes: [

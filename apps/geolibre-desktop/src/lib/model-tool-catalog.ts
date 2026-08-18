@@ -147,6 +147,8 @@ export function whiteboxToolDescriptor(tool: WhiteboxTool): ModelToolDescriptor 
     inputs,
     outputs,
     parameters,
+    // The WASM runner walks this manifest to build its CLI arguments.
+    native: tool,
   };
 }
 

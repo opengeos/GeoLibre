@@ -122,6 +122,14 @@ describe("whitebox tool descriptors", () => {
     assert.equal(descriptor?.outputs[0].kind, "vector");
   });
 
+  it("carries the manifest through as `native` for the WASM runner", () => {
+    // The runner builds its CLI arguments by walking `tool.params`; a descriptor
+    // that drops the manifest makes every Whitebox node run with no arguments
+    // and the binary rejects it as missing a required parameter.
+    const descriptor = whiteboxToolDescriptor(slopeTool);
+    assert.equal(descriptor?.native, slopeTool);
+  });
+
   it("drops a tool with no output port rather than stranding it on the canvas", () => {
     const descriptor = whiteboxToolDescriptor({
       id: "print_stats",
