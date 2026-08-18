@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.2"
   },
   "engines": {
     "node": ">=22.13"

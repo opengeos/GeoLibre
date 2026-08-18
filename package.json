@@ -36,15 +36,15 @@
     "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.12.1",
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
     "@types/node": "^26.2.0",
     "eslint": "^10.8.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fflate": "^0.8.3",
     "linkedom": "^0.18.13",
-    "tsx": "^4.23.11",
-    "typescript-eslint": "^8.66.0"
+    "tsx": "^4.23.12",
+    "typescript-eslint": "^8.67.0"
   },
   "overrides": {
     "brace-expansion": "^5.0.9",
