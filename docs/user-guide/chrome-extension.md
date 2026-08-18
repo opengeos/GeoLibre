@@ -6,7 +6,19 @@ The **Open data in GeoLibre** Chrome extension finds supported geospatial data l
 
 ## Install the extension
 
-Until the extension is available from the Chrome Web Store, install the packaged release manually:
+The extension is published on the Chrome Web Store, so it installs in one click and updates automatically:
+
+[Get Open data in GeoLibre from the Chrome Web Store](https://chromewebstore.google.com/detail/open-data-in-geolibre/joinecgbfoldanidcoakpjgkbaceaooj){ .md-button .md-button--primary }
+
+1. Open the [Chrome Web Store listing](https://chromewebstore.google.com/detail/open-data-in-geolibre/joinecgbfoldanidcoakpjgkbaceaooj).
+2. Select **Add to Chrome**, then confirm.
+3. Pin **Open data in GeoLibre** to the Chrome toolbar for convenient access.
+
+It works in any Chromium-based browser that can install from the Chrome Web Store, including Chrome, Edge, Brave, Vivaldi, Opera, and Arc.
+
+### Install the packaged release manually
+
+Prefer not to install from the Store, or want to run a build that is newer than the reviewed listing? Load the packaged release as an unpacked extension:
 
 1. Open the [latest GeoLibre release](https://github.com/opengeos/GeoLibre/releases/latest) and download the ZIP asset whose name starts with `geolibre-chrome-`.
 2. Extract the ZIP archive to a folder you intend to keep. Chrome loads the extension from this folder, so do not delete it after installation.
@@ -15,7 +27,7 @@ Until the extension is available from the Chrome Web Store, install the packaged
 5. Select **Load unpacked** and choose the extracted `geolibre-chrome-<version>` folder.
 6. Pin **Open data in GeoLibre** to the Chrome toolbar for convenient access.
 
-To update a manually installed copy, download and extract the newer release asset, then select the extension's **Reload** button on `chrome://extensions`. If you extract it to a different folder, remove the old copy and load the new folder instead.
+A manually installed copy does not update itself. To update it, download and extract the newer release asset, then select the extension's **Reload** button on `chrome://extensions`. If you extract it to a different folder, remove the old copy and load the new folder instead.
 
 ## Open datasets from a webpage
 
