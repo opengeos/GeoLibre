@@ -186,7 +186,8 @@
     "computing": "Calculando terreno…",
     "partialData": "Algumas amostras não tinham dados de terreno",
     "heading": "Rumo",
-    "finalHeading": "Rumo final"
+    "finalHeading": "Rumo final",
+    "bodyNote": "Medido em {{body}} (aproximação esférica)"
   },
   "statusBar": {
     "elevation": "Elev",

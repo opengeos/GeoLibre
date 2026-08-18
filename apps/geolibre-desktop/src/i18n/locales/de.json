@@ -186,7 +186,8 @@
     "computing": "Gelände wird berechnet…",
     "partialData": "Für einige Messpunkte lagen keine Geländedaten vor",
     "heading": "Kurs",
-    "finalHeading": "Endkurs"
+    "finalHeading": "Endkurs",
+    "bodyNote": "Gemessen auf {{body}} (Kugelnäherung)"
   },
   "statusBar": {
     "elevation": "Höhe",

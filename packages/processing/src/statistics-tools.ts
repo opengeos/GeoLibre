@@ -4,7 +4,7 @@ import centroid from "@turf/centroid";
 import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
-import { getActiveMeanRadiusMeters } from "@geolibre/core";
+import { earthAreaToBody, getActiveMeanRadiusMeters } from "@geolibre/core";
 import type { ProcessingAlgorithm, ProcessingContext } from "./types";
 import { parseTimestamp } from "./vector-tools";
 
@@ -593,7 +593,10 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
         [west, south],
       ],
     ]);
-    const studyArea = area(extent);
+    // turf's area is Earth-radius based, while the nearest-neighbour distances
+    // above already use the active body's radius. Rescale so the two agree and
+    // the NN ratio is meaningful off Earth (GeoLibre#1128); a no-op on Earth.
+    const studyArea = earthAreaToBody(area(extent));
     if (!(studyArea > 0)) {
       ctx.log("Error: the point extent has zero area (all points coincide).");
       return;

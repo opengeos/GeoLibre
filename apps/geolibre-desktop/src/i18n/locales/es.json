@@ -186,7 +186,8 @@
     "computing": "Calculando terreno…",
     "partialData": "Algunas muestras no tenían datos de terreno",
     "heading": "Rumbo",
-    "finalHeading": "Rumbo final"
+    "finalHeading": "Rumbo final",
+    "bodyNote": "Medido en {{body}} (aproximación esférica)"
   },
   "statusBar": {
     "elevation": "Elev",

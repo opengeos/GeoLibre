@@ -5,11 +5,10 @@
  * or MapLibre imports, so the math can be unit-tested in isolation.
  */
 
+import { getActiveMeanRadiusMeters } from "@geolibre/core";
+
 /** A geographic coordinate as a `[longitude, latitude]` tuple (degrees). */
 export type LngLat = [number, number];
-
-/** Mean Earth radius in meters (IUGG), used for haversine distances. */
-const EARTH_RADIUS_M = 6371008.8;
 
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 
@@ -28,7 +27,9 @@ export function haversineMeters(a: LngLat, b: LngLat): number {
   const sinDLat = Math.sin(dLat / 2);
   const sinDLng = Math.sin(dLng / 2);
   const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
+  // The active body's radius, not Earth's, so the profile's distance axis is
+  // correct on a Moon/Mars project too (GeoLibre#1128).
+  return 2 * getActiveMeanRadiusMeters() * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 /**

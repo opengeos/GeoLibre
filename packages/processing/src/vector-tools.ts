@@ -30,7 +30,12 @@ import type {
   Position,
   MultiPolygon,
 } from "geojson";
-import { layerJoinKey, type GeoLibreLayer } from "@geolibre/core";
+import {
+  bodyLengthToEarth,
+  earthLengthToBody,
+  layerJoinKey,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
 import { createDggsGridTool, dggsBinPointsTool, dggsCompactTool } from "./dggs-tools";
 import { TOPOLOGY_TOOLS } from "./topology-tools";
@@ -222,7 +227,10 @@ export const bufferTool: ProcessingAlgorithm = {
     if (!fc) return;
     const distance = numberParam(ctx, "distance", 1);
     const units = (ctx.parameters.units as string) || "kilometers";
-    const buffered = buffer(fc, distance, {
+    // turf bakes in Earth's radius, so the requested distance would lay out as
+    // Earth ground on a Moon/Mars project. Convert to the Earth-equivalent that
+    // spans the same distance on this body (GeoLibre#1128) — a no-op on Earth.
+    const buffered = buffer(fc, bodyLengthToEarth(distance), {
       units: units as "kilometers" | "meters" | "miles",
     });
     const features = ((buffered?.features ?? []) as Feature[]).filter((f) => Boolean(f?.geometry));
@@ -2207,9 +2215,13 @@ export const cellSectorsTool: ProcessingAlgorithm = {
       // after normalization), so draw an omnidirectional site as a circle.
       if (angle > 360) angle = 360;
       const full = angle === 360; // only reachable once the clamp above fired
+      // turf's circle/sector are Earth-radius based, so scale the site radius
+      // into its Earth equivalent to cover the intended ground on this body
+      // (GeoLibre#1128). A no-op on Earth.
+      const turfRadius = bodyLengthToEarth(radius);
       const wedge = full
-        ? circle(point.geometry.coordinates, radius, { units: units as LinearUnit })
-        : sector(point.geometry.coordinates, radius, azimuth - angle / 2, azimuth + angle / 2, {
+        ? circle(point.geometry.coordinates, turfRadius, { units: units as LinearUnit })
+        : sector(point.geometry.coordinates, turfRadius, azimuth - angle / 2, azimuth + angle / 2, {
             units: units as LinearUnit,
           });
       if (!wedge?.geometry) {
@@ -2306,7 +2318,9 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
       for (let i = 1; i < pts.length; i += 1) {
         const a = pts[i - 1];
         const b = pts[i];
-        const meters = distance(a.coord, b.coord, { units: "meters" });
+        // turf measures on Earth; rescale to this body's ground distance
+        // (GeoLibre#1128) so the derived speeds are correct off Earth too.
+        const meters = earthLengthToBody(distance(a.coord, b.coord, { units: "meters" }));
         const seconds = (b.time - a.time) / 1000;
         // Equal timestamps (the only non-positive gap after sorting) give an
         // undefined speed; emit the segment with null rather than Infinity.
@@ -2458,11 +2472,15 @@ export const detectStopsTool: ProcessingAlgorithm = {
         // Extend the run while each later fix stays within maxDistance of the
         // anchor (the run's first fix), so brief GPS scatter around one spot is
         // absorbed into a single stop.
+        // The threshold is a ground distance on the project's body, so rescale
+        // turf's Earth measurement before comparing (GeoLibre#1128).
         while (
           j < pts.length &&
-          distance(pts[i].coord, pts[j].coord, {
-            units: distanceUnits as LinearUnit,
-          }) <= maxDistance
+          earthLengthToBody(
+            distance(pts[i].coord, pts[j].coord, {
+              units: distanceUnits as LinearUnit,
+            }),
+          ) <= maxDistance
         ) {
           j += 1;
         }
@@ -2682,9 +2700,13 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
         const dt = timed[j].time - timed[i].time; // >= 0 (sorted)
         if (dt > maxTimeMs) break; // later j only widens the gap
         if (idField && timed[i].id === timed[j].id) continue;
-        const dist = distance(timed[i].coord, timed[j].coord, {
-          units: distanceUnits as LinearUnit,
-        });
+        // Both the threshold below and the reported `distance` property are
+        // ground distances on the project's body (GeoLibre#1128).
+        const dist = earthLengthToBody(
+          distance(timed[i].coord, timed[j].coord, {
+            units: distanceUnits as LinearUnit,
+          }),
+        );
         if (dist > maxDistance) continue;
         pairs.push({
           type: "Feature",

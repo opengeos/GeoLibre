@@ -264,7 +264,7 @@ export {
   type PaletteLegendEntry,
 } from "./plugins/raster-palette";
 export { colormapColors, normalizeRampColor, warmColormapColors } from "./plugins/colormap-colors";
-export { setTerrainMeasureLabels } from "./plugins/terrain-measure";
+export { setTerrainMeasureBodyNames, setTerrainMeasureLabels } from "./plugins/terrain-measure";
 export {
   addVectorLayerFromUrl,
   closeVectorLayerPanel,

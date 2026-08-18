@@ -194,7 +194,8 @@
     "computing": "جارٍ حساب التضاريس…",
     "partialData": "بعض العينات لا تتوفر لها بيانات تضاريس",
     "heading": "الاتجاه",
-    "finalHeading": "الاتجاه النهائي"
+    "finalHeading": "الاتجاه النهائي",
+    "bodyNote": "قياس على {{body}} (تقريب كروي)"
   },
   "statusBar": {
     "elevation": "ارتفاع",

@@ -6,7 +6,7 @@ import convex from "@turf/convex";
 import mask from "@turf/mask";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type { GeometryGeneratorType, LayerStyle } from "@geolibre/core";
-import { styleValue } from "@geolibre/core";
+import { bodyLengthToEarth, getActiveBodyRadiusRatio, styleValue } from "@geolibre/core";
 
 /**
  * Derived feature collections for the symbology pack (#1323): the inverted
@@ -125,7 +125,11 @@ export function buildGeneratedGeometry(
   // A zero flat distance buffers nothing — unless a field supplies the real
   // distances, in which case it is only the fallback for unreadable values.
   if (type === "buffer" && distance === 0 && !property) return EMPTY;
-  const key = type === "buffer" ? `buffer:${distance}:${property}` : type;
+  // The body's radius ratio is part of the buffer's identity: switching planets
+  // changes the ground distance those metres cover, so it must not hit a cache
+  // entry computed for the previous body.
+  const key =
+    type === "buffer" ? `buffer:${distance}:${property}:${getActiveBodyRadiusRatio()}` : type;
   let byKey = generatorCache.get(collection);
   if (!byKey) {
     byKey = new Map();
@@ -219,7 +223,11 @@ function deriveFeature(
         // applies, and turf's zero buffer returns the source geometry — which
         // would draw the untouched feature as if it were its own buffer.
         if (bufferDistance === 0) return null;
-        return buffer(feature, bufferDistance, { units: "meters" }) ?? null;
+        // turf bakes in Earth's radius, so on a Moon/Mars project the metres
+        // the user asked for would be laid out as Earth metres. Convert to the
+        // Earth-equivalent distance that spans the same ground on this body
+        // (GeoLibre#1128); a no-op on Earth.
+        return buffer(feature, bodyLengthToEarth(bufferDistance), { units: "meters" }) ?? null;
     }
   } catch {
     // Per-feature failures (invalid geometry) skip that feature only.

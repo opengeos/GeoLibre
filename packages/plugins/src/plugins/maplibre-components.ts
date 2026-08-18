@@ -2,7 +2,10 @@ import {
   clearExternalNativePaintBridge,
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
+  getActiveMeanRadiusMeters,
+  getEllipsoid,
   interpolateRampColors,
+  meanRadiusMeters,
   setExternalNativePaintBridge,
   useAppStore,
 } from "@geolibre/core";
@@ -732,6 +735,10 @@ let searchControl: SearchControl | null = null;
 let spinGlobeControl: SpinGlobeControl | null = null;
 let measureControl: MeasureControl | null = null;
 let measureTerrainDetach: (() => void) | null = null;
+/** Drops the store subscription that follows the project's celestial body. */
+let measureRadiusUnsubscribe: (() => void) | null = null;
+/** The body the mounted Measure control's radius currently reflects. */
+let measureEllipsoidId: string | null = null;
 let bookmarkControl: BookmarkControl | null = null;
 let minimapControl: MinimapControl | null = null;
 let viewStateControl: ViewStateControl | null = null;
@@ -4020,7 +4027,28 @@ function createSearchControl(SearchControlClass: SearchControlConstructor): Sear
 }
 
 function createMeasureControl(MeasureControlClass: MeasureControlConstructor): MeasureControl {
-  const control = new MeasureControlClass(MEASURE_OPTIONS);
+  // The control derives distances and areas from lon/lat angles scaled by a
+  // radius that defaults to Earth's, so on a Moon/Mars project every readout
+  // would be wrong by that body's radius ratio (GeoLibre#1128). Seed it with the
+  // project's body and follow the planet switcher for the rest of the session.
+  const control = new MeasureControlClass({
+    ...MEASURE_OPTIONS,
+    radius: getActiveMeanRadiusMeters(),
+  });
+  // Seed from the store rather than at module load: the body may already have
+  // changed before the user first opens the panel, and a stale baseline would
+  // swallow the switch *back* to that body as a no-op.
+  measureEllipsoidId = useAppStore.getState().preferences.map.ellipsoidId;
+  measureRadiusUnsubscribe?.();
+  measureRadiusUnsubscribe = useAppStore.subscribe((state) => {
+    const id = state.preferences.map.ellipsoidId;
+    if (id === measureEllipsoidId) return;
+    measureEllipsoidId = id;
+    // Resolve the radius from the id in hand rather than the active-ellipsoid
+    // singleton, so this does not depend on the store's own mirroring
+    // subscription having run before ours.
+    control.setRadius(meanRadiusMeters(getEllipsoid(id)));
+  });
   return control;
 }
 
@@ -4425,6 +4453,8 @@ function setSearchPlacesPanelVisible(visible: boolean): void {
 function teardownMeasureControl(app: GeoLibreAppAPI): void {
   measureTerrainDetach?.();
   measureTerrainDetach = null;
+  measureRadiusUnsubscribe?.();
+  measureRadiusUnsubscribe = null;
   if (measureControl && measureControlMounted) {
     app.removeMapControl(measureControl);
   }

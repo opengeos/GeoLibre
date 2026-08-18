@@ -14,12 +14,9 @@
  * scale bar and the measurement tools read.
  */
 
-import { getActiveMeanRadiusMeters, getEllipsoid, meanRadiusMeters } from "./ellipsoids";
+import { EARTH_MEAN_RADIUS_METERS, getActiveMeanRadiusMeters } from "./ellipsoids";
 import { scaleDenomination } from "./scale-units";
 import type { MapScaleUnit } from "./types";
-
-/** Earth's mean radius — the radius MapLibre's Mercator maths assumes. */
-const EARTH_MEAN_RADIUS_METERS = meanRadiusMeters(getEllipsoid("earth"));
 
 /**
  * Convert a MapLibre camera altitude (computed against Earth's radius) into the

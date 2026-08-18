@@ -184,7 +184,8 @@
     "computing": "正在计算地形…",
     "partialData": "部分采样点无地形数据",
     "heading": "方位角",
-    "finalHeading": "终点方位角"
+    "finalHeading": "终点方位角",
+    "bodyNote": "在 {{body}} 上测量（球体近似）"
   },
   "statusBar": {
     "elevation": "高程",

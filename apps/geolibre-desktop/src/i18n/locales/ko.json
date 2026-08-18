@@ -184,7 +184,8 @@
     "computing": "지형 계산 중…",
     "partialData": "일부 샘플에 지형 데이터가 없습니다",
     "heading": "방위",
-    "finalHeading": "최종 방위"
+    "finalHeading": "최종 방위",
+    "bodyNote": "{{body}}에서 측정(구형 근사)"
   },
   "statusBar": {
     "elevation": "고도",

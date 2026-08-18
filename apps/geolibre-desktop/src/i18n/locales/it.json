@@ -186,7 +186,8 @@
     "computing": "Calcolo del terreno…",
     "partialData": "Alcuni campioni non avevano dati del terreno",
     "heading": "Azimut",
-    "finalHeading": "Azimut finale"
+    "finalHeading": "Azimut finale",
+    "bodyNote": "Misurato su {{body}} (approssimazione sferica)"
   },
   "statusBar": {
     "elevation": "Quota",

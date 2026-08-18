@@ -186,7 +186,8 @@
     "computing": "در حال محاسبهٔ زمین…",
     "partialData": "برخی نمونه‌ها دادهٔ زمین نداشتند",
     "heading": "سمت",
-    "finalHeading": "سمت نهایی"
+    "finalHeading": "سمت نهایی",
+    "bodyNote": "اندازه‌گیری روی {{body}} (تقریب کروی)"
   },
   "statusBar": {
     "elevation": "ارتفاع",

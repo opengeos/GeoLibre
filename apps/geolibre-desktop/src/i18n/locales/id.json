@@ -184,7 +184,8 @@
     "computing": "Menghitung medan…",
     "partialData": "Beberapa sampel tidak memiliki data medan",
     "heading": "Arah",
-    "finalHeading": "Arah akhir"
+    "finalHeading": "Arah akhir",
+    "bodyNote": "Diukur di {{body}} (aproksimasi bola)"
   },
   "statusBar": {
     "elevation": "Elev",

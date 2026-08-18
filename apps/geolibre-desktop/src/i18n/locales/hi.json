@@ -186,7 +186,8 @@
     "computing": "भू-भाग की गणना हो रही है…",
     "partialData": "कुछ नमूनों में भू-भाग डेटा नहीं था",
     "heading": "दिशा",
-    "finalHeading": "अंतिम दिशा"
+    "finalHeading": "अंतिम दिशा",
+    "bodyNote": "{{body}} पर मापा गया (गोलाकार सन्निकटन)"
   },
   "statusBar": {
     "elevation": "ऊँचाई",

@@ -186,7 +186,8 @@
     "computing": "Terrein berekenen…",
     "partialData": "Sommige meetpunten hadden geen terreingegevens",
     "heading": "Koers",
-    "finalHeading": "Eindkoers"
+    "finalHeading": "Eindkoers",
+    "bodyNote": "Gemeten op {{body}} (bolbenadering)"
   },
   "statusBar": {
     "elevation": "Hoogte",

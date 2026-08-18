@@ -190,7 +190,8 @@
     "computing": "Расчёт рельефа…",
     "partialData": "Для части точек нет данных рельефа",
     "heading": "Азимут",
-    "finalHeading": "Конечный азимут"
+    "finalHeading": "Конечный азимут",
+    "bodyNote": "Измерено на {{body}} (сферическое приближение)"
   },
   "statusBar": {
     "elevation": "Выс",

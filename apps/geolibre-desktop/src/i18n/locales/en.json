@@ -186,7 +186,8 @@
     "computing": "Computing terrain…",
     "partialData": "Some samples had no terrain data",
     "heading": "Heading",
-    "finalHeading": "Final heading"
+    "finalHeading": "Final heading",
+    "bodyNote": "Measured on {{body}} (spherical approximation)"
   },
   "statusBar": {
     "elevation": "Elev",

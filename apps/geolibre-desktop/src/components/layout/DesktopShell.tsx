@@ -36,6 +36,7 @@ import {
   setLocalRasterPicker,
   setNonTiledRasterHandler,
   setKmlFileImportHandler,
+  setTerrainMeasureBodyNames,
   setTerrainMeasureLabels,
   setViewStateLabels,
   startLayerGeometryEdit,
@@ -91,6 +92,7 @@ import {
   type DroppedRaster,
 } from "../../lib/tauri-io";
 import { buildKmlModelLayer } from "../../lib/kml-model-layer";
+import { PLANET_SWITCHER_LABEL_KEYS } from "../../lib/planet-labels";
 import { isPhotoDropFileName, type GeotaggedPhotoResult } from "../../lib/geotagged-photos";
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
 import { detectNonGeographicCoordinates } from "@geolibre/core";
@@ -576,7 +578,15 @@ export function DesktopShell({
       partialData: t("terrainMeasure.partialData"),
       heading: t("terrainMeasure.heading"),
       finalHeading: t("terrainMeasure.finalHeading"),
+      bodyNote: t("terrainMeasure.bodyNote"),
     });
+    // The note names the body, so it uses the planet switcher's names rather
+    // than the ellipsoid records' datum-qualified ones.
+    setTerrainMeasureBodyNames(
+      Object.fromEntries(
+        Object.entries(PLANET_SWITCHER_LABEL_KEYS).map(([id, key]) => [id, t(key)]),
+      ),
+    );
   }, [t]);
   // The map's Fullscreen control maximizes the map *canvas* (it calls
   // requestFullscreen on the map container). Chromium promotes that element to

@@ -186,7 +186,8 @@
     "computing": "Calcul du terrain…",
     "partialData": "Certains échantillons n'avaient pas de données de terrain",
     "heading": "Cap",
-    "finalHeading": "Cap final"
+    "finalHeading": "Cap final",
+    "bodyNote": "Mesuré sur {{body}} (approximation sphérique)"
   },
   "statusBar": {
     "elevation": "Alt",
