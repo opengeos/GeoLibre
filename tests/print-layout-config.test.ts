@@ -7,6 +7,7 @@ import {
   normalizePrintLayoutConfig,
   printLayoutConfigsEqual,
   scrubPrintLayoutForLayers,
+  scrubPrintLayoutForRemovedLayers,
   type PrintLayoutConfig,
 } from "../packages/core/src/print-layout-config";
 
@@ -265,5 +266,38 @@ describe("scrubPrintLayoutForLayers", () => {
   it("treats an unset block as nothing to scrub", () => {
     const config = createDefaultPrintLayout();
     assert.equal(scrubPrintLayoutForLayers(config, new Set()), config);
+  });
+});
+
+describe("scrubPrintLayoutForRemovedLayers", () => {
+  it("clears the blocks built on a removed layer and leaves the rest alone", () => {
+    const config = withOverrides({
+      showDataTable: true,
+      tableLayerId: "gone",
+      showDataChart: true,
+      chartLayerId: "kept",
+      atlasEnabled: true,
+      atlasLayerId: "gone",
+    });
+    const scrubbed = scrubPrintLayoutForRemovedLayers(config, "gone");
+    assert.equal(scrubbed.tableLayerId, "");
+    assert.equal(scrubbed.showDataTable, false);
+    assert.equal(scrubbed.atlasLayerId, "");
+    assert.equal(scrubbed.atlasEnabled, false);
+    assert.equal(scrubbed.chartLayerId, "kept");
+    assert.equal(scrubbed.showDataChart, true);
+  });
+
+  it("accepts a set of ids, as a group delete passes", () => {
+    const config = withOverrides({ showDataChart: true, chartLayerId: "b" });
+    const scrubbed = scrubPrintLayoutForRemovedLayers(config, new Set(["a", "b"]));
+    assert.equal(scrubbed.chartLayerId, "");
+    assert.equal(scrubbed.showDataChart, false);
+  });
+
+  it("returns the same object when no block named a removed layer", () => {
+    const config = withOverrides({ showDataTable: true, tableLayerId: "kept" });
+    assert.equal(scrubPrintLayoutForRemovedLayers(config, "gone"), config);
+    assert.equal(scrubPrintLayoutForRemovedLayers(config, []), config);
   });
 });

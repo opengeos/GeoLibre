@@ -1556,6 +1556,31 @@ describe("print layout persistence", () => {
     assert.equal(applied.printLayout.chartLayerId, "kept");
   });
 
+  it("clears a composer block when its layer is deleted from the open project", () => {
+    const store = useAppStore.getState();
+    const kept = store.addGeoJsonLayer("Kept", { type: "FeatureCollection", features: [] });
+    const doomed = useAppStore
+      .getState()
+      .addGeoJsonLayer("Doomed", { type: "FeatureCollection", features: [] });
+    useAppStore.getState().setPrintLayout({
+      ...createDefaultPrintLayout(),
+      showDataTable: true,
+      tableLayerId: doomed,
+      showDataChart: true,
+      chartLayerId: kept,
+    });
+
+    useAppStore.getState().removeLayer(doomed);
+
+    // Otherwise a save taken before the composer is next opened would write a
+    // block pointing at a layer the file no longer carries.
+    const after = useAppStore.getState().printLayout;
+    assert.equal(after.tableLayerId, "");
+    assert.equal(after.showDataTable, false);
+    assert.equal(after.chartLayerId, kept);
+    assert.equal(after.showDataChart, true);
+  });
+
   it("ignores a write that changes nothing, so opening the composer is not an edit", () => {
     assert.equal(useAppStore.getState().isDirty, false);
     // The dialog replays its seeded values into the store on mount.

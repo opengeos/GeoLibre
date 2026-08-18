@@ -20,6 +20,7 @@ import { initialLayerStyle } from "./layer-defaults";
 import {
   createDefaultPrintLayout,
   printLayoutConfigsEqual,
+  scrubPrintLayoutForRemovedLayers,
   type PrintLayoutConfig,
 } from "./print-layout-config";
 import {
@@ -1700,6 +1701,9 @@ export const useAppStore = create<AppState>()(
           widgets: scrubWidgetsForRemovedLayers(s.widgets, id),
           comments: scrubCommentsForRemovedLayers(s.comments, id),
           legend: scrubLegendForRemovedLayers(s.legend, id),
+          // Clear a Print Layout data/atlas block built on the removed layer,
+          // so a save that follows the delete cannot write a dangling id.
+          printLayout: scrubPrintLayoutForRemovedLayers(s.printLayout, id),
           selectedLayerId:
             s.selectedLayerId === id
               ? (s.layers.find((l) => l.id !== id)?.id ?? null)
@@ -2045,6 +2049,9 @@ export const useAppStore = create<AppState>()(
               ? scrubCommentsForRemovedLayers(s.comments, removedIds)
               : s.comments,
             legend: removeChildren ? scrubLegendForRemovedLayers(s.legend, removedIds) : s.legend,
+            printLayout: removeChildren
+              ? scrubPrintLayoutForRemovedLayers(s.printLayout, removedIds)
+              : s.printLayout,
             selectedLayerId: selectionRemoved
               ? (layers[layers.length - 1]?.id ?? null)
               : s.selectedLayerId,

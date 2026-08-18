@@ -1678,9 +1678,15 @@ export function PrintLayoutDialog({
 
   // Fixed scale is only meaningful on physical paper (like the manual scale
   // input); fall back to margin mode when the page switches to pixel sizes.
+  // `open`-gated for the same reason as the defaulting effects above: this also
+  // runs on the mount that every project load triggers, so a hand-edited file
+  // pairing a pixel page with scale mode would be corrected — and the project
+  // marked dirty — before the composer had ever been opened. Nothing acts on
+  // the pairing until the composer is open, and opening it runs this.
   useEffect(() => {
+    if (!open) return;
     if (!isMmPage && atlasExtentMode === "scale") setAtlasExtentMode("margin");
-  }, [isMmPage, atlasExtentMode]);
+  }, [open, isMmPage, atlasExtentMode]);
 
   // Two-way scale sync: reflect the captured view's scale into the input unless
   // the user is actively editing it.

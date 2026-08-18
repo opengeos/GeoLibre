@@ -21,6 +21,8 @@
  * a corner on one side without the other fails the build.
  */
 
+import { removedLayerIdSet } from "./layer-ref-scrub";
+
 /** A page corner an overlay block can be pinned to. */
 export type PrintLayoutCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
@@ -490,6 +492,28 @@ export function printLayoutConfigsEqual(a: PrintLayoutConfig, b: PrintLayoutConf
 }
 
 /**
+ * Clear each data/atlas block whose layer `missing` rejects. Shared by the two
+ * entry points below, which differ only in how they decide what is gone.
+ *
+ * @returns The same object when every block's layer survives.
+ */
+function clearBlocksForMissingLayers(
+  config: PrintLayoutConfig,
+  missing: (layerId: string) => boolean,
+): PrintLayoutConfig {
+  const gone = (id: string) => id !== "" && missing(id);
+  if (!gone(config.tableLayerId) && !gone(config.chartLayerId) && !gone(config.atlasLayerId)) {
+    return config;
+  }
+  return {
+    ...config,
+    ...(gone(config.tableLayerId) ? { tableLayerId: "", showDataTable: false } : {}),
+    ...(gone(config.chartLayerId) ? { chartLayerId: "", showDataChart: false } : {}),
+    ...(gone(config.atlasLayerId) ? { atlasLayerId: "", atlasEnabled: false } : {}),
+  };
+}
+
+/**
  * Drop references to layers the project no longer carries, so a composer that
  * pointed at a since-deleted layer opens with the block cleared instead of
  * rendering nothing from a dangling id. Mirrors the widget/comment/legend
@@ -503,18 +527,23 @@ export function scrubPrintLayoutForLayers(
   config: PrintLayoutConfig,
   existingLayerIds: ReadonlySet<string>,
 ): PrintLayoutConfig {
-  const missing = (id: string) => id !== "" && !existingLayerIds.has(id);
-  if (
-    !missing(config.tableLayerId) &&
-    !missing(config.chartLayerId) &&
-    !missing(config.atlasLayerId)
-  ) {
-    return config;
-  }
-  return {
-    ...config,
-    ...(missing(config.tableLayerId) ? { tableLayerId: "", showDataTable: false } : {}),
-    ...(missing(config.chartLayerId) ? { chartLayerId: "", showDataChart: false } : {}),
-    ...(missing(config.atlasLayerId) ? { atlasLayerId: "", atlasEnabled: false } : {}),
-  };
+  return clearBlocksForMissingLayers(config, (id) => !existingLayerIds.has(id));
+}
+
+/**
+ * The delete-time counterpart, matching `scrubLegendForRemovedLayers` and its
+ * siblings: called when layers are removed from the open project so the saved
+ * file never carries a block pointing at a layer that is already gone.
+ *
+ * @param config - The config to scrub.
+ * @param layerIds - The removed layer id, or ids.
+ * @returns The same object when no block referenced a removed layer.
+ */
+export function scrubPrintLayoutForRemovedLayers(
+  config: PrintLayoutConfig,
+  layerIds: string | Iterable<string>,
+): PrintLayoutConfig {
+  const removed = removedLayerIdSet(layerIds);
+  if (removed.size === 0) return config;
+  return clearBlocksForMissingLayers(config, (id) => removed.has(id));
 }
