@@ -4061,6 +4061,8 @@
       "untitledModel": "Mô hình chưa đặt tên",
       "newModel": "Mới",
       "runModel": "Chạy",
+      "cancelRun": "Hủy",
+      "runCancelled": "Đã hủy lần chạy.",
       "importModel": "Nhập",
       "exportModel": "Xuất",
       "savedModels": "Mô hình đã lưu",
@@ -4095,6 +4097,7 @@
       "importedLog": "Đã nhập một mô hình có {{nodes}} nút.",
       "importFailed": "Nhập thất bại",
       "importInvalid": "Tệp đó không chứa đồ thị mô hình.",
+      "importUnsupported": "Tệp đó không phải là mô hình GeoLibre.",
       "rasterOutputUnsupported": "\"{{name}}\" là kết quả raster mà bản dựng này không thể thêm vào bản đồ."
     },
     "parameterField": {

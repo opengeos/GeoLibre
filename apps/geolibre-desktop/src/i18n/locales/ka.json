@@ -4042,6 +4042,8 @@
       "untitledModel": "უსათაურო მოდელი",
       "newModel": "ახალი",
       "runModel": "გაშვება",
+      "cancelRun": "გაუქმება",
+      "runCancelled": "გაშვება გაუქმდა.",
       "importModel": "იმპორტი",
       "exportModel": "ექსპორტი",
       "savedModels": "შენახული მოდელები",
@@ -4076,6 +4078,7 @@
       "importedLog": "იმპორტირებულია მოდელი {{nodes}} კვანძით.",
       "importFailed": "იმპორტი ვერ მოხერხდა",
       "importInvalid": "ეს ფაილი მოდელის გრაფს არ შეიცავს.",
+      "importUnsupported": "ეს ფაილი GeoLibre-ის მოდელი არ არის.",
       "rasterOutputUnsupported": "„{{name}}“ არის რასტრული შედეგი, რომელსაც ეს ბილდი რუკაზე ვერ დაამატებს."
     },
     "parameterField": {

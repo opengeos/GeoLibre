@@ -4042,6 +4042,8 @@
       "untitledModel": "مدل بدون عنوان",
       "newModel": "جدید",
       "runModel": "اجرا",
+      "cancelRun": "لغو",
+      "runCancelled": "اجرا لغو شد.",
       "importModel": "درون‌ریزی",
       "exportModel": "برون‌ریزی",
       "savedModels": "مدل‌های ذخیره‌شده",
@@ -4076,6 +4078,7 @@
       "importedLog": "مدلی با {{nodes}} گره درون‌ریزی شد.",
       "importFailed": "درون‌ریزی ناموفق بود",
       "importInvalid": "این پرونده شامل گراف مدل نیست.",
+      "importUnsupported": "این پرونده یک مدل GeoLibre نیست.",
       "rasterOutputUnsupported": "«{{name}}» یک نتیجهٔ رستری است که این نسخه نمی‌تواند به نقشه بیفزاید."
     },
     "parameterField": {

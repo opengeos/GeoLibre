@@ -4042,6 +4042,8 @@
       "untitledModel": "बिना शीर्षक मॉडल",
       "newModel": "नया",
       "runModel": "चलाएँ",
+      "cancelRun": "रद्द करें",
+      "runCancelled": "चलना रद्द किया गया।",
       "importModel": "आयात",
       "exportModel": "निर्यात",
       "savedModels": "सहेजे गए मॉडल",
@@ -4076,6 +4078,7 @@
       "importedLog": "{{nodes}} नोड वाला मॉडल आयात किया गया।",
       "importFailed": "आयात विफल रहा",
       "importInvalid": "उस फ़ाइल में मॉडल ग्राफ़ नहीं है।",
+      "importUnsupported": "वह फ़ाइल GeoLibre मॉडल नहीं है।",
       "rasterOutputUnsupported": "\"{{name}}\" एक रास्टर परिणाम है, जिसे यह बिल्ड मानचित्र में नहीं जोड़ सकता।"
     },
     "parameterField": {

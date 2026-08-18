@@ -112,7 +112,7 @@ export function addToolNode(
   return { graph: { ...graph, nodes: [...graph.nodes, node] }, nodeId };
 }
 
-/** Move a node to a new canvas position. */
+/** Move a node to a new canvas position, following the pointer exactly. */
 export function moveNode(
   graph: ProcessingModelGraph,
   nodeId: string,
@@ -123,6 +123,30 @@ export function moveNode(
     nodes: graph.nodes.map((node) =>
       node.id === nodeId ? { ...node, x: position.x, y: position.y } : node,
     ),
+  };
+}
+
+/**
+ * Settle a just-dragged node so it does not sit on top of another card.
+ *
+ * Cards are painted in array order with no z-index, so a node dropped over
+ * another swallows the hit-test for whichever ports end up underneath — and the
+ * only way out would be to drag the invisible card blind. Dropping therefore
+ * nudges the node to the nearest clear footprint (never moving the others) and
+ * re-appends it so it paints last and its own ports stay reachable.
+ *
+ * @param graph The graph after the drag.
+ * @param nodeId The node that was dragged.
+ * @returns The graph with that node settled and moved to the end of the paint order.
+ */
+export function settleNode(graph: ProcessingModelGraph, nodeId: string): ProcessingModelGraph {
+  const dragged = graph.nodes.find((node) => node.id === nodeId);
+  if (!dragged) return graph;
+  const others = graph.nodes.filter((node) => node.id !== nodeId);
+  const free = findFreePosition({ ...graph, nodes: others }, { x: dragged.x, y: dragged.y });
+  return {
+    ...graph,
+    nodes: [...others, { ...dragged, x: free.x, y: free.y }],
   };
 }
 

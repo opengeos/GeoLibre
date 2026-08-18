@@ -80,7 +80,9 @@ export interface ModelGraphIssue {
     | "duplicate-input"
     | "type-mismatch"
     | "cycle"
-    | "no-output";
+    | "no-output"
+    | "duplicate-node"
+    | "dangling-edge";
   nodeId?: string;
   edgeId?: string;
   /** English fallback describing the problem. */
@@ -114,8 +116,10 @@ export function topologicalOrder(graph: ProcessingModelGraph): ModelGraphNode[] 
   const queue = graph.nodes.filter((node) => (indegree.get(node.id) ?? 0) === 0);
   const byId = new Map(graph.nodes.map((node) => [node.id, node]));
   const ordered: ModelGraphNode[] = [];
-  while (queue.length > 0) {
-    const node = queue.shift() as ModelGraphNode;
+  // Index cursor rather than shift(): shift() is O(remaining) per call, which
+  // makes a wide fan-out quadratic, and this runs on every graph edit.
+  for (let head = 0; head < queue.length; head++) {
+    const node = queue[head];
     ordered.push(node);
     for (const nextId of outgoing.get(node.id) ?? []) {
       const remaining = (indegree.get(nextId) ?? 0) - 1;
@@ -165,6 +169,20 @@ export function validateModelGraph(
 ): ModelGraphIssue[] {
   const issues: ModelGraphIssue[] = [];
   const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+  // Every lookup here keys on node id, so a duplicate silently collapses to
+  // "last write wins" while both entries stay in `nodes` — the run would then
+  // execute only one of them, with no error anywhere.
+  const idCounts = new Map<string, number>();
+  for (const node of graph.nodes) idCounts.set(node.id, (idCounts.get(node.id) ?? 0) + 1);
+  for (const [id, count] of idCounts) {
+    if (count > 1) {
+      issues.push({
+        code: "duplicate-node",
+        nodeId: id,
+        message: `Two or more nodes share the id "${id}".`,
+      });
+    }
+  }
   const descriptors = new Map<string, ModelToolDescriptor | undefined>();
   for (const node of graph.nodes) {
     if (node.kind === "tool") descriptors.set(node.id, resolve(node.provider, node.toolId));
@@ -189,7 +207,17 @@ export function validateModelGraph(
   for (const edge of graph.edges) {
     const from = byId.get(edge.from);
     const to = byId.get(edge.to);
-    if (!from || !to) continue;
+    if (!from || !to) {
+      // Skipping these silently makes a stray edge's wiring simply vanish, and
+      // graphToLinearSteps still counts them when deciding whether a node has
+      // exactly one predecessor.
+      issues.push({
+        code: "dangling-edge",
+        edgeId: edge.id,
+        message: "A connection points at a node that no longer exists.",
+      });
+      continue;
+    }
     const fromPort = portsFor(from, descriptors.get(from.id)).outputs.find(
       (port) => port.id === edge.fromPort,
     );
@@ -396,7 +424,10 @@ export async function runModelGraph(
       produced.set(node.id, result);
       options.onNodeStatus?.(node.id, "done");
     } catch (err) {
-      const message = (err as Error).message;
+      // executeTool wraps arbitrary WASM/sidecar calls, which can reject with a
+      // non-Error; reading `.message` off that would throw inside this handler
+      // and escape as an unhandled rejection instead of the documented result.
+      const message = err instanceof Error ? err.message : String(err);
       options.log(`Error: ${message}`);
       options.onNodeStatus?.(node.id, "error");
       return { outputs, error: { nodeId: node.id, message } };
@@ -429,9 +460,14 @@ export function graphToLinearSteps(
   const outs = graph.nodes.filter((node) => node.kind === "output");
   if (inputs.length !== 1 || outs.length !== 1) return [];
 
+  const nodeIds = new Set(graph.nodes.map((node) => node.id));
   const incoming = new Map<string, number>();
   const outgoing = new Map<string, number>();
   for (const edge of graph.edges) {
+    // Count only edges between nodes that exist: a dangling edge would
+    // otherwise make a node look like it has the one predecessor this
+    // projection requires, defeating the "refuse rather than truncate" rule.
+    if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) continue;
     incoming.set(edge.to, (incoming.get(edge.to) ?? 0) + 1);
     outgoing.set(edge.from, (outgoing.get(edge.from) ?? 0) + 1);
   }
@@ -447,7 +483,7 @@ export function graphToLinearSteps(
     if ((outgoing.get(node.id) ?? 0) !== 1) return [];
     // Only client vector tools have a `steps` runner to fall back to.
     if (node.provider !== "vector" || !node.toolId) return [];
-    const inputEdge = graph.edges.find((edge) => edge.to === node.id);
+    const inputEdge = graph.edges.find((edge) => edge.to === node.id && nodeIds.has(edge.from));
     steps.push({
       id: node.id,
       toolId: node.toolId,

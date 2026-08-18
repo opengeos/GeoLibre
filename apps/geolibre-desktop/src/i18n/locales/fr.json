@@ -4042,6 +4042,8 @@
       "untitledModel": "Modèle sans titre",
       "newModel": "Nouveau",
       "runModel": "Exécuter",
+      "cancelRun": "Annuler",
+      "runCancelled": "Exécution annulée.",
       "importModel": "Importer",
       "exportModel": "Exporter",
       "savedModels": "Modèles enregistrés",
@@ -4076,6 +4078,7 @@
       "importedLog": "Modèle importé avec {{nodes}} nœud(s).",
       "importFailed": "Échec de l'importation",
       "importInvalid": "Ce fichier ne contient pas de graphe de modèle.",
+      "importUnsupported": "Ce fichier n'est pas un modèle GeoLibre.",
       "rasterOutputUnsupported": "« {{name}} » est un résultat raster que cette version ne peut pas ajouter à la carte."
     },
     "parameterField": {

@@ -14,6 +14,9 @@ import {
   removeNode,
   setNodeField,
   setNodeParameter,
+  settleNode,
+  NODE_HEIGHT,
+  NODE_WIDTH,
 } from "../apps/geolibre-desktop/src/lib/model-graph-edit";
 
 const BUFFER: ModelToolDescriptor = {
@@ -113,6 +116,46 @@ describe("editing nodes", () => {
     graph = setNodeField(graph, "c", "name", "Result");
     assert.equal(graph.nodes.find((node) => node.id === "a")?.layerId, "rivers");
     assert.equal(graph.nodes.find((node) => node.id === "c")?.name, "Result");
+  });
+});
+
+describe("settling a dragged node", () => {
+  const stacked = (): ProcessingModelGraph => ({
+    nodes: [
+      { id: "a", kind: "input", x: 0, y: 0, layerId: "roads" },
+      { id: "b", kind: "tool", x: 400, y: 400, provider: "vector", toolId: "buffer" },
+    ],
+    edges: [],
+  });
+
+  it("moves a card off one it was dropped on top of", () => {
+    // Dropped squarely onto `a`: leaving it there would make one card's ports
+    // unclickable, with no way to separate them except blind dragging.
+    let graph = moveNode(stacked(), "b", { x: 0, y: 0 });
+    graph = settleNode(graph, "b");
+    const a = graph.nodes.find((n) => n.id === "a")!;
+    const b = graph.nodes.find((n) => n.id === "b")!;
+    const overlaps = Math.abs(a.x - b.x) < NODE_WIDTH && Math.abs(a.y - b.y) < NODE_HEIGHT;
+    assert.equal(overlaps, false);
+  });
+
+  it("leaves a card dropped in clear space exactly where the pointer left it", () => {
+    let graph = moveNode(stacked(), "b", { x: 700, y: 500 });
+    graph = settleNode(graph, "b");
+    const b = graph.nodes.find((n) => n.id === "b")!;
+    assert.deepEqual([b.x, b.y], [700, 500]);
+  });
+
+  it("repaints the dragged card last so its own ports stay on top", () => {
+    const graph = settleNode(stacked(), "a");
+    assert.equal(graph.nodes[graph.nodes.length - 1].id, "a");
+  });
+
+  it("never displaces the cards it was dropped near", () => {
+    let graph = moveNode(stacked(), "b", { x: 0, y: 0 });
+    graph = settleNode(graph, "b");
+    const a = graph.nodes.find((n) => n.id === "a")!;
+    assert.deepEqual([a.x, a.y], [0, 0]);
   });
 });
 

@@ -1,5 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
+  normalizeModelGraph,
   useAppStore,
   type GeoLibreLayer,
   type ModelGraphNode,
@@ -59,12 +60,17 @@ import {
   removeNode,
   setNodeField,
   setNodeParameter,
+  settleNode,
 } from "../../../lib/model-graph-edit";
 import { fetchLayerBytes } from "../../../lib/whitebox-layer-inputs";
 import { ParameterField } from "../ParameterField";
 
 /** MIME type carrying a palette tool key through an HTML5 drag. */
 const TOOL_DRAG_TYPE = "application/x-geolibre-model-tool";
+
+/** Identifies an exported Model Builder file, so a stray JSON is rejected. */
+const MODEL_SCHEMA = "https://geolibre.app/schemas/model-graph-v1.json";
+const MODEL_VERSION = "1.0.0";
 
 const MIN_WIDTH = 820;
 const MIN_HEIGHT = 420;
@@ -219,10 +225,21 @@ export function ModelBuilderPanel({
   const filtered = useMemo(() => searchModelTools(catalog, search), [catalog, search]);
   const groups = useMemo(() => groupModelTools(filtered), [filtered]);
 
+  /**
+   * Abandon any run still in flight. Its closure holds the graph and layers of
+   * the session being replaced, so without this its log lines, node highlighting
+   * and result layers would bleed into whatever the user switched to.
+   */
+  const abortRun = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }, []);
+
   const resetRunState = useCallback(() => {
+    abortRun();
     setNodeStatus({});
     setLog([]);
-  }, []);
+  }, [abortRun]);
 
   const handleNewModel = useCallback(() => {
     setModelId(createId());
@@ -256,7 +273,11 @@ export function ModelBuilderPanel({
   }, [saveModel, modelId, modelName, graph, appendLog, t]);
 
   const handleExport = useCallback(() => {
-    const json = JSON.stringify({ name: modelName, graph }, null, 2);
+    const json = JSON.stringify(
+      { $schema: MODEL_SCHEMA, version: MODEL_VERSION, name: modelName, graph },
+      null,
+      2,
+    );
     const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
     const anchor = document.createElement("a");
     const slug = modelName
@@ -279,17 +300,26 @@ export function ModelBuilderPanel({
     async (file: File) => {
       try {
         const parsed = JSON.parse(await file.text()) as {
+          $schema?: unknown;
+          version?: unknown;
           name?: unknown;
-          graph?: ProcessingModelGraph;
+          graph?: unknown;
         };
-        if (!parsed.graph || !Array.isArray(parsed.graph.nodes)) {
-          throw new Error(t("processing.modelBuilder.importInvalid"));
+        if (parsed.$schema !== undefined && parsed.$schema !== MODEL_SCHEMA) {
+          throw new Error(t("processing.modelBuilder.importUnsupported"));
         }
+        // normalizeModelGraph is the same coercion the project loader applies:
+        // it drops nodes without a usable id or kind and edges that do not
+        // connect two surviving nodes, so a hand-edited file cannot reach the
+        // canvas with (say) a missing `edges` array that would then throw out
+        // of render, past this try/catch, into the panel's error boundary.
+        const graph = normalizeModelGraph(parsed.graph);
+        if (!graph) throw new Error(t("processing.modelBuilder.importInvalid"));
         setModelName(typeof parsed.name === "string" ? parsed.name : "");
-        setGraph(autoLayout(parsed.graph));
+        setGraph(autoLayout(graph));
         setSelectedNodeId(null);
         resetRunState();
-        appendLog(t("processing.modelBuilder.importedLog", { nodes: parsed.graph.nodes.length }));
+        appendLog(t("processing.modelBuilder.importedLog", { nodes: graph.nodes.length }));
       } catch (err) {
         appendLog(`${t("processing.modelBuilder.importFailed")}: ${(err as Error).message}`);
       }
@@ -372,6 +402,9 @@ export function ModelBuilderPanel({
         handle.removeEventListener("pointermove", handleMove);
         handle.removeEventListener("pointerup", handleEnd);
         handle.removeEventListener("pointercancel", handleEnd);
+        // Settle on drop so a card never comes to rest covering another's
+        // ports, which would make those ports unclickable with no way back.
+        setGraph((current) => settleNode(current, node.id));
       };
       handle.addEventListener("pointermove", handleMove);
       handle.addEventListener("pointerup", handleEnd);
@@ -457,6 +490,8 @@ export function ModelBuilderPanel({
         resolveDescriptor,
         resolveInput: (layerId) => layerToModelValue(layers, layerId),
         emitOutput: (name, value) => {
+          // A cancelled run must not drop layers into the session that replaced it.
+          if (controller.signal.aborted) return;
           if (value.kind === "vector") {
             addGeoJsonLayer(name, value.geojson);
           } else if (onAddRaster) {
@@ -465,10 +500,14 @@ export function ModelBuilderPanel({
             appendLog(t("processing.modelBuilder.rasterOutputUnsupported", { name }));
           }
         },
-        log: appendLog,
+        log: (message) => {
+          if (!controller.signal.aborted) appendLog(message);
+        },
         signal: controller.signal,
-        onNodeStatus: (nodeId, status) =>
-          setNodeStatus((current) => ({ ...current, [nodeId]: status })),
+        onNodeStatus: (nodeId, status) => {
+          if (controller.signal.aborted) return;
+          setNodeStatus((current) => ({ ...current, [nodeId]: status }));
+        },
         executeTool: async ({ node, descriptor, inputs, signal }) =>
           executeModelTool({
             node,
@@ -480,16 +519,22 @@ export function ModelBuilderPanel({
             log: appendLog,
           }),
       });
-      appendLog(
-        result.error
-          ? `${t("processing.modelBuilder.runFailed")}: ${result.error.message}`
-          : t("processing.modelBuilder.runFinished", {
-              outputs: Object.keys(result.outputs).length,
-            }),
-      );
+      if (!controller.signal.aborted) {
+        appendLog(
+          result.error
+            ? `${t("processing.modelBuilder.runFailed")}: ${result.error.message}`
+            : t("processing.modelBuilder.runFinished", {
+                outputs: Object.keys(result.outputs).length,
+              }),
+        );
+      }
     } finally {
-      setRunning(false);
-      abortRef.current = null;
+      // Only the run that still owns the controller clears the busy state; a
+      // superseded run must not stop the spinner for the one that replaced it.
+      if (abortRef.current === controller) {
+        setRunning(false);
+        abortRef.current = null;
+      }
     }
   }, [issues.length, graph, resolveDescriptor, layers, addGeoJsonLayer, onAddRaster, appendLog, t]);
 
@@ -618,24 +663,42 @@ export function ModelBuilderPanel({
           <Button size="sm" variant="ghost" className="h-7 gap-1 px-2" onClick={handleExport}>
             <Download className="h-3.5 w-3.5" /> {t("processing.modelBuilder.exportModel")}
           </Button>
-          <Button
-            size="sm"
-            className="h-7 gap-1 px-2"
-            onClick={() => void handleRun()}
-            disabled={running || issues.length > 0}
-          >
-            {running ? (
+          {running ? (
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 gap-1 px-2"
+              onClick={() => {
+                abortRun();
+                setRunning(false);
+                appendLog(t("processing.modelBuilder.runCancelled"));
+              }}
+            >
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
+              {t("processing.modelBuilder.cancelRun")}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="h-7 gap-1 px-2"
+              onClick={() => void handleRun()}
+              disabled={issues.length > 0}
+            >
               <Play className="h-3.5 w-3.5" />
-            )}
-            {t("processing.modelBuilder.runModel")}
-          </Button>
+              {t("processing.modelBuilder.runModel")}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"
             className="h-7 w-7 p-0"
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              // Closing abandons the run too; nothing is left writing into a
+              // panel the user has dismissed.
+              abortRun();
+              setRunning(false);
+              setOpen(false);
+            }}
             aria-label={t("common.close")}
           >
             <X className="h-4 w-4" />

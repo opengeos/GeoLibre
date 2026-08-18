@@ -3975,6 +3975,8 @@
       "untitledModel": "แบบจำลองไม่มีชื่อ",
       "newModel": "ใหม่",
       "runModel": "เรียกใช้",
+      "cancelRun": "ยกเลิก",
+      "runCancelled": "ยกเลิกการเรียกใช้แล้ว",
       "importModel": "นำเข้า",
       "exportModel": "ส่งออก",
       "savedModels": "แบบจำลองที่บันทึกไว้",
@@ -4009,6 +4011,7 @@
       "importedLog": "นำเข้าแบบจำลองที่มี {{nodes}} โหนดแล้ว",
       "importFailed": "นำเข้าไม่สำเร็จ",
       "importInvalid": "ไฟล์นั้นไม่มีกราฟของแบบจำลอง",
+      "importUnsupported": "ไฟล์นั้นไม่ใช่แบบจำลองของ GeoLibre",
       "rasterOutputUnsupported": "\"{{name}}\" เป็นผลลัพธ์แรสเตอร์ซึ่งรุ่นนี้ไม่สามารถเพิ่มลงในแผนที่ได้"
     },
     "parameterField": {

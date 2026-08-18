@@ -3975,6 +3975,8 @@
       "untitledModel": "제목 없는 모델",
       "newModel": "새로 만들기",
       "runModel": "실행",
+      "cancelRun": "취소",
+      "runCancelled": "실행을 취소했습니다.",
       "importModel": "가져오기",
       "exportModel": "내보내기",
       "savedModels": "저장된 모델",
@@ -4009,6 +4011,7 @@
       "importedLog": "노드 {{nodes}}개인 모델을 가져왔습니다.",
       "importFailed": "가져오기 실패",
       "importInvalid": "해당 파일에는 모델 그래프가 없습니다.",
+      "importUnsupported": "해당 파일은 GeoLibre 모델이 아닙니다.",
       "rasterOutputUnsupported": "\"{{name}}\"은(는) 래스터 결과이며 이 빌드에서는 지도에 추가할 수 없습니다."
     },
     "parameterField": {

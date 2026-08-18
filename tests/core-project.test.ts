@@ -6,6 +6,7 @@ import {
   DEFAULT_STORY_MAP,
   createEmptyProject,
   createSampleStoryMap,
+  normalizeModelGraph,
   parseProject,
   parseStoryMapCsv,
   parseStoryMapJson,
@@ -1470,5 +1471,65 @@ describe("primary mapView normalization", () => {
     assert.equal(applied.mapView.zoom, 0);
     assert.equal(applied.mapView.pitch, 85);
     assert.equal(applied.mapView.bearing, 270);
+  });
+});
+
+describe("normalizeModelGraph", () => {
+  it("supplies an empty edge list when the key is missing entirely", () => {
+    // A hand-edited file without `edges` used to reach the canvas as
+    // `edges: undefined`, and the renderer's `graph.edges.map(...)` then threw
+    // out of render — past the importer's try/catch — into the error boundary,
+    // instead of showing the friendly "not a model" message.
+    const graph = normalizeModelGraph({
+      nodes: [{ id: "a", kind: "input", x: 10, y: 20, layerId: "roads" }],
+    });
+    assert.deepEqual(graph?.edges, []);
+    assert.equal(graph?.nodes.length, 1);
+  });
+
+  it("drops edges that do not connect two surviving nodes", () => {
+    const graph = normalizeModelGraph({
+      nodes: [
+        { id: "a", kind: "input", x: 0, y: 0 },
+        { id: "b", kind: "output", x: 0, y: 0 },
+        { id: "", kind: "tool", x: 0, y: 0 },
+      ],
+      edges: [
+        { id: "e1", from: "a", fromPort: "out", to: "b", toPort: "in" },
+        { id: "e2", from: "a", fromPort: "out", to: "ghost", toPort: "in" },
+        { id: "e3", from: "a", fromPort: "out", to: "a", toPort: "in" },
+      ],
+    });
+    assert.deepEqual(
+      graph?.edges.map((edge) => edge.id),
+      ["e1"],
+    );
+  });
+
+  it("rejects a node with an unknown kind rather than passing it to the runner", () => {
+    const graph = normalizeModelGraph({
+      nodes: [
+        { id: "a", kind: "wat", x: 0, y: 0 },
+        { id: "b", kind: "output", x: 0, y: 0 },
+      ],
+      edges: [],
+    });
+    assert.deepEqual(
+      graph?.nodes.map((node) => node.id),
+      ["b"],
+    );
+  });
+
+  it("returns null for a value carrying no usable nodes", () => {
+    assert.equal(normalizeModelGraph(null), null);
+    assert.equal(normalizeModelGraph({ nodes: [] }), null);
+    assert.equal(normalizeModelGraph({ nodes: "nope" }), null);
+  });
+
+  it("coerces a non-finite coordinate instead of laying the node out at NaN", () => {
+    const graph = normalizeModelGraph({
+      nodes: [{ id: "a", kind: "input", x: "left", y: Number.NaN }],
+    });
+    assert.deepEqual([graph?.nodes[0].x, graph?.nodes[0].y], [0, 0]);
   });
 });

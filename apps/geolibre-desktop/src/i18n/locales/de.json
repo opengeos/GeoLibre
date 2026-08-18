@@ -4042,6 +4042,8 @@
       "untitledModel": "Unbenanntes Modell",
       "newModel": "Neu",
       "runModel": "Ausführen",
+      "cancelRun": "Abbrechen",
+      "runCancelled": "Ausführung abgebrochen.",
       "importModel": "Importieren",
       "exportModel": "Exportieren",
       "savedModels": "Gespeicherte Modelle",
@@ -4076,6 +4078,7 @@
       "importedLog": "Modell mit {{nodes}} Knoten importiert.",
       "importFailed": "Import fehlgeschlagen",
       "importInvalid": "Diese Datei enthält kein Modelldiagramm.",
+      "importUnsupported": "Diese Datei ist kein GeoLibre-Modell.",
       "rasterOutputUnsupported": "„{{name}}“ ist ein Rasterergebnis, das dieser Build nicht zur Karte hinzufügen kann."
     },
     "parameterField": {

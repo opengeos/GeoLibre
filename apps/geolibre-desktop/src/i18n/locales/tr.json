@@ -4042,6 +4042,8 @@
       "untitledModel": "Adsız model",
       "newModel": "Yeni",
       "runModel": "Çalıştır",
+      "cancelRun": "İptal",
+      "runCancelled": "Çalıştırma iptal edildi.",
       "importModel": "İçe aktar",
       "exportModel": "Dışa aktar",
       "savedModels": "Kayıtlı modeller",
@@ -4076,6 +4078,7 @@
       "importedLog": "{{nodes}} düğümlü bir model içe aktarıldı.",
       "importFailed": "İçe aktarma başarısız",
       "importInvalid": "Bu dosya bir model grafiği içermiyor.",
+      "importUnsupported": "Bu dosya bir GeoLibre modeli değil.",
       "rasterOutputUnsupported": "\"{{name}}\" bir raster sonucudur; bu sürüm bunu haritaya ekleyemez."
     },
     "parameterField": {

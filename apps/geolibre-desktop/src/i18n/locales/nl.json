@@ -4042,6 +4042,8 @@
       "untitledModel": "Naamloos model",
       "newModel": "Nieuw",
       "runModel": "Uitvoeren",
+      "cancelRun": "Annuleren",
+      "runCancelled": "Uitvoeren geannuleerd.",
       "importModel": "Importeren",
       "exportModel": "Exporteren",
       "savedModels": "Opgeslagen modellen",
@@ -4076,6 +4078,7 @@
       "importedLog": "Een model met {{nodes}} knooppunt(en) geïmporteerd.",
       "importFailed": "Importeren mislukt",
       "importInvalid": "Dat bestand bevat geen modelgraaf.",
+      "importUnsupported": "Dat bestand is geen GeoLibre-model.",
       "rasterOutputUnsupported": "“{{name}}” is een rasterresultaat dat deze build niet aan de kaart kan toevoegen."
     },
     "parameterField": {

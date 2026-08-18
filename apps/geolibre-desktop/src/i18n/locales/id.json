@@ -3975,6 +3975,8 @@
       "untitledModel": "Model tanpa judul",
       "newModel": "Baru",
       "runModel": "Jalankan",
+      "cancelRun": "Batal",
+      "runCancelled": "Eksekusi dibatalkan.",
       "importModel": "Impor",
       "exportModel": "Ekspor",
       "savedModels": "Model tersimpan",
@@ -4009,6 +4011,7 @@
       "importedLog": "Mengimpor model dengan {{nodes}} simpul.",
       "importFailed": "Gagal mengimpor",
       "importInvalid": "Berkas itu tidak berisi graf model.",
+      "importUnsupported": "Berkas itu bukan model GeoLibre.",
       "rasterOutputUnsupported": "\"{{name}}\" adalah hasil raster yang tidak dapat ditambahkan ke peta oleh versi ini."
     },
     "parameterField": {

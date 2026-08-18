@@ -214,6 +214,23 @@ describe("model graph validation", () => {
     assert.ok(codes.includes("duplicate-input"));
   });
 
+  it("reports two nodes sharing an id, which lookups would silently collapse", () => {
+    const graph = chainGraph();
+    graph.nodes.push({ ...graph.nodes[1], x: 50 });
+    const dup = validateModelGraph(graph, resolve).filter(
+      (issue) => issue.code === "duplicate-node",
+    );
+    assert.equal(dup.length, 1);
+    assert.equal(dup[0].nodeId, "t1");
+  });
+
+  it("reports an edge pointing at a node that no longer exists", () => {
+    const graph = chainGraph();
+    graph.edges.push({ id: "e9", from: "ghost", fromPort: "out", to: "t1", toPort: "layer" });
+    const codes = validateModelGraph(graph, resolve).map((issue) => issue.code);
+    assert.ok(codes.includes("dangling-edge"));
+  });
+
   it("requires an output node so a run keeps something", () => {
     const graph = chainGraph();
     graph.nodes = graph.nodes.filter((node) => node.kind !== "output");
@@ -397,6 +414,19 @@ describe("running a model graph", () => {
     assert.equal(saw.layer?.kind, "vector");
   });
 
+  it("reports a non-Error rejection instead of throwing inside its own handler", async () => {
+    const { options } = baseOptions();
+    const result = await runModelGraph(chainGraph(), {
+      ...options,
+      executeTool: async () => {
+        // A WASM/sidecar call can reject with something that is not an Error.
+        throw "plain string failure";
+      },
+    });
+    assert.equal(result.error?.nodeId, "t1");
+    assert.match(result.error?.message ?? "", /plain string failure/);
+  });
+
   it("does not start a node once the signal is aborted", async () => {
     const controller = new AbortController();
     controller.abort();
@@ -455,6 +485,18 @@ describe("legacy linear projection", () => {
       ],
     };
     assert.deepEqual(graphToLinearSteps(graph), []);
+  });
+
+  it("ignores a dangling edge when counting a node's predecessors", () => {
+    // Without this the stray edge makes `t1` look like it has two predecessors
+    // and the projection bails, or worse counts it as the one real predecessor.
+    const graph = chainGraph();
+    graph.edges.push({ id: "e9", from: "ghost", fromPort: "out", to: "t1", toPort: "layer" });
+    const steps = graphToLinearSteps(graph);
+    assert.deepEqual(
+      steps.map((step) => step.toolId),
+      ["buffer"],
+    );
   });
 
   it("records a non-default input port so the chain rewires correctly", () => {

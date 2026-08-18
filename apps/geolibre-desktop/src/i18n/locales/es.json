@@ -4042,6 +4042,8 @@
       "untitledModel": "Modelo sin título",
       "newModel": "Nuevo",
       "runModel": "Ejecutar",
+      "cancelRun": "Cancelar",
+      "runCancelled": "Ejecución cancelada.",
       "importModel": "Importar",
       "exportModel": "Exportar",
       "savedModels": "Modelos guardados",
@@ -4076,6 +4078,7 @@
       "importedLog": "Se importó un modelo con {{nodes}} nodo(s).",
       "importFailed": "La importación falló",
       "importInvalid": "Ese archivo no contiene un grafo de modelo.",
+      "importUnsupported": "Ese archivo no es un modelo de GeoLibre.",
       "rasterOutputUnsupported": "«{{name}}» es un resultado ráster que esta versión no puede añadir al mapa."
     },
     "parameterField": {

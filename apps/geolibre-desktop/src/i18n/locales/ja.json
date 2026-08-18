@@ -3975,6 +3975,8 @@
       "untitledModel": "名称未設定のモデル",
       "newModel": "新規",
       "runModel": "実行",
+      "cancelRun": "キャンセル",
+      "runCancelled": "実行をキャンセルしました。",
       "importModel": "インポート",
       "exportModel": "エクスポート",
       "savedModels": "保存済みのモデル",
@@ -4009,6 +4011,7 @@
       "importedLog": "{{nodes}} 個のノードを持つモデルをインポートしました。",
       "importFailed": "インポートに失敗しました",
       "importInvalid": "このファイルにはモデルグラフが含まれていません。",
+      "importUnsupported": "このファイルは GeoLibre のモデルではありません。",
       "rasterOutputUnsupported": "「{{name}}」はラスター結果のため、このビルドでは地図に追加できません。"
     },
     "parameterField": {

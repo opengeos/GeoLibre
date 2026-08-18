@@ -3975,6 +3975,8 @@
       "untitledModel": "未命名模型",
       "newModel": "新建",
       "runModel": "运行",
+      "cancelRun": "取消",
+      "runCancelled": "已取消运行。",
       "importModel": "导入",
       "exportModel": "导出",
       "savedModels": "已保存的模型",
@@ -4009,6 +4011,7 @@
       "importedLog": "已导入包含 {{nodes}} 个节点的模型。",
       "importFailed": "导入失败",
       "importInvalid": "该文件不包含模型图。",
+      "importUnsupported": "该文件不是 GeoLibre 模型。",
       "rasterOutputUnsupported": "“{{name}}”是栅格结果，此版本无法将其添加到地图。"
     },
     "parameterField": {

@@ -1,23 +1,16 @@
 import { useTranslation } from "react-i18next";
-import {
-  useAppStore,
-  type GeoLibreLayer,
-  type ProcessingModel,
-  type ProcessingModelStep,
-} from "@geolibre/core";
+import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { detectGeometryProfile, type MapController } from "@geolibre/map";
 import {
   VECTOR_TOOLS,
   getVectorTool,
   runAlgorithmCapture,
-  runModel,
   type AlgorithmParameter,
   type GeometryFamily,
   type ProcessingAlgorithm,
   type RunnerHost,
 } from "@geolibre/processing";
 import { createDuckDbCapability } from "../../lib/duckdb-processing";
-import { modelToPipeline, pipelineToModel } from "../../lib/processing-pipeline";
 import {
   Button,
   Dialog,
@@ -29,23 +22,10 @@ import {
   Label,
   ScrollArea,
   Select,
-  Separator,
   cn,
 } from "@geolibre/ui";
 import { ParameterField } from "./ParameterField";
-import {
-  ArrowDown,
-  ArrowUp,
-  Download,
-  Layers,
-  Loader2,
-  Play,
-  Plus,
-  Save,
-  Trash2,
-  Upload,
-  Workflow,
-} from "lucide-react";
+import { Download, Layers, Loader2, Play, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 interface BatchToolsDialogProps {

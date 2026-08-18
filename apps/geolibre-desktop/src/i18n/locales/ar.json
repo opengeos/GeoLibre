@@ -4309,6 +4309,8 @@
       "untitledModel": "نموذج بلا عنوان",
       "newModel": "جديد",
       "runModel": "تشغيل",
+      "cancelRun": "إلغاء",
+      "runCancelled": "تم إلغاء التشغيل.",
       "importModel": "استيراد",
       "exportModel": "تصدير",
       "savedModels": "النماذج المحفوظة",
@@ -4343,6 +4345,7 @@
       "importedLog": "تم استيراد نموذج يحتوي على {{nodes}} عقدة.",
       "importFailed": "فشل الاستيراد",
       "importInvalid": "هذا الملف لا يحتوي على مخطط نموذج.",
+      "importUnsupported": "هذا الملف ليس نموذج GeoLibre.",
       "rasterOutputUnsupported": "«{{name}}» نتيجة راستر لا يمكن لهذه النسخة إضافتها إلى الخريطة."
     },
     "parameterField": {

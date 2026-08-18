@@ -4176,6 +4176,8 @@
       "untitledModel": "Модель без названия",
       "newModel": "Создать",
       "runModel": "Запустить",
+      "cancelRun": "Отмена",
+      "runCancelled": "Выполнение отменено.",
       "importModel": "Импорт",
       "exportModel": "Экспорт",
       "savedModels": "Сохранённые модели",
@@ -4210,6 +4212,7 @@
       "importedLog": "Импортирована модель с узлами: {{nodes}}.",
       "importFailed": "Не удалось импортировать",
       "importInvalid": "Этот файл не содержит графа модели.",
+      "importUnsupported": "Этот файл не является моделью GeoLibre.",
       "rasterOutputUnsupported": "«{{name}}» — растровый результат, который эта сборка не может добавить на карту."
     },
     "parameterField": {
