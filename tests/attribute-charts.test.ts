@@ -240,9 +240,13 @@ describe("categoryColumnOptions", () => {
   });
 
   it("preserves field order when no preferred category is detected", () => {
-    const data = rows({ name: "Alpha" }, { name: "Beta" }, { name: "Gamma" });
+    const data = rows(
+      { name: "Alpha", region: "North" },
+      { name: "Beta", region: "South" },
+      { name: "Gamma", region: "East" },
+    );
 
-    assert.deepEqual(categoryColumnOptions(data, ["name"]), ["name"]);
+    assert.deepEqual(categoryColumnOptions(data, ["name", "region"]), ["name", "region"]);
   });
 });
 
