@@ -7,7 +7,7 @@ import type {
   RasterSampleDataset,
   RenderEngine,
 } from "maplibre-gl-raster";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
+import type { GeoLibreAppAPI, GeoLibreCogRenderEngine, GeoLibreMapControlPosition } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
 import {
   ensureSharedDeckOverlay,
@@ -449,6 +449,18 @@ export interface RasterVisualizationDefaults {
  * `titiler` delegates to a TiTiler server.
  */
 export type RasterRenderEngine = RenderEngine;
+
+// `GeoLibreCogRenderEngine` in ../types hand-mirrors this union: types.ts is the
+// public plugin-API surface, so it must not make `maplibre-gl-raster`'s types a
+// hard dependency of every external plugin. Nothing otherwise links the two, and
+// a renamed or dropped identifier would reach `control.setEngine()` as a string
+// the control no longer knows, with no build error. These assert both directions
+// so a bump of `maplibre-gl-raster` fails `npm run typecheck` instead.
+type Mirrors<Mirror extends Source, Source> = never;
+export type CogRenderEngineMirrorIsExact = [
+  Mirrors<GeoLibreCogRenderEngine, RasterRenderEngine>,
+  Mirrors<RasterRenderEngine, GeoLibreCogRenderEngine>,
+];
 
 /**
  * Applies a default RGB band triple once the header has loaded.
