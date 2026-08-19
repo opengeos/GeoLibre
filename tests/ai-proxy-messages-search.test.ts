@@ -212,7 +212,10 @@ describe("AI proxy messages search response", () => {
         },
       ],
     });
-    assert.deepEqual(parsed.results.map((r) => r.url), ["https://b.example/y"]);
+    assert.deepEqual(
+      parsed.results.map((r) => r.url),
+      ["https://b.example/y"],
+    );
   });
 
   it("falls back to the search hits when every claimed snippet is blank", () => {
