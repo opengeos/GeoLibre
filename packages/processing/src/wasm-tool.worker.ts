@@ -2,13 +2,17 @@
 import { runTool } from "geolibre-wasm/tools";
 import type { ToolResult } from "geolibre-wasm/tools";
 
-// Runs one `geolibre-wasm/tools` WASI tool off the main thread. The runner has
-// no yield points once a tool starts, so on the main thread a long job freezes
-// the whole UI for its duration — tiling a country-scale vector layer to zoom 14
-// is minutes of that, which is why wasm-convert.ts routes it here.
+// Runs `geolibre-wasm/tools` WASI tools off the main thread. The runner has no
+// yield points once a tool starts, so on the main thread a long job freezes the
+// whole UI for its duration — tiling a country-scale vector layer to zoom 14 is
+// minutes of that, and dissolving 290 polygons by an attribute is ~60s, which is
+// why wasm-convert.ts and wasm-client.ts both route through wasm-tool-runner.ts.
 //
-// One tool per worker: the caller terminates this worker as soon as the terminal
-// message arrives, so nothing here has to be reusable across runs.
+// One run at a time, but reusable across runs: the caller parks this worker for
+// its next call instead of terminating it, so the ~23 MB `geolibre-cli.wasm`
+// compile in this worker's module scope is paid once rather than per run. Each
+// run still gets a fresh WASI instance and a fresh /work from `runTool`, so
+// nothing carries over between them.
 const worker = self as unknown as DedicatedWorkerGlobalScope;
 
 /** A tool to run: its id, CLI args, and the files to place under /work. */
