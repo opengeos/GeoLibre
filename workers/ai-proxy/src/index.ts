@@ -289,14 +289,19 @@ export function parseMessagesSearchResponse(data: unknown, limit = 20): Messages
       // looking exactly as citable as a real one.
       const hit = searched.get(url);
       if (!hit) return undefined;
+      // A citation with no extract does not meet the schema the prompt asks for
+      // and grounds nothing, so drop it rather than let it stand in for a real
+      // result and suppress the raw-hit fallback below.
+      const content = typeof entry.content === "string" ? entry.content : "";
+      if (!content.trim()) return undefined;
       const published =
         typeof entry.published_date === "string" && entry.published_date.trim()
           ? entry.published_date.trim()
-          : hit?.published_date;
+          : hit.published_date;
       return {
         title: typeof entry.title === "string" && entry.title ? entry.title : hit.title,
         url,
-        content: typeof entry.content === "string" ? entry.content : "",
+        content,
         ...(published ? { published_date: published } : {}),
       };
     })

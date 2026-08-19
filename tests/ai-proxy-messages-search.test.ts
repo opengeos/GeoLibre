@@ -197,6 +197,37 @@ describe("AI proxy messages search response", () => {
     );
   });
 
+  it("drops a claimed entry whose snippet is blank, since it grounds nothing", () => {
+    const parsed = parseMessagesSearchResponse({
+      content: [
+        searchBlock,
+        {
+          type: "text",
+          text: JSON.stringify({
+            results: [
+              { url: "https://a.example/x", title: "Hit A", content: "   " },
+              { url: "https://b.example/y", title: "Hit B", content: "real extract" },
+            ],
+          }),
+        },
+      ],
+    });
+    assert.deepEqual(parsed.results.map((r) => r.url), ["https://b.example/y"]);
+  });
+
+  it("falls back to the search hits when every claimed snippet is blank", () => {
+    const parsed = parseMessagesSearchResponse({
+      content: [
+        searchBlock,
+        { type: "text", text: '{"results":[{"url":"https://a.example/x","content":""}]}' },
+      ],
+    });
+    assert.deepEqual(
+      parsed.results.map((r) => r.url),
+      ["https://a.example/x", "https://b.example/y"],
+    );
+  });
+
   it("caps claimed results at the requested limit", () => {
     const parsed = parseMessagesSearchResponse(
       {
