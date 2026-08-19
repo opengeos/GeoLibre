@@ -143,6 +143,12 @@ export function scanDocumentForDatasets() {
     const url = canonicalHttpUrl(raw);
     if (!url) return;
 
+    // Source Cooperative data objects have already been rewritten to the
+    // data.source.coop host by canonicalUrl. Anything left on source.coop is
+    // site navigation, such as `/products?tags=cloud%20optimised%20geotiff`,
+    // whose label can otherwise look like a raster format hint.
+    if (url.hostname === "source.coop") return;
+
     // A page may link to an existing GeoLibre deep link. Unpack it so users can
     // combine its datasets with other links found on the same page.
     const nestedData = url.searchParams.getAll("data");

@@ -135,6 +135,27 @@ describe("GeoLibre Chrome extension scanner", () => {
     assert.equal(found.styleUrl, "https://data.source.coop/giswqs/opengeos/roads.style.json");
   });
 
+  it("ignores Source Cooperative product tag links that resemble file formats", () => {
+    assert.deepEqual(
+      scan(
+        `
+          <a href="/products?tags=cloud%20optimised%20geotiff">cloud optimised geotiff</a>
+          <a href="/alexgleith/gebco-2024/GEBCO_2024.tif">GEBCO_2024.tif</a>
+        `,
+        "https://source.coop/alexgleith/gebco-2024/GEBCO_2024.tif",
+      ),
+      [
+        {
+          url: "https://data.source.coop/alexgleith/gebco-2024/GEBCO_2024.tif",
+          name: "GEBCO_2024.tif",
+          format: "GeoTIFF",
+          kind: "raster",
+          styleUrl: null,
+        },
+      ],
+    );
+  });
+
   it("collapses every Hugging Face file route onto the direct resolve URL", () => {
     const repo = "https://huggingface.co/datasets/giswqs/PACE-Water-Quality";
     const file = "main/cogs/PACE_OCI-20260103-chla.tif";
