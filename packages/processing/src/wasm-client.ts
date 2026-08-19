@@ -8,6 +8,7 @@
 import type { FeatureCollection } from "geojson";
 import { convertGeoTiffToCog } from "./cog-convert";
 import { normalizeVectorOutputFormat } from "./sidecar-client";
+import { runWasmToolInBackground } from "./wasm-tool-runner";
 import type {
   RunWhiteboxToolRequest,
   VectorOutputFormat,
@@ -651,7 +652,6 @@ export async function ensureWhiteboxRasterCog(bytes: Uint8Array): Promise<Uint8A
  * (Cloud Optimized GeoTIFF) for `raster_out` - never a server path.
  */
 export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Promise<WhiteboxJob> {
-  const { runTool } = await loadToolsModule();
   const encoder = new TextEncoder();
   const input: Record<string, Uint8Array> = {};
   const args: string[] = [];
@@ -770,7 +770,14 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
     }
   }
 
-  const { exitCode, stdout, files } = await runTool(request.tool_id, { args, input });
+  // Off the main thread: the WASI runner is one synchronous call with no yield
+  // points, so running it here would freeze the UI for the tool's whole
+  // duration (~60s for the 290-polygon dissolve in GeoLibre#1977).
+  const { exitCode, stdout, files } = await runWasmToolInBackground({
+    tool: request.tool_id,
+    args,
+    input,
+  });
   if (exitCode !== 0) {
     return job(
       request.tool_id,

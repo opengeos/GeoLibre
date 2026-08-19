@@ -456,9 +456,11 @@ describe("wasm-convert", () => {
     });
 
     // Vite only bundles the worker when it can statically see this exact shape.
+    // The script is shared with the Whitebox toolbox runner (wasm-client.ts),
+    // which is why it is named for tools rather than for conversion.
     it("loads the worker as an ES module", () => {
       const { worker } = startRun();
-      assert.match(worker.url.href, /wasm-convert\.worker\.ts$/);
+      assert.match(worker.url.href, /wasm-tool\.worker\.ts$/);
       assert.deepEqual(worker.options, { type: "module" });
     });
 
