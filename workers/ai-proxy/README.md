@@ -63,10 +63,16 @@ output-token cap, and per-client rate limit.
    hit's page text as opaque `encrypted_content`, so the model writes the
    per-source snippets that ground quantified figures; they are extracts it
    produces rather than verbatim provider content, and the cited URLs are
-   restricted to ones the search actually returned. And a search plus a
-   synthesis pass is slower and far more token-hungry than a Tavily call --
-   expect tens of thousands of tokens per search against whatever account backs
-   `SEARCH_MESSAGES_URL`.
+   restricted to ones the search actually returned -- *when* the backend reports
+   them. A gateway fronting a non-Anthropic model may return the
+   `web_search_tool_result` blocks with an empty `content` array: the search ran,
+   but its hits never arrive, so there is nothing to check the citations against
+   and the model's URLs are passed through on its word alone. Rather than drop
+   every source, the route serves them and logs `"grounded": false` on that
+   request, so a backend that always strips the hits is visible in the Worker's
+   logs. And a search plus a synthesis pass is slower and far more token-hungry
+   than a Tavily call -- expect tens of thousands of tokens per search against
+   whatever account backs `SEARCH_MESSAGES_URL`.
 
 3. Validate and deploy:
 

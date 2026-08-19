@@ -228,6 +228,12 @@ export function buildMessagesSearchRequest(
 interface MessagesSearchPayload {
   results: { title: string; url: string; content: string; published_date?: string }[];
   answer?: string;
+  /**
+   * Whether the citations could be checked against the search's own hits. False
+   * means the URLs are the model's unverified word — logged, not sent, since the
+   * client's contract is Tavily's.
+   */
+  grounded: boolean;
 }
 
 function extractJsonObject(text: string): unknown {
@@ -285,7 +291,13 @@ export function parseMessagesSearchResponse(data: unknown, limit = 20): Messages
   // empty content array -- the search ran, the citations just never reach us.
   // Checking claimed URLs against that empty set would drop every result and
   // leave the client an answer with no sources at all, so grounding is enforced
-  // only when there is something to ground against.
+  // only when there is something to ground against. The residual trust boundary
+  // is real and worth naming: against a backend that *always* strips the hits,
+  // no URL is ever verified and an invented one would reach the client looking
+  // citable. That case is indistinguishable from a genuinely empty search, so
+  // the flag rides along on the payload and the route logs it -- an operator
+  // pointing SEARCH_MESSAGES_URL at such a backend can see it in the logs
+  // rather than infer it.
   const grounded = searched.size > 0;
 
   const results = claimed
@@ -321,7 +333,7 @@ export function parseMessagesSearchResponse(data: unknown, limit = 20): Messages
       ? ((parsed as { answer: string }).answer as string)
       : undefined;
 
-  if (results.length > 0) return { results, answer };
+  if (results.length > 0) return { results, answer, grounded };
 
   // No usable JSON: hand back what the search itself found so the caller still
   // has sources to cite, with the model's prose as the answer.
@@ -335,6 +347,7 @@ export function parseMessagesSearchResponse(data: unknown, limit = 20): Messages
       }))
       .slice(0, limit),
     answer: answer ?? (textParts.join("").trim() || undefined),
+    grounded,
   };
 }
 
@@ -621,10 +634,13 @@ async function proxyMessagesSearch(
         message: "Messages search request",
         status: upstream.status,
         resultCount: parsed.results.length,
+        grounded: parsed.grounded,
         colo: request.cf?.colo,
       }),
     );
-    return new Response(JSON.stringify(parsed), { status: 200, headers });
+    // `grounded` is diagnostic, not part of the Tavily-shaped contract.
+    const { grounded: _grounded, ...responseBody } = parsed;
+    return new Response(JSON.stringify(responseBody), { status: 200, headers });
   } finally {
     clearTimeout(deadline);
   }

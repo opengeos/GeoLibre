@@ -206,6 +206,8 @@ describe("AI proxy messages search response", () => {
     assert.deepEqual(parsed.results, [
       { title: "Indiana floods", url: "https://news.example/indiana", content: "six dead" },
     ]);
+    // The URLs went out unverified, so the route can log that it happened.
+    assert.equal(parsed.grounded, false);
   });
 
   it("still refuses an invented url once the backend has surfaced any hit", () => {
@@ -224,6 +226,7 @@ describe("AI proxy messages search response", () => {
       parsed.results.map((r) => r.url),
       ["https://a.example/x", "https://b.example/y"],
     );
+    assert.equal(parsed.grounded, true);
   });
 
   it("falls back to the search hits when every claimed url was invented", () => {
@@ -306,6 +309,10 @@ describe("AI proxy messages search response", () => {
   });
 
   it("returns an empty envelope for a response with no content", () => {
-    assert.deepEqual(parseMessagesSearchResponse({}), { results: [], answer: undefined });
+    assert.deepEqual(parseMessagesSearchResponse({}), {
+      results: [],
+      answer: undefined,
+      grounded: false,
+    });
   });
 });
