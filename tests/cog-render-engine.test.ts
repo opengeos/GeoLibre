@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  DEEP_LINK_COG_ENGINE,
   LEGACY_COG_ENGINE,
   cogEngineDefaults,
+  deepLinkCogDefaults,
 } from "../apps/geolibre-desktop/src/lib/cog-render-engine";
 
 // The raster control holds one engine for every raster it manages, so the
@@ -11,8 +11,10 @@ import {
 // adding a COG silently re-renders layers another panel put on the map. That
 // only shows up as a UI side effect, hence these assertions.
 describe("cogEngineDefaults", () => {
-  it("uses a globe-compatible native renderer for URL deep links", () => {
-    assert.equal(DEEP_LINK_COG_ENGINE, "cog-tiler-wasm");
+  it("leaves URL deep links on the fresh control's globe-compatible default", () => {
+    const defaults = deepLinkCogDefaults();
+    assert.deepEqual(defaults, {});
+    assert.equal("engine" in defaults, false);
   });
 
   it('omits the engine entirely for "auto" so the control is left alone', () => {
