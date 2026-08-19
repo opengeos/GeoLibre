@@ -76,6 +76,21 @@ describe("coerceNumericStringRows", () => {
     assert.equal(adapted[1].properties.district, "37005");
   });
 
+  it("preserves compact GIS identifier fields without leading zeroes", () => {
+    const data = rows(
+      { GEOID: "6", OBJECTID: "10", STATEFP: "36", population: "42" },
+      { GEOID: "12", OBJECTID: "20", STATEFP: "48", population: "84" },
+    );
+
+    const adapted = coerceNumericStringRows(data);
+    assert.deepEqual(adapted[0].properties, {
+      GEOID: "6",
+      OBJECTID: "10",
+      STATEFP: "36",
+      population: 42,
+    });
+  });
+
   it("reuses rows that have no values to coerce", () => {
     const data = rows({ name: "Alpha", code: "37009" });
     assert.equal(coerceNumericStringRows(data)[0], data[0]);
