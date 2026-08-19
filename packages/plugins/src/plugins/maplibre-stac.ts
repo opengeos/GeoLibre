@@ -49,22 +49,24 @@ const SELECT_SOURCE = "geolibre-stac-selected";
 const SELECT_FILL = "geolibre-stac-selected-fill";
 const SELECT_LINE = "geolibre-stac-selected-line";
 const COG_ENGINE_STORAGE_KEY = "geolibre:stac-default-cog-engine";
-const COG_ENGINES = ["cog-tiler-wasm", "maplibre-gl-raster", "titiler"] as const;
+// "auto" leaves the raster control on whatever engine it already holds. It is
+// the default because the engine is control-wide: naming one re-renders every
+// raster on the map, including layers another panel put there.
+const COG_ENGINES = ["auto", "cog-tiler-wasm", "maplibre-gl-raster", "titiler"] as const;
+type StacCogEngine = (typeof COG_ENGINES)[number];
 
 // Web Storage throws rather than returning null when the browser blocks it
 // (private mode, a third-party-storage policy), so neither read nor write may
 // be the only thing standing between the user and a working panel.
-function savedCogEngine(): GeoLibreCogRenderEngine {
+function savedCogEngine(): StacCogEngine {
   let saved: string | null = null;
   try {
     saved =
       typeof localStorage === "undefined" ? null : localStorage.getItem(COG_ENGINE_STORAGE_KEY);
   } catch {
-    return "cog-tiler-wasm";
+    return "auto";
   }
-  return COG_ENGINES.includes(saved as (typeof COG_ENGINES)[number])
-    ? (saved as GeoLibreCogRenderEngine)
-    : "cog-tiler-wasm";
+  return COG_ENGINES.includes(saved as StacCogEngine) ? (saved as StacCogEngine) : "auto";
 }
 
 function rememberCogEngine(engine: string): void {
@@ -161,9 +163,12 @@ export interface StacLabels {
   loadMore: string;
   renderOptions: string;
   renderingEngine: string;
+  engineAuto: string;
   engineGpu: string;
   engineWasm: string;
   engineTitiler: string;
+  engineHint: string;
+  resizeResults: string;
   bands: string;
   bandsPlaceholder: string;
   colormap: string;
@@ -241,10 +246,15 @@ let labels: StacLabels = {
   searchFailed: "STAC search failed",
   loadMore: "Load more",
   renderOptions: "Raster rendering options",
-  renderingEngine: "Default COG rendering engine",
-  engineGpu: "GPU (deck.gl; Mercator only)",
+  renderingEngine: "COG rendering engine",
+  engineAuto: "Leave unchanged",
+  engineGpu: "GPU (deck.gl, Mercator only)",
   engineWasm: "WebAssembly tiler (globe compatible)",
   engineTitiler: "TiTiler server",
+  engineHint:
+    "Which renderer decodes the imagery. Unlike the settings above this is not per layer: " +
+    "it applies to every raster on the map, including ones already added.",
+  resizeResults: "Resize search results",
   bands: "Bands",
   bandsPlaceholder: "e.g. 1 or 1,2,3 (default: auto)",
   colormap: "Colormap (single-band only)",
@@ -785,6 +795,7 @@ function buildPanel(container: HTMLElement): () => void {
   const engineSelect = el("select");
   engineSelect.style.cssText = style.input;
   for (const [value, title] of [
+    ["auto", labels.engineAuto],
     ["cog-tiler-wasm", labels.engineWasm],
     ["maplibre-gl-raster", labels.engineGpu],
     ["titiler", labels.engineTitiler],
@@ -797,7 +808,9 @@ function buildPanel(container: HTMLElement): () => void {
   engineSelect.addEventListener("change", () => {
     rememberCogEngine(engineSelect.value);
   });
-  engineWrap.append(engineCaption, engineSelect);
+  const engineHint = el("span", labels.engineHint);
+  engineHint.style.cssText = style.status;
+  engineWrap.append(engineCaption, engineSelect, engineHint);
   const bandsField = field(labels.bands);
   bandsField.input.placeholder = labels.bandsPlaceholder;
   const colormapWrap = el("label");
@@ -842,7 +855,8 @@ function buildPanel(container: HTMLElement): () => void {
   resultSplitter.style.cssText = style.resultSplitter;
   resultSplitter.setAttribute("role", "separator");
   resultSplitter.setAttribute("aria-orientation", "horizontal");
-  resultSplitter.setAttribute("aria-label", "Resize search results");
+  resultSplitter.setAttribute("aria-label", labels.resizeResults);
+  resultSplitter.setAttribute("aria-valuemin", "150");
   resultSplitter.tabIndex = 0;
   const loadMore = el("button", labels.loadMore);
   loadMore.type = "button";
@@ -853,14 +867,27 @@ function buildPanel(container: HTMLElement): () => void {
   controls.append(catalogSection, searchSection, renderSection);
   container.append(controls, status, resultSplitter, results, loadMore);
 
-  const resizeResults = (height: number): void => {
-    const maximum = Math.max(150, container.getBoundingClientRect().height - 230);
-    const next = Math.min(maximum, Math.max(150, height));
-    results.style.flexBasis = `${next}px`;
-    resultSplitter.setAttribute("aria-valuenow", String(Math.round(next)));
-    resultSplitter.setAttribute("aria-valuemin", "150");
+  const splitterBounds = (): number =>
+    Math.max(150, container.getBoundingClientRect().height - 230);
+
+  // Announcing the size only after the first drag would leave a screen reader
+  // with a valueless separator, so the values are also synced on focus -- which
+  // must not pin the percentage flex basis into pixels the way a resize does.
+  const announceResults = (height: number, maximum: number): void => {
+    resultSplitter.setAttribute("aria-valuenow", String(Math.round(height)));
     resultSplitter.setAttribute("aria-valuemax", String(Math.round(maximum)));
   };
+
+  const resizeResults = (height: number): void => {
+    const maximum = splitterBounds();
+    const next = Math.min(maximum, Math.max(150, height));
+    results.style.flexBasis = `${next}px`;
+    announceResults(next, maximum);
+  };
+
+  resultSplitter.addEventListener("focus", () => {
+    announceResults(results.getBoundingClientRect().height, splitterBounds());
+  });
 
   resultSplitter.addEventListener("pointerdown", (event) => {
     event.preventDefault();
@@ -917,7 +944,9 @@ function buildPanel(container: HTMLElement): () => void {
     const rescaleMax = numeric(vmaxField.input);
     const nodata = numeric(nodataField.input);
     return {
-      engine: engineSelect.value as GeoLibreCogRenderEngine,
+      // "auto" is sent through as-is so the host leaves the control-wide engine
+      // alone rather than falling back to its own default.
+      engine: engineSelect.value as GeoLibreCogRenderEngine | "auto",
       ...(bands ? { bands } : {}),
       ...(colormap ? { colormap } : {}),
       ...(rescaleMin !== undefined ? { rescaleMin } : {}),

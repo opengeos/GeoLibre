@@ -934,9 +934,14 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
           : undefined;
       return addRasterToMap(api, url, {
         name,
-        // WASM is the globe-compatible default. Discovery plugins can opt into
-        // the GPU or TiTiler engine for a particular layer when appropriate.
-        defaults: { engine: options?.engine ?? "cog-tiler-wasm" },
+        // The engine is a control-wide setting, not a per-layer one, so naming
+        // one here re-renders every raster already on the map. Callers that say
+        // nothing keep the long-standing GPU default: the WASM tiler is aimed at
+        // local files and can leave a remote programmatic layer registered
+        // without producing pixels. A caller that knows better (the STAC panel,
+        // where the user picks) opts in, and "auto" leaves the control alone.
+        defaults:
+          options?.engine === "auto" ? {} : { engine: options?.engine ?? "maplibre-gl-raster" },
         state: {
           ...(bands?.length ? { bands, mode: bands.length >= 3 ? "rgb" : "single" } : {}),
           ...(options?.colormap !== undefined ? { colormap: options.colormap } : {}),
