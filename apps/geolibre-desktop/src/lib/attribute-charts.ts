@@ -57,12 +57,14 @@ function hasLeadingZeroes(value: string): boolean {
 /** True for common delimited-text headers that conventionally hold identifiers. */
 function isIdentifierFieldName(key: string): boolean {
   const normalized = key.replace(/([a-z\d])([A-Z])/g, "$1_$2").toLowerCase();
-  if (/(^|[\s_-])(id|code|fips|zip|zipcode|postal)([\s_-]|$)/.test(normalized)) return true;
+  if (/(^|[\s_-])(id|fid|code|fips|zip|zipcode|postal)([\s_-]|$)/.test(normalized)) {
+    return true;
+  }
   const compact = normalized.replace(/[\s_-]/g, "");
   return (
-    /^(geo|object|feature|row)id$/.test(compact) ||
-    /^(state|county|place)fp$/.test(compact) ||
-    /^(tract|block)ce$/.test(compact)
+    /^(geo|object|feature|row)id\d*$/.test(compact) ||
+    /^(state|county|place)fp\d*$/.test(compact) ||
+    /^(tract|block)ce\d*$/.test(compact)
   );
 }
 

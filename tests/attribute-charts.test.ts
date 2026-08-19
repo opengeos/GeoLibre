@@ -80,6 +80,8 @@ describe("coerceNumericStringRows", () => {
     const data = rows(
       {
         GEOID: "6",
+        GEOID10: "60",
+        FID: "1",
         OBJECTID: "10",
         STATEFP: "36",
         TRACTCE: "100",
@@ -88,6 +90,8 @@ describe("coerceNumericStringRows", () => {
       },
       {
         GEOID: "12",
+        GEOID10: "120",
+        FID: "2",
         OBJECTID: "20",
         STATEFP: "48",
         TRACTCE: "300",
@@ -102,6 +106,8 @@ describe("coerceNumericStringRows", () => {
       [
         {
           GEOID: "6",
+          GEOID10: "60",
+          FID: "1",
           OBJECTID: "10",
           STATEFP: "36",
           TRACTCE: "100",
@@ -110,6 +116,8 @@ describe("coerceNumericStringRows", () => {
         },
         {
           GEOID: "12",
+          GEOID10: "120",
+          FID: "2",
           OBJECTID: "20",
           STATEFP: "48",
           TRACTCE: "300",
