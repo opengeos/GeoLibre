@@ -288,7 +288,9 @@ export function readBuildTimeAssistantEnv(
   if (proxyUrl) {
     result.OPENAI_COMPATIBLE_BASE_URL = managedProxyBaseUrl(proxyUrl, baseOrigin);
     result.OPENAI_COMPATIBLE_MODEL =
-      viteEnv.VITE_GEOLIBRE_AI_MODEL?.trim() || result.OPENAI_COMPATIBLE_MODEL || "openai/gpt-5.5";
+      viteEnv.VITE_GEOLIBRE_AI_MODEL?.trim() ||
+      result.OPENAI_COMPATIBLE_MODEL ||
+      "openai/gpt-5.6-luna";
   }
   return result;
 }

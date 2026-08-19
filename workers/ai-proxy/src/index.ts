@@ -22,7 +22,7 @@ declare global {
     /** Base URL of an Anthropic-messages-compatible endpoint, e.g. a cli-proxy-api. */
     SEARCH_MESSAGES_URL?: string;
     SEARCH_MESSAGES_API_KEY?: string;
-    /** Defaults to claude-sonnet-5. */
+    /** Defaults to gpt-5.6-luna. */
     SEARCH_MESSAGES_MODEL?: string;
   }
 }
@@ -172,7 +172,7 @@ export function resolveSearchBackend(env: Env): "tavily" | "messages" {
   return env.SEARCH_BACKEND?.trim().toLowerCase() === "messages" ? "messages" : "tavily";
 }
 
-const MESSAGES_SEARCH_MODEL_DEFAULT = "claude-sonnet-5";
+const MESSAGES_SEARCH_MODEL_DEFAULT = "gpt-5.6-luna";
 
 // The client contract is Tavily's: {results:[{title,url,content,published_date}],
 // answer}. Anthropic's server-side search returns citable titles and URLs but the

@@ -32,7 +32,7 @@ describe("AI proxy messages search request", () => {
     const messages = request.messages as { role: string; content: string }[];
     assert.match(messages[0].content, /within the last 30 days/);
     assert.match(request.system as string, /at most 8 results/);
-    assert.equal(request.model, "claude-sonnet-5");
+    assert.equal(request.model, "gpt-5.6-luna");
   });
 
   it("clamps max_results into the documented range", () => {

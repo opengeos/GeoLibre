@@ -233,7 +233,7 @@ docker run --rm -p 8080:80 \
   -e GEOLIBRE_AUTH_USER=admin \
   -e GEOLIBRE_AUTH_PASSWORD='change-me' \
   -e GEOLIBRE_AI_URL=/ai \
-  -e GEOLIBRE_AI_MODEL=openai/gpt-5.5 \
+  -e GEOLIBRE_AI_MODEL=openai/gpt-5.6-luna \
   -e GEOLIBRE_AI_PROXY_URL=https://ai.geolibre.app \
   -e GEOLIBRE_AI_PROXY_TOKEN="$GEOLIBRE_AI_PROXY_TOKEN" \
   ghcr.io/opengeos/geolibre:latest

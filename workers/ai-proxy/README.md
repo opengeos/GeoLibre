@@ -53,7 +53,7 @@ output-token cap, and per-client rate limit.
    | `SEARCH_BACKEND` | no | `tavily` (default) or `messages`. Any other value is treated as `tavily`. |
    | `SEARCH_MESSAGES_URL` | for `messages` | Base URL, e.g. `https://cli-proxy.example.org`. `/v1/messages` is appended. |
    | `SEARCH_MESSAGES_API_KEY` | for `messages` | Bearer token for that endpoint. Store with `wrangler secret put`. |
-   | `SEARCH_MESSAGES_MODEL` | no | Defaults to `claude-sonnet-5`. |
+   | `SEARCH_MESSAGES_MODEL` | no | Defaults to `gpt-5.6-luna`. |
 
    Tavily remains the default, so an existing deployment is unchanged until
    `SEARCH_BACKEND=messages` is set deliberately. Like the Tavily path, the
@@ -84,7 +84,7 @@ docker run --rm -p 8080:80 \
   -e GEOLIBRE_AUTH_USER=admin \
   -e GEOLIBRE_AUTH_PASSWORD='change-me' \
   -e GEOLIBRE_AI_URL=/ai \
-  -e GEOLIBRE_AI_MODEL=openai/gpt-5.5 \
+  -e GEOLIBRE_AI_MODEL=openai/gpt-5.6-luna \
   -e GEOLIBRE_AI_PROXY_URL=https://ai.geolibre.app \
   -e GEOLIBRE_AI_PROXY_TOKEN="$GEOLIBRE_AI_PROXY_TOKEN" \
   ghcr.io/opengeos/geolibre:latest
@@ -118,7 +118,7 @@ A direct inference request without the server token must fail:
 ```sh
 curl -i https://ai.geolibre.app/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  --data '{"model":"openai/gpt-5.5","messages":[{"role":"user","content":"Hello"}]}'
+  --data '{"model":"openai/gpt-5.6-luna","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
 Expected status: `401 Unauthorized`. Test the intended path through the
@@ -127,7 +127,7 @@ password-protected Docker host instead:
 ```sh
 curl -u 'admin:change-me' http://localhost:8080/ai/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  --data '{"model":"openai/gpt-5.5","messages":[{"role":"user","content":"Reply OK"}],"max_completion_tokens":64}'
+  --data '{"model":"openai/gpt-5.6-luna","messages":[{"role":"user","content":"Reply OK"}],"max_completion_tokens":64}'
 ```
 
 The client supplies only the Docker username and password. nginx adds the
