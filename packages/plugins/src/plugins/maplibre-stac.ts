@@ -303,6 +303,13 @@ let unregisterPanel: (() => void) | null = null;
 let disposePanel: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
 
+// The results pane and the controls above it each keep a floor so neither can
+// be dragged away entirely. splitterBounds() reserves the controls floor and
+// clamps to the results one, so both are declared here and interpolated into
+// the styles rather than written twice.
+const RESULTS_MIN_HEIGHT = 150;
+const CONTROLS_MIN_HEIGHT = 180;
+
 const style = {
   panel:
     "display:flex;flex-direction:column;gap:10px;height:100%;padding:10px;box-sizing:border-box;" +
@@ -325,10 +332,8 @@ const style = {
   // The floor keeps a usable result list even with every filter section open;
   // its flex basis gives the search controls most of the panel initially. A
   // splitter between the two lets the user choose a different balance.
-  results:
-    "display:flex;flex:0 0 40%;min-height:150px;overflow:auto;flex-direction:column;gap:7px;",
-  controls:
-    "display:flex;flex-direction:column;gap:10px;flex:1 1 60%;min-height:180px;overflow:auto;",
+  results: `display:flex;flex:0 0 40%;min-height:${RESULTS_MIN_HEIGHT}px;overflow:auto;flex-direction:column;gap:7px;`,
+  controls: `display:flex;flex-direction:column;gap:10px;flex:1 1 60%;min-height:${CONTROLS_MIN_HEIGHT}px;overflow:auto;`,
   resultSplitter:
     "height:8px;flex:0 0 8px;cursor:row-resize;border-radius:4px;touch-action:none;" +
     "background:linear-gradient(transparent 3px,hsl(var(--border)) 3px,hsl(var(--border)) 5px,transparent 5px);",
@@ -858,7 +863,7 @@ function buildPanel(container: HTMLElement): () => void {
   resultSplitter.setAttribute("role", "separator");
   resultSplitter.setAttribute("aria-orientation", "horizontal");
   resultSplitter.setAttribute("aria-label", labels.resizeResults);
-  resultSplitter.setAttribute("aria-valuemin", "150");
+  resultSplitter.setAttribute("aria-valuemin", String(RESULTS_MIN_HEIGHT));
   resultSplitter.tabIndex = 0;
   const loadMore = el("button", labels.loadMore);
   loadMore.type = "button";
@@ -873,7 +878,6 @@ function buildPanel(container: HTMLElement): () => void {
   // ceiling has to be whatever the container has left after the siblings that
   // keep their own size. Guessing a fixed reserve here let a drag to the
   // reported maximum clip the tail of the list and the Load more button.
-  const CONTROLS_MIN_HEIGHT = 180;
   const splitterBounds = (): number => {
     const reserved = [status, resultSplitter, loadMore].reduce(
       (total, element) => total + (element.hidden ? 0 : element.getBoundingClientRect().height),
@@ -888,7 +892,7 @@ function buildPanel(container: HTMLElement): () => void {
       (Number.parseFloat(padding.paddingBottom) || 0) -
       // One gap per sibling boundary: controls, status, splitter, results, loadMore.
       gap * 4;
-    return Math.max(150, inner - reserved);
+    return Math.max(RESULTS_MIN_HEIGHT, inner - reserved);
   };
 
   // Announcing the size only after the first drag would leave a screen reader
@@ -901,7 +905,7 @@ function buildPanel(container: HTMLElement): () => void {
 
   const resizeResults = (height: number): void => {
     const maximum = splitterBounds();
-    const next = Math.min(maximum, Math.max(150, height));
+    const next = Math.min(maximum, Math.max(RESULTS_MIN_HEIGHT, height));
     results.style.flexBasis = `${next}px`;
     announceResults(next, maximum);
   };
