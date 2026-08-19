@@ -35,8 +35,14 @@ describe("AI proxy messages search request", () => {
   });
 
   it("clamps max_results into the documented range", () => {
-    assert.match(buildMessagesSearchRequest({ max_results: 99 }, "q").system as string, /at most 20 results/);
-    assert.match(buildMessagesSearchRequest({ max_results: 0 }, "q").system as string, /at most 1 results/);
+    assert.match(
+      buildMessagesSearchRequest({ max_results: 99 }, "q").system as string,
+      /at most 20 results/,
+    );
+    assert.match(
+      buildMessagesSearchRequest({ max_results: 0 }, "q").system as string,
+      /at most 1 results/,
+    );
   });
 
   it("ignores a lookback for retrospective general searches", () => {
@@ -59,7 +65,12 @@ describe("AI proxy messages search response", () => {
   const searchBlock = {
     type: "web_search_tool_result",
     content: [
-      { type: "web_search_result", title: "Hit A", url: "https://a.example/x", page_age: "2024-11-02" },
+      {
+        type: "web_search_result",
+        title: "Hit A",
+        url: "https://a.example/x",
+        page_age: "2024-11-02",
+      },
       { type: "web_search_result", title: "Hit B", url: "https://b.example/y", page_age: "None" },
     ],
   };
@@ -72,14 +83,21 @@ describe("AI proxy messages search response", () => {
           type: "text",
           text: JSON.stringify({
             answer: "At least 200 died.",
-            results: [{ title: "Hit A", url: "https://a.example/x", content: "…at least 200 deaths…" }],
+            results: [
+              { title: "Hit A", url: "https://a.example/x", content: "…at least 200 deaths…" },
+            ],
           }),
         },
       ],
     });
     assert.equal(parsed.answer, "At least 200 died.");
     assert.deepEqual(parsed.results, [
-      { title: "Hit A", url: "https://a.example/x", content: "…at least 200 deaths…", published_date: "2024-11-02" },
+      {
+        title: "Hit A",
+        url: "https://a.example/x",
+        content: "…at least 200 deaths…",
+        published_date: "2024-11-02",
+      },
     ]);
   });
 
@@ -87,7 +105,10 @@ describe("AI proxy messages search response", () => {
     const parsed = parseMessagesSearchResponse({
       content: [
         searchBlock,
-        { type: "text", text: '```json\n{"answer":"ok","results":[{"url":"https://b.example/y","content":"c"}]}\n```' },
+        {
+          type: "text",
+          text: '```json\n{"answer":"ok","results":[{"url":"https://b.example/y","content":"c"}]}\n```',
+        },
       ],
     });
     assert.equal(parsed.results.length, 1);
@@ -96,7 +117,10 @@ describe("AI proxy messages search response", () => {
 
   it("drops the page_age sentinel rather than emitting it as a date", () => {
     const parsed = parseMessagesSearchResponse({
-      content: [searchBlock, { type: "text", text: '{"results":[{"url":"https://b.example/y","content":"c"}]}' }],
+      content: [
+        searchBlock,
+        { type: "text", text: '{"results":[{"url":"https://b.example/y","content":"c"}]}' },
+      ],
     });
     assert.equal("published_date" in parsed.results[0], false);
   });
@@ -114,9 +138,15 @@ describe("AI proxy messages search response", () => {
 
   it("never invents a result the search did not return a url for", () => {
     const parsed = parseMessagesSearchResponse({
-      content: [searchBlock, { type: "text", text: '{"results":[{"title":"No url","content":"c"}]}' }],
+      content: [
+        searchBlock,
+        { type: "text", text: '{"results":[{"title":"No url","content":"c"}]}' },
+      ],
     });
-    assert.deepEqual(parsed.results.map((r) => r.url), ["https://a.example/x", "https://b.example/y"]);
+    assert.deepEqual(
+      parsed.results.map((r) => r.url),
+      ["https://a.example/x", "https://b.example/y"],
+    );
   });
 
   it("returns an empty envelope for a response with no content", () => {

@@ -226,7 +226,10 @@ interface MessagesSearchPayload {
 }
 
 function extractJsonObject(text: string): unknown {
-  const trimmed = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "");
+  const trimmed = text
+    .trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/, "");
   const start = trimmed.indexOf("{");
   const end = trimmed.lastIndexOf("}");
   if (start === -1 || end <= start) return undefined;
@@ -255,8 +258,12 @@ export function parseMessagesSearchResponse(data: unknown): MessagesSearchPayloa
         const url = typeof hit?.url === "string" ? hit.url : "";
         if (!url) continue;
         // page_age is absent for many pages and arrives as the string "None".
-        const age = typeof hit.page_age === "string" && hit.page_age !== "None" ? hit.page_age : undefined;
-        searched.set(url, { title: typeof hit.title === "string" ? hit.title : "", published_date: age });
+        const age =
+          typeof hit.page_age === "string" && hit.page_age !== "None" ? hit.page_age : undefined;
+        searched.set(url, {
+          title: typeof hit.title === "string" ? hit.title : "",
+          published_date: age,
+        });
       }
     } else if (block?.type === "text" && typeof block.text === "string") {
       textParts.push(block.text);
