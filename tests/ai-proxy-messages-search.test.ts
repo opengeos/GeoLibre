@@ -167,14 +167,21 @@ describe("AI proxy messages search response", () => {
           text: JSON.stringify({
             answer: "a",
             results: [
-              { url: "https://invented.example/fabricated", title: "Looks real", content: "200 deaths" },
+              {
+                url: "https://invented.example/fabricated",
+                title: "Looks real",
+                content: "200 deaths",
+              },
               { url: "https://a.example/x", title: "Hit A", content: "real" },
             ],
           }),
         },
       ],
     });
-    assert.deepEqual(parsed.results.map((r) => r.url), ["https://a.example/x"]);
+    assert.deepEqual(
+      parsed.results.map((r) => r.url),
+      ["https://a.example/x"],
+    );
   });
 
   it("falls back to the search hits when every claimed url was invented", () => {
@@ -208,7 +215,10 @@ describe("AI proxy messages search response", () => {
       },
       1,
     );
-    assert.deepEqual(parsed.results.map((r) => r.url), ["https://a.example/x"]);
+    assert.deepEqual(
+      parsed.results.map((r) => r.url),
+      ["https://a.example/x"],
+    );
   });
 
   it("caps the fallback hits at the requested limit too", () => {

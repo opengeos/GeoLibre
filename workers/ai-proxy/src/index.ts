@@ -250,10 +250,7 @@ function extractJsonObject(text: string): unknown {
  * to the raw search hits when the model does not return usable JSON, so a
  * malformed reply still yields citable URLs rather than an error.
  */
-export function parseMessagesSearchResponse(
-  data: unknown,
-  limit = 20,
-): MessagesSearchPayload {
+export function parseMessagesSearchResponse(data: unknown, limit = 20): MessagesSearchPayload {
   const content = Array.isArray((data as { content?: unknown })?.content)
     ? ((data as { content: unknown[] }).content as Record<string, unknown>[])
     : [];
