@@ -4,6 +4,7 @@ import {
   buildMessagesSearchRequest,
   parseMessagesSearchResponse,
   resolveSearchBackend,
+  searchResultLimit,
 } from "../workers/ai-proxy/src/index";
 
 describe("AI proxy search backend selection", () => {
@@ -58,6 +59,14 @@ describe("AI proxy messages search request", () => {
   it("always requests the server-side web_search tool", () => {
     const tools = buildMessagesSearchRequest({}, "q").tools as { type: string }[];
     assert.equal(tools[0].type, "web_search_20250305");
+  });
+
+  it("shares one clamped limit between the prompt and the response cap", () => {
+    assert.equal(searchResultLimit({}), 6);
+    assert.equal(searchResultLimit({ max_results: 8 }), 8);
+    assert.equal(searchResultLimit({ max_results: 99 }), 20);
+    assert.equal(searchResultLimit({ max_results: 0 }), 1);
+    assert.equal(searchResultLimit({ max_results: Number.NaN }), 6);
   });
 });
 
@@ -136,7 +145,7 @@ describe("AI proxy messages search response", () => {
     assert.equal(parsed.answer, "I could not format that.");
   });
 
-  it("never invents a result the search did not return a url for", () => {
+  it("drops a claimed entry that carries no url", () => {
     const parsed = parseMessagesSearchResponse({
       content: [
         searchBlock,
@@ -147,6 +156,67 @@ describe("AI proxy messages search response", () => {
       parsed.results.map((r) => r.url),
       ["https://a.example/x", "https://b.example/y"],
     );
+  });
+
+  it("drops a url the search never returned, so an invented link cannot be cited", () => {
+    const parsed = parseMessagesSearchResponse({
+      content: [
+        searchBlock,
+        {
+          type: "text",
+          text: JSON.stringify({
+            answer: "a",
+            results: [
+              { url: "https://invented.example/fabricated", title: "Looks real", content: "200 deaths" },
+              { url: "https://a.example/x", title: "Hit A", content: "real" },
+            ],
+          }),
+        },
+      ],
+    });
+    assert.deepEqual(parsed.results.map((r) => r.url), ["https://a.example/x"]);
+  });
+
+  it("falls back to the search hits when every claimed url was invented", () => {
+    const parsed = parseMessagesSearchResponse({
+      content: [
+        searchBlock,
+        { type: "text", text: '{"results":[{"url":"https://invented.example/z","content":"c"}]}' },
+      ],
+    });
+    assert.deepEqual(
+      parsed.results.map((r) => r.url),
+      ["https://a.example/x", "https://b.example/y"],
+    );
+  });
+
+  it("caps claimed results at the requested limit", () => {
+    const parsed = parseMessagesSearchResponse(
+      {
+        content: [
+          searchBlock,
+          {
+            type: "text",
+            text: JSON.stringify({
+              results: [
+                { url: "https://a.example/x", content: "one" },
+                { url: "https://b.example/y", content: "two" },
+              ],
+            }),
+          },
+        ],
+      },
+      1,
+    );
+    assert.deepEqual(parsed.results.map((r) => r.url), ["https://a.example/x"]);
+  });
+
+  it("caps the fallback hits at the requested limit too", () => {
+    const parsed = parseMessagesSearchResponse(
+      { content: [searchBlock, { type: "text", text: "prose, not json" }] },
+      1,
+    );
+    assert.equal(parsed.results.length, 1);
   });
 
   it("returns an empty envelope for a response with no content", () => {

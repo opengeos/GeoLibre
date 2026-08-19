@@ -180,16 +180,21 @@ const MESSAGES_SEARCH_MODEL_DEFAULT = "claude-sonnet-5";
 // per-source snippets that ground the impact figures. Asking for the whole
 // envelope as JSON keeps that mapping in one place instead of splitting it
 // between a synthesis prompt and a post-hoc merge.
+/** The client's requested result count, clamped to the documented range. */
+export function searchResultLimit(body: Record<string, unknown>): number {
+  const requested =
+    typeof body.max_results === "number" && Number.isFinite(body.max_results)
+      ? Math.floor(body.max_results)
+      : 6;
+  return Math.min(Math.max(requested, 1), 20);
+}
+
 export function buildMessagesSearchRequest(
   body: Record<string, unknown>,
   query: string,
   model = MESSAGES_SEARCH_MODEL_DEFAULT,
 ): Record<string, unknown> {
-  const requestedMaxResults =
-    typeof body.max_results === "number" && Number.isFinite(body.max_results)
-      ? Math.floor(body.max_results)
-      : 6;
-  const maxResults = Math.min(Math.max(requestedMaxResults, 1), 20);
+  const maxResults = searchResultLimit(body);
   const topic = body.topic === "news" ? "news" : "general";
   const days =
     topic === "news" && typeof body.days === "number" && Number.isFinite(body.days)
@@ -245,7 +250,10 @@ function extractJsonObject(text: string): unknown {
  * to the raw search hits when the model does not return usable JSON, so a
  * malformed reply still yields citable URLs rather than an error.
  */
-export function parseMessagesSearchResponse(data: unknown): MessagesSearchPayload {
+export function parseMessagesSearchResponse(
+  data: unknown,
+  limit = 20,
+): MessagesSearchPayload {
   const content = Array.isArray((data as { content?: unknown })?.content)
     ? ((data as { content: unknown[] }).content as Record<string, unknown>[])
     : [];
@@ -279,19 +287,24 @@ export function parseMessagesSearchResponse(data: unknown): MessagesSearchPayloa
     .map((entry) => {
       const url = typeof entry?.url === "string" ? entry.url.trim() : "";
       if (!url) return undefined;
+      // Only URLs the search actually returned may be cited: the model writes
+      // the snippets, so without this an invented link reaches the client
+      // looking exactly as citable as a real one.
       const hit = searched.get(url);
+      if (!hit) return undefined;
       const published =
         typeof entry.published_date === "string" && entry.published_date.trim()
           ? entry.published_date.trim()
           : hit?.published_date;
       return {
-        title: typeof entry.title === "string" && entry.title ? entry.title : (hit?.title ?? ""),
+        title: typeof entry.title === "string" && entry.title ? entry.title : hit.title,
         url,
         content: typeof entry.content === "string" ? entry.content : "",
         ...(published ? { published_date: published } : {}),
       };
     })
-    .filter((entry): entry is MessagesSearchPayload["results"][number] => entry !== undefined);
+    .filter((entry): entry is MessagesSearchPayload["results"][number] => entry !== undefined)
+    .slice(0, limit);
 
   const answer =
     typeof (parsed as { answer?: unknown })?.answer === "string"
@@ -303,12 +316,14 @@ export function parseMessagesSearchResponse(data: unknown): MessagesSearchPayloa
   // No usable JSON: hand back what the search itself found so the caller still
   // has sources to cite, with the model's prose as the answer.
   return {
-    results: [...searched.entries()].map(([url, hit]) => ({
-      title: hit.title,
-      url,
-      content: "",
-      ...(hit.published_date ? { published_date: hit.published_date } : {}),
-    })),
+    results: [...searched.entries()]
+      .map(([url, hit]) => ({
+        title: hit.title,
+        url,
+        content: "",
+        ...(hit.published_date ? { published_date: hit.published_date } : {}),
+      }))
+      .slice(0, limit),
     answer: answer ?? (textParts.join("").trim() || undefined),
   };
 }
@@ -541,59 +556,68 @@ async function proxyMessagesSearch(
   );
 
   const controller = new AbortController();
-  // A search plus a synthesis pass runs longer than Tavily's own bound, and this
-  // waits on the whole body rather than just headers, so it gets its own budget.
+  // A search plus a synthesis pass runs longer than Tavily's own bound. The
+  // timer is cleared only in the outer finally, after the body has been read:
+  // clearing it when fetch resolves would disarm the abort while the body --
+  // where the whole answer actually arrives -- was still streaming.
   const deadline = setTimeout(() => controller.abort(), MESSAGES_SEARCH_TIMEOUT_MS);
-  let upstream: Response;
   try {
-    upstream = await fetch(`${endpoint}/v1/messages`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (controller.signal.aborted) {
-      return jsonError("Search request timed out", 504, responseHeaders(origin));
+    let upstream: Response;
+    try {
+      upstream = await fetch(`${endpoint}/v1/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return jsonError("Search request timed out", 504, responseHeaders(origin));
+      }
+      throw error;
     }
-    throw error;
+
+    const headers = responseHeaders(origin);
+    headers.set("Content-Type", "application/json; charset=utf-8");
+    headers.set("Cache-Control", "no-store");
+
+    if (!upstream.ok) {
+      // Do not forward the upstream body: it can carry provider detail the client
+      // has no use for, and its shape is not the client's error contract.
+      console.log(
+        JSON.stringify({ message: "Messages search upstream error", status: upstream.status }),
+      );
+      return jsonError("Search upstream error", 502, headers);
+    }
+
+    let parsed: ReturnType<typeof parseMessagesSearchResponse>;
+    try {
+      parsed = parseMessagesSearchResponse(await upstream.json(), searchResultLimit(body));
+    } catch {
+      // A stalled body aborts rather than parses, so separate the two: the
+      // client should see a timeout, not a malformed-response error.
+      if (controller.signal.aborted) {
+        return jsonError("Search request timed out", 504, headers);
+      }
+      return jsonError("Search upstream returned an unreadable response", 502, headers);
+    }
+
+    console.log(
+      JSON.stringify({
+        message: "Messages search request",
+        status: upstream.status,
+        resultCount: parsed.results.length,
+        colo: request.cf?.colo,
+      }),
+    );
+    return new Response(JSON.stringify(parsed), { status: 200, headers });
   } finally {
     clearTimeout(deadline);
   }
-
-  const headers = responseHeaders(origin);
-  headers.set("Content-Type", "application/json; charset=utf-8");
-  headers.set("Cache-Control", "no-store");
-
-  if (!upstream.ok) {
-    // Do not forward the upstream body: it can carry provider detail the client
-    // has no use for, and its shape is not the client's error contract.
-    console.log(
-      JSON.stringify({ message: "Messages search upstream error", status: upstream.status }),
-    );
-    return jsonError("Search upstream error", 502, headers);
-  }
-
-  let parsed: ReturnType<typeof parseMessagesSearchResponse>;
-  try {
-    parsed = parseMessagesSearchResponse(await upstream.json());
-  } catch {
-    return jsonError("Search upstream returned an unreadable response", 502, headers);
-  }
-
-  console.log(
-    JSON.stringify({
-      message: "Messages search request",
-      status: upstream.status,
-      resultCount: parsed.results.length,
-      colo: request.cf?.colo,
-    }),
-  );
-  return new Response(JSON.stringify(parsed), { status: 200, headers });
 }
 
 export default {
