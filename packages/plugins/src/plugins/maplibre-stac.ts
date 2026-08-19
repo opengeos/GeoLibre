@@ -2,7 +2,12 @@ import { DEFAULT_LAYER_STYLE, useAppStore } from "@geolibre/core";
 import { fillLayerId, lineLayerId } from "@geolibre/map";
 import type { FeatureCollection, Geometry } from "geojson";
 import type { GeoJSONSource, MapMouseEvent, Map as MapLibreMap } from "maplibre-gl";
-import type { GeoLibreAppAPI, GeoLibreCogLayerOptions, GeoLibrePlugin } from "../types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreCogLayerOptions,
+  GeoLibreCogRenderEngine,
+  GeoLibrePlugin,
+} from "../types";
 import { addPMTilesAsset } from "./stac-layers";
 import {
   assetDisplayFormat,
@@ -43,6 +48,16 @@ const DRAW_LINE = "geolibre-stac-draw-bbox-line";
 const SELECT_SOURCE = "geolibre-stac-selected";
 const SELECT_FILL = "geolibre-stac-selected-fill";
 const SELECT_LINE = "geolibre-stac-selected-line";
+const COG_ENGINE_STORAGE_KEY = "geolibre:stac-default-cog-engine";
+const COG_ENGINES = ["cog-tiler-wasm", "maplibre-gl-raster", "titiler"] as const;
+
+function savedCogEngine(): GeoLibreCogRenderEngine {
+  if (typeof localStorage === "undefined") return "cog-tiler-wasm";
+  const saved = localStorage.getItem(COG_ENGINE_STORAGE_KEY);
+  return COG_ENGINES.includes(saved as (typeof COG_ENGINES)[number])
+    ? (saved as GeoLibreCogRenderEngine)
+    : "cog-tiler-wasm";
+}
 
 /**
  * Colormaps the COG renderer knows by name (`ColormapName` in
@@ -129,6 +144,10 @@ export interface StacLabels {
   searchFailed: string;
   loadMore: string;
   renderOptions: string;
+  renderingEngine: string;
+  engineGpu: string;
+  engineWasm: string;
+  engineTitiler: string;
   bands: string;
   bandsPlaceholder: string;
   colormap: string;
@@ -206,6 +225,10 @@ let labels: StacLabels = {
   searchFailed: "STAC search failed",
   loadMore: "Load more",
   renderOptions: "Raster rendering options",
+  renderingEngine: "Default COG rendering engine",
+  engineGpu: "GPU (deck.gl; Mercator only)",
+  engineWasm: "WebAssembly tiler (globe compatible)",
+  engineTitiler: "TiTiler server",
   bands: "Bands",
   bandsPlaceholder: "e.g. 1 or 1,2,3 (default: auto)",
   colormap: "Colormap (single-band only)",
@@ -274,11 +297,15 @@ const style = {
     "background:hsl(var(--primary));color:hsl(var(--primary-foreground));cursor:pointer;",
   status: "font-size:11px;line-height:1.4;color:hsl(var(--muted-foreground));",
   // The floor keeps a usable result list even with every filter section open;
-  // the controls above it scroll as a group rather than pushing it off-panel.
+  // its flex basis gives the search controls most of the panel initially. A
+  // splitter between the two lets the user choose a different balance.
   results:
-    "display:flex;flex:1 1 auto;min-height:150px;overflow:auto;flex-direction:column;gap:7px;",
+    "display:flex;flex:0 0 40%;min-height:150px;overflow:auto;flex-direction:column;gap:7px;",
   controls:
-    "display:flex;flex-direction:column;gap:10px;flex:0 1 auto;min-height:180px;overflow:auto;",
+    "display:flex;flex-direction:column;gap:10px;flex:1 1 60%;min-height:180px;overflow:auto;",
+  resultSplitter:
+    "height:8px;flex:0 0 8px;cursor:row-resize;border-radius:4px;touch-action:none;" +
+    "background:linear-gradient(transparent 3px,hsl(var(--border)) 3px,hsl(var(--border)) 5px,transparent 5px);",
   card:
     "display:flex;flex-direction:column;gap:5px;padding:8px;border:1px solid hsl(var(--border));" +
     "border-radius:7px;background:hsl(var(--muted));",
@@ -661,9 +688,9 @@ function buildPanel(container: HTMLElement): () => void {
   catalogInfo.style.cssText = "font-weight:600;";
   const collectionSelect = el("select");
   collectionSelect.multiple = true;
-  collectionSelect.size = 3;
+  collectionSelect.size = 8;
   // Catalogs can advertise hundreds of collections, so let the list be dragged taller.
-  collectionSelect.style.cssText = `${style.input}resize:vertical;overflow:auto;min-height:58px;`;
+  collectionSelect.style.cssText = `${style.input}resize:vertical;overflow:auto;min-height:150px;`;
   collectionSelect.title = labels.collectionsHint;
   // An API answers with a flat list of collections; a static catalog is a tree read as it opens.
   const tree = buildCatalogTree({
@@ -735,6 +762,28 @@ function buildPanel(container: HTMLElement): () => void {
   renderSection.hidden = true;
   const renderSummary = el("summary", labels.renderOptions);
   renderSummary.style.cssText = "cursor:pointer;font-weight:600;";
+  const engineWrap = el("label");
+  engineWrap.style.cssText = "display:flex;flex-direction:column;gap:2px;";
+  const engineCaption = el("span", labels.renderingEngine);
+  engineCaption.style.cssText = style.label;
+  const engineSelect = el("select");
+  engineSelect.style.cssText = style.input;
+  for (const [value, title] of [
+    ["cog-tiler-wasm", labels.engineWasm],
+    ["maplibre-gl-raster", labels.engineGpu],
+    ["titiler", labels.engineTitiler],
+  ] as const) {
+    const option = el("option", title);
+    option.value = value;
+    engineSelect.append(option);
+  }
+  engineSelect.value = savedCogEngine();
+  engineSelect.addEventListener("change", () => {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(COG_ENGINE_STORAGE_KEY, engineSelect.value);
+    }
+  });
+  engineWrap.append(engineCaption, engineSelect);
   const bandsField = field(labels.bands);
   bandsField.input.placeholder = labels.bandsPlaceholder;
   const colormapWrap = el("label");
@@ -763,6 +812,7 @@ function buildPanel(container: HTMLElement): () => void {
   renderHint.style.cssText = style.status;
   renderSection.append(
     renderSummary,
+    engineWrap,
     bandsField.wrap,
     colormapWrap,
     rescaleRow,
@@ -774,6 +824,12 @@ function buildPanel(container: HTMLElement): () => void {
   status.style.cssText = style.status;
   const results = el("div");
   results.style.cssText = style.results;
+  const resultSplitter = el("div");
+  resultSplitter.style.cssText = style.resultSplitter;
+  resultSplitter.setAttribute("role", "separator");
+  resultSplitter.setAttribute("aria-orientation", "horizontal");
+  resultSplitter.setAttribute("aria-label", "Resize search results");
+  resultSplitter.tabIndex = 0;
   const loadMore = el("button", labels.loadMore);
   loadMore.type = "button";
   loadMore.style.cssText = style.primary;
@@ -781,7 +837,40 @@ function buildPanel(container: HTMLElement): () => void {
   const controls = el("div");
   controls.style.cssText = style.controls;
   controls.append(catalogSection, searchSection, renderSection);
-  container.append(controls, status, results, loadMore);
+  container.append(controls, status, resultSplitter, results, loadMore);
+
+  const resizeResults = (height: number): void => {
+    const maximum = Math.max(150, container.getBoundingClientRect().height - 230);
+    const next = Math.min(maximum, Math.max(150, height));
+    results.style.flexBasis = `${next}px`;
+    resultSplitter.setAttribute("aria-valuenow", String(Math.round(next)));
+    resultSplitter.setAttribute("aria-valuemin", "150");
+    resultSplitter.setAttribute("aria-valuemax", String(Math.round(maximum)));
+  };
+
+  resultSplitter.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = results.getBoundingClientRect().height;
+    resultSplitter.setPointerCapture(event.pointerId);
+    const move = (moveEvent: PointerEvent): void => {
+      resizeResults(startHeight - (moveEvent.clientY - startY));
+    };
+    const stop = (): void => {
+      resultSplitter.removeEventListener("pointermove", move);
+      resultSplitter.removeEventListener("pointerup", stop);
+      resultSplitter.removeEventListener("pointercancel", stop);
+    };
+    resultSplitter.addEventListener("pointermove", move);
+    resultSplitter.addEventListener("pointerup", stop);
+    resultSplitter.addEventListener("pointercancel", stop);
+  });
+  resultSplitter.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowUp" ? 30 : -30;
+    resizeResults(results.getBoundingClientRect().height + delta);
+  });
 
   let index: StacIndexCatalog[] = [];
   let filtered: StacIndexCatalog[] = [];
@@ -814,6 +903,7 @@ function buildPanel(container: HTMLElement): () => void {
     const rescaleMax = numeric(vmaxField.input);
     const nodata = numeric(nodataField.input);
     return {
+      engine: engineSelect.value as GeoLibreCogRenderEngine,
       ...(bands ? { bands } : {}),
       ...(colormap ? { colormap } : {}),
       ...(rescaleMin !== undefined ? { rescaleMin } : {}),

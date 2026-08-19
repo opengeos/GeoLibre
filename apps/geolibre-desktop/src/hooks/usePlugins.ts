@@ -934,11 +934,9 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
           : undefined;
       return addRasterToMap(api, url, {
         name,
-        // STAC assets are already COGs with an HTTP(S) range-readable URL.
-        // Render them directly through the GPU COG engine; the WASM tiler is
-        // intended for local files and can leave remote programmatic layers
-        // registered without producing pixels.
-        defaults: { engine: "maplibre-gl-raster" },
+        // WASM is the globe-compatible default. Discovery plugins can opt into
+        // the GPU or TiTiler engine for a particular layer when appropriate.
+        defaults: { engine: options?.engine ?? "cog-tiler-wasm" },
         state: {
           ...(bands?.length ? { bands, mode: bands.length >= 3 ? "rgb" : "single" } : {}),
           ...(options?.colormap !== undefined ? { colormap: options.colormap } : {}),

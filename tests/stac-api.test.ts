@@ -161,6 +161,44 @@ test("connectStac reads only the root of a static catalog", async () => {
   );
 });
 
+test("connectStac redirects the retired USGS static catalog to its supported API", async () => {
+  const fetched: string[] = [];
+  const fetcher = (async (input: RequestInfo | URL) => {
+    fetched.push(String(input));
+    return jsonResponse({
+      type: "Catalog",
+      id: "usgs_astrogeology_api",
+      links: [
+        {
+          rel: "search",
+          href: "https://stac.astrogeology.usgs.gov/api/search",
+        },
+      ],
+    });
+  }) as typeof fetch;
+
+  const connection = await connectStac(
+    "http://asc-stacbrowser.s3-website-us-west-2.amazonaws.com/catalog.json",
+    fetcher,
+  );
+
+  assert.equal(connection.url, "https://stac.astrogeology.usgs.gov/api");
+  assert.deepEqual(fetched, ["https://stac.astrogeology.usgs.gov/api"]);
+  assert.equal(connection.isApi, true);
+});
+
+test("connectStac upgrades HTTP-only S3 website catalogs to their HTTPS endpoint", async () => {
+  const fetched: string[] = [];
+  const fetcher = (async (input: RequestInfo | URL) => {
+    fetched.push(String(input));
+    return jsonResponse({ type: "Catalog", id: "archive", links: [] });
+  }) as typeof fetch;
+
+  await connectStac("http://example.s3-website-us-west-2.amazonaws.com/catalog.json", fetcher);
+
+  assert.deepEqual(fetched, ["https://example.s3.us-west-2.amazonaws.com/catalog.json"]);
+});
+
 test("openCatalogNode reports what a node turned out to be and what is inside it", async () => {
   const fetcher = (async (input: RequestInfo | URL) => {
     if (String(input).endsWith("collection.json")) {
@@ -1362,5 +1400,28 @@ test("asset and bbox helpers recognize common STAC data", () => {
       assets: {},
     }),
     [1, 2, 3, 4],
+  );
+  assert.deepEqual(
+    itemBbox({
+      type: "Feature",
+      id: "mars-themis",
+      // THEMIS publishes proj:bbox here even though STAC bbox must be lon/lat.
+      bbox: [7_112_945, -1_778_200, 10_669_445, -3_852_900],
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [120, -30],
+            [180, -30],
+            [180, -65],
+            [120, -65],
+            [120, -30],
+          ],
+        ],
+      },
+      properties: {},
+      assets: {},
+    }),
+    [120, -65, 180, -30],
   );
 });

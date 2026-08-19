@@ -176,7 +176,11 @@ export interface GeoLibreOvertureQueryResult {
  * panel. All fields are optional; the renderer infers sensible defaults from
  * the GeoTIFF when they are omitted.
  */
+export type GeoLibreCogRenderEngine = "maplibre-gl-raster" | "cog-tiler-wasm" | "titiler";
+
 export interface GeoLibreCogLayerOptions {
+  /** Renderer used for this COG. WASM is globe-compatible; the GPU renderer requires Mercator. */
+  engine?: GeoLibreCogRenderEngine;
   /** Band selection, e.g. `"1"` (single band) or `"1,2,3"` (RGB). */
   bands?: string;
   /**
