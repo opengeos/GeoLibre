@@ -183,7 +183,7 @@ export function classifyServiceRequest(rawUrl) {
   // document's, so the TileJSON the main thread fetched to find them can be the
   // only trace of the tileset. The body is never read, so a TileJSON describing
   // raster tiles is indistinguishable here and is offered as a vector tileset.
-  if (/\/tile(?:s|json)\.json$/i.test(path)) {
+  if (/\/tile(?:s?|json)\.json$/i.test(path)) {
     return candidate(url, "Vector tiles", "vector", "Vector tile service");
   }
 
@@ -289,12 +289,13 @@ export function collectServiceCandidates(urls) {
   // invisible, so an origin that served a style but no tileset is offered
   // through the style itself. GeoLibre resolves a vector layer from a style URL
   // alone, reading the tile template and source layers out of the document.
+  const fallbacks = [];
   for (const [origin, styleUrl] of stylesByOrigin) {
     const covered = merged.some(
       (entry) => entry.format === "Vector tiles" && new URL(entry.url).origin === origin,
     );
     if (covered) continue;
-    merged.push({
+    fallbacks.push({
       url: styleUrl,
       name: "Vector tile style",
       format: "Vector tiles",
@@ -303,5 +304,10 @@ export function collectServiceCandidates(urls) {
       layer: null,
     });
   }
-  return merged.slice(0, MAX_SERVICE_CANDIDATES);
+  // The cap is taken out of the ordinary services first. A page varied enough to
+  // reach it is usually repeating layers of a few endpoints, while a fallback is
+  // the only trace its origin leaves at all, so spending every slot before
+  // reaching them would drop the one candidate that cannot be recovered.
+  const room = Math.max(0, MAX_SERVICE_CANDIDATES - fallbacks.length);
+  return [...merged.slice(0, room), ...fallbacks.slice(0, MAX_SERVICE_CANDIDATES)];
 }

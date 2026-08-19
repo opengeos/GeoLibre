@@ -656,6 +656,31 @@ describe("GeoLibre Chrome extension request history", () => {
     );
   });
 
+  it("recognizes the singular and prefixed spellings of a TileJSON", () => {
+    for (const name of ["tile.json", "tiles.json", "tilejson.json"]) {
+      assert.deepEqual(
+        collectServiceCandidates([`https://tiles.example.com/data/${name}`]).map(
+          (entry) => entry.url,
+        ),
+        [`https://tiles.example.com/data/${name}`],
+        name,
+      );
+    }
+  });
+
+  it("keeps room for a style fallback on a page that fills the cap", () => {
+    // A fallback is the only trace its origin leaves, while the services
+    // crowding it out are largely repeated layers of a few endpoints.
+    const urls = Array.from(
+      { length: 150 },
+      (_unused, index) =>
+        `https://maps.example.com/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=l${index}`,
+    );
+    const found = collectServiceCandidates([...urls, "https://tiles.example.com/style.json"]);
+    assert.equal(found.length, 100);
+    assert.deepEqual(found.at(-1)?.url, "https://tiles.example.com/style.json");
+  });
+
   it("bounds what an unusually varied page can offer", () => {
     const urls = Array.from(
       { length: 150 },

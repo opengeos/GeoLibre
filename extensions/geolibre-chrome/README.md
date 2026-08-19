@@ -64,9 +64,19 @@ Two consequences of reading the buffer rather than watching the network:
 - **Worker requests are invisible.** MapLibre and similar renderers fetch vector
   tiles from a web worker, which records them in the worker's own timeline, not
   the document's. Such a tileset is recovered from the metadata the main thread
-  *did* fetch: its TileJSON (`…/tiles.json`), or failing that the style document,
-  which GeoLibre can resolve a layer from on its own. A style is only offered in
-  its own right when no tileset from its origin was found.
+  *did* fetch: its TileJSON, or failing that the style document, which GeoLibre
+  can resolve a layer from on its own. A style is only offered in its own right
+  when no tileset from its origin was found.
+
+  A TileJSON is recognized by name (`tile.json`, `tiles.json`, `tilejson.json`),
+  which is narrower than every way a server can name one: tileserver-gl serves
+  `/data/<id>.json`, and that tileset is reached through its style rather than
+  its metadata. Nothing reads the response, so a TileJSON describing *raster*
+  tiles is indistinguishable from a vector one and is offered as a vector
+  tileset; selecting it opens the dialog on a document with no source layers,
+  which reports that plainly rather than drawing the wrong thing. Reading the
+  body would mean fetching a cross-origin URL, which needs the host permissions
+  this design exists to avoid.
 - **The buffer is finite.** It holds 250 entries per document by default and
   stops recording once full. A map's own early requests are normally well inside
   that, but a very busy page can lose a service added late. Raising the limit
