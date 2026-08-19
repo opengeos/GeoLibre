@@ -184,6 +184,48 @@ describe("AI proxy messages search response", () => {
     );
   });
 
+  it("keeps the model's own citations when the backend surfaced no hits", () => {
+    // cli-proxy-api in front of a non-Anthropic model runs the search but
+    // returns the tool-result block empty, so there is nothing to ground
+    // against; dropping every citation would leave an answer with no sources.
+    const parsed = parseMessagesSearchResponse({
+      content: [
+        { type: "web_search_tool_result", content: [] },
+        {
+          type: "text",
+          text: JSON.stringify({
+            answer: "Six died in Indiana.",
+            results: [
+              { title: "Indiana floods", url: "https://news.example/indiana", content: "six dead" },
+            ],
+          }),
+        },
+      ],
+    });
+    assert.equal(parsed.answer, "Six died in Indiana.");
+    assert.deepEqual(parsed.results, [
+      { title: "Indiana floods", url: "https://news.example/indiana", content: "six dead" },
+    ]);
+  });
+
+  it("still refuses an invented url once the backend has surfaced any hit", () => {
+    const parsed = parseMessagesSearchResponse({
+      content: [
+        searchBlock,
+        {
+          type: "text",
+          text: JSON.stringify({
+            results: [{ url: "https://invented.example/z", title: "Looks real", content: "c" }],
+          }),
+        },
+      ],
+    });
+    assert.deepEqual(
+      parsed.results.map((r) => r.url),
+      ["https://a.example/x", "https://b.example/y"],
+    );
+  });
+
   it("falls back to the search hits when every claimed url was invented", () => {
     const parsed = parseMessagesSearchResponse({
       content: [

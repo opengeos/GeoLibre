@@ -437,6 +437,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
           shiftKey: event.shiftKey,
           altKey: event.altKey,
           isComposing: event.nativeEvent.isComposing,
+          keyCode: event.nativeEvent.keyCode,
         },
         Boolean(input.trim()) && !runningRef.current && hasKey,
       )

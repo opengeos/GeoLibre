@@ -23,6 +23,13 @@ describe("assistant composer send key", () => {
     assert.equal(isSendKey({ key: "Enter", isComposing: true }, true), false);
   });
 
+  it("treats WebKit's keyCode 229 as composition too", () => {
+    // Safari has reported the IME's confirming Enter with isComposing already
+    // false, so the legacy code is the only signal left.
+    assert.equal(isSendKey({ key: "Enter", keyCode: 229 }, true), false);
+    assert.equal(isSendKey({ key: "Enter", keyCode: 13 }, true), true);
+  });
+
   it("leaves the press alone when the panel cannot send", () => {
     // An empty draft or a run in flight: the key must fall through rather than
     // be swallowed, so Enter still types a newline mid-run.

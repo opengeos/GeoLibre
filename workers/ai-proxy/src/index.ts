@@ -280,6 +280,14 @@ export function parseMessagesSearchResponse(data: unknown, limit = 20): Messages
     ? ((parsed as { results: unknown[] }).results as Record<string, unknown>[])
     : [];
 
+  // Whether the backend told us what the search actually found. A gateway that
+  // fronts a non-Anthropic model returns web_search_tool_result blocks with an
+  // empty content array -- the search ran, the citations just never reach us.
+  // Checking claimed URLs against that empty set would drop every result and
+  // leave the client an answer with no sources at all, so grounding is enforced
+  // only when there is something to ground against.
+  const grounded = searched.size > 0;
+
   const results = claimed
     .map((entry) => {
       const url = typeof entry?.url === "string" ? entry.url.trim() : "";
@@ -288,7 +296,7 @@ export function parseMessagesSearchResponse(data: unknown, limit = 20): Messages
       // the snippets, so without this an invented link reaches the client
       // looking exactly as citable as a real one.
       const hit = searched.get(url);
-      if (!hit) return undefined;
+      if (grounded && !hit) return undefined;
       // A citation with no extract does not meet the schema the prompt asks for
       // and grounds nothing, so drop it rather than let it stand in for a real
       // result and suppress the raw-hit fallback below.
@@ -297,9 +305,9 @@ export function parseMessagesSearchResponse(data: unknown, limit = 20): Messages
       const published =
         typeof entry.published_date === "string" && entry.published_date.trim()
           ? entry.published_date.trim()
-          : hit.published_date;
+          : hit?.published_date;
       return {
-        title: typeof entry.title === "string" && entry.title ? entry.title : hit.title,
+        title: typeof entry.title === "string" && entry.title ? entry.title : (hit?.title ?? ""),
         url,
         content,
         ...(published ? { published_date: published } : {}),
