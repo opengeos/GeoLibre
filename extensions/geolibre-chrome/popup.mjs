@@ -148,6 +148,12 @@ async function inspectPage() {
   try {
     // A map can be embedded in a frame, and the requests are recorded by the
     // document that made them, so every frame is asked for its own history.
+    // `activeTab` grants only the tab's main frame origin, so Chrome refuses
+    // the injection into cross-origin frames — per frame, leaving the
+    // same-origin ones to still return their buffers. A map living wholly in a
+    // cross-origin frame is therefore not found; reaching it would need
+    // standing host permission, which this extension deliberately does not ask
+    // for. See the "Cross-origin frames are out of reach" note in README.md.
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id, allFrames: true },
       func: collectRequestedUrls,

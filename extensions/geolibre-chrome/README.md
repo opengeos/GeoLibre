@@ -18,7 +18,8 @@ The published extension is on the Chrome Web Store:
 4. Select this `extensions/geolibre-chrome` directory.
 
 Everything happens after you click the toolbar icon: the extension scans the
-document's links, and reads each frame's Resource Timing buffer to recognize the
+document's links, and reads each reachable frame's Resource Timing buffer to
+recognize the
 services its maps requested. It holds no permission beyond `activeTab` and
 `scripting`, runs no background service worker, and stores nothing.
 
@@ -54,12 +55,13 @@ type without changing the current selection.
 A map fetches its tiles and service documents from JavaScript, so they are never
 links in the page. What the extension reads instead is `performance
 .getEntriesByType("resource")`, the record of its own requests that every
-document keeps, collected from the top frame and each frame below it. Recognized
+document keeps, collected from the top frame and every same-origin frame below
+it. Recognized
 are WMS, WMTS, WFS, OGC API Features, ArcGIS Feature Services, XYZ/TMS image
 tiles, and PBF/MVT vector tiles. Tile requests are collapsed into reusable
 `{z}/{x}/{y}` templates, and repeated requests from the same service appear once.
 
-Two consequences of reading the buffer rather than watching the network:
+Three consequences of reading the buffer rather than watching the network:
 
 - **Worker requests are invisible.** MapLibre and similar renderers fetch vector
   tiles from a web worker, which records them in the worker's own timeline, not
@@ -89,6 +91,15 @@ Two consequences of reading the buffer rather than watching the network:
   that, but a very busy page can lose a service added late. Raising the limit
   needs a `document_start` script, which needs the broad host permissions this
   design exists to avoid, so the cap is accepted.
+- **Cross-origin frames are out of reach.** `activeTab` grants the tab's main
+  frame origin, and Chrome deliberately does not extend that grant to a frame
+  from another origin. `allFrames: true` therefore reaches the top frame and its
+  same-origin frames; injection into a cross-origin frame is refused, and the
+  refusal is per-frame, so the frames that *are* reachable still return their
+  buffers. A map that runs entirely inside a cross-origin `iframe` is thus
+  invisible to the scan, and the popup reports no services rather than an error.
+  Reaching one needs host permission for that origin — the standing access this
+  design exists to avoid — so the boundary is accepted.
 
 A service endpoint on its own is rarely enough to add a layer, so each result
 also carries what the page asked that service *for*: the WMS `LAYERS` value, the
@@ -116,14 +127,16 @@ map, so what it detects is what a real page actually requests.
 | OGC API Features | [pygeoapi lakes collection](https://demo.pygeoapi.io/master/collections/lakes/items?f=html) | `https://demo.pygeoapi.io/master/collections/lakes/items` | — |
 | ArcGIS Feature Service | [OpenLayers "Vector ESRI" example](https://openlayers.org/en/latest/examples/vector-esri.html) | The `…/FeatureServer/0` layer URL | `0` |
 | XYZ raster tiles | [openstreetmap.org](https://www.openstreetmap.org/) | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | — |
-| Vector tiles, in an `iframe` | [MapLibre "Display a map" example](https://maplibre.org/maplibre-gl-js/docs/examples/display-a-map/) | `https://demotiles.maplibre.org/tiles/tiles.json` | style `…/style.json` |
+| Vector tiles, in a same-origin `iframe` | [MapLibre "Display a map" example](https://maplibre.org/maplibre-gl-js/docs/examples/display-a-map/) | `https://demotiles.maplibre.org/tiles/tiles.json` | style `…/style.json` |
 
 Each row above adds a layer that draws, with no further typing: that is the bar
 for this table. A row that opens the dialog but leaves a required field empty is
 a bug, not an expected extra step.
 
-The MapLibre row is worth keeping in the set: the map runs inside an `iframe`, so
-it covers services a page reaches only through an embedded frame, and it renders
+The MapLibre row is worth keeping in the set: the map runs inside a same-origin
+`iframe` (the docs page embeds `../display-a-map.html`), so it covers services a
+page reaches only through an embedded frame — the reachable kind, since a
+cross-origin frame is outside `activeTab` — and it renders
 through a worker, so it covers the tileset recovered from its TileJSON rather
 than from a tile request. It also carries a style whose glyph ranges are served
 as `.pbf`; those are fonts, not a tileset, and must not be offered.
