@@ -11,7 +11,27 @@ const UPSTREAM_HEADER_TIMEOUT_MS = 300_000;
 // plus an answer-synthesis step on Tavily's side; 30s was tight enough to turn
 // a merely slow news query during a live disaster event into a 504.
 const SEARCH_HEADER_TIMEOUT_MS = 60_000;
+// Declared here rather than in wrangler.jsonc: all four are optional and
+// deployment-specific. wrangler.jsonc's `secrets` block only supports
+// `required`, so listing SEARCH_MESSAGES_API_KEY there would warn on every
+// Tavily deployment that legitimately does not set it.
+declare global {
+  interface Env {
+    /** "tavily" (default) or "messages". */
+    SEARCH_BACKEND?: string;
+    /** Base URL of an Anthropic-messages-compatible endpoint, e.g. a cli-proxy-api. */
+    SEARCH_MESSAGES_URL?: string;
+    SEARCH_MESSAGES_API_KEY?: string;
+    /** Defaults to claude-sonnet-5. */
+    SEARCH_MESSAGES_MODEL?: string;
+  }
+}
+
 const TAVILY_ENDPOINT = "https://api.tavily.com/search";
+
+// Search + synthesis on one round trip, and this bound covers the whole body
+// rather than just the response headers, so it sits well above Tavily's.
+const MESSAGES_SEARCH_TIMEOUT_MS = 90_000;
 
 function jsonError(message: string, status: number, headers?: HeadersInit): Response {
   return Response.json({ error: { message, type: "geolibre_proxy_error" } }, { status, headers });
@@ -144,6 +164,148 @@ export function buildTavilySearchRequest(
   return request;
 }
 
+/**
+ * Which backend answers /tavily. Tavily stays the default so an existing
+ * deployment is unaffected until SEARCH_BACKEND is set deliberately.
+ */
+export function resolveSearchBackend(env: Env): "tavily" | "messages" {
+  return env.SEARCH_BACKEND?.trim().toLowerCase() === "messages" ? "messages" : "tavily";
+}
+
+const MESSAGES_SEARCH_MODEL_DEFAULT = "claude-sonnet-5";
+
+// The client contract is Tavily's: {results:[{title,url,content,published_date}],
+// answer}. Anthropic's server-side search returns citable titles and URLs but the
+// page text arrives as opaque encrypted_content, so the model has to write the
+// per-source snippets that ground the impact figures. Asking for the whole
+// envelope as JSON keeps that mapping in one place instead of splitting it
+// between a synthesis prompt and a post-hoc merge.
+export function buildMessagesSearchRequest(
+  body: Record<string, unknown>,
+  query: string,
+  model = MESSAGES_SEARCH_MODEL_DEFAULT,
+): Record<string, unknown> {
+  const requestedMaxResults =
+    typeof body.max_results === "number" && Number.isFinite(body.max_results)
+      ? Math.floor(body.max_results)
+      : 6;
+  const maxResults = Math.min(Math.max(requestedMaxResults, 1), 20);
+  const topic = body.topic === "news" ? "news" : "general";
+  const days =
+    topic === "news" && typeof body.days === "number" && Number.isFinite(body.days)
+      ? Math.min(Math.max(Math.floor(body.days), 1), 3650)
+      : undefined;
+
+  const recency =
+    days === undefined
+      ? topic === "news"
+        ? " Prefer recent journalistic coverage."
+        : " Retrospective sources are fine; prefer authoritative ones."
+      : ` Only use sources published within the last ${days} days.`;
+
+  return {
+    model,
+    max_tokens: 4096,
+    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }],
+    system:
+      "You are a search backend. Use the web_search tool, then reply with ONE JSON " +
+      "object and nothing else -- no prose, no code fence. Schema: " +
+      '{"answer": string, "results": [{"title": string, "url": string, ' +
+      '"content": string, "published_date": string}]}. "content" must be a short ' +
+      "extract from that specific source supporting the answer, quoting any " +
+      'figures it states. "url" must be a URL the search returned; never invent ' +
+      'one. Omit "published_date" when the source does not state one. Return at ' +
+      `most ${maxResults} results.`,
+    messages: [{ role: "user", content: `${query}${recency}` }],
+  };
+}
+
+interface MessagesSearchPayload {
+  results: { title: string; url: string; content: string; published_date?: string }[];
+  answer?: string;
+}
+
+function extractJsonObject(text: string): unknown {
+  const trimmed = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "");
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start === -1 || end <= start) return undefined;
+  try {
+    return JSON.parse(trimmed.slice(start, end + 1));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Map an Anthropic messages response onto the Tavily-shaped envelope. Falls back
+ * to the raw search hits when the model does not return usable JSON, so a
+ * malformed reply still yields citable URLs rather than an error.
+ */
+export function parseMessagesSearchResponse(data: unknown): MessagesSearchPayload {
+  const content = Array.isArray((data as { content?: unknown })?.content)
+    ? ((data as { content: unknown[] }).content as Record<string, unknown>[])
+    : [];
+
+  const searched = new Map<string, { title: string; published_date?: string }>();
+  const textParts: string[] = [];
+  for (const block of content) {
+    if (block?.type === "web_search_tool_result" && Array.isArray(block.content)) {
+      for (const hit of block.content as Record<string, unknown>[]) {
+        const url = typeof hit?.url === "string" ? hit.url : "";
+        if (!url) continue;
+        // page_age is absent for many pages and arrives as the string "None".
+        const age = typeof hit.page_age === "string" && hit.page_age !== "None" ? hit.page_age : undefined;
+        searched.set(url, { title: typeof hit.title === "string" ? hit.title : "", published_date: age });
+      }
+    } else if (block?.type === "text" && typeof block.text === "string") {
+      textParts.push(block.text);
+    }
+  }
+
+  const parsed = extractJsonObject(textParts.join(""));
+  const claimed = Array.isArray((parsed as { results?: unknown })?.results)
+    ? ((parsed as { results: unknown[] }).results as Record<string, unknown>[])
+    : [];
+
+  const results = claimed
+    .map((entry) => {
+      const url = typeof entry?.url === "string" ? entry.url.trim() : "";
+      if (!url) return undefined;
+      const hit = searched.get(url);
+      const published =
+        typeof entry.published_date === "string" && entry.published_date.trim()
+          ? entry.published_date.trim()
+          : hit?.published_date;
+      return {
+        title: typeof entry.title === "string" && entry.title ? entry.title : (hit?.title ?? ""),
+        url,
+        content: typeof entry.content === "string" ? entry.content : "",
+        ...(published ? { published_date: published } : {}),
+      };
+    })
+    .filter((entry): entry is MessagesSearchPayload["results"][number] => entry !== undefined);
+
+  const answer =
+    typeof (parsed as { answer?: unknown })?.answer === "string"
+      ? ((parsed as { answer: string }).answer as string)
+      : undefined;
+
+  if (results.length > 0) return { results, answer };
+
+  // No usable JSON: hand back what the search itself found so the caller still
+  // has sources to cite, with the model's prose as the answer.
+  return {
+    results: [...searched.entries()].map(([url, hit]) => ({
+      title: hit.title,
+      url,
+      content: "",
+      ...(hit.published_date ? { published_date: hit.published_date } : {}),
+    })),
+    answer: answer ?? (textParts.join("").trim() || undefined),
+  };
+}
+
 // Chat and search deliberately draw down one budget per client: both spend the
 // same operator's account, so the limit an operator configures is the total an
 // individual user may cost them, not a per-route allowance that a client can
@@ -245,6 +407,16 @@ async function proxyChat(request: Request, env: Env, origin: string | null): Pro
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
+/**
+ * /tavily keeps its name and its response shape; SEARCH_BACKEND decides who
+ * actually answers it, so clients need no change to switch providers.
+ */
+async function proxySearch(request: Request, env: Env, origin: string | null): Promise<Response> {
+  return resolveSearchBackend(env) === "messages"
+    ? proxyMessagesSearch(request, env, origin)
+    : proxyTavily(request, env, origin);
+}
+
 async function proxyTavily(request: Request, env: Env, origin: string | null): Promise<Response> {
   // Limit first, as proxyChat does, so an unconfigured Worker cannot be probed
   // without bound: the 503 below is cheap, but "cheap" is not "free".
@@ -319,6 +491,104 @@ async function proxyTavily(request: Request, env: Env, origin: string | null): P
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
+async function proxyMessagesSearch(
+  request: Request,
+  env: Env,
+  origin: string | null,
+): Promise<Response> {
+  const limited = withOrigin(await rateLimit(request, env), origin);
+  if (limited) return limited;
+
+  const endpoint = env.SEARCH_MESSAGES_URL?.trim().replace(/\/+$/, "");
+  const apiKey = env.SEARCH_MESSAGES_API_KEY?.trim();
+  if (!endpoint || !apiKey) {
+    return jsonError("Search is not configured", 503, responseHeaders(origin));
+  }
+
+  const maximumBytes = Math.min(positiveInteger(env.MAX_BODY_BYTES, 1_048_576), 65_536);
+  let body: Record<string, unknown>;
+  try {
+    body = await readBoundedJson(request, maximumBytes);
+  } catch (error) {
+    const status = error instanceof RangeError ? 413 : 400;
+    return jsonError(
+      error instanceof Error ? error.message : "Invalid request body",
+      status,
+      responseHeaders(origin),
+    );
+  }
+
+  const query = typeof body.query === "string" ? body.query.trim() : "";
+  if (!query || query.length > 1_000) {
+    return jsonError(
+      "query must be a non-empty string of at most 1,000 characters",
+      400,
+      responseHeaders(origin),
+    );
+  }
+
+  const payload = buildMessagesSearchRequest(
+    body,
+    query,
+    env.SEARCH_MESSAGES_MODEL?.trim() || undefined,
+  );
+
+  const controller = new AbortController();
+  // A search plus a synthesis pass runs longer than Tavily's own bound, and this
+  // waits on the whole body rather than just headers, so it gets its own budget.
+  const deadline = setTimeout(() => controller.abort(), MESSAGES_SEARCH_TIMEOUT_MS);
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${endpoint}/v1/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return jsonError("Search request timed out", 504, responseHeaders(origin));
+    }
+    throw error;
+  } finally {
+    clearTimeout(deadline);
+  }
+
+  const headers = responseHeaders(origin);
+  headers.set("Content-Type", "application/json; charset=utf-8");
+  headers.set("Cache-Control", "no-store");
+
+  if (!upstream.ok) {
+    // Do not forward the upstream body: it can carry provider detail the client
+    // has no use for, and its shape is not the client's error contract.
+    console.log(
+      JSON.stringify({ message: "Messages search upstream error", status: upstream.status }),
+    );
+    return jsonError("Search upstream error", 502, headers);
+  }
+
+  let parsed: ReturnType<typeof parseMessagesSearchResponse>;
+  try {
+    parsed = parseMessagesSearchResponse(await upstream.json());
+  } catch {
+    return jsonError("Search upstream returned an unreadable response", 502, headers);
+  }
+
+  console.log(
+    JSON.stringify({
+      message: "Messages search request",
+      status: upstream.status,
+      resultCount: parsed.results.length,
+      colo: request.cf?.colo,
+    }),
+  );
+  return new Response(JSON.stringify(parsed), { status: 200, headers });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -345,7 +615,7 @@ export default {
 
     try {
       return url.pathname === "/tavily"
-        ? await proxyTavily(request, env, origin)
+        ? await proxySearch(request, env, origin)
         : await proxyChat(request, env, origin);
     } catch (error) {
       console.error(

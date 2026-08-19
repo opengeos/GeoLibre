@@ -40,6 +40,34 @@ output-token cap, and per-client rate limit.
    client, so the configured limit is what a single user may cost you in total
    rather than a separate allowance each for chat and search.
 
+   ### Serving `/tavily` from a model's own web search
+
+   `/tavily` can instead be answered by an endpoint that speaks the Anthropic
+   messages API and exposes the server-side `web_search` tool -- a self-hosted
+   [cli-proxy-api](https://github.com/router-for-me/CLIProxyAPI), for example --
+   which removes the Tavily dependency entirely. The route keeps its name and
+   its response shape, so no client changes are needed.
+
+   | Setting | Required | Meaning |
+   | --- | --- | --- |
+   | `SEARCH_BACKEND` | no | `tavily` (default) or `messages`. Any other value is treated as `tavily`. |
+   | `SEARCH_MESSAGES_URL` | for `messages` | Base URL, e.g. `https://cli-proxy.example.org`. `/v1/messages` is appended. |
+   | `SEARCH_MESSAGES_API_KEY` | for `messages` | Bearer token for that endpoint. Store with `wrangler secret put`. |
+   | `SEARCH_MESSAGES_MODEL` | no | Defaults to `claude-sonnet-5`. |
+
+   Tavily remains the default, so an existing deployment is unchanged until
+   `SEARCH_BACKEND=messages` is set deliberately. Like the Tavily path, the
+   route returns `503 Search is not configured` when its settings are missing.
+
+   Two differences are worth knowing before switching. Anthropic returns each
+   hit's page text as opaque `encrypted_content`, so the model writes the
+   per-source snippets that ground quantified figures; they are extracts it
+   produces rather than verbatim provider content, and the cited URLs are
+   restricted to ones the search actually returned. And a search plus a
+   synthesis pass is slower and far more token-hungry than a Tavily call --
+   expect tens of thousands of tokens per search against whatever account backs
+   `SEARCH_MESSAGES_URL`.
+
 3. Validate and deploy:
 
    ```sh

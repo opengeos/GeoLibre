@@ -1,0 +1,125 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  buildMessagesSearchRequest,
+  parseMessagesSearchResponse,
+  resolveSearchBackend,
+} from "../workers/ai-proxy/src/index";
+
+describe("AI proxy search backend selection", () => {
+  it("defaults to Tavily so existing deployments are unaffected", () => {
+    assert.equal(resolveSearchBackend({} as Env), "tavily");
+    assert.equal(resolveSearchBackend({ SEARCH_BACKEND: "" } as Env), "tavily");
+    assert.equal(resolveSearchBackend({ SEARCH_BACKEND: "tavily" } as Env), "tavily");
+  });
+
+  it("selects the messages backend case- and whitespace-insensitively", () => {
+    assert.equal(resolveSearchBackend({ SEARCH_BACKEND: " Messages " } as Env), "messages");
+  });
+
+  it("treats an unknown backend as Tavily rather than failing closed", () => {
+    assert.equal(resolveSearchBackend({ SEARCH_BACKEND: "bing" } as Env), "tavily");
+  });
+});
+
+describe("AI proxy messages search request", () => {
+  it("turns a news lookback into an explicit recency instruction", () => {
+    const request = buildMessagesSearchRequest(
+      { topic: "news", days: 30, max_results: 8 },
+      "Colorado wildfire impacts",
+    );
+    const messages = request.messages as { role: string; content: string }[];
+    assert.match(messages[0].content, /within the last 30 days/);
+    assert.match(request.system as string, /at most 8 results/);
+    assert.equal(request.model, "claude-sonnet-5");
+  });
+
+  it("clamps max_results into the documented range", () => {
+    assert.match(buildMessagesSearchRequest({ max_results: 99 }, "q").system as string, /at most 20 results/);
+    assert.match(buildMessagesSearchRequest({ max_results: 0 }, "q").system as string, /at most 1 results/);
+  });
+
+  it("ignores a lookback for retrospective general searches", () => {
+    const request = buildMessagesSearchRequest({ topic: "general", days: 30 }, "Valencia flood");
+    const messages = request.messages as { role: string; content: string }[];
+    assert.doesNotMatch(messages[0].content, /last 30 days/);
+  });
+
+  it("honours an operator model override", () => {
+    assert.equal(buildMessagesSearchRequest({}, "q", "claude-opus-5").model, "claude-opus-5");
+  });
+
+  it("always requests the server-side web_search tool", () => {
+    const tools = buildMessagesSearchRequest({}, "q").tools as { type: string }[];
+    assert.equal(tools[0].type, "web_search_20250305");
+  });
+});
+
+describe("AI proxy messages search response", () => {
+  const searchBlock = {
+    type: "web_search_tool_result",
+    content: [
+      { type: "web_search_result", title: "Hit A", url: "https://a.example/x", page_age: "2024-11-02" },
+      { type: "web_search_result", title: "Hit B", url: "https://b.example/y", page_age: "None" },
+    ],
+  };
+
+  it("maps model JSON onto the Tavily envelope", () => {
+    const parsed = parseMessagesSearchResponse({
+      content: [
+        searchBlock,
+        {
+          type: "text",
+          text: JSON.stringify({
+            answer: "At least 200 died.",
+            results: [{ title: "Hit A", url: "https://a.example/x", content: "…at least 200 deaths…" }],
+          }),
+        },
+      ],
+    });
+    assert.equal(parsed.answer, "At least 200 died.");
+    assert.deepEqual(parsed.results, [
+      { title: "Hit A", url: "https://a.example/x", content: "…at least 200 deaths…", published_date: "2024-11-02" },
+    ]);
+  });
+
+  it("tolerates a fenced JSON reply", () => {
+    const parsed = parseMessagesSearchResponse({
+      content: [
+        searchBlock,
+        { type: "text", text: '```json\n{"answer":"ok","results":[{"url":"https://b.example/y","content":"c"}]}\n```' },
+      ],
+    });
+    assert.equal(parsed.results.length, 1);
+    assert.equal(parsed.results[0].title, "Hit B", "falls back to the search hit's title");
+  });
+
+  it("drops the page_age sentinel rather than emitting it as a date", () => {
+    const parsed = parseMessagesSearchResponse({
+      content: [searchBlock, { type: "text", text: '{"results":[{"url":"https://b.example/y","content":"c"}]}' }],
+    });
+    assert.equal("published_date" in parsed.results[0], false);
+  });
+
+  it("falls back to raw search hits when the model returns prose", () => {
+    const parsed = parseMessagesSearchResponse({
+      content: [searchBlock, { type: "text", text: "I could not format that." }],
+    });
+    assert.deepEqual(
+      parsed.results.map((r) => r.url),
+      ["https://a.example/x", "https://b.example/y"],
+    );
+    assert.equal(parsed.answer, "I could not format that.");
+  });
+
+  it("never invents a result the search did not return a url for", () => {
+    const parsed = parseMessagesSearchResponse({
+      content: [searchBlock, { type: "text", text: '{"results":[{"title":"No url","content":"c"}]}' }],
+    });
+    assert.deepEqual(parsed.results.map((r) => r.url), ["https://a.example/x", "https://b.example/y"]);
+  });
+
+  it("returns an empty envelope for a response with no content", () => {
+    assert.deepEqual(parseMessagesSearchResponse({}), { results: [], answer: undefined });
+  });
+});
