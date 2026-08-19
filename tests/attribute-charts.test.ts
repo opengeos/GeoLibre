@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   categoricalColumns,
+  categoryColumnOptions,
   coerceNumericStringRows,
   computeBar,
   computeBox,
@@ -220,6 +221,28 @@ describe("categoricalColumns", () => {
       properties: { name: `n${i}`, kind: i % 2 === 0 ? "x" : "y" },
     }));
     assert.deepEqual(categoricalColumns(data, ["name", "kind"]), ["kind"]);
+  });
+});
+
+describe("categoryColumnOptions", () => {
+  it("keeps unique label fields selectable after preferred categories", () => {
+    const data = rows(
+      { name: "Alpha", region: "North", population: 10 },
+      { name: "Beta", region: "North", population: 20 },
+      { name: "Gamma", region: "South", population: 30 },
+    );
+
+    assert.deepEqual(categoryColumnOptions(data, ["name", "region", "population"]), [
+      "region",
+      "name",
+      "population",
+    ]);
+  });
+
+  it("preserves field order when no preferred category is detected", () => {
+    const data = rows({ name: "Alpha" }, { name: "Beta" }, { name: "Gamma" });
+
+    assert.deepEqual(categoryColumnOptions(data, ["name"]), ["name"]);
   });
 });
 

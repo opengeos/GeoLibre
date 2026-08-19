@@ -67,7 +67,7 @@ import {
   type PageFilterMode,
 } from "../../lib/print-data-blocks";
 import {
-  categoricalColumns,
+  categoryColumnOptions,
   coerceNumericStringRows,
   numericColumns,
   type BarAggregation,
@@ -1193,10 +1193,11 @@ export function PrintLayoutDialog({
   );
   const chartAllRows = useMemo(() => {
     if (!chartLayer?.geojson) return [];
-    const rows = layerRows(chartLayer.geojson);
-    return chartLayer.metadata.sourceKind === "delimited-text"
-      ? coerceNumericStringRows(rows)
-      : rows;
+    // GeoJSON properties can also encode measurements as strings (for
+    // example, data exported from a GIS form or database). Analyze a guarded
+    // copy so those fields remain available as chart values without mutating
+    // the layer or converting identifiers and leading-zero codes.
+    return coerceNumericStringRows(layerRows(chartLayer.geojson));
   }, [chartLayer]);
   // Per-feature bounds for the page-extent filter, walked once per layer so
   // stepping/exporting an N-page atlas does not redo the vertex walk N times
@@ -1209,18 +1210,14 @@ export function PrintLayoutDialog({
     () => (chartLayer?.geojson ? collectAtlasFeatures(chartLayer.geojson) : []),
     [chartLayer],
   );
-  const chartCategoricalFields = useMemo(
-    () => categoricalColumns(chartAllRows, chartFields),
+  const chartCategoryOptions = useMemo(
+    () => categoryColumnOptions(chartAllRows, chartFields),
     [chartAllRows, chartFields],
   );
   const chartNumericFields = useMemo(
     () => numericColumns(chartAllRows, chartFields),
     [chartAllRows, chartFields],
   );
-  // Category options prefer detected low-cardinality fields but fall back to
-  // every field, so an unusual layer can still be charted.
-  const chartCategoryOptions =
-    chartCategoricalFields.length > 0 ? chartCategoricalFields : chartFields;
   // Effective selections: the first suitable field stands in until the user
   // picks one, so enabling a block gives instant feedback.
   const effectiveCategoryField =

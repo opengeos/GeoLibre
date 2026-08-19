@@ -62,10 +62,10 @@ function isIdentifierFieldName(key: string): boolean {
 
 /**
  * Convert numeric-looking strings in analysis rows without changing the source
- * data. Delimited-text layers use this adapter because their parser preserves
- * every cell as a string, including measurements that summaries should treat as
- * numeric. Because delimited text carries no declared field types, common
- * identifier headers and integer strings with leading zeroes remain text.
+ * data. String-oriented sources use this adapter because measurements may be
+ * stored as text even though summaries should treat them as numeric. Since the
+ * values carry no declared field types, common identifier headers and integer
+ * strings with leading zeroes remain text.
  *
  * The decision is per column, not per value: a column is converted only when its
  * numeric-looking values would carry it past the same threshold the summaries
@@ -385,6 +385,18 @@ export function categoricalColumns(
     const limit = Math.max(CATEGORY_ABSOLUTE_LIMIT, nonNull * CATEGORY_RATIO);
     return distinct.size <= limit;
   });
+}
+
+/**
+ * Every field that can label a chart category, with detected low-cardinality
+ * fields first so the automatic selection remains useful. Unique labels such
+ * as names and IDs must stay available for explicitly configured charts.
+ */
+export function categoryColumnOptions(rows: ChartRow[], columns: string[]): string[] {
+  const preferred = categoricalColumns(rows, columns);
+  if (preferred.length === 0) return columns;
+  const preferredSet = new Set(preferred);
+  return [...preferred, ...columns.filter((column) => !preferredSet.has(column))];
 }
 
 export type BarAggregation = "count" | "sum" | "mean";
