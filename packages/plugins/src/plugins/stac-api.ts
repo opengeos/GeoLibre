@@ -140,8 +140,10 @@ function httpUrl(value: unknown): value is string {
 
 /**
  * S3 website endpoints only support HTTP. Catalog indexes and older STAC documents still
- * publish those URLs, which makes them mixed content in the web app. The equivalent virtual
- * hosted-style S3 endpoint supports HTTPS and serves the same public object.
+ * publish those URLs, which makes them mixed content in the web app. The equivalent REST
+ * S3 endpoint supports HTTPS and serves the same public object. A bucket whose name holds
+ * a dot has to go through the path-style endpoint: the wildcard on the virtual hosted-style
+ * certificate covers one label, so `a.b.s3.<region>.amazonaws.com` fails TLS validation.
  */
 function browserCatalogHref(href: string): string {
   const url = new URL(href);
@@ -155,8 +157,14 @@ function browserCatalogHref(href: string): string {
   }
   const website = url.hostname.match(/^(.+)\.s3-website[.-]([a-z0-9-]+)\.amazonaws\.com$/i);
   if (!website) return url.href;
+  const [, bucket, region] = website;
   url.protocol = "https:";
-  url.hostname = `${website[1]}.s3.${website[2]}.amazonaws.com`;
+  if (bucket.includes(".")) {
+    url.hostname = `s3.${region}.amazonaws.com`;
+    url.pathname = `/${bucket}${url.pathname}`;
+  } else {
+    url.hostname = `${bucket}.s3.${region}.amazonaws.com`;
+  }
   return url.href;
 }
 
@@ -644,12 +652,16 @@ export function itemBbox(item: StacItem): [number, number, number, number] | und
     }
     for (const child of value) collect(child);
   };
-  if (item.geometry?.type === "GeometryCollection") {
-    for (const geometry of item.geometry.geometries)
-      collect("coordinates" in geometry ? geometry.coordinates : []);
-  } else if (item.geometry && "coordinates" in item.geometry) {
-    collect(item.geometry.coordinates);
-  }
+  // A GeometryCollection may hold another one, so walk rather than reading one level.
+  const collectGeometry = (geometry: Geometry | null | undefined): void => {
+    if (!geometry) return;
+    if (geometry.type === "GeometryCollection") {
+      for (const child of geometry.geometries) collectGeometry(child);
+      return;
+    }
+    collect(geometry.coordinates);
+  };
+  collectGeometry(item.geometry);
   if (!positions.length) return advertised;
 
   const latitudes = positions.map(([, latitude]) => latitude);

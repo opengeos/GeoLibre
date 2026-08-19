@@ -199,6 +199,23 @@ test("connectStac upgrades HTTP-only S3 website catalogs to their HTTPS endpoint
   assert.deepEqual(fetched, ["https://example.s3.us-west-2.amazonaws.com/catalog.json"]);
 });
 
+test("connectStac reads a dotted S3 bucket through the path-style HTTPS endpoint", async () => {
+  const fetched: string[] = [];
+  const fetcher = (async (input: RequestInfo | URL) => {
+    fetched.push(String(input));
+    return jsonResponse({ type: "Catalog", id: "archive", links: [] });
+  }) as typeof fetch;
+
+  // The virtual hosted-style certificate wildcard covers a single label, so a
+  // bucket holding a dot has to go through the path-style endpoint instead.
+  await connectStac(
+    "http://example.catalog.s3-website-us-west-2.amazonaws.com/catalog.json",
+    fetcher,
+  );
+
+  assert.deepEqual(fetched, ["https://s3.us-west-2.amazonaws.com/example.catalog/catalog.json"]);
+});
+
 test("openCatalogNode reports what a node turned out to be and what is inside it", async () => {
   const fetcher = (async (input: RequestInfo | URL) => {
     if (String(input).endsWith("collection.json")) {
@@ -1417,6 +1434,39 @@ test("asset and bbox helpers recognize common STAC data", () => {
             [120, -65],
             [120, -30],
           ],
+        ],
+      },
+      properties: {},
+      assets: {},
+    }),
+    [120, -65, 180, -30],
+  );
+  assert.deepEqual(
+    itemBbox({
+      type: "Feature",
+      id: "nested-collection",
+      bbox: [7_112_945, -1_778_200, 10_669_445, -3_852_900],
+      geometry: {
+        type: "GeometryCollection",
+        geometries: [
+          {
+            type: "GeometryCollection",
+            geometries: [
+              {
+                type: "Polygon",
+                coordinates: [
+                  [
+                    [120, -30],
+                    [150, -30],
+                    [150, -65],
+                    [120, -65],
+                    [120, -30],
+                  ],
+                ],
+              },
+            ],
+          },
+          { type: "Point", coordinates: [180, -50] },
         ],
       },
       properties: {},

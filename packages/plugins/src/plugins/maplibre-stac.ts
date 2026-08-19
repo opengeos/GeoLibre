@@ -51,12 +51,28 @@ const SELECT_LINE = "geolibre-stac-selected-line";
 const COG_ENGINE_STORAGE_KEY = "geolibre:stac-default-cog-engine";
 const COG_ENGINES = ["cog-tiler-wasm", "maplibre-gl-raster", "titiler"] as const;
 
+// Web Storage throws rather than returning null when the browser blocks it
+// (private mode, a third-party-storage policy), so neither read nor write may
+// be the only thing standing between the user and a working panel.
 function savedCogEngine(): GeoLibreCogRenderEngine {
-  if (typeof localStorage === "undefined") return "cog-tiler-wasm";
-  const saved = localStorage.getItem(COG_ENGINE_STORAGE_KEY);
+  let saved: string | null = null;
+  try {
+    saved =
+      typeof localStorage === "undefined" ? null : localStorage.getItem(COG_ENGINE_STORAGE_KEY);
+  } catch {
+    return "cog-tiler-wasm";
+  }
   return COG_ENGINES.includes(saved as (typeof COG_ENGINES)[number])
     ? (saved as GeoLibreCogRenderEngine)
     : "cog-tiler-wasm";
+}
+
+function rememberCogEngine(engine: string): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(COG_ENGINE_STORAGE_KEY, engine);
+  } catch {
+    // A blocked store just means the choice does not outlive the session.
+  }
 }
 
 /**
@@ -779,9 +795,7 @@ function buildPanel(container: HTMLElement): () => void {
   }
   engineSelect.value = savedCogEngine();
   engineSelect.addEventListener("change", () => {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(COG_ENGINE_STORAGE_KEY, engineSelect.value);
-    }
+    rememberCogEngine(engineSelect.value);
   });
   engineWrap.append(engineCaption, engineSelect);
   const bandsField = field(labels.bands);
