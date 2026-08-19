@@ -30,7 +30,10 @@ export function buildGeoLibreUrl(datasets, baseUrl = GEOLIBRE_WEB_URL) {
       throw new Error("GeoLibre can only open HTTP or HTTPS service links.");
     }
     target.searchParams.set("add", serviceKinds[service.format]);
-    target.searchParams.set("serviceUrl", service.url);
+    // A tileset known only through its style has the style as its own URL, and
+    // GeoLibre reads the tiles out of that document: handing the same URL over
+    // as the service URL as well would have it parsed as TileJSON and fail.
+    if (service.url !== service.styleUrl) target.searchParams.set("serviceUrl", service.url);
     // The layer and style the page was rendering: without them the dialog opens
     // on an endpoint whose layer field is empty and cannot be submitted.
     if (service.layer) target.searchParams.set("serviceLayer", service.layer);

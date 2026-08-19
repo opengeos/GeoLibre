@@ -292,3 +292,24 @@ export function scanDocumentForDatasets() {
     )
     .map(({ confidence: _confidence, ...dataset }) => dataset);
 }
+
+/**
+ * Read back the URLs this document has already requested. A map fetches its
+ * tiles and service documents from JavaScript, so they are never links in the
+ * page and `scanDocumentForDatasets` cannot see them; the Resource Timing
+ * buffer is the record of them that the page keeps on its own behalf.
+ *
+ * Keep every helper inside this function: Chrome serializes it when it injects
+ * it into the active tab, so it cannot close over module-level values.
+ */
+export function collectRequestedUrls() {
+  try {
+    return performance
+      .getEntriesByType("resource")
+      .map((entry) => entry.name)
+      .filter((name) => name.startsWith("http:") || name.startsWith("https:"));
+  } catch {
+    // A document that denies the timing API leaves only its links to scan.
+    return [];
+  }
+}

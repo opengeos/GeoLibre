@@ -43,4 +43,4 @@ The extension recognizes GeoJSON and spatial JSON, GeoParquet and Parquet, PMTil
 
 GeoLibre fetches selected links directly, so the source server must allow cross-origin requests (CORS). Complete HTTP(S) URLs, including signed query parameters, are forwarded to GeoLibre. Cookies and other browser-session credentials are not forwarded, so cookie-bound or session-authenticated links might fail. Temporary `blob:` URLs cannot be transferred.
 
-The extension requests access only to the active tab when you open it. It does not store browsing history, send analytics, or run continuously in the background.
+The extension requests access only to the active tab, and only from the moment you click its icon. It holds no standing permission to any website, stores nothing, sends no analytics, and runs nothing in the background. Map services are recognized by reading back the addresses of the requests the page has already made, which the page records for itself, rather than by watching your browsing.

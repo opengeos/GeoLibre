@@ -94,9 +94,31 @@ describe("serviceUrlParameter", () => {
     );
   });
 
+  it("opens a vector tileset carried by its style alone", () => {
+    // A style that names its tiles inline is the whole service: the tileset
+    // field stays empty and the style is resolved for both.
+    assert.deepEqual(
+      serviceUrlParameter(
+        "?add=ogc-vector-tiles&serviceStyle=https://tiles.example.com/style.json",
+      ),
+      {
+        kind: "ogc-vector-tiles",
+        url: "",
+        layer: null,
+        styleUrl: "https://tiles.example.com/style.json",
+      },
+    );
+  });
+
   it("rejects unsupported kinds and non-web URLs", () => {
     assert.equal(serviceUrlParameter("?add=bogus&serviceUrl=https://example.com"), null);
     assert.equal(serviceUrlParameter("?add=xyz&serviceUrl=file:///tmp/tiles"), null);
+    // Every other kind still needs a service URL: a style cannot stand in.
+    assert.equal(
+      serviceUrlParameter("?add=wms&serviceStyle=https://x.example.com/style.json"),
+      null,
+    );
+    assert.equal(serviceUrlParameter("?add=ogc-vector-tiles"), null);
   });
 });
 

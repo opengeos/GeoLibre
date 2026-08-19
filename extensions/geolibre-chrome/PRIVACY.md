@@ -1,18 +1,20 @@
 # Privacy policy — Open data in GeoLibre
 
-Last updated: August 16, 2026
+Last updated: August 18, 2026
 
 Open data in GeoLibre does not independently collect, retain, or sell personal
 information, page contents, or usage analytics. It does forward the complete
 dataset, service, and style URLs that the user explicitly selects,
 as described below.
 
-The extension uses Chrome's `activeTab` permission to inspect links and
-structured metadata on the current page only after the user clicks the
-extension's toolbar icon. The extension also observes completed HTTP(S)
-requests locally to identify geospatial services used by interactive maps. It
-does not inspect response bodies. Detected service URLs are held in Chrome's
-in-memory session storage and removed when their tab closes.
+The extension uses Chrome's `activeTab` permission to inspect the current page
+only after the user clicks the extension's toolbar icon. In that moment it reads
+the page's links and structured metadata, and reads back the addresses of the
+requests the page has already made, from the Resource Timing record each
+document keeps of its own loading, to identify geospatial services used by
+interactive maps. It does not inspect response bodies, and it does not observe
+the network or run in the background at any other time. Nothing is stored: the
+list exists only while the popup is open and is discarded when it closes.
 
 When the user chooses **Open in GeoLibre**, the complete selected HTTP(S)
 dataset and style URLs are placed in the query string of a new
@@ -25,8 +27,7 @@ The navigation request exposes its URL and the user's IP address to GeoLibre's
 web-hosting infrastructure, where standard service logs may retain them. The
 navigation may also appear in browser history. See the current
 [GeoLibre privacy policy](https://geolibre.app/privacy/) for the service's data
-practices. The extension itself does not persist URLs beyond the browser tab's
-session.
+practices. The extension itself never persists a URL.
 
 The extension does not fetch or upload the datasets. GeoLibre requests them
 directly from their original servers, subject to those servers' privacy
@@ -35,7 +36,8 @@ from the source page are not forwarded, although credentials embedded directly
 in a selected URL are part of the URL and are forwarded.
 
 The extension uses no remote code, advertising, analytics, tracking pixels,
-cookies, accounts, or persistent extension storage.
+cookies, accounts, or extension storage of any kind. It holds no host
+permissions and no permission to observe browsing.
 
 Questions may be submitted through the GeoLibre repository:
 <https://github.com/opengeos/GeoLibre/issues>.

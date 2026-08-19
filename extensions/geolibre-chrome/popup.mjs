@@ -1,5 +1,5 @@
-import { scanDocumentForDatasets } from "./scanner.mjs";
-import { mergeServiceCandidates } from "./service-scanner.mjs";
+import { collectRequestedUrls, scanDocumentForDatasets } from "./scanner.mjs";
+import { collectServiceCandidates, mergeServiceCandidates } from "./service-scanner.mjs";
 import { buildGeoLibreUrl } from "./url-builder.mjs";
 
 const elements = {
@@ -144,9 +144,19 @@ async function inspectPage() {
   } catch (error) {
     console.debug("GeoLibre could not scan the current document.", error);
   }
-  const key = `services:${tab.id}`;
-  const stored = await chrome.storage.session.get(key);
-  renderDatasets(mergeServiceCandidates(documentDatasets, stored[key] ?? []));
+  let services = [];
+  try {
+    // A map can be embedded in a frame, and the requests are recorded by the
+    // document that made them, so every frame is asked for its own history.
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      func: collectRequestedUrls,
+    });
+    services = collectServiceCandidates(results.flatMap((frame) => frame?.result ?? []));
+  } catch (error) {
+    console.debug("GeoLibre could not read the page's requests.", error);
+  }
+  renderDatasets(mergeServiceCandidates(documentDatasets, services));
 }
 
 elements.selectAll.addEventListener("click", () => {
