@@ -662,10 +662,13 @@ export function itemBbox(item: StacItem): [number, number, number, number] | und
     collect(geometry.coordinates);
   };
   collectGeometry(item.geometry);
-  if (!positions.length) return advertised;
+  // Anything still here failed the lon/lat check above, so falling back to it
+  // would hand out the impossible values this whole branch exists to replace.
+  // Without a usable geometry the honest answer is that there is no extent.
+  if (!positions.length) return undefined;
 
   const latitudes = positions.map(([, latitude]) => latitude);
-  if (latitudes.some((latitude) => latitude < -90 || latitude > 90)) return advertised;
+  if (latitudes.some((latitude) => latitude < -90 || latitude > 90)) return undefined;
   const longitudes = positions
     .map(([longitude]) => ((longitude % 360) + 360) % 360)
     .sort((a, b) => a - b);

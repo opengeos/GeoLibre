@@ -837,14 +837,16 @@ function buildPanel(container: HTMLElement): () => void {
   nodataField.input.placeholder = labels.nodataPlaceholder;
   const renderHint = el("div", labels.renderHint);
   renderHint.style.cssText = style.status;
+  // The engine picker sits last, after the per-layer options: it is the one
+  // control-wide setting here, and its hint reads "unlike the settings above".
   renderSection.append(
     renderSummary,
-    engineWrap,
     bandsField.wrap,
     colormapWrap,
     rescaleRow,
     nodataField.wrap,
     renderHint,
+    engineWrap,
   );
 
   const status = el("div", labels.initialStatus);
@@ -867,8 +869,27 @@ function buildPanel(container: HTMLElement): () => void {
   controls.append(catalogSection, searchSection, renderSection);
   container.append(controls, status, resultSplitter, results, loadMore);
 
-  const splitterBounds = (): number =>
-    Math.max(150, container.getBoundingClientRect().height - 230);
+  // The results pane neither grows nor shrinks once its basis is set, so the
+  // ceiling has to be whatever the container has left after the siblings that
+  // keep their own size. Guessing a fixed reserve here let a drag to the
+  // reported maximum clip the tail of the list and the Load more button.
+  const CONTROLS_MIN_HEIGHT = 180;
+  const splitterBounds = (): number => {
+    const reserved = [status, resultSplitter, loadMore].reduce(
+      (total, element) => total + (element.hidden ? 0 : element.getBoundingClientRect().height),
+      CONTROLS_MIN_HEIGHT,
+    );
+    const box = container.getBoundingClientRect();
+    const padding = window.getComputedStyle(container);
+    const gap = Number.parseFloat(padding.rowGap) || 0;
+    const inner =
+      box.height -
+      (Number.parseFloat(padding.paddingTop) || 0) -
+      (Number.parseFloat(padding.paddingBottom) || 0) -
+      // One gap per sibling boundary: controls, status, splitter, results, loadMore.
+      gap * 4;
+    return Math.max(150, inner - reserved);
+  };
 
   // Announcing the size only after the first drag would leave a screen reader
   // with a valueless separator, so the values are also synced on focus -- which

@@ -1474,4 +1474,17 @@ test("asset and bbox helpers recognize common STAC data", () => {
     }),
     [120, -65, 180, -30],
   );
+  // A projected bbox with no geometry to fall back on has no usable extent, so
+  // the caller must be told that rather than handed the projected numbers.
+  assert.equal(
+    itemBbox({
+      type: "Feature",
+      id: "projected-bbox-no-geometry",
+      bbox: [7_112_945, -1_778_200, 10_669_445, -3_852_900],
+      geometry: null,
+      properties: {},
+      assets: {},
+    }),
+    undefined,
+  );
 });
