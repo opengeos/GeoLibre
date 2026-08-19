@@ -100,6 +100,7 @@ import type {
   GeoLibreZarrQueryOptions,
   GeoLibreZarrQuerySelector,
 } from "@geolibre/plugins";
+import { cogEngineDefaults } from "../lib/cog-render-engine";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readFile } from "@tauri-apps/plugin-fs";
@@ -934,14 +935,8 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
           : undefined;
       return addRasterToMap(api, url, {
         name,
-        // The engine is a control-wide setting, not a per-layer one, so naming
-        // one here re-renders every raster already on the map. Callers that say
-        // nothing keep the long-standing GPU default: the WASM tiler is aimed at
-        // local files and can leave a remote programmatic layer registered
-        // without producing pixels. A caller that knows better (the STAC panel,
-        // where the user picks) opts in, and "auto" leaves the control alone.
-        defaults:
-          options?.engine === "auto" ? {} : { engine: options?.engine ?? "maplibre-gl-raster" },
+        // Control-wide, not per layer: see cogEngineDefaults.
+        defaults: cogEngineDefaults(options?.engine),
         state: {
           ...(bands?.length ? { bands, mode: bands.length >= 3 ? "rgb" : "single" } : {}),
           ...(options?.colormap !== undefined ? { colormap: options.colormap } : {}),

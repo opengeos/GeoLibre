@@ -669,6 +669,11 @@ export function itemBbox(item: StacItem): [number, number, number, number] | und
 
   const latitudes = positions.map(([, latitude]) => latitude);
   if (latitudes.some((latitude) => latitude < -90 || latitude > 90)) return undefined;
+  // The wrap below would fold any magnitude into a plausible-looking angle, so
+  // a geometry carrying the same projected-metre bug as the bbox has to be
+  // rejected the way an impossible latitude is. The bound is 360 rather than
+  // 180 because planetary catalogs legitimately write 0-360 east longitude.
+  if (positions.some(([longitude]) => longitude < -360 || longitude > 360)) return undefined;
   const longitudes = positions
     .map(([longitude]) => ((longitude % 360) + 360) % 360)
     .sort((a, b) => a - b);

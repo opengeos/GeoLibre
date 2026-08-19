@@ -1487,4 +1487,51 @@ test("asset and bbox helpers recognize common STAC data", () => {
     }),
     undefined,
   );
+  // A geometry carrying the same projected-metre bug as the bbox must not be
+  // wrapped into a plausible-looking angle.
+  assert.equal(
+    itemBbox({
+      type: "Feature",
+      id: "projected-geometry",
+      bbox: [7_112_945, -1_778_200, 10_669_445, -3_852_900],
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [7_112_945, -30],
+            [10_669_445, -30],
+            [10_669_445, -65],
+            [7_112_945, -65],
+            [7_112_945, -30],
+          ],
+        ],
+      },
+      properties: {},
+      assets: {},
+    }),
+    undefined,
+  );
+  // 0-360 east longitude is a real planetary convention, not a broken CRS.
+  assert.deepEqual(
+    itemBbox({
+      type: "Feature",
+      id: "east-longitude",
+      bbox: [7_112_945, -1_778_200, 10_669_445, -3_852_900],
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [200, -30],
+            [240, -30],
+            [240, -65],
+            [200, -65],
+            [200, -30],
+          ],
+        ],
+      },
+      properties: {},
+      assets: {},
+    }),
+    [-160, -65, -120, -30],
+  );
 });
