@@ -61,7 +61,8 @@ function isIdentifierFieldName(key: string): boolean {
   const compact = normalized.replace(/[\s_-]/g, "");
   return (
     /^(geo|object|feature|row)id$/.test(compact) ||
-    /^(state|county|tract|block|place)fp$/.test(compact)
+    /^(state|county|place)fp$/.test(compact) ||
+    /^(tract|block)ce$/.test(compact)
   );
 }
 
