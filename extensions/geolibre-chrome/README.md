@@ -73,10 +73,17 @@ Two consequences of reading the buffer rather than watching the network:
   `/data/<id>.json`, and that tileset is reached through its style rather than
   its metadata. Nothing reads the response, so a TileJSON describing *raster*
   tiles is indistinguishable from a vector one and is offered as a vector
-  tileset; selecting it opens the dialog on a document with no source layers,
-  which reports that plainly rather than drawing the wrong thing. Reading the
-  body would mean fetching a cross-origin URL, which needs the host permissions
-  this design exists to avoid.
+  tileset. Such a false positive cannot become a layer: Add Data resolves the
+  document on submit and refuses it when no source layers come out. Reading the
+  body here would mean fetching a cross-origin URL, which needs the host
+  permissions this design exists to avoid.
+
+  A style stands as a candidate of its own only when its path names it one:
+  `…/style.json`, `…/styles.json`, or an ArcGIS `…/resources/styles/<name>.json`.
+  The looser `…/styles/<name>.json` is an ordinary theme or configuration route
+  as well, so a style matched that way is still trusted to explain a tileset
+  found at its origin, but never offered on its own, where a page's theme file
+  would appear as a layer.
 - **The buffer is finite.** It holds 250 entries per document by default and
   stops recording once full. A map's own early requests are normally well inside
   that, but a very busy page can lose a service added late. Raising the limit

@@ -236,11 +236,14 @@ export function classifyStyleRequest(rawUrl) {
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
   const path = url.pathname;
-  const isStyle =
-    /\/style(?:s)?\.json$/i.test(path) ||
-    /\/styles?\/[^/]+\.json$/i.test(path) ||
-    /\/resources\/styles\/[^/]*\.json$/i.test(path);
-  return isStyle ? { origin: url.origin, url: url.href } : null;
+  // `…/style.json` and an ArcGIS `…/resources/styles/<name>.json` name themselves
+  // as map styles. `…/styles/<name>.json` does not: a theme or configuration
+  // endpoint is served at exactly that path. So the generic spelling is trusted
+  // to explain a tileset already found at its origin, but never to become a
+  // candidate of its own, where it would offer a page's theme file as a layer.
+  const named = /\/styles?\.json$/i.test(path) || /\/resources\/styles\/[^/]*\.json$/i.test(path);
+  const isStyle = named || /\/styles?\/[^/]+\.json$/i.test(path);
+  return isStyle ? { origin: url.origin, url: url.href, named } : null;
 }
 
 /** Two entries describe the same thing only if they name the same layer. */
@@ -275,13 +278,13 @@ export function collectServiceCandidates(urls) {
   const services = [];
   for (const url of urls) {
     const style = classifyStyleRequest(url);
-    if (style) stylesByOrigin.set(style.origin, style.url);
+    if (style) stylesByOrigin.set(style.origin, style);
     const service = classifyServiceRequest(url);
     if (service) services.push(service);
   }
   for (const service of services) {
     if (service.format !== "Vector tiles" || service.styleUrl) continue;
-    service.styleUrl = stylesByOrigin.get(new URL(service.url).origin) ?? null;
+    service.styleUrl = stylesByOrigin.get(new URL(service.url).origin)?.url ?? null;
   }
   const merged = mergeServiceCandidates(services);
   // Same reason as the TileJSON rule above: when a style names its tiles inline
@@ -290,17 +293,18 @@ export function collectServiceCandidates(urls) {
   // through the style itself. GeoLibre resolves a vector layer from a style URL
   // alone, reading the tile template and source layers out of the document.
   const fallbacks = [];
-  for (const [origin, styleUrl] of stylesByOrigin) {
+  for (const [origin, style] of stylesByOrigin) {
+    if (!style.named) continue;
     const covered = merged.some(
       (entry) => entry.format === "Vector tiles" && new URL(entry.url).origin === origin,
     );
     if (covered) continue;
     fallbacks.push({
-      url: styleUrl,
+      url: style.url,
       name: "Vector tile style",
       format: "Vector tiles",
       kind: "vector",
-      styleUrl,
+      styleUrl: style.url,
       layer: null,
     });
   }

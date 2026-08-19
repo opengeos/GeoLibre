@@ -444,6 +444,7 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     assert.deepEqual(classifyStyleRequest("https://tiles.example.com/style.json"), {
       origin: "https://tiles.example.com",
       url: "https://tiles.example.com/style.json",
+      named: true,
     });
     assert.equal(
       classifyStyleRequest("https://api.example.com/maps/streets/style.json?key=abc")?.url,
@@ -644,6 +645,28 @@ describe("GeoLibre Chrome extension request history", () => {
     assert.equal(link.searchParams.get("add"), "ogc-vector-tiles");
     assert.equal(link.searchParams.get("serviceUrl"), null);
     assert.equal(link.searchParams.get("serviceStyle"), "https://tiles.example.com/style.json");
+  });
+
+  it("does not offer a theme file that merely sits at a style-shaped path", () => {
+    // `/styles/<name>.json` is an ordinary theme and configuration route, so it
+    // explains a tileset found at its origin but never stands as one itself.
+    assert.deepEqual(collectServiceCandidates(["https://app.example.com/styles/dark.json"]), []);
+    assert.deepEqual(
+      collectServiceCandidates([
+        "https://app.example.com/styles/dark.json",
+        "https://app.example.com/roads/4/5/6.pbf",
+      ]).map((entry) => entry.styleUrl),
+      ["https://app.example.com/styles/dark.json"],
+    );
+  });
+
+  it("offers a style that names itself, including an ArcGIS one", () => {
+    assert.deepEqual(
+      collectServiceCandidates([
+        "https://tiles.example.com/VectorTileServer/resources/styles/root.json",
+      ]).map((entry) => entry.url),
+      ["https://tiles.example.com/VectorTileServer/resources/styles/root.json"],
+    );
   });
 
   it("does not repeat a style that already explains a tileset", () => {
