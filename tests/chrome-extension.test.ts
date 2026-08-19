@@ -660,6 +660,28 @@ describe("GeoLibre Chrome extension request history", () => {
     );
   });
 
+  it("keeps the map style when a theme file follows it from the same origin", () => {
+    // Either request order must leave the origin represented by its real style,
+    // both when the style is all there is and when it explains a tileset.
+    for (const order of [
+      ["https://tiles.example.com/style.json", "https://tiles.example.com/styles/theme.json"],
+      ["https://tiles.example.com/styles/theme.json", "https://tiles.example.com/style.json"],
+    ]) {
+      assert.deepEqual(
+        collectServiceCandidates(order).map((entry) => entry.url),
+        ["https://tiles.example.com/style.json"],
+        order.join(" then "),
+      );
+      assert.deepEqual(
+        collectServiceCandidates([...order, "https://tiles.example.com/roads/4/5/6.pbf"]).map(
+          (entry) => entry.styleUrl,
+        ),
+        ["https://tiles.example.com/style.json"],
+        order.join(" then "),
+      );
+    }
+  });
+
   it("offers a style that names itself, including an ArcGIS one", () => {
     assert.deepEqual(
       collectServiceCandidates([

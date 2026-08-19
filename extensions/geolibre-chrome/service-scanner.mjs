@@ -278,7 +278,13 @@ export function collectServiceCandidates(urls) {
   const services = [];
   for (const url of urls) {
     const style = classifyStyleRequest(url);
-    if (style) stylesByOrigin.set(style.origin, style);
+    // Keep a self-naming style over a generic one from the same origin. A page
+    // that fetches its map style and later a theme file at `…/styles/<name>
+    // .json` must still offer the map: letting the theme win would both strand
+    // a worker-only tileset and hand an existing one the wrong style document.
+    if (style && (!stylesByOrigin.get(style.origin)?.named || style.named)) {
+      stylesByOrigin.set(style.origin, style);
+    }
     const service = classifyServiceRequest(url);
     if (service) services.push(service);
   }
