@@ -9,6 +9,7 @@ import {
   mapboxStyleForDataLayer,
   parseRasterUrlStyle,
 } from "../lib/data-url";
+import { DEEP_LINK_COG_ENGINE } from "../lib/cog-render-engine";
 import type { createAppAPI } from "./usePlugins";
 import type { ProjectUrlLoadState } from "./useProjectUrlLoader";
 
@@ -46,7 +47,10 @@ export async function loadDataUrl(
     const rasterStyle = rawStyle === null ? null : parseRasterUrlStyle(rawStyle);
     const id = await addRasterToMap(mapAppAPI, remote.url, {
       name: remote.name,
-      defaults: { engine: "maplibre-gl-raster" },
+      // The native WASM renderer draws as a MapLibre raster layer and therefore
+      // preserves the workspace's globe projection. The deck.gl renderer cannot
+      // draw on the globe and switches the entire map to Mercator when it loads.
+      defaults: { engine: DEEP_LINK_COG_ENGINE },
       zoomTo: fit,
       ...(rasterStyle ? { state: rasterStyle } : {}),
     });

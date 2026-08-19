@@ -8,6 +8,9 @@ import type { GeoLibreCogLayerOptions, GeoLibreCogRenderEngine } from "@geolibre
  */
 export const LEGACY_COG_ENGINE: GeoLibreCogRenderEngine = "maplibre-gl-raster";
 
+/** Native renderer used by URL deep links so opening a COG preserves globe view. */
+export const DEEP_LINK_COG_ENGINE: GeoLibreCogRenderEngine = "cog-tiler-wasm";
+
 /**
  * Resolve the `defaults` fragment `addCogLayer` hands the raster control.
  *

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  DEEP_LINK_COG_ENGINE,
   LEGACY_COG_ENGINE,
   cogEngineDefaults,
 } from "../apps/geolibre-desktop/src/lib/cog-render-engine";
@@ -10,6 +11,10 @@ import {
 // adding a COG silently re-renders layers another panel put on the map. That
 // only shows up as a UI side effect, hence these assertions.
 describe("cogEngineDefaults", () => {
+  it("uses a globe-compatible native renderer for URL deep links", () => {
+    assert.equal(DEEP_LINK_COG_ENGINE, "cog-tiler-wasm");
+  });
+
   it('omits the engine entirely for "auto" so the control is left alone', () => {
     const defaults = cogEngineDefaults("auto");
     assert.deepEqual(defaults, {});
