@@ -22,11 +22,25 @@ export interface WasmToolRequest {
   input: Record<string, Uint8Array>;
 }
 
-/** The single message this worker posts back. */
-export type WasmToolResponse = { ok: true; result: ToolResult } | { ok: false; error: string };
+/**
+ * What this worker posts back: an immediate `ack` on receipt, then one terminal
+ * message when the tool finishes.
+ *
+ * The ack is what lets the caller tell a live parked worker from one that died
+ * while idle. Nothing here can report that: a worker killed out of band fires
+ * no `error` event, and posting to it silently does nothing, so without an ack
+ * a reused-but-dead worker would leave the run pending forever.
+ */
+export type WasmToolResponse =
+  | { ok: "ack" }
+  | { ok: true; result: ToolResult }
+  | { ok: false; error: string };
 
 worker.addEventListener("message", async (event: MessageEvent<WasmToolRequest>) => {
   const { tool, args, input } = event.data;
+  // Before the run, so it lands even though the WASI call that follows blocks
+  // this worker's thread until the tool is done.
+  worker.postMessage({ ok: "ack" } satisfies WasmToolResponse);
   try {
     // runTool compiles the bundled geolibre-cli.wasm on first use, in this
     // worker's own module scope — a copy already compiled on the main thread

@@ -46,12 +46,25 @@ export function releaseIdleWasmToolWorkers(): void {
   for (const worker of idleWorkers.splice(0)) worker.terminate();
 }
 
-function acquireWorker(): Worker {
-  return (
-    idleWorkers.pop() ??
-    new Worker(new URL("./wasm-tool.worker.ts", import.meta.url), { type: "module" })
-  );
+function spawnWorker(): Worker {
+  return new Worker(new URL("./wasm-tool.worker.ts", import.meta.url), { type: "module" });
 }
+
+/** A worker to run on, and whether it came from the pool rather than being new. */
+function acquireWorker(): { worker: Worker; reused: boolean } {
+  const parked = idleWorkers.pop();
+  return parked ? { worker: parked, reused: true } : { worker: spawnWorker(), reused: false };
+}
+
+// How long a *reused* worker has to acknowledge a request before it is treated
+// as dead. A parked worker is idle by construction — it is only parked once it
+// has answered — so an ack is a message hop away and this window is enormous by
+// comparison. It exists because a worker killed out of band (an OOM kill, a
+// discarded tab) fires no `error` event and silently swallows `postMessage`, and
+// this module deliberately puts no timeout on the run itself, so without the ack
+// a dead worker would leave the run pending forever. A false positive costs a
+// respawn, never a failed run.
+const REUSED_WORKER_ACK_MS = 10_000;
 
 /** Park a still-healthy worker for reuse, or terminate it if enough are warm. */
 function releaseWorker(worker: Worker): void {
@@ -74,14 +87,42 @@ function releaseWorker(worker: Worker): void {
  */
 function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
   return new Promise((resolve, reject) => {
-    const worker = acquireWorker();
+    let { worker, reused } = acquireWorker();
+    // Only a reused worker is watched: a freshly spawned one has not had time to
+    // die, and a broken one reports itself through `error`. Its startup also
+    // includes loading this worker's module graph, which in a dev server can be
+    // slower than any ack window worth setting.
+    let ackTimer: ReturnType<typeof setTimeout> | undefined;
+    const armAck = () => {
+      if (!reused) return;
+      ackTimer = setTimeout(() => {
+        // Never acknowledged, so it died while parked. Replace it and re-post;
+        // the request has not started, so nothing is lost by retrying once.
+        cleanup();
+        worker.terminate();
+        worker = spawnWorker();
+        reused = false;
+        attach();
+        post();
+      }, REUSED_WORKER_ACK_MS);
+    };
+    const disarmAck = () => {
+      if (ackTimer !== undefined) clearTimeout(ackTimer);
+      ackTimer = undefined;
+    };
     const onMessage = (event: MessageEvent<WasmToolResponse>) => {
+      if (event.data.ok === "ack") {
+        disarmAck();
+        return;
+      }
+      disarmAck();
       cleanup();
       releaseWorker(worker);
       if (event.data.ok) resolve(event.data.result);
       else reject(new Error(event.data.error || `${request.tool} failed.`));
     };
     const onError = (event: ErrorEvent) => {
+      disarmAck();
       cleanup();
       worker.terminate();
       reject(new Error(event.message || `The ${request.tool} worker failed.`));
@@ -89,6 +130,7 @@ function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
     // `error` does not fire when a posted message cannot be deserialized, which
     // would otherwise leave this promise pending forever.
     const onMessageError = () => {
+      disarmAck();
       cleanup();
       worker.terminate();
       reject(new Error(`The ${request.tool} worker posted an undeserializable message.`));
@@ -98,21 +140,29 @@ function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
       worker.removeEventListener("error", onError);
       worker.removeEventListener("messageerror", onMessageError);
     };
-    worker.addEventListener("message", onMessage);
-    worker.addEventListener("error", onError);
-    worker.addEventListener("messageerror", onMessageError);
+    const attach = () => {
+      worker.addEventListener("message", onMessage);
+      worker.addEventListener("error", onError);
+      worker.addEventListener("messageerror", onMessageError);
+    };
     // The input files are structured-cloned rather than transferred: these
     // wrappers do not otherwise take ownership of the caller's bytes, and a
     // neutered input array would be a trap the callers don't set.
-    try {
-      worker.postMessage(request);
-    } catch (error) {
-      // A throw here (e.g. DataCloneError) rejects the promise on its own, but
-      // the worker is already spawned and would leak without this.
-      cleanup();
-      worker.terminate();
-      reject(error instanceof Error ? error : new Error(String(error)));
-    }
+    const post = () => {
+      try {
+        worker.postMessage(request);
+        armAck();
+      } catch (error) {
+        // A throw here (e.g. DataCloneError) rejects the promise on its own, but
+        // the worker is already spawned and would leak without this.
+        disarmAck();
+        cleanup();
+        worker.terminate();
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+    attach();
+    post();
   });
 }
 

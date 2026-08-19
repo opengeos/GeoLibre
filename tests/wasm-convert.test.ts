@@ -501,6 +501,50 @@ describe("wasm-convert", () => {
       await second.promise;
     });
 
+    // A worker killed while parked fires no `error` and swallows postMessage, so
+    // without the ack the run would stay pending forever. It is replaced instead.
+    it("replaces a parked worker that never acknowledges the request", async (t) => {
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const first = startRun();
+      first.worker.emit("message", { data: { ok: true, result: okResult } });
+      await first.promise;
+
+      const second = startRun();
+      assert.equal(second.worker, first.worker, "it should try the parked worker first");
+      t.mock.timers.tick(10_000);
+
+      assert.equal(first.worker.terminated, true, "the silent worker should be terminated");
+      assert.equal(FakeWorker.instances.length, 2, "a replacement should be spawned");
+      const replacement = FakeWorker.instances[1];
+      assert.deepEqual(
+        replacement.posted,
+        [first.worker.posted[0]],
+        "the request should be re-sent",
+      );
+
+      // The replacement answers, and the run resolves as if nothing happened.
+      replacement.emit("message", { data: { ok: true, result: okResult } });
+      const result = await second.promise;
+      assert.deepEqual(result.data, Uint8Array.from(PMTILES_MAGIC));
+    });
+
+    // A live parked worker acks, so it is kept rather than replaced.
+    it("keeps a parked worker that acknowledges the request", async (t) => {
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const first = startRun();
+      first.worker.emit("message", { data: { ok: true, result: okResult } });
+      await first.promise;
+
+      const second = startRun();
+      second.worker.emit("message", { data: { ok: "ack" } });
+      t.mock.timers.tick(10_000);
+      assert.equal(FakeWorker.instances.length, 1, "no replacement should be spawned");
+      assert.equal(second.worker.terminated, false);
+
+      second.worker.emit("message", { data: { ok: true, result: okResult } });
+      await second.promise;
+    });
+
     it("rejects with the error the worker reports and still parks it", async () => {
       const { promise, worker } = startRun();
       worker.emit("message", { data: { ok: false, error: "runner exploded" } });
