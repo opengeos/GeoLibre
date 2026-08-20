@@ -2020,7 +2020,7 @@ function applyVectorDataRenderLayers(
     removeSourceIfExists(map, invertedSourceId(layer.id));
   }
 
-  if (!layer.style.extrusionEnabled && (profile.hasLine || profile.hasPolygon)) {
+  if (profile.hasLine || (!layer.style.extrusionEnabled && profile.hasPolygon)) {
     ensureLayer(
       map,
       lineLayerId(layer.id),
@@ -2032,7 +2032,9 @@ function applyVectorDataRenderLayers(
         filter: withFeatureFilters(layer, [
           "match",
           ["geometry-type"],
-          ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+          layer.style.extrusionEnabled
+            ? ["LineString", "MultiLineString"]
+            : ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
           true,
           false,
         ]),
@@ -2092,7 +2094,7 @@ function applyVectorDataRenderLayers(
     removeIfExists(map, lineDecorationLayerId(layer.id));
   }
 
-  if (!layer.style.extrusionEnabled && profile.hasPoint && renderer === "heatmap") {
+  if (profile.hasPoint && renderer === "heatmap") {
     // Heatmap renderer: one density layer, no circle/cluster/marker layers.
     removeIfExists(map, circleLayerId(layer.id));
     removeIfExists(map, markerLayerId(layer.id));
@@ -2117,7 +2119,7 @@ function applyVectorDataRenderLayers(
       },
       beforeId,
     );
-  } else if (!layer.style.extrusionEnabled && profile.hasPoint && renderer === "cluster") {
+  } else if (profile.hasPoint && renderer === "cluster") {
     // Cluster renderer: a bubble + count for aggregated clusters, plus a circle
     // for the individual (unclustered) points. The source carries clusters
     // (geojson source-level clustering, or supercluster tiles on the tiled path).
@@ -2177,7 +2179,7 @@ function applyVectorDataRenderLayers(
       },
       beforeId,
     );
-  } else if (!layer.style.extrusionEnabled && profile.hasPoint) {
+  } else if (profile.hasPoint) {
     // Single (default) renderer: a marker icon per point when a marker is
     // configured, otherwise one circle per point.
     removeIfExists(map, heatmapLayerId(layer.id));
@@ -2259,7 +2261,7 @@ function applyVectorDataRenderLayers(
     removeIfExists(map, clusterCountLayerId(layer.id));
   }
 
-  if (!layer.style.extrusionEnabled && hasTextMarkers) {
+  if (hasTextMarkers) {
     ensureLayer(
       map,
       textLayerId(layer.id),

@@ -30,6 +30,7 @@ const sketchesLayer = (): GeoLibreLayer => ({
   type: "geojson",
   visible: true,
   opacity: 1,
+  source: {},
   style: structuredClone(DEFAULT_LAYER_STYLE),
   metadata: {},
   geojson: { type: "FeatureCollection", features: [] },
@@ -55,6 +56,14 @@ describe("maplibreGeoEditorPlugin", () => {
       hasMassingFeatures({ type: "FeatureCollection", features: [polygon({ height: 10 })] }),
       true,
     );
+    assert.equal(
+      hasMassingFeatures({ type: "FeatureCollection", features: [polygon({ height: "10" })] }),
+      true,
+    );
+    assert.equal(
+      hasMassingFeatures({ type: "FeatureCollection", features: [polygon({ height: "ten" })] }),
+      false,
+    );
   });
 
   it("enables and then resets only the auto-managed massing style", () => {
@@ -72,5 +81,22 @@ describe("maplibreGeoEditorPlugin", () => {
 
     layer.style = { ...layer.style, extrusionEnabled: true, extrusionHeightExpression: "custom" };
     assert.equal(sketchesStyleForMassing(layer, flat), layer.style);
+  });
+
+  it("restores the complete pre-massing extrusion style", () => {
+    const layer = sketchesLayer();
+    layer.id = "custom-before-massing";
+    layer.style = {
+      ...layer.style,
+      elevation3dEnabled: true,
+      extrusionHeightProperty: "floors",
+    };
+    const original = structuredClone(layer.style);
+    const massing = { type: "FeatureCollection" as const, features: [polygon({ height: 10 })] };
+    const flat = { type: "FeatureCollection" as const, features: [polygon({})] };
+
+    layer.style = sketchesStyleForMassing(layer, massing);
+    layer.style = sketchesStyleForMassing(layer, flat);
+    assert.deepEqual(layer.style, original);
   });
 });

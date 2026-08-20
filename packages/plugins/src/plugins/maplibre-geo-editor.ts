@@ -41,6 +41,17 @@ const GEOMAN_TEXT_PROPERTY = "__gm_text";
 const MASSING_HEIGHT_EXPRESSION =
   '["step",["zoom"],0.01,12,["case",["has","height"],["max",0,["to-number",["get","height"],0]],0.01]]';
 
+type PreMassingExtrusionStyle = Pick<
+  GeoLibreLayer["style"],
+  | "elevation3dEnabled"
+  | "extrusionEnabled"
+  | "extrusionHeightProperty"
+  | "extrusionAdvancedStyleEnabled"
+  | "extrusionHeightExpression"
+>;
+
+const preMassingExtrusionStyles = new Map<string, PreMassingExtrusionStyle>();
+
 let geoEditorPosition: GeoLibreMapControlPosition = "top-left";
 
 const GEO_EDITOR_OPTIONS = {
@@ -501,12 +512,19 @@ function syncSketchesToStore(): void {
 }
 
 export function hasMassingFeatures(collection: FeatureCollection): boolean {
-  return collection.features.some(
-    (feature) =>
+  return collection.features.some((feature) => {
+    const height = feature.properties?.height;
+    const numericHeight =
+      typeof height === "number"
+        ? height
+        : typeof height === "string" && height.trim() !== ""
+          ? Number(height)
+          : Number.NaN;
+    return (
       (feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon") &&
-      typeof feature.properties?.height === "number" &&
-      Number.isFinite(feature.properties.height),
-  );
+      Number.isFinite(numericHeight)
+    );
+  });
 }
 
 export function sketchesStyleForMassing(
@@ -517,12 +535,36 @@ export function sketchesStyleForMassing(
     if (layer.style.extrusionHeightExpression !== MASSING_HEIGHT_EXPRESSION) {
       return layer.style;
     }
+    const previous = preMassingExtrusionStyles.get(layer.id);
+    preMassingExtrusionStyles.delete(layer.id);
     return {
       ...layer.style,
-      extrusionEnabled: false,
-      extrusionAdvancedStyleEnabled: false,
-      extrusionHeightExpression: "",
+      ...(previous ?? {
+        elevation3dEnabled: false,
+        extrusionEnabled: false,
+        extrusionHeightProperty: "height",
+        extrusionAdvancedStyleEnabled: false,
+        extrusionHeightExpression: "",
+      }),
     };
+  }
+
+  if (
+    layer.style.extrusionEnabled &&
+    layer.style.extrusionHeightExpression !== "" &&
+    layer.style.extrusionHeightExpression !== MASSING_HEIGHT_EXPRESSION
+  ) {
+    return layer.style;
+  }
+
+  if (!preMassingExtrusionStyles.has(layer.id)) {
+    preMassingExtrusionStyles.set(layer.id, {
+      elevation3dEnabled: layer.style.elevation3dEnabled,
+      extrusionEnabled: layer.style.extrusionEnabled,
+      extrusionHeightProperty: layer.style.extrusionHeightProperty,
+      extrusionAdvancedStyleEnabled: layer.style.extrusionAdvancedStyleEnabled,
+      extrusionHeightExpression: layer.style.extrusionHeightExpression,
+    });
   }
 
   return {
