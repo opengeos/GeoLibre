@@ -1,6 +1,9 @@
 import { normalizeDesktopSettings, type DesktopSettings } from "../hooks/useDesktopSettings";
+import { resolveLanguage } from "../i18n/languages";
 
 export const DESKTOP_SETTINGS_URL_PARAMS = ["settingsUrl", "settingUrl"] as const;
+const LANGUAGE_URL_PARAMS = ["locale", "lang"] as const;
+const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
 
 export function desktopSettingsUrl(search: string): string | null {
   const params = new URLSearchParams(search);
@@ -13,11 +16,13 @@ export function desktopSettingsUrl(search: string): string | null {
 
 export async function fetchDesktopSettings(
   url: string,
-  fetchImpl: typeof fetch = fetch,
+  options: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
 ): Promise<DesktopSettings> {
+  const { fetchImpl = fetch, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS } = options;
   const response = await fetchImpl(url, {
     cache: "no-cache",
     credentials: "same-origin",
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) {
     const status = response.statusText
@@ -38,4 +43,17 @@ export async function fetchDesktopSettings(
     throw new Error(`Desktop settings at ${url} must be a JSON object.`);
   }
   return normalizeDesktopSettings(parsed);
+}
+
+/** Resolve a shared language only when a valid locale/lang URL override is absent. */
+export function sharedSettingsLanguage(
+  search: string,
+  language: string,
+  availableLanguages: readonly string[],
+): string | null {
+  const params = new URLSearchParams(search);
+  for (const name of LANGUAGE_URL_PARAMS) {
+    if (resolveLanguage(params.get(name), availableLanguages)) return null;
+  }
+  return resolveLanguage(language, availableLanguages);
 }

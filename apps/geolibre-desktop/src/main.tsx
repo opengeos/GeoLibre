@@ -61,14 +61,18 @@ import "./lib/auth-return-url-boot";
 // paint is already in the right language. English is bundled; other locales are
 // lazily imported, so `i18nReady` resolves once the initial locale's catalog has
 // loaded and init has run — the render below awaits it.
-import i18n, { i18nReady } from "./i18n";
+import i18n, { AVAILABLE_LANGUAGES, i18nReady, setActiveLanguage } from "./i18n";
 import { installDiagnosticsCapture } from "./lib/diagnostics";
 import { isTauri } from "./lib/is-tauri";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
 import { resolveAuthGate, type AuthGateConfig } from "./lib/auth-gate";
 import { getInitialThemeMode } from "./hooks/useThemeMode";
 import { applyTemporaryDesktopSettings } from "./hooks/useDesktopSettings";
-import { desktopSettingsUrl, fetchDesktopSettings } from "./lib/desktop-settings-url";
+import {
+  desktopSettingsUrl,
+  fetchDesktopSettings,
+  sharedSettingsLanguage,
+} from "./lib/desktop-settings-url";
 
 installDiagnosticsCapture();
 // In the desktop build, route geocoding (place search / reverse geocode)
@@ -196,14 +200,30 @@ registerSW({
 const sharedSettingsUrl = desktopSettingsUrl(window.location.search);
 const sharedSettingsReady = sharedSettingsUrl
   ? fetchDesktopSettings(sharedSettingsUrl)
-      .then((settings) => applyTemporaryDesktopSettings(settings))
+      .then((settings) => {
+        applyTemporaryDesktopSettings(settings);
+        return settings;
+      })
       .catch((error: unknown) => {
         // A shared settings file is optional configuration. Keep the app usable
         // with the visitor's local settings, but make a bad URL visible in the
         // diagnostics capture and developer console.
         console.error("[GeoLibre] Failed to load shared desktop settings", error);
+        return null;
       })
-  : Promise.resolve();
+  : Promise.resolve(null);
+
+const startupLanguageReady = Promise.all([i18nReady, sharedSettingsReady]).then(
+  async ([, settings]) => {
+    if (!settings) return;
+    const language = sharedSettingsLanguage(
+      window.location.search,
+      settings.language,
+      AVAILABLE_LANGUAGES,
+    );
+    if (language) await setActiveLanguage(language);
+  },
+);
 
 void Promise.all([
   import("./App"),
@@ -211,8 +231,7 @@ void Promise.all([
   loadAuthGate(authGate),
   // Gate the first render on i18next being initialized with the active locale's
   // (lazily loaded) catalog, so the UI never paints raw translation keys.
-  i18nReady,
-  sharedSettingsReady,
+  startupLanguageReady,
 ])
   .then(([{ default: App }, { AppErrorBoundary }, withAuthGate]) => {
     const app = <App />;

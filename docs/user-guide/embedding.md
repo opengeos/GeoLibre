@@ -52,7 +52,9 @@ https://web.geolibre.app/?url=https://share.geolibre.app/you/project.geolibre.js
 The settings document must be public or same-origin, return valid JSON, and
 allow cross-origin browser requests when hosted elsewhere. Its fields use the
 same shape as the `geolibre.desktopSettings` local-storage value. Missing or
-invalid fields are replaced with GeoLibre defaults. URL parameters such as
+invalid fields are replaced with GeoLibre defaults. If the document fails to
+load within ten seconds, GeoLibre starts with the visitor's local settings.
+URL parameters such as
 `theme`, `layout`, and `maponly` continue to take precedence over corresponding
 settings where they overlap.
 
