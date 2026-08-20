@@ -259,9 +259,11 @@ ephemeral and never written to a project file.
 > `Referer`) against `ALLOWED_ORIGINS` via `isAllowedOrigin` (defaults to the
 > hosted origins (`geolibre.app`, `web.geolibre.app`, its legacy
 > `viewer.geolibre.app` alias, `studio.geolibre.app`, and
-> `collab.geolibre.app`), the project-owned Cloudflare/GitHub Pages preview
-> origins, loopback hosts (`localhost` and `127.0.0.1`), and
-> `tauri://localhost`) as browser-origin filtering
+> `collab.geolibre.app`), single-label HTTPS deployment hosts under
+> `*.geolibre-preview.pages.dev`, loopback hosts (`localhost` and
+> `127.0.0.1`), and `tauri://localhost`). Nested or custom-port preview hosts
+> and look-alike domains are rejected; the shared `opengeos.org` GitHub Pages
+> preview origin is deliberately not trusted) as browser-origin filtering
 > and defense-in-depth (not authentication or a general server-side access gate)
 > and enforces a per-IP `checkRateLimit` (10 requests / 60 s). `Access-Control-Allow-Origin: *` is
 > still sent on responses so non-browser clients (e.g. Tauri) are not blocked by

@@ -109,7 +109,6 @@ describe("Node collaboration relay", () => {
       "https://web.geolibre.app",
       "https://viewer.geolibre.app",
       "https://studio.geolibre.app",
-      "https://opengeos.org",
       "https://50e58010.geolibre-preview.pages.dev",
     ]) {
       const response = await fetch(`${http}/sessions`, {
@@ -130,6 +129,42 @@ describe("Node collaboration relay", () => {
       headers: { origin: "https://preview.geolibre-preview.pages.dev.example.com" },
     });
     assert.equal(rejectedPreviewLookalike.status, 403);
+
+    for (const origin of [
+      "https://opengeos.org",
+      "https://a.b.geolibre-preview.pages.dev",
+      "https://preview.geolibre-preview.pages.dev:8443",
+    ]) {
+      const response = await fetch(`${http}/sessions`, {
+        method: "POST",
+        headers: { origin },
+      });
+      assert.equal(response.status, 403, `${origin} should be rejected`);
+    }
+  });
+
+  it("makes a configured origin allowlist authoritative", async () => {
+    const { http } = await start();
+    const previous = process.env.ALLOWED_ORIGINS;
+    process.env.ALLOWED_ORIGINS = "https://allowed.example";
+    try {
+      const allowed = await fetch(`${http}/sessions`, {
+        method: "POST",
+        headers: { origin: "https://allowed.example" },
+      });
+      assert.equal(allowed.status, 200);
+
+      for (const origin of ["http://localhost:5173", "https://pr-1.geolibre-preview.pages.dev"]) {
+        const response = await fetch(`${http}/sessions`, {
+          method: "POST",
+          headers: { origin },
+        });
+        assert.equal(response.status, 403, `${origin} should require explicit configuration`);
+      }
+    } finally {
+      if (previous === undefined) delete process.env.ALLOWED_ORIGINS;
+      else process.env.ALLOWED_ORIGINS = previous;
+    }
   });
 
   it("rejects an oversized session-create body by declared length and by count", async () => {
