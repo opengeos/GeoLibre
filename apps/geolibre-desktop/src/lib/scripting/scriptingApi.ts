@@ -17,6 +17,7 @@ import { SKETCHES_SOURCE_KIND, addRasterToMap } from "@geolibre/plugins";
 import type { Feature, FeatureCollection } from "geojson";
 import type { RefObject } from "react";
 import type { MapController } from "@geolibre/map";
+import { isTiff } from "./binary-output";
 import { beginProcessingRun } from "../processing-history";
 import { captureMapImage } from "../print-layout-export";
 import { styleParamPatch } from "./style-params";
@@ -410,7 +411,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             // GeoLibre-authored subset extractors, whose produced COG comes back
             // under a key with no typed param at all (SUBSET_OUTPUT_TOOL_IDS in
             // wasm-client), so parameterKind falls through to "string".
-            if (outKind === "file_out" || outKind === "vector_out") {
+            if ((outKind === "file_out" || outKind === "vector_out") && !isTiff(value)) {
               unretrievable.push(
                 `Output "${outputName}" (${outKind}, ${value.length} bytes) is a file, not a map layer; run this tool from Processing to download it.`,
               );

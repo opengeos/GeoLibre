@@ -111,6 +111,9 @@ function modelAlgorithmDetail(descriptor: ModelToolDescriptor) {
 /** Full detail for at most this many `list_model_algorithms` search hits. */
 const MAX_MODEL_ALGORITHM_MATCHES = 25;
 
+/** Full detail for at most this many `list_whitebox_tools` search hits. */
+const MAX_WHITEBOX_MATCHES = 25;
+
 /** Statement keywords that write data or have side effects. */
 const SQL_WRITE_KEYWORDS =
   /\b(INSERT|UPDATE|DELETE|MERGE|CREATE|DROP|ALTER|TRUNCATE|REPLACE|ATTACH|DETACH|COPY|EXPORT|IMPORT|INSTALL|LOAD|PRAGMA|VACUUM|CHECKPOINT)\b/;
@@ -342,9 +345,21 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
 
   // Lazily load the shared processing executor (Phase 2). It pulls in the
   // algorithm registries (Turf, DuckDB), so it is imported only when used.
+  type WhiteboxToolSummary = {
+    id: string;
+    name: string;
+    category: string;
+    description: string;
+    parameters: unknown[];
+  };
   type ScriptingHandlers = {
     listAlgorithms: () => unknown;
     runAlgorithm: (input: {
+      id: string;
+      params: Record<string, unknown>;
+    }) => Promise<{ logs?: string[]; resultLayerIds?: string[] }>;
+    listWhiteboxTools: () => Promise<WhiteboxToolSummary[]>;
+    runWhiteboxTool: (input: {
       id: string;
       params: Record<string, unknown>;
     }) => Promise<{ logs?: string[]; resultLayerIds?: string[] }>;
@@ -727,7 +742,7 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
   const listAlgorithms = tool({
     name: "list_algorithms",
     description:
-      "List the available client-side processing algorithms (vector geometry/overlay tools like buffer, clip, dissolve, intersection, difference, union, spatial-join; plus H3 grids) with their id, name, group, and typed parameters. Call this before run_algorithm.",
+      "List the available client-side processing algorithms (vector geometry/overlay tools like buffer, clip, dissolve, intersection, difference, union, spatial-join; plus H3 grids) with their id, name, group, and typed parameters. Call this before run_algorithm. These are vector-only — for raster work (hydrology, terrain, LiDAR, image processing) use list_whitebox_tools and run_whitebox_tool instead.",
     inputSchema: z.object({}),
     callback: async () => json({ algorithms: (await getScripting()).listAlgorithms() }),
   });
@@ -750,6 +765,68 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
         id: input.id,
         params: (input.params as Record<string, unknown>) ?? {},
       });
+      return json({
+        logs: result.logs ?? [],
+        resultLayerIds: result.resultLayerIds ?? [],
+      });
+    },
+  });
+
+  const listWhiteboxTools = tool({
+    name: "list_whitebox_tools",
+    description:
+      "List Whitebox raster/terrain tools that can run in the browser (hydrology such as fill_depressions, d8_pointer, flow accumulation and extract_streams; terrain such as slope, aspect, hillshade; LiDAR; image processing; raster↔vector conversion) with their exact parameter names, kinds and defaults. The catalog runs to ~1000 tools, so pass `search` to filter by name, id or category ('slope', 'stream', 'hydro'); without it you get the category names to search within. Call this before run_whitebox_tool.",
+    inputSchema: z.object({
+      search: z
+        .string()
+        .optional()
+        .describe("Filter by tool name, id or category, e.g. 'slope' or 'hydrology'."),
+    }),
+    callback: async (input) => {
+      const tools = await (await getScripting()).listWhiteboxTools();
+      const query = input.search?.trim().toLowerCase();
+      if (query) {
+        const matches = tools.filter((item) =>
+          `${item.name} ${item.id} ${item.category}`.toLowerCase().includes(query),
+        );
+        return json({
+          search: input.search,
+          matched: matches.length,
+          truncated: matches.length > MAX_WHITEBOX_MATCHES,
+          tools: matches.slice(0, MAX_WHITEBOX_MATCHES),
+        });
+      }
+      // ~1000 tools with full parameter lists is far too much to serialize, so
+      // an unfiltered call returns the categories to search within instead.
+      const categories = new Map<string, number>();
+      for (const item of tools) {
+        categories.set(item.category, (categories.get(item.category) ?? 0) + 1);
+      }
+      return json({
+        total: tools.length,
+        categories: [...categories]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([category, count]) => ({ category, tools: count })),
+        hint: "Call again with `search` (a category, a tool name, or a keyword like 'stream') to get exact ids and parameters.",
+      });
+    },
+  });
+
+  const runWhiteboxTool = tool({
+    name: "run_whitebox_tool",
+    description:
+      "Run a Whitebox tool by id (from list_whitebox_tools) in the browser via WASM and add its results as new layers. `params` is keyed by the tool's exact parameter names; a raster/vector input parameter takes a layer id (from list_layers). Chain steps by feeding one run's returned result layer id into the next. Returns the run log and the new layer id(s).",
+    inputSchema: z.object({
+      id: z.string().describe("Whitebox tool id, e.g. 'fill_depressions', 'slope'."),
+      params: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe("Parameter values keyed by parameter name; input parameters take a layer id."),
+    }),
+    callback: async (input) => {
+      const result = await (
+        await getScripting()
+      ).runWhiteboxTool({ id: input.id, params: input.params ?? {} });
       return json({
         logs: result.logs ?? [],
         resultLayerIds: result.resultLayerIds ?? [],
@@ -962,6 +1039,8 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
     addTileLayer,
     listAlgorithms,
     runAlgorithm,
+    listWhiteboxTools,
+    runWhiteboxTool,
     listModelAlgorithms,
     createModelBuilderModel,
     searchStac,
