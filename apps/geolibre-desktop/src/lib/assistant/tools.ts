@@ -744,7 +744,7 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
       inputs: z.array(
         z.object({
           key: z.string(),
-          layer: z.string().describe("Layer id (from list_layers) or its exact name."),
+          layer: z.string().describe("Layer id (from list_layers), or the layer's name."),
         }),
       ),
       steps: z.array(

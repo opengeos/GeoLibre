@@ -218,6 +218,49 @@ describe("AI-created Model Builder models", () => {
     );
   });
 
+  it("prefers an exact layer name and rejects an ambiguous one", () => {
+    const base = {
+      name: "Case",
+      inputs: [{ key: "roads", layer: "roads" }],
+      steps: [
+        {
+          key: "result",
+          algorithm: "buffer",
+          inputs: { layer: "roads" },
+          parameters: { distance: 100 },
+        },
+      ],
+      outputs: [{ source: "result", name: "Result" }],
+    };
+    // A single case-insensitive match still resolves: the assistant paraphrases
+    // casing, and there is nothing else the reference could mean.
+    const model = buildAssistantModel(base, layers, [BUFFER], ids());
+    const input = model.graph?.nodes.find((node) => node.kind === "input");
+    assert.equal(input?.layerId, "roads-id");
+
+    const cased = [...layers, { id: "roads-lower", name: "roads" } as GeoLibreLayer];
+    // The exact-case name wins over the case-insensitive one.
+    assert.equal(
+      buildAssistantModel(
+        { ...base, inputs: [{ key: "roads", layer: "Roads" }] },
+        cased,
+        [BUFFER],
+        ids(),
+      ).graph?.nodes.find((node) => node.kind === "input")?.layerId,
+      "roads-id",
+    );
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, inputs: [{ key: "roads", layer: "ROADS" }] },
+          cased,
+          [BUFFER],
+          ids(),
+        ),
+      /matches more than one layer name/,
+    );
+  });
+
   it("checks step parameters against the tool's own declaration", () => {
     const base = {
       name: "Bad parameters",

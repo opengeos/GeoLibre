@@ -151,8 +151,18 @@ export function buildAssistantModel(
   const resolveLayer = (reference: string): GeoLibreLayer | undefined => {
     const exactId = layers.find((layer) => layer.id === reference);
     if (exactId) return exactId;
-    const target = reference.trim().toLowerCase();
-    return layers.find((layer) => layer.name.toLowerCase() === target);
+    const trimmed = reference.trim();
+    const exactName = layers.find((layer) => layer.name === trimmed);
+    if (exactName) return exactName;
+    // The assistant paraphrases casing, so a name still matches case-insensitively
+    // — but only while it picks out a single layer. Two layers differing by case
+    // alone would otherwise silently resolve to whichever came first.
+    const target = trimmed.toLowerCase();
+    const matches = layers.filter((layer) => layer.name.toLowerCase() === target);
+    if (matches.length > 1) {
+      throw new Error(`"${reference}" matches more than one layer name; use the layer id.`);
+    }
+    return matches[0];
   };
 
   definition.inputs.forEach((input, index) => {
