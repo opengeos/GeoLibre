@@ -90,7 +90,19 @@ function buildToolGroups() {
   for (const tools of Object.values(CATALOGS)) {
     for (const tool of tools) {
       if (!tool.group) continue;
-      groups[toolGroupKey(tool.group)] = tool.group;
+      const key = toolGroupKey(tool.group);
+      // `toolGroupKey` strips punctuation, so two distinct labels can slug to
+      // the same key ("Sub Group" and "Sub-Group" both give `subGroup`). Left
+      // unchecked, the second label would silently overwrite the first and both
+      // headings would share one translation. Fail here instead: this is the
+      // only place that sees every label at once, and `--check` runs in CI.
+      if (groups[key] !== undefined && groups[key] !== tool.group) {
+        throw new Error(
+          `Group labels "${groups[key]}" and "${tool.group}" both map to the key ` +
+            `"${key}". Rename one, or make toolGroupKey distinguish them.`,
+        );
+      }
+      groups[key] = tool.group;
     }
   }
   // Sorted so the generated block has a stable order regardless of which
