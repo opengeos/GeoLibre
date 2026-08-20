@@ -4052,6 +4052,7 @@
       "untitledModel": "Modelo sin título",
       "newModel": "Nuevo",
       "discardChanges": "¿Descartar los cambios sin guardar del modelo actual?",
+      "discardRunning": "Todavía se está ejecutando un modelo. ¿Detenerlo y continuar?",
       "arrange": "Organizar",
       "arrangeHint": "Distribuir los nodos siguiendo el flujo",
       "runModel": "Ejecutar",

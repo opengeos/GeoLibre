@@ -466,11 +466,17 @@ export function ModelBuilderPanel({
    * the current model away, so each asks first rather than discarding unsaved
    * work silently. `window.confirm` is blocking and matches how the rest of
    * the app confirms a discard (see PythonEditorPane).
+   *
+   * A run in flight is unsaved work of a different kind — `resetRunState`
+   * aborts it — and a saved, unmodified model is not `dirty`, so it needs its
+   * own prompt. That matters most for the AI Assistant, which can request a
+   * model load the user never clicked; without this a background trigger would
+   * kill a running job with no confirmation at all.
    */
-  const confirmDiscard = useCallback(
-    () => !dirty || window.confirm(t("processing.modelBuilder.discardChanges")),
-    [dirty, t],
-  );
+  const confirmDiscard = useCallback(() => {
+    if (running && !window.confirm(t("processing.modelBuilder.discardRunning"))) return false;
+    return !dirty || window.confirm(t("processing.modelBuilder.discardChanges"));
+  }, [dirty, running, t]);
 
   /**
    * Room the layout gets to work with: the canvas's own visible width, so a

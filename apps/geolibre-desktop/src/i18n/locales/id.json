@@ -3985,6 +3985,7 @@
       "untitledModel": "Model tanpa judul",
       "newModel": "Baru",
       "discardChanges": "Buang perubahan yang belum disimpan pada model saat ini?",
+      "discardRunning": "Model masih berjalan. Hentikan dan lanjutkan?",
       "arrange": "Tata",
       "arrangeHint": "Menata simpul mengikuti alur",
       "runModel": "Jalankan",

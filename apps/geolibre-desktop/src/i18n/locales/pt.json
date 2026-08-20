@@ -4052,6 +4052,7 @@
       "untitledModel": "Modelo sem título",
       "newModel": "Novo",
       "discardChanges": "Descartar alterações não guardadas no modelo atual?",
+      "discardRunning": "Ainda está a decorrer uma execução do modelo. Parar e continuar?",
       "arrange": "Organizar",
       "arrangeHint": "Dispor os nós ao longo do fluxo",
       "runModel": "Executar",

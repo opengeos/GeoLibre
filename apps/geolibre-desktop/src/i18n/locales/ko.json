@@ -3985,6 +3985,7 @@
       "untitledModel": "제목 없는 모델",
       "newModel": "새로 만들기",
       "discardChanges": "현재 모델의 저장되지 않은 변경 사항을 취소하시겠습니까?",
+      "discardRunning": "모델 실행이 아직 진행 중입니다. 중지하고 계속하시겠습니까?",
       "arrange": "정렬",
       "arrangeHint": "노드를 처리 흐름에 따라 배치합니다",
       "runModel": "실행",

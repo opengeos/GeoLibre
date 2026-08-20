@@ -5,6 +5,7 @@ import {
   type GeoLibreLayer,
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
+import type { ModelToolDescriptor } from "@geolibre/processing";
 import type { InvokableTool, JSONValue } from "@strands-agents/sdk";
 import * as maplibregl from "maplibre-gl";
 import { tool } from "@strands-agents/sdk";
@@ -47,6 +48,22 @@ interface LayerSummary {
   geometryType: string | null;
   featureCount: number;
   fields: { name: string; type: string }[];
+}
+
+/**
+ * The algorithms the assistant may place in a Model Builder graph.
+ *
+ * `list_model_algorithms` and `create_model_builder_model` both read this one
+ * list, so the ids offered to the model and the ids `buildAssistantModel`
+ * resolves cannot drift apart. Imported dynamically to keep the processing
+ * registry out of the assistant's initial chunk.
+ */
+async function loadModelToolDescriptors(): Promise<ModelToolDescriptor[]> {
+  const [{ VECTOR_TOOLS }, { vectorToolDescriptor }] = await Promise.all([
+    import("@geolibre/processing"),
+    import("../model-tool-catalog"),
+  ]);
+  return VECTOR_TOOLS.map(vectorToolDescriptor);
 }
 
 /** Statement keywords that write data or have side effects. */
@@ -701,13 +718,13 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
       "List algorithms that can be placed in Model Builder, including their exact input-port and parameter ids. Call this before create_model_builder_model.",
     inputSchema: z.object({}),
     callback: async () => {
-      const [{ VECTOR_TOOLS }, { vectorToolDescriptor }] = await Promise.all([
-        import("@geolibre/processing"),
-        import("../model-tool-catalog"),
-      ]);
       return json({
-        algorithms: VECTOR_TOOLS.map(vectorToolDescriptor).map((descriptor) => ({
+        algorithms: (await loadModelToolDescriptors()).map((descriptor) => ({
           id: descriptor.toolId,
+          // The registry a tool came from is part of its identity: two
+          // registries can define the same id, so a step naming a colliding
+          // bare id is rejected until it is qualified as `provider:id`.
+          provider: descriptor.provider,
           name: descriptor.name,
           description: descriptor.description,
           inputs: descriptor.inputs,
@@ -736,15 +753,7 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
       outputs: z.array(z.object({ source: z.string(), name: z.string() })),
     }),
     callback: async (input) => {
-      const [{ VECTOR_TOOLS }, { vectorToolDescriptor }] = await Promise.all([
-        import("@geolibre/processing"),
-        import("../model-tool-catalog"),
-      ]);
-      const model = buildAssistantModel(
-        input,
-        store().layers,
-        VECTOR_TOOLS.map(vectorToolDescriptor),
-      );
+      const model = buildAssistantModel(input, store().layers, await loadModelToolDescriptors());
       store().saveModel(model);
       store().setModelBuilderRequestedModelId(model.id);
       store().setModelBuilderOpen(true);

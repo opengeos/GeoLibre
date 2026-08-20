@@ -4052,6 +4052,7 @@
       "untitledModel": "Naamloos model",
       "newModel": "Nieuw",
       "discardChanges": "Niet-opgeslagen wijzigingen aan het huidige model verwerpen?",
+      "discardRunning": "Er wordt nog een model uitgevoerd. Stoppen en doorgaan?",
       "arrange": "Ordenen",
       "arrangeHint": "De knooppunten langs de stroom ordenen",
       "runModel": "Uitvoeren",

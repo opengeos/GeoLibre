@@ -4052,6 +4052,7 @@
       "untitledModel": "Modèle sans titre",
       "newModel": "Nouveau",
       "discardChanges": "Annuler les modifications non enregistrées du modèle actuel ?",
+      "discardRunning": "Une exécution du modèle est encore en cours. L’arrêter et continuer ?",
       "arrange": "Organiser",
       "arrangeHint": "Disposer les nœuds le long du flux",
       "runModel": "Exécuter",

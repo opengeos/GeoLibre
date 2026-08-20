@@ -4071,6 +4071,7 @@
       "untitledModel": "Mô hình chưa đặt tên",
       "newModel": "Mới",
       "discardChanges": "Hủy các thay đổi chưa được lưu đối với mô hình hiện tại?",
+      "discardRunning": "Một lần chạy mô hình vẫn đang diễn ra. Dừng lại và tiếp tục?",
       "arrange": "Sắp xếp",
       "arrangeHint": "Sắp xếp các nút theo dòng xử lý",
       "runModel": "Chạy",

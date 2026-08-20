@@ -3985,6 +3985,7 @@
       "untitledModel": "名称未設定のモデル",
       "newModel": "新規",
       "discardChanges": "現在のモデルの未保存の変更を破棄しますか?",
+      "discardRunning": "モデルの実行がまだ進行中です。停止して続行しますか?",
       "arrange": "整列",
       "arrangeHint": "ノードを処理の流れに沿って並べます",
       "runModel": "実行",

@@ -29,6 +29,18 @@ const CLIP: ModelToolDescriptor = {
   parameters: [],
 };
 
+/** A same-id tool from the other registry, the collision `modelToolKey` guards. */
+const WHITEBOX_BUFFER: ModelToolDescriptor = {
+  key: "whitebox:buffer",
+  provider: "whitebox",
+  toolId: "buffer",
+  name: "Buffer Raster",
+  group: "Whitebox",
+  inputs: [{ id: "input", label: "Input", kind: "raster", required: true }],
+  outputs: [{ id: "out", label: "Output", kind: "raster" }],
+  parameters: [],
+};
+
 const layers = [
   { id: "roads-id", name: "Roads", type: "geojson" },
   { id: "counties-id", name: "Counties", type: "geojson" },
@@ -87,7 +99,14 @@ describe("AI-created Model Builder models", () => {
     const base = {
       name: "Bad model",
       inputs: [{ key: "roads", layer: "Roads" }],
-      steps: [{ key: "result", algorithm: "buffer", inputs: { layer: "roads" } }],
+      steps: [
+        {
+          key: "result",
+          algorithm: "buffer",
+          inputs: { layer: "roads" },
+          parameters: { distance: 100 },
+        },
+      ],
       outputs: [{ source: "result", name: "Result" }],
     };
     assert.throws(
@@ -129,6 +148,81 @@ describe("AI-created Model Builder models", () => {
           ids(),
         ),
       /Unknown model output source/,
+    );
+  });
+
+  it("keeps the provider part of a tool's identity", () => {
+    const base = {
+      name: "Colliding ids",
+      inputs: [{ key: "roads", layer: "Roads" }],
+      steps: [
+        {
+          key: "result",
+          algorithm: "buffer",
+          inputs: { layer: "roads" },
+          parameters: { distance: 100 },
+        },
+      ],
+      outputs: [{ source: "result", name: "Result" }],
+    };
+    // A bare id both registries define resolves to neither.
+    assert.throws(
+      () => buildAssistantModel(base, layers, [BUFFER, WHITEBOX_BUFFER], ids()),
+      /defined by more than one provider/,
+    );
+    const model = buildAssistantModel(
+      { ...base, steps: [{ ...base.steps[0], algorithm: "vector:buffer" }] },
+      layers,
+      [BUFFER, WHITEBOX_BUFFER],
+      ids(),
+    );
+    const tool = model.graph?.nodes.find((node) => node.kind === "tool");
+    assert.equal(tool?.provider, "vector");
+  });
+
+  it("checks step parameters against the tool's own declaration", () => {
+    const base = {
+      name: "Bad parameters",
+      inputs: [{ key: "roads", layer: "Roads" }],
+      steps: [
+        {
+          key: "result",
+          algorithm: "buffer",
+          inputs: { layer: "roads" },
+          parameters: { distance: 100 } as Record<string, unknown>,
+        },
+      ],
+      outputs: [{ source: "result", name: "Result" }],
+    };
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { distance: 100, invented: 1 } }] },
+          layers,
+          [BUFFER],
+          ids(),
+        ),
+      /has no parameter "invented"/,
+    );
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { distance: "far" } }] },
+          layers,
+          [BUFFER],
+          ids(),
+        ),
+      /expects a number value/,
+    );
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: {} }] },
+          layers,
+          [BUFFER],
+          ids(),
+        ),
+      /"distance" of "buffer" is required/,
     );
   });
 });

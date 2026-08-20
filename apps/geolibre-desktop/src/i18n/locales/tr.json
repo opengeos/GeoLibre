@@ -4052,6 +4052,7 @@
       "untitledModel": "Adsız model",
       "newModel": "Yeni",
       "discardChanges": "Mevcut modelin kaydedilmemiş değişiklikleri atılsın mı?",
+      "discardRunning": "Bir model çalışması hâlâ sürüyor. Durdurulup devam edilsin mi?",
       "arrange": "Düzenle",
       "arrangeHint": "Düğümleri akış boyunca dizer",
       "runModel": "Çalıştır",

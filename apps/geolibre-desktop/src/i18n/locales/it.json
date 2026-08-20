@@ -4052,6 +4052,7 @@
       "untitledModel": "Modello senza titolo",
       "newModel": "Nuovo",
       "discardChanges": "Scartare le modifiche non salvate del modello corrente?",
+      "discardRunning": "Un'esecuzione del modello è ancora in corso. Interromperla e continuare?",
       "arrange": "Disponi",
       "arrangeHint": "Dispone i nodi lungo il flusso",
       "runModel": "Esegui",

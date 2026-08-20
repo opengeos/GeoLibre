@@ -4052,6 +4052,7 @@
       "untitledModel": "Unbenanntes Modell",
       "newModel": "Neu",
       "discardChanges": "Nicht gespeicherte Änderungen am aktuellen Modell verwerfen?",
+      "discardRunning": "Ein Modelllauf läuft noch. Anhalten und fortfahren?",
       "arrange": "Anordnen",
       "arrangeHint": "Die Knoten entlang des Ablaufs anordnen",
       "runModel": "Ausführen",

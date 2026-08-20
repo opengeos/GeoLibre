@@ -4062,6 +4062,7 @@
       "untitledModel": "Untitled model",
       "newModel": "New",
       "discardChanges": "Discard unsaved changes to the current model?",
+      "discardRunning": "A model run is still in progress. Stop it and continue?",
       "arrange": "Arrange",
       "arrangeHint": "Lay the nodes out along the flow",
       "runModel": "Run",
