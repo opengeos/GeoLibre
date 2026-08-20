@@ -1976,10 +1976,7 @@ function applyVectorDataRenderLayers(
           ...zoomRange,
           ...(flatBelowZoom !== null
             ? {
-                minzoom: Math.min(
-                  zoomRange.maxzoom,
-                  Math.max(zoomRange.minzoom, flatBelowZoom),
-                ),
+                minzoom: Math.min(zoomRange.maxzoom, Math.max(zoomRange.minzoom, flatBelowZoom)),
               }
             : {}),
           filter: withFeatureFilters(layer, [
