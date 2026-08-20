@@ -1625,6 +1625,16 @@
     "exportCsv": "CSV exporteren",
     "exportGeoParquet": "GeoParquet exporteren"
   },
+  "auth": {
+    "unavailableTitle": "Aanmelden is niet beschikbaar",
+    "unavailableDescription": "GeoLibre kon de aanmeldservice niet bereiken en kan daarom niet vaststellen of u bent aangemeld. Dit is meestal tijdelijk; als het aanhoudt, vragen de authenticatie-instellingen van deze implementatie mogelijk om aandacht.",
+    "retry": "Opnieuw proberen",
+    "signInTitle": "Aanmelden bij GeoLibre",
+    "signInDescription": "Deze implementatie vereist een account. U wordt naar een beveiligde aanmeldpagina geleid en daarna hier teruggebracht.",
+    "signIn": "Aanmelden",
+    "signOut": "Afmelden",
+    "account": "Account"
+  },
   "basemapExtract": {
     "title": "Offline basiskaart extraheren",
     "url": "Basiskaart-URL",
@@ -4074,6 +4084,9 @@
       "importTooLarge": "Dat model is te groot om te openen.",
       "importModel": "Importeren",
       "exportModel": "Exporteren",
+      "copyPython": "Python-script kopiëren",
+      "pythonCopied": "Python-script is naar het klembord gekopieerd.",
+      "pythonCopyFailed": "Python-script kon niet worden gekopieerd",
       "savedModels": "Opgeslagen modellen",
       "loadModelPlaceholder": "Een opgeslagen model laden...",
       "deleteModel": "Verwijderen",
@@ -5663,15 +5676,5 @@
     "mapPoint": "Kaartpunt",
     "reply": "Beantwoorden",
     "replyPlaceholder": "Schrijf een antwoord..."
-  },
-  "auth": {
-    "unavailableTitle": "Aanmelden is niet beschikbaar",
-    "unavailableDescription": "GeoLibre kon de aanmeldservice niet bereiken en kan daarom niet vaststellen of u bent aangemeld. Dit is meestal tijdelijk; als het aanhoudt, vragen de authenticatie-instellingen van deze implementatie mogelijk om aandacht.",
-    "retry": "Opnieuw proberen",
-    "signInTitle": "Aanmelden bij GeoLibre",
-    "signInDescription": "Deze implementatie vereist een account. U wordt naar een beveiligde aanmeldpagina geleid en daarna hier teruggebracht.",
-    "signIn": "Aanmelden",
-    "signOut": "Afmelden",
-    "account": "Account"
   }
 }

@@ -1625,6 +1625,16 @@
     "exportCsv": "Esporta CSV",
     "exportGeoParquet": "Esporta GeoParquet"
   },
+  "auth": {
+    "unavailableTitle": "Accesso non disponibile",
+    "unavailableDescription": "GeoLibre non è riuscito a raggiungere il servizio di accesso, quindi non può sapere se hai effettuato l'accesso. Di solito è un problema temporaneo; se persiste, le impostazioni di autenticazione di questo deployment potrebbero richiedere attenzione.",
+    "retry": "Riprova",
+    "signInTitle": "Accedi a GeoLibre",
+    "signInDescription": "Questo deployment richiede un account. Verrai portato a una pagina di accesso sicura e poi riportato qui.",
+    "signIn": "Accedi",
+    "signOut": "Esci",
+    "account": "Account"
+  },
   "basemapExtract": {
     "title": "Estrai mappa di base offline",
     "url": "URL della mappa di base",
@@ -4074,6 +4084,9 @@
       "importTooLarge": "Questo modello è troppo grande da aprire.",
       "importModel": "Importa",
       "exportModel": "Esporta",
+      "copyPython": "Copia script Python",
+      "pythonCopied": "Lo script Python è stato copiato negli appunti.",
+      "pythonCopyFailed": "Impossibile copiare lo script Python",
       "savedModels": "Modelli salvati",
       "loadModelPlaceholder": "Carica un modello salvato...",
       "deleteModel": "Elimina",
@@ -5663,15 +5676,5 @@
     "mapPoint": "Punto sulla mappa",
     "reply": "Rispondi",
     "replyPlaceholder": "Scrivi una risposta..."
-  },
-  "auth": {
-    "unavailableTitle": "Accesso non disponibile",
-    "unavailableDescription": "GeoLibre non è riuscito a raggiungere il servizio di accesso, quindi non può sapere se hai effettuato l'accesso. Di solito è un problema temporaneo; se persiste, le impostazioni di autenticazione di questo deployment potrebbero richiedere attenzione.",
-    "retry": "Riprova",
-    "signInTitle": "Accedi a GeoLibre",
-    "signInDescription": "Questo deployment richiede un account. Verrai portato a una pagina di accesso sicura e poi riportato qui.",
-    "signIn": "Accedi",
-    "signOut": "Esci",
-    "account": "Account"
   }
 }

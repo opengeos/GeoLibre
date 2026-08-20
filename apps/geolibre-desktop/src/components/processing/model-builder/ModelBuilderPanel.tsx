@@ -32,6 +32,7 @@ import { Button, Input, Label, ScrollArea, Select, cn } from "@geolibre/ui";
 import {
   ChevronDown,
   ChevronUp,
+  Copy,
   Download,
   GripVertical,
   LayoutGrid,
@@ -64,6 +65,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { clamp } from "../../../lib/clamp";
 import { createDuckDbCapability } from "../../../lib/duckdb-processing";
+import { modelGraphToPython } from "../../../lib/model-python-script";
 import {
   buildModelToolCatalog,
   groupModelTools,
@@ -296,6 +298,8 @@ export function ModelBuilderPanel({
   const [search, setSearch] = useState("");
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  /** Script for the last graph that completed successfully, not later canvas edits. */
+  const [pythonScript, setPythonScript] = useState<string | null>(null);
   const [nodeStatus, setNodeStatus] = useState<Record<string, "running" | "done" | "error">>({});
   /**
    * The output port a keyboard/click user has armed, waiting for an input port
@@ -442,6 +446,7 @@ export function ModelBuilderPanel({
     // abortRun() clears the ref, so the in-flight run's `finally` no longer
     // matches its own controller and will not clear this itself.
     setRunning(false);
+    setPythonScript(null);
     setNodeStatus({});
     setLog([]);
   }, [abortRun]);
@@ -886,6 +891,7 @@ export function ModelBuilderPanel({
     const controller = new AbortController();
     abortRef.current = controller;
     setRunning(true);
+    setPythonScript(null);
     setNodeStatus({});
     const duckdb = createDuckDbCapability();
     // Outputs the host refused after the graph itself finished, so the summary
@@ -946,6 +952,7 @@ export function ModelBuilderPanel({
       // runModelGraph returns, so counting failures first would always read 0.
       await Promise.allSettled(pendingAdds);
       if (!controller.signal.aborted) {
+        if (!result.error) setPythonScript(modelGraphToPython(graph, resolveDescriptor));
         appendLog(
           result.error
             ? `${t("processing.modelBuilder.runFailed")}: ${result.error.message}`
@@ -963,6 +970,20 @@ export function ModelBuilderPanel({
       }
     }
   }, [issues.length, graph, resolveDescriptor, layers, addGeoJsonLayer, onAddRaster, appendLog, t]);
+
+  const handleCopyPython = useCallback(async () => {
+    if (!pythonScript) return;
+    try {
+      await navigator.clipboard.writeText(pythonScript);
+      appendLog(t("processing.modelBuilder.pythonCopied"));
+    } catch (error) {
+      appendLog(
+        `${t("processing.modelBuilder.pythonCopyFailed")}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }, [pythonScript, appendLog, t]);
 
   // --- Panel chrome -------------------------------------------------------
 
@@ -1313,6 +1334,18 @@ export function ModelBuilderPanel({
           >
             <Download className="h-3.5 w-3.5" />{" "}
             {!compact && t("processing.modelBuilder.exportModel")}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 shrink-0 gap-1 px-2"
+            onClick={() => void handleCopyPython()}
+            disabled={!pythonScript || running}
+            aria-label={t("processing.modelBuilder.copyPython")}
+            title={t("processing.modelBuilder.copyPython")}
+          >
+            <Copy className="h-3.5 w-3.5" />
+            {!compact && t("processing.modelBuilder.copyPython")}
           </Button>
           {running ? (
             <Button

@@ -1625,6 +1625,16 @@
     "exportCsv": "Exportar CSV",
     "exportGeoParquet": "Exportar GeoParquet"
   },
+  "auth": {
+    "unavailableTitle": "O login não está disponível",
+    "unavailableDescription": "O GeoLibre não conseguiu acessar o serviço de login, portanto não sabe se você está conectado. Isso costuma ser temporário; se persistir, as configurações de autenticação desta implantação podem precisar de atenção.",
+    "retry": "Tentar novamente",
+    "signInTitle": "Faça login no GeoLibre",
+    "signInDescription": "Esta implantação requer uma conta. Você será levado a uma página de login segura e retornará para cá.",
+    "signIn": "Entrar",
+    "signOut": "Sair",
+    "account": "Conta"
+  },
   "basemapExtract": {
     "title": "Extrair mapa base offline",
     "url": "URL do mapa base",
@@ -4074,6 +4084,9 @@
       "importTooLarge": "Esse modelo é demasiado grande para abrir.",
       "importModel": "Importar",
       "exportModel": "Exportar",
+      "copyPython": "Copiar script Python",
+      "pythonCopied": "O script Python foi copiado para a área de transferência.",
+      "pythonCopyFailed": "Não foi possível copiar o script Python",
       "savedModels": "Modelos guardados",
       "loadModelPlaceholder": "Carregar um modelo guardado...",
       "deleteModel": "Excluir",
@@ -5663,15 +5676,5 @@
     "mapPoint": "Ponto do mapa",
     "reply": "Responder",
     "replyPlaceholder": "Escreva uma resposta..."
-  },
-  "auth": {
-    "unavailableTitle": "O login não está disponível",
-    "unavailableDescription": "O GeoLibre não conseguiu acessar o serviço de login, portanto não sabe se você está conectado. Isso costuma ser temporário; se persistir, as configurações de autenticação desta implantação podem precisar de atenção.",
-    "retry": "Tentar novamente",
-    "signInTitle": "Faça login no GeoLibre",
-    "signInDescription": "Esta implantação requer uma conta. Você será levado a uma página de login segura e retornará para cá.",
-    "signIn": "Entrar",
-    "signOut": "Sair",
-    "account": "Conta"
   }
 }

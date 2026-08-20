@@ -1625,6 +1625,16 @@
     "exportCsv": "CSV Dışa Aktar",
     "exportGeoParquet": "GeoParquet Dışa Aktar"
   },
+  "auth": {
+    "unavailableTitle": "Oturum açma kullanılamıyor",
+    "unavailableDescription": "GeoLibre oturum açma hizmetine ulaşamadı, bu nedenle oturum açıp açmadığınızı belirleyemiyor. Bu durum genellikle geçicidir; sürerse bu dağıtımın kimlik doğrulama ayarlarının gözden geçirilmesi gerekebilir.",
+    "retry": "Yeniden dene",
+    "signInTitle": "GeoLibre'de oturum açın",
+    "signInDescription": "Bu dağıtım bir hesap gerektirir. Güvenli bir oturum açma sayfasına yönlendirilecek ve ardından buraya geri getirileceksiniz.",
+    "signIn": "Oturum aç",
+    "signOut": "Oturumu kapat",
+    "account": "Hesap"
+  },
   "basemapExtract": {
     "title": "Çevrimdışı Temel Harita Çıkar",
     "url": "Temel harita URL'si",
@@ -4074,6 +4084,9 @@
       "importTooLarge": "Bu model açılamayacak kadar büyük.",
       "importModel": "İçe aktar",
       "exportModel": "Dışa aktar",
+      "copyPython": "Python betiğini kopyala",
+      "pythonCopied": "Python betiği panoya kopyalandı.",
+      "pythonCopyFailed": "Python betiği kopyalanamadı",
       "savedModels": "Kayıtlı modeller",
       "loadModelPlaceholder": "Kayıtlı bir model yükle...",
       "deleteModel": "Sil",
@@ -5663,15 +5676,5 @@
     "mapPoint": "Harita Noktası",
     "reply": "Yanıtla",
     "replyPlaceholder": "Bir yanıt yazın..."
-  },
-  "auth": {
-    "unavailableTitle": "Oturum açma kullanılamıyor",
-    "unavailableDescription": "GeoLibre oturum açma hizmetine ulaşamadı, bu nedenle oturum açıp açmadığınızı belirleyemiyor. Bu durum genellikle geçicidir; sürerse bu dağıtımın kimlik doğrulama ayarlarının gözden geçirilmesi gerekebilir.",
-    "retry": "Yeniden dene",
-    "signInTitle": "GeoLibre'de oturum açın",
-    "signInDescription": "Bu dağıtım bir hesap gerektirir. Güvenli bir oturum açma sayfasına yönlendirilecek ve ardından buraya geri getirileceksiniz.",
-    "signIn": "Oturum aç",
-    "signOut": "Oturumu kapat",
-    "account": "Hesap"
   }
 }

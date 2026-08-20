@@ -1625,6 +1625,16 @@
     "exportCsv": "Exporter en CSV",
     "exportGeoParquet": "Exporter en GeoParquet"
   },
+  "auth": {
+    "unavailableTitle": "La connexion est indisponible",
+    "unavailableDescription": "GeoLibre n'a pas pu joindre le service de connexion et ne peut donc pas savoir si vous êtes connecté. Ce problème est généralement temporaire ; s'il persiste, les paramètres d'authentification de ce déploiement méritent peut-être une vérification.",
+    "retry": "Réessayer",
+    "signInTitle": "Connectez-vous à GeoLibre",
+    "signInDescription": "Ce déploiement nécessite un compte. Vous serez redirigé vers une page de connexion sécurisée, puis ramené ici.",
+    "signIn": "Se connecter",
+    "signOut": "Se déconnecter",
+    "account": "Compte"
+  },
   "basemapExtract": {
     "title": "Extraire un fond de carte hors ligne",
     "url": "URL du fond de carte",
@@ -4074,6 +4084,9 @@
       "importTooLarge": "Ce modèle est trop volumineux pour être ouvert.",
       "importModel": "Importer",
       "exportModel": "Exporter",
+      "copyPython": "Copier le script Python",
+      "pythonCopied": "Le script Python a été copié dans le presse-papiers.",
+      "pythonCopyFailed": "Impossible de copier le script Python",
       "savedModels": "Modèles enregistrés",
       "loadModelPlaceholder": "Charger un modèle enregistré...",
       "deleteModel": "Supprimer",
@@ -5663,15 +5676,5 @@
     "mapPoint": "Point de la carte",
     "reply": "Répondre",
     "replyPlaceholder": "Écrire une réponse..."
-  },
-  "auth": {
-    "unavailableTitle": "La connexion est indisponible",
-    "unavailableDescription": "GeoLibre n'a pas pu joindre le service de connexion et ne peut donc pas savoir si vous êtes connecté. Ce problème est généralement temporaire ; s'il persiste, les paramètres d'authentification de ce déploiement méritent peut-être une vérification.",
-    "retry": "Réessayer",
-    "signInTitle": "Connectez-vous à GeoLibre",
-    "signInDescription": "Ce déploiement nécessite un compte. Vous serez redirigé vers une page de connexion sécurisée, puis ramené ici.",
-    "signIn": "Se connecter",
-    "signOut": "Se déconnecter",
-    "account": "Compte"
   }
 }
