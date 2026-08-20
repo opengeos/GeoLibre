@@ -188,6 +188,26 @@ export function buildAssistantModel(
         toPort: portId,
       });
     }
+    // A layer slot no edge supplies names a project layer by hand. The canvas's
+    // own field is a picker that can only store a real `layer.id`, but the
+    // assistant sees the same slot as free text and may write a layer name —
+    // which passes every structural check and then fails at Run time, where
+    // `layerToModelValue` looks the value up by exact id. Resolve it here the
+    // way `definition.inputs` is resolved, so the saved graph holds ids only.
+    const layerSlots = new Set(descriptor.inputs.map((port) => port.id));
+    for (const param of descriptor.parameters) {
+      if (param.type === "layer") layerSlots.add(param.id);
+    }
+    for (const slot of layerSlots) {
+      if (wired.has(slot)) continue;
+      const raw = parameters[slot];
+      if (typeof raw !== "string" || !raw) continue;
+      const layer = resolveLayer(raw);
+      if (!layer) {
+        throw new Error(`No layer matching "${raw}" for "${slot}" of "${step.algorithm}".`);
+      }
+      parameters[slot] = layer.id;
+    }
     checkStepParameters(step, descriptor, parameters, wired);
     nodes.push({
       id,

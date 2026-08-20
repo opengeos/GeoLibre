@@ -12,7 +12,12 @@ const BUFFER: ModelToolDescriptor = {
   group: "Geometry",
   inputs: [{ id: "layer", label: "Input", kind: "vector", required: true }],
   outputs: [{ id: "out", label: "Output", kind: "vector" }],
-  parameters: [{ id: "distance", label: "Distance", type: "number", required: true }],
+  // `vectorToolDescriptor` lists a layer parameter as both a port and a
+  // parameter, so a single-node model can name a layer without an input node.
+  parameters: [
+    { id: "layer", label: "Input", type: "layer", required: true },
+    { id: "distance", label: "Distance", type: "number", required: true },
+  ],
 };
 
 const CLIP: ModelToolDescriptor = {
@@ -26,7 +31,10 @@ const CLIP: ModelToolDescriptor = {
     { id: "overlay", label: "Overlay", kind: "vector", required: true },
   ],
   outputs: [{ id: "out", label: "Output", kind: "vector" }],
-  parameters: [],
+  parameters: [
+    { id: "layer", label: "Input", type: "layer", required: true },
+    { id: "overlay", label: "Overlay", type: "layer", required: true },
+  ],
 };
 
 /** A same-id tool from the other registry, the collision `modelToolKey` guards. */
@@ -178,6 +186,36 @@ describe("AI-created Model Builder models", () => {
     );
     const tool = model.graph?.nodes.find((node) => node.kind === "tool");
     assert.equal(tool?.provider, "vector");
+  });
+
+  it("resolves a layer named in parameters rather than wired to a port", () => {
+    const base = {
+      name: "Named layer",
+      inputs: [],
+      steps: [
+        {
+          key: "result",
+          algorithm: "buffer",
+          inputs: {},
+          parameters: { layer: "Roads", distance: 100 } as Record<string, unknown>,
+        },
+      ],
+      outputs: [{ source: "result", name: "Result" }],
+    };
+    const model = buildAssistantModel(base, layers, [BUFFER], ids());
+    const tool = model.graph?.nodes.find((node) => node.kind === "tool");
+    // Run time looks the value up by exact id, so the name must not survive.
+    assert.equal(tool?.parameters?.layer, "roads-id");
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layer: "Rivers", distance: 1 } }] },
+          layers,
+          [BUFFER],
+          ids(),
+        ),
+      /No layer matching "Rivers"/,
+    );
   });
 
   it("checks step parameters against the tool's own declaration", () => {
