@@ -39,7 +39,7 @@ const SKETCHES_LAYER_NAME = "Sketches";
 const SKETCHES_SOURCE_PATH = "geoeditor://sketches";
 const GEOMAN_TEXT_PROPERTY = "__gm_text";
 const MASSING_HEIGHT_EXPRESSION =
-  '["step",["zoom"],0.01,12,["case",["has","height"],["max",0,["to-number",["get","height"],0]],0.01]]';
+  '["step",["zoom"],0,12,["case",["has","height"],["max",0,["to-number",["get","height"],0]],0]]';
 
 type PreMassingExtrusionStyle = Pick<
   GeoLibreLayer["style"],

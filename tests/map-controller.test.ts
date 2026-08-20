@@ -630,6 +630,45 @@ describe("MapController.syncLayers reconciliation", () => {
       false,
     ]);
   });
+
+  it("renders zoom-gated extrusions as flat fills below their cutoff", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const layer = pointLayer("massing", {
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        extrusionEnabled: true,
+        extrusionAdvancedStyleEnabled: true,
+        extrusionHeightExpression:
+          '["step",["zoom"],0,12,["max",0,["to-number",["get","height"],0]]]',
+      },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { height: 10 },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    controller.syncLayers([layer]);
+
+    assert.equal(fake.layers.get("layer-massing-fill")?.maxzoom, 12);
+    assert.equal(fake.layers.get("layer-massing-extrusion")?.minzoom, 12);
+  });
 });
 
 function vectorTileLayer(id: string, patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {

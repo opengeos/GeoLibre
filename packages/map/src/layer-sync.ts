@@ -367,6 +367,33 @@ function styleLayerZoomRange(style: LayerStyle): {
   };
 }
 
+/**
+ * Return the first zoom where a zoom-stepped extrusion becomes non-flat.
+ * A zero-height fill-extrusion is still triangulated as 3D geometry by
+ * MapLibre and can produce large tile-boundary shards on the globe. Callers
+ * use this cutoff to render an ordinary fill below it instead.
+ */
+function flatExtrusionCutoff(style: LayerStyle): number | null {
+  if (!style.extrusionAdvancedStyleEnabled || !style.extrusionHeightExpression) return null;
+  try {
+    const expression: unknown = JSON.parse(style.extrusionHeightExpression);
+    if (
+      Array.isArray(expression) &&
+      expression[0] === "step" &&
+      Array.isArray(expression[1]) &&
+      expression[1][0] === "zoom" &&
+      expression[2] === 0 &&
+      typeof expression[3] === "number" &&
+      Number.isFinite(expression[3])
+    ) {
+      return clampLayerZoom(expression[3], MIN_LAYER_ZOOM);
+    }
+  } catch {
+    // Invalid expressions are handled by the existing style-expression path.
+  }
+  return null;
+}
+
 // Intersect a native layer's source-declared zoom range with the user-configured
 // style range, taking the tighter bound on each end. This keeps a tile
 // service's zoom floor/ceiling intact while still letting the user narrow the
@@ -1908,7 +1935,37 @@ function applyVectorDataRenderLayers(
 
   if (profile.hasPolygon) {
     if (layer.style.extrusionEnabled) {
-      removeIfExists(map, fillLayerId(layer.id));
+      const zoomRange = styleLayerZoomRange(layer.style);
+      const flatBelowZoom = flatExtrusionCutoff(layer.style);
+      const hasFlatRange = flatBelowZoom !== null && zoomRange.minzoom < flatBelowZoom;
+      if (hasFlatRange) {
+        ensureLayer(
+          map,
+          fillLayerId(layer.id),
+          {
+            id: fillLayerId(layer.id),
+            type: "fill",
+            ...sourceSpec,
+            minzoom: zoomRange.minzoom,
+            maxzoom: Math.min(zoomRange.maxzoom, flatBelowZoom),
+            filter: withFeatureFilters(layer, [
+              "match",
+              ["geometry-type"],
+              ["Polygon", "MultiPolygon"],
+              true,
+              false,
+            ]),
+            paint: {
+              ...fillPaint(layer.style, opacity),
+              "fill-pattern": (fillPatternId ?? null) as unknown as string,
+            },
+            layout: { visibility },
+          },
+          beforeId,
+        );
+      } else {
+        removeIfExists(map, fillLayerId(layer.id));
+      }
       ensureLayer(
         map,
         fillExtrusionLayerId(layer.id),
@@ -1916,7 +1973,15 @@ function applyVectorDataRenderLayers(
           id: fillExtrusionLayerId(layer.id),
           type: "fill-extrusion",
           ...sourceSpec,
-          ...styleLayerZoomRange(layer.style),
+          ...zoomRange,
+          ...(flatBelowZoom !== null
+            ? {
+                minzoom: Math.min(
+                  zoomRange.maxzoom,
+                  Math.max(zoomRange.minzoom, flatBelowZoom),
+                ),
+              }
+            : {}),
           filter: withFeatureFilters(layer, [
             "match",
             ["geometry-type"],
