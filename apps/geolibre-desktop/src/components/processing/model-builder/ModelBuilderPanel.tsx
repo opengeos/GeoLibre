@@ -1826,6 +1826,26 @@ function translateIssue(t: TFunction, issue: ModelGraphIssue): string {
   }
 }
 
+/**
+ * Display name for a tool node, translated where GeoLibre owns the metadata.
+ *
+ * The palette, the canvas card, the inspector header and the run log all name
+ * the same tool, so they resolve it the same way; a raw `descriptor.name` at any
+ * one of them shows an English tool name inside an otherwise translated dialog.
+ * Whitebox descriptors resolve to their catalog text, as everywhere else.
+ */
+function descriptorName(
+  t: TFunction,
+  descriptor: ModelToolDescriptor | undefined,
+  fallback = "",
+): string {
+  if (!descriptor) return fallback;
+  return translateToolName(t, modelProviderCatalog(descriptor.provider), {
+    id: descriptor.toolId,
+    name: descriptor.name,
+  });
+}
+
 /** Display name for a port, translating the two synthetic node ports. */
 function portLabel(t: TFunction, label: string): string {
   if (label === INPUT_NODE_PORT) return t("processing.modelBuilder.outputNode");
@@ -1974,7 +1994,7 @@ const GraphNodeCard = memo(function GraphNodeCard({
         t("processing.modelBuilder.inputNode"))
       : node.kind === "output"
         ? node.name?.trim() || t("processing.modelBuilder.outputNode")
-        : (descriptor?.name ?? node.toolId ?? "");
+        : descriptorName(t, descriptor, node.toolId ?? "");
 
   return (
     // Focusable with a role, so the card can be reached and selected from the
@@ -2162,7 +2182,7 @@ function NodeInspector({
       <div className="flex items-center justify-between gap-2">
         <p className="truncate text-xs font-semibold">
           {node.kind === "tool"
-            ? (descriptor?.name ?? node.toolId)
+            ? descriptorName(t, descriptor, node.toolId ?? "")
             : node.kind === "input"
               ? t("processing.modelBuilder.inputNode")
               : t("processing.modelBuilder.outputNode")}
@@ -2429,7 +2449,9 @@ async function executeModelTool({
       signal,
     });
     if (!output)
-      throw new Error(t("processing.modelBuilder.toolNoOutput", { tool: descriptor.name }));
+      throw new Error(
+        t("processing.modelBuilder.toolNoOutput", { tool: descriptorName(t, descriptor) }),
+      );
     return { out: { kind: "vector", geojson: output } };
   }
 
@@ -2471,7 +2493,9 @@ async function executeModelTool({
     }
   }
   if (Object.keys(results).length === 0) {
-    throw new Error(t("processing.modelBuilder.toolNoUsableOutput", { tool: descriptor.name }));
+    throw new Error(
+      t("processing.modelBuilder.toolNoUsableOutput", { tool: descriptorName(t, descriptor) }),
+    );
   }
   return results;
 }
