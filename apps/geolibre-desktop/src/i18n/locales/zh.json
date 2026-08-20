@@ -3984,6 +3984,7 @@
       "modelNamePlaceholder": "未命名模型",
       "untitledModel": "未命名模型",
       "newModel": "新建",
+      "discardChanges": "是否放弃当前模型的未保存更改？",
       "arrange": "排列",
       "arrangeHint": "沿处理流程排列节点",
       "runModel": "运行",

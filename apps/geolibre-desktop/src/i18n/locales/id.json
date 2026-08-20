@@ -3984,6 +3984,7 @@
       "modelNamePlaceholder": "Model tanpa judul",
       "untitledModel": "Model tanpa judul",
       "newModel": "Baru",
+      "discardChanges": "Buang perubahan yang belum disimpan pada model saat ini?",
       "arrange": "Tata",
       "arrangeHint": "Menata simpul mengikuti alur",
       "runModel": "Jalankan",

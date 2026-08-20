@@ -9,6 +9,7 @@ import {
   connectNodes,
   createsCycle,
   emptyModelGraph,
+  graphsEqual,
   layoutGraph,
   moveNode,
   removeEdge,
@@ -358,5 +359,79 @@ describe("auto layout", () => {
   it("leaves an empty graph untouched when arranging", () => {
     const graph: ProcessingModelGraph = { nodes: [], edges: [] };
     assert.deepEqual(layoutGraph(graph), graph);
+  });
+});
+
+describe("graphsEqual", () => {
+  const base = (): ProcessingModelGraph => ({
+    nodes: [
+      { id: "a", kind: "input", x: 10, y: 20, layerId: "roads" },
+      {
+        id: "b",
+        kind: "tool",
+        x: 30,
+        y: 40,
+        provider: "vector",
+        toolId: "buffer",
+        parameters: { distance: 5, units: "km" },
+      },
+    ],
+    edges: [{ id: "e1", from: "a", fromPort: "out", to: "b", toPort: "layer" }],
+  });
+
+  it("treats a graph as equal to itself", () => {
+    const graph = base();
+    assert.equal(graphsEqual(graph, graph), true);
+    assert.equal(graphsEqual(graph, base()), true);
+  });
+
+  it("ignores the order keys were written in", () => {
+    // Parameters are built up by several code paths, so the same model can
+    // stringify two ways; that must not read as an unsaved edit.
+    const other = base();
+    other.nodes[1].parameters = { units: "km", distance: 5 };
+    assert.equal(graphsEqual(base(), other), true);
+  });
+
+  it("ignores the order nodes sit in the array", () => {
+    // settleNode re-appends a dragged node so it paints last, which reorders
+    // `nodes` without changing the model.
+    const other = base();
+    other.nodes.reverse();
+    assert.equal(graphsEqual(base(), other), true);
+  });
+
+  it("treats an absent key and an undefined one as the same", () => {
+    const other = base();
+    other.nodes[0].name = undefined;
+    assert.equal(graphsEqual(base(), other), true);
+  });
+
+  it("sees a moved node as a change", () => {
+    const other = base();
+    other.nodes[0].x = 999;
+    assert.equal(graphsEqual(base(), other), false);
+  });
+
+  it("sees an edited parameter as a change", () => {
+    const other = base();
+    other.nodes[1].parameters = { distance: 6, units: "km" };
+    assert.equal(graphsEqual(base(), other), false);
+  });
+
+  it("sees an added or removed edge as a change", () => {
+    const other = base();
+    other.edges = [];
+    assert.equal(graphsEqual(base(), other), false);
+  });
+
+  it("sees a rewired edge as a change", () => {
+    const other = base();
+    other.edges[0].toPort = "overlay";
+    assert.equal(graphsEqual(base(), other), false);
+  });
+
+  it("treats two empty graphs as equal", () => {
+    assert.equal(graphsEqual(emptyModelGraph(), emptyModelGraph()), true);
   });
 });

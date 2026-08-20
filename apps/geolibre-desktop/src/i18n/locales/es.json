@@ -4051,6 +4051,7 @@
       "modelNamePlaceholder": "Modelo sin título",
       "untitledModel": "Modelo sin título",
       "newModel": "Nuevo",
+      "discardChanges": "¿Descartar los cambios sin guardar del modelo actual?",
       "arrange": "Organizar",
       "arrangeHint": "Distribuir los nodos siguiendo el flujo",
       "runModel": "Ejecutar",

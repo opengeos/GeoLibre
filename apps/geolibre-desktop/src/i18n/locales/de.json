@@ -4051,6 +4051,7 @@
       "modelNamePlaceholder": "Unbenanntes Modell",
       "untitledModel": "Unbenanntes Modell",
       "newModel": "Neu",
+      "discardChanges": "Nicht gespeicherte Änderungen am aktuellen Modell verwerfen?",
       "arrange": "Anordnen",
       "arrangeHint": "Die Knoten entlang des Ablaufs anordnen",
       "runModel": "Ausführen",

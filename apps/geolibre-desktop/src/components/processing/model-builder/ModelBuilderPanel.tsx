@@ -71,6 +71,7 @@ import {
   autoLayout,
   connectNodes,
   emptyModelGraph,
+  graphsEqual,
   layoutGraph,
   moveNode,
   removeEdge,
@@ -310,23 +311,54 @@ export function ModelBuilderPanel({
     setLog([]);
   }, [abortRun]);
 
+  /** The name Save would write, so the dirty check compares like with like. */
+  const savedName = modelName.trim() || t("processing.modelBuilder.untitledModel");
+
+  /**
+   * True when the canvas holds work Save has not written to the project.
+   *
+   * An untouched empty canvas is not unsaved work, so a freshly opened panel
+   * never prompts. A model that has never been saved counts as dirty as soon
+   * as it has a node or a name.
+   */
+  const dirty = useMemo(() => {
+    if (graph.nodes.length === 0 && graph.edges.length === 0 && !modelName.trim()) return false;
+    const saved = savedModels.find((model) => model.id === modelId);
+    if (!saved) return true;
+    if (saved.name !== savedName) return true;
+    return !graphsEqual(saved.graph ?? emptyModelGraph(), graph);
+  }, [graph, modelName, savedName, modelId, savedModels]);
+
+  /**
+   * Gate an action that replaces the canvas. New, Load and Import all throw
+   * the current model away, so each asks first rather than discarding unsaved
+   * work silently. `window.confirm` is blocking and matches how the rest of
+   * the app confirms a discard (see PythonEditorPane).
+   */
+  const confirmDiscard = useCallback(
+    () => !dirty || window.confirm(t("processing.modelBuilder.discardChanges")),
+    [dirty, t],
+  );
+
   const handleNewModel = useCallback(() => {
+    if (!confirmDiscard()) return;
     setModelId(createId());
     setModelName("");
     setGraph(emptyModelGraph());
     setSelectedNodeId(null);
     resetRunState();
-  }, [resetRunState]);
+  }, [confirmDiscard, resetRunState]);
 
   const handleLoadModel = useCallback(
     (model: ProcessingModel) => {
+      if (!confirmDiscard()) return;
       setModelId(model.id);
       setModelName(model.name);
       setGraph(autoLayout(model.graph ?? stepsToGraph(model)));
       setSelectedNodeId(null);
       resetRunState();
     },
-    [resetRunState],
+    [confirmDiscard, resetRunState],
   );
 
   /**
@@ -384,6 +416,7 @@ export function ModelBuilderPanel({
 
   const handleImport = useCallback(
     async (file: File) => {
+      if (!confirmDiscard()) return;
       try {
         // Bounded before the read, so an obviously-too-large file never gets
         // decoded and parsed in full just to be rejected afterwards.
@@ -421,7 +454,7 @@ export function ModelBuilderPanel({
         appendLog(`${t("processing.modelBuilder.importFailed")}: ${(err as Error).message}`);
       }
     },
-    [appendLog, resetRunState, t],
+    [appendLog, confirmDiscard, resetRunState, t],
   );
 
   // --- Canvas interaction -------------------------------------------------

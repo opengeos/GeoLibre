@@ -4051,6 +4051,7 @@
       "modelNamePlaceholder": "Adsız model",
       "untitledModel": "Adsız model",
       "newModel": "Yeni",
+      "discardChanges": "Mevcut modelin kaydedilmemiş değişiklikleri atılsın mı?",
       "arrange": "Düzenle",
       "arrangeHint": "Düğümleri akış boyunca dizer",
       "runModel": "Çalıştır",

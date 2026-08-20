@@ -3984,6 +3984,7 @@
       "modelNamePlaceholder": "名称未設定のモデル",
       "untitledModel": "名称未設定のモデル",
       "newModel": "新規",
+      "discardChanges": "現在のモデルの未保存の変更を破棄しますか?",
       "arrange": "整列",
       "arrangeHint": "ノードを処理の流れに沿って並べます",
       "runModel": "実行",

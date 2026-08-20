@@ -4051,6 +4051,7 @@
       "modelNamePlaceholder": "Modèle sans titre",
       "untitledModel": "Modèle sans titre",
       "newModel": "Nouveau",
+      "discardChanges": "Annuler les modifications non enregistrées du modèle actuel ?",
       "arrange": "Organiser",
       "arrangeHint": "Disposer les nœuds le long du flux",
       "runModel": "Exécuter",

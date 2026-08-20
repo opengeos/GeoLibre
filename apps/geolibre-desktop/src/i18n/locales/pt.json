@@ -4051,6 +4051,7 @@
       "modelNamePlaceholder": "Modelo sem título",
       "untitledModel": "Modelo sem título",
       "newModel": "Novo",
+      "discardChanges": "Descartar alterações não guardadas no modelo atual?",
       "arrange": "Organizar",
       "arrangeHint": "Dispor os nós ao longo do fluxo",
       "runModel": "Executar",

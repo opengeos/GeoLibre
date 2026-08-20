@@ -341,3 +341,46 @@ export function layoutGraph(graph: ProcessingModelGraph): ProcessingModelGraph {
     }),
   };
 }
+
+/**
+ * Serialize a value with object keys in a stable order, so two structurally
+ * equal values always produce the same string.
+ *
+ * `JSON.stringify` preserves insertion order, and a node's `parameters` are
+ * built up by different code paths (typed in the inspector, restored from a
+ * project file, copied from a descriptor default), so the same model can
+ * stringify two ways. Comparing those raw would report an edit that is not
+ * there.
+ */
+function stableKey(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(stableKey).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    // An absent key and a key set to undefined mean the same thing here, and
+    // JSON.stringify drops the latter — so drop it on both sides.
+    .filter(([, entry]) => entry !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${stableKey(entry)}`).join(",")}}`;
+}
+
+/**
+ * Compare two graphs by content, ignoring key order and the order nodes and
+ * edges happen to sit in their arrays.
+ *
+ * Backs the Model Builder's unsaved-work check. Array order is deliberately
+ * ignored: {@link settleNode} re-appends a dragged node so it paints last, which
+ * reorders `nodes` without changing the model. Positions, on the other hand,
+ * *are* compared — moving a card is an edit the user would not expect a New or
+ * Load to throw away without asking.
+ *
+ * @param a One graph.
+ * @param b The other.
+ * @returns True when the two describe the same model.
+ */
+export function graphsEqual(a: ProcessingModelGraph, b: ProcessingModelGraph): boolean {
+  if (a === b) return true;
+  if (a.nodes.length !== b.nodes.length || a.edges.length !== b.edges.length) return false;
+  const canonical = (graph: ProcessingModelGraph): string =>
+    `${graph.nodes.map(stableKey).sort().join("|")}#${graph.edges.map(stableKey).sort().join("|")}`;
+  return canonical(a) === canonical(b);
+}

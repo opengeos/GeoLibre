@@ -4070,6 +4070,7 @@
       "modelNamePlaceholder": "Mô hình chưa đặt tên",
       "untitledModel": "Mô hình chưa đặt tên",
       "newModel": "Mới",
+      "discardChanges": "Hủy các thay đổi chưa được lưu đối với mô hình hiện tại?",
       "arrange": "Sắp xếp",
       "arrangeHint": "Sắp xếp các nút theo dòng xử lý",
       "runModel": "Chạy",

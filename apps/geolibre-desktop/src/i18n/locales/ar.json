@@ -4318,6 +4318,7 @@
       "modelNamePlaceholder": "نموذج بلا عنوان",
       "untitledModel": "نموذج بلا عنوان",
       "newModel": "جديد",
+      "discardChanges": "هل تريد تجاهل التغييرات غير المحفوظة في النموذج الحالي؟",
       "arrange": "ترتيب",
       "arrangeHint": "ترتيب العقد على امتداد مسار التدفق",
       "runModel": "تشغيل",

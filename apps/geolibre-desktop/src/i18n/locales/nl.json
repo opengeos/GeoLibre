@@ -4051,6 +4051,7 @@
       "modelNamePlaceholder": "Naamloos model",
       "untitledModel": "Naamloos model",
       "newModel": "Nieuw",
+      "discardChanges": "Niet-opgeslagen wijzigingen aan het huidige model verwerpen?",
       "arrange": "Ordenen",
       "arrangeHint": "De knooppunten langs de stroom ordenen",
       "runModel": "Uitvoeren",
