@@ -46,6 +46,15 @@ export {
 // reuse the title-resolve-or-fallback + per-id warning-dedup behavior instead
 // of re-implementing (and drifting from) it.
 export { PanelTitleResolver } from "./panel-title";
+// Same rationale as PanelTitleResolver: the toolbar-menu label resolver is the
+// one place that decides how a `string | (() => string)` label becomes display
+// text, so hosts rendering plugin menus share its fallback/dedup behavior.
+export {
+  isToolbarLabel,
+  resetToolbarLabelWarnings,
+  resolveToolbarLabel,
+  type GeoLibreToolbarLabel,
+} from "./toolbar-menu-label";
 export { maplibreLayerControlPlugin } from "./plugins/layer-control";
 export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";

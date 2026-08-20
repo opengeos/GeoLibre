@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { detectGeometryProfile, type MapController } from "@geolibre/map";
@@ -22,6 +23,12 @@ import {
   ScrollArea,
   Select,
 } from "@geolibre/ui";
+import {
+  translateParameter,
+  translateToolDescription,
+  translateToolGroup,
+  translateToolName,
+} from "../../lib/processing-tool-i18n";
 import { ParameterField } from "./ParameterField";
 import { Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
@@ -51,14 +58,14 @@ function groupedTools(): { group: string; tools: ProcessingAlgorithm[] }[] {
 }
 
 /** Render a `<select>`'s tool options grouped by registry group. */
-function ToolOptions(): ReactElement {
+function ToolOptions({ t }: { t: TFunction }): ReactElement {
   return (
     <>
       {groupedTools().map((group) => (
-        <optgroup key={group.group} label={group.group}>
+        <optgroup key={group.group} label={translateToolGroup(t, group.group)}>
           {group.tools.map((tool) => (
             <option key={tool.id} value={tool.id}>
-              {tool.name}
+              {translateToolName(t, "vector", tool)}
             </option>
           ))}
         </optgroup>
@@ -333,9 +340,11 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
       <div className="flex flex-col gap-1">
         <Label className="text-xs">{t("processing.batchTools.tool")}</Label>
         <Select value={toolId} onChange={(e) => setToolId(e.target.value)}>
-          <ToolOptions />
+          <ToolOptions t={t} />
         </Select>
-        <p className="text-xs text-muted-foreground">{tool.description}</p>
+        <p className="text-xs text-muted-foreground">
+          {translateToolDescription(t, "vector", tool)}
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -354,7 +363,7 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
               .map((param) => (
                 <ParameterField
                   key={param.id}
-                  param={param}
+                  param={translateParameter(t, "vector", tool.id, param)}
                   value={params[param.id]}
                   layerOptions={layerOptions(param.geometryFilter)}
                   fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}

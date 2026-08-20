@@ -163,6 +163,14 @@ export interface GeoLibreAppAPI {
   getActiveRightPanel?: () => string | null;
   setActiveRightPanelDock?: (dock: GeoLibreRightPanelDock) => void;
   getActiveRightPanelDock?: () => GeoLibreRightPanelDock | null;
+  // Localization (see "Following the app language" below).
+  getLocale?: () => string;
+  onLocaleChange?: (listener: (locale: string) => void) => () => void;
+  translate?: (
+    key: string,
+    defaultValue: string,
+    params?: Record<string, string | number>,
+  ) => string;
   // Top toolbar menus (see "Toolbar menus" below).
   registerToolbarMenu?: (menu: GeoLibreToolbarMenu) => () => void;
   unregisterToolbarMenu?: (id: string) => void;
@@ -833,6 +841,49 @@ const unregister = app.registerToolbarMenu?.({
 Each item is an **action** (`onSelect`, the default when `type` is omitted), a **submenu** (nested `items`), or a **separator**. Items typically open a right panel or a floating panel, but `onSelect` can run anything. Re-registering the same `id` replaces the menu, so you can rebuild it as your plugin's state changes.
 
 Menus from **external plugins** (loaded from a zip, a manifest URL, or a bundled drop-in) render at the end of the banner, after the Help menu, so third-party menus sit together past the built-in menus. Menus from built-in plugins render beside the built-in menus. The host decides placement from the menu's owning plugin, so you do not need to do anything special.
+
+Every `label` (the menu button's, a submenu trigger's, an action's) accepts a **getter function** as well as a plain string, the same way panel titles do:
+
+```typescript
+app.registerToolbarMenu?.({
+  id: "my-plugin-menu",
+  label: () => app.translate?.("plugin.my-plugin.menu", "Workbench") ?? "Workbench",
+  items: [
+    {
+      id: "open",
+      label: () => app.translate?.("plugin.my-plugin.open", "Open workbench") ?? "Open workbench",
+      onSelect: () => app.openRightPanel?.("my-workbench"),
+    },
+  ],
+});
+```
+
+The host re-reads every label each time it renders the menu tree, and it re-renders on a language change, so a getter follows the app language without your plugin re-registering its menu. A plain string is frozen at registration time. A getter that throws or returns nothing usable degrades to the item's id path and warns once, so a broken label cannot make the menu disappear.
+
+## Following the app language
+
+The GeoLibre UI is translated with react-i18next, but a plugin renders its panels as plain DOM and cannot use the host's React hooks. Three methods bridge that gap:
+
+```typescript
+// The active catalog code ("en", "zh", "pt-BR", ...).
+const locale = app.getLocale?.() ?? "en";
+
+// Resolve a key, falling back to your own English text when no catalog has it.
+const title = app.translate?.("plugin.my-plugin.title", "Workbench") ?? "Workbench";
+const label = app.translate?.("plugin.my-plugin.count", "{{n}} features", { n: 3 });
+
+// Re-render when the user switches language. Returns an unsubscribe function —
+// call it from `deactivate`, or the listener keeps re-rendering DOM you no
+// longer own.
+const stop = app.onLocaleChange?.((next) => renderPanel(container, next));
+```
+
+Conventions:
+
+- **Always pass your own English text as `defaultValue`.** GeoLibre's catalogs do not ship your plugin's strings, so the fallback is what makes your UI read correctly today; translations are an upgrade, not a prerequisite.
+- **Namespace your keys by plugin id** (`plugin.<your-id>.<something>`) so they cannot collide with the host's own keys.
+- These methods are typed optional like the rest of the API, so call them with optional chaining and keep a literal fallback.
+- Panel titles and toolbar labels take getters precisely so they can call `app.translate?.()` and stay current; use those rather than re-registering on every language change.
 
 ## Floating panels
 

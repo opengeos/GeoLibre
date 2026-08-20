@@ -30,6 +30,12 @@ import {
   Select,
   cn,
 } from "@geolibre/ui";
+import {
+  translateParameter,
+  translateToolDescription,
+  translateToolGroup,
+  translateToolName,
+} from "../../lib/processing-tool-i18n";
 import { ParameterField } from "./ParameterField";
 import { Loader2, Play, Server } from "lucide-react";
 import type { FeatureCollection } from "geojson";
@@ -458,7 +464,7 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
               {groups.map((group) => (
                 <div key={group.group} className="mb-1">
                   <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                    {group.group}
+                    {translateToolGroup(t, group.group)}
                   </div>
                   {group.tools.map((entry) => (
                     <button
@@ -470,7 +476,7 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
                         entry.id === selectedId && "bg-accent font-medium text-accent-foreground",
                       )}
                     >
-                      {entry.name}
+                      {translateToolName(t, "vector", entry)}
                     </button>
                   ))}
                 </div>
@@ -480,11 +486,14 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
 
           {/* Parameter form + run + log */}
           <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <p className="text-sm text-muted-foreground">{tool.description}</p>
+            <p className="text-sm text-muted-foreground">
+              {translateToolDescription(t, "vector", tool)}
+            </p>
 
             <div className="flex flex-col gap-3">
               {tool.parameters.filter(isParamVisible).map((param) => {
                 // Narrow the resolution spinner to the selected DGGS type's range.
+                const localized = translateParameter(t, "vector", tool.id, param);
                 const fieldParam =
                   (tool.id === "dggs-grid" ||
                     tool.id === "dggs-bin" ||
@@ -503,12 +512,12 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
                         const subtype = typeof rawSubtype === "string" ? rawSubtype : undefined;
                         const max = maxResolutionForDggs(dggsType, subtype);
                         return {
-                          ...param,
+                          ...localized,
                           max,
                           label: t("processing.vectorTools.resolutionRange", { max }),
                         };
                       })()
-                    : param;
+                    : localized;
                 return (
                   <ParameterField
                     key={param.id}

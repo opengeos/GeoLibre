@@ -94,6 +94,7 @@ import { applyRightPanelVisibility } from "../../lib/persisted-right-panel";
 import { COORDINATE_FORMATS, normalizeCoordinateFormat } from "../../lib/coordinate-format";
 import { THEME_SCHEMES, normalizeHexColor, type ThemeScheme } from "../../lib/theme-schemes";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
+import { pluginDisplayName } from "../../lib/plugin-display-name";
 import { resolveShareHost, shareHostLabel } from "../../lib/share-geolibre";
 import { IS_STORE_BUILD, type UpdateNotificationLevel } from "../../lib/updates";
 import { ensureStartupProjectSnapshot, openProjectFile } from "../../lib/tauri-io";
@@ -2147,7 +2148,7 @@ export function SettingsDialog({
                                 togglePluginHidden(plugin.id, event.target.checked)
                               }
                             />
-                            <span>{plugin.name}</span>
+                            <span>{pluginDisplayName(t, plugin)}</span>
                           </label>
                         ))}
                       </div>

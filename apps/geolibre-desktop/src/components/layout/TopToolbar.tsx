@@ -113,6 +113,7 @@ import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
 import { useViewportHistory } from "../../hooks/useViewportHistory";
 import type { Command } from "../../lib/commands";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
+import { pluginDisplayName } from "../../lib/plugin-display-name";
 import { masHidesDataSource } from "../../lib/mas-build";
 import { IS_STORE_BUILD } from "../../lib/updates";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
@@ -1782,7 +1783,7 @@ export function TopToolbar({
       )
       .map((plugin) => ({
         id: `plugin.${plugin.id}`,
-        title: t("toolbar.command.togglePlugin", { name: plugin.name }),
+        title: t("toolbar.command.togglePlugin", { name: pluginDisplayName(t, plugin) }),
         group: t("toolbar.commandGroup.plugins"),
         keywords: isActive(plugin.id) ? "plugin deactivate" : "plugin activate",
         run: () => toggle(plugin.id, appApi),

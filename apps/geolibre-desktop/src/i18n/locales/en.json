@@ -4259,6 +4259,1438 @@
       "run": "Run",
       "outputPlaceholder": "Output will appear here.",
       "resolutionRange": "Resolution (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "Buffer",
+          "description": "Create a buffer polygon around each feature by a fixed distance",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "distance": {
+              "label": "Distance"
+            },
+            "units": {
+              "label": "Units",
+              "options": {
+                "kilometers": "Kilometers",
+                "meters": "Meters",
+                "miles": "Miles"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "Centroids",
+          "description": "Compute the centroid point of each feature",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "Convex hull",
+          "description": "Compute the convex hull enclosing all features",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "Dissolve",
+          "description": "Merge polygon features into a single geometry, optionally grouped by a field",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "field": {
+              "label": "Dissolve field (optional)",
+              "description": "Property name to group features by before dissolving"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "Bounding box",
+          "description": "Compute the rectangular envelope of all features",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            }
+          }
+        },
+        "simplify": {
+          "name": "Simplify",
+          "description": "Reduce the number of vertices using Douglas-Peucker",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "tolerance": {
+              "label": "Tolerance (degrees)"
+            },
+            "highQuality": {
+              "label": "High quality"
+            }
+          }
+        },
+        "clip": {
+          "name": "Clip",
+          "description": "Clip the input layer to the area covered by an overlay layer (keeps input attributes)",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "overlay": {
+              "label": "Overlay (clip) layer"
+            }
+          }
+        },
+        "intersection": {
+          "name": "Intersection",
+          "description": "Keep only the areas where both polygon layers overlap",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "overlay": {
+              "label": "Overlay layer"
+            }
+          }
+        },
+        "difference": {
+          "name": "Difference",
+          "description": "Remove the overlay layer's area from the input layer",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "overlay": {
+              "label": "Overlay layer"
+            }
+          }
+        },
+        "union": {
+          "name": "Union",
+          "description": "Merge two polygon layers into a single combined geometry",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "overlay": {
+              "label": "Overlay layer"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "Spatial join",
+          "description": "Attach attributes from a join layer to each input feature based on a spatial relationship",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "overlay": {
+              "label": "Join layer"
+            },
+            "predicate": {
+              "label": "Spatial relationship",
+              "options": {
+                "intersects": "Intersects",
+                "within": "Within",
+                "contains": "Contains"
+              }
+            },
+            "how": {
+              "label": "Join type",
+              "options": {
+                "inner": "Inner (keep only matched features)",
+                "left": "Left (keep all input features)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "Attribute join",
+          "description": "Attach attributes from a join layer (a table) onto each input feature where a key field matches, without using geometry. One-to-one: the first matching join row wins.",
+          "params": {
+            "layer": {
+              "label": "Target layer"
+            },
+            "overlay": {
+              "label": "Join layer (table)",
+              "description": "The layer whose attributes are brought over. Its geometry is ignored."
+            },
+            "target_field": {
+              "label": "Target key field"
+            },
+            "join_field": {
+              "label": "Join key field"
+            },
+            "how": {
+              "label": "Join type",
+              "options": {
+                "left": "Left (keep all target features)",
+                "inner": "Inner (keep only matched features)"
+              }
+            },
+            "fields": {
+              "label": "Fields to bring over (optional)",
+              "description": "Comma-separated join fields to copy. Leave blank to bring over every join field except the key."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "Select by value",
+          "description": "Extract features whose attribute value matches a condition into a new layer",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "field": {
+              "label": "Field"
+            },
+            "operator": {
+              "label": "Operator",
+              "options": {
+                "eq": "= (equals)",
+                "neq": "≠ (not equals)",
+                "gt": "> (greater than)",
+                "gte": "≥ (greater than or equal)",
+                "lt": "< (less than)",
+                "lte": "≤ (less than or equal)",
+                "contains": "contains (text)",
+                "starts-with": "starts with (text)",
+                "is-null": "is empty",
+                "is-not-null": "is not empty"
+              }
+            },
+            "value": {
+              "label": "Value",
+              "description": "Compared as a number when both sides are numeric."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "Select by location",
+          "description": "Extract features by their spatial relationship to a second layer into a new layer",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "overlay": {
+              "label": "Filter layer"
+            },
+            "predicate": {
+              "label": "Spatial relationship",
+              "options": {
+                "intersects": "Intersects",
+                "within": "Within",
+                "contains": "Contains",
+                "disjoint": "Disjoint (no intersection)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "Random extract",
+          "description": "Extract a random subset of features into a new layer, sized by a feature count or a percentage of the input.",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "method": {
+              "label": "Method",
+              "options": {
+                "count": "Number of features",
+                "percentage": "Percentage of features"
+              }
+            },
+            "count": {
+              "label": "Number of features",
+              "description": "Clamped to the number of input features when larger."
+            },
+            "percentage": {
+              "label": "Percentage of features"
+            }
+          }
+        },
+        "reproject": {
+          "name": "Reproject",
+          "description": "Reinterpret a layer's coordinates as a source CRS and transform them to WGS84 so they display in the correct location. Requires the Sidecar or Python engine.",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "source_crs": {
+              "label": "Source CRS",
+              "description": "The CRS the layer's coordinates are really in (e.g. EPSG:3857). The result is transformed to WGS84 (EPSG:4326)."
+            }
+          }
+        },
+        "explode": {
+          "name": "Explode",
+          "description": "Split multipart geometries into single-part features (one feature per part), keeping each parent's attributes",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "Aggregate by attribute",
+          "description": "Dissolve features that share an attribute value into one geometry per group, with a summary statistic",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "group_field": {
+              "label": "Group by field"
+            },
+            "statistic": {
+              "label": "Statistic",
+              "options": {
+                "count": "Count",
+                "sum": "Sum",
+                "mean": "Mean",
+                "min": "Min",
+                "max": "Max",
+                "median": "Median"
+              }
+            },
+            "stat_field": {
+              "label": "Statistic field",
+              "description": "Numeric field summarized by the statistic above."
+            }
+          }
+        },
+        "smooth": {
+          "name": "Smooth",
+          "description": "Round the corners of line and polygon features with Chaikin's algorithm (adds vertices), distinct from Simplify's vertex reduction. Z/elevation is preserved; points pass through unchanged.",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "iterations": {
+              "label": "Iterations",
+              "description": "More iterations give a smoother result (1-10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "Regular grid",
+          "description": "Generate a regular rectangular grid (fishnet) of cells over an extent. Source: the current map view, a layer's extent, or a manual bounding box.",
+          "params": {
+            "source": {
+              "label": "Extent source",
+              "options": {
+                "viewport": "Map viewport",
+                "layer": "Layer extent",
+                "bbox": "Manual bounding box"
+              }
+            },
+            "layer": {
+              "label": "Input layer"
+            },
+            "west": {
+              "label": "West (min lon)"
+            },
+            "south": {
+              "label": "South (min lat)"
+            },
+            "east": {
+              "label": "East (max lon)"
+            },
+            "north": {
+              "label": "North (max lat)"
+            },
+            "cell_width": {
+              "label": "Cell width (degrees)"
+            },
+            "cell_height": {
+              "label": "Cell height (degrees)",
+              "description": "Leave blank to match the cell width."
+            },
+            "cell_type": {
+              "label": "Cell type",
+              "options": {
+                "polygon": "Rectangles",
+                "point": "Points (cell centers)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "Build a Voronoi diagram (one polygon per point, clipped to the points' extent) or a Delaunay triangulation from a point layer.",
+          "params": {
+            "layer": {
+              "label": "Input point layer"
+            },
+            "type": {
+              "label": "Diagram",
+              "options": {
+                "voronoi": "Voronoi polygons",
+                "delaunay": "Delaunay triangles"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "Cell-site coverage",
+          "description": "Build antenna sector/wedge polygons from point sites using azimuth, radius and beamwidth (read from attribute fields or fixed values). Beamwidth is clamped to 360° (a full circle); the recorded beamwidth reflects the clamped value. Useful for cell-tower coverage, like QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "Input point layer"
+            },
+            "azimuthField": {
+              "label": "Azimuth field (°)",
+              "description": "Direction the sector faces, in degrees clockwise from north. Falls back to the fixed azimuth when blank or non-numeric."
+            },
+            "azimuth": {
+              "label": "Azimuth (fixed, °)"
+            },
+            "radiusField": {
+              "label": "Radius field",
+              "description": "Coverage radius. Falls back to the fixed radius when blank or non-numeric."
+            },
+            "radius": {
+              "label": "Radius (fixed)"
+            },
+            "beamwidthField": {
+              "label": "Beamwidth field (°)",
+              "description": "Angular width of the sector, clamped to 360° (a full circle). Falls back to the fixed beamwidth when blank or non-numeric."
+            },
+            "beamwidth": {
+              "label": "Beamwidth (fixed, °)"
+            },
+            "units": {
+              "label": "Radius units",
+              "options": {
+                "kilometers": "Kilometers",
+                "meters": "Meters",
+                "miles": "Miles"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "DGGS Generator",
+          "description": "Fill an area with DGGS cells (H3, S2, A5, DGGRID, DGGAL). Source: a layer's geometry, a layer's extent, the current map view, or a manual bounding box.",
+          "params": {
+            "dggsType": {
+              "label": "DGGS type",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID type",
+              "description": "Grid configuration passed to duck_dggs as dggs_params (ISEA/FULLER × aperture × topology).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL type",
+              "description": "DGGRS passed to dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "Area source",
+              "options": {
+                "polyfill": "Layer geometry (polyfill)",
+                "extent": "Layer extent (bbox)",
+                "viewport": "Map viewport",
+                "bbox": "Manual bounding box"
+              }
+            },
+            "layer": {
+              "label": "Input layer"
+            },
+            "west": {
+              "label": "West (min lon)"
+            },
+            "south": {
+              "label": "South (min lat)"
+            },
+            "east": {
+              "label": "East (max lon)"
+            },
+            "north": {
+              "label": "North (max lat)"
+            },
+            "resolution": {
+              "label": "Resolution",
+              "description": "Range depends on DGGS type. Leave blank to auto-pick from the area."
+            },
+            "compactCells": {
+              "label": "Compact cells",
+              "description": "Merge complete sets of sibling cells into coarser parents (fewer features, mixed resolutions)."
+            },
+            "fixAntimeridian": {
+              "label": "Fix antimeridian",
+              "description": "Unwrap cell rings that cross ±180° longitude."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "DGGS Binning",
+          "description": "Aggregate a point layer into DGGS cells (count, or sum/mean/min/max of a numeric field).",
+          "params": {
+            "dggsType": {
+              "label": "DGGS type",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID type",
+              "description": "Grid configuration passed to duck_dggs as dggs_params (ISEA/FULLER × aperture × topology).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL type",
+              "description": "DGGRS passed to dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "Input point layer"
+            },
+            "aggOp": {
+              "label": "Aggregate",
+              "options": {
+                "count": "Count",
+                "sum": "Sum",
+                "mean": "Mean",
+                "min": "Min",
+                "max": "Max"
+              }
+            },
+            "field": {
+              "label": "Field",
+              "description": "Numeric field to aggregate."
+            },
+            "resolution": {
+              "label": "Resolution",
+              "description": "Range depends on DGGS type. Leave blank to auto-pick from the area."
+            },
+            "fixAntimeridian": {
+              "label": "Fix antimeridian",
+              "description": "Unwrap cell rings that cross ±180° longitude."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "DGGS Compact",
+          "description": "Compact DGGS polygon cells, or expand them to a uniform resolution (H3, S2, A5, DGGAL). Input must be a cell layer with an ID property.",
+          "params": {
+            "dggsType": {
+              "label": "DGGS type",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL type",
+              "description": "DGGRS passed to dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "Mode",
+              "options": {
+                "compact": "Compact",
+                "expand": "Expand"
+              }
+            },
+            "layer": {
+              "label": "Input DGGS layer",
+              "description": "Polygon cell layer from DGGS Generator / Binning (or equivalent)."
+            },
+            "cellField": {
+              "label": "Cell ID field",
+              "description": "Defaults to h3, a5, s2, or dggal for the selected type when left blank."
+            },
+            "resolution": {
+              "label": "Target resolution",
+              "description": "Resolution to expand to. Must be at least as fine as the input cells."
+            },
+            "fixAntimeridian": {
+              "label": "Fix antimeridian",
+              "description": "Unwrap cell rings that cross ±180° longitude."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "Trajectory speed",
+          "description": "Order points by time (per target) and connect consecutive fixes into segments carrying distance, duration and speed. Like QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Input point layer"
+            },
+            "timeField": {
+              "label": "Time field",
+              "description": "Timestamp per fix: an ISO date/time string or an epoch (seconds or milliseconds)."
+            },
+            "idField": {
+              "label": "Target id field",
+              "description": "Splits the points into separate trajectories. Leave blank to treat all points as one target."
+            },
+            "speedUnits": {
+              "label": "Speed units",
+              "options": {
+                "km/h": "km/h",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "Detect stops",
+          "description": "Find places where a target dwells: runs of consecutive fixes that stay within a distance (absorbing GPS scatter) for at least a minimum duration. Outputs one point per stop. Like QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Input point layer"
+            },
+            "timeField": {
+              "label": "Time field",
+              "description": "Timestamp per fix: an ISO date/time string or an epoch (seconds or milliseconds)."
+            },
+            "idField": {
+              "label": "Target id field",
+              "description": "Detects stops per target. Leave blank to treat all points as one target."
+            },
+            "maxDistance": {
+              "label": "Max distance",
+              "description": "Every fix in a stop must be within this distance of the stop's first fix (so a stop can span up to twice this value). Set it to your GPS scatter radius."
+            },
+            "distanceUnits": {
+              "label": "Distance units",
+              "options": {
+                "meters": "Meters",
+                "kilometers": "Kilometers",
+                "miles": "Miles"
+              }
+            },
+            "minDuration": {
+              "label": "Min duration (s)",
+              "description": "A dwell shorter than this is not reported as a stop."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "Space-time proximity",
+          "description": "Find pairs of points close in both space and time — e.g. two targets meeting. Outputs a line connecting each qualifying pair, carrying the distance and time gap.",
+          "params": {
+            "layer": {
+              "label": "Input point layer"
+            },
+            "timeField": {
+              "label": "Time field",
+              "description": "Timestamp per point: an ISO date/time string or an epoch (seconds or milliseconds)."
+            },
+            "idField": {
+              "label": "Target id field",
+              "description": "When set, only points with DIFFERENT id values are paired (encounters between distinct targets). Leave blank to consider every pair."
+            },
+            "maxDistance": {
+              "label": "Max distance"
+            },
+            "distanceUnits": {
+              "label": "Distance units",
+              "options": {
+                "meters": "Meters",
+                "kilometers": "Kilometers",
+                "miles": "Miles"
+              }
+            },
+            "maxTime": {
+              "label": "Max time difference"
+            },
+            "timeUnits": {
+              "label": "Time units",
+              "options": {
+                "seconds": "Seconds",
+                "minutes": "Minutes",
+                "hours": "Hours"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "Check validity",
+          "description": "Find features with invalid geometry (GEOS rules: self-intersecting rings, holes outside shells, ...) and mark them on the map",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "Fix geometries",
+          "description": "Repair invalid geometries with ST_MakeValid (GEOS); valid features pass through untouched",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "Check topology rules",
+          "description": "Validate the layer against topology rules (overlaps, gaps, self-intersections, dangles) and mark each violation on the map",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "ruleSelfIntersect": {
+              "label": "Lines must not self-intersect"
+            },
+            "ruleOverlap": {
+              "label": "Polygons must not overlap"
+            },
+            "ruleGaps": {
+              "label": "Polygons must not have gaps"
+            },
+            "ruleDangles": {
+              "label": "Lines must not have dangles"
+            },
+            "rulePointCovered": {
+              "label": "Points must be covered by a line"
+            },
+            "ruleEndpointSnap": {
+              "label": "Line endpoints must connect within tolerance"
+            },
+            "snapTolerance": {
+              "label": "Snap tolerance",
+              "description": "For the endpoint rule: how far apart (in layer coordinate units — degrees for WGS84) two line ends may be and still count as connected."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "Fix topology",
+          "description": "Automatically repair topology violations: snap nearly-connected line endpoints, fix dangles, and project points onto lines. Free ends with nothing nearby are left unchanged.",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "ruleEndpointSnap": {
+              "label": "Snap nearly-connected line endpoints"
+            },
+            "ruleDangles": {
+              "label": "Repair dangles (snap or project onto nearby geometry)"
+            },
+            "rulePointCovered": {
+              "label": "Project points onto the nearest line"
+            },
+            "snapTolerance": {
+              "label": "Snap tolerance",
+              "description": "How far (in layer coordinate units — degrees for WGS84) geometry may move to connect."
+            },
+            "dryRun": {
+              "label": "Preview only (dry run)",
+              "description": "Report the fixes that would be applied without creating a repaired layer."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "Isochrone / service area",
+          "description": "Travel-time or travel-distance reachability polygons from each point in a layer",
+          "params": {
+            "layer": {
+              "label": "Origin points"
+            },
+            "mode": {
+              "label": "Travel mode",
+              "options": {
+                "auto": "Driving",
+                "pedestrian": "Walking",
+                "bicycle": "Cycling"
+              }
+            },
+            "metric": {
+              "label": "Metric",
+              "options": {
+                "time": "Travel time (minutes)",
+                "distance": "Distance (km)"
+              }
+            },
+            "contours": {
+              "label": "Contours",
+              "description": "Comma-separated values (minutes for time, km for distance)"
+            },
+            "endpoint": {
+              "label": "Routing server (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "OD cost matrix",
+          "description": "Travel time and distance between every origin and destination point, as connecting lines",
+          "params": {
+            "origins": {
+              "label": "Origin points"
+            },
+            "destinations": {
+              "label": "Destination points"
+            },
+            "mode": {
+              "label": "Travel mode",
+              "options": {
+                "auto": "Driving",
+                "pedestrian": "Walking",
+                "bicycle": "Cycling"
+              }
+            },
+            "endpoint": {
+              "label": "Routing server (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "Sequential route (directions)",
+          "description": "Connect points in sequence along the road network into a route. Each point is snapped to the nearest road, so off-road coordinates (cell sites, sensors) still route. Order follows the chosen field (e.g. a timestamp) or the layer's feature order.",
+          "params": {
+            "layer": {
+              "label": "Input points"
+            },
+            "order_field": {
+              "label": "Order by field (optional)",
+              "description": "Sort points by this field (numbers or timestamps) before routing. Leave empty to use the layer's feature order."
+            },
+            "mode": {
+              "label": "Travel mode",
+              "options": {
+                "auto": "Driving",
+                "pedestrian": "Walking",
+                "bicycle": "Cycling"
+              }
+            },
+            "endpoint": {
+              "label": "Routing server (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "Global Moran's I",
+          "description": "Measure overall spatial autocorrelation of a numeric attribute across the whole layer.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "field": {
+              "label": "Value field"
+            },
+            "weightsType": {
+              "label": "Spatial weights",
+              "description": "How neighbors are defined for each feature.",
+              "options": {
+                "knn": "K nearest neighbors",
+                "distance": "Distance band"
+              }
+            },
+            "k": {
+              "label": "Neighbors (k)"
+            },
+            "threshold": {
+              "label": "Distance band (km)"
+            },
+            "permutations": {
+              "label": "Permutations",
+              "description": "Random permutations for the pseudo p-value."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "Local Moran's I (LISA)",
+          "description": "Per-feature clusters and outliers (High-High, Low-Low, High-Low, Low-High) with pseudo significance.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "field": {
+              "label": "Value field"
+            },
+            "weightsType": {
+              "label": "Spatial weights",
+              "description": "How neighbors are defined for each feature.",
+              "options": {
+                "knn": "K nearest neighbors",
+                "distance": "Distance band"
+              }
+            },
+            "k": {
+              "label": "Neighbors (k)"
+            },
+            "threshold": {
+              "label": "Distance band (km)"
+            },
+            "permutations": {
+              "label": "Permutations",
+              "description": "Random permutations for the pseudo p-value."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Getis-Ord Gi* hotspots",
+          "description": "Identify statistically significant hot spots and cold spots of a numeric attribute.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "field": {
+              "label": "Value field"
+            },
+            "weightsType": {
+              "label": "Spatial weights",
+              "description": "How neighbors are defined for each feature.",
+              "options": {
+                "knn": "K nearest neighbors",
+                "distance": "Distance band"
+              }
+            },
+            "k": {
+              "label": "Neighbors (k)"
+            },
+            "threshold": {
+              "label": "Distance band (km)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "Average nearest neighbor",
+          "description": "Test whether points are clustered, dispersed, or randomly distributed (ANN ratio + z-score).",
+          "params": {
+            "layer": {
+              "label": "Point layer"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "Kernel density (heatmap)",
+          "description": "Estimate a density surface from points as a grid of cells, using a quartic kernel.",
+          "params": {
+            "layer": {
+              "label": "Point layer"
+            },
+            "weightField": {
+              "label": "Weight field (optional)",
+              "description": "Numeric field weighting each point; blank = equal weight."
+            },
+            "bandwidth": {
+              "label": "Search radius / bandwidth (km)"
+            },
+            "cellSize": {
+              "label": "Cell size (km)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "Emerging Hot Spot (space-time cube)",
+          "description": "Build a space-time cube from timestamped points (a fishnet grid × equal time steps) and classify each cell as a new, intensifying, persistent, diminishing, sporadic, oscillating, or historical hot/cold spot. Runs Getis-Ord Gi* per time slice, then a Mann-Kendall trend test on each cell's Gi* series. Client-side, like ArcGIS Emerging Hot Spot Analysis.",
+          "params": {
+            "layer": {
+              "label": "Point layer"
+            },
+            "timeField": {
+              "label": "Time field",
+              "description": "Timestamp per point: an ISO date/time string or an epoch (seconds or milliseconds)."
+            },
+            "cellSize": {
+              "label": "Cell size (km)",
+              "description": "Edge length of each square spatial bin, in kilometres."
+            },
+            "timeStep": {
+              "label": "Time-step interval"
+            },
+            "timeStepUnit": {
+              "label": "Time-step unit",
+              "options": {
+                "hours": "Hours",
+                "days": "Days",
+                "weeks": "Weeks"
+              }
+            },
+            "weightField": {
+              "label": "Weight field (optional)",
+              "description": "Numeric field summed per space-time bin instead of counting points; blank = count points."
+            },
+            "confidence": {
+              "label": "Confidence level",
+              "description": "Significance threshold for a bin to count as a hot/cold spot and for the trend.",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "Hillshade",
+          "description": "Compute a shaded-relief (hillshade) raster from an elevation model.",
+          "params": {
+            "azimuth": {
+              "label": "Azimuth (degrees)"
+            },
+            "altitude": {
+              "label": "Altitude (degrees)"
+            },
+            "z_factor": {
+              "label": "Z factor"
+            }
+          }
+        },
+        "slope": {
+          "name": "Slope",
+          "description": "Compute slope (steepness) from an elevation model.",
+          "params": {
+            "units": {
+              "label": "Units",
+              "options": {
+                "degrees": "Degrees",
+                "percent": "Percent"
+              }
+            },
+            "z_factor": {
+              "label": "Z factor"
+            }
+          }
+        },
+        "aspect": {
+          "name": "Aspect",
+          "description": "Compute aspect (compass direction of the steepest slope) from an elevation model."
+        },
+        "reproject": {
+          "name": "Reproject",
+          "description": "Warp a raster to a different coordinate reference system.",
+          "params": {
+            "dst_crs": {
+              "label": "Target CRS",
+              "description": "An authority code such as EPSG:3857 or EPSG:4326."
+            },
+            "resampling": {
+              "label": "Resampling",
+              "options": {
+                "nearest": "Nearest neighbour",
+                "bilinear": "Bilinear",
+                "cubic": "Cubic"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "Resample",
+          "description": "Resample a raster to a different pixel size (resolution).",
+          "params": {
+            "resolution": {
+              "label": "Target pixel size",
+              "description": "Output pixel size in the raster's CRS units."
+            },
+            "resampling": {
+              "label": "Resampling",
+              "options": {
+                "nearest": "Nearest neighbour",
+                "bilinear": "Bilinear",
+                "cubic": "Cubic"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "Clip by extent",
+          "description": "Crop a raster to a bounding box (in the raster's CRS).",
+          "params": {
+            "minx": {
+              "label": "Min X"
+            },
+            "miny": {
+              "label": "Min Y"
+            },
+            "maxx": {
+              "label": "Max X"
+            },
+            "maxy": {
+              "label": "Max Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "Clip by mask layer",
+          "description": "Clip a raster to the geometries of a vector mask file.",
+          "params": {
+            "mask_path": {
+              "label": "Mask layer",
+              "description": "A GeoJSON file whose geometries define the clip region. It is reprojected to the raster's CRS automatically (a GeoJSON with no CRS is assumed to be WGS84)."
+            },
+            "crop": {
+              "label": "Crop to mask extent"
+            },
+            "all_touched": {
+              "label": "Include all touched pixels"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "Polygonize",
+          "description": "Convert a raster band into vector polygons grouped by pixel value.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "connectivity": {
+              "label": "Connectivity",
+              "options": {
+                "4": "4-connected",
+                "8": "8-connected"
+              }
+            },
+            "field": {
+              "label": "Value field name"
+            }
+          }
+        },
+        "contour": {
+          "name": "Contour",
+          "description": "Generate contour lines from an elevation model.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "interval": {
+              "label": "Interval",
+              "description": "Elevation difference between successive contour lines."
+            },
+            "base": {
+              "label": "Base"
+            },
+            "attribute": {
+              "label": "Elevation field name"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "Interpolation (IDW / Kriging)",
+          "description": "Interpolate a point layer's numeric attribute into a continuous raster surface using inverse distance weighting or ordinary kriging.",
+          "params": {
+            "field": {
+              "label": "Value field",
+              "description": "Name of the numeric point attribute to interpolate (e.g. elevation, temperature)."
+            },
+            "method": {
+              "label": "Method",
+              "options": {
+                "idw": "Inverse distance weighting (IDW)",
+                "kriging": "Ordinary kriging"
+              }
+            },
+            "resolution": {
+              "label": "Output pixel size",
+              "description": "Cell size in the layer's CRS units (degrees for WGS84). The grid covers the points' extent."
+            },
+            "power": {
+              "label": "IDW power",
+              "description": "Higher values give nearby points more influence."
+            },
+            "variogram_model": {
+              "label": "Variogram model",
+              "description": "Theoretical model fitted to the empirical semivariogram. Kriging is capped at 1500 points.",
+              "options": {
+                "spherical": "Spherical",
+                "exponential": "Exponential",
+                "gaussian": "Gaussian",
+                "linear": "Linear"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "Zonal statistics",
+          "description": "Summarize raster values within each polygon of a vector layer (count, min, max, mean, sum, std, median).",
+          "params": {
+            "zones_path": {
+              "label": "Zones layer",
+              "description": "A GeoJSON polygon layer defining the zones. It is reprojected to the raster's CRS automatically (a GeoJSON with no CRS is assumed to be WGS84)."
+            },
+            "band": {
+              "label": "Band"
+            },
+            "prefix": {
+              "label": "Field prefix",
+              "description": "Prepended to each statistic field name (e.g. 'dem_' → 'dem_mean'). Leave blank for bare 'mean', 'min', …"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "Raster calculator",
+          "description": "Evaluate a NumPy band-math expression. Reference band 1 of each input as A, B, C and specific bands as A1, A2, …; e.g. NDVI is (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "Expression",
+              "description": "A NumPy expression over A, B, C (and A1, A2, …). Functions: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan."
+            },
+            "b_path": {
+              "label": "Raster B (optional)",
+              "description": "A second raster, referenced as B / B1, B2, …. Must match A's dimensions."
+            },
+            "c_path": {
+              "label": "Raster C (optional)",
+              "description": "A third raster, referenced as C / C1, C2, …. Must match A's dimensions."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "Spectral index",
+          "description": "Compute a named spectral index (NDVI, NDWI, EVI, …) from a multiband raster. Pick a sensor preset for the band layout, or set band numbers manually with the Custom sensor.",
+          "params": {
+            "index": {
+              "label": "Index",
+              "options": {
+                "ndvi": "NDVI (vegetation)",
+                "gndvi": "GNDVI (green vegetation)",
+                "ndwi": "NDWI (water, McFeeters)",
+                "ndmi": "NDMI (moisture)",
+                "ndbi": "NDBI (built-up)",
+                "nbr": "NBR (burn ratio)",
+                "evi": "EVI (enhanced vegetation)",
+                "savi": "SAVI (soil-adjusted vegetation)"
+              }
+            },
+            "sensor": {
+              "label": "Sensor / band layout",
+              "description": "Preset band numbers for common sensors. Choose Custom to map bands by hand for a differently stacked GeoTIFF.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "Custom (set band numbers below)"
+              }
+            },
+            "red": {
+              "label": "Red band number"
+            },
+            "green": {
+              "label": "Green band number"
+            },
+            "blue": {
+              "label": "Blue band number"
+            },
+            "nir": {
+              "label": "NIR band number"
+            },
+            "swir1": {
+              "label": "SWIR1 band number"
+            },
+            "swir2": {
+              "label": "SWIR2 band number"
+            },
+            "L": {
+              "label": "Soil factor (L)",
+              "description": "SAVI soil-brightness correction (0 dense cover → 1 bare soil)."
+            },
+            "scale": {
+              "label": "Reflectance scale",
+              "description": "Multiplier converting pixel values to reflectance (0–1). Leave at 1 for normalized-difference indices; set it for EVI/SAVI on integer-DN imagery (e.g. 0.0001 for Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "Reclassify",
+          "description": "Remap value ranges to new class values using a rule table.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "table": {
+              "label": "Rules",
+              "description": "Comma- or newline-separated 'min:max:newvalue' rules, e.g. '0:10:1, 10:20:2, 20:max:3'. Ranges are half-open [min, max); blank/min/max mean ±∞."
+            },
+            "unmatched": {
+              "label": "Unmatched values",
+              "options": {
+                "nodata": "Set to NoData",
+                "original": "Keep original value"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "Mosaic / merge",
+          "description": "Combine up to five rasters (sharing a CRS) into a single raster covering their union.",
+          "params": {
+            "raster_2": {
+              "label": "Second raster"
+            },
+            "raster_3": {
+              "label": "Third raster (optional)"
+            },
+            "raster_4": {
+              "label": "Fourth raster (optional)"
+            },
+            "raster_5": {
+              "label": "Fifth raster (optional)"
+            },
+            "method": {
+              "label": "Overlap method",
+              "description": "Which value wins where inputs overlap.",
+              "options": {
+                "first": "First",
+                "last": "Last",
+                "min": "Minimum",
+                "max": "Maximum"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "Focal statistics",
+          "description": "Apply a moving-window (neighbourhood) statistic to a raster band.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "statistic": {
+              "label": "Statistic",
+              "options": {
+                "mean": "Mean",
+                "median": "Median",
+                "min": "Minimum",
+                "max": "Maximum",
+                "sum": "Sum",
+                "std": "Standard deviation",
+                "range": "Range (max − min)"
+              }
+            },
+            "size": {
+              "label": "Window size",
+              "description": "Odd neighbourhood size in pixels (3 = 3×3). Capped at 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "Analysis",
+      "clip": "Clip",
+      "dataQuality": "Data quality",
+      "dggs": "DGGS",
+      "geometry": "Geometry",
+      "join": "Join",
+      "movementTime": "Movement & time",
+      "network": "Network",
+      "overlay": "Overlay",
+      "rasterToVector": "Raster to Vector",
+      "reproject": "Reproject",
+      "select": "Select",
+      "spatialStatistics": "Spatial Statistics",
+      "terrain": "Terrain",
+      "vectorToRaster": "Vector to Raster"
     }
   },
   "segmentation": {

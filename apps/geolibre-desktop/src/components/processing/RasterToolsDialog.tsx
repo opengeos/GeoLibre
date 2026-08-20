@@ -66,6 +66,12 @@ import {
 import { createAppAPI } from "../../hooks/usePlugins";
 import { canExportRasterLayer, rasterExportUrl } from "../../lib/raster-export";
 import { fetchableUrl } from "../../lib/url-utils";
+import {
+  translateParameter,
+  translateToolDescription,
+  translateToolGroup,
+  translateToolName,
+} from "../../lib/processing-tool-i18n";
 
 /**
  * The input URL the Python sidecar can read for an added raster layer, or null
@@ -643,7 +649,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
               {groups.map((group) => (
                 <div key={group.group} className="mb-1">
                   <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                    {group.group}
+                    {translateToolGroup(t, group.group)}
                   </div>
                   {group.tools.map((entry) => (
                     <button
@@ -655,7 +661,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                         entry.id === selectedId && "bg-accent font-medium text-accent-foreground",
                       )}
                     >
-                      {entry.name}
+                      {translateToolName(t, "raster", entry)}
                     </button>
                   ))}
                 </div>
@@ -665,7 +671,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
 
           {/* Parameter form + run + log */}
           <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <p className="text-sm text-muted-foreground">{tool.description}</p>
+            <p className="text-sm text-muted-foreground">
+              {translateToolDescription(t, "raster", tool)}
+            </p>
 
             {/* Engine selector (only for tools with a browser implementation). */}
             {tool.supportsClient && (
@@ -826,7 +834,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
             {tool.parameters.filter(isParamVisible).map((param) => (
               <RasterParameterField
                 key={param.id}
-                param={param}
+                param={translateParameter(t, "raster", tool.id, param)}
                 value={params[param.id]}
                 onChange={(value) => setParam(param.id, value)}
                 onPick={() => void pickPathParam(param)}

@@ -72,6 +72,13 @@ import {
   searchModelTools,
 } from "../../../lib/model-tool-catalog";
 import {
+  modelProviderCatalog,
+  translateParameter,
+  translateToolDescription,
+  translateToolGroup,
+  translateToolName,
+} from "../../../lib/processing-tool-i18n";
+import {
   NODE_HEIGHT,
   NODE_WIDTH,
   addDataNode,
@@ -1484,7 +1491,7 @@ export function ModelBuilderPanel({
                   groups.map((group) => (
                     <div key={group.group} className="mb-2">
                       <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {group.group}
+                        {translateToolGroup(t, group.group)}
                       </p>
                       {group.tools.map((tool) => (
                         // A real button, not a bare draggable div: dragging is the
@@ -1500,11 +1507,29 @@ export function ModelBuilderPanel({
                             event.dataTransfer.effectAllowed = "copy";
                           }}
                           onClick={() => addToolAtDefault(tool)}
-                          title={tool.description ?? tool.name}
-                          aria-label={t("processing.modelBuilder.addToolNode", { tool: tool.name })}
+                          title={
+                            translateToolDescription(t, modelProviderCatalog(tool.provider), {
+                              id: tool.toolId,
+                              name: tool.name,
+                              description: tool.description,
+                            }) ||
+                            translateToolName(t, modelProviderCatalog(tool.provider), {
+                              id: tool.toolId,
+                              name: tool.name,
+                            })
+                          }
+                          aria-label={t("processing.modelBuilder.addToolNode", {
+                            tool: translateToolName(t, modelProviderCatalog(tool.provider), {
+                              id: tool.toolId,
+                              name: tool.name,
+                            }),
+                          })}
                           className="w-full cursor-grab truncate rounded px-1.5 py-1 text-start text-xs hover:bg-accent active:cursor-grabbing"
                         >
-                          {tool.name}
+                          {translateToolName(t, modelProviderCatalog(tool.provider), {
+                            id: tool.toolId,
+                            name: tool.name,
+                          })}
                         </button>
                       ))}
                     </div>
@@ -2187,7 +2212,13 @@ function NodeInspector({
       {node.kind === "tool" && descriptor && (
         <div className="space-y-2">
           {descriptor.description && (
-            <p className="text-[11px] text-muted-foreground">{descriptor.description}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {translateToolDescription(t, modelProviderCatalog(descriptor.provider), {
+                id: descriptor.toolId,
+                name: descriptor.name,
+                description: descriptor.description,
+              })}
+            </p>
           )}
           {descriptor.parameters.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">
@@ -2197,7 +2228,12 @@ function NodeInspector({
             descriptor.parameters.map((param) => (
               <ParameterField
                 key={param.id}
-                param={param}
+                param={translateParameter(
+                  t,
+                  modelProviderCatalog(descriptor.provider),
+                  descriptor.toolId,
+                  param,
+                )}
                 value={node.parameters?.[param.id]}
                 layerOptions={layers.map((layer) => ({ id: layer.id, name: layer.name }))}
                 onChange={(value) => onParamChange(param.id, value)}

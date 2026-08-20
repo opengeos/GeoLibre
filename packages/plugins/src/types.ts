@@ -14,6 +14,7 @@ import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 import type { OvertureTheme } from "maplibre-gl-overture-maps";
 import type { TemporalLayerAdapter } from "./plugins/temporal-layers";
+import type { GeoLibreToolbarLabel } from "./toolbar-menu-label";
 
 export type GeoLibreMapControlPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
@@ -699,6 +700,39 @@ export interface GeoLibreAppAPI {
   /** Where the active panel docks, or null when none is open. */
   getActiveRightPanelDock?: () => GeoLibreRightPanelDock | null;
   /**
+   * The host's active UI language as a BCP 47-ish catalog code (`"en"`, `"zh"`,
+   * `"pt-BR"`, …). Plugins render their panels as plain DOM and so cannot use
+   * the host's React i18n hooks; this, {@link onLocaleChange} and
+   * {@link translate} are the contract that lets that DOM follow the app
+   * language (GeoLibre#2021). Typed optional for forward-compatibility with
+   * hosts that ship no localization, so call it with optional chaining and fall
+   * back to your own default.
+   */
+  getLocale?: () => string;
+  /**
+   * Subscribe to app language changes. The listener is called with the new
+   * locale code after the host has switched (its catalog is already loaded, so
+   * {@link translate} is safe to call from inside). Returns an unsubscribe
+   * function — call it from `deactivate`, or the listener will keep re-rendering
+   * DOM the plugin no longer owns.
+   */
+  onLocaleChange?: (listener: (locale: string) => void) => () => void;
+  /**
+   * Translate a key against the host's catalogs, falling back to
+   * `defaultValue` when the active locale has no entry for it. `params` fills
+   * `{{placeholder}}` interpolations.
+   *
+   * A plugin should pass its own English text as `defaultValue`, so its UI reads
+   * correctly on a host with no entry for its keys and gains translations as
+   * catalogs grow. Namespace keys by plugin id (`plugin.<id>.<something>`) to
+   * avoid colliding with the host's own keys.
+   */
+  translate?: (
+    key: string,
+    defaultValue: string,
+    params?: Record<string, string | number>,
+  ) => string;
+  /**
    * Register a plugin-owned top-level toolbar menu shown in the GeoLibre banner
    * beside the built-in menus, with nested submenus and action items. Returns
    * an unregister function (call it from `deactivate`). Re-registering the same
@@ -739,8 +773,14 @@ export interface GeoLibreToolbarMenuAction {
   type?: "action";
   /** Stable id, unique within the menu. */
   id: string;
-  /** Label shown in the menu. */
-  label: string;
+  /**
+   * Label shown in the menu. Pass a getter function to make it reactive, the
+   * way panel titles already are: the host re-reads every label each time it
+   * renders the menu tree, and it re-renders on `languageChanged`, so a getter
+   * wired to a translation follows the app language without the plugin
+   * re-registering its menu. A plain string is frozen at registration time.
+   */
+  label: GeoLibreToolbarLabel;
   /** Optional icon: a URL or `data:` URI rendered as an image. */
   icon?: string;
   /** When true, the item is shown disabled and cannot be selected. */
@@ -754,8 +794,8 @@ export interface GeoLibreToolbarSubmenu {
   type: "submenu";
   /** Stable id, unique within the parent menu. */
   id: string;
-  /** Label shown on the submenu trigger. */
-  label: string;
+  /** Label shown on the submenu trigger. Reactive getters allowed, as above. */
+  label: GeoLibreToolbarLabel;
   /** Optional icon: a URL or `data:` URI rendered as an image. */
   icon?: string;
   /** Child items (actions, separators, or further submenus). */
@@ -782,8 +822,8 @@ export type GeoLibreToolbarMenuItem =
 export interface GeoLibreToolbarMenu {
   /** Stable unique id used to unregister the menu. */
   id: string;
-  /** Button label shown in the toolbar. */
-  label: string;
+  /** Button label shown in the toolbar. Reactive getters allowed, as above. */
+  label: GeoLibreToolbarLabel;
   /** Optional icon: a URL or `data:` URI rendered as an image. */
   icon?: string;
   /** Top-level items (actions, separators, or submenus). */

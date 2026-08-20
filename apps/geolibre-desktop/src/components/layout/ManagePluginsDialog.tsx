@@ -58,6 +58,7 @@ import {
   pickLocalPathWithFallback,
 } from "../../lib/tauri-io";
 import { openExternalLink } from "../../lib/open-external";
+import { pluginDisplayName } from "../../lib/plugin-display-name";
 
 type ManageSection = "all" | "installed" | "not-installed" | "upgradeable" | "settings";
 
@@ -565,7 +566,9 @@ export function ManagePluginsDialog({
                       >
                         <div className="min-w-0 space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">{entry.name}</span>
+                            <span className="truncate text-sm font-medium">
+                              {pluginDisplayName(t, entry)}
+                            </span>
                             <span className="shrink-0 text-xs text-muted-foreground">
                               v{entry.version}
                             </span>
@@ -820,7 +823,9 @@ function SettingsTab({
               <div key={plugin.id} className="flex items-center gap-2 rounded-md border p-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-xs font-medium">{plugin.name}</span>
+                    <span className="truncate text-xs font-medium">
+                      {pluginDisplayName(t, plugin)}
+                    </span>
                     <span className="shrink-0 text-[11px] text-muted-foreground">
                       v{plugin.version}
                     </span>
@@ -834,7 +839,9 @@ function SettingsTab({
                   size="icon"
                   variant="ghost"
                   className="h-8 w-8 shrink-0"
-                  aria-label={t("managePlugins.uninstallAria", { name: plugin.name })}
+                  aria-label={t("managePlugins.uninstallAria", {
+                    name: pluginDisplayName(t, plugin),
+                  })}
                   onClick={() => onUninstallFromFile(plugin.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />

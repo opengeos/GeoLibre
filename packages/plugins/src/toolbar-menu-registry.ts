@@ -1,3 +1,4 @@
+import { isToolbarLabel } from "./toolbar-menu-label";
 import type { GeoLibreToolbarMenu } from "./types";
 
 /**
@@ -63,7 +64,10 @@ export function registerToolbarMenu(menu: GeoLibreToolbarMenu, ownerPluginId?: s
   if (!menu || typeof menu.id !== "string" || menu.id.length === 0) {
     throw new Error("registerToolbarMenu requires a menu with a non-empty id.");
   }
-  if (typeof menu.label !== "string" || menu.label.length === 0) {
+  // A label may be a getter (so it can follow the app language), so only the
+  // shape is checked here; a getter's return value is validated where it is
+  // read, by resolveToolbarLabel.
+  if (!isToolbarLabel(menu.label)) {
     throw new Error(`Toolbar menu "${menu.id}" must have a non-empty label.`);
   }
   if (!Array.isArray(menu.items)) {

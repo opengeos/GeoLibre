@@ -128,6 +128,8 @@ import {
   vectorDownloadFileName,
 } from "../lib/vector-url-fetch";
 import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
+import i18n from "../i18n";
+import { createPluginLocaleApi } from "../lib/plugin-locale";
 import { setTimeSliderOpenedByBinding, shouldCloseTimeSliderDock } from "../lib/time-slider-dock";
 import { createWmsTileUrl, normalizeWmsVersion } from "../components/layout/add-data/helpers";
 import { createExternalNativeStoreLayer } from "../lib/external-native-layer";
@@ -1243,6 +1245,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
     getActiveRightPanel,
     setActiveRightPanelDock,
     getActiveRightPanelDock,
+    ...createPluginLocaleApi(i18n),
     registerToolbarMenu,
     unregisterToolbarMenu,
     registerFloatingPanel,

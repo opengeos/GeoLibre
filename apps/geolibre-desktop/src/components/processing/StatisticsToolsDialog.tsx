@@ -22,6 +22,11 @@ import { Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
+import {
+  translateParameter,
+  translateToolDescription,
+  translateToolName,
+} from "../../lib/processing-tool-i18n";
 import { ParameterField } from "./ParameterField";
 
 interface StatisticsToolsDialogProps {
@@ -312,7 +317,7 @@ export function StatisticsToolsDialog({
                     entry.id === selectedId && "bg-accent font-medium text-accent-foreground",
                   )}
                 >
-                  {entry.name}
+                  {translateToolName(t, "statistics", entry)}
                 </button>
               ))}
             </div>
@@ -320,13 +325,15 @@ export function StatisticsToolsDialog({
 
           {/* Parameter form + run + log */}
           <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <p className="text-sm text-muted-foreground">{tool.description}</p>
+            <p className="text-sm text-muted-foreground">
+              {translateToolDescription(t, "statistics", tool)}
+            </p>
 
             <div className="flex flex-col gap-3">
               {tool.parameters.filter(isParamVisible).map((param) => (
                 <ParameterField
                   key={param.id}
-                  param={param}
+                  param={translateParameter(t, "statistics", tool.id, param)}
                   value={params[param.id]}
                   layerOptions={layerOptions(param.geometryFilter)}
                   fieldOptions={param.type === "field" ? fieldOptions(param) : undefined}
