@@ -202,3 +202,70 @@ export function formatStatValue(value: number): string {
     maximumFractionDigits: 4,
   });
 }
+
+/** Which population the statistics summarize. */
+export type StatsScope = "all" | "filtered" | "selected";
+
+/** Which narrowed scopes the statistics dialog can offer right now. */
+export interface StatsScopeAvailability {
+  /** The search filter narrows the layer to a population of its own. */
+  hasFilter: boolean;
+  /** The feature selection narrows the layer. */
+  hasSelection: boolean;
+}
+
+/**
+ * Decide which narrowed scopes are worth offering alongside "all".
+ *
+ * A scope earns a place in the picker only when it actually narrows the layer,
+ * and only once for a given population: the table's "Show Selected Features"
+ * view narrows the filtered rows to exactly the selection, and offering that
+ * same population twice — under two labels, with two copy headers — would say
+ * nothing. Both subsets are picked out of the same array in the same order (see
+ * `pickAnalysisRows`), so identity comparison is enough to detect the overlap.
+ *
+ * @param rows Every row of the layer.
+ * @param filteredRows Rows matching the table's search filter.
+ * @param selectedRows Rows matching the layer's feature selection.
+ * @returns Whether the filtered and selected scopes should be offered.
+ */
+export function statsScopeAvailability(
+  rows: ChartRow[],
+  filteredRows: ChartRow[],
+  selectedRows: ChartRow[],
+): StatsScopeAvailability {
+  const filteredMatchesSelection =
+    selectedRows.length > 0 &&
+    filteredRows.length === selectedRows.length &&
+    filteredRows.every((row, index) => row === selectedRows[index]);
+  return {
+    hasFilter: filteredRows.length !== rows.length && !filteredMatchesSelection,
+    hasSelection: selectedRows.length > 0 && selectedRows.length !== rows.length,
+  };
+}
+
+/**
+ * Resolve the scope to summarize from the one the user picked.
+ *
+ * A picked scope survives as long as it is still offered. When it stops being
+ * offered — the search is cleared, the selection is dropped, the two collapse
+ * onto each other — the other narrowed scope takes over if there is one, so the
+ * user keeps reading a subset instead of being dropped back onto the whole
+ * layer without asking. Only when neither narrows the layer does it fall to
+ * "all". Callers render from the result rather than from the picked scope, so a
+ * scope that disappears cannot leave a stale label on the summary or its
+ * clipboard header.
+ *
+ * @param scope The scope the user picked.
+ * @param availability Which narrowed scopes are on offer, from
+ *   {@link statsScopeAvailability}.
+ * @returns The scope to summarize.
+ */
+export function resolveStatsScope(
+  scope: StatsScope,
+  { hasFilter, hasSelection }: StatsScopeAvailability,
+): StatsScope {
+  if (scope === "filtered") return hasFilter ? "filtered" : hasSelection ? "selected" : "all";
+  if (scope === "selected") return hasSelection ? "selected" : hasFilter ? "filtered" : "all";
+  return "all";
+}

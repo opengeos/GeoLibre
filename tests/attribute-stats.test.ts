@@ -9,6 +9,8 @@ import {
   computeNumericStats,
   computeTextStats,
   formatStatValue,
+  resolveStatsScope,
+  statsScopeAvailability,
   type NumericFieldStats,
   type TextFieldStats,
 } from "../apps/geolibre-desktop/src/lib/attribute-stats";
@@ -156,5 +158,62 @@ describe("formatStatValue", () => {
   it("renders non-finite values as an em dash", () => {
     assert.equal(formatStatValue(Number.NaN), "—");
     assert.equal(formatStatValue(Infinity), "—");
+  });
+});
+
+describe("statsScopeAvailability", () => {
+  const layer = rows({ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 });
+
+  it("offers a scope only when it narrows the layer", () => {
+    assert.deepEqual(statsScopeAvailability(layer, layer, []), {
+      hasFilter: false,
+      hasSelection: false,
+    });
+    assert.deepEqual(statsScopeAvailability(layer, layer.slice(0, 2), [layer[3]]), {
+      hasFilter: true,
+      hasSelection: true,
+    });
+  });
+
+  it("drops a selection that covers the whole layer", () => {
+    assert.equal(statsScopeAvailability(layer, layer, layer).hasSelection, false);
+  });
+
+  it("drops the filtered scope when it holds exactly the selected rows", () => {
+    const selected = [layer[1], layer[2]];
+    const availability = statsScopeAvailability(layer, [layer[1], layer[2]], selected);
+    assert.deepEqual(availability, { hasFilter: false, hasSelection: true });
+  });
+
+  it("keeps both scopes when the same number of rows differ", () => {
+    const availability = statsScopeAvailability(layer, [layer[0], layer[1]], [layer[2], layer[3]]);
+    assert.deepEqual(availability, { hasFilter: true, hasSelection: true });
+  });
+});
+
+describe("resolveStatsScope", () => {
+  const both = { hasFilter: true, hasSelection: true };
+
+  it("keeps a scope that is still offered", () => {
+    assert.equal(resolveStatsScope("filtered", both), "filtered");
+    assert.equal(resolveStatsScope("selected", both), "selected");
+    assert.equal(resolveStatsScope("all", both), "all");
+  });
+
+  it("hands over to the other narrowed scope when one disappears", () => {
+    assert.equal(
+      resolveStatsScope("filtered", { hasFilter: false, hasSelection: true }),
+      "selected",
+    );
+    assert.equal(
+      resolveStatsScope("selected", { hasFilter: true, hasSelection: false }),
+      "filtered",
+    );
+  });
+
+  it("falls back to the whole layer once nothing narrows it", () => {
+    const none = { hasFilter: false, hasSelection: false };
+    assert.equal(resolveStatsScope("filtered", none), "all");
+    assert.equal(resolveStatsScope("selected", none), "all");
   });
 });

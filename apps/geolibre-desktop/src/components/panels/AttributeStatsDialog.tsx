@@ -13,7 +13,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import type { ChartRow } from "../../lib/attribute-charts";
-import { computeFieldStats, formatStatValue, type FieldStats } from "../../lib/attribute-stats";
+import {
+  computeFieldStats,
+  formatStatValue,
+  resolveStatsScope,
+  statsScopeAvailability,
+  type FieldStats,
+  type StatsScope,
+} from "../../lib/attribute-stats";
 
 interface AttributeStatsDialogProps {
   open: boolean;
@@ -28,7 +35,8 @@ interface AttributeStatsDialogProps {
   layerName: string;
 }
 
-type StatsScope = "all" | "filtered" | "selected";
+/** Neither narrowed scope, for while the dialog is closed. */
+const NO_SCOPES = { hasFilter: false, hasSelection: false };
 
 /**
  * One-click field statistics summary for the attribute table: pick a field and
@@ -52,24 +60,13 @@ export function AttributeStatsDialog({
   const [scope, setScope] = useState<StatsScope>("all");
   const [copied, setCopied] = useState(false);
 
-  // "Show Selected Features" narrows the table to the selection, so the filtered
-  // rows can be exactly the selected rows. Both sets are filtered out of the same
-  // array in the same order, so identity comparison is enough to spot that. Only
-  // worth walking the rows while the dialog is open: the parent keeps it mounted
-  // and feeds it rows whenever any analysis dialog is open.
-  const filteredMatchesSelection = useMemo(
-    () =>
-      open &&
-      selectedRows.length > 0 &&
-      filteredRows.length === selectedRows.length &&
-      filteredRows.every((row, index) => row === selectedRows[index]),
-    [open, filteredRows, selectedRows],
+  // Which narrowed scopes to offer. Only worth working out while the dialog is
+  // open: the parent keeps it mounted and feeds it rows whenever any analysis
+  // dialog is open, and the overlap check walks the rows.
+  const { hasFilter, hasSelection } = useMemo(
+    () => (open ? statsScopeAvailability(rows, filteredRows, selectedRows) : NO_SCOPES),
+    [open, rows, filteredRows, selectedRows],
   );
-
-  // A scope is worth offering only when it actually narrows the row set, and
-  // only once for a given set of rows; otherwise two scopes would be identical.
-  const hasFilter = filteredRows.length !== rows.length && !filteredMatchesSelection;
-  const hasSelection = selectedRows.length > 0 && selectedRows.length !== rows.length;
 
   // Seed the field picker when the dialog opens. Keyed on `open` only: `columns`
   // gets a fresh identity every parent render, so depending on it here would
@@ -82,32 +79,15 @@ export function AttributeStatsDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Where a scope lands once it stops being offered: prefer the other narrowed
-  // scope while one is still on offer, so the user keeps reading a subset rather
-  // than being dropped back onto the whole layer. Clearing the search leaves
-  // "Selected" (including when the selected-features view collapses "Filtered"
-  // onto it); clearing the selection leaves "Filtered".
-  const fallbackScope: StatsScope =
-    scope === "filtered" && hasSelection
-      ? "selected"
-      : scope === "selected" && hasFilter
-        ? "filtered"
-        : "all";
+  const activeScope = resolveStatsScope(scope, { hasFilter, hasSelection });
 
-  // Apply that fall back when a transient scope disappears while the dialog is
-  // open, so the select never points at an option that is no longer offered.
+  // Follow the resolved scope back into state when a transient scope disappears
+  // while the dialog is open, so the select never points at an option that is no
+  // longer offered.
   useEffect(() => {
-    if ((scope === "filtered" && !hasFilter) || (scope === "selected" && !hasSelection)) {
-      setScope(fallbackScope);
-    }
-  }, [fallbackScope, hasFilter, hasSelection, scope]);
+    if (activeScope !== scope) setScope(activeScope);
+  }, [activeScope, scope]);
 
-  const activeScope: StatsScope =
-    scope === "filtered" && hasFilter
-      ? "filtered"
-      : scope === "selected" && hasSelection
-        ? "selected"
-        : fallbackScope;
   const scopedRows =
     activeScope === "filtered" ? filteredRows : activeScope === "selected" ? selectedRows : rows;
 
