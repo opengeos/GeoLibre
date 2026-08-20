@@ -39,7 +39,7 @@ const SKETCHES_LAYER_NAME = "Sketches";
 const SKETCHES_SOURCE_PATH = "geoeditor://sketches";
 const GEOMAN_TEXT_PROPERTY = "__gm_text";
 const MASSING_HEIGHT_EXPRESSION =
-  '["case",["has","height"],["max",0,["to-number",["get","height"],0]],0.01]';
+  '["step",["zoom"],0.01,12,["case",["has","height"],["max",0,["to-number",["get","height"],0]],0.01]]';
 
 let geoEditorPosition: GeoLibreMapControlPosition = "top-left";
 
@@ -77,6 +77,8 @@ const GEO_EDITOR_OPTIONS = {
   showFeatureProperties: true,
   enableAttributeEditing: true,
   attributePanelTitle: "Feature properties",
+  // Leave the right-side MapLibre controls clickable while the form is open.
+  attributePanelSideOffset: 54,
   attributeSchema: {
     polygon: [
       {
@@ -247,7 +249,6 @@ function getGeoEditorOptions(): GeoEditorOptions {
     ...GEO_EDITOR_OPTIONS,
     position: geoEditorPosition,
     onFeatureCreate: () => {
-      sketchesIdleDisplayOverride = true;
       unionSketchesWithStoreOnNextSync = true;
       // Defer until Geoman commits the new feature to its feature store.
       queueMicrotask(() => {
