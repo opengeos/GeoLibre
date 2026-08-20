@@ -678,10 +678,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   );
   const analysisSelectedRows = useMemo(() => {
     if (!adaptAnalysisRows || selectedIdSet.size === 0) return [];
-    return coerceNumericStringRows(
-      attributeRows.filter(({ featureId }) => selectedIdSet.has(featureId)),
-    );
-  }, [adaptAnalysisRows, attributeRows, selectedIdSet]);
+    // Filter the already-adapted full-layer rows so a field keeps the same
+    // numeric/text inference when the statistics scope changes.
+    return analysisRows.filter((_, index) => selectedIdSet.has(attributeRows[index].featureId));
+  }, [adaptAnalysisRows, analysisRows, attributeRows, selectedIdSet]);
   const sorted = [...filtered].sort((a, b) => {
     const aValue = sort.key === "__featureId" ? a.featureId : a.properties[sort.key];
     const bValue = sort.key === "__featureId" ? b.featureId : b.properties[sort.key];
