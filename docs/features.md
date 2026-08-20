@@ -127,6 +127,12 @@ kepler.gl, see the [Comparison](comparison.md).
     - Add results to the map or export them
     - An in-browser PostGIS SQL engine via PGlite and an Apache Sedona spatial SQL engine
 - Multiple DuckDB SQL query-result layers with identify, selection, and attribute table support
+- **Apache Iceberg** vector layers, read in-browser through DuckDB's `iceberg` and `spatial` extensions
+    - Point at a table's metadata location, or attach an Iceberg REST catalog and pick a table from it — a source exposing a single table selects it automatically
+    - Selecting a table reports its true row count (from the manifest metadata, without scanning) before anything is read, and the load is capped by a row limit so a table far larger than the browser can hold still opens as a usable subset
+    - An optional SQL box, pre-filled with the generated `SELECT * FROM ...`, so a `WHERE`, a join, or a projection decides which geometries are rendered; editing it re-reports the row count and geometry column for that query
+    - The geometry column and its **CRS are both read from the schema** — Iceberg records the coordinate system in the column type, so a projected table reprojects to WGS84 with nothing to fill in; only native `GEOMETRY` columns are offered, since Iceberg v3 has a real geometry type and a BLOB or VARCHAR here is an attribute
+    - Due to the potential scale of huge iceberg tables, the resulting layer is a snapshot and is deliberately **never re-scanned on a timer** — the layer menu's automatic-refresh interval is unavailable for it; Refresh re-runs the scan on demand
 
 ## Map tools, printing, and media
 

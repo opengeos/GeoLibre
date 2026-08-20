@@ -327,6 +327,10 @@
         "label": "Add PostgreSQL Layer",
         "description": "Start Martin locally, discover PostGIS sources, and add a source as vector tiles."
       },
+      "iceberg": {
+        "label": "Add Apache Iceberg Layer",
+        "description": "Read an Iceberg table (V3 or above) and add a subset of its features."
+      },
       "deckglViz": {
         "label": "Add Deck.gl Layer",
         "description": "Pick a deck.gl layer type, then load the example data or upload a CSV/JSON/GeoJSON file or URL."
@@ -706,6 +710,41 @@
       "tableReadOnly": "{{table}} (read-only: no primary key)",
       "errorSelectTable": "Select a table to load.",
       "errorRuntimeMissing": "The processing server does not have the PostGIS runtime (psycopg) installed. Install the geolibre-server 'postgis' extra to load editable layers."
+    },
+    "iceberg": {
+      "defaultName": "Iceberg Layer",
+      "notice": "Iceberg tables are read once, on demand. The layer is a snapshot capped at the row limit below and is never re-scanned automatically — use Refresh in the layer menu to read it again.",
+      "mode": "Iceberg source",
+      "modeTable": "Table location",
+      "modeCatalog": "REST catalog",
+      "location": "Table metadata location",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "Warehouse",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "Catalog endpoint",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "Connect",
+      "table": "Iceberg table",
+      "sql": "SQL (optional)",
+      "sqlHint": "Edit to filter or reshape what is rendered. The statement must return a GEOMETRY column; leave it as generated to read the whole table.",
+      "selectTable": "Select a table",
+      "geometryColumn": "Geometry column",
+      "rowLimit": "Row limit",
+      "rowLimitHint": "At most {{max}} rows are read into the layer.",
+      "rowLimitTruncates": "The table holds {{total}} rows; the layer will contain the first {{limit}}.",
+      "statusConnecting": "Reading Iceberg metadata...",
+      "statusInspecting": "Inspecting table...",
+      "statusInspected": "{{rows}} rows. Geometry: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} rows, but no GEOMETRY column was found. Iceberg geometry must use the v3 geometry type.",
+      "statusTablesFound_one": "Found {{count}} table.",
+      "statusTablesFound_other": "Found {{count}} tables. Select one to continue.",
+      "statusNoTables": "The catalog exposes no tables.",
+      "errorLocation": "Enter the Iceberg table's metadata location.",
+      "errorWarehouse": "Enter the Iceberg warehouse to attach.",
+      "errorEndpoint": "Enter the Iceberg REST catalog endpoint.",
+      "errorConnect": "Could not read the Iceberg source.",
+      "errorInspect": "Could not inspect the Iceberg table.",
+      "errorConnectFirst": "Connect and select an Iceberg table first."
     },
     "video": {
       "defaultName": "Video Layer",
@@ -2282,7 +2321,8 @@
       "video": "Video Layer",
       "deckglViz": "Deck.gl Layer",
       "gltfModel": "3D Model (glTF)",
-      "postgres": "PostgreSQL Layer"
+      "postgres": "PostgreSQL Layer",
+      "iceberg": "Apache Iceberg Layer"
     },
     "conversion": {
       "vectorToVector": "Vector to Vector",
@@ -5241,6 +5281,7 @@
     "refreshVectorControlError": "Could not refresh this layer. Try re-opening the Add Vector Layer panel.",
     "refreshed": "Refreshed.",
     "refreshedCount": "Refreshed {{count}} features.",
+    "refreshedTruncated": "Refreshed {{count}} of {{total}} features.",
     "refreshError": "Could not refresh this layer.",
     "exportNeedsFeatures": "Export requires a vector layer with features.",
     "exportedWithWarnings": "Layer exported. {{warnings}}",

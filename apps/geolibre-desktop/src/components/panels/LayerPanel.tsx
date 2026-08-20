@@ -189,8 +189,10 @@ import {
   refreshGeoJsonLayer,
   setLayerConnectionResult,
   setLayerRefreshConfig,
+  supportsAutoRefresh,
   supportsRefreshFailurePolicy,
 } from "../../lib/layer-refresh";
+import { isIcebergLayer, refreshIcebergLayer } from "../../lib/iceberg";
 import {
   getLayerWatchConfig,
   isLocalFileLayer,
@@ -1381,6 +1383,47 @@ export function LayerPanel({
           scheduleStatusClear(layer.id);
           return;
         }
+        if (isIcebergLayer(layer)) {
+          // Iceberg layers re-run their stored, row-capped scan. This is the
+          // only path that re-reads the table: they are excluded from the
+          // interval scheduling below, so `automatic` is never true here.
+          const { geojson, featureCount, totalRows, truncated } = await refreshIcebergLayer(layer);
+          const latest = useAppStore
+            .getState()
+            .layers.find((candidate) => candidate.id === layer.id);
+          if (!latest) return;
+
+          updateLayer(layer.id, {
+            geojson,
+            ...setLayerConnectionResult(latest, {
+              syncedAt: new Date().toISOString(),
+              error: null,
+            }),
+            metadata: {
+              ...latest.metadata,
+              featureCount,
+              icebergTotalRows: totalRows,
+              icebergTruncated: truncated,
+            },
+          });
+
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: {
+              type: "success",
+              message: truncated
+                ? t("layers.refreshedTruncated", {
+                    count: featureCount.toLocaleString(),
+                    total: totalRows.toLocaleString(),
+                  })
+                : t("layers.refreshedCount", {
+                    count: featureCount.toLocaleString(),
+                  }),
+            },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
         if (isLocalFileLayer(layer)) {
           // Local-file vector layers re-read their features from disk (the same
           // conversion the import ran) rather than fetching a URL.
@@ -2345,7 +2388,7 @@ export function LayerPanel({
 
     for (const layer of layers) {
       const config = getLayerRefreshConfig(layer);
-      if (!config.enabled || !isRefreshableLayer(layer)) continue;
+      if (!config.enabled || !isRefreshableLayer(layer) || !supportsAutoRefresh(layer)) continue;
 
       activeLayerIds.add(layer.id);
       const existing = refreshTimersRef.current.get(layer.id);
@@ -2359,6 +2402,7 @@ export function LayerPanel({
 
         const latestConfig = getLayerRefreshConfig(latest);
         if (!latestConfig.enabled || !isRefreshableLayer(latest)) return;
+        if (!supportsAutoRefresh(latest)) return;
         void handleRefreshLayerRef.current(latest, true);
       }, config.intervalMs);
 
@@ -2383,7 +2427,7 @@ export function LayerPanel({
       const now = Date.now();
       for (const layer of useAppStore.getState().layers) {
         const config = getLayerRefreshConfig(layer);
-        if (!config.enabled || !isRefreshableLayer(layer)) continue;
+        if (!config.enabled || !isRefreshableLayer(layer) || !supportsAutoRefresh(layer)) continue;
         const lastSynced = layer.connection?.lastSyncedAt
           ? new Date(layer.connection.lastSyncedAt).getTime()
           : 0;
@@ -3140,6 +3184,10 @@ export function LayerPanel({
             // dismissed (and its on-map icon removed) when closed.
             const canEditRasterStyle = layer.metadata.sourceKind === RASTER_SOURCE_KIND;
             const canRefresh = isRefreshableLayer(layer);
+            // Iceberg layers refresh only on demand: scanning a table that
+            // large on a timer is never what the user meant, so the interval
+            // settings are unavailable even though Refresh is not.
+            const canAutoRefresh = canRefresh && supportsAutoRefresh(layer);
             const isLayerLocked =
               collaboration.isActive && (collaboration.lockedLayerIds ?? []).includes(layer.id);
             const layerEditable = canEditLayer(layer.id);
@@ -4141,7 +4189,7 @@ export function LayerPanel({
                                 {t("layers.refresh")}
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                disabled={!canRefresh}
+                                disabled={!canAutoRefresh}
                                 onSelect={() => {
                                   setRefreshSettingsLayerId(layer.id);
                                 }}

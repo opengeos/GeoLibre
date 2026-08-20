@@ -5,6 +5,10 @@ import { parseGeoRssLayer } from "./georss";
 // query-layer refresh is loaded dynamically inside sql-query-layer.ts, so this
 // module stays importable under the node test runner.
 import { isSqlQueryLayer } from "./sql-query-layer";
+// Same reasoning: `iceberg.ts` is the pure half of the Iceberg support, so the
+// metadata check imports cleanly here; its DuckDB engine is behind a dynamic
+// import inside `refreshIcebergLayer`.
+import { isIcebergLayer } from "./iceberg";
 
 // Keep in sync with WFS_PROXY_PATH / GPX_PROXY_PATH in vite.config.ts (the dev
 // proxy binds them there). The GPX path is a generic feed CORS proxy reused for
@@ -409,8 +413,28 @@ export function isRefreshableLayer(layer: GeoLibreLayer): boolean {
     isVectorControlRefreshLayer(layer) ||
     // SQL query layers refresh by re-executing their stored DuckDB statement
     // (see refreshSqlQueryLayer) rather than fetching a URL.
-    isSqlQueryLayer(layer)
+    isSqlQueryLayer(layer) ||
+    // Iceberg layers refresh by re-running their stored scan (see
+    // refreshIcebergLayer) — on demand only, see supportsAutoRefresh.
+    isIcebergLayer(layer)
   );
+}
+
+/**
+ * Whether a refreshable layer may also be refreshed on a *timer*.
+ *
+ * Everything refreshable qualifies except Iceberg layers: an Iceberg scan reads
+ * a table whose size is the whole reason the load is row-capped in the first
+ * place, so re-running it every N seconds would re-download and re-render a
+ * large dataset behind the user's back. Those layers keep the manual Refresh
+ * action and lose only the interval. Callers must gate both the scheduling and
+ * the auto-refresh settings UI on this, not just default the interval to off.
+ *
+ * @param layer The store layer to test.
+ * @returns Whether an automatic refresh interval may be scheduled for it.
+ */
+export function supportsAutoRefresh(layer: GeoLibreLayer): boolean {
+  return !isIcebergLayer(layer);
 }
 
 export function getLayerRefreshConfig(layer: GeoLibreLayer): LayerRefreshConfig {

@@ -160,6 +160,12 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
     labelKey: "toolbar.layerType.postgres",
     tier: "advanced",
   },
+  {
+    id: "iceberg",
+    section: "databases",
+    labelKey: "toolbar.layerType.iceberg",
+    tier: "advanced",
+  },
 ];
 
 /**

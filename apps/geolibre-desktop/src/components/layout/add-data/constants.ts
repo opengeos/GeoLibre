@@ -27,6 +27,7 @@ export type KindI18nKey =
   | "mbtiles"
   | "arcgis"
   | "postgres"
+  | "iceberg"
   | "deckglViz"
   | "video";
 
@@ -51,6 +52,7 @@ export const KIND_I18N_KEY: Record<AddDataKind, KindI18nKey> = {
   mbtiles: "mbtiles",
   arcgis: "arcgis",
   postgres: "postgres",
+  iceberg: "iceberg",
   "deckgl-viz": "deckglViz",
   video: "video",
 };

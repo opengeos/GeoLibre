@@ -13,6 +13,7 @@ import { DelimitedTextSource } from "./add-data/sources/DelimitedTextSource";
 import { GdbSource } from "./add-data/sources/GdbSource";
 import { GeoRssSource } from "./add-data/sources/GeoRssSource";
 import { GpxSource } from "./add-data/sources/GpxSource";
+import { IcebergSource } from "./add-data/sources/IcebergSource";
 import { MbtilesSource } from "./add-data/sources/MbtilesSource";
 import { OgcFeaturesSource } from "./add-data/sources/OgcFeaturesSource";
 import { OgcVectorTilesSource } from "./add-data/sources/OgcVectorTilesSource";
@@ -106,6 +107,8 @@ function renderSource(
       return <ArcGISSource initialUrl={initialUrl} />;
     case "postgres":
       return <PostgresSource initialPostgres={initialPostgres} />;
+    case "iceberg":
+      return <IcebergSource />;
     case "video":
       return <VideoSource />;
     case "deckgl-viz":

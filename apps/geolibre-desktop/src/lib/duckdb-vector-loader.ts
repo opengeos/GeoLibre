@@ -165,6 +165,7 @@ export async function resetSqlDatabase(poisoned: duckdb.AsyncDuckDB): Promise<vo
   if (current !== poisoned || sqlDbPromise !== previous) return;
   sqlDbPromise = null;
   spatialExtensionByDb.delete(poisoned);
+  icebergExtensionByDb.delete(poisoned);
   // Terminate now if idle; otherwise let the last in-flight query's release do it.
   if ((sqlDbInFlight.get(poisoned) ?? 0) > 0) {
     sqlDbTerminateWhenIdle.add(poisoned);
@@ -280,6 +281,46 @@ export const ensureA5Extension = createCommunityExtensionLoader("a5");
  * once per database instance. Mirrors {@link ensureH3Extension}.
  */
 export const ensureDuckDggsExtension = createCommunityExtensionLoader("duck_dggs");
+
+// Iceberg load state, keyed per instance so each DuckDB instance tracks its own
+// load (mirroring spatialExtensionByDb). Memoized as a promise so concurrent
+// callers share one INSTALL/LOAD.
+const icebergExtensionByDb = new WeakMap<duckdb.AsyncDuckDB, Promise<void>>();
+
+/**
+ * Install and load DuckDB's `iceberg` extension once per database instance, so
+ * `iceberg_scan()` and `ATTACH ... (TYPE ICEBERG)` are available.
+ *
+ * Unlike {@link ensureH3Extension} this is a **core** DuckDB extension (no
+ * `FROM community`), published for the WASM platforms alongside `spatial`.
+ * Reading a table also reads its Parquet data files over HTTP, so callers must
+ * have run the pre-spatial remote warm-up first — see
+ * {@link ensureSpatialExtension}, whose `beforeLoad` exists for exactly that.
+ *
+ * @param db The instance the load is memoized against.
+ * @param connection The connection to run INSTALL/LOAD on.
+ */
+export async function ensureIcebergExtension(
+  db: duckdb.AsyncDuckDB,
+  connection: duckdb.AsyncDuckDBConnection,
+): Promise<void> {
+  let promise = icebergExtensionByDb.get(db);
+  if (!promise) {
+    promise = (async () => {
+      await connection.query("INSTALL iceberg");
+      await connection.query("LOAD iceberg");
+    })();
+    icebergExtensionByDb.set(db, promise);
+  }
+  try {
+    await promise;
+  } catch (error) {
+    // Only clear the memo if it still points at this failed load, so a retry a
+    // concurrent caller already installed is not wiped out.
+    if (icebergExtensionByDb.get(db) === promise) icebergExtensionByDb.delete(db);
+    throw error;
+  }
+}
 
 async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
   const bundle = await selectDuckDbBundle();
@@ -484,7 +525,19 @@ function toFeatureCollection(
   };
 }
 
-async function validateDetectedGeometry(
+/**
+ * Resolve a schema-detected geometry column into one that can be turned into
+ * SQL: a native GEOMETRY or blob-WKB candidate passes straight through, while a
+ * string candidate is value-probed (it may be a plain user attribute that merely
+ * shares a WKB-ish name). Exported so other DuckDB readers — the Iceberg loader
+ * — apply the same rule against their own FROM-able source expression.
+ *
+ * @param connection An open DuckDB connection.
+ * @param source A FROM-able sub-select the candidates are probed against.
+ * @param detected The result of {@link detectGeometryColumn}.
+ * @returns The usable geometry, or null when none of the candidates decode.
+ */
+export async function validateDetectedGeometry(
   connection: duckdb.AsyncDuckDBConnection,
   source: string,
   detected: ReturnType<typeof detectGeometryColumn>,

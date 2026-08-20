@@ -18,6 +18,7 @@ export type AddDataKind =
   | "mbtiles"
   | "arcgis"
   | "postgres"
+  | "iceberg"
   | "deckgl-viz"
   | "video";
 
