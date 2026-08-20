@@ -502,7 +502,7 @@ function syncSketchesToStore(): void {
 export function hasMassingFeatures(collection: FeatureCollection): boolean {
   return collection.features.some(
     (feature) =>
-      (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") &&
+      (feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon") &&
       typeof feature.properties?.height === "number" &&
       Number.isFinite(feature.properties.height),
   );
@@ -526,6 +526,7 @@ export function sketchesStyleForMassing(
 
   return {
     ...layer.style,
+    elevation3dEnabled: false,
     extrusionEnabled: true,
     extrusionHeightProperty: "height",
     extrusionAdvancedStyleEnabled: true,

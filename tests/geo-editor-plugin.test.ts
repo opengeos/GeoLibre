@@ -45,6 +45,13 @@ describe("maplibreGeoEditorPlugin", () => {
   it("only identifies polygons with a finite numeric height as massing", () => {
     assert.equal(hasMassingFeatures({ type: "FeatureCollection", features: [polygon({})] }), false);
     assert.equal(
+      hasMassingFeatures({
+        type: "FeatureCollection",
+        features: [{ type: "Feature", properties: { height: 10 }, geometry: null }],
+      }),
+      false,
+    );
+    assert.equal(
       hasMassingFeatures({ type: "FeatureCollection", features: [polygon({ height: 10 })] }),
       true,
     );
@@ -57,6 +64,7 @@ describe("maplibreGeoEditorPlugin", () => {
 
     layer.style = sketchesStyleForMassing(layer, massing);
     assert.equal(layer.style.extrusionEnabled, true);
+    assert.equal(layer.style.elevation3dEnabled, false);
 
     layer.style = sketchesStyleForMassing(layer, flat);
     assert.equal(layer.style.extrusionEnabled, false);
