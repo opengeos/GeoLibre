@@ -130,18 +130,24 @@ async function withIcebergConnection<T>(
       }
       return await work(active);
     } finally {
-      if (connection) {
-        if (attached) {
-          try {
-            await connection.query(buildIcebergDetachSql());
-          } catch {
-            // Best-effort: the connection is closing anyway, and leaving the
-            // catalog attached would make the next ATTACH fail on the alias.
+      // The release is the `finally` of its own nested try, for the same reason
+      // `connect()` sits inside the outer one: a rejecting `close()` would
+      // otherwise skip it and leak the in-flight count permanently.
+      try {
+        if (connection) {
+          if (attached) {
+            try {
+              await connection.query(buildIcebergDetachSql());
+            } catch {
+              // Best-effort: the connection is closing anyway, and leaving the
+              // catalog attached would make the next ATTACH fail on the alias.
+            }
           }
+          await connection.close();
         }
-        await connection.close();
+      } finally {
+        await releaseSqlDatabase(db);
       }
-      await releaseSqlDatabase(db);
     }
   };
 
