@@ -841,6 +841,20 @@ class Map(anywidget.AnyWidget):
             timeout=timeout,
         )
 
+    def run_model_builder(
+        self,
+        graph: dict[str, Any],
+        *,
+        timeout: float = 600.0,
+    ) -> dict[str, Any]:
+        """Run a serialized GeoLibre Model Builder graph in the displayed app.
+
+        Sending the complete graph in one request also makes copied Model
+        Builder scripts portable to JupyterLite, whose browser kernel cannot
+        synchronously retrieve each intermediate layer id.
+        """
+        return self.request("runModelBuilder", {"graph": graph}, timeout=timeout)
+
     def list_whitebox_tools(self, *, timeout: float = 30.0) -> list[dict[str, Any]]:
         """List the bundled Whitebox/GeoLibre WASM tools and their parameters.
 

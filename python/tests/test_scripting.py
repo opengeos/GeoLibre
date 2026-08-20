@@ -200,6 +200,25 @@ def test_run_algorithm_builds_params(m, monkeypatch):
     assert captured["params"] == {"id": "buffer", "params": {"distance": 100}}
 
 
+def test_run_model_builder_builds_request(m, monkeypatch):
+    graph = {"nodes": [], "edges": []}
+    captured = {}
+    monkeypatch.setattr(
+        m,
+        "request",
+        lambda method, params=None, **kwargs: (
+            captured.update(method=method, params=params, kwargs=kwargs) or {"outputLayerIds": []}
+        ),
+    )
+
+    assert m.run_model_builder(graph, timeout=42) == {"outputLayerIds": []}
+    assert captured == {
+        "method": "runModelBuilder",
+        "params": {"graph": graph},
+        "kwargs": {"timeout": 42},
+    }
+
+
 def test_list_whitebox_tools_builds_request(m, monkeypatch):
     captured = {}
     monkeypatch.setattr(

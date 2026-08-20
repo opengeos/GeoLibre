@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { normalizeModelGraph, useAppStore } from "@geolibre/core";
 import {
   ALGORITHMS,
   VECTOR_TOOLS,
@@ -8,6 +8,8 @@ import {
   listWasmToolManifests,
   mergeWasmToolManifests,
   runWhiteboxToolWasm,
+  topologicalOrder,
+  validateModelGraph,
   type ProcessingAlgorithm,
   type ProcessingContext,
   type WhiteboxLayerInput,
@@ -24,6 +26,7 @@ import { styleParamPatch } from "./style-params";
 import { parameterKind } from "../whitebox-param-kind";
 import { canUseLayerForParameter, fetchLayerBytes } from "../whitebox-layer-inputs";
 import { createAppAPI } from "../../hooks/usePlugins";
+import { buildModelToolCatalog } from "../model-tool-catalog";
 
 // The scripting command surface, shared by every programmatic entry point: the
 // Jupyter widget's postMessage bridge (useCommandBridge) and the in-app Python
@@ -125,7 +128,7 @@ function requireLayerId(params: Record<string, unknown>): string {
 export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers {
   const { getController } = deps;
 
-  return {
+  const handlers: ScriptingHandlers = {
     // -- view / camera ------------------------------------------------------
     getView: () => getController()?.readView() ?? null,
     getCenter: () => getController()?.readView().center ?? null,
@@ -435,6 +438,72 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         throw error;
       }
     },
+    runModelBuilder: async (params) => {
+      const graph = normalizeModelGraph(params.graph);
+      if (!graph) throw new Error("runModelBuilder: graph is invalid");
+      const catalog = buildModelToolCatalog(VECTOR_TOOLS, await whiteboxTools());
+      const byKey = new Map(catalog.map((descriptor) => [descriptor.key, descriptor]));
+      const resolve = (provider: string | undefined, toolId: string | undefined) =>
+        provider && toolId ? byKey.get(`${provider}:${toolId}`) : undefined;
+      const issues = validateModelGraph(graph, resolve);
+      if (issues.length) throw new Error(issues.map((issue) => issue.message).join("\n"));
+      const ordered = topologicalOrder(graph);
+      if (!ordered) throw new Error("The model contains a loop.");
+
+      const incoming = new Map<string, typeof graph.edges>();
+      for (const edge of graph.edges) {
+        const list = incoming.get(edge.to) ?? [];
+        list.push(edge);
+        incoming.set(edge.to, list);
+      }
+      const produced = new Map<string, Map<string, string>>();
+      const outputLayerIds: string[] = [];
+      for (const node of ordered) {
+        if (node.kind === "input") {
+          const layerId = node.layerId ?? "";
+          if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) {
+            throw new Error(`No layer with id "${layerId}"`);
+          }
+          produced.set(node.id, new Map([["out", layerId]]));
+          continue;
+        }
+        if (node.kind === "output") {
+          const edge = incoming.get(node.id)?.[0];
+          const layerId = edge ? produced.get(edge.from)?.get(edge.fromPort) : undefined;
+          if (!layerId) throw new Error(`No result reached output "${node.name ?? node.id}"`);
+          if (node.name?.trim()) useAppStore.getState().updateLayer(layerId, { name: node.name });
+          outputLayerIds.push(layerId);
+          continue;
+        }
+
+        const descriptor = resolve(node.provider, node.toolId);
+        if (!descriptor || !node.provider || !node.toolId) {
+          throw new Error(`Unknown Model Builder tool "${node.toolId ?? ""}"`);
+        }
+        const toolParams: Record<string, unknown> = { ...(node.parameters ?? {}) };
+        for (const edge of incoming.get(node.id) ?? []) {
+          const layerId = produced.get(edge.from)?.get(edge.fromPort);
+          if (!layerId) throw new Error(`No result reached "${descriptor.name}"`);
+          toolParams[edge.toPort] = layerId;
+        }
+        const handler =
+          node.provider === "whitebox" ? handlers.runWhiteboxTool : handlers.runAlgorithm;
+        const result = (await handler({ id: node.toolId, params: toolParams })) as {
+          resultLayerIds?: unknown;
+        };
+        const resultLayerIds = result?.resultLayerIds;
+        if (!Array.isArray(resultLayerIds) || resultLayerIds.length < descriptor.outputs.length) {
+          throw new Error(`"${descriptor.name}" did not produce its expected map outputs.`);
+        }
+        produced.set(
+          node.id,
+          new Map(
+            descriptor.outputs.map((port, index) => [port.id, String(resultLayerIds[index])]),
+          ),
+        );
+      }
+      return { outputLayerIds };
+    },
 
     // -- export -------------------------------------------------------------
     toImage: () => {
@@ -447,4 +516,5 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       return captureMapImage(map).image.toDataURL("image/png");
     },
   };
+  return handlers;
 }

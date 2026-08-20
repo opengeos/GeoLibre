@@ -635,6 +635,14 @@ class HostMap:
         """
         _send("runAlgorithm", {"id": algorithm_id, "params": dict(params)})
 
+    def run_model_builder(self, graph: dict[str, Any]) -> None:
+        """Run a complete Model Builder graph in the host app.
+
+        The graph is sent as one command so JupyterLite can preserve dependent
+        step outputs without synchronous browser-kernel round trips.
+        """
+        _send("runModelBuilder", {"graph": graph})
+
 
 def connect() -> HostMap:
     """Return a handle to the live map in the surrounding GeoLibre app.
