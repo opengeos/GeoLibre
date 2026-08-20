@@ -193,10 +193,13 @@ function cardLayout(
   const rows = Math.max(ports.inputs.length, ports.outputs.length);
   // A labelled card is always a little taller than a bare one: at the compact
   // height a single row's text sits hard against the title above and the card
-  // edge below.
+  // edge below. The synthetic input/output cards carry no port label, but
+  // sizing them bare would leave them visibly shorter than every tool card
+  // beside them, so they take the height of a one-row labelled tool and a
+  // chain lines up.
   const height =
-    labelIn || labelOut
-      ? Math.max(NODE_HEIGHT + 6, CARD_HEADER_HEIGHT + rows * PORT_ROW_HEIGHT + 8)
+    labelIn || labelOut || kind !== "tool"
+      ? Math.max(NODE_HEIGHT + 6, CARD_HEADER_HEIGHT + Math.max(rows, 1) * PORT_ROW_HEIGHT + 8)
       : NODE_HEIGHT;
   // Both sides share one vertical band. A labelled side fills it row by row; an
   // unlabelled side spreads its dots down the same band rather than down the
@@ -205,7 +208,7 @@ function cardLayout(
   const band: PortBand =
     labelIn || labelOut
       ? { top: CARD_HEADER_HEIGHT, height: rows * PORT_ROW_HEIGHT }
-      : { top: 0, height: NODE_HEIGHT };
+      : { top: 0, height };
   return { height, labelIn, labelOut, band };
 }
 
@@ -498,17 +501,27 @@ export function ModelBuilderPanel({
     resetRunState();
   }, [confirmDiscard, resetRunState]);
 
+  /** @returns False when the user declined to discard what was on the canvas. */
   const handleLoadModel = useCallback(
-    (model: ProcessingModel) => {
-      if (!confirmDiscard()) return;
+    (model: ProcessingModel): boolean => {
+      if (!confirmDiscard()) return false;
       setModelId(model.id);
       setModelName(model.name);
       setGraph(autoLayout(model.graph ?? stepsToGraph(model), layoutOptions()));
       setSelectedNodeId(null);
       resetRunState();
+      return true;
     },
     [confirmDiscard, layoutOptions, resetRunState],
   );
+
+  /** Re-run the depth-based layout over the nodes the user has moved around. */
+  const handleArrange = useCallback(() => {
+    setGraph((current) => layoutGraph(current, layoutOptions()));
+    // The layout starts at the origin, so a canvas left scrolled somewhere
+    // else would open on empty space right after tidying it up.
+    canvasRef.current?.scrollTo({ left: 0, top: 0 });
+  }, [layoutOptions]);
 
   // Programmatic entry points (notably the AI Assistant) save a normal project
   // model and request that it be shown. Reuse the regular load path so an
@@ -517,8 +530,16 @@ export function ModelBuilderPanel({
     if (!open || !requestedModelId) return;
     const requested = savedModels.find((model) => model.id === requestedModelId);
     setRequestedModelId(null);
-    if (requested) handleLoadModel(requested);
-  }, [open, requestedModelId, savedModels, setRequestedModelId, handleLoadModel]);
+    if (!requested || !handleLoadModel(requested)) return;
+    // This request usually opens the panel, so on this pass the canvas is
+    // still mounting and the `layoutOptions()` inside handleLoadModel measures
+    // a width of zero — the layout then falls back to its default and a long
+    // assistant-built chain lands off the visible area. Re-arrange on the next
+    // frame, once the canvas has real width, so the model appears tidied and
+    // scrolled to its start rather than needing a manual Arrange.
+    const frame = requestAnimationFrame(() => handleArrange());
+    return () => cancelAnimationFrame(frame);
+  }, [open, requestedModelId, savedModels, setRequestedModelId, handleLoadModel, handleArrange]);
 
   /**
    * Forget the loaded model. The picker only offers models the project already
@@ -543,14 +564,6 @@ export function ModelBuilderPanel({
       return next ? next.graph : current;
     });
   }, []);
-
-  /** Re-run the depth-based layout over the nodes the user has moved around. */
-  const handleArrange = useCallback(() => {
-    setGraph((current) => layoutGraph(current, layoutOptions()));
-    // The layout starts at the origin, so a canvas left scrolled somewhere
-    // else would open on empty space right after tidying it up.
-    canvasRef.current?.scrollTo({ left: 0, top: 0 });
-  }, [layoutOptions]);
 
   const handleSave = useCallback(() => {
     // Also write the legacy linear projection when the graph happens to be a
@@ -1917,7 +1930,14 @@ const GraphNodeCard = memo(function GraphNodeCard({
       }}
       style={{ left: node.x, top: node.y, width: NODE_WIDTH, height: layout.height }}
       className={cn(
-        "absolute cursor-grab select-none rounded-md border bg-card p-2 shadow-sm active:cursor-grabbing",
+        "absolute cursor-grab select-none border p-2 shadow-sm active:cursor-grabbing",
+        // A tool is a square-cornered card; the model's own inputs and outputs
+        // are rounded and tinted, so the data flowing in and out reads apart
+        // from the processing between it at a glance — the same split ArcGIS
+        // ModelBuilder and QGIS draw as ovals versus rectangles. Safe for
+        // exactly these two kinds: each has a single, vertically centred port,
+        // so no port dot ever lands on the rounded part of the edge.
+        node.kind === "tool" ? "rounded-md bg-card" : "rounded-xl border-primary/40 bg-primary/10",
         selected && "border-primary ring-2 ring-primary/30",
         hasIssue && !selected && "border-destructive",
         status === "running" && "ring-2 ring-primary",
