@@ -101,6 +101,29 @@ describe("Node collaboration relay", () => {
     await assert.rejects(connect(http, "NOTFOUND"), /Unexpected server response: 404/);
   });
 
+  it("allows the hosted GeoLibre web origins to create sessions", async () => {
+    const { http } = await start();
+
+    for (const origin of [
+      "https://geolibre.app",
+      "https://web.geolibre.app",
+      "https://viewer.geolibre.app",
+      "https://studio.geolibre.app",
+    ]) {
+      const response = await fetch(`${http}/sessions`, {
+        method: "POST",
+        headers: { origin },
+      });
+      assert.equal(response.status, 200, `${origin} should be allowed`);
+    }
+
+    const rejected = await fetch(`${http}/sessions`, {
+      method: "POST",
+      headers: { origin: "https://web.geolibre.app.example.com" },
+    });
+    assert.equal(rejected.status, 403);
+  });
+
   it("rejects an oversized session-create body by declared length and by count", async () => {
     const { http } = await start();
 

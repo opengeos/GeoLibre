@@ -51,6 +51,9 @@ function isAllowedOrigin(originHeader: string | null, envAllowed?: string): bool
         .filter(Boolean)
     : [
         "https://geolibre.app",
+        "https://web.geolibre.app",
+        "https://viewer.geolibre.app",
+        "https://studio.geolibre.app",
         "https://collab.geolibre.app",
         "http://localhost",
         "http://127.0.0.1",

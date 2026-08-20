@@ -257,7 +257,9 @@ ephemeral and never written to a project file.
 
 > **Operator note:** `POST /sessions` validates the request `Origin` (or
 > `Referer`) against `ALLOWED_ORIGINS` via `isAllowedOrigin` (defaults to the
-> app's own domains plus `localhost` for development) as browser-origin filtering
+> hosted app origins (`geolibre.app`, `web.geolibre.app`, its legacy
+> `viewer.geolibre.app` alias, and `studio.geolibre.app`) plus `localhost` for
+> development) as browser-origin filtering
 > and defense-in-depth (not authentication or a general server-side access gate)
 > and enforces a per-IP `checkRateLimit` (10 requests / 60 s). `Access-Control-Allow-Origin: *` is
 > still sent on responses so non-browser clients (e.g. Tauri) are not blocked by
