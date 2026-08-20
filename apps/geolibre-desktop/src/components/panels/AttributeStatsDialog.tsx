@@ -34,9 +34,9 @@ type StatsScope = "all" | "filtered" | "selected";
  * One-click field statistics summary for the attribute table: pick a field and
  * read its count / nulls / min / max / mean / median / std / sum / unique
  * (numeric) or count / nulls / unique / most-frequent values (text). When a
- * search filter is active the scope can switch between all features and the
- * filtered subset. The computation lives in `attribute-stats`; this only renders
- * it.
+ * search filter or a feature selection narrows the table, the scope can switch
+ * between all features and that subset. The computation lives in
+ * `attribute-stats`; this only renders it.
  */
 export function AttributeStatsDialog({
   open,
@@ -52,10 +52,21 @@ export function AttributeStatsDialog({
   const [scope, setScope] = useState<StatsScope>("all");
   const [copied, setCopied] = useState(false);
 
-  // A filter is active (and worth offering as a scope) only when it actually
-  // narrows the row set; otherwise the two scopes would be identical.
-  const hasFilter = filteredRows.length !== rows.length;
-  const hasSelection = selectedRows.length > 0;
+  // "Show Selected Features" narrows the table to the selection, so the filtered
+  // rows can be exactly the selected rows. Both sets are filtered out of the same
+  // array in the same order, so identity comparison is enough to spot that.
+  const filteredMatchesSelection = useMemo(
+    () =>
+      selectedRows.length > 0 &&
+      filteredRows.length === selectedRows.length &&
+      filteredRows.every((row, index) => row === selectedRows[index]),
+    [filteredRows, selectedRows],
+  );
+
+  // A scope is worth offering only when it actually narrows the row set, and
+  // only once for a given set of rows; otherwise two scopes would be identical.
+  const hasFilter = filteredRows.length !== rows.length && !filteredMatchesSelection;
+  const hasSelection = selectedRows.length > 0 && selectedRows.length !== rows.length;
 
   // Seed the field picker when the dialog opens. Keyed on `open` only: `columns`
   // gets a fresh identity every parent render, so depending on it here would
