@@ -86,7 +86,11 @@ function buildToolMeta() {
  * one namespace keyed by `toolGroupKey` and are translated once.
  */
 function buildToolGroups() {
-  const groups = {};
+  // Null-prototype: `toolGroupKey` can produce an inherited member name — a
+  // group labelled "Constructor" slugs to `constructor` — and on a plain object
+  // the collision lookup below would read `Object.prototype.constructor` and
+  // throw on the very first tool in that group.
+  const groups = Object.create(null);
   for (const tools of Object.values(CATALOGS)) {
     for (const tool of tools) {
       if (!tool.group) continue;
@@ -107,6 +111,7 @@ function buildToolGroups() {
   }
   // Sorted so the generated block has a stable order regardless of which
   // registry happened to mention a group first.
+  // Back to a normal object for JSON.stringify.
   return Object.fromEntries(Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)));
 }
 

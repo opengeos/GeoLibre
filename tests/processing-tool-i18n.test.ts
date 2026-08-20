@@ -37,6 +37,15 @@ describe("toolGroupKey", () => {
   it("falls back for a label with no word characters", () => {
     assert.equal(toolGroupKey("—"), "other");
   });
+
+  it("can produce an inherited member name", () => {
+    // Pins the input behind the null-prototype accumulator in
+    // scripts/gen-processing-i18n-catalog.mjs: on a plain object, looking this
+    // key up finds Object.prototype.constructor and the generator's collision
+    // guard would fire on a group that has no collision at all.
+    assert.equal(toolGroupKey("Constructor"), "constructor");
+    assert.equal(toolGroupKey("To String"), "toString");
+  });
 });
 
 describe("tool metadata translation", () => {
