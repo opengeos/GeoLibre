@@ -123,6 +123,29 @@ export function coerceNumericStringRows(rows: ChartRow[]): ChartRow[] {
 }
 
 /**
+ * Narrow whole-layer analysis rows to the features named by `featureIds`.
+ *
+ * The analysis rows come from {@link coerceNumericStringRows} over the entire
+ * layer, so they line up index for index with the source rows they were built
+ * from. Picking out of that array — rather than re-coercing the subset — is what
+ * keeps a field's numeric/text inference identical no matter which statistics
+ * scope (all / filtered / selected) is showing: the threshold is always measured
+ * against the full layer.
+ *
+ * @param analysisRows The coerced rows for the whole layer.
+ * @param sourceRows The rows those were built from, same length and order.
+ * @param featureIds The features to keep.
+ * @returns The coerced rows for those features, in layer order.
+ */
+export function pickAnalysisRows(
+  analysisRows: ChartRow[],
+  sourceRows: { featureId: string }[],
+  featureIds: ReadonlySet<string>,
+): ChartRow[] {
+  return analysisRows.filter((_, index) => featureIds.has(sourceRows[index].featureId));
+}
+
+/**
  * The distinct non-empty values of a category field, sorted for display. Used
  * by the selector widget to build its list of value chips.
  *

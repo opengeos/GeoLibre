@@ -54,13 +54,16 @@ export function AttributeStatsDialog({
 
   // "Show Selected Features" narrows the table to the selection, so the filtered
   // rows can be exactly the selected rows. Both sets are filtered out of the same
-  // array in the same order, so identity comparison is enough to spot that.
+  // array in the same order, so identity comparison is enough to spot that. Only
+  // worth walking the rows while the dialog is open: the parent keeps it mounted
+  // and feeds it rows whenever any analysis dialog is open.
   const filteredMatchesSelection = useMemo(
     () =>
+      open &&
       selectedRows.length > 0 &&
       filteredRows.length === selectedRows.length &&
       filteredRows.every((row, index) => row === selectedRows[index]),
-    [filteredRows, selectedRows],
+    [open, filteredRows, selectedRows],
   );
 
   // A scope is worth offering only when it actually narrows the row set, and
@@ -79,11 +82,17 @@ export function AttributeStatsDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Where a scope lands once it stops being offered. Clearing the search over
-  // the selected-features view collapses "Filtered" onto "Selected", so keep
-  // the rows the user was already reading instead of resetting to "all".
+  // Where a scope lands once it stops being offered: prefer the other narrowed
+  // scope when one is still on offer, so the user keeps reading a subset rather
+  // than being dropped back onto the whole layer. Clearing the search over the
+  // selected-features view collapses "Filtered" onto "Selected"; clearing the
+  // selection while a search is still active leaves "Filtered".
   const fallbackScope: StatsScope =
-    scope === "filtered" && filteredMatchesSelection && hasSelection ? "selected" : "all";
+    scope === "filtered" && filteredMatchesSelection && hasSelection
+      ? "selected"
+      : scope === "selected" && hasFilter
+        ? "filtered"
+        : "all";
 
   // Apply that fall back when a transient scope disappears while the dialog is
   // open, so the select never points at an option that is no longer offered.
