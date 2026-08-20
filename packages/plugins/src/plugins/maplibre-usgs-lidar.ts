@@ -131,7 +131,7 @@ const mountUsgsLidarControl = (app: GeoLibreAppAPI): boolean => {
 export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-usgs-lidar",
   name: "USGS LiDAR",
-  version: "0.11.2",
+  version: "0.11.3",
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
 
