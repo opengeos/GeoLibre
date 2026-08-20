@@ -45,6 +45,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -156,14 +157,57 @@ function createId(): string {
 }
 
 /** Where a port's connector dot sits, in canvas coordinates. */
+/** Vertical room the provider line and the tool name take on a card. */
+const CARD_HEADER_HEIGHT = 36;
+/** Height of one labelled port row. */
+const PORT_ROW_HEIGHT = 18;
+
+/**
+ * Card geometry for one node.
+ *
+ * A side carrying more than one port gets a labelled row per port: two bare
+ * dots on the edge of a card are indistinguishable, so a tool like Raster
+ * Streams To Vector gave no way to tell its `d8_pntr` input from its `streams`
+ * one without hovering each in turn. Cards grow to fit those rows; a
+ * single-port side keeps the compact card and centres its dot as before.
+ */
+function cardLayout(ports: {
+  inputs: { id: string; label: string }[];
+  outputs: { id: string; label: string }[];
+}): { height: number; labelIn: boolean; labelOut: boolean } {
+  const labelIn = ports.inputs.length > 1;
+  const labelOut = ports.outputs.length > 1;
+  const rows = Math.max(ports.inputs.length, ports.outputs.length);
+  const height =
+    labelIn || labelOut
+      ? Math.max(NODE_HEIGHT, CARD_HEADER_HEIGHT + rows * PORT_ROW_HEIGHT + 6)
+      : NODE_HEIGHT;
+  return { height, labelIn, labelOut };
+}
+
+/**
+ * Where one port's connector sits.
+ *
+ * Labelled ports stack in rows under the header so each dot lines up with its
+ * name; an unlabelled side spreads its single dot down the middle of the card
+ * as it always did.
+ */
 function portPosition(
   node: ModelGraphNode,
   index: number,
   count: number,
   side: "in" | "out",
+  height: number = NODE_HEIGHT,
+  labelled = false,
 ): { x: number; y: number } {
   const x = side === "in" ? node.x : node.x + NODE_WIDTH;
-  const spacing = NODE_HEIGHT / (count + 1);
+  if (labelled) {
+    return {
+      x,
+      y: node.y + CARD_HEADER_HEIGHT + PORT_ROW_HEIGHT * index + PORT_ROW_HEIGHT / 2,
+    };
+  }
+  const spacing = height / (count + 1);
   return { x, y: node.y + spacing * (index + 1) };
 }
 
@@ -1081,7 +1125,14 @@ export function ModelBuilderPanel({
   const canvasExtent = graph.nodes.reduce(
     (acc, node) => ({
       width: Math.max(acc.width, node.x + NODE_WIDTH + 80),
-      height: Math.max(acc.height, node.y + NODE_HEIGHT + 80),
+      // Per-node height, since a multi-port card is taller than NODE_HEIGHT and
+      // the deepest one decides how far the canvas has to scroll.
+      height: Math.max(
+        acc.height,
+        node.y +
+          cardLayout(portsOf(node, resolveDescriptor(node.provider, node.toolId))).height +
+          80,
+      ),
     }),
     { width: 640, height: 400 },
   );
@@ -1676,7 +1727,17 @@ function GraphEdges({
     const list = side === "in" ? ports.inputs : ports.outputs;
     const index = list.findIndex((port) => port.id === portId);
     if (index < 0) return null;
-    return portPosition(node, index, list.length, side);
+    // Same geometry the card uses, or a labelled multi-port node would draw its
+    // curves to where the dots used to be.
+    const layout = cardLayout(ports);
+    return portPosition(
+      node,
+      index,
+      list.length,
+      side,
+      layout.height,
+      side === "in" ? layout.labelIn : layout.labelOut,
+    );
   };
 
   return (
@@ -1778,6 +1839,7 @@ const GraphNodeCard = memo(function GraphNodeCard({
 }): ReactElement {
   const { t } = useTranslation();
   const ports = portsOf(node, descriptor);
+  const layout = cardLayout(ports);
   const title =
     node.kind === "input"
       ? (layers.find((layer) => layer.id === node.layerId)?.name ??
@@ -1807,7 +1869,7 @@ const GraphNodeCard = memo(function GraphNodeCard({
         event.preventDefault();
         onSelect(node.id);
       }}
-      style={{ left: node.x, top: node.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
+      style={{ left: node.x, top: node.y, width: NODE_WIDTH, height: layout.height }}
       className={cn(
         "absolute cursor-grab select-none rounded-md border bg-card p-2 shadow-sm active:cursor-grabbing",
         selected && "border-primary ring-2 ring-primary/30",
@@ -1829,49 +1891,99 @@ const GraphNodeCard = memo(function GraphNodeCard({
       </p>
 
       {ports.inputs.map((port, index) => {
-        const at = portPosition(node, index, ports.inputs.length, "in");
+        const at = portPosition(
+          node,
+          index,
+          ports.inputs.length,
+          "in",
+          layout.height,
+          layout.labelIn,
+        );
         return (
-          <button
-            key={port.id}
-            type="button"
-            data-port="in"
-            data-node-id={node.id}
-            data-port-id={port.id}
-            title={portLabel(t, port.label)}
-            aria-label={t("processing.modelBuilder.inputPort", { port: portLabel(t, port.label) })}
-            onClick={() => onPortActivate("in", node.id, port.id)}
-            style={{ left: -6, top: at.y - node.y - 5 }}
-            className="absolute h-2.5 w-2.5 cursor-pointer rounded-full border border-primary bg-background"
-          />
+          <Fragment key={port.id}>
+            <button
+              type="button"
+              data-port="in"
+              data-node-id={node.id}
+              data-port-id={port.id}
+              title={portLabel(t, port.label)}
+              aria-label={t("processing.modelBuilder.inputPort", {
+                port: portLabel(t, port.label),
+              })}
+              onClick={() => onPortActivate("in", node.id, port.id)}
+              style={{ left: -6, top: at.y - node.y - 5 }}
+              className="absolute h-2.5 w-2.5 cursor-pointer rounded-full border border-primary bg-background"
+            />
+            {/* The name of the port this dot belongs to, so a multi-input tool
+                says which input is which without hovering each dot. */}
+            {layout.labelIn && (
+              <span
+                aria-hidden="true"
+                style={{
+                  left: 6,
+                  top: at.y - node.y - PORT_ROW_HEIGHT / 2,
+                  height: PORT_ROW_HEIGHT,
+                  maxWidth: NODE_WIDTH - 24,
+                }}
+                className="pointer-events-none absolute flex items-center truncate text-[9px] leading-none text-muted-foreground"
+              >
+                {portLabel(t, port.label)}
+              </span>
+            )}
+          </Fragment>
         );
       })}
       {ports.outputs.map((port, index) => {
-        const at = portPosition(node, index, ports.outputs.length, "out");
+        const at = portPosition(
+          node,
+          index,
+          ports.outputs.length,
+          "out",
+          layout.height,
+          layout.labelOut,
+        );
         return (
-          <button
-            key={port.id}
-            type="button"
-            data-port="out"
-            data-node-id={node.id}
-            data-port-id={port.id}
-            title={portLabel(t, port.label)}
-            aria-label={t("processing.modelBuilder.outputPort", { port: portLabel(t, port.label) })}
-            aria-pressed={armedPortId === port.id}
-            // Pointer users drag; keyboard users activate, which fires `click`
-            // and never `pointerdown`. Both paths end in connectPorts.
-            onPointerDown={(event) => onPortPointerDown(event, node.id, port.id)}
-            onClick={(event) => {
-              // A pointer drag ends in its own `pointerup` handler and then
-              // fires a click here too, which would arm the port it just wired.
-              if (event.detail !== 0) return;
-              onPortActivate("out", node.id, port.id);
-            }}
-            style={{ right: -6, top: at.y - node.y - 5 }}
-            className={cn(
-              "absolute h-2.5 w-2.5 cursor-crosshair rounded-full border border-primary bg-primary",
-              armedPortId === port.id && "ring-2 ring-primary ring-offset-1",
+          <Fragment key={port.id}>
+            <button
+              type="button"
+              data-port="out"
+              data-node-id={node.id}
+              data-port-id={port.id}
+              title={portLabel(t, port.label)}
+              aria-label={t("processing.modelBuilder.outputPort", {
+                port: portLabel(t, port.label),
+              })}
+              aria-pressed={armedPortId === port.id}
+              // Pointer users drag; keyboard users activate, which fires `click`
+              // and never `pointerdown`. Both paths end in connectPorts.
+              onPointerDown={(event) => onPortPointerDown(event, node.id, port.id)}
+              onClick={(event) => {
+                // A pointer drag ends in its own `pointerup` handler and then
+                // fires a click here too, which would arm the port it just wired.
+                if (event.detail !== 0) return;
+                onPortActivate("out", node.id, port.id);
+              }}
+              style={{ right: -6, top: at.y - node.y - 5 }}
+              className={cn(
+                "absolute h-2.5 w-2.5 cursor-crosshair rounded-full border border-primary bg-primary",
+                armedPortId === port.id && "ring-2 ring-primary ring-offset-1",
+              )}
+            />
+            {layout.labelOut && (
+              <span
+                aria-hidden="true"
+                style={{
+                  right: 6,
+                  top: at.y - node.y - PORT_ROW_HEIGHT / 2,
+                  height: PORT_ROW_HEIGHT,
+                  maxWidth: NODE_WIDTH - 24,
+                }}
+                className="pointer-events-none absolute flex items-center truncate text-[9px] leading-none text-muted-foreground"
+              >
+                {portLabel(t, port.label)}
+              </span>
             )}
-          />
+          </Fragment>
         );
       })}
     </div>
