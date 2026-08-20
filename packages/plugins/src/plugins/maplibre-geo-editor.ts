@@ -38,6 +38,8 @@ export { canEditLayerGeometry, SKETCHES_SOURCE_KIND } from "./geo-editor-geometr
 const SKETCHES_LAYER_NAME = "Sketches";
 const SKETCHES_SOURCE_PATH = "geoeditor://sketches";
 const GEOMAN_TEXT_PROPERTY = "__gm_text";
+const MASSING_HEIGHT_EXPRESSION =
+  '["case",["has","height"],["max",0,["to-number",["get","height"],0]],0.01]';
 
 let geoEditorPosition: GeoLibreMapControlPosition = "top-left";
 
@@ -81,7 +83,6 @@ const GEO_EDITOR_OPTIONS = {
         name: "height",
         label: "Height (m)",
         type: "number",
-        defaultValue: 10,
         min: 0,
         step: 0.5,
       },
@@ -469,7 +470,7 @@ function syncSketchesToStore(): void {
       sketchesLayerId = existing.id;
       store.updateLayer(existing.id, {
         geojson: collection,
-        ...(hasMassingFeatures(collection) ? { style: massingSketchStyle(existing) } : {}),
+        style: sketchesStyleForMassing(existing, collection),
       });
     } else {
       if (collection.features.length === 0) {
@@ -483,13 +484,10 @@ function syncSketchesToStore(): void {
           ...useAppStore.getState().layers.find((layer) => layer.id === id)?.metadata,
           sourceKind: SKETCHES_SOURCE_KIND,
         },
-        ...(hasMassingFeatures(collection)
-          ? {
-              style: massingSketchStyle(
-                useAppStore.getState().layers.find((layer) => layer.id === id)!,
-              ),
-            }
-          : {}),
+        style: sketchesStyleForMassing(
+          useAppStore.getState().layers.find((layer) => layer.id === id)!,
+          collection,
+        ),
       });
     }
   } finally {
@@ -501,7 +499,7 @@ function syncSketchesToStore(): void {
   }
 }
 
-function hasMassingFeatures(collection: FeatureCollection): boolean {
+export function hasMassingFeatures(collection: FeatureCollection): boolean {
   return collection.features.some(
     (feature) =>
       (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") &&
@@ -510,14 +508,28 @@ function hasMassingFeatures(collection: FeatureCollection): boolean {
   );
 }
 
-function massingSketchStyle(layer: GeoLibreLayer): GeoLibreLayer["style"] {
+export function sketchesStyleForMassing(
+  layer: GeoLibreLayer,
+  collection: FeatureCollection,
+): GeoLibreLayer["style"] {
+  if (!hasMassingFeatures(collection)) {
+    if (layer.style.extrusionHeightExpression !== MASSING_HEIGHT_EXPRESSION) {
+      return layer.style;
+    }
+    return {
+      ...layer.style,
+      extrusionEnabled: false,
+      extrusionAdvancedStyleEnabled: false,
+      extrusionHeightExpression: "",
+    };
+  }
+
   return {
     ...layer.style,
     extrusionEnabled: true,
     extrusionHeightProperty: "height",
     extrusionAdvancedStyleEnabled: true,
-    extrusionHeightExpression:
-      '["case",["has","height"],["max",0,["to-number",["get","height"],0]],0.01]',
+    extrusionHeightExpression: MASSING_HEIGHT_EXPRESSION,
   };
 }
 
