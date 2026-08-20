@@ -83,12 +83,12 @@ export function AttributeStatsDialog({
   }, [open]);
 
   // Where a scope lands once it stops being offered: prefer the other narrowed
-  // scope when one is still on offer, so the user keeps reading a subset rather
-  // than being dropped back onto the whole layer. Clearing the search over the
-  // selected-features view collapses "Filtered" onto "Selected"; clearing the
-  // selection while a search is still active leaves "Filtered".
+  // scope while one is still on offer, so the user keeps reading a subset rather
+  // than being dropped back onto the whole layer. Clearing the search leaves
+  // "Selected" (including when the selected-features view collapses "Filtered"
+  // onto it); clearing the selection leaves "Filtered".
   const fallbackScope: StatsScope =
-    scope === "filtered" && filteredMatchesSelection && hasSelection
+    scope === "filtered" && hasSelection
       ? "selected"
       : scope === "selected" && hasFilter
         ? "filtered"
