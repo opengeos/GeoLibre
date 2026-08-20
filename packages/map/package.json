@@ -28,7 +28,7 @@
     "geotiff": "^3.0.5",
     "maplibre-gl": "^6.3.0",
     "maplibre-gl-layer-control": "^0.17.4",
-    "pmtiles": "^4.4.1",
+    "pmtiles": "^4.5.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

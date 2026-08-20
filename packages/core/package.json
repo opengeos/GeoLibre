@@ -12,7 +12,7 @@
     "@maplibre/maplibre-gl-style-spec": "^26.2.1",
     "uuid": "^14.0.1",
     "zundo": "^2.3.0",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

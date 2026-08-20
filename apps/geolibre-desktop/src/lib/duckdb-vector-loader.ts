@@ -15,6 +15,7 @@ import {
   wkbRowsToFeatureCollection,
 } from "./duckdb-geometry";
 import { confirmLargeDataset, type DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
+import { readDxfCodepage, recodeCadFeatureCollection } from "./cad-encoding";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
 import { prjSidecarCrs } from "./prj-sidecar";
@@ -606,6 +607,10 @@ export async function loadDuckDbVectorFile(
     // Inside the try so the finally still closes the connection if it throws.
     // `prjSidecarCrs` is `.shp`-scoped, so a non-shapefile's siblings are safe.
     const prjCrs = prjSidecarCrs(file);
+    // Read $DWGCODEPAGE / $ACADVER before registerFileBuffer transfers (and
+    // detaches) the bytes. WASM GDAL has no iconv, so DXF TEXT is recoded
+    // after ST_Read. Other formats skip this (null → no-op).
+    const dxfCodepage = file.extension === "dxf" ? readDxfCodepage(file.data) : null;
 
     await registerVectorFileBuffers(db, file);
     await ensureSpatialExtension(
@@ -655,7 +660,10 @@ export async function loadDuckDbVectorFile(
       );
       // Features may carry a null geometry; the app's layer model treats them
       // as a regular FeatureCollection and the map ignores null geometries.
-      return toFeatureCollection(rowsFromResult(result), detected.column) as FeatureCollection;
+      return recodeCadFeatureCollection(
+        toFeatureCollection(rowsFromResult(result), detected.column) as FeatureCollection,
+        dxfCodepage,
+      );
     } catch (error) {
       // DuckDB Spatial's WKB reader rejects surface geometries (TIN /
       // PolyhedralSurface), which its bundled GDAL emits for ESRI MultiPatch
@@ -677,7 +685,15 @@ export async function loadDuckDbVectorFile(
       if (isParquetExtension(file.extension) || !isSurfaceError) {
         throw error;
       }
-      return loadViaKeepWkbFallback(db, file, options, sourceCrs, error, guardConfirmed);
+      return loadViaKeepWkbFallback(
+        db,
+        file,
+        options,
+        sourceCrs,
+        error,
+        guardConfirmed,
+        dxfCodepage,
+      );
     }
   } finally {
     await connection.close();
@@ -700,6 +716,10 @@ export async function loadDuckDbVectorFile(
  * @param guardConfirmed Whether the normal path already confirmed the
  *   large-dataset guard; when false (the error fired on the count guard) it is
  *   re-run here so a huge file is not loaded without confirmation.
+ * @param dxfCodepage The drawing codepage the normal path read from the DXF
+ *   header, or null. A DXF with a 3DFACE/PolyfaceMesh entity can reach this
+ *   fallback too, so its TEXT is recoded here as well; without it the
+ *   attributes would keep the Latin-1 mojibake the normal path repairs.
  */
 async function loadViaKeepWkbFallback(
   db: duckdb.AsyncDuckDB,
@@ -708,6 +728,7 @@ async function loadViaKeepWkbFallback(
   sourceCrs: string | null,
   originalError: unknown,
   guardConfirmed: boolean,
+  dxfCodepage: string | null,
 ): Promise<FeatureCollection> {
   // Read on a fresh connection: re-running ST_Read on the connection that
   // already scanned the file trips a "Missing DB manager" GDAL assertion in the
@@ -754,8 +775,14 @@ async function loadViaKeepWkbFallback(
     }
     // The decoded geometry is in the file's own CRS; reproject to WGS84 with the
     // same source CRS the normal path resolved. Reuses the shared ST_Transform
-    // path, which handles the MultiPolygon the TIN decoded to.
-    return reprojectFeatureCollectionToWgs84(collection, sourceCrs);
+    // path, which handles the MultiPolygon the TIN decoded to. Recode first, at
+    // this `ST_Read` boundary: reprojection re-reads the collection as GeoJSON,
+    // which OGR already treats as UTF-8, so it is not the layer that mangled
+    // the strings and must not be handed mojibake to round-trip.
+    return reprojectFeatureCollectionToWgs84(
+      recodeCadFeatureCollection(collection, dxfCodepage),
+      sourceCrs,
+    );
   } finally {
     await connection.close();
   }

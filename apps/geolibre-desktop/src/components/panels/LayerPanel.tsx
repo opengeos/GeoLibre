@@ -93,6 +93,7 @@ import {
   zoomToSelection,
 } from "../../lib/selection-actions";
 import { isMobile } from "../../lib/is-mobile";
+import { PLANET_SWITCHER_LABEL_KEYS } from "../../lib/planet-labels";
 import { masHidesDataSource } from "../../lib/mas-build";
 import {
   DATA_SOURCE_CATALOG,
@@ -318,22 +319,6 @@ const SYNC_CLOCK_TICK_MS = 60_000;
 const ADD_DATA_DIALOG_SOURCES = DATA_SOURCE_CATALOG.filter(
   (entry): entry is DataSourceCatalogEntry & { id: AddDataKind } => entry.id in KIND_I18N_KEY,
 );
-
-/** Menu labels for the planet switcher, keyed by celestial body. */
-const PLANET_SWITCHER_LABEL_KEYS: Record<EllipsoidId, ParseKeys> = {
-  earth: "planetSwitcher.earth",
-  mercury: "planetSwitcher.mercury",
-  venus: "planetSwitcher.venus",
-  moon: "planetSwitcher.moon",
-  mars: "planetSwitcher.mars",
-  io: "planetSwitcher.io",
-  europa: "planetSwitcher.europa",
-  ganymede: "planetSwitcher.ganymede",
-  callisto: "planetSwitcher.callisto",
-  titan: "planetSwitcher.titan",
-  pluto: "planetSwitcher.pluto",
-  charon: "planetSwitcher.charon",
-};
 
 type LayerRefreshStatus = {
   type: "refreshing" | "success" | "error" | "warning";
@@ -2504,19 +2489,21 @@ export function LayerPanel({
 
   useEffect(() => {
     const watchers = watchUnsubsRef.current;
+    const refreshTimers = refreshTimersRef.current;
+    const refreshStatusTimers = refreshStatusTimersRef.current;
     return () => {
       for (const entry of watchers.values()) {
         entry.unwatch();
       }
       watchers.clear();
-      for (const entry of refreshTimersRef.current.values()) {
+      for (const entry of refreshTimers.values()) {
         window.clearInterval(entry.timer);
       }
-      refreshTimersRef.current.clear();
-      for (const timer of refreshStatusTimersRef.current.values()) {
+      refreshTimers.clear();
+      for (const timer of refreshStatusTimers.values()) {
         window.clearTimeout(timer);
       }
-      refreshStatusTimersRef.current.clear();
+      refreshStatusTimers.clear();
     };
   }, []);
 

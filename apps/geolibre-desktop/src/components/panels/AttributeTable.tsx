@@ -450,7 +450,6 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const calcExpressionRef = useRef<HTMLTextAreaElement>(null);
 
   const layer = layers.find((l) => l.id === selectedLayerId);
-  const coerceNumericStrings = layer?.metadata.sourceKind === "delimited-text";
   const hasLayer = Boolean(layer);
   // Columns materialized by persistent joins are derived data: every save
   // re-derives them from the join table, so an edit, rename, or delete here
@@ -661,9 +660,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       return featureId.includes(filterLower) || props.includes(filterLower);
     });
   }, [attributeFilter, attributeRows, featureView, selectedIdSet]);
-  // Delimited-text imports preserve every cell as a string. Adapt only the rows
-  // sent to analysis dialogs, leaving the table and exported source data intact.
-  const adaptAnalysisRows = coerceNumericStrings && (chartOpen || statsOpen || explorerOpen);
+  // String-oriented sources can encode measurements as text. Adapt only the
+  // rows sent to analysis dialogs, leaving the table and source data intact.
+  const adaptAnalysisRows = chartOpen || statsOpen || explorerOpen;
   const analysisRows = useMemo(
     () => (adaptAnalysisRows ? coerceNumericStringRows(attributeRows) : attributeRows),
     [adaptAnalysisRows, attributeRows],

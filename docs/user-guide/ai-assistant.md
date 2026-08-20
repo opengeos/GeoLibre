@@ -64,7 +64,7 @@ docker run --rm -p 8080:80 \
   -e GEOLIBRE_AUTH_USER=admin \
   -e GEOLIBRE_AUTH_PASSWORD='change-me' \
   -e GEOLIBRE_AI_URL=/ai \
-  -e GEOLIBRE_AI_MODEL=openai/gpt-5.5 \
+  -e GEOLIBRE_AI_MODEL=openai/gpt-5.6-luna \
   -e GEOLIBRE_AI_PROXY_URL=https://ai.geolibre.app \
   -e GEOLIBRE_AI_PROXY_TOKEN="$GEOLIBRE_AI_PROXY_TOKEN" \
   ghcr.io/opengeos/geolibre:latest
@@ -140,7 +140,8 @@ that field blank to keep using the environment value.
 
 ## Using it
 
-Type a request and press **Ctrl/Cmd + Enter** (or click **Send**). The
+Type a request and press **Enter** (or click **Send**); **Shift + Enter**
+inserts a newline, and **Ctrl/Cmd + Enter** still sends. The
 assistant streams its reply, runs tools as needed, and reports what it did. While
 it is working, **Send** becomes **Stop** — click it to cancel. **Clear** (the
 eraser icon) starts a fresh conversation.

@@ -178,6 +178,15 @@ export function classifyServiceRequest(rawUrl) {
     return candidate(url, "OGC API", "vector", "OGC API service", api.href);
   }
 
+  // A MapLibre-style renderer fetches its `.pbf` tiles from a web worker, and a
+  // worker's requests are recorded in the worker's own timeline rather than the
+  // document's, so the TileJSON the main thread fetched to find them can be the
+  // only trace of the tileset. The body is never read, so a TileJSON describing
+  // raster tiles is indistinguishable here and is offered as a vector tileset.
+  if (/\/tile(?:s?|json)\.json$/i.test(path)) {
+    return candidate(url, "Vector tiles", "vector", "Vector tile service");
+  }
+
   const tile = path.match(/^(.*\/)(\d+)\/(\d+)\/(\d+)(\.(?:png|jpe?g|webp|gif|pbf|mvt))(?:\/)?$/i);
   if (tile) {
     const [zoom, column, row] = tile.slice(2, 5).map(Number);
@@ -227,11 +236,14 @@ export function classifyStyleRequest(rawUrl) {
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
   const path = url.pathname;
-  const isStyle =
-    /\/style(?:s)?\.json$/i.test(path) ||
-    /\/styles?\/[^/]+\.json$/i.test(path) ||
-    /\/resources\/styles\/[^/]*\.json$/i.test(path);
-  return isStyle ? { origin: url.origin, url: url.href } : null;
+  // `…/style.json` and an ArcGIS `…/resources/styles/<name>.json` name themselves
+  // as map styles. `…/styles/<name>.json` does not: a theme or configuration
+  // endpoint is served at exactly that path. So the generic spelling is trusted
+  // to explain a tileset already found at its origin, but never to become a
+  // candidate of its own, where it would offer a page's theme file as a layer.
+  const named = /\/styles?\.json$/i.test(path) || /\/resources\/styles\/[^/]*\.json$/i.test(path);
+  const isStyle = named || /\/styles?\/[^/]+\.json$/i.test(path);
+  return isStyle ? { origin: url.origin, url: url.href, named } : null;
 }
 
 /** Two entries describe the same thing only if they name the same layer. */
@@ -247,108 +259,65 @@ export function mergeServiceCandidates(...groups) {
   return [...merged.values()];
 }
 
-/** Serialize asynchronous mutations independently for each browser tab. */
-export function createTabTaskQueue() {
-  const pending = new Map();
-  return (tabId, task) => {
-    const previous = pending.get(tabId) ?? Promise.resolve();
-    const next = previous.catch(() => undefined).then(task);
-    pending.set(tabId, next);
-    void next
-      .catch(() => undefined)
-      .finally(() => {
-        if (pending.get(tabId) === next) pending.delete(tabId);
-      });
-    return next;
-  };
-}
-
-const MAX_TRACKED_DOCUMENTS = 200;
-
-function remember(documents, documentId) {
-  documents.add(documentId);
-  // A long-lived single-page app can churn through frames without ever
-  // navigating the tab, so keep the oldest ids from accumulating forever.
-  if (documents.size > MAX_TRACKED_DOCUMENTS) {
-    documents.delete(documents.values().next().value);
-  }
-}
+/**
+ * The Resource Timing buffer holds every request a document made, so a busy
+ * page can offer hundreds of tiles that collapse to a handful of services.
+ * This bounds what an unusually varied page can put in front of the user.
+ */
+const MAX_SERVICE_CANDIDATES = 100;
 
 /**
- * Track which documents belong to a tab's *current* page, so a request left in
- * flight by the page before it cannot be filed under the page after it.
+ * Turn the URLs a document has requested into the services GeoLibre can open.
  *
- * Chrome does not put a `documentId` on a navigation request: a `main_frame` or
- * `sub_frame` event describes a document that does not exist yet, and the id is
- * only ever seen afterwards, on the requests that document itself makes. A
- * page's documents therefore cannot be enumerated when it loads. What *can* be
- * known is which documents belonged to the pages before it, so each navigation
- * retires the ids seen so far and every later request is accepted unless its
- * document was retired. A request with no id at all is a navigation of the tab
- * being watched (a service URL opened directly) and belongs to the new page.
+ * Tiles and the style that describes them are separate requests and arrive in
+ * no fixed order, so the styles are collected first and paired afterwards: a
+ * vector tileset is only addable with the source layers its style names.
  */
-export function createPageScope() {
-  const tabs = new Map();
-
-  const stateFor = (tabId) => {
-    let state = tabs.get(tabId);
-    if (!state) {
-      state = {
-        generation: 0,
-        seen: new Set(),
-        leaving: new Set(),
-        retired: new Set(),
-        navigating: false,
-      };
-      tabs.set(tabId, state);
+export function collectServiceCandidates(urls) {
+  const stylesByOrigin = new Map();
+  const services = [];
+  for (const url of urls) {
+    const style = classifyStyleRequest(url);
+    // Keep a self-naming style over a generic one from the same origin. A page
+    // that fetches its map style and later a theme file at `…/styles/<name>
+    // .json` must still offer the map: letting the theme win would both strand
+    // a worker-only tileset and hand an existing one the wrong style document.
+    if (style && (!stylesByOrigin.get(style.origin)?.named || style.named)) {
+      stylesByOrigin.set(style.origin, style);
     }
-    return state;
-  };
-
-  return {
-    /**
-     * A navigation has started. Everything seen so far belongs to the page
-     * being left, so mark it for retirement now rather than when the navigation
-     * completes: a small tile or service request made by the *incoming* page
-     * can finish before its own HTML does, and retiring at completion would
-     * sweep up that new document along with the old ones.
-     */
-    beginPage(tabId) {
-      const state = stateFor(tabId);
-      for (const documentId of state.seen) remember(state.leaving, documentId);
-      state.seen = new Set();
-      state.navigating = true;
-    },
-    /** Retire the outgoing page's documents and open a new generation. */
-    startPage(tabId) {
-      const state = stateFor(tabId);
-      // Without an observed navigation start there is no separate set to
-      // retire, so fall back to retiring everything seen.
-      const outgoing = state.navigating ? state.leaving : state.seen;
-      for (const documentId of outgoing) remember(state.retired, documentId);
-      state.leaving = new Set();
-      if (!state.navigating) state.seen = new Set();
-      state.navigating = false;
-      state.generation += 1;
-      return state.generation;
-    },
-    /** The current page's generation, for re-checking a queued write. */
-    generation(tabId) {
-      return stateFor(tabId).generation;
-    },
-    accepts(tabId, documentId) {
-      const state = stateFor(tabId);
-      if (!documentId) return true;
-      if (state.retired.has(documentId)) return false;
-      // A request from the outgoing page can still complete while its
-      // replacement loads. It belongs to the page on screen, so it is accepted,
-      // but its document stays marked for retirement: moving it back among the
-      // incoming page's documents would let it outlive the navigation.
-      if (!state.leaving.has(documentId)) remember(state.seen, documentId);
-      return true;
-    },
-    forget(tabId) {
-      tabs.delete(tabId);
-    },
-  };
+    const service = classifyServiceRequest(url);
+    if (service) services.push(service);
+  }
+  for (const service of services) {
+    if (service.format !== "Vector tiles" || service.styleUrl) continue;
+    service.styleUrl = stylesByOrigin.get(new URL(service.url).origin)?.url ?? null;
+  }
+  const merged = mergeServiceCandidates(services);
+  // Same reason as the TileJSON rule above: when a style names its tiles inline
+  // there is no metadata request either, and the worker's tile requests are
+  // invisible, so an origin that served a style but no tileset is offered
+  // through the style itself. GeoLibre resolves a vector layer from a style URL
+  // alone, reading the tile template and source layers out of the document.
+  const fallbacks = [];
+  for (const [origin, style] of stylesByOrigin) {
+    if (!style.named) continue;
+    const covered = merged.some(
+      (entry) => entry.format === "Vector tiles" && new URL(entry.url).origin === origin,
+    );
+    if (covered) continue;
+    fallbacks.push({
+      url: style.url,
+      name: "Vector tile style",
+      format: "Vector tiles",
+      kind: "vector",
+      styleUrl: style.url,
+      layer: null,
+    });
+  }
+  // The cap is taken out of the ordinary services first. A page varied enough to
+  // reach it is usually repeating layers of a few endpoints, while a fallback is
+  // the only trace its origin leaves at all, so spending every slot before
+  // reaching them would drop the one candidate that cannot be recovered.
+  const room = Math.max(0, MAX_SERVICE_CANDIDATES - fallbacks.length);
+  return [...merged.slice(0, room), ...fallbacks.slice(0, MAX_SERVICE_CANDIDATES)];
 }

@@ -140,6 +140,9 @@ export function meanRadiusMeters(ellipsoid: Ellipsoid): number {
   return (2 * a + b) / 3;
 }
 
+/** Earth's mean radius in metres — the radius Turf.js and MapLibre bake in. */
+export const EARTH_MEAN_RADIUS_METERS = meanRadiusMeters(ELLIPSOIDS.find((e) => e.id === "earth")!);
+
 // --- Active ellipsoid singleton -------------------------------------------
 
 let activeEllipsoidId: EllipsoidId = DEFAULT_ELLIPSOID_ID;
@@ -165,6 +168,69 @@ export function getActiveMeanRadiusMeters(): number {
 /** Semi-major axis (metres) of the active body — for its Web-Mercator scale. */
 export function getActiveSemiMajorAxisMeters(): number {
   return getActiveEllipsoid().semiMajorAxisMeters;
+}
+
+// --- Earth-locked geodesy correction ---------------------------------------
+
+/**
+ * The active body's mean radius as a fraction of Earth's — `R_body / R_earth`,
+ * and exactly `1` on Earth.
+ *
+ * Everything GeoLibre measures ultimately comes from lon/lat *angles*, and the
+ * only thing that turns an angle into a ground distance is the radius it is
+ * multiplied by. Turf.js hardcodes Earth's, with no per-call override (that is
+ * the "Turf is Earth-locked" half of GeoLibre#1128), so rather than patch or
+ * replace Turf we post-scale what it returns and pre-scale what we hand it. The
+ * result is exact for a sphere, which is how every non-Earth body GeoLibre
+ * offers is modelled anyway, and within Mars' 0.6% flattening at worst.
+ *
+ * Suggested by @thareUSGS (USGS Astrogeology) on GeoLibre#1128 as the practical
+ * workaround planetary web maps have long used on Earth-locked engines.
+ */
+export function getActiveBodyRadiusRatio(): number {
+  return getActiveMeanRadiusMeters() / EARTH_MEAN_RADIUS_METERS;
+}
+
+/**
+ * Convert a length Turf.js measured on Earth into the active body's true ground
+ * length. A no-op on Earth.
+ *
+ * Use on anything Turf *returns* — a distance, a length, a perimeter.
+ *
+ * The correction is a dimensionless ratio, so it is unit-agnostic: pass the
+ * length in whatever unit Turf gave it back (metres, kilometres, miles) and the
+ * result is in that same unit. There is no hidden unit conversion here.
+ */
+export function earthLengthToBody(length: number): number {
+  return length * getActiveBodyRadiusRatio();
+}
+
+/**
+ * Convert a true ground length on the active body into the Earth-equivalent
+ * length to hand Turf.js. A no-op on Earth.
+ *
+ * Use on anything passed *into* Turf as a distance — a buffer width, a circle
+ * or sector radius, a search threshold — so the resulting geometry spans that
+ * distance on this body rather than on Earth.
+ *
+ * Unit-agnostic like {@link earthLengthToBody}: pass the length in whatever
+ * unit you are about to hand Turf alongside it, and the result is in that unit.
+ */
+export function bodyLengthToEarth(length: number): number {
+  return length / getActiveBodyRadiusRatio();
+}
+
+/**
+ * Convert an area Turf.js measured on Earth into the active body's true ground
+ * area. A no-op on Earth.
+ *
+ * Areas scale with the *square* of the radius ratio, so this is not the same
+ * correction as {@link earthLengthToBody}. Unit-agnostic in the same way, for
+ * whatever squared unit the area is expressed in.
+ */
+export function earthAreaToBody(area: number): number {
+  const ratio = getActiveBodyRadiusRatio();
+  return area * ratio * ratio;
 }
 
 // --- Planetary basemaps ----------------------------------------------------

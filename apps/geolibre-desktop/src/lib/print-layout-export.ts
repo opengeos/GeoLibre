@@ -5,6 +5,7 @@
  * unit tested. {@link captureMapImage} reads the live map's canvases, and the
  * export helpers rasterize {@link drawLayout} at print resolution.
  */
+import { getActiveMeanRadiusMeters } from "@geolibre/core";
 import { zipSync } from "fflate";
 import { jsPDF } from "jspdf";
 import { isFullViewportMapCanvas } from "./print-capture";
@@ -217,7 +218,9 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
 }
 
 function haversineMeters(a: { lng: number; lat: number }, b: { lng: number; lat: number }): number {
-  const R = 6371008.8;
+  // The active body's radius, so an exported layout's scale bar matches the
+  // on-map one on a Moon/Mars project (GeoLibre#1128).
+  const R = getActiveMeanRadiusMeters();
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
   const dLng = toRad(b.lng - a.lng);

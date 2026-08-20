@@ -48,11 +48,11 @@ describe("build-time AI proxy", () => {
     );
   });
 
-  it("defaults a managed Chat Completions proxy to GPT-5.5", () => {
+  it("defaults a managed Chat Completions proxy to GPT-5.6 Luna", () => {
     assert.equal(
       readBuildTimeAssistantEnv({ VITE_GEOLIBRE_AI_URL: "https://ai.example.com/v1" })
         .OPENAI_COMPATIBLE_MODEL,
-      "openai/gpt-5.5",
+      "openai/gpt-5.6-luna",
     );
   });
 

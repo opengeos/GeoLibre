@@ -46,6 +46,7 @@ export function buildProjectSnapshot(
       manifestUrls: state.projectPlugins?.manifestUrls ?? [],
     },
     legend: state.legend,
+    printLayout: state.printLayout,
     storymap: state.storymap,
     models: state.models,
     processingHistory: state.processingHistory,

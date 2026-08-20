@@ -57,15 +57,23 @@ function hasLeadingZeroes(value: string): boolean {
 /** True for common delimited-text headers that conventionally hold identifiers. */
 function isIdentifierFieldName(key: string): boolean {
   const normalized = key.replace(/([a-z\d])([A-Z])/g, "$1_$2").toLowerCase();
-  return /(^|[\s_-])(id|code|fips|zip|zipcode|postal)([\s_-]|$)/.test(normalized);
+  if (/(^|[\s_-])(id|fid|code|fips|zip|zipcode|postal)([\s_-]|$)/.test(normalized)) {
+    return true;
+  }
+  const compact = normalized.replace(/[\s_-]/g, "");
+  return (
+    /^(geo|object|feature|row)id\d*$/.test(compact) ||
+    /^(state|county|place)fp\d*$/.test(compact) ||
+    /^(tract|block)ce\d*$/.test(compact)
+  );
 }
 
 /**
  * Convert numeric-looking strings in analysis rows without changing the source
- * data. Delimited-text layers use this adapter because their parser preserves
- * every cell as a string, including measurements that summaries should treat as
- * numeric. Because delimited text carries no declared field types, common
- * identifier headers and integer strings with leading zeroes remain text.
+ * data. String-oriented sources use this adapter because measurements may be
+ * stored as text even though summaries should treat them as numeric. Since the
+ * values carry no declared field types, common identifier headers and integer
+ * strings with leading zeroes remain text.
  *
  * The decision is per column, not per value: a column is converted only when its
  * numeric-looking values would carry it past the same threshold the summaries
@@ -385,6 +393,18 @@ export function categoricalColumns(
     const limit = Math.max(CATEGORY_ABSOLUTE_LIMIT, nonNull * CATEGORY_RATIO);
     return distinct.size <= limit;
   });
+}
+
+/**
+ * Every field that can label a chart category, with detected low-cardinality
+ * fields first so the automatic selection remains useful. Unique labels such
+ * as names and IDs must stay available for explicitly configured charts.
+ */
+export function categoryColumnOptions(rows: ChartRow[], columns: string[]): string[] {
+  const preferred = categoricalColumns(rows, columns);
+  if (preferred.length === 0) return columns;
+  const preferredSet = new Set(preferred);
+  return [...preferred, ...columns.filter((column) => !preferredSet.has(column))];
 }
 
 export type BarAggregation = "count" | "sum" | "mean";

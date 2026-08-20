@@ -5,8 +5,7 @@ import { scanDocumentForDatasets } from "../extensions/geolibre-chrome/scanner.m
 import {
   classifyServiceRequest,
   classifyStyleRequest,
-  createPageScope,
-  createTabTaskQueue,
+  collectServiceCandidates,
   mergeServiceCandidates,
 } from "../extensions/geolibre-chrome/service-scanner.mjs";
 import { buildGeoLibreUrl } from "../extensions/geolibre-chrome/url-builder.mjs";
@@ -133,6 +132,27 @@ describe("GeoLibre Chrome extension scanner", () => {
     );
     assert.equal(found.url, "https://data.source.coop/giswqs/opengeos/roads.geojson");
     assert.equal(found.styleUrl, "https://data.source.coop/giswqs/opengeos/roads.style.json");
+  });
+
+  it("ignores Source Cooperative product tag links that resemble file formats", () => {
+    assert.deepEqual(
+      scan(
+        `
+          <a href="/products?tags=cloud%20optimised%20geotiff">cloud optimised geotiff</a>
+          <a href="/alexgleith/gebco-2024/GEBCO_2024.tif">GEBCO_2024.tif</a>
+        `,
+        "https://source.coop/alexgleith/gebco-2024/GEBCO_2024.tif",
+      ),
+      [
+        {
+          url: "https://data.source.coop/alexgleith/gebco-2024/GEBCO_2024.tif",
+          name: "GEBCO_2024.tif",
+          format: "GeoTIFF",
+          kind: "raster",
+          styleUrl: null,
+        },
+      ],
+    );
   });
 
   it("collapses every Hugging Face file route onto the direct resolve URL", () => {
@@ -445,6 +465,7 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     assert.deepEqual(classifyStyleRequest("https://tiles.example.com/style.json"), {
       origin: "https://tiles.example.com",
       url: "https://tiles.example.com/style.json",
+      named: true,
     });
     assert.equal(
       classifyStyleRequest("https://api.example.com/maps/streets/style.json?key=abc")?.url,
@@ -549,179 +570,189 @@ describe("GeoLibre Chrome extension service request scanner", () => {
     assert.ok(first && second);
     assert.equal(first.url, second.url);
   });
-
-  it("serializes asynchronous work independently per tab", async () => {
-    const enqueue = createTabTaskQueue();
-    const order: string[] = [];
-    let release!: () => void;
-    const blocked = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const first = enqueue(7, async () => {
-      order.push("first:start");
-      await blocked;
-      order.push("first:end");
-    });
-    const second = enqueue(7, async () => {
-      order.push("second");
-    });
-    const other = enqueue(8, async () => {
-      order.push("other");
-    });
-    await other;
-    assert.deepEqual(order, ["first:start", "other"]);
-    release();
-    await Promise.all([first, second]);
-    assert.deepEqual(order, ["first:start", "other", "first:end", "second"]);
-  });
-
-  it("accepts the documents of the current page, including frames it opens later", () => {
-    const scope = createPageScope();
-    scope.startPage(7);
-    // Chrome sends no documentId on the navigation itself; the ids arrive on
-    // the requests the page then makes, the top document and its frames alike.
-    assert.equal(scope.accepts(7, undefined), true);
-    assert.equal(scope.accepts(7, "top-document"), true);
-    assert.equal(scope.accepts(7, "child-document"), true);
-  });
-
-  it("keeps a document the incoming page created before its own navigation finished", () => {
-    const scope = createPageScope();
-    scope.startPage(4);
-    scope.accepts(4, "old-document");
-    // A tile the next page requests can complete before that page's HTML does,
-    // so the boundary is drawn when the navigation starts.
-    scope.beginPage(4);
-    assert.equal(scope.accepts(4, "new-document"), true);
-    scope.startPage(4);
-    assert.equal(scope.accepts(4, "new-document"), true);
-    assert.equal(scope.accepts(4, "old-document"), false);
-  });
-
-  it("retires an outgoing document even if it reports in mid-navigation", () => {
-    const scope = createPageScope();
-    scope.startPage(6);
-    scope.accepts(6, "old-document");
-    scope.beginPage(6);
-    // Still the page on screen, so the request counts, but the document must
-    // not escape retirement by reporting during the transition.
-    assert.equal(scope.accepts(6, "old-document"), true);
-    scope.startPage(6);
-    assert.equal(scope.accepts(6, "old-document"), false);
-  });
-
-  it("refuses a request left in flight by the page that was navigated away from", () => {
-    const scope = createPageScope();
-    scope.startPage(3);
-    assert.equal(scope.accepts(3, "old-document"), true);
-    scope.startPage(3);
-    assert.equal(scope.accepts(3, "old-document"), false);
-    assert.equal(scope.accepts(3, "new-document"), true);
-    // A second navigation retires the page between, not only the first one.
-    scope.startPage(3);
-    assert.equal(scope.accepts(3, "new-document"), false);
-  });
-
-  it("scopes documents and generations to their own tab", () => {
-    const scope = createPageScope();
-    scope.startPage(1);
-    scope.accepts(1, "shared-id");
-    const generation = scope.generation(1);
-    scope.startPage(2);
-    assert.equal(scope.generation(1), generation);
-    assert.equal(scope.accepts(2, "shared-id"), true);
-    scope.startPage(1);
-    assert.notEqual(scope.generation(1), generation);
-    assert.equal(scope.accepts(1, "shared-id"), false);
-    assert.equal(scope.accepts(2, "shared-id"), true);
-  });
-
-  it("forgets a closed tab rather than growing a set per tab that ever existed", () => {
-    const scope = createPageScope();
-    scope.startPage(9);
-    scope.accepts(9, "document");
-    scope.startPage(9);
-    assert.equal(scope.accepts(9, "document"), false);
-    scope.forget(9);
-    assert.equal(scope.generation(9), 0);
-    assert.equal(scope.accepts(9, "document"), true);
-  });
 });
 
-describe("GeoLibre Chrome extension request watcher", () => {
-  interface Details {
-    tabId?: number;
-    type?: string;
-    url: string;
-    documentId?: string;
-  }
-  type Listener = (details: Details) => void;
-
-  // `background.mjs` registers its listeners against the extension APIs at
-  // import time, so the module is exercised through a stub of them.
-  async function loadWatcher() {
-    const store = new Map<string, unknown>();
-    const completed: Listener[] = [];
-    const navigations: Listener[] = [];
-    let writes = 0;
-    const addListener = (list: Listener[]) => (fn: Listener) => list.push(fn);
-    Object.assign(globalThis, {
-      chrome: {
-        webRequest: {
-          onCompleted: { addListener: addListener(completed) },
-          onBeforeRequest: { addListener: addListener(navigations) },
-        },
-        tabs: { onRemoved: { addListener: () => undefined } },
-        storage: {
-          session: {
-            get: async (key: string) => ({ [key]: store.get(key) }),
-            set: async (items: Record<string, unknown>) => {
-              writes += 1;
-              for (const [name, value] of Object.entries(items)) store.set(name, value);
-            },
-            remove: async (key: string) => {
-              store.delete(key);
-            },
-          },
-        },
-      },
-    });
-    await import("../extensions/geolibre-chrome/background.mjs");
-    const settle = async () => {
-      for (let turn = 0; turn < 8; turn += 1) await new Promise((r) => setTimeout(r, 0));
-    };
-    return {
-      services: () => (store.get("services:1") ?? []) as { url: string; styleUrl: string | null }[],
-      writes: () => writes,
-      async request(details: Details) {
-        const event = { tabId: 1, type: "xmlhttprequest", documentId: "doc", ...details };
-        if (event.type === "main_frame") for (const fn of navigations) fn(event);
-        for (const fn of completed) fn(event);
-        await settle();
-      },
-    };
-  }
-
-  it("fills in a style that arrives after the tiles it describes", async () => {
-    const watcher = await loadWatcher();
-    await watcher.request({ type: "main_frame", url: "https://maps.example.com/", documentId: "" });
-    await watcher.request({ url: "https://tiles.example.com/roads/4/5/6.pbf" });
+describe("GeoLibre Chrome extension request history", () => {
+  it("pairs a vector tileset with the style requested after it", () => {
     assert.deepEqual(
-      watcher.services().map((entry) => entry.styleUrl),
-      [null],
-    );
-    // The style is a separate request and can finish after the first tile.
-    await watcher.request({ url: "https://tiles.example.com/style.json" });
-    assert.deepEqual(
-      watcher.services().map((entry) => entry.styleUrl),
+      collectServiceCandidates([
+        "https://tiles.example.com/roads/4/5/6.pbf",
+        "https://tiles.example.com/style.json",
+      ]).map((entry) => entry.styleUrl),
       ["https://tiles.example.com/style.json"],
     );
+  });
 
-    // Panning a map repeats one candidate; that must not keep rewriting it.
-    const before = watcher.writes();
-    await watcher.request({ url: "https://tiles.example.com/roads/7/8/9.pbf" });
-    await watcher.request({ url: "https://tiles.example.com/roads/1/2/3.pbf" });
-    assert.equal(watcher.writes(), before);
-    assert.equal(watcher.services().length, 1);
+  it("leaves a tileset unpaired when the style belongs to another origin", () => {
+    // The unrelated style explains no tileset here, so it is offered as one of
+    // its own rather than attached to a tileset it does not describe.
+    assert.deepEqual(
+      collectServiceCandidates([
+        "https://tiles.example.com/roads/4/5/6.pbf",
+        "https://other.example.com/style.json",
+      ]).map((entry) => [entry.url, entry.styleUrl]),
+      [
+        ["https://tiles.example.com/roads/{z}/{x}/{y}.pbf", null],
+        ["https://other.example.com/style.json", "https://other.example.com/style.json"],
+      ],
+    );
+  });
+
+  it("collapses the repeated tiles a panned map leaves behind", () => {
+    const found = collectServiceCandidates([
+      "https://tiles.example.com/roads/4/5/6.pbf",
+      "https://tiles.example.com/roads/7/8/9.pbf",
+      "https://tiles.example.com/roads/1/2/3.pbf",
+    ]);
+    assert.equal(found.length, 1);
+    assert.equal(found[0].url, "https://tiles.example.com/roads/{z}/{x}/{y}.pbf");
+  });
+
+  it("ignores the ordinary requests a page makes alongside its map", () => {
+    assert.deepEqual(
+      collectServiceCandidates([
+        "https://example.com/app.js",
+        "https://example.com/logo.png",
+        "https://example.com/api/users",
+      ]),
+      [],
+    );
+  });
+
+  it("keeps two layers of one service apart", () => {
+    assert.deepEqual(
+      collectServiceCandidates([
+        "https://maps.example.com/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=roads",
+        "https://maps.example.com/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=rivers",
+      ]).map((entry) => entry.layer),
+      ["roads", "rivers"],
+    );
+  });
+
+  it("offers a worker-fetched tileset through the TileJSON the page fetched", () => {
+    // MapLibre fetches its tiles from a web worker, whose requests never reach
+    // the document's timing buffer, so the metadata request is the only trace.
+    const found = collectServiceCandidates([
+      "https://demotiles.example.org/style.json",
+      "https://demotiles.example.org/tiles/tiles.json",
+    ]);
+    assert.deepEqual(found, [
+      {
+        url: "https://demotiles.example.org/tiles/tiles.json",
+        name: "Vector tile service",
+        format: "Vector tiles",
+        kind: "vector",
+        styleUrl: "https://demotiles.example.org/style.json",
+        layer: null,
+      },
+    ]);
+  });
+
+  it("falls back to the style when a page fetched no tileset metadata", () => {
+    const found = collectServiceCandidates(["https://tiles.example.com/style.json"]);
+    assert.deepEqual(found, [
+      {
+        url: "https://tiles.example.com/style.json",
+        name: "Vector tile style",
+        format: "Vector tiles",
+        kind: "vector",
+        styleUrl: "https://tiles.example.com/style.json",
+        layer: null,
+      },
+    ]);
+    // That candidate opens GeoLibre on the style alone, with no tileset URL to
+    // be parsed as TileJSON.
+    const link = new URL(buildGeoLibreUrl(found));
+    assert.equal(link.searchParams.get("add"), "ogc-vector-tiles");
+    assert.equal(link.searchParams.get("serviceUrl"), null);
+    assert.equal(link.searchParams.get("serviceStyle"), "https://tiles.example.com/style.json");
+  });
+
+  it("does not offer a theme file that merely sits at a style-shaped path", () => {
+    // `/styles/<name>.json` is an ordinary theme and configuration route, so it
+    // explains a tileset found at its origin but never stands as one itself.
+    assert.deepEqual(collectServiceCandidates(["https://app.example.com/styles/dark.json"]), []);
+    assert.deepEqual(
+      collectServiceCandidates([
+        "https://app.example.com/styles/dark.json",
+        "https://app.example.com/roads/4/5/6.pbf",
+      ]).map((entry) => entry.styleUrl),
+      ["https://app.example.com/styles/dark.json"],
+    );
+  });
+
+  it("keeps the map style when a theme file follows it from the same origin", () => {
+    // Either request order must leave the origin represented by its real style,
+    // both when the style is all there is and when it explains a tileset.
+    for (const order of [
+      ["https://tiles.example.com/style.json", "https://tiles.example.com/styles/theme.json"],
+      ["https://tiles.example.com/styles/theme.json", "https://tiles.example.com/style.json"],
+    ]) {
+      assert.deepEqual(
+        collectServiceCandidates(order).map((entry) => entry.url),
+        ["https://tiles.example.com/style.json"],
+        order.join(" then "),
+      );
+      assert.deepEqual(
+        collectServiceCandidates([...order, "https://tiles.example.com/roads/4/5/6.pbf"]).map(
+          (entry) => entry.styleUrl,
+        ),
+        ["https://tiles.example.com/style.json"],
+        order.join(" then "),
+      );
+    }
+  });
+
+  it("offers a style that names itself, including an ArcGIS one", () => {
+    assert.deepEqual(
+      collectServiceCandidates([
+        "https://tiles.example.com/VectorTileServer/resources/styles/root.json",
+      ]).map((entry) => entry.url),
+      ["https://tiles.example.com/VectorTileServer/resources/styles/root.json"],
+    );
+  });
+
+  it("does not repeat a style that already explains a tileset", () => {
+    assert.equal(
+      collectServiceCandidates([
+        "https://tiles.example.com/style.json",
+        "https://tiles.example.com/roads/4/5/6.pbf",
+      ]).length,
+      1,
+    );
+  });
+
+  it("recognizes the singular and prefixed spellings of a TileJSON", () => {
+    for (const name of ["tile.json", "tiles.json", "tilejson.json"]) {
+      assert.deepEqual(
+        collectServiceCandidates([`https://tiles.example.com/data/${name}`]).map(
+          (entry) => entry.url,
+        ),
+        [`https://tiles.example.com/data/${name}`],
+        name,
+      );
+    }
+  });
+
+  it("keeps room for a style fallback on a page that fills the cap", () => {
+    // A fallback is the only trace its origin leaves, while the services
+    // crowding it out are largely repeated layers of a few endpoints.
+    const urls = Array.from(
+      { length: 150 },
+      (_unused, index) =>
+        `https://maps.example.com/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=l${index}`,
+    );
+    const found = collectServiceCandidates([...urls, "https://tiles.example.com/style.json"]);
+    assert.equal(found.length, 100);
+    assert.deepEqual(found.at(-1)?.url, "https://tiles.example.com/style.json");
+  });
+
+  it("bounds what an unusually varied page can offer", () => {
+    const urls = Array.from(
+      { length: 150 },
+      (_unused, index) =>
+        `https://maps.example.com/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=l${index}`,
+    );
+    assert.equal(collectServiceCandidates(urls).length, 100);
   });
 });

@@ -47,7 +47,7 @@ if [ -n "${GEOLIBRE_AI_URL:-}" ] || [ -n "${GEOLIBRE_AI_PROXY_URL:-}" ] || [ -n 
       ;;
   esac
   export GEOLIBRE_AI_URL
-  export GEOLIBRE_AI_MODEL="${GEOLIBRE_AI_MODEL:-openai/gpt-5.5}"
+  export GEOLIBRE_AI_MODEL="${GEOLIBRE_AI_MODEL:-openai/gpt-5.6-luna}"
   export GEOLIBRE_AI_PROXY_URL GEOLIBRE_AI_PROXY_TOKEN
 
   python -c '

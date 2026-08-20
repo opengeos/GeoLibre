@@ -116,7 +116,31 @@ const terrainMeasureLabels = {
   partialData: "Some samples had no terrain data",
   heading: "Heading",
   finalHeading: "Final heading",
+  /**
+   * `{{body}}` is replaced with the active celestial body's name. The name is a
+   * standalone token after a colon rather than the object of a preposition,
+   * because no single inline form can be right for every body in every
+   * language (Georgian needs "მარსზე" not "მარსი-ზე"; German "auf dem Mars",
+   * French "sur la Lune", Russian "на Марсе" all inflect or take an article).
+   */
+  bodyNote: "Measured on: {{body}} (spherical approximation)",
 };
+
+/**
+ * Display names for the celestial bodies, keyed by ellipsoid id. Empty by
+ * default so {@link renderBodyNote} falls back to the ellipsoid's own name; the
+ * desktop shell pushes the planet switcher's translated names via {@link
+ * setTerrainMeasureBodyNames}, which read better here than the ellipsoid names
+ * (plain "Mars", not "Mars (IAU 2000)" nested inside another parenthetical).
+ */
+const terrainMeasureBodyNames: Record<string, string> = {};
+
+/** Override the celestial-body display names with translated text. */
+export function setTerrainMeasureBodyNames(names: Record<string, string>): void {
+  for (const [id, name] of Object.entries(names)) {
+    if (name) terrainMeasureBodyNames[id] = name;
+  }
+}
 
 /** Override the terrain-measure labels with translated text. */
 export function setTerrainMeasureLabels(labels: Partial<typeof terrainMeasureLabels>): void {
@@ -357,6 +381,33 @@ export function attachTerrainMeasure(
   section.style.fontSize = "12px";
   panel.appendChild(section);
 
+  // On a non-Earth project every readout above is scaled to that body's radius
+  // (GeoLibre#1128). Say so, so a planetary user can tell a corrected number
+  // from an Earth one rather than having to trust the basemap they are looking
+  // at. Hidden on Earth, where there is nothing to disclose.
+  const bodyNote = document.createElement("div");
+  bodyNote.className = "geolibre-measure-body-note";
+  bodyNote.style.margin = "8px 12px 12px";
+  bodyNote.style.fontSize = "11px";
+  bodyNote.style.opacity = "0.7";
+  bodyNote.style.display = "none";
+  panel.appendChild(bodyNote);
+
+  const renderBodyNote = (): void => {
+    const ellipsoid = getActiveEllipsoid();
+    if (ellipsoid.id === "earth") {
+      bodyNote.style.display = "none";
+      bodyNote.textContent = "";
+      return;
+    }
+    bodyNote.style.display = "block";
+    bodyNote.textContent = terrainMeasureLabels.bodyNote.replace(
+      "{{body}}",
+      terrainMeasureBodyNames[ellipsoid.id] ?? ellipsoid.name,
+    );
+  };
+  renderBodyNote();
+
   // Bearing lives in its own section above the terrain one. It resolves
   // synchronously from the measured coordinates, so it appears the instant the
   // line is drawn and stays visible when the terrain section hides itself for
@@ -444,10 +495,7 @@ export function attachTerrainMeasure(
     section.appendChild(note);
   };
 
-  const onDrawEnd = (event: { measurement?: Measurement }): void => {
-    const measurement = event.measurement;
-    if (!measurement) return;
-    renderBearing(measurement);
+  const computeFor = (measurement: Measurement): void => {
     const token = ++requestToken;
     pendingMeasurementId = measurement.id;
     // Drop the previous readout now: it no longer matches what the section
@@ -467,6 +515,13 @@ export function attachTerrainMeasure(
         pendingMeasurementId = null;
         hide();
       });
+  };
+
+  const onDrawEnd = (event: { measurement?: Measurement }): void => {
+    const measurement = event.measurement;
+    if (!measurement) return;
+    renderBearing(measurement);
+    computeFor(measurement);
   };
 
   const onClear = (): void => {
@@ -491,10 +546,26 @@ export function attachTerrainMeasure(
     if (current) render();
   };
 
+  // The control recomputes its own distances/areas when the project's celestial
+  // body changes (GeoLibre#1128), but the terrain readout is a cached result of
+  // our own maths against that body's radius — a unit re-render would keep
+  // showing the previous body's surface distance/area. Recompute it instead.
+  const onRadiusChange = (): void => {
+    renderBodyNote();
+    const measurementId = current?.measurementId ?? pendingMeasurementId;
+    if (!measurementId) return;
+    const measurement = control
+      .getMeasurements()
+      .find((candidate) => candidate.id === measurementId);
+    if (!measurement) return;
+    computeFor(measurement);
+  };
+
   control.on("drawend", onDrawEnd);
   control.on("clear", onClear);
   control.on("measurementremove", onMeasurementRemove);
   control.on("unitchange", onUnitChange);
+  control.on("radiuschange", onRadiusChange);
 
   return () => {
     requestToken += 1;
@@ -502,6 +573,8 @@ export function attachTerrainMeasure(
     control.off("clear", onClear);
     control.off("measurementremove", onMeasurementRemove);
     control.off("unitchange", onUnitChange);
+    control.off("radiuschange", onRadiusChange);
+    bodyNote.remove();
     bearingSection.remove();
     section.remove();
   };

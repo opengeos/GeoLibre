@@ -6,6 +6,7 @@
  * produced here and composes each capture through the regular layout pipeline,
  * so everything in this module is unit-testable without a map.
  */
+import { getActiveMeanRadiusMeters } from "@geolibre/core";
 import type { FeatureCollection, Geometry, Position } from "geojson";
 
 /** Geographic bounds as `[west, south, east, north]` in WGS84 degrees. */
@@ -474,9 +475,8 @@ export function buildAtlasPages(
   return pages.map((p, index) => ({ ...p, index }));
 }
 
-const EARTH_RADIUS_M = 6371008.8;
-
-/** Great-circle distance in metres between two `[lng, lat]` positions. */
+/** Great-circle distance in metres between two `[lng, lat]` positions, on the
+ * project's active body rather than always Earth (GeoLibre#1128). */
 function haversineMeters(a: Position, b: Position): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(b[1] - a[1]);
@@ -484,7 +484,7 @@ function haversineMeters(a: Position, b: Position): number {
   const la1 = toRad(a[1]);
   const la2 = toRad(b[1]);
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
+  return 2 * getActiveMeanRadiusMeters() * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 /** Linear interpolation between two positions — adequate at the sub-segment

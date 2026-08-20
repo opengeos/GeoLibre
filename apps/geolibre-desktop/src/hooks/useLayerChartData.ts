@@ -40,10 +40,7 @@ function buildLayerChartData(layer: GeoLibreLayer | null): LayerChartData {
     : (layer.geojson?.features ?? []).map((feature) => ({
         properties: (feature.properties ?? {}) as Record<string, unknown>,
       }));
-  const rows =
-    layer.metadata.sourceKind === "delimited-text"
-      ? coerceNumericStringRows(sourceRows)
-      : sourceRows;
+  const rows = coerceNumericStringRows(sourceRows);
 
   const keys = new Set<string>();
   for (const row of rows) {

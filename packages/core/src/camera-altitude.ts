@@ -14,12 +14,9 @@
  * scale bar and the measurement tools read.
  */
 
-import { getActiveMeanRadiusMeters, getEllipsoid, meanRadiusMeters } from "./ellipsoids";
+import { getActiveBodyRadiusRatio } from "./ellipsoids";
 import { scaleDenomination } from "./scale-units";
 import type { MapScaleUnit } from "./types";
-
-/** Earth's mean radius — the radius MapLibre's Mercator maths assumes. */
-const EARTH_MEAN_RADIUS_METERS = meanRadiusMeters(getEllipsoid("earth"));
 
 /**
  * Convert a MapLibre camera altitude (computed against Earth's radius) into the
@@ -31,7 +28,7 @@ const EARTH_MEAN_RADIUS_METERS = meanRadiusMeters(getEllipsoid("earth"));
  */
 export function scaleAltitudeToActiveBody(earthAltitudeMeters: number | null): number | null {
   if (earthAltitudeMeters === null || !Number.isFinite(earthAltitudeMeters)) return null;
-  return earthAltitudeMeters * (getActiveMeanRadiusMeters() / EARTH_MEAN_RADIUS_METERS);
+  return earthAltitudeMeters * getActiveBodyRadiusRatio();
 }
 
 /**

@@ -100,6 +100,7 @@ import type {
   GeoLibreZarrQueryOptions,
   GeoLibreZarrQuerySelector,
 } from "@geolibre/plugins";
+import { cogEngineDefaults } from "../lib/cog-render-engine";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readFile } from "@tauri-apps/plugin-fs";
@@ -934,11 +935,8 @@ export function createAppAPI(mapControllerRef?: RefObject<MapController | null>)
           : undefined;
       return addRasterToMap(api, url, {
         name,
-        // STAC assets are already COGs with an HTTP(S) range-readable URL.
-        // Render them directly through the GPU COG engine; the WASM tiler is
-        // intended for local files and can leave remote programmatic layers
-        // registered without producing pixels.
-        defaults: { engine: "maplibre-gl-raster" },
+        // Control-wide, not per layer: see cogEngineDefaults.
+        defaults: cogEngineDefaults(options?.engine),
         state: {
           ...(bands?.length ? { bands, mode: bands.length >= 3 ? "rgb" : "single" } : {}),
           ...(options?.colormap !== undefined ? { colormap: options.colormap } : {}),

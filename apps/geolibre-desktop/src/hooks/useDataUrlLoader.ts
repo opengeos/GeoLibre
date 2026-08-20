@@ -9,6 +9,7 @@ import {
   mapboxStyleForDataLayer,
   parseRasterUrlStyle,
 } from "../lib/data-url";
+import { deepLinkCogDefaults } from "../lib/cog-render-engine";
 import type { createAppAPI } from "./usePlugins";
 import type { ProjectUrlLoadState } from "./useProjectUrlLoader";
 
@@ -46,7 +47,10 @@ export async function loadDataUrl(
     const rasterStyle = rawStyle === null ? null : parseRasterUrlStyle(rawStyle);
     const id = await addRasterToMap(mapAppAPI, remote.url, {
       name: remote.name,
-      defaults: { engine: "maplibre-gl-raster" },
+      // A URL loader starts an empty workspace, whose raster control defaults
+      // to the native, globe-compatible WASM renderer. Do not override the
+      // control-wide engine when adding this layer.
+      defaults: deepLinkCogDefaults(),
       zoomTo: fit,
       ...(rasterStyle ? { state: rasterStyle } : {}),
     });

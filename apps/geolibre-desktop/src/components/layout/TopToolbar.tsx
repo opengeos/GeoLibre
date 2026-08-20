@@ -917,6 +917,13 @@ export function TopToolbar({
       showingOfMatched: (count, matched) => t("stacPlugin.showingOfMatched", { count, matched }),
       loadMore: t("stacPlugin.loadMore"),
       renderOptions: t("stacPlugin.renderOptions"),
+      renderingEngine: t("stacPlugin.renderingEngine"),
+      engineAuto: t("stacPlugin.engineAuto"),
+      engineGpu: t("stacPlugin.engineGpu"),
+      engineWasm: t("stacPlugin.engineWasm"),
+      engineTitiler: t("stacPlugin.engineTitiler"),
+      engineHint: t("stacPlugin.engineHint"),
+      resizeResults: t("stacPlugin.resizeResults"),
       bands: t("stacPlugin.bands"),
       bandsPlaceholder: t("stacPlugin.bandsPlaceholder"),
       colormap: t("stacPlugin.colormap"),
@@ -2010,7 +2017,11 @@ export function TopToolbar({
           mapControllerRef={mapControllerRef}
         />
       )}
+      {/* Remount on every project load so the composer starts from the opened
+          project's saved layout instead of keeping the previous project's
+          settings and captured map (GeoLibre discussion #1992). */}
       <PrintLayoutDialog
+        key={`print-layout-${projectGeneration}`}
         open={printLayoutOpen}
         onOpenChange={setPrintLayoutOpen}
         mapControllerRef={mapControllerRef}

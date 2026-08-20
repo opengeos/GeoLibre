@@ -169,6 +169,9 @@ export interface GeoLibreOvertureQueryResult {
   truncated: boolean;
 }
 
+/** Renderers the raster control can decode a COG with. */
+export type GeoLibreCogRenderEngine = "maplibre-gl-raster" | "cog-tiler-wasm" | "titiler";
+
 /**
  * Options for {@link GeoLibreAppAPI.addCogLayer}: a native Cloud-Optimized
  * GeoTIFF layer read directly from a URL and rendered client-side, with band
@@ -177,6 +180,14 @@ export interface GeoLibreOvertureQueryResult {
  * the GeoTIFF when they are omitted.
  */
 export interface GeoLibreCogLayerOptions {
+  /**
+   * Renderer that decodes this COG. WASM is globe-compatible; the GPU renderer
+   * requires Mercator. Unlike the other options here this is **not** per layer:
+   * the raster control holds one engine for every raster it manages, so naming
+   * one re-renders the rasters already on the map too. Pass `"auto"` to leave
+   * whatever the control is already on alone.
+   */
+  engine?: GeoLibreCogRenderEngine | "auto";
   /** Band selection, e.g. `"1"` (single band) or `"1,2,3"` (RGB). */
   bands?: string;
   /**

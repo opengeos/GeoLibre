@@ -1,6 +1,7 @@
 import type { BBox, Feature, Geometry } from "geojson";
 
 export const STAC_INDEX_CATALOGS_URL = "https://stacindex.org/api/catalogs";
+const USGS_ASTROGEOLOGY_API_URL = "https://stac.astrogeology.usgs.gov/api";
 // No item-search endpoint to ask, so a page is however much of the tree the walk covers.
 const STATIC_SEARCH_READS_PER_PAGE = 300;
 const STATIC_SEARCH_CONCURRENCY = 12;
@@ -137,8 +138,38 @@ function httpUrl(value: unknown): value is string {
   }
 }
 
+/**
+ * S3 website endpoints only support HTTP. Catalog indexes and older STAC documents still
+ * publish those URLs, which makes them mixed content in the web app. The equivalent REST
+ * S3 endpoint supports HTTPS and serves the same public object. A bucket whose name holds
+ * a dot has to go through the path-style endpoint: the wildcard on the virtual hosted-style
+ * certificate covers one label, so `a.b.s3.<region>.amazonaws.com` fails TLS validation.
+ */
+function browserCatalogHref(href: string): string {
+  const url = new URL(href);
+  // STAC Index still advertises this 2022 static catalog. Its planetary child buckets have
+  // since been removed, while USGS publishes the same data through its supported STAC API.
+  if (
+    url.hostname.toLowerCase() === "asc-stacbrowser.s3-website-us-west-2.amazonaws.com" &&
+    url.pathname === "/catalog.json"
+  ) {
+    return USGS_ASTROGEOLOGY_API_URL;
+  }
+  const website = url.hostname.match(/^(.+)\.s3-website[.-]([a-z0-9-]+)\.amazonaws\.com$/i);
+  if (!website) return url.href;
+  const [, bucket, region] = website;
+  url.protocol = "https:";
+  if (bucket.includes(".")) {
+    url.hostname = `s3.${region}.amazonaws.com`;
+    url.pathname = `/${bucket}${url.pathname}`;
+  } else {
+    url.hostname = `${bucket}.s3.${region}.amazonaws.com`;
+  }
+  return url.href;
+}
+
 function absoluteHref(href: string, base: string): string {
-  return new URL(href, base).href;
+  return browserCatalogHref(new URL(href, base).href);
 }
 
 /**
@@ -186,7 +217,7 @@ export function isAzureBlobHref(href: string): boolean {
 }
 
 async function fetchJson<T>(url: string, init: RequestInit, fetcher: FetchLike): Promise<T> {
-  const response = await fetcher(url, {
+  const response = await fetcher(browserCatalogHref(url), {
     ...init,
     headers: { Accept: "application/geo+json, application/json", ...init.headers },
   });
@@ -327,7 +358,7 @@ export async function connectStac(
   signal?: AbortSignal,
 ): Promise<StacConnection> {
   if (!httpUrl(inputUrl)) throw new Error("Enter a valid HTTP or HTTPS STAC URL");
-  const url = new URL(inputUrl).href;
+  const url = browserCatalogHref(inputUrl);
   const root = await fetchJson<Record<string, unknown>>(url, { signal }, fetcher);
   if (typeof root !== "object" || root === null)
     throw new Error("The URL did not return a STAC document");
@@ -586,7 +617,78 @@ export async function searchStaticStac(
 }
 
 export function itemBbox(item: StacItem): [number, number, number, number] | undefined {
-  return horizontalBbox(item.bbox);
+  const advertised = horizontalBbox(item.bbox);
+  if (
+    advertised &&
+    advertised[0] >= -180 &&
+    advertised[0] <= 180 &&
+    advertised[2] >= -180 &&
+    advertised[2] <= 180 &&
+    advertised[1] >= -90 &&
+    advertised[1] <= 90 &&
+    advertised[3] >= -90 &&
+    advertised[3] <= 90 &&
+    advertised[1] <= advertised[3]
+  ) {
+    return advertised;
+  }
+
+  // Some planetary records (notably USGS Mars THEMIS mosaics) incorrectly put
+  // their projected metre extent in the STAC bbox while their required GeoJSON
+  // geometry is correctly expressed as lon/lat. Derive the camera extent from
+  // that geometry instead of handing MapLibre impossible million-degree values.
+  const positions: Array<[number, number]> = [];
+  const collect = (value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    if (
+      value.length >= 2 &&
+      typeof value[0] === "number" &&
+      Number.isFinite(value[0]) &&
+      typeof value[1] === "number" &&
+      Number.isFinite(value[1])
+    ) {
+      positions.push([value[0], value[1]]);
+      return;
+    }
+    for (const child of value) collect(child);
+  };
+  // A GeometryCollection may hold another one, so walk rather than reading one level.
+  const collectGeometry = (geometry: Geometry | null | undefined): void => {
+    if (!geometry) return;
+    if (geometry.type === "GeometryCollection") {
+      for (const child of geometry.geometries) collectGeometry(child);
+      return;
+    }
+    collect(geometry.coordinates);
+  };
+  collectGeometry(item.geometry);
+  // Anything still here failed the lon/lat check above, so falling back to it
+  // would hand out the impossible values this whole branch exists to replace.
+  // Without a usable geometry the honest answer is that there is no extent.
+  if (!positions.length) return undefined;
+
+  const latitudes = positions.map(([, latitude]) => latitude);
+  if (latitudes.some((latitude) => latitude < -90 || latitude > 90)) return undefined;
+  // The wrap below would fold any magnitude into a plausible-looking angle, so
+  // a geometry carrying the same projected-metre bug as the bbox has to be
+  // rejected the way an impossible latitude is. The bound is 360 rather than
+  // 180 because planetary catalogs legitimately write 0-360 east longitude.
+  if (positions.some(([longitude]) => longitude < -360 || longitude > 360)) return undefined;
+  const longitudes = positions
+    .map(([longitude]) => ((longitude % 360) + 360) % 360)
+    .sort((a, b) => a - b);
+  let gapIndex = longitudes.length - 1;
+  let largestGap = longitudes[0] + 360 - longitudes.at(-1)!;
+  for (let index = 0; index < longitudes.length - 1; index += 1) {
+    const gap = longitudes[index + 1] - longitudes[index];
+    if (gap > largestGap) {
+      largestGap = gap;
+      gapIndex = index;
+    }
+  }
+  const start = longitudes[(gapIndex + 1) % longitudes.length];
+  const west = start >= 180 ? start - 360 : start;
+  return [west, Math.min(...latitudes), west + (360 - largestGap), Math.max(...latitudes)];
 }
 
 /** A format {@link assetFormat} recognizes, and {@link visualizeAsset} knows how to add. */

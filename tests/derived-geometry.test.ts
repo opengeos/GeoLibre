@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { FeatureCollection, Polygon } from "geojson";
-import { DEFAULT_LAYER_STYLE } from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, setActiveEllipsoidId } from "@geolibre/core";
 import {
   buildGeneratedGeometry,
   buildInvertedMask,
@@ -134,6 +134,32 @@ describe("buildGeneratedGeometry", () => {
     const ring = (derived.features[0].geometry as Polygon).coordinates[0];
     for (const [x, y] of ring) {
       assert.ok(Math.abs(x) < 0.02 && Math.abs(y) < 0.02);
+    }
+  });
+
+  it("widens a buffer on Mars so it covers the requested Martian metres", () => {
+    const fc = collection({
+      type: "Feature",
+      properties: {},
+      geometry: { type: "Point", coordinates: [0, 0] },
+    });
+    const earth = buildGeneratedGeometry(fc, "buffer", 100_000);
+    setActiveEllipsoidId("mars");
+    try {
+      const mars = buildGeneratedGeometry(fc, "buffer", 100_000);
+      assert.ok(earth && mars);
+      const radius = (fcArg: FeatureCollection) =>
+        Math.max(
+          ...(fcArg.features[0].geometry as Polygon).coordinates[0].map(([x]) => Math.abs(x)),
+        );
+      // turf lays the buffer out in Earth degrees, so covering 100 km of
+      // Martian ground needs ~1.88x the angular radius (issue #1128).
+      assert.ok(
+        Math.abs(radius(mars) / radius(earth) - 1 / 0.532) < 0.02,
+        `expected ~1.88x the angular radius, got ${radius(mars) / radius(earth)}`,
+      );
+    } finally {
+      setActiveEllipsoidId("earth");
     }
   });
 

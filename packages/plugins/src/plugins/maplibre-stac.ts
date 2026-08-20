@@ -2,7 +2,12 @@ import { DEFAULT_LAYER_STYLE, useAppStore } from "@geolibre/core";
 import { fillLayerId, lineLayerId } from "@geolibre/map";
 import type { FeatureCollection, Geometry } from "geojson";
 import type { GeoJSONSource, MapMouseEvent, Map as MapLibreMap } from "maplibre-gl";
-import type { GeoLibreAppAPI, GeoLibreCogLayerOptions, GeoLibrePlugin } from "../types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreCogLayerOptions,
+  GeoLibreCogRenderEngine,
+  GeoLibrePlugin,
+} from "../types";
 import { addPMTilesAsset } from "./stac-layers";
 import {
   assetDisplayFormat,
@@ -43,6 +48,34 @@ const DRAW_LINE = "geolibre-stac-draw-bbox-line";
 const SELECT_SOURCE = "geolibre-stac-selected";
 const SELECT_FILL = "geolibre-stac-selected-fill";
 const SELECT_LINE = "geolibre-stac-selected-line";
+const COG_ENGINE_STORAGE_KEY = "geolibre:stac-default-cog-engine";
+// "auto" leaves the raster control on whatever engine it already holds. It is
+// the default because the engine is control-wide: naming one re-renders every
+// raster on the map, including layers another panel put there.
+const COG_ENGINES = ["auto", "cog-tiler-wasm", "maplibre-gl-raster", "titiler"] as const;
+type StacCogEngine = (typeof COG_ENGINES)[number];
+
+// Web Storage throws rather than returning null when the browser blocks it
+// (private mode, a third-party-storage policy), so neither read nor write may
+// be the only thing standing between the user and a working panel.
+function savedCogEngine(): StacCogEngine {
+  let saved: string | null = null;
+  try {
+    saved =
+      typeof localStorage === "undefined" ? null : localStorage.getItem(COG_ENGINE_STORAGE_KEY);
+  } catch {
+    return "auto";
+  }
+  return COG_ENGINES.includes(saved as StacCogEngine) ? (saved as StacCogEngine) : "auto";
+}
+
+function rememberCogEngine(engine: string): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(COG_ENGINE_STORAGE_KEY, engine);
+  } catch {
+    // A blocked store just means the choice does not outlive the session.
+  }
+}
 
 /**
  * Colormaps the COG renderer knows by name (`ColormapName` in
@@ -129,6 +162,13 @@ export interface StacLabels {
   searchFailed: string;
   loadMore: string;
   renderOptions: string;
+  renderingEngine: string;
+  engineAuto: string;
+  engineGpu: string;
+  engineWasm: string;
+  engineTitiler: string;
+  engineHint: string;
+  resizeResults: string;
   bands: string;
   bandsPlaceholder: string;
   colormap: string;
@@ -206,6 +246,15 @@ let labels: StacLabels = {
   searchFailed: "STAC search failed",
   loadMore: "Load more",
   renderOptions: "Raster rendering options",
+  renderingEngine: "COG rendering engine",
+  engineAuto: "Leave unchanged",
+  engineGpu: "GPU (deck.gl, Mercator only)",
+  engineWasm: "WebAssembly tiler (globe compatible)",
+  engineTitiler: "TiTiler server",
+  engineHint:
+    "Which renderer decodes the imagery. Unlike the settings above this is not per layer: " +
+    "it applies to every raster on the map, including ones already added.",
+  resizeResults: "Resize search results",
   bands: "Bands",
   bandsPlaceholder: "e.g. 1 or 1,2,3 (default: auto)",
   colormap: "Colormap (single-band only)",
@@ -254,6 +303,13 @@ let unregisterPanel: (() => void) | null = null;
 let disposePanel: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
 
+// The results pane and the controls above it each keep a floor so neither can
+// be dragged away entirely. splitterBounds() reserves the controls floor and
+// clamps to the results one, so both are declared here and interpolated into
+// the styles rather than written twice.
+const RESULTS_MIN_HEIGHT = 150;
+const CONTROLS_MIN_HEIGHT = 180;
+
 const style = {
   panel:
     "display:flex;flex-direction:column;gap:10px;height:100%;padding:10px;box-sizing:border-box;" +
@@ -274,11 +330,13 @@ const style = {
     "background:hsl(var(--primary));color:hsl(var(--primary-foreground));cursor:pointer;",
   status: "font-size:11px;line-height:1.4;color:hsl(var(--muted-foreground));",
   // The floor keeps a usable result list even with every filter section open;
-  // the controls above it scroll as a group rather than pushing it off-panel.
-  results:
-    "display:flex;flex:1 1 auto;min-height:150px;overflow:auto;flex-direction:column;gap:7px;",
-  controls:
-    "display:flex;flex-direction:column;gap:10px;flex:0 1 auto;min-height:180px;overflow:auto;",
+  // its flex basis gives the search controls most of the panel initially. A
+  // splitter between the two lets the user choose a different balance.
+  results: `display:flex;flex:0 0 40%;min-height:${RESULTS_MIN_HEIGHT}px;overflow:auto;flex-direction:column;gap:7px;`,
+  controls: `display:flex;flex-direction:column;gap:10px;flex:1 1 60%;min-height:${CONTROLS_MIN_HEIGHT}px;overflow:auto;`,
+  resultSplitter:
+    "height:8px;flex:0 0 8px;cursor:row-resize;border-radius:4px;touch-action:none;" +
+    "background:linear-gradient(transparent 3px,hsl(var(--border)) 3px,hsl(var(--border)) 5px,transparent 5px);",
   card:
     "display:flex;flex-direction:column;gap:5px;padding:8px;border:1px solid hsl(var(--border));" +
     "border-radius:7px;background:hsl(var(--muted));",
@@ -661,9 +719,9 @@ function buildPanel(container: HTMLElement): () => void {
   catalogInfo.style.cssText = "font-weight:600;";
   const collectionSelect = el("select");
   collectionSelect.multiple = true;
-  collectionSelect.size = 3;
+  collectionSelect.size = 8;
   // Catalogs can advertise hundreds of collections, so let the list be dragged taller.
-  collectionSelect.style.cssText = `${style.input}resize:vertical;overflow:auto;min-height:58px;`;
+  collectionSelect.style.cssText = `${style.input}resize:vertical;overflow:auto;min-height:150px;`;
   collectionSelect.title = labels.collectionsHint;
   // An API answers with a flat list of collections; a static catalog is a tree read as it opens.
   const tree = buildCatalogTree({
@@ -735,6 +793,29 @@ function buildPanel(container: HTMLElement): () => void {
   renderSection.hidden = true;
   const renderSummary = el("summary", labels.renderOptions);
   renderSummary.style.cssText = "cursor:pointer;font-weight:600;";
+  const engineWrap = el("label");
+  engineWrap.style.cssText = "display:flex;flex-direction:column;gap:2px;";
+  const engineCaption = el("span", labels.renderingEngine);
+  engineCaption.style.cssText = style.label;
+  const engineSelect = el("select");
+  engineSelect.style.cssText = style.input;
+  for (const [value, title] of [
+    ["auto", labels.engineAuto],
+    ["cog-tiler-wasm", labels.engineWasm],
+    ["maplibre-gl-raster", labels.engineGpu],
+    ["titiler", labels.engineTitiler],
+  ] as const) {
+    const option = el("option", title);
+    option.value = value;
+    engineSelect.append(option);
+  }
+  engineSelect.value = savedCogEngine();
+  engineSelect.addEventListener("change", () => {
+    rememberCogEngine(engineSelect.value);
+  });
+  const engineHint = el("span", labels.engineHint);
+  engineHint.style.cssText = style.status;
+  engineWrap.append(engineCaption, engineSelect, engineHint);
   const bandsField = field(labels.bands);
   bandsField.input.placeholder = labels.bandsPlaceholder;
   const colormapWrap = el("label");
@@ -761,6 +842,8 @@ function buildPanel(container: HTMLElement): () => void {
   nodataField.input.placeholder = labels.nodataPlaceholder;
   const renderHint = el("div", labels.renderHint);
   renderHint.style.cssText = style.status;
+  // The engine picker sits last, after the per-layer options: it is the one
+  // control-wide setting here, and its hint reads "unlike the settings above".
   renderSection.append(
     renderSummary,
     bandsField.wrap,
@@ -768,12 +851,20 @@ function buildPanel(container: HTMLElement): () => void {
     rescaleRow,
     nodataField.wrap,
     renderHint,
+    engineWrap,
   );
 
   const status = el("div", labels.initialStatus);
   status.style.cssText = style.status;
   const results = el("div");
   results.style.cssText = style.results;
+  const resultSplitter = el("div");
+  resultSplitter.style.cssText = style.resultSplitter;
+  resultSplitter.setAttribute("role", "separator");
+  resultSplitter.setAttribute("aria-orientation", "horizontal");
+  resultSplitter.setAttribute("aria-label", labels.resizeResults);
+  resultSplitter.setAttribute("aria-valuemin", String(RESULTS_MIN_HEIGHT));
+  resultSplitter.tabIndex = 0;
   const loadMore = el("button", labels.loadMore);
   loadMore.type = "button";
   loadMore.style.cssText = style.primary;
@@ -781,7 +872,71 @@ function buildPanel(container: HTMLElement): () => void {
   const controls = el("div");
   controls.style.cssText = style.controls;
   controls.append(catalogSection, searchSection, renderSection);
-  container.append(controls, status, results, loadMore);
+  container.append(controls, status, resultSplitter, results, loadMore);
+
+  // The results pane neither grows nor shrinks once its basis is set, so the
+  // ceiling has to be whatever the container has left after the siblings that
+  // keep their own size. Guessing a fixed reserve here let a drag to the
+  // reported maximum clip the tail of the list and the Load more button.
+  const splitterBounds = (): number => {
+    const reserved = [status, resultSplitter, loadMore].reduce(
+      (total, element) => total + (element.hidden ? 0 : element.getBoundingClientRect().height),
+      CONTROLS_MIN_HEIGHT,
+    );
+    const box = container.getBoundingClientRect();
+    const padding = window.getComputedStyle(container);
+    const gap = Number.parseFloat(padding.rowGap) || 0;
+    const inner =
+      box.height -
+      (Number.parseFloat(padding.paddingTop) || 0) -
+      (Number.parseFloat(padding.paddingBottom) || 0) -
+      // One gap per sibling boundary: controls, status, splitter, results, loadMore.
+      gap * 4;
+    return Math.max(RESULTS_MIN_HEIGHT, inner - reserved);
+  };
+
+  // Announcing the size only after the first drag would leave a screen reader
+  // with a valueless separator, so the values are also synced on focus -- which
+  // must not pin the percentage flex basis into pixels the way a resize does.
+  const announceResults = (height: number, maximum: number): void => {
+    resultSplitter.setAttribute("aria-valuenow", String(Math.round(height)));
+    resultSplitter.setAttribute("aria-valuemax", String(Math.round(maximum)));
+  };
+
+  const resizeResults = (height: number): void => {
+    const maximum = splitterBounds();
+    const next = Math.min(maximum, Math.max(RESULTS_MIN_HEIGHT, height));
+    results.style.flexBasis = `${next}px`;
+    announceResults(next, maximum);
+  };
+
+  resultSplitter.addEventListener("focus", () => {
+    announceResults(results.getBoundingClientRect().height, splitterBounds());
+  });
+
+  resultSplitter.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = results.getBoundingClientRect().height;
+    resultSplitter.setPointerCapture(event.pointerId);
+    const move = (moveEvent: PointerEvent): void => {
+      resizeResults(startHeight - (moveEvent.clientY - startY));
+    };
+    const stop = (): void => {
+      resultSplitter.removeEventListener("pointermove", move);
+      resultSplitter.removeEventListener("pointerup", stop);
+      resultSplitter.removeEventListener("pointercancel", stop);
+    };
+    resultSplitter.addEventListener("pointermove", move);
+    resultSplitter.addEventListener("pointerup", stop);
+    resultSplitter.addEventListener("pointercancel", stop);
+  });
+  resultSplitter.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowUp" ? 30 : -30;
+    resizeResults(results.getBoundingClientRect().height + delta);
+  });
 
   let index: StacIndexCatalog[] = [];
   let filtered: StacIndexCatalog[] = [];
@@ -814,6 +969,9 @@ function buildPanel(container: HTMLElement): () => void {
     const rescaleMax = numeric(vmaxField.input);
     const nodata = numeric(nodataField.input);
     return {
+      // "auto" is sent through as-is so the host leaves the control-wide engine
+      // alone rather than falling back to its own default.
+      engine: engineSelect.value as GeoLibreCogRenderEngine | "auto",
       ...(bands ? { bands } : {}),
       ...(colormap ? { colormap } : {}),
       ...(rescaleMin !== undefined ? { rescaleMin } : {}),

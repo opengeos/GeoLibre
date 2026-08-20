@@ -4,8 +4,8 @@
 interface __BaseEnv_Env {
 	AI_RATE_LIMITER: RateLimit;
 	ALLOWED_ORIGINS: "https://geolibre.app,https://web.geolibre.app,https://viewer.geolibre.app,https://studio.geolibre.app,http://localhost:5173,http://localhost:1420,tauri://localhost,http://tauri.localhost";
-	ALLOWED_MODELS: "openai/gpt-5.5,anthropic/claude-opus-5,anthropic/claude-sonnet-5,google/gemini-3.6-flash,google/gemini-3.5-flash,google/gemini-3.5-flash-lite";
-	DEFAULT_MODEL: "openai/gpt-5.5";
+	ALLOWED_MODELS: "openai/gpt-5.6-luna,openai/gpt-5.6-sol,openai/gpt-5.6-terra,anthropic/claude-opus-5,anthropic/claude-sonnet-5,google/gemini-3.6-flash,google/gemini-3.5-flash,google/gemini-3.5-flash-lite";
+	DEFAULT_MODEL: "openai/gpt-5.6-luna";
 	AI_GATEWAY_ID: "default";
 	MAX_BODY_BYTES: "1048576";
 	MAX_OUTPUT_TOKENS: "16384";

@@ -39,12 +39,18 @@ export function serviceUrlParameter(search: string): ServiceUrlParameter | null 
     parsed && kind && TILE_TEMPLATE_KINDS.has(kind)
       ? parsed.replace(/%7B/gi, "{").replace(/%7D/gi, "}")
       : parsed;
-  if (!kind || !SERVICE_KINDS.has(kind) || !url) return null;
+  const styleUrl = httpUrl(params.get("serviceStyle"));
+  if (!kind || !SERVICE_KINDS.has(kind)) return null;
+  // A vector tileset whose style names its tiles inline is addable from that
+  // style alone, since the source layers and the tile template both come out of
+  // the same document. So a link carrying only a style is complete, and the
+  // dialog opens with an empty tileset field rather than not opening at all.
+  if (!url && !(kind === "ogc-vector-tiles" && styleUrl)) return null;
   return {
     kind,
-    url,
+    url: url ?? "",
     layer: params.get("serviceLayer")?.trim() || null,
-    styleUrl: httpUrl(params.get("serviceStyle")),
+    styleUrl,
   };
 }
 export interface RemoteGeoJsonLayer {

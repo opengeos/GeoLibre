@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   categoricalColumns,
+  categoryColumnOptions,
   coerceNumericStringRows,
   computeBar,
   computeBox,
@@ -73,6 +74,58 @@ describe("coerceNumericStringRows", () => {
     });
     assert.equal(adapted[1].properties.FIPS, "37005");
     assert.equal(adapted[1].properties.district, "37005");
+  });
+
+  it("preserves compact GIS identifier fields without leading zeroes", () => {
+    const data = rows(
+      {
+        GEOID: "6",
+        GEOID10: "60",
+        FID: "1",
+        OBJECTID: "10",
+        STATEFP: "36",
+        TRACTCE: "100",
+        BLOCKCE: "200",
+        population: "42",
+      },
+      {
+        GEOID: "12",
+        GEOID10: "120",
+        FID: "2",
+        OBJECTID: "20",
+        STATEFP: "48",
+        TRACTCE: "300",
+        BLOCKCE: "400",
+        population: "84",
+      },
+    );
+
+    const adapted = coerceNumericStringRows(data);
+    assert.deepEqual(
+      adapted.map(({ properties }) => properties),
+      [
+        {
+          GEOID: "6",
+          GEOID10: "60",
+          FID: "1",
+          OBJECTID: "10",
+          STATEFP: "36",
+          TRACTCE: "100",
+          BLOCKCE: "200",
+          population: 42,
+        },
+        {
+          GEOID: "12",
+          GEOID10: "120",
+          FID: "2",
+          OBJECTID: "20",
+          STATEFP: "48",
+          TRACTCE: "300",
+          BLOCKCE: "400",
+          population: 84,
+        },
+      ],
+    );
   });
 
   it("reuses rows that have no values to coerce", () => {
@@ -220,6 +273,32 @@ describe("categoricalColumns", () => {
       properties: { name: `n${i}`, kind: i % 2 === 0 ? "x" : "y" },
     }));
     assert.deepEqual(categoricalColumns(data, ["name", "kind"]), ["kind"]);
+  });
+});
+
+describe("categoryColumnOptions", () => {
+  it("keeps unique label fields selectable after preferred categories", () => {
+    const data = rows(
+      { name: "Alpha", region: "North", population: 10 },
+      { name: "Beta", region: "North", population: 20 },
+      { name: "Gamma", region: "South", population: 30 },
+    );
+
+    assert.deepEqual(categoryColumnOptions(data, ["name", "region", "population"]), [
+      "region",
+      "name",
+      "population",
+    ]);
+  });
+
+  it("preserves field order when no preferred category is detected", () => {
+    const data = rows(
+      { name: "Alpha", region: "North" },
+      { name: "Beta", region: "South" },
+      { name: "Gamma", region: "East" },
+    );
+
+    assert.deepEqual(categoryColumnOptions(data, ["name", "region"]), ["name", "region"]);
   });
 });
 

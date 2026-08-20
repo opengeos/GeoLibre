@@ -190,8 +190,9 @@ function isSubsetUrlParameter(tool: WhiteboxTool, param: WhiteboxToolParameter):
 // vector inputs (points_to_line's `line_field`/`sort_field`, and ~170 other
 // tools), so the dialog can offer the selected layer's attribute names instead
 // of asking the user to recall a column name (GeoLibre#1459). The kind check is
-// what keeps a same-named *dataset* param out (join_tables' `primary_key_field`
-// is a vector input): only a scalar string names a column.
+// what keeps a same-named *dataset* param out (the catalog types
+// classify_objects_svm's `class_field` as a LiDAR input): only a scalar string
+// names a column.
 function isFieldParameter(param: WhiteboxToolParameter): boolean {
   return parameterKind(param) === "string" && isFieldParameterName(param.name);
 }

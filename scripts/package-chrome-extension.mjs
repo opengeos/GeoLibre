@@ -11,7 +11,6 @@ const runtimeFiles = [
   "popup.html",
   "popup.css",
   "popup.mjs",
-  "background.mjs",
   "scanner.mjs",
   "service-scanner.mjs",
   "url-builder.mjs",

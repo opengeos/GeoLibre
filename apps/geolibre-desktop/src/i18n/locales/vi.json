@@ -184,7 +184,8 @@
     "computing": "Tính toán địa hình…",
     "partialData": "Một số mẫu không có dữ liệu địa hình",
     "heading": "tiêu đề",
-    "finalHeading": "Tiêu đề cuối cùng"
+    "finalHeading": "Tiêu đề cuối cùng",
+    "bodyNote": "Đo trên: {{body}} (xấp xỉ hình cầu)"
   },
   "addData": {
     "kind": {
@@ -3335,6 +3336,13 @@
     "showingOfMatched": "Đang hiển thị {{count}} trong số {{matched}} mục.",
     "loadMore": "Tải thêm",
     "renderOptions": "Tùy chọn hiển thị raster",
+    "renderingEngine": "Công cụ kết xuất COG",
+    "engineAuto": "Để nguyên không thay đổi",
+    "engineWasm": "Trình xếp WebAssembly (tương thích quả địa cầu)",
+    "engineGpu": "GPU (deck.gl, chỉ Mercator)",
+    "engineTitiler": "máy chủ TiTiler",
+    "engineHint": "Trình kết xuất nào giải mã hình ảnh. Không giống như các cài đặt ở trên, cài đặt này không áp dụng cho mỗi lớp: nó áp dụng cho mọi raster trên bản đồ, bao gồm cả những raster đã được thêm vào.",
+    "resizeResults": "Thay đổi kích thước kết quả tìm kiếm",
     "bands": "Ban nhạc",
     "bandsPlaceholder": "ví dụ. 1 hoặc 1,2,3 (mặc định: tự động)",
     "colormap": "Bản đồ màu (chỉ một băng tần)",
@@ -3902,9 +3910,9 @@
     "clear": "Xóa cuộc trò chuyện",
     "close": "Đóng trợ lý",
     "send": "Gửi",
-    "sendHint": "Gửi (Ctrl/Cmd+Enter)",
+    "sendHint": "Gửi (Enter)",
     "stop": "Dừng lại",
-    "placeholder": "Hỏi về dữ liệu của bạn, ví dụ: \"hiển thị các quốc gia có dân số trên 50 triệu\" · Ctrl/Cmd+Enter để gửi",
+    "placeholder": "Hỏi về dữ liệu của bạn, ví dụ: \"hiển thị các quốc gia có dân số trên 50 triệu\" · Enter để gửi, Shift+Enter để xuống dòng",
     "intro": "Trò chuyện với dữ liệu của bạn. Tôi có thể chạy Spatial SQL, thêm hoặc xóa các lớp, định kiểu lại chúng và di chuyển bản đồ - mọi thay đổi đều không thể hoàn tác được. Hãy thử \"tô màu các quốc gia theo dân số bằng đường dốc màu đỏ chia độ\".",
     "setupTitle": "Thiết lập Trợ lý AI"
   },
