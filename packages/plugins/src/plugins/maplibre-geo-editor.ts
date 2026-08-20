@@ -45,7 +45,16 @@ const GEO_EDITOR_OPTIONS = {
   collapsed: false,
   toolbarOrientation: "vertical",
   columns: 2,
-  drawModes: ["polygon", "line", "rectangle", "circle", "marker", "freehand", "text_marker"],
+  drawModes: [
+    "polygon",
+    "massing",
+    "line",
+    "rectangle",
+    "circle",
+    "marker",
+    "freehand",
+    "text_marker",
+  ],
   editModes: [
     "select",
     "drag",
@@ -64,6 +73,20 @@ const GEO_EDITOR_OPTIONS = {
   fileModes: ["open", "save"],
   hideGeomanControl: true,
   showFeatureProperties: true,
+  enableAttributeEditing: true,
+  attributePanelTitle: "Feature properties",
+  attributeSchema: {
+    polygon: [
+      {
+        name: "height",
+        label: "Height (m)",
+        type: "number",
+        defaultValue: 10,
+        min: 0,
+        step: 0.5,
+      },
+    ],
+  },
   // Avoid zoom/fit on Sketches restore — it retriggers style churn and races with draw.
   fitBoundsOnLoad: false,
 } satisfies Omit<
@@ -444,7 +467,10 @@ function syncSketchesToStore(): void {
   try {
     if (existing) {
       sketchesLayerId = existing.id;
-      store.updateLayer(existing.id, { geojson: collection });
+      store.updateLayer(existing.id, {
+        geojson: collection,
+        ...(hasMassingFeatures(collection) ? { style: massingSketchStyle(existing) } : {}),
+      });
     } else {
       if (collection.features.length === 0) {
         return;
@@ -457,6 +483,13 @@ function syncSketchesToStore(): void {
           ...useAppStore.getState().layers.find((layer) => layer.id === id)?.metadata,
           sourceKind: SKETCHES_SOURCE_KIND,
         },
+        ...(hasMassingFeatures(collection)
+          ? {
+              style: massingSketchStyle(
+                useAppStore.getState().layers.find((layer) => layer.id === id)!,
+              ),
+            }
+          : {}),
       });
     }
   } finally {
@@ -466,6 +499,26 @@ function syncSketchesToStore(): void {
   if (!sketchesIdleDisplayOverride) {
     scheduleApplySketchesMapDisplay();
   }
+}
+
+function hasMassingFeatures(collection: FeatureCollection): boolean {
+  return collection.features.some(
+    (feature) =>
+      (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") &&
+      typeof feature.properties?.height === "number" &&
+      Number.isFinite(feature.properties.height),
+  );
+}
+
+function massingSketchStyle(layer: GeoLibreLayer): GeoLibreLayer["style"] {
+  return {
+    ...layer.style,
+    extrusionEnabled: true,
+    extrusionHeightProperty: "height",
+    extrusionAdvancedStyleEnabled: true,
+    extrusionHeightExpression:
+      '["case",["has","height"],["max",0,["to-number",["get","height"],0]],0.01]',
+  };
 }
 
 // ---------------------------------------------------------------------------
