@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  applyTemporaryDesktopSettings,
+  shouldPersistDesktopSettings,
+} from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
+import {
   desktopSettingsUrl,
   fetchDesktopSettings,
   sharedSettingsLanguage,
@@ -77,6 +81,22 @@ describe("desktop settings URL", () => {
     );
   });
 
+  it("actually aborts a settings request after its timeout", async () => {
+    let signal: AbortSignal | null = null;
+    const fetchImpl = ((_url: string, init?: RequestInit) => {
+      signal = init?.signal ?? null;
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(signal?.reason), { once: true });
+      });
+    }) as typeof fetch;
+
+    await assert.rejects(
+      fetchDesktopSettings("https://example.com/stalled.json", { fetchImpl, timeoutMs: 5 }),
+      (error: Error) => error.name === "TimeoutError",
+    );
+    assert.equal(signal?.aborted, true);
+  });
+
   it("lets a remote language replace the saved language before render", () => {
     const available = ["en", "de", "fr"];
     // The app may have initialized from a saved `de`; main.tsx switches to the
@@ -91,5 +111,11 @@ describe("desktop settings URL", () => {
     assert.equal(sharedSettingsLanguage("?lang=de", "fr", available), null);
     // An unsupported explicit locale follows the existing fallback behavior.
     assert.equal(sharedSettingsLanguage("?locale=unknown", "fr", available), "fr");
+  });
+
+  it("keeps a shared-settings session out of persistent storage", () => {
+    assert.equal(shouldPersistDesktopSettings(), true);
+    applyTemporaryDesktopSettings({ layout: { toolbarLabels: false } });
+    assert.equal(shouldPersistDesktopSettings(), false);
   });
 });

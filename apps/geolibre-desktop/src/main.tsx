@@ -194,9 +194,6 @@ registerSW({
   },
 });
 
-// Fetch both chunks in parallel rather than waterfalling the boundary import
-// after App resolves — a free win, and it matters over the network in the web
-// build where these are separate fetches.
 const sharedSettingsUrl = desktopSettingsUrl(window.location.search);
 const sharedSettingsReady = sharedSettingsUrl
   ? fetchDesktopSettings(sharedSettingsUrl)
@@ -221,10 +218,20 @@ const startupLanguageReady = Promise.all([i18nReady, sharedSettingsReady]).then(
       settings.language,
       AVAILABLE_LANGUAGES,
     );
-    if (language) await setActiveLanguage(language);
+    if (!language) return;
+    try {
+      await setActiveLanguage(language);
+    } catch (error) {
+      // Shared language is optional presentation configuration. If its lazy
+      // catalog cannot load, retain the language i18next already initialized.
+      console.error("[GeoLibre] Failed to apply shared settings language", error);
+    }
   },
 );
 
+// Fetch both chunks in parallel rather than waterfalling the boundary import
+// after App resolves — a free win, and it matters over the network in the web
+// build where these are separate fetches.
 void Promise.all([
   import("./App"),
   import("./components/common/error-boundaries"),

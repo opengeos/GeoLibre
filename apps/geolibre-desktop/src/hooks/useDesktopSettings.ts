@@ -489,12 +489,16 @@ export function applyTemporaryDesktopSettings(settings: unknown): void {
   useDesktopSettingsStore.getState().setDesktopSettings(normalizeDesktopSettings(settings));
 }
 
+export function shouldPersistDesktopSettings(): boolean {
+  return !desktopSettingsAreTemporary;
+}
+
 export function useDesktopSettingsPersistence() {
   useEffect(() => {
     // Keep the entire shared-settings session ephemeral. Persisting a later
     // user edit would serialize the remote baseline along with that edit and
     // silently replace unrelated local preferences.
-    if (desktopSettingsAreTemporary) return;
+    if (!shouldPersistDesktopSettings()) return;
     saveDesktopSettings(useDesktopSettingsStore.getState().desktopSettings);
 
     return useDesktopSettingsStore.subscribe((state, previous) => {
