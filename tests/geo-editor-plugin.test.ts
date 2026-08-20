@@ -83,6 +83,19 @@ describe("maplibreGeoEditorPlugin", () => {
     assert.equal(sketchesStyleForMassing(layer, flat), layer.style);
   });
 
+  it("keeps the auto-managed style off once the user switches the layer to 2D", () => {
+    const layer = sketchesLayer();
+    layer.id = "switched-to-2d";
+    const massing = { type: "FeatureCollection" as const, features: [polygon({ height: 10 })] };
+
+    layer.style = sketchesStyleForMassing(layer, massing);
+    assert.equal(layer.style.extrusionEnabled, true);
+
+    // The Style panel's 2D radio clears the flags but leaves the expression.
+    layer.style = { ...layer.style, extrusionEnabled: false, elevation3dEnabled: false };
+    assert.equal(sketchesStyleForMassing(layer, massing), layer.style);
+  });
+
   it("restores the complete pre-massing extrusion style", () => {
     const layer = sketchesLayer();
     layer.id = "custom-before-massing";

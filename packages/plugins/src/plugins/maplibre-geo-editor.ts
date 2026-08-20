@@ -125,8 +125,6 @@ let pushingSketchesToStore = false;
 let appApi: GeoLibreAppAPI | null = null;
 /** Map-only hide of Sketches while GeoEditor interacts; does not touch store.visible. */
 let sketchesMapLayerSuppressed = false;
-/** After a draw completes, show Sketches even if draw mode stays active for another shape. */
-let sketchesIdleDisplayOverride = false;
 /** Union store + editor on the next sync so a partial getAll cannot drop prior sketches. */
 let unionSketchesWithStoreOnNextSync = false;
 /** Pending one-shot `styledata` listener, so repeated draw events don't pile up listeners. */
@@ -230,8 +228,8 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
     if (editTargetLayerId) void endLayerGeometryEdit(app, { save: true });
     pluginActive = false;
     viewImportBaseline = null;
-    sketchesIdleDisplayOverride = false;
     unionSketchesWithStoreOnNextSync = false;
+    preMassingExtrusionStyles.clear();
     setSketchesMapLayerSuppressed(false);
     showGeomanDisplayLayers();
     appApi = null;
@@ -282,10 +280,7 @@ function getGeoEditorOptions(): GeoEditorOptions {
     },
     onAttributeChange: () => syncSketchesToStore(),
     onHistoryChange: () => syncSketchesToStore(),
-    onModeChange: () => {
-      sketchesIdleDisplayOverride = false;
-      applySketchesMapDisplay();
-    },
+    onModeChange: () => applySketchesMapDisplay(),
     onSelectionChange: () => applySketchesMapDisplay(),
   };
 }
@@ -506,9 +501,7 @@ function syncSketchesToStore(): void {
     pushingSketchesToStore = false;
   }
 
-  if (!sketchesIdleDisplayOverride) {
-    scheduleApplySketchesMapDisplay();
-  }
+  scheduleApplySketchesMapDisplay();
 }
 
 export function hasMassingFeatures(collection: FeatureCollection): boolean {
@@ -549,11 +542,14 @@ export function sketchesStyleForMassing(
     };
   }
 
-  if (
-    layer.style.extrusionEnabled &&
-    layer.style.extrusionHeightExpression !== "" &&
-    layer.style.extrusionHeightExpression !== MASSING_HEIGHT_EXPRESSION
-  ) {
+  // Leave a style the user has taken over alone. Two shapes count as taken over:
+  // a hand-written extrusion height expression, and the auto-managed expression
+  // with extrusion switched off — the Style panel's 2D / 3D-elevation radios
+  // clear `extrusionEnabled` without clearing the expression, so that pairing can
+  // only come from the user picking another visualization mode.
+  if (layer.style.extrusionHeightExpression === MASSING_HEIGHT_EXPRESSION) {
+    if (!layer.style.extrusionEnabled) return layer.style;
+  } else if (layer.style.extrusionEnabled && layer.style.extrusionHeightExpression !== "") {
     return layer.style;
   }
 
@@ -863,7 +859,6 @@ export async function startLayerGeometryEdit(
   // The store layer is left untouched until save, so Cancel simply discards the
   // editor's copy and the original geojson is still in the store.
   editTargetLayerId = layerId;
-  sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;
 
   // Hide the target's normal rendering through the store, not via a map-layer
@@ -957,7 +952,6 @@ export async function endLayerGeometryEdit(
     editTargetOriginalVisible = null;
     editTargetOriginalProperties = null;
     editTargetOriginalGeometries = null;
-    sketchesIdleDisplayOverride = false;
     unionSketchesWithStoreOnNextSync = false;
     notifyGeometryEdit();
     return;
@@ -971,7 +965,6 @@ export async function endLayerGeometryEdit(
     if (save) syncEditTargetToStore();
   } finally {
     editTargetLayerId = null;
-    sketchesIdleDisplayOverride = false;
     unionSketchesWithStoreOnNextSync = false;
     // Restore the target layer's normal rendering (it now reflects the saved
     // edits, or the untouched original on cancel).
@@ -1004,7 +997,6 @@ function abortGeometryEditSession(): void {
   editTargetOriginalProperties = null;
   editTargetOriginalGeometries = null;
   editTargetLayerId = null;
-  sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;
   void restoreSketchesAfterSession();
   applySketchesMapDisplay();
@@ -1162,7 +1154,6 @@ function teardownSketchesStoreSync(): void {
 
 function isGeoEditorInteractionMode(): boolean {
   if (!geoEditorControl) return false;
-  if (sketchesIdleDisplayOverride) return false;
   const { activeDrawMode, activeEditMode } = geoEditorControl.getState();
   return activeDrawMode !== null || activeEditMode !== null;
 }
