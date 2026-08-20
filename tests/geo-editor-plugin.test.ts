@@ -96,6 +96,36 @@ describe("maplibreGeoEditorPlugin", () => {
     assert.equal(sketchesStyleForMassing(layer, massing), layer.style);
   });
 
+  it("only defers to a custom height expression that is actually rendering", () => {
+    const massing = { type: "FeatureCollection" as const, features: [polygon({ height: 10 })] };
+
+    // Advanced mode off: the expression is inert (`extrusionHeightValue` ignores
+    // it), so massing may take the layer over.
+    const stray = sketchesLayer();
+    stray.id = "stray-expression";
+    stray.style = {
+      ...stray.style,
+      extrusionEnabled: true,
+      extrusionAdvancedStyleEnabled: false,
+      extrusionHeightExpression: "custom",
+    };
+    assert.equal(
+      sketchesStyleForMassing(stray, massing).extrusionHeightExpression !== "custom",
+      true,
+    );
+
+    // Advanced mode on: the user's expression is driving the render, so it stands.
+    const live = sketchesLayer();
+    live.id = "live-expression";
+    live.style = {
+      ...live.style,
+      extrusionEnabled: true,
+      extrusionAdvancedStyleEnabled: true,
+      extrusionHeightExpression: "custom",
+    };
+    assert.equal(sketchesStyleForMassing(live, massing), live.style);
+  });
+
   it("restores the complete pre-massing extrusion style", () => {
     const layer = sketchesLayer();
     layer.id = "custom-before-massing";

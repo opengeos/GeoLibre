@@ -52,6 +52,37 @@ type PreMassingExtrusionStyle = Pick<
 
 const preMassingExtrusionStyles = new Map<string, PreMassingExtrusionStyle>();
 
+/**
+ * User-facing strings the editor renders as copy (the draw/edit mode entries in
+ * {@link GEO_EDITOR_OPTIONS} are keys, not display text). This package is
+ * framework-agnostic and cannot call react-i18next's `t()` directly, so the host
+ * pushes translated values via {@link setGeoEditorLabels}, the pattern used by
+ * `maplibre-graticule` and `maplibre-reverse-geocode`. Defaults are English.
+ */
+export interface GeoEditorLabels {
+  /** Header of the feature-attribute form. */
+  attributePanelTitle: string;
+  /** Label of the massing footprint's height field, in metres. */
+  massingHeight: string;
+}
+
+export const DEFAULT_GEO_EDITOR_LABELS: GeoEditorLabels = {
+  attributePanelTitle: "Feature properties",
+  massingHeight: "Height (m)",
+};
+
+let geoEditorLabels: GeoEditorLabels = { ...DEFAULT_GEO_EDITOR_LABELS };
+
+/**
+ * Replace the user-facing strings (the host calls this with translations on
+ * every language change). The third-party control reads its options once at
+ * construction, so a language switch while the editor is open takes effect the
+ * next time the plugin is activated rather than live.
+ */
+export function setGeoEditorLabels(next: Partial<GeoEditorLabels>): void {
+  geoEditorLabels = { ...geoEditorLabels, ...next };
+}
+
 let geoEditorPosition: GeoLibreMapControlPosition = "top-left";
 
 const GEO_EDITOR_OPTIONS = {
@@ -87,25 +118,15 @@ const GEO_EDITOR_OPTIONS = {
   hideGeomanControl: true,
   showFeatureProperties: true,
   enableAttributeEditing: true,
-  attributePanelTitle: "Feature properties",
   // Leave the right-side MapLibre controls clickable while the form is open.
   attributePanelSideOffset: 54,
-  attributeSchema: {
-    polygon: [
-      {
-        name: "height",
-        label: "Height (m)",
-        type: "number",
-        min: 0,
-        step: 0.5,
-      },
-    ],
-  },
   // Avoid zoom/fit on Sketches restore — it retriggers style churn and races with draw.
   fitBoundsOnLoad: false,
 } satisfies Omit<
   GeoEditorOptions,
   | "position"
+  | "attributePanelTitle"
+  | "attributeSchema"
   | "onFeatureCreate"
   | "onFeatureEdit"
   | "onFeatureDelete"
@@ -257,6 +278,18 @@ function getGeoEditorOptions(): GeoEditorOptions {
   return {
     ...GEO_EDITOR_OPTIONS,
     position: geoEditorPosition,
+    attributePanelTitle: geoEditorLabels.attributePanelTitle,
+    attributeSchema: {
+      polygon: [
+        {
+          name: "height",
+          label: geoEditorLabels.massingHeight,
+          type: "number",
+          min: 0,
+          step: 0.5,
+        },
+      ],
+    },
     onFeatureCreate: () => {
       unionSketchesWithStoreOnNextSync = true;
       // Defer until Geoman commits the new feature to its feature store.
@@ -543,13 +576,23 @@ export function sketchesStyleForMassing(
   }
 
   // Leave a style the user has taken over alone. Two shapes count as taken over:
-  // a hand-written extrusion height expression, and the auto-managed expression
-  // with extrusion switched off — the Style panel's 2D / 3D-elevation radios
-  // clear `extrusionEnabled` without clearing the expression, so that pairing can
-  // only come from the user picking another visualization mode.
+  // an extrusion height the user's own expression is currently driving, and the
+  // auto-managed expression with extrusion switched off — the Style panel's 2D /
+  // 3D-elevation radios clear `extrusionEnabled` without clearing the expression,
+  // so that pairing can only come from the user picking another visualization
+  // mode. The first test mirrors `extrusionHeightValue`, which ignores the
+  // expression unless `extrusionAdvancedStyleEnabled` is on, so a stray
+  // expression left behind by a since-disabled advanced mode does not block
+  // auto-management. A custom expression that is not rendering yet (extrusion
+  // still off) is overwritten but recoverable: `preMassingExtrusionStyles`
+  // restores it when the last massing feature goes away.
   if (layer.style.extrusionHeightExpression === MASSING_HEIGHT_EXPRESSION) {
     if (!layer.style.extrusionEnabled) return layer.style;
-  } else if (layer.style.extrusionEnabled && layer.style.extrusionHeightExpression !== "") {
+  } else if (
+    layer.style.extrusionEnabled &&
+    layer.style.extrusionAdvancedStyleEnabled &&
+    layer.style.extrusionHeightExpression !== ""
+  ) {
     return layer.style;
   }
 

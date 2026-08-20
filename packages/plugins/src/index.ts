@@ -387,6 +387,9 @@ export { maplibreFemaWmsPlugin } from "./plugins/maplibre-fema-wms";
 export {
   maplibreGeoEditorPlugin,
   GEO_EDITOR_PLUGIN_ID,
+  DEFAULT_GEO_EDITOR_LABELS,
+  setGeoEditorLabels,
+  type GeoEditorLabels,
   canEditLayerGeometry,
   SKETCHES_SOURCE_KIND,
   startLayerGeometryEdit,

@@ -27,6 +27,7 @@ import {
   openVectorLayerPanel,
   setAnnotationLabels,
   setBasemapControlLabels,
+  setGeoEditorLabels,
   setGraticuleLabels,
   setH3Labels,
   setS2Labels,
@@ -584,6 +585,10 @@ export function TopToolbar({
       engineWasm: t("huggingFace.engineWasm"),
       engineTitiler: t("huggingFace.engineTitiler"),
       resetDefaults: t("huggingFace.resetDefaults"),
+    });
+    setGeoEditorLabels({
+      attributePanelTitle: t("geoEditorPlugin.attributePanelTitle"),
+      massingHeight: t("geoEditorPlugin.massingHeight"),
     });
     setGraticuleLabels({
       title: t("graticule.title"),

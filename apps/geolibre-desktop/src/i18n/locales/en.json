@@ -3677,6 +3677,10 @@
     "confirmStyleReplace_one": "Switching to \"{{name}}\" replaces the whole map style and will remove the stacked basemap you added. Continue?",
     "confirmStyleReplace_other": "Switching to \"{{name}}\" replaces the whole map style and will remove the {{count}} stacked basemaps you added. Continue?"
   },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "Feature properties",
+    "massingHeight": "Height (m)"
+  },
   "annotations": {
     "toolbar": "Annotation tools",
     "layerName": "Annotations",
