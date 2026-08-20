@@ -73,6 +73,7 @@ import {
 } from "../../../lib/model-tool-catalog";
 import {
   modelProviderCatalog,
+  translateModelToolGroup,
   translateParameter,
   translateToolDescription,
   translateToolGroup,
@@ -438,6 +439,9 @@ export function ModelBuilderPanel({
     () =>
       searchModelTools(catalog, search, (descriptor) => {
         const catalogName = modelProviderCatalog(descriptor.provider);
+        // Whitebox metadata is not translated, and its raw name/group are
+        // already in the haystack, so there is nothing to add for those.
+        if (!catalogName) return "";
         return `${translateToolName(t, catalogName, {
           id: descriptor.toolId,
           name: descriptor.name,
@@ -1503,7 +1507,7 @@ export function ModelBuilderPanel({
                   groups.map((group) => (
                     <div key={group.group} className="mb-2">
                       <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {translateToolGroup(t, group.group)}
+                        {translateModelToolGroup(t, group)}
                       </p>
                       {group.tools.map((tool) => {
                         const catalog = modelProviderCatalog(tool.provider);

@@ -141,6 +141,33 @@ export function translateToolGroup(t: TFunction, group: string): string {
 }
 
 /**
+ * A Model Builder palette heading for the active locale.
+ *
+ * Unlike the single-registry dialogs, the palette mixes owned tools with
+ * Whitebox ones, and `groupModelTools` keys its groups on the raw label — so a
+ * heading has no provider of its own. Translating every heading through the
+ * shared namespace is wrong for a Whitebox-only group whose category text
+ * happens to slug onto an owned key: the WASM catalog ships a `terrain`
+ * category (lowercase) beside the raster registry's `Terrain`, and both reach
+ * `processing.toolGroup.terrain`, which would render the palette with two
+ * identically-labelled headings.
+ *
+ * So a heading is translated only when at least one of its tools comes from a
+ * catalog GeoLibre owns. A group of purely Whitebox categories renders its
+ * label verbatim, the way the rest of that catalog's metadata does; a mixed
+ * group (none exist today, since no Whitebox category matches an owned label
+ * exactly) counts as owned, because an owned tool sitting under the heading
+ * means the label is ours to translate.
+ */
+export function translateModelToolGroup(
+  t: TFunction,
+  group: { group: string; tools: { provider: string }[] },
+): string {
+  const owned = group.tools.some((tool) => modelProviderCatalog(tool.provider) !== null);
+  return owned ? translateToolGroup(t, group.group) : group.group;
+}
+
+/**
  * A parameter with its `label`, `description` and select-option labels resolved
  * for the active locale.
  *

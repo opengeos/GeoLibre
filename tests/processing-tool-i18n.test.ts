@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { TFunction } from "i18next";
 import {
   modelProviderCatalog,
+  translateModelToolGroup,
   toolGroupKey,
   translateParameter,
   translateToolDescription,
@@ -143,6 +144,41 @@ describe("translateParameter", () => {
     assert.equal(translated.description, undefined);
     assert.equal(translated.options, undefined);
     assert.equal(translated.label, "Distance");
+  });
+});
+
+describe("translateModelToolGroup", () => {
+  const t = fakeT({ "processing.toolGroup.terrain": "地形" });
+
+  it("translates a heading whose tools come from an owned catalog", () => {
+    assert.equal(
+      translateModelToolGroup(t, { group: "Terrain", tools: [{ provider: "vector" }] }),
+      "地形",
+    );
+  });
+
+  it("leaves a Whitebox-only heading verbatim", () => {
+    // The WASM catalog ships a lowercase `terrain` category beside the raster
+    // registry's `Terrain`; both slug to `terrain`, so translating this one
+    // would put two identically-labelled headings in the palette.
+    assert.equal(
+      translateModelToolGroup(t, { group: "terrain", tools: [{ provider: "whitebox" }] }),
+      "terrain",
+    );
+  });
+
+  it("treats a mixed group as owned", () => {
+    assert.equal(
+      translateModelToolGroup(t, {
+        group: "Terrain",
+        tools: [{ provider: "whitebox" }, { provider: "vector" }],
+      }),
+      "地形",
+    );
+  });
+
+  it("leaves an empty group verbatim", () => {
+    assert.equal(translateModelToolGroup(t, { group: "Terrain", tools: [] }), "Terrain");
   });
 });
 
