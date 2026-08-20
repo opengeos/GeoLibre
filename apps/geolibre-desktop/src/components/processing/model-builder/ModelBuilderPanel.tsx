@@ -157,7 +157,6 @@ function createId(): string {
     : `id-${Math.random().toString(36).slice(2)}`;
 }
 
-/** Where a port's connector dot sits, in canvas coordinates. */
 /**
  * Vertical room the provider line and the tool name take on a card. Measured
  * against the rendered header (a 10px uppercase line over a 12px title, inside
