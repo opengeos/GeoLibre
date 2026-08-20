@@ -1232,10 +1232,10 @@ function applySketchesMapDisplay(): void {
   }
 
   if (isGeoEditorInteractionMode()) {
-    showGeomanDisplayLayers();
+    applyGeomanInteractionDisplay();
     positionGeoEditorOverlayLayers();
     scheduleShowGeomanDisplayLayersOnStyleData();
-    setSketchesMapLayerSuppressed(true);
+    setSketchesMapLayerSuppressed(!isMassingDrawDisplay());
     return;
   }
 
@@ -1276,7 +1276,7 @@ function scheduleShowGeomanDisplayLayersOnStyleData(): void {
   pendingStyleDataListener = () => {
     pendingStyleDataListener = null;
     if (editTargetLayerId || isGeoEditorInteractionMode()) {
-      showGeomanDisplayLayers();
+      applyGeomanInteractionDisplay();
       positionGeoEditorOverlayLayers();
     }
   };
@@ -1311,7 +1311,10 @@ function setSketchesMapLayersVisibility(layer: GeoLibreLayer): void {
   }
 }
 
-function setGeomanDisplayLayersVisibility(visibility: "visible" | "none"): void {
+function setGeomanDisplayLayersVisibility(
+  visibility: "visible" | "none",
+  matches: (layer: maplibregl.LayerSpecification) => boolean = isGeomanDisplayLayer,
+): void {
   const map = appApi?.getMap?.();
   if (!map) return;
   const sketchesLayer = activeEditableLayer(useAppStore.getState().layers);
@@ -1331,13 +1334,62 @@ function setGeomanDisplayLayersVisibility(visibility: "visible" | "none"): void 
   if (!style?.layers) return;
 
   for (const layer of style.layers) {
-    if (!isGeomanDisplayLayer(layer)) continue;
+    if (!matches(layer)) continue;
     try {
       map.setLayoutProperty(layer.id, "visibility", effectiveVisibility);
     } catch {
       // Layer may have been removed with the current style.
     }
   }
+}
+
+/**
+ * Geoman's `gm_main-*` layers draw its committed features; every other `gm_*`
+ * layer is a transient drawing aid (the in-progress rubber band, vertex, edge
+ * and snap markers).
+ */
+export function isGeomanCommittedDisplayLayer(layer: maplibregl.LayerSpecification): boolean {
+  if (!isGeomanDisplayLayer(layer)) return false;
+  const source = "source" in layer && typeof layer.source === "string" ? layer.source : "";
+  return layer.id.toLowerCase().startsWith("gm_main") || source.startsWith("gm_main");
+}
+
+/**
+ * Whether the Sketches layer's auto-managed massing extrusion is what the user
+ * should be seeing right now: a draw tool is armed — so the display would
+ * otherwise fall back to Geoman's flat rendering for as long as the tool stays
+ * armed for the next footprint — and the layer carries the extrusion this
+ * plugin manages.
+ *
+ * Edit modes are excluded: their handles hit-test against Geoman's committed
+ * layers, which this state hides.
+ */
+function isMassingDrawDisplay(): boolean {
+  if (editTargetLayerId || !geoEditorControl) return false;
+  const { activeDrawMode, activeEditMode } = geoEditorControl.getState();
+  if (activeDrawMode === null || activeEditMode !== null) return false;
+  const layer = activeEditableLayer(useAppStore.getState().layers);
+  return (
+    layer?.style.extrusionEnabled === true &&
+    layer.style.extrusionHeightExpression === MASSING_HEIGHT_EXPRESSION
+  );
+}
+
+/**
+ * Show Geoman for an active interaction. While a massing extrusion is what the
+ * user should see, Geoman's committed-feature layers stay hidden so the
+ * extruded Sketches layer is not covered by a flat copy of itself, and the
+ * transient aids stay visible so the next footprint still rubber-bands as it is
+ * drawn — showing Sketches by hiding *all* of Geoman is what e8bd03bf had to
+ * revert.
+ */
+function applyGeomanInteractionDisplay(): void {
+  if (!isMassingDrawDisplay()) {
+    showGeomanDisplayLayers();
+    return;
+  }
+  setGeomanDisplayLayersVisibility("visible", (layer) => !isGeomanCommittedDisplayLayer(layer));
+  setGeomanDisplayLayersVisibility("none", isGeomanCommittedDisplayLayer);
 }
 
 function hideGeomanDisplayLayers(): void {

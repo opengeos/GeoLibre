@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   GEO_EDITOR_PLUGIN_ID,
   hasMassingFeatures,
+  isGeomanCommittedDisplayLayer,
   maplibreGeoEditorPlugin as plugin,
   sketchesStyleForMassing,
 } from "../packages/plugins/src/plugins/maplibre-geo-editor";
@@ -124,6 +125,35 @@ describe("maplibreGeoEditorPlugin", () => {
       extrusionHeightExpression: "custom",
     };
     assert.equal(sketchesStyleForMassing(live, massing), live.style);
+  });
+
+  // A massing draw hides only Geoman's committed-feature layers, so the extruded
+  // Sketches layer is what the user sees while the transient aids keep drawing
+  // the next footprint's rubber band.
+  it("separates Geoman's committed layers from its transient drawing aids", () => {
+    const layer = (id: string, source: string) =>
+      ({ id, source, type: "fill" }) as unknown as Parameters<
+        typeof isGeomanCommittedDisplayLayer
+      >[0];
+
+    assert.equal(
+      isGeomanCommittedDisplayLayer(layer("gm_main-polygon__fill-layer-0", "gm_main")),
+      true,
+    );
+    assert.equal(
+      isGeomanCommittedDisplayLayer(layer("gm_temporary-polygon__fill-layer-0", "gm_temporary")),
+      false,
+    );
+    assert.equal(
+      isGeomanCommittedDisplayLayer(
+        layer("gm_internal-vertex_marker__circle-layer-0", "gm_internal"),
+      ),
+      false,
+    );
+    assert.equal(
+      isGeomanCommittedDisplayLayer(layer("layer-sketches-extrusion", "source-sketches")),
+      false,
+    );
   });
 
   it("restores the complete pre-massing extrusion style", () => {
