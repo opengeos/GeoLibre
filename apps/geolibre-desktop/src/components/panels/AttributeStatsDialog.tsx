@@ -79,20 +79,26 @@ export function AttributeStatsDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Fall back to "all" when a transient scope disappears while the dialog is
+  // Where a scope lands once it stops being offered. Clearing the search over
+  // the selected-features view collapses "Filtered" onto "Selected", so keep
+  // the rows the user was already reading instead of resetting to "all".
+  const fallbackScope: StatsScope =
+    scope === "filtered" && filteredMatchesSelection && hasSelection ? "selected" : "all";
+
+  // Apply that fall back when a transient scope disappears while the dialog is
   // open, so the select never points at an option that is no longer offered.
   useEffect(() => {
     if ((scope === "filtered" && !hasFilter) || (scope === "selected" && !hasSelection)) {
-      setScope("all");
+      setScope(fallbackScope);
     }
-  }, [hasFilter, hasSelection, scope]);
+  }, [fallbackScope, hasFilter, hasSelection, scope]);
 
   const activeScope: StatsScope =
     scope === "filtered" && hasFilter
       ? "filtered"
       : scope === "selected" && hasSelection
         ? "selected"
-        : "all";
+        : fallbackScope;
   const scopedRows =
     activeScope === "filtered" ? filteredRows : activeScope === "selected" ? selectedRows : rows;
 
