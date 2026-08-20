@@ -78,6 +78,13 @@ function isAllowedOrigin(
     const originUrl = new URL(originHeader);
     const host = originUrl.hostname;
     if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost")) return true;
+    if (
+      !envAllowed &&
+      originUrl.protocol === "https:" &&
+      (host === "opengeos.org" || host.endsWith(".geolibre-preview.pages.dev"))
+    ) {
+      return true;
+    }
     return allowedList.some((allowed) => {
       if (allowed === "*") return true;
       try {
