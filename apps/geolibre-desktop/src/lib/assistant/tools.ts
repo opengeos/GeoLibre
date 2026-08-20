@@ -715,7 +715,7 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
   const listModelAlgorithms = tool({
     name: "list_model_algorithms",
     description:
-      "List algorithms that can be placed in Model Builder, including their exact input-port and parameter ids. Call this before create_model_builder_model.",
+      "List the client-side vector algorithms that can be placed in Model Builder, including their exact input-port and parameter ids. Raster and Whitebox tools are not available to this flow — use run_algorithm or the Processing menu for those. Call this before create_model_builder_model.",
     inputSchema: z.object({}),
     callback: async () => {
       return json({
@@ -738,10 +738,15 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
   const createModelBuilderModel = tool({
     name: "create_model_builder_model",
     description:
-      "Create, save, and open an editable Model Builder workflow. Inputs and steps use unique short keys. Each step's inputs maps an algorithm input-port id to an earlier input/step key; parameters holds non-layer settings. Outputs name results to add to the map. Call list_model_algorithms first and use its exact ids.",
+      "Create, save, and open an editable Model Builder workflow from the client-side vector algorithms. Inputs and steps use unique short keys. Each step's inputs maps an algorithm input-port id to an earlier input/step key; parameters holds non-layer settings. Outputs name results to add to the map. Call list_model_algorithms first and use its exact ids; the model is always saved, but Model Builder asks before replacing unsaved canvas work or a running job.",
     inputSchema: z.object({
       name: z.string(),
-      inputs: z.array(z.object({ key: z.string(), layer: z.string() })),
+      inputs: z.array(
+        z.object({
+          key: z.string(),
+          layer: z.string().describe("Layer id (from list_layers) or its exact name."),
+        }),
+      ),
       steps: z.array(
         z.object({
           key: z.string(),
@@ -762,7 +767,12 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
         name: model.name,
         nodes: model.graph?.nodes.length ?? 0,
         edges: model.graph?.edges.length ?? 0,
-        opened: true,
+        saved: true,
+        // The panel is opened here, but it loads the model from an effect that
+        // first asks about unsaved canvas work or a run in flight. That answer
+        // arrives long after this result, so claiming the model is on screen
+        // would let the assistant report an outcome the user may have declined.
+        builderOpened: true,
       });
     },
   });
