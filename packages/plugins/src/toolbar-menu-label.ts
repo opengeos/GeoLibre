@@ -14,7 +14,12 @@
  *
  * Unlike the panel registries there is no per-registration `set()` step: menu
  * items are anonymous nodes in a tree, so the dedup key is the caller-supplied
- * label path (`"<menuId>.<itemId>"`).
+ * label path (`"<menuId>.<itemId>"`). One consequence: where
+ * `PanelTitleResolver` clears a panel's dedup on re-registration, a path here
+ * stays warned for the session, so a plugin that fixes a broken getter and
+ * re-registers its menu will not log again for that path. That is the accepted
+ * trade for not tracking per-menu state; `resetToolbarLabelWarnings` clears it
+ * (used by the tests).
  */
 
 /** A label that is either literal text or a getter returning it. */

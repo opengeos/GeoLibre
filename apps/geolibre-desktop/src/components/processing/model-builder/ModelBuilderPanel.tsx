@@ -1493,45 +1493,40 @@ export function ModelBuilderPanel({
                       <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                         {translateToolGroup(t, group.group)}
                       </p>
-                      {group.tools.map((tool) => (
-                        // A real button, not a bare draggable div: dragging is the
-                        // only other way to add a tool node, so a div here would put
-                        // the panel's core interaction out of reach of the keyboard
-                        // entirely. Activating it drops the node onto the canvas.
-                        <button
-                          key={tool.key}
-                          type="button"
-                          draggable
-                          onDragStart={(event) => {
-                            event.dataTransfer.setData(TOOL_DRAG_TYPE, tool.key);
-                            event.dataTransfer.effectAllowed = "copy";
-                          }}
-                          onClick={() => addToolAtDefault(tool)}
-                          title={
-                            translateToolDescription(t, modelProviderCatalog(tool.provider), {
-                              id: tool.toolId,
-                              name: tool.name,
-                              description: tool.description,
-                            }) ||
-                            translateToolName(t, modelProviderCatalog(tool.provider), {
-                              id: tool.toolId,
-                              name: tool.name,
-                            })
-                          }
-                          aria-label={t("processing.modelBuilder.addToolNode", {
-                            tool: translateToolName(t, modelProviderCatalog(tool.provider), {
-                              id: tool.toolId,
-                              name: tool.name,
-                            }),
-                          })}
-                          className="w-full cursor-grab truncate rounded px-1.5 py-1 text-start text-xs hover:bg-accent active:cursor-grabbing"
-                        >
-                          {translateToolName(t, modelProviderCatalog(tool.provider), {
-                            id: tool.toolId,
-                            name: tool.name,
-                          })}
-                        </button>
-                      ))}
+                      {group.tools.map((tool) => {
+                        const catalog = modelProviderCatalog(tool.provider);
+                        const toolMeta = {
+                          id: tool.toolId,
+                          name: tool.name,
+                          description: tool.description,
+                        };
+                        const name = translateToolName(t, catalog, toolMeta);
+                        // `||`, not `??`: a tool with no description (or one whose
+                        // catalog entry is an empty string) should get the name as
+                        // its tooltip rather than an empty one.
+                        const tooltip = translateToolDescription(t, catalog, toolMeta) || name;
+                        return (
+                          // A real button, not a bare draggable div: dragging is the
+                          // only other way to add a tool node, so a div here would put
+                          // the panel's core interaction out of reach of the keyboard
+                          // entirely. Activating it drops the node onto the canvas.
+                          <button
+                            key={tool.key}
+                            type="button"
+                            draggable
+                            onDragStart={(event) => {
+                              event.dataTransfer.setData(TOOL_DRAG_TYPE, tool.key);
+                              event.dataTransfer.effectAllowed = "copy";
+                            }}
+                            onClick={() => addToolAtDefault(tool)}
+                            title={tooltip}
+                            aria-label={t("processing.modelBuilder.addToolNode", { tool: name })}
+                            className="w-full cursor-grab truncate rounded px-1.5 py-1 text-start text-xs hover:bg-accent active:cursor-grabbing"
+                          >
+                            {name}
+                          </button>
+                        );
+                      })}
                     </div>
                   ))
                 )}
