@@ -22,11 +22,13 @@ interface AttributeStatsDialogProps {
   rows: ChartRow[];
   /** Rows matching the table's current search filter (a subset of `rows`). */
   filteredRows: ChartRow[];
+  /** Rows matching the layer's current feature selection (a subset of `rows`). */
+  selectedRows: ChartRow[];
   columns: string[];
   layerName: string;
 }
 
-type StatsScope = "all" | "filtered";
+type StatsScope = "all" | "filtered" | "selected";
 
 /**
  * One-click field statistics summary for the attribute table: pick a field and
@@ -41,6 +43,7 @@ export function AttributeStatsDialog({
   onOpenChange,
   rows,
   filteredRows,
+  selectedRows,
   columns,
   layerName,
 }: AttributeStatsDialogProps) {
@@ -52,6 +55,7 @@ export function AttributeStatsDialog({
   // A filter is active (and worth offering as a scope) only when it actually
   // narrows the row set; otherwise the two scopes would be identical.
   const hasFilter = filteredRows.length !== rows.length;
+  const hasSelection = selectedRows.length > 0;
 
   // Seed the field picker when the dialog opens. Keyed on `open` only: `columns`
   // gets a fresh identity every parent render, so depending on it here would
@@ -64,13 +68,20 @@ export function AttributeStatsDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Fall back to "all" when the active filter clears while the dialog is open,
-  // so the scope select never points at an option that is no longer offered.
+  // Fall back to "all" when a transient scope disappears while the dialog is
+  // open, so the select never points at an option that is no longer offered.
   useEffect(() => {
-    if (!hasFilter) setScope("all");
-  }, [hasFilter]);
+    if ((scope === "filtered" && !hasFilter) || (scope === "selected" && !hasSelection)) {
+      setScope("all");
+    }
+  }, [hasFilter, hasSelection, scope]);
 
-  const scopedRows = scope === "filtered" && hasFilter ? filteredRows : rows;
+  const scopedRows =
+    scope === "filtered" && hasFilter
+      ? filteredRows
+      : scope === "selected" && hasSelection
+        ? selectedRows
+        : rows;
 
   const stats = useMemo<FieldStats | null>(() => {
     if (!open || !field) return null;
@@ -83,7 +94,9 @@ export function AttributeStatsDialog({
     const header =
       scope === "filtered"
         ? t("attributeStats.copyHeaderFiltered", { field })
-        : t("attributeStats.copyHeader", { field });
+        : scope === "selected"
+          ? t("attributeStats.copyHeaderSelected", { field })
+          : t("attributeStats.copyHeader", { field });
     void navigator.clipboard
       ?.writeText([header, ...lines].join("\n"))
       .then(() => setCopied(true))
@@ -125,7 +138,7 @@ export function AttributeStatsDialog({
                   ))}
                 </Select>
               </div>
-              {hasFilter ? (
+              {hasFilter || hasSelection ? (
                 <div className="grid gap-1.5">
                   <Label htmlFor="stats-scope">{t("attributeStats.scope")}</Label>
                   <Select
@@ -140,11 +153,20 @@ export function AttributeStatsDialog({
                     <option value="all">
                       {t("attributeStats.scopeAll", { total: rows.length.toLocaleString() })}
                     </option>
-                    <option value="filtered">
-                      {t("attributeStats.scopeFiltered", {
-                        total: filteredRows.length.toLocaleString(),
-                      })}
-                    </option>
+                    {hasFilter ? (
+                      <option value="filtered">
+                        {t("attributeStats.scopeFiltered", {
+                          total: filteredRows.length.toLocaleString(),
+                        })}
+                      </option>
+                    ) : null}
+                    {hasSelection ? (
+                      <option value="selected">
+                        {t("attributeStats.scopeSelected", {
+                          total: selectedRows.length.toLocaleString(),
+                        })}
+                      </option>
+                    ) : null}
                   </Select>
                 </div>
               ) : null}

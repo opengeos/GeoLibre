@@ -676,6 +676,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         : filtered,
     [adaptAnalysisRows, analysisRows, attributeRows.length, filtered],
   );
+  const analysisSelectedRows = useMemo(() => {
+    if (!adaptAnalysisRows || selectedIdSet.size === 0) return [];
+    return coerceNumericStringRows(
+      attributeRows.filter(({ featureId }) => selectedIdSet.has(featureId)),
+    );
+  }, [adaptAnalysisRows, attributeRows, selectedIdSet]);
   const sorted = [...filtered].sort((a, b) => {
     const aValue = sort.key === "__featureId" ? a.featureId : a.properties[sort.key];
     const bValue = sort.key === "__featureId" ? b.featureId : b.properties[sort.key];
@@ -2402,6 +2408,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         onOpenChange={setStatsOpen}
         rows={analysisRows}
         filteredRows={analysisFilteredRows}
+        selectedRows={analysisSelectedRows}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
       />

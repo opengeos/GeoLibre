@@ -5493,6 +5493,7 @@
     "scope": "Phạm vi",
     "scopeAll": "Tất cả các tính năng ({{total}})",
     "scopeFiltered": "Đã lọc ({{total}})",
+    "scopeSelected": "Đã chọn ({{total}})",
     "copiedToClipboard": "Đã sao chép vào bảng nhớ tạm.",
     "stat": {
       "min": "tối thiểu",
@@ -5509,6 +5510,7 @@
     "copy": "tối thiểu",
     "copyHeader": "Thống kê hiện trường — {{field}}",
     "copyHeaderFiltered": "Thống kê hiện trường — {{field}} (đã lọc)",
+    "copyHeaderSelected": "Thống kê hiện trường — {{field}} (đã chọn)",
     "noValues": "Không có giá trị để tóm tắt.",
     "mostFrequent": "Giá trị thường xuyên nhất",
     "noPopulated": "Không có giá trị được điền."
