@@ -397,7 +397,14 @@ export function ManagePluginsDialog({
     const term = query.trim().toLowerCase();
     const matches = (entry: PluginRegistryEntry) =>
       !term ||
-      [entry.name, entry.id, entry.description, ...(entry.categories ?? [])]
+      [
+        entry.name,
+        // The card shows the localized name, so it must be searchable too.
+        pluginDisplayName(t, entry),
+        entry.id,
+        entry.description,
+        ...(entry.categories ?? []),
+      ]
         .filter((field): field is string => Boolean(field))
         .some((field) => field.toLowerCase().includes(term));
     return (
@@ -422,7 +429,7 @@ export function ManagePluginsDialog({
             a.id.localeCompare(b.id),
         )
     );
-  }, [entries, isInstalled, isUpgradeable, query, section]);
+  }, [entries, isInstalled, isUpgradeable, query, section, t]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -559,6 +566,11 @@ export function ManagePluginsDialog({
                     const updateAvailable = isUpgradeable(entry);
                     const loadPending = isLoadPending(entry);
                     const loadIssue = externalLoadIssues.get(entry.manifestUrl);
+                    // One resolution per card: the visible title and every
+                    // accessible label must announce the same string, or a
+                    // screen reader reads the plugin's English name over a
+                    // localized title.
+                    const displayName = pluginDisplayName(t, entry);
                     return (
                       <div
                         key={entry.id}
@@ -566,9 +578,7 @@ export function ManagePluginsDialog({
                       >
                         <div className="min-w-0 space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">
-                              {pluginDisplayName(t, entry)}
-                            </span>
+                            <span className="truncate text-sm font-medium">{displayName}</span>
                             <span className="shrink-0 text-xs text-muted-foreground">
                               v{entry.version}
                             </span>
@@ -579,7 +589,7 @@ export function ManagePluginsDialog({
                                 rel="noreferrer"
                                 className="shrink-0 text-muted-foreground hover:text-foreground"
                                 aria-label={t("managePlugins.openHomepageAria", {
-                                  name: entry.name,
+                                  name: displayName,
                                 })}
                                 onClick={(event) => {
                                   event.preventDefault();
@@ -635,7 +645,7 @@ export function ManagePluginsDialog({
                               size="sm"
                               variant="outline"
                               disabled={!compatible}
-                              aria-label={t("managePlugins.installAria", { name: entry.name })}
+                              aria-label={t("managePlugins.installAria", { name: displayName })}
                               onClick={() => installUrl(entry.manifestUrl)}
                             >
                               <Download className="h-3.5 w-3.5" />
@@ -652,7 +662,7 @@ export function ManagePluginsDialog({
                                 variant="outline"
                                 className="text-destructive"
                                 aria-label={t("managePlugins.confirmUninstallAria", {
-                                  name: entry.name,
+                                  name: displayName,
                                 })}
                                 onClick={() => {
                                   uninstallUrl(entry.manifestUrl);
@@ -678,7 +688,7 @@ export function ManagePluginsDialog({
                                   size="sm"
                                   variant="outline"
                                   disabled={busyId === entry.id}
-                                  aria-label={t("managePlugins.updateAria", { name: entry.name })}
+                                  aria-label={t("managePlugins.updateAria", { name: displayName })}
                                   onClick={() => void handleUpgrade(entry)}
                                 >
                                   {busyId === entry.id ? (
@@ -711,7 +721,7 @@ export function ManagePluginsDialog({
                                 variant="ghost"
                                 className="h-8 w-8"
                                 disabled={busyId === entry.id}
-                                aria-label={t("managePlugins.uninstallAria", { name: entry.name })}
+                                aria-label={t("managePlugins.uninstallAria", { name: displayName })}
                                 onClick={() => {
                                   setActionError(null);
                                   setConfirmRemoveId(entry.id);

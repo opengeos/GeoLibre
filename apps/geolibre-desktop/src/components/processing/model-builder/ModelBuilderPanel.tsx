@@ -432,7 +432,19 @@ export function ModelBuilderPanel({
   }, [issues]);
 
   const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
-  const filtered = useMemo(() => searchModelTools(catalog, search), [catalog, search]);
+  // The palette renders translated names and group headings, so the search has
+  // to see them too or a user can only find a tool by its English name.
+  const filtered = useMemo(
+    () =>
+      searchModelTools(catalog, search, (descriptor) => {
+        const catalogName = modelProviderCatalog(descriptor.provider);
+        return `${translateToolName(t, catalogName, {
+          id: descriptor.toolId,
+          name: descriptor.name,
+        })} ${translateToolGroup(t, descriptor.group)}`;
+      }),
+    [catalog, search, t],
+  );
   const groups = useMemo(() => groupModelTools(filtered), [filtered]);
 
   /**

@@ -196,4 +196,19 @@ describe("the combined palette", () => {
     );
     assert.equal(searchModelTools(catalog, "   ").length, catalog.length);
   });
+
+  it("also searches the caller's localized text", () => {
+    // The palette renders translated names and headings, so a user who sees
+    // "缓冲区" must be able to search for it rather than only for "Buffer".
+    const catalog = buildModelToolCatalog([bufferAlgorithm, clipAlgorithm], [slopeTool]);
+    const localized = (descriptor: { toolId: string }) =>
+      descriptor.toolId === "buffer" ? "缓冲区" : "";
+    assert.deepEqual(
+      searchModelTools(catalog, "缓冲区", localized).map((d) => d.toolId),
+      ["buffer"],
+    );
+    // Without the resolver the same query finds nothing, so the extra text is
+    // what makes it match (not a coincidental hit on the English metadata).
+    assert.deepEqual(searchModelTools(catalog, "缓冲区"), []);
+  });
 });

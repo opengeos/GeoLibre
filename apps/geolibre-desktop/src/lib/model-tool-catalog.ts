@@ -201,15 +201,22 @@ export function groupModelTools(
  *
  * @param descriptors The palette entries.
  * @param query The user's search text; blank returns everything.
+ * @param localizedText Extra searchable text per entry. The palette renders
+ *   translated names and group headings, so it passes those here — otherwise a
+ *   user who sees "几何" could only find it by typing "Geometry". Omitted, only
+ *   the registry's own English metadata is searched.
  * @returns The matching entries, in their original order.
  */
 export function searchModelTools(
   descriptors: ModelToolDescriptor[],
   query: string,
+  localizedText?: (descriptor: ModelToolDescriptor) => string,
 ): ModelToolDescriptor[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return descriptors;
   return descriptors.filter((descriptor) =>
-    `${descriptor.name} ${descriptor.toolId} ${descriptor.group}`.toLowerCase().includes(needle),
+    `${descriptor.name} ${descriptor.toolId} ${descriptor.group} ${localizedText?.(descriptor) ?? ""}`
+      .toLowerCase()
+      .includes(needle),
   );
 }
