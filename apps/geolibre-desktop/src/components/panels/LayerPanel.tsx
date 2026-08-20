@@ -1413,7 +1413,7 @@ export function LayerPanel({
               type: "success",
               message: truncated
                 ? t("layers.refreshedTruncated", {
-                    count: featureCount.toLocaleString(),
+                    shown: featureCount.toLocaleString(),
                     total: totalRows.toLocaleString(),
                   })
                 : t("layers.refreshedCount", {

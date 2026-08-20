@@ -329,7 +329,7 @@
       },
       "iceberg": {
         "label": "Add Apache Iceberg Layer",
-        "description": "Read an Iceberg table (V3 or above) and add a subset of its features."
+        "description": "Read an Iceberg table (v3 or above) and add a subset of its features."
       },
       "deckglViz": {
         "label": "Add Deck.gl Layer",
@@ -730,7 +730,7 @@
       "selectTable": "Select a table",
       "geometryColumn": "Geometry column",
       "rowLimit": "Row limit",
-      "rowLimitHint": "At most {{max}} rows are read into the layer.",
+      "rowLimitHint": "The layer holds the table's first rows, up to this limit. The limit cannot exceed {{max}} rows.",
       "rowLimitTruncates": "The table holds {{total}} rows; the layer will contain the first {{limit}}.",
       "statusConnecting": "Reading Iceberg metadata...",
       "statusInspecting": "Inspecting table...",
@@ -5281,7 +5281,7 @@
     "refreshVectorControlError": "Could not refresh this layer. Try re-opening the Add Vector Layer panel.",
     "refreshed": "Refreshed.",
     "refreshedCount": "Refreshed {{count}} features.",
-    "refreshedTruncated": "Refreshed {{count}} of {{total}} features.",
+    "refreshedTruncated": "Refreshed {{shown}} of {{total}} features.",
     "refreshError": "Could not refresh this layer.",
     "exportNeedsFeatures": "Export requires a vector layer with features.",
     "exportedWithWarnings": "Layer exported. {{warnings}}",

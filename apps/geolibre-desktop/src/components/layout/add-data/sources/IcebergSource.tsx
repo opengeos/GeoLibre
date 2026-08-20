@@ -73,6 +73,22 @@ export function IcebergSource() {
   // input bumps it, so an in-flight request for the previous source cannot
   // repopulate the dropdown after its results stopped being relevant.
   const requestRef = useRef(0);
+  // Which request currently owns `busy`. Separate from `requestRef` because
+  // invalidation bumps that token *without* starting a request: gating the
+  // `busy` reset on `requestRef` alone would leave the form stuck disabled when
+  // the user edits an input while a connect is still in flight.
+  const busyRequestRef = useRef(0);
+
+  /** Take ownership of `busy` for `requestToken` and raise it. */
+  const beginBusy = (requestToken: number) => {
+    busyRequestRef.current = requestToken;
+    setBusy(true);
+  };
+
+  /** Drop `busy`, unless a newer request has taken it over in the meantime. */
+  const endBusy = (requestToken: number) => {
+    if (busyRequestRef.current === requestToken) setBusy(false);
+  };
 
   /** Drop everything derived from a connection, so a stale table (or its row
    * count) can never be submitted after the inputs change. */
@@ -203,7 +219,7 @@ export function IcebergSource() {
     if (!typed || typed === inspectedSql) return;
     const requestToken = ++requestRef.current;
     source.setError(null);
-    setBusy(true);
+    beginBusy(requestToken);
     try {
       await inspectTable(connected, selectedTable, requestToken, typed);
     } catch (err) {
@@ -212,7 +228,11 @@ export function IcebergSource() {
         setStatus(null);
       }
     } finally {
-      setBusy(false);
+      // Only the request that owns `busy` may clear it. A superseded one
+      // settling first would otherwise re-enable Connect and Add while its
+      // replacement is still in flight, letting a submit run against a
+      // half-cleared inspection.
+      endBusy(requestToken);
     }
   };
 
@@ -226,7 +246,7 @@ export function IcebergSource() {
     setGeometryColumn("");
     setSql("");
     setInspectedSql("");
-    setBusy(true);
+    beginBusy(requestToken);
     try {
       const normalizedLocation = normalizeIcebergLocation(location);
       if (!normalizedLocation) {
@@ -280,7 +300,7 @@ export function IcebergSource() {
         setStatus(null);
       }
     } finally {
-      setBusy(false);
+      endBusy(requestToken);
     }
   };
 
@@ -296,7 +316,7 @@ export function IcebergSource() {
     if (!connected || !table) return;
     const requestToken = ++requestRef.current;
     source.setError(null);
-    setBusy(true);
+    beginBusy(requestToken);
     try {
       await inspectTable(connected, table, requestToken);
     } catch (err) {
@@ -305,7 +325,7 @@ export function IcebergSource() {
         setStatus(null);
       }
     } finally {
-      setBusy(false);
+      endBusy(requestToken);
     }
   };
 
@@ -434,6 +454,10 @@ export function IcebergSource() {
             <Select
               id="iceberg-table"
               value={selectedTableKey}
+              // Held while an inspection runs so a second one cannot be started
+              // over the first; the token gate above then has a single request
+              // to own `busy`.
+              disabled={busy || source.isSubmitting}
               onChange={(event) => {
                 void handleSelectTable(event.target.value);
               }}

@@ -230,7 +230,15 @@ export function AddDataError({ message }: { message: string }) {
           `break-words` wraps the long unbroken URLs they quote. The height cap
           keeps a large error scrolling inside its own box rather than pushing
           the Cancel/Add buttons out of the dialog. */}
-      <span className="max-h-40 min-w-0 overflow-y-auto whitespace-pre-wrap break-words text-sm text-destructive dark:text-red-300">
+      {/* Focusable so the cap above can be scrolled by keyboard as well as by
+          pointer; without it a long engine error is partly unreadable without a
+          mouse. `aria-label` gives the focus stop a name, since a scrollable
+          region announced as unlabelled is worse than no stop at all. */}
+      <span
+        tabIndex={0}
+        aria-label={message}
+        className="max-h-40 min-w-0 overflow-y-auto whitespace-pre-wrap break-words text-sm text-destructive dark:text-red-300"
+      >
         {message}
       </span>
     </div>

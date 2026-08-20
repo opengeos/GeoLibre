@@ -102,33 +102,45 @@ async function withIcebergConnection<T>(
 ): Promise<T> {
   const attempt = async (db: duckdb.AsyncDuckDB): Promise<T> => {
     acquireSqlDatabase(db);
-    const connection = await db.connect();
+    // `connect()` runs *inside* the try so a rejection still reaches the
+    // `finally` and releases the instance. Leaking the in-flight count would be
+    // permanent: resetSqlDatabase only terminates an instance once that count is
+    // zero, so a never-released count strands the poisoned instance and its
+    // worker — and a failing connect is reachable on exactly the poisoned
+    // instance the retry below exists for.
+    let connection: duckdb.AsyncDuckDBConnection | null = null;
     let attached = false;
     try {
+      // A const alias, because TypeScript cannot narrow the mutable `connection`
+      // inside the callback below.
+      const active = await db.connect();
+      connection = active;
       // Warm the HTTP read path with a pre-spatial remote read_parquet before
       // any LOAD: duckdb-wasm otherwise breaks remote reads on a connection
       // that loaded spatial first, which every Iceberg data-file read needs.
-      await ensureSpatialExtension(db, connection, async () => {
-        await connection.query(
+      await ensureSpatialExtension(db, active, async () => {
+        await active.query(
           `SELECT 1 FROM read_parquet(${quoteSqlString(SAMPLE_DATASET_URL)}) LIMIT 0`,
         );
       });
-      await ensureIcebergExtension(db, connection);
+      await ensureIcebergExtension(db, active);
       if (config.mode === "catalog") {
-        await connection.query(buildIcebergAttachSql(config));
+        await active.query(buildIcebergAttachSql(config));
         attached = true;
       }
-      return await work(connection);
+      return await work(active);
     } finally {
-      if (attached) {
-        try {
-          await connection.query(buildIcebergDetachSql());
-        } catch {
-          // Best-effort: the connection is closing anyway, and leaving the
-          // catalog attached would make the next ATTACH fail on the alias.
+      if (connection) {
+        if (attached) {
+          try {
+            await connection.query(buildIcebergDetachSql());
+          } catch {
+            // Best-effort: the connection is closing anyway, and leaving the
+            // catalog attached would make the next ATTACH fail on the alias.
+          }
         }
+        await connection.close();
       }
-      await connection.close();
       await releaseSqlDatabase(db);
     }
   };
@@ -166,7 +178,13 @@ function isStoiConversionError(error: unknown): boolean {
 export async function listIcebergTables(config: IcebergLayerConfig): Promise<IcebergTableRef[]> {
   return withIcebergConnection(config, async (connection) => {
     if (config.mode === "table") {
-      await connection.query(`${buildIcebergSourceSql(config)} LIMIT 0`);
+      // Through the guarded helper and wrapped as a sub-select, exactly like the
+      // inspect/load paths: a custom statement may end in its own `LIMIT` or a
+      // `--` comment, either of which would break (or silently defeat) a
+      // concatenated ` LIMIT 0`.
+      await connection.query(
+        `SELECT * FROM (${icebergSourceSql(config)}) AS iceberg_source LIMIT 0`,
+      );
       return [{ name: icebergNameFromLocation(config.location) }];
     }
     const rows = rowsFromResult(await connection.query("SHOW ALL TABLES"));
@@ -190,9 +208,13 @@ export async function listIcebergTables(config: IcebergLayerConfig): Promise<Ice
  * Describe the configured source without materializing it: its GEOMETRY
  * columns, the total row count, and which column (with which CRS) will be read.
  *
- * The row count is what makes an Iceberg load an informed choice — for a whole
- * table it comes from the manifest metadata rather than a scan, so it is cheap
- * even for a table far too large to render.
+ * The row count is what makes an Iceberg load an informed choice. It is a
+ * `count(*)` over the configured source: for an unfiltered table DuckDB answers
+ * it from the manifest metadata rather than a scan, so it is cheap even for a
+ * table far too large to render. A custom statement is not free in the same way
+ * — its filters, joins, or projections have to be evaluated over the data files
+ * — but it runs once, on an explicit user action, and the count is the whole
+ * point of the step.
  *
  * @param config The connection, selected table, and any custom SQL.
  * @returns The geometry columns, row count, chosen column, and its CRS.
@@ -200,7 +222,7 @@ export async function listIcebergTables(config: IcebergLayerConfig): Promise<Ice
 export async function inspectIcebergTable(config: IcebergLayerConfig): Promise<IcebergTableInfo> {
   return withIcebergConnection(config, async (connection) => {
     const source = icebergSourceSql(config);
-    const geometryColumns = await describeGeometryColumns(connection, source);
+    const { geometryColumns } = await describeSource(connection, source);
     const chosen = resolveGeometryColumn(geometryColumns, config);
     const countRows = rowsFromResult(
       await connection.query(`SELECT count(*) AS row_count FROM (${source}) AS iceberg_source`),
@@ -230,7 +252,7 @@ export async function inspectIcebergTable(config: IcebergLayerConfig): Promise<I
 export async function loadIcebergTable(config: IcebergLayerConfig): Promise<IcebergLoadResult> {
   return withIcebergConnection(config, async (connection) => {
     const source = icebergSourceSql(config);
-    const geometryColumns = await describeGeometryColumns(connection, source);
+    const { columnNames, geometryColumns } = await describeSource(connection, source);
     const chosen = resolveGeometryColumn(geometryColumns, config);
     if (!chosen) {
       throw new Error(
@@ -255,10 +277,22 @@ export async function loadIcebergTable(config: IcebergLayerConfig): Promise<Iceb
       rowLimit,
       // Every geometry column, not just the unselected ones: the rendered one
       // reaches the features through the GeoJSON alias, so keeping its raw value
-      // in the wildcard would only ship redundant binary across Arrow. Safe to
-      // EXCLUDE unconditionally because these names came from a DESCRIBE of this
-      // very source.
-      geometryColumns.map((column) => column.name),
+      // in the wildcard would only ship redundant binary across Arrow. These
+      // names came from a DESCRIBE of this very source, so they are certain to
+      // exist — which matters, as DuckDB rejects EXCLUDE of a missing column.
+      //
+      // A source column that already carries the reserved GeoJSON alias joins
+      // them, and only then: left in the wildcard it would collide with the
+      // alias appended beside it (a duplicate-column error, or a silent read of
+      // that attribute as the geometry, since rowsToFeatureCollection consumes
+      // the name unconditionally). De-duplicated because that reserved name
+      // could itself be a geometry column, and EXCLUDE rejects a repeat too.
+      [
+        ...new Set([
+          ...geometryColumns.map((column) => column.name),
+          ...(columnNames.includes(GEOMETRY_JSON_COLUMN) ? [GEOMETRY_JSON_COLUMN] : []),
+        ]),
+      ],
     );
     const rows = rowsFromResult(await connection.query(sql));
     const geojson = rowsToFeatureCollection(rows, chosen.name);
@@ -295,8 +329,15 @@ function icebergSourceSql(config: IcebergLayerConfig): string {
   return cleaned;
 }
 
+/** A source's column names, plus the subset of them that are GEOMETRY typed. */
+interface IcebergSourceSchema {
+  columnNames: string[];
+  geometryColumns: IcebergColumn[];
+}
+
 /**
- * The GEOMETRY-typed columns a source exposes, in schema order.
+ * Describe a source: every column name it exposes, and the GEOMETRY-typed ones
+ * in schema order.
  *
  * Deliberately only native `GEOMETRY`: Iceberg v3 carries a real geometry type
  * (and DuckDB's iceberg extension maps it to `LogicalType::GEOMETRY`), so a BLOB
@@ -304,17 +345,19 @@ function icebergSourceSql(config: IcebergLayerConfig): string {
  * way the vector-file loader does for plain Parquet, where WKB-in-a-blob is the
  * norm — would only produce loads that fail inside `ST_AsGeoJSON`.
  */
-async function describeGeometryColumns(
+async function describeSource(
   connection: duckdb.AsyncDuckDBConnection,
   source: string,
-): Promise<IcebergColumn[]> {
+): Promise<IcebergSourceSchema> {
   const description = rowsFromResult(await connection.query(`DESCRIBE ${source}`));
-  return description
+  const columnNames = description.map((row) => String(row.column_name ?? ""));
+  const geometryColumns = description
     .filter((row) => isGeometryColumnType(row.column_type))
     .map((row) => ({
       name: String(row.column_name ?? ""),
       type: String(row.column_type ?? ""),
     }));
+  return { columnNames, geometryColumns };
 }
 
 /**
