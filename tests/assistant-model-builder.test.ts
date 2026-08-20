@@ -49,6 +49,52 @@ const WHITEBOX_BUFFER: ModelToolDescriptor = {
   parameters: [],
 };
 
+/** A tool with two output ports, as several Whitebox tools have. */
+const CVA: ModelToolDescriptor = {
+  key: "whitebox:change_vector_analysis",
+  provider: "whitebox",
+  toolId: "change_vector_analysis",
+  name: "Change Vector Analysis",
+  group: "Whitebox",
+  inputs: [{ id: "input", label: "Input", kind: "vector", required: true }],
+  outputs: [
+    { id: "magnitude", label: "Magnitude", kind: "vector" },
+    { id: "direction", label: "Direction", kind: "vector" },
+  ],
+  parameters: [],
+};
+
+/** A tool whose required field only applies for some values of its governing select. */
+const AGGREGATE: ModelToolDescriptor = {
+  key: "vector:aggregate",
+  provider: "vector",
+  toolId: "aggregate",
+  name: "Aggregate",
+  group: "Analysis",
+  inputs: [{ id: "layer", label: "Input", kind: "vector", required: true }],
+  outputs: [{ id: "out", label: "Output", kind: "vector" }],
+  parameters: [
+    { id: "layer", label: "Input", type: "layer", required: true },
+    {
+      id: "statistic",
+      label: "Statistic",
+      type: "select",
+      default: "count",
+      options: [
+        { value: "count", label: "Count" },
+        { value: "sum", label: "Sum" },
+      ],
+    },
+    {
+      id: "stat_field",
+      label: "Field",
+      type: "field",
+      required: true,
+      visibleWhen: { param: "statistic", notIn: ["count"] },
+    },
+  ],
+};
+
 const layers = [
   { id: "roads-id", name: "Roads", type: "geojson" },
   { id: "counties-id", name: "Counties", type: "geojson" },
@@ -304,6 +350,92 @@ describe("AI-created Model Builder models", () => {
           ids(),
         ),
       /"distance" of "buffer" is required/,
+    );
+  });
+
+  it("takes a governing parameter's declared default into account", () => {
+    const base = {
+      name: "Counted",
+      inputs: [{ key: "roads", layer: "Roads" }],
+      steps: [{ key: "grouped", algorithm: "aggregate", inputs: { layer: "roads" } }],
+      outputs: [{ source: "grouped", name: "Counted" }],
+    };
+    // `statistic` defaults to "count", which hides `stat_field` — omitting both
+    // must not read as a missing required parameter.
+    const model = buildAssistantModel(base, layers, [AGGREGATE], ids());
+    assert.equal(model.graph?.nodes.length, 3);
+    // Choosing a statistic that does need a field still requires one.
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          {
+            ...base,
+            steps: [{ ...base.steps[0], parameters: { statistic: "sum" } }],
+          },
+          layers,
+          [AGGREGATE],
+          ids(),
+        ),
+      /"stat_field" of "aggregate" is required/,
+    );
+  });
+
+  it("makes a multi-output step name the port it is wired through", () => {
+    const base = {
+      name: "Change",
+      inputs: [{ key: "roads", layer: "Roads" }],
+      steps: [{ key: "cva", algorithm: "change_vector_analysis", inputs: { input: "roads" } }],
+      outputs: [{ source: "cva", name: "Change" }],
+    };
+    assert.throws(
+      () => buildAssistantModel(base, layers, [CVA], ids()),
+      /has more than one output \(magnitude, direction\)/,
+    );
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, outputs: [{ source: "cva.slope", name: "Change" }] },
+          layers,
+          [CVA],
+          ids(),
+        ),
+      /has no output port "slope"/,
+    );
+    const model = buildAssistantModel(
+      { ...base, outputs: [{ source: "cva.direction", name: "Change" }] },
+      layers,
+      [CVA],
+      ids(),
+    );
+    const edge = model.graph?.edges.find((item) => item.fromPort === "direction");
+    assert.ok(edge, "the output edge carries the named port");
+  });
+
+  it("reports validation issues as readable messages", () => {
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          {
+            name: "Mismatched",
+            inputs: [{ key: "dem", layer: "Roads" }],
+            steps: [
+              { key: "raster", algorithm: "whitebox:buffer", inputs: { input: "dem" } },
+              {
+                key: "vector",
+                algorithm: "vector:buffer",
+                inputs: { layer: "raster" },
+                parameters: { distance: 10 },
+              },
+            ],
+            outputs: [{ source: "vector", name: "Buffered" }],
+          },
+          layers,
+          [BUFFER, WHITEBOX_BUFFER],
+          ids(),
+        ),
+      // The message, not the bare `type-mismatch` code: the assistant reads
+      // this and needs to know which port is wrong.
+      /Invalid model: .+/,
     );
   });
 });

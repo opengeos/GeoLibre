@@ -2242,6 +2242,9 @@ export const useAppStore = create<AppState>()(
             selectByLocationLayerId: null,
             loadEditorFeaturesOpen: false,
             loadEditorFeaturesLayerId: null,
+            // A pending assistant-requested Model Builder load names a model in
+            // the previous project's `savedModels`.
+            modelBuilderRequestedModelId: null,
           },
         }));
         clearHistory();
@@ -2302,6 +2305,9 @@ export const useAppStore = create<AppState>()(
             selectByLocationLayerId: null,
             loadEditorFeaturesOpen: false,
             loadEditorFeaturesLayerId: null,
+            // A pending assistant-requested Model Builder load names a model in
+            // the previous project's `savedModels`.
+            modelBuilderRequestedModelId: null,
           },
         }));
         clearHistory();

@@ -71,6 +71,7 @@ import {
   type DistanceUnit,
 } from "../../lib/whitebox-distance-params";
 import { parameterKind } from "../../lib/whitebox-param-kind";
+import { isTiff } from "../../lib/scripting/binary-output";
 import {
   canUseLayerForParameter,
   fetchLayerBytes,
@@ -140,12 +141,13 @@ function isOutputParameter(param: WhiteboxToolParameter): boolean {
 /**
  * Best-effort extension for a binary tool output, sniffed from its magic bytes.
  * Covers the formats GeoLibre `file_out` and (CRS-preserving) `vector_out` tools
- * emit today (GeoParquet, FlatGeobuf, zipped Shapefile, PNG, PMTiles); a
+ * emit today (GeoTIFF, GeoParquet, FlatGeobuf, zipped Shapefile, PNG, PMTiles); a
  * genuinely opaque output falls back to `.bin`. Extend the sniff here if a
  * future tool writes a recognizable format.
  */
 function fileOutputExtension(bytes: Uint8Array): string {
   const matches = (sig: number[]) => sig.every((b, i) => bytes[i] === b);
+  if (isTiff(bytes)) return "tif";
   if (matches([0x50, 0x41, 0x52, 0x31])) return "parquet"; // "PAR1"
   if (matches([0x66, 0x67, 0x62, 0x03])) return "fgb"; // FlatGeobuf "fgb\x03"
   if (matches([0x50, 0x4b, 0x03, 0x04])) return "zip"; // Shapefile bundle "PK\x03\x04"
@@ -1413,13 +1415,18 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       // become a new raster layer; a `file_out` (e.g. write_geoparquet .parquet,
       // a rendered .png, a .pmtiles) or a CRS-preserving `vector_out`
       // (GeoParquet/FlatGeobuf/zipped Shapefile, chosen to keep a reprojection's
-      // target CRS) is not a GeoTIFF, so download it instead of handing it to the
-      // raster loader.
+      // target CRS) is downloaded instead — unless its bytes turn out to be a
+      // GeoTIFF after all, which several tools declare only as a generic file.
       for (const [name, value] of Object.entries(nextJob.outputs)) {
         if (!(value instanceof Uint8Array)) continue;
         const param = jobTool?.params?.find((item) => item.name === name);
         const outKind = param ? parameterKind(param) : "";
-        if (outKind === "file_out" || outKind === "vector_out") {
+        // A generic `file_out` can still hold a GeoTIFF — `slope` declares its
+        // output only as "Optional output path" — so sniff the bytes rather
+        // than trust the declared kind, the way the scripting/assistant path
+        // does, and put a raster on the map instead of downloading it.
+        const declaredFile = outKind === "file_out" || outKind === "vector_out";
+        if (declaredFile && (!isTiff(value) || !onAddRaster)) {
           const label = `${jobToolLabel} ${humanize(name)}`.replace(/\s+/g, "_");
           // Prefer the content signature: a `vector_out` and most binary
           // `file_out` formats (GeoParquet/FlatGeobuf/zipped Shapefile/PNG/

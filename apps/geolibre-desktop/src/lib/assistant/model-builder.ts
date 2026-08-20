@@ -32,11 +32,24 @@ export interface AssistantModelDefinition {
   outputs: AssistantModelOutput[];
 }
 
-/** Whether a parameter applies, given the other values the assistant supplied. */
-function isParameterVisible(param: AlgorithmParameter, values: Record<string, unknown>): boolean {
+/**
+ * Whether a parameter applies, given the other values the assistant supplied.
+ *
+ * A governing parameter the assistant left out still has an effective value —
+ * the one the tool declares as its default — so that is what decides
+ * visibility. Reading `values` alone would make `aggregate`'s `stat_field` look
+ * visible (and so required) whenever `statistic` is omitted, even though the
+ * default `"count"` is exactly the case that needs no field.
+ */
+function isParameterVisible(
+  param: AlgorithmParameter,
+  values: Record<string, unknown>,
+  declared: Map<string, AlgorithmParameter>,
+): boolean {
   const vw = param.visibleWhen;
   if (!vw) return true;
-  const current = values[vw.param] as string | undefined;
+  const effective = values[vw.param] ?? declared.get(vw.param)?.default;
+  const current = effective as string | undefined;
   if ("in" in vw) return current != null && vw.in.includes(current);
   return current == null || !vw.notIn.includes(current);
 }
@@ -96,7 +109,7 @@ function checkStepParameters(
     // A wired port carries its value along the edge, and a parameter the tool
     // defaults needs no explicit value.
     if (!param.required || wired.has(param.id) || param.default !== undefined) continue;
-    if (!isParameterVisible(param, values)) continue;
+    if (!isParameterVisible(param, values, declared)) continue;
     const value = values[param.id];
     if (value === undefined || value === null || value === "") {
       throw new Error(`Parameter "${param.id}" of "${step.algorithm}" is required.`);
@@ -109,7 +122,14 @@ export function buildAssistantModel(
   definition: AssistantModelDefinition,
   layers: GeoLibreLayer[],
   descriptors: ModelToolDescriptor[],
-  createId: () => string = () => crypto.randomUUID(),
+  // Guarded the way `createId` in ModelBuilderPanel is: the webview has
+  // `crypto.randomUUID`, but the embed and non-secure-origin builds need not,
+  // and there a bare call would crash graph construction instead of failing as
+  // a tool error the assistant can report.
+  createId: () => string = () =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `id-${Math.random().toString(36).slice(2)}`,
 ): ProcessingModel {
   const descriptorByKey = new Map(
     descriptors.map((descriptor) => [`${descriptor.provider}:${descriptor.toolId}`, descriptor]),
@@ -140,13 +160,46 @@ export function buildAssistantModel(
     if (!bare) throw new Error(`"${algorithm}" is not a Model Builder algorithm.`);
     return bare;
   };
-  const nodesByKey = new Map<string, { id: string; outputPort: string; kind: "input" | "tool" }>();
+  const nodesByKey = new Map<string, { id: string; outputs: string[]; kind: "input" | "tool" }>();
   const nodes: ProcessingModelGraph["nodes"] = [];
   const edges: ProcessingModelGraph["edges"] = [];
 
   const claimKey = (key: string): void => {
     if (!key.trim()) throw new Error("Every input and step needs a non-empty key.");
     if (nodesByKey.has(key)) throw new Error(`Duplicate model key "${key}".`);
+  };
+  /**
+   * Resolve a reference to an earlier input or step down to one output port.
+   *
+   * Several Whitebox tools write more than one output (magnitude *and*
+   * direction, say), so a bare key does not say which one an edge should carry.
+   * Rather than silently taking the first — the kind of quiet truncation
+   * `graphToLinearSteps` refuses to make — such a reference has to name its
+   * port as `key.port`.
+   */
+  const resolveSource = (
+    reference: string,
+  ): { id: string; port: string; kind: "input" | "tool" } | undefined => {
+    const direct = nodesByKey.get(reference);
+    if (direct) {
+      if (direct.outputs.length > 1) {
+        throw new Error(
+          `"${reference}" has more than one output (${direct.outputs.join(", ")}); reference it as "${reference}.<port>".`,
+        );
+      }
+      return { id: direct.id, port: direct.outputs[0] ?? "out", kind: direct.kind };
+    }
+    const dot = reference.lastIndexOf(".");
+    if (dot <= 0) return undefined;
+    const owner = nodesByKey.get(reference.slice(0, dot));
+    if (!owner) return undefined;
+    const port = reference.slice(dot + 1);
+    if (!owner.outputs.includes(port)) {
+      throw new Error(
+        `"${reference.slice(0, dot)}" has no output port "${port}" (has ${owner.outputs.join(", ")}).`,
+      );
+    }
+    return { id: owner.id, port, kind: owner.kind };
   };
   const resolveLayer = (reference: string): GeoLibreLayer | undefined => {
     const exactId = layers.find((layer) => layer.id === reference);
@@ -171,7 +224,7 @@ export function buildAssistantModel(
     if (!layer) throw new Error(`No layer matching model input "${input.layer}".`);
     const id = createId();
     nodes.push({ id, kind: "input", layerId: layer.id, x: 0, y: index * 112 });
-    nodesByKey.set(input.key, { id, outputPort: INPUT_NODE_PORT, kind: "input" });
+    nodesByKey.set(input.key, { id, outputs: [INPUT_NODE_PORT], kind: "input" });
   });
 
   definition.steps.forEach((step, index) => {
@@ -185,7 +238,7 @@ export function buildAssistantModel(
       if (!inputPorts.has(portId)) {
         throw new Error(`Algorithm "${step.algorithm}" has no input port "${portId}".`);
       }
-      const source = nodesByKey.get(sourceKey);
+      const source = resolveSource(sourceKey);
       if (!source)
         throw new Error(`Model source "${sourceKey}" must be defined before "${step.key}".`);
       delete parameters[portId];
@@ -193,7 +246,7 @@ export function buildAssistantModel(
       edges.push({
         id: createId(),
         from: source.id,
-        fromPort: source.outputPort,
+        fromPort: source.port,
         to: id,
         toPort: portId,
       });
@@ -230,13 +283,13 @@ export function buildAssistantModel(
     });
     nodesByKey.set(step.key, {
       id,
-      outputPort: descriptor.outputs[0]?.id ?? "out",
+      outputs: descriptor.outputs.length ? descriptor.outputs.map((port) => port.id) : ["out"],
       kind: "tool",
     });
   });
 
   definition.outputs.forEach((output, index) => {
-    const source = nodesByKey.get(output.source);
+    const source = resolveSource(output.source);
     if (!source) throw new Error(`Unknown model output source "${output.source}".`);
     if (source.kind !== "tool") throw new Error("A model output must come from an algorithm step.");
     const id = createId();
@@ -250,7 +303,7 @@ export function buildAssistantModel(
     edges.push({
       id: createId(),
       from: source.id,
-      fromPort: source.outputPort,
+      fromPort: source.port,
       to: id,
       toPort: OUTPUT_NODE_PORT,
     });
@@ -263,7 +316,10 @@ export function buildAssistantModel(
     provider && toolId ? descriptorByKey.get(`${provider}:${toolId}`) : undefined,
   );
   if (issues.length) {
-    throw new Error(`Invalid model: ${issues.map((issue) => issue.code).join(", ")}.`);
+    // `message` rather than `code`: this text is the tool-call result the
+    // assistant reads, and "missing-input" alone says nothing about which port
+    // on which node to fix, so a retry would be guesswork.
+    throw new Error(`Invalid model: ${issues.map((issue) => issue.message).join(" ")}`);
   }
   return {
     id: createId(),

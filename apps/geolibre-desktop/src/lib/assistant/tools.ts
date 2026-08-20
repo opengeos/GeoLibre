@@ -18,7 +18,6 @@ import { cleanStatement, maskSqlLiterals, previewLayerTables, runSqlQuery } from
 import { createXyzTileUrlTemplate } from "../xyz-url";
 import { findNamedTileBasemap, NAMED_TILE_BASEMAPS } from "./basemaps";
 import { buildSymbologyStyle } from "./symbology";
-import { buildAssistantModel } from "./model-builder";
 import { webSearch } from "./web-search";
 
 /** Dependencies the assistant tools need beyond the global store. */
@@ -898,13 +897,36 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
             .string()
             .describe("Algorithm id from list_model_algorithms, e.g. 'vector:buffer'."),
           parameters: z.record(z.string(), z.unknown()).optional(),
-          inputs: z.record(z.string(), z.string()),
+          inputs: z
+            .record(z.string(), z.string())
+            .describe(
+              "Maps an input-port id to an earlier input or step key. A step whose tool has several outputs must name the port too, as 'stepKey.portId'.",
+            ),
         }),
       ),
-      outputs: z.array(z.object({ source: z.string(), name: z.string() })),
+      outputs: z.array(
+        z.object({
+          source: z
+            .string()
+            .describe(
+              "The step key whose result to add to the map, or 'stepKey.portId' when the tool has several outputs.",
+            ),
+          name: z.string(),
+        }),
+      ),
     }),
     callback: async (input) => {
-      const model = buildAssistantModel(input, store().layers, await loadModelToolDescriptors());
+      // Loaded here rather than at module scope so `@geolibre/processing` —
+      // which `model-builder` imports for its graph helpers — stays out of the
+      // assistant's initial chunk, the same reason `getScripting` defers it.
+      const [{ buildAssistantModel }, descriptors] = await Promise.all([
+        import("./model-builder"),
+        loadModelToolDescriptors(),
+      ]);
+      // Read the layers only once the catalog has loaded: the first call fetches
+      // the Whitebox snapshot and WASM manifests, and a layer added or renamed
+      // in that window would otherwise be validated against a stale list.
+      const model = buildAssistantModel(input, store().layers, descriptors);
       store().saveModel(model);
       store().setModelBuilderRequestedModelId(model.id);
       store().setModelBuilderOpen(true);
