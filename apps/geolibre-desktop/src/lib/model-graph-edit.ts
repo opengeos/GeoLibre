@@ -461,6 +461,10 @@ export function graphsEqual(a: ProcessingModelGraph, b: ProcessingModelGraph): b
  * @param nodeId The tool whose result should be kept.
  * @param portId The output port to tap.
  * @param createId Fresh id source.
+ * @param name Suggested result name, normally the tool's display name. Made
+ *   unique against the outputs already in the graph, since an unnamed output
+ *   falls back to a single shared "Model output" label and a model that keeps
+ *   several steps would put indistinguishable layers on the map.
  * @returns The updated graph and the new node's id, or `null` when the tool is
  *   not in the graph.
  */
@@ -469,6 +473,7 @@ export function addOutputForPort(
   nodeId: string,
   portId: string,
   createId: () => string,
+  name?: string,
 ): { graph: ProcessingModelGraph; nodeId: string } | null {
   const source = graph.nodes.find((node) => node.id === nodeId);
   if (!source) return null;
@@ -480,8 +485,17 @@ export function addOutputForPort(
     { x: source.x + NODE_WIDTH + 72, y: source.y },
     createId,
   );
+  const resultName = name?.trim() ? uniqueOutputName(graph, name.trim()) : "";
+  const named: ProcessingModelGraph = resultName
+    ? {
+        ...added.graph,
+        nodes: added.graph.nodes.map((node) =>
+          node.id === added.nodeId ? { ...node, name: resultName } : node,
+        ),
+      }
+    : added.graph;
   const connected = connectNodes(
-    added.graph,
+    named,
     { nodeId, portId },
     { nodeId: added.nodeId, portId: OUTPUT_NODE_PORT },
     createId,
@@ -489,8 +503,31 @@ export function addOutputForPort(
   // A brand-new output node cannot close a loop or target itself, so a
   // rejection here is not reachable; fall back to the unwired node rather than
   // dropping the user's click on the floor.
-  if ("rejected" in connected) return { graph: added.graph, nodeId: added.nodeId };
+  if ("rejected" in connected) return { graph: named, nodeId: added.nodeId };
   return { graph: connected.graph, nodeId: added.nodeId };
+}
+
+/**
+ * A result name not already taken by another `output` node, by appending a
+ * counter. Two Buffer steps both named "Buffer" would otherwise land on the
+ * map as two layers the user cannot tell apart.
+ *
+ * @param graph The current graph.
+ * @param base The preferred name.
+ * @returns `base`, or `base` with the lowest free counter appended.
+ */
+export function uniqueOutputName(graph: ProcessingModelGraph, base: string): string {
+  const taken = new Set(
+    graph.nodes
+      .filter((node) => node.kind === "output")
+      .map((node) => node.name?.trim())
+      .filter((name): name is string => Boolean(name)),
+  );
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base} ${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
 }
 
 /** True when this output port already feeds an `output` node. */

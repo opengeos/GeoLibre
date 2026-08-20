@@ -4100,6 +4100,8 @@
       "removeConnection": "Remove connection",
       "removeNode": "Remove node",
       "resizePanel": "Resize panel",
+      "minimizePanel": "Minimize panel",
+      "restorePanel": "Restore panel",
       "resizePalette": "Resize the tool palette",
       "resizeInspector": "Resize the properties panel",
       "resizeLog": "Resize the message log",

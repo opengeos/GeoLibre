@@ -4090,6 +4090,8 @@
       "removeConnection": "حذف اتصال",
       "removeNode": "حذف گره",
       "resizePanel": "تغییر اندازهٔ پنل",
+      "minimizePanel": "کوچک‌کردن پنل",
+      "restorePanel": "بازگرداندن پنل",
       "resizePalette": "تغییر اندازهٔ پالت ابزارها",
       "resizeInspector": "تغییر اندازهٔ پنل ویژگی‌ها",
       "resizeLog": "تغییر اندازهٔ گزارش پیام‌ها",

@@ -4357,6 +4357,8 @@
       "removeConnection": "إزالة الاتصال",
       "removeNode": "إزالة العقدة",
       "resizePanel": "تغيير حجم اللوحة",
+      "minimizePanel": "تصغير اللوحة",
+      "restorePanel": "استعادة اللوحة",
       "resizePalette": "تغيير حجم لوحة الأدوات",
       "resizeInspector": "تغيير حجم لوحة الخصائص",
       "resizeLog": "تغيير حجم سجل الرسائل",

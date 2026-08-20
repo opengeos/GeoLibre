@@ -4023,6 +4023,8 @@
       "removeConnection": "ลบการเชื่อมต่อ",
       "removeNode": "ลบโหนด",
       "resizePanel": "ปรับขนาดแผง",
+      "minimizePanel": "ย่อแผง",
+      "restorePanel": "คืนขนาดแผง",
       "resizePalette": "ปรับขนาดแผงเครื่องมือ",
       "resizeInspector": "ปรับขนาดแผงคุณสมบัติ",
       "resizeLog": "ปรับขนาดบันทึกข้อความ",

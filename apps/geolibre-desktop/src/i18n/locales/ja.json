@@ -4023,6 +4023,8 @@
       "removeConnection": "接続を削除",
       "removeNode": "ノードを削除",
       "resizePanel": "パネルのサイズを変更",
+      "minimizePanel": "パネルを最小化",
+      "restorePanel": "パネルを元に戻す",
       "resizePalette": "ツールパレットのサイズを変更",
       "resizeInspector": "プロパティパネルのサイズを変更",
       "resizeLog": "メッセージログのサイズを変更",

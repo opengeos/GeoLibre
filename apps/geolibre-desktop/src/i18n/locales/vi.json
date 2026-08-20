@@ -4109,6 +4109,8 @@
       "removeConnection": "Xóa kết nối",
       "removeNode": "Xóa nút",
       "resizePanel": "Đổi kích thước bảng",
+      "minimizePanel": "Thu nhỏ bảng",
+      "restorePanel": "Khôi phục bảng",
       "resizePalette": "Đổi kích thước bảng công cụ",
       "resizeInspector": "Đổi kích thước bảng thuộc tính",
       "resizeLog": "Đổi kích thước nhật ký thông báo",

@@ -4090,6 +4090,8 @@
       "removeConnection": "კავშირის წაშლა",
       "removeNode": "კვანძის წაშლა",
       "resizePanel": "პანელის ზომის შეცვლა",
+      "minimizePanel": "პანელის ჩაკეცვა",
+      "restorePanel": "პანელის აღდგენა",
       "resizePalette": "ხელსაწყოთა პალიტრის ზომის შეცვლა",
       "resizeInspector": "თვისებების პანელის ზომის შეცვლა",
       "resizeLog": "შეტყობინებების ჟურნალის ზომის შეცვლა",

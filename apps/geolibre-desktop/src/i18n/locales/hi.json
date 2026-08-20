@@ -4090,6 +4090,8 @@
       "removeConnection": "कनेक्शन हटाएँ",
       "removeNode": "नोड हटाएँ",
       "resizePanel": "पैनल का आकार बदलें",
+      "minimizePanel": "पैनल छोटा करें",
+      "restorePanel": "पैनल पुनर्स्थापित करें",
       "resizePalette": "उपकरण पैलेट का आकार बदलें",
       "resizeInspector": "गुण पैनल का आकार बदलें",
       "resizeLog": "संदेश लॉग का आकार बदलें",

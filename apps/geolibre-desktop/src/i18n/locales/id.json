@@ -4023,6 +4023,8 @@
       "removeConnection": "Hapus koneksi",
       "removeNode": "Hapus simpul",
       "resizePanel": "Ubah ukuran panel",
+      "minimizePanel": "Perkecil panel",
+      "restorePanel": "Pulihkan panel",
       "resizePalette": "Ubah ukuran palet alat",
       "resizeInspector": "Ubah ukuran panel properti",
       "resizeLog": "Ubah ukuran log pesan",

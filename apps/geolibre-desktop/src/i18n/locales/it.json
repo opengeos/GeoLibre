@@ -4090,6 +4090,8 @@
       "removeConnection": "Rimuovi collegamento",
       "removeNode": "Rimuovi nodo",
       "resizePanel": "Ridimensiona il pannello",
+      "minimizePanel": "Riduci il pannello",
+      "restorePanel": "Ripristina il pannello",
       "resizePalette": "Ridimensiona la tavolozza degli strumenti",
       "resizeInspector": "Ridimensiona il pannello delle proprietà",
       "resizeLog": "Ridimensiona il registro dei messaggi",

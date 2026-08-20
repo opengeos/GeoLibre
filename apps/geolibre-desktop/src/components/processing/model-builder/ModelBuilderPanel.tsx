@@ -29,6 +29,8 @@ import {
 } from "@geolibre/processing";
 import { Button, Input, Label, ScrollArea, Select, cn } from "@geolibre/ui";
 import {
+  ChevronDown,
+  ChevronUp,
   Download,
   GripVertical,
   LayoutGrid,
@@ -175,6 +177,12 @@ export function ModelBuilderPanel({
   const [paletteWidth, setPaletteWidth] = useState(DEFAULT_PALETTE_WIDTH);
   const [inspectorWidth, setInspectorWidth] = useState(DEFAULT_INSPECTOR_WIDTH);
   const [logHeight, setLogHeight] = useState(DEFAULT_LOG_HEIGHT);
+  /**
+   * Collapsed to just the title bar, so the map underneath can be read without
+   * closing the panel and losing the model on the canvas. A run keeps going
+   * while collapsed — the point is to watch its results land.
+   */
+  const [minimized, setMinimized] = useState(false);
   const [modelId, setModelId] = useState<string>(() => createId());
   const [modelName, setModelName] = useState("");
   const [graph, setGraph] = useState<ProcessingModelGraph>(emptyModelGraph);
@@ -399,9 +407,9 @@ export function ModelBuilderPanel({
    * The port can still feed the next tool as well, so keeping an intermediate
    * step costs nothing downstream.
    */
-  const handleKeepResult = useCallback((nodeId: string, portId: string) => {
+  const handleKeepResult = useCallback((nodeId: string, portId: string, name: string) => {
     setGraph((current) => {
-      const next = addOutputForPort(current, nodeId, portId, createId);
+      const next = addOutputForPort(current, nodeId, portId, createId, name);
       return next ? next.graph : current;
     });
   }, []);
@@ -1034,7 +1042,9 @@ export function ModelBuilderPanel({
           left: position.x,
           top: position.y,
           width: size.width,
-          height: size.height,
+          // Collapsed, the section shrinks to whatever the title bar needs
+          // rather than painting a card-coloured rectangle over the map.
+          height: minimized ? "auto" : size.height,
         } as CSSProperties
       }
     >
@@ -1117,6 +1127,20 @@ export function ModelBuilderPanel({
             size="sm"
             variant="ghost"
             className="h-7 w-7 p-0"
+            onClick={() => setMinimized((current) => !current)}
+            aria-expanded={!minimized}
+            aria-label={
+              minimized
+                ? t("processing.modelBuilder.restorePanel")
+                : t("processing.modelBuilder.minimizePanel")
+            }
+          >
+            {minimized ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0"
             onClick={() => {
               // Closing abandons the run too; nothing is left writing into a
               // panel the user has dismissed.
@@ -1142,288 +1166,301 @@ export function ModelBuilderPanel({
         />
       </div>
 
-      <div className="flex min-h-0 flex-1">
-        {/* Palette */}
-        <div
-          className="flex shrink-0 flex-col border-e"
-          style={{ width: Math.min(paletteWidth, maxSideWidth) }}
-        >
-          <div className="space-y-1 border-b p-2">
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={t("processing.modelBuilder.searchTools")}
-              aria-label={t("processing.modelBuilder.searchTools")}
-              className="h-7 text-xs"
-            />
-            <div className="flex gap-1">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-6 flex-1 px-1 text-[11px]"
-                onClick={() => addNode("input")}
-              >
-                {t("processing.modelBuilder.addInputNode")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-6 flex-1 px-1 text-[11px]"
-                onClick={() => addNode("output")}
-              >
-                {t("processing.modelBuilder.addOutputNode")}
-              </Button>
-            </div>
-          </div>
-          <ScrollArea className="min-h-0 flex-1 p-2">
-            {catalog.length === 0 ? (
-              <p className="p-2 text-xs text-muted-foreground">
-                {t("processing.modelBuilder.loadingTools")}
-              </p>
-            ) : groups.length === 0 ? (
-              <p className="p-2 text-xs text-muted-foreground">
-                {t("processing.modelBuilder.noToolsMatch")}
-              </p>
-            ) : (
-              groups.map((group) => (
-                <div key={group.group} className="mb-2">
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    {group.group}
-                  </p>
-                  {group.tools.map((tool) => (
-                    // A real button, not a bare draggable div: dragging is the
-                    // only other way to add a tool node, so a div here would put
-                    // the panel's core interaction out of reach of the keyboard
-                    // entirely. Activating it drops the node onto the canvas.
-                    <button
-                      key={tool.key}
-                      type="button"
-                      draggable
-                      onDragStart={(event) => {
-                        event.dataTransfer.setData(TOOL_DRAG_TYPE, tool.key);
-                        event.dataTransfer.effectAllowed = "copy";
-                      }}
-                      onClick={() => addToolAtDefault(tool)}
-                      title={tool.description ?? tool.name}
-                      aria-label={t("processing.modelBuilder.addToolNode", { tool: tool.name })}
-                      className="w-full cursor-grab truncate rounded px-1.5 py-1 text-start text-xs hover:bg-accent active:cursor-grabbing"
-                    >
-                      {tool.name}
-                    </button>
-                  ))}
-                </div>
-              ))
-            )}
-          </ScrollArea>
-        </div>
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={t("processing.modelBuilder.resizePalette")}
-          tabIndex={0}
-          onPointerDown={(event) => handleSideResizeStart(event, "palette")}
-          onKeyDown={(event) => handleSideResizeKey(event, "palette")}
-          className="w-1 shrink-0 cursor-col-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
-        />
-
-        {/* Canvas */}
-        <div
-          ref={canvasRef}
-          className="relative min-w-0 flex-1 overflow-auto bg-muted/20"
-          onDragOver={(event) => {
-            if (event.dataTransfer.types.includes(TOOL_DRAG_TYPE)) {
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "copy";
-            }
-          }}
-          onDrop={handleCanvasDrop}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setSelectedNodeId(null);
-          }}
-        >
+      {!minimized && (
+        <div className="flex min-h-0 flex-1">
+          {/* Palette */}
           <div
-            className="relative"
-            style={{ width: canvasExtent.width, height: canvasExtent.height }}
+            className="flex shrink-0 flex-col border-e"
+            style={{ width: Math.min(paletteWidth, maxSideWidth) }}
           >
-            <GraphEdges
-              graph={graph}
-              resolveDescriptor={resolveDescriptor}
-              linking={linking}
-              onRemoveEdge={(edgeId) => setGraph((current) => removeEdge(current, edgeId))}
-            />
-            {graph.nodes.map((node) => (
-              <GraphNodeCard
-                key={node.id}
-                node={node}
-                descriptor={resolveDescriptor(node.provider, node.toolId)}
-                layers={layers}
-                selected={node.id === selectedNodeId}
-                status={nodeStatus[node.id]}
-                hasIssue={issuesByNode.has(node.id)}
-                armedPortId={armedPort?.nodeId === node.id ? armedPort.portId : undefined}
-                onSelect={setSelectedNodeId}
-                onPointerDown={handleNodePointerDown}
-                onPortPointerDown={handlePortPointerDown}
-                onPortActivate={handlePortActivate}
+            <div className="space-y-1 border-b p-2">
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder={t("processing.modelBuilder.searchTools")}
+                aria-label={t("processing.modelBuilder.searchTools")}
+                className="h-7 text-xs"
               />
-            ))}
-          </div>
-          {/* Centred on the visible canvas rather than the scroll extent, which
-              is wider than the viewport and would push the hint out of sight. */}
-          {graph.nodes.length === 0 && (
-            <p className="pointer-events-none absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-muted-foreground">
-              {t("processing.modelBuilder.canvasEmpty")}
-            </p>
-          )}
-        </div>
-
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={t("processing.modelBuilder.resizeInspector")}
-          tabIndex={0}
-          onPointerDown={(event) => handleSideResizeStart(event, "inspector")}
-          onKeyDown={(event) => handleSideResizeKey(event, "inspector")}
-          className="w-1 shrink-0 cursor-col-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
-        />
-
-        {/* Inspector */}
-        <div
-          className="flex shrink-0 flex-col border-s"
-          style={{ width: Math.min(inspectorWidth, maxSideWidth) }}
-        >
-          <ScrollArea className="min-h-0 flex-1 p-2">
-            <NodeInspector
-              node={selectedNode}
-              descriptor={
-                selectedNode
-                  ? resolveDescriptor(selectedNode.provider, selectedNode.toolId)
-                  : undefined
-              }
-              layers={layers}
-              issues={selectedNode ? (issuesByNode.get(selectedNode.id) ?? []) : []}
-              keptPorts={
-                selectedNode
-                  ? new Set(
-                      (resolveDescriptor(selectedNode.provider, selectedNode.toolId)?.outputs ?? [])
-                        .filter((port) => portFeedsOutput(graph, selectedNode.id, port.id))
-                        .map((port) => port.id),
-                    )
-                  : new Set<string>()
-              }
-              onKeepResult={(portId) => selectedNode && handleKeepResult(selectedNode.id, portId)}
-              onFieldChange={(field, value) =>
-                selectedNode &&
-                setGraph((current) => setNodeField(current, selectedNode.id, field, value))
-              }
-              onParamChange={(paramId, value) =>
-                selectedNode &&
-                setGraph((current) => setNodeParameter(current, selectedNode.id, paramId, value))
-              }
-              onRemove={() => {
-                if (!selectedNode) return;
-                setGraph((current) => removeNode(current, selectedNode.id));
-                // An armed port on the node being deleted would otherwise stay
-                // armed and wire the next activation to a node that is gone.
-                setArmedPort((current) => (current?.nodeId === selectedNode.id ? null : current));
-                setSelectedNodeId(null);
-              }}
-            />
-          </ScrollArea>
-          {savedModels.length > 0 && (
-            <div className="border-t p-2">
-              <Label htmlFor="model-saved-picker" className="text-[11px]">
-                {t("processing.modelBuilder.savedModels")}
-              </Label>
-              <div className="mt-1 flex items-center gap-1">
-                <Select
-                  id="model-saved-picker"
-                  className="h-7 min-w-0 flex-1 text-xs"
-                  value=""
-                  onChange={(event) => {
-                    const model = savedModels.find((entry) => entry.id === event.target.value);
-                    if (model) handleLoadModel(model);
-                  }}
-                >
-                  <option value="">{t("processing.modelBuilder.loadModelPlaceholder")}</option>
-                  {savedModels.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name || t("processing.modelBuilder.untitledModel")}
-                    </option>
-                  ))}
-                </Select>
+              <div className="flex gap-1">
                 <Button
                   size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 shrink-0 p-0"
-                  onClick={handleDeleteModel}
-                  disabled={!savedModels.some((model) => model.id === modelId)}
-                  title={t("processing.modelBuilder.deleteModel")}
-                  aria-label={t("processing.modelBuilder.deleteModel")}
+                  variant="outline"
+                  className="h-6 flex-1 px-1 text-[11px]"
+                  onClick={() => addNode("input")}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  {t("processing.modelBuilder.addInputNode")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 flex-1 px-1 text-[11px]"
+                  onClick={() => addNode("output")}
+                >
+                  {t("processing.modelBuilder.addOutputNode")}
                 </Button>
               </div>
             </div>
-          )}
+            <ScrollArea className="min-h-0 flex-1 p-2">
+              {catalog.length === 0 ? (
+                <p className="p-2 text-xs text-muted-foreground">
+                  {t("processing.modelBuilder.loadingTools")}
+                </p>
+              ) : groups.length === 0 ? (
+                <p className="p-2 text-xs text-muted-foreground">
+                  {t("processing.modelBuilder.noToolsMatch")}
+                </p>
+              ) : (
+                groups.map((group) => (
+                  <div key={group.group} className="mb-2">
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {group.group}
+                    </p>
+                    {group.tools.map((tool) => (
+                      // A real button, not a bare draggable div: dragging is the
+                      // only other way to add a tool node, so a div here would put
+                      // the panel's core interaction out of reach of the keyboard
+                      // entirely. Activating it drops the node onto the canvas.
+                      <button
+                        key={tool.key}
+                        type="button"
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData(TOOL_DRAG_TYPE, tool.key);
+                          event.dataTransfer.effectAllowed = "copy";
+                        }}
+                        onClick={() => addToolAtDefault(tool)}
+                        title={tool.description ?? tool.name}
+                        aria-label={t("processing.modelBuilder.addToolNode", { tool: tool.name })}
+                        className="w-full cursor-grab truncate rounded px-1.5 py-1 text-start text-xs hover:bg-accent active:cursor-grabbing"
+                      >
+                        {tool.name}
+                      </button>
+                    ))}
+                  </div>
+                ))
+              )}
+            </ScrollArea>
+          </div>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("processing.modelBuilder.resizePalette")}
+            tabIndex={0}
+            onPointerDown={(event) => handleSideResizeStart(event, "palette")}
+            onKeyDown={(event) => handleSideResizeKey(event, "palette")}
+            className="w-1 shrink-0 cursor-col-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
+          />
+
+          {/* Canvas */}
+          <div
+            ref={canvasRef}
+            className="relative min-w-0 flex-1 overflow-auto bg-muted/20"
+            onDragOver={(event) => {
+              if (event.dataTransfer.types.includes(TOOL_DRAG_TYPE)) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+              }
+            }}
+            onDrop={handleCanvasDrop}
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setSelectedNodeId(null);
+            }}
+          >
+            <div
+              className="relative"
+              style={{ width: canvasExtent.width, height: canvasExtent.height }}
+            >
+              <GraphEdges
+                graph={graph}
+                resolveDescriptor={resolveDescriptor}
+                linking={linking}
+                onRemoveEdge={(edgeId) => setGraph((current) => removeEdge(current, edgeId))}
+              />
+              {graph.nodes.map((node) => (
+                <GraphNodeCard
+                  key={node.id}
+                  node={node}
+                  descriptor={resolveDescriptor(node.provider, node.toolId)}
+                  layers={layers}
+                  selected={node.id === selectedNodeId}
+                  status={nodeStatus[node.id]}
+                  hasIssue={issuesByNode.has(node.id)}
+                  armedPortId={armedPort?.nodeId === node.id ? armedPort.portId : undefined}
+                  onSelect={setSelectedNodeId}
+                  onPointerDown={handleNodePointerDown}
+                  onPortPointerDown={handlePortPointerDown}
+                  onPortActivate={handlePortActivate}
+                />
+              ))}
+            </div>
+            {/* Centred on the visible canvas rather than the scroll extent, which
+              is wider than the viewport and would push the hint out of sight. */}
+            {graph.nodes.length === 0 && (
+              <p className="pointer-events-none absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-muted-foreground">
+                {t("processing.modelBuilder.canvasEmpty")}
+              </p>
+            )}
+          </div>
+
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("processing.modelBuilder.resizeInspector")}
+            tabIndex={0}
+            onPointerDown={(event) => handleSideResizeStart(event, "inspector")}
+            onKeyDown={(event) => handleSideResizeKey(event, "inspector")}
+            className="w-1 shrink-0 cursor-col-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
+          />
+
+          {/* Inspector */}
+          <div
+            className="flex shrink-0 flex-col border-s"
+            style={{ width: Math.min(inspectorWidth, maxSideWidth) }}
+          >
+            <ScrollArea className="min-h-0 flex-1 p-2">
+              <NodeInspector
+                node={selectedNode}
+                descriptor={
+                  selectedNode
+                    ? resolveDescriptor(selectedNode.provider, selectedNode.toolId)
+                    : undefined
+                }
+                layers={layers}
+                issues={selectedNode ? (issuesByNode.get(selectedNode.id) ?? []) : []}
+                keptPorts={
+                  selectedNode
+                    ? new Set(
+                        (
+                          resolveDescriptor(selectedNode.provider, selectedNode.toolId)?.outputs ??
+                          []
+                        )
+                          .filter((port) => portFeedsOutput(graph, selectedNode.id, port.id))
+                          .map((port) => port.id),
+                      )
+                    : new Set<string>()
+                }
+                onKeepResult={(portId, name) =>
+                  selectedNode && handleKeepResult(selectedNode.id, portId, name)
+                }
+                onFieldChange={(field, value) =>
+                  selectedNode &&
+                  setGraph((current) => setNodeField(current, selectedNode.id, field, value))
+                }
+                onParamChange={(paramId, value) =>
+                  selectedNode &&
+                  setGraph((current) => setNodeParameter(current, selectedNode.id, paramId, value))
+                }
+                onRemove={() => {
+                  if (!selectedNode) return;
+                  setGraph((current) => removeNode(current, selectedNode.id));
+                  // An armed port on the node being deleted would otherwise stay
+                  // armed and wire the next activation to a node that is gone.
+                  setArmedPort((current) => (current?.nodeId === selectedNode.id ? null : current));
+                  setSelectedNodeId(null);
+                }}
+              />
+            </ScrollArea>
+            {savedModels.length > 0 && (
+              <div className="border-t p-2">
+                <Label htmlFor="model-saved-picker" className="text-[11px]">
+                  {t("processing.modelBuilder.savedModels")}
+                </Label>
+                <div className="mt-1 flex items-center gap-1">
+                  <Select
+                    id="model-saved-picker"
+                    className="h-7 min-w-0 flex-1 text-xs"
+                    value=""
+                    onChange={(event) => {
+                      const model = savedModels.find((entry) => entry.id === event.target.value);
+                      if (model) handleLoadModel(model);
+                    }}
+                  >
+                    <option value="">{t("processing.modelBuilder.loadModelPlaceholder")}</option>
+                    {savedModels.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name || t("processing.modelBuilder.untitledModel")}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 shrink-0 p-0"
+                    onClick={handleDeleteModel}
+                    disabled={!savedModels.some((model) => model.id === modelId)}
+                    title={t("processing.modelBuilder.deleteModel")}
+                    aria-label={t("processing.modelBuilder.deleteModel")}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Issues + log */}
-      <div
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label={t("processing.modelBuilder.resizeLog")}
-        tabIndex={0}
-        onPointerDown={handleLogResizeStart}
-        onKeyDown={handleLogResizeKey}
-        className="h-1 shrink-0 cursor-row-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
-      />
-      <div className="shrink-0 border-t" style={{ height: Math.min(logHeight, maxLogHeight) }}>
-        <ScrollArea className="h-full p-2 font-mono text-[11px]">
-          {catalogFailed && (
-            <div className="flex items-center gap-2 text-destructive">
-              <span>{t("processing.modelBuilder.catalogUnavailable")}</span>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-5 px-1.5 text-[11px]"
-                onClick={() => {
-                  setCatalogFailed(false);
-                  setRetryToken((token) => token + 1);
-                }}
-              >
-                {t("common.retry")}
-              </Button>
-            </div>
-          )}
-          {issues.map((issue, index) => (
-            <div key={index} className="text-destructive">
-              {translateIssue(t, issue)}
-            </div>
-          ))}
-          {log.map((line, index) => (
-            <div key={index} className="whitespace-pre-wrap">
-              {line}
-            </div>
-          ))}
-          {issues.length === 0 && log.length === 0 && !catalogFailed && (
-            <span className="text-muted-foreground">
-              {t("processing.modelBuilder.outputPlaceholder")}
-            </span>
-          )}
-        </ScrollArea>
-      </div>
+      {!minimized && (
+        <>
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={t("processing.modelBuilder.resizeLog")}
+            tabIndex={0}
+            onPointerDown={handleLogResizeStart}
+            onKeyDown={handleLogResizeKey}
+            className="h-1 shrink-0 cursor-row-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
+          />
+          <div className="shrink-0 border-t" style={{ height: Math.min(logHeight, maxLogHeight) }}>
+            <ScrollArea className="h-full p-2 font-mono text-[11px]">
+              {catalogFailed && (
+                <div className="flex items-center gap-2 text-destructive">
+                  <span>{t("processing.modelBuilder.catalogUnavailable")}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-5 px-1.5 text-[11px]"
+                    onClick={() => {
+                      setCatalogFailed(false);
+                      setRetryToken((token) => token + 1);
+                    }}
+                  >
+                    {t("common.retry")}
+                  </Button>
+                </div>
+              )}
+              {issues.map((issue, index) => (
+                <div key={index} className="text-destructive">
+                  {translateIssue(t, issue)}
+                </div>
+              ))}
+              {log.map((line, index) => (
+                <div key={index} className="whitespace-pre-wrap">
+                  {line}
+                </div>
+              ))}
+              {issues.length === 0 && log.length === 0 && !catalogFailed && (
+                <span className="text-muted-foreground">
+                  {t("processing.modelBuilder.outputPlaceholder")}
+                </span>
+              )}
+            </ScrollArea>
+          </div>
+        </>
+      )}
 
       {/* Resize grip */}
-      <div
-        onPointerDown={handleResizeStart}
-        onKeyDown={handleResizeKey}
-        role="separator"
-        tabIndex={0}
-        aria-label={t("processing.modelBuilder.resizePanel")}
-        className="absolute bottom-0 end-0 h-4 w-4 cursor-nwse-resize focus-visible:bg-primary focus-visible:outline-none"
-      />
+      {!minimized && (
+        <div
+          onPointerDown={handleResizeStart}
+          onKeyDown={handleResizeKey}
+          role="separator"
+          tabIndex={0}
+          aria-label={t("processing.modelBuilder.resizePanel")}
+          className="absolute bottom-0 end-0 h-4 w-4 cursor-nwse-resize focus-visible:bg-primary focus-visible:outline-none"
+        />
+      )}
     </section>
   );
 }
@@ -1715,7 +1752,7 @@ function NodeInspector({
   keptPorts: Set<string>;
   onFieldChange: (field: "layerId" | "name", value: string) => void;
   onParamChange: (paramId: string, value: unknown) => void;
-  onKeepResult: (portId: string) => void;
+  onKeepResult: (portId: string, name: string) => void;
   onRemove: () => void;
 }): ReactElement {
   const { t } = useTranslation();
@@ -1826,7 +1863,18 @@ function NodeInspector({
                   variant="outline"
                   className="h-6 w-full justify-start px-1.5 text-[11px]"
                   disabled={keptPorts.has(port.id)}
-                  onClick={() => onKeepResult(port.id)}
+                  // Name the result after the tool, so a model that keeps
+                  // several steps does not put a stack of layers all called
+                  // "Model output" on the map. A multi-output tool adds the
+                  // port, since its two results are not the same thing.
+                  onClick={() =>
+                    onKeepResult(
+                      port.id,
+                      descriptor.outputs.length === 1
+                        ? descriptor.name
+                        : `${descriptor.name} (${portLabel(t, port.label)})`,
+                    )
+                  }
                 >
                   <Save className="me-1 h-3 w-3" />
                   {/* A one-output tool's port name is noise ("Keep \"Output\""),

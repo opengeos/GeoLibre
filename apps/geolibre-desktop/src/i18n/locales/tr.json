@@ -4090,6 +4090,8 @@
       "removeConnection": "Bağlantıyı kaldır",
       "removeNode": "Düğümü kaldır",
       "resizePanel": "Paneli yeniden boyutlandır",
+      "minimizePanel": "Paneli küçült",
+      "restorePanel": "Paneli geri yükle",
       "resizePalette": "Araç paletini yeniden boyutlandır",
       "resizeInspector": "Özellikler panelini yeniden boyutlandır",
       "resizeLog": "İleti günlüğünü yeniden boyutlandır",

@@ -4023,6 +4023,8 @@
       "removeConnection": "연결 제거",
       "removeNode": "노드 제거",
       "resizePanel": "패널 크기 조정",
+      "minimizePanel": "패널 최소화",
+      "restorePanel": "패널 복원",
       "resizePalette": "도구 팔레트 크기 조정",
       "resizeInspector": "속성 패널 크기 조정",
       "resizeLog": "메시지 로그 크기 조정",

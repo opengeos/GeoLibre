@@ -4023,6 +4023,8 @@
       "removeConnection": "删除连接",
       "removeNode": "删除节点",
       "resizePanel": "调整面板大小",
+      "minimizePanel": "最小化面板",
+      "restorePanel": "还原面板",
       "resizePalette": "调整工具面板大小",
       "resizeInspector": "调整属性面板大小",
       "resizeLog": "调整消息日志大小",

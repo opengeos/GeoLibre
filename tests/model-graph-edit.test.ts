@@ -19,6 +19,7 @@ import {
   setNodeField,
   setNodeParameter,
   settleNode,
+  uniqueOutputName,
   NODE_HEIGHT,
   NODE_WIDTH,
 } from "../apps/geolibre-desktop/src/lib/model-graph-edit";
@@ -561,5 +562,55 @@ describe("keeping an intermediate result", () => {
 
   it("does not count a port that only feeds another tool", () => {
     assert.equal(portFeedsOutput(chain(), "in", "out"), false);
+  });
+
+  it("names the kept output after the tool", () => {
+    // Otherwise every kept step falls back to one shared "Model output" label
+    // and the map ends up with layers the user cannot tell apart.
+    const result = addOutputForPort(chain(), "t1", "out", ids, "Buffer");
+    assert.ok(result);
+    assert.equal(result.graph.nodes.find((node) => node.id === result.nodeId)?.name, "Buffer");
+  });
+
+  it("counts up rather than reusing a name another output already has", () => {
+    const first = addOutputForPort(chain(), "t1", "out", ids, "Buffer");
+    assert.ok(first);
+    const second = addOutputForPort(first.graph, "t2", "out", ids, "Buffer");
+    assert.ok(second);
+    assert.equal(second.graph.nodes.find((node) => node.id === second.nodeId)?.name, "Buffer 2");
+  });
+
+  it("leaves the name empty when none is suggested", () => {
+    const result = addOutputForPort(chain(), "t1", "out", ids);
+    assert.ok(result);
+    assert.equal(result.graph.nodes.find((node) => node.id === result.nodeId)?.name, "");
+  });
+});
+
+describe("uniqueOutputName", () => {
+  const withOutputs = (...names: string[]): ProcessingModelGraph => ({
+    nodes: names.map((name, i) => ({ id: `o${i}`, kind: "output" as const, x: 0, y: 0, name })),
+    edges: [],
+  });
+
+  it("returns the base name when it is free", () => {
+    assert.equal(uniqueOutputName(withOutputs("Centroids"), "Buffer"), "Buffer");
+  });
+
+  it("appends the lowest free counter", () => {
+    assert.equal(uniqueOutputName(withOutputs("Buffer"), "Buffer"), "Buffer 2");
+    assert.equal(uniqueOutputName(withOutputs("Buffer", "Buffer 2"), "Buffer"), "Buffer 3");
+  });
+
+  it("skips over a gap rather than reusing a taken name", () => {
+    assert.equal(uniqueOutputName(withOutputs("Buffer", "Buffer 3"), "Buffer"), "Buffer 2");
+  });
+
+  it("ignores names on nodes that are not outputs", () => {
+    const graph: ProcessingModelGraph = {
+      nodes: [{ id: "t", kind: "tool", x: 0, y: 0, provider: "vector", toolId: "buffer" }],
+      edges: [],
+    };
+    assert.equal(uniqueOutputName(graph, "Buffer"), "Buffer");
   });
 });

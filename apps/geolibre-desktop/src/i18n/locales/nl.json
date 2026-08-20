@@ -4090,6 +4090,8 @@
       "removeConnection": "Verbinding verwijderen",
       "removeNode": "Knooppunt verwijderen",
       "resizePanel": "Paneelgrootte wijzigen",
+      "minimizePanel": "Paneel minimaliseren",
+      "restorePanel": "Paneel herstellen",
       "resizePalette": "Grootte van het gereedschapspalet wijzigen",
       "resizeInspector": "Grootte van het eigenschappenpaneel wijzigen",
       "resizeLog": "Grootte van het berichtenlogboek wijzigen",

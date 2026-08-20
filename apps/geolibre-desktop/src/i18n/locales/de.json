@@ -4090,6 +4090,8 @@
       "removeConnection": "Verbindung entfernen",
       "removeNode": "Knoten entfernen",
       "resizePanel": "Bereichsgröße ändern",
+      "minimizePanel": "Bereich minimieren",
+      "restorePanel": "Bereich wiederherstellen",
       "resizePalette": "Werkzeugpalette in der Größe ändern",
       "resizeInspector": "Eigenschaftenbereich in der Größe ändern",
       "resizeLog": "Meldungsprotokoll in der Größe ändern",
