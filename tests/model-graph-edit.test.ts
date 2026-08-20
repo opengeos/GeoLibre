@@ -4,6 +4,7 @@ import type { ProcessingModelGraph } from "../packages/core/src/types";
 import type { ModelToolDescriptor } from "../packages/processing/src/model-graph";
 import {
   addDataNode,
+  addOutputForPort,
   addToolNode,
   autoLayout,
   connectNodes,
@@ -12,6 +13,7 @@ import {
   graphsEqual,
   layoutGraph,
   moveNode,
+  portFeedsOutput,
   removeEdge,
   removeNode,
   setNodeField,
@@ -360,6 +362,77 @@ describe("auto layout", () => {
     const graph: ProcessingModelGraph = { nodes: [], edges: [] };
     assert.deepEqual(layoutGraph(graph), graph);
   });
+
+  /** A chain of `n` tool nodes, each fed by the one before it. */
+  const chainOf = (n: number): ProcessingModelGraph => ({
+    nodes: Array.from({ length: n }, (_, i) => ({
+      id: `n${i}`,
+      kind: "tool" as const,
+      x: 0,
+      y: 0,
+      provider: "vector" as const,
+      toolId: "buffer",
+    })),
+    edges: Array.from({ length: n - 1 }, (_, i) => ({
+      id: `e${i}`,
+      from: `n${i}`,
+      fromPort: "out",
+      to: `n${i + 1}`,
+      toPort: "layer",
+    })),
+  });
+
+  it("wraps a long chain into bands that fit the canvas width", () => {
+    // 640px fits depths at x=40 and x=280 (each card is NODE_WIDTH wide), so a
+    // six-long chain has to wrap rather than run off the right edge.
+    const laid = layoutGraph(chainOf(6), { width: 640 });
+    const at = Object.fromEntries(laid.nodes.map((node) => [node.id, [node.x, node.y]]));
+    const widest = Math.max(...laid.nodes.map((node) => node.x + NODE_WIDTH));
+    assert.ok(widest <= 640, `rightmost edge ${widest} should fit in 640`);
+    // Reads left to right, then wraps down to a fresh band.
+    assert.equal(at.n0[1], at.n1[1], "first two share a band");
+    assert.ok(at.n1[0] > at.n0[0], "and run left to right within it");
+    assert.ok(at.n2[1] > at.n1[1], "the third wraps to the next band down");
+    assert.equal(at.n2[0], at.n0[0], "starting back at the left margin");
+  });
+
+  it("keeps one band when no width is given", () => {
+    const laid = layoutGraph(chainOf(6));
+    const ys = new Set(laid.nodes.map((node) => node.y));
+    assert.equal(ys.size, 1, "every node stays on one row");
+    const xs = laid.nodes.map((node) => node.x).sort((a, b) => a - b);
+    assert.equal(new Set(xs).size, 6, "each depth gets its own column");
+  });
+
+  it("still places a single column when the canvas is narrower than one card", () => {
+    const laid = layoutGraph(chainOf(3), { width: 50 });
+    assert.equal(new Set(laid.nodes.map((node) => node.x)).size, 1);
+    assert.equal(new Set(laid.nodes.map((node) => node.y)).size, 3);
+  });
+
+  it("gives a band enough height for its most crowded depth", () => {
+    // Two sources feed one tool: depth 0 holds two nodes, so the next band has
+    // to clear both rather than overlapping the second.
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "a", kind: "input", x: 0, y: 0, layerId: "one" },
+        { id: "b", kind: "input", x: 0, y: 0, layerId: "two" },
+        { id: "c", kind: "tool", x: 0, y: 0, provider: "vector", toolId: "clip" },
+        { id: "d", kind: "output", x: 0, y: 0, name: "Out" },
+      ],
+      edges: [
+        { id: "e1", from: "a", fromPort: "out", to: "c", toPort: "layer" },
+        { id: "e2", from: "b", fromPort: "out", to: "c", toPort: "overlay" },
+        { id: "e3", from: "c", fromPort: "out", to: "d", toPort: "in" },
+      ],
+    };
+    // One depth per band, so each of the three depths starts its own band.
+    const laid = layoutGraph(graph, { width: 260 });
+    const at = Object.fromEntries(laid.nodes.map((node) => [node.id, node.y]));
+    assert.notEqual(at.a, at.b, "the two sources stack within their band");
+    assert.ok(at.c >= Math.max(at.a, at.b) + NODE_HEIGHT, "and the next band clears both");
+    assert.ok(at.d > at.c);
+  });
 });
 
 describe("graphsEqual", () => {
@@ -433,5 +506,60 @@ describe("graphsEqual", () => {
 
   it("treats two empty graphs as equal", () => {
     assert.equal(graphsEqual(emptyModelGraph(), emptyModelGraph()), true);
+  });
+});
+
+describe("keeping an intermediate result", () => {
+  const chain = (): ProcessingModelGraph => ({
+    nodes: [
+      { id: "in", kind: "input", x: 0, y: 0, layerId: "roads" },
+      { id: "t1", kind: "tool", x: 240, y: 0, provider: "vector", toolId: "buffer" },
+      { id: "t2", kind: "tool", x: 480, y: 0, provider: "vector", toolId: "centroids" },
+      { id: "out", kind: "output", x: 720, y: 0, name: "Final" },
+    ],
+    edges: [
+      { id: "e1", from: "in", fromPort: "out", to: "t1", toPort: "layer" },
+      { id: "e2", from: "t1", fromPort: "out", to: "t2", toPort: "layer" },
+      { id: "e3", from: "t2", fromPort: "out", to: "out", toPort: "in" },
+    ],
+  });
+  let seq = 0;
+  const ids = () => `gen${seq++}`;
+
+  it("adds an output node wired to the tool's port", () => {
+    const result = addOutputForPort(chain(), "t1", "out", ids);
+    assert.ok(result);
+    const added = result.graph.nodes.find((node) => node.id === result.nodeId);
+    assert.equal(added?.kind, "output");
+    assert.ok(
+      result.graph.edges.some(
+        (edge) => edge.from === "t1" && edge.fromPort === "out" && edge.to === result.nodeId,
+      ),
+    );
+  });
+
+  it("leaves the port still feeding the next tool", () => {
+    // Fanning out must not cost the chain its downstream link, or "keep this
+    // result" would quietly truncate the model.
+    const result = addOutputForPort(chain(), "t1", "out", ids);
+    assert.ok(result);
+    assert.ok(result.graph.edges.some((edge) => edge.from === "t1" && edge.to === "t2"));
+  });
+
+  it("returns null for a node that is not in the graph", () => {
+    assert.equal(addOutputForPort(chain(), "ghost", "out", ids), null);
+  });
+
+  it("reports whether a port already feeds an output node", () => {
+    const graph = chain();
+    assert.equal(portFeedsOutput(graph, "t2", "out"), true, "the final tool is kept");
+    assert.equal(portFeedsOutput(graph, "t1", "out"), false, "the middle one is not");
+    const result = addOutputForPort(graph, "t1", "out", ids);
+    assert.ok(result);
+    assert.equal(portFeedsOutput(result.graph, "t1", "out"), true);
+  });
+
+  it("does not count a port that only feeds another tool", () => {
+    assert.equal(portFeedsOutput(chain(), "in", "out"), false);
   });
 });

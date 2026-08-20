@@ -5,7 +5,7 @@ import type {
   ModelToolProvider,
   ProcessingModelGraph,
 } from "@geolibre/core";
-import type { ModelToolDescriptor } from "@geolibre/processing";
+import { OUTPUT_NODE_PORT, type ModelToolDescriptor } from "@geolibre/processing";
 
 /** An empty canvas. */
 export function emptyModelGraph(): ProcessingModelGraph {
@@ -271,23 +271,54 @@ export function createsCycle(graph: ProcessingModelGraph, from: string, to: stri
  * @param graph The imported graph.
  * @returns The graph, with positions filled in only if they were all at 0,0.
  */
-export function autoLayout(graph: ProcessingModelGraph): ProcessingModelGraph {
+export function autoLayout(
+  graph: ProcessingModelGraph,
+  options: LayoutOptions = {},
+): ProcessingModelGraph {
   const placed = graph.nodes.some((node) => node.x !== 0 || node.y !== 0);
   if (placed) return graph;
-  return layoutGraph(graph);
+  return layoutGraph(graph, options);
 }
 
+/** How much room the layout has to work with. */
+export interface LayoutOptions {
+  /**
+   * Visible canvas width in pixels. The flow wraps to a new band once a depth
+   * would not fit, so a long chain stays reachable instead of running off the
+   * right edge. Omitted (or non-finite) means unlimited width: one band, the
+   * old single-row behaviour.
+   */
+  width?: number;
+}
+
+/** Horizontal pitch between two consecutive depths. */
+const LAYOUT_COLUMN = 240;
+/** Vertical pitch between two nodes sharing a depth. */
+const LAYOUT_ROW = 120;
+/** Padding between the canvas origin and the first node. */
+const LAYOUT_MARGIN = 40;
+
 /**
- * Arrange every node on a left-to-right grid by its depth from the sources,
- * discarding the positions it already had.
+ * Arrange every node by its depth from the sources, discarding the positions
+ * it already had.
+ *
+ * The flow reads left to right, and wraps: when `options.width` cannot fit
+ * another depth, the next one starts a fresh band below the deepest node of
+ * the current one. Without that a chain of more than a few tools ran straight
+ * off the right edge of the canvas, so Arrange pushed work out of view rather
+ * than tidying it into view.
  *
  * @param graph The graph to lay out.
+ * @param options Room available; see {@link LayoutOptions}.
  * @returns The graph with every node repositioned.
  */
-export function layoutGraph(graph: ProcessingModelGraph): ProcessingModelGraph {
+export function layoutGraph(
+  graph: ProcessingModelGraph,
+  options: LayoutOptions = {},
+): ProcessingModelGraph {
   if (graph.nodes.length === 0) return graph;
-  const COLUMN = 240;
-  const ROW = 120;
+  const COLUMN = LAYOUT_COLUMN;
+  const ROW = LAYOUT_ROW;
   // Depth from the sources, so the layout reads left-to-right along the flow.
   const depth = new Map<string, number>();
   const incoming = new Map<string, string[]>();
@@ -330,14 +361,47 @@ export function layoutGraph(graph: ProcessingModelGraph): ProcessingModelGraph {
     return depth.get(start) ?? 0;
   };
   for (const node of graph.nodes) resolveDepth(node.id);
+
+  // How many depths fit side by side. The last one has to fit whole, not just
+  // start inside the viewport, or the rightmost card is still clipped.
+  const usable = options.width;
+  const perBand =
+    usable && Number.isFinite(usable)
+      ? Math.max(1, Math.floor((usable - LAYOUT_MARGIN - NODE_WIDTH) / COLUMN) + 1)
+      : Number.POSITIVE_INFINITY;
+
+  // Each band is as tall as its most crowded depth, so bands never overlap.
+  const perDepth = new Map<number, number>();
+  for (const node of graph.nodes) {
+    const value = depth.get(node.id) ?? 0;
+    perDepth.set(value, (perDepth.get(value) ?? 0) + 1);
+  }
+  const bandRows = new Map<number, number>();
+  for (const [value, count] of perDepth) {
+    const band = Number.isFinite(perBand) ? Math.floor(value / perBand) : 0;
+    bandRows.set(band, Math.max(bandRows.get(band) ?? 0, count));
+  }
+  const bandTop = new Map<number, number>();
+  let top = LAYOUT_MARGIN;
+  for (const band of [...bandRows.keys()].sort((a, b) => a - b)) {
+    bandTop.set(band, top);
+    top += (bandRows.get(band) ?? 1) * ROW;
+  }
+
   const perColumn = new Map<number, number>();
   return {
     ...graph,
     nodes: graph.nodes.map((node) => {
-      const column = depth.get(node.id) ?? 0;
-      const row = perColumn.get(column) ?? 0;
-      perColumn.set(column, row + 1);
-      return { ...node, x: 40 + column * COLUMN, y: 40 + row * ROW };
+      const value = depth.get(node.id) ?? 0;
+      const band = Number.isFinite(perBand) ? Math.floor(value / perBand) : 0;
+      const column = Number.isFinite(perBand) ? value % perBand : value;
+      const row = perColumn.get(value) ?? 0;
+      perColumn.set(value, row + 1);
+      return {
+        ...node,
+        x: LAYOUT_MARGIN + column * COLUMN,
+        y: (bandTop.get(band) ?? LAYOUT_MARGIN) + row * ROW,
+      };
     }),
   };
 }
@@ -383,4 +447,62 @@ export function graphsEqual(a: ProcessingModelGraph, b: ProcessingModelGraph): b
   const canonical = (graph: ProcessingModelGraph): string =>
     `${graph.nodes.map(stableKey).sort().join("|")}#${graph.edges.map(stableKey).sort().join("|")}`;
   return canonical(a) === canonical(b);
+}
+
+/**
+ * Attach a fresh `output` node to one of a tool's output ports.
+ *
+ * A model keeps only what an `output` node is wired to, so without this the
+ * only reachable result is the end of the chain — every intermediate step is
+ * computed and thrown away. An output port may feed the next tool *and* an
+ * output node at the same time, so keeping a step costs nothing downstream.
+ *
+ * @param graph The current graph.
+ * @param nodeId The tool whose result should be kept.
+ * @param portId The output port to tap.
+ * @param createId Fresh id source.
+ * @returns The updated graph and the new node's id, or `null` when the tool is
+ *   not in the graph.
+ */
+export function addOutputForPort(
+  graph: ProcessingModelGraph,
+  nodeId: string,
+  portId: string,
+  createId: () => string,
+): { graph: ProcessingModelGraph; nodeId: string } | null {
+  const source = graph.nodes.find((node) => node.id === nodeId);
+  if (!source) return null;
+  // One column to the right of the tool, where the flow already reads; the
+  // placement helper pushes it down until it has a clear footprint.
+  const added = addDataNode(
+    graph,
+    "output",
+    { x: source.x + NODE_WIDTH + 72, y: source.y },
+    createId,
+  );
+  const connected = connectNodes(
+    added.graph,
+    { nodeId, portId },
+    { nodeId: added.nodeId, portId: OUTPUT_NODE_PORT },
+    createId,
+  );
+  // A brand-new output node cannot close a loop or target itself, so a
+  // rejection here is not reachable; fall back to the unwired node rather than
+  // dropping the user's click on the floor.
+  if ("rejected" in connected) return { graph: added.graph, nodeId: added.nodeId };
+  return { graph: connected.graph, nodeId: added.nodeId };
+}
+
+/** True when this output port already feeds an `output` node. */
+export function portFeedsOutput(
+  graph: ProcessingModelGraph,
+  nodeId: string,
+  portId: string,
+): boolean {
+  const outputs = new Set(
+    graph.nodes.filter((node) => node.kind === "output").map((node) => node.id),
+  );
+  return graph.edges.some(
+    (edge) => edge.from === nodeId && edge.fromPort === portId && outputs.has(edge.to),
+  );
 }

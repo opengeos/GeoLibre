@@ -67,6 +67,7 @@ import {
   NODE_HEIGHT,
   NODE_WIDTH,
   addDataNode,
+  addOutputForPort,
   addToolNode,
   autoLayout,
   connectNodes,
@@ -74,6 +75,7 @@ import {
   graphsEqual,
   layoutGraph,
   moveNode,
+  portFeedsOutput,
   removeEdge,
   removeNode,
   setNodeField,
@@ -94,6 +96,13 @@ const MIN_SIDE_WIDTH = 140;
 const MAX_SIDE_WIDTH = 480;
 const DEFAULT_PALETTE_WIDTH = 208;
 const DEFAULT_INSPECTOR_WIDTH = 224;
+/** Bounds on the draggable log pane, in pixels. */
+const MIN_LOG_HEIGHT = 56;
+const MAX_LOG_HEIGHT = 420;
+const DEFAULT_LOG_HEIGHT = 96;
+/** Share of the panel height the log pane may take, so the canvas survives. */
+const MAX_LOG_FRACTION = 0.6;
+
 /**
  * Share of the panel a single side column may take. Both columns are
  * `shrink-0`, so without this two columns dragged wide (or a panel later
@@ -165,6 +174,7 @@ export function ModelBuilderPanel({
   const [size, setSize] = useState({ width: 980, height: 560 });
   const [paletteWidth, setPaletteWidth] = useState(DEFAULT_PALETTE_WIDTH);
   const [inspectorWidth, setInspectorWidth] = useState(DEFAULT_INSPECTOR_WIDTH);
+  const [logHeight, setLogHeight] = useState(DEFAULT_LOG_HEIGHT);
   const [modelId, setModelId] = useState<string>(() => createId());
   const [modelName, setModelName] = useState("");
   const [graph, setGraph] = useState<ProcessingModelGraph>(emptyModelGraph);
@@ -340,6 +350,17 @@ export function ModelBuilderPanel({
     [dirty, t],
   );
 
+  /**
+   * Room the layout gets to work with: the canvas's own visible width, so a
+   * long chain wraps into bands that stay on screen rather than running off
+   * the right edge. `clientWidth` excludes the scrollbar, which is what the
+   * nodes actually have to fit inside.
+   */
+  const layoutOptions = useCallback(
+    () => ({ width: canvasRef.current?.clientWidth || undefined }),
+    [],
+  );
+
   const handleNewModel = useCallback(() => {
     if (!confirmDiscard()) return;
     setModelId(createId());
@@ -354,11 +375,11 @@ export function ModelBuilderPanel({
       if (!confirmDiscard()) return;
       setModelId(model.id);
       setModelName(model.name);
-      setGraph(autoLayout(model.graph ?? stepsToGraph(model)));
+      setGraph(autoLayout(model.graph ?? stepsToGraph(model), layoutOptions()));
       setSelectedNodeId(null);
       resetRunState();
     },
-    [confirmDiscard, resetRunState],
+    [confirmDiscard, layoutOptions, resetRunState],
   );
 
   /**
@@ -373,10 +394,25 @@ export function ModelBuilderPanel({
     appendLog(t("processing.modelBuilder.deletedLog"));
   }, [savedModels, deleteModel, modelId, appendLog, t]);
 
+  /**
+   * Keep a tool's result: drop an `output` node next to it and wire the two.
+   * The port can still feed the next tool as well, so keeping an intermediate
+   * step costs nothing downstream.
+   */
+  const handleKeepResult = useCallback((nodeId: string, portId: string) => {
+    setGraph((current) => {
+      const next = addOutputForPort(current, nodeId, portId, createId);
+      return next ? next.graph : current;
+    });
+  }, []);
+
   /** Re-run the depth-based layout over the nodes the user has moved around. */
   const handleArrange = useCallback(() => {
-    setGraph((current) => layoutGraph(current));
-  }, []);
+    setGraph((current) => layoutGraph(current, layoutOptions()));
+    // The layout starts at the origin, so a canvas left scrolled somewhere
+    // else would open on empty space right after tidying it up.
+    canvasRef.current?.scrollTo({ left: 0, top: 0 });
+  }, [layoutOptions]);
 
   const handleSave = useCallback(() => {
     // Also write the legacy linear projection when the graph happens to be a
@@ -446,7 +482,7 @@ export function ModelBuilderPanel({
           throw new Error(t("processing.modelBuilder.importTooLarge"));
         }
         setModelName(typeof parsed.name === "string" ? parsed.name : "");
-        setGraph(autoLayout(graph));
+        setGraph(autoLayout(graph, layoutOptions()));
         setSelectedNodeId(null);
         resetRunState();
         appendLog(t("processing.modelBuilder.importedLog", { nodes: graph.nodes.length }));
@@ -454,7 +490,7 @@ export function ModelBuilderPanel({
         appendLog(`${t("processing.modelBuilder.importFailed")}: ${(err as Error).message}`);
       }
     },
-    [appendLog, confirmDiscard, resetRunState, t],
+    [appendLog, confirmDiscard, layoutOptions, resetRunState, t],
   );
 
   // --- Canvas interaction -------------------------------------------------
@@ -852,6 +888,53 @@ export function ModelBuilderPanel({
     [paletteWidth, inspectorWidth, maxSideWidth],
   );
 
+  /** Upper bound for the log pane at the panel's current height. */
+  const maxLogHeight = Math.max(
+    MIN_LOG_HEIGHT,
+    Math.min(MAX_LOG_HEIGHT, size.height * MAX_LOG_FRACTION),
+  );
+
+  /**
+   * Drag the splitter above the log pane. Dragging up grows it, which is the
+   * direction that reveals more of the run output. Vertical, so unlike the
+   * column splitters this needs no writing-direction handling.
+   */
+  const handleLogResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const handle = event.currentTarget;
+      handle.setPointerCapture(event.pointerId);
+      const startY = event.clientY;
+      const start = logHeight;
+      const handleMove = (move: PointerEvent) => {
+        setLogHeight(clamp(start - (move.clientY - startY), MIN_LOG_HEIGHT, maxLogHeight));
+      };
+      const handleEnd = () => {
+        if (handle.hasPointerCapture(event.pointerId))
+          handle.releasePointerCapture(event.pointerId);
+        handle.removeEventListener("pointermove", handleMove);
+        handle.removeEventListener("pointerup", handleEnd);
+        handle.removeEventListener("pointercancel", handleEnd);
+      };
+      handle.addEventListener("pointermove", handleMove);
+      handle.addEventListener("pointerup", handleEnd);
+      handle.addEventListener("pointercancel", handleEnd);
+    },
+    [logHeight, maxLogHeight],
+  );
+
+  /** Keyboard path for the log splitter. */
+  const handleLogResizeKey = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const step = event.key === "ArrowUp" ? 16 : event.key === "ArrowDown" ? -16 : 0;
+      if (!step) return;
+      event.preventDefault();
+      setLogHeight((current) => clamp(current + step, MIN_LOG_HEIGHT, maxLogHeight));
+    },
+    [maxLogHeight],
+  );
+
   /** Keyboard path for the splitters, so a column is resizable without a mouse. */
   const handleSideResizeKey = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>, side: "palette" | "inspector") => {
@@ -1219,6 +1302,16 @@ export function ModelBuilderPanel({
               }
               layers={layers}
               issues={selectedNode ? (issuesByNode.get(selectedNode.id) ?? []) : []}
+              keptPorts={
+                selectedNode
+                  ? new Set(
+                      (resolveDescriptor(selectedNode.provider, selectedNode.toolId)?.outputs ?? [])
+                        .filter((port) => portFeedsOutput(graph, selectedNode.id, port.id))
+                        .map((port) => port.id),
+                    )
+                  : new Set<string>()
+              }
+              onKeepResult={(portId) => selectedNode && handleKeepResult(selectedNode.id, portId)}
               onFieldChange={(field, value) =>
                 selectedNode &&
                 setGraph((current) => setNodeField(current, selectedNode.id, field, value))
@@ -1277,7 +1370,16 @@ export function ModelBuilderPanel({
       </div>
 
       {/* Issues + log */}
-      <div className="h-24 shrink-0 border-t">
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={t("processing.modelBuilder.resizeLog")}
+        tabIndex={0}
+        onPointerDown={handleLogResizeStart}
+        onKeyDown={handleLogResizeKey}
+        className="h-1 shrink-0 cursor-row-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
+      />
+      <div className="shrink-0 border-t" style={{ height: Math.min(logHeight, maxLogHeight) }}>
         <ScrollArea className="h-full p-2 font-mono text-[11px]">
           {catalogFailed && (
             <div className="flex items-center gap-2 text-destructive">
@@ -1599,16 +1701,21 @@ function NodeInspector({
   descriptor,
   layers,
   issues,
+  keptPorts,
   onFieldChange,
   onParamChange,
+  onKeepResult,
   onRemove,
 }: {
   node: ModelGraphNode | null;
   descriptor: ModelToolDescriptor | undefined;
   layers: GeoLibreLayer[];
   issues: ModelGraphIssue[];
+  /** Output ports of this node that already feed an `output` node. */
+  keptPorts: Set<string>;
   onFieldChange: (field: "layerId" | "name", value: string) => void;
   onParamChange: (paramId: string, value: unknown) => void;
+  onKeepResult: (portId: string) => void;
   onRemove: () => void;
 }): ReactElement {
   const { t } = useTranslation();
@@ -1702,6 +1809,38 @@ function NodeInspector({
                 onChange={(value) => onParamChange(param.id, value)}
               />
             ))
+          )}
+          {/* A model keeps only what an output node is wired to, so a mid-chain
+              tool's result is computed and discarded unless the user knows to
+              add a second output node and fan the port out to it. This makes
+              that one click, per output port. */}
+          {descriptor.outputs.length > 0 && (
+            <div className="space-y-1 border-t pt-2">
+              <p className="text-[11px] text-muted-foreground">
+                {t("processing.modelBuilder.keepResultHint")}
+              </p>
+              {descriptor.outputs.map((port) => (
+                <Button
+                  key={port.id}
+                  size="sm"
+                  variant="outline"
+                  className="h-6 w-full justify-start px-1.5 text-[11px]"
+                  disabled={keptPorts.has(port.id)}
+                  onClick={() => onKeepResult(port.id)}
+                >
+                  <Save className="me-1 h-3 w-3" />
+                  {/* A one-output tool's port name is noise ("Keep \"Output\""),
+                      so only name the port when there is a choice to make. */}
+                  {descriptor.outputs.length === 1
+                    ? keptPorts.has(port.id)
+                      ? t("processing.modelBuilder.resultKeptSingle")
+                      : t("processing.modelBuilder.keepResultSingle")
+                    : keptPorts.has(port.id)
+                      ? t("processing.modelBuilder.resultKept", { port: portLabel(t, port.label) })
+                      : t("processing.modelBuilder.keepResult", { port: portLabel(t, port.label) })}
+                </Button>
+              ))}
+            </div>
           )}
         </div>
       )}
