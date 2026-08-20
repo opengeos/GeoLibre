@@ -5,6 +5,19 @@ export const DESKTOP_SETTINGS_URL_PARAMS = ["settingsUrl", "settingUrl"] as cons
 const LANGUAGE_URL_PARAMS = ["locale", "lang"] as const;
 const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
 
+/**
+ * Keep URL-controlled settings limited to presentation. In particular, a
+ * shared link must never supply credentials, plugin sources, or local paths.
+ */
+export function normalizeSharedDesktopSettings(settings: Record<string, unknown>): DesktopSettings {
+  return normalizeDesktopSettings({
+    language: settings.language,
+    layout: settings.layout,
+    theme: settings.theme,
+    uiProfile: settings.uiProfile,
+  });
+}
+
 export function desktopSettingsUrl(search: string): string | null {
   const params = new URLSearchParams(search);
   for (const name of DESKTOP_SETTINGS_URL_PARAMS) {
@@ -42,7 +55,7 @@ export async function fetchDesktopSettings(
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(`Desktop settings at ${url} must be a JSON object.`);
   }
-  return normalizeDesktopSettings(parsed);
+  return normalizeSharedDesktopSettings(parsed as Record<string, unknown>);
 }
 
 /** Resolve a shared language only when a valid locale/lang URL override is absent. */

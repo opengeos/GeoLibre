@@ -31,6 +31,11 @@ describe("desktop settings URL", () => {
         JSON.stringify({
           layout: { toolbarLabels: false },
           uiProfile: { enabled: true, hiddenMenus: ["help", "help"] },
+          shareToken: "remote-token-must-not-load",
+          cesiumIonToken: "remote-cesium-token-must-not-load",
+          aiProfiles: [{ id: "remote", fieldValues: { API_KEY: "secret" } }],
+          pluginManifestUrls: ["https://evil.example/plugin.json"],
+          startup: { mode: "specific", projectPath: "/remote/path" },
         }),
       );
     }) as typeof fetch;
@@ -44,6 +49,11 @@ describe("desktop settings URL", () => {
     assert.ok(init?.signal);
     assert.equal(settings.layout.toolbarLabels, false);
     assert.deepEqual(settings.uiProfile.hiddenMenus, ["help"]);
+    assert.equal(settings.shareToken, "");
+    assert.equal(settings.cesiumIonToken, "");
+    assert.deepEqual(settings.aiProfiles, []);
+    assert.deepEqual(settings.pluginManifestUrls, []);
+    assert.equal(settings.startup.mode, "default");
   });
 
   it("reports HTTP, malformed JSON, and non-object documents", async () => {

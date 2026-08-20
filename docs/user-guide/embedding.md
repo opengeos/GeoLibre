@@ -32,7 +32,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | `maponly`    | `maponly`                                                  | Hides all chrome (toolbar, panels, and status bar), leaving only the map. The bare flag or `true`, `1`, `yes`, `on` enable it.        |
 | `welcome`    | `welcome=0`                                                | Hides the first-launch welcome wizard. Accepts `0`, `false`, `off`, or `no`. A `url=` or `data=` deep link already suppresses it automatically. |
 | `theme`      | `theme=dark`                                               | Sets the initial color theme, overriding the OS preference. Accepts `dark` or `light`; the in-app toggle still works afterward.       |
-| `settingsUrl` | `settingsUrl=https://example.com/desktop-settings.json`   | Loads a complete `geolibre.desktopSettings` JSON object before the first render. The override lasts for this page only and does not replace the visitor's locally saved settings. `settingUrl` is accepted as an alias. |
+| `settingsUrl` | `settingsUrl=https://example.com/desktop-settings.json`   | Loads shared presentation settings before the first render. Supports `language`, `layout`, accent `theme`, and `uiProfile`. The override lasts for this page only and does not replace locally saved settings. `settingUrl` is accepted as an alias. |
 | `tool`       | `tool=adaptive_filter`                                     | Opens the Processing (Whitebox toolbox) dialog on a specific tool by its id. Unknown ids open the dialog without preselecting a tool. |
 
 !!! note "Private projects and data"
@@ -50,13 +50,18 @@ https://web.geolibre.app/?url=https://share.geolibre.app/you/project.geolibre.js
 ```
 
 The settings document must be public or same-origin, return valid JSON, and
-allow cross-origin browser requests when hosted elsewhere. Its fields use the
-same shape as the `geolibre.desktopSettings` local-storage value. Missing or
-invalid fields are replaced with GeoLibre defaults. If the document fails to
-load within ten seconds, GeoLibre starts with the visitor's local settings.
-URL parameters such as
-`theme`, `layout`, and `maponly` continue to take precedence over corresponding
-settings where they overlap.
+allow cross-origin browser requests when hosted elsewhere. Its supported fields
+use the same shape as their counterparts in the `geolibre.desktopSettings`
+local-storage value. Credential-bearing fields, plugin sources, local startup
+paths, and update settings are ignored. Missing or invalid fields are replaced
+with GeoLibre defaults. If the document fails to load within ten seconds,
+GeoLibre starts with the visitor's local settings. The `locale` and `lang` URL
+parameters take precedence over a shared `language`. Other embed parameters,
+including `theme`, `layout`, and `maponly`, independently control the initial
+light/dark mode and chrome rather than the desktop accent and panel preferences.
+
+Encode the settings URL with `encodeURIComponent` when it contains `&`, `+`,
+`%`, or `#`, just as for a nested `data` URL.
 
 ### Deep-linking a Processing tool
 
