@@ -76,12 +76,14 @@ export function AttributeStatsDialog({
     }
   }, [hasFilter, hasSelection, scope]);
 
-  const scopedRows =
+  const activeScope: StatsScope =
     scope === "filtered" && hasFilter
-      ? filteredRows
+      ? "filtered"
       : scope === "selected" && hasSelection
-        ? selectedRows
-        : rows;
+        ? "selected"
+        : "all";
+  const scopedRows =
+    activeScope === "filtered" ? filteredRows : activeScope === "selected" ? selectedRows : rows;
 
   const stats = useMemo<FieldStats | null>(() => {
     if (!open || !field) return null;
@@ -92,9 +94,9 @@ export function AttributeStatsDialog({
     if (!stats || !field) return;
     const lines = statRows(stats, t).map(([label, value]) => `${label}\t${value}`);
     const header =
-      scope === "filtered"
+      activeScope === "filtered"
         ? t("attributeStats.copyHeaderFiltered", { field })
-        : scope === "selected"
+        : activeScope === "selected"
           ? t("attributeStats.copyHeaderSelected", { field })
           : t("attributeStats.copyHeader", { field });
     void navigator.clipboard
@@ -144,7 +146,7 @@ export function AttributeStatsDialog({
                   <Select
                     id="stats-scope"
                     className="w-44"
-                    value={scope}
+                    value={activeScope}
                     onChange={(event) => {
                       setScope(event.target.value as StatsScope);
                       setCopied(false);
