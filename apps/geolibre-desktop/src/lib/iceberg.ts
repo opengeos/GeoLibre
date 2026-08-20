@@ -31,7 +31,7 @@ export const ICEBERG_SOURCE_KIND = "iceberg-table";
 export const ICEBERG_CATALOG_ALIAS = "geolibre_iceberg";
 
 /** Rows materialized per load when the user does not choose otherwise. */
-export const DEFAULT_ICEBERG_ROW_LIMIT = 50_000;
+export const DEFAULT_ICEBERG_ROW_LIMIT = 5_000;
 
 /**
  * Hard ceiling on the row limit. The result is materialized as an in-memory
