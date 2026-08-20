@@ -457,11 +457,11 @@ export async function runModelGraph(
  * model authored on the canvas still runs in builds that only understand
  * `steps`.
  *
- * Only an unambiguous chain projects: one input node, one output node, and
- * every tool node with exactly one incoming and one outgoing edge. Anything
- * with a branch or a multi-input tool returns `[]`, which is the honest answer
- * — such a model has no linear equivalent and older builds must not run a
- * silently truncated version of it.
+ * Only an unambiguous chain projects: one input node feeding exactly one edge,
+ * one output node fed by exactly one edge, and every tool node with exactly one
+ * incoming and one outgoing edge. Anything with a branch or a multi-input tool
+ * returns `[]`, which is the honest answer — such a model has no linear
+ * equivalent and older builds must not run a silently truncated version of it.
  *
  * @param graph The authored graph.
  * @returns The equivalent step chain, or `[]` when there is not one.
@@ -486,6 +486,14 @@ export function graphToLinearSteps(
     incoming.set(edge.to, (incoming.get(edge.to) ?? 0) + 1);
     outgoing.set(edge.from, (outgoing.get(edge.from) ?? 0) + 1);
   }
+  // A branch through the shared input or output node keeps every tool node at
+  // in-degree 1 / out-degree 1, so the per-tool counts above would wave it
+  // through and `runModel` would then run the branches as a strict chain — the
+  // silent truncation this function exists to refuse.
+  if ((outgoing.get(inputs[0].id) ?? 0) !== 1) return [];
+  if ((incoming.get(outs[0].id) ?? 0) !== 1) return [];
+
+  const byId = new Map(graph.nodes.map((node) => [node.id, node]));
   const steps: {
     id: string;
     toolId: string;
@@ -499,10 +507,19 @@ export function graphToLinearSteps(
     // Only client vector tools have a `steps` runner to fall back to.
     if (node.provider !== "vector" || !node.toolId) return [];
     const inputEdge = graph.edges.find((edge) => edge.to === node.id && nodeIds.has(edge.from));
+    const parameters = { ...(node.parameters ?? {}) };
+    // The source layer lives on the `input` node, not in any tool's parameters,
+    // but `runModel` overrides the input parameter only from step 1 onwards —
+    // step 0 reads its layer straight out of `parameters`. Without this the
+    // fallback chain fails at its very first step.
+    const source = inputEdge ? byId.get(inputEdge.from) : undefined;
+    if (source?.kind === "input" && source.layerId) {
+      parameters[inputEdge?.toPort ?? "layer"] = source.layerId;
+    }
     steps.push({
       id: node.id,
       toolId: node.toolId,
-      parameters: { ...(node.parameters ?? {}) },
+      parameters,
       ...(inputEdge && inputEdge.toPort !== "layer" ? { inputParam: inputEdge.toPort } : {}),
     });
   }

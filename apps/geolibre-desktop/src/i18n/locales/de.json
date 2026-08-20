@@ -4051,6 +4051,8 @@
       "modelNamePlaceholder": "Unbenanntes Modell",
       "untitledModel": "Unbenanntes Modell",
       "newModel": "Neu",
+      "arrange": "Anordnen",
+      "arrangeHint": "Die Knoten entlang des Ablaufs anordnen",
       "runModel": "Ausführen",
       "cancelRun": "Abbrechen",
       "runCancelled": "Ausführung abgebrochen.",
@@ -4072,6 +4074,8 @@
       "exportModel": "Exportieren",
       "savedModels": "Gespeicherte Modelle",
       "loadModelPlaceholder": "Gespeichertes Modell laden ...",
+      "deleteModel": "Löschen",
+      "deletedLog": "Modell aus dem Projekt gelöscht.",
       "searchTools": "Werkzeuge suchen",
       "loadingTools": "Werkzeuge werden geladen ...",
       "noToolsMatch": "Keine Werkzeuge entsprechen Ihrer Suche.",
@@ -4085,6 +4089,8 @@
       "removeConnection": "Verbindung entfernen",
       "removeNode": "Knoten entfernen",
       "resizePanel": "Bereichsgröße ändern",
+      "resizePalette": "Werkzeugpalette in der Größe ändern",
+      "resizeInspector": "Eigenschaftenbereich in der Größe ändern",
       "selectNodeHint": "Wählen Sie einen Knoten, um seine Einstellungen zu bearbeiten.",
       "sourceLayer": "Quellebene",
       "chooseLayer": "Ebene wählen ...",
@@ -4103,7 +4109,10 @@
       "importFailed": "Import fehlgeschlagen",
       "importInvalid": "Diese Datei enthält kein Modelldiagramm.",
       "importUnsupported": "Diese Datei ist kein GeoLibre-Modell.",
-      "rasterOutputUnsupported": "„{{name}}“ ist ein Rasterergebnis, das dieser Build nicht zur Karte hinzufügen kann."
+      "rasterOutputUnsupported": "„{{name}}“ ist ein Rasterergebnis, das dieser Build nicht zur Karte hinzufügen kann.",
+      "portNeedsVector": "„{{port}}“ benötigt Vektordaten, es kam aber ein Raster an.",
+      "toolNoOutput": "„{{tool}}“ hat keine Ausgabe erzeugt.",
+      "toolNoUsableOutput": "„{{tool}}“ hat keine verwendbare Ausgabe erzeugt."
     },
     "parameterField": {
       "selectLayer": "Ebene auswählen …",

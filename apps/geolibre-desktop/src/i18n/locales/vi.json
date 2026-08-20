@@ -4070,6 +4070,8 @@
       "modelNamePlaceholder": "Mô hình chưa đặt tên",
       "untitledModel": "Mô hình chưa đặt tên",
       "newModel": "Mới",
+      "arrange": "Sắp xếp",
+      "arrangeHint": "Sắp xếp các nút theo dòng xử lý",
       "runModel": "Chạy",
       "cancelRun": "Hủy",
       "runCancelled": "Đã hủy lần chạy.",
@@ -4091,6 +4093,8 @@
       "exportModel": "Xuất",
       "savedModels": "Mô hình đã lưu",
       "loadModelPlaceholder": "Tải một mô hình đã lưu...",
+      "deleteModel": "Xóa bỏ",
+      "deletedLog": "Đã xóa mô hình khỏi dự án.",
       "searchTools": "Tìm công cụ",
       "loadingTools": "Đang tải công cụ...",
       "noToolsMatch": "Không có công cụ nào khớp với tìm kiếm của bạn.",
@@ -4104,6 +4108,8 @@
       "removeConnection": "Xóa kết nối",
       "removeNode": "Xóa nút",
       "resizePanel": "Đổi kích thước bảng",
+      "resizePalette": "Đổi kích thước bảng công cụ",
+      "resizeInspector": "Đổi kích thước bảng thuộc tính",
       "selectNodeHint": "Chọn một nút để chỉnh sửa thiết lập của nó.",
       "sourceLayer": "Lớp nguồn",
       "chooseLayer": "Chọn một lớp...",
@@ -4122,7 +4128,10 @@
       "importFailed": "Nhập thất bại",
       "importInvalid": "Tệp đó không chứa đồ thị mô hình.",
       "importUnsupported": "Tệp đó không phải là mô hình GeoLibre.",
-      "rasterOutputUnsupported": "\"{{name}}\" là kết quả raster mà bản dựng này không thể thêm vào bản đồ."
+      "rasterOutputUnsupported": "\"{{name}}\" là kết quả raster mà bản dựng này không thể thêm vào bản đồ.",
+      "portNeedsVector": "\"{{port}}\" cần dữ liệu vector, nhưng lại nhận được raster.",
+      "toolNoOutput": "\"{{tool}}\" không tạo ra kết quả nào.",
+      "toolNoUsableOutput": "\"{{tool}}\" không tạo ra kết quả dùng được nào."
     },
     "parameterField": {
       "selectLayer": "Sao chép liên kết có thể chia sẻ để mở công cụ này với cài đặt hiện tại",

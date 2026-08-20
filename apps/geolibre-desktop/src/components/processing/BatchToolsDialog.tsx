@@ -35,7 +35,6 @@ const PRIMARY_INPUT_PARAM = "layer";
 /** Sample size when scanning a layer's attribute field names. */
 const FIELD_SCAN_SAMPLE = 1000;
 
-/** A best-effort unique id (webview always has crypto.randomUUID). */
 /** Vector tools grouped by their `group` label, preserving registry order. */
 function groupedTools(): { group: string; tools: ProcessingAlgorithm[] }[] {
   const groups: { group: string; tools: ProcessingAlgorithm[] }[] = [];

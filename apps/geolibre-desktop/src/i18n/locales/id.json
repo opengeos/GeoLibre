@@ -3984,6 +3984,8 @@
       "modelNamePlaceholder": "Model tanpa judul",
       "untitledModel": "Model tanpa judul",
       "newModel": "Baru",
+      "arrange": "Tata",
+      "arrangeHint": "Menata simpul mengikuti alur",
       "runModel": "Jalankan",
       "cancelRun": "Batal",
       "runCancelled": "Eksekusi dibatalkan.",
@@ -4005,6 +4007,8 @@
       "exportModel": "Ekspor",
       "savedModels": "Model tersimpan",
       "loadModelPlaceholder": "Muat model tersimpan...",
+      "deleteModel": "Hapus",
+      "deletedLog": "Model dihapus dari proyek.",
       "searchTools": "Cari alat",
       "loadingTools": "Memuat alat...",
       "noToolsMatch": "Tidak ada alat yang cocok dengan pencarian Anda.",
@@ -4018,6 +4022,8 @@
       "removeConnection": "Hapus koneksi",
       "removeNode": "Hapus simpul",
       "resizePanel": "Ubah ukuran panel",
+      "resizePalette": "Ubah ukuran palet alat",
+      "resizeInspector": "Ubah ukuran panel properti",
       "selectNodeHint": "Pilih sebuah simpul untuk mengubah pengaturannya.",
       "sourceLayer": "Lapisan sumber",
       "chooseLayer": "Pilih lapisan...",
@@ -4036,7 +4042,10 @@
       "importFailed": "Gagal mengimpor",
       "importInvalid": "Berkas itu tidak berisi graf model.",
       "importUnsupported": "Berkas itu bukan model GeoLibre.",
-      "rasterOutputUnsupported": "\"{{name}}\" adalah hasil raster yang tidak dapat ditambahkan ke peta oleh versi ini."
+      "rasterOutputUnsupported": "\"{{name}}\" adalah hasil raster yang tidak dapat ditambahkan ke peta oleh versi ini.",
+      "portNeedsVector": "\"{{port}}\" memerlukan data vektor, tetapi yang datang adalah raster.",
+      "toolNoOutput": "\"{{tool}}\" tidak menghasilkan keluaran.",
+      "toolNoUsableOutput": "\"{{tool}}\" tidak menghasilkan keluaran yang dapat digunakan."
     },
     "parameterField": {
       "selectLayer": "Pilih layer...",

@@ -4051,6 +4051,8 @@
       "modelNamePlaceholder": "უსათაურო მოდელი",
       "untitledModel": "უსათაურო მოდელი",
       "newModel": "ახალი",
+      "arrange": "დალაგება",
+      "arrangeHint": "კვანძების დალაგება ნაკადის მიმართულებით",
       "runModel": "გაშვება",
       "cancelRun": "გაუქმება",
       "runCancelled": "გაშვება გაუქმდა.",
@@ -4072,6 +4074,8 @@
       "exportModel": "ექსპორტი",
       "savedModels": "შენახული მოდელები",
       "loadModelPlaceholder": "შენახული მოდელის ჩატვირთვა...",
+      "deleteModel": "წაშლა",
+      "deletedLog": "მოდელი წაშლილია პროექტიდან.",
       "searchTools": "ხელსაწყოების ძებნა",
       "loadingTools": "ხელსაწყოები იტვირთება...",
       "noToolsMatch": "თქვენს ძებნას ხელსაწყო არ ემთხვევა.",
@@ -4085,6 +4089,8 @@
       "removeConnection": "კავშირის წაშლა",
       "removeNode": "კვანძის წაშლა",
       "resizePanel": "პანელის ზომის შეცვლა",
+      "resizePalette": "ხელსაწყოთა პალიტრის ზომის შეცვლა",
+      "resizeInspector": "თვისებების პანელის ზომის შეცვლა",
       "selectNodeHint": "აირჩიეთ კვანძი მისი პარამეტრების შესაცვლელად.",
       "sourceLayer": "წყაროს ფენა",
       "chooseLayer": "აირჩიეთ ფენა...",
@@ -4103,7 +4109,10 @@
       "importFailed": "იმპორტი ვერ მოხერხდა",
       "importInvalid": "ეს ფაილი მოდელის გრაფს არ შეიცავს.",
       "importUnsupported": "ეს ფაილი GeoLibre-ის მოდელი არ არის.",
-      "rasterOutputUnsupported": "„{{name}}“ არის რასტრული შედეგი, რომელსაც ეს ბილდი რუკაზე ვერ დაამატებს."
+      "rasterOutputUnsupported": "„{{name}}“ არის რასტრული შედეგი, რომელსაც ეს ბილდი რუკაზე ვერ დაამატებს.",
+      "portNeedsVector": "„{{port}}“ საჭიროებს ვექტორულ მონაცემს, მაგრამ მივიდა რასტრი.",
+      "toolNoOutput": "„{{tool}}“-მა შედეგი ვერ დააბრუნა.",
+      "toolNoUsableOutput": "„{{tool}}“-მა გამოსადეგი შედეგი ვერ დააბრუნა."
     },
     "parameterField": {
       "selectLayer": "აირჩიეთ ფენა...",

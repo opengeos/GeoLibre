@@ -4051,6 +4051,8 @@
       "modelNamePlaceholder": "مدل بدون عنوان",
       "untitledModel": "مدل بدون عنوان",
       "newModel": "جدید",
+      "arrange": "چیدمان",
+      "arrangeHint": "چیدن گره‌ها در امتداد جریان",
       "runModel": "اجرا",
       "cancelRun": "لغو",
       "runCancelled": "اجرا لغو شد.",
@@ -4072,6 +4074,8 @@
       "exportModel": "برون‌ریزی",
       "savedModels": "مدل‌های ذخیره‌شده",
       "loadModelPlaceholder": "بارگذاری یک مدل ذخیره‌شده...",
+      "deleteModel": "حذف",
+      "deletedLog": "مدل از پروژه حذف شد.",
       "searchTools": "جست‌وجوی ابزارها",
       "loadingTools": "در حال بارگذاری ابزارها...",
       "noToolsMatch": "هیچ ابزاری با جست‌وجوی شما مطابقت ندارد.",
@@ -4085,6 +4089,8 @@
       "removeConnection": "حذف اتصال",
       "removeNode": "حذف گره",
       "resizePanel": "تغییر اندازهٔ پنل",
+      "resizePalette": "تغییر اندازهٔ پالت ابزارها",
+      "resizeInspector": "تغییر اندازهٔ پنل ویژگی‌ها",
       "selectNodeHint": "برای ویرایش تنظیمات، یک گره را انتخاب کنید.",
       "sourceLayer": "لایهٔ مبدأ",
       "chooseLayer": "یک لایه انتخاب کنید...",
@@ -4103,7 +4109,10 @@
       "importFailed": "درون‌ریزی ناموفق بود",
       "importInvalid": "این پرونده شامل گراف مدل نیست.",
       "importUnsupported": "این پرونده یک مدل GeoLibre نیست.",
-      "rasterOutputUnsupported": "«{{name}}» یک نتیجهٔ رستری است که این نسخه نمی‌تواند به نقشه بیفزاید."
+      "rasterOutputUnsupported": "«{{name}}» یک نتیجهٔ رستری است که این نسخه نمی‌تواند به نقشه بیفزاید.",
+      "portNeedsVector": "«{{port}}» به دادهٔ برداری نیاز دارد، اما یک رستر دریافت شد.",
+      "toolNoOutput": "«{{tool}}» هیچ خروجی تولید نکرد.",
+      "toolNoUsableOutput": "«{{tool}}» خروجی قابل‌استفاده‌ای تولید نکرد."
     },
     "parameterField": {
       "selectLayer": "یک لایه برگزینید...",

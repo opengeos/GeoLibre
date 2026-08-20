@@ -4051,6 +4051,8 @@
       "modelNamePlaceholder": "Naamloos model",
       "untitledModel": "Naamloos model",
       "newModel": "Nieuw",
+      "arrange": "Ordenen",
+      "arrangeHint": "De knooppunten langs de stroom ordenen",
       "runModel": "Uitvoeren",
       "cancelRun": "Annuleren",
       "runCancelled": "Uitvoeren geannuleerd.",
@@ -4072,6 +4074,8 @@
       "exportModel": "Exporteren",
       "savedModels": "Opgeslagen modellen",
       "loadModelPlaceholder": "Een opgeslagen model laden...",
+      "deleteModel": "Verwijderen",
+      "deletedLog": "Model verwijderd uit het project.",
       "searchTools": "Gereedschappen zoeken",
       "loadingTools": "Gereedschappen laden...",
       "noToolsMatch": "Geen gereedschappen komen overeen met uw zoekopdracht.",
@@ -4085,6 +4089,8 @@
       "removeConnection": "Verbinding verwijderen",
       "removeNode": "Knooppunt verwijderen",
       "resizePanel": "Paneelgrootte wijzigen",
+      "resizePalette": "Grootte van het gereedschapspalet wijzigen",
+      "resizeInspector": "Grootte van het eigenschappenpaneel wijzigen",
       "selectNodeHint": "Selecteer een knooppunt om de instellingen te bewerken.",
       "sourceLayer": "Bronlaag",
       "chooseLayer": "Kies een laag...",
@@ -4103,7 +4109,10 @@
       "importFailed": "Importeren mislukt",
       "importInvalid": "Dat bestand bevat geen modelgraaf.",
       "importUnsupported": "Dat bestand is geen GeoLibre-model.",
-      "rasterOutputUnsupported": "“{{name}}” is een rasterresultaat dat deze build niet aan de kaart kan toevoegen."
+      "rasterOutputUnsupported": "“{{name}}” is een rasterresultaat dat deze build niet aan de kaart kan toevoegen.",
+      "portNeedsVector": "“{{port}}” heeft vectorgegevens nodig, maar er kwam een raster binnen.",
+      "toolNoOutput": "“{{tool}}” heeft geen uitvoer opgeleverd.",
+      "toolNoUsableOutput": "“{{tool}}” heeft geen bruikbare uitvoer opgeleverd."
     },
     "parameterField": {
       "selectLayer": "Selecteer een laag...",

@@ -4185,6 +4185,8 @@
       "modelNamePlaceholder": "Модель без названия",
       "untitledModel": "Модель без названия",
       "newModel": "Создать",
+      "arrange": "Упорядочить",
+      "arrangeHint": "Расставить узлы вдоль потока обработки",
       "runModel": "Запустить",
       "cancelRun": "Отмена",
       "runCancelled": "Выполнение отменено.",
@@ -4206,6 +4208,8 @@
       "exportModel": "Экспорт",
       "savedModels": "Сохранённые модели",
       "loadModelPlaceholder": "Загрузить сохранённую модель...",
+      "deleteModel": "Удалить",
+      "deletedLog": "Модель удалена из проекта.",
       "searchTools": "Поиск инструментов",
       "loadingTools": "Загрузка инструментов...",
       "noToolsMatch": "Нет инструментов, соответствующих запросу.",
@@ -4219,6 +4223,8 @@
       "removeConnection": "Удалить связь",
       "removeNode": "Удалить узел",
       "resizePanel": "Изменить размер панели",
+      "resizePalette": "Изменить размер палитры инструментов",
+      "resizeInspector": "Изменить размер панели свойств",
       "selectNodeHint": "Выберите узел, чтобы изменить его настройки.",
       "sourceLayer": "Исходный слой",
       "chooseLayer": "Выберите слой...",
@@ -4237,7 +4243,10 @@
       "importFailed": "Не удалось импортировать",
       "importInvalid": "Этот файл не содержит графа модели.",
       "importUnsupported": "Этот файл не является моделью GeoLibre.",
-      "rasterOutputUnsupported": "«{{name}}» — растровый результат, который эта сборка не может добавить на карту."
+      "rasterOutputUnsupported": "«{{name}}» — растровый результат, который эта сборка не может добавить на карту.",
+      "portNeedsVector": "«{{port}}» требует векторных данных, но поступил растр.",
+      "toolNoOutput": "«{{tool}}» не выдал результата.",
+      "toolNoUsableOutput": "«{{tool}}» не выдал пригодного результата."
     },
     "parameterField": {
       "selectLayer": "Выберите слой...",

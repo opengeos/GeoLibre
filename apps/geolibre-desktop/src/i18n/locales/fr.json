@@ -4051,6 +4051,8 @@
       "modelNamePlaceholder": "Modèle sans titre",
       "untitledModel": "Modèle sans titre",
       "newModel": "Nouveau",
+      "arrange": "Organiser",
+      "arrangeHint": "Disposer les nœuds le long du flux",
       "runModel": "Exécuter",
       "cancelRun": "Annuler",
       "runCancelled": "Exécution annulée.",
@@ -4072,6 +4074,8 @@
       "exportModel": "Exporter",
       "savedModels": "Modèles enregistrés",
       "loadModelPlaceholder": "Charger un modèle enregistré...",
+      "deleteModel": "Supprimer",
+      "deletedLog": "Modèle supprimé du projet.",
       "searchTools": "Rechercher des outils",
       "loadingTools": "Chargement des outils...",
       "noToolsMatch": "Aucun outil ne correspond à votre recherche.",
@@ -4085,6 +4089,8 @@
       "removeConnection": "Supprimer la connexion",
       "removeNode": "Supprimer le nœud",
       "resizePanel": "Redimensionner le panneau",
+      "resizePalette": "Redimensionner la palette d'outils",
+      "resizeInspector": "Redimensionner le panneau des propriétés",
       "selectNodeHint": "Sélectionnez un nœud pour modifier ses paramètres.",
       "sourceLayer": "Couche source",
       "chooseLayer": "Choisir une couche...",
@@ -4103,7 +4109,10 @@
       "importFailed": "Échec de l'importation",
       "importInvalid": "Ce fichier ne contient pas de graphe de modèle.",
       "importUnsupported": "Ce fichier n'est pas un modèle GeoLibre.",
-      "rasterOutputUnsupported": "« {{name}} » est un résultat raster que cette version ne peut pas ajouter à la carte."
+      "rasterOutputUnsupported": "« {{name}} » est un résultat raster que cette version ne peut pas ajouter à la carte.",
+      "portNeedsVector": "« {{port}} » nécessite des données vectorielles, mais un raster est arrivé.",
+      "toolNoOutput": "« {{tool}} » n'a produit aucun résultat.",
+      "toolNoUsableOutput": "« {{tool}} » n'a produit aucun résultat exploitable."
     },
     "parameterField": {
       "selectLayer": "Sélectionner une couche...",

@@ -3984,6 +3984,8 @@
       "modelNamePlaceholder": "未命名模型",
       "untitledModel": "未命名模型",
       "newModel": "新建",
+      "arrange": "排列",
+      "arrangeHint": "沿处理流程排列节点",
       "runModel": "运行",
       "cancelRun": "取消",
       "runCancelled": "已取消运行。",
@@ -4005,6 +4007,8 @@
       "exportModel": "导出",
       "savedModels": "已保存的模型",
       "loadModelPlaceholder": "加载已保存的模型…",
+      "deleteModel": "删除",
+      "deletedLog": "模型已从项目中删除。",
       "searchTools": "搜索工具",
       "loadingTools": "正在加载工具…",
       "noToolsMatch": "没有与搜索匹配的工具。",
@@ -4018,6 +4022,8 @@
       "removeConnection": "删除连接",
       "removeNode": "删除节点",
       "resizePanel": "调整面板大小",
+      "resizePalette": "调整工具面板大小",
+      "resizeInspector": "调整属性面板大小",
       "selectNodeHint": "选择一个节点以编辑其设置。",
       "sourceLayer": "源图层",
       "chooseLayer": "选择图层…",
@@ -4036,7 +4042,10 @@
       "importFailed": "导入失败",
       "importInvalid": "该文件不包含模型图。",
       "importUnsupported": "该文件不是 GeoLibre 模型。",
-      "rasterOutputUnsupported": "“{{name}}”是栅格结果，此版本无法将其添加到地图。"
+      "rasterOutputUnsupported": "“{{name}}”是栅格结果，此版本无法将其添加到地图。",
+      "portNeedsVector": "“{{port}}”需要矢量数据，但收到的是栅格。",
+      "toolNoOutput": "“{{tool}}”没有产生输出。",
+      "toolNoUsableOutput": "“{{tool}}”没有产生可用的输出。"
     },
     "parameterField": {
       "selectLayer": "选择一个图层...",

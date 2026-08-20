@@ -3984,6 +3984,8 @@
       "modelNamePlaceholder": "제목 없는 모델",
       "untitledModel": "제목 없는 모델",
       "newModel": "새로 만들기",
+      "arrange": "정렬",
+      "arrangeHint": "노드를 처리 흐름에 따라 배치합니다",
       "runModel": "실행",
       "cancelRun": "취소",
       "runCancelled": "실행을 취소했습니다.",
@@ -4005,6 +4007,8 @@
       "exportModel": "내보내기",
       "savedModels": "저장된 모델",
       "loadModelPlaceholder": "저장된 모델 불러오기...",
+      "deleteModel": "삭제",
+      "deletedLog": "모델을 프로젝트에서 삭제했습니다.",
       "searchTools": "도구 검색",
       "loadingTools": "도구를 불러오는 중...",
       "noToolsMatch": "검색과 일치하는 도구가 없습니다.",
@@ -4018,6 +4022,8 @@
       "removeConnection": "연결 제거",
       "removeNode": "노드 제거",
       "resizePanel": "패널 크기 조정",
+      "resizePalette": "도구 팔레트 크기 조정",
+      "resizeInspector": "속성 패널 크기 조정",
       "selectNodeHint": "노드를 선택하면 설정을 편집할 수 있습니다.",
       "sourceLayer": "원본 레이어",
       "chooseLayer": "레이어 선택...",
@@ -4036,7 +4042,10 @@
       "importFailed": "가져오기 실패",
       "importInvalid": "해당 파일에는 모델 그래프가 없습니다.",
       "importUnsupported": "해당 파일은 GeoLibre 모델이 아닙니다.",
-      "rasterOutputUnsupported": "\"{{name}}\"은(는) 래스터 결과이며 이 빌드에서는 지도에 추가할 수 없습니다."
+      "rasterOutputUnsupported": "\"{{name}}\"은(는) 래스터 결과이며 이 빌드에서는 지도에 추가할 수 없습니다.",
+      "portNeedsVector": "\"{{port}}\"에는 벡터 데이터가 필요하지만 래스터가 전달되었습니다.",
+      "toolNoOutput": "\"{{tool}}\"이(가) 출력을 생성하지 않았습니다.",
+      "toolNoUsableOutput": "\"{{tool}}\"이(가) 사용할 수 있는 출력을 생성하지 않았습니다."
     },
     "parameterField": {
       "selectLayer": "레이어 선택...",

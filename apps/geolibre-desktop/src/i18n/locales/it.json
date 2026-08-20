@@ -4051,6 +4051,8 @@
       "modelNamePlaceholder": "Modello senza titolo",
       "untitledModel": "Modello senza titolo",
       "newModel": "Nuovo",
+      "arrange": "Disponi",
+      "arrangeHint": "Dispone i nodi lungo il flusso",
       "runModel": "Esegui",
       "cancelRun": "Annulla",
       "runCancelled": "Esecuzione annullata.",
@@ -4072,6 +4074,8 @@
       "exportModel": "Esporta",
       "savedModels": "Modelli salvati",
       "loadModelPlaceholder": "Carica un modello salvato...",
+      "deleteModel": "Elimina",
+      "deletedLog": "Modello eliminato dal progetto.",
       "searchTools": "Cerca strumenti",
       "loadingTools": "Caricamento degli strumenti...",
       "noToolsMatch": "Nessuno strumento corrisponde alla ricerca.",
@@ -4085,6 +4089,8 @@
       "removeConnection": "Rimuovi collegamento",
       "removeNode": "Rimuovi nodo",
       "resizePanel": "Ridimensiona il pannello",
+      "resizePalette": "Ridimensiona la tavolozza degli strumenti",
+      "resizeInspector": "Ridimensiona il pannello delle proprietà",
       "selectNodeHint": "Seleziona un nodo per modificarne le impostazioni.",
       "sourceLayer": "Livello di origine",
       "chooseLayer": "Scegli un livello...",
@@ -4103,7 +4109,10 @@
       "importFailed": "Importazione non riuscita",
       "importInvalid": "Quel file non contiene un grafo di modello.",
       "importUnsupported": "Quel file non è un modello GeoLibre.",
-      "rasterOutputUnsupported": "«{{name}}» è un risultato raster che questa build non può aggiungere alla mappa."
+      "rasterOutputUnsupported": "«{{name}}» è un risultato raster che questa build non può aggiungere alla mappa.",
+      "portNeedsVector": "«{{port}}» richiede dati vettoriali, ma è arrivato un raster.",
+      "toolNoOutput": "«{{tool}}» non ha prodotto alcun risultato.",
+      "toolNoUsableOutput": "«{{tool}}» non ha prodotto alcun risultato utilizzabile."
     },
     "parameterField": {
       "selectLayer": "Seleziona un livello...",

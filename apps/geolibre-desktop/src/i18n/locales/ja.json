@@ -3984,6 +3984,8 @@
       "modelNamePlaceholder": "名称未設定のモデル",
       "untitledModel": "名称未設定のモデル",
       "newModel": "新規",
+      "arrange": "整列",
+      "arrangeHint": "ノードを処理の流れに沿って並べます",
       "runModel": "実行",
       "cancelRun": "キャンセル",
       "runCancelled": "実行をキャンセルしました。",
@@ -4005,6 +4007,8 @@
       "exportModel": "エクスポート",
       "savedModels": "保存済みのモデル",
       "loadModelPlaceholder": "保存済みモデルを読み込む…",
+      "deleteModel": "削除",
+      "deletedLog": "モデルをプロジェクトから削除しました。",
       "searchTools": "ツールを検索",
       "loadingTools": "ツールを読み込んでいます…",
       "noToolsMatch": "検索に一致するツールはありません。",
@@ -4018,6 +4022,8 @@
       "removeConnection": "接続を削除",
       "removeNode": "ノードを削除",
       "resizePanel": "パネルのサイズを変更",
+      "resizePalette": "ツールパレットのサイズを変更",
+      "resizeInspector": "プロパティパネルのサイズを変更",
       "selectNodeHint": "ノードを選択すると設定を編集できます。",
       "sourceLayer": "ソースレイヤー",
       "chooseLayer": "レイヤーを選択…",
@@ -4036,7 +4042,10 @@
       "importFailed": "インポートに失敗しました",
       "importInvalid": "このファイルにはモデルグラフが含まれていません。",
       "importUnsupported": "このファイルは GeoLibre のモデルではありません。",
-      "rasterOutputUnsupported": "「{{name}}」はラスター結果のため、このビルドでは地図に追加できません。"
+      "rasterOutputUnsupported": "「{{name}}」はラスター結果のため、このビルドでは地図に追加できません。",
+      "portNeedsVector": "「{{port}}」にはベクターデータが必要ですが、ラスターが渡されました。",
+      "toolNoOutput": "「{{tool}}」は出力を生成しませんでした。",
+      "toolNoUsableOutput": "「{{tool}}」は利用できる出力を生成しませんでした。"
     },
     "parameterField": {
       "selectLayer": "レイヤーを選択...",

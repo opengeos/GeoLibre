@@ -4051,6 +4051,8 @@
       "modelNamePlaceholder": "Modelo sem título",
       "untitledModel": "Modelo sem título",
       "newModel": "Novo",
+      "arrange": "Organizar",
+      "arrangeHint": "Dispor os nós ao longo do fluxo",
       "runModel": "Executar",
       "cancelRun": "Cancelar",
       "runCancelled": "Execução cancelada.",
@@ -4072,6 +4074,8 @@
       "exportModel": "Exportar",
       "savedModels": "Modelos guardados",
       "loadModelPlaceholder": "Carregar um modelo guardado...",
+      "deleteModel": "Excluir",
+      "deletedLog": "Modelo eliminado do projeto.",
       "searchTools": "Pesquisar ferramentas",
       "loadingTools": "A carregar ferramentas...",
       "noToolsMatch": "Nenhuma ferramenta corresponde à sua pesquisa.",
@@ -4085,6 +4089,8 @@
       "removeConnection": "Remover ligação",
       "removeNode": "Remover nó",
       "resizePanel": "Redimensionar painel",
+      "resizePalette": "Redimensionar a paleta de ferramentas",
+      "resizeInspector": "Redimensionar o painel de propriedades",
       "selectNodeHint": "Selecione um nó para editar as suas definições.",
       "sourceLayer": "Camada de origem",
       "chooseLayer": "Escolher uma camada...",
@@ -4103,7 +4109,10 @@
       "importFailed": "A importação falhou",
       "importInvalid": "Esse ficheiro não contém um grafo de modelo.",
       "importUnsupported": "Esse ficheiro não é um modelo do GeoLibre.",
-      "rasterOutputUnsupported": "«{{name}}» é um resultado raster que esta versão não consegue adicionar ao mapa."
+      "rasterOutputUnsupported": "«{{name}}» é um resultado raster que esta versão não consegue adicionar ao mapa.",
+      "portNeedsVector": "«{{port}}» precisa de dados vetoriais, mas chegou um raster.",
+      "toolNoOutput": "«{{tool}}» não produziu qualquer resultado.",
+      "toolNoUsableOutput": "«{{tool}}» não produziu qualquer resultado utilizável."
     },
     "parameterField": {
       "selectLayer": "Selecionar uma camada...",

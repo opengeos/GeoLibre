@@ -9,6 +9,7 @@ import {
   connectNodes,
   createsCycle,
   emptyModelGraph,
+  layoutGraph,
   moveNode,
   removeEdge,
   removeNode,
@@ -332,5 +333,30 @@ describe("auto layout", () => {
     const laid = autoLayout(graph);
     assert.equal(laid.nodes[0].x, laid.nodes[1].x);
     assert.notEqual(laid.nodes[0].y, laid.nodes[1].y);
+  });
+
+  it("re-lays hand-placed nodes when the user asks for it", () => {
+    // autoLayout deliberately leaves a positioned graph alone; the Arrange
+    // button is the explicit request to overwrite those positions, so it goes
+    // through layoutGraph instead.
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "a", kind: "input", x: 900, y: 400, layerId: "roads" },
+        { id: "b", kind: "tool", x: 30, y: 40, provider: "vector", toolId: "buffer" },
+        { id: "c", kind: "output", x: 120, y: 500, name: "Out" },
+      ],
+      edges: [
+        { id: "e1", from: "a", fromPort: "out", to: "b", toPort: "layer" },
+        { id: "e2", from: "b", fromPort: "out", to: "c", toPort: "in" },
+      ],
+    };
+    const laid = layoutGraph(graph);
+    const x = Object.fromEntries(laid.nodes.map((node) => [node.id, node.x]));
+    assert.ok(x.a < x.b && x.b < x.c);
+  });
+
+  it("leaves an empty graph untouched when arranging", () => {
+    const graph: ProcessingModelGraph = { nodes: [], edges: [] };
+    assert.deepEqual(layoutGraph(graph), graph);
   });
 });

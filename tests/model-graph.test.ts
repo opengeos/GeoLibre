@@ -475,7 +475,40 @@ describe("legacy linear projection", () => {
       steps.map((step) => step.toolId),
       ["buffer"],
     );
-    assert.deepEqual(steps[0].parameters, { distance: 50 });
+    // The source layer lives on the input node, and runModel only overrides a
+    // step's input parameter from step 1 onwards — so step 0 has to carry it or
+    // the fallback chain fails on its very first tool.
+    assert.deepEqual(steps[0].parameters, { distance: 50, layer: "roads" });
+  });
+
+  it("carries the source layer into a non-default input parameter too", () => {
+    const graph = chainGraph();
+    graph.edges[0].toPort = "input";
+    const steps = graphToLinearSteps(graph);
+    assert.equal(steps[0].inputParam, "input");
+    assert.deepEqual(steps[0].parameters, { distance: 50, input: "roads" });
+  });
+
+  it("refuses to project a branch that shares one input node", () => {
+    // Every tool node still has in-degree 1 and out-degree 1 here, so only the
+    // input node's own fan-out reveals that this is not a linear chain. Left
+    // unchecked it would project as [a, b] and runModel would feed b from a's
+    // output instead of from the shared input.
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "in1", kind: "input", x: 0, y: 0, layerId: "roads" },
+        { id: "a", kind: "tool", x: 0, y: 0, provider: "vector", toolId: "buffer" },
+        { id: "b", kind: "tool", x: 0, y: 0, provider: "vector", toolId: "centroids" },
+        { id: "o", kind: "output", x: 0, y: 0, name: "Out" },
+      ],
+      edges: [
+        { id: "e1", from: "in1", fromPort: "out", to: "a", toPort: "layer" },
+        { id: "e2", from: "in1", fromPort: "out", to: "b", toPort: "layer" },
+        { id: "e3", from: "a", fromPort: "out", to: "o", toPort: "in" },
+        { id: "e4", from: "b", fromPort: "out", to: "o", toPort: "in" },
+      ],
+    };
+    assert.deepEqual(graphToLinearSteps(graph), []);
   });
 
   it("refuses to project a multi-input tool rather than truncating it", () => {

@@ -264,12 +264,28 @@ export function createsCycle(graph: ProcessingModelGraph, from: string, to: stri
  * positions — a hand-written or older pipeline file would otherwise stack every
  * node at the origin.
  *
+ * Only fills positions in when there are none to preserve; use
+ * {@link layoutGraph} for the user-invoked "arrange" command, which is an
+ * explicit request to overwrite the hand-placed positions.
+ *
  * @param graph The imported graph.
  * @returns The graph, with positions filled in only if they were all at 0,0.
  */
 export function autoLayout(graph: ProcessingModelGraph): ProcessingModelGraph {
   const placed = graph.nodes.some((node) => node.x !== 0 || node.y !== 0);
-  if (placed || graph.nodes.length === 0) return graph;
+  if (placed) return graph;
+  return layoutGraph(graph);
+}
+
+/**
+ * Arrange every node on a left-to-right grid by its depth from the sources,
+ * discarding the positions it already had.
+ *
+ * @param graph The graph to lay out.
+ * @returns The graph with every node repositioned.
+ */
+export function layoutGraph(graph: ProcessingModelGraph): ProcessingModelGraph {
+  if (graph.nodes.length === 0) return graph;
   const COLUMN = 240;
   const ROW = 120;
   // Depth from the sources, so the layout reads left-to-right along the flow.

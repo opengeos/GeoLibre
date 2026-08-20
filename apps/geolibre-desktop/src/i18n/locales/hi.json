@@ -4051,6 +4051,8 @@
       "modelNamePlaceholder": "बिना शीर्षक मॉडल",
       "untitledModel": "बिना शीर्षक मॉडल",
       "newModel": "नया",
+      "arrange": "व्यवस्थित करें",
+      "arrangeHint": "नोड्स को प्रवाह के अनुसार व्यवस्थित करें",
       "runModel": "चलाएँ",
       "cancelRun": "रद्द करें",
       "runCancelled": "चलना रद्द किया गया।",
@@ -4072,6 +4074,8 @@
       "exportModel": "निर्यात",
       "savedModels": "सहेजे गए मॉडल",
       "loadModelPlaceholder": "सहेजा गया मॉडल लोड करें...",
+      "deleteModel": "हटाएँ",
+      "deletedLog": "मॉडल परियोजना से हटाया गया।",
       "searchTools": "उपकरण खोजें",
       "loadingTools": "उपकरण लोड हो रहे हैं...",
       "noToolsMatch": "आपकी खोज से कोई उपकरण मेल नहीं खाता।",
@@ -4085,6 +4089,8 @@
       "removeConnection": "कनेक्शन हटाएँ",
       "removeNode": "नोड हटाएँ",
       "resizePanel": "पैनल का आकार बदलें",
+      "resizePalette": "उपकरण पैलेट का आकार बदलें",
+      "resizeInspector": "गुण पैनल का आकार बदलें",
       "selectNodeHint": "सेटिंग्स संपादित करने के लिए कोई नोड चुनें।",
       "sourceLayer": "स्रोत परत",
       "chooseLayer": "एक परत चुनें...",
@@ -4103,7 +4109,10 @@
       "importFailed": "आयात विफल रहा",
       "importInvalid": "उस फ़ाइल में मॉडल ग्राफ़ नहीं है।",
       "importUnsupported": "वह फ़ाइल GeoLibre मॉडल नहीं है।",
-      "rasterOutputUnsupported": "\"{{name}}\" एक रास्टर परिणाम है, जिसे यह बिल्ड मानचित्र में नहीं जोड़ सकता।"
+      "rasterOutputUnsupported": "\"{{name}}\" एक रास्टर परिणाम है, जिसे यह बिल्ड मानचित्र में नहीं जोड़ सकता।",
+      "portNeedsVector": "\"{{port}}\" को वेक्टर डेटा चाहिए, लेकिन रास्टर मिला।",
+      "toolNoOutput": "\"{{tool}}\" ने कोई आउटपुट नहीं बनाया।",
+      "toolNoUsableOutput": "\"{{tool}}\" ने कोई उपयोगी आउटपुट नहीं बनाया।"
     },
     "parameterField": {
       "selectLayer": "एक लेयर चुनें...",

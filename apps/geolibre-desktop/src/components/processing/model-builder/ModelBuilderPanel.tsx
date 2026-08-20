@@ -28,8 +28,20 @@ import {
   type WhiteboxTool,
 } from "@geolibre/processing";
 import { Button, Input, Label, ScrollArea, Select, cn } from "@geolibre/ui";
-import { Download, GripVertical, Loader2, Play, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import {
+  Download,
+  GripVertical,
+  LayoutGrid,
+  Loader2,
+  Play,
+  Plus,
+  Save,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -38,6 +50,7 @@ import {
   useState,
   type CSSProperties,
   type DragEvent as ReactDragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from "react";
@@ -58,6 +71,7 @@ import {
   autoLayout,
   connectNodes,
   emptyModelGraph,
+  layoutGraph,
   moveNode,
   removeEdge,
   removeNode,
@@ -74,9 +88,30 @@ const TOOL_DRAG_TYPE = "application/x-geolibre-model-tool";
 /** Identifies an exported Model Builder file, so a stray JSON is rejected. */
 const MODEL_SCHEMA = "https://geolibre.app/schemas/model-graph-v1.json";
 const MODEL_VERSION = "1.0.0";
+/** Bounds on the draggable palette and inspector columns, in pixels. */
+const MIN_SIDE_WIDTH = 140;
+const MAX_SIDE_WIDTH = 480;
+const DEFAULT_PALETTE_WIDTH = 208;
+const DEFAULT_INSPECTOR_WIDTH = 224;
+/**
+ * Share of the panel a single side column may take. Both columns are
+ * `shrink-0`, so without this two columns dragged wide (or a panel later
+ * resized narrow) would squeeze the canvas between them to nothing with no way
+ * left to grab a node and drag the column back.
+ */
+const MAX_SIDE_FRACTION = 0.4;
+
 /** Sanity bounds on an imported file; a hand-built model is nowhere near these. */
 const MAX_IMPORT_NODES = 2000;
 const MAX_IMPORT_EDGES = 4000;
+/**
+ * Byte cap checked before the file is read, mirroring how the other importers
+ * in this app bound size (`MAX_CIM_BYTES` in `arcgis-project-import.ts`). The
+ * node/edge caps above can only fire once the whole file has been decoded and
+ * parsed, so a pathological file would be fully loaded before anything could
+ * reject it. A model at the node/edge caps serializes well under this.
+ */
+const MAX_IMPORT_BYTES = 16 * 1024 * 1024;
 
 const MIN_WIDTH = 820;
 const MIN_HEIGHT = 420;
@@ -122,10 +157,13 @@ export function ModelBuilderPanel({
   const layers = useAppStore((s) => s.layers);
   const savedModels = useAppStore((s) => s.models);
   const saveModel = useAppStore((s) => s.saveModel);
+  const deleteModel = useAppStore((s) => s.deleteModel);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
 
   const [position, setPosition] = useState({ x: 48, y: 48 });
   const [size, setSize] = useState({ width: 980, height: 560 });
+  const [paletteWidth, setPaletteWidth] = useState(DEFAULT_PALETTE_WIDTH);
+  const [inspectorWidth, setInspectorWidth] = useState(DEFAULT_INSPECTOR_WIDTH);
   const [modelId, setModelId] = useState<string>(() => createId());
   const [modelName, setModelName] = useState("");
   const [graph, setGraph] = useState<ProcessingModelGraph>(emptyModelGraph);
@@ -139,6 +177,12 @@ export function ModelBuilderPanel({
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const [nodeStatus, setNodeStatus] = useState<Record<string, "running" | "done" | "error">>({});
+  /**
+   * The output port a keyboard/click user has armed, waiting for an input port
+   * to complete the connection. Null during pointer drags, which carry their
+   * own in-flight state in {@link linking}.
+   */
+  const [armedPort, setArmedPort] = useState<{ nodeId: string; portId: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -256,6 +300,9 @@ export function ModelBuilderPanel({
 
   const resetRunState = useCallback(() => {
     abortRun();
+    // A port armed against the outgoing graph would wire the wrong node once a
+    // different model is loaded under it.
+    setArmedPort(null);
     // abortRun() clears the ref, so the in-flight run's `finally` no longer
     // matches its own controller and will not clear this itself.
     setRunning(false);
@@ -281,6 +328,23 @@ export function ModelBuilderPanel({
     },
     [resetRunState],
   );
+
+  /**
+   * Forget the loaded model. The picker only offers models the project already
+   * holds, so the button is meaningful exactly when the open model is one of
+   * them; deleting leaves the canvas as-is so an accidental click loses only
+   * the saved copy, which Save writes straight back.
+   */
+  const handleDeleteModel = useCallback(() => {
+    if (!savedModels.some((model) => model.id === modelId)) return;
+    deleteModel(modelId);
+    appendLog(t("processing.modelBuilder.deletedLog"));
+  }, [savedModels, deleteModel, modelId, appendLog, t]);
+
+  /** Re-run the depth-based layout over the nodes the user has moved around. */
+  const handleArrange = useCallback(() => {
+    setGraph((current) => layoutGraph(current));
+  }, []);
 
   const handleSave = useCallback(() => {
     // Also write the legacy linear projection when the graph happens to be a
@@ -321,6 +385,11 @@ export function ModelBuilderPanel({
   const handleImport = useCallback(
     async (file: File) => {
       try {
+        // Bounded before the read, so an obviously-too-large file never gets
+        // decoded and parsed in full just to be rejected afterwards.
+        if (file.size > MAX_IMPORT_BYTES) {
+          throw new Error(t("processing.modelBuilder.importTooLarge"));
+        }
         const parsed = JSON.parse(await file.text()) as {
           $schema?: unknown;
           version?: unknown;
@@ -426,13 +495,24 @@ export function ModelBuilderPanel({
       const startX = event.clientX;
       const startY = event.clientY;
       const origin = { x: node.x, y: node.y };
+      // A pointer can report several moves per frame, and each setGraph here
+      // re-runs validateModelGraph over the whole graph and repaints the edge
+      // layer. Coalescing to one commit per animation frame keeps that work at
+      // display rate no matter how fast the device samples.
+      let frame = 0;
+      let pending: { x: number; y: number } | null = null;
+      const commit = () => {
+        frame = 0;
+        const next = pending;
+        pending = null;
+        if (next) setGraph((current) => moveNode(current, node.id, next));
+      };
       const handleMove = (move: PointerEvent) => {
-        setGraph((current) =>
-          moveNode(current, node.id, {
-            x: Math.max(0, origin.x + (move.clientX - startX)),
-            y: Math.max(0, origin.y + (move.clientY - startY)),
-          }),
-        );
+        pending = {
+          x: Math.max(0, origin.x + (move.clientX - startX)),
+          y: Math.max(0, origin.y + (move.clientY - startY)),
+        };
+        if (!frame) frame = requestAnimationFrame(commit);
       };
       const handleEnd = () => {
         if (handle.hasPointerCapture(event.pointerId))
@@ -440,6 +520,10 @@ export function ModelBuilderPanel({
         handle.removeEventListener("pointermove", handleMove);
         handle.removeEventListener("pointerup", handleEnd);
         handle.removeEventListener("pointercancel", handleEnd);
+        // Land the last sampled position before settling, or a move that was
+        // still waiting on its frame would be dropped on release.
+        if (frame) cancelAnimationFrame(frame);
+        commit();
         // Settle on drop so a card never comes to rest covering another's
         // ports, which would make those ports unclickable with no way back.
         setGraph((current) => settleNode(current, node.id));
@@ -458,6 +542,54 @@ export function ModelBuilderPanel({
     x: number;
     y: number;
   } | null>(null);
+
+  /**
+   * Connect two ports, reporting a refusal the way the pointer path does.
+   * Shared by the pointer drop and the keyboard click path so both wire nodes
+   * through exactly the same rules.
+   */
+  const connectPorts = useCallback(
+    (from: { nodeId: string; portId: string }, to: { nodeId: string; portId: string }) => {
+      setGraph((current) => {
+        const result = connectNodes(current, from, to, createId);
+        if ("rejected" in result) {
+          appendLog(
+            result.rejected === "cycle"
+              ? t("processing.modelBuilder.connectCycle")
+              : t("processing.modelBuilder.connectSameNode"),
+          );
+          return current;
+        }
+        return result.graph;
+      });
+    },
+    [appendLog, t],
+  );
+
+  /**
+   * Keyboard/click wiring: activating an output port arms it, activating an
+   * input port completes the connection. Native button activation (Enter or
+   * Space) fires `click`, never `pointerdown`, so without this the whole
+   * canvas is unusable without a pointing device. Activating the armed port
+   * again disarms it, so there is a way out that does not need the mouse.
+   */
+  const handlePortActivate = useCallback(
+    (side: "in" | "out", nodeId: string, portId: string) => {
+      if (side === "out") {
+        setArmedPort((current) =>
+          current && current.nodeId === nodeId && current.portId === portId
+            ? null
+            : { nodeId, portId },
+        );
+        return;
+      }
+      setArmedPort((current) => {
+        if (current) connectPorts(current, { nodeId, portId });
+        return null;
+      });
+    },
+    [connectPorts],
+  );
 
   const handlePortPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>, nodeId: string, portId: string) => {
@@ -483,32 +615,14 @@ export function ModelBuilderPanel({
           ?.closest<HTMLElement>("[data-port='in']");
         const toNode = dropped?.dataset.nodeId;
         const toPort = dropped?.dataset.portId;
-        if (toNode && toPort) {
-          setGraph((current) => {
-            const result = connectNodes(
-              current,
-              { nodeId, portId },
-              { nodeId: toNode, portId: toPort },
-              createId,
-            );
-            if ("rejected" in result) {
-              appendLog(
-                result.rejected === "cycle"
-                  ? t("processing.modelBuilder.connectCycle")
-                  : t("processing.modelBuilder.connectSameNode"),
-              );
-              return current;
-            }
-            return result.graph;
-          });
-        }
+        if (toNode && toPort) connectPorts({ nodeId, portId }, { nodeId: toNode, portId: toPort });
         setLinking(null);
       };
       handle.addEventListener("pointermove", handleMove);
       handle.addEventListener("pointerup", handleEnd);
       handle.addEventListener("pointercancel", handleEnd);
     },
-    [canvasPoint, appendLog, t],
+    [canvasPoint, connectPorts],
   );
 
   // --- Running ------------------------------------------------------------
@@ -574,6 +688,7 @@ export function ModelBuilderPanel({
             layers,
             duckdb,
             log: appendLog,
+            t,
           }),
       });
       // Wait for the host's raster adds before summarising: they settle after
@@ -628,6 +743,66 @@ export function ModelBuilderPanel({
     handle.addEventListener("pointerup", handleEnd);
     handle.addEventListener("pointercancel", handleEnd);
   };
+
+  /**
+   * Drag one of the two column splitters.
+   *
+   * The palette grows as the pointer moves towards the canvas and the
+   * inspector grows as it moves away from it, which in a mirrored (RTL) layout
+   * is the opposite screen direction — hence the sign taken from the element's
+   * computed `direction` rather than assuming left-to-right.
+   */
+  /** Upper bound for one side column at the panel's current width. */
+  const maxSideWidth = Math.max(
+    MIN_SIDE_WIDTH,
+    Math.min(MAX_SIDE_WIDTH, size.width * MAX_SIDE_FRACTION),
+  );
+
+  const handleSideResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>, side: "palette" | "inspector") => {
+      event.preventDefault();
+      event.stopPropagation();
+      const handle = event.currentTarget;
+      handle.setPointerCapture(event.pointerId);
+      const dirSign = getComputedStyle(handle).direction === "rtl" ? -1 : 1;
+      const sideSign = side === "palette" ? 1 : -1;
+      const startX = event.clientX;
+      const start = side === "palette" ? paletteWidth : inspectorWidth;
+      const setWidth = side === "palette" ? setPaletteWidth : setInspectorWidth;
+      const handleMove = (move: PointerEvent) => {
+        setWidth(
+          clamp(start + (move.clientX - startX) * dirSign * sideSign, MIN_SIDE_WIDTH, maxSideWidth),
+        );
+      };
+      const handleEnd = () => {
+        if (handle.hasPointerCapture(event.pointerId))
+          handle.releasePointerCapture(event.pointerId);
+        handle.removeEventListener("pointermove", handleMove);
+        handle.removeEventListener("pointerup", handleEnd);
+        handle.removeEventListener("pointercancel", handleEnd);
+      };
+      handle.addEventListener("pointermove", handleMove);
+      handle.addEventListener("pointerup", handleEnd);
+      handle.addEventListener("pointercancel", handleEnd);
+    },
+    [paletteWidth, inspectorWidth, maxSideWidth],
+  );
+
+  /** Keyboard path for the splitters, so a column is resizable without a mouse. */
+  const handleSideResizeKey = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>, side: "palette" | "inspector") => {
+      const step = event.key === "ArrowLeft" ? -16 : event.key === "ArrowRight" ? 16 : 0;
+      if (!step) return;
+      event.preventDefault();
+      const dirSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
+      const sideSign = side === "palette" ? 1 : -1;
+      const setWidth = side === "palette" ? setPaletteWidth : setInspectorWidth;
+      setWidth((current) =>
+        clamp(current + step * dirSign * sideSign, MIN_SIDE_WIDTH, maxSideWidth),
+      );
+    },
+    [maxSideWidth],
+  );
 
   const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -716,6 +891,16 @@ export function ModelBuilderPanel({
             size="sm"
             variant="ghost"
             className="h-7 gap-1 px-2"
+            onClick={handleArrange}
+            disabled={graph.nodes.length === 0}
+            title={t("processing.modelBuilder.arrangeHint")}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" /> {t("processing.modelBuilder.arrange")}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1 px-2"
             onClick={() => importRef.current?.click()}
           >
             <Upload className="h-3.5 w-3.5" /> {t("processing.modelBuilder.importModel")}
@@ -779,7 +964,10 @@ export function ModelBuilderPanel({
 
       <div className="flex min-h-0 flex-1">
         {/* Palette */}
-        <div className="flex w-52 shrink-0 flex-col border-e">
+        <div
+          className="flex shrink-0 flex-col border-e"
+          style={{ width: Math.min(paletteWidth, maxSideWidth) }}
+        >
           <div className="space-y-1 border-b p-2">
             <Input
               value={search}
@@ -848,6 +1036,15 @@ export function ModelBuilderPanel({
             )}
           </ScrollArea>
         </div>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("processing.modelBuilder.resizePalette")}
+          tabIndex={0}
+          onPointerDown={(event) => handleSideResizeStart(event, "palette")}
+          onKeyDown={(event) => handleSideResizeKey(event, "palette")}
+          className="w-1 shrink-0 cursor-col-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
+        />
 
         {/* Canvas */}
         <div
@@ -883,8 +1080,11 @@ export function ModelBuilderPanel({
                 selected={node.id === selectedNodeId}
                 status={nodeStatus[node.id]}
                 hasIssue={issuesByNode.has(node.id)}
+                armedPortId={armedPort?.nodeId === node.id ? armedPort.portId : undefined}
+                onSelect={setSelectedNodeId}
                 onPointerDown={handleNodePointerDown}
                 onPortPointerDown={handlePortPointerDown}
+                onPortActivate={handlePortActivate}
               />
             ))}
           </div>
@@ -897,8 +1097,21 @@ export function ModelBuilderPanel({
           )}
         </div>
 
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("processing.modelBuilder.resizeInspector")}
+          tabIndex={0}
+          onPointerDown={(event) => handleSideResizeStart(event, "inspector")}
+          onKeyDown={(event) => handleSideResizeKey(event, "inspector")}
+          className="w-1 shrink-0 cursor-col-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
+        />
+
         {/* Inspector */}
-        <div className="flex w-56 shrink-0 flex-col border-s">
+        <div
+          className="flex shrink-0 flex-col border-s"
+          style={{ width: Math.min(inspectorWidth, maxSideWidth) }}
+        >
           <ScrollArea className="min-h-0 flex-1 p-2">
             <NodeInspector
               node={selectedNode}
@@ -929,22 +1142,35 @@ export function ModelBuilderPanel({
               <Label htmlFor="model-saved-picker" className="text-[11px]">
                 {t("processing.modelBuilder.savedModels")}
               </Label>
-              <Select
-                id="model-saved-picker"
-                className="mt-1 h-7 w-full text-xs"
-                value=""
-                onChange={(event) => {
-                  const model = savedModels.find((entry) => entry.id === event.target.value);
-                  if (model) handleLoadModel(model);
-                }}
-              >
-                <option value="">{t("processing.modelBuilder.loadModelPlaceholder")}</option>
-                {savedModels.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name || t("processing.modelBuilder.untitledModel")}
-                  </option>
-                ))}
-              </Select>
+              <div className="mt-1 flex items-center gap-1">
+                <Select
+                  id="model-saved-picker"
+                  className="h-7 min-w-0 flex-1 text-xs"
+                  value=""
+                  onChange={(event) => {
+                    const model = savedModels.find((entry) => entry.id === event.target.value);
+                    if (model) handleLoadModel(model);
+                  }}
+                >
+                  <option value="">{t("processing.modelBuilder.loadModelPlaceholder")}</option>
+                  {savedModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name || t("processing.modelBuilder.untitledModel")}
+                    </option>
+                  ))}
+                </Select>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 shrink-0 p-0"
+                  onClick={handleDeleteModel}
+                  disabled={!savedModels.some((model) => model.id === modelId)}
+                  title={t("processing.modelBuilder.deleteModel")}
+                  aria-label={t("processing.modelBuilder.deleteModel")}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
           )}
         </div>
@@ -1125,16 +1351,26 @@ function portsOf(
   return { inputs: descriptor?.inputs ?? [], outputs: descriptor?.outputs ?? [] };
 }
 
-/** One draggable card on the canvas. */
-function GraphNodeCard({
+/**
+ * One draggable card on the canvas.
+ *
+ * Memoized because a node drag commits a new graph object on every animation
+ * frame: without this, every card on the canvas re-renders for a move that
+ * only changed one of them. Its handler props are all `useCallback`-stable, so
+ * only the moved card's `node` identity actually changes.
+ */
+const GraphNodeCard = memo(function GraphNodeCard({
   node,
   descriptor,
   layers,
   selected,
   status,
   hasIssue,
+  armedPortId,
+  onSelect,
   onPointerDown,
   onPortPointerDown,
+  onPortActivate,
 }: {
   node: ModelGraphNode;
   descriptor: ModelToolDescriptor | undefined;
@@ -1142,12 +1378,16 @@ function GraphNodeCard({
   selected: boolean;
   status?: "running" | "done" | "error";
   hasIssue: boolean;
+  /** The output port on this node armed for a keyboard connection, if any. */
+  armedPortId?: string;
+  onSelect: (nodeId: string) => void;
   onPointerDown: (event: ReactPointerEvent<HTMLDivElement>, node: ModelGraphNode) => void;
   onPortPointerDown: (
     event: ReactPointerEvent<HTMLButtonElement>,
     nodeId: string,
     portId: string,
   ) => void;
+  onPortActivate: (side: "in" | "out", nodeId: string, portId: string) => void;
 }): ReactElement {
   const { t } = useTranslation();
   const ports = portsOf(node, descriptor);
@@ -1160,8 +1400,26 @@ function GraphNodeCard({
         : (descriptor?.name ?? node.toolId ?? "");
 
   return (
+    // Focusable with a role, so the card can be reached and selected from the
+    // keyboard; without it selecting a node (and so editing its parameters in
+    // the inspector) needed a pointer. Dragging stays pointer-only — a card's
+    // position is presentation, not part of the model.
     <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      aria-label={title}
       onPointerDown={(event) => onPointerDown(event, node)}
+      onKeyDown={(event) => {
+        // Only the card's own activation. A keydown on one of the port buttons
+        // bubbles up here, and preventDefault() on that would stop the browser
+        // synthesizing the port's `click` — which is the whole keyboard wiring
+        // path.
+        if (event.target !== event.currentTarget) return;
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onSelect(node.id);
+      }}
       style={{ left: node.x, top: node.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
       className={cn(
         "absolute cursor-grab select-none rounded-md border bg-card p-2 shadow-sm active:cursor-grabbing",
@@ -1194,8 +1452,9 @@ function GraphNodeCard({
             data-port-id={port.id}
             title={portLabel(t, port.label)}
             aria-label={t("processing.modelBuilder.inputPort", { port: portLabel(t, port.label) })}
+            onClick={() => onPortActivate("in", node.id, port.id)}
             style={{ left: -6, top: at.y - node.y - 5 }}
-            className="absolute h-2.5 w-2.5 rounded-full border border-primary bg-background"
+            className="absolute h-2.5 w-2.5 cursor-pointer rounded-full border border-primary bg-background"
           />
         );
       })}
@@ -1210,15 +1469,27 @@ function GraphNodeCard({
             data-port-id={port.id}
             title={portLabel(t, port.label)}
             aria-label={t("processing.modelBuilder.outputPort", { port: portLabel(t, port.label) })}
+            aria-pressed={armedPortId === port.id}
+            // Pointer users drag; keyboard users activate, which fires `click`
+            // and never `pointerdown`. Both paths end in connectPorts.
             onPointerDown={(event) => onPortPointerDown(event, node.id, port.id)}
+            onClick={(event) => {
+              // A pointer drag ends in its own `pointerup` handler and then
+              // fires a click here too, which would arm the port it just wired.
+              if (event.detail !== 0) return;
+              onPortActivate("out", node.id, port.id);
+            }}
             style={{ right: -6, top: at.y - node.y - 5 }}
-            className="absolute h-2.5 w-2.5 cursor-crosshair rounded-full border border-primary bg-primary"
+            className={cn(
+              "absolute h-2.5 w-2.5 cursor-crosshair rounded-full border border-primary bg-primary",
+              armedPortId === port.id && "ring-2 ring-primary ring-offset-1",
+            )}
           />
         );
       })}
     </div>
   );
-}
+});
 
 /** Right-hand properties panel for whichever node is selected. */
 function NodeInspector({
@@ -1416,6 +1687,10 @@ async function layerToModelValue(
  * `layer_inputs` — GeoJSON for a `vector_in`, raw GeoTIFF bytes for a
  * `raster_in` — and their job outputs are mapped back onto the descriptor's
  * output ports so the next node receives the right payload.
+ *
+ * Takes `t` because everything it throws is surfaced verbatim in the run log,
+ * appended to an already-translated prefix; an English literal here would
+ * leave that line half-localized in all 19 locales.
  */
 async function executeModelTool({
   node,
@@ -1425,6 +1700,7 @@ async function executeModelTool({
   layers,
   duckdb,
   log,
+  t,
 }: {
   node: ModelGraphNode;
   descriptor: ModelToolDescriptor;
@@ -1433,17 +1709,21 @@ async function executeModelTool({
   layers: GeoLibreLayer[];
   duckdb: ReturnType<typeof createDuckDbCapability>;
   log: (message: string) => void;
+  t: TFunction;
 }): Promise<Record<string, ModelValue>> {
   if (descriptor.provider === "vector") {
     const tool = getVectorTool(descriptor.toolId);
-    if (!tool) throw new Error(`Unknown vector tool "${descriptor.toolId}"`);
+    if (!tool)
+      throw new Error(t("processing.modelBuilder.issueUnknownTool", { tool: descriptor.toolId }));
     // Each wired input becomes a synthetic layer the tool resolves by id, the
     // same trick the linear runner uses to chain a step's output forward.
     const synthetic: GeoLibreLayer[] = [];
     const parameters = { ...(node.parameters ?? {}) };
     for (const [portId, value] of Object.entries(inputs)) {
       if (value.kind !== "vector") {
-        throw new Error(`"${portId}" needs vector data, but a raster arrived.`);
+        throw new Error(
+          t("processing.modelBuilder.portNeedsVector", { port: portLabel(t, portId) }),
+        );
       }
       const syntheticId = `__geolibre_model_${node.id}_${portId}`;
       synthetic.push(syntheticLayer(syntheticId, portId, value.geojson));
@@ -1455,7 +1735,8 @@ async function executeModelTool({
       duckdb,
       signal,
     });
-    if (!output) throw new Error(`"${descriptor.name}" produced no output.`);
+    if (!output)
+      throw new Error(t("processing.modelBuilder.toolNoOutput", { tool: descriptor.name }));
     return { out: { kind: "vector", geojson: output } };
   }
 
@@ -1497,7 +1778,7 @@ async function executeModelTool({
     }
   }
   if (Object.keys(results).length === 0) {
-    throw new Error(`"${descriptor.name}" produced no usable output.`);
+    throw new Error(t("processing.modelBuilder.toolNoUsableOutput", { tool: descriptor.name }));
   }
   return results;
 }

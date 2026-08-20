@@ -4051,6 +4051,8 @@
       "modelNamePlaceholder": "Adsız model",
       "untitledModel": "Adsız model",
       "newModel": "Yeni",
+      "arrange": "Düzenle",
+      "arrangeHint": "Düğümleri akış boyunca dizer",
       "runModel": "Çalıştır",
       "cancelRun": "İptal",
       "runCancelled": "Çalıştırma iptal edildi.",
@@ -4072,6 +4074,8 @@
       "exportModel": "Dışa aktar",
       "savedModels": "Kayıtlı modeller",
       "loadModelPlaceholder": "Kayıtlı bir model yükle...",
+      "deleteModel": "Sil",
+      "deletedLog": "Model projeden silindi.",
       "searchTools": "Araç ara",
       "loadingTools": "Araçlar yükleniyor...",
       "noToolsMatch": "Aramanızla eşleşen araç yok.",
@@ -4085,6 +4089,8 @@
       "removeConnection": "Bağlantıyı kaldır",
       "removeNode": "Düğümü kaldır",
       "resizePanel": "Paneli yeniden boyutlandır",
+      "resizePalette": "Araç paletini yeniden boyutlandır",
+      "resizeInspector": "Özellikler panelini yeniden boyutlandır",
       "selectNodeHint": "Ayarlarını düzenlemek için bir düğüm seçin.",
       "sourceLayer": "Kaynak katman",
       "chooseLayer": "Bir katman seçin...",
@@ -4103,7 +4109,10 @@
       "importFailed": "İçe aktarma başarısız",
       "importInvalid": "Bu dosya bir model grafiği içermiyor.",
       "importUnsupported": "Bu dosya bir GeoLibre modeli değil.",
-      "rasterOutputUnsupported": "\"{{name}}\" bir raster sonucudur; bu sürüm bunu haritaya ekleyemez."
+      "rasterOutputUnsupported": "\"{{name}}\" bir raster sonucudur; bu sürüm bunu haritaya ekleyemez.",
+      "portNeedsVector": "\"{{port}}\" vektör verisi gerektiriyor ancak bir raster geldi.",
+      "toolNoOutput": "\"{{tool}}\" hiçbir çıktı üretmedi.",
+      "toolNoUsableOutput": "\"{{tool}}\" kullanılabilir bir çıktı üretmedi."
     },
     "parameterField": {
       "selectLayer": "Bir katman seçin...",

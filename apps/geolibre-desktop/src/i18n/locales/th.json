@@ -3984,6 +3984,8 @@
       "modelNamePlaceholder": "แบบจำลองไม่มีชื่อ",
       "untitledModel": "แบบจำลองไม่มีชื่อ",
       "newModel": "ใหม่",
+      "arrange": "จัดเรียง",
+      "arrangeHint": "จัดเรียงโหนดตามลำดับการไหลของงาน",
       "runModel": "เรียกใช้",
       "cancelRun": "ยกเลิก",
       "runCancelled": "ยกเลิกการเรียกใช้แล้ว",
@@ -4005,6 +4007,8 @@
       "exportModel": "ส่งออก",
       "savedModels": "แบบจำลองที่บันทึกไว้",
       "loadModelPlaceholder": "โหลดแบบจำลองที่บันทึกไว้...",
+      "deleteModel": "ลบ",
+      "deletedLog": "ลบแบบจำลองออกจากโครงการแล้ว",
       "searchTools": "ค้นหาเครื่องมือ",
       "loadingTools": "กำลังโหลดเครื่องมือ...",
       "noToolsMatch": "ไม่มีเครื่องมือที่ตรงกับการค้นหาของคุณ",
@@ -4018,6 +4022,8 @@
       "removeConnection": "ลบการเชื่อมต่อ",
       "removeNode": "ลบโหนด",
       "resizePanel": "ปรับขนาดแผง",
+      "resizePalette": "ปรับขนาดแผงเครื่องมือ",
+      "resizeInspector": "ปรับขนาดแผงคุณสมบัติ",
       "selectNodeHint": "เลือกโหนดเพื่อแก้ไขการตั้งค่า",
       "sourceLayer": "ชั้นข้อมูลต้นทาง",
       "chooseLayer": "เลือกชั้นข้อมูล...",
@@ -4036,7 +4042,10 @@
       "importFailed": "นำเข้าไม่สำเร็จ",
       "importInvalid": "ไฟล์นั้นไม่มีกราฟของแบบจำลอง",
       "importUnsupported": "ไฟล์นั้นไม่ใช่แบบจำลองของ GeoLibre",
-      "rasterOutputUnsupported": "\"{{name}}\" เป็นผลลัพธ์แรสเตอร์ซึ่งรุ่นนี้ไม่สามารถเพิ่มลงในแผนที่ได้"
+      "rasterOutputUnsupported": "\"{{name}}\" เป็นผลลัพธ์แรสเตอร์ซึ่งรุ่นนี้ไม่สามารถเพิ่มลงในแผนที่ได้",
+      "portNeedsVector": "\"{{port}}\" ต้องการข้อมูลเวกเตอร์ แต่ได้รับแรสเตอร์",
+      "toolNoOutput": "\"{{tool}}\" ไม่ได้สร้างผลลัพธ์",
+      "toolNoUsableOutput": "\"{{tool}}\" ไม่ได้สร้างผลลัพธ์ที่ใช้งานได้"
     },
     "parameterField": {
       "selectLayer": "เลือกเลเยอร์...",

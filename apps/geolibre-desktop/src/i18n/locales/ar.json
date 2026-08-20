@@ -4318,6 +4318,8 @@
       "modelNamePlaceholder": "نموذج بلا عنوان",
       "untitledModel": "نموذج بلا عنوان",
       "newModel": "جديد",
+      "arrange": "ترتيب",
+      "arrangeHint": "ترتيب العقد على امتداد مسار التدفق",
       "runModel": "تشغيل",
       "cancelRun": "إلغاء",
       "runCancelled": "تم إلغاء التشغيل.",
@@ -4339,6 +4341,8 @@
       "exportModel": "تصدير",
       "savedModels": "النماذج المحفوظة",
       "loadModelPlaceholder": "تحميل نموذج محفوظ...",
+      "deleteModel": "حذف",
+      "deletedLog": "تم حذف النموذج من المشروع.",
       "searchTools": "البحث عن الأدوات",
       "loadingTools": "جارٍ تحميل الأدوات...",
       "noToolsMatch": "لا توجد أدوات تطابق بحثك.",
@@ -4352,6 +4356,8 @@
       "removeConnection": "إزالة الاتصال",
       "removeNode": "إزالة العقدة",
       "resizePanel": "تغيير حجم اللوحة",
+      "resizePalette": "تغيير حجم لوحة الأدوات",
+      "resizeInspector": "تغيير حجم لوحة الخصائص",
       "selectNodeHint": "اختر عقدة لتحرير إعداداتها.",
       "sourceLayer": "طبقة المصدر",
       "chooseLayer": "اختر طبقة...",
@@ -4370,7 +4376,10 @@
       "importFailed": "فشل الاستيراد",
       "importInvalid": "هذا الملف لا يحتوي على مخطط نموذج.",
       "importUnsupported": "هذا الملف ليس نموذج GeoLibre.",
-      "rasterOutputUnsupported": "«{{name}}» نتيجة راستر لا يمكن لهذه النسخة إضافتها إلى الخريطة."
+      "rasterOutputUnsupported": "«{{name}}» نتيجة راستر لا يمكن لهذه النسخة إضافتها إلى الخريطة.",
+      "portNeedsVector": "«{{port}}» يحتاج إلى بيانات متجهة، لكن وصلت بيانات راستر.",
+      "toolNoOutput": "«{{tool}}» لم تُنتج أي مخرجات.",
+      "toolNoUsableOutput": "«{{tool}}» لم تُنتج مخرجات قابلة للاستخدام."
     },
     "parameterField": {
       "selectLayer": "حدد طبقة...",

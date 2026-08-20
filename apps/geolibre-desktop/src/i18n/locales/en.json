@@ -4061,6 +4061,8 @@
       "modelNamePlaceholder": "Untitled model",
       "untitledModel": "Untitled model",
       "newModel": "New",
+      "arrange": "Arrange",
+      "arrangeHint": "Lay the nodes out along the flow",
       "runModel": "Run",
       "cancelRun": "Cancel",
       "runCancelled": "Run cancelled.",
@@ -4082,6 +4084,8 @@
       "exportModel": "Export",
       "savedModels": "Saved models",
       "loadModelPlaceholder": "Load a saved model...",
+      "deleteModel": "Delete",
+      "deletedLog": "Model deleted from the project.",
       "searchTools": "Search tools",
       "loadingTools": "Loading tools...",
       "noToolsMatch": "No tools match your search.",
@@ -4095,6 +4099,8 @@
       "removeConnection": "Remove connection",
       "removeNode": "Remove node",
       "resizePanel": "Resize panel",
+      "resizePalette": "Resize the tool palette",
+      "resizeInspector": "Resize the properties panel",
       "selectNodeHint": "Select a node to edit its settings.",
       "sourceLayer": "Source layer",
       "chooseLayer": "Choose a layer...",
@@ -4113,7 +4119,10 @@
       "importFailed": "Import failed",
       "importInvalid": "That file does not contain a model graph.",
       "importUnsupported": "That file is not a GeoLibre model.",
-      "rasterOutputUnsupported": "\"{{name}}\" is a raster result, which this build cannot add to the map."
+      "rasterOutputUnsupported": "\"{{name}}\" is a raster result, which this build cannot add to the map.",
+      "portNeedsVector": "\"{{port}}\" needs vector data, but a raster arrived.",
+      "toolNoOutput": "\"{{tool}}\" produced no output.",
+      "toolNoUsableOutput": "\"{{tool}}\" produced no usable output."
     },
     "parameterField": {
       "selectLayer": "Select a layer...",
