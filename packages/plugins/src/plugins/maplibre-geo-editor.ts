@@ -561,6 +561,14 @@ export function sketchesStyleForMassing(
     if (layer.style.extrusionHeightExpression !== MASSING_HEIGHT_EXPRESSION) {
       return layer.style;
     }
+    // The user switched the layer out of extrusion while massing features were
+    // still present (the same signal the enable path below honors). That later,
+    // explicit choice outranks the pre-massing snapshot, which would otherwise
+    // turn extrusion back on as the last footprint goes away.
+    if (!layer.style.extrusionEnabled) {
+      preMassingExtrusionStyles.delete(layer.id);
+      return layer.style;
+    }
     const previous = preMassingExtrusionStyles.get(layer.id);
     preMassingExtrusionStyles.delete(layer.id);
     return {

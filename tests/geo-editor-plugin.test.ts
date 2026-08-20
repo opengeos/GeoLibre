@@ -156,6 +156,21 @@ describe("maplibreGeoEditorPlugin", () => {
     );
   });
 
+  it("keeps a manual 2D switch when the last massing feature is removed", () => {
+    const layer = sketchesLayer();
+    layer.id = "2d-then-emptied";
+    // A pre-existing property-driven extrusion, so the snapshot has something to
+    // restore that would visibly contradict the user's later choice.
+    layer.style = { ...layer.style, extrusionEnabled: true, extrusionHeightProperty: "floors" };
+    const massing = { type: "FeatureCollection" as const, features: [polygon({ height: 10 })] };
+    const flat = { type: "FeatureCollection" as const, features: [polygon({})] };
+
+    layer.style = sketchesStyleForMassing(layer, massing);
+    layer.style = { ...layer.style, extrusionEnabled: false, elevation3dEnabled: false };
+
+    assert.equal(sketchesStyleForMassing(layer, flat), layer.style);
+  });
+
   it("restores the complete pre-massing extrusion style", () => {
     const layer = sketchesLayer();
     layer.id = "custom-before-massing";
