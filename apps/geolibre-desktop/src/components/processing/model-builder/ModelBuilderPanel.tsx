@@ -34,6 +34,8 @@ import {
   Download,
   GripVertical,
   LayoutGrid,
+  PanelLeft,
+  PanelRight,
   Loader2,
   Play,
   Plus,
@@ -125,8 +127,25 @@ const MAX_IMPORT_EDGES = 4000;
  */
 const MAX_IMPORT_BYTES = 16 * 1024 * 1024;
 
+/**
+ * Preferred floors. They are *preferences*, not hard limits: a container
+ * narrower than this gets a panel narrower than this, because a panel that
+ * refuses to shrink below 820px on a 420px screen simply hangs off the edge
+ * with its Run and Close buttons unreachable.
+ */
 const MIN_WIDTH = 820;
 const MIN_HEIGHT = 420;
+/** Absolute floors, below which the panel stops being usable at all. */
+const FLOOR_WIDTH = 260;
+const FLOOR_HEIGHT = 220;
+/** Width a side pane takes when it overlays the canvas in compact mode. */
+const COMPACT_PANE_WIDTH = 240;
+/**
+ * Below this the palette, canvas and inspector cannot share a row: three
+ * columns leave the canvas a sliver. The side panes become overlays opened one
+ * at a time from the title bar instead, so the canvas keeps the full width.
+ */
+const COMPACT_WIDTH = 720;
 const EDGE_MARGIN = 12;
 
 /** A best-effort unique id (the webview always has crypto.randomUUID). */
@@ -183,6 +202,12 @@ export function ModelBuilderPanel({
    * while collapsed — the point is to watch its results land.
    */
   const [minimized, setMinimized] = useState(false);
+  /**
+   * Which side pane is showing in compact mode, where they overlay the canvas
+   * rather than sit beside it. Null means neither, which is the useful default
+   * on a small screen: the canvas is what there is least room for.
+   */
+  const [compactPane, setCompactPane] = useState<"palette" | "inspector" | null>(null);
   const [modelId, setModelId] = useState<string>(() => createId());
   const [modelName, setModelName] = useState("");
   const [graph, setGraph] = useState<ProcessingModelGraph>(emptyModelGraph);
@@ -209,26 +234,42 @@ export function ModelBuilderPanel({
 
   const appendLog = useCallback((line: string) => setLog((prev) => [...prev, line]), []);
 
-  // The default size assumes a full-width map; open side panels can leave much
-  // less, which would push the inspector column out of view. Shrink to whatever
-  // the map area actually offers the first time the panel is shown.
-  useLayoutEffect(() => {
-    if (!open) return;
+  /**
+   * Keep the panel inside the map area.
+   *
+   * The default size assumes a full-width map; open side panels, a small
+   * window or a phone leave much less. The floors here are the *smaller* of
+   * the preferred minimum and what the container actually offers, so the panel
+   * shrinks to fit instead of hanging off the edge with its buttons out of
+   * reach.
+   */
+  const fitToContainer = useCallback(() => {
     const bounds = sectionRef.current?.parentElement?.getBoundingClientRect();
     if (!bounds) return;
-    setSize((current) => ({
-      width: clamp(current.width, MIN_WIDTH, Math.max(MIN_WIDTH, bounds.width - EDGE_MARGIN * 2)),
-      height: clamp(
-        current.height,
-        MIN_HEIGHT,
-        Math.max(MIN_HEIGHT, bounds.height - EDGE_MARGIN * 2),
-      ),
-    }));
+    const maxWidth = Math.max(FLOOR_WIDTH, bounds.width - EDGE_MARGIN * 2);
+    const maxHeight = Math.max(FLOOR_HEIGHT, bounds.height - EDGE_MARGIN * 2);
+    const width = clamp(size.width, Math.min(MIN_WIDTH, maxWidth), maxWidth);
+    const height = clamp(size.height, Math.min(MIN_HEIGHT, maxHeight), maxHeight);
+    if (width !== size.width || height !== size.height) setSize({ width, height });
     setPosition((current) => ({
-      x: clamp(current.x, 0, Math.max(0, bounds.width - MIN_WIDTH - EDGE_MARGIN)),
-      y: clamp(current.y, 0, Math.max(0, bounds.height - MIN_HEIGHT - EDGE_MARGIN)),
+      x: clamp(current.x, 0, Math.max(0, bounds.width - width - EDGE_MARGIN)),
+      y: clamp(current.y, 0, Math.max(0, bounds.height - height - EDGE_MARGIN)),
     }));
-  }, [open]);
+  }, [size.width, size.height]);
+
+  // Re-fit whenever the map area changes, not just when the panel opens: a
+  // resized window or a side panel opening would otherwise leave the panel
+  // sized for a viewport that is gone. The observed element is the map area,
+  // which the panel does not affect, so this cannot feed back on itself.
+  useLayoutEffect(() => {
+    if (!open) return;
+    fitToContainer();
+    const host = sectionRef.current?.parentElement;
+    if (!host || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => fitToContainer());
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [open, fitToContainer]);
 
   // Load both registries once the panel is first opened. The Whitebox catalog is
   // a fetched snapshot and the WASM manifests load the binary, so they run
@@ -860,6 +901,23 @@ export function ModelBuilderPanel({
    * is the opposite screen direction — hence the sign taken from the element's
    * computed `direction` rather than assuming left-to-right.
    */
+  /**
+   * Too narrow for three columns. The side panes overlay the canvas instead of
+   * splitting the row with it, and the toolbar drops its button labels.
+   */
+  const compact = size.width < COMPACT_WIDTH;
+
+  /** Resize floors, matching what {@link fitToContainer} allows. */
+  const hostBounds = sectionRef.current?.parentElement?.getBoundingClientRect();
+  const minWidth = Math.min(
+    MIN_WIDTH,
+    Math.max(FLOOR_WIDTH, (hostBounds?.width ?? MIN_WIDTH) - EDGE_MARGIN * 2),
+  );
+  const minHeight = Math.min(
+    MIN_HEIGHT,
+    Math.max(FLOOR_HEIGHT, (hostBounds?.height ?? MIN_HEIGHT) - EDGE_MARGIN * 2),
+  );
+
   /** Upper bound for one side column at the panel's current width. */
   const maxSideWidth = Math.max(
     MIN_SIDE_WIDTH,
@@ -977,11 +1035,11 @@ export function ModelBuilderPanel({
       const maxWidth = bounds ? bounds.width - position.x - EDGE_MARGIN : Infinity;
       const maxHeight = bounds ? bounds.height - position.y - EDGE_MARGIN : Infinity;
       setSize((current) => ({
-        width: clamp(current.width + dx * dirSign, MIN_WIDTH, Math.max(MIN_WIDTH, maxWidth)),
-        height: clamp(current.height + dy, MIN_HEIGHT, Math.max(MIN_HEIGHT, maxHeight)),
+        width: clamp(current.width + dx * dirSign, minWidth, Math.max(minWidth, maxWidth)),
+        height: clamp(current.height + dy, minHeight, Math.max(minHeight, maxHeight)),
       }));
     },
-    [position.x, position.y],
+    [position.x, position.y, minWidth, minHeight],
   );
 
   const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -999,15 +1057,11 @@ export function ModelBuilderPanel({
       const maxWidth = bounds ? bounds.width - position.x - EDGE_MARGIN : Infinity;
       const maxHeight = bounds ? bounds.height - position.y - EDGE_MARGIN : Infinity;
       setSize({
-        width: clamp(
-          start.width + (move.clientX - startX),
-          MIN_WIDTH,
-          Math.max(MIN_WIDTH, maxWidth),
-        ),
+        width: clamp(start.width + (move.clientX - startX), minWidth, Math.max(minWidth, maxWidth)),
         height: clamp(
           start.height + (move.clientY - startY),
-          MIN_HEIGHT,
-          Math.max(MIN_HEIGHT, maxHeight),
+          minHeight,
+          Math.max(minHeight, maxHeight),
         ),
       });
     };
@@ -1050,64 +1104,126 @@ export function ModelBuilderPanel({
     >
       {/* Title bar doubles as the drag handle. */}
       <div
-        className="flex shrink-0 cursor-grab items-center gap-2 border-b bg-muted/40 px-2 py-1.5 active:cursor-grabbing"
+        className="flex shrink-0 cursor-grab items-center gap-2 overflow-x-auto border-b bg-muted/40 px-2 py-1.5 active:cursor-grabbing"
         onPointerDown={handleDragStart}
       >
         <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="shrink-0 text-sm font-medium">{t("processing.modelBuilder.title")}</span>
+        {/* The section's own aria-label still names the panel, so dropping the
+            visible title on a narrow panel costs nothing and buys the toolbar
+            the room its buttons need. */}
+        {!compact && (
+          <span className="shrink-0 text-sm font-medium">{t("processing.modelBuilder.title")}</span>
+        )}
         <Input
           value={modelName}
           onChange={(event) => setModelName(event.target.value)}
           placeholder={t("processing.modelBuilder.modelNamePlaceholder")}
           aria-label={t("processing.modelBuilder.modelName")}
-          className="h-7 max-w-56 text-xs"
+          className="h-7 min-w-16 max-w-56 text-xs"
         />
+        {compact && !minimized && (
+          <>
+            <Button
+              size="sm"
+              variant={compactPane === "palette" ? "secondary" : "ghost"}
+              className="h-7 w-7 shrink-0 p-0"
+              onClick={() =>
+                setCompactPane((current) => (current === "palette" ? null : "palette"))
+              }
+              aria-pressed={compactPane === "palette"}
+              aria-label={t("processing.modelBuilder.searchTools")}
+            >
+              <PanelLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant={compactPane === "inspector" ? "secondary" : "ghost"}
+              className="h-7 w-7 shrink-0 p-0"
+              onClick={() =>
+                setCompactPane((current) => (current === "inspector" ? null : "inspector"))
+              }
+              aria-pressed={compactPane === "inspector"}
+              aria-label={t("processing.modelBuilder.selectNodeHint")}
+            >
+              <PanelRight className="h-4 w-4" />
+            </Button>
+          </>
+        )}
         <div className="ms-auto flex items-center gap-1">
-          <Button size="sm" variant="ghost" className="h-7 gap-1 px-2" onClick={handleNewModel}>
-            <Plus className="h-3.5 w-3.5" /> {t("processing.modelBuilder.newModel")}
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 gap-1 px-2" onClick={handleSave}>
-            <Save className="h-3.5 w-3.5" /> {t("common.save")}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 shrink-0 gap-1 px-2"
+            onClick={handleNewModel}
+            aria-label={t("processing.modelBuilder.newModel")}
+            title={t("processing.modelBuilder.newModel")}
+          >
+            <Plus className="h-3.5 w-3.5" /> {!compact && t("processing.modelBuilder.newModel")}
           </Button>
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 gap-1 px-2"
+            className="h-7 shrink-0 gap-1 px-2"
+            onClick={handleSave}
+            aria-label={t("common.save")}
+            title={t("common.save")}
+          >
+            <Save className="h-3.5 w-3.5" /> {!compact && t("common.save")}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 shrink-0 gap-1 px-2"
             onClick={handleArrange}
             disabled={graph.nodes.length === 0}
+            aria-label={t("processing.modelBuilder.arrange")}
             title={t("processing.modelBuilder.arrangeHint")}
           >
-            <LayoutGrid className="h-3.5 w-3.5" /> {t("processing.modelBuilder.arrange")}
+            <LayoutGrid className="h-3.5 w-3.5" />{" "}
+            {!compact && t("processing.modelBuilder.arrange")}
           </Button>
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 gap-1 px-2"
+            className="h-7 shrink-0 gap-1 px-2"
             onClick={() => importRef.current?.click()}
+            aria-label={t("processing.modelBuilder.importModel")}
+            title={t("processing.modelBuilder.importModel")}
           >
-            <Upload className="h-3.5 w-3.5" /> {t("processing.modelBuilder.importModel")}
+            <Upload className="h-3.5 w-3.5" />{" "}
+            {!compact && t("processing.modelBuilder.importModel")}
           </Button>
-          <Button size="sm" variant="ghost" className="h-7 gap-1 px-2" onClick={handleExport}>
-            <Download className="h-3.5 w-3.5" /> {t("processing.modelBuilder.exportModel")}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 shrink-0 gap-1 px-2"
+            onClick={handleExport}
+            aria-label={t("processing.modelBuilder.exportModel")}
+            title={t("processing.modelBuilder.exportModel")}
+          >
+            <Download className="h-3.5 w-3.5" />{" "}
+            {!compact && t("processing.modelBuilder.exportModel")}
           </Button>
           {running ? (
             <Button
               size="sm"
               variant="destructive"
-              className="h-7 gap-1 px-2"
+              className="h-7 shrink-0 gap-1 px-2"
               onClick={() => {
                 abortRun();
                 setRunning(false);
                 appendLog(t("processing.modelBuilder.runCancelled"));
               }}
+              aria-label={t("processing.modelBuilder.cancelRun")}
+              title={t("processing.modelBuilder.cancelRun")}
             >
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {t("processing.modelBuilder.cancelRun")}
+              {!compact && t("processing.modelBuilder.cancelRun")}
             </Button>
           ) : (
             <Button
               size="sm"
-              className="h-7 gap-1 px-2"
+              className="h-7 shrink-0 gap-1 px-2"
               onClick={() => void handleRun()}
               // catalog.length === 0 is also the window where `issues` is
               // short-circuited to [], so without it Run looks enabled on a
@@ -1118,9 +1234,11 @@ export function ModelBuilderPanel({
                 catalog.length === 0 ||
                 graph.nodes.length === 0
               }
+              aria-label={t("processing.modelBuilder.runModel")}
+              title={t("processing.modelBuilder.runModel")}
             >
               <Play className="h-3.5 w-3.5" />
-              {t("processing.modelBuilder.runModel")}
+              {!compact && t("processing.modelBuilder.runModel")}
             </Button>
           )}
           <Button
@@ -1167,89 +1285,102 @@ export function ModelBuilderPanel({
       </div>
 
       {!minimized && (
-        <div className="flex min-h-0 flex-1">
-          {/* Palette */}
-          <div
-            className="flex shrink-0 flex-col border-e"
-            style={{ width: Math.min(paletteWidth, maxSideWidth) }}
-          >
-            <div className="space-y-1 border-b p-2">
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t("processing.modelBuilder.searchTools")}
-                aria-label={t("processing.modelBuilder.searchTools")}
-                className="h-7 text-xs"
-              />
-              <div className="flex gap-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 flex-1 px-1 text-[11px]"
-                  onClick={() => addNode("input")}
-                >
-                  {t("processing.modelBuilder.addInputNode")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 flex-1 px-1 text-[11px]"
-                  onClick={() => addNode("output")}
-                >
-                  {t("processing.modelBuilder.addOutputNode")}
-                </Button>
-              </div>
-            </div>
-            <ScrollArea className="min-h-0 flex-1 p-2">
-              {catalog.length === 0 ? (
-                <p className="p-2 text-xs text-muted-foreground">
-                  {t("processing.modelBuilder.loadingTools")}
-                </p>
-              ) : groups.length === 0 ? (
-                <p className="p-2 text-xs text-muted-foreground">
-                  {t("processing.modelBuilder.noToolsMatch")}
-                </p>
-              ) : (
-                groups.map((group) => (
-                  <div key={group.group} className="mb-2">
-                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {group.group}
-                    </p>
-                    {group.tools.map((tool) => (
-                      // A real button, not a bare draggable div: dragging is the
-                      // only other way to add a tool node, so a div here would put
-                      // the panel's core interaction out of reach of the keyboard
-                      // entirely. Activating it drops the node onto the canvas.
-                      <button
-                        key={tool.key}
-                        type="button"
-                        draggable
-                        onDragStart={(event) => {
-                          event.dataTransfer.setData(TOOL_DRAG_TYPE, tool.key);
-                          event.dataTransfer.effectAllowed = "copy";
-                        }}
-                        onClick={() => addToolAtDefault(tool)}
-                        title={tool.description ?? tool.name}
-                        aria-label={t("processing.modelBuilder.addToolNode", { tool: tool.name })}
-                        className="w-full cursor-grab truncate rounded px-1.5 py-1 text-start text-xs hover:bg-accent active:cursor-grabbing"
-                      >
-                        {tool.name}
-                      </button>
-                    ))}
-                  </div>
-                ))
+        <div className="relative flex min-h-0 flex-1">
+          {/* Palette. Compact: an overlay over the canvas, opened from the
+              toolbar, so three columns never have to share a narrow row. */}
+          {(!compact || compactPane === "palette") && (
+            <div
+              className={cn(
+                "flex flex-col bg-card",
+                compact ? "absolute inset-y-0 start-0 z-20 shadow-lg" : "shrink-0",
+                "border-e",
               )}
-            </ScrollArea>
-          </div>
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label={t("processing.modelBuilder.resizePalette")}
-            tabIndex={0}
-            onPointerDown={(event) => handleSideResizeStart(event, "palette")}
-            onKeyDown={(event) => handleSideResizeKey(event, "palette")}
-            className="w-1 shrink-0 cursor-col-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
-          />
+              style={{
+                width: compact
+                  ? Math.min(COMPACT_PANE_WIDTH, Math.max(160, size.width - 48))
+                  : Math.min(paletteWidth, maxSideWidth),
+              }}
+            >
+              <div className="space-y-1 border-b p-2">
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={t("processing.modelBuilder.searchTools")}
+                  aria-label={t("processing.modelBuilder.searchTools")}
+                  className="h-7 text-xs"
+                />
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 flex-1 px-1 text-[11px]"
+                    onClick={() => addNode("input")}
+                  >
+                    {t("processing.modelBuilder.addInputNode")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 flex-1 px-1 text-[11px]"
+                    onClick={() => addNode("output")}
+                  >
+                    {t("processing.modelBuilder.addOutputNode")}
+                  </Button>
+                </div>
+              </div>
+              <ScrollArea className="min-h-0 flex-1 p-2">
+                {catalog.length === 0 ? (
+                  <p className="p-2 text-xs text-muted-foreground">
+                    {t("processing.modelBuilder.loadingTools")}
+                  </p>
+                ) : groups.length === 0 ? (
+                  <p className="p-2 text-xs text-muted-foreground">
+                    {t("processing.modelBuilder.noToolsMatch")}
+                  </p>
+                ) : (
+                  groups.map((group) => (
+                    <div key={group.group} className="mb-2">
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {group.group}
+                      </p>
+                      {group.tools.map((tool) => (
+                        // A real button, not a bare draggable div: dragging is the
+                        // only other way to add a tool node, so a div here would put
+                        // the panel's core interaction out of reach of the keyboard
+                        // entirely. Activating it drops the node onto the canvas.
+                        <button
+                          key={tool.key}
+                          type="button"
+                          draggable
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData(TOOL_DRAG_TYPE, tool.key);
+                            event.dataTransfer.effectAllowed = "copy";
+                          }}
+                          onClick={() => addToolAtDefault(tool)}
+                          title={tool.description ?? tool.name}
+                          aria-label={t("processing.modelBuilder.addToolNode", { tool: tool.name })}
+                          className="w-full cursor-grab truncate rounded px-1.5 py-1 text-start text-xs hover:bg-accent active:cursor-grabbing"
+                        >
+                          {tool.name}
+                        </button>
+                      ))}
+                    </div>
+                  ))
+                )}
+              </ScrollArea>
+            </div>
+          )}
+          {!compact && (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t("processing.modelBuilder.resizePalette")}
+              tabIndex={0}
+              onPointerDown={(event) => handleSideResizeStart(event, "palette")}
+              onKeyDown={(event) => handleSideResizeKey(event, "palette")}
+              className="w-1 shrink-0 cursor-col-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
+            />
+          )}
 
           {/* Canvas */}
           <div
@@ -1302,101 +1433,116 @@ export function ModelBuilderPanel({
             )}
           </div>
 
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label={t("processing.modelBuilder.resizeInspector")}
-            tabIndex={0}
-            onPointerDown={(event) => handleSideResizeStart(event, "inspector")}
-            onKeyDown={(event) => handleSideResizeKey(event, "inspector")}
-            className="w-1 shrink-0 cursor-col-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
-          />
+          {!compact && (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t("processing.modelBuilder.resizeInspector")}
+              tabIndex={0}
+              onPointerDown={(event) => handleSideResizeStart(event, "inspector")}
+              onKeyDown={(event) => handleSideResizeKey(event, "inspector")}
+              className="w-1 shrink-0 cursor-col-resize bg-border/60 hover:bg-primary/60 focus-visible:bg-primary focus-visible:outline-none"
+            />
+          )}
 
           {/* Inspector */}
-          <div
-            className="flex shrink-0 flex-col border-s"
-            style={{ width: Math.min(inspectorWidth, maxSideWidth) }}
-          >
-            <ScrollArea className="min-h-0 flex-1 p-2">
-              <NodeInspector
-                node={selectedNode}
-                descriptor={
-                  selectedNode
-                    ? resolveDescriptor(selectedNode.provider, selectedNode.toolId)
-                    : undefined
-                }
-                layers={layers}
-                issues={selectedNode ? (issuesByNode.get(selectedNode.id) ?? []) : []}
-                keptPorts={
-                  selectedNode
-                    ? new Set(
-                        (
-                          resolveDescriptor(selectedNode.provider, selectedNode.toolId)?.outputs ??
-                          []
+          {(!compact || compactPane === "inspector") && (
+            <div
+              className={cn(
+                "flex flex-col border-s bg-card",
+                compact ? "absolute inset-y-0 end-0 z-20 shadow-lg" : "shrink-0",
+              )}
+              style={{
+                width: compact
+                  ? Math.min(COMPACT_PANE_WIDTH, Math.max(160, size.width - 48))
+                  : Math.min(inspectorWidth, maxSideWidth),
+              }}
+            >
+              <ScrollArea className="min-h-0 flex-1 p-2">
+                <NodeInspector
+                  node={selectedNode}
+                  descriptor={
+                    selectedNode
+                      ? resolveDescriptor(selectedNode.provider, selectedNode.toolId)
+                      : undefined
+                  }
+                  layers={layers}
+                  issues={selectedNode ? (issuesByNode.get(selectedNode.id) ?? []) : []}
+                  keptPorts={
+                    selectedNode
+                      ? new Set(
+                          (
+                            resolveDescriptor(selectedNode.provider, selectedNode.toolId)
+                              ?.outputs ?? []
+                          )
+                            .filter((port) => portFeedsOutput(graph, selectedNode.id, port.id))
+                            .map((port) => port.id),
                         )
-                          .filter((port) => portFeedsOutput(graph, selectedNode.id, port.id))
-                          .map((port) => port.id),
-                      )
-                    : new Set<string>()
-                }
-                onKeepResult={(portId, name) =>
-                  selectedNode && handleKeepResult(selectedNode.id, portId, name)
-                }
-                onFieldChange={(field, value) =>
-                  selectedNode &&
-                  setGraph((current) => setNodeField(current, selectedNode.id, field, value))
-                }
-                onParamChange={(paramId, value) =>
-                  selectedNode &&
-                  setGraph((current) => setNodeParameter(current, selectedNode.id, paramId, value))
-                }
-                onRemove={() => {
-                  if (!selectedNode) return;
-                  setGraph((current) => removeNode(current, selectedNode.id));
-                  // An armed port on the node being deleted would otherwise stay
-                  // armed and wire the next activation to a node that is gone.
-                  setArmedPort((current) => (current?.nodeId === selectedNode.id ? null : current));
-                  setSelectedNodeId(null);
-                }}
-              />
-            </ScrollArea>
-            {savedModels.length > 0 && (
-              <div className="border-t p-2">
-                <Label htmlFor="model-saved-picker" className="text-[11px]">
-                  {t("processing.modelBuilder.savedModels")}
-                </Label>
-                <div className="mt-1 flex items-center gap-1">
-                  <Select
-                    id="model-saved-picker"
-                    className="h-7 min-w-0 flex-1 text-xs"
-                    value=""
-                    onChange={(event) => {
-                      const model = savedModels.find((entry) => entry.id === event.target.value);
-                      if (model) handleLoadModel(model);
-                    }}
-                  >
-                    <option value="">{t("processing.modelBuilder.loadModelPlaceholder")}</option>
-                    {savedModels.map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.name || t("processing.modelBuilder.untitledModel")}
-                      </option>
-                    ))}
-                  </Select>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 w-7 shrink-0 p-0"
-                    onClick={handleDeleteModel}
-                    disabled={!savedModels.some((model) => model.id === modelId)}
-                    title={t("processing.modelBuilder.deleteModel")}
-                    aria-label={t("processing.modelBuilder.deleteModel")}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                      : new Set<string>()
+                  }
+                  onKeepResult={(portId, name) =>
+                    selectedNode && handleKeepResult(selectedNode.id, portId, name)
+                  }
+                  onFieldChange={(field, value) =>
+                    selectedNode &&
+                    setGraph((current) => setNodeField(current, selectedNode.id, field, value))
+                  }
+                  onParamChange={(paramId, value) =>
+                    selectedNode &&
+                    setGraph((current) =>
+                      setNodeParameter(current, selectedNode.id, paramId, value),
+                    )
+                  }
+                  onRemove={() => {
+                    if (!selectedNode) return;
+                    setGraph((current) => removeNode(current, selectedNode.id));
+                    // An armed port on the node being deleted would otherwise stay
+                    // armed and wire the next activation to a node that is gone.
+                    setArmedPort((current) =>
+                      current?.nodeId === selectedNode.id ? null : current,
+                    );
+                    setSelectedNodeId(null);
+                  }}
+                />
+              </ScrollArea>
+              {savedModels.length > 0 && (
+                <div className="border-t p-2">
+                  <Label htmlFor="model-saved-picker" className="text-[11px]">
+                    {t("processing.modelBuilder.savedModels")}
+                  </Label>
+                  <div className="mt-1 flex items-center gap-1">
+                    <Select
+                      id="model-saved-picker"
+                      className="h-7 min-w-0 flex-1 text-xs"
+                      value=""
+                      onChange={(event) => {
+                        const model = savedModels.find((entry) => entry.id === event.target.value);
+                        if (model) handleLoadModel(model);
+                      }}
+                    >
+                      <option value="">{t("processing.modelBuilder.loadModelPlaceholder")}</option>
+                      {savedModels.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name || t("processing.modelBuilder.untitledModel")}
+                        </option>
+                      ))}
+                    </Select>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 shrink-0 p-0"
+                      onClick={handleDeleteModel}
+                      disabled={!savedModels.some((model) => model.id === modelId)}
+                      title={t("processing.modelBuilder.deleteModel")}
+                      aria-label={t("processing.modelBuilder.deleteModel")}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
