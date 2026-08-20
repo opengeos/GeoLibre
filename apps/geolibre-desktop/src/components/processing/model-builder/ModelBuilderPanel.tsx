@@ -551,6 +551,12 @@ export function ModelBuilderPanel({
   const connectPorts = useCallback(
     (from: { nodeId: string; portId: string }, to: { nodeId: string; portId: string }) => {
       setGraph((current) => {
+        // connectNodes does not check that both endpoints still exist, and an
+        // edge onto a deleted node renders nowhere — GraphEdges resolves no
+        // anchor for it, so neither the curve nor its click-to-remove hit area
+        // is drawn, leaving a dangling-edge issue with no way to clear it.
+        if (!current.nodes.some((node) => node.id === from.nodeId)) return current;
+        if (!current.nodes.some((node) => node.id === to.nodeId)) return current;
         const result = connectNodes(current, from, to, createId);
         if ("rejected" in result) {
           appendLog(
@@ -572,6 +578,10 @@ export function ModelBuilderPanel({
    * Space) fires `click`, never `pointerdown`, so without this the whole
    * canvas is unusable without a pointing device. Activating the armed port
    * again disarms it, so there is a way out that does not need the mouse.
+   *
+   * Activating an already-wired input port with nothing armed disconnects it.
+   * Removing an edge is otherwise only possible by clicking its curve, which
+   * leaves a keyboard user who mis-wires two ports with no way to undo it.
    */
   const handlePortActivate = useCallback(
     (side: "in" | "out", nodeId: string, portId: string) => {
@@ -584,7 +594,16 @@ export function ModelBuilderPanel({
         return;
       }
       setArmedPort((current) => {
-        if (current) connectPorts(current, { nodeId, portId });
+        if (current) {
+          connectPorts(current, { nodeId, portId });
+        } else {
+          setGraph((graphNow) => {
+            const wired = graphNow.edges.find(
+              (edge) => edge.to === nodeId && edge.toPort === portId,
+            );
+            return wired ? removeEdge(graphNow, wired.id) : graphNow;
+          });
+        }
         return null;
       });
     },
@@ -599,11 +618,23 @@ export function ModelBuilderPanel({
       setLinking({ nodeId, portId, x: start.x, y: start.y });
       const handle = event.currentTarget;
       handle.setPointerCapture(event.pointerId);
+      // Coalesced to one commit per frame for the same reason the node drag is:
+      // each update repaints every edge in GraphEdges, and a high-poll-rate
+      // pointer reports several moves per frame.
+      let frame = 0;
+      let pending: { x: number; y: number } | null = null;
+      const commit = () => {
+        frame = 0;
+        const next = pending;
+        pending = null;
+        if (next) setLinking((current) => (current ? { ...current, ...next } : current));
+      };
       const handleMove = (move: PointerEvent) => {
-        const point = canvasPoint(move.clientX, move.clientY);
-        setLinking((current) => (current ? { ...current, x: point.x, y: point.y } : current));
+        pending = canvasPoint(move.clientX, move.clientY);
+        if (!frame) frame = requestAnimationFrame(commit);
       };
       const handleEnd = (end: PointerEvent) => {
+        if (frame) cancelAnimationFrame(frame);
         if (handle.hasPointerCapture(end.pointerId)) handle.releasePointerCapture(end.pointerId);
         handle.removeEventListener("pointermove", handleMove);
         handle.removeEventListener("pointerup", handleEnd);
@@ -804,6 +835,31 @@ export function ModelBuilderPanel({
     [maxSideWidth],
   );
 
+  /**
+   * Keyboard path for the panel's own resize grip, matching the column
+   * splitters: arrows grow or shrink the panel a step at a time. The panel is
+   * clamped to its container the same way the pointer drag is.
+   */
+  const handleResizeKey = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const dx = event.key === "ArrowLeft" ? -16 : event.key === "ArrowRight" ? 16 : 0;
+      const dy = event.key === "ArrowUp" ? -16 : event.key === "ArrowDown" ? 16 : 0;
+      if (!dx && !dy) return;
+      event.preventDefault();
+      const dirSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
+      const bounds = (
+        event.currentTarget.closest("section") as HTMLElement | null
+      )?.parentElement?.getBoundingClientRect();
+      const maxWidth = bounds ? bounds.width - position.x - EDGE_MARGIN : Infinity;
+      const maxHeight = bounds ? bounds.height - position.y - EDGE_MARGIN : Infinity;
+      setSize((current) => ({
+        width: clamp(current.width + dx * dirSign, MIN_WIDTH, Math.max(MIN_WIDTH, maxWidth)),
+        height: clamp(current.height + dy, MIN_HEIGHT, Math.max(MIN_HEIGHT, maxHeight)),
+      }));
+    },
+    [position.x, position.y],
+  );
+
   const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -927,7 +983,15 @@ export function ModelBuilderPanel({
               size="sm"
               className="h-7 gap-1 px-2"
               onClick={() => void handleRun()}
-              disabled={issues.length > 0 || catalogFailed || graph.nodes.length === 0}
+              // catalog.length === 0 is also the window where `issues` is
+              // short-circuited to [], so without it Run looks enabled on a
+              // just-loaded model that no tool can resolve yet.
+              disabled={
+                issues.length > 0 ||
+                catalogFailed ||
+                catalog.length === 0 ||
+                graph.nodes.length === 0
+              }
             >
               <Play className="h-3.5 w-3.5" />
               {t("processing.modelBuilder.runModel")}
@@ -1133,6 +1197,9 @@ export function ModelBuilderPanel({
               onRemove={() => {
                 if (!selectedNode) return;
                 setGraph((current) => removeNode(current, selectedNode.id));
+                // An armed port on the node being deleted would otherwise stay
+                // armed and wire the next activation to a node that is gone.
+                setArmedPort((current) => (current?.nodeId === selectedNode.id ? null : current));
                 setSelectedNodeId(null);
               }}
             />
@@ -1216,9 +1283,11 @@ export function ModelBuilderPanel({
       {/* Resize grip */}
       <div
         onPointerDown={handleResizeStart}
+        onKeyDown={handleResizeKey}
         role="separator"
+        tabIndex={0}
         aria-label={t("processing.modelBuilder.resizePanel")}
-        className="absolute bottom-0 end-0 h-4 w-4 cursor-nwse-resize"
+        className="absolute bottom-0 end-0 h-4 w-4 cursor-nwse-resize focus-visible:bg-primary focus-visible:outline-none"
       />
     </section>
   );
