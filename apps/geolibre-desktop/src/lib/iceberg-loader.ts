@@ -253,6 +253,12 @@ export async function loadIcebergTable(config: IcebergLayerConfig): Promise<Iceb
       geometryGeoJsonSql(quoteIdentifier(chosen.name), sourceCrs),
       GEOMETRY_JSON_COLUMN,
       rowLimit,
+      // Every geometry column, not just the unselected ones: the rendered one
+      // reaches the features through the GeoJSON alias, so keeping its raw value
+      // in the wildcard would only ship redundant binary across Arrow. Safe to
+      // EXCLUDE unconditionally because these names came from a DESCRIBE of this
+      // very source.
+      geometryColumns.map((column) => column.name),
     );
     const rows = rowsFromResult(await connection.query(sql));
     const geojson = rowsToFeatureCollection(rows, chosen.name);

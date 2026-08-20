@@ -7,8 +7,10 @@ import {
   DEFAULT_ICEBERG_CRS,
   DEFAULT_ICEBERG_ROW_LIMIT,
   icebergLayerMetadata,
+  icebergCrsFromColumnType,
   icebergTableKey,
   icebergTableLabel,
+  keepOrDefaultGeometryColumn,
   MAX_ICEBERG_ROW_LIMIT,
   normalizeIcebergLocation,
   normalizeIcebergSql,
@@ -169,20 +171,22 @@ export function IcebergSource() {
     });
     if (requestRef.current !== requestToken) return;
     setTableInfo(info);
-    setGeometryColumn(info.geometryColumn ?? "");
+    // Keep a deliberate pick across re-inspection (the SQL box re-inspects on
+    // every edit); only fall back to the first column when the previous choice
+    // is no longer part of the source.
+    setGeometryColumn((current) => keepOrDefaultGeometryColumn(current, info.geometryColumns));
     // Pre-fill the query box with the statement this inspection ran, so the
     // user edits something that already works rather than composing an
     // `iceberg_scan` call by hand. Only when they have not typed their own.
     const ran = customSql || generatedSqlFor(connection, table);
     if (!customSql) setSql(ran);
     setInspectedSql(normalizeIcebergSql(ran));
+    // The row/geometry summary is rendered from state (see `summary` below) so
+    // it follows the column picker; only the "nothing to render" case is a
+    // status, since it has no column to describe.
     setStatus(
-      info.geometryColumn
-        ? t("addData.iceberg.statusInspected", {
-            rows: info.rowCount.toLocaleString(),
-            column: info.geometryColumn,
-            crs: info.crs ?? DEFAULT_ICEBERG_CRS,
-          })
+      info.geometryColumns.length > 0
+        ? null
         : t("addData.iceberg.statusNoGeometry", {
             rows: info.rowCount.toLocaleString(),
           }),
@@ -333,6 +337,21 @@ export function IcebergSource() {
 
   const rowLimitValue = clampIcebergRowLimit(rowLimit);
   const truncates = tableInfo !== null && tableInfo.rowCount > rowLimitValue;
+  // Derived, not stored: the summary has to follow the geometry picker, which
+  // changes the CRS being reported without any need to re-read the table. A
+  // formatted string set once at inspection time would go stale on switch.
+  const selectedGeometry =
+    tableInfo?.geometryColumns.find((column) => column.name === geometryColumn) ?? null;
+  const summary =
+    tableInfo && selectedGeometry
+      ? t("addData.iceberg.statusInspected", {
+          rows: tableInfo.rowCount.toLocaleString(),
+          column: selectedGeometry.name,
+          // A column with no CRS parameter is CRS84 by the Iceberg spec, so name
+          // it rather than leaving the reader to guess what "no CRS" means.
+          crs: icebergCrsFromColumnType(selectedGeometry.type) ?? DEFAULT_ICEBERG_CRS,
+        })
+      : null;
 
   return (
     <AddDataSourceForm
@@ -408,6 +427,7 @@ export function IcebergSource() {
           </div>
         </div>
         {status ? <p className="text-xs text-muted-foreground">{status}</p> : null}
+        {summary ? <p className="text-xs text-muted-foreground">{summary}</p> : null}
         {tables.length > 0 ? (
           <div className="space-y-1.5">
             <Label htmlFor="iceberg-table">{t("addData.iceberg.table")}</Label>

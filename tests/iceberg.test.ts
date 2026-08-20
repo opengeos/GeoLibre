@@ -12,6 +12,7 @@ import {
   DEFAULT_ICEBERG_ROW_LIMIT,
   icebergCrsFromColumnType,
   icebergTransformCrs,
+  keepOrDefaultGeometryColumn,
   getIcebergLayerConfig,
   icebergLayerMetadata,
   icebergNameFromLocation,
@@ -354,6 +355,64 @@ describe("custom SQL as the scan source", () => {
       10,
     );
     assert.match(wrapped, /FROM \(SELECT \* FROM t WHERE x\) AS iceberg_source LIMIT 10$/);
+  });
+});
+
+describe("multiple geometry columns", () => {
+  it("excludes every geometry column from the wildcard", () => {
+    // Including the rendered one: it reaches the features through the
+    // ST_AsGeoJSON alias, so its raw value would be redundant binary.
+    const sql = buildIcebergSelectSql(
+      "SELECT * FROM iceberg_scan('x')",
+      'ST_AsGeoJSON("geom_a")',
+      "__g",
+      100,
+      ["geom_a", "geom_b"],
+    );
+    assert.match(sql, /^SELECT \* EXCLUDE \("geom_a", "geom_b"\), ST_AsGeoJSON/);
+    assert.match(sql, /LIMIT 100$/);
+  });
+
+  it("omits the clause entirely when nothing is excluded", () => {
+    // DuckDB rejects an empty EXCLUDE ().
+    const sql = buildIcebergSelectSql("SELECT 1", "ST_AsGeoJSON(g)", "__g", 10, []);
+    assert.doesNotMatch(sql, /EXCLUDE/);
+    assert.match(sql, /^SELECT \*, ST_AsGeoJSON\(g\)/);
+  });
+
+  it("defaults to no exclusions when the argument is omitted", () => {
+    assert.doesNotMatch(buildIcebergSelectSql("SELECT 1", "ST_AsGeoJSON(g)", "__g", 10), /EXCLUDE/);
+  });
+
+  it("escapes a quote in a column name rather than breaking out", () => {
+    const sql = buildIcebergSelectSql("SELECT 1", "ST_AsGeoJSON(g)", "__g", 10, ['ge"om']);
+    assert.match(sql, /EXCLUDE \("ge""om"\)/);
+  });
+});
+
+describe("keepOrDefaultGeometryColumn", () => {
+  const COLUMNS = [
+    { name: "geom_a", type: "GEOMETRY" },
+    { name: "geom_b", type: "GEOMETRY(EPSG:3857)" },
+  ];
+
+  it("keeps a deliberate pick that the source still exposes", () => {
+    // Re-inspection runs on every SQL edit; without this the choice would
+    // silently revert to the first column.
+    assert.equal(keepOrDefaultGeometryColumn("geom_b", COLUMNS), "geom_b");
+  });
+
+  it("falls back to the first when the pick is gone", () => {
+    assert.equal(keepOrDefaultGeometryColumn("geom_removed", COLUMNS), "geom_a");
+  });
+
+  it("defaults to the first when nothing is selected yet", () => {
+    assert.equal(keepOrDefaultGeometryColumn("", COLUMNS), "geom_a");
+  });
+
+  it("selects nothing when the source has no geometry", () => {
+    assert.equal(keepOrDefaultGeometryColumn("geom_a", []), "");
+    assert.equal(keepOrDefaultGeometryColumn("", []), "");
   });
 });
 

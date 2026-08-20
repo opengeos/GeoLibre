@@ -318,24 +318,58 @@ export function buildIcebergSourceSql(config: IcebergLayerConfig): string {
 }
 
 /**
- * Wrap the source in the bounded read the loader materializes: every column
- * plus the GeoJSON rendering of the geometry, capped at the config's row limit.
+ * Wrap the source in the bounded read the loader materializes: the attribute
+ * columns plus the GeoJSON rendering of the geometry, capped at the row limit.
+ *
+ * `excludeColumns` is how a table with several geometry columns stays sane. The
+ * caller passes **every** GEOMETRY column, including the one being rendered: the
+ * rendered column is already carried by the `ST_AsGeoJSON` alias, and the others
+ * would otherwise ride the wildcard into feature properties and be embedded in
+ * the saved project — as an unreadable binary blob at best, and as many
+ * megabytes of it across a 50k-row load. Excluding them also trims what crosses
+ * the Arrow boundary.
  *
  * @param sourceSql A FROM-able sub-select (see {@link buildIcebergSourceSql}).
  * @param geometryJsonSql The `ST_AsGeoJSON(...)` expression for the geometry.
  * @param geometryJsonColumn Alias the GeoJSON text is exposed under.
  * @param rowLimit Maximum rows to materialize.
+ * @param excludeColumns Columns to drop from the wildcard; empty omits the
+ *   clause entirely, since DuckDB rejects an empty `EXCLUDE`.
  */
 export function buildIcebergSelectSql(
   sourceSql: string,
   geometryJsonSql: string,
   geometryJsonColumn: string,
   rowLimit: number,
+  excludeColumns: readonly string[] = [],
 ): string {
+  const exclude =
+    excludeColumns.length > 0 ? ` EXCLUDE (${excludeColumns.map(quoteIdentifier).join(", ")})` : "";
   return (
-    `SELECT *, ${geometryJsonSql} AS ${quoteIdentifier(geometryJsonColumn)} ` +
+    `SELECT *${exclude}, ${geometryJsonSql} AS ${quoteIdentifier(geometryJsonColumn)} ` +
     `FROM (${sourceSql}) AS iceberg_source LIMIT ${clampIcebergRowLimit(rowLimit)}`
   );
+}
+
+/**
+ * The geometry column a picker should land on after the source is re-described:
+ * the one already chosen when it is still there, otherwise the first available.
+ *
+ * Re-inspection happens whenever the SQL box is edited, and without this the
+ * chosen column would be silently reset to the first every time — losing a
+ * deliberate pick with no indication. Kept here, rather than inline in the
+ * dialog, so the rule is unit-testable.
+ *
+ * @param current The currently selected column name (may be empty).
+ * @param columns The GEOMETRY columns the source now exposes.
+ * @returns The column to select, or `""` when the source has none.
+ */
+export function keepOrDefaultGeometryColumn(
+  current: string,
+  columns: readonly IcebergColumn[],
+): string {
+  if (current && columns.some((column) => column.name === current)) return current;
+  return columns[0]?.name ?? "";
 }
 
 /** Build the metadata blob a loaded Iceberg layer carries. */
