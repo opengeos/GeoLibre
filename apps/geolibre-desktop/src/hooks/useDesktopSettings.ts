@@ -169,6 +169,8 @@ interface DesktopSettingsState {
   setDesktopSettings: (settings: DesktopSettings) => void;
 }
 
+let desktopSettingsAreTemporary = false;
+
 export const DEFAULT_DESKTOP_LAYOUT_SETTINGS: DesktopLayoutSettings = {
   browserPanelVisible: true,
   commentsPanelVisible: true,
@@ -481,8 +483,15 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set) => ({
   setDesktopSettings: (settings) => set({ desktopSettings: normalizeDesktopSettings(settings) }),
 }));
 
+/** Apply settings supplied by an embed URL without replacing this browser's saved preferences. */
+export function applyTemporaryDesktopSettings(settings: unknown): void {
+  desktopSettingsAreTemporary = true;
+  useDesktopSettingsStore.getState().setDesktopSettings(normalizeDesktopSettings(settings));
+}
+
 export function useDesktopSettingsPersistence() {
   useEffect(() => {
+    if (desktopSettingsAreTemporary) return;
     saveDesktopSettings(useDesktopSettingsStore.getState().desktopSettings);
 
     return useDesktopSettingsStore.subscribe((state, previous) => {

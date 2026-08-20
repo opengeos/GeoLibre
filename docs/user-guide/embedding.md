@@ -32,6 +32,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | `maponly`    | `maponly`                                                  | Hides all chrome (toolbar, panels, and status bar), leaving only the map. The bare flag or `true`, `1`, `yes`, `on` enable it.        |
 | `welcome`    | `welcome=0`                                                | Hides the first-launch welcome wizard. Accepts `0`, `false`, `off`, or `no`. A `url=` or `data=` deep link already suppresses it automatically. |
 | `theme`      | `theme=dark`                                               | Sets the initial color theme, overriding the OS preference. Accepts `dark` or `light`; the in-app toggle still works afterward.       |
+| `settingsUrl` | `settingsUrl=https://example.com/desktop-settings.json`   | Loads a complete `geolibre.desktopSettings` JSON object before the first render. The override lasts for this page only and does not replace the visitor's locally saved settings. `settingUrl` is accepted as an alias. |
 | `tool`       | `tool=adaptive_filter`                                     | Opens the Processing (Whitebox toolbox) dialog on a specific tool by its id. Unknown ids open the dialog without preselecting a tool. |
 
 !!! note "Private projects and data"
@@ -47,6 +48,13 @@ Parameters combine. For a narrow, chrome-free, dark embed of a shared project:
 ```text
 https://web.geolibre.app/?url=https://share.geolibre.app/you/project.geolibre.json&maponly&theme=dark
 ```
+
+The settings document must be public or same-origin, return valid JSON, and
+allow cross-origin browser requests when hosted elsewhere. Its fields use the
+same shape as the `geolibre.desktopSettings` local-storage value. Missing or
+invalid fields are replaced with GeoLibre defaults. URL parameters such as
+`theme`, `layout`, and `maponly` continue to take precedence over corresponding
+settings where they overlap.
 
 ### Deep-linking a Processing tool
 

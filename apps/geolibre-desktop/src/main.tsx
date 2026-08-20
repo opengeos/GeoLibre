@@ -67,6 +67,8 @@ import { isTauri } from "./lib/is-tauri";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
 import { resolveAuthGate, type AuthGateConfig } from "./lib/auth-gate";
 import { getInitialThemeMode } from "./hooks/useThemeMode";
+import { applyTemporaryDesktopSettings } from "./hooks/useDesktopSettings";
+import { desktopSettingsUrl, fetchDesktopSettings } from "./lib/desktop-settings-url";
 
 installDiagnosticsCapture();
 // In the desktop build, route geocoding (place search / reverse geocode)
@@ -191,6 +193,18 @@ registerSW({
 // Fetch both chunks in parallel rather than waterfalling the boundary import
 // after App resolves — a free win, and it matters over the network in the web
 // build where these are separate fetches.
+const sharedSettingsUrl = desktopSettingsUrl(window.location.search);
+const sharedSettingsReady = sharedSettingsUrl
+  ? fetchDesktopSettings(sharedSettingsUrl)
+      .then((settings) => applyTemporaryDesktopSettings(settings))
+      .catch((error: unknown) => {
+        // A shared settings file is optional configuration. Keep the app usable
+        // with the visitor's local settings, but make a bad URL visible in the
+        // diagnostics capture and developer console.
+        console.error("[GeoLibre] Failed to load shared desktop settings", error);
+      })
+  : Promise.resolve();
+
 void Promise.all([
   import("./App"),
   import("./components/common/error-boundaries"),
@@ -198,6 +212,7 @@ void Promise.all([
   // Gate the first render on i18next being initialized with the active locale's
   // (lazily loaded) catalog, so the UI never paints raw translation keys.
   i18nReady,
+  sharedSettingsReady,
 ])
   .then(([{ default: App }, { AppErrorBoundary }, withAuthGate]) => {
     const app = <App />;
