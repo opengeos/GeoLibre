@@ -255,7 +255,9 @@ export function ModelBuilderPanel({
 }: ModelBuilderPanelProps): ReactElement | null {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.modelBuilderOpen);
+  const requestedModelId = useAppStore((s) => s.ui.modelBuilderRequestedModelId);
   const setOpen = useAppStore((s) => s.setModelBuilderOpen);
+  const setRequestedModelId = useAppStore((s) => s.setModelBuilderRequestedModelId);
   const layers = useAppStore((s) => s.layers);
   const savedModels = useAppStore((s) => s.models);
   const saveModel = useAppStore((s) => s.saveModel);
@@ -501,6 +503,16 @@ export function ModelBuilderPanel({
     },
     [confirmDiscard, layoutOptions, resetRunState],
   );
+
+  // Programmatic entry points (notably the AI Assistant) save a normal project
+  // model and request that it be shown. Reuse the regular load path so an
+  // unsaved canvas still receives its discard confirmation.
+  useEffect(() => {
+    if (!open || !requestedModelId) return;
+    const requested = savedModels.find((model) => model.id === requestedModelId);
+    setRequestedModelId(null);
+    if (requested) handleLoadModel(requested);
+  }, [open, requestedModelId, savedModels, setRequestedModelId, handleLoadModel]);
 
   /**
    * Forget the loaded model. The picker only offers models the project already

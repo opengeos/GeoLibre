@@ -165,6 +165,7 @@ operations, so its actions stay within GeoLibre's validated surface.
 | **Inspect layers** | Lists loaded layers, their geometry, attribute fields, and SQL table names (schema only — never your full data). |
 | **NL → Spatial SQL** | Generates and runs a **read-only** DuckDB Spatial SQL query through the [SQL Workspace](sql-workspace.md), and can add the result as a layer. |
 | **Geoprocessing** | Runs the registered [processing](processing.md) algorithms (buffer, clip, dissolve, intersection, difference, union, spatial join, simplify, H3 grids, …) and chains them into multi-step pipelines, adding each result as a layer. |
+| **Model Builder** | Creates a validated, editable Model Builder workflow from a description, saves it with the project, and opens it for review before you run it. |
 | **Symbology** | Applies a **graduated** (numeric) or **categorized** (text) color ramp to a layer. |
 | **Add data** | Adds a layer from a public GeoJSON URL, or an XYZ tile basemap by name (`osm`, `opentopomap`, `carto-dark`) or a custom `{z}/{x}/{y}` URL. |
 | **Earth observation** | Searches the Microsoft [Planetary Computer](https://planetarycomputer.microsoft.com) STAC catalog (Sentinel-2, Landsat, NAIP, DEMs, …) and adds an item over the current view as a raster layer — tiles are signed server-side, so no credentials are needed. |
@@ -194,6 +195,7 @@ count points in each polygon of the districts layer
 ```text
 buffer the roads by 100 meters
 buffer the roads by 100 m, then clip the buffer to the county boundary
+create a Model Builder model that buffers roads by 100 m, clips the result to counties, and names the output Road buffers
 dissolve the parcels by zoning type
 find where the floodplain overlaps the buildings (intersection)
 create an H3 hex grid at resolution 8 over the points and count points per cell

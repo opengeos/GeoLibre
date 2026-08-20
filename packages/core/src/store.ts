@@ -342,6 +342,8 @@ export interface AppState {
     batchToolsOpen: boolean;
     /** The Model Builder canvas panel (author a processing graph). */
     modelBuilderOpen: boolean;
+    /** One-shot request for Model Builder to load a saved model. */
+    modelBuilderRequestedModelId: string | null;
     /** Style Manager dialog visibility (issue #1294). */
     styleManagerOpen: boolean;
     /** Processing History panel visibility (#1292). */
@@ -465,6 +467,7 @@ export interface AppState {
   setStorymapComposing: (chapterId: string | null) => void;
   setBatchToolsOpen: (open: boolean) => void;
   setModelBuilderOpen: (open: boolean) => void;
+  setModelBuilderRequestedModelId: (id: string | null) => void;
   setProcessingHistoryOpen: (open: boolean) => void;
   /** Open/close Select by Expression, optionally preselecting a target layer. */
   setSelectByExpressionOpen: (open: boolean, layerId?: string | null) => void;
@@ -1064,6 +1067,7 @@ export const useAppStore = create<AppState>()(
         storymapComposingId: null,
         batchToolsOpen: false,
         modelBuilderOpen: false,
+        modelBuilderRequestedModelId: null,
         styleManagerOpen: false,
         processingHistoryOpen: false,
         selectByExpressionOpen: false,
@@ -1401,6 +1405,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, storymapComposingId: chapterId } })),
       setBatchToolsOpen: (open) => set((s) => ({ ui: { ...s.ui, batchToolsOpen: open } })),
       setModelBuilderOpen: (open) => set((s) => ({ ui: { ...s.ui, modelBuilderOpen: open } })),
+      setModelBuilderRequestedModelId: (id) =>
+        set((s) => ({ ui: { ...s.ui, modelBuilderRequestedModelId: id } })),
       setProcessingHistoryOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, processingHistoryOpen: open } })),
       setProcessingRerun: (request) => set((s) => ({ ui: { ...s.ui, processingRerun: request } })),

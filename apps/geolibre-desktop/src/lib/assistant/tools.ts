@@ -17,6 +17,7 @@ import { cleanStatement, maskSqlLiterals, previewLayerTables, runSqlQuery } from
 import { createXyzTileUrlTemplate } from "../xyz-url";
 import { findNamedTileBasemap, NAMED_TILE_BASEMAPS } from "./basemaps";
 import { buildSymbologyStyle } from "./symbology";
+import { buildAssistantModel } from "./model-builder";
 import { webSearch } from "./web-search";
 
 /** Dependencies the assistant tools need beyond the global store. */
@@ -694,6 +695,69 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
     },
   });
 
+  const listModelAlgorithms = tool({
+    name: "list_model_algorithms",
+    description:
+      "List algorithms that can be placed in Model Builder, including their exact input-port and parameter ids. Call this before create_model_builder_model.",
+    inputSchema: z.object({}),
+    callback: async () => {
+      const [{ VECTOR_TOOLS }, { vectorToolDescriptor }] = await Promise.all([
+        import("@geolibre/processing"),
+        import("../model-tool-catalog"),
+      ]);
+      return json({
+        algorithms: VECTOR_TOOLS.map(vectorToolDescriptor).map((descriptor) => ({
+          id: descriptor.toolId,
+          name: descriptor.name,
+          description: descriptor.description,
+          inputs: descriptor.inputs,
+          parameters: descriptor.parameters,
+          outputs: descriptor.outputs,
+        })),
+      });
+    },
+  });
+
+  const createModelBuilderModel = tool({
+    name: "create_model_builder_model",
+    description:
+      "Create, save, and open an editable Model Builder workflow. Inputs and steps use unique short keys. Each step's inputs maps an algorithm input-port id to an earlier input/step key; parameters holds non-layer settings. Outputs name results to add to the map. Call list_model_algorithms first and use its exact ids.",
+    inputSchema: z.object({
+      name: z.string(),
+      inputs: z.array(z.object({ key: z.string(), layer: z.string() })),
+      steps: z.array(
+        z.object({
+          key: z.string(),
+          algorithm: z.string(),
+          parameters: z.record(z.string(), z.unknown()).optional(),
+          inputs: z.record(z.string(), z.string()),
+        }),
+      ),
+      outputs: z.array(z.object({ source: z.string(), name: z.string() })),
+    }),
+    callback: async (input) => {
+      const [{ VECTOR_TOOLS }, { vectorToolDescriptor }] = await Promise.all([
+        import("@geolibre/processing"),
+        import("../model-tool-catalog"),
+      ]);
+      const model = buildAssistantModel(
+        input,
+        store().layers,
+        VECTOR_TOOLS.map(vectorToolDescriptor),
+      );
+      store().saveModel(model);
+      store().setModelBuilderRequestedModelId(model.id);
+      store().setModelBuilderOpen(true);
+      return json({
+        modelId: model.id,
+        name: model.name,
+        nodes: model.graph?.nodes.length ?? 0,
+        edges: model.graph?.edges.length ?? 0,
+        opened: true,
+      });
+    },
+  });
+
   const searchStac = tool({
     name: "search_stac",
     description:
@@ -810,6 +874,8 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
     addTileLayer,
     listAlgorithms,
     runAlgorithm,
+    listModelAlgorithms,
+    createModelBuilderModel,
     searchStac,
     addStacLayer,
     webSearchTool,
