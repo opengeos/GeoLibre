@@ -51,20 +51,65 @@ interface LayerSummary {
 }
 
 /**
- * The algorithms the assistant may place in a Model Builder graph.
+ * The algorithms the assistant may place in a Model Builder graph: the same
+ * palette the canvas itself offers, so anything a user could drag in, the
+ * assistant can wire up — the client vector registry plus the Whitebox catalog
+ * snapshot and the WASM manifests.
  *
  * `list_model_algorithms` and `create_model_builder_model` both read this one
  * list, so the ids offered to the model and the ids `buildAssistantModel`
  * resolves cannot drift apart. Imported dynamically to keep the processing
- * registry out of the assistant's initial chunk.
+ * registry out of the assistant's initial chunk. The two remote sources degrade
+ * independently, matching `ModelBuilderPanel`: losing one still leaves a usable
+ * palette built from the other, rather than failing the whole tool call.
  */
 async function loadModelToolDescriptors(): Promise<ModelToolDescriptor[]> {
-  const [{ VECTOR_TOOLS }, { vectorToolDescriptor }] = await Promise.all([
-    import("@geolibre/processing"),
-    import("../model-tool-catalog"),
+  const [
+    {
+      VECTOR_TOOLS,
+      fetchRemoteWhiteboxCatalogSnapshot,
+      listWasmToolManifests,
+      mergeWasmToolManifests,
+    },
+    { buildModelToolCatalog },
+  ] = await Promise.all([import("@geolibre/processing"), import("../model-tool-catalog")]);
+  const [catalogResult, wasmResult] = await Promise.allSettled([
+    fetchRemoteWhiteboxCatalogSnapshot(),
+    listWasmToolManifests(),
   ]);
-  return VECTOR_TOOLS.map(vectorToolDescriptor);
+  if (catalogResult.status === "rejected") {
+    console.warn("[GeoLibre] Assistant could not load the Whitebox catalog:", catalogResult.reason);
+  }
+  if (wasmResult.status === "rejected") {
+    console.warn("[GeoLibre] Assistant could not enumerate WASM manifests:", wasmResult.reason);
+  }
+  return buildModelToolCatalog(
+    VECTOR_TOOLS,
+    mergeWasmToolManifests(
+      catalogResult.status === "fulfilled" ? catalogResult.value : [],
+      wasmResult.status === "fulfilled" ? wasmResult.value : [],
+    ),
+  );
 }
+
+/** The model-facing shape of one algorithm: ports and parameters, no manifest. */
+function modelAlgorithmDetail(descriptor: ModelToolDescriptor) {
+  return {
+    // Qualified, because two registries can define the same bare id and
+    // `buildAssistantModel` rejects a colliding one until it is namespaced.
+    id: descriptor.key,
+    provider: descriptor.provider,
+    name: descriptor.name,
+    group: descriptor.group,
+    description: descriptor.description,
+    inputs: descriptor.inputs,
+    parameters: descriptor.parameters,
+    outputs: descriptor.outputs,
+  };
+}
+
+/** Full detail for at most this many `list_model_algorithms` search hits. */
+const MAX_MODEL_ALGORITHM_MATCHES = 25;
 
 /** Statement keywords that write data or have side effects. */
 const SQL_WRITE_KEYWORDS =
@@ -715,22 +760,44 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
   const listModelAlgorithms = tool({
     name: "list_model_algorithms",
     description:
-      "List the client-side vector algorithms that can be placed in Model Builder, including their exact input-port and parameter ids. Raster and Whitebox tools are not available to this flow — use run_algorithm or the Processing menu for those. Call this before create_model_builder_model.",
-    inputSchema: z.object({}),
-    callback: async () => {
+      "List algorithms that can be placed in Model Builder — client-side vector tools plus the full Whitebox/raster catalog (hydrology, terrain, LiDAR, image processing) — with their exact input-port and parameter ids. The catalog runs to ~1000 tools, so pass `search` to filter by name, id or group ('stream', 'flow accumulation', 'hydro', 'terrain'); without it you get the vector tools in full plus the Whitebox group names to search within. Call this before create_model_builder_model and use the exact ids it returns.",
+    inputSchema: z.object({
+      search: z
+        .string()
+        .optional()
+        .describe("Filter by tool name, id or group, e.g. 'stream' or 'hydrology'."),
+    }),
+    callback: async (input) => {
+      const [catalog, { searchModelTools }] = await Promise.all([
+        loadModelToolDescriptors(),
+        import("../model-tool-catalog"),
+      ]);
+      const query = input.search?.trim();
+      if (query) {
+        const matches = searchModelTools(catalog, query);
+        return json({
+          search: query,
+          matched: matches.length,
+          // Enough for the model to pick from without flooding the context; a
+          // narrower search is the way to see the rest.
+          truncated: matches.length > MAX_MODEL_ALGORITHM_MATCHES,
+          algorithms: matches.slice(0, MAX_MODEL_ALGORITHM_MATCHES).map(modelAlgorithmDetail),
+        });
+      }
+      // Unfiltered, the Whitebox half is far too large to serialize, so it is
+      // summarized to its groups. Searching one of those group names returns
+      // the tools inside it with full ports and parameters.
+      const groups = new Map<string, number>();
+      for (const descriptor of catalog) {
+        if (descriptor.provider === "vector") continue;
+        groups.set(descriptor.group, (groups.get(descriptor.group) ?? 0) + 1);
+      }
       return json({
-        algorithms: (await loadModelToolDescriptors()).map((descriptor) => ({
-          id: descriptor.toolId,
-          // The registry a tool came from is part of its identity: two
-          // registries can define the same id, so a step naming a colliding
-          // bare id is rejected until it is qualified as `provider:id`.
-          provider: descriptor.provider,
-          name: descriptor.name,
-          description: descriptor.description,
-          inputs: descriptor.inputs,
-          parameters: descriptor.parameters,
-          outputs: descriptor.outputs,
-        })),
+        algorithms: catalog.filter((d) => d.provider === "vector").map(modelAlgorithmDetail),
+        rasterGroups: [...groups]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([group, tools]) => ({ group, tools })),
+        hint: "Raster/Whitebox tools are summarized by group. Call again with `search` (a group name, a tool name, or a keyword like 'stream') to get their exact ids, ports and parameters.",
       });
     },
   });
@@ -738,7 +805,7 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
   const createModelBuilderModel = tool({
     name: "create_model_builder_model",
     description:
-      "Create, save, and open an editable Model Builder workflow from the client-side vector algorithms. Inputs and steps use unique short keys. Each step's inputs maps an algorithm input-port id to an earlier input/step key; parameters holds non-layer settings. Outputs name results to add to the map. Call list_model_algorithms first and use its exact ids; the model is always saved, but Model Builder asks before replacing unsaved canvas work or a running job.",
+      "Create, save, and open an editable Model Builder workflow. Steps can mix client-side vector tools and Whitebox/raster tools, so a raster chain (e.g. fill depressions → flow accumulation → extract streams → raster-to-vector) is a valid model. Inputs and steps use unique short keys. Each step's inputs maps an algorithm input-port id to an earlier input/step key; parameters holds non-layer settings. Outputs name results to add to the map. Call list_model_algorithms first and use the exact ids it returns; the model is always saved, but Model Builder asks before replacing unsaved canvas work or a running job.",
     inputSchema: z.object({
       name: z.string(),
       inputs: z.array(
@@ -750,7 +817,9 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
       steps: z.array(
         z.object({
           key: z.string(),
-          algorithm: z.string(),
+          algorithm: z
+            .string()
+            .describe("Algorithm id from list_model_algorithms, e.g. 'vector:buffer'."),
           parameters: z.record(z.string(), z.unknown()).optional(),
           inputs: z.record(z.string(), z.string()),
         }),
