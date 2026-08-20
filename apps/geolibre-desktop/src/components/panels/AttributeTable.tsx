@@ -667,15 +667,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     () => (adaptAnalysisRows ? coerceNumericStringRows(attributeRows) : attributeRows),
     [adaptAnalysisRows, attributeRows],
   );
-  const analysisFilteredRows = useMemo(
-    () =>
-      adaptAnalysisRows
-        ? filtered.length === attributeRows.length
-          ? analysisRows
-          : coerceNumericStringRows(filtered)
-        : filtered,
-    [adaptAnalysisRows, analysisRows, attributeRows.length, filtered],
-  );
+  const analysisFilteredRows = useMemo(() => {
+    if (!adaptAnalysisRows) return filtered;
+    if (filtered.length === attributeRows.length) return analysisRows;
+    const filteredIds = new Set(filtered.map(({ featureId }) => featureId));
+    return analysisRows.filter((_, index) => filteredIds.has(attributeRows[index].featureId));
+  }, [adaptAnalysisRows, analysisRows, attributeRows, filtered]);
   const analysisSelectedRows = useMemo(() => {
     if (!adaptAnalysisRows || selectedIdSet.size === 0) return [];
     // Filter the already-adapted full-layer rows so a field keeps the same
