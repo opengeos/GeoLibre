@@ -1022,6 +1022,26 @@ describe("replayVectorLayer with layer groups", () => {
     });
   }
 
+  it("replays embedded GeoJSON with its effective format instead of the original file format", async () => {
+    const info = vectorInfo({
+      format: "geopackage",
+      source: { kind: "file", fileName: "countries.gpkg" },
+    });
+    const layer = createVectorStoreLayer(info);
+    let addDataOptions: VectorLayerOptions | undefined;
+    const control = {
+      addData: async (_source: unknown, options?: VectorLayerOptions) => {
+        addDataOptions = options;
+        return info;
+      },
+    } as unknown as VectorControl;
+
+    await replayVectorLayer(control, layer, embedded, groups);
+
+    assert.equal((layer.metadata.vectorState as { format?: string }).format, "geopackage");
+    assert.equal(addDataOptions?.format, "geojson");
+  });
+
   it("clears restored render tracking after group overrides are removed", async () => {
     const info = vectorInfo();
     const layer = {

@@ -491,12 +491,20 @@ export function replayVectorLayer(
   } = {},
 ): Promise<unknown> {
   const effective = effectiveLayerRenderState(layer, groups);
+  const replayState = savedVectorState(layer);
+  // Embedded data is always a GeoJSON FeatureCollection, even when it was
+  // materialized from a GeoPackage or another source format. The effective
+  // replay format must follow the data being passed to addData, not the
+  // original file format retained in the project metadata.
+  if (typeof source !== "string" && source.type === "FeatureCollection") {
+    replayState.format = "geojson";
+  }
   // Record the folded values before addData so its first layer event is treated
   // as a restore echo rather than as an edit to the child's own state.
   rememberControlVectorRenderState(layer.id, effective);
   return control
     .addData(source, {
-      ...savedVectorState(layer),
+      ...replayState,
       ...(options.companionFiles?.length ? { companionFiles: options.companionFiles } : {}),
       ...(options.localPath ? { sourcePath: options.localPath } : {}),
       fitBounds: false,
