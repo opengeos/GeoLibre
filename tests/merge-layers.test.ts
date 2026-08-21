@@ -129,6 +129,20 @@ describe("merge layers tool", () => {
     assert.ok(failed.messages.some((m) => m.includes("none of the selected layers")));
   });
 
+  it("distinguishes a missing layer from one with no usable geometry", () => {
+    const nullGeom = makeLayer("n", "Null geometry", {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: { a: 1 }, geometry: null }],
+    });
+    const run = runMerge([pointsA, nullGeom], { layers: ["a", "n", "gone"] });
+    assert.ok(run.messages.some((m) => m.includes("1 selected layer(s) that no longer exist")));
+    assert.ok(run.messages.some((m) => m.includes("1 selected layer(s) with no usable geometry")));
+    // Only the one usable layer is reported as merged, and it contributes all
+    // the output features.
+    assert.ok(run.messages.some((m) => m.includes("Merged 1 layer(s): 2 feature(s)")));
+    assert.equal(run.results[0].features.length, 2);
+  });
+
   it("errors when fewer than two layers are selected", () => {
     const none = runMerge([pointsA], {});
     assert.equal(none.results.length, 0);

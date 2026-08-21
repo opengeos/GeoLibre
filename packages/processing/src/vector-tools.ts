@@ -2782,13 +2782,21 @@ export const mergeLayersTool: ProcessingAlgorithm = {
     const rawFieldName = (ctx.parameters.sourceFieldName as string)?.trim();
     const sourceField = rawFieldName || "source";
 
-    const selected = ids
-      .map((id) => ctx.layers.find((l) => l.id === id))
-      .filter((l): l is GeoLibreLayer => Boolean(l?.geojson?.features?.length));
-    const skipped = ids.length - selected.length;
-    if (skipped) ctx.log(`Skipped ${skipped} selected layer(s) with no GeoJSON features`);
+    // Resolve first so a layer deleted since it was selected (or a stale
+    // History re-run) is reported as missing rather than as merely empty.
+    const resolved = ids.map((id) => ctx.layers.find((l) => l.id === id));
+    const missing = resolved.filter((l) => !l).length;
+    if (missing) ctx.log(`Skipped ${missing} selected layer(s) that no longer exist`);
+    // Require a feature that will actually be emitted: a layer whose features
+    // all have null geometry contributes nothing to the output below, so it is
+    // a skip, not a merged layer.
+    const selected = resolved.filter((l): l is GeoLibreLayer =>
+      Boolean(l?.geojson?.features?.some((feature) => feature.geometry)),
+    );
+    const unusable = ids.length - missing - selected.length;
+    if (unusable) ctx.log(`Skipped ${unusable} selected layer(s) with no usable geometry`);
     if (!selected.length) {
-      ctx.log("Error: none of the selected layers has GeoJSON features");
+      ctx.log("Error: none of the selected layers has usable geometry");
       return;
     }
     // The source field is written last and would otherwise overwrite an input
@@ -2796,8 +2804,10 @@ export const mergeLayersTool: ProcessingAlgorithm = {
     if (
       addSource &&
       selected.some((layer) =>
-        layer.geojson!.features.some((feature) =>
-          Object.prototype.hasOwnProperty.call(feature.properties ?? {}, sourceField),
+        layer.geojson!.features.some(
+          (feature) =>
+            feature.geometry &&
+            Object.prototype.hasOwnProperty.call(feature.properties ?? {}, sourceField),
         ),
       )
     ) {
