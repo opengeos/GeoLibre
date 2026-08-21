@@ -2783,34 +2783,73 @@ export const decodePolylineTool: ProcessingAlgorithm = {
     const rawPrecision = ctx.parameters.precision;
     const precision = rawPrecision === "6" || rawPrecision === 6 ? 6 : 5;
 
-    const outFeatures: Feature<LineString>[] = [];
+    const outFeatures: Feature<LineString | MultiLineString>[] = [];
     let skipped = 0;
 
     for (const feature of fc.features) {
-      const val = feature.properties?.[field];
-      if (typeof val !== "string" || !val.trim()) {
+      const rawVal = feature.properties?.[field];
+      if (typeof rawVal !== "string" || !rawVal.trim()) {
         skipped++;
         continue;
       }
-      const coords = decodePolyline(val.trim(), precision);
-      if (coords.length < 2) {
+      const val = rawVal.trim();
+      const parts = val.split(";").map((p) => p.trim()).filter(Boolean);
+      if (parts.length === 0) {
         skipped++;
         continue;
       }
-      outFeatures.push({
-        type: "Feature",
-        properties: { ...(feature.properties ?? {}) },
-        geometry: {
-          type: "LineString",
-          coordinates: coords,
-        },
-      });
+
+      let valid = true;
+      const multiCoords: [number, number][][] = [];
+
+      for (const part of parts) {
+        for (let i = 0; i < part.length; i++) {
+          const code = part.charCodeAt(i);
+          if (code < 63 || code > 126) {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) break;
+
+        const coords = decodePolyline(part, precision);
+        if (coords.length < 2) {
+          valid = false;
+          break;
+        }
+        multiCoords.push(coords);
+      }
+
+      if (!valid || multiCoords.length === 0) {
+        skipped++;
+        continue;
+      }
+
+      if (multiCoords.length === 1) {
+        outFeatures.push({
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}) },
+          geometry: {
+            type: "LineString",
+            coordinates: multiCoords[0],
+          },
+        });
+      } else {
+        outFeatures.push({
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}) },
+          geometry: {
+            type: "MultiLineString",
+            coordinates: multiCoords,
+          },
+        });
+      }
     }
 
     if (skipped > 0) {
       ctx.log(`Skipped ${skipped} feature(s) with missing or invalid polyline string`);
     }
-    ctx.log(`Decoded ${outFeatures.length} LineString feature(s) from "${field}"`);
+    ctx.log(`Decoded ${outFeatures.length} line feature(s) from "${field}"`);
     ctx.addResultLayer?.("Decoded polylines", featureCollection(outFeatures));
   },
 };

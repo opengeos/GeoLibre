@@ -274,6 +274,7 @@ async function textExportContent(
   format: TextVectorExportFormat,
   geojson: FeatureCollection,
   documentName: string,
+  precision = 5,
 ): Promise<string> {
   switch (format) {
     case "geojson":
@@ -283,7 +284,7 @@ async function textExportContent(
     case "kml":
       return (await import("./kml-writer")).writeKml(geojson, documentName);
     case "polyline":
-      return geojsonToPolylineText(geojson);
+      return geojsonToPolylineText(geojson, precision);
   }
 }
 
@@ -292,8 +293,9 @@ async function exportTextLayer(
   geojson: FeatureCollection,
   baseName: string,
   documentName: string,
+  precision = 5,
 ): Promise<string | null> {
-  const content = await textExportContent(format, geojson, documentName);
+  const content = await textExportContent(format, geojson, documentName, precision);
   const { extension, filterExtensions, label, mimeType } = TEXT_EXPORT_FORMATS[format];
   return saveTextFileWithFallback(content, {
     defaultName: `${baseName}.${extension}`,
@@ -344,9 +346,10 @@ export async function exportVectorLayer(
   format: VectorExportFormat,
   baseName: string,
   documentName = baseName,
+  precision = 5,
 ): Promise<string | null> {
   if (format === "geojson" || format === "csv" || format === "kml" || format === "polyline") {
-    return exportTextLayer(format, geojson, baseName, documentName);
+    return exportTextLayer(format, geojson, baseName, documentName, precision);
   }
   return exportBinaryLayer(format, geojson, baseName, documentName);
 }

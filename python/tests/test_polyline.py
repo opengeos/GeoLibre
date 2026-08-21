@@ -71,6 +71,32 @@ def test_encode_polyline_valhalla():
     assert encode_polyline(coords, precision=6) == "_o`diA~gw}qC_pR_pR_pR_af@"
 
 
+def test_encode_polyline_half_precision_rounding_p5():
+    # Positive half-precision: 0.000025 * 1e5 = 2.5 -> Math.round is 3
+    # Negative half-precision: -0.000025 * 1e5 = -2.5 -> Math.round is -2
+    coords_pos = [(0.000025, 0.000025)]
+    coords_neg = [(-0.000025, -0.000025)]
+    assert encode_polyline(coords_pos, precision=5) == "EE"
+    assert encode_polyline(coords_neg, precision=5) == "BB"
+    decoded_pos = decode_polyline(encode_polyline(coords_pos, precision=5), precision=5)
+    decoded_neg = decode_polyline(encode_polyline(coords_neg, precision=5), precision=5)
+    assert math.isclose(decoded_pos[0][1], 0.00003, abs_tol=1e-6)
+    assert math.isclose(decoded_neg[0][1], -0.00002, abs_tol=1e-6)
+
+
+def test_encode_polyline_half_precision_rounding_p6():
+    # Positive half-precision: 0.0000025 * 1e6 = 2.5 -> Math.round is 3
+    # Negative half-precision: -0.0000025 * 1e6 = -2.5 -> Math.round is -2
+    coords_pos = [(0.0000025, 0.0000025)]
+    coords_neg = [(-0.0000025, -0.0000025)]
+    assert encode_polyline(coords_pos, precision=6) == "EE"
+    assert encode_polyline(coords_neg, precision=6) == "BB"
+    decoded_pos = decode_polyline(encode_polyline(coords_pos, precision=6), precision=6)
+    decoded_neg = decode_polyline(encode_polyline(coords_neg, precision=6), precision=6)
+    assert math.isclose(decoded_pos[0][1], 0.000003, abs_tol=1e-7)
+    assert math.isclose(decoded_neg[0][1], -0.000002, abs_tol=1e-7)
+
+
 def test_polyline_roundtrip():
     original = [
         (106.6297, 10.8231),
@@ -98,6 +124,10 @@ def test_polyline_to_geojson_single():
 def test_unescape_polyline():
     escaped = "_p~iF~ps|U_ulLnnqC_mqNvxq\\\\`@"
     assert unescape_polyline(escaped) == "_p~iF~ps|U_ulLnnqC_mqNvxq\\`@"
+    assert unescape_polyline("abc\\ndef") == "abc\\ndef"
+    assert unescape_polyline("abc\\rdef") == "abc\\rdef"
+    assert unescape_polyline("abc\\tdef") == "abc\\tdef"
+    assert unescape_polyline('a\\"b\\\'c\\\\d') == 'a"b\'c\\d'
     coords = decode_polyline(escaped, precision=5, unescape=True)
     assert len(coords) == 3
 

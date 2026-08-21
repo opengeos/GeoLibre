@@ -1579,7 +1579,7 @@ export function LayerPanel({
   );
 
   const handleExportLayer = useCallback(
-    async (layer: GeoLibreLayer, format: VectorExportFormat) => {
+    async (layer: GeoLibreLayer, format: VectorExportFormat, precision?: number) => {
       clearRefreshStatusTimer(layer.id);
       try {
         const geojson = await resolveLayerGeojson(
@@ -1604,11 +1604,17 @@ export function LayerPanel({
         const egressGeojson = layer.fieldVisibility
           ? excludeHiddenFieldsFromGeojson(geojson, layer.fieldVisibility)
           : geojson;
+        const polylinePrecision =
+          precision ??
+          (typeof layer.metadata?.polylinePrecision === "number"
+            ? layer.metadata.polylinePrecision
+            : 5);
         const savedPath = await exportVectorLayer(
           egressGeojson,
           format,
           sanitizeExportFileName(layer.name),
           layer.name,
+          polylinePrecision,
         );
         // A null path means the user cancelled the save dialog, so no note.
         if (savedPath !== null) {
@@ -3954,13 +3960,22 @@ export function LayerPanel({
                                   CSV (attributes only)
                                 </DropdownMenuItem>
                                 {canExportPolyline && (
-                                  <DropdownMenuItem
-                                    onSelect={() => {
-                                      void handleExportLayer(layer, "polyline");
-                                    }}
-                                  >
-                                    Encoded Polyline
-                                  </DropdownMenuItem>
+                                  <>
+                                    <DropdownMenuItem
+                                      onSelect={() => {
+                                        void handleExportLayer(layer, "polyline", 5);
+                                      }}
+                                    >
+                                      Encoded Polyline (precision 5)
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onSelect={() => {
+                                        void handleExportLayer(layer, "polyline", 6);
+                                      }}
+                                    >
+                                      Encoded Polyline (precision 6)
+                                    </DropdownMenuItem>
+                                  </>
                                 )}
                               </DropdownMenuSubContent>
                             </DropdownMenuSub>

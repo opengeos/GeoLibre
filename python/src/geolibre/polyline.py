@@ -21,9 +21,6 @@ def unescape_polyline(encoded: str) -> str:
         encoded.replace("\\\\", "\\")
         .replace('\\"', '"')
         .replace("\\'", "'")
-        .replace("\\n", "\n")
-        .replace("\\r", "\r")
-        .replace("\\t", "\t")
     )
 
 
@@ -129,8 +126,8 @@ def encode_polyline(
         if not (math.isfinite(lon) and math.isfinite(lat)):
             continue
 
-        round_lat = round(lat * factor)
-        round_lon = round(lon * factor)
+        round_lat = math.floor(lat * factor + 0.5)
+        round_lon = math.floor(lon * factor + 0.5)
 
         delta_lat = round_lat - prev_lat
         delta_lon = round_lon - prev_lon

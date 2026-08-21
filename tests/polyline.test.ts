@@ -136,6 +136,13 @@ describe("polyline codec", () => {
       const decoded = decodePolyline(escaped, 5, true);
       assert.equal(decoded.length, 3);
     });
+
+    it("preserves literal \\n, \\r, and \\t sequences without converting to control characters", () => {
+      assert.equal(unescapePolyline("abc\\ndef"), "abc\\ndef");
+      assert.equal(unescapePolyline("abc\\rdef"), "abc\\rdef");
+      assert.equal(unescapePolyline("abc\\tdef"), "abc\\tdef");
+      assert.equal(unescapePolyline('a\\"b\\\'c\\\\d'), 'a"b\'c\\d');
+    });
   });
 
   describe("batchDecodePolylines", () => {
@@ -331,6 +338,138 @@ describe("polyline codec", () => {
       assert.equal(resultFc.features.length, 1);
       assert.equal(resultFc.features[0].properties?.encoded_geom, "_p~iF~ps|U_ulLnnqC_mqNvxq`@");
       assert.equal(resultFc.features[0].properties?.name, "Route A");
+    });
+
+    it("decodePolylineTool skips malformed polyline string containing invalid characters like '/'", async () => {
+      const { decodePolylineTool } = await import("@geolibre/processing");
+      const layerWithInvalidPoly = {
+        id: "test-poly-layer-invalid",
+        name: "Invalid Polyline",
+        type: "geojson" as const,
+        visible: true,
+        opacity: 1,
+        style: {} as any,
+        metadata: {},
+        source: { type: "geojson" as const },
+        geojson: {
+          type: "FeatureCollection" as const,
+          features: [
+            {
+              type: "Feature" as const,
+              properties: { routeId: "Bad", poly: "_p~iF/invalid" },
+              geometry: null as any,
+            },
+          ],
+        },
+      };
+
+      let resultFc: FeatureCollection | undefined;
+      const logs: string[] = [];
+
+      decodePolylineTool.run({
+        layers: [layerWithInvalidPoly as any],
+        parameters: {
+          layer: "test-poly-layer-invalid",
+          field: "poly",
+          precision: "5",
+        },
+        log: (msg) => logs.push(msg),
+        addResultLayer: (_name, fc) => {
+          resultFc = fc;
+        },
+      });
+
+      assert.ok(resultFc);
+      assert.equal(resultFc.features.length, 0);
+      assert.ok(logs.some((msg) => msg.includes("Skipped 1 feature(s)")));
+    });
+
+    it("round-trips MultiLineString features through encodePolylineTool and decodePolylineTool", async () => {
+      const { encodePolylineTool, decodePolylineTool } = await import("@geolibre/processing");
+      const multiLineLayer = {
+        id: "test-multi-layer",
+        name: "MultiLine Test",
+        type: "geojson" as const,
+        visible: true,
+        opacity: 1,
+        style: {} as any,
+        metadata: {},
+        source: { type: "geojson" as const },
+        geojson: {
+          type: "FeatureCollection" as const,
+          features: [
+            {
+              type: "Feature" as const,
+              properties: { routeGroup: "Multi1" },
+              geometry: {
+                type: "MultiLineString" as const,
+                coordinates: [
+                  [
+                    [-120.2, 38.5],
+                    [-120.95, 40.7],
+                  ],
+                  [
+                    [-77.05, 38.88],
+                    [-77.04, 38.89],
+                  ],
+                ],
+              },
+            },
+          ],
+        },
+      };
+
+      let encodedFc: FeatureCollection | undefined;
+      encodePolylineTool.run({
+        layers: [multiLineLayer as any],
+        parameters: {
+          layer: "test-multi-layer",
+          precision: "5",
+          targetField: "poly_str",
+        },
+        log: () => {},
+        addResultLayer: (_name, fc) => {
+          encodedFc = fc;
+        },
+      });
+
+      assert.ok(encodedFc);
+      assert.equal(encodedFc.features.length, 1);
+      const encodedProp = encodedFc.features[0].properties?.poly_str;
+      assert.ok(typeof encodedProp === "string" && encodedProp.includes(";"));
+
+      const encodedLayer = {
+        id: "test-encoded-layer",
+        name: "Encoded",
+        type: "geojson" as const,
+        visible: true,
+        opacity: 1,
+        style: {} as any,
+        metadata: {},
+        source: { type: "geojson" as const },
+        geojson: encodedFc,
+      };
+
+      let decodedFc: FeatureCollection | undefined;
+      decodePolylineTool.run({
+        layers: [encodedLayer as any],
+        parameters: {
+          layer: "test-encoded-layer",
+          field: "poly_str",
+          precision: "5",
+        },
+        log: () => {},
+        addResultLayer: (_name, fc) => {
+          decodedFc = fc;
+        },
+      });
+
+      assert.ok(decodedFc);
+      assert.equal(decodedFc.features.length, 1);
+      const decodedGeom = decodedFc.features[0].geometry;
+      assert.equal(decodedGeom.type, "MultiLineString");
+      assert.equal((decodedGeom as MultiLineString).coordinates.length, 2);
+      assert.equal(decodedFc.features[0].properties?.routeGroup, "Multi1");
     });
   });
 

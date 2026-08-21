@@ -642,12 +642,38 @@ function parseGpxTextLayers(text: string, path: string): LoadedVectorLayer[] {
     }));
 }
 
+function hasValidPolylineCoordinates(fc: FeatureCollection): boolean {
+  if (!fc.features || fc.features.length === 0) return false;
+  for (const feature of fc.features) {
+    const geometry = feature.geometry;
+    if (!geometry) continue;
+    if (geometry.type === "LineString") {
+      for (const coord of geometry.coordinates) {
+        const [lon, lat] = coord;
+        if (!Number.isFinite(lon) || !Number.isFinite(lat) || lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+          return false;
+        }
+      }
+    } else if (geometry.type === "MultiLineString") {
+      for (const line of geometry.coordinates) {
+        for (const coord of line) {
+          const [lon, lat] = coord;
+          if (!Number.isFinite(lon) || !Number.isFinite(lat) || lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+            return false;
+          }
+        }
+      }
+    }
+  }
+  return true;
+}
+
 function parsePolylineFileLayers(text: string, path: string): LoadedVectorLayer[] {
   let fc = batchDecodePolylines(text, { precision: 5, unescape: true });
-  if (fc.features.length === 0) {
+  if (!hasValidPolylineCoordinates(fc)) {
     fc = batchDecodePolylines(text, { precision: 6, unescape: true });
   }
-  if (fc.features.length === 0) {
+  if (!hasValidPolylineCoordinates(fc)) {
     throw new Error("No valid polyline coordinates could be decoded from this file.");
   }
   const baseName = pathWithoutExtension(browserSafeFileName(path)) || "Polyline";
@@ -2012,15 +2038,9 @@ async function loadBrowserVectorFile(
 
   if (extension === "polyline") {
     const text = await file.text();
-    let fc = batchDecodePolylines(text, { precision: 5, unescape: true });
-    if (fc.features.length === 0) {
-      fc = batchDecodePolylines(text, { precision: 6, unescape: true });
-    }
-    if (fc.features.length === 0) {
-      throw new Error("No valid polyline coordinates could be decoded from this file.");
-    }
+    const [layer] = parsePolylineFileLayers(text, file.name);
     return {
-      data: fc,
+      data: layer.data,
       path: file.name,
     };
   }
@@ -2324,15 +2344,9 @@ async function loadTauriVectorFile(
   if (extension === "polyline") {
     try {
       const text = await readLocalFileText(path);
-      let fc = batchDecodePolylines(text, { precision: 5, unescape: true });
-      if (fc.features.length === 0) {
-        fc = batchDecodePolylines(text, { precision: 6, unescape: true });
-      }
-      if (fc.features.length === 0) {
-        throw new Error("No valid polyline coordinates could be decoded from this file.");
-      }
+      const [layer] = parsePolylineFileLayers(text, path);
       return {
-        data: fc,
+        data: layer.data,
         path,
       };
     } catch (error) {

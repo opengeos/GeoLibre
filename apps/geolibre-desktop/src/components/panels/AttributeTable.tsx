@@ -998,7 +998,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     };
   };
 
-  const exportLayer = async (format: VectorExportFormat) => {
+  const exportLayer = async (format: VectorExportFormat, precision?: number) => {
     if (!layer?.geojson) return;
 
     try {
@@ -1011,7 +1011,18 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       }
 
       const baseName = sanitizeExportFileName(layer.name);
-      const savedPath = await exportVectorLayer(exportGeojson, format, baseName, layer.name);
+      const polylinePrecision =
+        precision ??
+        (typeof layer.metadata?.polylinePrecision === "number"
+          ? layer.metadata.polylinePrecision
+          : 5);
+      const savedPath = await exportVectorLayer(
+        exportGeojson,
+        format,
+        baseName,
+        layer.name,
+        polylinePrecision,
+      );
       // Surface Shapefile field-name limitations (10-char truncation and any
       // resulting collisions) only when a file was actually written; a null
       // path means the user cancelled the save dialog.
@@ -1775,9 +1786,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               CSV (attributes only)
             </DropdownMenuItem>
             {layer && layerSupportsPolylineExport(layer) && (
-              <DropdownMenuItem onSelect={() => void exportLayer("polyline")}>
-                Encoded Polyline
-              </DropdownMenuItem>
+              <>
+                <DropdownMenuItem onSelect={() => void exportLayer("polyline", 5)}>
+                  Encoded Polyline (precision 5)
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void exportLayer("polyline", 6)}>
+                  Encoded Polyline (precision 6)
+                </DropdownMenuItem>
+              </>
             )}
           </DropdownMenuContent>
         </DropdownMenu>

@@ -399,7 +399,10 @@ export function PolylineSource() {
             <div className="flex items-center justify-between font-medium text-foreground">
               <span>{t("addData.polyline.previewTitle")}</span>
               <span className="text-[11px] text-muted-foreground">
-                {parsedData.linesCount} line(s) · {parsedData.totalPoints} points
+                {t("addData.polyline.previewInfo", {
+                  lines: parsedData.linesCount,
+                  points: parsedData.totalPoints,
+                })}
               </span>
             </div>
 
@@ -477,6 +480,8 @@ export function PolylineSource() {
             onSelect={(val) => {
               const sample = SAMPLE_POLYLINES.find((s) => s.value === val);
               if (sample) {
+                setDelimiterType("newline");
+                setCustomDelimiter("");
                 setPrecision(sample.precision);
                 setUnescapeBackslashes(sample.unescape ?? true);
                 setRawText(sample.value);
