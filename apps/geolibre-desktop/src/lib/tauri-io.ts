@@ -650,7 +650,14 @@ function hasValidPolylineCoordinates(fc: FeatureCollection): boolean {
     if (geometry.type === "LineString") {
       for (const coord of geometry.coordinates) {
         const [lon, lat] = coord;
-        if (!Number.isFinite(lon) || !Number.isFinite(lat) || lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+        if (
+          !Number.isFinite(lon) ||
+          !Number.isFinite(lat) ||
+          lon < -180 ||
+          lon > 180 ||
+          lat < -90 ||
+          lat > 90
+        ) {
           return false;
         }
       }
@@ -658,7 +665,14 @@ function hasValidPolylineCoordinates(fc: FeatureCollection): boolean {
       for (const line of geometry.coordinates) {
         for (const coord of line) {
           const [lon, lat] = coord;
-          if (!Number.isFinite(lon) || !Number.isFinite(lat) || lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+          if (
+            !Number.isFinite(lon) ||
+            !Number.isFinite(lat) ||
+            lon < -180 ||
+            lon > 180 ||
+            lat < -90 ||
+            lat > 90
+          ) {
             return false;
           }
         }

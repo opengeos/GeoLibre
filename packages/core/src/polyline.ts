@@ -27,10 +27,7 @@ import type {
  */
 export function unescapePolyline(str: string): string {
   if (!str || typeof str !== "string") return "";
-  return str
-    .replace(/\\\\/g, "\\")
-    .replace(/\\"/g, '"')
-    .replace(/\\'/g, "'");
+  return str.replace(/\\\\/g, "\\").replace(/\\"/g, '"').replace(/\\'/g, "'");
 }
 
 /**

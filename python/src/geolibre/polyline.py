@@ -17,11 +17,7 @@ def unescape_polyline(encoded: str) -> str:
     """
     if not encoded or not isinstance(encoded, str):
         return ""
-    return (
-        encoded.replace("\\\\", "\\")
-        .replace('\\"', '"')
-        .replace("\\'", "'")
-    )
+    return encoded.replace("\\\\", "\\").replace('\\"', '"').replace("\\'", "'")
 
 
 def decode_polyline(

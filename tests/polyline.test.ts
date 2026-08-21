@@ -141,7 +141,7 @@ describe("polyline codec", () => {
       assert.equal(unescapePolyline("abc\\ndef"), "abc\\ndef");
       assert.equal(unescapePolyline("abc\\rdef"), "abc\\rdef");
       assert.equal(unescapePolyline("abc\\tdef"), "abc\\tdef");
-      assert.equal(unescapePolyline('a\\"b\\\'c\\\\d'), 'a"b\'c\\d');
+      assert.equal(unescapePolyline("a\\\"b\\'c\\\\d"), "a\"b'c\\d");
     });
   });
 

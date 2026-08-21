@@ -2793,7 +2793,10 @@ export const decodePolylineTool: ProcessingAlgorithm = {
         continue;
       }
       const val = rawVal.trim();
-      const parts = val.split(";").map((p) => p.trim()).filter(Boolean);
+      const parts = val
+        .split(";")
+        .map((p) => p.trim())
+        .filter(Boolean);
       if (parts.length === 0) {
         skipped++;
         continue;

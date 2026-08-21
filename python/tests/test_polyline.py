@@ -127,7 +127,7 @@ def test_unescape_polyline():
     assert unescape_polyline("abc\\ndef") == "abc\\ndef"
     assert unescape_polyline("abc\\rdef") == "abc\\rdef"
     assert unescape_polyline("abc\\tdef") == "abc\\tdef"
-    assert unescape_polyline('a\\"b\\\'c\\\\d') == 'a"b\'c\\d'
+    assert unescape_polyline("a\\\"b\\'c\\\\d") == "a\"b'c\\d"
     coords = decode_polyline(escaped, precision=5, unescape=True)
     assert len(coords) == 3
 
