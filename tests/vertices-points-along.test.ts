@@ -274,7 +274,7 @@ describe("points along geometry tool", () => {
     const points = results[0].features;
     assert.equal(points.length, 3);
     const mid = points[1];
-    assert.equal(mid.properties?.distance, total / 2);
+    assert.equal(mid.properties?.distance, Number((total / 2).toFixed(6)));
     const measured = distance(start, mid.geometry.coordinates, { units: "kilometers" });
     assert.ok(Math.abs(measured / total - 0.5) < 1e-6, `midpoint sits at ${measured / total}`);
     // It does NOT sit on the linear interpolation [45, 60].

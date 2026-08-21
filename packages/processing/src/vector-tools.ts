@@ -1800,8 +1800,10 @@ function* walkAlong(
     while (atDistance <= travelled + segment) {
       const offset = atDistance - travelled;
       let position: Position;
-      if (offset <= 0) position = [start[0], start[1]];
-      else if (offset >= segment) position = [end[0], end[1]];
+      // Exact vertices keep their full position (Z included); only the
+      // geodesically interpolated interior points are necessarily 2-D.
+      if (offset <= 0) position = [...start] as Position;
+      else if (offset >= segment) position = [...end] as Position;
       else {
         heading ??= bearing(start, end);
         position = destination(start, offset, heading, { units }).geometry.coordinates;
@@ -1877,7 +1879,7 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
     // frame for the walk, and post-scale every length Turf measures back into
     // the active body's frame before it reaches the distance column.
     const turfInterval = bodyLengthToEarth(interval);
-    const parts: { feature: Feature; part: Position[] }[] = [];
+    const parts: { feature: Feature; part: Position[]; length: number }[] = [];
     let skipped = 0;
     let estimated = 0;
     for (const feature of fc.features) {
@@ -1889,8 +1891,9 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
       for (const part of geometryParts(geometry)) {
         if (part.length < 2) continue;
         // Interval multiples plus the closing end vertex.
-        estimated += Math.floor(ringLength(part, alongUnits) / turfInterval) + 2;
-        parts.push({ feature, part });
+        const length = ringLength(part, alongUnits);
+        estimated += Math.floor(length / turfInterval) + 2;
+        parts.push({ feature, part, length });
       }
     }
     // Bail before allocating anything, the way gridTool does for its cells.
@@ -1900,21 +1903,24 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
       );
       return;
     }
+    // One rounding rule for the whole distance column, so `3 * 0.1` and the
+    // measured endpoint length both read cleanly.
+    const roundDistance = (value: number) => Number(value.toFixed(6));
     const points: Feature<Point>[] = [];
-    for (const { feature, part } of parts) {
+    for (const { feature, part, length } of parts) {
       // Walk every interval multiple, then always close with the part's
       // final vertex so endpoints survive rounding of the total length.
       let lastPushed: Feature<Point> | undefined;
       for (const { position, step } of walkAlong(part, turfInterval, alongUnits)) {
         lastPushed = {
           type: "Feature",
-          properties: { ...(feature.properties ?? {}), distance: step * interval },
+          properties: { ...(feature.properties ?? {}), distance: roundDistance(step * interval) },
           geometry: { type: "Point", coordinates: position },
         };
         points.push(lastPushed);
       }
       const last = part[part.length - 1];
-      const endDistance = Number(earthLengthToBody(ringLength(part, alongUnits)).toFixed(6));
+      const endDistance = roundDistance(earthLengthToBody(length));
       const previous = lastPushed?.geometry.coordinates;
       // When the length is an (near) exact multiple of the interval, the last
       // stepped point already sits on the end vertex; keep one point but snap
