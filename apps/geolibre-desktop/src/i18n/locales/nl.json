@@ -327,6 +327,10 @@
         "label": "PostgreSQL-laag toevoegen",
         "description": "Start Martin lokaal, ontdek PostGIS-bronnen en voeg een bron toe als vectortegels."
       },
+      "iceberg": {
+        "label": "Apache Iceberg-laag toevoegen",
+        "description": "Lees een Iceberg-tabel (v3 of hoger) en voeg een deel van de objecten toe."
+      },
       "deckglViz": {
         "label": "Deck.gl-laag toevoegen",
         "description": "Kies een deck.gl-laagtype en laad vervolgens de voorbeeldgegevens of upload een CSV/JSON/GeoJSON-bestand of -URL."
@@ -706,6 +710,41 @@
       "tableReadOnly": "{{table}} (alleen-lezen: geen primaire sleutel)",
       "errorSelectTable": "Selecteer een tabel om te laden.",
       "errorRuntimeMissing": "De verwerkingsserver heeft de PostGIS-runtime (psycopg) niet geïnstalleerd. Installeer de 'postgis'-extra van geolibre-server om bewerkbare lagen te laden."
+    },
+    "iceberg": {
+      "defaultName": "Iceberg-laag",
+      "notice": "Iceberg-tabellen worden eenmalig, op aanvraag, gelezen. De laag is een momentopname die is begrensd door de onderstaande rijlimiet en wordt nooit automatisch opnieuw gescand — gebruik Vernieuwen in het laagmenu om de tabel opnieuw te lezen.",
+      "mode": "Iceberg-bron",
+      "modeTable": "Tabellocatie",
+      "modeCatalog": "REST-catalogus",
+      "location": "Locatie van tabelmetadata",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "Warehouse",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "Catalogus-eindpunt",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "Verbinden",
+      "table": "Iceberg-tabel",
+      "sql": "SQL (optioneel)",
+      "sqlHint": "Bewerk om te filteren of te bepalen wat er wordt weergegeven. De instructie moet een GEOMETRY-kolom teruggeven; laat deze zoals gegenereerd om de hele tabel te lezen.",
+      "selectTable": "Selecteer een tabel",
+      "geometryColumn": "Geometriekolom",
+      "rowLimit": "Rijlimiet",
+      "rowLimitHint": "De laag bevat de eerste rijen van de tabel, tot aan deze limiet. De limiet mag niet groter zijn dan {{max}} rijen.",
+      "rowLimitTruncates": "De tabel bevat {{total}} rijen; de laag zal de eerste {{limit}} bevatten.",
+      "statusConnecting": "Iceberg-metadata lezen...",
+      "statusInspecting": "Tabel inspecteren...",
+      "statusInspected": "{{rows}} rijen. Geometrie: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} rijen, maar er is geen GEOMETRY-kolom gevonden. Iceberg-geometrie moet het v3-geometrietype gebruiken.",
+      "statusTablesFound_one": "{{count}} tabel gevonden.",
+      "statusTablesFound_other": "{{count}} tabellen gevonden. Selecteer er een om door te gaan.",
+      "statusNoTables": "De catalogus bevat geen tabellen.",
+      "errorLocation": "Voer de metadatalocatie van de Iceberg-tabel in.",
+      "errorWarehouse": "Voer de Iceberg-warehouse in die moet worden gekoppeld.",
+      "errorEndpoint": "Voer het eindpunt van de Iceberg REST-catalogus in.",
+      "errorConnect": "Kon de Iceberg-bron niet lezen.",
+      "errorInspect": "Kon de Iceberg-tabel niet inspecteren.",
+      "errorConnectFirst": "Maak eerst verbinding en selecteer een Iceberg-tabel."
     },
     "video": {
       "defaultName": "Videolaag",
@@ -2282,7 +2321,8 @@
       "video": "Videolaag",
       "deckglViz": "Deck.gl-laag",
       "gltfModel": "3D-model (glTF)",
-      "postgres": "PostgreSQL-laag"
+      "postgres": "PostgreSQL-laag",
+      "iceberg": "Apache Iceberg-laag"
     },
     "conversion": {
       "vectorToVector": "Vector naar vector",
@@ -3441,11 +3481,19 @@
     "addUnsupported": "Alleen GeoTIFF/COG-, GeoJSON-, GeoParquet- en PMTiles-assets kunnen aan de kaart worden toegevoegd",
     "addFailed": "Kan asset niet toevoegen",
     "addNoSourceLayers": "Dit archief bevat geen tekenbare lagen",
+    "addNoTarget": "Deze asset bevat niets om te tekenen",
+    "addIcechunk": "Icechunk-stores kunnen nog niet worden gelezen",
+    "zarrProblemGroup": "Deze asset verwijst naar een groep arrays, niet naar één array die kan worden getekend",
+    "zarrProblemUnauthorized": "Deze Zarr-store vereist inloggegevens die GeoLibre nog niet kan leveren",
+    "zarrProblemUnsupportedUrl": "Het adres van deze Zarr-store kan niet per sleutel worden gelezen",
+    "zarrProblemUnavailable": "Deze Zarr-store kon niet worden geopend",
+    "chooseTarget": "Kies wat u wilt toevoegen",
     "cogUnsupported": "Deze GeoLibre-host kan externe GeoTIFF-assets niet weergeven",
     "formatCog": "COG",
     "formatGeoJson": "GeoJSON",
     "formatPmtiles": "PMTiles",
     "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
     "formatUnknown": "Onbekend formaat",
     "notAddable": "kan niet worden toegevoegd"
   },
@@ -3676,6 +3724,10 @@
   "basemaps": {
     "confirmStyleReplace_one": "Overschakelen naar \"{{name}}\" vervangt de volledige kaartstijl en verwijdert de gestapelde basiskaart die u hebt toegevoegd. Doorgaan?",
     "confirmStyleReplace_other": "Overschakelen naar \"{{name}}\" vervangt de volledige kaartstijl en verwijdert de {{count}} gestapelde basiskaarten die u hebt toegevoegd. Doorgaan?"
+  },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "Objecteigenschappen",
+    "massingHeight": "Hoogte (m)"
   },
   "annotations": {
     "toolbar": "Annotatiegereedschap",
@@ -4247,6 +4299,1438 @@
       "run": "Uitvoeren",
       "outputPlaceholder": "De uitvoer verschijnt hier.",
       "resolutionRange": "Resolutie (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "Buffer",
+          "description": "Maak een bufferpolygoon op een vaste afstand rond elk object",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "distance": {
+              "label": "Afstand"
+            },
+            "units": {
+              "label": "Eenheden",
+              "options": {
+                "kilometers": "Kilometer",
+                "meters": "Meter",
+                "miles": "Mijl"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "Centroïden",
+          "description": "Bereken de centroïde van elk object",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "Convexe romp",
+          "description": "Bereken de convexe romp die alle objecten omsluit",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "Samenvoegen",
+          "description": "Voeg polygoonobjecten samen tot één geometrie, optioneel gegroepeerd op een veld",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "field": {
+              "label": "Samenvoegveld (optioneel)",
+              "description": "Naam van de eigenschap waarop objecten worden gegroepeerd voordat ze worden samengevoegd"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "Begrenzingskader",
+          "description": "Bereken de rechthoekige omhullende van alle objecten",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            }
+          }
+        },
+        "simplify": {
+          "name": "Vereenvoudigen",
+          "description": "Verminder het aantal hoekpunten met Douglas-Peucker",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "tolerance": {
+              "label": "Tolerantie (graden)"
+            },
+            "highQuality": {
+              "label": "Hoge kwaliteit"
+            }
+          }
+        },
+        "clip": {
+          "name": "Knippen",
+          "description": "Knip de invoerlaag bij tot het gebied dat een overlay-laag bedekt (invoerattributen blijven behouden)",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "overlay": {
+              "label": "Overlay-laag (knipvorm)"
+            }
+          }
+        },
+        "intersection": {
+          "name": "Doorsnede",
+          "description": "Behoud alleen de gebieden waar beide polygoonlagen elkaar overlappen",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "overlay": {
+              "label": "Overlay-laag"
+            }
+          }
+        },
+        "difference": {
+          "name": "Verschil",
+          "description": "Verwijder het gebied van de overlay-laag uit de invoerlaag",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "overlay": {
+              "label": "Overlay-laag"
+            }
+          }
+        },
+        "union": {
+          "name": "Vereniging",
+          "description": "Voeg twee polygoonlagen samen tot één gecombineerde geometrie",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "overlay": {
+              "label": "Overlay-laag"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "Ruimtelijke join",
+          "description": "Koppel attributen uit een joinlaag aan elk invoerobject op basis van een ruimtelijke relatie",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "overlay": {
+              "label": "Joinlaag"
+            },
+            "predicate": {
+              "label": "Ruimtelijke relatie",
+              "options": {
+                "intersects": "Snijdt",
+                "within": "Binnen",
+                "contains": "Bevat"
+              }
+            },
+            "how": {
+              "label": "Jointype",
+              "options": {
+                "inner": "Inner (alleen gekoppelde objecten behouden)",
+                "left": "Left (alle invoerobjecten behouden)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "Attribuutjoin",
+          "description": "Koppel attributen uit een joinlaag (een tabel) aan elk invoerobject waar een sleutelveld overeenkomt, zonder geometrie te gebruiken. Een-op-een: de eerste overeenkomende joinrij wint.",
+          "params": {
+            "layer": {
+              "label": "Doellaag"
+            },
+            "overlay": {
+              "label": "Joinlaag (tabel)",
+              "description": "De laag waarvan de attributen worden overgenomen. De geometrie ervan wordt genegeerd."
+            },
+            "target_field": {
+              "label": "Sleutelveld doel"
+            },
+            "join_field": {
+              "label": "Sleutelveld join"
+            },
+            "how": {
+              "label": "Jointype",
+              "options": {
+                "left": "Left (alle doelobjecten behouden)",
+                "inner": "Inner (alleen gekoppelde objecten behouden)"
+              }
+            },
+            "fields": {
+              "label": "Over te nemen velden (optioneel)",
+              "description": "Door komma's gescheiden joinvelden om te kopiëren. Laat leeg om elk joinveld behalve de sleutel over te nemen."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "Selecteren op waarde",
+          "description": "Haal objecten waarvan de attribuutwaarde aan een voorwaarde voldoet naar een nieuwe laag",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "field": {
+              "label": "Veld"
+            },
+            "operator": {
+              "label": "Operator",
+              "options": {
+                "eq": "= (is gelijk aan)",
+                "neq": "≠ (is niet gelijk aan)",
+                "gt": "> (groter dan)",
+                "gte": "≥ (groter dan of gelijk aan)",
+                "lt": "< (kleiner dan)",
+                "lte": "≤ (kleiner dan of gelijk aan)",
+                "contains": "bevat (tekst)",
+                "starts-with": "begint met (tekst)",
+                "is-null": "is leeg",
+                "is-not-null": "is niet leeg"
+              }
+            },
+            "value": {
+              "label": "Waarde",
+              "description": "Wordt als getal vergeleken wanneer beide zijden numeriek zijn."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "Selecteren op locatie",
+          "description": "Haal objecten op basis van hun ruimtelijke relatie met een tweede laag naar een nieuwe laag",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "overlay": {
+              "label": "Filterlaag"
+            },
+            "predicate": {
+              "label": "Ruimtelijke relatie",
+              "options": {
+                "intersects": "Snijdt",
+                "within": "Binnen",
+                "contains": "Bevat",
+                "disjoint": "Disjunct (geen doorsnede)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "Willekeurige selectie",
+          "description": "Haal een willekeurige deelverzameling van objecten naar een nieuwe laag, bepaald door een aantal objecten of een percentage van de invoer.",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "method": {
+              "label": "Methode",
+              "options": {
+                "count": "Aantal objecten",
+                "percentage": "Percentage van de objecten"
+              }
+            },
+            "count": {
+              "label": "Aantal objecten",
+              "description": "Wordt begrensd tot het aantal invoerobjecten wanneer het groter is."
+            },
+            "percentage": {
+              "label": "Percentage van de objecten"
+            }
+          }
+        },
+        "reproject": {
+          "name": "Herprojecteren",
+          "description": "Interpreteer de coördinaten van een laag als een bron-CRS en transformeer ze naar WGS84 zodat ze op de juiste locatie worden weergegeven. Vereist de sidecar- of Python-engine.",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "source_crs": {
+              "label": "Bron-CRS",
+              "description": "Het CRS waarin de coördinaten van de laag werkelijk staan (bijv. EPSG:3857). Het resultaat wordt getransformeerd naar WGS84 (EPSG:4326)."
+            }
+          }
+        },
+        "explode": {
+          "name": "Opsplitsen",
+          "description": "Splits meerdelige geometrieën op in enkelvoudige objecten (één object per deel), met behoud van de attributen van elk bovenliggend object",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "Aggregeren op attribuut",
+          "description": "Voeg objecten met dezelfde attribuutwaarde samen tot één geometrie per groep, met een samenvattende statistiek",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "group_field": {
+              "label": "Groeperen op veld"
+            },
+            "statistic": {
+              "label": "Statistiek",
+              "options": {
+                "count": "Aantal",
+                "sum": "Som",
+                "mean": "Gemiddelde",
+                "min": "Min",
+                "max": "Max",
+                "median": "Mediaan"
+              }
+            },
+            "stat_field": {
+              "label": "Statistiekveld",
+              "description": "Numeriek veld dat door de bovenstaande statistiek wordt samengevat."
+            }
+          }
+        },
+        "smooth": {
+          "name": "Gladstrijken",
+          "description": "Rond de hoeken van lijn- en polygoonobjecten af met het algoritme van Chaikin (voegt hoekpunten toe), in tegenstelling tot de hoekpuntreductie van Vereenvoudigen. Z/hoogte blijft behouden; punten worden ongewijzigd doorgegeven.",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "iterations": {
+              "label": "Iteraties",
+              "description": "Meer iteraties geven een gladder resultaat (1-10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "Regelmatig raster",
+          "description": "Genereer een regelmatig rechthoekig raster (fishnet) van cellen over een omvang. Bron: de huidige kaartweergave, de omvang van een laag of een handmatig begrenzingskader.",
+          "params": {
+            "source": {
+              "label": "Bron van omvang",
+              "options": {
+                "viewport": "Kaartweergave",
+                "layer": "Laagomvang",
+                "bbox": "Handmatig begrenzingskader"
+              }
+            },
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "west": {
+              "label": "West (min. lengtegraad)"
+            },
+            "south": {
+              "label": "Zuid (min. breedtegraad)"
+            },
+            "east": {
+              "label": "Oost (max. lengtegraad)"
+            },
+            "north": {
+              "label": "Noord (max. breedtegraad)"
+            },
+            "cell_width": {
+              "label": "Celbreedte (graden)"
+            },
+            "cell_height": {
+              "label": "Celhoogte (graden)",
+              "description": "Laat leeg om gelijk te stellen aan de celbreedte."
+            },
+            "cell_type": {
+              "label": "Celtype",
+              "options": {
+                "polygon": "Rechthoeken",
+                "point": "Punten (celmiddelpunten)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "Bouw een Voronoi-diagram (één polygoon per punt, geknipt op de omvang van de punten) of een Delaunay-triangulatie uit een puntlaag.",
+          "params": {
+            "layer": {
+              "label": "Invoerpuntlaag"
+            },
+            "type": {
+              "label": "Diagram",
+              "options": {
+                "voronoi": "Voronoi-polygonen",
+                "delaunay": "Delaunay-driehoeken"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "Dekkingsgebied zendmast",
+          "description": "Bouw antennesector-/wigpolygonen uit puntlocaties met behulp van azimut, straal en bundelbreedte (gelezen uit attribuutvelden of vaste waarden). De bundelbreedte wordt begrensd tot 360° (een volledige cirkel); de vastgelegde bundelbreedte weerspiegelt de begrensde waarde. Handig voor de dekking van zendmasten, zoals QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "Invoerpuntlaag"
+            },
+            "azimuthField": {
+              "label": "Azimutveld (°)",
+              "description": "Richting waarin de sector wijst, in graden met de klok mee vanaf het noorden. Valt terug op de vaste azimut wanneer leeg of niet-numeriek."
+            },
+            "azimuth": {
+              "label": "Azimut (vast, °)"
+            },
+            "radiusField": {
+              "label": "Straalveld",
+              "description": "Dekkingsstraal. Valt terug op de vaste straal wanneer leeg of niet-numeriek."
+            },
+            "radius": {
+              "label": "Straal (vast)"
+            },
+            "beamwidthField": {
+              "label": "Bundelbreedteveld (°)",
+              "description": "Hoekbreedte van de sector, begrensd tot 360° (een volledige cirkel). Valt terug op de vaste bundelbreedte wanneer leeg of niet-numeriek."
+            },
+            "beamwidth": {
+              "label": "Bundelbreedte (vast, °)"
+            },
+            "units": {
+              "label": "Straaleenheden",
+              "options": {
+                "kilometers": "Kilometer",
+                "meters": "Meter",
+                "miles": "Mijl"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "DGGS-generator",
+          "description": "Vul een gebied met DGGS-cellen (H3, S2, A5, DGGRID, DGGAL). Bron: de geometrie van een laag, de omvang van een laag, de huidige kaartweergave of een handmatig begrenzingskader.",
+          "params": {
+            "dggsType": {
+              "label": "DGGS-type",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID-type",
+              "description": "Rasterconfiguratie die als dggs_params aan duck_dggs wordt doorgegeven (ISEA/FULLER × apertuur × topologie).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL-type",
+              "description": "DGGRS die aan dggal.createDGGRS wordt doorgegeven (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "Gebiedsbron",
+              "options": {
+                "polyfill": "Laaggeometrie (polyfill)",
+                "extent": "Laagomvang (bbox)",
+                "viewport": "Kaartweergave",
+                "bbox": "Handmatig begrenzingskader"
+              }
+            },
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "west": {
+              "label": "West (min. lengtegraad)"
+            },
+            "south": {
+              "label": "Zuid (min. breedtegraad)"
+            },
+            "east": {
+              "label": "Oost (max. lengtegraad)"
+            },
+            "north": {
+              "label": "Noord (max. breedtegraad)"
+            },
+            "resolution": {
+              "label": "Resolutie",
+              "description": "Het bereik hangt af van het DGGS-type. Laat leeg om automatisch te kiezen op basis van het gebied."
+            },
+            "compactCells": {
+              "label": "Cellen compacteren",
+              "description": "Voeg volledige sets van broer-/zustercellen samen tot grovere bovenliggende cellen (minder objecten, gemengde resoluties)."
+            },
+            "fixAntimeridian": {
+              "label": "Antimeridiaan corrigeren",
+              "description": "Celringen die de lengtegraad ±180° kruisen, uitvouwen."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "DGGS-binning",
+          "description": "Aggregeer een puntlaag in DGGS-cellen (aantal, of som/gemiddelde/min/max van een numeriek veld).",
+          "params": {
+            "dggsType": {
+              "label": "DGGS-type",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID-type",
+              "description": "Rasterconfiguratie die als dggs_params aan duck_dggs wordt doorgegeven (ISEA/FULLER × apertuur × topologie).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL-type",
+              "description": "DGGRS die aan dggal.createDGGRS wordt doorgegeven (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "Invoerpuntlaag"
+            },
+            "aggOp": {
+              "label": "Aggregeren",
+              "options": {
+                "count": "Aantal",
+                "sum": "Som",
+                "mean": "Gemiddelde",
+                "min": "Min",
+                "max": "Max"
+              }
+            },
+            "field": {
+              "label": "Veld",
+              "description": "Numeriek veld om te aggregeren."
+            },
+            "resolution": {
+              "label": "Resolutie",
+              "description": "Het bereik hangt af van het DGGS-type. Laat leeg om automatisch te kiezen op basis van het gebied."
+            },
+            "fixAntimeridian": {
+              "label": "Antimeridiaan corrigeren",
+              "description": "Celringen die de lengtegraad ±180° kruisen, uitvouwen."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "DGGS-compactering",
+          "description": "Compacteer DGGS-polygooncellen, of breid ze uit naar een uniforme resolutie (H3, S2, A5, DGGAL). De invoer moet een cellaag met een ID-eigenschap zijn.",
+          "params": {
+            "dggsType": {
+              "label": "DGGS-type",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL-type",
+              "description": "DGGRS die aan dggal.createDGGRS wordt doorgegeven (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "Modus",
+              "options": {
+                "compact": "Compacteren",
+                "expand": "Uitbreiden"
+              }
+            },
+            "layer": {
+              "label": "Invoer-DGGS-laag",
+              "description": "Polygooncellaag uit DGGS-generator / -binning (of gelijkwaardig)."
+            },
+            "cellField": {
+              "label": "Cel-ID-veld",
+              "description": "Standaard h3, a5, s2 of dggal voor het geselecteerde type wanneer leeg gelaten."
+            },
+            "resolution": {
+              "label": "Doelresolutie",
+              "description": "Resolutie waarnaar wordt uitgebreid. Moet minstens zo fijn zijn als de invoercellen."
+            },
+            "fixAntimeridian": {
+              "label": "Antimeridiaan corrigeren",
+              "description": "Celringen die de lengtegraad ±180° kruisen, uitvouwen."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "Trajectsnelheid",
+          "description": "Sorteer punten op tijd (per doel) en verbind opeenvolgende positiebepalingen tot segmenten met afstand, duur en snelheid. Zoals QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Invoerpuntlaag"
+            },
+            "timeField": {
+              "label": "Tijdveld",
+              "description": "Tijdstempel per positiebepaling: een ISO-datum/tijdtekst of een epoch (seconden of milliseconden)."
+            },
+            "idField": {
+              "label": "Doel-id-veld",
+              "description": "Splitst de punten op in afzonderlijke trajecten. Laat leeg om alle punten als één doel te behandelen."
+            },
+            "speedUnits": {
+              "label": "Snelheidseenheden",
+              "options": {
+                "km/h": "km/u",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "Stops detecteren",
+          "description": "Vind plaatsen waar een doel verblijft: reeksen opeenvolgende positiebepalingen die gedurende minstens een minimale duur binnen een afstand blijven (waarbij GPS-ruis wordt opgevangen). Geeft één punt per stop als uitvoer. Zoals QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Invoerpuntlaag"
+            },
+            "timeField": {
+              "label": "Tijdveld",
+              "description": "Tijdstempel per positiebepaling: een ISO-datum/tijdtekst of een epoch (seconden of milliseconden)."
+            },
+            "idField": {
+              "label": "Doel-id-veld",
+              "description": "Detecteert stops per doel. Laat leeg om alle punten als één doel te behandelen."
+            },
+            "maxDistance": {
+              "label": "Max. afstand",
+              "description": "Elke positiebepaling in een stop moet binnen deze afstand van de eerste positiebepaling van de stop liggen (een stop kan dus tot twee keer deze waarde beslaan). Stel dit in op de spreidingsstraal van uw GPS."
+            },
+            "distanceUnits": {
+              "label": "Afstandseenheden",
+              "options": {
+                "meters": "Meter",
+                "kilometers": "Kilometer",
+                "miles": "Mijl"
+              }
+            },
+            "minDuration": {
+              "label": "Min. duur (s)",
+              "description": "Een verblijf korter dan dit wordt niet als stop gerapporteerd."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "Ruimte-tijdnabijheid",
+          "description": "Vind paren punten die zowel in ruimte als in tijd dicht bij elkaar liggen — bijv. twee doelen die elkaar ontmoeten. Geeft een lijn als uitvoer die elk in aanmerking komend paar verbindt, met de afstand en het tijdsverschil.",
+          "params": {
+            "layer": {
+              "label": "Invoerpuntlaag"
+            },
+            "timeField": {
+              "label": "Tijdveld",
+              "description": "Tijdstempel per punt: een ISO-datum/tijdtekst of een epoch (seconden of milliseconden)."
+            },
+            "idField": {
+              "label": "Doel-id-veld",
+              "description": "Indien ingesteld worden alleen punten met VERSCHILLENDE id-waarden gepaard (ontmoetingen tussen verschillende doelen). Laat leeg om elk paar in aanmerking te nemen."
+            },
+            "maxDistance": {
+              "label": "Max. afstand"
+            },
+            "distanceUnits": {
+              "label": "Afstandseenheden",
+              "options": {
+                "meters": "Meter",
+                "kilometers": "Kilometer",
+                "miles": "Mijl"
+              }
+            },
+            "maxTime": {
+              "label": "Max. tijdsverschil"
+            },
+            "timeUnits": {
+              "label": "Tijdseenheden",
+              "options": {
+                "seconds": "Seconden",
+                "minutes": "Minuten",
+                "hours": "Uren"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "Geldigheid controleren",
+          "description": "Vind objecten met ongeldige geometrie (GEOS-regels: zelfsnijdende ringen, gaten buiten de buitenring, ...) en markeer ze op de kaart",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "Geometrieën herstellen",
+          "description": "Herstel ongeldige geometrieën met ST_MakeValid (GEOS); geldige objecten worden ongewijzigd doorgegeven",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "Topologieregels controleren",
+          "description": "Valideer de laag aan de hand van topologieregels (overlappingen, gaten, zelfsnijdingen, loshangende uiteinden) en markeer elke overtreding op de kaart",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "ruleSelfIntersect": {
+              "label": "Lijnen mogen zichzelf niet snijden"
+            },
+            "ruleOverlap": {
+              "label": "Polygonen mogen niet overlappen"
+            },
+            "ruleGaps": {
+              "label": "Polygonen mogen geen gaten hebben"
+            },
+            "ruleDangles": {
+              "label": "Lijnen mogen geen loshangende uiteinden hebben"
+            },
+            "rulePointCovered": {
+              "label": "Punten moeten door een lijn worden bedekt"
+            },
+            "ruleEndpointSnap": {
+              "label": "Lijneindpunten moeten binnen de tolerantie aansluiten"
+            },
+            "snapTolerance": {
+              "label": "Snaptolerantie",
+              "description": "Voor de eindpuntregel: hoe ver (in coördinaateenheden van de laag — graden voor WGS84) twee lijneinden uit elkaar mogen liggen en toch als verbonden gelden."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "Topologie herstellen",
+          "description": "Herstel topologieovertredingen automatisch: snap bijna-aansluitende lijneindpunten, herstel loshangende uiteinden en projecteer punten op lijnen. Vrije uiteinden zonder iets in de buurt blijven ongewijzigd.",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "ruleEndpointSnap": {
+              "label": "Bijna-aansluitende lijneindpunten snappen"
+            },
+            "ruleDangles": {
+              "label": "Loshangende uiteinden herstellen (snappen of projecteren op nabije geometrie)"
+            },
+            "rulePointCovered": {
+              "label": "Punten op de dichtstbijzijnde lijn projecteren"
+            },
+            "snapTolerance": {
+              "label": "Snaptolerantie",
+              "description": "Hoe ver (in coördinaateenheden van de laag — graden voor WGS84) geometrie mag verschuiven om aan te sluiten."
+            },
+            "dryRun": {
+              "label": "Alleen voorbeeld (proefuitvoering)",
+              "description": "Rapporteer de herstellingen die zouden worden toegepast zonder een herstelde laag te maken."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "Isochroon / bereikbaarheidsgebied",
+          "description": "Bereikbaarheidspolygonen op basis van reistijd of reisafstand vanaf elk punt in een laag",
+          "params": {
+            "layer": {
+              "label": "Beginpunten"
+            },
+            "mode": {
+              "label": "Vervoerswijze",
+              "options": {
+                "auto": "Autorijden",
+                "pedestrian": "Lopen",
+                "bicycle": "Fietsen"
+              }
+            },
+            "metric": {
+              "label": "Maat",
+              "options": {
+                "time": "Reistijd (minuten)",
+                "distance": "Afstand (km)"
+              }
+            },
+            "contours": {
+              "label": "Contouren",
+              "description": "Door komma's gescheiden waarden (minuten voor tijd, km voor afstand)"
+            },
+            "endpoint": {
+              "label": "Routeringsserver (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "OD-kostenmatrix",
+          "description": "Reistijd en afstand tussen elk begin- en bestemmingspunt, als verbindingslijnen",
+          "params": {
+            "origins": {
+              "label": "Beginpunten"
+            },
+            "destinations": {
+              "label": "Bestemmingspunten"
+            },
+            "mode": {
+              "label": "Vervoerswijze",
+              "options": {
+                "auto": "Autorijden",
+                "pedestrian": "Lopen",
+                "bicycle": "Fietsen"
+              }
+            },
+            "endpoint": {
+              "label": "Routeringsserver (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "Opeenvolgende route (routebeschrijving)",
+          "description": "Verbind punten in volgorde langs het wegennet tot een route. Elk punt wordt naar de dichtstbijzijnde weg gesnapt, zodat coördinaten naast de weg (zendmasten, sensoren) toch worden gerouteerd. De volgorde volgt het gekozen veld (bijv. een tijdstempel) of de objectvolgorde van de laag.",
+          "params": {
+            "layer": {
+              "label": "Invoerpunten"
+            },
+            "order_field": {
+              "label": "Sorteren op veld (optioneel)",
+              "description": "Sorteer punten op dit veld (getallen of tijdstempels) voordat de route wordt berekend. Laat leeg om de objectvolgorde van de laag te gebruiken."
+            },
+            "mode": {
+              "label": "Vervoerswijze",
+              "options": {
+                "auto": "Autorijden",
+                "pedestrian": "Lopen",
+                "bicycle": "Fietsen"
+              }
+            },
+            "endpoint": {
+              "label": "Routeringsserver (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "Globale Moran's I",
+          "description": "Meet de algehele ruimtelijke autocorrelatie van een numeriek attribuut over de hele laag.",
+          "params": {
+            "layer": {
+              "label": "Laag"
+            },
+            "field": {
+              "label": "Waardeveld"
+            },
+            "weightsType": {
+              "label": "Ruimtelijke gewichten",
+              "description": "Hoe buren voor elk object worden bepaald.",
+              "options": {
+                "knn": "K naaste buren",
+                "distance": "Afstandsband"
+              }
+            },
+            "k": {
+              "label": "Buren (k)"
+            },
+            "threshold": {
+              "label": "Afstandsband (km)"
+            },
+            "permutations": {
+              "label": "Permutaties",
+              "description": "Willekeurige permutaties voor de pseudo-p-waarde."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "Lokale Moran's I (LISA)",
+          "description": "Clusters en uitschieters per object (hoog-hoog, laag-laag, hoog-laag, laag-hoog) met pseudosignificantie.",
+          "params": {
+            "layer": {
+              "label": "Laag"
+            },
+            "field": {
+              "label": "Waardeveld"
+            },
+            "weightsType": {
+              "label": "Ruimtelijke gewichten",
+              "description": "Hoe buren voor elk object worden bepaald.",
+              "options": {
+                "knn": "K naaste buren",
+                "distance": "Afstandsband"
+              }
+            },
+            "k": {
+              "label": "Buren (k)"
+            },
+            "threshold": {
+              "label": "Afstandsband (km)"
+            },
+            "permutations": {
+              "label": "Permutaties",
+              "description": "Willekeurige permutaties voor de pseudo-p-waarde."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Getis-Ord Gi*-hotspots",
+          "description": "Identificeer statistisch significante hotspots en coldspots van een numeriek attribuut.",
+          "params": {
+            "layer": {
+              "label": "Laag"
+            },
+            "field": {
+              "label": "Waardeveld"
+            },
+            "weightsType": {
+              "label": "Ruimtelijke gewichten",
+              "description": "Hoe buren voor elk object worden bepaald.",
+              "options": {
+                "knn": "K naaste buren",
+                "distance": "Afstandsband"
+              }
+            },
+            "k": {
+              "label": "Buren (k)"
+            },
+            "threshold": {
+              "label": "Afstandsband (km)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "Gemiddelde naaste buur",
+          "description": "Test of punten geclusterd, verspreid of willekeurig verdeeld zijn (ANN-ratio + z-score).",
+          "params": {
+            "layer": {
+              "label": "Puntlaag"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "Kernel-dichtheid (heatmap)",
+          "description": "Schat een dichtheidsoppervlak uit punten als een raster van cellen, met een kwartische kernel.",
+          "params": {
+            "layer": {
+              "label": "Puntlaag"
+            },
+            "weightField": {
+              "label": "Gewichtsveld (optioneel)",
+              "description": "Numeriek veld dat elk punt weegt; leeg = gelijk gewicht."
+            },
+            "bandwidth": {
+              "label": "Zoekstraal / bandbreedte (km)"
+            },
+            "cellSize": {
+              "label": "Celgrootte (km)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "Opkomende hotspots (ruimte-tijdkubus)",
+          "description": "Bouw een ruimte-tijdkubus uit punten met tijdstempel (een fishnet-raster × gelijke tijdstappen) en classificeer elke cel als nieuwe, toenemende, aanhoudende, afnemende, sporadische, oscillerende of historische hotspot/coldspot. Voert Getis-Ord Gi* per tijdsnede uit en vervolgens een Mann-Kendall-trendtoets op de Gi*-reeks van elke cel. Client-side, zoals ArcGIS Emerging Hot Spot Analysis.",
+          "params": {
+            "layer": {
+              "label": "Puntlaag"
+            },
+            "timeField": {
+              "label": "Tijdveld",
+              "description": "Tijdstempel per punt: een ISO-datum/tijdtekst of een epoch (seconden of milliseconden)."
+            },
+            "cellSize": {
+              "label": "Celgrootte (km)",
+              "description": "Zijdelengte van elke vierkante ruimtelijke bin, in kilometers."
+            },
+            "timeStep": {
+              "label": "Tijdstapinterval"
+            },
+            "timeStepUnit": {
+              "label": "Tijdstapeenheid",
+              "options": {
+                "hours": "Uren",
+                "days": "Dagen",
+                "weeks": "Weken"
+              }
+            },
+            "weightField": {
+              "label": "Gewichtsveld (optioneel)",
+              "description": "Numeriek veld dat per ruimte-tijdbin wordt opgeteld in plaats van punten te tellen; leeg = punten tellen."
+            },
+            "confidence": {
+              "label": "Betrouwbaarheidsniveau",
+              "description": "Significantiedrempel waarbij een bin als hotspot/coldspot telt en voor de trend.",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "Reliëfschaduw",
+          "description": "Bereken een reliëfschaduwraster (hillshade) uit een hoogtemodel.",
+          "params": {
+            "azimuth": {
+              "label": "Azimut (graden)"
+            },
+            "altitude": {
+              "label": "Zonshoogte (graden)"
+            },
+            "z_factor": {
+              "label": "Z-factor"
+            }
+          }
+        },
+        "slope": {
+          "name": "Helling",
+          "description": "Bereken de helling (steilheid) uit een hoogtemodel.",
+          "params": {
+            "units": {
+              "label": "Eenheden",
+              "options": {
+                "degrees": "Graden",
+                "percent": "Procent"
+              }
+            },
+            "z_factor": {
+              "label": "Z-factor"
+            }
+          }
+        },
+        "aspect": {
+          "name": "Expositie",
+          "description": "Bereken de expositie (kompasrichting van de steilste helling) uit een hoogtemodel."
+        },
+        "reproject": {
+          "name": "Herprojecteren",
+          "description": "Warp een raster naar een ander coördinatenreferentiesysteem.",
+          "params": {
+            "dst_crs": {
+              "label": "Doel-CRS",
+              "description": "Een autoriteitscode zoals EPSG:3857 of EPSG:4326."
+            },
+            "resampling": {
+              "label": "Herbemonstering",
+              "options": {
+                "nearest": "Naaste buur",
+                "bilinear": "Bilineair",
+                "cubic": "Kubisch"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "Resamplen",
+          "description": "Resample een raster naar een andere pixelgrootte (resolutie).",
+          "params": {
+            "resolution": {
+              "label": "Doelpixelgrootte",
+              "description": "Pixelgrootte van de uitvoer in de CRS-eenheden van het raster."
+            },
+            "resampling": {
+              "label": "Herbemonstering",
+              "options": {
+                "nearest": "Naaste buur",
+                "bilinear": "Bilineair",
+                "cubic": "Kubisch"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "Knippen op omvang",
+          "description": "Snij een raster bij tot een begrenzingskader (in het CRS van het raster).",
+          "params": {
+            "minx": {
+              "label": "Min. X"
+            },
+            "miny": {
+              "label": "Min. Y"
+            },
+            "maxx": {
+              "label": "Max. X"
+            },
+            "maxy": {
+              "label": "Max. Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "Knippen op maskerlaag",
+          "description": "Knip een raster bij tot de geometrieën van een vectormaskerbestand.",
+          "params": {
+            "mask_path": {
+              "label": "Maskerlaag",
+              "description": "Een GeoJSON-bestand waarvan de geometrieën het knipgebied bepalen. Het wordt automatisch geherprojecteerd naar het CRS van het raster (een GeoJSON zonder CRS wordt als WGS84 beschouwd)."
+            },
+            "crop": {
+              "label": "Bijsnijden tot maskeromvang"
+            },
+            "all_touched": {
+              "label": "Alle geraakte pixels opnemen"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "Polygoniseren",
+          "description": "Zet een rasterband om in vectorpolygonen, gegroepeerd op pixelwaarde.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "connectivity": {
+              "label": "Connectiviteit",
+              "options": {
+                "4": "4-verbonden",
+                "8": "8-verbonden"
+              }
+            },
+            "field": {
+              "label": "Naam van het waardeveld"
+            }
+          }
+        },
+        "contour": {
+          "name": "Contourlijnen",
+          "description": "Genereer contourlijnen uit een hoogtemodel.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "interval": {
+              "label": "Interval",
+              "description": "Hoogteverschil tussen opeenvolgende contourlijnen."
+            },
+            "base": {
+              "label": "Basis"
+            },
+            "attribute": {
+              "label": "Naam van het hoogteveld"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "Interpolatie (IDW / Kriging)",
+          "description": "Interpoleer een numeriek attribuut van een puntlaag naar een continu rasteroppervlak met inverse-afstandsweging of ordinary kriging.",
+          "params": {
+            "field": {
+              "label": "Waardeveld",
+              "description": "Naam van het numerieke puntattribuut dat moet worden geïnterpoleerd (bijv. hoogte, temperatuur)."
+            },
+            "method": {
+              "label": "Methode",
+              "options": {
+                "idw": "Inverse-afstandsweging (IDW)",
+                "kriging": "Ordinary kriging"
+              }
+            },
+            "resolution": {
+              "label": "Pixelgrootte van de uitvoer",
+              "description": "Celgrootte in de CRS-eenheden van de laag (graden voor WGS84). Het raster bedekt de omvang van de punten."
+            },
+            "power": {
+              "label": "IDW-macht",
+              "description": "Hogere waarden geven nabije punten meer invloed."
+            },
+            "variogram_model": {
+              "label": "Variogrammodel",
+              "description": "Theoretisch model dat op het empirische semivariogram wordt gefit. Kriging is beperkt tot 1500 punten.",
+              "options": {
+                "spherical": "Sferisch",
+                "exponential": "Exponentieel",
+                "gaussian": "Gaussisch",
+                "linear": "Lineair"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "Zonale statistieken",
+          "description": "Vat rasterwaarden samen binnen elke polygoon van een vectorlaag (aantal, min, max, gemiddelde, som, standaardafwijking, mediaan).",
+          "params": {
+            "zones_path": {
+              "label": "Zonelaag",
+              "description": "Een GeoJSON-polygoonlaag die de zones bepaalt. Deze wordt automatisch geherprojecteerd naar het CRS van het raster (een GeoJSON zonder CRS wordt als WGS84 beschouwd)."
+            },
+            "band": {
+              "label": "Band"
+            },
+            "prefix": {
+              "label": "Veldvoorvoegsel",
+              "description": "Wordt vóór elke statistiekveldnaam geplaatst (bijv. 'dem_' → 'dem_mean'). Laat leeg voor kale 'mean', 'min', …"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "Rastercalculator",
+          "description": "Evalueer een NumPy-bandrekenexpressie. Verwijs naar band 1 van elke invoer als A, B, C en naar specifieke banden als A1, A2, …; NDVI is bijv. (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "Expressie",
+              "description": "Een NumPy-expressie over A, B, C (en A1, A2, …). Functies: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan."
+            },
+            "b_path": {
+              "label": "Raster B (optioneel)",
+              "description": "Een tweede raster, aangeduid als B / B1, B2, …. Moet dezelfde afmetingen hebben als A."
+            },
+            "c_path": {
+              "label": "Raster C (optioneel)",
+              "description": "Een derde raster, aangeduid als C / C1, C2, …. Moet dezelfde afmetingen hebben als A."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "Spectrale index",
+          "description": "Bereken een benoemde spectrale index (NDVI, NDWI, EVI, …) uit een multibandraster. Kies een sensorvoorinstelling voor de bandindeling, of stel bandnummers handmatig in met de sensor Aangepast.",
+          "params": {
+            "index": {
+              "label": "Index",
+              "options": {
+                "ndvi": "NDVI (vegetatie)",
+                "gndvi": "GNDVI (groene vegetatie)",
+                "ndwi": "NDWI (water, McFeeters)",
+                "ndmi": "NDMI (vocht)",
+                "ndbi": "NDBI (bebouwing)",
+                "nbr": "NBR (brandratio)",
+                "evi": "EVI (verbeterde vegetatie)",
+                "savi": "SAVI (bodemgecorrigeerde vegetatie)"
+              }
+            },
+            "sensor": {
+              "label": "Sensor / bandindeling",
+              "description": "Vooringestelde bandnummers voor gangbare sensoren. Kies Aangepast om banden handmatig toe te wijzen voor een anders gestapelde GeoTIFF.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "Aangepast (bandnummers hieronder instellen)"
+              }
+            },
+            "red": {
+              "label": "Bandnummer rood"
+            },
+            "green": {
+              "label": "Bandnummer groen"
+            },
+            "blue": {
+              "label": "Bandnummer blauw"
+            },
+            "nir": {
+              "label": "Bandnummer NIR"
+            },
+            "swir1": {
+              "label": "Bandnummer SWIR1"
+            },
+            "swir2": {
+              "label": "Bandnummer SWIR2"
+            },
+            "L": {
+              "label": "Bodemfactor (L)",
+              "description": "SAVI-correctie voor bodemhelderheid (0 dichte bedekking → 1 kale bodem)."
+            },
+            "scale": {
+              "label": "Reflectantieschaal",
+              "description": "Vermenigvuldigingsfactor die pixelwaarden omzet naar reflectantie (0–1). Laat op 1 staan voor genormaliseerde-verschilindices; stel in voor EVI/SAVI op beelden met gehele DN-waarden (bijv. 0.0001 voor Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "Herclassificeren",
+          "description": "Wijs waardebereiken opnieuw toe aan nieuwe klassewaarden met een regeltabel.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "table": {
+              "label": "Regels",
+              "description": "Door komma's of regeleinden gescheiden 'min:max:nieuwewaarde'-regels, bijv. '0:10:1, 10:20:2, 20:max:3'. Bereiken zijn halfopen [min, max); leeg/min/max betekent ±∞."
+            },
+            "unmatched": {
+              "label": "Niet-overeenkomende waarden",
+              "options": {
+                "nodata": "Op NoData zetten",
+                "original": "Oorspronkelijke waarde behouden"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "Mozaïek / samenvoegen",
+          "description": "Combineer tot vijf rasters (met hetzelfde CRS) tot één raster dat hun vereniging bedekt.",
+          "params": {
+            "raster_2": {
+              "label": "Tweede raster"
+            },
+            "raster_3": {
+              "label": "Derde raster (optioneel)"
+            },
+            "raster_4": {
+              "label": "Vierde raster (optioneel)"
+            },
+            "raster_5": {
+              "label": "Vijfde raster (optioneel)"
+            },
+            "method": {
+              "label": "Overlapmethode",
+              "description": "Welke waarde wint waar invoerrasters overlappen.",
+              "options": {
+                "first": "Eerste",
+                "last": "Laatste",
+                "min": "Minimum",
+                "max": "Maximum"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "Focale statistieken",
+          "description": "Pas een statistiek met een bewegend venster (buurt) toe op een rasterband.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "statistic": {
+              "label": "Statistiek",
+              "options": {
+                "mean": "Gemiddelde",
+                "median": "Mediaan",
+                "min": "Minimum",
+                "max": "Maximum",
+                "sum": "Som",
+                "std": "Standaardafwijking",
+                "range": "Bereik (max − min)"
+              }
+            },
+            "size": {
+              "label": "Venstergrootte",
+              "description": "Oneven buurtgrootte in pixels (3 = 3×3). Maximaal 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "Analyse",
+      "clip": "Knippen",
+      "dataQuality": "Datakwaliteit",
+      "dggs": "DGGS",
+      "geometry": "Geometrie",
+      "join": "Join",
+      "movementTime": "Beweging & tijd",
+      "network": "Netwerk",
+      "overlay": "Overlay",
+      "rasterToVector": "Raster naar vector",
+      "reproject": "Herprojecteren",
+      "select": "Selecteren",
+      "spatialStatistics": "Ruimtelijke statistiek",
+      "terrain": "Terrein",
+      "vectorToRaster": "Vector naar raster"
     }
   },
   "segmentation": {
@@ -5245,6 +6729,7 @@
     "refreshVectorControlError": "Kon deze laag niet vernieuwen. Probeer het paneel Vectorlaag toevoegen opnieuw te openen.",
     "refreshed": "Vernieuwd.",
     "refreshedCount": "{{count}} objecten vernieuwd.",
+    "refreshedTruncated": "{{shown}} van {{total}} objecten vernieuwd.",
     "refreshError": "Kon deze laag niet vernieuwen.",
     "exportNeedsFeatures": "Exporteren vereist een vectorlaag met objecten.",
     "exportedWithWarnings": "Laag geëxporteerd. {{warnings}}",

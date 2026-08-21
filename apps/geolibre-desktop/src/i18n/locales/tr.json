@@ -327,6 +327,10 @@
         "label": "PostgreSQL Katmanı Ekle",
         "description": "Martin'i yerel olarak başlatın, PostGIS kaynaklarını keşfedin ve bir kaynağı vektör döşemeleri olarak ekleyin."
       },
+      "iceberg": {
+        "label": "Apache Iceberg Katmanı Ekle",
+        "description": "Bir Iceberg tablosunu (v3 veya üstü) okuyun ve öğelerinin bir alt kümesini ekleyin."
+      },
       "deckglViz": {
         "label": "Deck.gl Katmanı Ekle",
         "description": "Bir deck.gl katman türü seçin, ardından örnek verileri yükleyin veya bir CSV/JSON/GeoJSON dosyası ya da URL'si yükleyin."
@@ -706,6 +710,41 @@
       "tableReadOnly": "{{table}} (salt okunur: birincil anahtar yok)",
       "errorSelectTable": "Yüklenecek bir tablo seçin.",
       "errorRuntimeMissing": "İşleme sunucusunda PostGIS çalışma zamanı (psycopg) yüklü değil. Düzenlenebilir katmanları yüklemek için geolibre-server 'postgis' ek paketini yükleyin."
+    },
+    "iceberg": {
+      "defaultName": "Iceberg Katmanı",
+      "notice": "Iceberg tabloları istek üzerine bir kez okunur. Katman, aşağıdaki satır sınırıyla sınırlanmış bir anlık görüntüdür ve hiçbir zaman otomatik olarak yeniden taranmaz — yeniden okumak için katman menüsündeki Yenile'yi kullanın.",
+      "mode": "Iceberg kaynağı",
+      "modeTable": "Tablo konumu",
+      "modeCatalog": "REST kataloğu",
+      "location": "Tablo meta veri konumu",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "Ambar",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "Katalog uç noktası",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "Bağlan",
+      "table": "Iceberg tablosu",
+      "sql": "SQL (isteğe bağlı)",
+      "sqlHint": "Çizilecek içeriği filtrelemek veya yeniden biçimlendirmek için düzenleyin. İfade bir GEOMETRY sütunu döndürmelidir; tablonun tamamını okumak için oluşturulduğu gibi bırakın.",
+      "selectTable": "Bir tablo seçin",
+      "geometryColumn": "Geometri sütunu",
+      "rowLimit": "Satır sınırı",
+      "rowLimitHint": "Katman, tablonun ilk satırlarını bu sınıra kadar tutar. Sınır {{max}} satırı aşamaz.",
+      "rowLimitTruncates": "Tablo {{total}} satır içeriyor; katman ilk {{limit}} satırı içerecek.",
+      "statusConnecting": "Iceberg meta verisi okunuyor...",
+      "statusInspecting": "Tablo inceleniyor...",
+      "statusInspected": "{{rows}} satır. Geometri: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} satır, ancak GEOMETRY sütunu bulunamadı. Iceberg geometrisi v3 geometri türünü kullanmalıdır.",
+      "statusTablesFound_one": "{{count}} tablo bulundu.",
+      "statusTablesFound_other": "{{count}} tablo bulundu. Devam etmek için birini seçin.",
+      "statusNoTables": "Katalog hiçbir tablo sunmuyor.",
+      "errorLocation": "Iceberg tablosunun meta veri konumunu girin.",
+      "errorWarehouse": "Bağlanılacak Iceberg ambarını girin.",
+      "errorEndpoint": "Iceberg REST katalog uç noktasını girin.",
+      "errorConnect": "Iceberg kaynağı okunamadı.",
+      "errorInspect": "Iceberg tablosu incelenemedi.",
+      "errorConnectFirst": "Önce bağlanın ve bir Iceberg tablosu seçin."
     },
     "video": {
       "defaultName": "Video Katmanı",
@@ -2282,7 +2321,8 @@
       "video": "Video Katmanı",
       "deckglViz": "Deck.gl Katmanı",
       "gltfModel": "3D Model (glTF)",
-      "postgres": "PostgreSQL Katmanı"
+      "postgres": "PostgreSQL Katmanı",
+      "iceberg": "Apache Iceberg Katmanı"
     },
     "conversion": {
       "vectorToVector": "Vektörden Vektöre",
@@ -3441,11 +3481,19 @@
     "addUnsupported": "Haritaya yalnızca GeoTIFF/COG, GeoJSON, GeoParquet ve PMTiles varlıkları eklenebilir",
     "addFailed": "Varlık eklenemedi",
     "addNoSourceLayers": "Bu arşiv çizilecek katman listelemiyor",
+    "addNoTarget": "Bu varlık çizilecek hiçbir şey listelemiyor",
+    "addIcechunk": "Icechunk depoları henüz okunamıyor",
+    "zarrProblemGroup": "Bu varlık çizilebilir tek bir dizi değil, bir dizi grubu adlandırıyor",
+    "zarrProblemUnauthorized": "Bu Zarr deposu, GeoLibre'nin henüz sağlayamadığı kimlik bilgileri gerektiriyor",
+    "zarrProblemUnsupportedUrl": "Bu Zarr deposunun adresi anahtar anahtar okunamıyor",
+    "zarrProblemUnavailable": "Bu Zarr deposu açılamadı",
+    "chooseTarget": "Ne ekleneceğini seçin",
     "cogUnsupported": "Bu GeoLibre ana bilgisayarı uzak GeoTIFF varlıklarını görselleştiremiyor",
     "formatCog": "COG",
     "formatGeoJson": "GeoJSON",
     "formatPmtiles": "PMTiles",
     "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
     "formatUnknown": "Bilinmeyen biçim",
     "notAddable": "eklenemez"
   },
@@ -3676,6 +3724,10 @@
   "basemaps": {
     "confirmStyleReplace_one": "\"{{name}}\" öğesine geçmek tüm harita stilini değiştirir ve eklediğiniz üst üste bindirilmiş temel haritayı kaldırır. Devam edilsin mi?",
     "confirmStyleReplace_other": "\"{{name}}\" öğesine geçmek tüm harita stilini değiştirir ve eklediğiniz {{count}} üst üste bindirilmiş temel haritayı kaldırır. Devam edilsin mi?"
+  },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "Öğe özellikleri",
+    "massingHeight": "Yükseklik (m)"
   },
   "annotations": {
     "toolbar": "Not araçları",
@@ -4247,6 +4299,1438 @@
       "run": "Çalıştır",
       "outputPlaceholder": "Çıktı burada görünecek.",
       "resolutionRange": "Çözünürlük (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "Tampon Bölge",
+          "description": "Her öğenin çevresinde sabit bir mesafede tampon bölge poligonu oluşturur",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "distance": {
+              "label": "Mesafe"
+            },
+            "units": {
+              "label": "Birimler",
+              "options": {
+                "kilometers": "Kilometre",
+                "meters": "Metre",
+                "miles": "Mil"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "Merkez Noktaları",
+          "description": "Her öğenin ağırlık merkezi noktasını hesaplar",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "Dış bükey kabuk",
+          "description": "Tüm öğeleri çevreleyen dış bükey kabuğu hesaplar",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "Eritme",
+          "description": "Poligon öğelerini tek bir geometride birleştirir, isteğe bağlı olarak bir alana göre gruplar",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "field": {
+              "label": "Eritme alanı (isteğe bağlı)",
+              "description": "Eritmeden önce öğelerin gruplanacağı özellik adı"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "Sınırlayıcı kutu",
+          "description": "Tüm öğelerin dikdörtgen zarfını hesaplar",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            }
+          }
+        },
+        "simplify": {
+          "name": "Basitleştir",
+          "description": "Douglas-Peucker algoritmasıyla köşe noktası sayısını azaltır",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "tolerance": {
+              "label": "Tolerans (derece)"
+            },
+            "highQuality": {
+              "label": "Yüksek kalite"
+            }
+          }
+        },
+        "clip": {
+          "name": "Kırp",
+          "description": "Girdi katmanını bir kaplama katmanının kapladığı alana göre kırpar (girdi özniteliklerini korur)",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "overlay": {
+              "label": "Kaplama (kırpma) katmanı"
+            }
+          }
+        },
+        "intersection": {
+          "name": "Kesişim",
+          "description": "Yalnızca iki poligon katmanının örtüştüğü alanları tutar",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "overlay": {
+              "label": "Kaplama katmanı"
+            }
+          }
+        },
+        "difference": {
+          "name": "Fark",
+          "description": "Kaplama katmanının alanını girdi katmanından çıkarır",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "overlay": {
+              "label": "Kaplama katmanı"
+            }
+          }
+        },
+        "union": {
+          "name": "Birleşim",
+          "description": "İki poligon katmanını tek bir birleşik geometride birleştirir",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "overlay": {
+              "label": "Kaplama katmanı"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "Konumsal birleştirme",
+          "description": "Konumsal bir ilişkiye göre birleştirme katmanındaki öznitelikleri her girdi öğesine ekler",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "overlay": {
+              "label": "Birleştirme katmanı"
+            },
+            "predicate": {
+              "label": "Konumsal ilişki",
+              "options": {
+                "intersects": "Kesişir",
+                "within": "İçinde",
+                "contains": "İçerir"
+              }
+            },
+            "how": {
+              "label": "Birleştirme türü",
+              "options": {
+                "inner": "İç (yalnızca eşleşen öğeleri tut)",
+                "left": "Sol (tüm girdi öğelerini tut)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "Öznitelik birleştirme",
+          "description": "Geometri kullanmadan, bir anahtar alanın eşleştiği yerlerde birleştirme katmanındaki (bir tablo) öznitelikleri her girdi öğesine ekler. Bire bir: eşleşen ilk birleştirme satırı kazanır.",
+          "params": {
+            "layer": {
+              "label": "Hedef katman"
+            },
+            "overlay": {
+              "label": "Birleştirme katmanı (tablo)",
+              "description": "Öznitelikleri aktarılacak katman. Geometrisi yok sayılır."
+            },
+            "target_field": {
+              "label": "Hedef anahtar alanı"
+            },
+            "join_field": {
+              "label": "Birleştirme anahtar alanı"
+            },
+            "how": {
+              "label": "Birleştirme türü",
+              "options": {
+                "left": "Sol (tüm hedef öğelerini tut)",
+                "inner": "İç (yalnızca eşleşen öğeleri tut)"
+              }
+            },
+            "fields": {
+              "label": "Aktarılacak alanlar (isteğe bağlı)",
+              "description": "Kopyalanacak birleştirme alanları, virgülle ayrılmış. Anahtar dışındaki tüm birleştirme alanlarını aktarmak için boş bırakın."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "Değere göre seç",
+          "description": "Öznitelik değeri bir koşulla eşleşen öğeleri yeni bir katmana çıkarır",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "field": {
+              "label": "Alan"
+            },
+            "operator": {
+              "label": "İşleç",
+              "options": {
+                "eq": "= (eşittir)",
+                "neq": "≠ (eşit değildir)",
+                "gt": "> (büyüktür)",
+                "gte": "≥ (büyük veya eşittir)",
+                "lt": "< (küçüktür)",
+                "lte": "≤ (küçük veya eşittir)",
+                "contains": "içerir (metin)",
+                "starts-with": "ile başlar (metin)",
+                "is-null": "boş",
+                "is-not-null": "boş değil"
+              }
+            },
+            "value": {
+              "label": "Değer",
+              "description": "Her iki taraf da sayısal olduğunda sayı olarak karşılaştırılır."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "Konuma göre seç",
+          "description": "Öğeleri ikinci bir katmanla olan konumsal ilişkilerine göre yeni bir katmana çıkarır",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "overlay": {
+              "label": "Filtre katmanı"
+            },
+            "predicate": {
+              "label": "Konumsal ilişki",
+              "options": {
+                "intersects": "Kesişir",
+                "within": "İçinde",
+                "contains": "İçerir",
+                "disjoint": "Ayrık (kesişim yok)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "Rastgele örnekleme",
+          "description": "Öğelerin rastgele bir alt kümesini, öğe sayısına veya girdinin yüzdesine göre boyutlandırarak yeni bir katmana çıkarır.",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "method": {
+              "label": "Yöntem",
+              "options": {
+                "count": "Öğe sayısı",
+                "percentage": "Öğe yüzdesi"
+              }
+            },
+            "count": {
+              "label": "Öğe sayısı",
+              "description": "Girdi öğe sayısından büyükse o sayıya sınırlanır."
+            },
+            "percentage": {
+              "label": "Öğe yüzdesi"
+            }
+          }
+        },
+        "reproject": {
+          "name": "Yeniden izdüşümle",
+          "description": "Bir katmanın koordinatlarını kaynak KRS olarak yorumlar ve doğru konumda görüntülenmeleri için WGS84'e dönüştürür. Sidecar veya Python motoru gerektirir.",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "source_crs": {
+              "label": "Kaynak KRS",
+              "description": "Katmanın koordinatlarının gerçekte bulunduğu KRS (örn. EPSG:3857). Sonuç WGS84'e (EPSG:4326) dönüştürülür."
+            }
+          }
+        },
+        "explode": {
+          "name": "Parçalara ayır",
+          "description": "Çok parçalı geometrileri tek parçalı öğelere böler (her parça için bir öğe), her üst öğenin özniteliklerini korur",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "Özniteliğe göre kümeleştir",
+          "description": "Aynı öznitelik değerini paylaşan öğeleri grup başına tek bir geometride eritir ve bir özet istatistik ekler",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "group_field": {
+              "label": "Gruplama alanı"
+            },
+            "statistic": {
+              "label": "İstatistik",
+              "options": {
+                "count": "Sayı",
+                "sum": "Toplam",
+                "mean": "Ortalama",
+                "min": "Min",
+                "max": "Maks",
+                "median": "Ortanca"
+              }
+            },
+            "stat_field": {
+              "label": "İstatistik alanı",
+              "description": "Yukarıdaki istatistikle özetlenecek sayısal alan."
+            }
+          }
+        },
+        "smooth": {
+          "name": "Yumuşat",
+          "description": "Chaikin algoritmasıyla çizgi ve poligon öğelerinin köşelerini yuvarlar (köşe noktası ekler); Basitleştir'in köşe noktası azaltmasından farklıdır. Z/yükseklik korunur; noktalar değişmeden geçer.",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "iterations": {
+              "label": "Yineleme",
+              "description": "Daha fazla yineleme daha pürüzsüz sonuç verir (1-10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "Düzenli ızgara",
+          "description": "Bir kapsam üzerinde hücrelerden oluşan düzenli dikdörtgen bir ızgara (balık ağı) oluşturur. Kaynak: geçerli harita görünümü, bir katmanın kapsamı veya elle girilen sınırlayıcı kutu.",
+          "params": {
+            "source": {
+              "label": "Kapsam kaynağı",
+              "options": {
+                "viewport": "Harita görünümü",
+                "layer": "Katman kapsamı",
+                "bbox": "Elle sınırlayıcı kutu"
+              }
+            },
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "west": {
+              "label": "Batı (min boylam)"
+            },
+            "south": {
+              "label": "Güney (min enlem)"
+            },
+            "east": {
+              "label": "Doğu (maks boylam)"
+            },
+            "north": {
+              "label": "Kuzey (maks enlem)"
+            },
+            "cell_width": {
+              "label": "Hücre genişliği (derece)"
+            },
+            "cell_height": {
+              "label": "Hücre yüksekliği (derece)",
+              "description": "Hücre genişliğiyle eşleşmesi için boş bırakın."
+            },
+            "cell_type": {
+              "label": "Hücre türü",
+              "options": {
+                "polygon": "Dikdörtgenler",
+                "point": "Noktalar (hücre merkezleri)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "Bir nokta katmanından Voronoi diyagramı (nokta başına bir poligon, noktaların kapsamına kırpılmış) veya Delaunay üçgenlemesi oluşturur.",
+          "params": {
+            "layer": {
+              "label": "Girdi nokta katmanı"
+            },
+            "type": {
+              "label": "Diyagram",
+              "options": {
+                "voronoi": "Voronoi poligonları",
+                "delaunay": "Delaunay üçgenleri"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "Baz istasyonu kapsama alanı",
+          "description": "Nokta konumlardan azimut, yarıçap ve ışın genişliğini (öznitelik alanlarından veya sabit değerlerden okunarak) kullanarak anten sektörü/dilim poligonları oluşturur. Işın genişliği 360°'ye (tam daire) sınırlanır; kaydedilen ışın genişliği sınırlanmış değeri yansıtır. QGIS Shape Tools gibi, baz istasyonu kapsama alanı için kullanışlıdır.",
+          "params": {
+            "layer": {
+              "label": "Girdi nokta katmanı"
+            },
+            "azimuthField": {
+              "label": "Azimut alanı (°)",
+              "description": "Sektörün baktığı yön, kuzeyden saat yönünde derece olarak. Boş veya sayısal olmadığında sabit azimuta geri döner."
+            },
+            "azimuth": {
+              "label": "Azimut (sabit, °)"
+            },
+            "radiusField": {
+              "label": "Yarıçap alanı",
+              "description": "Kapsama yarıçapı. Boş veya sayısal olmadığında sabit yarıçapa geri döner."
+            },
+            "radius": {
+              "label": "Yarıçap (sabit)"
+            },
+            "beamwidthField": {
+              "label": "Işın genişliği alanı (°)",
+              "description": "Sektörün açısal genişliği, 360°'ye (tam daire) sınırlanır. Boş veya sayısal olmadığında sabit ışın genişliğine geri döner."
+            },
+            "beamwidth": {
+              "label": "Işın genişliği (sabit, °)"
+            },
+            "units": {
+              "label": "Yarıçap birimleri",
+              "options": {
+                "kilometers": "Kilometre",
+                "meters": "Metre",
+                "miles": "Mil"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "DGGS Üreteci",
+          "description": "Bir alanı DGGS hücreleriyle (H3, S2, A5, DGGRID, DGGAL) doldurur. Kaynak: bir katmanın geometrisi, bir katmanın kapsamı, geçerli harita görünümü veya elle girilen sınırlayıcı kutu.",
+          "params": {
+            "dggsType": {
+              "label": "DGGS türü",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID türü",
+              "description": "duck_dggs'ye dggs_params olarak aktarılan ızgara yapılandırması (ISEA/FULLER × açıklık × topoloji).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL türü",
+              "description": "dggal.createDGGRS'ye aktarılan DGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "Alan kaynağı",
+              "options": {
+                "polyfill": "Katman geometrisi (poligon doldurma)",
+                "extent": "Katman kapsamı (sınırlayıcı kutu)",
+                "viewport": "Harita görünümü",
+                "bbox": "Elle sınırlayıcı kutu"
+              }
+            },
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "west": {
+              "label": "Batı (min boylam)"
+            },
+            "south": {
+              "label": "Güney (min enlem)"
+            },
+            "east": {
+              "label": "Doğu (maks boylam)"
+            },
+            "north": {
+              "label": "Kuzey (maks enlem)"
+            },
+            "resolution": {
+              "label": "Çözünürlük",
+              "description": "Aralık DGGS türüne bağlıdır. Alandan otomatik seçmek için boş bırakın."
+            },
+            "compactCells": {
+              "label": "Hücreleri sıkıştır",
+              "description": "Tam kardeş hücre kümelerini daha kaba üst hücrelerde birleştirir (daha az öğe, karışık çözünürlükler)."
+            },
+            "fixAntimeridian": {
+              "label": "Antimeridyeni düzelt",
+              "description": "±180° boylamı geçen hücre halkalarını açar."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "DGGS Gruplama",
+          "description": "Bir nokta katmanını DGGS hücrelerinde toplar (sayı veya sayısal bir alanın toplam/ortalama/min/maks değeri).",
+          "params": {
+            "dggsType": {
+              "label": "DGGS türü",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID türü",
+              "description": "duck_dggs'ye dggs_params olarak aktarılan ızgara yapılandırması (ISEA/FULLER × açıklık × topoloji).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL türü",
+              "description": "dggal.createDGGRS'ye aktarılan DGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "Girdi nokta katmanı"
+            },
+            "aggOp": {
+              "label": "Toplama",
+              "options": {
+                "count": "Sayı",
+                "sum": "Toplam",
+                "mean": "Ortalama",
+                "min": "Min",
+                "max": "Maks"
+              }
+            },
+            "field": {
+              "label": "Alan",
+              "description": "Toplanacak sayısal alan."
+            },
+            "resolution": {
+              "label": "Çözünürlük",
+              "description": "Aralık DGGS türüne bağlıdır. Alandan otomatik seçmek için boş bırakın."
+            },
+            "fixAntimeridian": {
+              "label": "Antimeridyeni düzelt",
+              "description": "±180° boylamı geçen hücre halkalarını açar."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "DGGS Sıkıştırma",
+          "description": "DGGS poligon hücrelerini sıkıştırır veya tek tip bir çözünürlüğe genişletir (H3, S2, A5, DGGAL). Girdi, ID özelliğine sahip bir hücre katmanı olmalıdır.",
+          "params": {
+            "dggsType": {
+              "label": "DGGS türü",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL türü",
+              "description": "dggal.createDGGRS'ye aktarılan DGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "Kip",
+              "options": {
+                "compact": "Sıkıştır",
+                "expand": "Genişlet"
+              }
+            },
+            "layer": {
+              "label": "Girdi DGGS katmanı",
+              "description": "DGGS Üreteci / Gruplama'dan (veya eşdeğerinden) gelen poligon hücre katmanı."
+            },
+            "cellField": {
+              "label": "Hücre ID alanı",
+              "description": "Boş bırakıldığında seçilen türe göre varsayılan olarak h3, a5, s2 veya dggal kullanılır."
+            },
+            "resolution": {
+              "label": "Hedef çözünürlük",
+              "description": "Genişletilecek çözünürlük. En az girdi hücreleri kadar ince olmalıdır."
+            },
+            "fixAntimeridian": {
+              "label": "Antimeridyeni düzelt",
+              "description": "±180° boylamı geçen hücre halkalarını açar."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "Güzergah hızı",
+          "description": "Noktaları (hedef başına) zamana göre sıralar ve ardışık konum kayıtlarını mesafe, süre ve hız taşıyan parçalara bağlar. QGIS TrajecTools gibi.",
+          "params": {
+            "layer": {
+              "label": "Girdi nokta katmanı"
+            },
+            "timeField": {
+              "label": "Zaman alanı",
+              "description": "Her konum kaydı için zaman damgası: ISO tarih/saat dizesi veya epoch (saniye ya da milisaniye)."
+            },
+            "idField": {
+              "label": "Hedef id alanı",
+              "description": "Noktaları ayrı güzergahlara böler. Tüm noktaları tek bir hedef olarak ele almak için boş bırakın."
+            },
+            "speedUnits": {
+              "label": "Hız birimleri",
+              "options": {
+                "km/h": "km/sa",
+                "m/s": "m/s",
+                "mph": "mil/sa"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "Durakları algıla",
+          "description": "Bir hedefin beklediği yerleri bulur: en az belirli bir süre boyunca belirli bir mesafe içinde kalan (GPS saçılmasını yutan) ardışık konum kaydı dizileri. Her durak için bir nokta üretir. QGIS TrajecTools gibi.",
+          "params": {
+            "layer": {
+              "label": "Girdi nokta katmanı"
+            },
+            "timeField": {
+              "label": "Zaman alanı",
+              "description": "Her konum kaydı için zaman damgası: ISO tarih/saat dizesi veya epoch (saniye ya da milisaniye)."
+            },
+            "idField": {
+              "label": "Hedef id alanı",
+              "description": "Durakları hedef başına algılar. Tüm noktaları tek bir hedef olarak ele almak için boş bırakın."
+            },
+            "maxDistance": {
+              "label": "Maks mesafe",
+              "description": "Bir duraktaki her konum kaydı, durağın ilk kaydına bu mesafe içinde olmalıdır (dolayısıyla bir durak bu değerin iki katına kadar yayılabilir). GPS saçılma yarıçapınıza ayarlayın."
+            },
+            "distanceUnits": {
+              "label": "Mesafe birimleri",
+              "options": {
+                "meters": "Metre",
+                "kilometers": "Kilometre",
+                "miles": "Mil"
+              }
+            },
+            "minDuration": {
+              "label": "Min süre (s)",
+              "description": "Bundan daha kısa bir bekleme durak olarak bildirilmez."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "Uzay-zaman yakınlığı",
+          "description": "Hem uzayda hem zamanda yakın nokta çiftlerini bulur — örn. iki hedefin buluşması. Uygun her çifti birbirine bağlayan, mesafe ve zaman farkını taşıyan bir çizgi üretir.",
+          "params": {
+            "layer": {
+              "label": "Girdi nokta katmanı"
+            },
+            "timeField": {
+              "label": "Zaman alanı",
+              "description": "Her nokta için zaman damgası: ISO tarih/saat dizesi veya epoch (saniye ya da milisaniye)."
+            },
+            "idField": {
+              "label": "Hedef id alanı",
+              "description": "Ayarlandığında yalnızca FARKLI id değerlerine sahip noktalar eşleştirilir (ayrı hedefler arasındaki karşılaşmalar). Her çifti dikkate almak için boş bırakın."
+            },
+            "maxDistance": {
+              "label": "Maks mesafe"
+            },
+            "distanceUnits": {
+              "label": "Mesafe birimleri",
+              "options": {
+                "meters": "Metre",
+                "kilometers": "Kilometre",
+                "miles": "Mil"
+              }
+            },
+            "maxTime": {
+              "label": "Maks zaman farkı"
+            },
+            "timeUnits": {
+              "label": "Zaman birimleri",
+              "options": {
+                "seconds": "Saniye",
+                "minutes": "Dakika",
+                "hours": "Saat"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "Geçerliliği denetle",
+          "description": "Geçersiz geometriye sahip öğeleri (GEOS kuralları: kendisiyle kesişen halkalar, dış halkanın dışındaki delikler, ...) bulur ve haritada işaretler",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "Geometrileri düzelt",
+          "description": "Geçersiz geometrileri ST_MakeValid (GEOS) ile onarır; geçerli öğeler dokunulmadan geçer",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "Topoloji kurallarını denetle",
+          "description": "Katmanı topoloji kurallarına (örtüşmeler, boşluklar, kendisiyle kesişmeler, sarkan uçlar) göre doğrular ve her ihlali haritada işaretler",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "ruleSelfIntersect": {
+              "label": "Çizgiler kendisiyle kesişmemeli"
+            },
+            "ruleOverlap": {
+              "label": "Poligonlar örtüşmemeli"
+            },
+            "ruleGaps": {
+              "label": "Poligonlar arasında boşluk olmamalı"
+            },
+            "ruleDangles": {
+              "label": "Çizgilerde sarkan uç olmamalı"
+            },
+            "rulePointCovered": {
+              "label": "Noktalar bir çizgi tarafından örtülmeli"
+            },
+            "ruleEndpointSnap": {
+              "label": "Çizgi uç noktaları tolerans içinde bağlanmalı"
+            },
+            "snapTolerance": {
+              "label": "Yakalama toleransı",
+              "description": "Uç nokta kuralı için: iki çizgi ucunun birbirinden ne kadar uzakta (katman koordinat birimlerinde — WGS84 için derece) olup yine de bağlı sayılabileceği."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "Topolojiyi düzelt",
+          "description": "Topoloji ihlallerini otomatik olarak onarır: neredeyse bağlı çizgi uç noktalarını yakalar, sarkan uçları düzeltir ve noktaları çizgilere izdüşürür. Yakınında hiçbir şey olmayan serbest uçlar değiştirilmez.",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "ruleEndpointSnap": {
+              "label": "Neredeyse bağlı çizgi uç noktalarını yakala"
+            },
+            "ruleDangles": {
+              "label": "Sarkan uçları onar (yakındaki geometriye yakala veya izdüşür)"
+            },
+            "rulePointCovered": {
+              "label": "Noktaları en yakın çizgiye izdüşür"
+            },
+            "snapTolerance": {
+              "label": "Yakalama toleransı",
+              "description": "Geometrinin bağlanmak için ne kadar (katman koordinat birimlerinde — WGS84 için derece) hareket edebileceği."
+            },
+            "dryRun": {
+              "label": "Yalnızca önizleme (deneme çalıştırması)",
+              "description": "Onarılmış bir katman oluşturmadan uygulanacak düzeltmeleri bildirir."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "Eş zaman eğrisi / hizmet alanı",
+          "description": "Bir katmandaki her noktadan seyahat süresi veya seyahat mesafesine göre erişilebilirlik poligonları",
+          "params": {
+            "layer": {
+              "label": "Başlangıç noktaları"
+            },
+            "mode": {
+              "label": "Seyahat modu",
+              "options": {
+                "auto": "Araçla",
+                "pedestrian": "Yürüyerek",
+                "bicycle": "Bisikletle"
+              }
+            },
+            "metric": {
+              "label": "Ölçüt",
+              "options": {
+                "time": "Seyahat süresi (dakika)",
+                "distance": "Mesafe (km)"
+              }
+            },
+            "contours": {
+              "label": "Konturlar",
+              "description": "Virgülle ayrılmış değerler (süre için dakika, mesafe için km)"
+            },
+            "endpoint": {
+              "label": "Rotalama sunucusu (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "Kaynak-hedef maliyet matrisi",
+          "description": "Her başlangıç ve hedef noktası arasındaki seyahat süresi ve mesafesi, bağlantı çizgileri olarak",
+          "params": {
+            "origins": {
+              "label": "Başlangıç noktaları"
+            },
+            "destinations": {
+              "label": "Hedef noktaları"
+            },
+            "mode": {
+              "label": "Seyahat modu",
+              "options": {
+                "auto": "Araçla",
+                "pedestrian": "Yürüyerek",
+                "bicycle": "Bisikletle"
+              }
+            },
+            "endpoint": {
+              "label": "Rotalama sunucusu (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "Sıralı rota (yol tarifi)",
+          "description": "Noktaları yol ağı boyunca sırayla birbirine bağlayarak bir rota oluşturur. Her nokta en yakın yola yakalanır, böylece yol dışındaki koordinatlar (baz istasyonları, sensörler) de rotalanır. Sıralama seçilen alanı (örn. bir zaman damgası) veya katmanın öğe sırasını izler.",
+          "params": {
+            "layer": {
+              "label": "Girdi noktaları"
+            },
+            "order_field": {
+              "label": "Sıralama alanı (isteğe bağlı)",
+              "description": "Rotalamadan önce noktaları bu alana (sayılar veya zaman damgaları) göre sıralar. Katmanın öğe sırasını kullanmak için boş bırakın."
+            },
+            "mode": {
+              "label": "Seyahat modu",
+              "options": {
+                "auto": "Araçla",
+                "pedestrian": "Yürüyerek",
+                "bicycle": "Bisikletle"
+              }
+            },
+            "endpoint": {
+              "label": "Rotalama sunucusu (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "Global Moran'ın I'sı",
+          "description": "Sayısal bir özniteliğin tüm katman genelindeki toplam konumsal özilişkisini ölçer.",
+          "params": {
+            "layer": {
+              "label": "Katman"
+            },
+            "field": {
+              "label": "Değer alanı"
+            },
+            "weightsType": {
+              "label": "Konumsal ağırlıklar",
+              "description": "Her öğe için komşuların nasıl tanımlandığı.",
+              "options": {
+                "knn": "K en yakın komşu",
+                "distance": "Mesafe bandı"
+              }
+            },
+            "k": {
+              "label": "Komşu sayısı (k)"
+            },
+            "threshold": {
+              "label": "Mesafe bandı (km)"
+            },
+            "permutations": {
+              "label": "Permütasyonlar",
+              "description": "Sözde p-değeri için rastgele permütasyonlar."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "Yerel Moran'ın I'sı (LISA)",
+          "description": "Öğe başına kümeler ve aykırı değerler (Yüksek-Yüksek, Düşük-Düşük, Yüksek-Düşük, Düşük-Yüksek), sözde anlamlılıkla birlikte.",
+          "params": {
+            "layer": {
+              "label": "Katman"
+            },
+            "field": {
+              "label": "Değer alanı"
+            },
+            "weightsType": {
+              "label": "Konumsal ağırlıklar",
+              "description": "Her öğe için komşuların nasıl tanımlandığı.",
+              "options": {
+                "knn": "K en yakın komşu",
+                "distance": "Mesafe bandı"
+              }
+            },
+            "k": {
+              "label": "Komşu sayısı (k)"
+            },
+            "threshold": {
+              "label": "Mesafe bandı (km)"
+            },
+            "permutations": {
+              "label": "Permütasyonlar",
+              "description": "Sözde p-değeri için rastgele permütasyonlar."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Getis-Ord Gi* sıcak noktaları",
+          "description": "Sayısal bir özniteliğin istatistiksel olarak anlamlı sıcak ve soğuk noktalarını belirler.",
+          "params": {
+            "layer": {
+              "label": "Katman"
+            },
+            "field": {
+              "label": "Değer alanı"
+            },
+            "weightsType": {
+              "label": "Konumsal ağırlıklar",
+              "description": "Her öğe için komşuların nasıl tanımlandığı.",
+              "options": {
+                "knn": "K en yakın komşu",
+                "distance": "Mesafe bandı"
+              }
+            },
+            "k": {
+              "label": "Komşu sayısı (k)"
+            },
+            "threshold": {
+              "label": "Mesafe bandı (km)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "Ortalama en yakın komşu",
+          "description": "Noktaların kümelenmiş, dağınık veya rastgele dağılmış olup olmadığını sınar (ANN oranı + z-skoru).",
+          "params": {
+            "layer": {
+              "label": "Nokta katmanı"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "Çekirdek yoğunluğu (ısı haritası)",
+          "description": "Kuartik çekirdek kullanarak noktalardan hücre ızgarası biçiminde bir yoğunluk yüzeyi kestirir.",
+          "params": {
+            "layer": {
+              "label": "Nokta katmanı"
+            },
+            "weightField": {
+              "label": "Ağırlık alanı (isteğe bağlı)",
+              "description": "Her noktayı ağırlıklandıran sayısal alan; boş = eşit ağırlık."
+            },
+            "bandwidth": {
+              "label": "Arama yarıçapı / bant genişliği (km)"
+            },
+            "cellSize": {
+              "label": "Hücre boyutu (km)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "Yükselen sıcak noktalar (uzay-zaman küpü)",
+          "description": "Zaman damgalı noktalardan bir uzay-zaman küpü (balık ağı ızgarası × eşit zaman adımları) oluşturur ve her hücreyi yeni, yoğunlaşan, kalıcı, azalan, düzensiz, salınımlı veya tarihsel sıcak/soğuk nokta olarak sınıflandırır. Her zaman dilimi için Getis-Ord Gi* çalıştırır, ardından her hücrenin Gi* serisine Mann-Kendall eğilim testi uygular. İstemci tarafında çalışır; ArcGIS Emerging Hot Spot Analysis gibi.",
+          "params": {
+            "layer": {
+              "label": "Nokta katmanı"
+            },
+            "timeField": {
+              "label": "Zaman alanı",
+              "description": "Her nokta için zaman damgası: ISO tarih/saat dizesi veya epoch (saniye ya da milisaniye)."
+            },
+            "cellSize": {
+              "label": "Hücre boyutu (km)",
+              "description": "Her kare konumsal hücrenin kenar uzunluğu, kilometre cinsinden."
+            },
+            "timeStep": {
+              "label": "Zaman adımı aralığı"
+            },
+            "timeStepUnit": {
+              "label": "Zaman adımı birimi",
+              "options": {
+                "hours": "Saat",
+                "days": "Gün",
+                "weeks": "Hafta"
+              }
+            },
+            "weightField": {
+              "label": "Ağırlık alanı (isteğe bağlı)",
+              "description": "Noktaları saymak yerine her uzay-zaman hücresi için toplanacak sayısal alan; boş = noktaları say."
+            },
+            "confidence": {
+              "label": "Güven düzeyi",
+              "description": "Bir hücrenin sıcak/soğuk nokta sayılması ve eğilim için anlamlılık eşiği.",
+              "options": {
+                "90": "%90",
+                "95": "%95",
+                "99": "%99"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "Tepe gölgeleme",
+          "description": "Bir yükseklik modelinden gölgeli kabartma (tepe gölgeleme) rasteri hesaplar.",
+          "params": {
+            "azimuth": {
+              "label": "Azimut (derece)"
+            },
+            "altitude": {
+              "label": "Yükseklik açısı (derece)"
+            },
+            "z_factor": {
+              "label": "Z çarpanı"
+            }
+          }
+        },
+        "slope": {
+          "name": "Eğim",
+          "description": "Bir yükseklik modelinden eğimi (diklik) hesaplar.",
+          "params": {
+            "units": {
+              "label": "Birimler",
+              "options": {
+                "degrees": "Derece",
+                "percent": "Yüzde"
+              }
+            },
+            "z_factor": {
+              "label": "Z çarpanı"
+            }
+          }
+        },
+        "aspect": {
+          "name": "Bakı",
+          "description": "Bir yükseklik modelinden bakıyı (en dik eğimin pusula yönü) hesaplar."
+        },
+        "reproject": {
+          "name": "Yeniden izdüşümle",
+          "description": "Bir rasteri farklı bir koordinat referans sistemine dönüştürür.",
+          "params": {
+            "dst_crs": {
+              "label": "Hedef KRS",
+              "description": "EPSG:3857 veya EPSG:4326 gibi bir otorite kodu."
+            },
+            "resampling": {
+              "label": "Yeniden örnekleme",
+              "options": {
+                "nearest": "En yakın komşu",
+                "bilinear": "Çift doğrusal",
+                "cubic": "Kübik"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "Yeniden örnekle",
+          "description": "Bir rasteri farklı bir piksel boyutuna (çözünürlüğe) yeniden örnekler.",
+          "params": {
+            "resolution": {
+              "label": "Hedef piksel boyutu",
+              "description": "Rasterin KRS birimlerinde çıktı piksel boyutu."
+            },
+            "resampling": {
+              "label": "Yeniden örnekleme",
+              "options": {
+                "nearest": "En yakın komşu",
+                "bilinear": "Çift doğrusal",
+                "cubic": "Kübik"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "Kapsama göre kırp",
+          "description": "Bir rasteri sınırlayıcı kutuya (rasterin KRS'sinde) göre kırpar.",
+          "params": {
+            "minx": {
+              "label": "Min X"
+            },
+            "miny": {
+              "label": "Min Y"
+            },
+            "maxx": {
+              "label": "Maks X"
+            },
+            "maxy": {
+              "label": "Maks Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "Maske katmanına göre kırp",
+          "description": "Bir rasteri bir vektör maske dosyasının geometrilerine göre kırpar.",
+          "params": {
+            "mask_path": {
+              "label": "Maske katmanı",
+              "description": "Geometrileri kırpma bölgesini tanımlayan bir GeoJSON dosyası. Rasterin KRS'sine otomatik olarak yeniden izdüşümlenir (KRS'si olmayan bir GeoJSON WGS84 varsayılır)."
+            },
+            "crop": {
+              "label": "Maske kapsamına kırp"
+            },
+            "all_touched": {
+              "label": "Dokunulan tüm pikselleri dahil et"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "Poligonlaştır",
+          "description": "Bir raster bandını piksel değerine göre gruplanmış vektör poligonlara dönüştürür.",
+          "params": {
+            "band": {
+              "label": "Bant"
+            },
+            "connectivity": {
+              "label": "Bağlantılılık",
+              "options": {
+                "4": "4 bağlantılı",
+                "8": "8 bağlantılı"
+              }
+            },
+            "field": {
+              "label": "Değer alanı adı"
+            }
+          }
+        },
+        "contour": {
+          "name": "Eşyükselti eğrisi",
+          "description": "Bir yükseklik modelinden eşyükselti eğrileri üretir.",
+          "params": {
+            "band": {
+              "label": "Bant"
+            },
+            "interval": {
+              "label": "Aralık",
+              "description": "Ardışık eşyükselti eğrileri arasındaki yükseklik farkı."
+            },
+            "base": {
+              "label": "Taban"
+            },
+            "attribute": {
+              "label": "Yükseklik alanı adı"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "Enterpolasyon (IDW / Kriging)",
+          "description": "Bir nokta katmanının sayısal özniteliğini ters mesafe ağırlıklandırma veya sıradan kriging ile sürekli bir raster yüzeyine enterpole eder.",
+          "params": {
+            "field": {
+              "label": "Değer alanı",
+              "description": "Enterpole edilecek sayısal nokta özniteliğinin adı (örn. yükseklik, sıcaklık)."
+            },
+            "method": {
+              "label": "Yöntem",
+              "options": {
+                "idw": "Ters mesafe ağırlıklandırma (IDW)",
+                "kriging": "Sıradan kriging"
+              }
+            },
+            "resolution": {
+              "label": "Çıktı piksel boyutu",
+              "description": "Katmanın KRS birimlerinde hücre boyutu (WGS84 için derece). Izgara noktaların kapsamını kaplar."
+            },
+            "power": {
+              "label": "IDW üssü",
+              "description": "Daha yüksek değerler yakın noktalara daha fazla etki verir."
+            },
+            "variogram_model": {
+              "label": "Variogram modeli",
+              "description": "Deneysel yarıvariograma uydurulan kuramsal model. Kriging 1500 nokta ile sınırlıdır.",
+              "options": {
+                "spherical": "Küresel",
+                "exponential": "Üstel",
+                "gaussian": "Gauss",
+                "linear": "Doğrusal"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "Bölgesel istatistikler",
+          "description": "Bir vektör katmanının her poligonu içindeki raster değerlerini özetler (sayı, min, maks, ortalama, toplam, std, ortanca).",
+          "params": {
+            "zones_path": {
+              "label": "Bölge katmanı",
+              "description": "Bölgeleri tanımlayan bir GeoJSON poligon katmanı. Rasterin KRS'sine otomatik olarak yeniden izdüşümlenir (KRS'si olmayan bir GeoJSON WGS84 varsayılır)."
+            },
+            "band": {
+              "label": "Bant"
+            },
+            "prefix": {
+              "label": "Alan öneki",
+              "description": "Her istatistik alanı adının başına eklenir (örn. 'dem_' → 'dem_mean'). Yalın 'mean', 'min', … için boş bırakın."
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "Raster hesap makinesi",
+          "description": "Bir NumPy bant matematiği ifadesini değerlendirir. Her girdinin 1. bandına A, B, C ile ve belirli bantlara A1, A2, … ile başvurun; örn. NDVI = (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "İfade",
+              "description": "A, B, C (ve A1, A2, …) üzerinde bir NumPy ifadesi. İşlevler: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan."
+            },
+            "b_path": {
+              "label": "Raster B (isteğe bağlı)",
+              "description": "B / B1, B2, … olarak başvurulan ikinci bir raster. A'nın boyutlarıyla eşleşmelidir."
+            },
+            "c_path": {
+              "label": "Raster C (isteğe bağlı)",
+              "description": "C / C1, C2, … olarak başvurulan üçüncü bir raster. A'nın boyutlarıyla eşleşmelidir."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "Spektral indeks",
+          "description": "Çok bantlı bir rasterden adlandırılmış bir spektral indeks (NDVI, NDWI, EVI, …) hesaplar. Bant düzeni için bir sensör ön ayarı seçin veya Özel sensör ile bant numaralarını elle ayarlayın.",
+          "params": {
+            "index": {
+              "label": "İndeks",
+              "options": {
+                "ndvi": "NDVI (bitki örtüsü)",
+                "gndvi": "GNDVI (yeşil bitki örtüsü)",
+                "ndwi": "NDWI (su, McFeeters)",
+                "ndmi": "NDMI (nem)",
+                "ndbi": "NDBI (yapılaşma)",
+                "nbr": "NBR (yanma oranı)",
+                "evi": "EVI (geliştirilmiş bitki örtüsü)",
+                "savi": "SAVI (toprağa göre düzeltilmiş bitki örtüsü)"
+              }
+            },
+            "sensor": {
+              "label": "Sensör / bant düzeni",
+              "description": "Yaygın sensörler için ön ayarlı bant numaraları. Farklı yığılmış bir GeoTIFF için bantları elle eşlemek üzere Özel'i seçin.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "Özel (bant numaralarını aşağıda ayarlayın)"
+              }
+            },
+            "red": {
+              "label": "Kırmızı bant numarası"
+            },
+            "green": {
+              "label": "Yeşil bant numarası"
+            },
+            "blue": {
+              "label": "Mavi bant numarası"
+            },
+            "nir": {
+              "label": "NIR bant numarası"
+            },
+            "swir1": {
+              "label": "SWIR1 bant numarası"
+            },
+            "swir2": {
+              "label": "SWIR2 bant numarası"
+            },
+            "L": {
+              "label": "Toprak çarpanı (L)",
+              "description": "SAVI toprak parlaklığı düzeltmesi (0 yoğun örtü → 1 çıplak toprak)."
+            },
+            "scale": {
+              "label": "Yansıtım ölçeği",
+              "description": "Piksel değerlerini yansıtıma (0–1) dönüştüren çarpan. Normalleştirilmiş fark indeksleri için 1'de bırakın; tamsayı DN görüntülerinde EVI/SAVI için ayarlayın (örn. Sentinel-2 L2A için 0.0001)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "Yeniden sınıflandır",
+          "description": "Bir kural tablosu kullanarak değer aralıklarını yeni sınıf değerlerine eşler.",
+          "params": {
+            "band": {
+              "label": "Bant"
+            },
+            "table": {
+              "label": "Kurallar",
+              "description": "Virgül veya satır sonuyla ayrılmış 'min:maks:yenideğer' kuralları, örn. '0:10:1, 10:20:2, 20:max:3'. Aralıklar yarı açıktır [min, maks); boş/min/max ±∞ anlamına gelir."
+            },
+            "unmatched": {
+              "label": "Eşleşmeyen değerler",
+              "options": {
+                "nodata": "NoData olarak ayarla",
+                "original": "Özgün değeri koru"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "Mozaikle / birleştir",
+          "description": "En fazla beş rasteri (aynı KRS'yi paylaşan) birleşimlerini kaplayan tek bir rasterde birleştirir.",
+          "params": {
+            "raster_2": {
+              "label": "İkinci raster"
+            },
+            "raster_3": {
+              "label": "Üçüncü raster (isteğe bağlı)"
+            },
+            "raster_4": {
+              "label": "Dördüncü raster (isteğe bağlı)"
+            },
+            "raster_5": {
+              "label": "Beşinci raster (isteğe bağlı)"
+            },
+            "method": {
+              "label": "Örtüşme yöntemi",
+              "description": "Girdilerin örtüştüğü yerlerde hangi değerin kazanacağı.",
+              "options": {
+                "first": "İlk",
+                "last": "Son",
+                "min": "Minimum",
+                "max": "Maksimum"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "Odak istatistikleri",
+          "description": "Bir raster bandına hareketli pencere (komşuluk) istatistiği uygular.",
+          "params": {
+            "band": {
+              "label": "Bant"
+            },
+            "statistic": {
+              "label": "İstatistik",
+              "options": {
+                "mean": "Ortalama",
+                "median": "Ortanca",
+                "min": "Minimum",
+                "max": "Maksimum",
+                "sum": "Toplam",
+                "std": "Standart sapma",
+                "range": "Aralık (maks − min)"
+              }
+            },
+            "size": {
+              "label": "Pencere boyutu",
+              "description": "Piksel cinsinden tek sayılı komşuluk boyutu (3 = 3×3). En fazla 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "Analiz",
+      "clip": "Kırpma",
+      "dataQuality": "Veri kalitesi",
+      "dggs": "DGGS",
+      "geometry": "Geometri",
+      "join": "Birleştirme",
+      "movementTime": "Hareket ve zaman",
+      "network": "Ağ",
+      "overlay": "Kaplama",
+      "rasterToVector": "Rasterdan Vektöre",
+      "reproject": "Yeniden izdüşümleme",
+      "select": "Seçim",
+      "spatialStatistics": "Konumsal İstatistikler",
+      "terrain": "Arazi",
+      "vectorToRaster": "Vektörden Rastera"
     }
   },
   "segmentation": {
@@ -5245,6 +6729,7 @@
     "refreshVectorControlError": "Bu katman yenilenemedi. Vektör Katmanı Ekle panelini yeniden açmayı deneyin.",
     "refreshed": "Yenilendi.",
     "refreshedCount": "{{count}} öğe yenilendi.",
+    "refreshedTruncated": "{{total}} öğeden {{shown}} tanesi yenilendi.",
     "refreshError": "Bu katman yenilenemedi.",
     "exportNeedsFeatures": "Dışa aktarma, öğeleri olan bir vektör katmanı gerektirir.",
     "exportedWithWarnings": "Katman dışa aktarıldı. {{warnings}}",

@@ -327,6 +327,10 @@
         "label": "PostgreSQL-Ebene hinzufügen",
         "description": "Startet Martin lokal, ermittelt PostGIS-Quellen und fügt eine Quelle als Vektorkacheln hinzu."
       },
+      "iceberg": {
+        "label": "Apache-Iceberg-Ebene hinzufügen",
+        "description": "Eine Iceberg-Tabelle (v3 oder höher) lesen und eine Teilmenge ihrer Objekte hinzufügen."
+      },
       "deckglViz": {
         "label": "Deck.gl-Ebene hinzufügen",
         "description": "Wählen Sie einen Deck.gl-Ebenentyp und laden Sie dann die Beispieldaten oder eine CSV-/JSON-/GeoJSON-Datei bzw. URL hoch."
@@ -706,6 +710,41 @@
       "tableReadOnly": "{{table}} (schreibgeschützt: kein Primärschlüssel)",
       "errorSelectTable": "Wählen Sie eine zu ladende Tabelle aus.",
       "errorRuntimeMissing": "Der Verarbeitungsserver hat die PostGIS-Laufzeitumgebung (psycopg) nicht installiert. Installieren Sie das Extra „postgis“ von geolibre-server, um bearbeitbare Ebenen zu laden."
+    },
+    "iceberg": {
+      "defaultName": "Iceberg-Ebene",
+      "notice": "Iceberg-Tabellen werden einmalig bei Bedarf gelesen. Die Ebene ist ein Snapshot, der auf das untenstehende Zeilenlimit begrenzt ist und nie automatisch neu eingelesen wird — verwenden Sie „Aktualisieren“ im Ebenenmenü, um sie erneut zu lesen.",
+      "mode": "Iceberg-Quelle",
+      "modeTable": "Tabellenspeicherort",
+      "modeCatalog": "REST-Katalog",
+      "location": "Speicherort der Tabellenmetadaten",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "Warehouse",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "Katalog-Endpunkt",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "Verbinden",
+      "table": "Iceberg-Tabelle",
+      "sql": "SQL (optional)",
+      "sqlHint": "Bearbeiten, um zu filtern oder umzuformen, was dargestellt wird. Die Anweisung muss eine GEOMETRY-Spalte zurückgeben; unverändert lassen, um die gesamte Tabelle zu lesen.",
+      "selectTable": "Tabelle auswählen",
+      "geometryColumn": "Geometriespalte",
+      "rowLimit": "Zeilenlimit",
+      "rowLimitHint": "Die Ebene enthält die ersten Zeilen der Tabelle bis zu diesem Limit. Das Limit darf {{max}} Zeilen nicht überschreiten.",
+      "rowLimitTruncates": "Die Tabelle enthält {{total}} Zeilen; die Ebene wird die ersten {{limit}} enthalten.",
+      "statusConnecting": "Iceberg-Metadaten werden gelesen...",
+      "statusInspecting": "Tabelle wird untersucht...",
+      "statusInspected": "{{rows}} Zeilen. Geometrie: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} Zeilen, aber es wurde keine GEOMETRY-Spalte gefunden. Iceberg-Geometrien müssen den v3-Geometrietyp verwenden.",
+      "statusTablesFound_one": "{{count}} Tabelle gefunden.",
+      "statusTablesFound_other": "{{count}} Tabellen gefunden. Wählen Sie eine aus, um fortzufahren.",
+      "statusNoTables": "Der Katalog stellt keine Tabellen bereit.",
+      "errorLocation": "Geben Sie den Speicherort der Metadaten der Iceberg-Tabelle ein.",
+      "errorWarehouse": "Geben Sie das anzubindende Iceberg-Warehouse ein.",
+      "errorEndpoint": "Geben Sie den Endpunkt des Iceberg-REST-Katalogs ein.",
+      "errorConnect": "Die Iceberg-Quelle konnte nicht gelesen werden.",
+      "errorInspect": "Die Iceberg-Tabelle konnte nicht untersucht werden.",
+      "errorConnectFirst": "Stellen Sie zuerst eine Verbindung her und wählen Sie eine Iceberg-Tabelle aus."
     },
     "video": {
       "defaultName": "Videoebene",
@@ -2282,7 +2321,8 @@
       "video": "Video-Ebene",
       "deckglViz": "Deck.gl-Ebene",
       "gltfModel": "3D-Modell (glTF)",
-      "postgres": "PostgreSQL-Ebene"
+      "postgres": "PostgreSQL-Ebene",
+      "iceberg": "Apache-Iceberg-Ebene"
     },
     "conversion": {
       "vectorToVector": "Vektor zu Vektor",
@@ -3441,11 +3481,19 @@
     "addUnsupported": "Nur GeoTIFF/COG-, GeoJSON-, GeoParquet- und PMTiles-Assets können zur Karte hinzugefügt werden",
     "addFailed": "Asset konnte nicht hinzugefügt werden",
     "addNoSourceLayers": "Dieses Archiv führt keine zeichenbaren Ebenen auf",
+    "addNoTarget": "Dieses Asset enthält nichts, das gezeichnet werden kann",
+    "addIcechunk": "Icechunk-Stores können noch nicht gelesen werden",
+    "zarrProblemGroup": "Dieses Asset bezeichnet eine Gruppe von Arrays, nicht ein einzelnes, das gezeichnet werden kann",
+    "zarrProblemUnauthorized": "Dieser Zarr-Store benötigt Zugangsdaten, die GeoLibre noch nicht bereitstellen kann",
+    "zarrProblemUnsupportedUrl": "Die Adresse dieses Zarr-Stores kann nicht schlüsselweise gelesen werden",
+    "zarrProblemUnavailable": "Dieser Zarr-Store konnte nicht geöffnet werden",
+    "chooseTarget": "Wählen Sie, was hinzugefügt werden soll",
     "cogUnsupported": "Dieser GeoLibre-Host kann entfernte GeoTIFF-Assets nicht darstellen",
     "formatCog": "COG",
     "formatGeoJson": "GeoJSON",
     "formatPmtiles": "PMTiles",
     "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
     "formatUnknown": "Unbekanntes Format",
     "notAddable": "nicht hinzufügbar"
   },
@@ -3676,6 +3724,10 @@
   "basemaps": {
     "confirmStyleReplace_one": "Der Wechsel zu „{{name}}“ ersetzt den gesamten Kartenstil und entfernt die von Ihnen hinzugefügte gestapelte Basiskarte. Fortfahren?",
     "confirmStyleReplace_other": "Der Wechsel zu „{{name}}“ ersetzt den gesamten Kartenstil und entfernt die {{count}} von Ihnen hinzugefügten gestapelten Basiskarten. Fortfahren?"
+  },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "Objekteigenschaften",
+    "massingHeight": "Höhe (m)"
   },
   "annotations": {
     "toolbar": "Anmerkungswerkzeuge",
@@ -4247,6 +4299,1438 @@
       "run": "Ausführen",
       "outputPlaceholder": "Die Ausgabe erscheint hier.",
       "resolutionRange": "Auflösung (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "Puffer",
+          "description": "Um jedes Objekt ein Pufferpolygon mit festem Abstand erzeugen",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "distance": {
+              "label": "Entfernung"
+            },
+            "units": {
+              "label": "Einheiten",
+              "options": {
+                "kilometers": "Kilometer",
+                "meters": "Meter",
+                "miles": "Meilen"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "Zentroide",
+          "description": "Den Zentroidpunkt jedes Objekts berechnen",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "Konvexe Hülle",
+          "description": "Die konvexe Hülle berechnen, die alle Objekte umschließt",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "Auflösen",
+          "description": "Polygonobjekte zu einer einzigen Geometrie zusammenführen, optional gruppiert nach einem Feld",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "field": {
+              "label": "Auflösungsfeld (optional)",
+              "description": "Name der Eigenschaft, nach der die Objekte vor dem Auflösen gruppiert werden"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "Begrenzungsrahmen",
+          "description": "Das rechteckige Umhüllungsrechteck aller Objekte berechnen",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            }
+          }
+        },
+        "simplify": {
+          "name": "Vereinfachen",
+          "description": "Die Anzahl der Stützpunkte mit dem Douglas-Peucker-Algorithmus reduzieren",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "tolerance": {
+              "label": "Toleranz (Grad)"
+            },
+            "highQuality": {
+              "label": "Hohe Qualität"
+            }
+          }
+        },
+        "clip": {
+          "name": "Zuschneiden",
+          "description": "Die Eingabeebene auf die von einer Überlagerungsebene abgedeckte Fläche zuschneiden (Attribute der Eingabe bleiben erhalten)",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "overlay": {
+              "label": "Überlagerungsebene (Zuschnitt)"
+            }
+          }
+        },
+        "intersection": {
+          "name": "Verschneidung",
+          "description": "Nur die Flächen behalten, in denen sich beide Polygonebenen überlappen",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "overlay": {
+              "label": "Überlagerungsebene"
+            }
+          }
+        },
+        "difference": {
+          "name": "Differenz",
+          "description": "Die Fläche der Überlagerungsebene aus der Eingabeebene entfernen",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "overlay": {
+              "label": "Überlagerungsebene"
+            }
+          }
+        },
+        "union": {
+          "name": "Vereinigung",
+          "description": "Zwei Polygonebenen zu einer einzigen kombinierten Geometrie zusammenführen",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "overlay": {
+              "label": "Überlagerungsebene"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "Räumliche Verknüpfung",
+          "description": "Attribute einer Verknüpfungsebene anhand einer räumlichen Beziehung an jedes Eingabeobjekt anhängen",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "overlay": {
+              "label": "Verknüpfungsebene"
+            },
+            "predicate": {
+              "label": "Räumliche Beziehung",
+              "options": {
+                "intersects": "Schneidet",
+                "within": "Innerhalb",
+                "contains": "Enthält"
+              }
+            },
+            "how": {
+              "label": "Verknüpfungstyp",
+              "options": {
+                "inner": "Inner (nur übereinstimmende Objekte behalten)",
+                "left": "Left (alle Eingabeobjekte behalten)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "Attributverknüpfung",
+          "description": "Attribute einer Verknüpfungsebene (einer Tabelle) an jedes Eingabeobjekt anhängen, bei dem ein Schlüsselfeld übereinstimmt, ohne Geometrie zu verwenden. Eins-zu-eins: die erste übereinstimmende Verknüpfungszeile gewinnt.",
+          "params": {
+            "layer": {
+              "label": "Zielebene"
+            },
+            "overlay": {
+              "label": "Verknüpfungsebene (Tabelle)",
+              "description": "Die Ebene, deren Attribute übernommen werden. Ihre Geometrie wird ignoriert."
+            },
+            "target_field": {
+              "label": "Schlüsselfeld der Zielebene"
+            },
+            "join_field": {
+              "label": "Schlüsselfeld der Verknüpfungsebene"
+            },
+            "how": {
+              "label": "Verknüpfungstyp",
+              "options": {
+                "left": "Left (alle Zielobjekte behalten)",
+                "inner": "Inner (nur übereinstimmende Objekte behalten)"
+              }
+            },
+            "fields": {
+              "label": "Zu übernehmende Felder (optional)",
+              "description": "Kommagetrennte Verknüpfungsfelder, die kopiert werden. Leer lassen, um alle Verknüpfungsfelder außer dem Schlüssel zu übernehmen."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "Nach Wert auswählen",
+          "description": "Objekte, deren Attributwert eine Bedingung erfüllt, in eine neue Ebene extrahieren",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "field": {
+              "label": "Feld"
+            },
+            "operator": {
+              "label": "Operator",
+              "options": {
+                "eq": "= (gleich)",
+                "neq": "≠ (ungleich)",
+                "gt": "> (größer als)",
+                "gte": "≥ (größer oder gleich)",
+                "lt": "< (kleiner als)",
+                "lte": "≤ (kleiner oder gleich)",
+                "contains": "enthält (Text)",
+                "starts-with": "beginnt mit (Text)",
+                "is-null": "ist leer",
+                "is-not-null": "ist nicht leer"
+              }
+            },
+            "value": {
+              "label": "Wert",
+              "description": "Wird als Zahl verglichen, wenn beide Seiten numerisch sind."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "Nach Lage auswählen",
+          "description": "Objekte anhand ihrer räumlichen Beziehung zu einer zweiten Ebene in eine neue Ebene extrahieren",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "overlay": {
+              "label": "Filterebene"
+            },
+            "predicate": {
+              "label": "Räumliche Beziehung",
+              "options": {
+                "intersects": "Schneidet",
+                "within": "Innerhalb",
+                "contains": "Enthält",
+                "disjoint": "Disjunkt (keine Überschneidung)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "Zufällige Auswahl",
+          "description": "Eine zufällige Teilmenge von Objekten in eine neue Ebene extrahieren, bemessen nach einer Objektanzahl oder einem Prozentsatz der Eingabe.",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "method": {
+              "label": "Methode",
+              "options": {
+                "count": "Anzahl der Objekte",
+                "percentage": "Prozentsatz der Objekte"
+              }
+            },
+            "count": {
+              "label": "Anzahl der Objekte",
+              "description": "Wird auf die Anzahl der Eingabeobjekte begrenzt, wenn größer."
+            },
+            "percentage": {
+              "label": "Prozentsatz der Objekte"
+            }
+          }
+        },
+        "reproject": {
+          "name": "Umprojizieren",
+          "description": "Die Koordinaten einer Ebene als Quell-CRS interpretieren und nach WGS84 transformieren, damit sie an der richtigen Stelle angezeigt werden. Erfordert die Sidecar- oder Python-Engine.",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "source_crs": {
+              "label": "Quell-CRS",
+              "description": "Das CRS, in dem die Koordinaten der Ebene tatsächlich vorliegen (z. B. EPSG:3857). Das Ergebnis wird nach WGS84 (EPSG:4326) transformiert."
+            }
+          }
+        },
+        "explode": {
+          "name": "Zerlegen",
+          "description": "Mehrteilige Geometrien in einteilige Objekte aufteilen (ein Objekt je Teil); die Attribute des Ursprungsobjekts bleiben erhalten",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "Nach Attribut aggregieren",
+          "description": "Objekte mit gleichem Attributwert zu einer Geometrie je Gruppe auflösen, mit einer zusammenfassenden Statistik",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "group_field": {
+              "label": "Gruppierungsfeld"
+            },
+            "statistic": {
+              "label": "Statistik",
+              "options": {
+                "count": "Anzahl",
+                "sum": "Summe",
+                "mean": "Mittelwert",
+                "min": "Min",
+                "max": "Max",
+                "median": "Median"
+              }
+            },
+            "stat_field": {
+              "label": "Statistikfeld",
+              "description": "Numerisches Feld, das mit der obigen Statistik zusammengefasst wird."
+            }
+          }
+        },
+        "smooth": {
+          "name": "Glätten",
+          "description": "Die Ecken von Linien- und Polygonobjekten mit dem Chaikin-Algorithmus abrunden (fügt Stützpunkte hinzu), im Unterschied zur Stützpunktreduktion von „Vereinfachen“. Z-/Höhenwerte bleiben erhalten; Punkte werden unverändert durchgereicht.",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "iterations": {
+              "label": "Iterationen",
+              "description": "Mehr Iterationen ergeben ein glatteres Ergebnis (1–10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "Regelmäßiges Raster",
+          "description": "Ein regelmäßiges rechteckiges Gitter (Fischnetz) aus Zellen über eine Ausdehnung erzeugen. Quelle: der aktuelle Kartenausschnitt, die Ausdehnung einer Ebene oder ein manueller Begrenzungsrahmen.",
+          "params": {
+            "source": {
+              "label": "Quelle der Ausdehnung",
+              "options": {
+                "viewport": "Kartenausschnitt",
+                "layer": "Ebenenausdehnung",
+                "bbox": "Manueller Begrenzungsrahmen"
+              }
+            },
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "west": {
+              "label": "West (min. Länge)"
+            },
+            "south": {
+              "label": "Süd (min. Breite)"
+            },
+            "east": {
+              "label": "Ost (max. Länge)"
+            },
+            "north": {
+              "label": "Nord (max. Breite)"
+            },
+            "cell_width": {
+              "label": "Zellenbreite (Grad)"
+            },
+            "cell_height": {
+              "label": "Zellenhöhe (Grad)",
+              "description": "Leer lassen, um die Zellenbreite zu übernehmen."
+            },
+            "cell_type": {
+              "label": "Zellentyp",
+              "options": {
+                "polygon": "Rechtecke",
+                "point": "Punkte (Zellenmittelpunkte)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "Aus einer Punktebene ein Voronoi-Diagramm (ein Polygon je Punkt, auf die Ausdehnung der Punkte zugeschnitten) oder eine Delaunay-Triangulation erzeugen.",
+          "params": {
+            "layer": {
+              "label": "Eingabepunktebene"
+            },
+            "type": {
+              "label": "Diagramm",
+              "options": {
+                "voronoi": "Voronoi-Polygone",
+                "delaunay": "Delaunay-Dreiecke"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "Mobilfunkzellen-Abdeckung",
+          "description": "Antennensektor-/Keilpolygone aus Punktstandorten anhand von Azimut, Radius und Strahlbreite erzeugen (aus Attributfeldern oder festen Werten). Die Strahlbreite wird auf 360° (Vollkreis) begrenzt; die gespeicherte Strahlbreite entspricht dem begrenzten Wert. Nützlich für die Abdeckung von Mobilfunkmasten, wie QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "Eingabepunktebene"
+            },
+            "azimuthField": {
+              "label": "Azimutfeld (°)",
+              "description": "Richtung, in die der Sektor zeigt, in Grad im Uhrzeigersinn ab Nord. Fällt auf den festen Azimut zurück, wenn leer oder nicht numerisch."
+            },
+            "azimuth": {
+              "label": "Azimut (fest, °)"
+            },
+            "radiusField": {
+              "label": "Radiusfeld",
+              "description": "Abdeckungsradius. Fällt auf den festen Radius zurück, wenn leer oder nicht numerisch."
+            },
+            "radius": {
+              "label": "Radius (fest)"
+            },
+            "beamwidthField": {
+              "label": "Strahlbreitenfeld (°)",
+              "description": "Winkelbreite des Sektors, begrenzt auf 360° (Vollkreis). Fällt auf die feste Strahlbreite zurück, wenn leer oder nicht numerisch."
+            },
+            "beamwidth": {
+              "label": "Strahlbreite (fest, °)"
+            },
+            "units": {
+              "label": "Radiuseinheiten",
+              "options": {
+                "kilometers": "Kilometer",
+                "meters": "Meter",
+                "miles": "Meilen"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "DGGS-Generator",
+          "description": "Eine Fläche mit DGGS-Zellen füllen (H3, S2, A5, DGGRID, DGGAL). Quelle: die Geometrie einer Ebene, die Ausdehnung einer Ebene, der aktuelle Kartenausschnitt oder ein manueller Begrenzungsrahmen.",
+          "params": {
+            "dggsType": {
+              "label": "DGGS-Typ",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID-Typ",
+              "description": "Gitterkonfiguration, die als dggs_params an duck_dggs übergeben wird (ISEA/FULLER × Apertur × Topologie).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL-Typ",
+              "description": "DGGRS, das an dggal.createDGGRS übergeben wird (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "Flächenquelle",
+              "options": {
+                "polyfill": "Ebenengeometrie (Polyfill)",
+                "extent": "Ebenenausdehnung (Bbox)",
+                "viewport": "Kartenausschnitt",
+                "bbox": "Manueller Begrenzungsrahmen"
+              }
+            },
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "west": {
+              "label": "West (min. Länge)"
+            },
+            "south": {
+              "label": "Süd (min. Breite)"
+            },
+            "east": {
+              "label": "Ost (max. Länge)"
+            },
+            "north": {
+              "label": "Nord (max. Breite)"
+            },
+            "resolution": {
+              "label": "Auflösung",
+              "description": "Der Wertebereich hängt vom DGGS-Typ ab. Leer lassen, um die Auflösung automatisch aus der Fläche zu bestimmen."
+            },
+            "compactCells": {
+              "label": "Zellen kompaktieren",
+              "description": "Vollständige Sätze von Geschwisterzellen zu gröberen Elternzellen zusammenführen (weniger Objekte, gemischte Auflösungen)."
+            },
+            "fixAntimeridian": {
+              "label": "Antimeridian korrigieren",
+              "description": "Zellringe entfalten, die den Längengrad ±180° überschreiten."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "DGGS-Binning",
+          "description": "Eine Punktebene in DGGS-Zellen aggregieren (Anzahl oder Summe/Mittelwert/Min/Max eines numerischen Felds).",
+          "params": {
+            "dggsType": {
+              "label": "DGGS-Typ",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID-Typ",
+              "description": "Gitterkonfiguration, die als dggs_params an duck_dggs übergeben wird (ISEA/FULLER × Apertur × Topologie).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL-Typ",
+              "description": "DGGRS, das an dggal.createDGGRS übergeben wird (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "Eingabepunktebene"
+            },
+            "aggOp": {
+              "label": "Aggregation",
+              "options": {
+                "count": "Anzahl",
+                "sum": "Summe",
+                "mean": "Mittelwert",
+                "min": "Min",
+                "max": "Max"
+              }
+            },
+            "field": {
+              "label": "Feld",
+              "description": "Zu aggregierendes numerisches Feld."
+            },
+            "resolution": {
+              "label": "Auflösung",
+              "description": "Der Wertebereich hängt vom DGGS-Typ ab. Leer lassen, um die Auflösung automatisch aus der Fläche zu bestimmen."
+            },
+            "fixAntimeridian": {
+              "label": "Antimeridian korrigieren",
+              "description": "Zellringe entfalten, die den Längengrad ±180° überschreiten."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "DGGS-Kompaktierung",
+          "description": "DGGS-Polygonzellen kompaktieren oder auf eine einheitliche Auflösung erweitern (H3, S2, A5, DGGAL). Die Eingabe muss eine Zellenebene mit einer ID-Eigenschaft sein.",
+          "params": {
+            "dggsType": {
+              "label": "DGGS-Typ",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL-Typ",
+              "description": "DGGRS, das an dggal.createDGGRS übergeben wird (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "Modus",
+              "options": {
+                "compact": "Kompaktieren",
+                "expand": "Erweitern"
+              }
+            },
+            "layer": {
+              "label": "DGGS-Eingabeebene",
+              "description": "Polygon-Zellenebene aus DGGS-Generator / -Binning (oder gleichwertig)."
+            },
+            "cellField": {
+              "label": "Zellen-ID-Feld",
+              "description": "Standardmäßig h3, a5, s2 oder dggal je nach gewähltem Typ, wenn leer gelassen."
+            },
+            "resolution": {
+              "label": "Zielauflösung",
+              "description": "Auflösung, auf die erweitert wird. Muss mindestens so fein sein wie die Eingabezellen."
+            },
+            "fixAntimeridian": {
+              "label": "Antimeridian korrigieren",
+              "description": "Zellringe entfalten, die den Längengrad ±180° überschreiten."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "Trajektoriengeschwindigkeit",
+          "description": "Punkte zeitlich (je Ziel) ordnen und aufeinanderfolgende Messpunkte zu Segmenten mit Entfernung, Dauer und Geschwindigkeit verbinden. Wie QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Eingabepunktebene"
+            },
+            "timeField": {
+              "label": "Zeitfeld",
+              "description": "Zeitstempel je Messpunkt: eine ISO-Datums-/Zeitangabe oder ein Epochenwert (Sekunden oder Millisekunden)."
+            },
+            "idField": {
+              "label": "Ziel-ID-Feld",
+              "description": "Teilt die Punkte in getrennte Trajektorien auf. Leer lassen, um alle Punkte als ein Ziel zu behandeln."
+            },
+            "speedUnits": {
+              "label": "Geschwindigkeitseinheiten",
+              "options": {
+                "km/h": "km/h",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "Stopps erkennen",
+          "description": "Orte finden, an denen ein Ziel verweilt: Folgen aufeinanderfolgender Messpunkte, die mindestens für eine Mindestdauer innerhalb einer Entfernung bleiben (GPS-Streuung wird aufgefangen). Gibt einen Punkt je Stopp aus. Wie QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Eingabepunktebene"
+            },
+            "timeField": {
+              "label": "Zeitfeld",
+              "description": "Zeitstempel je Messpunkt: eine ISO-Datums-/Zeitangabe oder ein Epochenwert (Sekunden oder Millisekunden)."
+            },
+            "idField": {
+              "label": "Ziel-ID-Feld",
+              "description": "Erkennt Stopps je Ziel. Leer lassen, um alle Punkte als ein Ziel zu behandeln."
+            },
+            "maxDistance": {
+              "label": "Max. Entfernung",
+              "description": "Jeder Messpunkt eines Stopps muss innerhalb dieser Entfernung zum ersten Messpunkt des Stopps liegen (ein Stopp kann sich also über bis zum Doppelten dieses Werts erstrecken). Setzen Sie den Wert auf Ihren GPS-Streuradius."
+            },
+            "distanceUnits": {
+              "label": "Entfernungseinheiten",
+              "options": {
+                "meters": "Meter",
+                "kilometers": "Kilometer",
+                "miles": "Meilen"
+              }
+            },
+            "minDuration": {
+              "label": "Min. Dauer (s)",
+              "description": "Ein kürzeres Verweilen wird nicht als Stopp gemeldet."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "Raum-Zeit-Nähe",
+          "description": "Punktpaare finden, die räumlich und zeitlich nahe beieinander liegen — z. B. zwei Ziele, die sich treffen. Gibt für jedes passende Paar eine Verbindungslinie mit Entfernung und Zeitabstand aus.",
+          "params": {
+            "layer": {
+              "label": "Eingabepunktebene"
+            },
+            "timeField": {
+              "label": "Zeitfeld",
+              "description": "Zeitstempel je Punkt: eine ISO-Datums-/Zeitangabe oder ein Epochenwert (Sekunden oder Millisekunden)."
+            },
+            "idField": {
+              "label": "Ziel-ID-Feld",
+              "description": "Wenn gesetzt, werden nur Punkte mit UNTERSCHIEDLICHEN ID-Werten gepaart (Begegnungen zwischen verschiedenen Zielen). Leer lassen, um jedes Paar zu berücksichtigen."
+            },
+            "maxDistance": {
+              "label": "Max. Entfernung"
+            },
+            "distanceUnits": {
+              "label": "Entfernungseinheiten",
+              "options": {
+                "meters": "Meter",
+                "kilometers": "Kilometer",
+                "miles": "Meilen"
+              }
+            },
+            "maxTime": {
+              "label": "Max. Zeitdifferenz"
+            },
+            "timeUnits": {
+              "label": "Zeiteinheiten",
+              "options": {
+                "seconds": "Sekunden",
+                "minutes": "Minuten",
+                "hours": "Stunden"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "Gültigkeit prüfen",
+          "description": "Objekte mit ungültiger Geometrie finden (GEOS-Regeln: sich selbst schneidende Ringe, Löcher außerhalb der Hülle, ...) und auf der Karte markieren",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "Geometrien reparieren",
+          "description": "Ungültige Geometrien mit ST_MakeValid (GEOS) reparieren; gültige Objekte werden unverändert durchgereicht",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "Topologieregeln prüfen",
+          "description": "Die Ebene gegen Topologieregeln prüfen (Überlappungen, Lücken, Selbstüberschneidungen, lose Enden) und jeden Verstoß auf der Karte markieren",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "ruleSelfIntersect": {
+              "label": "Linien dürfen sich nicht selbst schneiden"
+            },
+            "ruleOverlap": {
+              "label": "Polygone dürfen sich nicht überlappen"
+            },
+            "ruleGaps": {
+              "label": "Polygone dürfen keine Lücken haben"
+            },
+            "ruleDangles": {
+              "label": "Linien dürfen keine losen Enden haben"
+            },
+            "rulePointCovered": {
+              "label": "Punkte müssen von einer Linie abgedeckt sein"
+            },
+            "ruleEndpointSnap": {
+              "label": "Linienendpunkte müssen innerhalb der Toleranz verbunden sein"
+            },
+            "snapTolerance": {
+              "label": "Fangtoleranz",
+              "description": "Für die Endpunktregel: wie weit (in Koordinateneinheiten der Ebene — Grad bei WGS84) zwei Linienenden voneinander entfernt sein dürfen und trotzdem als verbunden gelten."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "Topologie reparieren",
+          "description": "Topologieverstöße automatisch reparieren: fast verbundene Linienendpunkte fangen, lose Enden korrigieren und Punkte auf Linien projizieren. Freie Enden ohne etwas in der Nähe bleiben unverändert.",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "ruleEndpointSnap": {
+              "label": "Fast verbundene Linienendpunkte fangen"
+            },
+            "ruleDangles": {
+              "label": "Lose Enden reparieren (auf nahe Geometrie fangen oder projizieren)"
+            },
+            "rulePointCovered": {
+              "label": "Punkte auf die nächste Linie projizieren"
+            },
+            "snapTolerance": {
+              "label": "Fangtoleranz",
+              "description": "Wie weit (in Koordinateneinheiten der Ebene — Grad bei WGS84) sich Geometrie bewegen darf, um eine Verbindung herzustellen."
+            },
+            "dryRun": {
+              "label": "Nur Vorschau (Probelauf)",
+              "description": "Die Korrekturen melden, die angewendet würden, ohne eine reparierte Ebene zu erstellen."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "Isochrone / Einzugsgebiet",
+          "description": "Erreichbarkeitspolygone nach Reisezeit oder Reiseentfernung von jedem Punkt einer Ebene",
+          "params": {
+            "layer": {
+              "label": "Startpunkte"
+            },
+            "mode": {
+              "label": "Verkehrsmittel",
+              "options": {
+                "auto": "Auto",
+                "pedestrian": "Zu Fuß",
+                "bicycle": "Fahrrad"
+              }
+            },
+            "metric": {
+              "label": "Metrik",
+              "options": {
+                "time": "Fahrzeit (Minuten)",
+                "distance": "Entfernung (km)"
+              }
+            },
+            "contours": {
+              "label": "Konturen",
+              "description": "Kommagetrennte Werte (Minuten bei Zeit, km bei Entfernung)"
+            },
+            "endpoint": {
+              "label": "Routing-Server (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "Quelle-Ziel-Kostenmatrix",
+          "description": "Reisezeit und Entfernung zwischen jedem Start- und Zielpunkt, als Verbindungslinien",
+          "params": {
+            "origins": {
+              "label": "Startpunkte"
+            },
+            "destinations": {
+              "label": "Zielpunkte"
+            },
+            "mode": {
+              "label": "Verkehrsmittel",
+              "options": {
+                "auto": "Auto",
+                "pedestrian": "Zu Fuß",
+                "bicycle": "Fahrrad"
+              }
+            },
+            "endpoint": {
+              "label": "Routing-Server (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "Sequenzielle Route (Wegbeschreibung)",
+          "description": "Punkte der Reihe nach entlang des Straßennetzes zu einer Route verbinden. Jeder Punkt wird auf die nächste Straße gefangen, sodass auch Koordinaten abseits der Straße (Mobilfunkstandorte, Sensoren) geroutet werden. Die Reihenfolge folgt dem gewählten Feld (z. B. einem Zeitstempel) oder der Objektreihenfolge der Ebene.",
+          "params": {
+            "layer": {
+              "label": "Eingabepunkte"
+            },
+            "order_field": {
+              "label": "Sortierfeld (optional)",
+              "description": "Punkte vor dem Routing nach diesem Feld (Zahlen oder Zeitstempel) sortieren. Leer lassen, um die Objektreihenfolge der Ebene zu verwenden."
+            },
+            "mode": {
+              "label": "Verkehrsmittel",
+              "options": {
+                "auto": "Auto",
+                "pedestrian": "Zu Fuß",
+                "bicycle": "Fahrrad"
+              }
+            },
+            "endpoint": {
+              "label": "Routing-Server (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "Globales Moran's I",
+          "description": "Die gesamträumliche Autokorrelation eines numerischen Attributs über die ganze Ebene messen.",
+          "params": {
+            "layer": {
+              "label": "Ebene"
+            },
+            "field": {
+              "label": "Wertefeld"
+            },
+            "weightsType": {
+              "label": "Räumliche Gewichte",
+              "description": "Wie die Nachbarn jedes Objekts bestimmt werden.",
+              "options": {
+                "knn": "K nächste Nachbarn",
+                "distance": "Distanzband"
+              }
+            },
+            "k": {
+              "label": "Nachbarn (k)"
+            },
+            "threshold": {
+              "label": "Distanzband (km)"
+            },
+            "permutations": {
+              "label": "Permutationen",
+              "description": "Zufällige Permutationen für den Pseudo-p-Wert."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "Lokales Moran's I (LISA)",
+          "description": "Cluster und Ausreißer je Objekt (Hoch-Hoch, Niedrig-Niedrig, Hoch-Niedrig, Niedrig-Hoch) mit Pseudo-Signifikanz.",
+          "params": {
+            "layer": {
+              "label": "Ebene"
+            },
+            "field": {
+              "label": "Wertefeld"
+            },
+            "weightsType": {
+              "label": "Räumliche Gewichte",
+              "description": "Wie die Nachbarn jedes Objekts bestimmt werden.",
+              "options": {
+                "knn": "K nächste Nachbarn",
+                "distance": "Distanzband"
+              }
+            },
+            "k": {
+              "label": "Nachbarn (k)"
+            },
+            "threshold": {
+              "label": "Distanzband (km)"
+            },
+            "permutations": {
+              "label": "Permutationen",
+              "description": "Zufällige Permutationen für den Pseudo-p-Wert."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Getis-Ord Gi*-Hotspots",
+          "description": "Statistisch signifikante Hotspots und Coldspots eines numerischen Attributs ermitteln.",
+          "params": {
+            "layer": {
+              "label": "Ebene"
+            },
+            "field": {
+              "label": "Wertefeld"
+            },
+            "weightsType": {
+              "label": "Räumliche Gewichte",
+              "description": "Wie die Nachbarn jedes Objekts bestimmt werden.",
+              "options": {
+                "knn": "K nächste Nachbarn",
+                "distance": "Distanzband"
+              }
+            },
+            "k": {
+              "label": "Nachbarn (k)"
+            },
+            "threshold": {
+              "label": "Distanzband (km)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "Durchschnittlicher nächster Nachbar",
+          "description": "Prüfen, ob Punkte geclustert, gestreut oder zufällig verteilt sind (ANN-Verhältnis + z-Wert).",
+          "params": {
+            "layer": {
+              "label": "Punktebene"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "Kerndichte (Heatmap)",
+          "description": "Aus Punkten eine Dichteoberfläche als Zellengitter schätzen, mit einem quartischen Kern.",
+          "params": {
+            "layer": {
+              "label": "Punktebene"
+            },
+            "weightField": {
+              "label": "Gewichtungsfeld (optional)",
+              "description": "Numerisches Feld zur Gewichtung jedes Punkts; leer = gleiche Gewichtung."
+            },
+            "bandwidth": {
+              "label": "Suchradius / Bandbreite (km)"
+            },
+            "cellSize": {
+              "label": "Zellengröße (km)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "Aufkommende Hotspots (Raum-Zeit-Würfel)",
+          "description": "Aus zeitgestempelten Punkten einen Raum-Zeit-Würfel aufbauen (ein Fischnetzgitter × gleich lange Zeitschritte) und jede Zelle als neuen, sich verstärkenden, anhaltenden, abnehmenden, sporadischen, oszillierenden oder historischen Hot-/Coldspot klassifizieren. Führt Getis-Ord Gi* je Zeitscheibe aus, dann einen Mann-Kendall-Trendtest auf der Gi*-Reihe jeder Zelle. Clientseitig, wie die ArcGIS-Analyse aufkommender Hotspots.",
+          "params": {
+            "layer": {
+              "label": "Punktebene"
+            },
+            "timeField": {
+              "label": "Zeitfeld",
+              "description": "Zeitstempel je Punkt: eine ISO-Datums-/Zeitangabe oder ein Epochenwert (Sekunden oder Millisekunden)."
+            },
+            "cellSize": {
+              "label": "Zellengröße (km)",
+              "description": "Kantenlänge jeder quadratischen Raumzelle in Kilometern."
+            },
+            "timeStep": {
+              "label": "Zeitschrittintervall"
+            },
+            "timeStepUnit": {
+              "label": "Zeitschritteinheit",
+              "options": {
+                "hours": "Stunden",
+                "days": "Tage",
+                "weeks": "Wochen"
+              }
+            },
+            "weightField": {
+              "label": "Gewichtungsfeld (optional)",
+              "description": "Numerisches Feld, das je Raum-Zeit-Zelle summiert wird, statt Punkte zu zählen; leer = Punkte zählen."
+            },
+            "confidence": {
+              "label": "Konfidenzniveau",
+              "description": "Signifikanzschwelle, ab der eine Zelle als Hot-/Coldspot zählt, sowie für den Trend.",
+              "options": {
+                "90": "90 %",
+                "95": "95 %",
+                "99": "99 %"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "Schummerung",
+          "description": "Ein Schummerungsraster (Schattenrelief) aus einem Höhenmodell berechnen.",
+          "params": {
+            "azimuth": {
+              "label": "Azimut (Grad)"
+            },
+            "altitude": {
+              "label": "Höhenwinkel (Grad)"
+            },
+            "z_factor": {
+              "label": "Z-Faktor"
+            }
+          }
+        },
+        "slope": {
+          "name": "Hangneigung",
+          "description": "Die Hangneigung (Steilheit) aus einem Höhenmodell berechnen.",
+          "params": {
+            "units": {
+              "label": "Einheiten",
+              "options": {
+                "degrees": "Grad",
+                "percent": "Prozent"
+              }
+            },
+            "z_factor": {
+              "label": "Z-Faktor"
+            }
+          }
+        },
+        "aspect": {
+          "name": "Exposition",
+          "description": "Die Exposition (Himmelsrichtung der steilsten Neigung) aus einem Höhenmodell berechnen."
+        },
+        "reproject": {
+          "name": "Umprojizieren",
+          "description": "Ein Raster in ein anderes Koordinatenreferenzsystem transformieren.",
+          "params": {
+            "dst_crs": {
+              "label": "Ziel-CRS",
+              "description": "Ein Authority-Code wie EPSG:3857 oder EPSG:4326."
+            },
+            "resampling": {
+              "label": "Resampling",
+              "options": {
+                "nearest": "Nächster Nachbar",
+                "bilinear": "Bilinear",
+                "cubic": "Kubisch"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "Resampling",
+          "description": "Ein Raster auf eine andere Pixelgröße (Auflösung) umrechnen.",
+          "params": {
+            "resolution": {
+              "label": "Zielpixelgröße",
+              "description": "Ausgabepixelgröße in den CRS-Einheiten des Rasters."
+            },
+            "resampling": {
+              "label": "Resampling",
+              "options": {
+                "nearest": "Nächster Nachbar",
+                "bilinear": "Bilinear",
+                "cubic": "Kubisch"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "Nach Ausdehnung zuschneiden",
+          "description": "Ein Raster auf einen Begrenzungsrahmen (im CRS des Rasters) zuschneiden.",
+          "params": {
+            "minx": {
+              "label": "Min. X"
+            },
+            "miny": {
+              "label": "Min. Y"
+            },
+            "maxx": {
+              "label": "Max. X"
+            },
+            "maxy": {
+              "label": "Max. Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "Nach Maskenebene zuschneiden",
+          "description": "Ein Raster auf die Geometrien einer Vektormaskendatei zuschneiden.",
+          "params": {
+            "mask_path": {
+              "label": "Maskenebene",
+              "description": "Eine GeoJSON-Datei, deren Geometrien den Zuschnittsbereich definieren. Sie wird automatisch in das CRS des Rasters umprojiziert (ein GeoJSON ohne CRS wird als WGS84 angenommen)."
+            },
+            "crop": {
+              "label": "Auf Maskenausdehnung zuschneiden"
+            },
+            "all_touched": {
+              "label": "Alle berührten Pixel einbeziehen"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "Polygonisieren",
+          "description": "Ein Rasterband in Vektorpolygone umwandeln, gruppiert nach Pixelwert.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "connectivity": {
+              "label": "Konnektivität",
+              "options": {
+                "4": "4er-Nachbarschaft",
+                "8": "8er-Nachbarschaft"
+              }
+            },
+            "field": {
+              "label": "Name des Wertefelds"
+            }
+          }
+        },
+        "contour": {
+          "name": "Höhenlinien",
+          "description": "Höhenlinien aus einem Höhenmodell erzeugen.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "interval": {
+              "label": "Intervall",
+              "description": "Höhenunterschied zwischen aufeinanderfolgenden Höhenlinien."
+            },
+            "base": {
+              "label": "Basis"
+            },
+            "attribute": {
+              "label": "Name des Höhenfelds"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "Interpolation (IDW / Kriging)",
+          "description": "Das numerische Attribut einer Punktebene mit inverser Distanzgewichtung oder Ordinary Kriging in eine kontinuierliche Rasteroberfläche interpolieren.",
+          "params": {
+            "field": {
+              "label": "Wertefeld",
+              "description": "Name des numerischen Punktattributs, das interpoliert werden soll (z. B. Höhe, Temperatur)."
+            },
+            "method": {
+              "label": "Methode",
+              "options": {
+                "idw": "Inverse Distanzgewichtung (IDW)",
+                "kriging": "Ordinary Kriging"
+              }
+            },
+            "resolution": {
+              "label": "Ausgabepixelgröße",
+              "description": "Zellengröße in den CRS-Einheiten der Ebene (Grad bei WGS84). Das Gitter deckt die Ausdehnung der Punkte ab."
+            },
+            "power": {
+              "label": "IDW-Exponent",
+              "description": "Höhere Werte geben nahen Punkten mehr Einfluss."
+            },
+            "variogram_model": {
+              "label": "Variogrammmodell",
+              "description": "Theoretisches Modell, das an das empirische Semivariogramm angepasst wird. Kriging ist auf 1500 Punkte begrenzt.",
+              "options": {
+                "spherical": "Sphärisch",
+                "exponential": "Exponentiell",
+                "gaussian": "Gaußsch",
+                "linear": "Linear"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "Zonale Statistik",
+          "description": "Rasterwerte innerhalb jedes Polygons einer Vektorebene zusammenfassen (Anzahl, Min, Max, Mittelwert, Summe, Standardabweichung, Median).",
+          "params": {
+            "zones_path": {
+              "label": "Zonenebene",
+              "description": "Eine GeoJSON-Polygonebene, die die Zonen definiert. Sie wird automatisch in das CRS des Rasters umprojiziert (ein GeoJSON ohne CRS wird als WGS84 angenommen)."
+            },
+            "band": {
+              "label": "Band"
+            },
+            "prefix": {
+              "label": "Feldpräfix",
+              "description": "Wird jedem Statistikfeldnamen vorangestellt (z. B. 'dem_' → 'dem_mean'). Leer lassen für einfaches 'mean', 'min', …"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "Rasterrechner",
+          "description": "Einen NumPy-Bandrechenausdruck auswerten. Band 1 jeder Eingabe wird als A, B, C referenziert, einzelne Bänder als A1, A2, …; NDVI ist z. B. (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "Ausdruck",
+              "description": "Ein NumPy-Ausdruck über A, B, C (und A1, A2, …). Funktionen: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan."
+            },
+            "b_path": {
+              "label": "Raster B (optional)",
+              "description": "Ein zweites Raster, referenziert als B / B1, B2, …. Muss die Abmessungen von A haben."
+            },
+            "c_path": {
+              "label": "Raster C (optional)",
+              "description": "Ein drittes Raster, referenziert als C / C1, C2, …. Muss die Abmessungen von A haben."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "Spektralindex",
+          "description": "Einen benannten Spektralindex (NDVI, NDWI, EVI, …) aus einem Multiband-Raster berechnen. Wählen Sie eine Sensorvoreinstellung für die Bandanordnung oder legen Sie die Bandnummern mit dem Sensor „Benutzerdefiniert“ manuell fest.",
+          "params": {
+            "index": {
+              "label": "Index",
+              "options": {
+                "ndvi": "NDVI (Vegetation)",
+                "gndvi": "GNDVI (grüne Vegetation)",
+                "ndwi": "NDWI (Wasser, McFeeters)",
+                "ndmi": "NDMI (Feuchtigkeit)",
+                "ndbi": "NDBI (Bebauung)",
+                "nbr": "NBR (Brandindex)",
+                "evi": "EVI (erweiterte Vegetation)",
+                "savi": "SAVI (bodenbereinigte Vegetation)"
+              }
+            },
+            "sensor": {
+              "label": "Sensor / Bandanordnung",
+              "description": "Voreingestellte Bandnummern für gängige Sensoren. Wählen Sie „Benutzerdefiniert“, um die Bänder für ein anders gestapeltes GeoTIFF von Hand zuzuordnen.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "Benutzerdefiniert (Bandnummern unten festlegen)"
+              }
+            },
+            "red": {
+              "label": "Nummer des roten Bands"
+            },
+            "green": {
+              "label": "Nummer des grünen Bands"
+            },
+            "blue": {
+              "label": "Nummer des blauen Bands"
+            },
+            "nir": {
+              "label": "Nummer des NIR-Bands"
+            },
+            "swir1": {
+              "label": "Nummer des SWIR1-Bands"
+            },
+            "swir2": {
+              "label": "Nummer des SWIR2-Bands"
+            },
+            "L": {
+              "label": "Bodenfaktor (L)",
+              "description": "SAVI-Bodenhelligkeitskorrektur (0 dichte Bedeckung → 1 offener Boden)."
+            },
+            "scale": {
+              "label": "Reflektanzskalierung",
+              "description": "Multiplikator, der Pixelwerte in Reflektanz (0–1) umrechnet. Für normalisierte Differenzindizes bei 1 belassen; für EVI/SAVI auf Ganzzahl-DN-Bildern setzen (z. B. 0.0001 für Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "Neu klassifizieren",
+          "description": "Wertebereiche mithilfe einer Regeltabelle neuen Klassenwerten zuordnen.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "table": {
+              "label": "Regeln",
+              "description": "Komma- oder zeilengetrennte Regeln der Form 'min:max:neuerwert', z. B. '0:10:1, 10:20:2, 20:max:3'. Bereiche sind halboffen [min, max); leer/min/max bedeuten ±∞."
+            },
+            "unmatched": {
+              "label": "Nicht zugeordnete Werte",
+              "options": {
+                "nodata": "Auf NoData setzen",
+                "original": "Ursprünglichen Wert behalten"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "Mosaik / Zusammenführen",
+          "description": "Bis zu fünf Raster (mit gemeinsamem CRS) zu einem einzigen Raster über ihre Vereinigung kombinieren.",
+          "params": {
+            "raster_2": {
+              "label": "Zweites Raster"
+            },
+            "raster_3": {
+              "label": "Drittes Raster (optional)"
+            },
+            "raster_4": {
+              "label": "Viertes Raster (optional)"
+            },
+            "raster_5": {
+              "label": "Fünftes Raster (optional)"
+            },
+            "method": {
+              "label": "Überlappungsmethode",
+              "description": "Welcher Wert gewinnt, wo sich Eingaben überlappen.",
+              "options": {
+                "first": "Erster",
+                "last": "Letzter",
+                "min": "Minimum",
+                "max": "Maximum"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "Fokalstatistik",
+          "description": "Eine Statistik mit gleitendem Fenster (Nachbarschaft) auf ein Rasterband anwenden.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "statistic": {
+              "label": "Statistik",
+              "options": {
+                "mean": "Mittelwert",
+                "median": "Median",
+                "min": "Minimum",
+                "max": "Maximum",
+                "sum": "Summe",
+                "std": "Standardabweichung",
+                "range": "Spannweite (max − min)"
+              }
+            },
+            "size": {
+              "label": "Fenstergröße",
+              "description": "Ungerade Nachbarschaftsgröße in Pixeln (3 = 3×3). Begrenzt auf 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "Analyse",
+      "clip": "Zuschneiden",
+      "dataQuality": "Datenqualität",
+      "dggs": "DGGS",
+      "geometry": "Geometrie",
+      "join": "Verknüpfung",
+      "movementTime": "Bewegung & Zeit",
+      "network": "Netzwerk",
+      "overlay": "Überlagerung",
+      "rasterToVector": "Raster zu Vektor",
+      "reproject": "Umprojizieren",
+      "select": "Auswahl",
+      "spatialStatistics": "Räumliche Statistik",
+      "terrain": "Gelände",
+      "vectorToRaster": "Vektor zu Raster"
     }
   },
   "segmentation": {
@@ -5245,6 +6729,7 @@
     "refreshVectorControlError": "Diese Ebene konnte nicht aktualisiert werden. Versuchen Sie, das Panel „Vektorebene hinzufügen“ erneut zu öffnen.",
     "refreshed": "Aktualisiert.",
     "refreshedCount": "{{count}} Objekte aktualisiert.",
+    "refreshedTruncated": "{{shown}} von {{total}} Objekten aktualisiert.",
     "refreshError": "Diese Ebene konnte nicht aktualisiert werden.",
     "exportNeedsFeatures": "Für den Export ist eine Vektorebene mit Objekten erforderlich.",
     "exportedWithWarnings": "Ebene exportiert. {{warnings}}",

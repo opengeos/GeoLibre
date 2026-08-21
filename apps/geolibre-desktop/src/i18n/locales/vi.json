@@ -263,31 +263,8 @@
     "cancel": "Hủy"
   },
   "addData": {
+    "title": "Thêm dữ liệu",
     "kind": {
-      "gdb": {
-        "description": "Thêm một lớp từ Cơ sở dữ liệu địa lý tệp Esri (thư mục .gdb). Lớp này được đọc bằng máy chủ GeoLibre cục bộ và được chuyển hướng sang WGS84.",
-        "label": "Thêm lớp cơ sở dữ liệu địa lý tệp"
-      },
-      "photos": {
-        "label": "Thêm ảnh được gắn thẻ địa lý",
-        "description": "Nhập ảnh JPEG/HEIC dưới dạng lớp điểm, đặt từng ảnh từ vị trí EXIF ​​GPS của nó."
-      },
-      "mbtiles": {
-        "label": "Thêm lớp MBTiles",
-        "description": "Thêm tệp MBTiles cục bộ dưới dạng lớp gạch raster hoặc vector."
-      },
-      "arcgis": {
-        "label": "Thêm lớp ArcGIS",
-        "description": "Thêm lớp ArcGIS FeatureServer, VectorTileServer, MapServer hoặc ImageServer hoặc một mục cổng thông tin."
-      },
-      "postgres": {
-        "label": "Thêm lớp PostgreSQL",
-        "description": "Bắt đầu Martin cục bộ, khám phá các nguồn PostGIS và thêm nguồn dưới dạng các ô vector."
-      },
-      "deckglViz": {
-        "label": "Thêm lớp Deck.gl",
-        "description": "Chọn loại lớp deck.gl, sau đó tải dữ liệu mẫu hoặc tải lên tệp hoặc URL CSV/JSON/GeoJSON."
-      },
       "xyz": {
         "label": "Thêm lớp XYZ",
         "description": "Thêm một lớp từ Cơ sở dữ liệu địa lý tệp Esri (thư mục .gdb). Lớp này được đọc bằng máy chủ GeoLibre cục bộ và được chuyển hướng sang WGS84."
@@ -328,12 +305,52 @@
         "label": "Thêm lớp CAD (DXF/DWG)",
         "description": "Thêm bản vẽ AutoCAD DXF hoặc DWG dưới dạng lớp vectơ, chọn lớp nào sẽ tải và hệ quy chiếu tọa độ để chiếu lớp đó."
       },
+      "gdb": {
+        "description": "Thêm một lớp từ Cơ sở dữ liệu địa lý tệp Esri (thư mục .gdb). Lớp này được đọc bằng máy chủ GeoLibre cục bộ và được chuyển hướng sang WGS84.",
+        "label": "Thêm lớp cơ sở dữ liệu địa lý tệp"
+      },
+      "photos": {
+        "label": "Thêm ảnh được gắn thẻ địa lý",
+        "description": "Nhập ảnh JPEG/HEIC dưới dạng lớp điểm, đặt từng ảnh từ vị trí EXIF ​​GPS của nó."
+      },
+      "mbtiles": {
+        "label": "Thêm lớp MBTiles",
+        "description": "Thêm tệp MBTiles cục bộ dưới dạng lớp gạch raster hoặc vector."
+      },
+      "arcgis": {
+        "label": "Thêm lớp ArcGIS",
+        "description": "Thêm lớp ArcGIS FeatureServer, VectorTileServer, MapServer hoặc ImageServer hoặc một mục cổng thông tin."
+      },
+      "postgres": {
+        "label": "Thêm lớp PostgreSQL",
+        "description": "Bắt đầu Martin cục bộ, khám phá các nguồn PostGIS và thêm nguồn dưới dạng các ô vector."
+      },
+      "iceberg": {
+        "label": "Thêm lớp Apache Iceberg",
+        "description": "Đọc một bảng Iceberg (phiên bản 3 trở lên) và thêm một tập con các đối tượng của nó."
+      },
+      "deckglViz": {
+        "label": "Thêm lớp Deck.gl",
+        "description": "Chọn loại lớp deck.gl, sau đó tải dữ liệu mẫu hoặc tải lên tệp hoặc URL CSV/JSON/GeoJSON."
+      },
       "video": {
         "label": "Thêm lớp video",
         "description": "Thêm lớp phủ video được tham chiếu địa lý bằng cách cung cấp URL MP4 và tọa độ bốn góc."
       }
     },
-    "title": "Thêm dữ liệu",
+    "shared": {
+      "layerName": "Tên lớp",
+      "insertBelow": "Chèn bên dưới",
+      "insertTop": "Danh sách lớp trên cùng (mặc định)",
+      "layersGroup": "API OGC - Lớp tính năng",
+      "basemapLayersGroup": "Các lớp bản đồ cơ sở",
+      "showBasemapLayers": "Hiển thị các lớp bản đồ cơ sở (nâng cao)",
+      "addLayer": "Thêm lớp",
+      "adding": "Đang thêm…",
+      "addError": "Chọn từ các loại tính năng __PH0__",
+      "sampleData": "Dữ liệu mẫu",
+      "loadSampleData": "Nhập mẫu URL ô XYZ."
+    },
     "common": {
       "optional": "Không bắt buộc",
       "chooseFile": "Chọn tập tin",
@@ -373,6 +390,32 @@
       "errorNoServices": "Không tìm thấy dịch vụ hợp lệ trong tập tin đó.",
       "errorRead": "Không thể đọc tệp đó dưới dạng thư viện dịch vụ.",
       "imported_other": "Đã nhập dịch vụ {{count}}."
+    },
+    "xyz": {
+      "defaultName": "Lớp XYZ",
+      "sampleLabel": "Hình ảnh USGS",
+      "errorUrl": "Nhập mẫu URL ô XYZ.",
+      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "shortUrlPlaceholder": "https://go.example.com/layer",
+      "shortUrl": "URL ngắn"
+    },
+    "wms": {
+      "sampleLabelGebco": "Đo độ sâu đại dương GEBCO",
+      "errorUrl": "Nhập URL dịch vụ WMS.",
+      "errorLayers": "Nhập một hoặc nhiều tên lớp WMS.",
+      "urlPlaceholder": "https://example.com/geoserver/wms",
+      "layers": "Lớp",
+      "styles": "Kiểu dáng",
+      "transparent": "Nền trong suốt",
+      "retrieveLayers": "Truy xuất các lớp",
+      "retrieving": "Đang truy xuất...",
+      "retrievedLayers": "Các lớp được truy xuất",
+      "defaultName": "Lớp WMS",
+      "sampleLabel": "Hình ảnh USGS NAIP",
+      "selectLayer_other": "Chọn từ {{count}} lớp",
+      "noLayersFound": "Không có lớp nào được tìm thấy cho dịch vụ này.",
+      "retrieveError": "Không thể truy xuất các lớp từ dịch vụ này.",
+      "version": "Phiên bản WMS"
     },
     "wfs": {
       "urlPlaceholder": "https://example.com/geoserver/wfs",
@@ -420,45 +463,6 @@
       "errorMaxFeatures": "Nhập giá trị tính năng tối đa từ 1 trở lên.",
       "errorBbox": "Nhập hộp giới hạn là \"tây, nam, đông, bắc\".",
       "errorNoFeatures": "Bộ sưu tập này không trả lại tính năng nào."
-    },
-    "wms": {
-      "sampleLabelGebco": "Đo độ sâu đại dương GEBCO",
-      "errorUrl": "Nhập URL dịch vụ WMS.",
-      "errorLayers": "Nhập một hoặc nhiều tên lớp WMS.",
-      "urlPlaceholder": "https://example.com/geoserver/wms",
-      "layers": "Lớp",
-      "styles": "Kiểu dáng",
-      "transparent": "Nền trong suốt",
-      "retrieveLayers": "Truy xuất các lớp",
-      "retrieving": "Đang truy xuất...",
-      "retrievedLayers": "Các lớp được truy xuất",
-      "defaultName": "Lớp WMS",
-      "sampleLabel": "Hình ảnh USGS NAIP",
-      "selectLayer_other": "Chọn từ {{count}} lớp",
-      "noLayersFound": "Không có lớp nào được tìm thấy cho dịch vụ này.",
-      "retrieveError": "Không thể truy xuất các lớp từ dịch vụ này.",
-      "version": "Phiên bản WMS"
-    },
-    "shared": {
-      "layerName": "Tên lớp",
-      "insertBelow": "Chèn bên dưới",
-      "insertTop": "Danh sách lớp trên cùng (mặc định)",
-      "layersGroup": "API OGC - Lớp tính năng",
-      "basemapLayersGroup": "Các lớp bản đồ cơ sở",
-      "showBasemapLayers": "Hiển thị các lớp bản đồ cơ sở (nâng cao)",
-      "addLayer": "Thêm lớp",
-      "adding": "Đang thêm…",
-      "addError": "Chọn từ các loại tính năng __PH0__",
-      "sampleData": "Dữ liệu mẫu",
-      "loadSampleData": "Nhập mẫu URL ô XYZ."
-    },
-    "xyz": {
-      "defaultName": "Lớp XYZ",
-      "sampleLabel": "Hình ảnh USGS",
-      "errorUrl": "Nhập mẫu URL ô XYZ.",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
-      "shortUrlPlaceholder": "https://go.example.com/layer",
-      "shortUrl": "URL ngắn"
     },
     "ogcVectorTiles": {
       "tilesUrlPlaceholder": "https://example.com/tiles/WebMercatorQuad?f=tilejson",
@@ -514,6 +518,25 @@
       "loadingProgress": "Đã tải {{loaded}} trong số {{total}} tính năng…",
       "loadingProgressUnknown": "Đã tải tính năng {{loaded}}…"
     },
+    "gpx": {
+      "defaultName": "Lớp GPX",
+      "sampleLabel": "Đường mòn Fells Loop",
+      "routePoints": "Nhập URL GeoRSS.",
+      "url": "URL GPX",
+      "file": "tập tin GPX",
+      "urlPlaceholder": "https://example.com/route.gpx",
+      "layerTypes": "Các loại lớp",
+      "errorFileMissing": "Dữ liệu tệp GPX bị thiếu.",
+      "readError": "Không thể đọc tệp GPX.",
+      "errorChooseFile": "Chọn tệp GPX.",
+      "errorUrl": "Nhập URL GPX.",
+      "errorSelectType": "Chọn ít nhất một loại lớp GPX.",
+      "errorNotFound": "Không tìm thấy loại lớp GPX đã chọn.",
+      "waypoints": "Điểm tham chiếu",
+      "tracks": "Bài hát",
+      "trackPoints": "Theo dõi điểm",
+      "routes": "Tuyến đường"
+    },
     "georss": {
       "errorUrl": "Nhập URL GeoRSS.",
       "url": "URL GeoRSS",
@@ -542,24 +565,27 @@
       "errorNoLayer": "Chọn một lớp CAD để tải.",
       "errorUnsupportedGeometry": "Lớp CAD này chứa hình học hỗn hợp hoặc bộ sưu tập không thể hiển thị được. Hãy thử một lớp khác."
     },
-    "gpx": {
-      "defaultName": "Lớp GPX",
-      "sampleLabel": "Đường mòn Fells Loop",
-      "routePoints": "Nhập URL GeoRSS.",
-      "url": "URL GPX",
-      "file": "tập tin GPX",
-      "urlPlaceholder": "https://example.com/route.gpx",
-      "layerTypes": "Các loại lớp",
-      "errorFileMissing": "Dữ liệu tệp GPX bị thiếu.",
-      "readError": "Không thể đọc tệp GPX.",
-      "errorChooseFile": "Chọn tệp GPX.",
-      "errorUrl": "Nhập URL GPX.",
-      "errorSelectType": "Chọn ít nhất một loại lớp GPX.",
-      "errorNotFound": "Không tìm thấy loại lớp GPX đã chọn.",
-      "waypoints": "Điểm tham chiếu",
-      "tracks": "Bài hát",
-      "trackPoints": "Theo dõi điểm",
-      "routes": "Tuyến đường"
+    "gdb": {
+      "errorNotGdb": "Chọn một thư mục có đuôi .gdb (Cơ sở dữ liệu địa lý tệp Esri).",
+      "errorNoLayers": "Không tìm thấy lớp đối tượng nào có hình học trong cơ sở dữ liệu địa lý này.",
+      "errorChooseFolder": "Trước tiên hãy chọn thư mục .gdb.",
+      "errorNoLayer": "Chọn một lớp tính năng để tải.",
+      "errorTimeout": "Đã hết thời gian đọc cơ sở dữ liệu địa lý.",
+      "crs": "CRS nguồn",
+      "crsPlaceholder": "ví dụ. EPSG:26915",
+      "crsHelp": "Không thể phát hiện được hệ tọa độ của lớp đối tượng này. Nhập mã EPSG (hoặc ESRI) mà nó được lưu trữ để có thể chuyển hướng sang WGS84.",
+      "errorMissingCrs": "Không thể phát hiện được hệ tọa độ của lớp đối tượng này. Nhập CRS nguồn của nó để thêm nó.",
+      "chooseFolder": "Chọn thư mục .gdb...",
+      "noFolderSelected": "Không có cơ sở dữ liệu địa lý nào được chọn",
+      "layer": "Lớp tính năng",
+      "layerPlaceholder": "Chọn cơ sở dữ liệu địa lý trước",
+      "readingLayers": "Đọc các lớp...",
+      "layerOption": "{{name}} ({{type}}, {{count}} tính năng)",
+      "help": "Các bảng chỉ thuộc tính không được liệt kê. Lớp tính năng đã chọn sẽ được tải thông qua máy chủ GeoLibre cục bộ và được chuyển hướng sang WGS84.",
+      "desktopOnly": "Các lớp Cơ sở dữ liệu địa lý tệp chỉ có sẵn trong GeoLibre Desktop. Tính năng này đọc thư mục .gdb cục bộ thông qua máy chủ GeoLibre cục bộ mà ứng dụng web không thể truy cập.",
+      "readError": "Không thể đọc Cơ sở dữ liệu địa lý tệp này.",
+      "convertError": "Không thể tải lớp tính năng này.",
+      "defaultName": "Lớp cơ sở dữ liệu địa lý"
     },
     "delimitedText": {
       "errorWorkbookEmpty": "Sổ làm việc Excel không có trang tính nào chứa dữ liệu.",
@@ -621,28 +647,6 @@
       "manualPlace": "Đặt ở trung tâm bản đồ",
       "manualHint": "Kéo ghim này để định vị ảnh, sau đó nhấp vào Xong."
     },
-    "gdb": {
-      "errorNotGdb": "Chọn một thư mục có đuôi .gdb (Cơ sở dữ liệu địa lý tệp Esri).",
-      "errorNoLayers": "Không tìm thấy lớp đối tượng nào có hình học trong cơ sở dữ liệu địa lý này.",
-      "errorChooseFolder": "Trước tiên hãy chọn thư mục .gdb.",
-      "errorNoLayer": "Chọn một lớp tính năng để tải.",
-      "errorTimeout": "Đã hết thời gian đọc cơ sở dữ liệu địa lý.",
-      "crs": "CRS nguồn",
-      "crsPlaceholder": "ví dụ. EPSG:26915",
-      "crsHelp": "Không thể phát hiện được hệ tọa độ của lớp đối tượng này. Nhập mã EPSG (hoặc ESRI) mà nó được lưu trữ để có thể chuyển hướng sang WGS84.",
-      "errorMissingCrs": "Không thể phát hiện được hệ tọa độ của lớp đối tượng này. Nhập CRS nguồn của nó để thêm nó.",
-      "chooseFolder": "Chọn thư mục .gdb...",
-      "noFolderSelected": "Không có cơ sở dữ liệu địa lý nào được chọn",
-      "layer": "Lớp tính năng",
-      "layerPlaceholder": "Chọn cơ sở dữ liệu địa lý trước",
-      "readingLayers": "Đọc các lớp...",
-      "layerOption": "{{name}} ({{type}}, {{count}} tính năng)",
-      "help": "Các bảng chỉ thuộc tính không được liệt kê. Lớp tính năng đã chọn sẽ được tải thông qua máy chủ GeoLibre cục bộ và được chuyển hướng sang WGS84.",
-      "desktopOnly": "Các lớp Cơ sở dữ liệu địa lý tệp chỉ có sẵn trong GeoLibre Desktop. Tính năng này đọc thư mục .gdb cục bộ thông qua máy chủ GeoLibre cục bộ mà ứng dụng web không thể truy cập.",
-      "readError": "Không thể đọc Cơ sở dữ liệu địa lý tệp này.",
-      "convertError": "Không thể tải lớp tính năng này.",
-      "defaultName": "Lớp cơ sở dữ liệu địa lý"
-    },
     "mbtiles": {
       "defaultName": "Lớp MBTiles",
       "readError": "Chọn ảnh JPEG, PNG, TIFF hoặc HEIC. Mỗi cái được đặt từ vị trí EXIF ​​GPS của nó. Ảnh HEIC được định vị nhưng hiển thị không có hình thu nhỏ.",
@@ -690,6 +694,40 @@
       "tableReadOnly": "{{table}} (chỉ đọc: không có khóa chính)",
       "errorSelectTable": "Chọn một bảng để tải.",
       "errorRuntimeMissing": "Máy chủ xử lý chưa cài đặt thời gian chạy PostGIS (psycopg). Cài đặt thêm 'postgis' máy chủ địa lý để tải các lớp có thể chỉnh sửa."
+    },
+    "iceberg": {
+      "defaultName": "Lớp Iceberg",
+      "notice": "Bảng Iceberg chỉ được đọc một lần, theo yêu cầu. Lớp là một ảnh chụp nhanh bị giới hạn bởi số hàng tối đa bên dưới và không bao giờ được quét lại tự động — dùng Làm mới trong menu lớp để đọc lại.",
+      "mode": "Nguồn Iceberg",
+      "modeTable": "Vị trí bảng",
+      "modeCatalog": "Danh mục REST",
+      "location": "Vị trí siêu dữ liệu của bảng",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "Kho (warehouse)",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "Điểm cuối danh mục",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "Kết nối",
+      "table": "Bảng Iceberg",
+      "sql": "SQL (tùy chọn)",
+      "sqlHint": "Chỉnh sửa để lọc hoặc định hình lại nội dung được hiển thị. Câu lệnh phải trả về một cột GEOMETRY; giữ nguyên như đã tạo để đọc toàn bộ bảng.",
+      "selectTable": "Chọn một bảng",
+      "geometryColumn": "Cột hình học",
+      "rowLimit": "Giới hạn số hàng",
+      "rowLimitHint": "Lớp chứa những hàng đầu tiên của bảng, tối đa đến giới hạn này. Giới hạn không được vượt quá {{max}} hàng.",
+      "rowLimitTruncates": "Bảng có {{total}} hàng; lớp sẽ chứa {{limit}} hàng đầu tiên.",
+      "statusConnecting": "Đang đọc siêu dữ liệu Iceberg...",
+      "statusInspecting": "Đang kiểm tra bảng...",
+      "statusInspected": "{{rows}} hàng. Hình học: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} hàng, nhưng không tìm thấy cột GEOMETRY nào. Hình học Iceberg phải dùng kiểu geometry của phiên bản 3.",
+      "statusTablesFound_other": "Đã tìm thấy {{count}} bảng. Chọn một bảng để tiếp tục.",
+      "statusNoTables": "Danh mục không có bảng nào.",
+      "errorLocation": "Nhập vị trí siêu dữ liệu của bảng Iceberg.",
+      "errorWarehouse": "Nhập kho Iceberg cần gắn kết.",
+      "errorEndpoint": "Nhập điểm cuối danh mục REST của Iceberg.",
+      "errorConnect": "Không thể đọc nguồn Iceberg.",
+      "errorInspect": "Không thể kiểm tra bảng Iceberg.",
+      "errorConnectFirst": "Hãy kết nối và chọn một bảng Iceberg trước."
     },
     "video": {
       "cornerTopRight": "trên cùng bên phải",
@@ -2024,6 +2062,22 @@
       "reset": "Đặt lại về mặc định",
       "globeOnly": "Hiệu ứng khí quyển chỉ khả dụng khi bật chế độ xem Quả cầu."
     },
+    "sun": {
+      "title": "Mặt trời",
+      "date": "Ngày",
+      "time": "Thời gian",
+      "timeOfDay": "Thời gian trong ngày",
+      "play": "Chơi",
+      "pause": "Tạm dừng",
+      "stepBack": "Lùi lại một giờ",
+      "stepForward": "Bước về phía trước một giờ",
+      "speed": "Tốc độ hoạt ảnh",
+      "loop": "Hoạt hình vòng lặp",
+      "now": "Hiện nay",
+      "shade": "Bóng đêm",
+      "close": "Đóng",
+      "localTimeNote": "Lần lượt ngân hàng đường chân trời"
+    },
     "routeAnimation": {
       "expand": "Mở rộng",
       "close": "Đóng",
@@ -2087,22 +2141,6 @@
       "terrainWarning": "Địa hình - kéo lên",
       "help": "Mũi tên hoặc điều khiển A/D · W/S hoặc Van tiết lưu lên/xuống trang · Khoảng cách ngang với cánh · Thoát ra Esc."
     },
-    "sun": {
-      "title": "Mặt trời",
-      "date": "Ngày",
-      "time": "Thời gian",
-      "timeOfDay": "Thời gian trong ngày",
-      "play": "Chơi",
-      "pause": "Tạm dừng",
-      "stepBack": "Lùi lại một giờ",
-      "stepForward": "Bước về phía trước một giờ",
-      "speed": "Tốc độ hoạt ảnh",
-      "loop": "Hoạt hình vòng lặp",
-      "now": "Hiện nay",
-      "shade": "Bóng đêm",
-      "close": "Đóng",
-      "localTimeNote": "Lần lượt ngân hàng đường chân trời"
-    },
     "setView": {
       "title": "Đặt chế độ xem",
       "description": "Di chuyển bản đồ đến một camera chính xác.",
@@ -2140,6 +2178,16 @@
       "bearing": "mang",
       "go": "Đi",
       "invalid": "Nhập kinh độ hợp lệ (−180 đến 180), vĩ độ (−90 đến 90) và thu phóng."
+    },
+    "commandGroup": {
+      "project": "Dự án",
+      "addData": "Thêm dữ liệu",
+      "processing": "Xử lý",
+      "controls": "Điều khiển",
+      "view": "Xem",
+      "help": "Giúp đỡ",
+      "plugins": "Plugin",
+      "settings": "Cài đặt"
     },
     "command": {
       "diagnostics": "Chẩn đoán",
@@ -2227,17 +2275,8 @@
       "video": "Lớp video",
       "deckglViz": "Chuyển đổi đã hoàn tất; việc lưu đã bị hủy.",
       "gltfModel": "Mô hình 3D (glTF)",
-      "postgres": "Lớp PostgreSQL"
-    },
-    "commandGroup": {
-      "project": "Dự án",
-      "addData": "Thêm dữ liệu",
-      "processing": "Xử lý",
-      "controls": "Điều khiển",
-      "view": "Xem",
-      "help": "Giúp đỡ",
-      "plugins": "Plugin",
-      "settings": "Cài đặt"
+      "postgres": "Lớp PostgreSQL",
+      "iceberg": "Lớp Apache Iceberg"
     },
     "conversion": {
       "vectorToVector": "Vectơ sang Vectơ",
@@ -2350,6 +2389,19 @@
       "checkValidity": "Kiểm tra tính hợp lệ",
       "fixGeometries": "Sửa hình học",
       "checkTopologyRules": "Kiểm tra các quy tắc cấu trúc liên kết"
+    },
+    "networkTool": {
+      "isochrone": "Isochrone / khu vực dịch vụ",
+      "odMatrix": "Ma trận chi phí OD",
+      "sequentialRoute": "Lộ trình tuần tự (chỉ đường)"
+    },
+    "statisticsTool": {
+      "globalMoransI": "Moran's I toàn cục",
+      "localMoransI": "Moran's I cục bộ (LISA)",
+      "getisOrd": "Điểm nóng Getis-Ord Gi*",
+      "averageNearestNeighbor": "Hàng xóm gần nhất trung bình",
+      "kernelDensity": "Mật độ nhân (bản đồ nhiệt)",
+      "emergingHotSpot": "Điểm nóng mới nổi (khối không-thời gian)"
     },
     "rasterTool": {
       "errorStartTool": "Không thể khởi động công cụ raster.",
@@ -2664,19 +2716,6 @@
       "pointerElevationNoticeDesc": "Việc đọc độ cao của thanh trạng thái được phân giải từ địa hình 3D của chính bản đồ khi tính năng này được bật, tính năng này sẽ không gửi đi đâu cả. Nếu không có địa hình 3D, nó sẽ quay trở lại API độ cao Open-Meteo công khai và tọa độ dưới con trỏ sẽ rời khỏi thiết bị của bạn cho những yêu cầu đó.",
       "batchTools": "Công cụ hàng loạt"
     },
-    "networkTool": {
-      "isochrone": "Isochrone / khu vực dịch vụ",
-      "odMatrix": "Ma trận chi phí OD",
-      "sequentialRoute": "Lộ trình tuần tự (chỉ đường)"
-    },
-    "statisticsTool": {
-      "globalMoransI": "Moran's I toàn cục",
-      "localMoransI": "Moran's I cục bộ (LISA)",
-      "getisOrd": "Điểm nóng Getis-Ord Gi*",
-      "averageNearestNeighbor": "Hàng xóm gần nhất trung bình",
-      "kernelDensity": "Mật độ nhân (bản đồ nhiệt)",
-      "emergingHotSpot": "Điểm nóng mới nổi (khối không-thời gian)"
-    },
     "plugin": {
       "maplibre-gl-directions": "Chỉ đường",
       "maplibre-gl-earthdata-gis": "GIS dữ liệu trái đất",
@@ -2726,6 +2765,16 @@
       "maplibre-gl-streetview": "Chế độ xem phố",
       "maplibre-gl-time-slider": "Thanh trượt thời gian"
     },
+    "fileDrop": {
+      "addedRasterLayers_other": "Đã thêm các lớp raster {{count}} vào bảng điều khiển Lớp.",
+      "addedBoth": "Đã thêm {{vector}} và {{raster}} vào bảng điều khiển Lớp.",
+      "bothVectorLayers_other": "{{count}} lớp vectơ",
+      "bothRasterLayers_other": "{{count}} lớp raster",
+      "overlayTitle": "__PH0__ lớp raster",
+      "overlaySubtext": "Dữ liệu của bạn sẽ được thêm ngay vào bảng điều khiển Lớp.",
+      "addedLayer": "Đã thêm \"{{name}}\" vào bảng điều khiển Lớp.",
+      "addedVectorLayers_other": "Đã thêm các lớp vectơ {{count}} vào bảng điều khiển Lớp."
+    },
     "error": {
       "couldNotOpenOsmPbf": "Không thể mở tệp OSM PBF.",
       "invalidOsmPbfUrl": "Nhập (các) URL http hợp lệ vào tệp .osm.pbf.",
@@ -2759,16 +2808,6 @@
       "scale": "Tỉ lệ",
       "bearing": "Mang°",
       "altitude": "Độ cao m"
-    },
-    "fileDrop": {
-      "addedRasterLayers_other": "Đã thêm các lớp raster {{count}} vào bảng điều khiển Lớp.",
-      "addedBoth": "Đã thêm {{vector}} và {{raster}} vào bảng điều khiển Lớp.",
-      "bothVectorLayers_other": "{{count}} lớp vectơ",
-      "bothRasterLayers_other": "{{count}} lớp raster",
-      "overlayTitle": "__PH0__ lớp raster",
-      "overlaySubtext": "Dữ liệu của bạn sẽ được thêm ngay vào bảng điều khiển Lớp.",
-      "addedLayer": "Đã thêm \"{{name}}\" vào bảng điều khiển Lớp.",
-      "addedVectorLayers_other": "Đã thêm các lớp vectơ {{count}} vào bảng điều khiển Lớp."
     },
     "sqlWorkspace": {
       "engine": "Công cụ SQL",
@@ -3312,6 +3351,36 @@
   },
   "stacPlugin": {
     "title": "Danh mục STAC",
+    "footprintLayerName": "Dấu chân tìm kiếm STAC",
+    "catalogSearch": "Tìm danh mục công khai từ STAC Index",
+    "catalogSearchPlaceholder": "Tìm kiếm tên danh mục…",
+    "indexLoading": "Đang tải chỉ mục STAC…",
+    "indexUnavailable": "Chỉ mục STAC không có sẵn - hãy nhập URL",
+    "indexLoadFailed": "Không thể tải chỉ mục STAC",
+    "urlLabel": "Danh mục STAC hoặc URL API",
+    "connect": "Kết nối",
+    "connecting": "Đang kết nối với STAC…",
+    "connected": "Đã kết nối. Chọn bộ lọc và tìm kiếm.",
+    "connectFailed": "Không thể kết nối với STAC",
+    "selectCatalog": "Chọn danh mục…",
+    "noMatchingCatalogs": "Không có danh mục phù hợp",
+    "catalogApiSuffix": "(API)",
+    "catalogStaticSuffix": "(tĩnh)",
+    "kindApi": "API STAC",
+    "kindStatic": "danh mục tĩnh",
+    "collectionsHint": "Giữ Ctrl/Cmd để chọn nhiều bộ sưu tập; kéo cạnh dưới để thay đổi kích thước",
+    "limitToExtent": "Giới hạn tìm kiếm trong phạm vi bản đồ hiện tại",
+    "bboxLabel": "Hộp giới hạn (tây, nam, đông, bắc)",
+    "bboxPlaceholder": "Không bắt buộc; ghi đè phạm vi bản đồ",
+    "bboxInvalid": "Nhập một hộp hợp lệ: tây, nam, đông, bắc.",
+    "drawBbox": "Vẽ bbox trên bản đồ",
+    "cancelDrawing": "Hủy bản vẽ",
+    "clearDrawnBbox": "Xóa bbox đã vẽ",
+    "drawHint": "Nhấp và kéo trên bản đồ để vẽ hộp giới hạn tìm kiếm.",
+    "drawnBbox": "Hộp rút: {{bbox}}",
+    "drawnBboxCleared": "Đã xóa bbox vẽ.",
+    "mapNotReady": "Bản đồ chưa sẵn sàng để vẽ.",
+    "startDate": "Ngày bắt đầu",
     "endDate": "Ngày kết thúc",
     "additionalParams": "Tham số tìm kiếm bổ sung (chỉ API JSON, STAC)",
     "additionalInvalid": "Tham số tìm kiếm bổ sung phải là đối tượng JSON.",
@@ -3320,18 +3389,11 @@
     "resultsCleared": "Kết quả tìm kiếm đã bị xóa.",
     "searching": "Đang tìm kiếm các mục STAC…",
     "loadingMore": "Đang tải thêm mục…",
+    "noMatchesHere": "Không có kết quả phù hợp ở phần đó của danh mục. Tải thêm để tiếp tục tìm kiếm.",
+    "treeEmpty": "Trống",
+    "treeOpenFailed": "Không thể mở danh mục này",
     "noResults": "Không có mục STAC nào phù hợp với các bộ lọc này.",
     "searchFailed": "Tìm kiếm STAC không thành công",
-    "nodata": "Không có giá trị dữ liệu",
-    "nodataPlaceholder": "Ghi đè thẻ NoData của tệp",
-    "renderHint": "Để trống một trường để trình kết xuất suy ra nó từ GeoTIFF. Tùy chọn áp dụng cho nội dung được thêm sau khi chúng thay đổi.",
-    "initialStatus": "Chọn một danh mục từ Chỉ mục STAC hoặc nhập URL.",
-    "catalogInfo": "{{kind}}: {{title}}",
-    "zoom": "Phóng",
-    "add": "Thêm vào",
-    "download": "Tải xuống",
-    "adding": "Đang thêm {{asset}}…",
-    "added": "Đã thêm {{asset}} vào bản đồ.",
     "showing": "Đang hiển thị {{count}} mục.",
     "showingOfMatched": "Đang hiển thị {{count}} trong số {{matched}} mục.",
     "loadMore": "Tải thêm",
@@ -3349,47 +3411,32 @@
     "colormapDefault": "Trình kết xuất mặc định",
     "minValue": "Giá trị tối thiểu",
     "maxValue": "Giá trị tối đa",
-    "connectFailed": "Không thể kết nối với STAC",
-    "selectCatalog": "Chọn danh mục…",
-    "noMatchingCatalogs": "Không có danh mục phù hợp",
-    "catalogApiSuffix": "(API)",
-    "catalogStaticSuffix": "(tĩnh)",
-    "kindApi": "API STAC",
-    "kindStatic": "danh mục tĩnh",
-    "collectionsHint": "Giữ Ctrl/Cmd để chọn nhiều bộ sưu tập; kéo cạnh dưới để thay đổi kích thước",
-    "limitToExtent": "Giới hạn tìm kiếm trong phạm vi bản đồ hiện tại",
-    "bboxLabel": "Hộp giới hạn (tây, nam, đông, bắc)",
+    "nodata": "Không có giá trị dữ liệu",
+    "nodataPlaceholder": "Ghi đè thẻ NoData của tệp",
+    "renderHint": "Để trống một trường để trình kết xuất suy ra nó từ GeoTIFF. Tùy chọn áp dụng cho nội dung được thêm sau khi chúng thay đổi.",
+    "initialStatus": "Chọn một danh mục từ Chỉ mục STAC hoặc nhập URL.",
+    "catalogInfo": "{{kind}}: {{title}}",
+    "zoom": "Phóng",
+    "add": "Thêm vào",
+    "download": "Tải xuống",
+    "adding": "Đang thêm {{asset}}…",
+    "added": "Đã thêm {{asset}} vào bản đồ.",
     "addUnsupported": "Chỉ có thể thêm nội dung GeoTIFF/COG, GeoJSON, GeoParquet và PMTiles vào bản đồ",
     "addFailed": "Không thể thêm nội dung",
     "addNoSourceLayers": "Kho lưu trữ này không liệt kê lớp nào để vẽ",
+    "addNoTarget": "Tài sản này không liệt kê nội dung nào để vẽ",
+    "addIcechunk": "Chưa thể đọc kho Icechunk",
+    "zarrProblemGroup": "Tài sản này chỉ đến một nhóm mảng, không phải một mảng có thể vẽ được",
+    "zarrProblemUnauthorized": "Kho Zarr này cần thông tin xác thực mà GeoLibre chưa thể cung cấp",
+    "zarrProblemUnsupportedUrl": "Địa chỉ của kho Zarr này không thể đọc theo từng khóa",
+    "zarrProblemUnavailable": "Không thể mở kho Zarr này",
+    "chooseTarget": "Chọn nội dung cần thêm",
     "cogUnsupported": "Máy chủ GeoLibre này không thể hiển thị nội dung GeoTIFF từ xa",
-    "footprintLayerName": "Dấu chân tìm kiếm STAC",
-    "catalogSearch": "Tìm danh mục công khai từ STAC Index",
-    "catalogSearchPlaceholder": "Tìm kiếm tên danh mục…",
-    "indexLoading": "Đang tải chỉ mục STAC…",
-    "indexUnavailable": "Chỉ mục STAC không có sẵn - hãy nhập URL",
-    "indexLoadFailed": "Không thể tải chỉ mục STAC",
-    "urlLabel": "Danh mục STAC hoặc URL API",
-    "connect": "Kết nối",
-    "connecting": "Đang kết nối với STAC…",
-    "connected": "Đã kết nối. Chọn bộ lọc và tìm kiếm.",
-    "bboxPlaceholder": "Không bắt buộc; ghi đè phạm vi bản đồ",
-    "bboxInvalid": "Nhập một hộp hợp lệ: tây, nam, đông, bắc.",
-    "drawBbox": "Vẽ bbox trên bản đồ",
-    "cancelDrawing": "Hủy bản vẽ",
-    "clearDrawnBbox": "Xóa bbox đã vẽ",
-    "drawHint": "Nhấp và kéo trên bản đồ để vẽ hộp giới hạn tìm kiếm.",
-    "drawnBbox": "Hộp rút: {{bbox}}",
-    "drawnBboxCleared": "Đã xóa bbox vẽ.",
-    "mapNotReady": "Bản đồ chưa sẵn sàng để vẽ.",
-    "startDate": "Ngày bắt đầu",
-    "noMatchesHere": "Không có kết quả phù hợp ở phần đó của danh mục. Tải thêm để tiếp tục tìm kiếm.",
-    "treeEmpty": "Trống",
-    "treeOpenFailed": "Không thể mở danh mục này",
     "formatCog": "COG",
     "formatGeoJson": "GeoJSON",
     "formatPmtiles": "PMTiles",
     "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
     "formatUnknown": "Định dạng không xác định",
     "notAddable": "không thể thêm"
   },
@@ -3614,6 +3661,10 @@
   },
   "basemaps": {
     "confirmStyleReplace_other": "Việc chuyển sang \"{{name}}\" sẽ thay thế toàn bộ kiểu bản đồ và sẽ xóa các bản đồ nền xếp chồng {{count}} mà bạn đã thêm. Tiếp tục?"
+  },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "Thuộc tính đối tượng",
+    "massingHeight": "Chiều cao (m)"
   },
   "annotations": {
     "toolbar": "Công cụ chú thích",
@@ -4179,6 +4230,1438 @@
       "run": "Chạy",
       "outputPlaceholder": "Đầu ra sẽ xuất hiện ở đây.",
       "resolutionRange": "Độ phân giải (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "Vùng đệm",
+          "description": "Tạo đa giác vùng đệm quanh mỗi đối tượng theo một khoảng cách cố định",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "distance": {
+              "label": "Khoảng cách"
+            },
+            "units": {
+              "label": "Đơn vị",
+              "options": {
+                "kilometers": "Kilômét",
+                "meters": "Mét",
+                "miles": "Dặm"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "Trọng tâm",
+          "description": "Tính điểm trọng tâm của mỗi đối tượng",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "Bao lồi",
+          "description": "Tính bao lồi bao quanh tất cả các đối tượng",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "Hòa tan",
+          "description": "Gộp các đối tượng đa giác thành một hình học duy nhất, có thể nhóm theo một trường",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "field": {
+              "label": "Trường hòa tan (tùy chọn)",
+              "description": "Tên thuộc tính dùng để nhóm các đối tượng trước khi hòa tan"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "Hộp bao",
+          "description": "Tính hình chữ nhật bao quanh tất cả các đối tượng",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            }
+          }
+        },
+        "simplify": {
+          "name": "Đơn giản hóa",
+          "description": "Giảm số đỉnh bằng thuật toán Douglas-Peucker",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "tolerance": {
+              "label": "Dung sai (độ)"
+            },
+            "highQuality": {
+              "label": "Chất lượng cao"
+            }
+          }
+        },
+        "clip": {
+          "name": "Cắt",
+          "description": "Cắt lớp đầu vào theo vùng được phủ bởi lớp phủ (giữ thuộc tính của đầu vào)",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "overlay": {
+              "label": "Lớp phủ (lớp cắt)"
+            }
+          }
+        },
+        "intersection": {
+          "name": "Giao",
+          "description": "Chỉ giữ lại những vùng mà cả hai lớp đa giác chồng lên nhau",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "overlay": {
+              "label": "Lớp phủ"
+            }
+          }
+        },
+        "difference": {
+          "name": "Hiệu",
+          "description": "Loại bỏ vùng của lớp phủ khỏi lớp đầu vào",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "overlay": {
+              "label": "Lớp phủ"
+            }
+          }
+        },
+        "union": {
+          "name": "Hợp",
+          "description": "Gộp hai lớp đa giác thành một hình học kết hợp duy nhất",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "overlay": {
+              "label": "Lớp phủ"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "Nối không gian",
+          "description": "Gắn thuộc tính từ lớp nối vào mỗi đối tượng đầu vào dựa trên quan hệ không gian",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "overlay": {
+              "label": "Lớp nối"
+            },
+            "predicate": {
+              "label": "Quan hệ không gian",
+              "options": {
+                "intersects": "Giao nhau",
+                "within": "Nằm trong",
+                "contains": "Chứa"
+              }
+            },
+            "how": {
+              "label": "Kiểu nối",
+              "options": {
+                "inner": "Trong (chỉ giữ các đối tượng khớp)",
+                "left": "Trái (giữ tất cả đối tượng đầu vào)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "Nối thuộc tính",
+          "description": "Gắn thuộc tính từ lớp nối (một bảng) vào mỗi đối tượng đầu vào khi trường khóa khớp nhau, không dùng hình học. Một-một: hàng nối khớp đầu tiên được chọn.",
+          "params": {
+            "layer": {
+              "label": "Lớp đích"
+            },
+            "overlay": {
+              "label": "Lớp nối (bảng)",
+              "description": "Lớp có thuộc tính được chuyển sang. Hình học của nó bị bỏ qua."
+            },
+            "target_field": {
+              "label": "Trường khóa đích"
+            },
+            "join_field": {
+              "label": "Trường khóa nối"
+            },
+            "how": {
+              "label": "Kiểu nối",
+              "options": {
+                "left": "Trái (giữ tất cả đối tượng đích)",
+                "inner": "Trong (chỉ giữ các đối tượng khớp)"
+              }
+            },
+            "fields": {
+              "label": "Các trường cần chuyển sang (tùy chọn)",
+              "description": "Các trường nối cần sao chép, phân tách bằng dấu phẩy. Để trống để chuyển sang mọi trường nối trừ trường khóa."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "Chọn theo giá trị",
+          "description": "Trích xuất các đối tượng có giá trị thuộc tính thỏa điều kiện vào một lớp mới",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "field": {
+              "label": "Trường"
+            },
+            "operator": {
+              "label": "Toán tử",
+              "options": {
+                "eq": "= (bằng)",
+                "neq": "≠ (khác)",
+                "gt": "> (lớn hơn)",
+                "gte": "≥ (lớn hơn hoặc bằng)",
+                "lt": "< (nhỏ hơn)",
+                "lte": "≤ (nhỏ hơn hoặc bằng)",
+                "contains": "chứa (văn bản)",
+                "starts-with": "bắt đầu bằng (văn bản)",
+                "is-null": "rỗng",
+                "is-not-null": "không rỗng"
+              }
+            },
+            "value": {
+              "label": "Giá trị",
+              "description": "So sánh dưới dạng số khi cả hai vế đều là số."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "Chọn theo vị trí",
+          "description": "Trích xuất các đối tượng theo quan hệ không gian của chúng với một lớp thứ hai vào một lớp mới",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "overlay": {
+              "label": "Lớp lọc"
+            },
+            "predicate": {
+              "label": "Quan hệ không gian",
+              "options": {
+                "intersects": "Giao nhau",
+                "within": "Nằm trong",
+                "contains": "Chứa",
+                "disjoint": "Rời nhau (không giao)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "Trích xuất ngẫu nhiên",
+          "description": "Trích xuất một tập con ngẫu nhiên các đối tượng vào một lớp mới, theo số lượng đối tượng hoặc tỷ lệ phần trăm của đầu vào.",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "method": {
+              "label": "Phương pháp",
+              "options": {
+                "count": "Số lượng đối tượng",
+                "percentage": "Tỷ lệ phần trăm đối tượng"
+              }
+            },
+            "count": {
+              "label": "Số lượng đối tượng",
+              "description": "Được giới hạn bằng số đối tượng đầu vào nếu lớn hơn."
+            },
+            "percentage": {
+              "label": "Tỷ lệ phần trăm đối tượng"
+            }
+          }
+        },
+        "reproject": {
+          "name": "Chiếu lại",
+          "description": "Diễn giải lại tọa độ của lớp theo một CRS nguồn và chuyển đổi sang WGS84 để hiển thị đúng vị trí. Yêu cầu engine Sidecar hoặc Python.",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "source_crs": {
+              "label": "CRS nguồn",
+              "description": "CRS thực sự của tọa độ lớp (ví dụ EPSG:3857). Kết quả được chuyển đổi sang WGS84 (EPSG:4326)."
+            }
+          }
+        },
+        "explode": {
+          "name": "Tách phần",
+          "description": "Tách hình học đa phần thành các đối tượng đơn phần (mỗi phần một đối tượng), giữ thuộc tính của đối tượng gốc",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "Tổng hợp theo thuộc tính",
+          "description": "Hòa tan các đối tượng có cùng giá trị thuộc tính thành một hình học cho mỗi nhóm, kèm một thống kê tóm tắt",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "group_field": {
+              "label": "Trường nhóm"
+            },
+            "statistic": {
+              "label": "Thống kê",
+              "options": {
+                "count": "Đếm",
+                "sum": "Tổng",
+                "mean": "Trung bình",
+                "min": "Nhỏ nhất",
+                "max": "Lớn nhất",
+                "median": "Trung vị"
+              }
+            },
+            "stat_field": {
+              "label": "Trường thống kê",
+              "description": "Trường số được tóm tắt bởi thống kê ở trên."
+            }
+          }
+        },
+        "smooth": {
+          "name": "Làm trơn",
+          "description": "Bo tròn các góc của đối tượng đường và đa giác bằng thuật toán Chaikin (thêm đỉnh), khác với việc giảm đỉnh của Đơn giản hóa. Giá trị Z/độ cao được giữ nguyên; điểm được giữ nguyên không đổi.",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "iterations": {
+              "label": "Số lần lặp",
+              "description": "Càng nhiều lần lặp, kết quả càng trơn (1-10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "Lưới đều",
+          "description": "Tạo lưới chữ nhật đều (lưới ô) phủ lên một phạm vi. Nguồn: khung nhìn bản đồ hiện tại, phạm vi của một lớp, hoặc hộp bao nhập thủ công.",
+          "params": {
+            "source": {
+              "label": "Nguồn phạm vi",
+              "options": {
+                "viewport": "Khung nhìn bản đồ",
+                "layer": "Phạm vi lớp",
+                "bbox": "Hộp bao thủ công"
+              }
+            },
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "west": {
+              "label": "Tây (kinh độ nhỏ nhất)"
+            },
+            "south": {
+              "label": "Nam (vĩ độ nhỏ nhất)"
+            },
+            "east": {
+              "label": "Đông (kinh độ lớn nhất)"
+            },
+            "north": {
+              "label": "Bắc (vĩ độ lớn nhất)"
+            },
+            "cell_width": {
+              "label": "Chiều rộng ô (độ)"
+            },
+            "cell_height": {
+              "label": "Chiều cao ô (độ)",
+              "description": "Để trống để bằng chiều rộng ô."
+            },
+            "cell_type": {
+              "label": "Kiểu ô",
+              "options": {
+                "polygon": "Hình chữ nhật",
+                "point": "Điểm (tâm ô)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "Dựng sơ đồ Voronoi (mỗi điểm một đa giác, cắt theo phạm vi của các điểm) hoặc lưới tam giác Delaunay từ một lớp điểm.",
+          "params": {
+            "layer": {
+              "label": "Lớp điểm đầu vào"
+            },
+            "type": {
+              "label": "Sơ đồ",
+              "options": {
+                "voronoi": "Đa giác Voronoi",
+                "delaunay": "Tam giác Delaunay"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "Vùng phủ trạm phát sóng",
+          "description": "Dựng đa giác hình quạt/sector ăng-ten từ các điểm trạm bằng góc phương vị, bán kính và độ rộng búp sóng (đọc từ trường thuộc tính hoặc giá trị cố định). Độ rộng búp sóng được giới hạn ở 360° (một vòng tròn đầy đủ); độ rộng búp sóng được ghi lại phản ánh giá trị đã giới hạn. Hữu ích cho vùng phủ trạm di động, tương tự QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "Lớp điểm đầu vào"
+            },
+            "azimuthField": {
+              "label": "Trường góc phương vị (°)",
+              "description": "Hướng của sector, tính bằng độ theo chiều kim đồng hồ từ hướng bắc. Dùng góc phương vị cố định khi để trống hoặc không phải số."
+            },
+            "azimuth": {
+              "label": "Góc phương vị (cố định, °)"
+            },
+            "radiusField": {
+              "label": "Trường bán kính",
+              "description": "Bán kính vùng phủ. Dùng bán kính cố định khi để trống hoặc không phải số."
+            },
+            "radius": {
+              "label": "Bán kính (cố định)"
+            },
+            "beamwidthField": {
+              "label": "Trường độ rộng búp sóng (°)",
+              "description": "Độ rộng góc của sector, giới hạn ở 360° (một vòng tròn đầy đủ). Dùng độ rộng búp sóng cố định khi để trống hoặc không phải số."
+            },
+            "beamwidth": {
+              "label": "Độ rộng búp sóng (cố định, °)"
+            },
+            "units": {
+              "label": "Đơn vị bán kính",
+              "options": {
+                "kilometers": "Kilômét",
+                "meters": "Mét",
+                "miles": "Dặm"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "Bộ tạo DGGS",
+          "description": "Lấp đầy một vùng bằng các ô DGGS (H3, S2, A5, DGGRID, DGGAL). Nguồn: hình học của một lớp, phạm vi của một lớp, khung nhìn bản đồ hiện tại, hoặc hộp bao thủ công.",
+          "params": {
+            "dggsType": {
+              "label": "Kiểu DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "Kiểu DGGRID",
+              "description": "Cấu hình lưới được truyền cho duck_dggs dưới dạng dggs_params (ISEA/FULLER × khẩu độ × tôpô).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "Kiểu DGGAL",
+              "description": "DGGRS được truyền cho dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "Nguồn vùng",
+              "options": {
+                "polyfill": "Hình học lớp (lấp đầy đa giác)",
+                "extent": "Phạm vi lớp (hộp bao)",
+                "viewport": "Khung nhìn bản đồ",
+                "bbox": "Hộp bao thủ công"
+              }
+            },
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "west": {
+              "label": "Tây (kinh độ nhỏ nhất)"
+            },
+            "south": {
+              "label": "Nam (vĩ độ nhỏ nhất)"
+            },
+            "east": {
+              "label": "Đông (kinh độ lớn nhất)"
+            },
+            "north": {
+              "label": "Bắc (vĩ độ lớn nhất)"
+            },
+            "resolution": {
+              "label": "Độ phân giải",
+              "description": "Khoảng giá trị phụ thuộc vào kiểu DGGS. Để trống để tự chọn theo diện tích."
+            },
+            "compactCells": {
+              "label": "Nén ô",
+              "description": "Gộp các bộ ô con đầy đủ thành ô cha thô hơn (ít đối tượng hơn, độ phân giải hỗn hợp)."
+            },
+            "fixAntimeridian": {
+              "label": "Sửa kinh tuyến đối diện",
+              "description": "Mở gập các vòng ô cắt qua kinh độ ±180°."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "Gom nhóm DGGS",
+          "description": "Tổng hợp một lớp điểm vào các ô DGGS (đếm, hoặc tổng/trung bình/nhỏ nhất/lớn nhất của một trường số).",
+          "params": {
+            "dggsType": {
+              "label": "Kiểu DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "Kiểu DGGRID",
+              "description": "Cấu hình lưới được truyền cho duck_dggs dưới dạng dggs_params (ISEA/FULLER × khẩu độ × tôpô).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "Kiểu DGGAL",
+              "description": "DGGRS được truyền cho dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "Lớp điểm đầu vào"
+            },
+            "aggOp": {
+              "label": "Tổng hợp",
+              "options": {
+                "count": "Đếm",
+                "sum": "Tổng",
+                "mean": "Trung bình",
+                "min": "Nhỏ nhất",
+                "max": "Lớn nhất"
+              }
+            },
+            "field": {
+              "label": "Trường",
+              "description": "Trường số cần tổng hợp."
+            },
+            "resolution": {
+              "label": "Độ phân giải",
+              "description": "Khoảng giá trị phụ thuộc vào kiểu DGGS. Để trống để tự chọn theo diện tích."
+            },
+            "fixAntimeridian": {
+              "label": "Sửa kinh tuyến đối diện",
+              "description": "Mở gập các vòng ô cắt qua kinh độ ±180°."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "Nén DGGS",
+          "description": "Nén các ô đa giác DGGS, hoặc mở rộng chúng về một độ phân giải đồng nhất (H3, S2, A5, DGGAL). Đầu vào phải là lớp ô có thuộc tính ID.",
+          "params": {
+            "dggsType": {
+              "label": "Kiểu DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "Kiểu DGGAL",
+              "description": "DGGRS được truyền cho dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "Chế độ",
+              "options": {
+                "compact": "Nén",
+                "expand": "Mở rộng"
+              }
+            },
+            "layer": {
+              "label": "Lớp DGGS đầu vào",
+              "description": "Lớp ô đa giác từ Bộ tạo DGGS / Gom nhóm DGGS (hoặc tương đương)."
+            },
+            "cellField": {
+              "label": "Trường ID ô",
+              "description": "Mặc định là h3, a5, s2 hoặc dggal theo kiểu đã chọn khi để trống."
+            },
+            "resolution": {
+              "label": "Độ phân giải đích",
+              "description": "Độ phân giải cần mở rộng tới. Phải ít nhất mịn bằng các ô đầu vào."
+            },
+            "fixAntimeridian": {
+              "label": "Sửa kinh tuyến đối diện",
+              "description": "Mở gập các vòng ô cắt qua kinh độ ±180°."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "Tốc độ quỹ đạo",
+          "description": "Sắp xếp các điểm theo thời gian (cho mỗi mục tiêu) và nối các điểm định vị liên tiếp thành các đoạn mang thông tin khoảng cách, thời lượng và tốc độ. Tương tự QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Lớp điểm đầu vào"
+            },
+            "timeField": {
+              "label": "Trường thời gian",
+              "description": "Dấu thời gian cho mỗi điểm định vị: chuỗi ngày/giờ ISO hoặc epoch (giây hoặc mili giây)."
+            },
+            "idField": {
+              "label": "Trường id mục tiêu",
+              "description": "Tách các điểm thành các quỹ đạo riêng. Để trống để coi tất cả các điểm là một mục tiêu."
+            },
+            "speedUnits": {
+              "label": "Đơn vị tốc độ",
+              "options": {
+                "km/h": "km/h",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "Phát hiện điểm dừng",
+          "description": "Tìm các nơi mục tiêu dừng lại: chuỗi điểm định vị liên tiếp nằm trong một khoảng cách (hấp thụ nhiễu GPS) trong ít nhất một khoảng thời gian tối thiểu. Xuất một điểm cho mỗi điểm dừng. Tương tự QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Lớp điểm đầu vào"
+            },
+            "timeField": {
+              "label": "Trường thời gian",
+              "description": "Dấu thời gian cho mỗi điểm định vị: chuỗi ngày/giờ ISO hoặc epoch (giây hoặc mili giây)."
+            },
+            "idField": {
+              "label": "Trường id mục tiêu",
+              "description": "Phát hiện điểm dừng cho từng mục tiêu. Để trống để coi tất cả các điểm là một mục tiêu."
+            },
+            "maxDistance": {
+              "label": "Khoảng cách tối đa",
+              "description": "Mọi điểm định vị trong một điểm dừng phải nằm trong khoảng cách này so với điểm định vị đầu tiên của điểm dừng (nên một điểm dừng có thể trải rộng tới gấp đôi giá trị này). Đặt bằng bán kính nhiễu GPS của bạn."
+            },
+            "distanceUnits": {
+              "label": "Đơn vị khoảng cách",
+              "options": {
+                "meters": "Mét",
+                "kilometers": "Kilômét",
+                "miles": "Dặm"
+              }
+            },
+            "minDuration": {
+              "label": "Thời lượng tối thiểu (giây)",
+              "description": "Một lần dừng ngắn hơn giá trị này sẽ không được báo cáo là điểm dừng."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "Lân cận không gian-thời gian",
+          "description": "Tìm các cặp điểm gần nhau cả về không gian lẫn thời gian — ví dụ hai mục tiêu gặp nhau. Xuất một đường nối mỗi cặp thỏa điều kiện, mang thông tin khoảng cách và chênh lệch thời gian.",
+          "params": {
+            "layer": {
+              "label": "Lớp điểm đầu vào"
+            },
+            "timeField": {
+              "label": "Trường thời gian",
+              "description": "Dấu thời gian cho mỗi điểm: chuỗi ngày/giờ ISO hoặc epoch (giây hoặc mili giây)."
+            },
+            "idField": {
+              "label": "Trường id mục tiêu",
+              "description": "Khi được đặt, chỉ ghép cặp các điểm có giá trị id KHÁC NHAU (cuộc gặp giữa các mục tiêu khác nhau). Để trống để xét mọi cặp."
+            },
+            "maxDistance": {
+              "label": "Khoảng cách tối đa"
+            },
+            "distanceUnits": {
+              "label": "Đơn vị khoảng cách",
+              "options": {
+                "meters": "Mét",
+                "kilometers": "Kilômét",
+                "miles": "Dặm"
+              }
+            },
+            "maxTime": {
+              "label": "Chênh lệch thời gian tối đa"
+            },
+            "timeUnits": {
+              "label": "Đơn vị thời gian",
+              "options": {
+                "seconds": "Giây",
+                "minutes": "Phút",
+                "hours": "Giờ"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "Kiểm tra tính hợp lệ",
+          "description": "Tìm các đối tượng có hình học không hợp lệ (theo quy tắc GEOS: vòng tự cắt, lỗ nằm ngoài vỏ, ...) và đánh dấu chúng trên bản đồ",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "Sửa hình học",
+          "description": "Sửa hình học không hợp lệ bằng ST_MakeValid (GEOS); các đối tượng hợp lệ được giữ nguyên",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "Kiểm tra quy tắc tôpô",
+          "description": "Kiểm tra lớp theo các quy tắc tôpô (chồng lấn, khoảng hở, tự cắt, đầu thừa) và đánh dấu từng vi phạm trên bản đồ",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "ruleSelfIntersect": {
+              "label": "Đường không được tự cắt"
+            },
+            "ruleOverlap": {
+              "label": "Đa giác không được chồng lấn"
+            },
+            "ruleGaps": {
+              "label": "Đa giác không được có khoảng hở"
+            },
+            "ruleDangles": {
+              "label": "Đường không được có đầu thừa"
+            },
+            "rulePointCovered": {
+              "label": "Điểm phải nằm trên một đường"
+            },
+            "ruleEndpointSnap": {
+              "label": "Đầu mút của đường phải nối nhau trong dung sai"
+            },
+            "snapTolerance": {
+              "label": "Dung sai bắt dính",
+              "description": "Cho quy tắc đầu mút: hai đầu đường có thể cách nhau bao xa (theo đơn vị tọa độ của lớp — độ đối với WGS84) mà vẫn được tính là nối nhau."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "Sửa tôpô",
+          "description": "Tự động sửa các vi phạm tôpô: bắt dính các đầu mút đường gần nối nhau, sửa đầu thừa, và chiếu điểm lên đường. Các đầu tự do không có gì ở gần được giữ nguyên.",
+          "params": {
+            "layer": {
+              "label": "Lớp đầu vào"
+            },
+            "ruleEndpointSnap": {
+              "label": "Bắt dính các đầu mút đường gần nối nhau"
+            },
+            "ruleDangles": {
+              "label": "Sửa đầu thừa (bắt dính hoặc chiếu lên hình học gần đó)"
+            },
+            "rulePointCovered": {
+              "label": "Chiếu điểm lên đường gần nhất"
+            },
+            "snapTolerance": {
+              "label": "Dung sai bắt dính",
+              "description": "Hình học có thể dịch chuyển bao xa (theo đơn vị tọa độ của lớp — độ đối với WGS84) để nối nhau."
+            },
+            "dryRun": {
+              "label": "Chỉ xem trước (chạy thử)",
+              "description": "Báo cáo các sửa chữa sẽ được áp dụng mà không tạo lớp đã sửa."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "Đường đẳng thời / vùng phục vụ",
+          "description": "Đa giác vùng tiếp cận theo thời gian hoặc khoảng cách di chuyển từ mỗi điểm trong một lớp",
+          "params": {
+            "layer": {
+              "label": "Điểm xuất phát"
+            },
+            "mode": {
+              "label": "Phương thức di chuyển",
+              "options": {
+                "auto": "Lái xe",
+                "pedestrian": "Đi bộ",
+                "bicycle": "Đi xe đạp"
+              }
+            },
+            "metric": {
+              "label": "Thước đo",
+              "options": {
+                "time": "Thời gian di chuyển (phút)",
+                "distance": "Khoảng cách (km)"
+              }
+            },
+            "contours": {
+              "label": "Đường đồng mức",
+              "description": "Các giá trị phân tách bằng dấu phẩy (phút đối với thời gian, km đối với khoảng cách)"
+            },
+            "endpoint": {
+              "label": "Máy chủ định tuyến (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "Ma trận chi phí OD",
+          "description": "Thời gian và khoảng cách di chuyển giữa mọi điểm xuất phát và điểm đến, dưới dạng các đường nối",
+          "params": {
+            "origins": {
+              "label": "Điểm xuất phát"
+            },
+            "destinations": {
+              "label": "Điểm đến"
+            },
+            "mode": {
+              "label": "Phương thức di chuyển",
+              "options": {
+                "auto": "Lái xe",
+                "pedestrian": "Đi bộ",
+                "bicycle": "Đi xe đạp"
+              }
+            },
+            "endpoint": {
+              "label": "Máy chủ định tuyến (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "Tuyến đường tuần tự (chỉ đường)",
+          "description": "Nối các điểm theo thứ tự dọc theo mạng lưới đường thành một tuyến. Mỗi điểm được bắt dính vào đường gần nhất, nên tọa độ ngoài đường (trạm phát sóng, cảm biến) vẫn định tuyến được. Thứ tự theo trường đã chọn (ví dụ dấu thời gian) hoặc theo thứ tự đối tượng của lớp.",
+          "params": {
+            "layer": {
+              "label": "Điểm đầu vào"
+            },
+            "order_field": {
+              "label": "Sắp xếp theo trường (tùy chọn)",
+              "description": "Sắp xếp các điểm theo trường này (số hoặc dấu thời gian) trước khi định tuyến. Để trống để dùng thứ tự đối tượng của lớp."
+            },
+            "mode": {
+              "label": "Phương thức di chuyển",
+              "options": {
+                "auto": "Lái xe",
+                "pedestrian": "Đi bộ",
+                "bicycle": "Đi xe đạp"
+              }
+            },
+            "endpoint": {
+              "label": "Máy chủ định tuyến (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "Moran's I toàn cục",
+          "description": "Đo mức tự tương quan không gian tổng thể của một thuộc tính số trên toàn bộ lớp.",
+          "params": {
+            "layer": {
+              "label": "Lớp"
+            },
+            "field": {
+              "label": "Trường giá trị"
+            },
+            "weightsType": {
+              "label": "Trọng số không gian",
+              "description": "Cách xác định lân cận cho mỗi đối tượng.",
+              "options": {
+                "knn": "K lân cận gần nhất",
+                "distance": "Dải khoảng cách"
+              }
+            },
+            "k": {
+              "label": "Số lân cận (k)"
+            },
+            "threshold": {
+              "label": "Dải khoảng cách (km)"
+            },
+            "permutations": {
+              "label": "Số hoán vị",
+              "description": "Số hoán vị ngẫu nhiên cho giá trị p giả."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "Moran's I cục bộ (LISA)",
+          "description": "Cụm và điểm ngoại lai cho từng đối tượng (Cao-Cao, Thấp-Thấp, Cao-Thấp, Thấp-Cao) với mức ý nghĩa giả.",
+          "params": {
+            "layer": {
+              "label": "Lớp"
+            },
+            "field": {
+              "label": "Trường giá trị"
+            },
+            "weightsType": {
+              "label": "Trọng số không gian",
+              "description": "Cách xác định lân cận cho mỗi đối tượng.",
+              "options": {
+                "knn": "K lân cận gần nhất",
+                "distance": "Dải khoảng cách"
+              }
+            },
+            "k": {
+              "label": "Số lân cận (k)"
+            },
+            "threshold": {
+              "label": "Dải khoảng cách (km)"
+            },
+            "permutations": {
+              "label": "Số hoán vị",
+              "description": "Số hoán vị ngẫu nhiên cho giá trị p giả."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Điểm nóng Getis-Ord Gi*",
+          "description": "Xác định các điểm nóng và điểm lạnh có ý nghĩa thống kê của một thuộc tính số.",
+          "params": {
+            "layer": {
+              "label": "Lớp"
+            },
+            "field": {
+              "label": "Trường giá trị"
+            },
+            "weightsType": {
+              "label": "Trọng số không gian",
+              "description": "Cách xác định lân cận cho mỗi đối tượng.",
+              "options": {
+                "knn": "K lân cận gần nhất",
+                "distance": "Dải khoảng cách"
+              }
+            },
+            "k": {
+              "label": "Số lân cận (k)"
+            },
+            "threshold": {
+              "label": "Dải khoảng cách (km)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "Lân cận gần nhất trung bình",
+          "description": "Kiểm định xem các điểm phân bố theo cụm, phân tán hay ngẫu nhiên (tỷ số ANN + điểm z).",
+          "params": {
+            "layer": {
+              "label": "Lớp điểm"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "Mật độ hạt nhân (bản đồ nhiệt)",
+          "description": "Ước lượng bề mặt mật độ từ các điểm dưới dạng lưới ô, dùng hạt nhân bậc bốn.",
+          "params": {
+            "layer": {
+              "label": "Lớp điểm"
+            },
+            "weightField": {
+              "label": "Trường trọng số (tùy chọn)",
+              "description": "Trường số làm trọng số cho mỗi điểm; để trống = trọng số bằng nhau."
+            },
+            "bandwidth": {
+              "label": "Bán kính tìm kiếm / băng thông (km)"
+            },
+            "cellSize": {
+              "label": "Kích thước ô (km)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "Điểm nóng mới nổi (khối không gian-thời gian)",
+          "description": "Dựng khối không gian-thời gian từ các điểm có dấu thời gian (lưới ô × các bước thời gian bằng nhau) và phân loại mỗi ô là điểm nóng/lạnh mới, tăng cường, dai dẳng, suy giảm, rời rạc, dao động hoặc lịch sử. Chạy Getis-Ord Gi* cho từng lát thời gian, rồi kiểm định xu hướng Mann-Kendall trên chuỗi Gi* của mỗi ô. Chạy phía máy khách, tương tự Emerging Hot Spot Analysis của ArcGIS.",
+          "params": {
+            "layer": {
+              "label": "Lớp điểm"
+            },
+            "timeField": {
+              "label": "Trường thời gian",
+              "description": "Dấu thời gian cho mỗi điểm: chuỗi ngày/giờ ISO hoặc epoch (giây hoặc mili giây)."
+            },
+            "cellSize": {
+              "label": "Kích thước ô (km)",
+              "description": "Độ dài cạnh của mỗi ô vuông không gian, tính bằng kilômét."
+            },
+            "timeStep": {
+              "label": "Khoảng bước thời gian"
+            },
+            "timeStepUnit": {
+              "label": "Đơn vị bước thời gian",
+              "options": {
+                "hours": "Giờ",
+                "days": "Ngày",
+                "weeks": "Tuần"
+              }
+            },
+            "weightField": {
+              "label": "Trường trọng số (tùy chọn)",
+              "description": "Trường số được cộng dồn cho mỗi ô không gian-thời gian thay vì đếm điểm; để trống = đếm điểm."
+            },
+            "confidence": {
+              "label": "Mức tin cậy",
+              "description": "Ngưỡng ý nghĩa để một ô được tính là điểm nóng/lạnh và cho xu hướng.",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "Bóng đồi",
+          "description": "Tính raster bóng địa hình (bóng đồi) từ mô hình độ cao.",
+          "params": {
+            "azimuth": {
+              "label": "Góc phương vị (độ)"
+            },
+            "altitude": {
+              "label": "Góc cao (độ)"
+            },
+            "z_factor": {
+              "label": "Hệ số Z"
+            }
+          }
+        },
+        "slope": {
+          "name": "Độ dốc",
+          "description": "Tính độ dốc từ mô hình độ cao.",
+          "params": {
+            "units": {
+              "label": "Đơn vị",
+              "options": {
+                "degrees": "Độ",
+                "percent": "Phần trăm"
+              }
+            },
+            "z_factor": {
+              "label": "Hệ số Z"
+            }
+          }
+        },
+        "aspect": {
+          "name": "Hướng dốc",
+          "description": "Tính hướng dốc (hướng la bàn của sườn dốc nhất) từ mô hình độ cao."
+        },
+        "reproject": {
+          "name": "Chiếu lại",
+          "description": "Nắn raster sang một hệ quy chiếu tọa độ khác.",
+          "params": {
+            "dst_crs": {
+              "label": "CRS đích",
+              "description": "Mã hệ quy chiếu như EPSG:3857 hoặc EPSG:4326."
+            },
+            "resampling": {
+              "label": "Lấy mẫu lại",
+              "options": {
+                "nearest": "Lân cận gần nhất",
+                "bilinear": "Song tuyến tính",
+                "cubic": "Bậc ba"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "Lấy mẫu lại",
+          "description": "Lấy mẫu lại raster sang kích thước pixel (độ phân giải) khác.",
+          "params": {
+            "resolution": {
+              "label": "Kích thước pixel đích",
+              "description": "Kích thước pixel đầu ra theo đơn vị CRS của raster."
+            },
+            "resampling": {
+              "label": "Lấy mẫu lại",
+              "options": {
+                "nearest": "Lân cận gần nhất",
+                "bilinear": "Song tuyến tính",
+                "cubic": "Bậc ba"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "Cắt theo phạm vi",
+          "description": "Cắt raster theo một hộp bao (trong CRS của raster).",
+          "params": {
+            "minx": {
+              "label": "X nhỏ nhất"
+            },
+            "miny": {
+              "label": "Y nhỏ nhất"
+            },
+            "maxx": {
+              "label": "X lớn nhất"
+            },
+            "maxy": {
+              "label": "Y lớn nhất"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "Cắt theo lớp mặt nạ",
+          "description": "Cắt raster theo hình học của một tệp mặt nạ vector.",
+          "params": {
+            "mask_path": {
+              "label": "Lớp mặt nạ",
+              "description": "Tệp GeoJSON có hình học xác định vùng cắt. Nó được tự động chiếu lại sang CRS của raster (GeoJSON không có CRS được coi là WGS84)."
+            },
+            "crop": {
+              "label": "Cắt theo phạm vi mặt nạ"
+            },
+            "all_touched": {
+              "label": "Bao gồm mọi pixel bị chạm"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "Đa giác hóa",
+          "description": "Chuyển một kênh raster thành các đa giác vector nhóm theo giá trị pixel.",
+          "params": {
+            "band": {
+              "label": "Kênh"
+            },
+            "connectivity": {
+              "label": "Liên thông",
+              "options": {
+                "4": "Liên thông 4",
+                "8": "Liên thông 8"
+              }
+            },
+            "field": {
+              "label": "Tên trường giá trị"
+            }
+          }
+        },
+        "contour": {
+          "name": "Đường đồng mức",
+          "description": "Tạo đường đồng mức từ mô hình độ cao.",
+          "params": {
+            "band": {
+              "label": "Kênh"
+            },
+            "interval": {
+              "label": "Khoảng cao đều",
+              "description": "Chênh lệch độ cao giữa hai đường đồng mức liên tiếp."
+            },
+            "base": {
+              "label": "Mức cơ sở"
+            },
+            "attribute": {
+              "label": "Tên trường độ cao"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "Nội suy (IDW / Kriging)",
+          "description": "Nội suy thuộc tính số của một lớp điểm thành bề mặt raster liên tục bằng nghịch đảo khoảng cách có trọng số hoặc kriging thông thường.",
+          "params": {
+            "field": {
+              "label": "Trường giá trị",
+              "description": "Tên thuộc tính số của điểm cần nội suy (ví dụ độ cao, nhiệt độ)."
+            },
+            "method": {
+              "label": "Phương pháp",
+              "options": {
+                "idw": "Nghịch đảo khoảng cách có trọng số (IDW)",
+                "kriging": "Kriging thông thường"
+              }
+            },
+            "resolution": {
+              "label": "Kích thước pixel đầu ra",
+              "description": "Kích thước ô theo đơn vị CRS của lớp (độ đối với WGS84). Lưới phủ toàn bộ phạm vi của các điểm."
+            },
+            "power": {
+              "label": "Số mũ IDW",
+              "description": "Giá trị càng lớn thì các điểm gần có ảnh hưởng càng nhiều."
+            },
+            "variogram_model": {
+              "label": "Mô hình variogram",
+              "description": "Mô hình lý thuyết khớp với semivariogram thực nghiệm. Kriging giới hạn ở 1500 điểm.",
+              "options": {
+                "spherical": "Cầu",
+                "exponential": "Mũ",
+                "gaussian": "Gauss",
+                "linear": "Tuyến tính"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "Thống kê theo vùng",
+          "description": "Tóm tắt giá trị raster trong mỗi đa giác của một lớp vector (đếm, nhỏ nhất, lớn nhất, trung bình, tổng, độ lệch chuẩn, trung vị).",
+          "params": {
+            "zones_path": {
+              "label": "Lớp vùng",
+              "description": "Lớp đa giác GeoJSON xác định các vùng. Nó được tự động chiếu lại sang CRS của raster (GeoJSON không có CRS được coi là WGS84)."
+            },
+            "band": {
+              "label": "Kênh"
+            },
+            "prefix": {
+              "label": "Tiền tố trường",
+              "description": "Được thêm vào trước tên mỗi trường thống kê (ví dụ 'dem_' → 'dem_mean'). Để trống để dùng tên trần 'mean', 'min', …"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "Máy tính raster",
+          "description": "Tính một biểu thức toán học kênh kiểu NumPy. Tham chiếu kênh 1 của mỗi đầu vào là A, B, C và các kênh cụ thể là A1, A2, …; ví dụ NDVI là (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "Biểu thức",
+              "description": "Biểu thức NumPy trên A, B, C (và A1, A2, …). Hàm: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan."
+            },
+            "b_path": {
+              "label": "Raster B (tùy chọn)",
+              "description": "Raster thứ hai, tham chiếu là B / B1, B2, …. Phải có cùng kích thước với A."
+            },
+            "c_path": {
+              "label": "Raster C (tùy chọn)",
+              "description": "Raster thứ ba, tham chiếu là C / C1, C2, …. Phải có cùng kích thước với A."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "Chỉ số phổ",
+          "description": "Tính một chỉ số phổ có tên (NDVI, NDWI, EVI, …) từ raster đa kênh. Chọn cấu hình cảm biến cho bố cục kênh, hoặc đặt số kênh thủ công với cảm biến Tùy chỉnh.",
+          "params": {
+            "index": {
+              "label": "Chỉ số",
+              "options": {
+                "ndvi": "NDVI (thực vật)",
+                "gndvi": "GNDVI (thực vật xanh)",
+                "ndwi": "NDWI (nước, McFeeters)",
+                "ndmi": "NDMI (độ ẩm)",
+                "ndbi": "NDBI (xây dựng)",
+                "nbr": "NBR (tỷ số cháy)",
+                "evi": "EVI (thực vật tăng cường)",
+                "savi": "SAVI (thực vật hiệu chỉnh đất)"
+              }
+            },
+            "sensor": {
+              "label": "Cảm biến / bố cục kênh",
+              "description": "Số kênh đặt sẵn cho các cảm biến phổ biến. Chọn Tùy chỉnh để tự ánh xạ kênh cho GeoTIFF xếp kênh khác.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "Tùy chỉnh (đặt số kênh bên dưới)"
+              }
+            },
+            "red": {
+              "label": "Số kênh đỏ"
+            },
+            "green": {
+              "label": "Số kênh lục"
+            },
+            "blue": {
+              "label": "Số kênh lam"
+            },
+            "nir": {
+              "label": "Số kênh NIR"
+            },
+            "swir1": {
+              "label": "Số kênh SWIR1"
+            },
+            "swir2": {
+              "label": "Số kênh SWIR2"
+            },
+            "L": {
+              "label": "Hệ số đất (L)",
+              "description": "Hiệu chỉnh độ sáng đất của SAVI (0 thảm phủ dày → 1 đất trống)."
+            },
+            "scale": {
+              "label": "Hệ số phản xạ",
+              "description": "Hệ số nhân chuyển giá trị pixel thành phản xạ (0–1). Giữ 1 cho các chỉ số hiệu số chuẩn hóa; đặt cho EVI/SAVI trên ảnh DN số nguyên (ví dụ 0.0001 cho Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "Phân loại lại",
+          "description": "Ánh xạ lại các khoảng giá trị thành giá trị lớp mới bằng bảng quy tắc.",
+          "params": {
+            "band": {
+              "label": "Kênh"
+            },
+            "table": {
+              "label": "Quy tắc",
+              "description": "Các quy tắc 'min:max:giá_trị_mới' phân tách bằng dấu phẩy hoặc xuống dòng, ví dụ '0:10:1, 10:20:2, 20:max:3'. Khoảng là nửa mở [min, max); để trống/min/max nghĩa là ±∞."
+            },
+            "unmatched": {
+              "label": "Giá trị không khớp",
+              "options": {
+                "nodata": "Đặt thành NoData",
+                "original": "Giữ giá trị gốc"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "Khảm / gộp",
+          "description": "Kết hợp tối đa năm raster (cùng CRS) thành một raster duy nhất phủ hợp của chúng.",
+          "params": {
+            "raster_2": {
+              "label": "Raster thứ hai"
+            },
+            "raster_3": {
+              "label": "Raster thứ ba (tùy chọn)"
+            },
+            "raster_4": {
+              "label": "Raster thứ tư (tùy chọn)"
+            },
+            "raster_5": {
+              "label": "Raster thứ năm (tùy chọn)"
+            },
+            "method": {
+              "label": "Phương pháp chồng lấn",
+              "description": "Giá trị nào được chọn ở nơi các đầu vào chồng lấn.",
+              "options": {
+                "first": "Đầu tiên",
+                "last": "Cuối cùng",
+                "min": "Nhỏ nhất",
+                "max": "Lớn nhất"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "Thống kê tiêu cự",
+          "description": "Áp dụng thống kê cửa sổ trượt (lân cận) cho một kênh raster.",
+          "params": {
+            "band": {
+              "label": "Kênh"
+            },
+            "statistic": {
+              "label": "Thống kê",
+              "options": {
+                "mean": "Trung bình",
+                "median": "Trung vị",
+                "min": "Nhỏ nhất",
+                "max": "Lớn nhất",
+                "sum": "Tổng",
+                "std": "Độ lệch chuẩn",
+                "range": "Khoảng biến thiên (max − min)"
+              }
+            },
+            "size": {
+              "label": "Kích thước cửa sổ",
+              "description": "Kích thước lân cận lẻ tính bằng pixel (3 = 3×3). Tối đa 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "Phân tích",
+      "clip": "Cắt",
+      "dataQuality": "Chất lượng dữ liệu",
+      "dggs": "DGGS",
+      "geometry": "Hình học",
+      "join": "Nối",
+      "movementTime": "Di chuyển & thời gian",
+      "network": "Mạng lưới",
+      "overlay": "Chồng lớp",
+      "rasterToVector": "Raster sang Vector",
+      "reproject": "Chiếu lại",
+      "select": "Chọn",
+      "spatialStatistics": "Thống kê không gian",
+      "terrain": "Địa hình",
+      "vectorToRaster": "Vector sang Raster"
     }
   },
   "segmentation": {
@@ -4989,16 +6472,6 @@
     "invalidKmlCoordinatesById": "Xuất KML không thể ghi ID tính năng {{id}} vì nó có tọa độ không hợp lệ."
   },
   "layers": {
-    "exportStyleNeedsFeatures": "Dán kiểu từ \"__PH0__\"",
-    "exportStyleError": "Không thể xuất kiểu của lớp này.",
-    "importStyle": "Kiểu nhập (URL GeoLibre / Mapbox GL / SLD / QML)…",
-    "openStyleManager": "Kiểu đã lưu (Trình quản lý kiểu)…",
-    "importStyleSuccess": "Phong cách nhập khẩu.",
-    "importStyleInvalid": "Tệp đó không phải là JSON, SLD hoặc QML hợp lệ.",
-    "importStyleNoMatch": "Không có ký hiệu nào có thể được đọc từ phong cách đó.",
-    "importStyleError": "Không thể nhập kiểu này.",
-    "copyStyle": "Sao chép kiểu",
-    "pasteStyle": "Dán kiểu",
     "panelCollapsedLabel": "Trình tạo biểu thức mở",
     "expand": "Mở rộng các lớp",
     "collapse": "Thu gọn các lớp",
@@ -5006,36 +6479,6 @@
     "dragToReorder": "Kéo để sắp xếp lại",
     "saveGeometryEdits": "Chỉnh sửa tiện ích",
     "discardGeometryEdits": "Loại bỏ các chỉnh sửa hình học",
-    "bindToTimeSlider": "Liên kết với Thanh trượt thời gian…",
-    "bindTimeDimensionToTimeSlider": "Liên kết thứ nguyên thời gian với Time Slider",
-    "bindNoTimeDimension": "Lớp này không có chiều thời gian có thể đọc được.",
-    "unbindFromTimeSlider": "Hủy liên kết khỏi Thanh trượt thời gian",
-    "bindDialogDescription": "Biểu mẫu thuộc tính",
-    "bindScanning": "Tính năng quét các thuộc tính ngày và dấu thời gian…",
-    "bindNoProperty": "Không tìm thấy thuộc tính ngày hoặc dấu thời gian trong lớp này.",
-    "bindNoTimestamps": "Thuộc tính đã chọn không có dấu thời gian có thể đọc được. Chọn một tài sản khác.",
-    "bindTileNoFeatures": "Chưa có ô nào được tải cho lớp này. Thu phóng đến lớp, sau đó thử lại.",
-    "bindRange": "Phạm vi thời gian",
-    "pasteStyleFrom": "Dán kiểu từ \"{{name}}\"",
-    "pasteStyleEmpty": "Trước tiên hãy sao chép kiểu của lớp",
-    "pasteStyleMismatch": "Kiểu được sao chép dành cho một loại lớp khác",
-    "styleCopied": "Đã sao chép kiểu từ \"{{name}}\".",
-    "stylePasted": "Đã dán kiểu từ \"{{name}}\".",
-    "saveToLibrary": "Lưu vào dữ liệu của tôi",
-    "savedToLibrary": "Đã lưu “{{name}}” vào Dữ liệu của tôi.",
-    "saveToLibraryNoSource": "Lớp này không có nguồn có thể thêm lại nên không thể lưu vào Dữ liệu của tôi.",
-    "saveToLibraryTooLarge": "Các tính năng của lớp này là bản sao duy nhất của nó và quá lớn để lưu vào Dữ liệu của tôi.",
-    "saveToLibraryConfigTooLarge": "Cấu hình đã lưu của lớp này quá lớn đối với Dữ liệu của tôi.",
-    "identifyUnavailable": "Nhận dạng chỉ khả dụng cho các lớp vectơ, WMS và COG",
-    "exportGeoTiff": "GeoTIFF (COG)",
-    "extractSubset": "Trích xuất tập hợp con…",
-    "stylesMenu": "Kiểu dáng",
-    "exportGeoLibreStyle": "Xuất kiểu URL GeoLibre",
-    "exportMapboxStyle": "Xuất dưới dạng kiểu Mapbox GL",
-    "exportSldStyle": "Xuất dưới dạng OGC SLD",
-    "exportQmlStyle": "Chỉnh sửa tiện ích",
-    "exportStyleSuccess": "Phong cách xuất khẩu.",
-    "exportStyleDataNotReady": "Dữ liệu lớp chưa sẵn sàng. Hãy thử lại sau giây lát.",
     "moveUp": "Di chuyển lên",
     "moveDown": "Di chuyển xuống",
     "zoomToLayer": "Thu phóng đến lớp",
@@ -5046,6 +6489,7 @@
     "identifyDeactivate": "Dán kiểu",
     "identifyInspectPixels": "Kiểm tra giá trị pixel",
     "identifyStopInspectPixels": "Dừng kiểm tra giá trị pixel",
+    "identifyUnavailable": "Nhận dạng chỉ khả dụng cho các lớp vectơ, WMS và COG",
     "selectFeaturesMenu": "Chọn tính năng",
     "selectFeaturesSingle": "Chọn tính năng bằng cách nhấp",
     "selectFeaturesRectangle": "Chọn tính năng bằng hình chữ nhật",
@@ -5053,26 +6497,45 @@
     "selectFeaturesFreehand": "Chọn tính năng bằng nét vẽ tự do",
     "selectFeaturesRadius": "Chọn tính năng bằng bán kính",
     "selectFeaturesModifiers": "Shift để thêm, Alt để bớt, Shift+Alt để lấy phần giao. Nhấn Esc để hủy.",
-    "openAttributeTable": "Mở bảng thuộc tính",
-    "openRasterAttributeTable": "Mở bảng thuộc tính raster",
-    "export": "Xuất khẩu",
-    "refresh": "Làm cho khỏe lại",
-    "autoRefreshOn": "Tự động làm mới bật",
-    "lastSynced": "Đồng bộ hóa lần cuối {{time}}",
-    "syncErrorStatus": "Đồng bộ hóa không thành công: {{message}}",
-    "autoRefresh": "Tự động làm mới",
-    "refreshWfsGeojsonOnly": "Chỉ các URL WFS và GeoJSON",
-    "editSqlQuery": "Chỉnh sửa truy vấn trong SQL Workspace",
-    "searchPlacesClear": "Xóa tìm kiếm",
-    "searchPlacesGoToCoordinate": "Đi đến {{coordinate}}",
-    "searchPlacesGoToH3Cell": "Đi đến ô H3 {{cell}} (res {{resolution}})",
-    "background": "Lý lịch",
-    "backgroundCannotReorder": "Không thể sắp xếp lại nền",
-    "hideBackground": "Ẩn nền",
-    "showBackground": "Hiển thị nền",
-    "opacity": "Độ mờ",
-    "opacityExactHint": "Nhấp đúp để nhập giá trị chính xác",
-    "opacityFor": "Độ trong suốt của {{name}}",
+    "exportGeoTiff": "GeoTIFF (COG)",
+    "extractSubset": "Trích xuất tập hợp con…",
+    "stylesMenu": "Kiểu dáng",
+    "exportGeoLibreStyle": "Xuất kiểu URL GeoLibre",
+    "exportMapboxStyle": "Xuất dưới dạng kiểu Mapbox GL",
+    "exportSldStyle": "Xuất dưới dạng OGC SLD",
+    "exportQmlStyle": "Chỉnh sửa tiện ích",
+    "exportStyleSuccess": "Phong cách xuất khẩu.",
+    "exportStyleDataNotReady": "Dữ liệu lớp chưa sẵn sàng. Hãy thử lại sau giây lát.",
+    "exportStyleNeedsFeatures": "Dán kiểu từ \"__PH0__\"",
+    "exportStyleError": "Không thể xuất kiểu của lớp này.",
+    "importStyle": "Kiểu nhập (URL GeoLibre / Mapbox GL / SLD / QML)…",
+    "openStyleManager": "Kiểu đã lưu (Trình quản lý kiểu)…",
+    "importStyleSuccess": "Phong cách nhập khẩu.",
+    "importStyleInvalid": "Tệp đó không phải là JSON, SLD hoặc QML hợp lệ.",
+    "importStyleNoMatch": "Không có ký hiệu nào có thể được đọc từ phong cách đó.",
+    "importStyleError": "Không thể nhập kiểu này.",
+    "copyStyle": "Sao chép kiểu",
+    "pasteStyle": "Dán kiểu",
+    "pasteStyleFrom": "Dán kiểu từ \"{{name}}\"",
+    "pasteStyleEmpty": "Trước tiên hãy sao chép kiểu của lớp",
+    "pasteStyleMismatch": "Kiểu được sao chép dành cho một loại lớp khác",
+    "styleCopied": "Đã sao chép kiểu từ \"{{name}}\".",
+    "stylePasted": "Đã dán kiểu từ \"{{name}}\".",
+    "saveToLibrary": "Lưu vào dữ liệu của tôi",
+    "savedToLibrary": "Đã lưu “{{name}}” vào Dữ liệu của tôi.",
+    "saveToLibraryNoSource": "Lớp này không có nguồn có thể thêm lại nên không thể lưu vào Dữ liệu của tôi.",
+    "saveToLibraryTooLarge": "Các tính năng của lớp này là bản sao duy nhất của nó và quá lớn để lưu vào Dữ liệu của tôi.",
+    "saveToLibraryConfigTooLarge": "Cấu hình đã lưu của lớp này quá lớn đối với Dữ liệu của tôi.",
+    "bindToTimeSlider": "Liên kết với Thanh trượt thời gian…",
+    "bindTimeDimensionToTimeSlider": "Liên kết thứ nguyên thời gian với Time Slider",
+    "bindNoTimeDimension": "Lớp này không có chiều thời gian có thể đọc được.",
+    "unbindFromTimeSlider": "Hủy liên kết khỏi Thanh trượt thời gian",
+    "bindDialogDescription": "Biểu mẫu thuộc tính",
+    "bindScanning": "Tính năng quét các thuộc tính ngày và dấu thời gian…",
+    "bindNoProperty": "Không tìm thấy thuộc tính ngày hoặc dấu thời gian trong lớp này.",
+    "bindNoTimestamps": "Thuộc tính đã chọn không có dấu thời gian có thể đọc được. Chọn một tài sản khác.",
+    "bindTileNoFeatures": "Chưa có ô nào được tải cho lớp này. Thu phóng đến lớp, sau đó thử lại.",
+    "bindRange": "Phạm vi thời gian",
     "bindRangeEnd": "Kết thúc phạm vi thời gian",
     "bindRangeHint": "Lấy từ các ô được tải cho đến nay, vì vậy nó có thể hẹp hơn toàn bộ tập dữ liệu. Nhập một năm (1958) hoặc một ngày (1958-03-01).",
     "bindRangeInvalid": "Nhập cả hai giới hạn dưới dạng năm (1958) hoặc ngày (1958-03-01).",
@@ -5083,46 +6546,6 @@
     "bindWindowWider": "Trong vòng ba bước trước và sau",
     "bindWindowCumulative": "Mọi thứ tính đến bước hiện tại (tích lũy)",
     "bindCancel": "Hủy bỏ",
-    "hideAllLayers": "Ẩn tất cả các lớp",
-    "showAllLayers": "Hiển thị tất cả các lớp",
-    "dragNamedToReorder": "Kéo {{name}} để sắp xếp lại",
-    "hideLayer": "Ẩn lớp",
-    "showLayer": "Hiển thị lớp",
-    "editingGeometry": "Chỉnh sửa hình học",
-    "rename": "Đổi tên",
-    "materializeToEditable": "Vật chất hóa thành lớp có thể chỉnh sửa",
-    "finishEditingGeometry": "Hoàn tất chỉnh sửa hình học",
-    "editGeometry": "Chỉnh sửa hình học",
-    "saveEditsPostgisSuccess": "Đã lưu vào {{table}}: {{inserted}} đã chèn, {{updated}} đã cập nhật, {{deleted}} đã xóa.",
-    "saveEditsPostgisSkippedFields": "Các trường không có cột bảng phù hợp sẽ không được lưu: {{fields}}.",
-    "saveEditsPostgisRefreshWarning": "Các chỉnh sửa đã được lưu vào bảng nhưng việc làm mới lớp không thành công. Tải lại lớp trước khi lưu lại, nếu không các tính năng mới có thể được chèn hai lần.",
-    "saveEditsPostgisNoConnection": "Không có kết nối PostgreSQL nào có sẵn cho lớp này. Kết nối lại trong Thêm dữ liệu > PostgreSQL, sau đó thử lại.",
-    "typeBasemap": "bản đồ nền",
-    "searchPlaces": "Tìm kiếm địa điểm",
-    "searchPlacesPlaceholder": "Tìm kiếm địa điểm, vĩ độ, kinh độ hoặc ô H3...",
-    "searchPlacesSearching": "Đang tìm kiếm...",
-    "searchPlacesNoResults": "Không tìm thấy địa điểm nào",
-    "searchPlacesError": "Tìm kiếm không thành công. Hãy thử lại.",
-    "renameGroup": "Nhấp đúp để thay đổi bản đồ cơ sở",
-    "moveGroupUp": "Di chuyển nhóm lên",
-    "moveGroupDown": "Di chuyển nhóm xuống",
-    "ungroupKeepLayers": "Ungroup (giữ các lớp)",
-    "deleteGroupAndLayers": "Xóa nhóm và lớp",
-    "groupActions": "Hành động nhóm",
-    "addDataToGroup": "Thêm dữ liệu vào nhóm",
-    "groupOpacity": "Độ mờ",
-    "groupOpacityAria": "{{name}} độ mờ nhóm",
-    "doubleClickToRename": "Bấm đúp để đổi tên",
-    "opacityValueInputAria": "Độ trong suốt {{label}}",
-    "opacityValueEditAria": "Chỉnh sửa giá trị {{label}}",
-    "basemapOpacity": "Độ mờ của bản đồ cơ sở",
-    "newGroup": "Nhóm mới",
-    "basemaps": "Bản đồ nền",
-    "geoEditor": "GeoEditor",
-    "collapseGroup": "Tải lại lớp này từ nguồn của nó trong một khoảng thời gian cố định.",
-    "expandGroup": "Mở rộng nhóm",
-    "hideGroup": "Ẩn nhóm",
-    "showGroup": "Hiển thị nhóm",
     "bindConfirm": "Ràng buộc",
     "openStylePanel": "Mở bảng Kiểu",
     "openRasterStylePanel": "Chỉnh sửa kiểu raster…",
@@ -5133,16 +6556,46 @@
     "saveEditsNoFeatures": "Lớp này không có tính năng để lưu.",
     "saveEditsError": "Không thể lưu các chỉnh sửa vào tệp nguồn.",
     "saveEditsToPostgis": "Lưu các chỉnh sửa vào bảng PostGIS",
-    "reloadFromDisk": "Tải lại từ đĩa",
-    "watchFile": "Xem tập tin để biết những thay đổi",
-    "watchError": "Không thể xem tập tin này để biết những thay đổi.",
-    "autoRefreshDialogTitle": "{{name}} Tự động làm mới",
-    "layerFallback": "Lớp",
-    "autoRefreshDialogDescription": "Tải lại lớp này từ nguồn của nó trong một khoảng thời gian cố định.",
-    "interval": "Khoảng thời gian",
-    "custom": "Phong tục",
-    "customIntervalSeconds": "Khoảng thời gian tùy chỉnh (giây)",
-    "refreshFailurePolicy": "Nếu làm mới không thành công",
+    "saveEditsPostgisSuccess": "Đã lưu vào {{table}}: {{inserted}} đã chèn, {{updated}} đã cập nhật, {{deleted}} đã xóa.",
+    "saveEditsPostgisSkippedFields": "Các trường không có cột bảng phù hợp sẽ không được lưu: {{fields}}.",
+    "saveEditsPostgisRefreshWarning": "Các chỉnh sửa đã được lưu vào bảng nhưng việc làm mới lớp không thành công. Tải lại lớp trước khi lưu lại, nếu không các tính năng mới có thể được chèn hai lần.",
+    "saveEditsPostgisNoConnection": "Không có kết nối PostgreSQL nào có sẵn cho lớp này. Kết nối lại trong Thêm dữ liệu > PostgreSQL, sau đó thử lại.",
+    "typeBasemap": "bản đồ nền",
+    "searchPlaces": "Tìm kiếm địa điểm",
+    "searchPlacesPlaceholder": "Tìm kiếm địa điểm, vĩ độ, kinh độ hoặc ô H3...",
+    "searchPlacesSearching": "Đang tìm kiếm...",
+    "searchPlacesNoResults": "Không tìm thấy địa điểm nào",
+    "searchPlacesError": "Tìm kiếm không thành công. Hãy thử lại.",
+    "searchPlacesClear": "Xóa tìm kiếm",
+    "searchPlacesGoToCoordinate": "Đi đến {{coordinate}}",
+    "searchPlacesGoToH3Cell": "Đi đến ô H3 {{cell}} (res {{resolution}})",
+    "background": "Lý lịch",
+    "backgroundCannotReorder": "Không thể sắp xếp lại nền",
+    "hideBackground": "Ẩn nền",
+    "showBackground": "Hiển thị nền",
+    "opacity": "Độ mờ",
+    "opacityExactHint": "Nhấp đúp để nhập giá trị chính xác",
+    "opacityFor": "Độ trong suốt của {{name}}",
+    "opacityValueInputAria": "Độ trong suốt {{label}}",
+    "opacityValueEditAria": "Chỉnh sửa giá trị {{label}}",
+    "basemapOpacity": "Độ mờ của bản đồ cơ sở",
+    "newGroup": "Nhóm mới",
+    "basemaps": "Bản đồ nền",
+    "geoEditor": "GeoEditor",
+    "collapseGroup": "Tải lại lớp này từ nguồn của nó trong một khoảng thời gian cố định.",
+    "expandGroup": "Mở rộng nhóm",
+    "hideGroup": "Ẩn nhóm",
+    "showGroup": "Hiển thị nhóm",
+    "renameGroup": "Nhấp đúp để thay đổi bản đồ cơ sở",
+    "moveGroupUp": "Di chuyển nhóm lên",
+    "moveGroupDown": "Di chuyển nhóm xuống",
+    "ungroupKeepLayers": "Ungroup (giữ các lớp)",
+    "deleteGroupAndLayers": "Xóa nhóm và lớp",
+    "groupActions": "Hành động nhóm",
+    "addDataToGroup": "Thêm dữ liệu vào nhóm",
+    "groupOpacity": "Độ mờ",
+    "groupOpacityAria": "{{name}} độ mờ nhóm",
+    "doubleClickToRename": "Bấm đúp để đổi tên",
     "doubleClickToChangeBasemap": "Nhấp đúp để thay đổi bản đồ cơ sở",
     "renameNamed": "Đổi tên {{name}}",
     "newGroupFromLayer": "Nhóm mới từ lớp",
@@ -5153,16 +6606,36 @@
     "hiddenByGroup": "Ẩn vì nhóm của nó không hiển thị",
     "empty": "Không có lớp dữ liệu. Thêm dữ liệu từ thanh công cụ.",
     "emptyBeginner": "Chưa có lớp nào. Thêm bản đồ nền thông qua Plugin → Bản đồ nền hoặc dữ liệu của riêng bạn thông qua menu Thêm dữ liệu.",
-    "exported": "Đã xuất lớp.",
-    "exportLayerError": "Không thể xuất lớp này.",
-    "refreshIntervals": {
-      "off": "Tắt",
-      "s15": "15 giây",
-      "s30": "30 giây",
-      "m1": "1 phút",
-      "m5": "5 phút",
-      "m15": "15 phút"
-    },
+    "hideAllLayers": "Ẩn tất cả các lớp",
+    "showAllLayers": "Hiển thị tất cả các lớp",
+    "dragNamedToReorder": "Kéo {{name}} để sắp xếp lại",
+    "hideLayer": "Ẩn lớp",
+    "showLayer": "Hiển thị lớp",
+    "editingGeometry": "Chỉnh sửa hình học",
+    "rename": "Đổi tên",
+    "materializeToEditable": "Vật chất hóa thành lớp có thể chỉnh sửa",
+    "finishEditingGeometry": "Hoàn tất chỉnh sửa hình học",
+    "editGeometry": "Chỉnh sửa hình học",
+    "openAttributeTable": "Mở bảng thuộc tính",
+    "openRasterAttributeTable": "Mở bảng thuộc tính raster",
+    "export": "Xuất khẩu",
+    "refresh": "Làm cho khỏe lại",
+    "autoRefreshOn": "Tự động làm mới bật",
+    "lastSynced": "Đồng bộ hóa lần cuối {{time}}",
+    "syncErrorStatus": "Đồng bộ hóa không thành công: {{message}}",
+    "autoRefresh": "Tự động làm mới",
+    "refreshWfsGeojsonOnly": "Chỉ các URL WFS và GeoJSON",
+    "editSqlQuery": "Chỉnh sửa truy vấn trong SQL Workspace",
+    "reloadFromDisk": "Tải lại từ đĩa",
+    "watchFile": "Xem tập tin để biết những thay đổi",
+    "watchError": "Không thể xem tập tin này để biết những thay đổi.",
+    "autoRefreshDialogTitle": "{{name}} Tự động làm mới",
+    "layerFallback": "Lớp",
+    "autoRefreshDialogDescription": "Tải lại lớp này từ nguồn của nó trong một khoảng thời gian cố định.",
+    "interval": "Khoảng thời gian",
+    "custom": "Phong tục",
+    "customIntervalSeconds": "Khoảng thời gian tùy chỉnh (giây)",
+    "refreshFailurePolicy": "Nếu làm mới không thành công",
     "refreshFailureKeepLast": "Thao tác này sẽ xóa __PH0__ khỏi dự án và bản đồ.",
     "refreshFailureClear": "Xóa lớp",
     "apply": "Áp dụng",
@@ -5180,9 +6653,20 @@
     "refreshVectorControlError": "Không thể làm mới lớp này. Hãy thử mở lại bảng Add Vector Layer.",
     "refreshed": "Đã làm mới.",
     "refreshedCount": "Đã làm mới các tính năng {{count}}.",
+    "refreshedTruncated": "Đã làm mới {{shown}} trong số {{total}} đối tượng.",
     "refreshError": "Không thể làm mới lớp này.",
     "exportNeedsFeatures": "Xuất yêu cầu một lớp vectơ có các tính năng.",
-    "exportedWithWarnings": "Đã xuất lớp. {{warnings}}"
+    "exportedWithWarnings": "Đã xuất lớp. {{warnings}}",
+    "exported": "Đã xuất lớp.",
+    "exportLayerError": "Không thể xuất lớp này.",
+    "refreshIntervals": {
+      "off": "Tắt",
+      "s15": "15 giây",
+      "s30": "30 giây",
+      "m1": "1 phút",
+      "m5": "5 phút",
+      "m15": "15 phút"
+    }
   },
   "timeSliderSymbology": {
     "bandsHint": "Số băng tần dựa trên 1, được phân tách bằng dấu phẩy (ví dụ: 4,3,2). Để trống cho mặc định của trình kết xuất.",

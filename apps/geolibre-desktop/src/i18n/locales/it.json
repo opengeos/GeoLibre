@@ -327,6 +327,10 @@
         "label": "Aggiungi livello PostgreSQL",
         "description": "Avvia Martin in locale, individua le sorgenti PostGIS e aggiungi una sorgente come tile vettoriali."
       },
+      "iceberg": {
+        "label": "Aggiungi livello Apache Iceberg",
+        "description": "Leggi una tabella Iceberg (v3 o successiva) e aggiungi un sottoinsieme dei suoi elementi."
+      },
       "deckglViz": {
         "label": "Aggiungi livello Deck.gl",
         "description": "Scegli un tipo di livello deck.gl, quindi carica i dati di esempio oppure carica un file o URL CSV/JSON/GeoJSON."
@@ -706,6 +710,41 @@
       "tableReadOnly": "{{table}} (sola lettura: nessuna chiave primaria)",
       "errorSelectTable": "Seleziona una tabella da caricare.",
       "errorRuntimeMissing": "Il server di elaborazione non ha installato il runtime PostGIS (psycopg). Installa l'estensione opzionale 'postgis' di geolibre-server per caricare livelli modificabili."
+    },
+    "iceberg": {
+      "defaultName": "Livello Iceberg",
+      "notice": "Le tabelle Iceberg vengono lette una sola volta, su richiesta. Il livello è un'istantanea limitata al numero massimo di righe indicato sotto e non viene mai riletto automaticamente: usa Aggiorna nel menu del livello per leggerla di nuovo.",
+      "mode": "Origine Iceberg",
+      "modeTable": "Posizione della tabella",
+      "modeCatalog": "Catalogo REST",
+      "location": "Posizione dei metadati della tabella",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "Warehouse",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "Endpoint del catalogo",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "Connetti",
+      "table": "Tabella Iceberg",
+      "sql": "SQL (facoltativo)",
+      "sqlHint": "Modifica per filtrare o rimodellare ciò che viene visualizzato. L'istruzione deve restituire una colonna GEOMETRY; lasciala come generata per leggere l'intera tabella.",
+      "selectTable": "Seleziona una tabella",
+      "geometryColumn": "Colonna della geometria",
+      "rowLimit": "Limite di righe",
+      "rowLimitHint": "Il livello contiene le prime righe della tabella, fino a questo limite. Il limite non può superare {{max}} righe.",
+      "rowLimitTruncates": "La tabella contiene {{total}} righe; il livello conterrà le prime {{limit}}.",
+      "statusConnecting": "Lettura dei metadati Iceberg...",
+      "statusInspecting": "Ispezione della tabella...",
+      "statusInspected": "{{rows}} righe. Geometria: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} righe, ma non è stata trovata alcuna colonna GEOMETRY. La geometria Iceberg deve usare il tipo geometry della v3.",
+      "statusTablesFound_one": "Trovata {{count}} tabella.",
+      "statusTablesFound_other": "Trovate {{count}} tabelle. Selezionane una per continuare.",
+      "statusNoTables": "Il catalogo non espone alcuna tabella.",
+      "errorLocation": "Inserisci la posizione dei metadati della tabella Iceberg.",
+      "errorWarehouse": "Inserisci il warehouse Iceberg da collegare.",
+      "errorEndpoint": "Inserisci l'endpoint del catalogo REST Iceberg.",
+      "errorConnect": "Impossibile leggere l'origine Iceberg.",
+      "errorInspect": "Impossibile ispezionare la tabella Iceberg.",
+      "errorConnectFirst": "Connettiti e seleziona prima una tabella Iceberg."
     },
     "video": {
       "defaultName": "Livello video",
@@ -2282,7 +2321,8 @@
       "video": "Livello video",
       "deckglViz": "Livello Deck.gl",
       "gltfModel": "Modello 3D (glTF)",
-      "postgres": "Livello PostgreSQL"
+      "postgres": "Livello PostgreSQL",
+      "iceberg": "Livello Apache Iceberg"
     },
     "conversion": {
       "vectorToVector": "Da vettoriale a vettoriale",
@@ -3441,11 +3481,19 @@
     "addUnsupported": "Solo le risorse GeoTIFF/COG, GeoJSON, GeoParquet e PMTiles possono essere aggiunte alla mappa",
     "addFailed": "Impossibile aggiungere la risorsa",
     "addNoSourceLayers": "Questo archivio non elenca livelli da disegnare",
+    "addNoTarget": "Questo asset non elenca nulla da disegnare",
+    "addIcechunk": "Gli archivi Icechunk non possono ancora essere letti",
+    "zarrProblemGroup": "Questo asset indica un gruppo di array, non un singolo array disegnabile",
+    "zarrProblemUnauthorized": "Questo archivio Zarr richiede credenziali che GeoLibre non può ancora fornire",
+    "zarrProblemUnsupportedUrl": "L'indirizzo di questo archivio Zarr non può essere letto una chiave alla volta",
+    "zarrProblemUnavailable": "Impossibile aprire questo archivio Zarr",
+    "chooseTarget": "Scegli cosa aggiungere",
     "cogUnsupported": "Questo host GeoLibre non può visualizzare risorse GeoTIFF remote",
     "formatCog": "COG",
     "formatGeoJson": "GeoJSON",
     "formatPmtiles": "PMTiles",
     "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
     "formatUnknown": "Formato sconosciuto",
     "notAddable": "non aggiungibile"
   },
@@ -3676,6 +3724,10 @@
   "basemaps": {
     "confirmStyleReplace_one": "Passando a \"{{name}}\" sostituirai l'intero stile della mappa e rimuoverai la mappa di base sovrapposta che hai aggiunto. Continuare?",
     "confirmStyleReplace_other": "Passando a \"{{name}}\" sostituirai l'intero stile della mappa e rimuoverai le {{count}} mappe di base sovrapposte che hai aggiunto. Continuare?"
+  },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "Proprietà dell'elemento",
+    "massingHeight": "Altezza (m)"
   },
   "annotations": {
     "toolbar": "Strumenti di annotazione",
@@ -4247,6 +4299,1438 @@
       "run": "Esegui",
       "outputPlaceholder": "L'output apparirà qui.",
       "resolutionRange": "Risoluzione (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "Buffer",
+          "description": "Crea un poligono di buffer attorno a ogni elemento a una distanza fissa",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "distance": {
+              "label": "Distanza"
+            },
+            "units": {
+              "label": "Unità",
+              "options": {
+                "kilometers": "Chilometri",
+                "meters": "Metri",
+                "miles": "Miglia"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "Centroidi",
+          "description": "Calcola il punto centroide di ogni elemento",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "Involucro convesso",
+          "description": "Calcola l'involucro convesso che racchiude tutti gli elementi",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "Dissolvenza",
+          "description": "Unisce gli elementi poligonali in un'unica geometria, facoltativamente raggruppati per campo",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "field": {
+              "label": "Campo di dissolvenza (facoltativo)",
+              "description": "Nome della proprietà in base alla quale raggruppare gli elementi prima della dissolvenza"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "Rettangolo di delimitazione",
+          "description": "Calcola il rettangolo di delimitazione di tutti gli elementi",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            }
+          }
+        },
+        "simplify": {
+          "name": "Semplifica",
+          "description": "Riduce il numero di vertici con l'algoritmo di Douglas-Peucker",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "tolerance": {
+              "label": "Tolleranza (gradi)"
+            },
+            "highQuality": {
+              "label": "Alta qualità"
+            }
+          }
+        },
+        "clip": {
+          "name": "Ritaglia",
+          "description": "Ritaglia il livello di input sull'area coperta da un livello di sovrapposizione (conserva gli attributi di input)",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "overlay": {
+              "label": "Livello di sovrapposizione (ritaglio)"
+            }
+          }
+        },
+        "intersection": {
+          "name": "Intersezione",
+          "description": "Mantiene solo le aree in cui i due livelli poligonali si sovrappongono",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "overlay": {
+              "label": "Livello di sovrapposizione"
+            }
+          }
+        },
+        "difference": {
+          "name": "Differenza",
+          "description": "Rimuove l'area del livello di sovrapposizione dal livello di input",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "overlay": {
+              "label": "Livello di sovrapposizione"
+            }
+          }
+        },
+        "union": {
+          "name": "Unione",
+          "description": "Unisce due livelli poligonali in un'unica geometria combinata",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "overlay": {
+              "label": "Livello di sovrapposizione"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "Join spaziale",
+          "description": "Associa a ogni elemento di input gli attributi di un livello di join in base a una relazione spaziale",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "overlay": {
+              "label": "Livello di join"
+            },
+            "predicate": {
+              "label": "Relazione spaziale",
+              "options": {
+                "intersects": "Interseca",
+                "within": "È contenuto in",
+                "contains": "Contiene"
+              }
+            },
+            "how": {
+              "label": "Tipo di join",
+              "options": {
+                "inner": "Interno (mantiene solo gli elementi corrispondenti)",
+                "left": "Sinistro (mantiene tutti gli elementi di input)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "Join per attributi",
+          "description": "Associa a ogni elemento di input gli attributi di un livello di join (una tabella) dove un campo chiave corrisponde, senza usare la geometria. Uno a uno: vince la prima riga di join corrispondente.",
+          "params": {
+            "layer": {
+              "label": "Livello di destinazione"
+            },
+            "overlay": {
+              "label": "Livello di join (tabella)",
+              "description": "Il livello da cui vengono prelevati gli attributi. La sua geometria viene ignorata."
+            },
+            "target_field": {
+              "label": "Campo chiave di destinazione"
+            },
+            "join_field": {
+              "label": "Campo chiave di join"
+            },
+            "how": {
+              "label": "Tipo di join",
+              "options": {
+                "left": "Sinistro (mantiene tutti gli elementi di destinazione)",
+                "inner": "Interno (mantiene solo gli elementi corrispondenti)"
+              }
+            },
+            "fields": {
+              "label": "Campi da prelevare (facoltativo)",
+              "description": "Campi di join da copiare, separati da virgole. Lascia vuoto per prelevare tutti i campi di join tranne la chiave."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "Seleziona per valore",
+          "description": "Estrae in un nuovo livello gli elementi il cui valore di attributo soddisfa una condizione",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "field": {
+              "label": "Campo"
+            },
+            "operator": {
+              "label": "Operatore",
+              "options": {
+                "eq": "= (uguale)",
+                "neq": "≠ (diverso)",
+                "gt": "> (maggiore di)",
+                "gte": "≥ (maggiore o uguale)",
+                "lt": "< (minore di)",
+                "lte": "≤ (minore o uguale)",
+                "contains": "contiene (testo)",
+                "starts-with": "inizia con (testo)",
+                "is-null": "è vuoto",
+                "is-not-null": "non è vuoto"
+              }
+            },
+            "value": {
+              "label": "Valore",
+              "description": "Confrontato come numero quando entrambi i lati sono numerici."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "Seleziona per posizione",
+          "description": "Estrae in un nuovo livello gli elementi in base alla loro relazione spaziale con un secondo livello",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "overlay": {
+              "label": "Livello di filtro"
+            },
+            "predicate": {
+              "label": "Relazione spaziale",
+              "options": {
+                "intersects": "Interseca",
+                "within": "È contenuto in",
+                "contains": "Contiene",
+                "disjoint": "Disgiunto (nessuna intersezione)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "Estrazione casuale",
+          "description": "Estrae in un nuovo livello un sottoinsieme casuale di elementi, dimensionato in base a un numero di elementi o a una percentuale dell'input.",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "method": {
+              "label": "Metodo",
+              "options": {
+                "count": "Numero di elementi",
+                "percentage": "Percentuale di elementi"
+              }
+            },
+            "count": {
+              "label": "Numero di elementi",
+              "description": "Limitato al numero di elementi di input se superiore."
+            },
+            "percentage": {
+              "label": "Percentuale di elementi"
+            }
+          }
+        },
+        "reproject": {
+          "name": "Riproietta",
+          "description": "Reinterpreta le coordinate di un livello come CRS di origine e le trasforma in WGS84 affinché vengano visualizzate nella posizione corretta. Richiede il motore Sidecar o Python.",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "source_crs": {
+              "label": "CRS di origine",
+              "description": "Il CRS in cui si trovano realmente le coordinate del livello (es. EPSG:3857). Il risultato viene trasformato in WGS84 (EPSG:4326)."
+            }
+          }
+        },
+        "explode": {
+          "name": "Esplodi",
+          "description": "Suddivide le geometrie multiparte in elementi a parte singola (un elemento per parte), conservando gli attributi di ogni elemento originario",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "Aggrega per attributo",
+          "description": "Dissolve gli elementi che condividono un valore di attributo in una geometria per gruppo, con una statistica di riepilogo",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "group_field": {
+              "label": "Campo di raggruppamento"
+            },
+            "statistic": {
+              "label": "Statistica",
+              "options": {
+                "count": "Conteggio",
+                "sum": "Somma",
+                "mean": "Media",
+                "min": "Min",
+                "max": "Max",
+                "median": "Mediana"
+              }
+            },
+            "stat_field": {
+              "label": "Campo della statistica",
+              "description": "Campo numerico riassunto dalla statistica indicata sopra."
+            }
+          }
+        },
+        "smooth": {
+          "name": "Leviga",
+          "description": "Arrotonda gli angoli degli elementi lineari e poligonali con l'algoritmo di Chaikin (aggiunge vertici), a differenza della riduzione dei vertici di Semplifica. Le quote Z sono conservate; i punti passano invariati.",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "iterations": {
+              "label": "Iterazioni",
+              "description": "Più iterazioni danno un risultato più levigato (1-10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "Griglia regolare",
+          "description": "Genera una griglia rettangolare regolare (fishnet) di celle su un'estensione. Origine: la vista corrente della mappa, l'estensione di un livello o un rettangolo di delimitazione manuale.",
+          "params": {
+            "source": {
+              "label": "Origine dell'estensione",
+              "options": {
+                "viewport": "Vista della mappa",
+                "layer": "Estensione del livello",
+                "bbox": "Rettangolo di delimitazione manuale"
+              }
+            },
+            "layer": {
+              "label": "Livello di input"
+            },
+            "west": {
+              "label": "Ovest (lon min)"
+            },
+            "south": {
+              "label": "Sud (lat min)"
+            },
+            "east": {
+              "label": "Est (lon max)"
+            },
+            "north": {
+              "label": "Nord (lat max)"
+            },
+            "cell_width": {
+              "label": "Larghezza della cella (gradi)"
+            },
+            "cell_height": {
+              "label": "Altezza della cella (gradi)",
+              "description": "Lascia vuoto per usare la larghezza della cella."
+            },
+            "cell_type": {
+              "label": "Tipo di cella",
+              "options": {
+                "polygon": "Rettangoli",
+                "point": "Punti (centri delle celle)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "Costruisce un diagramma di Voronoi (un poligono per punto, ritagliato sull'estensione dei punti) o una triangolazione di Delaunay da un livello di punti.",
+          "params": {
+            "layer": {
+              "label": "Livello di punti di input"
+            },
+            "type": {
+              "label": "Diagramma",
+              "options": {
+                "voronoi": "Poligoni di Voronoi",
+                "delaunay": "Triangoli di Delaunay"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "Copertura dei siti cellulari",
+          "description": "Costruisce poligoni a settore (spicchio) delle antenne a partire da siti puntuali usando azimut, raggio e ampiezza del fascio (letti da campi attributo o valori fissi). L'ampiezza del fascio è limitata a 360° (cerchio completo); l'ampiezza registrata riflette il valore limitato. Utile per la copertura dei ripetitori cellulari, come QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "Livello di punti di input"
+            },
+            "azimuthField": {
+              "label": "Campo azimut (°)",
+              "description": "Direzione verso cui è rivolto il settore, in gradi in senso orario da nord. Se vuoto o non numerico viene usato l'azimut fisso."
+            },
+            "azimuth": {
+              "label": "Azimut (fisso, °)"
+            },
+            "radiusField": {
+              "label": "Campo raggio",
+              "description": "Raggio di copertura. Se vuoto o non numerico viene usato il raggio fisso."
+            },
+            "radius": {
+              "label": "Raggio (fisso)"
+            },
+            "beamwidthField": {
+              "label": "Campo ampiezza del fascio (°)",
+              "description": "Ampiezza angolare del settore, limitata a 360° (cerchio completo). Se vuoto o non numerico viene usata l'ampiezza del fascio fissa."
+            },
+            "beamwidth": {
+              "label": "Ampiezza del fascio (fissa, °)"
+            },
+            "units": {
+              "label": "Unità del raggio",
+              "options": {
+                "kilometers": "Chilometri",
+                "meters": "Metri",
+                "miles": "Miglia"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "Generatore DGGS",
+          "description": "Riempie un'area con celle DGGS (H3, S2, A5, DGGRID, DGGAL). Origine: la geometria di un livello, l'estensione di un livello, la vista corrente della mappa o un rettangolo di delimitazione manuale.",
+          "params": {
+            "dggsType": {
+              "label": "Tipo di DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "Tipo DGGRID",
+              "description": "Configurazione della griglia passata a duck_dggs come dggs_params (ISEA/FULLER × apertura × topologia).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "Tipo DGGAL",
+              "description": "DGGRS passato a dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "Origine dell'area",
+              "options": {
+                "polyfill": "Geometria del livello (polyfill)",
+                "extent": "Estensione del livello (bbox)",
+                "viewport": "Vista della mappa",
+                "bbox": "Rettangolo di delimitazione manuale"
+              }
+            },
+            "layer": {
+              "label": "Livello di input"
+            },
+            "west": {
+              "label": "Ovest (lon min)"
+            },
+            "south": {
+              "label": "Sud (lat min)"
+            },
+            "east": {
+              "label": "Est (lon max)"
+            },
+            "north": {
+              "label": "Nord (lat max)"
+            },
+            "resolution": {
+              "label": "Risoluzione",
+              "description": "L'intervallo dipende dal tipo di DGGS. Lascia vuoto per sceglierla automaticamente in base all'area."
+            },
+            "compactCells": {
+              "label": "Compatta le celle",
+              "description": "Unisce insiemi completi di celle sorelle in celle madri più grossolane (meno elementi, risoluzioni miste)."
+            },
+            "fixAntimeridian": {
+              "label": "Correggi l'antimeridiano",
+              "description": "Srotola gli anelli delle celle che attraversano la longitudine ±180°."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "Binning DGGS",
+          "description": "Aggrega un livello di punti in celle DGGS (conteggio oppure somma/media/min/max di un campo numerico).",
+          "params": {
+            "dggsType": {
+              "label": "Tipo di DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "Tipo DGGRID",
+              "description": "Configurazione della griglia passata a duck_dggs come dggs_params (ISEA/FULLER × apertura × topologia).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "Tipo DGGAL",
+              "description": "DGGRS passato a dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "Livello di punti di input"
+            },
+            "aggOp": {
+              "label": "Aggregazione",
+              "options": {
+                "count": "Conteggio",
+                "sum": "Somma",
+                "mean": "Media",
+                "min": "Min",
+                "max": "Max"
+              }
+            },
+            "field": {
+              "label": "Campo",
+              "description": "Campo numerico da aggregare."
+            },
+            "resolution": {
+              "label": "Risoluzione",
+              "description": "L'intervallo dipende dal tipo di DGGS. Lascia vuoto per sceglierla automaticamente in base all'area."
+            },
+            "fixAntimeridian": {
+              "label": "Correggi l'antimeridiano",
+              "description": "Srotola gli anelli delle celle che attraversano la longitudine ±180°."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "Compattazione DGGS",
+          "description": "Compatta le celle poligonali DGGS oppure le espande a una risoluzione uniforme (H3, S2, A5, DGGAL). L'input deve essere un livello di celle con una proprietà ID.",
+          "params": {
+            "dggsType": {
+              "label": "Tipo di DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "Tipo DGGAL",
+              "description": "DGGRS passato a dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "Modalità",
+              "options": {
+                "compact": "Compatta",
+                "expand": "Espandi"
+              }
+            },
+            "layer": {
+              "label": "Livello DGGS di input",
+              "description": "Livello di celle poligonali prodotto dal Generatore DGGS / Binning DGGS (o equivalente)."
+            },
+            "cellField": {
+              "label": "Campo ID della cella",
+              "description": "Se vuoto, il valore predefinito è h3, a5, s2 o dggal a seconda del tipo selezionato."
+            },
+            "resolution": {
+              "label": "Risoluzione di destinazione",
+              "description": "Risoluzione a cui espandere. Deve essere almeno fine quanto le celle di input."
+            },
+            "fixAntimeridian": {
+              "label": "Correggi l'antimeridiano",
+              "description": "Srotola gli anelli delle celle che attraversano la longitudine ±180°."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "Velocità della traiettoria",
+          "description": "Ordina i punti per tempo (per ogni bersaglio) e collega le rilevazioni consecutive in segmenti con distanza, durata e velocità. Come QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Livello di punti di input"
+            },
+            "timeField": {
+              "label": "Campo temporale",
+              "description": "Timestamp di ogni rilevazione: una stringa data/ora ISO o un epoch (secondi o millisecondi)."
+            },
+            "idField": {
+              "label": "Campo ID del bersaglio",
+              "description": "Suddivide i punti in traiettorie separate. Lascia vuoto per trattare tutti i punti come un unico bersaglio."
+            },
+            "speedUnits": {
+              "label": "Unità di velocità",
+              "options": {
+                "km/h": "km/h",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "Rileva soste",
+          "description": "Trova i luoghi in cui un bersaglio sosta: sequenze di rilevazioni consecutive che restano entro una certa distanza (assorbendo la dispersione GPS) per almeno una durata minima. Produce un punto per ogni sosta. Come QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Livello di punti di input"
+            },
+            "timeField": {
+              "label": "Campo temporale",
+              "description": "Timestamp di ogni rilevazione: una stringa data/ora ISO o un epoch (secondi o millisecondi)."
+            },
+            "idField": {
+              "label": "Campo ID del bersaglio",
+              "description": "Rileva le soste per ogni bersaglio. Lascia vuoto per trattare tutti i punti come un unico bersaglio."
+            },
+            "maxDistance": {
+              "label": "Distanza massima",
+              "description": "Ogni rilevazione di una sosta deve trovarsi entro questa distanza dalla prima rilevazione della sosta (quindi una sosta può estendersi fino al doppio di questo valore). Impostala sul raggio di dispersione del tuo GPS."
+            },
+            "distanceUnits": {
+              "label": "Unità di distanza",
+              "options": {
+                "meters": "Metri",
+                "kilometers": "Chilometri",
+                "miles": "Miglia"
+              }
+            },
+            "minDuration": {
+              "label": "Durata minima (s)",
+              "description": "Una permanenza più breve di questo valore non viene segnalata come sosta."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "Prossimità spazio-temporale",
+          "description": "Trova coppie di punti vicini sia nello spazio sia nel tempo, ad esempio due bersagli che si incontrano. Produce una linea che collega ogni coppia qualificata, con la distanza e l'intervallo di tempo.",
+          "params": {
+            "layer": {
+              "label": "Livello di punti di input"
+            },
+            "timeField": {
+              "label": "Campo temporale",
+              "description": "Timestamp di ogni punto: una stringa data/ora ISO o un epoch (secondi o millisecondi)."
+            },
+            "idField": {
+              "label": "Campo ID del bersaglio",
+              "description": "Se impostato, vengono accoppiati solo punti con valori ID DIVERSI (incontri tra bersagli distinti). Lascia vuoto per considerare tutte le coppie."
+            },
+            "maxDistance": {
+              "label": "Distanza massima"
+            },
+            "distanceUnits": {
+              "label": "Unità di distanza",
+              "options": {
+                "meters": "Metri",
+                "kilometers": "Chilometri",
+                "miles": "Miglia"
+              }
+            },
+            "maxTime": {
+              "label": "Differenza di tempo massima"
+            },
+            "timeUnits": {
+              "label": "Unità di tempo",
+              "options": {
+                "seconds": "Secondi",
+                "minutes": "Minuti",
+                "hours": "Ore"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "Verifica validità",
+          "description": "Trova gli elementi con geometria non valida (regole GEOS: anelli autointersecanti, buchi esterni all'anello esterno, ...) e li contrassegna sulla mappa",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "Correggi geometrie",
+          "description": "Ripara le geometrie non valide con ST_MakeValid (GEOS); gli elementi validi passano invariati",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "Verifica regole topologiche",
+          "description": "Convalida il livello rispetto alle regole topologiche (sovrapposizioni, vuoti, autointersezioni, estremità libere) e contrassegna ogni violazione sulla mappa",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "ruleSelfIntersect": {
+              "label": "Le linee non devono autointersecarsi"
+            },
+            "ruleOverlap": {
+              "label": "I poligoni non devono sovrapporsi"
+            },
+            "ruleGaps": {
+              "label": "I poligoni non devono avere vuoti"
+            },
+            "ruleDangles": {
+              "label": "Le linee non devono avere estremità libere"
+            },
+            "rulePointCovered": {
+              "label": "I punti devono essere coperti da una linea"
+            },
+            "ruleEndpointSnap": {
+              "label": "Gli estremi delle linee devono connettersi entro la tolleranza"
+            },
+            "snapTolerance": {
+              "label": "Tolleranza di aggancio",
+              "description": "Per la regola sugli estremi: la distanza massima (in unità di coordinate del livello — gradi per WGS84) tra due estremi di linea perché siano considerati connessi."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "Correggi topologia",
+          "description": "Ripara automaticamente le violazioni topologiche: aggancia gli estremi di linea quasi connessi, corregge le estremità libere e proietta i punti sulle linee. Gli estremi liberi senza nulla nelle vicinanze restano invariati.",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "ruleEndpointSnap": {
+              "label": "Aggancia gli estremi di linea quasi connessi"
+            },
+            "ruleDangles": {
+              "label": "Ripara le estremità libere (aggancio o proiezione sulla geometria vicina)"
+            },
+            "rulePointCovered": {
+              "label": "Proietta i punti sulla linea più vicina"
+            },
+            "snapTolerance": {
+              "label": "Tolleranza di aggancio",
+              "description": "Di quanto (in unità di coordinate del livello — gradi per WGS84) la geometria può spostarsi per connettersi."
+            },
+            "dryRun": {
+              "label": "Solo anteprima (simulazione)",
+              "description": "Riporta le correzioni che verrebbero applicate senza creare un livello riparato."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "Isocrona / area di servizio",
+          "description": "Poligoni di raggiungibilità per tempo o distanza di viaggio da ogni punto di un livello",
+          "params": {
+            "layer": {
+              "label": "Punti di origine"
+            },
+            "mode": {
+              "label": "Modalità di viaggio",
+              "options": {
+                "auto": "In auto",
+                "pedestrian": "A piedi",
+                "bicycle": "In bicicletta"
+              }
+            },
+            "metric": {
+              "label": "Metrica",
+              "options": {
+                "time": "Tempo di viaggio (minuti)",
+                "distance": "Distanza (km)"
+              }
+            },
+            "contours": {
+              "label": "Isolinee",
+              "description": "Valori separati da virgole (minuti per il tempo, km per la distanza)"
+            },
+            "endpoint": {
+              "label": "Server di routing (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "Matrice dei costi OD",
+          "description": "Tempo e distanza di viaggio tra ogni punto di origine e di destinazione, come linee di collegamento",
+          "params": {
+            "origins": {
+              "label": "Punti di origine"
+            },
+            "destinations": {
+              "label": "Punti di destinazione"
+            },
+            "mode": {
+              "label": "Modalità di viaggio",
+              "options": {
+                "auto": "In auto",
+                "pedestrian": "A piedi",
+                "bicycle": "In bicicletta"
+              }
+            },
+            "endpoint": {
+              "label": "Server di routing (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "Percorso sequenziale (indicazioni)",
+          "description": "Collega i punti in sequenza lungo la rete stradale in un percorso. Ogni punto viene agganciato alla strada più vicina, così anche le coordinate fuori strada (siti cellulari, sensori) vengono instradate. L'ordine segue il campo scelto (es. un timestamp) o l'ordine degli elementi nel livello.",
+          "params": {
+            "layer": {
+              "label": "Punti di input"
+            },
+            "order_field": {
+              "label": "Ordina per campo (facoltativo)",
+              "description": "Ordina i punti in base a questo campo (numeri o timestamp) prima del calcolo del percorso. Lascia vuoto per usare l'ordine degli elementi nel livello."
+            },
+            "mode": {
+              "label": "Modalità di viaggio",
+              "options": {
+                "auto": "In auto",
+                "pedestrian": "A piedi",
+                "bicycle": "In bicicletta"
+              }
+            },
+            "endpoint": {
+              "label": "Server di routing (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "I di Moran globale",
+          "description": "Misura l'autocorrelazione spaziale complessiva di un attributo numerico sull'intero livello.",
+          "params": {
+            "layer": {
+              "label": "Livello"
+            },
+            "field": {
+              "label": "Campo valore"
+            },
+            "weightsType": {
+              "label": "Pesi spaziali",
+              "description": "Come vengono definiti i vicini di ogni elemento.",
+              "options": {
+                "knn": "K vicini più prossimi",
+                "distance": "Banda di distanza"
+              }
+            },
+            "k": {
+              "label": "Vicini (k)"
+            },
+            "threshold": {
+              "label": "Banda di distanza (km)"
+            },
+            "permutations": {
+              "label": "Permutazioni",
+              "description": "Permutazioni casuali per lo pseudo p-value."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "I di Moran locale (LISA)",
+          "description": "Cluster e valori anomali per ogni elemento (Alto-Alto, Basso-Basso, Alto-Basso, Basso-Alto) con pseudo-significatività.",
+          "params": {
+            "layer": {
+              "label": "Livello"
+            },
+            "field": {
+              "label": "Campo valore"
+            },
+            "weightsType": {
+              "label": "Pesi spaziali",
+              "description": "Come vengono definiti i vicini di ogni elemento.",
+              "options": {
+                "knn": "K vicini più prossimi",
+                "distance": "Banda di distanza"
+              }
+            },
+            "k": {
+              "label": "Vicini (k)"
+            },
+            "threshold": {
+              "label": "Banda di distanza (km)"
+            },
+            "permutations": {
+              "label": "Permutazioni",
+              "description": "Permutazioni casuali per lo pseudo p-value."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Hot spot Getis-Ord Gi*",
+          "description": "Identifica hot spot e cold spot statisticamente significativi di un attributo numerico.",
+          "params": {
+            "layer": {
+              "label": "Livello"
+            },
+            "field": {
+              "label": "Campo valore"
+            },
+            "weightsType": {
+              "label": "Pesi spaziali",
+              "description": "Come vengono definiti i vicini di ogni elemento.",
+              "options": {
+                "knn": "K vicini più prossimi",
+                "distance": "Banda di distanza"
+              }
+            },
+            "k": {
+              "label": "Vicini (k)"
+            },
+            "threshold": {
+              "label": "Banda di distanza (km)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "Vicino più prossimo medio",
+          "description": "Verifica se i punti sono raggruppati, dispersi o distribuiti casualmente (rapporto ANN + punteggio z).",
+          "params": {
+            "layer": {
+              "label": "Livello di punti"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "Densità kernel (mappa di calore)",
+          "description": "Stima una superficie di densità dai punti come griglia di celle, usando un kernel quartico.",
+          "params": {
+            "layer": {
+              "label": "Livello di punti"
+            },
+            "weightField": {
+              "label": "Campo peso (facoltativo)",
+              "description": "Campo numerico che pesa ogni punto; vuoto = peso uguale."
+            },
+            "bandwidth": {
+              "label": "Raggio di ricerca / larghezza di banda (km)"
+            },
+            "cellSize": {
+              "label": "Dimensione della cella (km)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "Hot spot emergenti (cubo spazio-temporale)",
+          "description": "Costruisce un cubo spazio-temporale da punti con timestamp (una griglia fishnet × intervalli di tempo uguali) e classifica ogni cella come hot/cold spot nuovo, in intensificazione, persistente, in diminuzione, sporadico, oscillante o storico. Esegue Getis-Ord Gi* per ogni intervallo temporale, quindi un test di tendenza di Mann-Kendall sulla serie Gi* di ogni cella. Lato client, come l'analisi Emerging Hot Spot di ArcGIS.",
+          "params": {
+            "layer": {
+              "label": "Livello di punti"
+            },
+            "timeField": {
+              "label": "Campo temporale",
+              "description": "Timestamp di ogni punto: una stringa data/ora ISO o un epoch (secondi o millisecondi)."
+            },
+            "cellSize": {
+              "label": "Dimensione della cella (km)",
+              "description": "Lunghezza del lato di ogni cella spaziale quadrata, in chilometri."
+            },
+            "timeStep": {
+              "label": "Intervallo del passo temporale"
+            },
+            "timeStepUnit": {
+              "label": "Unità del passo temporale",
+              "options": {
+                "hours": "Ore",
+                "days": "Giorni",
+                "weeks": "Settimane"
+              }
+            },
+            "weightField": {
+              "label": "Campo peso (facoltativo)",
+              "description": "Campo numerico sommato per ogni cella spazio-temporale invece di contare i punti; vuoto = conteggio dei punti."
+            },
+            "confidence": {
+              "label": "Livello di confidenza",
+              "description": "Soglia di significatività perché una cella conti come hot/cold spot e per la tendenza.",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "Ombreggiatura",
+          "description": "Calcola un raster di rilievo ombreggiato (hillshade) da un modello di elevazione.",
+          "params": {
+            "azimuth": {
+              "label": "Azimut (gradi)"
+            },
+            "altitude": {
+              "label": "Altitudine (gradi)"
+            },
+            "z_factor": {
+              "label": "Fattore Z"
+            }
+          }
+        },
+        "slope": {
+          "name": "Pendenza",
+          "description": "Calcola la pendenza (inclinazione) da un modello di elevazione.",
+          "params": {
+            "units": {
+              "label": "Unità",
+              "options": {
+                "degrees": "Gradi",
+                "percent": "Percentuale"
+              }
+            },
+            "z_factor": {
+              "label": "Fattore Z"
+            }
+          }
+        },
+        "aspect": {
+          "name": "Esposizione",
+          "description": "Calcola l'esposizione (direzione della bussola della massima pendenza) da un modello di elevazione."
+        },
+        "reproject": {
+          "name": "Riproietta",
+          "description": "Riproietta un raster in un sistema di riferimento delle coordinate diverso.",
+          "params": {
+            "dst_crs": {
+              "label": "CRS di destinazione",
+              "description": "Un codice di autorità come EPSG:3857 o EPSG:4326."
+            },
+            "resampling": {
+              "label": "Ricampionamento",
+              "options": {
+                "nearest": "Vicino più prossimo",
+                "bilinear": "Bilineare",
+                "cubic": "Cubico"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "Ricampiona",
+          "description": "Ricampiona un raster a una dimensione dei pixel (risoluzione) diversa.",
+          "params": {
+            "resolution": {
+              "label": "Dimensione dei pixel di destinazione",
+              "description": "Dimensione dei pixel in output nelle unità del CRS del raster."
+            },
+            "resampling": {
+              "label": "Ricampionamento",
+              "options": {
+                "nearest": "Vicino più prossimo",
+                "bilinear": "Bilineare",
+                "cubic": "Cubico"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "Ritaglia per estensione",
+          "description": "Ritaglia un raster su un rettangolo di delimitazione (nel CRS del raster).",
+          "params": {
+            "minx": {
+              "label": "X min"
+            },
+            "miny": {
+              "label": "Y min"
+            },
+            "maxx": {
+              "label": "X max"
+            },
+            "maxy": {
+              "label": "Y max"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "Ritaglia con livello maschera",
+          "description": "Ritaglia un raster sulle geometrie di un file vettoriale di maschera.",
+          "params": {
+            "mask_path": {
+              "label": "Livello maschera",
+              "description": "Un file GeoJSON le cui geometrie definiscono l'area di ritaglio. Viene riproiettato automaticamente nel CRS del raster (un GeoJSON senza CRS si presume in WGS84)."
+            },
+            "crop": {
+              "label": "Ritaglia all'estensione della maschera"
+            },
+            "all_touched": {
+              "label": "Includi tutti i pixel toccati"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "Poligonizza",
+          "description": "Converte una banda raster in poligoni vettoriali raggruppati per valore dei pixel.",
+          "params": {
+            "band": {
+              "label": "Banda"
+            },
+            "connectivity": {
+              "label": "Connettività",
+              "options": {
+                "4": "4 connessioni",
+                "8": "8 connessioni"
+              }
+            },
+            "field": {
+              "label": "Nome del campo valore"
+            }
+          }
+        },
+        "contour": {
+          "name": "Curve di livello",
+          "description": "Genera curve di livello da un modello di elevazione.",
+          "params": {
+            "band": {
+              "label": "Banda"
+            },
+            "interval": {
+              "label": "Intervallo",
+              "description": "Differenza di quota tra curve di livello successive."
+            },
+            "base": {
+              "label": "Base"
+            },
+            "attribute": {
+              "label": "Nome del campo quota"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "Interpolazione (IDW / Kriging)",
+          "description": "Interpola l'attributo numerico di un livello di punti in una superficie raster continua usando la ponderazione inversa della distanza o il kriging ordinario.",
+          "params": {
+            "field": {
+              "label": "Campo valore",
+              "description": "Nome dell'attributo numerico dei punti da interpolare (es. quota, temperatura)."
+            },
+            "method": {
+              "label": "Metodo",
+              "options": {
+                "idw": "Ponderazione inversa della distanza (IDW)",
+                "kriging": "Kriging ordinario"
+              }
+            },
+            "resolution": {
+              "label": "Dimensione dei pixel in output",
+              "description": "Dimensione della cella nelle unità del CRS del livello (gradi per WGS84). La griglia copre l'estensione dei punti."
+            },
+            "power": {
+              "label": "Potenza IDW",
+              "description": "Valori più alti danno maggiore influenza ai punti vicini."
+            },
+            "variogram_model": {
+              "label": "Modello di variogramma",
+              "description": "Modello teorico adattato al semivariogramma empirico. Il kriging è limitato a 1500 punti.",
+              "options": {
+                "spherical": "Sferico",
+                "exponential": "Esponenziale",
+                "gaussian": "Gaussiano",
+                "linear": "Lineare"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "Statistiche zonali",
+          "description": "Riassume i valori raster all'interno di ogni poligono di un livello vettoriale (conteggio, min, max, media, somma, dev. std., mediana).",
+          "params": {
+            "zones_path": {
+              "label": "Livello delle zone",
+              "description": "Un livello poligonale GeoJSON che definisce le zone. Viene riproiettato automaticamente nel CRS del raster (un GeoJSON senza CRS si presume in WGS84)."
+            },
+            "band": {
+              "label": "Banda"
+            },
+            "prefix": {
+              "label": "Prefisso dei campi",
+              "description": "Anteposto al nome di ogni campo statistico (es. 'dem_' → 'dem_mean'). Lascia vuoto per i nomi semplici 'mean', 'min', …"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "Calcolatore raster",
+          "description": "Valuta un'espressione NumPy di algebra delle bande. Fai riferimento alla banda 1 di ogni input come A, B, C e alle singole bande come A1, A2, …; ad esempio l'NDVI è (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "Espressione",
+              "description": "Un'espressione NumPy su A, B, C (e A1, A2, …). Funzioni: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan."
+            },
+            "b_path": {
+              "label": "Raster B (facoltativo)",
+              "description": "Un secondo raster, indicato come B / B1, B2, …. Deve avere le stesse dimensioni di A."
+            },
+            "c_path": {
+              "label": "Raster C (facoltativo)",
+              "description": "Un terzo raster, indicato come C / C1, C2, …. Deve avere le stesse dimensioni di A."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "Indice spettrale",
+          "description": "Calcola un indice spettrale noto (NDVI, NDWI, EVI, …) da un raster multibanda. Scegli un preset di sensore per la disposizione delle bande, oppure imposta manualmente i numeri di banda con il sensore Personalizzato.",
+          "params": {
+            "index": {
+              "label": "Indice",
+              "options": {
+                "ndvi": "NDVI (vegetazione)",
+                "gndvi": "GNDVI (vegetazione, verde)",
+                "ndwi": "NDWI (acqua, McFeeters)",
+                "ndmi": "NDMI (umidità)",
+                "ndbi": "NDBI (aree edificate)",
+                "nbr": "NBR (aree bruciate)",
+                "evi": "EVI (vegetazione migliorato)",
+                "savi": "SAVI (vegetazione corretto per il suolo)"
+              }
+            },
+            "sensor": {
+              "label": "Sensore / disposizione delle bande",
+              "description": "Numeri di banda predefiniti per i sensori comuni. Scegli Personalizzato per mappare manualmente le bande di un GeoTIFF impilato diversamente.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "Personalizzato (imposta i numeri di banda sotto)"
+              }
+            },
+            "red": {
+              "label": "Numero della banda rossa"
+            },
+            "green": {
+              "label": "Numero della banda verde"
+            },
+            "blue": {
+              "label": "Numero della banda blu"
+            },
+            "nir": {
+              "label": "Numero della banda NIR"
+            },
+            "swir1": {
+              "label": "Numero della banda SWIR1"
+            },
+            "swir2": {
+              "label": "Numero della banda SWIR2"
+            },
+            "L": {
+              "label": "Fattore del suolo (L)",
+              "description": "Correzione SAVI per la luminosità del suolo (0 copertura densa → 1 suolo nudo)."
+            },
+            "scale": {
+              "label": "Scala di riflettanza",
+              "description": "Moltiplicatore che converte i valori dei pixel in riflettanza (0–1). Lascia 1 per gli indici a differenza normalizzata; impostalo per EVI/SAVI su immagini con DN interi (es. 0.0001 per Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "Riclassifica",
+          "description": "Rimappa intervalli di valori in nuovi valori di classe usando una tabella di regole.",
+          "params": {
+            "band": {
+              "label": "Banda"
+            },
+            "table": {
+              "label": "Regole",
+              "description": "Regole 'min:max:nuovovalore' separate da virgole o a capo, es. '0:10:1, 10:20:2, 20:max:3'. Gli intervalli sono semiaperti [min, max); vuoto/min/max indicano ±∞."
+            },
+            "unmatched": {
+              "label": "Valori non corrispondenti",
+              "options": {
+                "nodata": "Imposta a NoData",
+                "original": "Mantieni il valore originale"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "Mosaico / unione",
+          "description": "Combina fino a cinque raster (con lo stesso CRS) in un unico raster che copre la loro unione.",
+          "params": {
+            "raster_2": {
+              "label": "Secondo raster"
+            },
+            "raster_3": {
+              "label": "Terzo raster (facoltativo)"
+            },
+            "raster_4": {
+              "label": "Quarto raster (facoltativo)"
+            },
+            "raster_5": {
+              "label": "Quinto raster (facoltativo)"
+            },
+            "method": {
+              "label": "Metodo di sovrapposizione",
+              "description": "Quale valore prevale dove gli input si sovrappongono.",
+              "options": {
+                "first": "Primo",
+                "last": "Ultimo",
+                "min": "Minimo",
+                "max": "Massimo"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "Statistiche focali",
+          "description": "Applica una statistica a finestra mobile (intorno) a una banda raster.",
+          "params": {
+            "band": {
+              "label": "Banda"
+            },
+            "statistic": {
+              "label": "Statistica",
+              "options": {
+                "mean": "Media",
+                "median": "Mediana",
+                "min": "Minimo",
+                "max": "Massimo",
+                "sum": "Somma",
+                "std": "Deviazione standard",
+                "range": "Intervallo (max − min)"
+              }
+            },
+            "size": {
+              "label": "Dimensione della finestra",
+              "description": "Dimensione dispari dell'intorno in pixel (3 = 3×3). Massimo 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "Analisi",
+      "clip": "Ritaglio",
+      "dataQuality": "Qualità dei dati",
+      "dggs": "DGGS",
+      "geometry": "Geometria",
+      "join": "Join",
+      "movementTime": "Movimento e tempo",
+      "network": "Reti",
+      "overlay": "Sovrapposizione",
+      "rasterToVector": "Da raster a vettoriale",
+      "reproject": "Riproiezione",
+      "select": "Selezione",
+      "spatialStatistics": "Statistica spaziale",
+      "terrain": "Terreno",
+      "vectorToRaster": "Da vettoriale a raster"
     }
   },
   "segmentation": {
@@ -5245,6 +6729,7 @@
     "refreshVectorControlError": "Impossibile aggiornare questo livello. Prova a riaprire il pannello Aggiungi livello vettoriale.",
     "refreshed": "Aggiornato.",
     "refreshedCount": "Aggiornati {{count}} elementi.",
+    "refreshedTruncated": "Aggiornati {{shown}} di {{total}} elementi.",
     "refreshError": "Impossibile aggiornare questo livello.",
     "exportNeedsFeatures": "L'esportazione richiede un livello vettoriale con elementi.",
     "exportedWithWarnings": "Livello esportato. {{warnings}}",

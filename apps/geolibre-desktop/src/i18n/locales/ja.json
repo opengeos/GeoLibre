@@ -325,6 +325,10 @@
         "label": "PostgreSQLレイヤーを追加",
         "description": "Martinをローカルで起動し、PostGISソースを検出して、ソースをベクタータイルとして追加します。"
       },
+      "iceberg": {
+        "label": "Apache Iceberg レイヤーを追加",
+        "description": "Iceberg テーブル（v3 以上）を読み取り、そのフィーチャの一部を追加します。"
+      },
       "deckglViz": {
         "label": "Deck.glレイヤーを追加",
         "description": "deck.glのレイヤータイプを選択し、サンプルデータを読み込むか、CSV/JSON/GeoJSONファイルまたはURLをアップロードします。"
@@ -690,6 +694,40 @@
       "tableReadOnly": "{{table}} (読み取り専用: 主キーなし)",
       "errorSelectTable": "読み込むテーブルを選択してください。",
       "errorRuntimeMissing": "処理サーバーにPostGISランタイム(psycopg)がインストールされていません。編集可能なレイヤーを読み込むには、geolibre-serverの'postgis'エクストラをインストールしてください。"
+    },
+    "iceberg": {
+      "defaultName": "Iceberg レイヤー",
+      "notice": "Iceberg テーブルはオンデマンドで一度だけ読み取られます。レイヤーは下の行数上限までのスナップショットであり、自動的に再スキャンされることはありません。再度読み取るには、レイヤーメニューの「更新」を使用してください。",
+      "mode": "Iceberg ソース",
+      "modeTable": "テーブルの場所",
+      "modeCatalog": "REST カタログ",
+      "location": "テーブルメタデータの場所",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "ウェアハウス",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "カタログエンドポイント",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "接続",
+      "table": "Iceberg テーブル",
+      "sql": "SQL（任意）",
+      "sqlHint": "描画する内容を絞り込んだり整形したりするには編集してください。ステートメントは GEOMETRY 列を返す必要があります。テーブル全体を読み取るには生成されたままにしてください。",
+      "selectTable": "テーブルを選択",
+      "geometryColumn": "ジオメトリ列",
+      "rowLimit": "行数上限",
+      "rowLimitHint": "レイヤーにはこの上限までのテーブルの先頭行が保持されます。上限は {{max}} 行を超えることはできません。",
+      "rowLimitTruncates": "テーブルには {{total}} 行ありますが、レイヤーには先頭の {{limit}} 行のみが含まれます。",
+      "statusConnecting": "Iceberg メタデータを読み込み中...",
+      "statusInspecting": "テーブルを検査中...",
+      "statusInspected": "{{rows}} 行。ジオメトリ: {{column}}（{{crs}}）。",
+      "statusNoGeometry": "{{rows}} 行ありますが、GEOMETRY 列が見つかりませんでした。Iceberg のジオメトリは v3 のジオメトリ型を使用する必要があります。",
+      "statusTablesFound_other": "{{count}} 個のテーブルが見つかりました。続行するには 1 つ選択してください。",
+      "statusNoTables": "このカタログにはテーブルがありません。",
+      "errorLocation": "Iceberg テーブルのメタデータの場所を入力してください。",
+      "errorWarehouse": "接続する Iceberg ウェアハウスを入力してください。",
+      "errorEndpoint": "Iceberg REST カタログのエンドポイントを入力してください。",
+      "errorConnect": "Iceberg ソースを読み取れませんでした。",
+      "errorInspect": "Iceberg テーブルを検査できませんでした。",
+      "errorConnectFirst": "先に接続して Iceberg テーブルを選択してください。"
     },
     "video": {
       "defaultName": "動画レイヤー",
@@ -2237,7 +2275,8 @@
       "video": "動画レイヤー",
       "deckglViz": "Deck.glレイヤー",
       "gltfModel": "3Dモデル (glTF)",
-      "postgres": "PostgreSQLレイヤー"
+      "postgres": "PostgreSQLレイヤー",
+      "iceberg": "Apache Iceberg レイヤー"
     },
     "conversion": {
       "vectorToVector": "ベクターからベクターへ",
@@ -3385,11 +3424,19 @@
     "addUnsupported": "地図に追加できるのは GeoTIFF/COG、GeoJSON、GeoParquet、PMTiles のアセットのみです",
     "addFailed": "アセットを追加できませんでした",
     "addNoSourceLayers": "このアーカイブには描画できるレイヤーがありません",
+    "addNoTarget": "このアセットには描画できるものがありません",
+    "addIcechunk": "Icechunk ストアはまだ読み取れません",
+    "zarrProblemGroup": "このアセットは描画可能な 1 つの配列ではなく、配列のグループを指しています",
+    "zarrProblemUnauthorized": "この Zarr ストアには、GeoLibre がまだ提供できない認証情報が必要です",
+    "zarrProblemUnsupportedUrl": "この Zarr ストアのアドレスはキー単位で読み取ることができません",
+    "zarrProblemUnavailable": "この Zarr ストアを開けませんでした",
+    "chooseTarget": "追加するものを選択",
     "cogUnsupported": "この GeoLibre ホストはリモートの GeoTIFF アセットを表示できません",
     "formatCog": "COG",
     "formatGeoJson": "GeoJSON",
     "formatPmtiles": "PMTiles",
     "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
     "formatUnknown": "不明な形式",
     "notAddable": "追加不可"
   },
@@ -3614,6 +3661,10 @@
   },
   "basemaps": {
     "confirmStyleReplace_other": "「{{name}}」に切り替えると、マップスタイル全体が置き換えられ、追加した{{count}}件の重ねたベースマップが削除されます。続行しますか?"
+  },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "フィーチャのプロパティ",
+    "massingHeight": "高さ (m)"
   },
   "annotations": {
     "toolbar": "注釈ツール",
@@ -4179,6 +4230,1438 @@
       "run": "実行",
       "outputPlaceholder": "ここに出力が表示されます。",
       "resolutionRange": "解像度（0-{{max}}）"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "バッファ",
+          "description": "各フィーチャの周囲に一定距離のバッファポリゴンを作成します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "distance": {
+              "label": "距離"
+            },
+            "units": {
+              "label": "単位",
+              "options": {
+                "kilometers": "キロメートル",
+                "meters": "メートル",
+                "miles": "マイル"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "重心",
+          "description": "各フィーチャの重心点を計算します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "凸包",
+          "description": "すべてのフィーチャを囲む凸包を計算します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "ディゾルブ",
+          "description": "ポリゴンフィーチャを 1 つのジオメトリに融合します。フィールドでグループ化することもできます",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "field": {
+              "label": "ディゾルブフィールド（任意）",
+              "description": "ディゾルブの前にフィーチャをグループ化するプロパティ名"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "バウンディングボックス",
+          "description": "すべてのフィーチャを囲む矩形の範囲を計算します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "simplify": {
+          "name": "簡素化",
+          "description": "Douglas-Peucker 法で頂点数を削減します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "tolerance": {
+              "label": "許容値（度）"
+            },
+            "highQuality": {
+              "label": "高品質"
+            }
+          }
+        },
+        "clip": {
+          "name": "クリップ",
+          "description": "入力レイヤーをオーバーレイレイヤーの範囲でクリップします（入力の属性を保持）",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "overlay": {
+              "label": "オーバーレイ（クリップ）レイヤー"
+            }
+          }
+        },
+        "intersection": {
+          "name": "交差",
+          "description": "2 つのポリゴンレイヤーが重なる領域のみを残します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "overlay": {
+              "label": "オーバーレイレイヤー"
+            }
+          }
+        },
+        "difference": {
+          "name": "差分",
+          "description": "入力レイヤーからオーバーレイレイヤーの領域を取り除きます",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "overlay": {
+              "label": "オーバーレイレイヤー"
+            }
+          }
+        },
+        "union": {
+          "name": "和集合",
+          "description": "2 つのポリゴンレイヤーを 1 つの結合ジオメトリにマージします",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "overlay": {
+              "label": "オーバーレイレイヤー"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "空間結合",
+          "description": "空間関係に基づいて、結合レイヤーの属性を各入力フィーチャに付加します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "overlay": {
+              "label": "結合レイヤー"
+            },
+            "predicate": {
+              "label": "空間関係",
+              "options": {
+                "intersects": "交差する",
+                "within": "内部にある",
+                "contains": "含む"
+              }
+            },
+            "how": {
+              "label": "結合タイプ",
+              "options": {
+                "inner": "内部結合（一致したフィーチャのみ保持）",
+                "left": "左結合（すべての入力フィーチャを保持）"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "属性結合",
+          "description": "ジオメトリを使わずに、キーフィールドが一致する各入力フィーチャに結合レイヤー（テーブル）の属性を付加します。1 対 1: 最初に一致した結合行が採用されます。",
+          "params": {
+            "layer": {
+              "label": "ターゲットレイヤー"
+            },
+            "overlay": {
+              "label": "結合レイヤー（テーブル）",
+              "description": "属性の取り込み元となるレイヤー。そのジオメトリは無視されます。"
+            },
+            "target_field": {
+              "label": "ターゲットキーフィールド"
+            },
+            "join_field": {
+              "label": "結合キーフィールド"
+            },
+            "how": {
+              "label": "結合タイプ",
+              "options": {
+                "left": "左結合（すべてのターゲットフィーチャを保持）",
+                "inner": "内部結合（一致したフィーチャのみ保持）"
+              }
+            },
+            "fields": {
+              "label": "取り込むフィールド（任意）",
+              "description": "コピーする結合フィールドをカンマ区切りで指定します。空欄のままにすると、キー以外のすべての結合フィールドを取り込みます。"
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "値で選択",
+          "description": "属性値が条件に一致するフィーチャを新しいレイヤーに抽出します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "field": {
+              "label": "フィールド"
+            },
+            "operator": {
+              "label": "演算子",
+              "options": {
+                "eq": "=（等しい）",
+                "neq": "≠（等しくない）",
+                "gt": ">（より大きい）",
+                "gte": "≥（以上）",
+                "lt": "<（より小さい）",
+                "lte": "≤（以下）",
+                "contains": "含む（テキスト）",
+                "starts-with": "で始まる（テキスト）",
+                "is-null": "空である",
+                "is-not-null": "空でない"
+              }
+            },
+            "value": {
+              "label": "値",
+              "description": "両辺が数値の場合は数値として比較されます。"
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "場所で選択",
+          "description": "別のレイヤーとの空間関係によってフィーチャを新しいレイヤーに抽出します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "overlay": {
+              "label": "フィルターレイヤー"
+            },
+            "predicate": {
+              "label": "空間関係",
+              "options": {
+                "intersects": "交差する",
+                "within": "内部にある",
+                "contains": "含む",
+                "disjoint": "離れている（交差なし）"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "ランダム抽出",
+          "description": "フィーチャ数または入力に対する割合で指定したサイズのランダムなフィーチャの部分集合を新しいレイヤーに抽出します。",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "method": {
+              "label": "方法",
+              "options": {
+                "count": "フィーチャ数",
+                "percentage": "フィーチャの割合"
+              }
+            },
+            "count": {
+              "label": "フィーチャ数",
+              "description": "入力フィーチャ数より大きい場合は、その数に制限されます。"
+            },
+            "percentage": {
+              "label": "フィーチャの割合"
+            }
+          }
+        },
+        "reproject": {
+          "name": "再投影",
+          "description": "レイヤーの座標を指定した元の CRS として解釈し直し、正しい位置に表示されるよう WGS84 に変換します。サイドカーまたは Python エンジンが必要です。",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "source_crs": {
+              "label": "元の CRS",
+              "description": "レイヤーの座標が実際に使用している CRS（例: EPSG:3857）。結果は WGS84（EPSG:4326）に変換されます。"
+            }
+          }
+        },
+        "explode": {
+          "name": "マルチパートの分解",
+          "description": "マルチパートジオメトリをシングルパートのフィーチャ（パートごとに 1 フィーチャ）に分割し、各親の属性を保持します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "属性で集約",
+          "description": "同じ属性値を持つフィーチャをグループごとに 1 つのジオメトリにディゾルブし、要約統計量を付加します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "group_field": {
+              "label": "グループ化フィールド"
+            },
+            "statistic": {
+              "label": "統計量",
+              "options": {
+                "count": "個数",
+                "sum": "合計",
+                "mean": "平均",
+                "min": "最小",
+                "max": "最大",
+                "median": "中央値"
+              }
+            },
+            "stat_field": {
+              "label": "統計フィールド",
+              "description": "上の統計量で要約する数値フィールド。"
+            }
+          }
+        },
+        "smooth": {
+          "name": "スムージング",
+          "description": "Chaikin アルゴリズムでラインおよびポリゴンフィーチャの角を丸めます（頂点を追加）。頂点を削減する「簡素化」とは異なります。Z 値（標高）は保持され、ポイントはそのまま通過します。",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "iterations": {
+              "label": "反復回数",
+              "description": "反復回数が多いほど滑らかになります（1〜10）。"
+            }
+          }
+        },
+        "grid": {
+          "name": "規則的なグリッド",
+          "description": "範囲を覆う規則的な矩形グリッド（フィッシュネット）のセルを生成します。範囲のソース: 現在の地図表示、レイヤーの範囲、または手動のバウンディングボックス。",
+          "params": {
+            "source": {
+              "label": "範囲のソース",
+              "options": {
+                "viewport": "地図のビューポート",
+                "layer": "レイヤーの範囲",
+                "bbox": "手動のバウンディングボックス"
+              }
+            },
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "west": {
+              "label": "西（最小経度）"
+            },
+            "south": {
+              "label": "南（最小緯度）"
+            },
+            "east": {
+              "label": "東（最大経度）"
+            },
+            "north": {
+              "label": "北（最大緯度）"
+            },
+            "cell_width": {
+              "label": "セルの幅（度）"
+            },
+            "cell_height": {
+              "label": "セルの高さ（度）",
+              "description": "空欄のままにするとセルの幅と同じになります。"
+            },
+            "cell_type": {
+              "label": "セルタイプ",
+              "options": {
+                "polygon": "矩形",
+                "point": "ポイント（セル中心）"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "ボロノイ / ドロネー",
+          "description": "ポイントレイヤーからボロノイ図（ポイントごとに 1 ポリゴン、ポイントの範囲でクリップ）またはドロネー三角形分割を作成します。",
+          "params": {
+            "layer": {
+              "label": "入力ポイントレイヤー"
+            },
+            "type": {
+              "label": "図の種類",
+              "options": {
+                "voronoi": "ボロノイポリゴン",
+                "delaunay": "ドロネー三角形"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "基地局カバレッジ",
+          "description": "方位角・半径・ビーム幅（属性フィールドまたは固定値から取得）を使って、ポイントサイトからアンテナのセクター（扇形）ポリゴンを作成します。ビーム幅は 360°（全円）に制限され、記録されるビーム幅は制限後の値です。QGIS Shape Tools のように、携帯基地局のカバレッジに便利です。",
+          "params": {
+            "layer": {
+              "label": "入力ポイントレイヤー"
+            },
+            "azimuthField": {
+              "label": "方位角フィールド（°）",
+              "description": "セクターの向き。北から時計回りの度数です。空欄または非数値の場合は固定の方位角が使用されます。"
+            },
+            "azimuth": {
+              "label": "方位角（固定、°）"
+            },
+            "radiusField": {
+              "label": "半径フィールド",
+              "description": "カバレッジ半径。空欄または非数値の場合は固定の半径が使用されます。"
+            },
+            "radius": {
+              "label": "半径（固定）"
+            },
+            "beamwidthField": {
+              "label": "ビーム幅フィールド（°）",
+              "description": "セクターの角度幅。360°（全円）に制限されます。空欄または非数値の場合は固定のビーム幅が使用されます。"
+            },
+            "beamwidth": {
+              "label": "ビーム幅（固定、°）"
+            },
+            "units": {
+              "label": "半径の単位",
+              "options": {
+                "kilometers": "キロメートル",
+                "meters": "メートル",
+                "miles": "マイル"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "DGGS ジェネレーター",
+          "description": "領域を DGGS セル（H3、S2、A5、DGGRID、DGGAL）で埋めます。ソース: レイヤーのジオメトリ、レイヤーの範囲、現在の地図表示、または手動のバウンディングボックス。",
+          "params": {
+            "dggsType": {
+              "label": "DGGS タイプ",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID タイプ",
+              "description": "duck_dggs に dggs_params として渡すグリッド構成（ISEA/FULLER × アパーチャ × トポロジー）。",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL タイプ",
+              "description": "dggal.createDGGRS に渡す DGGRS（ISEA/IVEA/RTEA/HEALPix/GNOSIS）。",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "領域のソース",
+              "options": {
+                "polyfill": "レイヤーのジオメトリ（ポリフィル）",
+                "extent": "レイヤーの範囲（bbox）",
+                "viewport": "地図のビューポート",
+                "bbox": "手動のバウンディングボックス"
+              }
+            },
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "west": {
+              "label": "西（最小経度）"
+            },
+            "south": {
+              "label": "南（最小緯度）"
+            },
+            "east": {
+              "label": "東（最大経度）"
+            },
+            "north": {
+              "label": "北（最大緯度）"
+            },
+            "resolution": {
+              "label": "解像度",
+              "description": "範囲は DGGS タイプによって異なります。空欄のままにすると面積から自動選択されます。"
+            },
+            "compactCells": {
+              "label": "セルをコンパクト化",
+              "description": "完全に揃った兄弟セルの組を、より粗い親セルにまとめます（フィーチャ数が減り、解像度が混在します）。"
+            },
+            "fixAntimeridian": {
+              "label": "対蹠子午線を補正",
+              "description": "経度 ±180° をまたぐセルのリングを展開します。"
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "DGGS ビニング",
+          "description": "ポイントレイヤーを DGGS セルに集約します（個数、または数値フィールドの合計/平均/最小/最大）。",
+          "params": {
+            "dggsType": {
+              "label": "DGGS タイプ",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID タイプ",
+              "description": "duck_dggs に dggs_params として渡すグリッド構成（ISEA/FULLER × アパーチャ × トポロジー）。",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL タイプ",
+              "description": "dggal.createDGGRS に渡す DGGRS（ISEA/IVEA/RTEA/HEALPix/GNOSIS）。",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "入力ポイントレイヤー"
+            },
+            "aggOp": {
+              "label": "集約",
+              "options": {
+                "count": "個数",
+                "sum": "合計",
+                "mean": "平均",
+                "min": "最小",
+                "max": "最大"
+              }
+            },
+            "field": {
+              "label": "フィールド",
+              "description": "集約する数値フィールド。"
+            },
+            "resolution": {
+              "label": "解像度",
+              "description": "範囲は DGGS タイプによって異なります。空欄のままにすると面積から自動選択されます。"
+            },
+            "fixAntimeridian": {
+              "label": "対蹠子午線を補正",
+              "description": "経度 ±180° をまたぐセルのリングを展開します。"
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "DGGS コンパクト化",
+          "description": "DGGS ポリゴンセルをコンパクト化するか、均一な解像度に展開します（H3、S2、A5、DGGAL）。入力は ID プロパティを持つセルレイヤーである必要があります。",
+          "params": {
+            "dggsType": {
+              "label": "DGGS タイプ",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL タイプ",
+              "description": "dggal.createDGGRS に渡す DGGRS（ISEA/IVEA/RTEA/HEALPix/GNOSIS）。",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "モード",
+              "options": {
+                "compact": "コンパクト化",
+                "expand": "展開"
+              }
+            },
+            "layer": {
+              "label": "入力 DGGS レイヤー",
+              "description": "DGGS ジェネレーター / ビニング（または同等のツール）で作成したポリゴンセルレイヤー。"
+            },
+            "cellField": {
+              "label": "セル ID フィールド",
+              "description": "空欄の場合、選択したタイプに応じて h3、a5、s2、または dggal が既定値になります。"
+            },
+            "resolution": {
+              "label": "ターゲット解像度",
+              "description": "展開先の解像度。入力セルと同じか、より細かい必要があります。"
+            },
+            "fixAntimeridian": {
+              "label": "対蹠子午線を補正",
+              "description": "経度 ±180° をまたぐセルのリングを展開します。"
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "軌跡の速度",
+          "description": "ポイントを（ターゲットごとに）時刻順に並べ、連続するフィックスを距離・所要時間・速度を持つセグメントとして接続します。QGIS TrajecTools に相当します。",
+          "params": {
+            "layer": {
+              "label": "入力ポイントレイヤー"
+            },
+            "timeField": {
+              "label": "時刻フィールド",
+              "description": "タイムスタンプ（フィックスごと）: ISO 形式の日時文字列、またはエポック（秒またはミリ秒）。"
+            },
+            "idField": {
+              "label": "ターゲット ID フィールド",
+              "description": "ポイントを別々の軌跡に分割します。空欄のままにすると、すべてのポイントを 1 つのターゲットとして扱います。"
+            },
+            "speedUnits": {
+              "label": "速度の単位",
+              "options": {
+                "km/h": "km/h",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "停止地点の検出",
+          "description": "ターゲットが滞留した場所、つまり一定距離内にとどまる（GPS のばらつきを吸収）連続フィックスの並びが最小時間以上続く場所を見つけます。停止ごとに 1 ポイントを出力します。QGIS TrajecTools に相当します。",
+          "params": {
+            "layer": {
+              "label": "入力ポイントレイヤー"
+            },
+            "timeField": {
+              "label": "時刻フィールド",
+              "description": "タイムスタンプ（フィックスごと）: ISO 形式の日時文字列、またはエポック（秒またはミリ秒）。"
+            },
+            "idField": {
+              "label": "ターゲット ID フィールド",
+              "description": "ターゲットごとに停止を検出します。空欄のままにすると、すべてのポイントを 1 つのターゲットとして扱います。"
+            },
+            "maxDistance": {
+              "label": "最大距離",
+              "description": "停止に含まれるすべてのフィックスは、その停止の最初のフィックスからこの距離以内にある必要があります（したがって停止はこの値の最大 2 倍に及ぶことがあります）。GPS のばらつき半径に設定してください。"
+            },
+            "distanceUnits": {
+              "label": "距離の単位",
+              "options": {
+                "meters": "メートル",
+                "kilometers": "キロメートル",
+                "miles": "マイル"
+              }
+            },
+            "minDuration": {
+              "label": "最小滞在時間（秒）",
+              "description": "これより短い滞留は停止として報告されません。"
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "時空間近接",
+          "description": "空間的にも時間的にも近いポイントのペア（例: 2 つのターゲットの出会い）を見つけます。条件を満たす各ペアを結ぶラインを、距離と時間差とともに出力します。",
+          "params": {
+            "layer": {
+              "label": "入力ポイントレイヤー"
+            },
+            "timeField": {
+              "label": "時刻フィールド",
+              "description": "タイムスタンプ（ポイントごと）: ISO 形式の日時文字列、またはエポック（秒またはミリ秒）。"
+            },
+            "idField": {
+              "label": "ターゲット ID フィールド",
+              "description": "設定すると、ID 値が異なるポイント同士のみがペアになります（異なるターゲット間の遭遇）。空欄のままにすると、すべてのペアを対象にします。"
+            },
+            "maxDistance": {
+              "label": "最大距離"
+            },
+            "distanceUnits": {
+              "label": "距離の単位",
+              "options": {
+                "meters": "メートル",
+                "kilometers": "キロメートル",
+                "miles": "マイル"
+              }
+            },
+            "maxTime": {
+              "label": "最大時間差"
+            },
+            "timeUnits": {
+              "label": "時間の単位",
+              "options": {
+                "seconds": "秒",
+                "minutes": "分",
+                "hours": "時間"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "有効性チェック",
+          "description": "無効なジオメトリ（GEOS のルール: 自己交差するリング、シェルの外側にある穴など）を持つフィーチャを見つけて地図上にマークします",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "ジオメトリの修復",
+          "description": "ST_MakeValid（GEOS）で無効なジオメトリを修復します。有効なフィーチャはそのまま通過します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "トポロジールールのチェック",
+          "description": "トポロジールール（重なり、隙間、自己交差、ダングル）に対してレイヤーを検証し、各違反を地図上にマークします",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "ruleSelfIntersect": {
+              "label": "ラインは自己交差してはならない"
+            },
+            "ruleOverlap": {
+              "label": "ポリゴンは重なってはならない"
+            },
+            "ruleGaps": {
+              "label": "ポリゴンに隙間があってはならない"
+            },
+            "ruleDangles": {
+              "label": "ラインにダングルがあってはならない"
+            },
+            "rulePointCovered": {
+              "label": "ポイントはラインに覆われていなければならない"
+            },
+            "ruleEndpointSnap": {
+              "label": "ラインの端点は許容値内で接続していなければならない"
+            },
+            "snapTolerance": {
+              "label": "スナップ許容値",
+              "description": "端点ルール用: 2 つのラインの端がどれだけ離れていても接続しているとみなすか（レイヤーの座標単位。WGS84 では度）。"
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "トポロジーの修復",
+          "description": "トポロジー違反を自動的に修復します: ほぼ接続しているラインの端点をスナップし、ダングルを修正し、ポイントをラインに投影します。近くに何もない自由端はそのまま残されます。",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "ruleEndpointSnap": {
+              "label": "ほぼ接続しているラインの端点をスナップ"
+            },
+            "ruleDangles": {
+              "label": "ダングルを修復（近くのジオメトリにスナップまたは投影）"
+            },
+            "rulePointCovered": {
+              "label": "ポイントを最も近いラインに投影"
+            },
+            "snapTolerance": {
+              "label": "スナップ許容値",
+              "description": "接続のためにジオメトリを移動できる距離（レイヤーの座標単位。WGS84 では度）。"
+            },
+            "dryRun": {
+              "label": "プレビューのみ（ドライラン）",
+              "description": "修復済みレイヤーを作成せずに、適用される修復内容を報告します。"
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "到達圏 / サービスエリア",
+          "description": "レイヤーの各ポイントからの移動時間または移動距離による到達可能範囲ポリゴン",
+          "params": {
+            "layer": {
+              "label": "出発地ポイント"
+            },
+            "mode": {
+              "label": "移動手段",
+              "options": {
+                "auto": "自動車",
+                "pedestrian": "徒歩",
+                "bicycle": "自転車"
+              }
+            },
+            "metric": {
+              "label": "指標",
+              "options": {
+                "time": "移動時間（分）",
+                "distance": "距離（km）"
+              }
+            },
+            "contours": {
+              "label": "等値線",
+              "description": "カンマ区切りの値（時間の場合は分、距離の場合は km）"
+            },
+            "endpoint": {
+              "label": "ルーティングサーバー（Valhalla）"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "OD コスト行列",
+          "description": "すべての出発地と目的地のポイント間の移動時間と距離を、結ぶラインとして出力します",
+          "params": {
+            "origins": {
+              "label": "出発地ポイント"
+            },
+            "destinations": {
+              "label": "目的地ポイント"
+            },
+            "mode": {
+              "label": "移動手段",
+              "options": {
+                "auto": "自動車",
+                "pedestrian": "徒歩",
+                "bicycle": "自転車"
+              }
+            },
+            "endpoint": {
+              "label": "ルーティングサーバー（Valhalla）"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "順次ルート（経路案内）",
+          "description": "ポイントを道路ネットワークに沿って順番に接続し、ルートを作成します。各ポイントは最も近い道路にスナップされるため、道路外の座標（基地局、センサーなど）でもルートを作成できます。順序は選択したフィールド（タイムスタンプなど）またはレイヤーのフィーチャ順に従います。",
+          "params": {
+            "layer": {
+              "label": "入力ポイント"
+            },
+            "order_field": {
+              "label": "並び順フィールド（任意）",
+              "description": "ルート作成前にこのフィールド（数値またはタイムスタンプ）でポイントを並べ替えます。空欄にするとレイヤーのフィーチャ順を使用します。"
+            },
+            "mode": {
+              "label": "移動手段",
+              "options": {
+                "auto": "自動車",
+                "pedestrian": "徒歩",
+                "bicycle": "自転車"
+              }
+            },
+            "endpoint": {
+              "label": "ルーティングサーバー（Valhalla）"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "グローバル Moran's I",
+          "description": "レイヤー全体にわたる数値属性の空間的自己相関の全体的な強さを測定します。",
+          "params": {
+            "layer": {
+              "label": "レイヤー"
+            },
+            "field": {
+              "label": "値フィールド"
+            },
+            "weightsType": {
+              "label": "空間重み",
+              "description": "各フィーチャの近傍をどのように定義するか。",
+              "options": {
+                "knn": "K 近傍",
+                "distance": "距離バンド"
+              }
+            },
+            "k": {
+              "label": "近傍数（k）"
+            },
+            "threshold": {
+              "label": "距離バンド（km）"
+            },
+            "permutations": {
+              "label": "並べ替え回数",
+              "description": "擬似 p 値を求めるためのランダム並べ替えの回数。"
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "ローカル Moran's I（LISA）",
+          "description": "フィーチャごとのクラスターと外れ値（High-High、Low-Low、High-Low、Low-High）を擬似有意性とともに算出します。",
+          "params": {
+            "layer": {
+              "label": "レイヤー"
+            },
+            "field": {
+              "label": "値フィールド"
+            },
+            "weightsType": {
+              "label": "空間重み",
+              "description": "各フィーチャの近傍をどのように定義するか。",
+              "options": {
+                "knn": "K 近傍",
+                "distance": "距離バンド"
+              }
+            },
+            "k": {
+              "label": "近傍数（k）"
+            },
+            "threshold": {
+              "label": "距離バンド（km）"
+            },
+            "permutations": {
+              "label": "並べ替え回数",
+              "description": "擬似 p 値を求めるためのランダム並べ替えの回数。"
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Getis-Ord Gi* ホットスポット",
+          "description": "数値属性の統計的に有意なホットスポットとコールドスポットを特定します。",
+          "params": {
+            "layer": {
+              "label": "レイヤー"
+            },
+            "field": {
+              "label": "値フィールド"
+            },
+            "weightsType": {
+              "label": "空間重み",
+              "description": "各フィーチャの近傍をどのように定義するか。",
+              "options": {
+                "knn": "K 近傍",
+                "distance": "距離バンド"
+              }
+            },
+            "k": {
+              "label": "近傍数（k）"
+            },
+            "threshold": {
+              "label": "距離バンド（km）"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "平均最近隣距離",
+          "description": "ポイントがクラスター化、分散、またはランダムに分布しているかを検定します（ANN 比 + z スコア）。",
+          "params": {
+            "layer": {
+              "label": "ポイントレイヤー"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "カーネル密度（ヒートマップ）",
+          "description": "四次カーネルを使って、ポイントからセルのグリッドとして密度サーフェスを推定します。",
+          "params": {
+            "layer": {
+              "label": "ポイントレイヤー"
+            },
+            "weightField": {
+              "label": "重みフィールド（任意）",
+              "description": "各ポイントに重みを付ける数値フィールド。空欄 = 等しい重み。"
+            },
+            "bandwidth": {
+              "label": "検索半径 / バンド幅（km）"
+            },
+            "cellSize": {
+              "label": "セルサイズ（km）"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "新興ホットスポット（時空間キューブ）",
+          "description": "タイムスタンプ付きポイントから時空間キューブ（フィッシュネットグリッド × 等間隔の時間ステップ）を構築し、各セルを新規・強化・持続・減衰・散発・振動・歴史的なホット/コールドスポットに分類します。時間スライスごとに Getis-Ord Gi* を実行し、各セルの Gi* 系列に Mann-Kendall トレンド検定を適用します。ArcGIS の Emerging Hot Spot Analysis と同様にクライアント側で実行されます。",
+          "params": {
+            "layer": {
+              "label": "ポイントレイヤー"
+            },
+            "timeField": {
+              "label": "時刻フィールド",
+              "description": "タイムスタンプ（ポイントごと）: ISO 形式の日時文字列、またはエポック（秒またはミリ秒）。"
+            },
+            "cellSize": {
+              "label": "セルサイズ（km）",
+              "description": "各正方形の空間ビンの一辺の長さ（キロメートル）。"
+            },
+            "timeStep": {
+              "label": "時間ステップの間隔"
+            },
+            "timeStepUnit": {
+              "label": "時間ステップの単位",
+              "options": {
+                "hours": "時間",
+                "days": "日",
+                "weeks": "週"
+              }
+            },
+            "weightField": {
+              "label": "重みフィールド（任意）",
+              "description": "ポイント数の代わりに時空間ビンごとに合計する数値フィールド。空欄 = ポイント数をカウント。"
+            },
+            "confidence": {
+              "label": "信頼水準",
+              "description": "ビンをホット/コールドスポットとみなす、およびトレンドの有意性のしきい値。",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "陰影起伏",
+          "description": "標高モデルから陰影起伏（ヒルシェード）ラスターを計算します。",
+          "params": {
+            "azimuth": {
+              "label": "方位角（度）"
+            },
+            "altitude": {
+              "label": "高度角（度）"
+            },
+            "z_factor": {
+              "label": "Z 係数"
+            }
+          }
+        },
+        "slope": {
+          "name": "傾斜",
+          "description": "標高モデルから傾斜（急峻さ）を計算します。",
+          "params": {
+            "units": {
+              "label": "単位",
+              "options": {
+                "degrees": "度",
+                "percent": "パーセント"
+              }
+            },
+            "z_factor": {
+              "label": "Z 係数"
+            }
+          }
+        },
+        "aspect": {
+          "name": "傾斜方向",
+          "description": "標高モデルから傾斜方向（最大傾斜の方角）を計算します。"
+        },
+        "reproject": {
+          "name": "再投影",
+          "description": "ラスターを別の座標参照系にワープします。",
+          "params": {
+            "dst_crs": {
+              "label": "ターゲット CRS",
+              "description": "EPSG:3857 や EPSG:4326 などの機関コード。"
+            },
+            "resampling": {
+              "label": "リサンプリング",
+              "options": {
+                "nearest": "最近傍",
+                "bilinear": "バイリニア",
+                "cubic": "キュービック"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "リサンプル",
+          "description": "ラスターを別のピクセルサイズ（解像度）にリサンプルします。",
+          "params": {
+            "resolution": {
+              "label": "ターゲットピクセルサイズ",
+              "description": "ラスターの CRS 単位での出力ピクセルサイズ。"
+            },
+            "resampling": {
+              "label": "リサンプリング",
+              "options": {
+                "nearest": "最近傍",
+                "bilinear": "バイリニア",
+                "cubic": "キュービック"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "範囲でクリップ",
+          "description": "ラスターをバウンディングボックス（ラスターの CRS）で切り抜きます。",
+          "params": {
+            "minx": {
+              "label": "最小 X"
+            },
+            "miny": {
+              "label": "最小 Y"
+            },
+            "maxx": {
+              "label": "最大 X"
+            },
+            "maxy": {
+              "label": "最大 Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "マスクレイヤーでクリップ",
+          "description": "ベクターマスクファイルのジオメトリでラスターをクリップします。",
+          "params": {
+            "mask_path": {
+              "label": "マスクレイヤー",
+              "description": "クリップ領域を定義するジオメトリを持つ GeoJSON ファイル。ラスターの CRS に自動的に再投影されます（CRS のない GeoJSON は WGS84 とみなされます）。"
+            },
+            "crop": {
+              "label": "マスクの範囲に切り抜く"
+            },
+            "all_touched": {
+              "label": "接触するすべてのピクセルを含める"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "ポリゴン化",
+          "description": "ラスターバンドをピクセル値ごとにグループ化したベクターポリゴンに変換します。",
+          "params": {
+            "band": {
+              "label": "バンド"
+            },
+            "connectivity": {
+              "label": "連結性",
+              "options": {
+                "4": "4 連結",
+                "8": "8 連結"
+              }
+            },
+            "field": {
+              "label": "値フィールド名"
+            }
+          }
+        },
+        "contour": {
+          "name": "等高線",
+          "description": "標高モデルから等高線を生成します。",
+          "params": {
+            "band": {
+              "label": "バンド"
+            },
+            "interval": {
+              "label": "間隔",
+              "description": "隣り合う等高線の標高差。"
+            },
+            "base": {
+              "label": "基準値"
+            },
+            "attribute": {
+              "label": "標高フィールド名"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "内挿（IDW / クリギング）",
+          "description": "逆距離加重法または通常クリギングを使って、ポイントレイヤーの数値属性を連続したラスターサーフェスに内挿します。",
+          "params": {
+            "field": {
+              "label": "値フィールド",
+              "description": "内挿する数値ポイント属性の名前（例: 標高、気温）。"
+            },
+            "method": {
+              "label": "方法",
+              "options": {
+                "idw": "逆距離加重法（IDW）",
+                "kriging": "通常クリギング"
+              }
+            },
+            "resolution": {
+              "label": "出力ピクセルサイズ",
+              "description": "レイヤーの CRS 単位でのセルサイズ（WGS84 では度）。グリッドはポイントの範囲を覆います。"
+            },
+            "power": {
+              "label": "IDW のべき乗",
+              "description": "値が大きいほど近くのポイントの影響が強くなります。"
+            },
+            "variogram_model": {
+              "label": "バリオグラムモデル",
+              "description": "経験セミバリオグラムに当てはめる理論モデル。クリギングは 1500 ポイントまでに制限されます。",
+              "options": {
+                "spherical": "球形",
+                "exponential": "指数",
+                "gaussian": "ガウス",
+                "linear": "線形"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "ゾーン統計",
+          "description": "ベクターレイヤーの各ポリゴン内のラスター値を要約します（個数、最小、最大、平均、合計、標準偏差、中央値）。",
+          "params": {
+            "zones_path": {
+              "label": "ゾーンレイヤー",
+              "description": "ゾーンを定義する GeoJSON ポリゴンレイヤー。ラスターの CRS に自動的に再投影されます（CRS のない GeoJSON は WGS84 とみなされます）。"
+            },
+            "band": {
+              "label": "バンド"
+            },
+            "prefix": {
+              "label": "フィールド接頭辞",
+              "description": "各統計フィールド名の前に付加されます（例: 'dem_' → 'dem_mean'）。空欄のままにすると 'mean'、'min' などそのままの名前になります。"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "ラスター計算機",
+          "description": "NumPy のバンド演算式を評価します。各入力のバンド 1 は A、B、C として、特定のバンドは A1、A2 などとして参照します。例: NDVI は (A2 - A1) / (A2 + A1)。",
+          "params": {
+            "expression": {
+              "label": "式",
+              "description": "A、B、C（および A1、A2 など）に対する NumPy の式。関数: where、log、exp、sqrt、abs、clip、minimum、maximum、sin、cos、tan。"
+            },
+            "b_path": {
+              "label": "ラスター B（任意）",
+              "description": "B / B1、B2 などとして参照される 2 つ目のラスター。A と同じ寸法である必要があります。"
+            },
+            "c_path": {
+              "label": "ラスター C（任意）",
+              "description": "C / C1、C2 などとして参照される 3 つ目のラスター。A と同じ寸法である必要があります。"
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "スペクトル指数",
+          "description": "マルチバンドラスターから名前付きのスペクトル指数（NDVI、NDWI、EVI など）を計算します。バンド配置はセンサーのプリセットを選ぶか、「カスタム」センサーでバンド番号を手動で設定します。",
+          "params": {
+            "index": {
+              "label": "指数",
+              "options": {
+                "ndvi": "NDVI（植生）",
+                "gndvi": "GNDVI（緑色植生）",
+                "ndwi": "NDWI（水域、McFeeters）",
+                "ndmi": "NDMI（水分）",
+                "ndbi": "NDBI（市街地）",
+                "nbr": "NBR（燃焼比）",
+                "evi": "EVI（強調植生）",
+                "savi": "SAVI（土壌調整植生）"
+              }
+            },
+            "sensor": {
+              "label": "センサー / バンド配置",
+              "description": "一般的なセンサー向けのプリセットバンド番号。異なる順序で積み重ねられた GeoTIFF の場合は「カスタム」を選んで手動でバンドを割り当てます。",
+              "options": {
+                "sentinel2": "Sentinel-2（B2、B3、B4、B8、B11、B12）",
+                "landsat89": "Landsat 8/9（B1〜B7）",
+                "naip": "NAIP（R、G、B、NIR）",
+                "custom": "カスタム（下でバンド番号を設定）"
+              }
+            },
+            "red": {
+              "label": "赤バンド番号"
+            },
+            "green": {
+              "label": "緑バンド番号"
+            },
+            "blue": {
+              "label": "青バンド番号"
+            },
+            "nir": {
+              "label": "NIR バンド番号"
+            },
+            "swir1": {
+              "label": "SWIR1 バンド番号"
+            },
+            "swir2": {
+              "label": "SWIR2 バンド番号"
+            },
+            "L": {
+              "label": "土壌係数（L）",
+              "description": "SAVI の土壌輝度補正（0 = 密な植被 → 1 = 裸地）。"
+            },
+            "scale": {
+              "label": "反射率スケール",
+              "description": "ピクセル値を反射率（0〜1）に変換する乗数。正規化差分指数では 1 のままにします。整数 DN 画像で EVI/SAVI を計算する場合は設定してください（例: Sentinel-2 L2A では 0.0001）。"
+            }
+          }
+        },
+        "reclassify": {
+          "name": "再分類",
+          "description": "ルールテーブルを使って値の範囲を新しいクラス値に再割り当てします。",
+          "params": {
+            "band": {
+              "label": "バンド"
+            },
+            "table": {
+              "label": "ルール",
+              "description": "カンマまたは改行区切りの 'min:max:newvalue' ルール。例: '0:10:1, 10:20:2, 20:max:3'。範囲は半開区間 [min, max) で、空欄/min/max は ±∞ を意味します。"
+            },
+            "unmatched": {
+              "label": "一致しない値",
+              "options": {
+                "nodata": "NoData に設定",
+                "original": "元の値を保持"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "モザイク / マージ",
+          "description": "最大 5 つのラスター（同じ CRS）を、それらの和領域を覆う 1 つのラスターに結合します。",
+          "params": {
+            "raster_2": {
+              "label": "2 つ目のラスター"
+            },
+            "raster_3": {
+              "label": "3 つ目のラスター（任意）"
+            },
+            "raster_4": {
+              "label": "4 つ目のラスター（任意）"
+            },
+            "raster_5": {
+              "label": "5 つ目のラスター（任意）"
+            },
+            "method": {
+              "label": "重なりの処理方法",
+              "description": "入力が重なる場所でどの値を採用するか。",
+              "options": {
+                "first": "最初",
+                "last": "最後",
+                "min": "最小",
+                "max": "最大"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "フォーカル統計",
+          "description": "ラスターバンドに移動ウィンドウ（近傍）統計を適用します。",
+          "params": {
+            "band": {
+              "label": "バンド"
+            },
+            "statistic": {
+              "label": "統計量",
+              "options": {
+                "mean": "平均",
+                "median": "中央値",
+                "min": "最小",
+                "max": "最大",
+                "sum": "合計",
+                "std": "標準偏差",
+                "range": "範囲（最大 − 最小）"
+              }
+            },
+            "size": {
+              "label": "ウィンドウサイズ",
+              "description": "ピクセル単位の奇数の近傍サイズ（3 = 3×3）。上限は 25 です。"
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "解析",
+      "clip": "クリップ",
+      "dataQuality": "データ品質",
+      "dggs": "DGGS",
+      "geometry": "ジオメトリ",
+      "join": "結合",
+      "movementTime": "移動と時間",
+      "network": "ネットワーク",
+      "overlay": "オーバーレイ",
+      "rasterToVector": "ラスターからベクター",
+      "reproject": "再投影",
+      "select": "選択",
+      "spatialStatistics": "空間統計",
+      "terrain": "地形",
+      "vectorToRaster": "ベクターからラスター"
     }
   },
   "segmentation": {
@@ -5170,6 +6653,7 @@
     "refreshVectorControlError": "このレイヤーを更新できませんでした。ベクターレイヤーの追加パネルを開き直してください。",
     "refreshed": "更新しました。",
     "refreshedCount": "{{count}}件のフィーチャを更新しました。",
+    "refreshedTruncated": "{{total}} 件中 {{shown}} 件のフィーチャを更新しました。",
     "refreshError": "このレイヤーを更新できませんでした。",
     "exportNeedsFeatures": "エクスポートにはフィーチャを含むベクターレイヤーが必要です。",
     "exportedWithWarnings": "レイヤーをエクスポートしました。{{warnings}}",

@@ -335,6 +335,10 @@
         "label": "إضافة طبقة PostgreSQL",
         "description": "تشغيل Martin محليًا، واكتشاف مصادر PostGIS، وإضافة مصدر كبلاطات متجهة."
       },
+      "iceberg": {
+        "label": "إضافة طبقة Apache Iceberg",
+        "description": "قراءة جدول Iceberg (الإصدار v3 أو أحدث) وإضافة مجموعة فرعية من معالمه."
+      },
       "deckglViz": {
         "label": "إضافة طبقة Deck.gl",
         "description": "اختيار نوع طبقة deck.gl، ثم تحميل البيانات النموذجية أو رفع ملف CSV/JSON/GeoJSON أو عنوان URL."
@@ -770,6 +774,45 @@
       "tableReadOnly": "{{table}} (للقراءة فقط: بلا مفتاح أساسي)",
       "errorSelectTable": "حدد جدولًا لتحميله.",
       "errorRuntimeMissing": "لا تتوفر لدى خادم المعالجة بيئة تشغيل PostGIS (حزمة psycopg). ثبّت إضافة 'postgis' الخاصة بـ geolibre-server لتحميل طبقات قابلة للتحرير."
+    },
+    "iceberg": {
+      "defaultName": "طبقة Iceberg",
+      "notice": "تُقرأ جداول Iceberg مرة واحدة عند الطلب. الطبقة لقطة محدودة بحد الصفوف أدناه ولا يُعاد مسحها تلقائيًا أبدًا؛ استخدم «تحديث» من قائمة الطبقة لقراءتها مجددًا.",
+      "mode": "مصدر Iceberg",
+      "modeTable": "موقع الجدول",
+      "modeCatalog": "كتالوج REST",
+      "location": "موقع البيانات الوصفية للجدول",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "المستودع",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "نقطة نهاية الكتالوج",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "اتصال",
+      "table": "جدول Iceberg",
+      "sql": "SQL (اختياري)",
+      "sqlHint": "عدّل لتصفية ما يُعرض أو إعادة تشكيله. يجب أن تُرجع العبارة عمودًا من نوع GEOMETRY؛ اتركها كما وُلِّدت لقراءة الجدول كاملًا.",
+      "selectTable": "اختر جدولًا",
+      "geometryColumn": "عمود الشكل الهندسي",
+      "rowLimit": "حد الصفوف",
+      "rowLimitHint": "تحتفظ الطبقة بالصفوف الأولى من الجدول حتى هذا الحد. لا يمكن أن يتجاوز الحد {{max}} صف.",
+      "rowLimitTruncates": "يحتوي الجدول على {{total}} صف؛ ستتضمن الطبقة أول {{limit}} منها.",
+      "statusConnecting": "جارٍ قراءة البيانات الوصفية لـ Iceberg...",
+      "statusInspecting": "جارٍ فحص الجدول...",
+      "statusInspected": "{{rows}} صف. الشكل الهندسي: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} صف، لكن لم يُعثر على عمود من نوع GEOMETRY. يجب أن يستخدم الشكل الهندسي في Iceberg نوع الشكل الهندسي من الإصدار v3.",
+      "statusTablesFound_one": "تم العثور على {{count}} جدول.",
+      "statusTablesFound_zero": "تم العثور على {{count}} جدول.",
+      "statusTablesFound_two": "تم العثور على جدولين ({{count}}). حدد أحدهما للمتابعة.",
+      "statusTablesFound_few": "تم العثور على {{count}} جداول. حدد واحدًا للمتابعة.",
+      "statusTablesFound_many": "تم العثور على {{count}} جدولًا. حدد واحدًا للمتابعة.",
+      "statusTablesFound_other": "تم العثور على {{count}} جدول. حدد واحدًا للمتابعة.",
+      "statusNoTables": "لا يعرض الكتالوج أي جداول.",
+      "errorLocation": "أدخل موقع البيانات الوصفية لجدول Iceberg.",
+      "errorWarehouse": "أدخل مستودع Iceberg المراد إرفاقه.",
+      "errorEndpoint": "أدخل نقطة نهاية كتالوج Iceberg REST.",
+      "errorConnect": "تعذّرت قراءة مصدر Iceberg.",
+      "errorInspect": "تعذّر فحص جدول Iceberg.",
+      "errorConnectFirst": "اتصل أولًا وحدد جدول Iceberg."
     },
     "video": {
       "defaultName": "طبقة فيديو",
@@ -2461,7 +2504,8 @@
       "video": "طبقة فيديو",
       "deckglViz": "طبقة Deck.gl",
       "gltfModel": "نموذج ثلاثي الأبعاد (glTF)",
-      "postgres": "طبقة PostgreSQL"
+      "postgres": "طبقة PostgreSQL",
+      "iceberg": "طبقة Apache Iceberg"
     },
     "conversion": {
       "vectorToVector": "متجه إلى متجه",
@@ -3664,11 +3708,19 @@
     "addUnsupported": "يمكن إضافة أصول GeoTIFF/COG وGeoJSON وGeoParquet وPMTiles فقط إلى الخريطة",
     "addFailed": "تعذّرت إضافة الأصل",
     "addNoSourceLayers": "لا يسرد هذا الأرشيف أي طبقات لرسمها",
+    "addNoTarget": "لا يسرد هذا الأصل أي شيء لرسمه",
+    "addIcechunk": "لا يمكن قراءة مخازن Icechunk بعد",
+    "zarrProblemGroup": "يشير هذا الأصل إلى مجموعة مصفوفات، وليس إلى مصفوفة واحدة يمكن رسمها",
+    "zarrProblemUnauthorized": "يحتاج مخزن Zarr هذا إلى بيانات اعتماد لا يستطيع GeoLibre توفيرها بعد",
+    "zarrProblemUnsupportedUrl": "لا يمكن قراءة عنوان مخزن Zarr هذا مفتاحًا مفتاحًا",
+    "zarrProblemUnavailable": "تعذّر فتح مخزن Zarr هذا",
+    "chooseTarget": "اختر ما تريد إضافته",
     "cogUnsupported": "لا يستطيع مضيف GeoLibre هذا عرض أصول GeoTIFF البعيدة",
     "formatCog": "COG",
     "formatGeoJson": "GeoJSON",
     "formatPmtiles": "PMTiles",
     "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
     "formatUnknown": "تنسيق غير معروف",
     "notAddable": "غير قابل للإضافة"
   },
@@ -3923,6 +3975,10 @@
     "confirmStyleReplace_few": "سيؤدي التبديل إلى \"{{name}}\" إلى استبدال نمط الخريطة بالكامل وإزالة {{count}} خرائط أساس مكدسة أضفتها. هل تريد المتابعة؟",
     "confirmStyleReplace_many": "سيؤدي التبديل إلى \"{{name}}\" إلى استبدال نمط الخريطة بالكامل وإزالة {{count}} خريطة أساس مكدسةً أضفتها. هل تريد المتابعة؟",
     "confirmStyleReplace_other": "سيؤدي التبديل إلى \"{{name}}\" إلى استبدال نمط الخريطة بالكامل وإزالة {{count}} خريطة أساس مكدسة أضفتها. هل تريد المتابعة؟"
+  },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "خصائص المعلم",
+    "massingHeight": "الارتفاع (م)"
   },
   "annotations": {
     "toolbar": "أدوات التعليقات التوضيحية",
@@ -4518,6 +4574,1438 @@
       "run": "تشغيل",
       "outputPlaceholder": "سيظهر الناتج هنا.",
       "resolutionRange": "الدقة (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "نطاق عازل",
+          "description": "إنشاء مضلع نطاق عازل حول كل معلم بمسافة ثابتة",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "distance": {
+              "label": "المسافة"
+            },
+            "units": {
+              "label": "الوحدات",
+              "options": {
+                "kilometers": "كيلومترات",
+                "meters": "أمتار",
+                "miles": "أميال"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "المراكز الهندسية",
+          "description": "حساب نقطة المركز الهندسي لكل معلم",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "الغلاف المحدب",
+          "description": "حساب الغلاف المحدب الذي يحيط بجميع المعالم",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "إذابة",
+          "description": "دمج معالم المضلعات في شكل هندسي واحد، مع إمكانية التجميع حسب حقل",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "field": {
+              "label": "حقل الإذابة (اختياري)",
+              "description": "اسم الخاصية التي تُجمَّع المعالم بحسبها قبل الإذابة"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "الصندوق المحيط",
+          "description": "حساب الغلاف المستطيل لجميع المعالم",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "simplify": {
+          "name": "تبسيط",
+          "description": "تقليل عدد الرؤوس باستخدام خوارزمية دوغلاس-بيوكر",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "tolerance": {
+              "label": "التسامح (درجات)"
+            },
+            "highQuality": {
+              "label": "جودة عالية"
+            }
+          }
+        },
+        "clip": {
+          "name": "قص",
+          "description": "قص طبقة الإدخال إلى المنطقة التي تغطيها طبقة التراكب (مع الاحتفاظ بسمات الإدخال)",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "overlay": {
+              "label": "طبقة التراكب (القص)"
+            }
+          }
+        },
+        "intersection": {
+          "name": "تقاطع",
+          "description": "الاحتفاظ فقط بالمناطق التي تتداخل فيها طبقتا المضلعات",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "overlay": {
+              "label": "طبقة التراكب"
+            }
+          }
+        },
+        "difference": {
+          "name": "فرق",
+          "description": "إزالة مساحة طبقة التراكب من طبقة الإدخال",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "overlay": {
+              "label": "طبقة التراكب"
+            }
+          }
+        },
+        "union": {
+          "name": "اتحاد",
+          "description": "دمج طبقتي مضلعات في شكل هندسي مركّب واحد",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "overlay": {
+              "label": "طبقة التراكب"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "ربط مكاني",
+          "description": "إلحاق سمات من طبقة ربط بكل معلم إدخال بناءً على علاقة مكانية",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "overlay": {
+              "label": "طبقة الربط"
+            },
+            "predicate": {
+              "label": "العلاقة المكانية",
+              "options": {
+                "intersects": "يتقاطع مع",
+                "within": "داخل",
+                "contains": "يحتوي"
+              }
+            },
+            "how": {
+              "label": "نوع الربط",
+              "options": {
+                "inner": "داخلي (الاحتفاظ بالمعالم المتطابقة فقط)",
+                "left": "يساري (الاحتفاظ بجميع معالم الإدخال)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "ربط بالسمات",
+          "description": "إلحاق سمات من طبقة ربط (جدول) بكل معلم إدخال حيثما يتطابق حقل مفتاح، دون استخدام الشكل الهندسي. واحد إلى واحد: يُعتمد أول صف ربط متطابق.",
+          "params": {
+            "layer": {
+              "label": "الطبقة الهدف"
+            },
+            "overlay": {
+              "label": "طبقة الربط (جدول)",
+              "description": "الطبقة التي تُنقل سماتها. يُتجاهل شكلها الهندسي."
+            },
+            "target_field": {
+              "label": "حقل المفتاح الهدف"
+            },
+            "join_field": {
+              "label": "حقل مفتاح الربط"
+            },
+            "how": {
+              "label": "نوع الربط",
+              "options": {
+                "left": "يساري (الاحتفاظ بجميع معالم الهدف)",
+                "inner": "داخلي (الاحتفاظ بالمعالم المتطابقة فقط)"
+              }
+            },
+            "fields": {
+              "label": "الحقول المراد نقلها (اختياري)",
+              "description": "حقول الربط المراد نسخها مفصولة بفواصل. اتركه فارغًا لنقل جميع حقول الربط عدا المفتاح."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "تحديد حسب القيمة",
+          "description": "استخراج المعالم التي تطابق قيمة سمتها شرطًا ما إلى طبقة جديدة",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "field": {
+              "label": "الحقل"
+            },
+            "operator": {
+              "label": "المعامل",
+              "options": {
+                "eq": "= (يساوي)",
+                "neq": "≠ (لا يساوي)",
+                "gt": "> (أكبر من)",
+                "gte": "≥ (أكبر من أو يساوي)",
+                "lt": "< (أصغر من)",
+                "lte": "≤ (أصغر من أو يساوي)",
+                "contains": "يحتوي على (نص)",
+                "starts-with": "يبدأ بـ (نص)",
+                "is-null": "فارغ",
+                "is-not-null": "غير فارغ"
+              }
+            },
+            "value": {
+              "label": "القيمة",
+              "description": "تُقارَن كرقم عندما يكون الطرفان رقميين."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "تحديد حسب الموقع",
+          "description": "استخراج المعالم حسب علاقتها المكانية بطبقة ثانية إلى طبقة جديدة",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "overlay": {
+              "label": "طبقة التصفية"
+            },
+            "predicate": {
+              "label": "العلاقة المكانية",
+              "options": {
+                "intersects": "يتقاطع مع",
+                "within": "داخل",
+                "contains": "يحتوي",
+                "disjoint": "منفصل (بلا تقاطع)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "استخراج عشوائي",
+          "description": "استخراج مجموعة فرعية عشوائية من المعالم إلى طبقة جديدة، يُحدَّد حجمها بعدد المعالم أو بنسبة مئوية من الإدخال.",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "method": {
+              "label": "الطريقة",
+              "options": {
+                "count": "عدد المعالم",
+                "percentage": "نسبة مئوية من المعالم"
+              }
+            },
+            "count": {
+              "label": "عدد المعالم",
+              "description": "يُقيَّد بعدد معالم الإدخال إذا كان أكبر منه."
+            },
+            "percentage": {
+              "label": "نسبة مئوية من المعالم"
+            }
+          }
+        },
+        "reproject": {
+          "name": "إعادة إسقاط",
+          "description": "إعادة تفسير إحداثيات طبقة على أنها بنظام إسناد إحداثي مصدر وتحويلها إلى WGS84 لتُعرض في موقعها الصحيح. يتطلب محرك الخدمة المساعدة أو محرك Python.",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "source_crs": {
+              "label": "نظام الإسناد الإحداثي المصدر",
+              "description": "نظام الإسناد الإحداثي الحقيقي لإحداثيات الطبقة (مثل EPSG:3857). تُحوَّل النتيجة إلى WGS84 ‏(EPSG:4326)."
+            }
+          }
+        },
+        "explode": {
+          "name": "تفكيك",
+          "description": "تقسيم الأشكال الهندسية متعددة الأجزاء إلى معالم أحادية الجزء (معلم لكل جزء)، مع الاحتفاظ بسمات كل معلم أصلي",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "تجميع حسب السمة",
+          "description": "إذابة المعالم التي تشترك في قيمة سمة إلى شكل هندسي واحد لكل مجموعة، مع إحصاء تلخيصي",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "group_field": {
+              "label": "حقل التجميع"
+            },
+            "statistic": {
+              "label": "الإحصاء",
+              "options": {
+                "count": "العدد",
+                "sum": "المجموع",
+                "mean": "المتوسط",
+                "min": "الحد الأدنى",
+                "max": "الحد الأقصى",
+                "median": "الوسيط"
+              }
+            },
+            "stat_field": {
+              "label": "حقل الإحصاء",
+              "description": "الحقل الرقمي الذي يُلخَّص بالإحصاء أعلاه."
+            }
+          }
+        },
+        "smooth": {
+          "name": "تنعيم",
+          "description": "تدوير زوايا المعالم الخطية والمضلعية بخوارزمية Chaikin (تضيف رؤوسًا)، بخلاف أداة التبسيط التي تقلل الرؤوس. يُحتفظ بقيم Z/الارتفاع؛ وتمر النقاط دون تغيير.",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "iterations": {
+              "label": "التكرارات",
+              "description": "كلما زادت التكرارات كانت النتيجة أنعم (1-10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "شبكة منتظمة",
+          "description": "توليد شبكة مستطيلة منتظمة (شبكة صيد) من الخلايا فوق مدى ما. المصدر: عرض الخريطة الحالي، أو مدى طبقة، أو صندوق محيط يدوي.",
+          "params": {
+            "source": {
+              "label": "مصدر المدى",
+              "options": {
+                "viewport": "نافذة عرض الخريطة",
+                "layer": "مدى الطبقة",
+                "bbox": "صندوق محيط يدوي"
+              }
+            },
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "west": {
+              "label": "الغرب (أدنى خط طول)"
+            },
+            "south": {
+              "label": "الجنوب (أدنى خط عرض)"
+            },
+            "east": {
+              "label": "الشرق (أقصى خط طول)"
+            },
+            "north": {
+              "label": "الشمال (أقصى خط عرض)"
+            },
+            "cell_width": {
+              "label": "عرض الخلية (درجات)"
+            },
+            "cell_height": {
+              "label": "ارتفاع الخلية (درجات)",
+              "description": "اتركه فارغًا ليطابق عرض الخلية."
+            },
+            "cell_type": {
+              "label": "نوع الخلية",
+              "options": {
+                "polygon": "مستطيلات",
+                "point": "نقاط (مراكز الخلايا)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "بناء مخطط Voronoi (مضلع واحد لكل نقطة، مقصوص إلى مدى النقاط) أو تثليث Delaunay من طبقة نقاط.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط المدخلة"
+            },
+            "type": {
+              "label": "المخطط",
+              "options": {
+                "voronoi": "مضلعات Voronoi",
+                "delaunay": "مثلثات Delaunay"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "تغطية المواقع الخلوية",
+          "description": "بناء مضلعات قطاعات/أوتاد الهوائيات من مواقع نقطية باستخدام السمت ونصف القطر وعرض الحزمة (تُقرأ من حقول السمات أو من قيم ثابتة). يُقيَّد عرض الحزمة عند 360° (دائرة كاملة)؛ ويعكس عرض الحزمة المسجَّل القيمة المقيَّدة. مفيد لتغطية أبراج الاتصالات الخلوية، على غرار QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط المدخلة"
+            },
+            "azimuthField": {
+              "label": "حقل السمت (°)",
+              "description": "الاتجاه الذي يواجهه القطاع، بالدرجات في اتجاه عقارب الساعة من الشمال. يُستخدم السمت الثابت عندما يكون فارغًا أو غير رقمي."
+            },
+            "azimuth": {
+              "label": "السمت (ثابت، °)"
+            },
+            "radiusField": {
+              "label": "حقل نصف القطر",
+              "description": "نصف قطر التغطية. يُستخدم نصف القطر الثابت عندما يكون فارغًا أو غير رقمي."
+            },
+            "radius": {
+              "label": "نصف القطر (ثابت)"
+            },
+            "beamwidthField": {
+              "label": "حقل عرض الحزمة (°)",
+              "description": "العرض الزاوي للقطاع، مقيَّد عند 360° (دائرة كاملة). يُستخدم عرض الحزمة الثابت عندما يكون فارغًا أو غير رقمي."
+            },
+            "beamwidth": {
+              "label": "عرض الحزمة (ثابت، °)"
+            },
+            "units": {
+              "label": "وحدات نصف القطر",
+              "options": {
+                "kilometers": "كيلومترات",
+                "meters": "أمتار",
+                "miles": "أميال"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "مولّد DGGS",
+          "description": "ملء منطقة بخلايا DGGS ‏(H3 وS2 وA5 وDGGRID وDGGAL). المصدر: الشكل الهندسي لطبقة، أو مدى طبقة، أو عرض الخريطة الحالي، أو صندوق محيط يدوي.",
+          "params": {
+            "dggsType": {
+              "label": "نوع DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "نوع DGGRID",
+              "description": "إعداد الشبكة المُمرَّر إلى duck_dggs بوصفه dggs_params ‏(ISEA/FULLER × الفتحة × الطوبولوجيا).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "نوع DGGAL",
+              "description": "نظام DGGRS المُمرَّر إلى dggal.createDGGRS ‏(ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "مصدر المنطقة",
+              "options": {
+                "polyfill": "الشكل الهندسي للطبقة (ملء المضلعات)",
+                "extent": "مدى الطبقة (الصندوق المحيط)",
+                "viewport": "نافذة عرض الخريطة",
+                "bbox": "صندوق محيط يدوي"
+              }
+            },
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "west": {
+              "label": "الغرب (أدنى خط طول)"
+            },
+            "south": {
+              "label": "الجنوب (أدنى خط عرض)"
+            },
+            "east": {
+              "label": "الشرق (أقصى خط طول)"
+            },
+            "north": {
+              "label": "الشمال (أقصى خط عرض)"
+            },
+            "resolution": {
+              "label": "الدقة",
+              "description": "يعتمد النطاق على نوع DGGS. اتركه فارغًا للاختيار التلقائي بناءً على المساحة."
+            },
+            "compactCells": {
+              "label": "ضغط الخلايا",
+              "description": "دمج المجموعات الكاملة من الخلايا الشقيقة في خلايا أصلية أخشن (معالم أقل، ودقات مختلطة)."
+            },
+            "fixAntimeridian": {
+              "label": "إصلاح خط الزوال المقابل",
+              "description": "فكّ حلقات الخلايا التي تعبر خط الطول ±180°."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "تجميع DGGS",
+          "description": "تجميع طبقة نقاط في خلايا DGGS (العدد، أو المجموع/المتوسط/الحد الأدنى/الحد الأقصى لحقل رقمي).",
+          "params": {
+            "dggsType": {
+              "label": "نوع DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "نوع DGGRID",
+              "description": "إعداد الشبكة المُمرَّر إلى duck_dggs بوصفه dggs_params ‏(ISEA/FULLER × الفتحة × الطوبولوجيا).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "نوع DGGAL",
+              "description": "نظام DGGRS المُمرَّر إلى dggal.createDGGRS ‏(ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "طبقة النقاط المدخلة"
+            },
+            "aggOp": {
+              "label": "التجميع",
+              "options": {
+                "count": "العدد",
+                "sum": "المجموع",
+                "mean": "المتوسط",
+                "min": "الحد الأدنى",
+                "max": "الحد الأقصى"
+              }
+            },
+            "field": {
+              "label": "الحقل",
+              "description": "الحقل الرقمي المراد تجميعه."
+            },
+            "resolution": {
+              "label": "الدقة",
+              "description": "يعتمد النطاق على نوع DGGS. اتركه فارغًا للاختيار التلقائي بناءً على المساحة."
+            },
+            "fixAntimeridian": {
+              "label": "إصلاح خط الزوال المقابل",
+              "description": "فكّ حلقات الخلايا التي تعبر خط الطول ±180°."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "ضغط DGGS",
+          "description": "ضغط خلايا مضلعات DGGS، أو توسيعها إلى دقة موحدة (H3 وS2 وA5 وDGGAL). يجب أن يكون الإدخال طبقة خلايا تحمل خاصية معرّف.",
+          "params": {
+            "dggsType": {
+              "label": "نوع DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "نوع DGGAL",
+              "description": "نظام DGGRS المُمرَّر إلى dggal.createDGGRS ‏(ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "الوضع",
+              "options": {
+                "compact": "ضغط",
+                "expand": "توسيع"
+              }
+            },
+            "layer": {
+              "label": "طبقة DGGS المدخلة",
+              "description": "طبقة خلايا مضلعية من مولّد DGGS / تجميع DGGS (أو ما يكافئها)."
+            },
+            "cellField": {
+              "label": "حقل معرّف الخلية",
+              "description": "الافتراضي h3 أو a5 أو s2 أو dggal بحسب النوع المحدد عند تركه فارغًا."
+            },
+            "resolution": {
+              "label": "الدقة الهدف",
+              "description": "الدقة المراد التوسيع إليها. يجب ألا تقل دقتها عن دقة خلايا الإدخال."
+            },
+            "fixAntimeridian": {
+              "label": "إصلاح خط الزوال المقابل",
+              "description": "فكّ حلقات الخلايا التي تعبر خط الطول ±180°."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "سرعة مسار الحركة",
+          "description": "ترتيب النقاط حسب الوقت (لكل هدف) وربط الرصدات المتتالية في مقاطع تحمل المسافة والمدة والسرعة. على غرار QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط المدخلة"
+            },
+            "timeField": {
+              "label": "حقل الوقت",
+              "description": "الطابع الزمني لكل رصدة: سلسلة تاريخ/وقت بصيغة ISO أو زمن Epoch (بالثواني أو الميلي ثانية)."
+            },
+            "idField": {
+              "label": "حقل معرّف الهدف",
+              "description": "يقسم النقاط إلى مسارات منفصلة. اتركه فارغًا لمعاملة جميع النقاط كهدف واحد."
+            },
+            "speedUnits": {
+              "label": "وحدات السرعة",
+              "options": {
+                "km/h": "كم/س",
+                "m/s": "م/ث",
+                "mph": "ميل/س"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "اكتشاف التوقفات",
+          "description": "العثور على الأماكن التي يمكث فيها هدف: سلاسل من الرصدات المتتالية تبقى ضمن مسافة معينة (مع استيعاب تشتت GPS) لمدة لا تقل عن حد أدنى. يُخرج نقطة واحدة لكل توقف. على غرار QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط المدخلة"
+            },
+            "timeField": {
+              "label": "حقل الوقت",
+              "description": "الطابع الزمني لكل رصدة: سلسلة تاريخ/وقت بصيغة ISO أو زمن Epoch (بالثواني أو الميلي ثانية)."
+            },
+            "idField": {
+              "label": "حقل معرّف الهدف",
+              "description": "يكتشف التوقفات لكل هدف. اتركه فارغًا لمعاملة جميع النقاط كهدف واحد."
+            },
+            "maxDistance": {
+              "label": "المسافة القصوى",
+              "description": "يجب أن تقع كل رصدة في التوقف ضمن هذه المسافة من أول رصدة فيه (لذا قد يمتد التوقف حتى ضعف هذه القيمة). اضبطها على نصف قطر تشتت GPS لديك."
+            },
+            "distanceUnits": {
+              "label": "وحدات المسافة",
+              "options": {
+                "meters": "أمتار",
+                "kilometers": "كيلومترات",
+                "miles": "أميال"
+              }
+            },
+            "minDuration": {
+              "label": "الحد الأدنى للمدة (ث)",
+              "description": "لا يُبلَّغ عن مكوث أقصر من هذا كتوقف."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "التقارب الزماني المكاني",
+          "description": "العثور على أزواج النقاط المتقاربة في المكان والزمان معًا، مثل التقاء هدفين. يُخرج خطًا يصل كل زوج مؤهل، يحمل المسافة والفارق الزمني.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط المدخلة"
+            },
+            "timeField": {
+              "label": "حقل الوقت",
+              "description": "الطابع الزمني لكل نقطة: سلسلة تاريخ/وقت بصيغة ISO أو زمن Epoch (بالثواني أو الميلي ثانية)."
+            },
+            "idField": {
+              "label": "حقل معرّف الهدف",
+              "description": "عند تعيينه، تُقرن فقط النقاط ذات قيم المعرّف المختلفة (لقاءات بين أهداف متمايزة). اتركه فارغًا للنظر في كل الأزواج."
+            },
+            "maxDistance": {
+              "label": "المسافة القصوى"
+            },
+            "distanceUnits": {
+              "label": "وحدات المسافة",
+              "options": {
+                "meters": "أمتار",
+                "kilometers": "كيلومترات",
+                "miles": "أميال"
+              }
+            },
+            "maxTime": {
+              "label": "الفارق الزمني الأقصى"
+            },
+            "timeUnits": {
+              "label": "وحدات الوقت",
+              "options": {
+                "seconds": "ثوانٍ",
+                "minutes": "دقائق",
+                "hours": "ساعات"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "التحقق من الصحة",
+          "description": "العثور على المعالم ذات الأشكال الهندسية غير الصالحة (قواعد GEOS: حلقات متقاطعة ذاتيًا، وثقوب خارج الأغلفة، ...) وتمييزها على الخريطة",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "إصلاح الأشكال الهندسية",
+          "description": "إصلاح الأشكال الهندسية غير الصالحة باستخدام ST_MakeValid ‏(GEOS)؛ وتمر المعالم الصالحة دون تغيير",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "التحقق من قواعد الطوبولوجيا",
+          "description": "التحقق من الطبقة وفق قواعد الطوبولوجيا (التداخلات، والفجوات، والتقاطعات الذاتية، والأطراف المتدلية) وتمييز كل مخالفة على الخريطة",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "ruleSelfIntersect": {
+              "label": "يجب ألا تتقاطع الخطوط ذاتيًا"
+            },
+            "ruleOverlap": {
+              "label": "يجب ألا تتداخل المضلعات"
+            },
+            "ruleGaps": {
+              "label": "يجب ألا تحتوي المضلعات على فجوات"
+            },
+            "ruleDangles": {
+              "label": "يجب ألا تحتوي الخطوط على أطراف متدلية"
+            },
+            "rulePointCovered": {
+              "label": "يجب أن تكون النقاط مغطاة بخط"
+            },
+            "ruleEndpointSnap": {
+              "label": "يجب أن تتصل نهايات الخطوط ضمن التسامح"
+            },
+            "snapTolerance": {
+              "label": "تسامح الالتقاط",
+              "description": "لقاعدة نقاط النهاية: المسافة القصوى (بوحدات إحداثيات الطبقة، أي الدرجات في WGS84) التي يمكن أن تفصل بين نهايتي خطين وتُعدّان متصلتين."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "إصلاح الطوبولوجيا",
+          "description": "إصلاح مخالفات الطوبولوجيا تلقائيًا: التقاط نهايات الخطوط شبه المتصلة، وإصلاح الأطراف المتدلية، وإسقاط النقاط على الخطوط. تُترك النهايات الحرة التي لا يوجد شيء بقربها دون تغيير.",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "ruleEndpointSnap": {
+              "label": "التقاط نهايات الخطوط شبه المتصلة"
+            },
+            "ruleDangles": {
+              "label": "إصلاح الأطراف المتدلية (التقاط أو إسقاط على الشكل الهندسي المجاور)"
+            },
+            "rulePointCovered": {
+              "label": "إسقاط النقاط على أقرب خط"
+            },
+            "snapTolerance": {
+              "label": "تسامح الالتقاط",
+              "description": "المسافة (بوحدات إحداثيات الطبقة، أي الدرجات في WGS84) التي يمكن أن يتحركها الشكل الهندسي للاتصال."
+            },
+            "dryRun": {
+              "label": "معاينة فقط (تشغيل تجريبي)",
+              "description": "الإبلاغ عن الإصلاحات التي ستُطبَّق دون إنشاء طبقة مُصلَحة."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "خطوط تساوي الزمن / منطقة الخدمة",
+          "description": "مضلعات إمكانية الوصول حسب زمن التنقل أو مسافته من كل نقطة في طبقة",
+          "params": {
+            "layer": {
+              "label": "نقاط المنشأ"
+            },
+            "mode": {
+              "label": "وسيلة التنقل",
+              "options": {
+                "auto": "القيادة",
+                "pedestrian": "المشي",
+                "bicycle": "ركوب الدراجة"
+              }
+            },
+            "metric": {
+              "label": "المقياس",
+              "options": {
+                "time": "زمن التنقل (دقائق)",
+                "distance": "المسافة (كم)"
+              }
+            },
+            "contours": {
+              "label": "الخطوط الكنتورية",
+              "description": "قيم مفصولة بفواصل (دقائق للزمن، وكيلومترات للمسافة)"
+            },
+            "endpoint": {
+              "label": "خادم التوجيه (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "مصفوفة تكلفة المنشأ والوجهة (OD)",
+          "description": "زمن التنقل ومسافته بين كل نقطة منشأ وكل نقطة وجهة، على شكل خطوط واصلة",
+          "params": {
+            "origins": {
+              "label": "نقاط المنشأ"
+            },
+            "destinations": {
+              "label": "نقاط الوجهة"
+            },
+            "mode": {
+              "label": "وسيلة التنقل",
+              "options": {
+                "auto": "القيادة",
+                "pedestrian": "المشي",
+                "bicycle": "ركوب الدراجة"
+              }
+            },
+            "endpoint": {
+              "label": "خادم التوجيه (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "مسار تسلسلي (اتجاهات)",
+          "description": "ربط النقاط بالتسلسل على امتداد شبكة الطرق في مسار واحد. تُلتقط كل نقطة إلى أقرب طريق، لذا تعمل الإحداثيات الواقعة خارج الطرق (المواقع الخلوية، والمستشعرات) أيضًا. يتبع الترتيب الحقل المختار (مثل طابع زمني) أو ترتيب معالم الطبقة.",
+          "params": {
+            "layer": {
+              "label": "النقاط المدخلة"
+            },
+            "order_field": {
+              "label": "الترتيب حسب الحقل (اختياري)",
+              "description": "فرز النقاط حسب هذا الحقل (أرقام أو طوابع زمنية) قبل التوجيه. اتركه فارغًا لاستخدام ترتيب معالم الطبقة."
+            },
+            "mode": {
+              "label": "وسيلة التنقل",
+              "options": {
+                "auto": "القيادة",
+                "pedestrian": "المشي",
+                "bicycle": "ركوب الدراجة"
+              }
+            },
+            "endpoint": {
+              "label": "خادم التوجيه (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "مؤشر موران العام",
+          "description": "قياس الارتباط الذاتي المكاني الإجمالي لسمة رقمية عبر الطبقة كاملة.",
+          "params": {
+            "layer": {
+              "label": "الطبقة"
+            },
+            "field": {
+              "label": "حقل القيمة"
+            },
+            "weightsType": {
+              "label": "الأوزان المكانية",
+              "description": "طريقة تحديد الجيران لكل معلم.",
+              "options": {
+                "knn": "أقرب k من الجيران",
+                "distance": "نطاق المسافة"
+              }
+            },
+            "k": {
+              "label": "الجيران (k)"
+            },
+            "threshold": {
+              "label": "نطاق المسافة (كم)"
+            },
+            "permutations": {
+              "label": "التباديل",
+              "description": "عدد التباديل العشوائية لحساب القيمة الاحتمالية الزائفة (pseudo p-value)."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "مؤشر موران المحلي (LISA)",
+          "description": "العناقيد والقيم الشاذة لكل معلم (مرتفع-مرتفع، منخفض-منخفض، مرتفع-منخفض، منخفض-مرتفع) مع دلالة زائفة.",
+          "params": {
+            "layer": {
+              "label": "الطبقة"
+            },
+            "field": {
+              "label": "حقل القيمة"
+            },
+            "weightsType": {
+              "label": "الأوزان المكانية",
+              "description": "طريقة تحديد الجيران لكل معلم.",
+              "options": {
+                "knn": "أقرب k من الجيران",
+                "distance": "نطاق المسافة"
+              }
+            },
+            "k": {
+              "label": "الجيران (k)"
+            },
+            "threshold": {
+              "label": "نطاق المسافة (كم)"
+            },
+            "permutations": {
+              "label": "التباديل",
+              "description": "عدد التباديل العشوائية لحساب القيمة الاحتمالية الزائفة (pseudo p-value)."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "النقاط الساخنة (Getis-Ord Gi*)",
+          "description": "تحديد النقاط الساخنة والباردة ذات الدلالة الإحصائية لسمة رقمية.",
+          "params": {
+            "layer": {
+              "label": "الطبقة"
+            },
+            "field": {
+              "label": "حقل القيمة"
+            },
+            "weightsType": {
+              "label": "الأوزان المكانية",
+              "description": "طريقة تحديد الجيران لكل معلم.",
+              "options": {
+                "knn": "أقرب k من الجيران",
+                "distance": "نطاق المسافة"
+              }
+            },
+            "k": {
+              "label": "الجيران (k)"
+            },
+            "threshold": {
+              "label": "نطاق المسافة (كم)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "متوسط أقرب جار",
+          "description": "اختبار ما إذا كانت النقاط متعنقدة أو متشتتة أو موزعة عشوائيًا (نسبة ANN + الدرجة المعيارية z).",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "كثافة النواة (خريطة حرارية)",
+          "description": "تقدير سطح كثافة من النقاط على شكل شبكة خلايا باستخدام نواة رباعية.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط"
+            },
+            "weightField": {
+              "label": "حقل الوزن (اختياري)",
+              "description": "حقل رقمي يوزن كل نقطة؛ فارغ = أوزان متساوية."
+            },
+            "bandwidth": {
+              "label": "نصف قطر البحث / عرض النطاق (كم)"
+            },
+            "cellSize": {
+              "label": "حجم الخلية (كم)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "النقاط الساخنة الناشئة (مكعب مكاني-زمني)",
+          "description": "بناء مكعب مكاني-زمني من نقاط ذات طوابع زمنية (شبكة صيد × خطوات زمنية متساوية) وتصنيف كل خلية كنقطة ساخنة/باردة جديدة، أو متزايدة، أو مستمرة، أو متناقصة، أو متقطعة، أو متذبذبة، أو تاريخية. يُشغَّل Getis-Ord Gi* لكل شريحة زمنية، ثم اختبار اتجاه Mann-Kendall على سلسلة Gi* لكل خلية. يعمل على جانب العميل، على غرار تحليل النقاط الساخنة الناشئة في ArcGIS.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط"
+            },
+            "timeField": {
+              "label": "حقل الوقت",
+              "description": "الطابع الزمني لكل نقطة: سلسلة تاريخ/وقت بصيغة ISO أو زمن Epoch (بالثواني أو الميلي ثانية)."
+            },
+            "cellSize": {
+              "label": "حجم الخلية (كم)",
+              "description": "طول ضلع كل خلية مكانية مربعة، بالكيلومترات."
+            },
+            "timeStep": {
+              "label": "فاصل الخطوة الزمنية"
+            },
+            "timeStepUnit": {
+              "label": "وحدة الخطوة الزمنية",
+              "options": {
+                "hours": "ساعات",
+                "days": "أيام",
+                "weeks": "أسابيع"
+              }
+            },
+            "weightField": {
+              "label": "حقل الوزن (اختياري)",
+              "description": "حقل رقمي يُجمع لكل خلية مكانية-زمنية بدلًا من عدّ النقاط؛ فارغ = عدّ النقاط."
+            },
+            "confidence": {
+              "label": "مستوى الثقة",
+              "description": "عتبة الدلالة لاعتبار الخلية نقطة ساخنة/باردة وللاتجاه.",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "التظليل التضاريسي",
+          "description": "حساب بيانات نقطية للتظليل التضاريسي (الظل المجسم) من نموذج ارتفاعات.",
+          "params": {
+            "azimuth": {
+              "label": "السمت (درجات)"
+            },
+            "altitude": {
+              "label": "زاوية الارتفاع (درجات)"
+            },
+            "z_factor": {
+              "label": "معامل Z"
+            }
+          }
+        },
+        "slope": {
+          "name": "الانحدار",
+          "description": "حساب الانحدار (درجة الميل) من نموذج ارتفاعات.",
+          "params": {
+            "units": {
+              "label": "الوحدات",
+              "options": {
+                "degrees": "درجات",
+                "percent": "نسبة مئوية"
+              }
+            },
+            "z_factor": {
+              "label": "معامل Z"
+            }
+          }
+        },
+        "aspect": {
+          "name": "الاتجاه القبلي",
+          "description": "حساب الاتجاه القبلي (اتجاه البوصلة لأشد انحدار) من نموذج ارتفاعات."
+        },
+        "reproject": {
+          "name": "إعادة إسقاط",
+          "description": "تحويل بيانات نقطية إلى نظام إسناد إحداثي مختلف.",
+          "params": {
+            "dst_crs": {
+              "label": "نظام الإسناد الإحداثي الهدف",
+              "description": "رمز جهة معتمدة مثل EPSG:3857 أو EPSG:4326."
+            },
+            "resampling": {
+              "label": "إعادة أخذ العينات",
+              "options": {
+                "nearest": "أقرب جار",
+                "bilinear": "ثنائي الخطية",
+                "cubic": "تكعيبي"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "إعادة أخذ العينات",
+          "description": "إعادة أخذ عينات بيانات نقطية إلى حجم بكسل (دقة) مختلف.",
+          "params": {
+            "resolution": {
+              "label": "حجم البكسل الهدف",
+              "description": "حجم بكسل المخرجات بوحدات نظام الإسناد الإحداثي للبيانات النقطية."
+            },
+            "resampling": {
+              "label": "إعادة أخذ العينات",
+              "options": {
+                "nearest": "أقرب جار",
+                "bilinear": "ثنائي الخطية",
+                "cubic": "تكعيبي"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "قص حسب المدى",
+          "description": "اقتطاع بيانات نقطية إلى صندوق محيط (بنظام الإسناد الإحداثي للبيانات النقطية).",
+          "params": {
+            "minx": {
+              "label": "أدنى X"
+            },
+            "miny": {
+              "label": "أدنى Y"
+            },
+            "maxx": {
+              "label": "أقصى X"
+            },
+            "maxy": {
+              "label": "أقصى Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "قص حسب طبقة القناع",
+          "description": "قص بيانات نقطية إلى الأشكال الهندسية لملف قناع متجه.",
+          "params": {
+            "mask_path": {
+              "label": "طبقة القناع",
+              "description": "ملف GeoJSON تحدد أشكاله الهندسية منطقة القص. يُعاد إسقاطه تلقائيًا إلى نظام الإسناد الإحداثي للبيانات النقطية (يُفترض أن ملف GeoJSON بلا نظام إسناد إحداثي هو WGS84)."
+            },
+            "crop": {
+              "label": "اقتطاع إلى مدى القناع"
+            },
+            "all_touched": {
+              "label": "تضمين جميع البكسلات الملامسة"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "تحويل إلى مضلعات",
+          "description": "تحويل نطاق بيانات نقطية إلى مضلعات متجهة مجمّعة حسب قيمة البكسل.",
+          "params": {
+            "band": {
+              "label": "النطاق"
+            },
+            "connectivity": {
+              "label": "الاتصالية",
+              "options": {
+                "4": "اتصال رباعي",
+                "8": "اتصال ثماني"
+              }
+            },
+            "field": {
+              "label": "اسم حقل القيمة"
+            }
+          }
+        },
+        "contour": {
+          "name": "خطوط الكنتور",
+          "description": "توليد خطوط كنتور من نموذج ارتفاعات.",
+          "params": {
+            "band": {
+              "label": "النطاق"
+            },
+            "interval": {
+              "label": "الفاصل",
+              "description": "فرق الارتفاع بين خطوط الكنتور المتتالية."
+            },
+            "base": {
+              "label": "الأساس"
+            },
+            "attribute": {
+              "label": "اسم حقل الارتفاع"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "الاستيفاء (IDW / Kriging)",
+          "description": "استيفاء سمة رقمية لطبقة نقاط إلى سطح بيانات نقطية متصل باستخدام الترجيح العكسي للمسافة أو الكريجينغ العادي.",
+          "params": {
+            "field": {
+              "label": "حقل القيمة",
+              "description": "اسم سمة النقاط الرقمية المراد استيفاؤها (مثل الارتفاع أو درجة الحرارة)."
+            },
+            "method": {
+              "label": "الطريقة",
+              "options": {
+                "idw": "الترجيح العكسي للمسافة (IDW)",
+                "kriging": "الكريجينغ العادي"
+              }
+            },
+            "resolution": {
+              "label": "حجم بكسل المخرجات",
+              "description": "حجم الخلية بوحدات نظام الإسناد الإحداثي للطبقة (الدرجات في WGS84). تغطي الشبكة مدى النقاط."
+            },
+            "power": {
+              "label": "قوة IDW",
+              "description": "القيم الأعلى تمنح النقاط القريبة تأثيرًا أكبر."
+            },
+            "variogram_model": {
+              "label": "نموذج الفاريوغرام",
+              "description": "النموذج النظري المطابَق على نصف الفاريوغرام التجريبي. يقتصر الكريجينغ على 1500 نقطة.",
+              "options": {
+                "spherical": "كروي",
+                "exponential": "أسّي",
+                "gaussian": "غاوسي",
+                "linear": "خطي"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "إحصاءات المناطق",
+          "description": "تلخيص قيم البيانات النقطية داخل كل مضلع من طبقة متجهة (العدد، والحد الأدنى، والحد الأقصى، والمتوسط، والمجموع، والانحراف المعياري، والوسيط).",
+          "params": {
+            "zones_path": {
+              "label": "طبقة المناطق",
+              "description": "طبقة مضلعات GeoJSON تحدد المناطق. يُعاد إسقاطها تلقائيًا إلى نظام الإسناد الإحداثي للبيانات النقطية (يُفترض أن ملف GeoJSON بلا نظام إسناد إحداثي هو WGS84)."
+            },
+            "band": {
+              "label": "النطاق"
+            },
+            "prefix": {
+              "label": "بادئة الحقل",
+              "description": "تُضاف قبل اسم كل حقل إحصائي (مثل 'dem_' ← 'dem_mean'). اتركها فارغة للاكتفاء بـ 'mean' و'min' و…"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "حاسبة البيانات النقطية",
+          "description": "تقييم تعبير حسابي للنطاقات بصيغة NumPy. يُشار إلى النطاق 1 من كل إدخال بـ A وB وC، وإلى نطاقات محددة بـ A1 وA2 و…؛ مثلًا NDVI هو (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "التعبير",
+              "description": "تعبير NumPy على A وB وC (وA1 وA2 و…). الدوال: where وlog وexp وsqrt وabs وclip وminimum وmaximum وsin وcos وtan."
+            },
+            "b_path": {
+              "label": "البيانات النقطية B (اختياري)",
+              "description": "بيانات نقطية ثانية يُشار إليها بـ B / B1 وB2 و…. يجب أن تطابق أبعاد A."
+            },
+            "c_path": {
+              "label": "البيانات النقطية C (اختياري)",
+              "description": "بيانات نقطية ثالثة يُشار إليها بـ C / C1 وC2 و…. يجب أن تطابق أبعاد A."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "مؤشر طيفي",
+          "description": "حساب مؤشر طيفي مسمّى (NDVI وNDWI وEVI و…) من بيانات نقطية متعددة النطاقات. اختر إعدادًا مسبقًا لمستشعر لتحديد ترتيب النطاقات، أو عيّن أرقام النطاقات يدويًا باستخدام المستشعر المخصص.",
+          "params": {
+            "index": {
+              "label": "المؤشر",
+              "options": {
+                "ndvi": "NDVI (الغطاء النباتي)",
+                "gndvi": "GNDVI (الغطاء النباتي الأخضر)",
+                "ndwi": "NDWI (المياه، McFeeters)",
+                "ndmi": "NDMI (الرطوبة)",
+                "ndbi": "NDBI (المناطق المبنية)",
+                "nbr": "NBR (نسبة الحرق)",
+                "evi": "EVI (الغطاء النباتي المحسّن)",
+                "savi": "SAVI (الغطاء النباتي المعدّل بالتربة)"
+              }
+            },
+            "sensor": {
+              "label": "المستشعر / ترتيب النطاقات",
+              "description": "أرقام نطاقات مُعدّة مسبقًا للمستشعرات الشائعة. اختر «مخصص» لتعيين النطاقات يدويًا لملف GeoTIFF مرتّب بشكل مختلف.",
+              "options": {
+                "sentinel2": "Sentinel-2 ‏(B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 ‏(B1–B7)",
+                "naip": "NAIP ‏(R, G, B, NIR)",
+                "custom": "مخصص (عيّن أرقام النطاقات أدناه)"
+              }
+            },
+            "red": {
+              "label": "رقم النطاق الأحمر"
+            },
+            "green": {
+              "label": "رقم النطاق الأخضر"
+            },
+            "blue": {
+              "label": "رقم النطاق الأزرق"
+            },
+            "nir": {
+              "label": "رقم نطاق NIR"
+            },
+            "swir1": {
+              "label": "رقم نطاق SWIR1"
+            },
+            "swir2": {
+              "label": "رقم نطاق SWIR2"
+            },
+            "L": {
+              "label": "معامل التربة (L)",
+              "description": "تصحيح سطوع التربة في SAVI (0 غطاء كثيف ← 1 تربة جرداء)."
+            },
+            "scale": {
+              "label": "مقياس الانعكاسية",
+              "description": "المُضاعِف الذي يحوّل قيم البكسل إلى انعكاسية (0–1). اتركه عند 1 لمؤشرات الفرق المعياري؛ وعيّنه لـ EVI/SAVI على الصور ذات القيم الرقمية الصحيحة (مثل 0.0001 لـ Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "إعادة تصنيف",
+          "description": "إعادة تعيين نطاقات القيم إلى قيم فئات جديدة باستخدام جدول قواعد.",
+          "params": {
+            "band": {
+              "label": "النطاق"
+            },
+            "table": {
+              "label": "القواعد",
+              "description": "قواعد بصيغة 'min:max:newvalue' مفصولة بفواصل أو أسطر جديدة، مثل '0:10:1, 10:20:2, 20:max:3'. النطاقات نصف مفتوحة [min, max)؛ وتعني القيم الفارغة/min/max ±∞."
+            },
+            "unmatched": {
+              "label": "القيم غير المطابقة",
+              "options": {
+                "nodata": "تعيين إلى NoData",
+                "original": "الاحتفاظ بالقيمة الأصلية"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "فسيفساء / دمج",
+          "description": "دمج ما يصل إلى خمس بيانات نقطية (تشترك في نظام إسناد إحداثي) في بيانات نقطية واحدة تغطي اتحادها.",
+          "params": {
+            "raster_2": {
+              "label": "البيانات النقطية الثانية"
+            },
+            "raster_3": {
+              "label": "البيانات النقطية الثالثة (اختياري)"
+            },
+            "raster_4": {
+              "label": "البيانات النقطية الرابعة (اختياري)"
+            },
+            "raster_5": {
+              "label": "البيانات النقطية الخامسة (اختياري)"
+            },
+            "method": {
+              "label": "طريقة التداخل",
+              "description": "القيمة التي تُعتمد حيث تتداخل المدخلات.",
+              "options": {
+                "first": "الأولى",
+                "last": "الأخيرة",
+                "min": "الحد الأدنى",
+                "max": "الحد الأقصى"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "إحصاءات بؤرية",
+          "description": "تطبيق إحصاء بنافذة متحركة (جوار) على نطاق بيانات نقطية.",
+          "params": {
+            "band": {
+              "label": "النطاق"
+            },
+            "statistic": {
+              "label": "الإحصاء",
+              "options": {
+                "mean": "المتوسط",
+                "median": "الوسيط",
+                "min": "الحد الأدنى",
+                "max": "الحد الأقصى",
+                "sum": "المجموع",
+                "std": "الانحراف المعياري",
+                "range": "المدى (الحد الأقصى − الحد الأدنى)"
+              }
+            },
+            "size": {
+              "label": "حجم النافذة",
+              "description": "حجم جوار فردي بالبكسل (3 = 3×3). الحد الأقصى 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "التحليل",
+      "clip": "القص",
+      "dataQuality": "جودة البيانات",
+      "dggs": "DGGS",
+      "geometry": "الهندسة",
+      "join": "الربط",
+      "movementTime": "الحركة والزمن",
+      "network": "الشبكة",
+      "overlay": "التراكب",
+      "rasterToVector": "من نقطي إلى متجه",
+      "reproject": "إعادة الإسقاط",
+      "select": "التحديد",
+      "spatialStatistics": "الإحصاء المكاني",
+      "terrain": "التضاريس",
+      "vectorToRaster": "من متجه إلى نقطي"
     }
   },
   "segmentation": {
@@ -5544,6 +7032,7 @@
     "refreshVectorControlError": "تعذر تحديث هذه الطبقة. جرّب إعادة فتح لوحة إضافة طبقة متجهات.",
     "refreshed": "تم التحديث.",
     "refreshedCount": "تم تحديث {{count}} من المعالم.",
+    "refreshedTruncated": "تم تحديث {{shown}} من أصل {{total}} معلم.",
     "refreshError": "تعذر تحديث هذه الطبقة.",
     "exportNeedsFeatures": "يتطلب التصدير طبقة متجهات تحتوي على معالم.",
     "exportedWithWarnings": "تم تصدير الطبقة. {{warnings}}",

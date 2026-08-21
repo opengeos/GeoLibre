@@ -327,6 +327,10 @@
         "label": "افزودن لایهٔ PostgreSQL",
         "description": "Martin را به‌صورت محلی اجرا کنید، منابع PostGIS را بیابید و یک منبع را به‌عنوان کاشی برداری بیفزایید."
       },
+      "iceberg": {
+        "label": "افزودن لایهٔ Apache Iceberg",
+        "description": "یک جدول Iceberg (نسخهٔ ۳ یا بالاتر) را می‌خواند و زیرمجموعه‌ای از عوارض آن را می‌افزاید."
+      },
       "deckglViz": {
         "label": "افزودن لایهٔ Deck.gl",
         "description": "یک نوع لایهٔ deck.gl را برگزینید، سپس دادهٔ نمونه را بارگیری کنید یا یک فایل یا نشانی CSV/JSON/GeoJSON بارگذاری کنید."
@@ -706,6 +710,41 @@
       "tableReadOnly": "{{table}} (فقط‌خواندنی: بدون کلید اصلی)",
       "errorSelectTable": "یک جدول را برای بارگیری برگزینید.",
       "errorRuntimeMissing": "سرور پردازش، زمان اجرای PostGIS (psycopg) را نصب ندارد. برای بارگیری لایه‌های ویرایش‌پذیر، افزودنی «postgis» بستهٔ geolibre-server را نصب کنید."
+    },
+    "iceberg": {
+      "defaultName": "لایهٔ Iceberg",
+      "notice": "جدول‌های Iceberg یک‌بار و بنا به درخواست خوانده می‌شوند. این لایه یک تصویر لحظه‌ای است که به حد سطرهای زیر محدود شده و هرگز به‌طور خودکار دوباره پیمایش نمی‌شود — برای خواندن دوبارهٔ آن از «تازه‌سازی» در منوی لایه استفاده کنید.",
+      "mode": "منبع Iceberg",
+      "modeTable": "مکان جدول",
+      "modeCatalog": "کاتالوگ REST",
+      "location": "مکان فراداده‌های جدول",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "انبار داده",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "نقطهٔ پایانی کاتالوگ",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "اتصال",
+      "table": "جدول Iceberg",
+      "sql": "SQL (اختیاری)",
+      "sqlHint": "برای پالایش یا بازچینش آنچه ترسیم می‌شود، ویرایش کنید. دستور باید یک ستون GEOMETRY برگرداند؛ برای خواندن کل جدول، آن را همان‌گونه که تولید شده رها کنید.",
+      "selectTable": "یک جدول برگزینید",
+      "geometryColumn": "ستون هندسه",
+      "rowLimit": "حد سطرها",
+      "rowLimitHint": "این لایه نخستین سطرهای جدول را تا این حد نگه می‌دارد. این حد نمی‌تواند از {{max}} سطر بیشتر باشد.",
+      "rowLimitTruncates": "جدول {{total}} سطر دارد؛ لایه شامل {{limit}} سطر نخست خواهد بود.",
+      "statusConnecting": "در حال خواندن فراداده‌های Iceberg...",
+      "statusInspecting": "در حال بررسی جدول...",
+      "statusInspected": "{{rows}} سطر. هندسه: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} سطر، اما هیچ ستون GEOMETRY یافت نشد. هندسهٔ Iceberg باید از نوع هندسهٔ نسخهٔ ۳ استفاده کند.",
+      "statusTablesFound_one": "{{count}} جدول یافت شد.",
+      "statusTablesFound_other": "{{count}} جدول یافت شد. برای ادامه یکی را برگزینید.",
+      "statusNoTables": "این کاتالوگ هیچ جدولی را عرضه نمی‌کند.",
+      "errorLocation": "مکان فراداده‌های جدول Iceberg را وارد کنید.",
+      "errorWarehouse": "انبار دادهٔ Iceberg را که باید پیوست شود وارد کنید.",
+      "errorEndpoint": "نقطهٔ پایانی کاتالوگ REST Iceberg را وارد کنید.",
+      "errorConnect": "خواندن منبع Iceberg ممکن نشد.",
+      "errorInspect": "بررسی جدول Iceberg ممکن نشد.",
+      "errorConnectFirst": "نخست متصل شوید و یک جدول Iceberg برگزینید."
     },
     "video": {
       "defaultName": "لایهٔ ویدئو",
@@ -2282,7 +2321,8 @@
       "video": "لایهٔ ویدئو",
       "deckglViz": "لایهٔ Deck.gl",
       "gltfModel": "مدل سه‌بعدی (glTF)",
-      "postgres": "لایهٔ PostgreSQL"
+      "postgres": "لایهٔ PostgreSQL",
+      "iceberg": "لایهٔ Apache Iceberg"
     },
     "conversion": {
       "vectorToVector": "برداری به برداری",
@@ -3441,11 +3481,19 @@
     "addUnsupported": "تنها دارایی‌های GeoTIFF/COG، GeoJSON، GeoParquet و PMTiles را می‌توان به نقشه افزود",
     "addFailed": "افزودن دارایی با شکست مواجه شد",
     "addNoSourceLayers": "این بایگانی هیچ لایه‌ای برای ترسیم فهرست نکرده است",
+    "addNoTarget": "این دارایی چیزی برای ترسیم فهرست نمی‌کند",
+    "addIcechunk": "مخازن Icechunk هنوز قابل خواندن نیستند",
+    "zarrProblemGroup": "این دارایی به گروهی از آرایه‌ها اشاره می‌کند، نه آرایه‌ای که بتوان ترسیم کرد",
+    "zarrProblemUnauthorized": "این مخزن Zarr به اعتبارنامه‌هایی نیاز دارد که GeoLibre هنوز نمی‌تواند فراهم کند",
+    "zarrProblemUnsupportedUrl": "نشانی این مخزن Zarr را نمی‌توان کلید به کلید خواند",
+    "zarrProblemUnavailable": "این مخزن Zarr باز نشد",
+    "chooseTarget": "آنچه را که باید افزوده شود برگزینید",
     "cogUnsupported": "این میزبان GeoLibre نمی‌تواند دارایی‌های GeoTIFF دوردست را نمایش دهد",
     "formatCog": "COG",
     "formatGeoJson": "GeoJSON",
     "formatPmtiles": "PMTiles",
     "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
     "formatUnknown": "قالب ناشناخته",
     "notAddable": "قابل افزودن نیست"
   },
@@ -3676,6 +3724,10 @@
   "basemaps": {
     "confirmStyleReplace_one": "رفتن به «{{name}}» کل شیوهٔ نمایش نقشه را جایگزین می‌کند و نقشهٔ پایهٔ روی‌هم‌چیده‌ای را که افزوده‌اید حذف خواهد کرد. ادامه می‌دهید؟",
     "confirmStyleReplace_other": "رفتن به «{{name}}» کل شیوهٔ نمایش نقشه را جایگزین می‌کند و {{count}} نقشهٔ پایهٔ روی‌هم‌چیده‌ای را که افزوده‌اید حذف خواهد کرد. ادامه می‌دهید؟"
+  },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "ویژگی‌های عارضه",
+    "massingHeight": "ارتفاع (متر)"
   },
   "annotations": {
     "toolbar": "ابزارهای حاشیه‌نویسی",
@@ -4247,6 +4299,1438 @@
       "run": "اجرا",
       "outputPlaceholder": "خروجی اینجا نمایان می‌شود.",
       "resolutionRange": "تفکیک‌پذیری (۰-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "بافر",
+          "description": "ایجاد یک چندضلعی بافر به فاصلهٔ ثابت پیرامون هر عارضه",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "distance": {
+              "label": "فاصله"
+            },
+            "units": {
+              "label": "یکاها",
+              "options": {
+                "kilometers": "کیلومتر",
+                "meters": "متر",
+                "miles": "مایل"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "مراکز ثقل",
+          "description": "محاسبهٔ نقطهٔ مرکز ثقل هر عارضه",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "پوش محدب",
+          "description": "محاسبهٔ پوش محدب دربرگیرندهٔ همهٔ عوارض",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "ادغام",
+          "description": "ادغام عوارض چندضلعی در یک هندسهٔ واحد، در صورت تمایل گروه‌بندی‌شده بر پایهٔ یک فیلد",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "field": {
+              "label": "فیلد ادغام (اختیاری)",
+              "description": "نام ویژگی‌ای که عوارض پیش از ادغام بر پایهٔ آن گروه‌بندی می‌شوند"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "کادر محدوده",
+          "description": "محاسبهٔ پوش مستطیلی همهٔ عوارض",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            }
+          }
+        },
+        "simplify": {
+          "name": "ساده‌سازی",
+          "description": "کاهش شمار رأس‌ها با الگوریتم داگلاس-پوکر",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "tolerance": {
+              "label": "رواداری (درجه)"
+            },
+            "highQuality": {
+              "label": "کیفیت بالا"
+            }
+          }
+        },
+        "clip": {
+          "name": "برش",
+          "description": "برش لایهٔ ورودی به ناحیهٔ پوشش‌داده‌شده توسط یک لایهٔ همپوشان (صفات ورودی حفظ می‌شوند)",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "overlay": {
+              "label": "لایهٔ همپوشان (برش)"
+            }
+          }
+        },
+        "intersection": {
+          "name": "اشتراک",
+          "description": "نگه‌داشتن تنها نواحی‌ای که هر دو لایهٔ چندضلعی همپوشانی دارند",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "overlay": {
+              "label": "لایهٔ همپوشان"
+            }
+          }
+        },
+        "difference": {
+          "name": "تفاضل",
+          "description": "حذف ناحیهٔ لایهٔ همپوشان از لایهٔ ورودی",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "overlay": {
+              "label": "لایهٔ همپوشان"
+            }
+          }
+        },
+        "union": {
+          "name": "اجتماع",
+          "description": "ادغام دو لایهٔ چندضلعی در یک هندسهٔ ترکیبی واحد",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "overlay": {
+              "label": "لایهٔ همپوشان"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "پیوند مکانی",
+          "description": "الحاق صفات یک لایهٔ پیوند به هر عارضهٔ ورودی بر پایهٔ یک رابطهٔ مکانی",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "overlay": {
+              "label": "لایهٔ پیوند"
+            },
+            "predicate": {
+              "label": "رابطهٔ مکانی",
+              "options": {
+                "intersects": "تقاطع دارد",
+                "within": "درون",
+                "contains": "دربر دارد"
+              }
+            },
+            "how": {
+              "label": "نوع پیوند",
+              "options": {
+                "inner": "درونی (نگه‌داشتن فقط عوارض منطبق)",
+                "left": "چپ (نگه‌داشتن همهٔ عوارض ورودی)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "پیوند صفات",
+          "description": "الحاق صفات یک لایهٔ پیوند (یک جدول) به هر عارضهٔ ورودی در جایی که یک فیلد کلید منطبق است، بدون استفاده از هندسه. یک‌به‌یک: نخستین سطر منطبق پیوند برنده است.",
+          "params": {
+            "layer": {
+              "label": "لایهٔ هدف"
+            },
+            "overlay": {
+              "label": "لایهٔ پیوند (جدول)",
+              "description": "لایه‌ای که صفات آن منتقل می‌شوند. هندسهٔ آن نادیده گرفته می‌شود."
+            },
+            "target_field": {
+              "label": "فیلد کلید هدف"
+            },
+            "join_field": {
+              "label": "فیلد کلید پیوند"
+            },
+            "how": {
+              "label": "نوع پیوند",
+              "options": {
+                "left": "چپ (نگه‌داشتن همهٔ عوارض هدف)",
+                "inner": "درونی (نگه‌داشتن فقط عوارض منطبق)"
+              }
+            },
+            "fields": {
+              "label": "فیلدهای قابل انتقال (اختیاری)",
+              "description": "فیلدهای پیوند برای رونوشت، جداشده با کاما. برای انتقال همهٔ فیلدهای پیوند به‌جز کلید، خالی بگذارید."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "انتخاب بر پایهٔ مقدار",
+          "description": "استخراج عوارضی که مقدار صفت آن‌ها با یک شرط مطابقت دارد در یک لایهٔ جدید",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "field": {
+              "label": "فیلد"
+            },
+            "operator": {
+              "label": "عملگر",
+              "options": {
+                "eq": "= (برابر)",
+                "neq": "≠ (نابرابر)",
+                "gt": "> (بزرگ‌تر از)",
+                "gte": "≥ (بزرگ‌تر یا مساوی)",
+                "lt": "< (کوچک‌تر از)",
+                "lte": "≤ (کوچک‌تر یا مساوی)",
+                "contains": "شامل است (متن)",
+                "starts-with": "آغاز می‌شود با (متن)",
+                "is-null": "خالی است",
+                "is-not-null": "خالی نیست"
+              }
+            },
+            "value": {
+              "label": "مقدار",
+              "description": "وقتی هر دو طرف عددی باشند، به‌صورت عدد مقایسه می‌شود."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "انتخاب بر پایهٔ موقعیت",
+          "description": "استخراج عوارض بر پایهٔ رابطهٔ مکانی آن‌ها با یک لایهٔ دوم در یک لایهٔ جدید",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "overlay": {
+              "label": "لایهٔ پالایه"
+            },
+            "predicate": {
+              "label": "رابطهٔ مکانی",
+              "options": {
+                "intersects": "تقاطع دارد",
+                "within": "درون",
+                "contains": "دربر دارد",
+                "disjoint": "مجزا (بدون تقاطع)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "استخراج تصادفی",
+          "description": "استخراج یک زیرمجموعهٔ تصادفی از عوارض در یک لایهٔ جدید، با اندازه‌ای بر پایهٔ شمار عوارض یا درصدی از ورودی.",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "method": {
+              "label": "روش",
+              "options": {
+                "count": "شمار عوارض",
+                "percentage": "درصد عوارض"
+              }
+            },
+            "count": {
+              "label": "شمار عوارض",
+              "description": "اگر بزرگ‌تر باشد، به شمار عوارض ورودی محدود می‌شود."
+            },
+            "percentage": {
+              "label": "درصد عوارض"
+            }
+          }
+        },
+        "reproject": {
+          "name": "تغییر تصویر",
+          "description": "مختصات یک لایه را به‌عنوان یک سیستم مختصات مبدأ بازتفسیر می‌کند و آن‌ها را به WGS84 تبدیل می‌کند تا در مکان درست نمایش داده شوند. به سرویس کناری یا موتور Python نیاز دارد.",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "source_crs": {
+              "label": "سیستم مختصات مبدأ",
+              "description": "سیستم مختصاتی که مختصات لایه واقعاً در آن هستند (مثلاً EPSG:3857). نتیجه به WGS84 ‏(EPSG:4326) تبدیل می‌شود."
+            }
+          }
+        },
+        "explode": {
+          "name": "تجزیه",
+          "description": "تقسیم هندسه‌های چندبخشی به عوارض تک‌بخشی (یک عارضه به ازای هر بخش)، با حفظ صفات هر والد",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "تجمیع بر پایهٔ صفت",
+          "description": "ادغام عوارضی که مقدار صفت مشترکی دارند در یک هندسه به ازای هر گروه، همراه با یک آمارهٔ خلاصه",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "group_field": {
+              "label": "فیلد گروه‌بندی"
+            },
+            "statistic": {
+              "label": "آماره",
+              "options": {
+                "count": "شمارش",
+                "sum": "مجموع",
+                "mean": "میانگین",
+                "min": "کمینه",
+                "max": "بیشینه",
+                "median": "میانه"
+              }
+            },
+            "stat_field": {
+              "label": "فیلد آماره",
+              "description": "فیلد عددی‌ای که با آمارهٔ بالا خلاصه می‌شود."
+            }
+          }
+        },
+        "smooth": {
+          "name": "هموارسازی",
+          "description": "گرد کردن گوشه‌های عوارض خطی و چندضلعی با الگوریتم چایکین (رأس می‌افزاید)، متفاوت از کاهش رأس در ساده‌سازی. Z/ارتفاع حفظ می‌شود؛ نقاط بدون تغییر عبور می‌کنند.",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "iterations": {
+              "label": "تکرارها",
+              "description": "تکرار بیشتر نتیجهٔ هموارتری می‌دهد (۱-۱۰)."
+            }
+          }
+        },
+        "grid": {
+          "name": "شبکهٔ منظم",
+          "description": "تولید یک شبکهٔ مستطیلی منظم (تور ماهیگیری) از سلول‌ها روی یک گستره. منبع: نمای کنونی نقشه، گسترهٔ یک لایه، یا یک کادر محدودهٔ دستی.",
+          "params": {
+            "source": {
+              "label": "منبع گستره",
+              "options": {
+                "viewport": "نمای نقشه",
+                "layer": "گسترهٔ لایه",
+                "bbox": "کادر محدودهٔ دستی"
+              }
+            },
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "west": {
+              "label": "غرب (کمینهٔ طول جغرافیایی)"
+            },
+            "south": {
+              "label": "جنوب (کمینهٔ عرض جغرافیایی)"
+            },
+            "east": {
+              "label": "شرق (بیشینهٔ طول جغرافیایی)"
+            },
+            "north": {
+              "label": "شمال (بیشینهٔ عرض جغرافیایی)"
+            },
+            "cell_width": {
+              "label": "پهنای سلول (درجه)"
+            },
+            "cell_height": {
+              "label": "بلندای سلول (درجه)",
+              "description": "برای برابر بودن با پهنای سلول، خالی بگذارید."
+            },
+            "cell_type": {
+              "label": "نوع سلول",
+              "options": {
+                "polygon": "مستطیل‌ها",
+                "point": "نقاط (مراکز سلول)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "ورونوی / دلونی",
+          "description": "ساخت یک نمودار ورونوی (یک چندضلعی به ازای هر نقطه، برش‌خورده به گسترهٔ نقاط) یا یک مثلث‌بندی دلونی از یک لایهٔ نقطه‌ای.",
+          "params": {
+            "layer": {
+              "label": "لایهٔ نقطه‌ای ورودی"
+            },
+            "type": {
+              "label": "نمودار",
+              "options": {
+                "voronoi": "چندضلعی‌های ورونوی",
+                "delaunay": "مثلث‌های دلونی"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "پوشش دکل‌های مخابراتی",
+          "description": "ساخت چندضلعی‌های قطاعی/گوه‌ای آنتن از نقاط دکل‌ها با استفاده از آزیموت، شعاع و پهنای پرتو (خوانده‌شده از فیلدهای صفت یا مقادیر ثابت). پهنای پرتو به ۳۶۰° (یک دایرهٔ کامل) محدود می‌شود؛ پهنای پرتو ثبت‌شده مقدار محدودشده را بازتاب می‌دهد. برای پوشش دکل‌های مخابراتی سودمند است، مانند QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "لایهٔ نقطه‌ای ورودی"
+            },
+            "azimuthField": {
+              "label": "فیلد آزیموت (°)",
+              "description": "جهتی که قطاع رو به آن است، بر حسب درجه در جهت عقربه‌های ساعت از شمال. وقتی خالی یا غیرعددی باشد، از آزیموت ثابت استفاده می‌شود."
+            },
+            "azimuth": {
+              "label": "آزیموت (ثابت، °)"
+            },
+            "radiusField": {
+              "label": "فیلد شعاع",
+              "description": "شعاع پوشش. وقتی خالی یا غیرعددی باشد، از شعاع ثابت استفاده می‌شود."
+            },
+            "radius": {
+              "label": "شعاع (ثابت)"
+            },
+            "beamwidthField": {
+              "label": "فیلد پهنای پرتو (°)",
+              "description": "پهنای زاویه‌ای قطاع، محدود به ۳۶۰° (یک دایرهٔ کامل). وقتی خالی یا غیرعددی باشد، از پهنای پرتو ثابت استفاده می‌شود."
+            },
+            "beamwidth": {
+              "label": "پهنای پرتو (ثابت، °)"
+            },
+            "units": {
+              "label": "یکاهای شعاع",
+              "options": {
+                "kilometers": "کیلومتر",
+                "meters": "متر",
+                "miles": "مایل"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "سازندهٔ DGGS",
+          "description": "پر کردن یک ناحیه با سلول‌های DGGS ‏(H3، S2، A5، DGGRID، DGGAL). منبع: هندسهٔ یک لایه، گسترهٔ یک لایه، نمای کنونی نقشه، یا یک کادر محدودهٔ دستی.",
+          "params": {
+            "dggsType": {
+              "label": "نوع DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "نوع DGGRID",
+              "description": "پیکربندی شبکه که به‌صورت dggs_params به duck_dggs داده می‌شود (ISEA/FULLER × دهانه × توپولوژی).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "نوع DGGAL",
+              "description": "DGGRS که به dggal.createDGGRS داده می‌شود (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "منبع ناحیه",
+              "options": {
+                "polyfill": "هندسهٔ لایه (پرکردن چندضلعی)",
+                "extent": "گسترهٔ لایه (کادر محدوده)",
+                "viewport": "نمای نقشه",
+                "bbox": "کادر محدودهٔ دستی"
+              }
+            },
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "west": {
+              "label": "غرب (کمینهٔ طول جغرافیایی)"
+            },
+            "south": {
+              "label": "جنوب (کمینهٔ عرض جغرافیایی)"
+            },
+            "east": {
+              "label": "شرق (بیشینهٔ طول جغرافیایی)"
+            },
+            "north": {
+              "label": "شمال (بیشینهٔ عرض جغرافیایی)"
+            },
+            "resolution": {
+              "label": "تفکیک‌پذیری",
+              "description": "بازه به نوع DGGS بستگی دارد. برای گزینش خودکار بر پایهٔ ناحیه، خالی بگذارید."
+            },
+            "compactCells": {
+              "label": "فشرده‌سازی سلول‌ها",
+              "description": "ادغام مجموعه‌های کامل سلول‌های هم‌نیا در والدهای درشت‌تر (عوارض کمتر، تفکیک‌پذیری‌های آمیخته)."
+            },
+            "fixAntimeridian": {
+              "label": "اصلاح نصف‌النهار مقابل",
+              "description": "حلقه‌های سلول‌هایی را که از طول جغرافیایی ±۱۸۰° می‌گذرند باز می‌کند."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "دسته‌بندی DGGS",
+          "description": "تجمیع یک لایهٔ نقطه‌ای در سلول‌های DGGS (شمارش، یا مجموع/میانگین/کمینه/بیشینهٔ یک فیلد عددی).",
+          "params": {
+            "dggsType": {
+              "label": "نوع DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "نوع DGGRID",
+              "description": "پیکربندی شبکه که به‌صورت dggs_params به duck_dggs داده می‌شود (ISEA/FULLER × دهانه × توپولوژی).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "نوع DGGAL",
+              "description": "DGGRS که به dggal.createDGGRS داده می‌شود (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "لایهٔ نقطه‌ای ورودی"
+            },
+            "aggOp": {
+              "label": "تجمیع",
+              "options": {
+                "count": "شمارش",
+                "sum": "مجموع",
+                "mean": "میانگین",
+                "min": "کمینه",
+                "max": "بیشینه"
+              }
+            },
+            "field": {
+              "label": "فیلد",
+              "description": "فیلد عددی برای تجمیع."
+            },
+            "resolution": {
+              "label": "تفکیک‌پذیری",
+              "description": "بازه به نوع DGGS بستگی دارد. برای گزینش خودکار بر پایهٔ ناحیه، خالی بگذارید."
+            },
+            "fixAntimeridian": {
+              "label": "اصلاح نصف‌النهار مقابل",
+              "description": "حلقه‌های سلول‌هایی را که از طول جغرافیایی ±۱۸۰° می‌گذرند باز می‌کند."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "فشرده‌سازی DGGS",
+          "description": "فشرده‌سازی سلول‌های چندضلعی DGGS، یا گسترش آن‌ها به یک تفکیک‌پذیری یکنواخت (H3، S2، A5، DGGAL). ورودی باید یک لایهٔ سلولی با ویژگی شناسه باشد.",
+          "params": {
+            "dggsType": {
+              "label": "نوع DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "نوع DGGAL",
+              "description": "DGGRS که به dggal.createDGGRS داده می‌شود (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "حالت",
+              "options": {
+                "compact": "فشرده‌سازی",
+                "expand": "گسترش"
+              }
+            },
+            "layer": {
+              "label": "لایهٔ DGGS ورودی",
+              "description": "لایهٔ سلول‌های چندضلعی از سازندهٔ DGGS / دسته‌بندی DGGS (یا معادل آن)."
+            },
+            "cellField": {
+              "label": "فیلد شناسهٔ سلول",
+              "description": "وقتی خالی بماند، بسته به نوع برگزیده، پیش‌فرض h3، a5، s2 یا dggal است."
+            },
+            "resolution": {
+              "label": "تفکیک‌پذیری هدف",
+              "description": "تفکیک‌پذیری‌ای که به آن گسترش داده می‌شود. باید دست‌کم به ریزی سلول‌های ورودی باشد."
+            },
+            "fixAntimeridian": {
+              "label": "اصلاح نصف‌النهار مقابل",
+              "description": "حلقه‌های سلول‌هایی را که از طول جغرافیایی ±۱۸۰° می‌گذرند باز می‌کند."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "سرعت مسیر حرکت",
+          "description": "مرتب‌سازی نقاط بر پایهٔ زمان (به ازای هر هدف) و اتصال نقاط متوالی به قطعاتی که فاصله، مدت و سرعت را حمل می‌کنند. مانند QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "لایهٔ نقطه‌ای ورودی"
+            },
+            "timeField": {
+              "label": "فیلد زمان",
+              "description": "برچسب زمانی هر نقطه: یک رشتهٔ تاریخ/زمان ISO یا یک زمان یونیکس (ثانیه یا میلی‌ثانیه)."
+            },
+            "idField": {
+              "label": "فیلد شناسهٔ هدف",
+              "description": "نقاط را به مسیرهای حرکت جداگانه تقسیم می‌کند. برای در نظر گرفتن همهٔ نقاط به‌عنوان یک هدف، خالی بگذارید."
+            },
+            "speedUnits": {
+              "label": "یکاهای سرعت",
+              "options": {
+                "km/h": "کیلومتر بر ساعت",
+                "m/s": "متر بر ثانیه",
+                "mph": "مایل بر ساعت"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "تشخیص توقف‌ها",
+          "description": "یافتن جاهایی که یک هدف در آن‌ها درنگ می‌کند: دنباله‌هایی از نقاط متوالی که دست‌کم برای یک مدت کمینه در یک فاصله می‌مانند (با جذب پراکندگی GPS). به ازای هر توقف یک نقطه خروجی می‌دهد. مانند QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "لایهٔ نقطه‌ای ورودی"
+            },
+            "timeField": {
+              "label": "فیلد زمان",
+              "description": "برچسب زمانی هر نقطه: یک رشتهٔ تاریخ/زمان ISO یا یک زمان یونیکس (ثانیه یا میلی‌ثانیه)."
+            },
+            "idField": {
+              "label": "فیلد شناسهٔ هدف",
+              "description": "توقف‌ها را به ازای هر هدف تشخیص می‌دهد. برای در نظر گرفتن همهٔ نقاط به‌عنوان یک هدف، خالی بگذارید."
+            },
+            "maxDistance": {
+              "label": "بیشینهٔ فاصله",
+              "description": "هر نقطه در یک توقف باید در این فاصله از نخستین نقطهٔ توقف باشد (پس یک توقف می‌تواند تا دو برابر این مقدار گسترده شود). آن را برابر شعاع پراکندگی GPS خود قرار دهید."
+            },
+            "distanceUnits": {
+              "label": "یکاهای فاصله",
+              "options": {
+                "meters": "متر",
+                "kilometers": "کیلومتر",
+                "miles": "مایل"
+              }
+            },
+            "minDuration": {
+              "label": "کمینهٔ مدت (ثانیه)",
+              "description": "درنگی کوتاه‌تر از این به‌عنوان توقف گزارش نمی‌شود."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "مجاورت فضا-زمان",
+          "description": "یافتن جفت نقاطی که هم در فضا و هم در زمان نزدیک‌اند — مثلاً دیدار دو هدف. به ازای هر جفت واجد شرایط یک خط اتصال خروجی می‌دهد که فاصله و شکاف زمانی را حمل می‌کند.",
+          "params": {
+            "layer": {
+              "label": "لایهٔ نقطه‌ای ورودی"
+            },
+            "timeField": {
+              "label": "فیلد زمان",
+              "description": "برچسب زمانی هر نقطه: یک رشتهٔ تاریخ/زمان ISO یا یک زمان یونیکس (ثانیه یا میلی‌ثانیه)."
+            },
+            "idField": {
+              "label": "فیلد شناسهٔ هدف",
+              "description": "وقتی تنظیم شود، فقط نقاطی با مقادیر شناسهٔ متفاوت جفت می‌شوند (برخوردهای میان هدف‌های مجزا). برای در نظر گرفتن هر جفت، خالی بگذارید."
+            },
+            "maxDistance": {
+              "label": "بیشینهٔ فاصله"
+            },
+            "distanceUnits": {
+              "label": "یکاهای فاصله",
+              "options": {
+                "meters": "متر",
+                "kilometers": "کیلومتر",
+                "miles": "مایل"
+              }
+            },
+            "maxTime": {
+              "label": "بیشینهٔ اختلاف زمانی"
+            },
+            "timeUnits": {
+              "label": "یکاهای زمان",
+              "options": {
+                "seconds": "ثانیه",
+                "minutes": "دقیقه",
+                "hours": "ساعت"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "بررسی اعتبار",
+          "description": "یافتن عوارض با هندسهٔ نامعتبر (قواعد GEOS: حلقه‌های خودمتقاطع، حفره‌های بیرون از پوسته، ...) و نشانه‌گذاری آن‌ها روی نقشه",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "اصلاح هندسه‌ها",
+          "description": "ترمیم هندسه‌های نامعتبر با ST_MakeValid ‏(GEOS)؛ عوارض معتبر دست‌نخورده عبور می‌کنند",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "بررسی قواعد توپولوژی",
+          "description": "اعتبارسنجی لایه در برابر قواعد توپولوژی (همپوشانی‌ها، شکاف‌ها، خودتقاطعی‌ها، سرهای آویزان) و نشانه‌گذاری هر تخطی روی نقشه",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "ruleSelfIntersect": {
+              "label": "خطوط نباید خودمتقاطع باشند"
+            },
+            "ruleOverlap": {
+              "label": "چندضلعی‌ها نباید همپوشانی داشته باشند"
+            },
+            "ruleGaps": {
+              "label": "چندضلعی‌ها نباید شکاف داشته باشند"
+            },
+            "ruleDangles": {
+              "label": "خطوط نباید سر آویزان داشته باشند"
+            },
+            "rulePointCovered": {
+              "label": "نقاط باید توسط یک خط پوشانده شوند"
+            },
+            "ruleEndpointSnap": {
+              "label": "نقاط انتهایی خطوط باید در محدودهٔ رواداری متصل شوند"
+            },
+            "snapTolerance": {
+              "label": "رواداری چسبندگی",
+              "description": "برای قاعدهٔ نقاط انتهایی: دو انتهای خط تا چه فاصله‌ای (بر حسب یکاهای مختصات لایه — درجه برای WGS84) می‌توانند از هم دور باشند و همچنان متصل به شمار آیند."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "اصلاح توپولوژی",
+          "description": "ترمیم خودکار تخطی‌های توپولوژی: چسباندن نقاط انتهایی خطوطی که تقریباً متصل‌اند، اصلاح سرهای آویزان، و تصویر کردن نقاط روی خطوط. انتهاهای آزادی که چیزی در نزدیکی ندارند بدون تغییر می‌مانند.",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "ruleEndpointSnap": {
+              "label": "چسباندن نقاط انتهایی خطوط تقریباً متصل"
+            },
+            "ruleDangles": {
+              "label": "ترمیم سرهای آویزان (چسباندن یا تصویر کردن روی هندسهٔ نزدیک)"
+            },
+            "rulePointCovered": {
+              "label": "تصویر کردن نقاط روی نزدیک‌ترین خط"
+            },
+            "snapTolerance": {
+              "label": "رواداری چسبندگی",
+              "description": "هندسه تا چه فاصله‌ای (بر حسب یکاهای مختصات لایه — درجه برای WGS84) می‌تواند برای اتصال جابه‌جا شود."
+            },
+            "dryRun": {
+              "label": "فقط پیش‌نمایش (اجرای آزمایشی)",
+              "description": "اصلاحاتی را که اعمال می‌شدند گزارش می‌کند، بدون ایجاد یک لایهٔ ترمیم‌شده."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "هم‌زمان‌خط / ناحیهٔ خدمات",
+          "description": "چندضلعی‌های دسترس‌پذیری بر پایهٔ زمان سفر یا فاصلهٔ سفر از هر نقطهٔ یک لایه",
+          "params": {
+            "layer": {
+              "label": "نقاط مبدأ"
+            },
+            "mode": {
+              "label": "شیوهٔ سفر",
+              "options": {
+                "auto": "رانندگی",
+                "pedestrian": "پیاده‌روی",
+                "bicycle": "دوچرخه‌سواری"
+              }
+            },
+            "metric": {
+              "label": "سنجه",
+              "options": {
+                "time": "زمان سفر (دقیقه)",
+                "distance": "فاصله (کیلومتر)"
+              }
+            },
+            "contours": {
+              "label": "خطوط تراز",
+              "description": "مقادیر جداشده با کاما (دقیقه برای زمان، کیلومتر برای فاصله)"
+            },
+            "endpoint": {
+              "label": "سرور مسیریابی (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "ماتریس هزینهٔ مبدأ-مقصد",
+          "description": "زمان و فاصلهٔ سفر میان هر نقطهٔ مبدأ و مقصد، به‌صورت خطوط اتصال",
+          "params": {
+            "origins": {
+              "label": "نقاط مبدأ"
+            },
+            "destinations": {
+              "label": "نقاط مقصد"
+            },
+            "mode": {
+              "label": "شیوهٔ سفر",
+              "options": {
+                "auto": "رانندگی",
+                "pedestrian": "پیاده‌روی",
+                "bicycle": "دوچرخه‌سواری"
+              }
+            },
+            "endpoint": {
+              "label": "سرور مسیریابی (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "مسیر ترتیبی (راهنمای مسیر)",
+          "description": "اتصال نقاط به ترتیب در امتداد شبکهٔ راه‌ها به‌صورت یک مسیر. هر نقطه به نزدیک‌ترین راه چسبانده می‌شود، پس مختصات خارج از راه (دکل‌های مخابراتی، حسگرها) نیز مسیریابی می‌شوند. ترتیب از فیلد برگزیده (مثلاً یک برچسب زمانی) یا ترتیب عوارض لایه پیروی می‌کند.",
+          "params": {
+            "layer": {
+              "label": "نقاط ورودی"
+            },
+            "order_field": {
+              "label": "مرتب‌سازی بر پایهٔ فیلد (اختیاری)",
+              "description": "نقاط را پیش از مسیریابی بر پایهٔ این فیلد (اعداد یا برچسب‌های زمانی) مرتب می‌کند. برای استفاده از ترتیب عوارض لایه، خالی بگذارید."
+            },
+            "mode": {
+              "label": "شیوهٔ سفر",
+              "options": {
+                "auto": "رانندگی",
+                "pedestrian": "پیاده‌روی",
+                "bicycle": "دوچرخه‌سواری"
+              }
+            },
+            "endpoint": {
+              "label": "سرور مسیریابی (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "شاخص موران سراسری",
+          "description": "اندازه‌گیری خودهمبستگی مکانی کلی یک صفت عددی در سراسر لایه.",
+          "params": {
+            "layer": {
+              "label": "لایه"
+            },
+            "field": {
+              "label": "فیلد مقدار"
+            },
+            "weightsType": {
+              "label": "وزن‌های مکانی",
+              "description": "نحوهٔ تعریف همسایه‌ها برای هر عارضه.",
+              "options": {
+                "knn": "K نزدیک‌ترین همسایه",
+                "distance": "باند فاصله"
+              }
+            },
+            "k": {
+              "label": "همسایه‌ها (k)"
+            },
+            "threshold": {
+              "label": "باند فاصله (کیلومتر)"
+            },
+            "permutations": {
+              "label": "جایگشت‌ها",
+              "description": "جایگشت‌های تصادفی برای مقدار p شبه‌تجربی."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "شاخص موران محلی (LISA)",
+          "description": "خوشه‌ها و پرت‌ها به ازای هر عارضه (بالا-بالا، پایین-پایین، بالا-پایین، پایین-بالا) با معناداری شبه‌تجربی.",
+          "params": {
+            "layer": {
+              "label": "لایه"
+            },
+            "field": {
+              "label": "فیلد مقدار"
+            },
+            "weightsType": {
+              "label": "وزن‌های مکانی",
+              "description": "نحوهٔ تعریف همسایه‌ها برای هر عارضه.",
+              "options": {
+                "knn": "K نزدیک‌ترین همسایه",
+                "distance": "باند فاصله"
+              }
+            },
+            "k": {
+              "label": "همسایه‌ها (k)"
+            },
+            "threshold": {
+              "label": "باند فاصله (کیلومتر)"
+            },
+            "permutations": {
+              "label": "جایگشت‌ها",
+              "description": "جایگشت‌های تصادفی برای مقدار p شبه‌تجربی."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "نقاط داغ Getis-Ord Gi*",
+          "description": "شناسایی نقاط داغ و نقاط سرد معنادار آماری یک صفت عددی.",
+          "params": {
+            "layer": {
+              "label": "لایه"
+            },
+            "field": {
+              "label": "فیلد مقدار"
+            },
+            "weightsType": {
+              "label": "وزن‌های مکانی",
+              "description": "نحوهٔ تعریف همسایه‌ها برای هر عارضه.",
+              "options": {
+                "knn": "K نزدیک‌ترین همسایه",
+                "distance": "باند فاصله"
+              }
+            },
+            "k": {
+              "label": "همسایه‌ها (k)"
+            },
+            "threshold": {
+              "label": "باند فاصله (کیلومتر)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "میانگین نزدیک‌ترین همسایه",
+          "description": "آزمون اینکه آیا نقاط خوشه‌ای، پراکنده یا به‌طور تصادفی توزیع شده‌اند (نسبت ANN + نمرهٔ z).",
+          "params": {
+            "layer": {
+              "label": "لایهٔ نقطه‌ای"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "چگالی کرنل (نقشهٔ حرارتی)",
+          "description": "برآورد یک سطح چگالی از نقاط به‌صورت شبکه‌ای از سلول‌ها، با استفاده از کرنل درجهٔ چهار.",
+          "params": {
+            "layer": {
+              "label": "لایهٔ نقطه‌ای"
+            },
+            "weightField": {
+              "label": "فیلد وزن (اختیاری)",
+              "description": "فیلد عددی وزن‌دهندهٔ هر نقطه؛ خالی = وزن برابر."
+            },
+            "bandwidth": {
+              "label": "شعاع جست‌وجو / پهنای باند (کیلومتر)"
+            },
+            "cellSize": {
+              "label": "اندازهٔ سلول (کیلومتر)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "نقاط داغ نوپدید (مکعب فضا-زمان)",
+          "description": "ساخت یک مکعب فضا-زمان از نقاط برچسب‌زمانی‌دار (یک شبکهٔ تور ماهیگیری × گام‌های زمانی برابر) و طبقه‌بندی هر سلول به‌عنوان نقطهٔ داغ/سرد جدید، تشدیدشونده، پایدار، کاهنده، پراکنده، نوسانی یا تاریخی. Getis-Ord Gi* را به ازای هر برش زمانی اجرا می‌کند، سپس یک آزمون روند من-کندال روی سری Gi* هر سلول انجام می‌دهد. سمت کارخواه، مانند تحلیل نقاط داغ نوپدید ArcGIS.",
+          "params": {
+            "layer": {
+              "label": "لایهٔ نقطه‌ای"
+            },
+            "timeField": {
+              "label": "فیلد زمان",
+              "description": "برچسب زمانی هر نقطه: یک رشتهٔ تاریخ/زمان ISO یا یک زمان یونیکس (ثانیه یا میلی‌ثانیه)."
+            },
+            "cellSize": {
+              "label": "اندازهٔ سلول (کیلومتر)",
+              "description": "طول ضلع هر سلول مربعی مکانی، بر حسب کیلومتر."
+            },
+            "timeStep": {
+              "label": "بازهٔ گام زمانی"
+            },
+            "timeStepUnit": {
+              "label": "یکای گام زمانی",
+              "options": {
+                "hours": "ساعت",
+                "days": "روز",
+                "weeks": "هفته"
+              }
+            },
+            "weightField": {
+              "label": "فیلد وزن (اختیاری)",
+              "description": "فیلد عددی‌ای که به‌جای شمارش نقاط، به ازای هر سلول فضا-زمان جمع زده می‌شود؛ خالی = شمارش نقاط."
+            },
+            "confidence": {
+              "label": "سطح اطمینان",
+              "description": "آستانهٔ معناداری برای اینکه یک سلول نقطهٔ داغ/سرد به شمار آید و برای روند.",
+              "options": {
+                "90": "۹۰٪",
+                "95": "۹۵٪",
+                "99": "۹۹٪"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "سایه‌روشن زمین",
+          "description": "محاسبهٔ یک رستر سایه‌روشن (هیل‌شید) از یک مدل ارتفاعی.",
+          "params": {
+            "azimuth": {
+              "label": "آزیموت (درجه)"
+            },
+            "altitude": {
+              "label": "ارتفاع زاویه‌ای (درجه)"
+            },
+            "z_factor": {
+              "label": "ضریب Z"
+            }
+          }
+        },
+        "slope": {
+          "name": "شیب",
+          "description": "محاسبهٔ شیب (تندی) از یک مدل ارتفاعی.",
+          "params": {
+            "units": {
+              "label": "یکاها",
+              "options": {
+                "degrees": "درجه",
+                "percent": "درصد"
+              }
+            },
+            "z_factor": {
+              "label": "ضریب Z"
+            }
+          }
+        },
+        "aspect": {
+          "name": "جهت شیب",
+          "description": "محاسبهٔ جهت شیب (جهت قطب‌نمایی تندترین شیب) از یک مدل ارتفاعی."
+        },
+        "reproject": {
+          "name": "تغییر تصویر",
+          "description": "تبدیل یک رستر به یک سیستم مرجع مختصات دیگر.",
+          "params": {
+            "dst_crs": {
+              "label": "سیستم مختصات هدف",
+              "description": "یک کد مرجع مانند EPSG:3857 یا EPSG:4326."
+            },
+            "resampling": {
+              "label": "بازنمونه‌گیری",
+              "options": {
+                "nearest": "نزدیک‌ترین همسایه",
+                "bilinear": "دوخطی",
+                "cubic": "مکعبی"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "بازنمونه‌گیری",
+          "description": "بازنمونه‌گیری یک رستر به اندازهٔ پیکسل (تفکیک‌پذیری) متفاوت.",
+          "params": {
+            "resolution": {
+              "label": "اندازهٔ پیکسل هدف",
+              "description": "اندازهٔ پیکسل خروجی بر حسب یکاهای سیستم مختصات رستر."
+            },
+            "resampling": {
+              "label": "بازنمونه‌گیری",
+              "options": {
+                "nearest": "نزدیک‌ترین همسایه",
+                "bilinear": "دوخطی",
+                "cubic": "مکعبی"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "برش بر پایهٔ گستره",
+          "description": "برش یک رستر به یک کادر محدوده (در سیستم مختصات رستر).",
+          "params": {
+            "minx": {
+              "label": "کمینهٔ X"
+            },
+            "miny": {
+              "label": "کمینهٔ Y"
+            },
+            "maxx": {
+              "label": "بیشینهٔ X"
+            },
+            "maxy": {
+              "label": "بیشینهٔ Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "برش بر پایهٔ لایهٔ ماسک",
+          "description": "برش یک رستر به هندسه‌های یک فایل ماسک برداری.",
+          "params": {
+            "mask_path": {
+              "label": "لایهٔ ماسک",
+              "description": "یک فایل GeoJSON که هندسه‌های آن ناحیهٔ برش را تعریف می‌کنند. به‌طور خودکار به سیستم مختصات رستر تبدیل می‌شود (یک GeoJSON بدون CRS به‌عنوان WGS84 فرض می‌شود)."
+            },
+            "crop": {
+              "label": "برش به گسترهٔ ماسک"
+            },
+            "all_touched": {
+              "label": "شامل همهٔ پیکسل‌های لمس‌شده"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "تبدیل به چندضلعی",
+          "description": "تبدیل یک باند رستری به چندضلعی‌های برداری گروه‌بندی‌شده بر پایهٔ مقدار پیکسل.",
+          "params": {
+            "band": {
+              "label": "باند"
+            },
+            "connectivity": {
+              "label": "پیوستگی",
+              "options": {
+                "4": "۴-همسایگی",
+                "8": "۸-همسایگی"
+              }
+            },
+            "field": {
+              "label": "نام فیلد مقدار"
+            }
+          }
+        },
+        "contour": {
+          "name": "منحنی میزان",
+          "description": "تولید خطوط منحنی میزان از یک مدل ارتفاعی.",
+          "params": {
+            "band": {
+              "label": "باند"
+            },
+            "interval": {
+              "label": "فاصلهٔ منحنی‌ها",
+              "description": "اختلاف ارتفاع میان خطوط منحنی میزان متوالی."
+            },
+            "base": {
+              "label": "مبنا"
+            },
+            "attribute": {
+              "label": "نام فیلد ارتفاع"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "درون‌یابی (IDW / کریجینگ)",
+          "description": "درون‌یابی صفت عددی یک لایهٔ نقطه‌ای به یک سطح رستری پیوسته با استفاده از وزن‌دهی معکوس فاصله یا کریجینگ معمولی.",
+          "params": {
+            "field": {
+              "label": "فیلد مقدار",
+              "description": "نام صفت عددی نقطه‌ای برای درون‌یابی (مثلاً ارتفاع، دما)."
+            },
+            "method": {
+              "label": "روش",
+              "options": {
+                "idw": "وزن‌دهی معکوس فاصله (IDW)",
+                "kriging": "کریجینگ معمولی"
+              }
+            },
+            "resolution": {
+              "label": "اندازهٔ پیکسل خروجی",
+              "description": "اندازهٔ سلول بر حسب یکاهای سیستم مختصات لایه (درجه برای WGS84). شبکه گسترهٔ نقاط را می‌پوشاند."
+            },
+            "power": {
+              "label": "توان IDW",
+              "description": "مقادیر بالاتر به نقاط نزدیک‌تر تأثیر بیشتری می‌دهند."
+            },
+            "variogram_model": {
+              "label": "مدل واریوگرام",
+              "description": "مدل نظری برازش‌شده بر نیم‌واریوگرام تجربی. کریجینگ به ۱۵۰۰ نقطه محدود است.",
+              "options": {
+                "spherical": "کروی",
+                "exponential": "نمایی",
+                "gaussian": "گاوسی",
+                "linear": "خطی"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "آمار پهنه‌ای",
+          "description": "خلاصه‌سازی مقادیر رستری درون هر چندضلعی یک لایهٔ برداری (شمارش، کمینه، بیشینه، میانگین، مجموع، انحراف معیار، میانه).",
+          "params": {
+            "zones_path": {
+              "label": "لایهٔ پهنه‌ها",
+              "description": "یک لایهٔ چندضلعی GeoJSON که پهنه‌ها را تعریف می‌کند. به‌طور خودکار به سیستم مختصات رستر تبدیل می‌شود (یک GeoJSON بدون CRS به‌عنوان WGS84 فرض می‌شود)."
+            },
+            "band": {
+              "label": "باند"
+            },
+            "prefix": {
+              "label": "پیشوند فیلد",
+              "description": "به ابتدای نام هر فیلد آماره افزوده می‌شود (مثلاً «dem_» ← «dem_mean»). برای نام‌های سادهٔ «mean»، «min»، … خالی بگذارید."
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "ماشین‌حساب رستری",
+          "description": "ارزیابی یک عبارت ریاضی باندی NumPy. به باند ۱ هر ورودی با A، B، C و به باندهای مشخص با A1، A2، … ارجاع دهید؛ مثلاً NDVI برابر است با ‎(A2 - A1) / (A2 + A1)‎.",
+          "params": {
+            "expression": {
+              "label": "عبارت",
+              "description": "یک عبارت NumPy روی A، B، C (و A1، A2، …). توابع: where، log، exp، sqrt، abs، clip، minimum، maximum، sin، cos، tan."
+            },
+            "b_path": {
+              "label": "رستر B (اختیاری)",
+              "description": "یک رستر دوم که با B / B1، B2، … به آن ارجاع داده می‌شود. باید با ابعاد A مطابقت داشته باشد."
+            },
+            "c_path": {
+              "label": "رستر C (اختیاری)",
+              "description": "یک رستر سوم که با C / C1، C2، … به آن ارجاع داده می‌شود. باید با ابعاد A مطابقت داشته باشد."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "شاخص طیفی",
+          "description": "محاسبهٔ یک شاخص طیفی نام‌دار (NDVI، NDWI، EVI، …) از یک رستر چندباندی. یک پیش‌تنظیم حسگر را برای چیدمان باندها برگزینید، یا شماره‌های باند را با حسگر سفارشی به‌صورت دستی تنظیم کنید.",
+          "params": {
+            "index": {
+              "label": "شاخص",
+              "options": {
+                "ndvi": "NDVI (پوشش گیاهی)",
+                "gndvi": "GNDVI (پوشش گیاهی سبز)",
+                "ndwi": "NDWI (آب، McFeeters)",
+                "ndmi": "NDMI (رطوبت)",
+                "ndbi": "NDBI (ساخت‌وساز)",
+                "nbr": "NBR (نسبت سوختگی)",
+                "evi": "EVI (پوشش گیاهی بهبودیافته)",
+                "savi": "SAVI (پوشش گیاهی تعدیل‌شده با خاک)"
+              }
+            },
+            "sensor": {
+              "label": "حسگر / چیدمان باندها",
+              "description": "شماره‌های باند پیش‌تنظیم‌شده برای حسگرهای رایج. برای نگاشت دستی باندها در یک GeoTIFF با چینش متفاوت، «سفارشی» را برگزینید.",
+              "options": {
+                "sentinel2": "Sentinel-2 ‏(B2، B3، B4، B8، B11، B12)",
+                "landsat89": "Landsat 8/9 ‏(B1–B7)",
+                "naip": "NAIP ‏(R، G، B، NIR)",
+                "custom": "سفارشی (شماره‌های باند را در زیر تنظیم کنید)"
+              }
+            },
+            "red": {
+              "label": "شمارهٔ باند قرمز"
+            },
+            "green": {
+              "label": "شمارهٔ باند سبز"
+            },
+            "blue": {
+              "label": "شمارهٔ باند آبی"
+            },
+            "nir": {
+              "label": "شمارهٔ باند NIR"
+            },
+            "swir1": {
+              "label": "شمارهٔ باند SWIR1"
+            },
+            "swir2": {
+              "label": "شمارهٔ باند SWIR2"
+            },
+            "L": {
+              "label": "ضریب خاک (L)",
+              "description": "تصحیح روشنایی خاک در SAVI ‏(۰ پوشش متراکم ← ۱ خاک لخت)."
+            },
+            "scale": {
+              "label": "مقیاس بازتاب",
+              "description": "ضریبی که مقادیر پیکسل را به بازتاب (۰–۱) تبدیل می‌کند. برای شاخص‌های تفاضل نرمال‌شده آن را ۱ بگذارید؛ برای EVI/SAVI روی تصاویر DN صحیح آن را تنظیم کنید (مثلاً 0.0001 برای Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "طبقه‌بندی دوباره",
+          "description": "بازنگاشت بازه‌های مقدار به مقادیر کلاس جدید با استفاده از یک جدول قواعد.",
+          "params": {
+            "band": {
+              "label": "باند"
+            },
+            "table": {
+              "label": "قواعد",
+              "description": "قواعد «min:max:newvalue» جداشده با کاما یا خط جدید، مثلاً «0:10:1, 10:20:2, 20:max:3». بازه‌ها نیمه‌باز [min, max) هستند؛ خالی/min/max به معنای ±∞ است."
+            },
+            "unmatched": {
+              "label": "مقادیر نامنطبق",
+              "options": {
+                "nodata": "تنظیم به NoData",
+                "original": "نگه‌داشتن مقدار اصلی"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "موزاییک / ادغام",
+          "description": "ترکیب تا پنج رستر (با سیستم مختصات مشترک) در یک رستر واحد که اجتماع آن‌ها را می‌پوشاند.",
+          "params": {
+            "raster_2": {
+              "label": "رستر دوم"
+            },
+            "raster_3": {
+              "label": "رستر سوم (اختیاری)"
+            },
+            "raster_4": {
+              "label": "رستر چهارم (اختیاری)"
+            },
+            "raster_5": {
+              "label": "رستر پنجم (اختیاری)"
+            },
+            "method": {
+              "label": "روش همپوشانی",
+              "description": "در جاهایی که ورودی‌ها همپوشانی دارند کدام مقدار برنده است.",
+              "options": {
+                "first": "نخستین",
+                "last": "آخرین",
+                "min": "کمینه",
+                "max": "بیشینه"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "آمار کانونی",
+          "description": "اعمال یک آمارهٔ پنجرهٔ متحرک (همسایگی) بر یک باند رستری.",
+          "params": {
+            "band": {
+              "label": "باند"
+            },
+            "statistic": {
+              "label": "آماره",
+              "options": {
+                "mean": "میانگین",
+                "median": "میانه",
+                "min": "کمینه",
+                "max": "بیشینه",
+                "sum": "مجموع",
+                "std": "انحراف معیار",
+                "range": "دامنه (بیشینه − کمینه)"
+              }
+            },
+            "size": {
+              "label": "اندازهٔ پنجره",
+              "description": "اندازهٔ فرد همسایگی بر حسب پیکسل (۳ = ۳×۳). حداکثر ۲۵."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "تحلیل",
+      "clip": "برش",
+      "dataQuality": "کیفیت داده",
+      "dggs": "DGGS",
+      "geometry": "هندسه",
+      "join": "پیوند",
+      "movementTime": "حرکت و زمان",
+      "network": "شبکه",
+      "overlay": "همپوشانی",
+      "rasterToVector": "رستری به برداری",
+      "reproject": "تغییر تصویر",
+      "select": "انتخاب",
+      "spatialStatistics": "آمار مکانی",
+      "terrain": "زمین",
+      "vectorToRaster": "برداری به رستری"
     }
   },
   "segmentation": {
@@ -5245,6 +6729,7 @@
     "refreshVectorControlError": "تازه‌سازی این لایه ممکن نشد. پنل «افزودن لایهٔ برداری» را دوباره باز کنید.",
     "refreshed": "تازه شد.",
     "refreshedCount": "{{count}} عارضه تازه شد.",
+    "refreshedTruncated": "{{shown}} از {{total}} عارضه تازه شد.",
     "refreshError": "تازه‌سازی این لایه ممکن نشد.",
     "exportNeedsFeatures": "خروجی به یک لایهٔ برداری دارای عارضه نیاز دارد.",
     "exportedWithWarnings": "لایه ایجاد شد. {{warnings}}",

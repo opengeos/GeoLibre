@@ -327,6 +327,10 @@
         "label": "Ajouter une couche PostgreSQL",
         "description": "Démarrer Martin localement, découvrir les sources PostGIS et ajouter une source en tuiles vectorielles."
       },
+      "iceberg": {
+        "label": "Ajouter une couche Apache Iceberg",
+        "description": "Lire une table Iceberg (v3 ou ultérieure) et ajouter un sous-ensemble de ses entités."
+      },
       "deckglViz": {
         "label": "Ajouter une couche Deck.gl",
         "description": "Choisissez un type de couche deck.gl, puis chargez les données d'exemple ou téléversez un fichier ou une URL CSV/JSON/GeoJSON."
@@ -706,6 +710,41 @@
       "tableReadOnly": "{{table}} (lecture seule : pas de clé primaire)",
       "errorSelectTable": "Sélectionnez une table à charger.",
       "errorRuntimeMissing": "Le serveur de traitement ne dispose pas de l'environnement d'exécution PostGIS (psycopg). Installez l'extra « postgis » de geolibre-server pour charger des couches modifiables."
+    },
+    "iceberg": {
+      "defaultName": "Couche Iceberg",
+      "notice": "Les tables Iceberg sont lues une seule fois, à la demande. La couche est un instantané limité au nombre de lignes ci-dessous et n'est jamais relue automatiquement — utilisez Actualiser dans le menu de la couche pour la relire.",
+      "mode": "Source Iceberg",
+      "modeTable": "Emplacement de la table",
+      "modeCatalog": "Catalogue REST",
+      "location": "Emplacement des métadonnées de la table",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "Entrepôt",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "Point de terminaison du catalogue",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "Connecter",
+      "table": "Table Iceberg",
+      "sql": "SQL (facultatif)",
+      "sqlHint": "Modifiez pour filtrer ou remodeler ce qui est rendu. L'instruction doit renvoyer une colonne GEOMETRY ; laissez-la telle que générée pour lire toute la table.",
+      "selectTable": "Sélectionner une table",
+      "geometryColumn": "Colonne de géométrie",
+      "rowLimit": "Limite de lignes",
+      "rowLimitHint": "La couche contient les premières lignes de la table, jusqu'à cette limite. La limite ne peut pas dépasser {{max}} lignes.",
+      "rowLimitTruncates": "La table contient {{total}} lignes ; la couche contiendra les {{limit}} premières.",
+      "statusConnecting": "Lecture des métadonnées Iceberg...",
+      "statusInspecting": "Inspection de la table...",
+      "statusInspected": "{{rows}} lignes. Géométrie : {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} lignes, mais aucune colonne GEOMETRY n'a été trouvée. La géométrie Iceberg doit utiliser le type géométrie v3.",
+      "statusTablesFound_one": "{{count}} table trouvée.",
+      "statusTablesFound_other": "{{count}} tables trouvées. Sélectionnez-en une pour continuer.",
+      "statusNoTables": "Le catalogue n'expose aucune table.",
+      "errorLocation": "Entrez l'emplacement des métadonnées de la table Iceberg.",
+      "errorWarehouse": "Entrez l'entrepôt Iceberg à attacher.",
+      "errorEndpoint": "Entrez le point de terminaison du catalogue REST Iceberg.",
+      "errorConnect": "Impossible de lire la source Iceberg.",
+      "errorInspect": "Impossible d'inspecter la table Iceberg.",
+      "errorConnectFirst": "Connectez-vous et sélectionnez d'abord une table Iceberg."
     },
     "video": {
       "defaultName": "Couche vidéo",
@@ -2282,7 +2321,8 @@
       "video": "Couche vidéo",
       "deckglViz": "Couche Deck.gl",
       "gltfModel": "Modèle 3D (glTF)",
-      "postgres": "Couche PostgreSQL"
+      "postgres": "Couche PostgreSQL",
+      "iceberg": "Couche Apache Iceberg"
     },
     "conversion": {
       "vectorToVector": "Vecteur vers vecteur",
@@ -3441,11 +3481,19 @@
     "addUnsupported": "Seules les ressources GeoTIFF/COG, GeoJSON, GeoParquet et PMTiles peuvent être ajoutées à la carte",
     "addFailed": "Impossible d'ajouter la ressource",
     "addNoSourceLayers": "Cette archive ne répertorie aucune couche à dessiner",
+    "addNoTarget": "Cet actif ne répertorie rien à dessiner",
+    "addIcechunk": "Les magasins Icechunk ne peuvent pas encore être lus",
+    "zarrProblemGroup": "Cet actif désigne un groupe de tableaux, pas un tableau dessinable",
+    "zarrProblemUnauthorized": "Ce magasin Zarr nécessite des identifiants que GeoLibre ne peut pas encore fournir",
+    "zarrProblemUnsupportedUrl": "L'adresse de ce magasin Zarr ne peut pas être lue clé par clé",
+    "zarrProblemUnavailable": "Ce magasin Zarr n'a pas pu être ouvert",
+    "chooseTarget": "Choisissez quoi ajouter",
     "cogUnsupported": "Cet hôte GeoLibre ne peut pas visualiser les ressources GeoTIFF distantes",
     "formatCog": "COG",
     "formatGeoJson": "GeoJSON",
     "formatPmtiles": "PMTiles",
     "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
     "formatUnknown": "Format inconnu",
     "notAddable": "non ajoutable"
   },
@@ -3676,6 +3724,10 @@
   "basemaps": {
     "confirmStyleReplace_one": "Passer à « {{name}} » remplace tout le style de la carte et supprimera le fond de carte superposé que vous avez ajouté. Continuer ?",
     "confirmStyleReplace_other": "Passer à « {{name}} » remplace tout le style de la carte et supprimera les {{count}} fonds de carte superposés que vous avez ajoutés. Continuer ?"
+  },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "Propriétés de l'entité",
+    "massingHeight": "Hauteur (m)"
   },
   "annotations": {
     "toolbar": "Outils d'annotation",
@@ -4247,6 +4299,1438 @@
       "run": "Exécuter",
       "outputPlaceholder": "La sortie apparaîtra ici.",
       "resolutionRange": "Résolution (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "Zone tampon",
+          "description": "Créer un polygone tampon autour de chaque entité à une distance fixe",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "distance": {
+              "label": "Distance"
+            },
+            "units": {
+              "label": "Unités",
+              "options": {
+                "kilometers": "Kilomètres",
+                "meters": "Mètres",
+                "miles": "Milles"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "Centroïdes",
+          "description": "Calculer le point centroïde de chaque entité",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "Enveloppe convexe",
+          "description": "Calculer l'enveloppe convexe englobant toutes les entités",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "Fusionner",
+          "description": "Fusionner les entités polygonales en une seule géométrie, éventuellement regroupées par un champ",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "field": {
+              "label": "Champ de fusion (facultatif)",
+              "description": "Nom de la propriété selon laquelle regrouper les entités avant la fusion"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "Boîte englobante",
+          "description": "Calculer l'enveloppe rectangulaire de toutes les entités",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            }
+          }
+        },
+        "simplify": {
+          "name": "Simplifier",
+          "description": "Réduire le nombre de sommets avec l'algorithme de Douglas-Peucker",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "tolerance": {
+              "label": "Tolérance (degrés)"
+            },
+            "highQuality": {
+              "label": "Haute qualité"
+            }
+          }
+        },
+        "clip": {
+          "name": "Découper",
+          "description": "Découper la couche d'entrée selon la zone couverte par une couche de superposition (conserve les attributs d'entrée)",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "overlay": {
+              "label": "Couche de superposition (découpage)"
+            }
+          }
+        },
+        "intersection": {
+          "name": "Intersection",
+          "description": "Ne conserver que les zones où les deux couches de polygones se chevauchent",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "overlay": {
+              "label": "Couche de superposition"
+            }
+          }
+        },
+        "difference": {
+          "name": "Différence",
+          "description": "Retirer la zone de la couche de superposition de la couche d'entrée",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "overlay": {
+              "label": "Couche de superposition"
+            }
+          }
+        },
+        "union": {
+          "name": "Union",
+          "description": "Fusionner deux couches de polygones en une seule géométrie combinée",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "overlay": {
+              "label": "Couche de superposition"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "Jointure spatiale",
+          "description": "Attacher les attributs d'une couche de jointure à chaque entité d'entrée selon une relation spatiale",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "overlay": {
+              "label": "Couche de jointure"
+            },
+            "predicate": {
+              "label": "Relation spatiale",
+              "options": {
+                "intersects": "Intersecte",
+                "within": "À l'intérieur de",
+                "contains": "Contient"
+              }
+            },
+            "how": {
+              "label": "Type de jointure",
+              "options": {
+                "inner": "Interne (ne conserver que les entités correspondantes)",
+                "left": "Gauche (conserver toutes les entités d'entrée)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "Jointure attributaire",
+          "description": "Attacher les attributs d'une couche de jointure (une table) à chaque entité d'entrée lorsqu'un champ clé correspond, sans utiliser la géométrie. Un à un : la première ligne de jointure correspondante l'emporte.",
+          "params": {
+            "layer": {
+              "label": "Couche cible"
+            },
+            "overlay": {
+              "label": "Couche de jointure (table)",
+              "description": "La couche dont les attributs sont rapportés. Sa géométrie est ignorée."
+            },
+            "target_field": {
+              "label": "Champ clé cible"
+            },
+            "join_field": {
+              "label": "Champ clé de jointure"
+            },
+            "how": {
+              "label": "Type de jointure",
+              "options": {
+                "left": "Gauche (conserver toutes les entités cibles)",
+                "inner": "Interne (ne conserver que les entités correspondantes)"
+              }
+            },
+            "fields": {
+              "label": "Champs à rapporter (facultatif)",
+              "description": "Champs de jointure à copier, séparés par des virgules. Laissez vide pour rapporter tous les champs de jointure sauf la clé."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "Sélectionner par valeur",
+          "description": "Extraire dans une nouvelle couche les entités dont la valeur d'attribut satisfait une condition",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "field": {
+              "label": "Champ"
+            },
+            "operator": {
+              "label": "Opérateur",
+              "options": {
+                "eq": "= (égal à)",
+                "neq": "≠ (différent de)",
+                "gt": "> (supérieur à)",
+                "gte": "≥ (supérieur ou égal à)",
+                "lt": "< (inférieur à)",
+                "lte": "≤ (inférieur ou égal à)",
+                "contains": "contient (texte)",
+                "starts-with": "commence par (texte)",
+                "is-null": "est vide",
+                "is-not-null": "n'est pas vide"
+              }
+            },
+            "value": {
+              "label": "Valeur",
+              "description": "Comparé comme un nombre lorsque les deux côtés sont numériques."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "Sélectionner par emplacement",
+          "description": "Extraire dans une nouvelle couche les entités selon leur relation spatiale avec une seconde couche",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "overlay": {
+              "label": "Couche de filtre"
+            },
+            "predicate": {
+              "label": "Relation spatiale",
+              "options": {
+                "intersects": "Intersecte",
+                "within": "À l'intérieur de",
+                "contains": "Contient",
+                "disjoint": "Disjoint (aucune intersection)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "Extraction aléatoire",
+          "description": "Extraire un sous-ensemble aléatoire d'entités dans une nouvelle couche, dimensionné par un nombre d'entités ou un pourcentage de l'entrée.",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "method": {
+              "label": "Méthode",
+              "options": {
+                "count": "Nombre d'entités",
+                "percentage": "Pourcentage d'entités"
+              }
+            },
+            "count": {
+              "label": "Nombre d'entités",
+              "description": "Ramené au nombre d'entités d'entrée s'il est supérieur."
+            },
+            "percentage": {
+              "label": "Pourcentage d'entités"
+            }
+          }
+        },
+        "reproject": {
+          "name": "Reprojeter",
+          "description": "Réinterpréter les coordonnées d'une couche dans un SRC source et les transformer en WGS84 pour qu'elles s'affichent au bon endroit. Nécessite le moteur Sidecar ou Python.",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "source_crs": {
+              "label": "SRC source",
+              "description": "Le SRC dans lequel les coordonnées de la couche sont réellement exprimées (p. ex. EPSG:3857). Le résultat est transformé en WGS84 (EPSG:4326)."
+            }
+          }
+        },
+        "explode": {
+          "name": "Décomposer",
+          "description": "Diviser les géométries multi-parties en entités simples (une entité par partie), en conservant les attributs de chaque parent",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "Agréger par attribut",
+          "description": "Fusionner les entités partageant une valeur d'attribut en une géométrie par groupe, avec une statistique de synthèse",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "group_field": {
+              "label": "Champ de regroupement"
+            },
+            "statistic": {
+              "label": "Statistique",
+              "options": {
+                "count": "Nombre",
+                "sum": "Somme",
+                "mean": "Moyenne",
+                "min": "Min",
+                "max": "Max",
+                "median": "Médiane"
+              }
+            },
+            "stat_field": {
+              "label": "Champ de statistique",
+              "description": "Champ numérique résumé par la statistique ci-dessus."
+            }
+          }
+        },
+        "smooth": {
+          "name": "Lisser",
+          "description": "Arrondir les angles des entités linéaires et polygonales avec l'algorithme de Chaikin (ajoute des sommets), à la différence de la réduction de sommets de Simplifier. Le Z/l'altitude est conservé ; les points passent inchangés.",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "iterations": {
+              "label": "Itérations",
+              "description": "Plus d'itérations donnent un résultat plus lisse (1-10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "Grille régulière",
+          "description": "Générer une grille rectangulaire régulière (maillage) de cellules sur une étendue. Source : la vue actuelle de la carte, l'étendue d'une couche ou une boîte englobante manuelle.",
+          "params": {
+            "source": {
+              "label": "Source de l'étendue",
+              "options": {
+                "viewport": "Vue de la carte",
+                "layer": "Étendue de la couche",
+                "bbox": "Boîte englobante manuelle"
+              }
+            },
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "west": {
+              "label": "Ouest (lon min)"
+            },
+            "south": {
+              "label": "Sud (lat min)"
+            },
+            "east": {
+              "label": "Est (lon max)"
+            },
+            "north": {
+              "label": "Nord (lat max)"
+            },
+            "cell_width": {
+              "label": "Largeur de cellule (degrés)"
+            },
+            "cell_height": {
+              "label": "Hauteur de cellule (degrés)",
+              "description": "Laissez vide pour reprendre la largeur de cellule."
+            },
+            "cell_type": {
+              "label": "Type de cellule",
+              "options": {
+                "polygon": "Rectangles",
+                "point": "Points (centres des cellules)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoï / Delaunay",
+          "description": "Construire un diagramme de Voronoï (un polygone par point, découpé selon l'étendue des points) ou une triangulation de Delaunay à partir d'une couche de points.",
+          "params": {
+            "layer": {
+              "label": "Couche de points d'entrée"
+            },
+            "type": {
+              "label": "Diagramme",
+              "options": {
+                "voronoi": "Polygones de Voronoï",
+                "delaunay": "Triangles de Delaunay"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "Couverture de site cellulaire",
+          "description": "Construire des polygones de secteur d'antenne à partir de sites ponctuels en utilisant l'azimut, le rayon et l'ouverture de faisceau (lus depuis des champs attributaires ou des valeurs fixes). L'ouverture est limitée à 360° (cercle complet) ; l'ouverture enregistrée reflète la valeur limitée. Utile pour la couverture des antennes-relais, comme QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "Couche de points d'entrée"
+            },
+            "azimuthField": {
+              "label": "Champ d'azimut (°)",
+              "description": "Direction vers laquelle le secteur est orienté, en degrés dans le sens horaire depuis le nord. Revient à l'azimut fixe si vide ou non numérique."
+            },
+            "azimuth": {
+              "label": "Azimut (fixe, °)"
+            },
+            "radiusField": {
+              "label": "Champ de rayon",
+              "description": "Rayon de couverture. Revient au rayon fixe si vide ou non numérique."
+            },
+            "radius": {
+              "label": "Rayon (fixe)"
+            },
+            "beamwidthField": {
+              "label": "Champ d'ouverture de faisceau (°)",
+              "description": "Largeur angulaire du secteur, limitée à 360° (cercle complet). Revient à l'ouverture fixe si vide ou non numérique."
+            },
+            "beamwidth": {
+              "label": "Ouverture de faisceau (fixe, °)"
+            },
+            "units": {
+              "label": "Unités du rayon",
+              "options": {
+                "kilometers": "Kilomètres",
+                "meters": "Mètres",
+                "miles": "Milles"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "Générateur DGGS",
+          "description": "Remplir une zone avec des cellules DGGS (H3, S2, A5, DGGRID, DGGAL). Source : la géométrie d'une couche, l'étendue d'une couche, la vue actuelle de la carte ou une boîte englobante manuelle.",
+          "params": {
+            "dggsType": {
+              "label": "Type de DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "Type DGGRID",
+              "description": "Configuration de grille transmise à duck_dggs comme dggs_params (ISEA/FULLER × ouverture × topologie).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "Type DGGAL",
+              "description": "DGGRS transmis à dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "Source de la zone",
+              "options": {
+                "polyfill": "Géométrie de la couche (remplissage)",
+                "extent": "Étendue de la couche (bbox)",
+                "viewport": "Vue de la carte",
+                "bbox": "Boîte englobante manuelle"
+              }
+            },
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "west": {
+              "label": "Ouest (lon min)"
+            },
+            "south": {
+              "label": "Sud (lat min)"
+            },
+            "east": {
+              "label": "Est (lon max)"
+            },
+            "north": {
+              "label": "Nord (lat max)"
+            },
+            "resolution": {
+              "label": "Résolution",
+              "description": "La plage dépend du type de DGGS. Laissez vide pour un choix automatique selon la zone."
+            },
+            "compactCells": {
+              "label": "Compacter les cellules",
+              "description": "Fusionner les ensembles complets de cellules sœurs en parents plus grossiers (moins d'entités, résolutions mixtes)."
+            },
+            "fixAntimeridian": {
+              "label": "Corriger l'antiméridien",
+              "description": "Déplier les anneaux de cellules qui traversent la longitude ±180°."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "Regroupement DGGS",
+          "description": "Agréger une couche de points en cellules DGGS (nombre, ou somme/moyenne/min/max d'un champ numérique).",
+          "params": {
+            "dggsType": {
+              "label": "Type de DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "Type DGGRID",
+              "description": "Configuration de grille transmise à duck_dggs comme dggs_params (ISEA/FULLER × ouverture × topologie).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "Type DGGAL",
+              "description": "DGGRS transmis à dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "Couche de points d'entrée"
+            },
+            "aggOp": {
+              "label": "Agrégation",
+              "options": {
+                "count": "Nombre",
+                "sum": "Somme",
+                "mean": "Moyenne",
+                "min": "Min",
+                "max": "Max"
+              }
+            },
+            "field": {
+              "label": "Champ",
+              "description": "Champ numérique à agréger."
+            },
+            "resolution": {
+              "label": "Résolution",
+              "description": "La plage dépend du type de DGGS. Laissez vide pour un choix automatique selon la zone."
+            },
+            "fixAntimeridian": {
+              "label": "Corriger l'antiméridien",
+              "description": "Déplier les anneaux de cellules qui traversent la longitude ±180°."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "Compactage DGGS",
+          "description": "Compacter des cellules polygonales DGGS, ou les développer à une résolution uniforme (H3, S2, A5, DGGAL). L'entrée doit être une couche de cellules avec une propriété d'identifiant.",
+          "params": {
+            "dggsType": {
+              "label": "Type de DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "Type DGGAL",
+              "description": "DGGRS transmis à dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "Mode",
+              "options": {
+                "compact": "Compacter",
+                "expand": "Développer"
+              }
+            },
+            "layer": {
+              "label": "Couche DGGS d'entrée",
+              "description": "Couche de cellules polygonales issue du Générateur / Regroupement DGGS (ou équivalent)."
+            },
+            "cellField": {
+              "label": "Champ d'identifiant de cellule",
+              "description": "Par défaut h3, a5, s2 ou dggal selon le type sélectionné si laissé vide."
+            },
+            "resolution": {
+              "label": "Résolution cible",
+              "description": "Résolution vers laquelle développer. Doit être au moins aussi fine que les cellules d'entrée."
+            },
+            "fixAntimeridian": {
+              "label": "Corriger l'antiméridien",
+              "description": "Déplier les anneaux de cellules qui traversent la longitude ±180°."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "Vitesse de trajectoire",
+          "description": "Ordonner les points par temps (par cible) et relier les relevés consécutifs en segments portant la distance, la durée et la vitesse. Comme QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Couche de points d'entrée"
+            },
+            "timeField": {
+              "label": "Champ de temps",
+              "description": "Horodatage par relevé : une chaîne date/heure ISO ou un temps epoch (secondes ou millisecondes)."
+            },
+            "idField": {
+              "label": "Champ d'identifiant de cible",
+              "description": "Sépare les points en trajectoires distinctes. Laissez vide pour traiter tous les points comme une seule cible."
+            },
+            "speedUnits": {
+              "label": "Unités de vitesse",
+              "options": {
+                "km/h": "km/h",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "Détecter les arrêts",
+          "description": "Trouver les lieux où une cible stationne : suites de relevés consécutifs restant dans une distance donnée (absorbant la dispersion GPS) pendant au moins une durée minimale. Produit un point par arrêt. Comme QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Couche de points d'entrée"
+            },
+            "timeField": {
+              "label": "Champ de temps",
+              "description": "Horodatage par relevé : une chaîne date/heure ISO ou un temps epoch (secondes ou millisecondes)."
+            },
+            "idField": {
+              "label": "Champ d'identifiant de cible",
+              "description": "Détecte les arrêts par cible. Laissez vide pour traiter tous les points comme une seule cible."
+            },
+            "maxDistance": {
+              "label": "Distance max",
+              "description": "Chaque relevé d'un arrêt doit se trouver à cette distance au plus du premier relevé de l'arrêt (un arrêt peut donc s'étendre jusqu'au double de cette valeur). Réglez-la sur le rayon de dispersion de votre GPS."
+            },
+            "distanceUnits": {
+              "label": "Unités de distance",
+              "options": {
+                "meters": "Mètres",
+                "kilometers": "Kilomètres",
+                "miles": "Milles"
+              }
+            },
+            "minDuration": {
+              "label": "Durée min (s)",
+              "description": "Un stationnement plus court que cette durée n'est pas signalé comme arrêt."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "Proximité spatio-temporelle",
+          "description": "Trouver les paires de points proches à la fois dans l'espace et dans le temps — p. ex. deux cibles qui se rencontrent. Produit une ligne reliant chaque paire retenue, portant la distance et l'écart de temps.",
+          "params": {
+            "layer": {
+              "label": "Couche de points d'entrée"
+            },
+            "timeField": {
+              "label": "Champ de temps",
+              "description": "Horodatage par point : une chaîne date/heure ISO ou un temps epoch (secondes ou millisecondes)."
+            },
+            "idField": {
+              "label": "Champ d'identifiant de cible",
+              "description": "Si défini, seuls les points ayant des identifiants DIFFÉRENTS sont appariés (rencontres entre cibles distinctes). Laissez vide pour considérer toutes les paires."
+            },
+            "maxDistance": {
+              "label": "Distance max"
+            },
+            "distanceUnits": {
+              "label": "Unités de distance",
+              "options": {
+                "meters": "Mètres",
+                "kilometers": "Kilomètres",
+                "miles": "Milles"
+              }
+            },
+            "maxTime": {
+              "label": "Écart de temps max"
+            },
+            "timeUnits": {
+              "label": "Unités de temps",
+              "options": {
+                "seconds": "Secondes",
+                "minutes": "Minutes",
+                "hours": "Heures"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "Vérifier la validité",
+          "description": "Trouver les entités à géométrie invalide (règles GEOS : anneaux auto-intersectés, trous hors de l'enveloppe, ...) et les marquer sur la carte",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "Corriger les géométries",
+          "description": "Réparer les géométries invalides avec ST_MakeValid (GEOS) ; les entités valides passent inchangées",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "Vérifier les règles de topologie",
+          "description": "Valider la couche selon des règles de topologie (chevauchements, lacunes, auto-intersections, extrémités libres) et marquer chaque violation sur la carte",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "ruleSelfIntersect": {
+              "label": "Les lignes ne doivent pas s'auto-intersecter"
+            },
+            "ruleOverlap": {
+              "label": "Les polygones ne doivent pas se chevaucher"
+            },
+            "ruleGaps": {
+              "label": "Les polygones ne doivent pas avoir de lacunes"
+            },
+            "ruleDangles": {
+              "label": "Les lignes ne doivent pas avoir d'extrémités libres"
+            },
+            "rulePointCovered": {
+              "label": "Les points doivent être couverts par une ligne"
+            },
+            "ruleEndpointSnap": {
+              "label": "Les extrémités de lignes doivent se connecter dans la tolérance"
+            },
+            "snapTolerance": {
+              "label": "Tolérance d'accrochage",
+              "description": "Pour la règle des extrémités : distance maximale (en unités de coordonnées de la couche — degrés pour WGS84) entre deux extrémités de lignes pour qu'elles comptent comme connectées."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "Corriger la topologie",
+          "description": "Réparer automatiquement les violations de topologie : accrocher les extrémités de lignes presque connectées, corriger les extrémités libres et projeter les points sur les lignes. Les extrémités libres sans rien à proximité restent inchangées.",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "ruleEndpointSnap": {
+              "label": "Accrocher les extrémités de lignes presque connectées"
+            },
+            "ruleDangles": {
+              "label": "Réparer les extrémités libres (accrocher ou projeter sur la géométrie voisine)"
+            },
+            "rulePointCovered": {
+              "label": "Projeter les points sur la ligne la plus proche"
+            },
+            "snapTolerance": {
+              "label": "Tolérance d'accrochage",
+              "description": "Distance (en unités de coordonnées de la couche — degrés pour WGS84) dont la géométrie peut se déplacer pour se connecter."
+            },
+            "dryRun": {
+              "label": "Aperçu seulement (simulation)",
+              "description": "Signaler les corrections qui seraient appliquées sans créer de couche réparée."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "Isochrone / zone de desserte",
+          "description": "Polygones d'accessibilité par temps ou distance de trajet depuis chaque point d'une couche",
+          "params": {
+            "layer": {
+              "label": "Points d'origine"
+            },
+            "mode": {
+              "label": "Mode de déplacement",
+              "options": {
+                "auto": "Voiture",
+                "pedestrian": "À pied",
+                "bicycle": "Vélo"
+              }
+            },
+            "metric": {
+              "label": "Mesure",
+              "options": {
+                "time": "Temps de trajet (minutes)",
+                "distance": "Distance (km)"
+              }
+            },
+            "contours": {
+              "label": "Contours",
+              "description": "Valeurs séparées par des virgules (minutes pour le temps, km pour la distance)"
+            },
+            "endpoint": {
+              "label": "Serveur de routage (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "Matrice de coûts OD",
+          "description": "Temps de trajet et distance entre chaque point d'origine et de destination, sous forme de lignes de liaison",
+          "params": {
+            "origins": {
+              "label": "Points d'origine"
+            },
+            "destinations": {
+              "label": "Points de destination"
+            },
+            "mode": {
+              "label": "Mode de déplacement",
+              "options": {
+                "auto": "Voiture",
+                "pedestrian": "À pied",
+                "bicycle": "Vélo"
+              }
+            },
+            "endpoint": {
+              "label": "Serveur de routage (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "Itinéraire séquentiel (directions)",
+          "description": "Relier les points dans l'ordre le long du réseau routier en un itinéraire. Chaque point est accroché à la route la plus proche, de sorte que des coordonnées hors route (sites cellulaires, capteurs) sont tout de même routées. L'ordre suit le champ choisi (p. ex. un horodatage) ou l'ordre des entités de la couche.",
+          "params": {
+            "layer": {
+              "label": "Points d'entrée"
+            },
+            "order_field": {
+              "label": "Trier par champ (facultatif)",
+              "description": "Trier les points selon ce champ (nombres ou horodatages) avant le routage. Laissez vide pour utiliser l'ordre des entités de la couche."
+            },
+            "mode": {
+              "label": "Mode de déplacement",
+              "options": {
+                "auto": "Voiture",
+                "pedestrian": "À pied",
+                "bicycle": "Vélo"
+              }
+            },
+            "endpoint": {
+              "label": "Serveur de routage (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "I de Moran global",
+          "description": "Mesurer l'autocorrélation spatiale globale d'un attribut numérique sur l'ensemble de la couche.",
+          "params": {
+            "layer": {
+              "label": "Couche"
+            },
+            "field": {
+              "label": "Champ de valeur"
+            },
+            "weightsType": {
+              "label": "Pondération spatiale",
+              "description": "Comment les voisins sont définis pour chaque entité.",
+              "options": {
+                "knn": "K plus proches voisins",
+                "distance": "Bande de distance"
+              }
+            },
+            "k": {
+              "label": "Voisins (k)"
+            },
+            "threshold": {
+              "label": "Bande de distance (km)"
+            },
+            "permutations": {
+              "label": "Permutations",
+              "description": "Permutations aléatoires pour la pseudo-valeur p."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "I de Moran local (LISA)",
+          "description": "Agrégats et valeurs aberrantes par entité (Haut-Haut, Bas-Bas, Haut-Bas, Bas-Haut) avec pseudo-significativité.",
+          "params": {
+            "layer": {
+              "label": "Couche"
+            },
+            "field": {
+              "label": "Champ de valeur"
+            },
+            "weightsType": {
+              "label": "Pondération spatiale",
+              "description": "Comment les voisins sont définis pour chaque entité.",
+              "options": {
+                "knn": "K plus proches voisins",
+                "distance": "Bande de distance"
+              }
+            },
+            "k": {
+              "label": "Voisins (k)"
+            },
+            "threshold": {
+              "label": "Bande de distance (km)"
+            },
+            "permutations": {
+              "label": "Permutations",
+              "description": "Permutations aléatoires pour la pseudo-valeur p."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Points chauds Getis-Ord Gi*",
+          "description": "Identifier les points chauds et points froids statistiquement significatifs d'un attribut numérique.",
+          "params": {
+            "layer": {
+              "label": "Couche"
+            },
+            "field": {
+              "label": "Champ de valeur"
+            },
+            "weightsType": {
+              "label": "Pondération spatiale",
+              "description": "Comment les voisins sont définis pour chaque entité.",
+              "options": {
+                "knn": "K plus proches voisins",
+                "distance": "Bande de distance"
+              }
+            },
+            "k": {
+              "label": "Voisins (k)"
+            },
+            "threshold": {
+              "label": "Bande de distance (km)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "Plus proche voisin moyen",
+          "description": "Tester si les points sont agrégés, dispersés ou distribués aléatoirement (ratio ANN + score z).",
+          "params": {
+            "layer": {
+              "label": "Couche de points"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "Densité de noyau (carte de chaleur)",
+          "description": "Estimer une surface de densité à partir de points sous forme de grille de cellules, avec un noyau quartique.",
+          "params": {
+            "layer": {
+              "label": "Couche de points"
+            },
+            "weightField": {
+              "label": "Champ de pondération (facultatif)",
+              "description": "Champ numérique pondérant chaque point ; vide = poids égal."
+            },
+            "bandwidth": {
+              "label": "Rayon de recherche / largeur de bande (km)"
+            },
+            "cellSize": {
+              "label": "Taille de cellule (km)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "Points chauds émergents (cube espace-temps)",
+          "description": "Construire un cube espace-temps à partir de points horodatés (un maillage × des pas de temps égaux) et classer chaque cellule comme point chaud/froid nouveau, en intensification, persistant, en diminution, sporadique, oscillant ou historique. Exécute Getis-Ord Gi* par tranche de temps, puis un test de tendance de Mann-Kendall sur la série Gi* de chaque cellule. Côté client, comme l'analyse des points chauds émergents d'ArcGIS.",
+          "params": {
+            "layer": {
+              "label": "Couche de points"
+            },
+            "timeField": {
+              "label": "Champ de temps",
+              "description": "Horodatage par point : une chaîne date/heure ISO ou un temps epoch (secondes ou millisecondes)."
+            },
+            "cellSize": {
+              "label": "Taille de cellule (km)",
+              "description": "Longueur du côté de chaque cellule spatiale carrée, en kilomètres."
+            },
+            "timeStep": {
+              "label": "Intervalle de pas de temps"
+            },
+            "timeStepUnit": {
+              "label": "Unité de pas de temps",
+              "options": {
+                "hours": "Heures",
+                "days": "Jours",
+                "weeks": "Semaines"
+              }
+            },
+            "weightField": {
+              "label": "Champ de pondération (facultatif)",
+              "description": "Champ numérique sommé par cellule espace-temps au lieu de compter les points ; vide = compter les points."
+            },
+            "confidence": {
+              "label": "Niveau de confiance",
+              "description": "Seuil de significativité pour qu'une cellule compte comme point chaud/froid et pour la tendance.",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "Ombrage du relief",
+          "description": "Calculer un raster d'ombrage du relief à partir d'un modèle d'altitude.",
+          "params": {
+            "azimuth": {
+              "label": "Azimut (degrés)"
+            },
+            "altitude": {
+              "label": "Hauteur du soleil (degrés)"
+            },
+            "z_factor": {
+              "label": "Facteur Z"
+            }
+          }
+        },
+        "slope": {
+          "name": "Pente",
+          "description": "Calculer la pente (inclinaison) à partir d'un modèle d'altitude.",
+          "params": {
+            "units": {
+              "label": "Unités",
+              "options": {
+                "degrees": "Degrés",
+                "percent": "Pourcentage"
+              }
+            },
+            "z_factor": {
+              "label": "Facteur Z"
+            }
+          }
+        },
+        "aspect": {
+          "name": "Orientation",
+          "description": "Calculer l'orientation (direction de la pente la plus forte) à partir d'un modèle d'altitude."
+        },
+        "reproject": {
+          "name": "Reprojeter",
+          "description": "Déformer un raster vers un autre système de référence de coordonnées.",
+          "params": {
+            "dst_crs": {
+              "label": "SRC cible",
+              "description": "Un code d'autorité tel que EPSG:3857 ou EPSG:4326."
+            },
+            "resampling": {
+              "label": "Rééchantillonnage",
+              "options": {
+                "nearest": "Plus proche voisin",
+                "bilinear": "Bilinéaire",
+                "cubic": "Cubique"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "Rééchantillonner",
+          "description": "Rééchantillonner un raster à une autre taille de pixel (résolution).",
+          "params": {
+            "resolution": {
+              "label": "Taille de pixel cible",
+              "description": "Taille de pixel en sortie, dans les unités du SRC du raster."
+            },
+            "resampling": {
+              "label": "Rééchantillonnage",
+              "options": {
+                "nearest": "Plus proche voisin",
+                "bilinear": "Bilinéaire",
+                "cubic": "Cubique"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "Découper par étendue",
+          "description": "Rogner un raster selon une boîte englobante (dans le SRC du raster).",
+          "params": {
+            "minx": {
+              "label": "X min"
+            },
+            "miny": {
+              "label": "Y min"
+            },
+            "maxx": {
+              "label": "X max"
+            },
+            "maxy": {
+              "label": "Y max"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "Découper par couche de masque",
+          "description": "Découper un raster selon les géométries d'un fichier vectoriel de masque.",
+          "params": {
+            "mask_path": {
+              "label": "Couche de masque",
+              "description": "Un fichier GeoJSON dont les géométries définissent la zone de découpage. Il est reprojeté automatiquement dans le SRC du raster (un GeoJSON sans SRC est supposé en WGS84)."
+            },
+            "crop": {
+              "label": "Rogner à l'étendue du masque"
+            },
+            "all_touched": {
+              "label": "Inclure tous les pixels touchés"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "Polygoniser",
+          "description": "Convertir une bande raster en polygones vectoriels regroupés par valeur de pixel.",
+          "params": {
+            "band": {
+              "label": "Bande"
+            },
+            "connectivity": {
+              "label": "Connectivité",
+              "options": {
+                "4": "4-connexité",
+                "8": "8-connexité"
+              }
+            },
+            "field": {
+              "label": "Nom du champ de valeur"
+            }
+          }
+        },
+        "contour": {
+          "name": "Courbes de niveau",
+          "description": "Générer des courbes de niveau à partir d'un modèle d'altitude.",
+          "params": {
+            "band": {
+              "label": "Bande"
+            },
+            "interval": {
+              "label": "Équidistance",
+              "description": "Différence d'altitude entre deux courbes de niveau successives."
+            },
+            "base": {
+              "label": "Base"
+            },
+            "attribute": {
+              "label": "Nom du champ d'altitude"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "Interpolation (IDW / Krigeage)",
+          "description": "Interpoler l'attribut numérique d'une couche de points en une surface raster continue par pondération inverse à la distance ou krigeage ordinaire.",
+          "params": {
+            "field": {
+              "label": "Champ de valeur",
+              "description": "Nom de l'attribut numérique des points à interpoler (p. ex. altitude, température)."
+            },
+            "method": {
+              "label": "Méthode",
+              "options": {
+                "idw": "Pondération inverse à la distance (IDW)",
+                "kriging": "Krigeage ordinaire"
+              }
+            },
+            "resolution": {
+              "label": "Taille de pixel en sortie",
+              "description": "Taille de cellule dans les unités du SRC de la couche (degrés pour WGS84). La grille couvre l'étendue des points."
+            },
+            "power": {
+              "label": "Puissance IDW",
+              "description": "Des valeurs plus élevées donnent plus d'influence aux points proches."
+            },
+            "variogram_model": {
+              "label": "Modèle de variogramme",
+              "description": "Modèle théorique ajusté au semi-variogramme empirique. Le krigeage est limité à 1500 points.",
+              "options": {
+                "spherical": "Sphérique",
+                "exponential": "Exponentiel",
+                "gaussian": "Gaussien",
+                "linear": "Linéaire"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "Statistiques zonales",
+          "description": "Résumer les valeurs raster dans chaque polygone d'une couche vectorielle (nombre, min, max, moyenne, somme, écart-type, médiane).",
+          "params": {
+            "zones_path": {
+              "label": "Couche de zones",
+              "description": "Une couche de polygones GeoJSON définissant les zones. Elle est reprojetée automatiquement dans le SRC du raster (un GeoJSON sans SRC est supposé en WGS84)."
+            },
+            "band": {
+              "label": "Bande"
+            },
+            "prefix": {
+              "label": "Préfixe des champs",
+              "description": "Ajouté devant le nom de chaque champ de statistique (p. ex. 'dem_' → 'dem_mean'). Laissez vide pour obtenir simplement 'mean', 'min', …"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "Calculatrice raster",
+          "description": "Évaluer une expression NumPy de calcul entre bandes. Référencez la bande 1 de chaque entrée par A, B, C et des bandes précises par A1, A2, … ; p. ex. le NDVI est (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "Expression",
+              "description": "Une expression NumPy sur A, B, C (et A1, A2, …). Fonctions : where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan."
+            },
+            "b_path": {
+              "label": "Raster B (facultatif)",
+              "description": "Un deuxième raster, référencé par B / B1, B2, …. Doit avoir les mêmes dimensions que A."
+            },
+            "c_path": {
+              "label": "Raster C (facultatif)",
+              "description": "Un troisième raster, référencé par C / C1, C2, …. Doit avoir les mêmes dimensions que A."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "Indice spectral",
+          "description": "Calculer un indice spectral nommé (NDVI, NDWI, EVI, …) à partir d'un raster multibande. Choisissez un préréglage de capteur pour la disposition des bandes, ou définissez les numéros de bande manuellement avec le capteur Personnalisé.",
+          "params": {
+            "index": {
+              "label": "Indice",
+              "options": {
+                "ndvi": "NDVI (végétation)",
+                "gndvi": "GNDVI (végétation verte)",
+                "ndwi": "NDWI (eau, McFeeters)",
+                "ndmi": "NDMI (humidité)",
+                "ndbi": "NDBI (bâti)",
+                "nbr": "NBR (rapport de brûlure)",
+                "evi": "EVI (végétation améliorée)",
+                "savi": "SAVI (végétation ajustée au sol)"
+              }
+            },
+            "sensor": {
+              "label": "Capteur / disposition des bandes",
+              "description": "Numéros de bande prédéfinis pour les capteurs courants. Choisissez Personnalisé pour associer les bandes à la main pour un GeoTIFF empilé différemment.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, V, B, PIR)",
+                "custom": "Personnalisé (définir les numéros de bande ci-dessous)"
+              }
+            },
+            "red": {
+              "label": "Numéro de bande rouge"
+            },
+            "green": {
+              "label": "Numéro de bande verte"
+            },
+            "blue": {
+              "label": "Numéro de bande bleue"
+            },
+            "nir": {
+              "label": "Numéro de bande PIR"
+            },
+            "swir1": {
+              "label": "Numéro de bande SWIR1"
+            },
+            "swir2": {
+              "label": "Numéro de bande SWIR2"
+            },
+            "L": {
+              "label": "Facteur de sol (L)",
+              "description": "Correction de luminosité du sol SAVI (0 couvert dense → 1 sol nu)."
+            },
+            "scale": {
+              "label": "Échelle de réflectance",
+              "description": "Multiplicateur convertissant les valeurs de pixel en réflectance (0–1). Laissez à 1 pour les indices de différence normalisée ; définissez-le pour EVI/SAVI sur des images en comptes numériques entiers (p. ex. 0,0001 pour Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "Reclasser",
+          "description": "Réaffecter des plages de valeurs à de nouvelles valeurs de classe à l'aide d'une table de règles.",
+          "params": {
+            "band": {
+              "label": "Bande"
+            },
+            "table": {
+              "label": "Règles",
+              "description": "Règles 'min:max:nouvellevaleur' séparées par des virgules ou des sauts de ligne, p. ex. '0:10:1, 10:20:2, 20:max:3'. Les plages sont semi-ouvertes [min, max) ; vide/min/max signifient ±∞."
+            },
+            "unmatched": {
+              "label": "Valeurs non classées",
+              "options": {
+                "nodata": "Définir sur NoData",
+                "original": "Conserver la valeur d'origine"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "Mosaïque / fusion",
+          "description": "Combiner jusqu'à cinq rasters (partageant un même SRC) en un seul raster couvrant leur union.",
+          "params": {
+            "raster_2": {
+              "label": "Deuxième raster"
+            },
+            "raster_3": {
+              "label": "Troisième raster (facultatif)"
+            },
+            "raster_4": {
+              "label": "Quatrième raster (facultatif)"
+            },
+            "raster_5": {
+              "label": "Cinquième raster (facultatif)"
+            },
+            "method": {
+              "label": "Méthode de chevauchement",
+              "description": "Quelle valeur l'emporte là où les entrées se chevauchent.",
+              "options": {
+                "first": "Première",
+                "last": "Dernière",
+                "min": "Minimum",
+                "max": "Maximum"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "Statistiques focales",
+          "description": "Appliquer une statistique de fenêtre mobile (voisinage) à une bande raster.",
+          "params": {
+            "band": {
+              "label": "Bande"
+            },
+            "statistic": {
+              "label": "Statistique",
+              "options": {
+                "mean": "Moyenne",
+                "median": "Médiane",
+                "min": "Minimum",
+                "max": "Maximum",
+                "sum": "Somme",
+                "std": "Écart-type",
+                "range": "Étendue (max − min)"
+              }
+            },
+            "size": {
+              "label": "Taille de la fenêtre",
+              "description": "Taille de voisinage impaire en pixels (3 = 3×3). Limitée à 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "Analyse",
+      "clip": "Découpage",
+      "dataQuality": "Qualité des données",
+      "dggs": "DGGS",
+      "geometry": "Géométrie",
+      "join": "Jointure",
+      "movementTime": "Mouvement et temps",
+      "network": "Réseau",
+      "overlay": "Superposition",
+      "rasterToVector": "Raster vers vecteur",
+      "reproject": "Reprojection",
+      "select": "Sélection",
+      "spatialStatistics": "Statistiques spatiales",
+      "terrain": "Relief",
+      "vectorToRaster": "Vecteur vers raster"
     }
   },
   "segmentation": {
@@ -5245,6 +6729,7 @@
     "refreshVectorControlError": "Impossible d'actualiser cette couche. Essayez de rouvrir le panneau Ajouter une couche vectorielle.",
     "refreshed": "Actualisé.",
     "refreshedCount": "{{count}} entités actualisées.",
+    "refreshedTruncated": "{{shown}} entités sur {{total}} actualisées.",
     "refreshError": "Impossible d'actualiser cette couche.",
     "exportNeedsFeatures": "L'exportation nécessite une couche vectorielle avec des entités.",
     "exportedWithWarnings": "Couche exportée. {{warnings}}",
