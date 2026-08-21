@@ -1,20 +1,11 @@
-import {
-  batchDecodePolylines,
-  decodePolyline,
-  unescapePolyline,
-} from "@geolibre/core";
+import { batchDecodePolylines, decodePolyline, unescapePolyline } from "@geolibre/core";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import type { FeatureCollection, LineString, MultiLineString } from "geojson";
 import { ChevronDown, ChevronUp, FileUp, Info, MapPin } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
-import {
-  createBaseLayer,
-  errorMessage,
-  fileNameFromPath,
-  layerNameFromPath,
-} from "../helpers";
+import { createBaseLayer, errorMessage, fileNameFromPath, layerNameFromPath } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 export type PolylineMode = "paste" | "file";
@@ -113,7 +104,7 @@ export function PolylineSource() {
     }
   };
 
-  const currentContent = polylineMode === "file" ? selectedFile?.text ?? "" : rawText;
+  const currentContent = polylineMode === "file" ? (selectedFile?.text ?? "") : rawText;
 
   const activeDelimiter = useMemo(() => {
     switch (delimiterType) {
@@ -140,7 +131,7 @@ export function PolylineSource() {
         delimiter: activeDelimiter,
         asMultiLine: outputGeometry === "multi",
         baseProperties: {
-          source: polylineMode === "file" ? selectedFile?.path ?? "file" : "polyline",
+          source: polylineMode === "file" ? (selectedFile?.path ?? "file") : "polyline",
         },
       });
 
@@ -253,7 +244,7 @@ export function PolylineSource() {
 
     const name = source.layerName.trim() || defaultName;
     const geojson = parsedData.featureCollection;
-    const sourcePath = polylineMode === "file" ? selectedFile?.path ?? "" : "encoded-polyline";
+    const sourcePath = polylineMode === "file" ? (selectedFile?.path ?? "") : "encoded-polyline";
 
     source.addAndClose(
       {
@@ -334,7 +325,9 @@ export function PolylineSource() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="polyline-output-geometry">{t("addData.polyline.outputGeometryLabel")}</Label>
+            <Label htmlFor="polyline-output-geometry">
+              {t("addData.polyline.outputGeometryLabel")}
+            </Label>
             <Select
               id="polyline-output-geometry"
               value={outputGeometry}
@@ -412,13 +405,17 @@ export function PolylineSource() {
 
             <div className="grid grid-cols-2 gap-2 text-muted-foreground text-[11px]">
               <div>
-                <span className="font-semibold text-foreground">{t("addData.polyline.previewLength")}: </span>
+                <span className="font-semibold text-foreground">
+                  {t("addData.polyline.previewLength")}:{" "}
+                </span>
                 {parsedData.totalLengthKm < 1
                   ? `${(parsedData.totalLengthKm * 1000).toFixed(0)} m`
                   : `${parsedData.totalLengthKm.toFixed(2)} km`}
               </div>
               <div className="truncate">
-                <span className="font-semibold text-foreground">{t("addData.polyline.previewExtent")}: </span>
+                <span className="font-semibold text-foreground">
+                  {t("addData.polyline.previewExtent")}:{" "}
+                </span>
                 [{parsedData.bbox.map((v) => v.toFixed(3)).join(", ")}]
               </div>
             </div>
@@ -446,12 +443,21 @@ export function PolylineSource() {
                         <span className="font-semibold text-foreground">
                           {t("addData.polyline.previewLine")} #{l.index}
                         </span>
-                        <span>{l.pointsCount} {t("addData.polyline.previewPoints")} · {l.lengthKm.toFixed(2)} km</span>
+                        <span>
+                          {l.pointsCount} {t("addData.polyline.previewPoints")} ·{" "}
+                          {l.lengthKm.toFixed(2)} km
+                        </span>
                       </div>
                       <div className="flex gap-2 text-[10px] text-muted-foreground">
-                        <span>{t("addData.polyline.previewStart")}: [{l.start[0].toFixed(5)}, {l.start[1].toFixed(5)}]</span>
+                        <span>
+                          {t("addData.polyline.previewStart")}: [{l.start[0].toFixed(5)},{" "}
+                          {l.start[1].toFixed(5)}]
+                        </span>
                         <span>→</span>
-                        <span>{t("addData.polyline.previewEnd")}: [{l.end[0].toFixed(5)}, {l.end[1].toFixed(5)}]</span>
+                        <span>
+                          {t("addData.polyline.previewEnd")}: [{l.end[0].toFixed(5)},{" "}
+                          {l.end[1].toFixed(5)}]
+                        </span>
                       </div>
                     </div>
                   ))}

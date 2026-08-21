@@ -2744,7 +2744,8 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
 export const decodePolylineTool: ProcessingAlgorithm = {
   id: "decode-polyline",
   name: "Decode polyline",
-  description: "Decode encoded polyline strings from an attribute field into a LineString vector layer",
+  description:
+    "Decode encoded polyline strings from an attribute field into a LineString vector layer",
   group: "Geometry",
   parameters: [
     {
@@ -2817,7 +2818,8 @@ export const decodePolylineTool: ProcessingAlgorithm = {
 export const encodePolylineTool: ProcessingAlgorithm = {
   id: "encode-polyline",
   name: "Encode line to polyline",
-  description: "Encode LineString and MultiLineString geometries into an encoded polyline attribute string",
+  description:
+    "Encode LineString and MultiLineString geometries into an encoded polyline attribute string",
   group: "Geometry",
   parameters: [
     {

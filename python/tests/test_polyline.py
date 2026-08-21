@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import math
+
 import pytest
 
 import geolibre.geolibre as gmod
 from geolibre import (
+    Map,
     decode_polyline,
     encode_polyline,
     polyline_to_geojson,
     unescape_polyline,
-    Map,
 )
 
 

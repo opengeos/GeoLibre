@@ -336,9 +336,7 @@ describe("polyline codec", () => {
 
   describe("drag and drop file ingestion", () => {
     it("loads dropped .polyline files directly into FeatureCollection layers", async () => {
-      const { loadDroppedVectorFiles } = await import(
-        "../apps/geolibre-desktop/src/lib/tauri-io"
-      );
+      const { loadDroppedVectorFiles } = await import("../apps/geolibre-desktop/src/lib/tauri-io");
       const mockPolylineFile = new File(
         ["_p~iF~ps|U_ulLnnqC_mqNvxq`@\n_p~iF~ps|U_ulLnnqC_mqNvxq`@"],
         "Polyline.polyline",
@@ -356,9 +354,8 @@ describe("polyline codec", () => {
 
   describe("layer export geometry restrictions", () => {
     it("layerSupportsPolylineExport returns true only for line layers", async () => {
-      const { layerSupportsPolylineExport } = await import(
-        "../apps/geolibre-desktop/src/lib/vector-export"
-      );
+      const { layerSupportsPolylineExport } =
+        await import("../apps/geolibre-desktop/src/lib/vector-export");
 
       const lineLayer = {
         id: "l1",
