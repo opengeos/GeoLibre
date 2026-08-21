@@ -2738,8 +2738,8 @@ export const mergeLayersTool: ProcessingAlgorithm = {
 
     const out = featureCollection(
       selected.flatMap((layer) =>
-        layer.geojson!.features
-          .filter((feature) => feature.geometry)
+        layer
+          .geojson!.features.filter((feature) => feature.geometry)
           .map((feature) => ({
             type: "Feature" as const,
             properties: Object.fromEntries(

@@ -57,7 +57,13 @@ const linesB = makeLayer("b", "Lines B", {
     {
       type: "Feature",
       properties: { label: "b1", value: 7 },
-      geometry: { type: "LineString", coordinates: [[2, 2], [3, 3]] },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [2, 2],
+          [3, 3],
+        ],
+      },
     },
   ],
 });
