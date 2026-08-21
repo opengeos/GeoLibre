@@ -44,7 +44,14 @@ describe("extract vertices tool", () => {
       {
         type: "Feature",
         properties: { kind: "road" },
-        geometry: { type: "LineString", coordinates: [[0, 0], [1, 1], [2, 0]] },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [1, 1],
+            [2, 0],
+          ],
+        },
       },
     ],
   });
@@ -56,7 +63,11 @@ describe("extract vertices tool", () => {
     assert.equal(fc.features.length, 3);
     assert.deepEqual(
       fc.features.map((f) => f.geometry.coordinates),
-      [[0, 0], [1, 1], [2, 0]],
+      [
+        [0, 0],
+        [1, 1],
+        [2, 0],
+      ],
     );
     assert.ok(fc.features.every((f) => f.properties?.kind === "road"));
     assert.deepEqual(
@@ -77,8 +88,18 @@ describe("extract vertices tool", () => {
           geometry: {
             type: "Polygon",
             coordinates: [
-              [[0, 0], [0, 1], [1, 1], [0, 0]],
-              [[0.2, 0.2], [0.2, 0.4], [0.4, 0.4], [0.2, 0.2]],
+              [
+                [0, 0],
+                [0, 1],
+                [1, 1],
+                [0, 0],
+              ],
+              [
+                [0.2, 0.2],
+                [0.2, 0.4],
+                [0.4, 0.4],
+                [0.2, 0.2],
+              ],
             ],
           },
         },
@@ -93,10 +114,7 @@ describe("extract vertices tool", () => {
   it("skips geometry-less features and errors on an empty result", () => {
     const mixed = makeLayer("mixed", "Mixed", {
       type: "FeatureCollection",
-      features: [
-        { type: "Feature", properties: {}, geometry: null },
-        ...line.geojson.features,
-      ],
+      features: [{ type: "Feature", properties: {}, geometry: null }, ...line.geojson.features],
     });
     const skipped = runTool("extract-vertices", [mixed], { layer: "mixed" });
     assert.ok(skipped.messages.some((m) => m.includes("Skipped 1")));
@@ -120,7 +138,13 @@ describe("points along geometry tool", () => {
       {
         type: "Feature",
         properties: { id: "L1" },
-        geometry: { type: "LineString", coordinates: [[0, 0], [3, 0]] },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [3, 0],
+          ],
+        },
       },
     ],
   });
@@ -175,7 +199,15 @@ describe("points along geometry tool", () => {
           properties: {},
           geometry: {
             type: "Polygon",
-            coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
+            coordinates: [
+              [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 1],
+                [0, 0],
+              ],
+            ],
           },
         },
       ],
@@ -188,7 +220,9 @@ describe("points along geometry tool", () => {
     // ~50 km steps around a ~444 km perimeter → interior points + corners.
     assert.ok(results[0].features.length > 8);
     assert.ok(
-      results[0].features.some((f) => f.geometry.coordinates[0] === 0 && f.geometry.coordinates[1] === 0),
+      results[0].features.some(
+        (f) => f.geometry.coordinates[0] === 0 && f.geometry.coordinates[1] === 0,
+      ),
     );
   });
 

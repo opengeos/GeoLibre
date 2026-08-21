@@ -1726,10 +1726,7 @@ function interpolateAlong(
     const segment = distance(start, end, { units });
     if (travelled + segment >= atDistance && segment > 0) {
       const t = (atDistance - travelled) / segment;
-      return [
-        start[0] + (end[0] - start[0]) * t,
-        start[1] + (end[1] - start[1]) * t,
-      ];
+      return [start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t];
     }
     travelled += segment;
   }
