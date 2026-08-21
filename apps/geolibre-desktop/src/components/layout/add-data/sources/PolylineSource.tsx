@@ -27,7 +27,7 @@ const SAMPLE_POLYLINES = [
   },
   {
     key: "addData.polyline.sampleEscaped" as const,
-    value: "_p~iF~ps|U_ulLnnqC_mqNvxq\\`@",
+    value: "otnyWckdxrCnlAsyAv~JrjAriIkjHvkL_|BbkL~tCfc@_iIb}C?goDkdUj`Cs}IwGktMvjE{_L{w@k~CjiF_uH~qGgkZfzFoaI{nB_}DoPcjT{|J?{r@swGnaDsuCoAgsQrhGkxKsbOswQjfEwQrbJcp`@~bBn_@ffAofI{eDguKwkLwrKwzGkt\\krg@gfqAg|@{uKcwKocHsaC{fFsjF_g@_rBf|OwdHvB?",
     precision: 5,
     unescape: true,
   },

@@ -642,8 +642,15 @@ function parseGpxTextLayers(text: string, path: string): LoadedVectorLayer[] {
     }));
 }
 
+/**
+ * Checks whether a decoded polyline FeatureCollection contains valid, non-empty WGS84 coordinates.
+ *
+ * Rejects collections with no features or 0 total coordinates, non-finite values,
+ * or coordinate values falling outside the valid WGS84 domain ([-180, 180] lon, [-90, 90] lat).
+ */
 function hasValidPolylineCoordinates(fc: FeatureCollection): boolean {
   if (!fc.features || fc.features.length === 0) return false;
+  let totalPoints = 0;
   for (const feature of fc.features) {
     const geometry = feature.geometry;
     if (!geometry) continue;
@@ -660,6 +667,7 @@ function hasValidPolylineCoordinates(fc: FeatureCollection): boolean {
         ) {
           return false;
         }
+        totalPoints++;
       }
     } else if (geometry.type === "MultiLineString") {
       for (const line of geometry.coordinates) {
@@ -675,13 +683,23 @@ function hasValidPolylineCoordinates(fc: FeatureCollection): boolean {
           ) {
             return false;
           }
+          totalPoints++;
         }
       }
     }
   }
-  return true;
+  return totalPoints > 0;
 }
 
+/**
+ * Parses raw polyline text from a dropped/opened file into a vector layer.
+ *
+ * Encoded polyline format does not self-describe its precision factor. Auto-detection
+ * first attempts standard precision 5 (Google Maps / OSRM standard, factor 1e5).
+ * If precision 5 yields coordinates outside valid WGS84 bounds (which occurs when
+ * precision 6 data with latitude > 9° or longitude > 18° is scaled up by 10x),
+ * it falls back to precision 6 (Valhalla / Mapbox standard, factor 1e6).
+ */
 function parsePolylineFileLayers(text: string, path: string): LoadedVectorLayer[] {
   let fc = batchDecodePolylines(text, { precision: 5, unescape: true });
   if (!hasValidPolylineCoordinates(fc)) {
