@@ -76,7 +76,7 @@
     "maplibre-gl": "^6.3.0",
     "maplibre-gl-3d-tiles": "^0.5.6",
     "maplibre-gl-basemap-control": "^0.14.0",
-    "maplibre-gl-components": "^0.31.0",
+    "maplibre-gl-components": "^0.31.1",
     "maplibre-gl-duckdb": "^0.2.4",
     "maplibre-gl-earth-engine": "^0.4.2",
     "maplibre-gl-enviroatlas": "^0.1.1",
