@@ -218,4 +218,3 @@ def test_decode_polyline_out_of_range_bounds():
     assert decode_polyline(lon_high, precision=5) == []
     lon_low = _encode_signed_number(0) + _encode_signed_number(-19000000)
     assert decode_polyline(lon_low, precision=5) == []
-
