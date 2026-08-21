@@ -9,6 +9,7 @@ export * from "./geojson-z";
 export * from "./color-ramp";
 export * from "./paths";
 export * from "./routing";
+export * from "./polyline";
 export * from "./vector-color";
 export * from "./expressions";
 export * from "./external-native-paint";

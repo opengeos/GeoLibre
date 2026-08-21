@@ -1,0 +1,139 @@
+"""Tests for Python polyline encoding, decoding, and Map.add_polyline."""
+
+from __future__ import annotations
+
+import math
+import pytest
+
+import geolibre.geolibre as gmod
+from geolibre import (
+    decode_polyline,
+    encode_polyline,
+    polyline_to_geojson,
+    unescape_polyline,
+    Map,
+)
+
+
+@pytest.fixture
+def m(monkeypatch):
+    """A Map instance with the static server stubbed out."""
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+    return Map()
+
+
+def test_decode_polyline_google():
+    # Google standard precision-5 vector
+    coords = decode_polyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@", precision=5)
+    assert len(coords) == 3
+    assert math.isclose(coords[0][0], -120.2, abs_tol=1e-5)
+    assert math.isclose(coords[0][1], 38.5, abs_tol=1e-5)
+    assert math.isclose(coords[1][0], -120.95, abs_tol=1e-5)
+    assert math.isclose(coords[1][1], 40.7, abs_tol=1e-5)
+    assert math.isclose(coords[2][0], -126.453, abs_tol=1e-5)
+    assert math.isclose(coords[2][1], 43.252, abs_tol=1e-5)
+
+
+def test_decode_polyline_valhalla():
+    # Valhalla precision-6 vector
+    coords = decode_polyline("_o`diA~gw}qC_pR_pR_pR_af@", precision=6)
+    assert len(coords) == 3
+    assert math.isclose(coords[0][0], -77.05, abs_tol=1e-6)
+    assert math.isclose(coords[0][1], 38.88, abs_tol=1e-6)
+    assert math.isclose(coords[1][0], -77.04, abs_tol=1e-6)
+    assert math.isclose(coords[1][1], 38.89, abs_tol=1e-6)
+    assert math.isclose(coords[2][0], -77.02, abs_tol=1e-6)
+    assert math.isclose(coords[2][1], 38.9, abs_tol=1e-6)
+
+
+def test_decode_polyline_empty_and_invalid():
+    assert decode_polyline("") == []
+    assert decode_polyline(None) == []  # type: ignore
+
+
+def test_encode_polyline_google():
+    coords = [
+        (-120.2, 38.5),
+        (-120.95, 40.7),
+        (-126.453, 43.252),
+    ]
+    assert encode_polyline(coords, precision=5) == "_p~iF~ps|U_ulLnnqC_mqNvxq`@"
+
+
+def test_encode_polyline_valhalla():
+    coords = [
+        (-77.05, 38.88),
+        (-77.04, 38.89),
+        (-77.02, 38.9),
+    ]
+    assert encode_polyline(coords, precision=6) == "_o`diA~gw}qC_pR_pR_pR_af@"
+
+
+def test_polyline_roundtrip():
+    original = [
+        (106.6297, 10.8231),
+        (106.635, 10.828),
+        (106.64, 10.835),
+    ]
+    encoded = encode_polyline(original, precision=5)
+    decoded = decode_polyline(encoded, precision=5)
+    assert len(decoded) == len(original)
+    for (orig_lng, orig_lat), (dec_lng, dec_lat) in zip(original, decoded):
+        assert math.isclose(orig_lng, dec_lng, abs_tol=1e-5)
+        assert math.isclose(orig_lat, dec_lat, abs_tol=1e-5)
+
+
+def test_polyline_to_geojson_single():
+    fc = polyline_to_geojson("_p~iF~ps|U_ulLnnqC_mqNvxq`@", precision=5, properties={"route": "R1"})
+    assert fc["type"] == "FeatureCollection"
+    assert len(fc["features"]) == 1
+    feature = fc["features"][0]
+    assert feature["geometry"]["type"] == "LineString"
+    assert len(feature["geometry"]["coordinates"]) == 3
+    assert feature["properties"]["route"] == "R1"
+
+
+def test_unescape_polyline():
+    escaped = "_p~iF~ps|U_ulLnnqC_mqNvxq\\\\`@"
+    assert unescape_polyline(escaped) == "_p~iF~ps|U_ulLnnqC_mqNvxq\\`@"
+    coords = decode_polyline(escaped, precision=5, unescape=True)
+    assert len(coords) == 3
+
+
+def test_polyline_to_geojson_multiple():
+    polylines = [
+        "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+        "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+    ]
+    fc = polyline_to_geojson(polylines, precision=5)
+    assert len(fc["features"]) == 2
+    assert fc["features"][0]["properties"]["line_index"] == 1
+    assert fc["features"][1]["properties"]["line_index"] == 2
+
+
+def test_polyline_to_geojson_multiline_string():
+    multiline_text = "_p~iF~ps|U_ulLnnqC_mqNvxq`@\n_p~iF~ps|U_ulLnnqC_mqNvxq`@"
+    fc = polyline_to_geojson(multiline_text, precision=5)
+    assert len(fc["features"]) == 2
+    assert fc["features"][0]["properties"]["line_index"] == 1
+
+
+def test_map_add_polyline(m):
+    seq_before = m._seq
+    layer_id = m.add_polyline(
+        "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+        name="My Route",
+        precision=5,
+        lineColor="#ff0000",
+    )
+    assert isinstance(layer_id, str)
+    assert m._seq == seq_before + 1
+
+    last = m.project["layers"][-1]
+    assert last["id"] == layer_id
+    assert last["name"] == "My Route"
+    assert last["type"] == "geojson"
+    assert last["geojson"]["type"] == "FeatureCollection"
+    assert len(last["geojson"]["features"]) == 1
+    assert last["geojson"]["features"][0]["geometry"]["type"] == "LineString"

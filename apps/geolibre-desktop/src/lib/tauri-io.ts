@@ -1,4 +1,5 @@
 import {
+  batchDecodePolylines,
   hasPathTraversal,
   isAbsoluteFilesystemPath,
   parseProject,
@@ -639,6 +640,24 @@ function parseGpxTextLayers(text: string, path: string): LoadedVectorLayer[] {
       name: `${baseName} ${layer.label}`,
       path,
     }));
+}
+
+function parsePolylineFileLayers(text: string, path: string): LoadedVectorLayer[] {
+  let fc = batchDecodePolylines(text, { precision: 5, unescape: true });
+  if (fc.features.length === 0) {
+    fc = batchDecodePolylines(text, { precision: 6, unescape: true });
+  }
+  if (fc.features.length === 0) {
+    throw new Error("No valid polyline coordinates could be decoded from this file.");
+  }
+  const baseName = pathWithoutExtension(browserSafeFileName(path)) || "Polyline";
+  return [
+    {
+      data: fc,
+      name: baseName,
+      path,
+    },
+  ];
 }
 
 /** Delimited text formats the drag-and-drop / open path loads as points. */
@@ -1991,6 +2010,21 @@ async function loadBrowserVectorFile(
     };
   }
 
+  if (extension === "polyline") {
+    const text = await file.text();
+    let fc = batchDecodePolylines(text, { precision: 5, unescape: true });
+    if (fc.features.length === 0) {
+      fc = batchDecodePolylines(text, { precision: 6, unescape: true });
+    }
+    if (fc.features.length === 0) {
+      throw new Error("No valid polyline coordinates could be decoded from this file.");
+    }
+    return {
+      data: fc,
+      path: file.name,
+    };
+  }
+
   // Deliberately NOT gated on `streamViaDuckDb`: `loadDuckDbVectorFile` has no
   // longitude/latitude column detection (that lives only in the GeoParquet
   // conversion path), so routing a plain lon/lat CSV to DuckDB fails with
@@ -2191,6 +2225,7 @@ async function tryLoadPickedNativeVectorPath(
     extension === "kml" ||
     extension === "kmz" ||
     extension === "gpx" ||
+    extension === "polyline" ||
     extension === "zip"
   ) {
     return undefined;
@@ -2283,6 +2318,26 @@ async function loadTauriVectorFile(
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Could not read this GPX file. ${detail}`);
+    }
+  }
+
+  if (extension === "polyline") {
+    try {
+      const text = await readLocalFileText(path);
+      let fc = batchDecodePolylines(text, { precision: 5, unescape: true });
+      if (fc.features.length === 0) {
+        fc = batchDecodePolylines(text, { precision: 6, unescape: true });
+      }
+      if (fc.features.length === 0) {
+        throw new Error("No valid polyline coordinates could be decoded from this file.");
+      }
+      return {
+        data: fc,
+        path,
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      throw new Error(`Could not read this Polyline file. ${detail}`);
     }
   }
 
@@ -3109,6 +3164,11 @@ export async function loadDroppedVectorFiles(
         continue;
       }
 
+      if (extension === "polyline") {
+        layers.push(...parsePolylineFileLayers(await file.text(), file.name));
+        continue;
+      }
+
       if (extension === "kmz") {
         try {
           layers.push(...(await loadKmzLayers(await file.arrayBuffer(), file.name, options)));
@@ -3388,6 +3448,15 @@ export async function loadDroppedVectorPaths(
           // "Unknown error" when the fs-plugin fallback fails.
           const detail = error instanceof Error ? error.message : String(error);
           throw new Error(`Could not read this GPX file. ${detail}`);
+        }
+        continue;
+      }
+      if (extension === "polyline") {
+        try {
+          layers.push(...parsePolylineFileLayers(await readLocalFileText(path), path));
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          throw new Error(`Could not read this Polyline file. ${detail}`);
         }
         continue;
       }

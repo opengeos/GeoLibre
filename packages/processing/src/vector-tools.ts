@@ -32,7 +32,9 @@ import type {
 } from "geojson";
 import {
   bodyLengthToEarth,
+  decodePolyline,
   earthLengthToBody,
+  encodePolyline,
   getActiveBodyRadiusRatio,
   layerJoinKey,
   type GeoLibreLayer,
@@ -2739,6 +2741,147 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
   },
 };
 
+export const decodePolylineTool: ProcessingAlgorithm = {
+  id: "decode-polyline",
+  name: "Decode polyline",
+  description: "Decode encoded polyline strings from an attribute field into a LineString vector layer",
+  group: "Geometry",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+    },
+    {
+      id: "field",
+      label: "Polyline field",
+      type: "field",
+      description: "Attribute field containing the encoded polyline string",
+      required: true,
+    },
+    {
+      id: "precision",
+      label: "Precision",
+      type: "select",
+      options: [
+        { label: "5 (Google / OSRM)", value: "5" },
+        { label: "6 (Valhalla / Mapbox)", value: "6" },
+      ],
+      default: "5",
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const field = (ctx.parameters.field as string)?.trim();
+    if (!field) {
+      ctx.log("Error: please specify a polyline field");
+      return;
+    }
+    const rawPrecision = ctx.parameters.precision;
+    const precision = rawPrecision === "6" || rawPrecision === 6 ? 6 : 5;
+
+    const outFeatures: Feature<LineString>[] = [];
+    let skipped = 0;
+
+    for (const feature of fc.features) {
+      const val = feature.properties?.[field];
+      if (typeof val !== "string" || !val.trim()) {
+        skipped++;
+        continue;
+      }
+      const coords = decodePolyline(val.trim(), precision);
+      if (coords.length < 2) {
+        skipped++;
+        continue;
+      }
+      outFeatures.push({
+        type: "Feature",
+        properties: { ...(feature.properties ?? {}) },
+        geometry: {
+          type: "LineString",
+          coordinates: coords,
+        },
+      });
+    }
+
+    if (skipped > 0) {
+      ctx.log(`Skipped ${skipped} feature(s) with missing or invalid polyline string`);
+    }
+    ctx.log(`Decoded ${outFeatures.length} LineString feature(s) from "${field}"`);
+    ctx.addResultLayer?.("Decoded polylines", featureCollection(outFeatures));
+  },
+};
+
+export const encodePolylineTool: ProcessingAlgorithm = {
+  id: "encode-polyline",
+  name: "Encode line to polyline",
+  description: "Encode LineString and MultiLineString geometries into an encoded polyline attribute string",
+  group: "Geometry",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["line"],
+    },
+    {
+      id: "precision",
+      label: "Precision",
+      type: "select",
+      options: [
+        { label: "5 (Google / OSRM)", value: "5" },
+        { label: "6 (Valhalla / Mapbox)", value: "6" },
+      ],
+      default: "5",
+    },
+    {
+      id: "targetField",
+      label: "Output field name",
+      type: "string",
+      description: "Name of the attribute column to store encoded polylines (default: polyline)",
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const rawPrecision = ctx.parameters.precision;
+    const precision = rawPrecision === "6" || rawPrecision === 6 ? 6 : 5;
+    const targetField = ((ctx.parameters.targetField as string) || "").trim() || "polyline";
+
+    const outFeatures: Feature[] = [];
+    let encodedCount = 0;
+
+    for (const feature of fc.features) {
+      const geometry = feature.geometry;
+      let polylineStr = "";
+      if (geometry?.type === "LineString") {
+        polylineStr = encodePolyline(geometry.coordinates as [number, number][], precision);
+      } else if (geometry?.type === "MultiLineString") {
+        polylineStr = geometry.coordinates
+          .map((lineCoords) => encodePolyline(lineCoords as [number, number][], precision))
+          .filter(Boolean)
+          .join(";");
+      }
+      if (polylineStr) encodedCount++;
+      outFeatures.push({
+        ...feature,
+        properties: {
+          ...(feature.properties ?? {}),
+          [targetField]: polylineStr,
+        },
+      });
+    }
+
+    ctx.log(
+      `Encoded ${encodedCount} line feature(s) into field "${targetField}" (precision ${precision})`,
+    );
+    ctx.addResultLayer?.("Encoded polylines", featureCollection(outFeatures));
+  },
+};
+
 export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   bufferTool,
   centroidsTool,
@@ -2762,6 +2905,8 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   gridTool,
   voronoiTool,
   cellSectorsTool,
+  decodePolylineTool,
+  encodePolylineTool,
   createDggsGridTool,
   dggsBinPointsTool,
   dggsCompactTool,

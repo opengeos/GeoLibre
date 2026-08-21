@@ -219,6 +219,7 @@ import {
   exportVectorLayer,
   geojsonVectorSourceId,
   kmlExportErrorMessage,
+  layerSupportsPolylineExport,
   resolveLayerGeojson,
   sanitizeExportFileName,
   shapefileFieldWarnings,
@@ -3134,6 +3135,7 @@ export function LayerPanel({
             // Export writes the layer's GeoJSON features to disk; only
             // geojson-backed vector layers carry those features.
             const canExportLayer = layer.type === "geojson";
+            const canExportPolyline = canExportLayer && layerSupportsPolylineExport(layer);
             // Importing a style (Mapbox GL or SLD) only writes the layer's
             // vector symbology, so it applies to any vector-styled layer (local
             // GeoJSON and vector tiles), not just the export-capable GeoJSON
@@ -3951,6 +3953,15 @@ export function LayerPanel({
                                 >
                                   CSV (attributes only)
                                 </DropdownMenuItem>
+                                {canExportPolyline && (
+                                  <DropdownMenuItem
+                                    onSelect={() => {
+                                      void handleExportLayer(layer, "polyline");
+                                    }}
+                                  >
+                                    Encoded Polyline
+                                  </DropdownMenuItem>
+                                )}
                               </DropdownMenuSubContent>
                             </DropdownMenuSub>
                           )}

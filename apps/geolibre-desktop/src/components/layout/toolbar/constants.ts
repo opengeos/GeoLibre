@@ -155,6 +155,8 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "dissolve", titleKey: "toolbar.vectorTool.dissolve" },
   { kind: "bounding-box", titleKey: "toolbar.vectorTool.boundingBox" },
   { kind: "simplify", titleKey: "toolbar.vectorTool.simplify" },
+  { kind: "decode-polyline", titleKey: "toolbar.vectorTool.decodePolyline" },
+  { kind: "encode-polyline", titleKey: "toolbar.vectorTool.encodePolyline" },
   { kind: "clip", titleKey: "toolbar.vectorTool.clip" },
   { kind: "intersection", titleKey: "toolbar.vectorTool.intersection" },
   { kind: "difference", titleKey: "toolbar.vectorTool.difference" },

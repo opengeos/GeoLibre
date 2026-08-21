@@ -10,6 +10,8 @@ export {
   getVectorTool,
   resolveVectorRerun,
   matchFeaturesByLocation,
+  decodePolylineTool,
+  encodePolylineTool,
   MAX_CLIENT_PAIRS,
   SELECT_LOCATION_PREDICATES,
   type LocationMatches,

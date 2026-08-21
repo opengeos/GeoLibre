@@ -129,6 +129,7 @@ import {
   formatAttributeValue,
   geojsonVectorSourceId,
   kmlExportErrorMessage,
+  layerSupportsPolylineExport,
   sanitizeExportFileName,
   shapefileFieldWarnings,
   type VectorExportFormat,
@@ -1773,6 +1774,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuItem onSelect={() => void exportLayer("csv")}>
               CSV (attributes only)
             </DropdownMenuItem>
+            {layer && layerSupportsPolylineExport(layer) && (
+              <DropdownMenuItem onSelect={() => void exportLayer("polyline")}>
+                Encoded Polyline
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         {isEditing ? (

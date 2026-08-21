@@ -261,6 +261,12 @@ export function ProcessingMenu({
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("simplify")}>
                       {t("toolbar.vectorTool.simplify")}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("decode-polyline")}>
+                      {t("toolbar.vectorTool.decodePolyline")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("encode-polyline")}>
+                      {t("toolbar.vectorTool.encodePolyline")}
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("reproject")}>
                       {t("toolbar.vectorTool.reproject")}
                     </DropdownMenuItem>

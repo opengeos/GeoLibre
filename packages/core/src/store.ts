@@ -141,6 +141,8 @@ export type VectorToolKind =
   | "trajectory-speed"
   | "detect-stops"
   | "space-time-proximity"
+  | "decode-polyline"
+  | "encode-polyline"
   | "check-validity"
   | "fix-geometries"
   | "check-topology-rules"

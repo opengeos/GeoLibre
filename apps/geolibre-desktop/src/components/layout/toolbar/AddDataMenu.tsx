@@ -62,6 +62,7 @@ export function AddDataMenu({
     gdb: { onSelect: () => onSetAddDataKind("gdb") },
     photos: { onSelect: () => onSetAddDataKind("photos") },
     gpx: { onSelect: () => onSetAddDataKind("gpx") },
+    polyline: { onSelect: () => onSetAddDataKind("polyline") },
     mbtiles: { onSelect: () => onSetAddDataKind("mbtiles") },
     "osm-pbf": { onSelect: onOpenOsmPbfDialog, disabled: osmPbfBusy },
     xyz: { onSelect: () => onSetAddDataKind("xyz") },

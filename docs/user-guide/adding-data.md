@@ -13,6 +13,7 @@ To collect supported dataset links from a catalog or other webpage and open seve
 | **Vector Layer** | Opens the Add Vector panel (backed by `maplibre-gl-vector`). Loads GeoJSON, GeoParquet, FlatGeobuf, zipped Shapefile, GeoPackage, KML/KMZ, GML, and other vector formats from a file or URL. |
 | **Raster Layer** | Opens the Add Raster panel (backed by `maplibre-gl-raster`). Loads GeoTIFF and Cloud-Optimized GeoTIFF (COG) from a file or URL. |
 | **Delimited Text Layer** | Loads CSV/TSV from a file or URL, using longitude and latitude columns to build point features, or by geocoding one or more address columns (see [Geocoding](data-integrations.md#geocoding)). |
+| **Encoded Polyline** | Loads Google (precision 5) or Valhalla/Mapbox (precision 6) encoded polyline strings from pasted text or uploaded text files. |
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |
 | **MBTiles Layer** | Loads a local MBTiles tile archive (desktop app). |
 

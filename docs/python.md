@@ -236,6 +236,7 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_flatgeobuf(data, name=, **style)` | Add a FlatGeobuf dataset (URL or local file). |
 | `add_shp(data, name=, **style)` | Add a Shapefile (zipped URL or local `.shp`). |
 | `add_kml(data, name=, **style)` / `add_gpkg(data, name=, layer=None, **style)` | Add KML/KMZ or GeoPackage data. |
+| `add_polyline(polyline, name="Polyline", precision=5, **style)` | Add an Encoded Polyline layer from a string or list of strings (precision 5 or 6). |
 | `add_vector_tiles(url, name=, source_layers=, source_layer=, **style)` | Add a vector tile layer from a TileJSON endpoint. |
 | `add_pmtiles(url, name=, tile_type=, source_layers=, **style)` | Add a PMTiles archive (vector or raster). |
 | `add_tile_layer(url, name=, tile_size=, attribution=)` | Add a raster XYZ tile layer. |
