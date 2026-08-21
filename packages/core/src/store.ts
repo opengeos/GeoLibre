@@ -17,7 +17,17 @@ import {
   DEFAULT_PROJECT_NAME,
 } from "./project";
 import { initialLayerStyle } from "./layer-defaults";
-import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
+import {
+  createDefaultPrintLayout,
+  printLayoutConfigsEqual,
+  scrubPrintLayoutForRemovedLayers,
+  type PrintLayoutConfig,
+} from "./print-layout-config";
+import {
+  DEFAULT_LAYER_GROUP_OPACITY,
+  normalizeGroupContiguity,
+  reorderLayerGroupInPanel,
+} from "./layer-groups";
 import {
   DEFAULT_BASEMAP,
   DEFAULT_DASHBOARD_COLUMNS,
@@ -31,6 +41,7 @@ import {
   MAX_PROCESSING_HISTORY,
   MIN_DASHBOARD_COLUMNS,
   type AddTileLayerOptions,
+  type CollabInvite,
   type CollaborationChatMessage,
   type CollaborationParticipant,
   type CollaborationPresence,
@@ -41,6 +52,7 @@ import {
   type LayerGroup,
   type LayerLibraryEntry,
   type AttributeFormConfig,
+  type EditorTrackingConfig,
   type LayerJoin,
   type LayerVirtualField,
   type LayerStyle,
@@ -131,6 +143,8 @@ export type VectorToolKind =
   | "trajectory-speed"
   | "detect-stops"
   | "space-time-proximity"
+  | "decode-polyline"
+  | "encode-polyline"
   | "check-validity"
   | "fix-geometries"
   | "check-topology-rules"
@@ -204,6 +218,8 @@ export interface AppState {
   preferences: ProjectPreferences;
   projectPlugins: ProjectPluginState | null;
   legend: LegendConfig;
+  /** Print Layout composer settings for the open project (discussion #1992). */
+  printLayout: PrintLayoutConfig;
   storymap: StoryMap | null;
   /** Saved processing pipelines (batch/model chaining; issue #344). */
   models: ProcessingModel[];
@@ -260,6 +276,22 @@ export interface AppState {
   selectedFeatureIds: string[];
   identifyLayerId: string | null;
   pointerCoords: [number, number] | null;
+  /**
+   * Ground elevation in true metres under the pointer, for the status bar
+   * (issue #1813). Null when it cannot be resolved — the pointer is off the
+   * map, terrain is off and the remote lookup has not answered (or failed), or
+   * the active body is not Earth. Set alongside `pointerCoords` by MapCanvas,
+   * which owns the map instance the terrain sample comes from.
+   */
+  pointerElevation: number | null;
+  /**
+   * Camera height above sea level in metres — Google Earth Pro's "Eye alt"
+   * (issue #1816). Derived from the camera, so deliberately *not* part of
+   * `mapView`: that shape is persisted into the project file, and a stored
+   * altitude could only drift from the center/zoom/pitch it is computed from.
+   * Null before the map loads, or when MapLibre cannot report it.
+   */
+  cameraAltitude: number | null;
   /** Live GPS fix for the status bar, or null while GPS tracking is off. */
   gpsStatus: GpsStatusFix | null;
   /** Anchored review comments on map points or features (issue #1518). */
@@ -310,7 +342,12 @@ export interface AppState {
     // Story Map dialog is hidden so the user can pan/zoom/tilt the real map and
     // save the resulting camera back into this chapter (issue #775).
     storymapComposingId: string | null;
+    /** The Batch tools dialog (run one tool across many layers). */
+    batchToolsOpen: boolean;
+    /** The Model Builder canvas panel (author a processing graph). */
     modelBuilderOpen: boolean;
+    /** One-shot request for Model Builder to load a saved model. */
+    modelBuilderRequestedModelId: string | null;
     /** Style Manager dialog visibility (issue #1294). */
     styleManagerOpen: boolean;
     /** Processing History panel visibility (#1292). */
@@ -340,6 +377,8 @@ export interface AppState {
   };
 
   setPointerCoords: (coords: [number, number] | null) => void;
+  setPointerElevation: (elevation: number | null) => void;
+  setCameraAltitude: (altitude: number | null) => void;
   setGpsStatus: (fix: GpsStatusFix | null) => void;
   setCollaboration: (patch: Partial<CollaborationState>) => void;
   updateCollaborationPresence: (clientId: string, presence: CollaborationPresence | null) => void;
@@ -391,6 +430,12 @@ export interface AppState {
   setBasemapOpacity: (opacity: number) => void;
   setPreferences: (preferences: ProjectPreferences) => void;
   setLegend: (legend: LegendConfig) => void;
+  /**
+   * Replace the Print Layout composer settings. A config equal to the current
+   * one is ignored, so re-opening the composer (or a project load seeding the
+   * dialog) never marks the project dirty.
+   */
+  setPrintLayout: (printLayout: PrintLayoutConfig) => void;
   setProjectPlugins: (projectPlugins: ProjectPluginState | null, shouldMarkDirty?: boolean) => void;
   selectLayer: (id: string | null) => void;
   selectFeature: (id: string | null) => void;
@@ -424,7 +469,9 @@ export interface AppState {
   setStorymapPanelOpen: (open: boolean) => void;
   setStorymapPresenting: (presenting: boolean, returnToEditor?: boolean) => void;
   setStorymapComposing: (chapterId: string | null) => void;
+  setBatchToolsOpen: (open: boolean) => void;
   setModelBuilderOpen: (open: boolean) => void;
+  setModelBuilderRequestedModelId: (id: string | null) => void;
   setProcessingHistoryOpen: (open: boolean) => void;
   /** Open/close Select by Expression, optionally preselecting a target layer. */
   setSelectByExpressionOpen: (open: boolean, layerId?: string | null) => void;
@@ -575,6 +622,12 @@ export interface AppState {
    */
   setLayerAttributeForm: (id: string, attributeForm: AttributeFormConfig | undefined) => void;
   /**
+   * Replace the layer's editor tracking configuration (whether creation/edit
+   * author and timestamp columns are maintained, and under which names). Pass
+   * `undefined` to drop the configuration entirely.
+   */
+  setLayerEditorTracking: (id: string, editorTracking: EditorTrackingConfig | undefined) => void;
+  /**
    * Replace a layer's virtual fields and immediately re-derive its computed
    * columns (strip what the previous fields added, evaluate the new list).
    * Pass an empty array to detach every virtual field.
@@ -687,6 +740,10 @@ export const DEFAULT_COLLABORATION_STATE: CollaborationState = Object.freeze({
   >,
   followHost: false,
   chat: Object.freeze([] as CollaborationChatMessage[]) as CollaborationChatMessage[],
+  requireIdentity: false,
+  identitySupported: false,
+  lockedLayerIds: Object.freeze([] as string[]) as string[],
+  invites: Object.freeze([] as CollabInvite[]) as CollabInvite[],
   error: null,
 });
 
@@ -960,6 +1017,7 @@ export const useAppStore = create<AppState>()(
       preferences: DEFAULT_PROJECT_PREFERENCES,
       projectPlugins: null,
       legend: { ...DEFAULT_LEGEND_CONFIG },
+      printLayout: createDefaultPrintLayout(),
       storymap: null,
       models: [],
       styleLibrary: [],
@@ -978,6 +1036,8 @@ export const useAppStore = create<AppState>()(
       selectedFeatureIds: [],
       identifyLayerId: null,
       pointerCoords: null,
+      pointerElevation: null,
+      cameraAltitude: null,
       gpsStatus: null,
       comments: [],
       metadata: {},
@@ -1009,7 +1069,9 @@ export const useAppStore = create<AppState>()(
         storymapPresenting: false,
         storymapReturnToEditor: false,
         storymapComposingId: null,
+        batchToolsOpen: false,
         modelBuilderOpen: false,
+        modelBuilderRequestedModelId: null,
         styleManagerOpen: false,
         processingHistoryOpen: false,
         selectByExpressionOpen: false,
@@ -1021,7 +1083,10 @@ export const useAppStore = create<AppState>()(
         collaborateDialogOpen: false,
       },
 
-      setPointerCoords: (coords) => set({ pointerCoords: coords }),
+      setPointerCoords: (coords) =>
+        set(coords ? { pointerCoords: coords } : { pointerCoords: null, pointerElevation: null }),
+      setPointerElevation: (elevation) => set({ pointerElevation: elevation }),
+      setCameraAltitude: (altitude) => set({ cameraAltitude: altitude }),
       setGpsStatus: (fix) => set({ gpsStatus: fix }),
 
       addComment: (comment) =>
@@ -1246,6 +1311,11 @@ export const useAppStore = create<AppState>()(
       setBasemapOpacity: (opacity) => set({ basemapOpacity: opacity, isDirty: true }),
       setPreferences: (preferences) => set({ preferences, isDirty: true }),
       setLegend: (legend) => set({ legend, isDirty: true }),
+
+      setPrintLayout: (printLayout) =>
+        set((s) =>
+          printLayoutConfigsEqual(s.printLayout, printLayout) ? s : { printLayout, isDirty: true },
+        ),
       // When shouldMarkDirty is false the existing dirty flag is preserved rather
       // than set; it cannot clear the flag (only markSaved() does that).
       setProjectPlugins: (projectPlugins, shouldMarkDirty = true) =>
@@ -1337,7 +1407,10 @@ export const useAppStore = create<AppState>()(
         })),
       setStorymapComposing: (chapterId) =>
         set((s) => ({ ui: { ...s.ui, storymapComposingId: chapterId } })),
+      setBatchToolsOpen: (open) => set((s) => ({ ui: { ...s.ui, batchToolsOpen: open } })),
       setModelBuilderOpen: (open) => set((s) => ({ ui: { ...s.ui, modelBuilderOpen: open } })),
+      setModelBuilderRequestedModelId: (id) =>
+        set((s) => ({ ui: { ...s.ui, modelBuilderRequestedModelId: id } })),
       setProcessingHistoryOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, processingHistoryOpen: open } })),
       setProcessingRerun: (request) => set((s) => ({ ui: { ...s.ui, processingRerun: request } })),
@@ -1644,6 +1717,9 @@ export const useAppStore = create<AppState>()(
           widgets: scrubWidgetsForRemovedLayers(s.widgets, id),
           comments: scrubCommentsForRemovedLayers(s.comments, id),
           legend: scrubLegendForRemovedLayers(s.legend, id),
+          // Clear a Print Layout data/atlas block built on the removed layer,
+          // so a save that follows the delete cannot write a dangling id.
+          printLayout: scrubPrintLayoutForRemovedLayers(s.printLayout, id),
           selectedLayerId:
             s.selectedLayerId === id
               ? (s.layers.find((l) => l.id !== id)?.id ?? null)
@@ -1702,6 +1778,8 @@ export const useAppStore = create<AppState>()(
         }),
 
       setLayerAttributeForm: (id, attributeForm) => get().updateLayer(id, { attributeForm }),
+
+      setLayerEditorTracking: (id, editorTracking) => get().updateLayer(id, { editorTracking }),
 
       setLayerVirtualFields: (id, fields) =>
         set((s) => {
@@ -1987,6 +2065,9 @@ export const useAppStore = create<AppState>()(
               ? scrubCommentsForRemovedLayers(s.comments, removedIds)
               : s.comments,
             legend: removeChildren ? scrubLegendForRemovedLayers(s.legend, removedIds) : s.legend,
+            printLayout: removeChildren
+              ? scrubPrintLayoutForRemovedLayers(s.printLayout, removedIds)
+              : s.printLayout,
             selectedLayerId: selectionRemoved
               ? (layers[layers.length - 1]?.id ?? null)
               : s.selectedLayerId,
@@ -2121,45 +2202,14 @@ export const useAppStore = create<AppState>()(
           };
         }),
 
+      // A folder that owns no layers has no position in `layers` to move, so
+      // the panel order it takes part in lives across both arrays and the move
+      // writes both (GeoLibre#1739).
       reorderLayerGroup: (id, direction) =>
         set((s) => {
-          const groupIds = new Set([id]);
-          let foundDescendant = true;
-          while (foundDescendant) {
-            foundDescendant = false;
-            for (const group of s.layerGroups) {
-              if (group.parentId && groupIds.has(group.parentId) && !groupIds.has(group.id)) {
-                groupIds.add(group.id);
-                foundDescendant = true;
-              }
-            }
-          }
-          // Build the top-level units in store (render) order: each ungrouped
-          // layer is its own unit, and a group's contiguous members form one
-          // unit. A nested organizer group may have no direct layers, so its
-          // block includes every unit belonging to a descendant group.
-          const units: { key: string; layers: GeoLibreLayer[] }[] = [];
-          for (const layer of s.layers) {
-            const key = layer.groupId ?? `layer:${layer.id}`;
-            const last = units[units.length - 1];
-            if (last && last.key === key) last.layers.push(layer);
-            else units.push({ key, layers: [layer] });
-          }
-          const matching = units
-            .map((unit, index) => (groupIds.has(unit.key) ? index : -1))
-            .filter((index) => index >= 0);
-          if (matching.length === 0) return s;
-          const first = matching[0];
-          const last = matching[matching.length - 1];
-          const neighbor = direction === "up" ? last + 1 : first - 1;
-          if (neighbor < 0 || neighbor >= units.length) return s;
-          const block = units.filter((unit) => groupIds.has(unit.key));
-          const remaining = units.filter((unit) => !groupIds.has(unit.key));
-          const neighborKey = units[neighbor].key;
-          const neighborIndex = remaining.findIndex((unit) => unit.key === neighborKey);
-          const insertAt = direction === "up" ? neighborIndex + 1 : neighborIndex;
-          remaining.splice(insertAt, 0, ...block);
-          return { layers: remaining.flatMap((u) => u.layers), isDirty: true };
+          const moved = reorderLayerGroupInPanel(s.layers, s.layerGroups, id, direction);
+          if (!moved) return s;
+          return { layers: moved.layers, layerGroups: moved.groups, isDirty: true };
         }),
 
       newProject: (options = {}) => {
@@ -2178,6 +2228,8 @@ export const useAppStore = create<AppState>()(
           // paste in the new one would apply an orphaned entry.
           copiedLayerStyle: null,
           pointerCoords: null,
+          pointerElevation: null,
+          cameraAltitude: null,
           attributeFilter: "",
           // Don't carry an active story presentation into a different project.
           ui: {
@@ -2194,6 +2246,9 @@ export const useAppStore = create<AppState>()(
             selectByLocationLayerId: null,
             loadEditorFeaturesOpen: false,
             loadEditorFeaturesLayerId: null,
+            // A pending assistant-requested Model Builder load names a model in
+            // the previous project's `savedModels`.
+            modelBuilderRequestedModelId: null,
           },
         }));
         clearHistory();
@@ -2229,6 +2284,13 @@ export const useAppStore = create<AppState>()(
           // The copied style names a layer from the previous project, so a
           // paste in the loaded one would apply an orphaned entry.
           copiedLayerStyle: null,
+          // Ephemeral readouts describe the previous project's map. The
+          // elevation and altitude especially: a project that switches to a
+          // planetary body would otherwise keep showing Earth-scaled values
+          // until the next hover or camera move.
+          pointerCoords: null,
+          pointerElevation: null,
+          cameraAltitude: null,
           // Present a bundled story on load; otherwise drop any presentation
           // carried over from the previous project.
           ui: {
@@ -2247,6 +2309,9 @@ export const useAppStore = create<AppState>()(
             selectByLocationLayerId: null,
             loadEditorFeaturesOpen: false,
             loadEditorFeaturesLayerId: null,
+            // A pending assistant-requested Model Builder load names a model in
+            // the previous project's `savedModels`.
+            modelBuilderRequestedModelId: null,
           },
         }));
         clearHistory();

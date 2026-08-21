@@ -83,6 +83,18 @@ export interface DesktopSettings {
    * desktop (Tauri) build; on the web these settings are inert.
    */
   updates: UpdateSettings;
+  /** Native-app project restoration policy. Browser builds ignore this setting. */
+  startup: StartupSettings;
+}
+
+export type StartupProjectMode = "default" | "last" | "specific";
+
+export interface StartupSettings {
+  mode: StartupProjectMode;
+  projectPath: string | null;
+  projectName: string | null;
+  /** Projection used when startup does not restore or receive a project. */
+  globeByDefault: boolean;
 }
 
 export interface ThemeSettings {
@@ -100,6 +112,17 @@ export interface UpdateSettings {
 }
 
 export interface DesktopLayoutSettings {
+  /**
+   * Whether the Browser (Data Source Manager) right panel is registered as
+   * visible. Unlike {@link layerPanelVisible} this does not describe a fixed
+   * dock slot: the Browser is a dockable right panel, so the flag is the
+   * persisted seed its registration hook applies on mount (open + collapsed onto
+   * its rail, or closed). Without it the panel reopened on every launch no
+   * matter what the Settings toggle said (#1935).
+   */
+  browserPanelVisible: boolean;
+  /** Same as {@link browserPanelVisible}, for the Comments right panel. */
+  commentsPanelVisible: boolean;
   layerPanelVisible: boolean;
   showProjectInfo: boolean;
   stylePanelVisible: boolean;
@@ -146,7 +169,11 @@ interface DesktopSettingsState {
   setDesktopSettings: (settings: DesktopSettings) => void;
 }
 
+let desktopSettingsAreTemporary = false;
+
 export const DEFAULT_DESKTOP_LAYOUT_SETTINGS: DesktopLayoutSettings = {
+  browserPanelVisible: true,
+  commentsPanelVisible: true,
   layerPanelVisible: true,
   showProjectInfo: true,
   stylePanelVisible: true,
@@ -173,6 +200,13 @@ export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = {
   notificationLevel: "all",
 };
 
+export const DEFAULT_STARTUP_SETTINGS: StartupSettings = {
+  mode: "default",
+  projectPath: null,
+  projectName: null,
+  globeByDefault: true,
+};
+
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   scheme: DEFAULT_THEME_SCHEME,
   customColor: DEFAULT_CUSTOM_COLOR,
@@ -190,6 +224,7 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   theme: DEFAULT_THEME_SETTINGS,
   uiProfile: DEFAULT_UI_PROFILE_SETTINGS,
   updates: DEFAULT_UPDATE_SETTINGS,
+  startup: DEFAULT_STARTUP_SETTINGS,
 };
 
 /** The experience-level presets, in order. Single source of truth. */
@@ -228,6 +263,28 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
     theme: normalizeThemeSettings(candidate.theme),
     uiProfile: normalizeUiProfileSettings(candidate.uiProfile),
     updates: normalizeUpdateSettings(candidate.updates),
+    startup: normalizeStartupSettings(candidate.startup),
+  };
+}
+
+function normalizeStartupSettings(startup: unknown): StartupSettings {
+  if (!startup || typeof startup !== "object") return DEFAULT_STARTUP_SETTINGS;
+  const candidate = startup as Partial<StartupSettings>;
+  const mode: StartupProjectMode =
+    candidate.mode === "last" || candidate.mode === "specific" ? candidate.mode : "default";
+  const projectPath =
+    typeof candidate.projectPath === "string" && candidate.projectPath.trim()
+      ? candidate.projectPath.trim()
+      : null;
+  const projectName =
+    typeof candidate.projectName === "string" && candidate.projectName.trim()
+      ? candidate.projectName.trim()
+      : null;
+  return {
+    mode: mode === "specific" && !projectPath ? "default" : mode,
+    projectPath,
+    projectName,
+    globeByDefault: typeof candidate.globeByDefault === "boolean" ? candidate.globeByDefault : true,
   };
 }
 
@@ -372,6 +429,14 @@ function normalizeDesktopLayoutSettings(layout: unknown): DesktopLayoutSettings 
   // cannot smuggle non-boolean values into the layout settings.
   const candidate = layout as Partial<DesktopLayoutSettings>;
   return {
+    browserPanelVisible:
+      typeof candidate.browserPanelVisible === "boolean"
+        ? candidate.browserPanelVisible
+        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.browserPanelVisible,
+    commentsPanelVisible:
+      typeof candidate.commentsPanelVisible === "boolean"
+        ? candidate.commentsPanelVisible
+        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.commentsPanelVisible,
     layerPanelVisible:
       typeof candidate.layerPanelVisible === "boolean"
         ? candidate.layerPanelVisible
@@ -418,8 +483,22 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set) => ({
   setDesktopSettings: (settings) => set({ desktopSettings: normalizeDesktopSettings(settings) }),
 }));
 
+/** Apply settings supplied by an embed URL without replacing this browser's saved preferences. */
+export function applyTemporaryDesktopSettings(settings: unknown): void {
+  desktopSettingsAreTemporary = true;
+  useDesktopSettingsStore.getState().setDesktopSettings(normalizeDesktopSettings(settings));
+}
+
+export function shouldPersistDesktopSettings(): boolean {
+  return !desktopSettingsAreTemporary;
+}
+
 export function useDesktopSettingsPersistence() {
   useEffect(() => {
+    // Keep the entire shared-settings session ephemeral. Persisting a later
+    // user edit would serialize the remote baseline along with that edit and
+    // silently replace unrelated local preferences.
+    if (!shouldPersistDesktopSettings()) return;
     saveDesktopSettings(useDesktopSettingsStore.getState().desktopSettings);
 
     return useDesktopSettingsStore.subscribe((state, previous) => {

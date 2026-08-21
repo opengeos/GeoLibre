@@ -1,5 +1,12 @@
-import { isDuckDBQueryLayer, SQL_QUERY_SOURCE_KIND, type GeoLibreLayer } from "@geolibre/core";
-import type { FeatureCollection } from "geojson";
+import {
+  editorTrackingFieldNames,
+  isDuckDBQueryLayer,
+  SQL_QUERY_SOURCE_KIND,
+  stampFeaturePropertiesEditorTracking,
+  type EditorTrackingConfig,
+  type GeoLibreLayer,
+} from "@geolibre/core";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
 
 /**
  * Pure helpers for in-place geometry editing of vector layers. Kept free of the
@@ -208,6 +215,82 @@ export function captureEditedProperties(
   return snapshot;
 }
 
+/**
+ * Decimal places coordinates are compared at when deciding whether a feature's
+ * geometry actually changed during an edit session (~0.1 mm at the equator).
+ *
+ * Geoman re-serializes every feature it loaded, whether or not it was touched,
+ * so an exact comparison would call a last-bit float difference an edit and
+ * stamp `edited_by`/`edited_at` on the whole layer each time someone opened a
+ * session and saved. The rounding trades an unobservable geometry change for
+ * never reporting an edit that did not happen.
+ */
+const GEOMETRY_COMPARE_PRECISION = 9;
+
+/** Round every number in a (possibly deeply nested) coordinate array. */
+function roundCoordinates(value: unknown): unknown {
+  if (typeof value === "number") return Number(value.toFixed(GEOMETRY_COMPARE_PRECISION));
+  if (Array.isArray(value)) return value.map(roundCoordinates);
+  return value;
+}
+
+/**
+ * A comparable string for a geometry, stable across the editor's round-trip.
+ *
+ * @param geometry The feature's geometry, or null/undefined for a null-geometry feature.
+ * @returns A canonical key; equal keys mean equal geometry at
+ *   {@link GEOMETRY_COMPARE_PRECISION}.
+ */
+export function canonicalGeometryKey(geometry: Geometry | null | undefined): string {
+  if (!geometry) return "null";
+  if (geometry.type === "GeometryCollection") {
+    return JSON.stringify({
+      type: geometry.type,
+      geometries: geometry.geometries.map((part) => canonicalGeometryKey(part)),
+    });
+  }
+  return JSON.stringify({
+    type: geometry.type,
+    coordinates: roundCoordinates(geometry.coordinates),
+  });
+}
+
+/**
+ * Snapshot each loaded feature's geometry, keyed by the same feature tag
+ * {@link captureEditedProperties} uses.
+ *
+ * Editor tracking needs to stamp the features a session actually changed, not
+ * every feature it loaded, and the editor reports no per-feature dirty flag —
+ * so the baseline is captured on the way in and compared on the way out.
+ *
+ * @param collection The collection from {@link tagFeatureKeys}.
+ * @returns Canonical geometry keys by feature tag.
+ */
+export function captureEditedGeometries(collection: FeatureCollection): Map<string, string> {
+  const snapshot = new Map<string, string>();
+  for (const feature of collection.features) {
+    const tag = feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY];
+    if (tag == null) continue;
+    snapshot.set(String(tag), canonicalGeometryKey(feature.geometry));
+  }
+  return snapshot;
+}
+
+/**
+ * What {@link reconcileEditedFeatures} needs to stamp editor tracking on the
+ * features a geometry-edit session created or moved.
+ */
+export interface GeometryEditTrackingOptions {
+  /** The target layer's editor tracking configuration. */
+  config: EditorTrackingConfig;
+  /** Identity to record as the author/editor. */
+  userIdentity?: string;
+  /** ISO timestamp; defaults to now. Shared by every feature in one save. */
+  timestamp?: string;
+  /** Geometry baseline from {@link captureEditedGeometries}. */
+  originalGeometries: ReadonlyMap<string, string>;
+}
+
 /** A copy of `properties` without Geoman's namespaced keys or the edit tag. */
 function withoutEditorProperties(rawProps: Record<string, unknown>): Record<string, unknown> {
   const properties: Record<string, unknown> = {};
@@ -232,15 +315,27 @@ function withoutEditorProperties(rawProps: Record<string, unknown>): Record<stri
  * so it keeps what it has minus the editor's own `__gm_*` bookkeeping, which
  * would otherwise show up as columns in the layer's attribute table.
  *
+ * When `tracking` is supplied, the features the session actually changed are
+ * stamped with editor tracking metadata: a feature with no snapshot was drawn
+ * during the session ("create"), and one whose geometry differs from the
+ * baseline was moved ("update"). Features that were merely loaded and saved
+ * again are left exactly as they were, so opening a session and closing it
+ * without touching anything does not rewrite the layer's edit history.
+ *
  * @param collection The editor's current feature collection (tagged).
  * @param originalProperties Snapshot from {@link captureEditedProperties}.
+ * @param tracking Editor tracking config and geometry baseline, when enabled.
  * @returns A new collection with unique stable ids and editor keys removed.
  */
 export function reconcileEditedFeatures(
   collection: FeatureCollection,
   originalProperties?: EditedFeatureProperties,
+  tracking?: GeometryEditTrackingOptions,
 ): FeatureCollection {
   const ids = makeIdAllocator();
+  // One timestamp for the whole save, so features changed in a single session
+  // share an `edited_at` instead of differing by however long the map took.
+  const timestamp = tracking?.timestamp ?? new Date().toISOString();
   return {
     type: "FeatureCollection",
     features: collection.features.map((feature) => {
@@ -257,10 +352,138 @@ export function reconcileEditedFeatures(
       } else {
         properties = withoutEditorProperties(rawProps);
       }
+      if (tracking) {
+        const action = editTrackingAction(
+          tag == null ? undefined : String(tag),
+          restored !== undefined,
+          feature.geometry,
+          tracking.originalGeometries,
+        );
+        // A feature copied from a tracked one arrives carrying the original's
+        // creation stamp — the session loads the layer's features with their
+        // tracking columns. `"create"` is authoritative for exactly this reason,
+        // so the copy is recorded as created here rather than inheriting it.
+        if (action) {
+          properties = stampFeaturePropertiesEditorTracking(properties, action, {
+            config: tracking.config,
+            userIdentity: tracking.userIdentity,
+            timestamp,
+          });
+        }
+      }
       const id = ids.take(tag);
       return { ...feature, id, properties };
     }),
   };
+}
+
+/**
+ * Classify one reconciled feature for editor tracking, or `null` when the
+ * session left it untouched and it must not be stamped.
+ */
+function editTrackingAction(
+  tag: string | undefined,
+  wasLoaded: boolean,
+  geometry: Geometry | null,
+  originalGeometries: ReadonlyMap<string, string>,
+): "create" | "update" | null {
+  if (!wasLoaded) return "create";
+  // A loaded feature always has a tag (that is what `wasLoaded` was decided
+  // from), so a missing baseline means the geometry snapshot and the property
+  // snapshot disagree. Treat that as changed rather than silently skipping: a
+  // spurious `edited_at` is recoverable, a missed one is not.
+  const baseline = tag === undefined ? undefined : originalGeometries.get(tag);
+  if (baseline === undefined) return "update";
+  return canonicalGeometryKey(geometry) === baseline ? null : "update";
+}
+
+/**
+ * Apply editor tracking to a collection the editor is pushing over a store
+ * layer wholesale, using the store's previous collection as the baseline.
+ *
+ * The Sketches sync differs from a geometry-edit save in two ways that this has
+ * to handle. It runs after every draw/drag rather than once at the end, so
+ * unchanged features must keep the timestamps they already have; and it is
+ * one-way — the editor holds its own copy of the features and never sees the
+ * tracking columns written to the store — so those values have to be carried
+ * forward explicitly or each sync would wipe them and re-stamp from scratch.
+ *
+ * @param next The editor's current collection, about to replace the store's.
+ * @param previous The store layer's collection before this sync.
+ * @param keyOf Feature identity across the two collections.
+ * @param tracking The layer's tracking config plus the identity to stamp.
+ * @returns `next` with tracking columns carried forward and changed features stamped.
+ */
+export function applySyncedEditorTracking(
+  next: FeatureCollection,
+  previous: FeatureCollection | null | undefined,
+  keyOf: (feature: Feature, index: number) => string,
+  tracking: { config: EditorTrackingConfig; userIdentity?: string; timestamp?: string },
+): FeatureCollection {
+  const fields = editorTrackingFieldNames(tracking.config);
+  if (!fields) return next;
+
+  // `keyOf` must not read the tracking columns: they only ever exist on the
+  // store side, so a key derived from them would give one feature two different
+  // identities once it had been stamped, and every later sync would read it as
+  // brand new and reset its creation stamp to "now". `sketchFeatureKey` satisfies
+  // this — its no-id fallback hashes the geometry rather than the whole feature.
+  const previousByKey = new Map<string, Feature>();
+  previous?.features.forEach((feature, index) => {
+    previousByKey.set(keyOf(feature, index), feature);
+  });
+
+  const timestamp = tracking.timestamp ?? new Date().toISOString();
+  const stampOptions = {
+    config: tracking.config,
+    userIdentity: tracking.userIdentity,
+    timestamp,
+  };
+
+  return {
+    ...next,
+    features: next.features.map((feature, index) => {
+      const prior = previousByKey.get(keyOf(feature, index));
+      if (!prior) {
+        return {
+          ...feature,
+          properties: stampFeaturePropertiesEditorTracking(
+            feature.properties,
+            "create",
+            stampOptions,
+          ),
+        };
+      }
+
+      const carried = carryForwardTrackingFields(feature.properties, prior.properties, fields);
+      if (canonicalGeometryKey(feature.geometry) === canonicalGeometryKey(prior.geometry)) {
+        // Untouched: keep whatever it was already stamped with.
+        return carried === feature.properties ? feature : { ...feature, properties: carried };
+      }
+      return {
+        ...feature,
+        properties: stampFeaturePropertiesEditorTracking(carried, "update", stampOptions),
+      };
+    }),
+  };
+}
+
+/**
+ * Copy the tracking columns the store already recorded onto the editor's copy
+ * of a feature. Returns the input untouched when there is nothing to carry, so
+ * a collection with no stamps yet is not needlessly rewritten.
+ */
+function carryForwardTrackingFields(
+  properties: Record<string, unknown> | null,
+  prior: Record<string, unknown> | null,
+  fields: readonly string[],
+): Record<string, unknown> | null {
+  if (!prior) return properties;
+  const present = fields.filter((field) => prior[field] !== undefined);
+  if (present.length === 0) return properties;
+  const result: Record<string, unknown> = { ...(properties ?? {}) };
+  for (const field of present) result[field] = prior[field];
+  return result;
 }
 
 /** A map style layer described by what role it plays for overlay ordering. */

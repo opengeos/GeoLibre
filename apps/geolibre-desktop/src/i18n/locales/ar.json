@@ -49,11 +49,11 @@
     "libraryLayerNeedsDesktop": "تقرأ هذه الطبقة المحفوظة ملفًا من القرص، لذا تحتاج إلى GeoLibre Desktop. أضف الملف مرة أخرى لحفظ إدخال جديد.",
     "libraryLayerConfigNotApplied": "تمت إضافة ملف «{{name}}»، لكن تعذّرت مطابقة تنسيقه المحفوظ بطبقة واحدة، لذلك لم تتم إعادة تطبيقه.",
     "libraryLayerJoinsUnresolved_one": "تمت إضافة الطبقة، لكن تعذّرت إعادة تطبيق عملية ربط محفوظة واحدة: الطبقة التي ترتبط بها غير موجودة في هذا المشروع.",
-    "libraryLayerJoinsUnresolved_other": "تمت إضافة الطبقة، لكن تعذّرت إعادة تطبيق {{count}} عملية ربط محفوظة: الطبقات التي ترتبط بها غير موجودة في هذا المشروع.",
     "libraryLayerJoinsUnresolved_many": "تمت إضافة الطبقة، لكن تعذّرت إعادة تطبيق {{count}} عمليةَ ربط محفوظة: الطبقات التي ترتبط بها غير موجودة في هذا المشروع.",
     "libraryLayerJoinsUnresolved_few": "تمت إضافة الطبقة، لكن تعذّرت إعادة تطبيق {{count}} عمليات ربط محفوظة: الطبقات التي ترتبط بها غير موجودة في هذا المشروع.",
     "libraryLayerJoinsUnresolved_two": "تمت إضافة الطبقة، لكن تعذّرت إعادة تطبيق {{count}} من عمليات الربط المحفوظة: الطبقات التي ترتبط بها غير موجودة في هذا المشروع.",
-    "libraryLayerJoinsUnresolved_zero": "تمت إضافة الطبقة، لكن تعذّرت إعادة تطبيق {{count}} من عمليات الربط المحفوظة: الطبقات التي ترتبط بها غير موجودة في هذا المشروع."
+    "libraryLayerJoinsUnresolved_zero": "تمت إضافة الطبقة، لكن تعذّرت إعادة تطبيق {{count}} من عمليات الربط المحفوظة: الطبقات التي ترتبط بها غير موجودة في هذا المشروع.",
+    "libraryLayerJoinsUnresolved_other": "تمت إضافة الطبقة، لكن تعذّرت إعادة تطبيق {{count}} عملية ربط محفوظة: الطبقات التي ترتبط بها غير موجودة في هذا المشروع."
   },
   "about": {
     "trigger": "حول",
@@ -125,8 +125,8 @@
     "failedToLoad": "فشل التحميل: {{message}}",
     "trust": {
       "title": "هل تريد تحميل الملحقات من هذا المشروع؟",
-      "description_zero": "يريد هذا المشروع تحميل {{count}} من الملحقات الخارجية من عناوين URL لم تثبّتها. تشغّل الملحقات تعليمات برمجية بوصول كامل إلى التطبيق.",
       "description_one": "يريد هذا المشروع تحميل ملحق خارجي واحد من عنوان URL لم تثبّته. تشغّل الملحقات تعليمات برمجية بوصول كامل إلى التطبيق.",
+      "description_zero": "يريد هذا المشروع تحميل {{count}} من الملحقات الخارجية من عناوين URL لم تثبّتها. تشغّل الملحقات تعليمات برمجية بوصول كامل إلى التطبيق.",
       "description_two": "يريد هذا المشروع تحميل {{count}} من الملحقات الخارجية من عناوين URL لم تثبّتها. تشغّل الملحقات تعليمات برمجية بوصول كامل إلى التطبيق.",
       "description_few": "يريد هذا المشروع تحميل {{count}} ملحقات خارجية من عناوين URL لم تثبّتها. تشغّل الملحقات تعليمات برمجية بوصول كامل إلى التطبيق.",
       "description_many": "يريد هذا المشروع تحميل {{count}} ملحقًا خارجيًا من عناوين URL لم تثبّتها. تشغّل الملحقات تعليمات برمجية بوصول كامل إلى التطبيق.",
@@ -192,7 +192,23 @@
     "elevationRange": "الارتفاع الأدنى / الأقصى",
     "meanSlope": "متوسط الانحدار",
     "computing": "جارٍ حساب التضاريس…",
-    "partialData": "بعض العينات لا تتوفر لها بيانات تضاريس"
+    "partialData": "بعض العينات لا تتوفر لها بيانات تضاريس",
+    "heading": "الاتجاه",
+    "finalHeading": "الاتجاه النهائي",
+    "bodyNote": "القياس على: {{body}} (تقريب كروي)"
+  },
+  "statusBar": {
+    "elevation": "ارتفاع",
+    "elevationLong": "الارتفاع",
+    "cameraAltitude": "ارتفاع الرؤية",
+    "cameraAltitudeLong": "ارتفاع الكاميرا فوق مستوى سطح البحر",
+    "coordinateFormat": {
+      "dd": "درجات عشرية",
+      "dms": "درجات ودقائق وثوانٍ",
+      "ddm": "درجات ودقائق عشرية",
+      "utm": "UTM (نطاق، شرق/شمال)"
+    },
+    "coordinateFormatHint": "صيغة الإحداثيات: {{format}}. انقر للتبديل."
   },
   "fileNamePrompt": {
     "title": "حفظ الملف باسم",
@@ -224,7 +240,9 @@
     "invalidUrl": "أدخل عنوان URL صالحًا للنمط يبدأ بـ HTTP أو HTTPS.",
     "sectionMoon": "القمر",
     "sectionMars": "المريخ",
-    "sectionOther": "أجرام سماوية أخرى"
+    "sectionOther": "أجرام سماوية أخرى",
+    "sectionRegional": "إقليمية",
+    "regionChina": "الصين (中国)"
   },
   "planetSwitcher": {
     "label": "الجرم السماوي",
@@ -273,6 +291,10 @@
         "label": "إضافة طبقة WMTS",
         "description": "إضافة قالب عنوان URL لبلاطات WMTS كطبقة بيانات نقطية."
       },
+      "ogcFeatures": {
+        "label": "إضافة طبقة OGC API - Features",
+        "description": "إضافة معالم من مجموعة OGC API - Features كطبقة متجهية، مع تتبّع روابط التقسيم إلى صفحات الخاصة بالخدمة حتى يتم تحميل عدد المعالم المطلوب."
+      },
       "ogcVectorTiles": {
         "label": "إضافة بلاطات متجهة OGC",
         "description": "إضافة خدمة OGC API - Tiles (متجهة) من TileJSON أو قالب بلاطات، مع إمكانية قراءة طبقات المصدر الخاصة بها من عنوان URL للنمط."
@@ -307,11 +329,15 @@
       },
       "arcgis": {
         "label": "إضافة طبقة ArcGIS",
-        "description": "إضافة طبقة من ArcGIS FeatureServer، أو طبقة VectorTileServer، أو عنصر بوابة."
+        "description": "إضافة طبقة ArcGIS من نوع FeatureServer أو VectorTileServer أو MapServer أو ImageServer، أو عنصر بوابة."
       },
       "postgres": {
         "label": "إضافة طبقة PostgreSQL",
         "description": "تشغيل Martin محليًا، واكتشاف مصادر PostGIS، وإضافة مصدر كبلاطات متجهة."
+      },
+      "iceberg": {
+        "label": "إضافة طبقة Apache Iceberg",
+        "description": "قراءة جدول Iceberg (الإصدار v3 أو أحدث) وإضافة مجموعة فرعية من معالمه."
       },
       "deckglViz": {
         "label": "إضافة طبقة Deck.gl",
@@ -320,10 +346,6 @@
       "video": {
         "label": "إضافة طبقة فيديو",
         "description": "إضافة تراكب فيديو مُسنَد جغرافيًا عبر توفير عنوان URL لملف MP4 وإحداثيات الزوايا الأربع."
-      },
-      "ogcFeatures": {
-        "label": "إضافة طبقة OGC API - Features",
-        "description": "إضافة معالم من مجموعة OGC API - Features كطبقة متجهية، مع تتبّع روابط التقسيم إلى صفحات الخاصة بالخدمة حتى يتم تحميل عدد المعالم المطلوب."
       }
     },
     "shared": {
@@ -376,14 +398,14 @@
       "errorTooLarge": "الملف أكبر من أن يُستورد (الحد الأقصى 5 ميغابايت).",
       "errorNoServices": "لم يُعثر على خدمات صالحة في ذلك الملف.",
       "errorRead": "تعذرت قراءة ذلك الملف كمكتبة خدمات.",
-      "imported_zero": "تم استيراد {{count}} من الخدمات.",
       "imported_one": "تم استيراد {{count}} خدمة.",
+      "imported_zero": "تم استيراد {{count}} من الخدمات.",
       "imported_two": "تم استيراد {{count}} من الخدمات.",
       "imported_few": "تم استيراد {{count}} خدمات.",
       "imported_many": "تم استيراد {{count}} خدمةً.",
       "imported_other": "تم استيراد {{count}} خدمة.",
-      "importedWithDropped_zero": "تم استيراد {{count}} من الخدمات (تم تخطي {{dropped}} — المكتبة ممتلئة).",
       "importedWithDropped_one": "تم استيراد {{count}} خدمة (تم تخطي {{dropped}} — المكتبة ممتلئة).",
+      "importedWithDropped_zero": "تم استيراد {{count}} من الخدمات (تم تخطي {{dropped}} — المكتبة ممتلئة).",
       "importedWithDropped_two": "تم استيراد {{count}} من الخدمات (تم تخطي {{dropped}} — المكتبة ممتلئة).",
       "importedWithDropped_few": "تم استيراد {{count}} خدمات (تم تخطي {{dropped}} — المكتبة ممتلئة).",
       "importedWithDropped_many": "تم استيراد {{count}} خدمةً (تم تخطي {{dropped}} — المكتبة ممتلئة).",
@@ -410,8 +432,8 @@
       "retrieveLayers": "جلب الطبقات",
       "retrieving": "جارٍ الجلب...",
       "retrievedLayers": "الطبقات المجلوبة",
-      "selectLayer_zero": "الاختيار من {{count}} من الطبقات",
       "selectLayer_one": "الاختيار من {{count}} طبقة",
+      "selectLayer_zero": "الاختيار من {{count}} من الطبقات",
       "selectLayer_two": "الاختيار من {{count}} من الطبقات",
       "selectLayer_few": "الاختيار من {{count}} طبقات",
       "selectLayer_many": "الاختيار من {{count}} طبقةً",
@@ -436,8 +458,8 @@
       "retrieveTypes": "جلب الأنواع",
       "retrieving": "جارٍ الجلب...",
       "retrievedTypes": "أنواع المعالم المجلوبة",
-      "selectType_zero": "الاختيار من {{count}} من أنواع المعالم",
       "selectType_one": "الاختيار من {{count}} نوع معالم",
+      "selectType_zero": "الاختيار من {{count}} من أنواع المعالم",
       "selectType_two": "الاختيار من {{count}} من أنواع المعالم",
       "selectType_few": "الاختيار من {{count}} أنواع معالم",
       "selectType_many": "الاختيار من {{count}} نوعًا من أنواع المعالم",
@@ -450,6 +472,32 @@
       "sampleLabel": "مرئيات EOX العالمية (Sentinel-2)",
       "errorUrl": "أدخل قالب عنوان URL لبلاطات WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
+    },
+    "ogcFeatures": {
+      "defaultName": "طبقة OGC API - Features",
+      "sampleLabel": "بحيرات العالم (عرض pygeoapi التوضيحي)",
+      "urlPlaceholder": "https://example.com/ogcapi",
+      "urlHint": "الصفحة الرئيسية للخدمة، أو أي عنوان URL منسوخ منها (يصلح أيضًا عنوان /collections أو /collections/{id}/items).",
+      "retrieveCollections": "جلب المجموعات",
+      "retrieving": "جارٍ الجلب...",
+      "retrievedCollections": "المجموعات المجلوبة",
+      "selectCollection_one": "الاختيار من {{count}} مجموعة",
+      "selectCollection_zero": "الاختيار من {{count}} من المجموعات",
+      "selectCollection_two": "الاختيار من {{count}} من المجموعات",
+      "selectCollection_few": "الاختيار من {{count}} مجموعات",
+      "selectCollection_many": "الاختيار من {{count}} مجموعةً",
+      "selectCollection_other": "الاختيار من {{count}} مجموعة",
+      "noCollectionsFound": "لم يُعثر على أي مجموعات معالم لهذه الخدمة.",
+      "retrieveError": "تعذّر جلب المجموعات من هذه الخدمة.",
+      "collection": "المجموعة",
+      "collectionPlaceholder": "collection-id",
+      "maxFeatures": "الحد الأقصى للمعالم",
+      "bbox": "الصندوق المحيط",
+      "datetime": "التاريخ والوقت",
+      "errorCollection": "أدخل معرّف مجموعة OGC API - Features.",
+      "errorMaxFeatures": "أدخل قيمة للحد الأقصى للمعالم تساوي 1 أو أكثر.",
+      "errorBbox": "أدخل الصندوق المحيط بالصيغة «غرب,جنوب,شرق,شمال».",
+      "errorNoFeatures": "لم تُرجع هذه المجموعة أي معالم."
     },
     "ogcVectorTiles": {
       "defaultName": "طبقة بلاطات متجهة OGC",
@@ -471,14 +519,39 @@
       "defaultName": "طبقة ArcGIS",
       "sampleFeatureLabel": "المدن الأمريكية الكبرى (معالم)",
       "sampleVectorTileLabel": "قطع أراضي سانتا مونيكا (بلاطات متجهة)",
+      "sampleMapServiceLabel": "حدود الولايات المتحدة (خدمة خرائط)",
+      "sampleImageServiceLabel": "تظليل تضاريس USGS 3DEP (خدمة صور)",
       "featureLayer": "طبقة معالم",
       "vectorTileLayer": "طبقة بلاطات متجهة",
+      "mapServiceLayer": "خدمة خرائط",
+      "imageServiceLayer": "خدمة صور",
       "portalItemId": "معرّف عنصر البوابة",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "الطبقات الفرعية",
+      "sublayersPlaceholder": "كل الطبقات الفرعية الظاهرة",
+      "sublayersHint": "معرفات طبقات فرعية اختيارية مفصولة بفواصل، مثل 0,2,5. اختيار طبقات فرعية يرسم الخدمة ديناميكيًا بدلًا من استخدام بلاطاتها المخزنة.",
+      "retrieveSublayers": "استعراض الطبقات",
+      "retrievingSublayers": "جارٍ الجلب...",
+      "availableSublayers": "الطبقات الفرعية المتاحة",
+      "noSublayersFound": "لم تعلن خدمة الخرائط هذه عن أي طبقات.",
+      "retrieveError": "تعذر جلب طبقات خدمة الخرائط.",
+      "errorMapServiceUrl": "أدخل عنوان URL لخدمة ArcGIS MapServer.",
+      "renderingRule": "قاعدة العرض",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "JSON اختياري لدالة راستر تطبقها الخدمة. قاعدة العرض ترسم الخدمة ديناميكيًا بدلًا من استخدام بلاطاتها المخزنة.",
       "portalUrl": "عنوان URL للبوابة",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "رمز الوصول"
+      "accessToken": "رمز الوصول",
+      "pageSize": "عدد السجلات لكل طلب",
+      "pageSizePlaceholder": "تلقائي",
+      "maxFeatures": "الحد الأقصى للمعالم",
+      "maxFeaturesPlaceholder": "الكل",
+      "pagingHint": "تُنزَّل طبقات المعالم على صفحات. قلّل عدد السجلات لكل طلب إذا انتهت مهلة الخدمة.",
+      "loadingProgress": "تم تحميل {{loaded}} من أصل {{total}} من المعالم…",
+      "loadingProgressUnknown": "تم تحميل {{loaded}} من المعالم…"
     },
     "gpx": {
       "defaultName": "طبقة GPX",
@@ -550,6 +623,8 @@
       "errorMissingCrs": "تعذّر اكتشاف نظام إحداثيات فئة المعالم هذه. أدخل نظام الإحداثيات المصدر لإضافتها."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "لا يحتوي مصنف Excel على أوراق عمل غير فارغة.",
+      "worksheet": "ورقة العمل",
       "defaultName": "طبقة نص مفصول",
       "sampleLabel": "المدن الأمريكية",
       "errorChooseFile": "اختر ملف نص مفصول.",
@@ -557,14 +632,14 @@
       "errorFileMissing": "بيانات ملف النص المفصول مفقودة.",
       "readError": "تعذرت قراءة ملف النص المفصول.",
       "errorDataMissing": "بيانات النص المفصول مفقودة.",
-      "retrievedColumns_zero": "تم جلب {{count}} من الأعمدة.",
       "retrievedColumns_one": "تم جلب {{count}} عمود.",
+      "retrievedColumns_zero": "تم جلب {{count}} من الأعمدة.",
       "retrievedColumns_two": "تم جلب {{count}} من الأعمدة.",
       "retrievedColumns_few": "تم جلب {{count}} أعمدة.",
       "retrievedColumns_many": "تم جلب {{count}} عمودًا.",
       "retrievedColumns_other": "تم جلب {{count}} عمود.",
-      "retrievedColumnsTable_zero": "تم جلب {{count}} من الأعمدة. لم يتم اكتشاف أعمدة إحداثيات؛ ستتم إضافته كجدول سمات.",
       "retrievedColumnsTable_one": "تم جلب {{count}} عمود. لم يتم اكتشاف أعمدة إحداثيات؛ ستتم إضافته كجدول سمات.",
+      "retrievedColumnsTable_zero": "تم جلب {{count}} من الأعمدة. لم يتم اكتشاف أعمدة إحداثيات؛ ستتم إضافته كجدول سمات.",
       "retrievedColumnsTable_two": "تم جلب {{count}} من الأعمدة. لم يتم اكتشاف أعمدة إحداثيات؛ ستتم إضافته كجدول سمات.",
       "retrievedColumnsTable_few": "تم جلب {{count}} أعمدة. لم يتم اكتشاف أعمدة إحداثيات؛ ستتم إضافته كجدول سمات.",
       "retrievedColumnsTable_many": "تم جلب {{count}} عمودًا. لم يتم اكتشاف أعمدة إحداثيات؛ ستتم إضافته كجدول سمات.",
@@ -606,32 +681,32 @@
       "hint": "حدد صورًا بصيغة JPEG أو PNG أو TIFF أو HEIC. تُوضع كل صورة وفق موقع GPS المسجل في بيانات EXIF الخاصة بها. صور HEIC تُحدد مواقعها لكنها تُعرض دون صورة مصغرة.",
       "readError": "تعذرت قراءة الصور المحددة.",
       "errorChooseFiles": "اختر صورة واحدة أو أكثر.",
-      "selectedCount_zero": "تم تحديد {{count}} من الصور",
       "selectedCount_one": "تم تحديد {{count}} صورة",
+      "selectedCount_zero": "تم تحديد {{count}} من الصور",
       "selectedCount_two": "تم تحديد {{count}} من الصور",
       "selectedCount_few": "تم تحديد {{count}} صور",
       "selectedCount_many": "تم تحديد {{count}} صورةً",
       "selectedCount_other": "تم تحديد {{count}} صورة",
-      "errorNoGps_zero": "لم يُعثر على موقع GPS في {{count}} من الصور المحددة.",
       "errorNoGps_one": "لم يُعثر على موقع GPS في الصورة المحددة.",
+      "errorNoGps_zero": "لم يُعثر على موقع GPS في {{count}} من الصور المحددة.",
       "errorNoGps_two": "لم يُعثر على موقع GPS في {{count}} من الصور المحددة.",
       "errorNoGps_few": "لم يُعثر على موقع GPS في {{count}} صور محددة.",
       "errorNoGps_many": "لم يُعثر على موقع GPS في {{count}} صورةً محددة.",
       "errorNoGps_other": "لم يُعثر على موقع GPS في {{count}} صورة محددة.",
-      "addedSummary_zero": "تمت إضافة {{count}} من الصور الموسومة جغرافيًا.",
       "addedSummary_one": "تمت إضافة {{count}} صورة موسومة جغرافيًا.",
+      "addedSummary_zero": "تمت إضافة {{count}} من الصور الموسومة جغرافيًا.",
       "addedSummary_two": "تمت إضافة {{count}} من الصور الموسومة جغرافيًا.",
       "addedSummary_few": "تمت إضافة {{count}} صور موسومة جغرافيًا.",
       "addedSummary_many": "تمت إضافة {{count}} صورةً موسومة جغرافيًا.",
       "addedSummary_other": "تمت إضافة {{count}} صورة موسومة جغرافيًا.",
-      "skippedNote_zero": "تم تخطي {{count}} من الصور (بلا موقع GPS).",
       "skippedNote_one": "تم تخطي {{count}} صورة (بلا موقع GPS).",
+      "skippedNote_zero": "تم تخطي {{count}} من الصور (بلا موقع GPS).",
       "skippedNote_two": "تم تخطي {{count}} من الصور (بلا موقع GPS).",
       "skippedNote_few": "تم تخطي {{count}} صور (بلا موقع GPS).",
       "skippedNote_many": "تم تخطي {{count}} صورةً (بلا موقع GPS).",
       "skippedNote_other": "تم تخطي {{count}} صورة (بلا موقع GPS).",
-      "noThumbnailNote_zero": "{{count}} من الصور بلا صورة مصغرة (HEIC أو صيغة غير مدعومة).",
       "noThumbnailNote_one": "{{count}} صورة بلا صورة مصغرة (HEIC أو صيغة غير مدعومة).",
+      "noThumbnailNote_zero": "{{count}} من الصور بلا صورة مصغرة (HEIC أو صيغة غير مدعومة).",
       "noThumbnailNote_two": "{{count}} من الصور بلا صورة مصغرة (HEIC أو صيغة غير مدعومة).",
       "noThumbnailNote_few": "{{count}} صور بلا صورة مصغرة (HEIC أو صيغة غير مدعومة).",
       "noThumbnailNote_many": "{{count}} صورةً بلا صورة مصغرة (HEIC أو صيغة غير مدعومة).",
@@ -659,8 +734,8 @@
       "statusDownloaded": "تم تنزيل Martin. جارٍ تشغيل الخادم المحلي...",
       "statusStarting": "جارٍ تشغيل خادم Martin المحلي...",
       "statusReadingCatalog": "جارٍ قراءة فهرس Martin...",
-      "statusFound_zero": "تم العثور على {{count}} من المصادر.",
       "statusFound_one": "تم العثور على {{count}} مصدر.",
+      "statusFound_zero": "تم العثور على {{count}} من المصادر.",
       "statusFound_two": "تم العثور على {{count}} من المصادر.",
       "statusFound_few": "تم العثور على {{count}} مصادر.",
       "statusFound_many": "تم العثور على {{count}} مصدرًا.",
@@ -687,17 +762,57 @@
       "loadModeEditable": "طبقة قابلة للتحرير (تحمّل جميع المعالم)",
       "editableNotice": "يحمّل معالم الجدول عبر خادم المعالجة المحلي بحيث يمكن تحريرها. احفظ التغييرات مرة أخرى باستخدام إجراء الطبقة \"حفظ التعديلات في جدول PostGIS\".",
       "statusListingTables": "جارٍ قراءة الجداول المكانية...",
-      "statusTablesFound_zero": "تم العثور على {{count}} من الجداول المكانية.",
       "statusTablesFound_one": "تم العثور على {{count}} جدول مكاني.",
+      "statusTablesFound_zero": "تم العثور على {{count}} من الجداول المكانية.",
       "statusTablesFound_two": "تم العثور على {{count}} من الجداول المكانية.",
       "statusTablesFound_few": "تم العثور على {{count}} جداول مكانية.",
       "statusTablesFound_many": "تم العثور على {{count}} جدولًا مكانيًا.",
       "statusTablesFound_other": "تم العثور على {{count}} جدول مكاني.",
       "statusNoTables": "لم يُعثر على جداول مكانية في قاعدة البيانات هذه.",
       "editableTable": "الجدول",
+      "geometryColumn": "عمود الشكل الهندسي",
       "tableReadOnly": "{{table}} (للقراءة فقط: بلا مفتاح أساسي)",
       "errorSelectTable": "حدد جدولًا لتحميله.",
       "errorRuntimeMissing": "لا تتوفر لدى خادم المعالجة بيئة تشغيل PostGIS (حزمة psycopg). ثبّت إضافة 'postgis' الخاصة بـ geolibre-server لتحميل طبقات قابلة للتحرير."
+    },
+    "iceberg": {
+      "defaultName": "طبقة Iceberg",
+      "notice": "تُقرأ جداول Iceberg مرة واحدة عند الطلب. الطبقة لقطة محدودة بحد الصفوف أدناه ولا يُعاد مسحها تلقائيًا أبدًا؛ استخدم «تحديث» من قائمة الطبقة لقراءتها مجددًا.",
+      "mode": "مصدر Iceberg",
+      "modeTable": "موقع الجدول",
+      "modeCatalog": "كتالوج REST",
+      "location": "موقع البيانات الوصفية للجدول",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "المستودع",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "نقطة نهاية الكتالوج",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "اتصال",
+      "table": "جدول Iceberg",
+      "sql": "SQL (اختياري)",
+      "sqlHint": "عدّل لتصفية ما يُعرض أو إعادة تشكيله. يجب أن تُرجع العبارة عمودًا من نوع GEOMETRY؛ اتركها كما وُلِّدت لقراءة الجدول كاملًا.",
+      "selectTable": "اختر جدولًا",
+      "geometryColumn": "عمود الشكل الهندسي",
+      "rowLimit": "حد الصفوف",
+      "rowLimitHint": "تحتفظ الطبقة بالصفوف الأولى من الجدول حتى هذا الحد. لا يمكن أن يتجاوز الحد {{max}} صف.",
+      "rowLimitTruncates": "يحتوي الجدول على {{total}} صف؛ ستتضمن الطبقة أول {{limit}} منها.",
+      "statusConnecting": "جارٍ قراءة البيانات الوصفية لـ Iceberg...",
+      "statusInspecting": "جارٍ فحص الجدول...",
+      "statusInspected": "{{rows}} صف. الشكل الهندسي: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} صف، لكن لم يُعثر على عمود من نوع GEOMETRY. يجب أن يستخدم الشكل الهندسي في Iceberg نوع الشكل الهندسي من الإصدار v3.",
+      "statusTablesFound_one": "تم العثور على {{count}} جدول.",
+      "statusTablesFound_zero": "تم العثور على {{count}} جدول.",
+      "statusTablesFound_two": "تم العثور على جدولين ({{count}}). حدد أحدهما للمتابعة.",
+      "statusTablesFound_few": "تم العثور على {{count}} جداول. حدد واحدًا للمتابعة.",
+      "statusTablesFound_many": "تم العثور على {{count}} جدولًا. حدد واحدًا للمتابعة.",
+      "statusTablesFound_other": "تم العثور على {{count}} جدول. حدد واحدًا للمتابعة.",
+      "statusNoTables": "لا يعرض الكتالوج أي جداول.",
+      "errorLocation": "أدخل موقع البيانات الوصفية لجدول Iceberg.",
+      "errorWarehouse": "أدخل مستودع Iceberg المراد إرفاقه.",
+      "errorEndpoint": "أدخل نقطة نهاية كتالوج Iceberg REST.",
+      "errorConnect": "تعذّرت قراءة مصدر Iceberg.",
+      "errorInspect": "تعذّر فحص جدول Iceberg.",
+      "errorConnectFirst": "اتصل أولًا وحدد جدول Iceberg."
     },
     "video": {
       "defaultName": "طبقة فيديو",
@@ -747,15 +862,15 @@
       "bandCombinationHelp": "يُرسم النطاق المفرد بخريطة ألوان، أما تركيب RGB فيرسم ثلاثة نطاقات من هذا المتغير كقنوات حمراء وخضراء وزرقاء، ويُمدّ كلٌّ منها على مداه الخاص 2-98 %.",
       "modeSingleBand": "نطاق واحد (بخريطة ألوان)",
       "modeRgb": "تركيب RGB (ثلاثة نطاقات)",
-      "colorMin": "الحد الأدنى للّون (اختياري)",
-      "colorMax": "الحد الأقصى للّون (اختياري)",
-      "adding": "جارٍ الإضافة...",
-      "addLayer": "إضافة طبقة",
       "channel": {
         "red": "النطاق الأحمر",
         "green": "النطاق الأخضر",
         "blue": "النطاق الأزرق"
-      }
+      },
+      "colorMin": "الحد الأدنى للّون (اختياري)",
+      "colorMax": "الحد الأقصى للّون (اختياري)",
+      "adding": "جارٍ الإضافة...",
+      "addLayer": "إضافة طبقة"
     },
     "deckViz": {
       "defaultName": "طبقة Deck.gl",
@@ -764,27 +879,27 @@
       "errorUnknownType": "نوع طبقة غير معروف.",
       "needsGeojson": "يتطلب {{label}} ملف GeoJSON.",
       "needsTabular": "يتطلب {{label}} بيانات جدولية بصيغة CSV/JSON، وليس GeoJSON.",
-      "mapRequiredFields_zero": "عيّن الحقول المطلوبة: {{fields}}.",
       "mapRequiredFields_one": "عيّن الحقل المطلوب: {{fields}}.",
+      "mapRequiredFields_zero": "عيّن الحقول المطلوبة: {{fields}}.",
       "mapRequiredFields_two": "عيّن الحقلين المطلوبين: {{fields}}.",
       "mapRequiredFields_few": "عيّن الحقول المطلوبة: {{fields}}.",
       "mapRequiredFields_many": "عيّن الحقول المطلوبة: {{fields}}.",
       "mapRequiredFields_other": "عيّن الحقول المطلوبة: {{fields}}.",
       "errorExample": "تعذر تحميل البيانات النموذجية.",
-      "loadedFeatures_zero": "تم تحميل {{count}} من المعالم.",
       "loadedFeatures_one": "تم تحميل {{count}} معلم.",
+      "loadedFeatures_zero": "تم تحميل {{count}} من المعالم.",
       "loadedFeatures_two": "تم تحميل {{count}} من المعالم.",
       "loadedFeatures_few": "تم تحميل {{count}} معالم.",
       "loadedFeatures_many": "تم تحميل {{count}} معلمًا.",
       "loadedFeatures_other": "تم تحميل {{count}} معلم.",
-      "loadedRows_zero": "{{count}} من الصفوف",
       "loadedRows_one": "{{count}} صف",
+      "loadedRows_zero": "{{count}} من الصفوف",
       "loadedRows_two": "{{count}} من الصفوف",
       "loadedRows_few": "{{count}} صفوف",
       "loadedRows_many": "{{count}} صفًا",
       "loadedRows_other": "{{count}} صف",
-      "loadedColumns_zero": "{{count}} من الأعمدة",
       "loadedColumns_one": "{{count}} عمود",
+      "loadedColumns_zero": "{{count}} من الأعمدة",
       "loadedColumns_two": "{{count}} من الأعمدة",
       "loadedColumns_few": "{{count}} أعمدة",
       "loadedColumns_many": "{{count}} عمودًا",
@@ -809,32 +924,6 @@
       "extrusion": "بثق ثلاثي الأبعاد",
       "modelUrlPlaceholder": "https://example.com/model.glb"
     },
-    "ogcFeatures": {
-      "defaultName": "طبقة OGC API - Features",
-      "sampleLabel": "بحيرات العالم (عرض pygeoapi التوضيحي)",
-      "urlPlaceholder": "https://example.com/ogcapi",
-      "urlHint": "الصفحة الرئيسية للخدمة، أو أي عنوان URL منسوخ منها (يصلح أيضًا عنوان /collections أو /collections/{id}/items).",
-      "retrieveCollections": "جلب المجموعات",
-      "retrieving": "جارٍ الجلب...",
-      "retrievedCollections": "المجموعات المجلوبة",
-      "selectCollection_one": "الاختيار من {{count}} مجموعة",
-      "selectCollection_zero": "الاختيار من {{count}} من المجموعات",
-      "selectCollection_two": "الاختيار من {{count}} من المجموعات",
-      "selectCollection_few": "الاختيار من {{count}} مجموعات",
-      "selectCollection_many": "الاختيار من {{count}} مجموعةً",
-      "selectCollection_other": "الاختيار من {{count}} مجموعة",
-      "noCollectionsFound": "لم يُعثر على أي مجموعات معالم لهذه الخدمة.",
-      "retrieveError": "تعذّر جلب المجموعات من هذه الخدمة.",
-      "collection": "المجموعة",
-      "collectionPlaceholder": "collection-id",
-      "maxFeatures": "الحد الأقصى للمعالم",
-      "bbox": "الصندوق المحيط",
-      "datetime": "التاريخ والوقت",
-      "errorCollection": "أدخل معرّف مجموعة OGC API - Features.",
-      "errorMaxFeatures": "أدخل قيمة للحد الأقصى للمعالم تساوي 1 أو أكثر.",
-      "errorBbox": "أدخل الصندوق المحيط بالصيغة «غرب,جنوب,شرق,شمال».",
-      "errorNoFeatures": "لم تُرجع هذه المجموعة أي معالم."
-    },
     "nonGeographicCoordinates": "الإحداثيات في {{names}} ليست خط طول/عرض، لذا لن يُرسم أي شيء على الخريطة. نظام الإحداثيات مذكور بشكل خاطئ — أعد إسقاط البيانات (أو صحّح ملف .prj) ثم حمّلها مرة أخرى."
   },
   "offline": {
@@ -846,8 +935,8 @@
     "includeExtra": "تضمين مستويات تفصيل إضافية للتكبير",
     "currentViewOnly": "العرض الحالي فقط · التكبير {{zoom}}",
     "detailLevels": "مستويات التفصيل الإضافية",
-    "relativeLevels_zero": "+{{count}} من المستويات · التكبير {{min}}–{{max}}",
     "relativeLevels_one": "+{{count}} مستوى · التكبير {{min}}–{{max}}",
+    "relativeLevels_zero": "+{{count}} من المستويات · التكبير {{min}}–{{max}}",
     "relativeLevels_two": "+{{count}} من المستويات · التكبير {{min}}–{{max}}",
     "relativeLevels_few": "+{{count}} مستويات · التكبير {{min}}–{{max}}",
     "relativeLevels_many": "+{{count}} مستوًى · التكبير {{min}}–{{max}}",
@@ -858,15 +947,15 @@
     "download": "تنزيل",
     "cancel": "إلغاء",
     "progress": "جارٍ التنزيل {{done}} / {{total}}…",
-    "complete_zero": "حُفظت المنطقة دون اتصال. جرى تخزين {{count}} من الموارد مؤقتًا للاستخدام دون اتصال.",
     "complete_one": "حُفظت المنطقة دون اتصال. جرى تخزين {{count}} مورد مؤقتًا للاستخدام دون اتصال.",
+    "complete_zero": "حُفظت المنطقة دون اتصال. جرى تخزين {{count}} من الموارد مؤقتًا للاستخدام دون اتصال.",
     "complete_two": "حُفظت المنطقة دون اتصال. جرى تخزين {{count}} من الموارد مؤقتًا للاستخدام دون اتصال.",
     "complete_few": "حُفظت المنطقة دون اتصال. جرى تخزين {{count}} موارد مؤقتًا للاستخدام دون اتصال.",
     "complete_many": "حُفظت المنطقة دون اتصال. جرى تخزين {{count}} موردًا مؤقتًا للاستخدام دون اتصال.",
     "complete_other": "حُفظت المنطقة دون اتصال. جرى تخزين {{count}} مورد مؤقتًا للاستخدام دون اتصال.",
     "completeWithFailures": "تم حفظ {{done}} من أصل {{total}} من الموارد (فشل {{failed}} منها).",
-    "retryFailed_zero": "إعادة محاولة {{count}} من الموارد الفاشلة",
     "retryFailed_one": "إعادة محاولة {{count}} مورد فاشل",
+    "retryFailed_zero": "إعادة محاولة {{count}} من الموارد الفاشلة",
     "retryFailed_two": "إعادة محاولة {{count}} من الموارد الفاشلة",
     "retryFailed_few": "إعادة محاولة {{count}} موارد فاشلة",
     "retryFailed_many": "إعادة محاولة {{count}} موردًا فاشلًا",
@@ -885,8 +974,8 @@
     "noServiceWorker": "التخزين المؤقت دون اتصال يتطلب تطبيق الويب المثبّت. تحديث المناطق لن يحفظ البلاطات للاستخدام دون اتصال في هذا الإصدار.",
     "empty": "لا توجد مناطق دون اتصال بعد. استخدم «تنزيل منطقة دون اتصال» لحفظ عرض الخريطة الحالي للاستخدام دون اتصال.",
     "zoomRange": "التكبير {{min}}–{{max}}",
-    "tilesCount_zero": "{{count}} من البلاطات",
     "tilesCount_one": "{{count}} بلاطة",
+    "tilesCount_zero": "{{count}} من البلاطات",
     "tilesCount_two": "{{count}} من البلاطات",
     "tilesCount_few": "{{count}} بلاطات",
     "tilesCount_many": "{{count}} بلاطةً",
@@ -899,8 +988,8 @@
     "confirmDelete": "حذف",
     "updateAll": "تحديث الكل",
     "updating": "جارٍ التحديث {{done}} / {{total}}…",
-    "totalFootprint_zero": "{{size}} موزعة على {{count}} من المناطق",
     "totalFootprint_one": "{{size}} موزعة على {{count}} منطقة",
+    "totalFootprint_zero": "{{size}} موزعة على {{count}} من المناطق",
     "totalFootprint_two": "{{size}} موزعة على {{count}} من المناطق",
     "totalFootprint_few": "{{size}} موزعة على {{count}} مناطق",
     "totalFootprint_many": "{{size}} موزعة على {{count}} منطقةً",
@@ -923,8 +1012,8 @@
     "pathTransition": "الانتقال",
     "pathGenerate": "توليد",
     "pathConfirmReplace": "هل تريد استبدال الإطارات المفتاحية الحالية بإطارات مولّدة من هذا المسار؟",
-    "pathGenerated_zero": "تم توليد {{count}} من الإطارات المفتاحية من المسار.",
     "pathGenerated_one": "تم توليد {{count}} إطار مفتاحي من المسار.",
+    "pathGenerated_zero": "تم توليد {{count}} من الإطارات المفتاحية من المسار.",
     "pathGenerated_two": "تم توليد {{count}} من الإطارات المفتاحية من المسار.",
     "pathGenerated_few": "تم توليد {{count}} إطارات مفتاحية من المسار.",
     "pathGenerated_many": "تم توليد {{count}} إطارًا مفتاحيًا من المسار.",
@@ -935,16 +1024,16 @@
     "confirmLoad": "هل تريد استبدال الإطارات المفتاحية الحالية بالإعداد المحمّل؟",
     "configFileType": "إعداد الجولة",
     "configSaved": "تم حفظ الإعداد باسم {{name}}",
-    "configLoaded_zero": "تم تحميل إعداد يتضمن {{count}} من الإطارات المفتاحية.",
     "configLoaded_one": "تم تحميل إعداد يتضمن {{count}} إطار مفتاحي.",
+    "configLoaded_zero": "تم تحميل إعداد يتضمن {{count}} من الإطارات المفتاحية.",
     "configLoaded_two": "تم تحميل إعداد يتضمن {{count}} من الإطارات المفتاحية.",
     "configLoaded_few": "تم تحميل إعداد يتضمن {{count}} إطارات مفتاحية.",
     "configLoaded_many": "تم تحميل إعداد يتضمن {{count}} إطارًا مفتاحيًا.",
     "configLoaded_other": "تم تحميل إعداد يتضمن {{count}} إطار مفتاحي.",
     "configSaveError": "تعذّر حفظ إعداد الجولة. يُرجى المحاولة مرة أخرى.",
     "configLoadError": "تعذّر تحميل إعداد الجولة. قد يكون الملف غير صالح.",
-    "keyframeCount_zero": "{{count}} من الإطارات المفتاحية",
     "keyframeCount_one": "{{count}} إطار مفتاحي",
+    "keyframeCount_zero": "{{count}} من الإطارات المفتاحية",
     "keyframeCount_two": "{{count}} من الإطارات المفتاحية",
     "keyframeCount_few": "{{count}} إطارات مفتاحية",
     "keyframeCount_many": "{{count}} إطارًا مفتاحيًا",
@@ -1060,8 +1149,8 @@
     "addGpsVertex": "إضافة رأس GPS",
     "undo": "تراجع",
     "finish": "إنهاء",
-    "vertices_zero": "{{count}} من الرؤوس",
     "vertices_one": "{{count}} رأس",
+    "vertices_zero": "{{count}} من الرؤوس",
     "vertices_two": "{{count}} من الرؤوس",
     "vertices_few": "{{count}} رؤوس",
     "vertices_many": "{{count}} رأسًا",
@@ -1079,20 +1168,20 @@
       "polygon": "حفظ المضلع"
     },
     "saved": {
-      "point_zero": "تم حفظ {{count}} من النقاط في {{layer}}.",
       "point_one": "تم حفظ {{count}} نقطة في {{layer}}.",
+      "point_zero": "تم حفظ {{count}} من النقاط في {{layer}}.",
       "point_two": "تم حفظ {{count}} من النقاط في {{layer}}.",
       "point_few": "تم حفظ {{count}} نقاط في {{layer}}.",
       "point_many": "تم حفظ {{count}} نقطةً في {{layer}}.",
       "point_other": "تم حفظ {{count}} نقطة في {{layer}}.",
-      "line_zero": "تم حفظ {{count}} من الخطوط في {{layer}}.",
       "line_one": "تم حفظ {{count}} خط في {{layer}}.",
+      "line_zero": "تم حفظ {{count}} من الخطوط في {{layer}}.",
       "line_two": "تم حفظ {{count}} من الخطوط في {{layer}}.",
       "line_few": "تم حفظ {{count}} خطوط في {{layer}}.",
       "line_many": "تم حفظ {{count}} خطًا في {{layer}}.",
       "line_other": "تم حفظ {{count}} خط في {{layer}}.",
-      "polygon_zero": "تم حفظ {{count}} من المضلعات في {{layer}}.",
       "polygon_one": "تم حفظ {{count}} مضلع في {{layer}}.",
+      "polygon_zero": "تم حفظ {{count}} من المضلعات في {{layer}}.",
       "polygon_two": "تم حفظ {{count}} من المضلعات في {{layer}}.",
       "polygon_few": "تم حفظ {{count}} مضلعات في {{layer}}.",
       "polygon_many": "تم حفظ {{count}} مضلعًا في {{layer}}.",
@@ -1124,8 +1213,8 @@
     "saveTrack": "حفظ كطبقة",
     "exportGpx": "تصدير GPX",
     "exportGeojson": "تصدير GeoJSON",
-    "points_zero": "{{count}} من النقاط",
     "points_one": "{{count}} نقطة",
+    "points_zero": "{{count}} من النقاط",
     "points_two": "{{count}} من النقاط",
     "points_few": "{{count}} نقاط",
     "points_many": "{{count}} نقطةً",
@@ -1138,8 +1227,8 @@
     "capture": "رقمنة",
     "capturePoint": "التقاط نقطة",
     "captureLayerName": "نقاط GPS",
-    "captured_zero": "تم التقاط {{count}} من النقاط في هذه الجلسة.",
     "captured_one": "تم التقاط {{count}} نقطة في هذه الجلسة.",
+    "captured_zero": "تم التقاط {{count}} من النقاط في هذه الجلسة.",
     "captured_two": "تم التقاط {{count}} من النقاط في هذه الجلسة.",
     "captured_few": "تم التقاط {{count}} نقاط في هذه الجلسة.",
     "captured_many": "تم التقاط {{count}} نقطةً في هذه الجلسة.",
@@ -1263,6 +1352,7 @@
     "guest": "ضيف",
     "connectFailed": "تعذّر الاتصال بخادم التعاون.",
     "copyFailed": "تعذّر النسخ إلى الحافظة.",
+    "shareFailed": "تعذّرت مشاركة أحدث تغييرات المشروع.",
     "connecting": "جارٍ الاتصال…",
     "reconnecting": "جارٍ إعادة الاتصال…",
     "connected": "الجلسة المباشرة نشطة",
@@ -1284,6 +1374,9 @@
     "viewOnly": "عرض فقط",
     "allowEdit": "السماح لهذا الشخص بالتحرير",
     "setViewOnly": "تعيين هذا الشخص للعرض فقط",
+    "kick": "طرد المشارك",
+    "block": "حظر المشارك",
+    "requireIdentityLabel": "اشتراط تسجيل الدخول بحساب للانضمام",
     "chatLog": "دردشة الجلسة",
     "chatCompose": "اكتب رسالة",
     "chatEmpty": "لا توجد رسائل بعد.",
@@ -1292,12 +1385,16 @@
     "chatAttachLocation": "إرفاق موقع الخريطة الحالي",
     "chatLocationAttached": "تم إرفاق الموقع (انقر للإزالة)",
     "chatGoToLocation": "الانتقال إلى هذا الموقع",
-    "sessionStatusUnread_zero": "جلسة تعاون مباشرة، {{count}} من الرسائل غير المقروءة. انقر لمعرفة المتصلين والدردشة.",
     "sessionStatusUnread_one": "جلسة تعاون مباشرة، {{count}} رسالة غير مقروءة. انقر لمعرفة المتصلين والدردشة.",
+    "sessionStatusUnread_zero": "جلسة تعاون مباشرة، {{count}} من الرسائل غير المقروءة. انقر لمعرفة المتصلين والدردشة.",
     "sessionStatusUnread_two": "جلسة تعاون مباشرة، {{count}} من الرسائل غير المقروءة. انقر لمعرفة المتصلين والدردشة.",
     "sessionStatusUnread_few": "جلسة تعاون مباشرة، {{count}} رسائل غير مقروءة. انقر لمعرفة المتصلين والدردشة.",
     "sessionStatusUnread_many": "جلسة تعاون مباشرة، {{count}} رسالةً غير مقروءة. انقر لمعرفة المتصلين والدردشة.",
-    "sessionStatusUnread_other": "جلسة تعاون مباشرة، {{count}} رسالة غير مقروءة. انقر لمعرفة المتصلين والدردشة."
+    "sessionStatusUnread_other": "جلسة تعاون مباشرة، {{count}} رسالة غير مقروءة. انقر لمعرفة المتصلين والدردشة.",
+    "lockLayer": "قفل الطبقة أمام الضيوف",
+    "unlockLayer": "إلغاء قفل الطبقة أمام الضيوف",
+    "layerLocked": "مقفلة",
+    "layerLockedHint": "هذه الطبقة مقفلة من قِبل المضيف ولا يمكن تحريرها"
   },
   "share": {
     "title": "مشاركة المشروع",
@@ -1310,6 +1407,7 @@
     "step2Description": "الصق الرمز في الإعدادات ← متغيرات البيئة على هذا الجهاز.",
     "configureToken": "ضبط الرمز المحلي",
     "liveAt": "مشروعك منشور الآن على:",
+    "credentialsRemoved": "لم يتم تضمين {{count}} من حقول بيانات الاعتماد. يجب على المستلمين تقديم بيانات اعتمادهم أو استخدام مرجع عبر وسيط.",
     "copyLink": "نسخ الرابط",
     "open": "فتح",
     "done": "تم",
@@ -1325,7 +1423,36 @@
     "errorFallback": "تعذّرت مشاركة المشروع.",
     "usernameRequired": "عيّن اسم مستخدم في حسابك على {{shareHost}} قبل المشاركة. افتح إعدادات حسابك لاختيار اسم، ثم حاول مرة أخرى.",
     "openAccountSettings": "فتح إعدادات الحساب",
-    "credentialsRemoved": "لم يتم تضمين {{count}} من حقول بيانات الاعتماد. يجب على المستلمين تقديم بيانات اعتمادهم أو استخدام مرجع عبر وسيط."
+    "readinessChecking": "جارٍ التحقق مما إذا كان المستلمون قادرين على تحميل بياناتك…",
+    "readinessUnavailable": "تعذّر إجراء فحص مصادر البيانات.",
+    "readinessAllReachable_one": "يبدو {{count}} مصدر بيانات قابلًا للوصول من قِبل المستلمين.",
+    "readinessAllReachable_zero": "تبدو مصادر البيانات البالغ عددها {{count}} قابلة للوصول من قِبل المستلمين.",
+    "readinessAllReachable_two": "تبدو مصادر البيانات البالغ عددها {{count}} قابلة للوصول من قِبل المستلمين.",
+    "readinessAllReachable_few": "تبدو جميع مصادر البيانات البالغ عددها {{count}} قابلة للوصول من قِبل المستلمين.",
+    "readinessAllReachable_many": "تبدو جميع مصادر البيانات البالغ عددها {{count}} مصدرًا قابلة للوصول من قِبل المستلمين.",
+    "readinessAllReachable_other": "تبدو جميع مصادر البيانات البالغ عددها {{count}} قابلة للوصول من قِبل المستلمين.",
+    "readinessTitle": "قد لا تُحمَّل بعض البيانات لدى المستلمين",
+    "readinessNote": "لا يمنع هذا المشاركة. يفتح المستلمون المشروع في متصفح، حيث قد تتصرف هذه المصادر على نحو مختلف عمّا تفعله لديك.",
+    "readinessTruncated_one": "لم يُفحص سوى {{count}} مصدر.",
+    "readinessTruncated_zero": "لم يُفحص سوى أول {{count}} من المصادر.",
+    "readinessTruncated_two": "لم يُفحص سوى أول {{count}} من المصادر.",
+    "readinessTruncated_few": "لم تُفحص سوى أول {{count}} مصادر.",
+    "readinessTruncated_many": "لم يُفحص سوى أول {{count}} مصدرًا.",
+    "readinessTruncated_other": "لم يُفحص سوى أول {{count}} مصدر.",
+    "readinessBasemapLabel": "خريطة الأساس",
+    "readinessPluginLabel": "إضافة",
+    "readinessReasonCredentialStripped": "يستخدم بيانات اعتماد تُزال عند المشاركة.",
+    "readinessReasonAuthRequired": "رفضت الخدمة طلبًا بلا بيانات اعتماد.",
+    "readinessReasonCors": "لا يستطيع المتصفح جلب البيانات من هذا المضيف: فهو لا يرسل ترويسات عبر المصادر، أو أنه غير قابل للوصول.",
+    "readinessReasonNotFound": "أجابت الخدمة بأن العنصر غير موجود، لذا قد يكون الرابط منتهي الصلاحية أو قد انتقل.",
+    "readinessReasonLocalFile": "يشير إلى ملف على جهازك.",
+    "readinessReasonPrivateHost": "يشير إلى عنوان شبكة خاصة أو محلية.",
+    "readinessReasonNoSource": "ليس له مصدر يمكن للمستلم فتحه.",
+    "readinessReasonUnchecked": "تعذّر فحصه.",
+    "readinessAdviceCredential": "اجعل الخدمة عامة، أو اطلب من المستلمين تقديم بيانات اعتمادهم الخاصة.",
+    "readinessAdviceCors": "لا يزال يُحمَّل في تطبيق سطح المكتب، لكن ليس في عارض المتصفح.",
+    "readinessAdviceNotFound": "حدّث مصدر هذه الطبقة أو استبدله قبل المشاركة.",
+    "readinessAdviceLocal": "حوّله إلى مصدر مستضاف، أو توقّع أن يرى المستلمون طبقة فارغة."
   },
   "gallery": {
     "title": "معرض المشاريع",
@@ -1352,8 +1479,8 @@
     "openOnWeb": "عرض على الويب",
     "openError": "تعذّر فتح هذا المشروع.",
     "byAuthor": "بواسطة {{author}}",
-    "views_zero": "{{count}} من المشاهدات",
     "views_one": "{{count}} مشاهدة",
+    "views_zero": "{{count}} من المشاهدات",
     "views_two": "{{count}} من المشاهدات",
     "views_few": "{{count}} مشاهدات",
     "views_many": "{{count}} مشاهدةً",
@@ -1446,15 +1573,21 @@
       "layer": "الطبقة",
       "titleLabel": "العنوان",
       "position": "الموضع",
-      "filterToPage": "المعالم داخل نطاق الصفحة فقط",
-      "filterToPageHint": "ينطبق على صفحات الأطلس ونطاق الطباعة المرسوم؛ وإلا تُستخدم الطبقة بأكملها."
+      "pageFilter": "تصفية نطاق الصفحة",
+      "filterAll": "كل المعالم",
+      "filterContained": "المعالم الواقعة بالكامل داخل نطاق الصفحة فقط",
+      "filterIntersecting": "المعالم المتقاطعة مع نطاق الصفحة فقط",
+      "filterToPageHint": "ينطبق على صفحات الأطلس ونطاق الطباعة المرسوم؛ وإلا تُستخدم الطبقة بأكملها.",
+      "filterToAtlasFeature": "معلم الأطلس الحالي فقط",
+      "filterToAtlasFeatureHint": "متاح عندما يستخدم الجدول طبقة تغطية الأطلس. له الأولوية على مرشّح نطاق الصفحة."
     },
     "dataTable": {
       "columns": "الأعمدة",
       "columnsHint": "يتم تحديد أول {{count}} حقل افتراضيًا. حدد الأعمدة للتخصيص.",
       "maxRows": "أقصى عدد صفوف",
-      "moreRows_zero": "+{{count}} صف إضافي",
+      "fitRows": "ضبط عدد الصفوف لملاءمة الصفحة",
       "moreRows_one": "+{{count}} صف إضافي",
+      "moreRows_zero": "+{{count}} صف إضافي",
       "moreRows_two": "+{{count}} صفان إضافيان",
       "moreRows_few": "+{{count}} صفوف إضافية",
       "moreRows_many": "+{{count}} صف إضافي",
@@ -1560,8 +1693,8 @@
       "moveDown": "نقل المدخل لأسفل",
       "showEntry": "إظهار المدخل",
       "hideEntry": "إخفاء المدخل",
-      "moreItems_zero": "+{{count}} عنصر إضافي",
       "moreItems_one": "+{{count}} عنصر إضافي",
+      "moreItems_zero": "+{{count}} عنصر إضافي",
       "moreItems_two": "+{{count}} عنصران إضافيان",
       "moreItems_few": "+{{count}} عناصر إضافية",
       "moreItems_many": "+{{count}} عنصرًا إضافيًا",
@@ -1585,6 +1718,8 @@
       "extentMargin": "هامش حول المعلم",
       "extentScale": "مقياس ثابت",
       "marginLabel": "الهامش (٪)",
+      "maskOutside": "تظليل المنطقة خارج المعلم الحالي",
+      "maskOutsideHint": "يطبّق تعبئة معكوسة شبه شفافة لإبراز معلم الأطلس الحالي.",
       "scaleLabel": "المقياس",
       "scaleRequired": "أدخل مقياسًا أكبر من الصفر.",
       "sortField": "الترتيب حسب",
@@ -1596,8 +1731,8 @@
       "filterPlaceholder": "مثال: POP2000 > 100000 and ST = \"CA\"",
       "filterError": "تعذّر تحليل المرشح. استخدم مقارنات حقل-عامل-قيمة (=, !=, >, >=, <, <=, contains) مربوطة بـ \"and\".",
       "filenamePattern": "اسم ملف الصفحة (تصدير ZIP)",
-      "pages_zero": "{{count}} صفحة",
       "pages_one": "{{count}} صفحة",
+      "pages_zero": "{{count}} صفحة",
       "pages_two": "{{count}} صفحتان",
       "pages_few": "{{count}} صفحات",
       "pages_many": "{{count}} صفحة",
@@ -1607,8 +1742,8 @@
       "prevPage": "صفحة الأطلس السابقة",
       "nextPage": "صفحة الأطلس التالية",
       "exportZip": "تصدير PNG ZIP",
-      "exportPdfPages_zero": "تصدير PDF ({{count}} صفحة)",
       "exportPdfPages_one": "تصدير PDF ({{count}} صفحة)",
+      "exportPdfPages_zero": "تصدير PDF ({{count}} صفحة)",
       "exportPdfPages_two": "تصدير PDF ({{count}} صفحتان)",
       "exportPdfPages_few": "تصدير PDF ({{count}} صفحات)",
       "exportPdfPages_many": "تصدير PDF ({{count}} صفحة)",
@@ -1643,10 +1778,10 @@
       "durationHours": "{{value}} س",
       "durationHoursMinutes": "{{hours}} س {{minutes}} د",
       "waypointCount_zero": "لم تُوضع أي نقاط مسار بعد",
-      "waypointCount_one": "تم وضع {{count}} نقطة مسار",
       "waypointCount_two": "تم وضع {{count}} من نقاط المسار",
       "waypointCount_few": "تم وضع {{count}} نقاط مسار",
       "waypointCount_many": "تم وضع {{count}} نقطة مسار",
+      "waypointCount_one": "تم وضع {{count}} نقطة مسار",
       "waypointCount_other": "تم وضع {{count}} نقطة مسار"
     },
     "reverseGeocodeMode": {
@@ -1663,6 +1798,19 @@
     "description": "اضبط المبالغة الرأسية للتضاريس ثلاثية الأبعاد. القيم الأعلى تجعل التلال والجبال تبدو أشد انحدارًا.",
     "label": "المبالغة الرأسية",
     "controlLabel": "تبديل التضاريس (انقر نقرًا مزدوجًا لضبط المبالغة)",
+    "sourceLabel": "مصدر التضاريس",
+    "sourceDescription": "استخدم ملف COG أحادي النطاق بنظام EPSG:3857 أو EPSG:4326 كمصدر للارتفاعات. يجب أن يسمح الملف بطلبات CORS ونطاق HTTP.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "نموذج ارتفاعات COG محلي",
+    "localSourceDescription": "يبقى الملف على هذا الجهاز وتُقرأ منه نطاقات صغيرة عند الحاجة إلى مربعات التضاريس.",
+    "useCog": "استخدام نموذج ارتفاعات COG",
+    "sourceLoading": "جارٍ فتح COG…",
+    "restoreDefaultSource": "استخدام التضاريس العالمية",
+    "sourceError": "تعذر فتح نموذج ارتفاعات COG.",
+    "sourceErrorEmpty": "هذا الملف فارغ. اختر ملف نموذج ارتفاعات COG.",
+    "sourceErrorBand": "النطاق المطلوب غير موجود في ملف COG هذا.",
+    "sourceErrorProjection": "يدعم تضاريس COG نماذج الارتفاعات بنظام EPSG:3857 وEPSG:4326 فقط.",
+    "sourceErrorDetail": "تعذر فتح نموذج ارتفاعات COG. ({{detail}})",
     "reset": "إعادة تعيين",
     "done": "تم"
   },
@@ -1690,6 +1838,16 @@
     "gapNote": "تمتد المقاطع المتقطعة عبر تواريخ بلا قراءة (بيانات مفقودة أو خارج نطاق التغطية).",
     "exportCsv": "تصدير CSV",
     "exportGeoParquet": "تصدير GeoParquet"
+  },
+  "auth": {
+    "unavailableTitle": "تسجيل الدخول غير متاح",
+    "unavailableDescription": "تعذّر على GeoLibre الوصول إلى خدمة تسجيل الدخول، لذا لا يمكنه معرفة ما إذا كنت قد سجّلت الدخول. عادةً ما يكون هذا مؤقتًا؛ وإذا استمر، فقد تحتاج إعدادات المصادقة في هذا النشر إلى المراجعة.",
+    "retry": "إعادة المحاولة",
+    "signInTitle": "تسجيل الدخول إلى GeoLibre",
+    "signInDescription": "يتطلب هذا النشر حسابًا. سيتم نقلك إلى صفحة تسجيل دخول آمنة ثم إعادتك إلى هنا.",
+    "signIn": "تسجيل الدخول",
+    "signOut": "تسجيل الخروج",
+    "account": "الحساب"
   },
   "basemapExtract": {
     "title": "استخراج خريطة أساس دون اتصال",
@@ -1821,8 +1979,13 @@
     "unit": {
       "meters": "م",
       "kilometers": "كم",
-      "miles": "ميل"
-    }
+      "miles": "ميل",
+      "feet": "قدم"
+    },
+    "viewshedHere": "مجال الرؤية من هنا ({{radius}})",
+    "viewshedLayerName": "مجال الرؤية ({{radius}})",
+    "viewshedToolName": "مجال الرؤية",
+    "viewshedNoResult": "تعذّر حساب منطقة مرئية هنا."
   },
   "knowledgeCard": {
     "title": "معلومات المكان",
@@ -1866,7 +2029,8 @@
       "geocoding": "الترميز الجغرافي",
       "ai": "موفرو الذكاء الاصطناعي",
       "environment": "البيئة",
-      "updates": "التحديثات"
+      "updates": "التحديثات",
+      "startup": "بدء التشغيل"
     },
     "menu": {
       "mapPreferences": "تفضيلات الخريطة",
@@ -1877,6 +2041,7 @@
       "ai": "موفرو الذكاء الاصطناعي",
       "environmentVariables": "متغيرات البيئة",
       "updates": "إعدادات التحديث",
+      "startupSettings": "إعدادات بدء التشغيل",
       "managePlugins": "إدارة الإضافات",
       "styleManager": "مدير الأنماط",
       "urlOverrideNote": "تتجاوز معلمات التخطيط في عنوان URL الإعدادات المحفوظة."
@@ -1893,6 +2058,26 @@
         "minor": "الإصدارات الرئيسية والثانوية فقط",
         "major": "الإصدارات الرئيسية فقط"
       }
+    },
+    "startup": {
+      "title": "مشروع بدء التشغيل",
+      "description": "اختر مساحة العمل التي يفتحها GeoLibre عند بدء تشغيل التطبيق الأصلي.",
+      "mode": {
+        "default": "فتح مساحة العمل الافتراضية",
+        "last": "إعادة فتح آخر مشروع",
+        "specific": "فتح مشروع محدد"
+      },
+      "modeHint": {
+        "default": "ابدأ بمشروع جديد بلا عنوان.",
+        "last": "افتح آخر مشروع محلي تم استخدامه."
+      },
+      "chooseProject": "اختيار مشروع",
+      "noProjectSelected": "لم يُحدد أي مشروع",
+      "globeByDefault": "تفعيل الكرة الأرضية ثلاثية الأبعاد افتراضيًا",
+      "globeByDefaultHint": "تُستخدم لمساحة العمل بلا عنوان عندما لا يُحدَّد مشروع بدء تشغيل أو رابط مشروع.",
+      "selectError": "تعذر قراءة المشروع المحدد.",
+      "restoring": "جارٍ فتح مشروع بدء التشغيل…",
+      "loadWarning": "مشروع بدء التشغيل غير متاح. فتح GeoLibre مساحة العمل الافتراضية بدلاً منه."
     },
     "map": {
       "constraintsTitle": "قيود الخريطة",
@@ -1915,7 +2100,9 @@
       "scaleUnitImperial": "إمبراطوري (ft / mi)",
       "scaleUnitNautical": "بحري (nmi)",
       "scaleUnitHint": "اختر الوحدات المعروضة على شريط المقياس أسفل الخريطة.",
-      "errorBoundsUnavailable": "حدود الخريطة غير متاحة بعد."
+      "errorBoundsUnavailable": "حدود الخريطة غير متاحة بعد.",
+      "coordinateFormat": "صيغة الإحداثيات",
+      "coordinateFormatHint": "الصيغة التي يعرض بها شريط الحالة إحداثيات المؤشر. انقر على الإحداثيات في شريط الحالة لتغيير الصيغة."
     },
     "layout": {
       "title": "التخطيط",
@@ -1980,8 +2167,8 @@
       "cesiumTokenStorageNote": "يُخزن محليًا على هذا الجهاز (وليس في ملف المشروع، لذا لا تتم مشاركته أبدًا) ويُرسل فقط إلى Cesium Ion. في نسخة الويب يتشارك مساحة تخزين المتصفح نفسها مع بيانات الموقع الأخرى.",
       "cesiumTokenPlaceholder": "eyJhbGciOi…",
       "variablesTitle": "متغيرات البيئة",
-      "variablesCount_zero": "{{count}} من متغيرات التشغيل المفعّلة.",
       "variablesCount_one": "{{count}} متغير تشغيل مفعّل.",
+      "variablesCount_zero": "{{count}} من متغيرات التشغيل المفعّلة.",
       "variablesCount_two": "{{count}} من متغيرات التشغيل المفعّلة.",
       "variablesCount_few": "{{count}} متغيرات تشغيل مفعّلة.",
       "variablesCount_many": "{{count}} متغير تشغيل مفعّلًا.",
@@ -2261,7 +2448,8 @@
       "dashboard": "لوحة المعلومات",
       "assistant": "مساعد الذكاء الاصطناعي",
       "geocode": "الترميز الجغرافي للعناوين",
-      "modelBuilder": "المعالجة الدفعية والنماذج",
+      "batchTools": "أدوات الدفعات",
+      "modelBuilder": "منشئ النماذج",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "التجزئة بالذكاء الاصطناعي",
@@ -2316,7 +2504,8 @@
       "video": "طبقة فيديو",
       "deckglViz": "طبقة Deck.gl",
       "gltfModel": "نموذج ثلاثي الأبعاد (glTF)",
-      "postgres": "طبقة PostgreSQL"
+      "postgres": "طبقة PostgreSQL",
+      "iceberg": "طبقة Apache Iceberg"
     },
     "conversion": {
       "vectorToVector": "متجه إلى متجه",
@@ -2343,6 +2532,7 @@
       "rasterShape": "قراءة راستر {{width}}×{{height}} بعدد {{bands}} نطاق",
       "wroteCog": "تمت كتابة COG مبلّط مع نظرات عامة ({{compression}})",
       "notAGeoTiff": "هذا الملف ليس GeoTIFF قابلًا للقراءة. في المتصفح، يقرأ تحويل راستر إلى COG صيغة GeoTIFF فقط؛ وتتطلب الصيغ الأخرى تطبيق سطح المكتب.",
+      "rasterTooLargeForBrowser": "في المتصفح يفكّ هذا ترميز الراستر بالكامل في WebAssembly، وهي محدودة بنحو 4 غيغابايت، لذا لا يتسع هذا الملف. حوّله باستخدام تطبيق GeoLibre لسطح المكتب، أو أنشئ COG مسبقًا باستخدام gdal_translate أو rio-cogeo.",
       "zoomRangeError": "يجب أن تحقق مستويات التكبير الشرط 0 ≤ الأدنى ≤ الأقصى ≤ {{max}}.",
       "colormap": "خريطة الألوان",
       "resampling": "إعادة المعاينة",
@@ -2588,7 +2778,7 @@
       "duckdbLayer": "طبقة DuckDB",
       "whitebox": "Whitebox",
       "geocode": "الترميز الجغرافي للعناوين",
-      "modelBuilder": "الدفعات والنماذج",
+      "modelBuilder": "منشئ النماذج",
       "processingHistory": "السجل",
       "conversion": "التحويل",
       "vector": "المتجهات",
@@ -2600,7 +2790,7 @@
       "terrain": "التضاريس",
       "remoteSensing": "الاستشعار عن بُعد",
       "projection": "الإسقاط",
-      "geolibre": "GeoLibre",
+      "geolibre": "صندوق أدوات GeoLibre",
       "subGroupGeometry": "الهندسة",
       "subGroupOverlay": "التراكب",
       "subGroupJoin": "الربط",
@@ -2624,6 +2814,8 @@
       "atmosphereEnabled": "مفعّل",
       "spinGlobe": "دوران الكرة الأرضية",
       "graticule": "خطوط الشبكة",
+      "pointerElevation": "الارتفاع",
+      "pointerElevationHint": "إظهار ارتفاع الأرض تحت المؤشر في شريط الحالة. بدون تضاريس ثلاثية الأبعاد يستخدم خدمة ارتفاعات عامة.",
       "weather": "الطقس",
       "weatherTooltip": "تراكب طبقات طقس شبه آنية فوق الخريطة مع إمكانية تحريكها.",
       "weatherPlay": "تشغيل الحركة",
@@ -2674,13 +2866,33 @@
       "arcgisImportWarnings_zero": "تم استيراد المشروع، لكن تعذّر تحميل {{count}} من الطبقات.",
       "arcgisImportWarnings_other": "تم استيراد المشروع، لكن تعذّر تحميل {{count}} طبقة.",
       "arcgisUnknownLayerType": "غير معروف",
+      "importWarningLayerCount_zero": "{{count}} طبقة",
+      "importWarningLayerCount_one": "{{count}} طبقة",
+      "importWarningLayerCount_two": "{{count}} من الطبقات",
+      "importWarningLayerCount_few": "{{count}} طبقات",
+      "importWarningLayerCount_many": "{{count}} طبقةً",
+      "importWarningLayerCount_other": "{{count}} طبقة",
+      "showLayerNames": "عرض أسماء الطبقات",
+      "hideLayerNames": "إخفاء أسماء الطبقات",
+      "arcgisImportReason": {
+        "layer-type": "نوع الطبقة {{layerType}} غير مدعوم.",
+        "missing-source": "لا تحتوي الطبقة على مصدر بيانات محلي قابل للقراءة.",
+        "format": "تنسيق بيانات الطبقة غير مدعوم.",
+        "file-geodatabase": "لا تُحمَّل مصادر File Geodatabase (‎.gdb) من المشاريع. في GeoLibre Desktop أضِفها من إضافة بيانات ← قاعدة بيانات جغرافية ملفية (GDB).",
+        "file-geodatabase-raster": "مجموعات البيانات النقطية المخزَّنة في File Geodatabase (‎.gdb) غير مدعومة. صدِّر الراستر إلى GeoTIFF ثم أضِفه كطبقة نقطية.",
+        "network-path": "لا يتم تحميل مسارات مشاركة الشبكة لأسباب أمنية.",
+        "service": "طبقات خدمات ArcGIS داخل المشاريع غير مدعومة بعد.",
+        "browser-local-file": "تمت الإشارة إلى الملف المحلي، لكن المتصفحات لا تستطيع إعادة فتح مسارات بيانات ArcGIS Pro. استخدم GeoLibre Desktop لتحميله.",
+        "map-extent": "يستخدم امتداد الخريطة المحفوظ نظام إحداثيات لا يستطيع GeoLibre تحويله، لذا فُتحت الخريطة على العرض الافتراضي.",
+        "nesting": "المجموعة متداخلة بعمق كبير، أو أن المشروع يشير مجددًا إلى مجموعة تحتويها بالفعل."
+      },
       "qgisImportComplete": "تم استيراد مشروع QGIS",
       "qgisImportWarnings_one": "تم استيراد المشروع، لكن تعذّر تحميل {{count}} طبقة.",
-      "qgisImportWarnings_other": "تم استيراد المشروع، لكن تعذّر تحميل {{count}} طبقة.",
       "qgisImportWarnings_many": "تم استيراد المشروع، لكن تعذّر تحميل {{count}} طبقةً.",
       "qgisImportWarnings_few": "تم استيراد المشروع، لكن تعذّر تحميل {{count}} طبقات.",
       "qgisImportWarnings_two": "تم استيراد المشروع، لكن تعذّر تحميل {{count}} من الطبقات.",
       "qgisImportWarnings_zero": "تم استيراد المشروع، لكن تعذّر تحميل {{count}} من الطبقات.",
+      "qgisImportWarnings_other": "تم استيراد المشروع، لكن تعذّر تحميل {{count}} طبقة.",
       "qgisUnknownProvider": "غير معروف",
       "qgisImportReason": {
         "non-vector": "لا يدعم هذا الإصدار الأول سوى الطبقات المتجهة المستندة إلى ملفات.",
@@ -2703,6 +2915,7 @@
       "embedVectorTitle": "هل تريد تضمين البيانات المتجهة المحلية؟",
       "embedVectorDesc": "يحتوي هذا المشروع على {{count}} من الطبقات المتجهة المحلية المحملة من جهازك. لا يستطيع المتصفح إعادة قراءتها عند إعادة فتح المشروع، لذا يجب تضمين بياناتها في ملف المشروع حتى يمكن استعادتها. يضيف التضمين نحو {{size}} إلى حجم الملف.",
       "embedVectorDescDesktop": "يحتوي هذا المشروع على {{count}} من الطبقات المتجهة المحلية المحملة من جهازك. ضمِّن بياناتها لجعل المشروع مكتفيًا بذاته (يضيف نحو {{size}})، أو احفظ مراجع الملفات التي يعاد تحميلها من القرص عند إعادة فتح المشروع. تُبقي المراجع الملف صغيرًا لكنها تتعطل إذا نُقل ملف مصدر أو حُذف لاحقًا.",
+      "embedVectorLargeWarning": "تضمين حوالي {{size}} ينتج ملف مشروع كبير جدًا. قد تكون إعادة فتحه بطيئة أو قد تفشل تمامًا، لأنه يجب تحليل كل معلم والاحتفاظ به في الذاكرة دفعة واحدة. لبيانات بهذا الحجم، حوِّل الطبقات إلى PMTiles أو FlatGeobuf وأضفها كطبقات بعيدة بدلاً من تضمينها.",
       "embedVectorEmbedButton": "تضمين البيانات",
       "embedVectorReferenceButton": "حفظ مراجع الملفات",
       "embedVectorSkipButton": "حفظ دون البيانات",
@@ -2743,16 +2956,9 @@
       "loadingOsmPbfProgress": "جارٍ تحويل المعالم إلى GeoJSON… تمت معالجة {{processed}} من أصل {{total}} من كيانات OSM.",
       "projectName": "اسم المشروع",
       "storymapEllipsis": "خريطة قصصية...",
-      "arcgisImportReason": {
-        "layer-type": "نوع الطبقة {{layerType}} غير مدعوم.",
-        "missing-source": "لا تحتوي الطبقة على مصدر بيانات محلي قابل للقراءة.",
-        "format": "تنسيق بيانات الطبقة غير مدعوم.",
-        "network-path": "لا يتم تحميل مسارات مشاركة الشبكة لأسباب أمنية.",
-        "service": "طبقات خدمات ArcGIS داخل المشاريع غير مدعومة بعد.",
-        "browser-local-file": "تمت الإشارة إلى الملف المحلي، لكن المتصفحات لا تستطيع إعادة فتح مسارات بيانات ArcGIS Pro. استخدم GeoLibre Desktop لتحميله.",
-        "map-extent": "يستخدم امتداد الخريطة المحفوظ نظام إحداثيات لا يستطيع GeoLibre تحويله، لذا فُتحت الخريطة على العرض الافتراضي.",
-        "nesting": "المجموعة متداخلة بعمق كبير، أو أن المشروع يشير مجددًا إلى مجموعة تحتويها بالفعل."
-      }
+      "pointerElevationNoticeTitle": "الارتفاع يستخدم خدمة ارتفاعات عامة",
+      "pointerElevationNoticeDesc": "يُحسب الارتفاع من تضاريس الخريطة ثلاثية الأبعاد عند تفعيلها دون إرسال أي بيانات. وبدونها تُستخدم واجهة Open-Meteo العامة، فتغادر إحداثيات المؤشر جهازك.",
+      "batchTools": "أدوات الدفعات"
     },
     "plugin": {
       "maplibre-gl-annotations": "التعليقات التوضيحية",
@@ -2807,27 +3013,27 @@
       "overlayTitle": "أفلت ملفات متجهة أو نقطية هنا لإضافة طبقات",
       "overlaySubtext": "تُضاف بياناتك فورًا إلى لوحة الطبقات.",
       "addedLayer": "تمت إضافة «{{name}}» إلى لوحة الطبقات.",
-      "addedVectorLayers_zero": "تمت إضافة {{count}} من الطبقات المتجهة إلى لوحة الطبقات.",
       "addedVectorLayers_one": "تمت إضافة {{count}} طبقة متجهة إلى لوحة الطبقات.",
+      "addedVectorLayers_zero": "تمت إضافة {{count}} من الطبقات المتجهة إلى لوحة الطبقات.",
       "addedVectorLayers_two": "تمت إضافة {{count}} من الطبقات المتجهة إلى لوحة الطبقات.",
       "addedVectorLayers_few": "تمت إضافة {{count}} طبقات متجهة إلى لوحة الطبقات.",
       "addedVectorLayers_many": "تمت إضافة {{count}} طبقةً متجهة إلى لوحة الطبقات.",
       "addedVectorLayers_other": "تمت إضافة {{count}} طبقة متجهة إلى لوحة الطبقات.",
-      "addedRasterLayers_zero": "تمت إضافة {{count}} من الطبقات النقطية إلى لوحة الطبقات.",
       "addedRasterLayers_one": "تمت إضافة {{count}} طبقة نقطية إلى لوحة الطبقات.",
+      "addedRasterLayers_zero": "تمت إضافة {{count}} من الطبقات النقطية إلى لوحة الطبقات.",
       "addedRasterLayers_two": "تمت إضافة {{count}} من الطبقات النقطية إلى لوحة الطبقات.",
       "addedRasterLayers_few": "تمت إضافة {{count}} طبقات نقطية إلى لوحة الطبقات.",
       "addedRasterLayers_many": "تمت إضافة {{count}} طبقةً نقطية إلى لوحة الطبقات.",
       "addedRasterLayers_other": "تمت إضافة {{count}} طبقة نقطية إلى لوحة الطبقات.",
       "addedBoth": "تمت إضافة {{vector}} و{{raster}} إلى لوحة الطبقات.",
-      "bothVectorLayers_zero": "{{count}} من الطبقات المتجهة",
       "bothVectorLayers_one": "{{count}} طبقة متجهة",
+      "bothVectorLayers_zero": "{{count}} من الطبقات المتجهة",
       "bothVectorLayers_two": "{{count}} من الطبقات المتجهة",
       "bothVectorLayers_few": "{{count}} طبقات متجهة",
       "bothVectorLayers_many": "{{count}} طبقةً متجهة",
       "bothVectorLayers_other": "{{count}} طبقة متجهة",
-      "bothRasterLayers_zero": "{{count}} من الطبقات النقطية",
       "bothRasterLayers_one": "{{count}} طبقة نقطية",
+      "bothRasterLayers_zero": "{{count}} من الطبقات النقطية",
       "bothRasterLayers_two": "{{count}} من الطبقات النقطية",
       "bothRasterLayers_few": "{{count}} طبقات نقطية",
       "bothRasterLayers_many": "{{count}} طبقةً نقطية",
@@ -2842,6 +3048,7 @@
       "couldNotOpenRecentProject": "تعذر فتح المشروع الأخير.",
       "couldNotLoadRecentProject": "تعذر تحميل المشروع الأخير.",
       "couldNotSaveProject": "تعذر حفظ المشروع.",
+      "projectTooLargeToSave": "هذا المشروع أكبر من أن يُحفَظ. حوِّل بياناته المتجهة المضمَّنة إلى PMTiles أو FlatGeobuf وأضفها كطبقات بعيدة بدلاً من تضمين المعالم.",
       "couldNotExportHtml": "تعذر تصدير المشروع إلى HTML.",
       "osmPbfNoFeatures": "لم يُعثر في ملف OSM PBF هذا على أي معالم نقاط أو خطوط أو مضلعات.",
       "couldNotLoadOsmPbf": "تعذر تحميل ملف OSM PBF.",
@@ -2902,16 +3109,16 @@
       "addAsLayer": "إضافة كطبقة",
       "exportCsv": "تصدير CSV",
       "exportGeoParquet": "تصدير GeoParquet",
-      "addedAsLayer_zero": "تمت إضافة {{count}} من المعالم إلى الخريطة باسم «{{name}}».",
       "addedAsLayer_one": "تمت إضافة {{count}} معلم إلى الخريطة باسم «{{name}}».",
+      "addedAsLayer_zero": "تمت إضافة {{count}} من المعالم إلى الخريطة باسم «{{name}}».",
       "addedAsLayer_two": "تمت إضافة {{count}} من المعالم إلى الخريطة باسم «{{name}}».",
       "addedAsLayer_few": "تمت إضافة {{count}} معالم إلى الخريطة باسم «{{name}}».",
       "addedAsLayer_many": "تمت إضافة {{count}} معلمًا إلى الخريطة باسم «{{name}}».",
       "addedAsLayer_other": "تمت إضافة {{count}} معلم إلى الخريطة باسم «{{name}}».",
       "addAsQueryLayer": "إضافة كطبقة استعلام",
       "addAsQueryLayerHint": "إضافة النتيجة كطبقة حية تعيد تشغيل SQL هذا عند التحديث",
-      "addedAsQueryLayer_zero": "تمت إضافة {{count}} معلم إلى الخريطة كطبقة استعلام «{{name}}». حدّثها من لوحة الطبقات لإعادة تشغيل SQL.",
       "addedAsQueryLayer_one": "تمت إضافة {{count}} معلم إلى الخريطة كطبقة استعلام «{{name}}». حدّثها من لوحة الطبقات لإعادة تشغيل SQL.",
+      "addedAsQueryLayer_zero": "تمت إضافة {{count}} معلم إلى الخريطة كطبقة استعلام «{{name}}». حدّثها من لوحة الطبقات لإعادة تشغيل SQL.",
       "addedAsQueryLayer_two": "تمت إضافة {{count}} معلمَين إلى الخريطة كطبقة استعلام «{{name}}». حدّثها من لوحة الطبقات لإعادة تشغيل SQL.",
       "addedAsQueryLayer_few": "تمت إضافة {{count}} معالم إلى الخريطة كطبقة استعلام «{{name}}». حدّثها من لوحة الطبقات لإعادة تشغيل SQL.",
       "addedAsQueryLayer_many": "تمت إضافة {{count}} معلمًا إلى الخريطة كطبقة استعلام «{{name}}». حدّثها من لوحة الطبقات لإعادة تشغيل SQL.",
@@ -2919,14 +3126,14 @@
       "savedAs": "تم حفظ {{label}} باسم {{name}}.",
       "noRows": "تم تنفيذ الجملة. لم تُرجَع أي صفوف.",
       "showingRows": "يتم عرض أول {{shown}} صف من أصل {{total}} صف. صدِّر النتائج لرؤيتها جميعًا.",
-      "rowsCount_zero": "{{count}} من الصفوف",
       "rowsCount_one": "{{count}} صف",
+      "rowsCount_zero": "{{count}} من الصفوف",
       "rowsCount_two": "{{count}} من الصفوف",
       "rowsCount_few": "{{count}} صفوف",
       "rowsCount_many": "{{count}} صفًا",
       "rowsCount_other": "{{count}} صف",
-      "columnsCount_zero": "{{count}} من الأعمدة",
       "columnsCount_one": "{{count}} عمود",
+      "columnsCount_zero": "{{count}} من الأعمدة",
       "columnsCount_two": "{{count}} من الأعمدة",
       "columnsCount_few": "{{count}} أعمدة",
       "columnsCount_many": "{{count}} عمودًا",
@@ -3108,6 +3315,203 @@
     "includeParents": "تضمين الخلايا الأصل للخلية المحددة",
     "showIcosahedron": "إظهار المجسّم العشريني"
   },
+  "s2Plugin": {
+    "title": "شبكة S2",
+    "controlTitle": "إعدادات شبكة S2",
+    "autoResolution": "دقة تلقائية",
+    "resolution": "الدقة",
+    "cellCount": "الخلايا في العرض: {{count}}",
+    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} خلية. قرّب العرض أو خفّض الدقة.",
+    "fillColor": "لون التعبئة",
+    "fillOpacity": "عتامة التعبئة",
+    "lineColor": "لون الحد الخارجي",
+    "lineWidth": "عرض الحد الخارجي",
+    "showLabels": "إظهار معرّفات الخلايا",
+    "identifyHint": "انقر على الخريطة لتحديد خلية S2.",
+    "selectedCell": "الخلية المحددة",
+    "noSelection": "لم تُحدَّد أي خلية",
+    "copyId": "نسخ المعرّف",
+    "parent": "الخلية الأصل",
+    "children": "الخلايا الفرعية",
+    "neighbors": "الخلايا المجاورة",
+    "center": "المركز",
+    "zoomToCell": "التكبير إلى الخلية",
+    "addAsLayer": "إضافة الشبكة كطبقة",
+    "exportGeoJson": "تصدير GeoJSON",
+    "exportCsv": "تصدير CSV",
+    "includeNeighbors": "تضمين الخلايا المجاورة للخلية المحددة",
+    "includeParents": "تضمين الخلايا الأصل للخلية المحددة"
+  },
+  "a5Plugin": {
+    "title": "شبكة A5",
+    "controlTitle": "إعدادات شبكة A5",
+    "autoResolution": "دقة تلقائية",
+    "resolution": "الدقة",
+    "cellCount": "الخلايا في العرض: {{count}}",
+    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} خلية. قرّب العرض أو خفّض الدقة.",
+    "fillColor": "لون التعبئة",
+    "fillOpacity": "عتامة التعبئة",
+    "lineColor": "لون الحد الخارجي",
+    "lineWidth": "عرض الحد الخارجي",
+    "showLabels": "إظهار معرّفات الخلايا",
+    "identifyHint": "انقر على الخريطة لتحديد خلية A5.",
+    "selectedCell": "الخلية المحددة",
+    "noSelection": "لم تُحدَّد أي خلية",
+    "copyId": "نسخ المعرّف",
+    "parent": "الخلية الأصل",
+    "children": "الخلايا الفرعية",
+    "neighbors": "الخلايا المجاورة",
+    "center": "المركز",
+    "zoomToCell": "التكبير إلى الخلية",
+    "addAsLayer": "إضافة الشبكة كطبقة",
+    "exportGeoJson": "تصدير GeoJSON",
+    "exportCsv": "تصدير CSV",
+    "includeNeighbors": "تضمين الخلايا المجاورة للخلية المحددة",
+    "includeParents": "تضمين الخلايا الأصل للخلية المحددة"
+  },
+  "dggridPlugin": {
+    "title": "DGGRID",
+    "controlTitle": "إعدادات DGGRID",
+    "cellType": "نوع الخلية",
+    "topologyHexagon": "سداسي",
+    "topologyDiamond": "معيّن",
+    "topologyTriangle": "مثلث",
+    "projection": "الإسقاط",
+    "aperture": "الفتحة",
+    "autoResolution": "دقة تلقائية",
+    "resolution": "الدقة",
+    "cellCount": "الخلايا في العرض: {{count}}",
+    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} خلية. قرّب العرض أو خفّض الدقة.",
+    "fillColor": "لون التعبئة",
+    "fillOpacity": "عتامة التعبئة",
+    "lineColor": "لون الحد الخارجي",
+    "lineWidth": "عرض الحد الخارجي",
+    "showLabels": "إظهار معرّفات الخلايا",
+    "identifyHint": "انقر على الخريطة لتحديد خلية DGGRID.",
+    "selectedCell": "الخلية المحددة",
+    "noSelection": "لم تُحدَّد أي خلية",
+    "copyId": "نسخ المعرّف",
+    "parent": "الخلية الأصل",
+    "children": "الخلايا الفرعية",
+    "neighbors": "الخلايا المجاورة",
+    "center": "المركز",
+    "zoomToCell": "التكبير إلى الخلية",
+    "addAsLayer": "إضافة الشبكة كطبقة",
+    "exportGeoJson": "تصدير GeoJSON",
+    "exportCsv": "تصدير CSV",
+    "includeNeighbors": "تضمين الخلايا المجاورة للخلية المحددة",
+    "includeParents": "تضمين الخلايا الأصل للخلية المحددة"
+  },
+  "dggalPlugin": {
+    "title": "DGGAL",
+    "controlTitle": "إعدادات DGGAL",
+    "gridType": "نوع DGGS",
+    "autoResolution": "دقة تلقائية",
+    "resolution": "الدقة",
+    "cellCount": "الخلايا في العرض: {{count}}",
+    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} خلية. قرّب العرض أو خفّض الدقة.",
+    "fillColor": "لون التعبئة",
+    "fillOpacity": "عتامة التعبئة",
+    "lineColor": "لون الحد الخارجي",
+    "lineWidth": "عرض الحد الخارجي",
+    "showLabels": "إظهار معرّفات الخلايا",
+    "identifyHint": "انقر على الخريطة لتحديد خلية DGGAL.",
+    "selectedCell": "الخلية المحددة",
+    "noSelection": "لم تُحدَّد أي خلية",
+    "copyId": "نسخ المعرّف",
+    "parent": "الخلية الأصل",
+    "children": "الخلايا الفرعية",
+    "neighbors": "الخلايا المجاورة",
+    "center": "المركز",
+    "zoomToCell": "التكبير إلى الخلية",
+    "addAsLayer": "إضافة الشبكة كطبقة",
+    "exportGeoJson": "تصدير GeoJSON",
+    "exportCsv": "تصدير CSV",
+    "includeNeighbors": "تضمين الخلايا المجاورة للخلية المحددة",
+    "includeParents": "تضمين الخلايا الأصل للخلية المحددة"
+  },
+  "olcPlugin": {
+    "title": "OLC",
+    "controlTitle": "إعدادات OLC",
+    "autoResolution": "دقة تلقائية",
+    "resolution": "الدقة",
+    "cellCount": "الخلايا في العرض: {{count}}",
+    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} خلية. قرّب العرض أو خفّض الدقة.",
+    "fillColor": "لون التعبئة",
+    "fillOpacity": "عتامة التعبئة",
+    "lineColor": "لون الحد الخارجي",
+    "lineWidth": "عرض الحد الخارجي",
+    "showLabels": "إظهار معرّفات الخلايا",
+    "identifyHint": "انقر على الخريطة لتحديد خلية OLC.",
+    "selectedCell": "الخلية المحددة",
+    "noSelection": "لم تُحدَّد أي خلية",
+    "copyId": "نسخ المعرّف",
+    "parent": "الخلية الأصل",
+    "children": "الخلايا الفرعية",
+    "neighbors": "الخلايا المجاورة",
+    "center": "المركز",
+    "zoomToCell": "التكبير إلى الخلية",
+    "addAsLayer": "إضافة الشبكة كطبقة",
+    "exportGeoJson": "تصدير GeoJSON",
+    "exportCsv": "تصدير CSV",
+    "includeNeighbors": "تضمين الخلايا المجاورة للخلية المحددة",
+    "includeParent": "تضمين الخلية الأصل للخلية المحددة"
+  },
+  "geohashPlugin": {
+    "title": "Geohash",
+    "controlTitle": "إعدادات Geohash",
+    "autoResolution": "دقة تلقائية",
+    "resolution": "الدقة",
+    "cellCount": "الخلايا في العرض: {{count}}",
+    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} خلية. قرّب العرض أو خفّض الدقة.",
+    "fillColor": "لون التعبئة",
+    "fillOpacity": "عتامة التعبئة",
+    "lineColor": "لون الحد الخارجي",
+    "lineWidth": "عرض الحد الخارجي",
+    "showLabels": "إظهار معرّفات الخلايا",
+    "identifyHint": "انقر على الخريطة لتحديد خلية Geohash.",
+    "selectedCell": "الخلية المحددة",
+    "noSelection": "لم تُحدَّد أي خلية",
+    "copyId": "نسخ المعرّف",
+    "parent": "الخلية الأصل",
+    "children": "الخلايا الفرعية",
+    "neighbors": "الخلايا المجاورة",
+    "center": "المركز",
+    "zoomToCell": "التكبير إلى الخلية",
+    "addAsLayer": "إضافة الشبكة كطبقة",
+    "exportGeoJson": "تصدير GeoJSON",
+    "exportCsv": "تصدير CSV",
+    "includeNeighbors": "تضمين الخلايا المجاورة للخلية المحددة",
+    "includeParent": "تضمين الخلية الأصل للخلية المحددة"
+  },
+  "tilecodePlugin": {
+    "title": "Tilecode",
+    "controlTitle": "إعدادات Tilecode",
+    "autoResolution": "دقة تلقائية",
+    "resolution": "الدقة",
+    "cellCount": "المربّعات في العرض: {{count}}",
+    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} مربّعة. قرّب العرض أو خفّض الدقة.",
+    "fillColor": "لون التعبئة",
+    "fillOpacity": "عتامة التعبئة",
+    "lineColor": "لون الحد الخارجي",
+    "lineWidth": "عرض الحد الخارجي",
+    "showLabels": "إظهار معرّفات المربّعات",
+    "identifyHint": "انقر على الخريطة لتحديد مربّعة.",
+    "selectedCell": "المربّعة المحددة",
+    "noSelection": "لم تُحدَّد أي مربّعة",
+    "copyId": "نسخ المعرّف",
+    "quadkey": "Quadkey",
+    "parent": "المربّعة الأصل",
+    "children": "المربّعات الفرعية",
+    "neighbors": "المربّعات المجاورة",
+    "center": "المركز",
+    "zoomToCell": "التكبير إلى المربّعة",
+    "addAsLayer": "إضافة الشبكة كطبقة",
+    "exportGeoJson": "تصدير GeoJSON",
+    "exportCsv": "تصدير CSV",
+    "includeNeighbors": "تضمين المربّعات المجاورة للمربّعة المحددة",
+    "includeParent": "تضمين المربّعة الأصل للمربّعة المحددة"
+  },
   "timelapse": {
     "title": "التسلسل الزمني",
     "provider": "مصدر الصور",
@@ -3228,6 +3632,98 @@
     "added": "تمت إضافة {{title}}.",
     "addError": "تعذّرت إضافة مجموعة البيانات.",
     "searchError": "فشل البحث."
+  },
+  "stacPlugin": {
+    "title": "كتالوجات STAC",
+    "footprintLayerName": "حدود نتائج بحث STAC",
+    "catalogSearch": "البحث عن كتالوج عام في STAC Index",
+    "catalogSearchPlaceholder": "البحث في أسماء الكتالوجات…",
+    "indexLoading": "جارٍ تحميل STAC Index…",
+    "indexUnavailable": "STAC Index غير متاح: أدخل عنوان URL",
+    "indexLoadFailed": "تعذّر تحميل STAC Index",
+    "urlLabel": "عنوان URL لكتالوج أو واجهة STAC",
+    "connect": "اتصال",
+    "connecting": "جارٍ الاتصال بـ STAC…",
+    "connected": "تم الاتصال. اختر عوامل التصفية ثم ابحث.",
+    "connectFailed": "تعذّر الاتصال بـ STAC",
+    "selectCatalog": "اختر كتالوجًا…",
+    "noMatchingCatalogs": "لا توجد كتالوجات مطابقة",
+    "catalogApiSuffix": " (API)",
+    "catalogStaticSuffix": " (ثابت)",
+    "kindApi": "واجهة STAC",
+    "kindStatic": "كتالوج ثابت",
+    "collectionsHint": "اضغط Ctrl/Cmd لتحديد عدة مجموعات؛ اسحب الحافة السفلية لتغيير الحجم",
+    "limitToExtent": "حصر البحث في نطاق الخريطة الحالي",
+    "bboxLabel": "الصندوق المحيط (غرب، جنوب، شرق، شمال)",
+    "bboxPlaceholder": "اختياري؛ يتجاوز نطاق الخريطة",
+    "bboxInvalid": "أدخل صندوقًا محيطًا صالحًا: غرب، جنوب، شرق، شمال.",
+    "drawBbox": "رسم صندوق على الخريطة",
+    "cancelDrawing": "إلغاء الرسم",
+    "clearDrawnBbox": "مسح الصندوق المرسوم",
+    "drawHint": "انقر واسحب على الخريطة لرسم صندوق البحث.",
+    "drawnBbox": "الصندوق المرسوم: {{bbox}}",
+    "drawnBboxCleared": "تم مسح الصندوق المرسوم.",
+    "mapNotReady": "الخريطة غير جاهزة للرسم.",
+    "startDate": "تاريخ البدء",
+    "endDate": "تاريخ الانتهاء",
+    "additionalParams": "معايير بحث إضافية (JSON، لواجهة STAC فقط)",
+    "additionalInvalid": "يجب أن تكون معايير البحث الإضافية كائن JSON.",
+    "searchItems": "البحث عن العناصر",
+    "clearResults": "مسح النتائج",
+    "resultsCleared": "تم مسح نتائج البحث.",
+    "searching": "جارٍ البحث عن عناصر STAC…",
+    "loadingMore": "جارٍ تحميل مزيد من العناصر…",
+    "noMatchesHere": "لا توجد نتائج مطابقة في هذا الجزء من الكتالوج. حمّل المزيد لمواصلة البحث.",
+    "treeEmpty": "فارغ",
+    "treeOpenFailed": "تعذّر فتح هذا الكتالوج",
+    "noResults": "لا توجد عناصر STAC مطابقة لعوامل التصفية هذه.",
+    "searchFailed": "فشل بحث STAC",
+    "showing": "العناصر المعروضة: {{count}}.",
+    "showingOfMatched": "العناصر المعروضة: {{count}} من {{matched}}.",
+    "loadMore": "تحميل المزيد",
+    "renderOptions": "خيارات عرض الراستر",
+    "renderingEngine": "محرك عرض COG",
+    "engineAuto": "الإبقاء دون تغيير",
+    "engineWasm": "مُبلِّط WebAssembly (متوافق مع الكرة الأرضية)",
+    "engineGpu": "وحدة معالجة الرسوميات (deck.gl, مركاتور فقط)",
+    "engineTitiler": "خادم TiTiler",
+    "engineHint": "أي مُصيِّر يفك ترميز الصور. وبخلاف الإعدادات أعلاه، لا ينطبق هذا لكل طبقة على حدة: بل على كل بيانات الراستر على الخريطة، بما فيها المضافة سابقًا.",
+    "resizeResults": "تغيير حجم نتائج البحث",
+    "bands": "النطاقات",
+    "bandsPlaceholder": "مثال: 1 أو 1,2,3 (الافتراضي: تلقائي)",
+    "colormap": "خريطة الألوان (نطاق واحد فقط)",
+    "colormapDefault": "الإعداد الافتراضي للعارض",
+    "minValue": "القيمة الدنيا",
+    "maxValue": "القيمة القصوى",
+    "nodata": "قيمة NoData",
+    "nodataPlaceholder": "يتجاوز وسم NoData في الملف",
+    "renderHint": "اترك الحقل فارغًا ليستنتج العارض القيمة من ملف GeoTIFF. تنطبق الخيارات على الأصول المضافة بعد تغييرها.",
+    "initialStatus": "اختر كتالوجًا من STAC Index أو أدخل عنوان URL.",
+    "catalogInfo": "{{title}} · {{kind}}",
+    "zoom": "تكبير",
+    "add": "إضافة",
+    "download": "تنزيل",
+    "adding": "جارٍ إضافة {{asset}}…",
+    "added": "تمت إضافة {{asset}} إلى الخريطة.",
+    "addUnsupported": "يمكن إضافة أصول GeoTIFF/COG وGeoJSON وGeoParquet وPMTiles فقط إلى الخريطة",
+    "addFailed": "تعذّرت إضافة الأصل",
+    "addNoSourceLayers": "لا يسرد هذا الأرشيف أي طبقات لرسمها",
+    "addNoTarget": "لا يسرد هذا الأصل أي شيء لرسمه",
+    "addIcechunkFailed": "تعذّر فتح مستودع Icechunk هذا",
+    "zarrProblemGroup": "يشير هذا الأصل إلى مجموعة مصفوفات، وليس إلى مصفوفة واحدة يمكن رسمها",
+    "zarrProblemMissing": "لا يحتوي هذا المخزن على ذلك المتغيّر",
+    "zarrProblemUnauthorized": "يحتاج مخزن Zarr هذا إلى بيانات اعتماد لا يستطيع GeoLibre توفيرها بعد",
+    "zarrProblemUnsupportedUrl": "لا يمكن قراءة عنوان مخزن Zarr هذا مفتاحًا مفتاحًا",
+    "zarrProblemUnavailable": "تعذّر فتح مخزن Zarr هذا",
+    "chooseTarget": "اختر ما تريد إضافته",
+    "cogUnsupported": "لا يستطيع مضيف GeoLibre هذا عرض أصول GeoTIFF البعيدة",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
+    "formatUnknown": "تنسيق غير معروف",
+    "notAddable": "غير قابل للإضافة"
   },
   "earthdataGis": {
     "hint": "ابحث في NASA Earthdata GIS عن خدمات الصور والخرائط والمعالم.",
@@ -3474,12 +3970,16 @@
     "resetDefaults": "إعادة التعيين إلى القيم الافتراضية"
   },
   "basemaps": {
-    "confirmStyleReplace_zero": "سيؤدي التبديل إلى \"{{name}}\" إلى استبدال نمط الخريطة بالكامل وإزالة {{count}} من خرائط الأساس المكدسة التي أضفتها. هل تريد المتابعة؟",
     "confirmStyleReplace_one": "سيؤدي التبديل إلى \"{{name}}\" إلى استبدال نمط الخريطة بالكامل وإزالة خريطة الأساس المكدسة التي أضفتها. هل تريد المتابعة؟",
+    "confirmStyleReplace_zero": "سيؤدي التبديل إلى \"{{name}}\" إلى استبدال نمط الخريطة بالكامل وإزالة {{count}} من خرائط الأساس المكدسة التي أضفتها. هل تريد المتابعة؟",
     "confirmStyleReplace_two": "سيؤدي التبديل إلى \"{{name}}\" إلى استبدال نمط الخريطة بالكامل وإزالة {{count}} من خرائط الأساس المكدسة التي أضفتها. هل تريد المتابعة؟",
     "confirmStyleReplace_few": "سيؤدي التبديل إلى \"{{name}}\" إلى استبدال نمط الخريطة بالكامل وإزالة {{count}} خرائط أساس مكدسة أضفتها. هل تريد المتابعة؟",
     "confirmStyleReplace_many": "سيؤدي التبديل إلى \"{{name}}\" إلى استبدال نمط الخريطة بالكامل وإزالة {{count}} خريطة أساس مكدسةً أضفتها. هل تريد المتابعة؟",
     "confirmStyleReplace_other": "سيؤدي التبديل إلى \"{{name}}\" إلى استبدال نمط الخريطة بالكامل وإزالة {{count}} خريطة أساس مكدسة أضفتها. هل تريد المتابعة؟"
+  },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "خصائص المعلم",
+    "massingHeight": "الارتفاع (م)"
   },
   "annotations": {
     "toolbar": "أدوات التعليقات التوضيحية",
@@ -3559,8 +4059,8 @@
     "close": "إغلاق لوحة المعلومات",
     "columns": "الأعمدة",
     "addWidget": "إضافة عنصر واجهة",
-    "widgetCount_zero": "{{count}} من عناصر الواجهة",
     "widgetCount_one": "{{count}} عنصر واجهة",
+    "widgetCount_zero": "{{count}} من عناصر الواجهة",
     "widgetCount_two": "{{count}} من عناصر الواجهة",
     "widgetCount_few": "{{count}} عناصر واجهة",
     "widgetCount_many": "{{count}} عنصرَ واجهة",
@@ -3571,11 +4071,11 @@
     "layerMissing": "الطبقة غير متوفرة",
     "noData": "لا تحتوي هذه الطبقة على سمات قابلة للرسم البياني.",
     "selectorMatches_one": "{{count}} من أصل {{total}} معلم",
-    "selectorMatches_other": "{{count}} من أصل {{total}} معلم",
     "selectorMatches_many": "{{count}} من أصل {{total}} معلمًا",
     "selectorMatches_few": "{{count}} من أصل {{total}} معالم",
     "selectorMatches_two": "{{count}} من أصل {{total}} من المعالم",
     "selectorMatches_zero": "{{count}} من أصل {{total}} من المعالم",
+    "selectorMatches_other": "{{count}} من أصل {{total}} معلم",
     "selectorClear": "مسح",
     "moveBack": "نقل إلى الخلف",
     "moveForward": "نقل إلى الأمام",
@@ -3597,19 +4097,27 @@
       "sum": "المجموع",
       "mean": "المتوسط"
     },
+    "indicatorAggregation": {
+      "count": "العدد",
+      "sum": "المجموع",
+      "mean": "المتوسط",
+      "min": "الحد الأدنى",
+      "max": "الحد الأقصى",
+      "median": "الوسيط"
+    },
     "chart": {
       "emptyNumeric": "لا توجد قيم رقمية للرسم.",
       "emptyScatter": "لا توجد صفوف يحتوي فيها كلا الحقلين على قيمة رقمية.",
       "emptyBar": "لا توجد صفوف للتجميع.",
       "emptyPie": "لا توجد قيم موجبة للرسم البياني.",
-      "pieCaptionCount_zero": "عدد الصفوف · {{count}} من الفئات",
       "pieCaptionCount_one": "عدد الصفوف · {{count}} فئة",
+      "pieCaptionCount_zero": "عدد الصفوف · {{count}} من الفئات",
       "pieCaptionCount_two": "عدد الصفوف · {{count}} من الفئات",
       "pieCaptionCount_few": "عدد الصفوف · {{count}} فئات",
       "pieCaptionCount_many": "عدد الصفوف · {{count}} فئةً",
       "pieCaptionCount_other": "عدد الصفوف · {{count}} فئة",
-      "pieCaptionSum_zero": "المجموع · {{count}} من الفئات",
       "pieCaptionSum_one": "المجموع · {{count}} فئة",
+      "pieCaptionSum_zero": "المجموع · {{count}} من الفئات",
       "pieCaptionSum_two": "المجموع · {{count}} من الفئات",
       "pieCaptionSum_few": "المجموع · {{count}} فئات",
       "pieCaptionSum_many": "المجموع · {{count}} فئةً",
@@ -3646,14 +4154,6 @@
       "colorDefault": "ألوان المخطط البياني الافتراضية",
       "cancel": "إلغاء",
       "save": "حفظ"
-    },
-    "indicatorAggregation": {
-      "count": "العدد",
-      "sum": "المجموع",
-      "mean": "المتوسط",
-      "min": "الحد الأدنى",
-      "max": "الحد الأقصى",
-      "median": "الوسيط"
     }
   },
   "assistant": {
@@ -3662,9 +4162,9 @@
     "clear": "مسح المحادثة",
     "close": "إغلاق المساعد",
     "send": "إرسال",
-    "sendHint": "إرسال (Ctrl/Cmd+Enter)",
+    "sendHint": "إرسال (Enter)",
     "stop": "إيقاف",
-    "placeholder": "اسأل عن بياناتك، مثل \"أظهر الدول التي يزيد عدد سكانها على 50 مليونًا\" · Ctrl/Cmd+Enter للإرسال",
+    "placeholder": "اسأل عن بياناتك، مثل \"أظهر الدول التي يزيد عدد سكانها على 50 مليونًا\" · Enter للإرسال، Shift+Enter لسطر جديد",
     "intro": "تحدث مع بياناتك. يمكنني تشغيل Spatial SQL، وإضافة الطبقات أو إزالتها، وإعادة تنسيقها، وتحريك الخريطة — وكل تغيير قابل للتراجع. جرّب \"لوّن الدول حسب عدد السكان بتدرج لوني أحمر\".",
     "setupTitle": "إعداد مساعد الذكاء الاصطناعي",
     "setupStatus": "يحتاج المساعد إلى موفر ذكاء اصطناعي ليتولى التفكير. أضف بيانات اعتماد لأي موفر واحد أدناه، وستتحول اللوحة إلى وضع الدردشة فور الحفظ.",
@@ -3774,6 +4274,8 @@
       "bylinePlaceholder": "المؤلف أو سطر الإسناد",
       "footerText": "نص التذييل",
       "footerPlaceholder": "التذييل الظاهر أسفل كل صفحة",
+      "markers": "علامات موقع قابلة للنقر",
+      "markersHint": "يرسم علامة في موقع كل فصل. عند النقر على العلامة في عارض PDF يفتح هذا الإحداثي في خرائط جوجل.",
       "startSlide": "شريحة البداية",
       "endSlide": "الشريحة الختامية",
       "generate": "إنشاء PDF",
@@ -3855,41 +4357,109 @@
       "copyPython": "نسخ Python",
       "copied": "تم النسخ",
       "clear": "مسح السجل",
-      "count_zero": "تم تسجيل {{count}} عملية تشغيل",
       "count_one": "تم تسجيل {{count}} عملية تشغيل",
+      "count_zero": "تم تسجيل {{count}} عملية تشغيل",
       "count_two": "تم تسجيل {{count}} عمليتَي تشغيل",
       "count_few": "تم تسجيل {{count}} عمليات تشغيل",
       "count_many": "تم تسجيل {{count}} عملية تشغيل",
       "count_other": "تم تسجيل {{count}} عملية تشغيل",
       "toolUnavailable": "الأداة «{{toolId}}» لم تعد متوفرة"
     },
-    "modelBuilder": {
-      "moveStepUp": "نقل الخطوة لأعلى",
-      "moveStepDown": "نقل الخطوة لأسفل",
-      "removeStep": "إزالة الخطوة",
-      "title": "الدُفعات والنماذج",
-      "description": "شغّل أداة متجهات على عدة طبقات، أو اربط الأدوات معًا في نموذج قابل لإعادة الاستخدام يُحفَظ مع مشروعك.",
-      "tabBatch": "دفعة",
-      "tabModels": "النماذج",
-      "outputPlaceholder": "سيظهر الناتج هنا.",
+    "batchTools": {
+      "title": "أدوات الدفعات",
+      "description": "تشغيل أداة متجهية واحدة على عدة طبقات دفعة واحدة.",
+      "runBatch": "تشغيل الدفعة",
       "tool": "الأداة",
       "sharedParameters": "المعاملات المشتركة",
       "noExtraParameters": "لا تحتوي هذه الأداة على معاملات إضافية.",
       "inputLayers": "طبقات الإدخال",
-      "selectAll": "تحديد الكل",
       "clearSelection": "مسح",
+      "selectAll": "تحديد الكل",
       "noCompatibleLayers": "لا توجد طبقات GeoJSON متوافقة.",
-      "newModel": "نموذج جديد",
-      "noSavedModels": "لا توجد نماذج محفوظة بعد.",
-      "untitledModel": "نموذج بلا عنوان",
+      "outputPlaceholder": "سيظهر الناتج هنا."
+    },
+    "modelBuilder": {
+      "title": "منشئ النماذج",
+      "description": "اسحب الأدوات إلى لوحة الرسم واربطها معًا في نموذج معالجة.",
       "modelName": "اسم النموذج",
-      "emptyPipelineHint": "أضف خطوة لبدء بناء سلسلة المعالجة. تقرأ الخطوة الأولى طبقة إدخال، وتتلقى كل خطوة تالية ناتج الخطوة السابقة.",
-      "addStep": "إضافة خطوة",
-      "runModel": "تشغيل النموذج",
+      "modelNamePlaceholder": "نموذج بلا عنوان",
+      "untitledModel": "نموذج بلا عنوان",
+      "newModel": "جديد",
+      "discardChanges": "هل تريد تجاهل التغييرات غير المحفوظة في النموذج الحالي؟",
+      "discardRunning": "لا يزال تشغيل النموذج جاريًا. هل تريد إيقافه والمتابعة؟",
+      "arrange": "ترتيب",
+      "arrangeHint": "ترتيب العقد على امتداد مسار التدفق",
+      "runModel": "تشغيل",
+      "cancelRun": "إلغاء",
+      "runCancelled": "تم إلغاء التشغيل.",
+      "issueMissingLayer": "اختر طبقة إدخال.",
+      "issueUnknownTool": "أداة غير معروفة «{{tool}}».",
+      "issueMissingInput": "«{{port}}» يحتاج إلى اتصال أو قيمة.",
+      "issueUnknownPort": "يشير أحد الاتصالات إلى منفذ لم يعد موجودًا.",
+      "issueDuplicateInput": "«{{port}}» لديه بالفعل اتصال وارد.",
+      "issueTypeMismatch": "هذان المنفذان يحملان أنواع بيانات مختلفة.",
+      "issueCycle": "النموذج يحتوي على حلقة مغلقة.",
+      "issueNoOutput": "أضف عقدة مخرجات للاحتفاظ بالنتيجة.",
+      "issueDuplicateNode": "عقدتان أو أكثر تشترك في المعرّف نفسه.",
+      "issueDanglingEdge": "يشير أحد الاتصالات إلى عقدة لم تعد موجودة.",
+      "outputAddFailed": "تعذّرت إضافة «{{name}}» إلى الخريطة",
+      "catalogUnavailable": "تعذّر تحميل الأدوات، لذا لا يمكن فحص النموذج أو تشغيله.",
+      "addToolNode": "إضافة {{tool}} إلى لوحة الرسم",
+      "importTooLarge": "هذا النموذج أكبر من أن يُفتح.",
+      "importModel": "استيراد",
+      "exportModel": "تصدير",
+      "copyPython": "نسخ برنامج Python النصي",
+      "pythonCopied": "تم نسخ برنامج Python النصي إلى الحافظة.",
+      "pythonCopyFailed": "تعذر نسخ برنامج Python النصي",
+      "savedModels": "النماذج المحفوظة",
+      "loadModelPlaceholder": "تحميل نموذج محفوظ...",
       "deleteModel": "حذف",
-      "inputPreviousStep": "الإدخال: → ناتج الخطوة السابقة",
-      "unknownTool": "أداة غير معروفة \"{{id}}\"",
-      "noParameters": "لا توجد معاملات."
+      "deletedLog": "تم حذف النموذج من المشروع.",
+      "searchTools": "البحث عن الأدوات",
+      "loadingTools": "جارٍ تحميل الأدوات...",
+      "noToolsMatch": "لا توجد أدوات تطابق بحثك.",
+      "addInputNode": "+ مدخل",
+      "addOutputNode": "+ مخرج",
+      "canvasEmpty": "اسحب أداة من لوحة الأدوات لبدء البناء.",
+      "inputNode": "مدخل",
+      "outputNode": "مخرج",
+      "inputPort": "مدخل: {{port}}",
+      "outputPort": "مخرج: {{port}}",
+      "removeConnection": "إزالة الاتصال",
+      "removeNode": "إزالة العقدة",
+      "resizePanel": "تغيير حجم اللوحة",
+      "minimizePanel": "تصغير اللوحة",
+      "restorePanel": "استعادة اللوحة",
+      "resizePalette": "تغيير حجم لوحة الأدوات",
+      "resizeInspector": "تغيير حجم لوحة الخصائص",
+      "resizeLog": "تغيير حجم سجل الرسائل",
+      "selectNodeHint": "اختر عقدة لتحرير إعداداتها.",
+      "sourceLayer": "طبقة المصدر",
+      "chooseLayer": "اختر طبقة...",
+      "resultName": "اسم النتيجة",
+      "resultNamePlaceholder": "مخرج النموذج",
+      "noParameters": "لا توجد معاملات.",
+      "keepResultHint": "احتفظ بنتيجة وسيطة بإضافة مخرج لها.",
+      "keepResultSingle": "الاحتفاظ بهذه النتيجة",
+      "resultKeptSingle": "هذه النتيجة محفوظة",
+      "keepResult": "الاحتفاظ بـ«{{port}}»",
+      "resultKept": "«{{port}}» محفوظ",
+      "outputPlaceholder": "تظهر الرسائل هنا.",
+      "connectCycle": "هذا الاتصال سينشئ حلقة مغلقة.",
+      "connectSameNode": "لا يمكن ربط العقدة بنفسها.",
+      "fixIssuesFirst": "أصلح المشكلات المذكورة قبل التشغيل.",
+      "runFailed": "فشل التشغيل",
+      "runFinished": "انتهى التشغيل — تمت إضافة {{outputs}} مخرج.",
+      "savedLog": "تم حفظ النموذج في المشروع.",
+      "exportedLog": "تم تصدير {{name}}",
+      "importedLog": "تم استيراد نموذج يحتوي على {{nodes}} عقدة.",
+      "importFailed": "فشل الاستيراد",
+      "importInvalid": "هذا الملف لا يحتوي على مخطط نموذج.",
+      "importUnsupported": "هذا الملف ليس نموذج GeoLibre.",
+      "rasterOutputUnsupported": "«{{name}}» نتيجة راستر لا يمكن لهذه النسخة إضافتها إلى الخريطة.",
+      "portNeedsVector": "«{{port}}» يحتاج إلى بيانات متجهة، لكن وصلت بيانات راستر.",
+      "toolNoOutput": "«{{tool}}» لم تُنتج أي مخرجات.",
+      "toolNoUsableOutput": "«{{tool}}» لم تُنتج مخرجات قابلة للاستخدام."
     },
     "parameterField": {
       "selectLayer": "حدد طبقة...",
@@ -3921,8 +4491,8 @@
       "whiteboxTools": "أدوات Whitebox",
       "toolbox": "صندوق أدوات Whitebox",
       "checkingRuntime": "جارٍ التحقق من بيئة التشغيل.",
-      "toolsAvailable_zero": "{{count}} من الأدوات متاحة.",
       "toolsAvailable_one": "{{count}} أداة متاحة.",
+      "toolsAvailable_zero": "{{count}} من الأدوات متاحة.",
       "toolsAvailable_two": "{{count}} من الأدوات متاحة.",
       "toolsAvailable_few": "{{count}} أدوات متاحة.",
       "toolsAvailable_many": "{{count}} أداةً متاحة.",
@@ -4005,6 +4575,1438 @@
       "run": "تشغيل",
       "outputPlaceholder": "سيظهر الناتج هنا.",
       "resolutionRange": "الدقة (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "نطاق عازل",
+          "description": "إنشاء مضلع نطاق عازل حول كل معلم بمسافة ثابتة",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "distance": {
+              "label": "المسافة"
+            },
+            "units": {
+              "label": "الوحدات",
+              "options": {
+                "kilometers": "كيلومترات",
+                "meters": "أمتار",
+                "miles": "أميال"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "المراكز الهندسية",
+          "description": "حساب نقطة المركز الهندسي لكل معلم",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "الغلاف المحدب",
+          "description": "حساب الغلاف المحدب الذي يحيط بجميع المعالم",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "إذابة",
+          "description": "دمج معالم المضلعات في شكل هندسي واحد، مع إمكانية التجميع حسب حقل",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "field": {
+              "label": "حقل الإذابة (اختياري)",
+              "description": "اسم الخاصية التي تُجمَّع المعالم بحسبها قبل الإذابة"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "الصندوق المحيط",
+          "description": "حساب الغلاف المستطيل لجميع المعالم",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "simplify": {
+          "name": "تبسيط",
+          "description": "تقليل عدد الرؤوس باستخدام خوارزمية دوغلاس-بيوكر",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "tolerance": {
+              "label": "التسامح (درجات)"
+            },
+            "highQuality": {
+              "label": "جودة عالية"
+            }
+          }
+        },
+        "clip": {
+          "name": "قص",
+          "description": "قص طبقة الإدخال إلى المنطقة التي تغطيها طبقة التراكب (مع الاحتفاظ بسمات الإدخال)",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "overlay": {
+              "label": "طبقة التراكب (القص)"
+            }
+          }
+        },
+        "intersection": {
+          "name": "تقاطع",
+          "description": "الاحتفاظ فقط بالمناطق التي تتداخل فيها طبقتا المضلعات",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "overlay": {
+              "label": "طبقة التراكب"
+            }
+          }
+        },
+        "difference": {
+          "name": "فرق",
+          "description": "إزالة مساحة طبقة التراكب من طبقة الإدخال",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "overlay": {
+              "label": "طبقة التراكب"
+            }
+          }
+        },
+        "union": {
+          "name": "اتحاد",
+          "description": "دمج طبقتي مضلعات في شكل هندسي مركّب واحد",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "overlay": {
+              "label": "طبقة التراكب"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "ربط مكاني",
+          "description": "إلحاق سمات من طبقة ربط بكل معلم إدخال بناءً على علاقة مكانية",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "overlay": {
+              "label": "طبقة الربط"
+            },
+            "predicate": {
+              "label": "العلاقة المكانية",
+              "options": {
+                "intersects": "يتقاطع مع",
+                "within": "داخل",
+                "contains": "يحتوي"
+              }
+            },
+            "how": {
+              "label": "نوع الربط",
+              "options": {
+                "inner": "داخلي (الاحتفاظ بالمعالم المتطابقة فقط)",
+                "left": "يساري (الاحتفاظ بجميع معالم الإدخال)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "ربط بالسمات",
+          "description": "إلحاق سمات من طبقة ربط (جدول) بكل معلم إدخال حيثما يتطابق حقل مفتاح، دون استخدام الشكل الهندسي. واحد إلى واحد: يُعتمد أول صف ربط متطابق.",
+          "params": {
+            "layer": {
+              "label": "الطبقة الهدف"
+            },
+            "overlay": {
+              "label": "طبقة الربط (جدول)",
+              "description": "الطبقة التي تُنقل سماتها. يُتجاهل شكلها الهندسي."
+            },
+            "target_field": {
+              "label": "حقل المفتاح الهدف"
+            },
+            "join_field": {
+              "label": "حقل مفتاح الربط"
+            },
+            "how": {
+              "label": "نوع الربط",
+              "options": {
+                "left": "يساري (الاحتفاظ بجميع معالم الهدف)",
+                "inner": "داخلي (الاحتفاظ بالمعالم المتطابقة فقط)"
+              }
+            },
+            "fields": {
+              "label": "الحقول المراد نقلها (اختياري)",
+              "description": "حقول الربط المراد نسخها مفصولة بفواصل. اتركه فارغًا لنقل جميع حقول الربط عدا المفتاح."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "تحديد حسب القيمة",
+          "description": "استخراج المعالم التي تطابق قيمة سمتها شرطًا ما إلى طبقة جديدة",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "field": {
+              "label": "الحقل"
+            },
+            "operator": {
+              "label": "المعامل",
+              "options": {
+                "eq": "= (يساوي)",
+                "neq": "≠ (لا يساوي)",
+                "gt": "> (أكبر من)",
+                "gte": "≥ (أكبر من أو يساوي)",
+                "lt": "< (أصغر من)",
+                "lte": "≤ (أصغر من أو يساوي)",
+                "contains": "يحتوي على (نص)",
+                "starts-with": "يبدأ بـ (نص)",
+                "is-null": "فارغ",
+                "is-not-null": "غير فارغ"
+              }
+            },
+            "value": {
+              "label": "القيمة",
+              "description": "تُقارَن كرقم عندما يكون الطرفان رقميين."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "تحديد حسب الموقع",
+          "description": "استخراج المعالم حسب علاقتها المكانية بطبقة ثانية إلى طبقة جديدة",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "overlay": {
+              "label": "طبقة التصفية"
+            },
+            "predicate": {
+              "label": "العلاقة المكانية",
+              "options": {
+                "intersects": "يتقاطع مع",
+                "within": "داخل",
+                "contains": "يحتوي",
+                "disjoint": "منفصل (بلا تقاطع)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "استخراج عشوائي",
+          "description": "استخراج مجموعة فرعية عشوائية من المعالم إلى طبقة جديدة، يُحدَّد حجمها بعدد المعالم أو بنسبة مئوية من الإدخال.",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "method": {
+              "label": "الطريقة",
+              "options": {
+                "count": "عدد المعالم",
+                "percentage": "نسبة مئوية من المعالم"
+              }
+            },
+            "count": {
+              "label": "عدد المعالم",
+              "description": "يُقيَّد بعدد معالم الإدخال إذا كان أكبر منه."
+            },
+            "percentage": {
+              "label": "نسبة مئوية من المعالم"
+            }
+          }
+        },
+        "reproject": {
+          "name": "إعادة إسقاط",
+          "description": "إعادة تفسير إحداثيات طبقة على أنها بنظام إسناد إحداثي مصدر وتحويلها إلى WGS84 لتُعرض في موقعها الصحيح. يتطلب محرك الخدمة المساعدة أو محرك Python.",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "source_crs": {
+              "label": "نظام الإسناد الإحداثي المصدر",
+              "description": "نظام الإسناد الإحداثي الحقيقي لإحداثيات الطبقة (مثل EPSG:3857). تُحوَّل النتيجة إلى WGS84 ‏(EPSG:4326)."
+            }
+          }
+        },
+        "explode": {
+          "name": "تفكيك",
+          "description": "تقسيم الأشكال الهندسية متعددة الأجزاء إلى معالم أحادية الجزء (معلم لكل جزء)، مع الاحتفاظ بسمات كل معلم أصلي",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "تجميع حسب السمة",
+          "description": "إذابة المعالم التي تشترك في قيمة سمة إلى شكل هندسي واحد لكل مجموعة، مع إحصاء تلخيصي",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "group_field": {
+              "label": "حقل التجميع"
+            },
+            "statistic": {
+              "label": "الإحصاء",
+              "options": {
+                "count": "العدد",
+                "sum": "المجموع",
+                "mean": "المتوسط",
+                "min": "الحد الأدنى",
+                "max": "الحد الأقصى",
+                "median": "الوسيط"
+              }
+            },
+            "stat_field": {
+              "label": "حقل الإحصاء",
+              "description": "الحقل الرقمي الذي يُلخَّص بالإحصاء أعلاه."
+            }
+          }
+        },
+        "smooth": {
+          "name": "تنعيم",
+          "description": "تدوير زوايا المعالم الخطية والمضلعية بخوارزمية Chaikin (تضيف رؤوسًا)، بخلاف أداة التبسيط التي تقلل الرؤوس. يُحتفظ بقيم Z/الارتفاع؛ وتمر النقاط دون تغيير.",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "iterations": {
+              "label": "التكرارات",
+              "description": "كلما زادت التكرارات كانت النتيجة أنعم (1-10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "شبكة منتظمة",
+          "description": "توليد شبكة مستطيلة منتظمة (شبكة صيد) من الخلايا فوق مدى ما. المصدر: عرض الخريطة الحالي، أو مدى طبقة، أو صندوق محيط يدوي.",
+          "params": {
+            "source": {
+              "label": "مصدر المدى",
+              "options": {
+                "viewport": "نافذة عرض الخريطة",
+                "layer": "مدى الطبقة",
+                "bbox": "صندوق محيط يدوي"
+              }
+            },
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "west": {
+              "label": "الغرب (أدنى خط طول)"
+            },
+            "south": {
+              "label": "الجنوب (أدنى خط عرض)"
+            },
+            "east": {
+              "label": "الشرق (أقصى خط طول)"
+            },
+            "north": {
+              "label": "الشمال (أقصى خط عرض)"
+            },
+            "cell_width": {
+              "label": "عرض الخلية (درجات)"
+            },
+            "cell_height": {
+              "label": "ارتفاع الخلية (درجات)",
+              "description": "اتركه فارغًا ليطابق عرض الخلية."
+            },
+            "cell_type": {
+              "label": "نوع الخلية",
+              "options": {
+                "polygon": "مستطيلات",
+                "point": "نقاط (مراكز الخلايا)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "بناء مخطط Voronoi (مضلع واحد لكل نقطة، مقصوص إلى مدى النقاط) أو تثليث Delaunay من طبقة نقاط.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط المدخلة"
+            },
+            "type": {
+              "label": "المخطط",
+              "options": {
+                "voronoi": "مضلعات Voronoi",
+                "delaunay": "مثلثات Delaunay"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "تغطية المواقع الخلوية",
+          "description": "بناء مضلعات قطاعات/أوتاد الهوائيات من مواقع نقطية باستخدام السمت ونصف القطر وعرض الحزمة (تُقرأ من حقول السمات أو من قيم ثابتة). يُقيَّد عرض الحزمة عند 360° (دائرة كاملة)؛ ويعكس عرض الحزمة المسجَّل القيمة المقيَّدة. مفيد لتغطية أبراج الاتصالات الخلوية، على غرار QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط المدخلة"
+            },
+            "azimuthField": {
+              "label": "حقل السمت (°)",
+              "description": "الاتجاه الذي يواجهه القطاع، بالدرجات في اتجاه عقارب الساعة من الشمال. يُستخدم السمت الثابت عندما يكون فارغًا أو غير رقمي."
+            },
+            "azimuth": {
+              "label": "السمت (ثابت، °)"
+            },
+            "radiusField": {
+              "label": "حقل نصف القطر",
+              "description": "نصف قطر التغطية. يُستخدم نصف القطر الثابت عندما يكون فارغًا أو غير رقمي."
+            },
+            "radius": {
+              "label": "نصف القطر (ثابت)"
+            },
+            "beamwidthField": {
+              "label": "حقل عرض الحزمة (°)",
+              "description": "العرض الزاوي للقطاع، مقيَّد عند 360° (دائرة كاملة). يُستخدم عرض الحزمة الثابت عندما يكون فارغًا أو غير رقمي."
+            },
+            "beamwidth": {
+              "label": "عرض الحزمة (ثابت، °)"
+            },
+            "units": {
+              "label": "وحدات نصف القطر",
+              "options": {
+                "kilometers": "كيلومترات",
+                "meters": "أمتار",
+                "miles": "أميال"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "مولّد DGGS",
+          "description": "ملء منطقة بخلايا DGGS ‏(H3 وS2 وA5 وDGGRID وDGGAL). المصدر: الشكل الهندسي لطبقة، أو مدى طبقة، أو عرض الخريطة الحالي، أو صندوق محيط يدوي.",
+          "params": {
+            "dggsType": {
+              "label": "نوع DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "نوع DGGRID",
+              "description": "إعداد الشبكة المُمرَّر إلى duck_dggs بوصفه dggs_params ‏(ISEA/FULLER × الفتحة × الطوبولوجيا).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "نوع DGGAL",
+              "description": "نظام DGGRS المُمرَّر إلى dggal.createDGGRS ‏(ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "مصدر المنطقة",
+              "options": {
+                "polyfill": "الشكل الهندسي للطبقة (ملء المضلعات)",
+                "extent": "مدى الطبقة (الصندوق المحيط)",
+                "viewport": "نافذة عرض الخريطة",
+                "bbox": "صندوق محيط يدوي"
+              }
+            },
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "west": {
+              "label": "الغرب (أدنى خط طول)"
+            },
+            "south": {
+              "label": "الجنوب (أدنى خط عرض)"
+            },
+            "east": {
+              "label": "الشرق (أقصى خط طول)"
+            },
+            "north": {
+              "label": "الشمال (أقصى خط عرض)"
+            },
+            "resolution": {
+              "label": "الدقة",
+              "description": "يعتمد النطاق على نوع DGGS. اتركه فارغًا للاختيار التلقائي بناءً على المساحة."
+            },
+            "compactCells": {
+              "label": "ضغط الخلايا",
+              "description": "دمج المجموعات الكاملة من الخلايا الشقيقة في خلايا أصلية أخشن (معالم أقل، ودقات مختلطة)."
+            },
+            "fixAntimeridian": {
+              "label": "إصلاح خط الزوال المقابل",
+              "description": "فكّ حلقات الخلايا التي تعبر خط الطول ±180°."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "تجميع DGGS",
+          "description": "تجميع طبقة نقاط في خلايا DGGS (العدد، أو المجموع/المتوسط/الحد الأدنى/الحد الأقصى لحقل رقمي).",
+          "params": {
+            "dggsType": {
+              "label": "نوع DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "نوع DGGRID",
+              "description": "إعداد الشبكة المُمرَّر إلى duck_dggs بوصفه dggs_params ‏(ISEA/FULLER × الفتحة × الطوبولوجيا).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "نوع DGGAL",
+              "description": "نظام DGGRS المُمرَّر إلى dggal.createDGGRS ‏(ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "طبقة النقاط المدخلة"
+            },
+            "aggOp": {
+              "label": "التجميع",
+              "options": {
+                "count": "العدد",
+                "sum": "المجموع",
+                "mean": "المتوسط",
+                "min": "الحد الأدنى",
+                "max": "الحد الأقصى"
+              }
+            },
+            "field": {
+              "label": "الحقل",
+              "description": "الحقل الرقمي المراد تجميعه."
+            },
+            "resolution": {
+              "label": "الدقة",
+              "description": "يعتمد النطاق على نوع DGGS. اتركه فارغًا للاختيار التلقائي بناءً على المساحة."
+            },
+            "fixAntimeridian": {
+              "label": "إصلاح خط الزوال المقابل",
+              "description": "فكّ حلقات الخلايا التي تعبر خط الطول ±180°."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "ضغط DGGS",
+          "description": "ضغط خلايا مضلعات DGGS، أو توسيعها إلى دقة موحدة (H3 وS2 وA5 وDGGAL). يجب أن يكون الإدخال طبقة خلايا تحمل خاصية معرّف.",
+          "params": {
+            "dggsType": {
+              "label": "نوع DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "نوع DGGAL",
+              "description": "نظام DGGRS المُمرَّر إلى dggal.createDGGRS ‏(ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "الوضع",
+              "options": {
+                "compact": "ضغط",
+                "expand": "توسيع"
+              }
+            },
+            "layer": {
+              "label": "طبقة DGGS المدخلة",
+              "description": "طبقة خلايا مضلعية من مولّد DGGS / تجميع DGGS (أو ما يكافئها)."
+            },
+            "cellField": {
+              "label": "حقل معرّف الخلية",
+              "description": "الافتراضي h3 أو a5 أو s2 أو dggal بحسب النوع المحدد عند تركه فارغًا."
+            },
+            "resolution": {
+              "label": "الدقة الهدف",
+              "description": "الدقة المراد التوسيع إليها. يجب ألا تقل دقتها عن دقة خلايا الإدخال."
+            },
+            "fixAntimeridian": {
+              "label": "إصلاح خط الزوال المقابل",
+              "description": "فكّ حلقات الخلايا التي تعبر خط الطول ±180°."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "سرعة مسار الحركة",
+          "description": "ترتيب النقاط حسب الوقت (لكل هدف) وربط الرصدات المتتالية في مقاطع تحمل المسافة والمدة والسرعة. على غرار QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط المدخلة"
+            },
+            "timeField": {
+              "label": "حقل الوقت",
+              "description": "الطابع الزمني لكل رصدة: سلسلة تاريخ/وقت بصيغة ISO أو زمن Epoch (بالثواني أو الميلي ثانية)."
+            },
+            "idField": {
+              "label": "حقل معرّف الهدف",
+              "description": "يقسم النقاط إلى مسارات منفصلة. اتركه فارغًا لمعاملة جميع النقاط كهدف واحد."
+            },
+            "speedUnits": {
+              "label": "وحدات السرعة",
+              "options": {
+                "km/h": "كم/س",
+                "m/s": "م/ث",
+                "mph": "ميل/س"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "اكتشاف التوقفات",
+          "description": "العثور على الأماكن التي يمكث فيها هدف: سلاسل من الرصدات المتتالية تبقى ضمن مسافة معينة (مع استيعاب تشتت GPS) لمدة لا تقل عن حد أدنى. يُخرج نقطة واحدة لكل توقف. على غرار QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط المدخلة"
+            },
+            "timeField": {
+              "label": "حقل الوقت",
+              "description": "الطابع الزمني لكل رصدة: سلسلة تاريخ/وقت بصيغة ISO أو زمن Epoch (بالثواني أو الميلي ثانية)."
+            },
+            "idField": {
+              "label": "حقل معرّف الهدف",
+              "description": "يكتشف التوقفات لكل هدف. اتركه فارغًا لمعاملة جميع النقاط كهدف واحد."
+            },
+            "maxDistance": {
+              "label": "المسافة القصوى",
+              "description": "يجب أن تقع كل رصدة في التوقف ضمن هذه المسافة من أول رصدة فيه (لذا قد يمتد التوقف حتى ضعف هذه القيمة). اضبطها على نصف قطر تشتت GPS لديك."
+            },
+            "distanceUnits": {
+              "label": "وحدات المسافة",
+              "options": {
+                "meters": "أمتار",
+                "kilometers": "كيلومترات",
+                "miles": "أميال"
+              }
+            },
+            "minDuration": {
+              "label": "الحد الأدنى للمدة (ث)",
+              "description": "لا يُبلَّغ عن مكوث أقصر من هذا كتوقف."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "التقارب الزماني المكاني",
+          "description": "العثور على أزواج النقاط المتقاربة في المكان والزمان معًا، مثل التقاء هدفين. يُخرج خطًا يصل كل زوج مؤهل، يحمل المسافة والفارق الزمني.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط المدخلة"
+            },
+            "timeField": {
+              "label": "حقل الوقت",
+              "description": "الطابع الزمني لكل نقطة: سلسلة تاريخ/وقت بصيغة ISO أو زمن Epoch (بالثواني أو الميلي ثانية)."
+            },
+            "idField": {
+              "label": "حقل معرّف الهدف",
+              "description": "عند تعيينه، تُقرن فقط النقاط ذات قيم المعرّف المختلفة (لقاءات بين أهداف متمايزة). اتركه فارغًا للنظر في كل الأزواج."
+            },
+            "maxDistance": {
+              "label": "المسافة القصوى"
+            },
+            "distanceUnits": {
+              "label": "وحدات المسافة",
+              "options": {
+                "meters": "أمتار",
+                "kilometers": "كيلومترات",
+                "miles": "أميال"
+              }
+            },
+            "maxTime": {
+              "label": "الفارق الزمني الأقصى"
+            },
+            "timeUnits": {
+              "label": "وحدات الوقت",
+              "options": {
+                "seconds": "ثوانٍ",
+                "minutes": "دقائق",
+                "hours": "ساعات"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "التحقق من الصحة",
+          "description": "العثور على المعالم ذات الأشكال الهندسية غير الصالحة (قواعد GEOS: حلقات متقاطعة ذاتيًا، وثقوب خارج الأغلفة، ...) وتمييزها على الخريطة",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "إصلاح الأشكال الهندسية",
+          "description": "إصلاح الأشكال الهندسية غير الصالحة باستخدام ST_MakeValid ‏(GEOS)؛ وتمر المعالم الصالحة دون تغيير",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "التحقق من قواعد الطوبولوجيا",
+          "description": "التحقق من الطبقة وفق قواعد الطوبولوجيا (التداخلات، والفجوات، والتقاطعات الذاتية، والأطراف المتدلية) وتمييز كل مخالفة على الخريطة",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "ruleSelfIntersect": {
+              "label": "يجب ألا تتقاطع الخطوط ذاتيًا"
+            },
+            "ruleOverlap": {
+              "label": "يجب ألا تتداخل المضلعات"
+            },
+            "ruleGaps": {
+              "label": "يجب ألا تحتوي المضلعات على فجوات"
+            },
+            "ruleDangles": {
+              "label": "يجب ألا تحتوي الخطوط على أطراف متدلية"
+            },
+            "rulePointCovered": {
+              "label": "يجب أن تكون النقاط مغطاة بخط"
+            },
+            "ruleEndpointSnap": {
+              "label": "يجب أن تتصل نهايات الخطوط ضمن التسامح"
+            },
+            "snapTolerance": {
+              "label": "تسامح الالتقاط",
+              "description": "لقاعدة نقاط النهاية: المسافة القصوى (بوحدات إحداثيات الطبقة، أي الدرجات في WGS84) التي يمكن أن تفصل بين نهايتي خطين وتُعدّان متصلتين."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "إصلاح الطوبولوجيا",
+          "description": "إصلاح مخالفات الطوبولوجيا تلقائيًا: التقاط نهايات الخطوط شبه المتصلة، وإصلاح الأطراف المتدلية، وإسقاط النقاط على الخطوط. تُترك النهايات الحرة التي لا يوجد شيء بقربها دون تغيير.",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "ruleEndpointSnap": {
+              "label": "التقاط نهايات الخطوط شبه المتصلة"
+            },
+            "ruleDangles": {
+              "label": "إصلاح الأطراف المتدلية (التقاط أو إسقاط على الشكل الهندسي المجاور)"
+            },
+            "rulePointCovered": {
+              "label": "إسقاط النقاط على أقرب خط"
+            },
+            "snapTolerance": {
+              "label": "تسامح الالتقاط",
+              "description": "المسافة (بوحدات إحداثيات الطبقة، أي الدرجات في WGS84) التي يمكن أن يتحركها الشكل الهندسي للاتصال."
+            },
+            "dryRun": {
+              "label": "معاينة فقط (تشغيل تجريبي)",
+              "description": "الإبلاغ عن الإصلاحات التي ستُطبَّق دون إنشاء طبقة مُصلَحة."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "خطوط تساوي الزمن / منطقة الخدمة",
+          "description": "مضلعات إمكانية الوصول حسب زمن التنقل أو مسافته من كل نقطة في طبقة",
+          "params": {
+            "layer": {
+              "label": "نقاط المنشأ"
+            },
+            "mode": {
+              "label": "وسيلة التنقل",
+              "options": {
+                "auto": "القيادة",
+                "pedestrian": "المشي",
+                "bicycle": "ركوب الدراجة"
+              }
+            },
+            "metric": {
+              "label": "المقياس",
+              "options": {
+                "time": "زمن التنقل (دقائق)",
+                "distance": "المسافة (كم)"
+              }
+            },
+            "contours": {
+              "label": "الخطوط الكنتورية",
+              "description": "قيم مفصولة بفواصل (دقائق للزمن، وكيلومترات للمسافة)"
+            },
+            "endpoint": {
+              "label": "خادم التوجيه (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "مصفوفة تكلفة المنشأ والوجهة (OD)",
+          "description": "زمن التنقل ومسافته بين كل نقطة منشأ وكل نقطة وجهة، على شكل خطوط واصلة",
+          "params": {
+            "origins": {
+              "label": "نقاط المنشأ"
+            },
+            "destinations": {
+              "label": "نقاط الوجهة"
+            },
+            "mode": {
+              "label": "وسيلة التنقل",
+              "options": {
+                "auto": "القيادة",
+                "pedestrian": "المشي",
+                "bicycle": "ركوب الدراجة"
+              }
+            },
+            "endpoint": {
+              "label": "خادم التوجيه (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "مسار تسلسلي (اتجاهات)",
+          "description": "ربط النقاط بالتسلسل على امتداد شبكة الطرق في مسار واحد. تُلتقط كل نقطة إلى أقرب طريق، لذا تعمل الإحداثيات الواقعة خارج الطرق (المواقع الخلوية، والمستشعرات) أيضًا. يتبع الترتيب الحقل المختار (مثل طابع زمني) أو ترتيب معالم الطبقة.",
+          "params": {
+            "layer": {
+              "label": "النقاط المدخلة"
+            },
+            "order_field": {
+              "label": "الترتيب حسب الحقل (اختياري)",
+              "description": "فرز النقاط حسب هذا الحقل (أرقام أو طوابع زمنية) قبل التوجيه. اتركه فارغًا لاستخدام ترتيب معالم الطبقة."
+            },
+            "mode": {
+              "label": "وسيلة التنقل",
+              "options": {
+                "auto": "القيادة",
+                "pedestrian": "المشي",
+                "bicycle": "ركوب الدراجة"
+              }
+            },
+            "endpoint": {
+              "label": "خادم التوجيه (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "مؤشر موران العام",
+          "description": "قياس الارتباط الذاتي المكاني الإجمالي لسمة رقمية عبر الطبقة كاملة.",
+          "params": {
+            "layer": {
+              "label": "الطبقة"
+            },
+            "field": {
+              "label": "حقل القيمة"
+            },
+            "weightsType": {
+              "label": "الأوزان المكانية",
+              "description": "طريقة تحديد الجيران لكل معلم.",
+              "options": {
+                "knn": "أقرب k من الجيران",
+                "distance": "نطاق المسافة"
+              }
+            },
+            "k": {
+              "label": "الجيران (k)"
+            },
+            "threshold": {
+              "label": "نطاق المسافة (كم)"
+            },
+            "permutations": {
+              "label": "التباديل",
+              "description": "عدد التباديل العشوائية لحساب القيمة الاحتمالية الزائفة (pseudo p-value)."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "مؤشر موران المحلي (LISA)",
+          "description": "العناقيد والقيم الشاذة لكل معلم (مرتفع-مرتفع، منخفض-منخفض، مرتفع-منخفض، منخفض-مرتفع) مع دلالة زائفة.",
+          "params": {
+            "layer": {
+              "label": "الطبقة"
+            },
+            "field": {
+              "label": "حقل القيمة"
+            },
+            "weightsType": {
+              "label": "الأوزان المكانية",
+              "description": "طريقة تحديد الجيران لكل معلم.",
+              "options": {
+                "knn": "أقرب k من الجيران",
+                "distance": "نطاق المسافة"
+              }
+            },
+            "k": {
+              "label": "الجيران (k)"
+            },
+            "threshold": {
+              "label": "نطاق المسافة (كم)"
+            },
+            "permutations": {
+              "label": "التباديل",
+              "description": "عدد التباديل العشوائية لحساب القيمة الاحتمالية الزائفة (pseudo p-value)."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "النقاط الساخنة (Getis-Ord Gi*)",
+          "description": "تحديد النقاط الساخنة والباردة ذات الدلالة الإحصائية لسمة رقمية.",
+          "params": {
+            "layer": {
+              "label": "الطبقة"
+            },
+            "field": {
+              "label": "حقل القيمة"
+            },
+            "weightsType": {
+              "label": "الأوزان المكانية",
+              "description": "طريقة تحديد الجيران لكل معلم.",
+              "options": {
+                "knn": "أقرب k من الجيران",
+                "distance": "نطاق المسافة"
+              }
+            },
+            "k": {
+              "label": "الجيران (k)"
+            },
+            "threshold": {
+              "label": "نطاق المسافة (كم)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "متوسط أقرب جار",
+          "description": "اختبار ما إذا كانت النقاط متعنقدة أو متشتتة أو موزعة عشوائيًا (نسبة ANN + الدرجة المعيارية z).",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "كثافة النواة (خريطة حرارية)",
+          "description": "تقدير سطح كثافة من النقاط على شكل شبكة خلايا باستخدام نواة رباعية.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط"
+            },
+            "weightField": {
+              "label": "حقل الوزن (اختياري)",
+              "description": "حقل رقمي يوزن كل نقطة؛ فارغ = أوزان متساوية."
+            },
+            "bandwidth": {
+              "label": "نصف قطر البحث / عرض النطاق (كم)"
+            },
+            "cellSize": {
+              "label": "حجم الخلية (كم)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "النقاط الساخنة الناشئة (مكعب مكاني-زمني)",
+          "description": "بناء مكعب مكاني-زمني من نقاط ذات طوابع زمنية (شبكة صيد × خطوات زمنية متساوية) وتصنيف كل خلية كنقطة ساخنة/باردة جديدة، أو متزايدة، أو مستمرة، أو متناقصة، أو متقطعة، أو متذبذبة، أو تاريخية. يُشغَّل Getis-Ord Gi* لكل شريحة زمنية، ثم اختبار اتجاه Mann-Kendall على سلسلة Gi* لكل خلية. يعمل على جانب العميل، على غرار تحليل النقاط الساخنة الناشئة في ArcGIS.",
+          "params": {
+            "layer": {
+              "label": "طبقة النقاط"
+            },
+            "timeField": {
+              "label": "حقل الوقت",
+              "description": "الطابع الزمني لكل نقطة: سلسلة تاريخ/وقت بصيغة ISO أو زمن Epoch (بالثواني أو الميلي ثانية)."
+            },
+            "cellSize": {
+              "label": "حجم الخلية (كم)",
+              "description": "طول ضلع كل خلية مكانية مربعة، بالكيلومترات."
+            },
+            "timeStep": {
+              "label": "فاصل الخطوة الزمنية"
+            },
+            "timeStepUnit": {
+              "label": "وحدة الخطوة الزمنية",
+              "options": {
+                "hours": "ساعات",
+                "days": "أيام",
+                "weeks": "أسابيع"
+              }
+            },
+            "weightField": {
+              "label": "حقل الوزن (اختياري)",
+              "description": "حقل رقمي يُجمع لكل خلية مكانية-زمنية بدلًا من عدّ النقاط؛ فارغ = عدّ النقاط."
+            },
+            "confidence": {
+              "label": "مستوى الثقة",
+              "description": "عتبة الدلالة لاعتبار الخلية نقطة ساخنة/باردة وللاتجاه.",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "التظليل التضاريسي",
+          "description": "حساب بيانات نقطية للتظليل التضاريسي (الظل المجسم) من نموذج ارتفاعات.",
+          "params": {
+            "azimuth": {
+              "label": "السمت (درجات)"
+            },
+            "altitude": {
+              "label": "زاوية الارتفاع (درجات)"
+            },
+            "z_factor": {
+              "label": "معامل Z"
+            }
+          }
+        },
+        "slope": {
+          "name": "الانحدار",
+          "description": "حساب الانحدار (درجة الميل) من نموذج ارتفاعات.",
+          "params": {
+            "units": {
+              "label": "الوحدات",
+              "options": {
+                "degrees": "درجات",
+                "percent": "نسبة مئوية"
+              }
+            },
+            "z_factor": {
+              "label": "معامل Z"
+            }
+          }
+        },
+        "aspect": {
+          "name": "اتجاه الانحدار",
+          "description": "حساب الاتجاه القبلي (اتجاه البوصلة لأشد انحدار) من نموذج ارتفاعات."
+        },
+        "reproject": {
+          "name": "إعادة إسقاط",
+          "description": "تحويل بيانات نقطية إلى نظام إسناد إحداثي مختلف.",
+          "params": {
+            "dst_crs": {
+              "label": "نظام الإسناد الإحداثي الهدف",
+              "description": "رمز جهة معتمدة مثل EPSG:3857 أو EPSG:4326."
+            },
+            "resampling": {
+              "label": "إعادة أخذ العينات",
+              "options": {
+                "nearest": "أقرب جار",
+                "bilinear": "ثنائي الخطية",
+                "cubic": "تكعيبي"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "إعادة أخذ العينات",
+          "description": "إعادة أخذ عينات بيانات نقطية إلى حجم بكسل (دقة) مختلف.",
+          "params": {
+            "resolution": {
+              "label": "حجم البكسل الهدف",
+              "description": "حجم بكسل المخرجات بوحدات نظام الإسناد الإحداثي للبيانات النقطية."
+            },
+            "resampling": {
+              "label": "إعادة أخذ العينات",
+              "options": {
+                "nearest": "أقرب جار",
+                "bilinear": "ثنائي الخطية",
+                "cubic": "تكعيبي"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "قص حسب المدى",
+          "description": "اقتطاع بيانات نقطية إلى صندوق محيط (بنظام الإسناد الإحداثي للبيانات النقطية).",
+          "params": {
+            "minx": {
+              "label": "أدنى X"
+            },
+            "miny": {
+              "label": "أدنى Y"
+            },
+            "maxx": {
+              "label": "أقصى X"
+            },
+            "maxy": {
+              "label": "أقصى Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "قص حسب طبقة القناع",
+          "description": "قص بيانات نقطية إلى الأشكال الهندسية لملف قناع متجه.",
+          "params": {
+            "mask_path": {
+              "label": "طبقة القناع",
+              "description": "ملف GeoJSON تحدد أشكاله الهندسية منطقة القص. يُعاد إسقاطه تلقائيًا إلى نظام الإسناد الإحداثي للبيانات النقطية (يُفترض أن ملف GeoJSON بلا نظام إسناد إحداثي هو WGS84)."
+            },
+            "crop": {
+              "label": "اقتطاع إلى مدى القناع"
+            },
+            "all_touched": {
+              "label": "تضمين جميع البكسلات الملامسة"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "تحويل إلى مضلعات",
+          "description": "تحويل نطاق بيانات نقطية إلى مضلعات متجهة مجمّعة حسب قيمة البكسل.",
+          "params": {
+            "band": {
+              "label": "النطاق"
+            },
+            "connectivity": {
+              "label": "الاتصالية",
+              "options": {
+                "4": "اتصال رباعي",
+                "8": "اتصال ثماني"
+              }
+            },
+            "field": {
+              "label": "اسم حقل القيمة"
+            }
+          }
+        },
+        "contour": {
+          "name": "خطوط الكنتور",
+          "description": "توليد خطوط كنتور من نموذج ارتفاعات.",
+          "params": {
+            "band": {
+              "label": "النطاق"
+            },
+            "interval": {
+              "label": "الفاصل",
+              "description": "فرق الارتفاع بين خطوط الكنتور المتتالية."
+            },
+            "base": {
+              "label": "الأساس"
+            },
+            "attribute": {
+              "label": "اسم حقل الارتفاع"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "الاستيفاء (IDW / Kriging)",
+          "description": "استيفاء سمة رقمية لطبقة نقاط إلى سطح بيانات نقطية متصل باستخدام الترجيح العكسي للمسافة أو الكريجينغ العادي.",
+          "params": {
+            "field": {
+              "label": "حقل القيمة",
+              "description": "اسم سمة النقاط الرقمية المراد استيفاؤها (مثل الارتفاع أو درجة الحرارة)."
+            },
+            "method": {
+              "label": "الطريقة",
+              "options": {
+                "idw": "الترجيح العكسي للمسافة (IDW)",
+                "kriging": "الكريجينغ العادي"
+              }
+            },
+            "resolution": {
+              "label": "حجم بكسل المخرجات",
+              "description": "حجم الخلية بوحدات نظام الإسناد الإحداثي للطبقة (الدرجات في WGS84). تغطي الشبكة مدى النقاط."
+            },
+            "power": {
+              "label": "قوة IDW",
+              "description": "القيم الأعلى تمنح النقاط القريبة تأثيرًا أكبر."
+            },
+            "variogram_model": {
+              "label": "نموذج الفاريوغرام",
+              "description": "النموذج النظري المطابَق على نصف الفاريوغرام التجريبي. يقتصر الكريجينغ على 1500 نقطة.",
+              "options": {
+                "spherical": "كروي",
+                "exponential": "أسّي",
+                "gaussian": "غاوسي",
+                "linear": "خطي"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "إحصاءات المناطق",
+          "description": "تلخيص قيم البيانات النقطية داخل كل مضلع من طبقة متجهة (العدد، والحد الأدنى، والحد الأقصى، والمتوسط، والمجموع، والانحراف المعياري، والوسيط).",
+          "params": {
+            "zones_path": {
+              "label": "طبقة المناطق",
+              "description": "طبقة مضلعات GeoJSON تحدد المناطق. يُعاد إسقاطها تلقائيًا إلى نظام الإسناد الإحداثي للبيانات النقطية (يُفترض أن ملف GeoJSON بلا نظام إسناد إحداثي هو WGS84)."
+            },
+            "band": {
+              "label": "النطاق"
+            },
+            "prefix": {
+              "label": "بادئة الحقل",
+              "description": "تُضاف قبل اسم كل حقل إحصائي (مثل 'dem_' ← 'dem_mean'). اتركها فارغة للاكتفاء بـ 'mean' و'min' و…"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "حاسبة البيانات النقطية",
+          "description": "تقييم تعبير حسابي للنطاقات بصيغة NumPy. يُشار إلى النطاق 1 من كل إدخال بـ A وB وC، وإلى نطاقات محددة بـ A1 وA2 و…؛ مثلًا NDVI هو (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "التعبير",
+              "description": "تعبير NumPy على A وB وC (وA1 وA2 و…). الدوال: where وlog وexp وsqrt وabs وclip وminimum وmaximum وsin وcos وtan."
+            },
+            "b_path": {
+              "label": "البيانات النقطية B (اختياري)",
+              "description": "بيانات نقطية ثانية يُشار إليها بـ B / B1 وB2 و…. يجب أن تطابق أبعاد A."
+            },
+            "c_path": {
+              "label": "البيانات النقطية C (اختياري)",
+              "description": "بيانات نقطية ثالثة يُشار إليها بـ C / C1 وC2 و…. يجب أن تطابق أبعاد A."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "مؤشر طيفي",
+          "description": "حساب مؤشر طيفي مسمّى (NDVI وNDWI وEVI و…) من بيانات نقطية متعددة النطاقات. اختر إعدادًا مسبقًا لمستشعر لتحديد ترتيب النطاقات، أو عيّن أرقام النطاقات يدويًا باستخدام المستشعر المخصص.",
+          "params": {
+            "index": {
+              "label": "المؤشر",
+              "options": {
+                "ndvi": "NDVI (الغطاء النباتي)",
+                "gndvi": "GNDVI (الغطاء النباتي الأخضر)",
+                "ndwi": "NDWI (المياه، McFeeters)",
+                "ndmi": "NDMI (الرطوبة)",
+                "ndbi": "NDBI (المناطق المبنية)",
+                "nbr": "NBR (نسبة الحرق)",
+                "evi": "EVI (الغطاء النباتي المحسّن)",
+                "savi": "SAVI (الغطاء النباتي المعدّل بالتربة)"
+              }
+            },
+            "sensor": {
+              "label": "المستشعر / ترتيب النطاقات",
+              "description": "أرقام نطاقات مُعدّة مسبقًا للمستشعرات الشائعة. اختر «مخصص» لتعيين النطاقات يدويًا لملف GeoTIFF مرتّب بشكل مختلف.",
+              "options": {
+                "sentinel2": "Sentinel-2 ‏(B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 ‏(B1–B7)",
+                "naip": "NAIP ‏(R, G, B, NIR)",
+                "custom": "مخصص (عيّن أرقام النطاقات أدناه)"
+              }
+            },
+            "red": {
+              "label": "رقم النطاق الأحمر"
+            },
+            "green": {
+              "label": "رقم النطاق الأخضر"
+            },
+            "blue": {
+              "label": "رقم النطاق الأزرق"
+            },
+            "nir": {
+              "label": "رقم نطاق NIR"
+            },
+            "swir1": {
+              "label": "رقم نطاق SWIR1"
+            },
+            "swir2": {
+              "label": "رقم نطاق SWIR2"
+            },
+            "L": {
+              "label": "معامل التربة (L)",
+              "description": "تصحيح سطوع التربة في SAVI (0 غطاء كثيف ← 1 تربة جرداء)."
+            },
+            "scale": {
+              "label": "مقياس الانعكاسية",
+              "description": "المُضاعِف الذي يحوّل قيم البكسل إلى انعكاسية (0–1). اتركه عند 1 لمؤشرات الفرق المعياري؛ وعيّنه لـ EVI/SAVI على الصور ذات القيم الرقمية الصحيحة (مثل 0.0001 لـ Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "إعادة تصنيف",
+          "description": "إعادة تعيين نطاقات القيم إلى قيم فئات جديدة باستخدام جدول قواعد.",
+          "params": {
+            "band": {
+              "label": "النطاق"
+            },
+            "table": {
+              "label": "القواعد",
+              "description": "قواعد بصيغة 'min:max:newvalue' مفصولة بفواصل أو أسطر جديدة، مثل '0:10:1, 10:20:2, 20:max:3'. النطاقات نصف مفتوحة [min, max)؛ وتعني القيم الفارغة/min/max ±∞."
+            },
+            "unmatched": {
+              "label": "القيم غير المطابقة",
+              "options": {
+                "nodata": "تعيين إلى NoData",
+                "original": "الاحتفاظ بالقيمة الأصلية"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "فسيفساء / دمج",
+          "description": "دمج ما يصل إلى خمس بيانات نقطية (تشترك في نظام إسناد إحداثي) في بيانات نقطية واحدة تغطي اتحادها.",
+          "params": {
+            "raster_2": {
+              "label": "البيانات النقطية الثانية"
+            },
+            "raster_3": {
+              "label": "البيانات النقطية الثالثة (اختياري)"
+            },
+            "raster_4": {
+              "label": "البيانات النقطية الرابعة (اختياري)"
+            },
+            "raster_5": {
+              "label": "البيانات النقطية الخامسة (اختياري)"
+            },
+            "method": {
+              "label": "طريقة التداخل",
+              "description": "القيمة التي تُعتمد حيث تتداخل المدخلات.",
+              "options": {
+                "first": "الأولى",
+                "last": "الأخيرة",
+                "min": "الحد الأدنى",
+                "max": "الحد الأقصى"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "إحصاءات بؤرية",
+          "description": "تطبيق إحصاء بنافذة متحركة (جوار) على نطاق بيانات نقطية.",
+          "params": {
+            "band": {
+              "label": "النطاق"
+            },
+            "statistic": {
+              "label": "الإحصاء",
+              "options": {
+                "mean": "المتوسط",
+                "median": "الوسيط",
+                "min": "الحد الأدنى",
+                "max": "الحد الأقصى",
+                "sum": "المجموع",
+                "std": "الانحراف المعياري",
+                "range": "المدى (الحد الأقصى − الحد الأدنى)"
+              }
+            },
+            "size": {
+              "label": "حجم النافذة",
+              "description": "حجم جوار فردي بالبكسل (3 = 3×3). الحد الأقصى 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "التحليل",
+      "clip": "القص",
+      "dataQuality": "جودة البيانات",
+      "dggs": "DGGS",
+      "geometry": "الهندسة",
+      "join": "الربط",
+      "movementTime": "الحركة والزمن",
+      "network": "الشبكة",
+      "overlay": "التراكب",
+      "rasterToVector": "من نقطي إلى متجه",
+      "reproject": "إعادة الإسقاط",
+      "select": "التحديد",
+      "spatialStatistics": "الإحصاء المكاني",
+      "terrain": "التضاريس",
+      "vectorToRaster": "من متجه إلى نقطي"
     }
   },
   "segmentation": {
@@ -4049,6 +6051,7 @@
     "title": "اكتشاف الكائنات",
     "description": "شغّل نموذج YOLO مُصدَّرًا إلى ONNX على ملف GeoTIFF، بالكامل داخل المتصفح. تُسنَد المربعات المكتشفة جغرافيًا وتُضاف كل فئة كطبقة مستقلة.",
     "hint": "استخدم نموذج COCO مدمجًا (يُنزَّل ويُخزَّن مؤقتًا مرة واحدة) أو استخدم نموذج YOLOv5/v8/v11 بصيغة ONNX خاصًا بك. يعمل الاكتشاف محليًا في المتصفح. تكتشف النماذج المدمجة الكائنات اليومية؛ وللصور الجوية، وفّر نموذجك الخاص المدرَّب على صور علوية.",
+    "unavailableNoExternalCdn": "اكتشاف الكائنات غير متاح في هذه النسخة. فهو يحتاج إلى ONNX Runtime الذي يُحمَّل من شبكة CDN خارجية عطّلها هذا النشر. توفير ملف نموذج خاص بك لا يحل المشكلة.",
     "imageLabel": "الصورة (GeoTIFF)",
     "imagePlaceholder": "اختر ملف GeoTIFF…",
     "chooseImage": "اختيار صورة",
@@ -4081,6 +6084,7 @@
     "title": "تجزئة كل شيء",
     "description": "شغّل SlimSAM تلقائيًا على ملف GeoTIFF، بالكامل داخل المتصفح. يتحول كل كائن مكتشف إلى مضلع مُسنَد جغرافيًا يُضاف ضمن طبقة واحدة.",
     "hint": "تُؤخذ عينات من شبكة نقاط عبر الصورة وتُجزَّأ باستخدام SlimSAM (يُنزَّل ويُخزَّن مؤقتًا مرة واحدة). لا حاجة إلى نقرات أو تسميات — الشبكات الأكثف تعثر على كائنات أكثر لكنها تستغرق وقتًا أطول.",
+    "unavailableNoExternalCdn": "«تجزئة كل شيء» غير متاحة في هذه النسخة. فهي تحتاج إلى ONNX Runtime الذي يُحمَّل من شبكة CDN خارجية عطّلها هذا النشر.",
     "imageLabel": "الصورة (GeoTIFF)",
     "imagePlaceholder": "اختر ملف GeoTIFF…",
     "chooseImage": "اختيار صورة",
@@ -4237,6 +6241,7 @@
     "deleteField": "حذف الحقل",
     "joinedColumnTitle": "عمود مرتبط مشتق من جدول ربط. عدّل جدول الربط أو تعريف الربط بدلاً من ذلك.",
     "virtualColumnTitle": "حقل افتراضي محسوب من تعبير. عدّل تعريفه في لوحة نمط الطبقة بدلاً من ذلك.",
+    "trackingColumnTitle": "حقل تتبّع التحرير، يُدار تلقائيًا. أعد تسميته من إعدادات تتبّع التحرير للطبقة.",
     "deleteFieldConfirm": "سيؤدي هذا إلى إزالة الحقل \"{{field}}\" نهائيًا من كل معلم في \"{{layer}}\". وسيُمسح أي نمط أو تسميات تشير إليه. لا يمكن التراجع عن هذا الإجراء.",
     "addFieldDescription": "أضف حقلًا جديدًا إلى كل معلم في \"{{layer}}\".",
     "fieldName": "اسم الحقل",
@@ -4309,8 +6314,8 @@
     "appliedRampHint": "تم تطبيق «{{name}}». بدّل الطبقة إلى تنسيق متدرج أو مصنّف لرؤية التدرج.",
     "saved": "تم حفظ «{{name}}» في المكتبة.",
     "deleted": "تم حذف «{{name}}».",
-    "importedCount_zero": "تم استيراد {{count}} نمط.",
     "importedCount_one": "تم استيراد {{count}} نمط.",
+    "importedCount_zero": "تم استيراد {{count}} نمط.",
     "importedCount_two": "تم استيراد {{count}} نمطَين.",
     "importedCount_few": "تم استيراد {{count}} أنماط.",
     "importedCount_many": "تم استيراد {{count}} نمطًا.",
@@ -4368,8 +6373,8 @@
       "targetField": "الحقل الهدف",
       "selectField": "اختر حقلاً…",
       "fields": "الحقول المراد ربطها",
-      "fieldCount_zero": "{{count}} من الحقول",
       "fieldCount_one": "{{count}} حقل",
+      "fieldCount_zero": "{{count}} من الحقول",
       "fieldCount_two": "{{count}} من الحقول",
       "fieldCount_few": "{{count}} حقول",
       "fieldCount_many": "{{count}} حقلاً",
@@ -4383,8 +6388,8 @@
       "missingLayer": "طبقة الربط غير موجودة",
       "noCandidates": "لا توجد طبقة أخرى بجدول سمات للربط",
       "statsMatched": "تمت مطابقة {{matched}} من {{total}} من المعالم",
-      "statsUnmatchedJoin_zero": "{{count}} من صفوف الجدول بدون تطابق",
       "statsUnmatchedJoin_one": "{{count}} صف من الجدول بدون تطابق",
+      "statsUnmatchedJoin_zero": "{{count}} من صفوف الجدول بدون تطابق",
       "statsUnmatchedJoin_two": "{{count}} من صفوف الجدول بدون تطابق",
       "statsUnmatchedJoin_few": "{{count}} صفوف من الجدول بدون تطابق",
       "statsUnmatchedJoin_many": "{{count}} صفًا من الجدول بدون تطابق",
@@ -4409,8 +6414,8 @@
       "edit": "تحرير الحقل الافتراضي",
       "remove": "إزالة الحقل الافتراضي",
       "enabledTitle": "تطبيق هذا الحقل الافتراضي",
-      "evaluationErrors_zero": "{{count}} من المعالم تعذّر تقييمها (خلايا فارغة)",
       "evaluationErrors_one": "{{count}} معلم تعذّر تقييمه (خلية فارغة)",
+      "evaluationErrors_zero": "{{count}} من المعالم تعذّر تقييمها (خلايا فارغة)",
       "evaluationErrors_two": "{{count}} من المعالم تعذّر تقييمهما (خلايا فارغة)",
       "evaluationErrors_few": "{{count}} معالم تعذّر تقييمها (خلايا فارغة)",
       "evaluationErrors_many": "{{count}} معلمًا تعذّر تقييمها (خلايا فارغة)",
@@ -4775,11 +6780,15 @@
       "typeConvexHull": "أغلفة محدبة",
       "typeBuffer": "مناطق عازلة",
       "bufferDistance": "مسافة العزل (م)",
+      "bufferField": "حقل المسافة",
+      "bufferFieldHint": "تُنشأ منطقة عازلة لكل معلم باستخدام قيمة المسافة الخاصة به بالأمتار؛ وتُطبَّق المسافة أعلاه على المعالم التي لا تحتوي على قيمة مسافة صالحة، ولا يُرسم المعلم عندما تكون القيمة 0.",
+      "fieldNone": "بلا (ثابت)",
       "fillColor": "لون التعبئة",
       "strokeColor": "لون الحد",
       "strokeWidth": "عرض الحد (px)",
       "opacity": "عتامة التعبئة",
-      "circleRadius": "نصف قطر النقطة (px)"
+      "circleRadius": "نصف قطر النقطة (px)",
+      "sizeField": "حقل الحجم"
     },
     "attributeForm": {
       "heading": "نموذج السمات",
@@ -4821,7 +6830,26 @@
       "save": "حفظ",
       "noFields": "لا تحتوي الطبقة على حقول سمات للتكوين.",
       "minMaxInvalid": "يجب أن يكون الحد الأدنى أقل من أو يساوي الحد الأقصى."
+    },
+    "editorTracking": {
+      "heading": "تتبع التحرير",
+      "description": "سجّل من أنشأ كل معلم ومن غيّره آخر مرة. تُملأ الحقول أدناه تلقائيًا عند رسم المعالم أو تحريرها أو حسابها أو جمعها.",
+      "enable": "تتبّع التعديلات في هذه الطبقة",
+      "identity": "اسمك",
+      "identityHint": "ستُسجَّل التعديلات باسم ”{{name}}“.",
+      "identityFromSession": "مأخوذ من جلسة التعاون التي تشارك فيها.",
+      "createdByField": "حقل ”أنشأه“",
+      "createdAtField": "حقل ”تاريخ الإنشاء“",
+      "editedByField": "حقل ”عدّله“",
+      "editedAtField": "حقل ”تاريخ التعديل“",
+      "blankName": "لا يمكن ترك أسماء الحقول فارغة.",
+      "duplicateName": "يجب أن يكون لكل حقل تتبّع اسم مختلف.",
+      "columnTaken": "”{{name}}“ حقل سمات موجود بالفعل. سيؤدي التتبّع إلى الكتابة فوق قيمه."
     }
+  },
+  "vectorExport": {
+    "invalidKmlCoordinatesByPosition": "تعذّر على مُصدّر KML كتابة المعلم {{position}} لأن إحداثياته غير صالحة.",
+    "invalidKmlCoordinatesById": "تعذّر على مُصدّر KML كتابة المعلم ذي المعرّف {{id}} لأن إحداثياته غير صالحة."
   },
   "layers": {
     "panelCollapsedLabel": "الطبقات (مطوية)",
@@ -4842,9 +6870,17 @@
     "identifyInspectPixels": "فحص قيم البكسل",
     "identifyStopInspectPixels": "إيقاف فحص قيم البكسل",
     "identifyUnavailable": "التعرف متاح فقط لطبقات المتجهات وWMS وCOG",
+    "selectFeaturesMenu": "تحديد المعالم",
+    "selectFeaturesSingle": "تحديد المعالم بالنقر",
+    "selectFeaturesRectangle": "تحديد المعالم بمستطيل",
+    "selectFeaturesPolygon": "تحديد المعالم بمضلع",
+    "selectFeaturesFreehand": "تحديد المعالم برسم حر",
+    "selectFeaturesRadius": "تحديد المعالم بنصف قطر",
+    "selectFeaturesModifiers": "Shift يضيف، وAlt يزيل، وShift+Alt يتقاطع. اضغط Esc للإلغاء.",
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "استخراج مجموعة فرعية…",
     "stylesMenu": "الأنماط",
+    "exportGeoLibreStyle": "تصدير نمط عنوان URL لـ GeoLibre",
     "exportMapboxStyle": "تصدير كنمط Mapbox GL",
     "exportSldStyle": "تصدير بصيغة OGC SLD",
     "exportQmlStyle": "تصدير بصيغة QGIS QML",
@@ -4852,7 +6888,7 @@
     "exportStyleDataNotReady": "بيانات الطبقة ليست جاهزة بعد. حاول مرة أخرى بعد قليل.",
     "exportStyleNeedsFeatures": "يتطلب تصدير النمط طبقة متجهات تحتوي على معالم.",
     "exportStyleError": "تعذر تصدير نمط هذه الطبقة.",
-    "importStyle": "استيراد نمط (Mapbox GL / SLD / QML)…",
+    "importStyle": "استيراد نمط (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "الأنماط المحفوظة (مدير الأنماط)…",
     "importStyleSuccess": "تم استيراد النمط.",
     "importStyleInvalid": "هذا الملف ليس ملف JSON أو SLD أو QML صالحًا.",
@@ -4891,6 +6927,7 @@
     "bindWindowCumulative": "كل شيء حتى الخطوة الحالية (تراكمي)",
     "bindCancel": "إلغاء",
     "bindConfirm": "ربط",
+    "openStylePanel": "فتح لوحة النمط",
     "openRasterStylePanel": "تحرير نمط البيانات النقطية…",
     "exportRasterSuccess": "تم تصدير البيانات النقطية.",
     "exportRasterError": "تعذر تصدير هذه البيانات النقطية.",
@@ -4996,6 +7033,7 @@
     "refreshVectorControlError": "تعذر تحديث هذه الطبقة. جرّب إعادة فتح لوحة إضافة طبقة متجهات.",
     "refreshed": "تم التحديث.",
     "refreshedCount": "تم تحديث {{count}} من المعالم.",
+    "refreshedTruncated": "تم تحديث {{shown}} من أصل {{total}} من المعالم.",
     "refreshError": "تعذر تحديث هذه الطبقة.",
     "exportNeedsFeatures": "يتطلب التصدير طبقة متجهات تحتوي على معالم.",
     "exportedWithWarnings": "تم تصدير الطبقة. {{warnings}}",
@@ -5058,6 +7096,78 @@
     "nodataOff": "عرض كل البكسلات",
     "nodataCustom": "قيمة مخصّصة"
   },
+  "netcdfSymbology": {
+    "heading": "ترميز NetCDF",
+    "colorRampLabel": "خريطة الألوان",
+    "reverse": "عكس خريطة الألوان",
+    "colorMin": "الحد الأدنى للون",
+    "colorMax": "الحد الأقصى للون",
+    "resetRange": "إعادة التعيين إلى مدى البيانات",
+    "openCube": "مكعب ثلاثي الأبعاد"
+  },
+  "netcdfCube": {
+    "heading": "مكعب صور ثلاثي الأبعاد",
+    "close": "إغلاق",
+    "settings": "الإعدادات",
+    "setupTitle": "مكعب صور ثلاثي الأبعاد",
+    "setupDescription": "اختر ما سيُقرأ قبل بناء المكعب. كل نطاق يُقرأ على حدة، لذا يحدّد الامتداد وعدد النطاقات المدة اللازمة.",
+    "extent": "الامتداد",
+    "extentView": "عرض الخريطة الحالي",
+    "extentDraw": "الرسم على الخريطة",
+    "extentFull": "امتداد الطبقة الكامل",
+    "viewHint": "يقرأ ما تعرضه الخريطة لحظة بناء المكعب.",
+    "fullHint": "يقرأ الشبكة بأكملها. بطيء لمكعب بحجم مشهد كامل.",
+    "drawBbox": "الرسم على الخريطة",
+    "drawing": "اسحب مربعًا على الخريطة لتعيين امتداد المكعب",
+    "drawHint": "اسحب مربعًا على الخريطة لتعيين الامتداد.",
+    "drawnExtent": "غرب {{west}}، جنوب {{south}}، شرق {{east}}، شمال {{north}}",
+    "detail": "مستوى التفصيل",
+    "detailOption": "{{size}} خلية لكل ضلع",
+    "bands": "النطاقات",
+    "allBands": "الكل ({{count}})",
+    "rgbOverlay": "صورة RGB في الأعلى",
+    "rgbHint": "يدمج ثلاثة نطاقات في صورة ملوّنة تُوضع على الوجه العلوي، فيبقى المكعب معروفًا كمكان.",
+    "red": "أحمر",
+    "green": "أخضر",
+    "blue": "أزرق",
+    "planeEstimate": "{{count}} عملية قراءة نطاق",
+    "create": "إنشاء المكعب",
+    "colorRampLabel": "خريطة الألوان",
+    "reverse": "عكس",
+    "showRgb": "RGB في الأعلى",
+    "rgbBands": "نطاقات RGB",
+    "recomposing": "جارٍ القراءة...",
+    "zScale": "الارتفاع",
+    "slice": "مقطع",
+    "sliceAt": "قطع عند {{band}} {{units}}",
+    "reading": "جارٍ قراءة النطاق {{done}} من {{total}}...",
+    "summary": "{{nx}} x {{ny}} خلية، {{nz}} نطاقًا على امتداد {{axis}}",
+    "errorNoCube": "لم يعد ملف المصدر لهذه الطبقة مفتوحًا، لذا تعذّرت قراءة المكعب.",
+    "error": {
+      "shapeMismatch": "مستويات نطاقات المتغير ليست بشكل واحد، لذا لا يمكن تكديسها في مكعب.",
+      "rgbShapeMismatch": "نطاقات RGB المختارة لا تطابق شكل المكعب.",
+      "noBands": "لا يحتوي هذا المتغير على نطاقات للقراءة.",
+      "noReadWindow": "لا يمكن تحديث هذا المكعب في مكانه. أعد بناءه من الإعدادات."
+    }
+  },
+  "netcdfProfile": {
+    "heading": "المقطع الطيفي",
+    "clear": "مسح",
+    "chartAria": "قيم البكسل المأخوذة على امتداد محور النطاقات",
+    "popOut": "فصل في نافذة",
+    "dock": "إرساء",
+    "poppedOutHint": "المخطط مفتوح في نافذة على الخريطة.",
+    "noValues": "لا توجد قيم لرسمها لهذه البكسلات.",
+    "exportPng": "PNG",
+    "exportCsv": "CSV",
+    "exportError": "تعذّر تصدير المخطط.",
+    "rasterFallbackName": "طبقة نقطية"
+  },
+  "netcdfIdentify": {
+    "noData": "لا توجد بيانات",
+    "coordinates": "خط الطول، خط العرض",
+    "cell": "الصف، العمود"
+  },
   "rasterAttributeTable": {
     "title": "جدول سمات البيانات النقطية",
     "resize": "تغيير حجم جدول سمات البيانات النقطية",
@@ -5106,6 +7216,7 @@
     "cogConvertConfirm": "\"{{name}}\" هو ملف GeoTIFF عادي (شرائطي) لا يمكن عرضه مباشرة. هل تريد تحويله الآن إلى Cloud-Optimized GeoTIFF وتحميل الناتج؟",
     "cogConvertRemoteConfirm": "\"{{name}}\" هو ملف GeoTIFF عادي (شرائطي) لا يمكن عرضه مباشرة. يتطلب عرضه تنزيل الملف كاملًا وتحويله إلى Cloud-Optimized GeoTIFF في المتصفح، وقد يكون ذلك بطيئًا ومستهلكًا للذاكرة مع الملفات الكبيرة. هل تريد المتابعة؟",
     "cogConvertLargeConfirm": "\"{{name}}\" هو ملف GeoTIFF كبير بأبعاد {{width}}×{{height}} وليس Cloud-Optimized GeoTIFF. قد يكون تحويله في المتصفح بطيئًا ومستهلكًا للذاكرة. هل تريد تحويله وتحميله على أي حال؟",
+    "cogConvertTooLarge": "ملف \"{{name}}\" كبير جدًا بحيث لا يمكن تحويله بأمان في المتصفح. حوّله إلى Cloud-Optimized GeoTIFF باستخدام gdal_translate أو rio cogeo، ثم حمّل الناتج.",
     "cogConvertFailed": "تعذر تحويل \"{{name}}\" إلى Cloud-Optimized GeoTIFF. جرّب تحويله باستخدام gdal_translate أو rio cogeo، ثم حمّل الناتج.",
     "rasterDownloadFailed": "تعذر تنزيل \"{{name}}\". قد يكون الخادم بطيئًا أو يتعذر الوصول إليه أو يحظر الطلبات عابرة المصادر، أو قد يكون الملف أكبر من أن يُحفظ في الذاكرة. تحقق من عنوان URL وحاول مرة أخرى.",
     "rasterNotGeotiff": "لم يُرجع \"{{name}}\" ملف GeoTIFF. ربما أرسل الخادم صفحة خطأ أو صفحة تسجيل دخول بدلًا منه. تحقق من عنوان URL وحاول مرة أخرى."
@@ -5263,7 +7374,8 @@
       "pythonConsole": "طرفية Python",
       "sqlWorkspace": "مساحة عمل SQL",
       "assistant": "المساعد",
-      "statusBar": "شريط الحالة"
+      "statusBar": "شريط الحالة",
+      "modelBuilder": "منشئ النماذج"
     }
   },
   "attributeStats": {
@@ -5274,10 +7386,12 @@
     "scope": "النطاق",
     "scopeAll": "كل المعالم ({{total}})",
     "scopeFiltered": "المُرشَّحة ({{total}})",
+    "scopeSelected": "المحددة ({{total}})",
     "copiedToClipboard": "تم النسخ إلى الحافظة.",
     "copy": "نسخ",
     "copyHeader": "إحصاءات الحقل — {{field}}",
     "copyHeaderFiltered": "إحصاءات الحقل — {{field}} (مُرشَّحة)",
+    "copyHeaderSelected": "إحصاءات الحقل — {{field}} (المحددة)",
     "noValues": "لا توجد قيم لتلخيصها.",
     "mostFrequent": "القيم الأكثر تكرارًا",
     "noPopulated": "لا توجد قيم مُعبّأة.",
@@ -5319,76 +7433,6 @@
     "noPopulated": "لا توجد قيم مُعبّأة.",
     "moreValues": "+{{total}} قيمة أخرى"
   },
-  "stacPlugin": {
-    "title": "كتالوجات STAC",
-    "footprintLayerName": "حدود نتائج بحث STAC",
-    "catalogSearch": "البحث عن كتالوج عام في STAC Index",
-    "catalogSearchPlaceholder": "البحث في أسماء الكتالوجات…",
-    "indexLoading": "جارٍ تحميل STAC Index…",
-    "indexUnavailable": "STAC Index غير متاح: أدخل عنوان URL",
-    "indexLoadFailed": "تعذّر تحميل STAC Index",
-    "urlLabel": "عنوان URL لكتالوج أو واجهة STAC",
-    "connect": "اتصال",
-    "connecting": "جارٍ الاتصال بـ STAC…",
-    "connected": "تم الاتصال. اختر عوامل التصفية ثم ابحث.",
-    "connectFailed": "تعذّر الاتصال بـ STAC",
-    "selectCatalog": "اختر كتالوجًا…",
-    "noMatchingCatalogs": "لا توجد كتالوجات مطابقة",
-    "catalogApiSuffix": " (API)",
-    "catalogStaticSuffix": " (ثابت)",
-    "kindApi": "واجهة STAC",
-    "kindStatic": "كتالوج ثابت",
-    "collectionsHint": "اضغط Ctrl/Cmd لتحديد عدة مجموعات؛ اسحب الحافة السفلية لتغيير الحجم",
-    "limitToExtent": "حصر البحث في نطاق الخريطة الحالي",
-    "bboxLabel": "الصندوق المحيط (غرب، جنوب، شرق، شمال)",
-    "bboxPlaceholder": "اختياري؛ يتجاوز نطاق الخريطة",
-    "bboxInvalid": "أدخل صندوقًا محيطًا صالحًا: غرب، جنوب، شرق، شمال.",
-    "drawBbox": "رسم صندوق على الخريطة",
-    "cancelDrawing": "إلغاء الرسم",
-    "clearDrawnBbox": "مسح الصندوق المرسوم",
-    "drawHint": "انقر واسحب على الخريطة لرسم صندوق البحث.",
-    "drawnBbox": "الصندوق المرسوم: {{bbox}}",
-    "drawnBboxCleared": "تم مسح الصندوق المرسوم.",
-    "mapNotReady": "الخريطة غير جاهزة للرسم.",
-    "startDate": "تاريخ البدء",
-    "endDate": "تاريخ الانتهاء",
-    "additionalParams": "معايير بحث إضافية (JSON، لواجهة STAC فقط)",
-    "additionalInvalid": "يجب أن تكون معايير البحث الإضافية كائن JSON.",
-    "searchItems": "البحث عن العناصر",
-    "clearResults": "مسح النتائج",
-    "resultsCleared": "تم مسح نتائج البحث.",
-    "searching": "جارٍ البحث عن عناصر STAC…",
-    "loadingMore": "جارٍ تحميل مزيد من العناصر…",
-    "noResults": "لا توجد عناصر STAC مطابقة لعوامل التصفية هذه.",
-    "searchFailed": "فشل بحث STAC",
-    "showing": "العناصر المعروضة: {{count}}.",
-    "showingOfMatched": "العناصر المعروضة: {{count}} من {{matched}}.",
-    "loadMore": "تحميل المزيد",
-    "renderOptions": "خيارات عرض الراستر",
-    "bands": "النطاقات",
-    "bandsPlaceholder": "مثال: 1 أو 1,2,3 (الافتراضي: تلقائي)",
-    "colormap": "خريطة الألوان (نطاق واحد فقط)",
-    "colormapDefault": "الإعداد الافتراضي للعارض",
-    "minValue": "القيمة الدنيا",
-    "maxValue": "القيمة القصوى",
-    "nodata": "قيمة NoData",
-    "nodataPlaceholder": "يتجاوز وسم NoData في الملف",
-    "renderHint": "اترك الحقل فارغًا ليستنتج العارض القيمة من ملف GeoTIFF. تنطبق الخيارات على الأصول المضافة بعد تغييرها.",
-    "initialStatus": "اختر كتالوجًا من STAC Index أو أدخل عنوان URL.",
-    "catalogInfo": "{{title}} · {{kind}}",
-    "zoom": "تكبير",
-    "add": "إضافة",
-    "download": "تنزيل",
-    "adding": "جارٍ إضافة {{asset}}…",
-    "added": "تمت إضافة {{asset}} إلى الخريطة.",
-    "addUnsupported": "يمكن إضافة أصول GeoTIFF/COG وGeoJSON فقط إلى الخريطة",
-    "addFailed": "تعذّرت إضافة الأصل",
-    "cogUnsupported": "لا يستطيع مضيف GeoLibre هذا عرض أصول GeoTIFF البعيدة"
-  },
-  "vectorExport": {
-    "invalidKmlCoordinatesByPosition": "تعذّر على مُصدّر KML كتابة المعلم {{position}} لأن إحداثياته غير صالحة.",
-    "invalidKmlCoordinatesById": "تعذّر على مُصدّر KML كتابة المعلم ذي المعرّف {{id}} لأن إحداثياته غير صالحة."
-  },
   "comments": {
     "title": "التعليقات",
     "addDialogTitle": "إضافة تعليق مراجعة",
@@ -5397,276 +7441,49 @@
     "authorNamePlaceholder": "مثال: أحمد أو سارة",
     "commentLabel": "تعليق / ملاحظات",
     "commentPlaceholder": "اكتب هنا ملاحظة المراجعة أو تعليقك...",
+    "post": "نشر التعليق",
+    "postShortcutTooltip": "نشر التعليق ({{shortcut}})",
     "confirmDelete": "هل أنت متأكد من حذف سلسلة التعليقات هذه؟",
     "sessionDisconnected": "انقطع اتصال الجلسة.",
-    "defaultAuthorName": "المؤلف"
-  },
-  "s2Plugin": {
-    "title": "شبكة S2",
-    "controlTitle": "إعدادات شبكة S2",
-    "autoResolution": "دقة تلقائية",
-    "resolution": "الدقة",
-    "cellCount": "الخلايا في العرض: {{count}}",
-    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} خلية. قرّب العرض أو خفّض الدقة.",
-    "fillColor": "لون التعبئة",
-    "fillOpacity": "عتامة التعبئة",
-    "lineColor": "لون الحد الخارجي",
-    "lineWidth": "عرض الحد الخارجي",
-    "showLabels": "إظهار معرّفات الخلايا",
-    "identifyHint": "انقر على الخريطة لتحديد خلية S2.",
-    "selectedCell": "الخلية المحددة",
-    "noSelection": "لم تُحدَّد أي خلية",
-    "copyId": "نسخ المعرّف",
-    "parent": "الخلية الأصل",
-    "children": "الخلايا الفرعية",
-    "neighbors": "الخلايا المجاورة",
-    "center": "المركز",
-    "zoomToCell": "التكبير إلى الخلية",
-    "addAsLayer": "إضافة الشبكة كطبقة",
-    "exportGeoJson": "تصدير GeoJSON",
-    "exportCsv": "تصدير CSV",
-    "includeNeighbors": "تضمين الخلايا المجاورة للخلية المحددة",
-    "includeParents": "تضمين الخلايا الأصل للخلية المحددة"
-  },
-  "a5Plugin": {
-    "title": "شبكة A5",
-    "controlTitle": "إعدادات شبكة A5",
-    "autoResolution": "دقة تلقائية",
-    "resolution": "الدقة",
-    "cellCount": "الخلايا في العرض: {{count}}",
-    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} خلية. قرّب العرض أو خفّض الدقة.",
-    "fillColor": "لون التعبئة",
-    "fillOpacity": "عتامة التعبئة",
-    "lineColor": "لون الحد الخارجي",
-    "lineWidth": "عرض الحد الخارجي",
-    "showLabels": "إظهار معرّفات الخلايا",
-    "identifyHint": "انقر على الخريطة لتحديد خلية A5.",
-    "selectedCell": "الخلية المحددة",
-    "noSelection": "لم تُحدَّد أي خلية",
-    "copyId": "نسخ المعرّف",
-    "parent": "الخلية الأصل",
-    "children": "الخلايا الفرعية",
-    "neighbors": "الخلايا المجاورة",
-    "center": "المركز",
-    "zoomToCell": "التكبير إلى الخلية",
-    "addAsLayer": "إضافة الشبكة كطبقة",
-    "exportGeoJson": "تصدير GeoJSON",
-    "exportCsv": "تصدير CSV",
-    "includeNeighbors": "تضمين الخلايا المجاورة للخلية المحددة",
-    "includeParents": "تضمين الخلايا الأصل للخلية المحددة"
-  },
-  "dggridPlugin": {
-    "title": "DGGRID",
-    "controlTitle": "إعدادات DGGRID",
-    "cellType": "نوع الخلية",
-    "topologyHexagon": "سداسي",
-    "topologyDiamond": "معيّن",
-    "topologyTriangle": "مثلث",
-    "projection": "الإسقاط",
-    "aperture": "الفتحة",
-    "autoResolution": "دقة تلقائية",
-    "resolution": "الدقة",
-    "cellCount": "الخلايا في العرض: {{count}}",
-    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} خلية. قرّب العرض أو خفّض الدقة.",
-    "fillColor": "لون التعبئة",
-    "fillOpacity": "عتامة التعبئة",
-    "lineColor": "لون الحد الخارجي",
-    "lineWidth": "عرض الحد الخارجي",
-    "showLabels": "إظهار معرّفات الخلايا",
-    "identifyHint": "انقر على الخريطة لتحديد خلية DGGRID.",
-    "selectedCell": "الخلية المحددة",
-    "noSelection": "لم تُحدَّد أي خلية",
-    "copyId": "نسخ المعرّف",
-    "parent": "الخلية الأصل",
-    "children": "الخلايا الفرعية",
-    "neighbors": "الخلايا المجاورة",
-    "center": "المركز",
-    "zoomToCell": "التكبير إلى الخلية",
-    "addAsLayer": "إضافة الشبكة كطبقة",
-    "exportGeoJson": "تصدير GeoJSON",
-    "exportCsv": "تصدير CSV",
-    "includeNeighbors": "تضمين الخلايا المجاورة للخلية المحددة",
-    "includeParents": "تضمين الخلايا الأصل للخلية المحددة"
-  },
-  "dggalPlugin": {
-    "title": "DGGAL",
-    "controlTitle": "إعدادات DGGAL",
-    "gridType": "نوع DGGS",
-    "autoResolution": "دقة تلقائية",
-    "resolution": "الدقة",
-    "cellCount": "الخلايا في العرض: {{count}}",
-    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} خلية. قرّب العرض أو خفّض الدقة.",
-    "fillColor": "لون التعبئة",
-    "fillOpacity": "عتامة التعبئة",
-    "lineColor": "لون الحد الخارجي",
-    "lineWidth": "عرض الحد الخارجي",
-    "showLabels": "إظهار معرّفات الخلايا",
-    "identifyHint": "انقر على الخريطة لتحديد خلية DGGAL.",
-    "selectedCell": "الخلية المحددة",
-    "noSelection": "لم تُحدَّد أي خلية",
-    "copyId": "نسخ المعرّف",
-    "parent": "الخلية الأصل",
-    "children": "الخلايا الفرعية",
-    "neighbors": "الخلايا المجاورة",
-    "center": "المركز",
-    "zoomToCell": "التكبير إلى الخلية",
-    "addAsLayer": "إضافة الشبكة كطبقة",
-    "exportGeoJson": "تصدير GeoJSON",
-    "exportCsv": "تصدير CSV",
-    "includeNeighbors": "تضمين الخلايا المجاورة للخلية المحددة",
-    "includeParents": "تضمين الخلايا الأصل للخلية المحددة"
-  },
-  "olcPlugin": {
-    "title": "OLC",
-    "controlTitle": "إعدادات OLC",
-    "autoResolution": "دقة تلقائية",
-    "resolution": "الدقة",
-    "cellCount": "الخلايا في العرض: {{count}}",
-    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} خلية. قرّب العرض أو خفّض الدقة.",
-    "fillColor": "لون التعبئة",
-    "fillOpacity": "عتامة التعبئة",
-    "lineColor": "لون الحد الخارجي",
-    "lineWidth": "عرض الحد الخارجي",
-    "showLabels": "إظهار معرّفات الخلايا",
-    "identifyHint": "انقر على الخريطة لتحديد خلية OLC.",
-    "selectedCell": "الخلية المحددة",
-    "noSelection": "لم تُحدَّد أي خلية",
-    "copyId": "نسخ المعرّف",
-    "parent": "الخلية الأصل",
-    "children": "الخلايا الفرعية",
-    "neighbors": "الخلايا المجاورة",
-    "center": "المركز",
-    "zoomToCell": "التكبير إلى الخلية",
-    "addAsLayer": "إضافة الشبكة كطبقة",
-    "exportGeoJson": "تصدير GeoJSON",
-    "exportCsv": "تصدير CSV",
-    "includeNeighbors": "تضمين الخلايا المجاورة للخلية المحددة",
-    "includeParent": "تضمين الخلية الأصل للخلية المحددة"
-  },
-  "geohashPlugin": {
-    "title": "Geohash",
-    "controlTitle": "إعدادات Geohash",
-    "autoResolution": "دقة تلقائية",
-    "resolution": "الدقة",
-    "cellCount": "الخلايا في العرض: {{count}}",
-    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} خلية. قرّب العرض أو خفّض الدقة.",
-    "fillColor": "لون التعبئة",
-    "fillOpacity": "عتامة التعبئة",
-    "lineColor": "لون الحد الخارجي",
-    "lineWidth": "عرض الحد الخارجي",
-    "showLabels": "إظهار معرّفات الخلايا",
-    "identifyHint": "انقر على الخريطة لتحديد خلية Geohash.",
-    "selectedCell": "الخلية المحددة",
-    "noSelection": "لم تُحدَّد أي خلية",
-    "copyId": "نسخ المعرّف",
-    "parent": "الخلية الأصل",
-    "children": "الخلايا الفرعية",
-    "neighbors": "الخلايا المجاورة",
-    "center": "المركز",
-    "zoomToCell": "التكبير إلى الخلية",
-    "addAsLayer": "إضافة الشبكة كطبقة",
-    "exportGeoJson": "تصدير GeoJSON",
-    "exportCsv": "تصدير CSV",
-    "includeNeighbors": "تضمين الخلايا المجاورة للخلية المحددة",
-    "includeParent": "تضمين الخلية الأصل للخلية المحددة"
-  },
-  "tilecodePlugin": {
-    "title": "Tilecode",
-    "controlTitle": "إعدادات Tilecode",
-    "autoResolution": "دقة تلقائية",
-    "resolution": "الدقة",
-    "cellCount": "المربّعات في العرض: {{count}}",
-    "tooManyCells": "يتجاوز هذا العرض حدّ {{limit}} مربّعة. قرّب العرض أو خفّض الدقة.",
-    "fillColor": "لون التعبئة",
-    "fillOpacity": "عتامة التعبئة",
-    "lineColor": "لون الحد الخارجي",
-    "lineWidth": "عرض الحد الخارجي",
-    "showLabels": "إظهار معرّفات المربّعات",
-    "identifyHint": "انقر على الخريطة لتحديد مربّعة.",
-    "selectedCell": "المربّعة المحددة",
-    "noSelection": "لم تُحدَّد أي مربّعة",
-    "copyId": "نسخ المعرّف",
-    "quadkey": "Quadkey",
-    "parent": "المربّعة الأصل",
-    "children": "المربّعات الفرعية",
-    "neighbors": "المربّعات المجاورة",
-    "center": "المركز",
-    "zoomToCell": "التكبير إلى المربّعة",
-    "addAsLayer": "إضافة الشبكة كطبقة",
-    "exportGeoJson": "تصدير GeoJSON",
-    "exportCsv": "تصدير CSV",
-    "includeNeighbors": "تضمين المربّعات المجاورة للمربّعة المحددة",
-    "includeParent": "تضمين المربّعة الأصل للمربّعة المحددة"
-  },
-  "netcdfSymbology": {
-    "heading": "ترميز NetCDF",
-    "colorRampLabel": "خريطة الألوان",
-    "reverse": "عكس خريطة الألوان",
-    "colorMin": "الحد الأدنى للون",
-    "colorMax": "الحد الأقصى للون",
-    "resetRange": "إعادة التعيين إلى مدى البيانات",
-    "openCube": "مكعب ثلاثي الأبعاد"
-  },
-  "netcdfCube": {
-    "heading": "مكعب صور ثلاثي الأبعاد",
-    "close": "إغلاق",
-    "settings": "الإعدادات",
-    "setupTitle": "مكعب صور ثلاثي الأبعاد",
-    "setupDescription": "اختر ما سيُقرأ قبل بناء المكعب. كل نطاق يُقرأ على حدة، لذا يحدّد الامتداد وعدد النطاقات المدة اللازمة.",
-    "extent": "الامتداد",
-    "extentView": "عرض الخريطة الحالي",
-    "extentDraw": "الرسم على الخريطة",
-    "extentFull": "امتداد الطبقة الكامل",
-    "viewHint": "يقرأ ما تعرضه الخريطة لحظة بناء المكعب.",
-    "fullHint": "يقرأ الشبكة بأكملها. بطيء لمكعب بحجم مشهد كامل.",
-    "drawBbox": "الرسم على الخريطة",
-    "drawing": "اسحب مربعًا على الخريطة لتعيين امتداد المكعب",
-    "drawHint": "اسحب مربعًا على الخريطة لتعيين الامتداد.",
-    "drawnExtent": "غرب {{west}}، جنوب {{south}}، شرق {{east}}، شمال {{north}}",
-    "detail": "مستوى التفصيل",
-    "detailOption": "{{size}} خلية لكل ضلع",
-    "bands": "النطاقات",
-    "allBands": "الكل ({{count}})",
-    "rgbOverlay": "صورة RGB في الأعلى",
-    "rgbHint": "يدمج ثلاثة نطاقات في صورة ملوّنة تُوضع على الوجه العلوي، فيبقى المكعب معروفًا كمكان.",
-    "red": "أحمر",
-    "green": "أخضر",
-    "blue": "أزرق",
-    "planeEstimate": "{{count}} عملية قراءة نطاق",
-    "create": "إنشاء المكعب",
-    "colorRampLabel": "خريطة الألوان",
-    "reverse": "عكس",
-    "showRgb": "RGB في الأعلى",
-    "rgbBands": "نطاقات RGB",
-    "recomposing": "جارٍ القراءة...",
-    "zScale": "الارتفاع",
-    "slice": "مقطع",
-    "sliceAt": "قطع عند {{band}} {{units}}",
-    "reading": "جارٍ قراءة النطاق {{done}} من {{total}}...",
-    "summary": "{{nx}} x {{ny}} خلية، {{nz}} نطاقًا على امتداد {{axis}}",
-    "errorNoCube": "لم يعد ملف المصدر لهذه الطبقة مفتوحًا، لذا تعذّرت قراءة المكعب.",
-    "error": {
-      "shapeMismatch": "مستويات نطاقات المتغير ليست بشكل واحد، لذا لا يمكن تكديسها في مكعب.",
-      "rgbShapeMismatch": "نطاقات RGB المختارة لا تطابق شكل المكعب.",
-      "noBands": "لا يحتوي هذا المتغير على نطاقات للقراءة.",
-      "noReadWindow": "لا يمكن تحديث هذا المكعب في مكانه. أعد بناءه من الإعدادات."
-    }
-  },
-  "netcdfProfile": {
-    "heading": "المقطع الطيفي",
-    "clear": "مسح",
-    "chartAria": "قيم البكسل المأخوذة على امتداد محور النطاقات",
-    "popOut": "فصل في نافذة",
-    "dock": "إرساء",
-    "poppedOutHint": "المخطط مفتوح في نافذة على الخريطة.",
-    "noValues": "لا توجد قيم لرسمها لهذه البكسلات.",
-    "exportPng": "PNG",
-    "exportCsv": "CSV",
-    "exportError": "تعذّر تصدير المخطط."
-  },
-  "netcdfIdentify": {
-    "noData": "لا توجد بيانات",
-    "coordinates": "خط الطول، خط العرض",
-    "cell": "الصف، العمود"
+    "defaultAuthorName": "المؤلف",
+    "addComment": "إضافة تعليق",
+    "addCommentTooltip": "وضع تعليق مراجعة جديد على الخريطة",
+    "yourNamePlaceholder": "اسمك…",
+    "saveName": "حفظ الاسم",
+    "noNameSet": "لم يتم تعيين اسم — ستظهر التعليقات باسم «{{name}}»",
+    "changeNameTooltip": "تغيير الاسم",
+    "setYourName": "تعيين اسمك",
+    "changeName": "تغيير الاسم",
+    "postingAs": "النشر باسم <strong>{{name}}</strong>",
+    "copy": "نسخ",
+    "startLiveSession": "بدء جلسة مباشرة",
+    "starting": "جارٍ البدء…",
+    "sessionCodePlaceholder": "أدخل رمز الجلسة",
+    "connect": "اتصال",
+    "joining": "جارٍ الانضمام…",
+    "liveSync": "مزامنة مباشرة ({{count}} متصل)",
+    "offlineWorkspace": "غير متصل / مساحة عمل خاصة",
+    "disconnect": "قطع الاتصال",
+    "joinFailed": "تعذر الانضمام إلى الجلسة.",
+    "startFailed": "تعذر بدء الجلسة.",
+    "filterOpen": "مفتوحة ({{count}})",
+    "filterResolved": "محلولة ({{count}})",
+    "filterAll": "الكل ({{count}})",
+    "emptyOpen": "لا توجد تعليقات مفتوحة",
+    "emptyResolved": "لا توجد تعليقات محلولة",
+    "emptyHint": "انقر على «إضافة تعليق» في الأعلى ثم حدد أي موقع أو معلم على الخريطة لترك ملاحظة مراجعة.",
+    "resolvedBadge": "محلول",
+    "zoomToLocation": "التكبير إلى الموقع",
+    "markResolved": "وضع علامة محلول",
+    "reopenThread": "إعادة فتح سلسلة التعليقات",
+    "deleteThread": "حذف سلسلة التعليقات",
+    "anchorFeature": "المعلم رقم {{id}} ({{layer}})",
+    "anchorPoint": "نقطة ({{coords}})",
+    "anchorMap": "خريطة",
+    "anchoredToFeature": "مثبت بالمعلم رقم {{id}} ({{layer}})",
+    "anchoredToPoint": "مثبت بـ ({{coords}})",
+    "mapPoint": "نقطة على الخريطة",
+    "reply": "رد",
+    "replyPlaceholder": "اكتب ردًا..."
   }
 }

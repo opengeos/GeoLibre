@@ -182,7 +182,23 @@
     "elevationRange": "最低 / 最高標高",
     "meanSlope": "平均勾配",
     "computing": "地形を計算しています…",
-    "partialData": "一部のサンプルに地形データがありませんでした"
+    "partialData": "一部のサンプルに地形データがありませんでした",
+    "heading": "方位",
+    "finalHeading": "最終方位",
+    "bodyNote": "計測対象: {{body}}（球体近似）"
+  },
+  "statusBar": {
+    "elevation": "標高",
+    "elevationLong": "標高",
+    "cameraAltitude": "視点高度",
+    "cameraAltitudeLong": "海面からのカメラ高度",
+    "coordinateFormat": {
+      "dd": "十進度",
+      "dms": "度分秒",
+      "ddm": "度・十進分",
+      "utm": "UTM（ゾーン、東距/北距）"
+    },
+    "coordinateFormatHint": "座標形式: {{format}}。クリックで切り替え。"
   },
   "fileNamePrompt": {
     "title": "名前を付けて保存",
@@ -214,7 +230,9 @@
     "invalidUrl": "有効なHTTPまたはHTTPSのスタイルURLを入力してください。",
     "sectionMoon": "月",
     "sectionMars": "火星",
-    "sectionOther": "その他の天体"
+    "sectionOther": "その他の天体",
+    "sectionRegional": "地域",
+    "regionChina": "中国"
   },
   "planetSwitcher": {
     "label": "天体",
@@ -263,6 +281,10 @@
         "label": "WMTSレイヤーを追加",
         "description": "WMTSタイルURLテンプレートをラスターレイヤーとして追加します。"
       },
+      "ogcFeatures": {
+        "label": "OGC API - Features レイヤーを追加",
+        "description": "OGC API - Features コレクションのフィーチャをベクターレイヤーとして追加します。指定したフィーチャ数が読み込まれるまで、サービスのページングリンクをたどります。"
+      },
       "ogcVectorTiles": {
         "label": "OGCベクタータイルを追加",
         "description": "TileJSONまたはタイルテンプレートからOGC API - Tiles(ベクター)サービスを追加します。スタイルURLからソースレイヤーを読み取ることもできます。"
@@ -297,11 +319,15 @@
       },
       "arcgis": {
         "label": "ArcGISレイヤーを追加",
-        "description": "ArcGISのFeatureServerレイヤー、VectorTileServerレイヤー、またはポータルアイテムを追加します。"
+        "description": "ArcGIS の FeatureServer、VectorTileServer、MapServer、ImageServer レイヤー、またはポータル アイテムを追加します。"
       },
       "postgres": {
         "label": "PostgreSQLレイヤーを追加",
         "description": "Martinをローカルで起動し、PostGISソースを検出して、ソースをベクタータイルとして追加します。"
+      },
+      "iceberg": {
+        "label": "Apache Iceberg レイヤーを追加",
+        "description": "Iceberg テーブル（v3 以上）を読み取り、そのフィーチャの一部を追加します。"
       },
       "deckglViz": {
         "label": "Deck.glレイヤーを追加",
@@ -310,10 +336,6 @@
       "video": {
         "label": "動画レイヤーを追加",
         "description": "MP4のURLと4つの角の座標を指定して、位置情報付きの動画オーバーレイを追加します。"
-      },
-      "ogcFeatures": {
-        "label": "OGC API - Features レイヤーを追加",
-        "description": "OGC API - Features コレクションのフィーチャをベクターレイヤーとして追加します。指定したフィーチャ数が読み込まれるまで、サービスのページングリンクをたどります。"
       }
     },
     "shared": {
@@ -421,6 +443,27 @@
       "errorUrl": "WMTSタイルURLテンプレートを入力してください。",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },
+    "ogcFeatures": {
+      "defaultName": "OGC API - Features レイヤー",
+      "sampleLabel": "世界の湖沼 (pygeoapi デモ)",
+      "urlPlaceholder": "https://example.com/ogcapi",
+      "urlHint": "サービスのランディングページ、またはそこからコピーした任意のURL (/collections や /collections/{id}/items のURLでも動作します)。",
+      "retrieveCollections": "コレクションを取得",
+      "retrieving": "取得中...",
+      "retrievedCollections": "取得したコレクション",
+      "selectCollection_other": "{{count}}件のコレクションから選択",
+      "noCollectionsFound": "このサービスではフィーチャコレクションが見つかりませんでした。",
+      "retrieveError": "このサービスからコレクションを取得できませんでした。",
+      "collection": "コレクション",
+      "collectionPlaceholder": "collection-id",
+      "maxFeatures": "最大フィーチャ数",
+      "bbox": "バウンディングボックス",
+      "datetime": "日時",
+      "errorCollection": "OGC API - Features のコレクションIDを入力してください。",
+      "errorMaxFeatures": "最大フィーチャ数には1以上の値を入力してください。",
+      "errorBbox": "バウンディングボックスを「西,南,東,北」の形式で入力してください。",
+      "errorNoFeatures": "このコレクションはフィーチャを返しませんでした。"
+    },
     "ogcVectorTiles": {
       "defaultName": "OGCベクタータイルレイヤー",
       "tilesUrl": "タイルURL",
@@ -441,14 +484,39 @@
       "defaultName": "ArcGISレイヤー",
       "sampleFeatureLabel": "米国の主要都市(フィーチャ)",
       "sampleVectorTileLabel": "サンタモニカの地籍(ベクタータイル)",
+      "sampleMapServiceLabel": "米国の行政界(マップサービス)",
+      "sampleImageServiceLabel": "USGS 3DEP 陰影起伏(イメージサービス)",
       "featureLayer": "フィーチャレイヤー",
       "vectorTileLayer": "ベクタータイルレイヤー",
+      "mapServiceLayer": "マップサービス",
+      "imageServiceLayer": "イメージサービス",
       "portalItemId": "ポータルアイテムID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "サブレイヤー",
+      "sublayersPlaceholder": "表示中のすべてのサブレイヤー",
+      "sublayersHint": "任意のサブレイヤー ID をカンマ区切りで指定します(例: 0,2,5)。サブレイヤーを選ぶと、キャッシュされたタイルではなく動的な描画になります。",
+      "retrieveSublayers": "レイヤーを参照",
+      "retrievingSublayers": "取得中...",
+      "availableSublayers": "利用可能なサブレイヤー",
+      "noSublayersFound": "このマップサービスはレイヤーを公開していません。",
+      "retrieveError": "マップサービスのレイヤーを取得できませんでした。",
+      "errorMapServiceUrl": "ArcGIS MapServerのURLを入力してください。",
+      "renderingRule": "レンダリング ルール",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "サービスが適用するラスター関数の JSON(任意)。レンダリング ルールを指定すると、キャッシュされたタイルではなく動的な描画になります。",
       "portalUrl": "ポータルURL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "アクセストークン"
+      "accessToken": "アクセストークン",
+      "pageSize": "リクエストあたりのレコード数",
+      "pageSizePlaceholder": "自動",
+      "maxFeatures": "最大フィーチャ数",
+      "maxFeaturesPlaceholder": "すべて",
+      "pagingHint": "フィーチャレイヤーはページ単位でダウンロードされます。サービスがタイムアウトする場合は、リクエストあたりのレコード数を減らしてください。",
+      "loadingProgress": "{{total}}件中{{loaded}}件のフィーチャを読み込みました…",
+      "loadingProgressUnknown": "{{loaded}}件のフィーチャを読み込みました…"
     },
     "gpx": {
       "defaultName": "GPXレイヤー",
@@ -520,6 +588,8 @@
       "errorMissingCrs": "このフィーチャクラスの座標系を検出できませんでした。追加するにはソースCRSを入力してください。"
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "Excel ブックに空でないワークシートがありません。",
+      "worksheet": "ワークシート",
       "defaultName": "区切りテキストレイヤー",
       "sampleLabel": "米国の都市",
       "errorChooseFile": "区切りテキストファイルを選択してください。",
@@ -620,9 +690,44 @@
       "statusTablesFound_other": "{{count}}件の空間テーブルが見つかりました。",
       "statusNoTables": "このデータベースには空間テーブルが見つかりませんでした。",
       "editableTable": "テーブル",
+      "geometryColumn": "ジオメトリ列",
       "tableReadOnly": "{{table}} (読み取り専用: 主キーなし)",
       "errorSelectTable": "読み込むテーブルを選択してください。",
       "errorRuntimeMissing": "処理サーバーにPostGISランタイム(psycopg)がインストールされていません。編集可能なレイヤーを読み込むには、geolibre-serverの'postgis'エクストラをインストールしてください。"
+    },
+    "iceberg": {
+      "defaultName": "Iceberg レイヤー",
+      "notice": "Iceberg テーブルはオンデマンドで一度だけ読み取られます。レイヤーは下の行数上限までのスナップショットであり、自動的に再スキャンされることはありません。再度読み取るには、レイヤーメニューの「更新」を使用してください。",
+      "mode": "Iceberg ソース",
+      "modeTable": "テーブルの場所",
+      "modeCatalog": "REST カタログ",
+      "location": "テーブルメタデータの場所",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "ウェアハウス",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "カタログエンドポイント",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "接続",
+      "table": "Iceberg テーブル",
+      "sql": "SQL（任意）",
+      "sqlHint": "描画する内容を絞り込んだり整形したりするには編集してください。ステートメントは GEOMETRY 列を返す必要があります。テーブル全体を読み取るには生成されたままにしてください。",
+      "selectTable": "テーブルを選択",
+      "geometryColumn": "ジオメトリ列",
+      "rowLimit": "行数上限",
+      "rowLimitHint": "レイヤーにはこの上限までのテーブルの先頭行が保持されます。上限は {{max}} 行を超えることはできません。",
+      "rowLimitTruncates": "テーブルには {{total}} 行ありますが、レイヤーには先頭の {{limit}} 行のみが含まれます。",
+      "statusConnecting": "Iceberg メタデータを読み込み中...",
+      "statusInspecting": "テーブルを検査中...",
+      "statusInspected": "{{rows}} 行。ジオメトリ: {{column}}（{{crs}}）。",
+      "statusNoGeometry": "{{rows}} 行ありますが、GEOMETRY 列が見つかりませんでした。Iceberg のジオメトリは v3 のジオメトリ型を使用する必要があります。",
+      "statusTablesFound_other": "{{count}} 個のテーブルが見つかりました。続行するには 1 つ選択してください。",
+      "statusNoTables": "このカタログにはテーブルがありません。",
+      "errorLocation": "Iceberg テーブルのメタデータの場所を入力してください。",
+      "errorWarehouse": "接続する Iceberg ウェアハウスを入力してください。",
+      "errorEndpoint": "Iceberg REST カタログのエンドポイントを入力してください。",
+      "errorConnect": "Iceberg ソースを読み取れませんでした。",
+      "errorInspect": "Iceberg テーブルを検査できませんでした。",
+      "errorConnectFirst": "先に接続して Iceberg テーブルを選択してください。"
     },
     "video": {
       "defaultName": "動画レイヤー",
@@ -672,15 +777,15 @@
       "bandCombinationHelp": "単一バンドはカラーマップで描画されます。RGB合成はこの変数の3つのバンドを赤・緑・青のチャンネルとして描画し、それぞれを独自の2-98%の範囲にストレッチします。",
       "modeSingleBand": "単一バンド（カラーマップ）",
       "modeRgb": "RGB合成（3バンド）",
-      "colorMin": "カラー最小値（省略可）",
-      "colorMax": "カラー最大値（省略可）",
-      "adding": "追加中...",
-      "addLayer": "レイヤーを追加",
       "channel": {
         "red": "赤バンド",
         "green": "緑バンド",
         "blue": "青バンド"
-      }
+      },
+      "colorMin": "カラー最小値（省略可）",
+      "colorMax": "カラー最大値（省略可）",
+      "adding": "追加中...",
+      "addLayer": "レイヤーを追加"
     },
     "deckViz": {
       "defaultName": "Deck.glレイヤー",
@@ -713,27 +818,6 @@
       "lineWidth": "線幅",
       "extrusion": "3D押し出し",
       "modelUrlPlaceholder": "https://example.com/model.glb"
-    },
-    "ogcFeatures": {
-      "defaultName": "OGC API - Features レイヤー",
-      "sampleLabel": "世界の湖沼 (pygeoapi デモ)",
-      "urlPlaceholder": "https://example.com/ogcapi",
-      "urlHint": "サービスのランディングページ、またはそこからコピーした任意のURL (/collections や /collections/{id}/items のURLでも動作します)。",
-      "retrieveCollections": "コレクションを取得",
-      "retrieving": "取得中...",
-      "retrievedCollections": "取得したコレクション",
-      "selectCollection_other": "{{count}}件のコレクションから選択",
-      "noCollectionsFound": "このサービスではフィーチャコレクションが見つかりませんでした。",
-      "retrieveError": "このサービスからコレクションを取得できませんでした。",
-      "collection": "コレクション",
-      "collectionPlaceholder": "collection-id",
-      "maxFeatures": "最大フィーチャ数",
-      "bbox": "バウンディングボックス",
-      "datetime": "日時",
-      "errorCollection": "OGC API - Features のコレクションIDを入力してください。",
-      "errorMaxFeatures": "最大フィーチャ数には1以上の値を入力してください。",
-      "errorBbox": "バウンディングボックスを「西,南,東,北」の形式で入力してください。",
-      "errorNoFeatures": "このコレクションはフィーチャを返しませんでした。"
     },
     "nonGeographicCoordinates": "{{names}} の座標は経緯度ではないため、地図には何も描画されません。CRS が誤って記録されています — データを再投影する（または .prj を修正する）と読み込み直してください。"
   },
@@ -1093,6 +1177,7 @@
     "guest": "ゲスト",
     "connectFailed": "共同編集サーバーに接続できませんでした。",
     "copyFailed": "クリップボードにコピーできませんでした。",
+    "shareFailed": "プロジェクトの最新の変更を共有できませんでした。",
     "connecting": "接続中…",
     "reconnecting": "再接続中…",
     "connected": "ライブセッション接続中",
@@ -1114,6 +1199,9 @@
     "viewOnly": "閲覧のみ",
     "allowEdit": "このユーザーに編集を許可",
     "setViewOnly": "このユーザーを閲覧のみに設定",
+    "kick": "参加者を退出させる",
+    "block": "参加者をブロック",
+    "requireIdentityLabel": "参加にはサインイン済みアカウントを必須にする",
     "chatLog": "セッションチャット",
     "chatCompose": "メッセージを入力",
     "chatEmpty": "メッセージはまだありません。",
@@ -1122,7 +1210,11 @@
     "chatAttachLocation": "現在の地図位置を添付",
     "chatLocationAttached": "位置情報を添付しました(クリックで削除)",
     "chatGoToLocation": "この位置に移動",
-    "sessionStatusUnread_other": "ライブ共同編集セッション、未読メッセージ {{count}} 件。クリックすると接続中のメンバーとチャットを確認できます。"
+    "sessionStatusUnread_other": "ライブ共同編集セッション、未読メッセージ {{count}} 件。クリックすると接続中のメンバーとチャットを確認できます。",
+    "lockLayer": "ゲスト向けにレイヤーをロック",
+    "unlockLayer": "ゲスト向けにレイヤーのロックを解除",
+    "layerLocked": "ロック中",
+    "layerLockedHint": "このレイヤーはホストによってロックされており、編集できません"
   },
   "share": {
     "title": "プロジェクトを共有",
@@ -1135,6 +1227,7 @@
     "step2Description": "このデバイスの設定 → 環境変数にトークンを貼り付けてください。",
     "configureToken": "ローカルトークンを設定",
     "liveAt": "プロジェクトは次のURLで公開されています:",
+    "credentialsRemoved": "{{count}} 個の認証情報フィールドは含まれていません。受信者は自分の認証情報を指定するか、ブローカー参照を使用する必要があります。",
     "copyLink": "リンクをコピー",
     "open": "開く",
     "done": "完了",
@@ -1150,7 +1243,26 @@
     "errorFallback": "プロジェクトを共有できませんでした。",
     "usernameRequired": "共有する前に {{shareHost}} アカウントでユーザー名を設定してください。アカウント設定を開いて選択し、もう一度お試しください。",
     "openAccountSettings": "アカウント設定を開く",
-    "credentialsRemoved": "{{count}} 個の認証情報フィールドは含まれていません。受信者は自分の認証情報を指定するか、ブローカー参照を使用する必要があります。"
+    "readinessChecking": "受信者があなたのデータを読み込めるか確認しています…",
+    "readinessUnavailable": "データソースの確認を実行できませんでした。",
+    "readinessAllReachable_other": "{{count}} 個のデータソースに受信者がアクセスできるようです。",
+    "readinessTitle": "一部のデータは受信者側で読み込めない可能性があります",
+    "readinessNote": "これによって共有がブロックされることはありません。受信者はブラウザでプロジェクトを開くため、これらのソースの動作はお手元とは異なる場合があります。",
+    "readinessTruncated_other": "最初の {{count}} 個のソースのみを確認しました。",
+    "readinessBasemapLabel": "ベースマップ",
+    "readinessPluginLabel": "プラグイン",
+    "readinessReasonCredentialStripped": "共有時に削除される認証情報を使用しています。",
+    "readinessReasonAuthRequired": "サービスが認証情報のないリクエストを拒否しました。",
+    "readinessReasonCors": "ブラウザはこのホストを取得できません。クロスオリジンヘッダーを送信していないか、到達できません。",
+    "readinessReasonNotFound": "サービスが「見つかりません」と応答したため、リンクの期限が切れたか移動した可能性があります。",
+    "readinessReasonLocalFile": "お使いのマシン上のファイルを参照しています。",
+    "readinessReasonPrivateHost": "プライベートまたはローカルネットワークのアドレスを参照しています。",
+    "readinessReasonNoSource": "受信者が開けるソースがありません。",
+    "readinessReasonUnchecked": "確認できませんでした。",
+    "readinessAdviceCredential": "サービスを公開するか、受信者に自分の認証情報を用意するよう伝えてください。",
+    "readinessAdviceCors": "デスクトップアプリでは読み込めますが、ブラウザのビューアーでは読み込めません。",
+    "readinessAdviceNotFound": "共有する前にこのレイヤーのソースを更新するか置き換えてください。",
+    "readinessAdviceLocal": "ホスティングされたソースに変換してください。そうしない場合、受信者には空のレイヤーが表示されます。"
   },
   "gallery": {
     "title": "プロジェクトギャラリー",
@@ -1266,13 +1378,19 @@
       "layer": "レイヤー",
       "titleLabel": "見出し",
       "position": "位置",
-      "filterToPage": "ページ範囲内のフィーチャのみ",
-      "filterToPageHint": "アトラスページと描画した印刷範囲に適用されます。それ以外の場合はレイヤー全体が使用されます。"
+      "pageFilter": "ページ範囲フィルター",
+      "filterAll": "すべての地物",
+      "filterContained": "ページ範囲内に完全に含まれる地物のみ",
+      "filterIntersecting": "ページ範囲と交差する地物のみ",
+      "filterToPageHint": "アトラスページと描画した印刷範囲に適用されます。それ以外の場合はレイヤー全体が使用されます。",
+      "filterToAtlasFeature": "現在のアトラスフィーチャのみ",
+      "filterToAtlasFeatureHint": "テーブルがアトラスのカバレッジレイヤーを使用している場合に利用できます。ページ範囲フィルターより優先されます。"
     },
     "dataTable": {
       "columns": "列",
       "columnsHint": "既定では最初の{{count}}個のフィールドが選択されます。列にチェックを入れてカスタマイズしてください。",
       "maxRows": "最大行数",
+      "fitRows": "ページに収まるよう行数を調整",
       "moreRows_other": "ほか{{count}}行",
       "noRows": "現在の設定で表示できる行がありません。"
     },
@@ -1395,6 +1513,8 @@
       "extentMargin": "フィーチャ周囲の余白",
       "extentScale": "固定縮尺",
       "marginLabel": "余白（%）",
+      "maskOutside": "現在のフィーチャの外側をマスク",
+      "maskOutsideHint": "半透明の反転塗りつぶしを適用して、現在のアトラスフィーチャを強調します。",
       "scaleLabel": "縮尺",
       "scaleRequired": "0より大きい縮尺を入力してください。",
       "sortField": "並べ替え",
@@ -1459,6 +1579,19 @@
     "description": "3D地形の垂直方向の誇張度を調整します。値を大きくすると、丘や山がより急峻に表示されます。",
     "label": "垂直誇張度",
     "controlLabel": "地形の表示切り替え(ダブルクリックで誇張度を設定)",
+    "sourceLabel": "地形ソース",
+    "sourceDescription": "EPSG:3857 または EPSG:4326 の単一バンド COG を標高ソースとして使用します。ファイルは CORS と HTTP 範囲リクエストを許可する必要があります。",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "ローカル COG DEM",
+    "localSourceDescription": "ファイルはこのデバイスに保持され、地形タイルが必要になるたびに小さな範囲で読み取られます。",
+    "useCog": "COG DEM を使用",
+    "sourceLoading": "COG を開いています…",
+    "restoreDefaultSource": "全球地形を使用",
+    "sourceError": "COG DEM を開けませんでした。",
+    "sourceErrorEmpty": "このファイルは空です。COG DEM ファイルを選択してください。",
+    "sourceErrorBand": "要求されたバンドはこの COG に存在しません。",
+    "sourceErrorProjection": "COG 地形は EPSG:3857 と EPSG:4326 の DEM のみに対応しています。",
+    "sourceErrorDetail": "COG DEM を開けませんでした。({{detail}})",
     "reset": "リセット",
     "done": "完了"
   },
@@ -1486,6 +1619,16 @@
     "gapNote": "破線の区間は値がない日付（nodata またはカバー範囲外）をつないでいます。",
     "exportCsv": "CSVをエクスポート",
     "exportGeoParquet": "GeoParquetをエクスポート"
+  },
+  "auth": {
+    "unavailableTitle": "サインインを利用できません",
+    "unavailableDescription": "GeoLibre はサインインサービスに接続できなかったため、サインイン済みかどうかを判断できません。通常は一時的なものです。解消しない場合は、このデプロイの認証設定を確認する必要があるかもしれません。",
+    "retry": "再試行",
+    "signInTitle": "GeoLibre にサインイン",
+    "signInDescription": "このデプロイにはアカウントが必要です。安全なサインインページに移動し、その後ここに戻ります。",
+    "signIn": "サインイン",
+    "signOut": "サインアウト",
+    "account": "アカウント"
   },
   "basemapExtract": {
     "title": "オフラインベースマップを抽出",
@@ -1617,8 +1760,13 @@
     "unit": {
       "meters": "m",
       "kilometers": "km",
-      "miles": "マイル"
-    }
+      "miles": "マイル",
+      "feet": "ft"
+    },
+    "viewshedHere": "ここからの可視領域 ({{radius}})",
+    "viewshedLayerName": "可視領域 ({{radius}})",
+    "viewshedToolName": "可視領域",
+    "viewshedNoResult": "ここでは可視領域を計算できませんでした。"
   },
   "knowledgeCard": {
     "title": "場所の情報",
@@ -1662,7 +1810,8 @@
       "geocoding": "ジオコーディング",
       "ai": "AIプロバイダー",
       "environment": "環境変数",
-      "updates": "アップデート"
+      "updates": "アップデート",
+      "startup": "起動"
     },
     "menu": {
       "mapPreferences": "地図設定",
@@ -1673,6 +1822,7 @@
       "ai": "AIプロバイダー",
       "environmentVariables": "環境変数",
       "updates": "更新設定",
+      "startupSettings": "起動設定",
       "managePlugins": "プラグインを管理",
       "styleManager": "スタイルマネージャー",
       "urlOverrideNote": "URLのレイアウトパラメータは保存済みの設定より優先されます。"
@@ -1689,6 +1839,26 @@
         "minor": "メジャーおよびマイナーリリースのみ",
         "major": "メジャーリリースのみ"
       }
+    },
+    "startup": {
+      "title": "起動時のプロジェクト",
+      "description": "ネイティブアプリの起動時にGeoLibreが開くワークスペースを選択します。",
+      "mode": {
+        "default": "既定のワークスペースを開く",
+        "last": "最後のプロジェクトを再度開く",
+        "specific": "特定のプロジェクトを開く"
+      },
+      "modeHint": {
+        "default": "新しい無題のプロジェクトで開始します。",
+        "last": "最近使用したローカルプロジェクトを開きます。"
+      },
+      "chooseProject": "プロジェクトを選択",
+      "noProjectSelected": "プロジェクトが選択されていません",
+      "globeByDefault": "既定で3D地球儀を有効にする",
+      "globeByDefaultHint": "起動時のプロジェクトもプロジェクトリンクも指定されていない場合の、無題のワークスペースに使用されます。",
+      "selectError": "選択したプロジェクトを読み取れませんでした。",
+      "restoring": "起動時のプロジェクトを開いています…",
+      "loadWarning": "起動時のプロジェクトを利用できません。GeoLibreは代わりに既定のワークスペースを開きました。"
     },
     "map": {
       "constraintsTitle": "地図の制約",
@@ -1711,7 +1881,9 @@
       "scaleUnitImperial": "ヤード・ポンド法（ft / mi）",
       "scaleUnitNautical": "海里（nmi）",
       "scaleUnitHint": "地図下部のスケールバーに表示する単位を選択します。",
-      "errorBoundsUnavailable": "地図の表示範囲がまだ取得できていません。"
+      "errorBoundsUnavailable": "地図の表示範囲がまだ取得できていません。",
+      "coordinateFormat": "座標形式",
+      "coordinateFormatHint": "ステータスバーがポインター座標を表示する表記です。 ステータスバーの座標をクリックすると表記を切り替えられます。"
     },
     "layout": {
       "title": "レイアウト",
@@ -2047,7 +2219,8 @@
       "dashboard": "ダッシュボード",
       "assistant": "AIアシスタント",
       "geocode": "住所をジオコーディング",
-      "modelBuilder": "バッチ処理とモデル",
+      "batchTools": "バッチツール",
+      "modelBuilder": "モデルビルダー",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AIセグメンテーション",
@@ -2102,7 +2275,8 @@
       "video": "動画レイヤー",
       "deckglViz": "Deck.glレイヤー",
       "gltfModel": "3Dモデル (glTF)",
-      "postgres": "PostgreSQLレイヤー"
+      "postgres": "PostgreSQLレイヤー",
+      "iceberg": "Apache Iceberg レイヤー"
     },
     "conversion": {
       "vectorToVector": "ベクターからベクターへ",
@@ -2129,6 +2303,7 @@
       "rasterShape": "{{width}}×{{height}}、{{bands}}バンドのラスターを読み込みました",
       "wroteCog": "オーバービュー付きのタイル化COGを書き出しました（{{compression}}）",
       "notAGeoTiff": "このファイルは読み取り可能なGeoTIFFではありません。ブラウザ版の「ラスターからCOGへ」はGeoTIFFのみ読み取れます。他の形式にはデスクトップアプリが必要です。",
+      "rasterTooLargeForBrowser": "ブラウザではラスター全体を WebAssembly でデコードしますが、WebAssembly は約4GBに制限されているため、このファイルは収まりません。GeoLibre デスクトップアプリで変換するか、gdal_translate または rio-cogeo で事前に COG を作成してください。",
       "zoomRangeError": "ズームレベルは 0 ≤ 最小 ≤ 最大 ≤ {{max}} を満たす必要があります。",
       "colormap": "カラーマップ",
       "resampling": "リサンプリング",
@@ -2374,7 +2549,7 @@
       "duckdbLayer": "DuckDB レイヤー",
       "whitebox": "Whitebox",
       "geocode": "住所をジオコーディング",
-      "modelBuilder": "バッチ処理とモデル",
+      "modelBuilder": "モデルビルダー",
       "processingHistory": "履歴",
       "conversion": "変換",
       "vector": "ベクター",
@@ -2386,7 +2561,7 @@
       "terrain": "地形",
       "remoteSensing": "リモートセンシング",
       "projection": "投影法",
-      "geolibre": "GeoLibre",
+      "geolibre": "GeoLibre ツールボックス",
       "subGroupGeometry": "ジオメトリ",
       "subGroupOverlay": "オーバーレイ",
       "subGroupJoin": "結合",
@@ -2410,6 +2585,8 @@
       "atmosphereEnabled": "有効",
       "spinGlobe": "地球儀を回転",
       "graticule": "グリッド線",
+      "pointerElevation": "標高",
+      "pointerElevationHint": "ステータスバーにポインター位置の地表標高を表示します。3D地形がない場合は公開標高サービスに問い合わせます。",
       "weather": "天気",
       "weatherTooltip": "アニメーション可能なほぼリアルタイムの気象レイヤーを重ねて表示します。",
       "weatherPlay": "アニメーションを再生",
@@ -2455,6 +2632,21 @@
       "arcgisImportComplete": "ArcGIS Pro プロジェクトをインポートしました",
       "arcgisImportWarnings_other": "プロジェクトをインポートしましたが、{{count}} 個のレイヤーを読み込めませんでした。",
       "arcgisUnknownLayerType": "不明",
+      "importWarningLayerCount_other": "{{count}} 個のレイヤー",
+      "showLayerNames": "レイヤー名を表示",
+      "hideLayerNames": "レイヤー名を隠す",
+      "arcgisImportReason": {
+        "layer-type": "{{layerType}} のレイヤータイプはサポートされていません。",
+        "missing-source": "このレイヤーには読み取り可能なローカルデータソースがありません。",
+        "format": "このレイヤーのデータ形式はサポートされていません。",
+        "file-geodatabase": "ファイルジオデータベース（.gdb）のソースはプロジェクトから読み込まれません。GeoLibre Desktop では、データ追加 → ファイルジオデータベース（GDB）から追加してください。",
+        "file-geodatabase-raster": "ファイルジオデータベース（.gdb）に保存されたラスターデータセットはサポートされていません。ラスターを GeoTIFF にエクスポートし、ラスターレイヤーとして追加してください。",
+        "network-path": "ネットワーク共有のパスはセキュリティ上の理由から読み込まれません。",
+        "service": "プロジェクト内の ArcGIS サービスレイヤーはまだサポートされていません。",
+        "browser-local-file": "ローカルファイルが参照されていますが、ブラウザーでは ArcGIS Pro のデータパスを開き直せません。GeoLibre Desktop で読み込んでください。",
+        "map-extent": "保存された地図範囲は GeoLibre が変換できない座標系を使用しているため、地図は既定のビューで開きました。",
+        "nesting": "グループの入れ子が深すぎるか、プロジェクトがそのグループを含むグループを参照し返しています。"
+      },
       "qgisImportComplete": "QGIS プロジェクトをインポートしました",
       "qgisImportWarnings_other": "プロジェクトをインポートしましたが、{{count}} 個のレイヤーを読み込めませんでした。",
       "qgisUnknownProvider": "不明",
@@ -2479,6 +2671,7 @@
       "embedVectorTitle": "ローカルのベクターデータを埋め込みますか?",
       "embedVectorDesc": "このプロジェクトには、お使いのコンピューターから読み込まれたローカルのベクターレイヤーが {{count}} 個あります。プロジェクトを再度開いたときにブラウザがこれらを再読み込みすることはできないため、復元するにはデータをプロジェクトファイルに埋め込む必要があります。埋め込むとファイルサイズが約 {{size}} 増加します。",
       "embedVectorDescDesktop": "このプロジェクトには、お使いのコンピューターから読み込まれたローカルのベクターレイヤーが {{count}} 個あります。データを埋め込んでプロジェクトを自己完結型にする（約 {{size}} 増加）か、プロジェクトを再度開いたときにディスクから再読み込みされるファイル参照として保存できます。参照はファイルサイズを小さく保ちますが、元のファイルが後で移動または削除されると読み込めなくなります。",
+      "embedVectorLargeWarning": "約 {{size}} を埋め込むと、プロジェクトファイルが非常に大きくなります。すべてのフィーチャを一度に解析してメモリに保持する必要があるため、再度開くときに時間がかかったり、失敗したりすることがあります。このサイズのデータは、レイヤーを PMTiles または FlatGeobuf に変換し、埋め込む代わりにリモートレイヤーとして追加してください。",
       "embedVectorEmbedButton": "データを埋め込む",
       "embedVectorReferenceButton": "ファイル参照を保存",
       "embedVectorSkipButton": "データなしで保存",
@@ -2519,16 +2712,9 @@
       "loadingOsmPbfProgress": "フィーチャを GeoJSON に変換しています… {{total}} 件中 {{processed}} 件の OSM エンティティを処理済み。",
       "projectName": "プロジェクト名",
       "storymapEllipsis": "ストーリーマップ...",
-      "arcgisImportReason": {
-        "layer-type": "{{layerType}} のレイヤータイプはサポートされていません。",
-        "missing-source": "このレイヤーには読み取り可能なローカルデータソースがありません。",
-        "format": "このレイヤーのデータ形式はサポートされていません。",
-        "network-path": "ネットワーク共有のパスはセキュリティ上の理由から読み込まれません。",
-        "service": "プロジェクト内の ArcGIS サービスレイヤーはまだサポートされていません。",
-        "browser-local-file": "ローカルファイルが参照されていますが、ブラウザーでは ArcGIS Pro のデータパスを開き直せません。GeoLibre Desktop で読み込んでください。",
-        "map-extent": "保存された地図範囲は GeoLibre が変換できない座標系を使用しているため、地図は既定のビューで開きました。",
-        "nesting": "グループの入れ子が深すぎるか、プロジェクトがそのグループを含むグループを参照し返しています。"
-      }
+      "pointerElevationNoticeTitle": "標高は公開サービスを利用します",
+      "pointerElevationNoticeDesc": "3D地形が有効な場合、標高は地図自体から求められ、何も送信されません。3D地形がない場合は公開のOpen-Meteo APIに問い合わせ、ポインター位置の座標が端末外に送信されます。",
+      "batchTools": "バッチツール"
     },
     "plugin": {
       "maplibre-gl-annotations": "注釈",
@@ -2598,6 +2784,7 @@
       "couldNotOpenRecentProject": "最近使用したプロジェクトを開けませんでした。",
       "couldNotLoadRecentProject": "最近使用したプロジェクトを読み込めませんでした。",
       "couldNotSaveProject": "プロジェクトを保存できませんでした。",
+      "projectTooLargeToSave": "このプロジェクトは大きすぎて保存できません。埋め込まれたベクターデータを PMTiles または FlatGeobuf に変換し、フィーチャを埋め込む代わりにリモートレイヤーとして追加してください。",
       "couldNotExportHtml": "プロジェクトを HTML にエクスポートできませんでした。",
       "osmPbfNoFeatures": "この OSM PBF ファイルにはポイント、ライン、ポリゴンのいずれのフィーチャも見つかりませんでした。",
       "couldNotLoadOsmPbf": "OSM PBF ファイルを読み込めませんでした。",
@@ -2844,6 +3031,203 @@
     "includeParents": "選択したセルの親セルを含める",
     "showIcosahedron": "正二十面体を表示"
   },
+  "s2Plugin": {
+    "title": "S2グリッド",
+    "controlTitle": "S2グリッドの設定",
+    "autoResolution": "解像度を自動設定",
+    "resolution": "解像度",
+    "cellCount": "表示範囲内に{{count}}個のセル",
+    "tooManyCells": "この表示範囲はセル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
+    "fillColor": "塗りつぶしの色",
+    "fillOpacity": "塗りつぶしの不透明度",
+    "lineColor": "輪郭線の色",
+    "lineWidth": "輪郭の太さ",
+    "showLabels": "セルIDを表示",
+    "identifyHint": "地図をクリックしてS2セルを特定します。",
+    "selectedCell": "選択中のセル",
+    "noSelection": "セルが選択されていません",
+    "copyId": "IDをコピー",
+    "parent": "親セル",
+    "children": "子セル",
+    "neighbors": "隣接セル",
+    "center": "中心",
+    "zoomToCell": "セルにズーム",
+    "addAsLayer": "グリッドをレイヤーとして追加",
+    "exportGeoJson": "GeoJSONをエクスポート",
+    "exportCsv": "CSVをエクスポート",
+    "includeNeighbors": "選択したセルの隣接セルを含める",
+    "includeParents": "選択したセルの親セルを含める"
+  },
+  "a5Plugin": {
+    "title": "A5グリッド",
+    "controlTitle": "A5グリッドの設定",
+    "autoResolution": "解像度を自動設定",
+    "resolution": "解像度",
+    "cellCount": "表示範囲内に{{count}}個のセル",
+    "tooManyCells": "この表示範囲はセル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
+    "fillColor": "塗りつぶしの色",
+    "fillOpacity": "塗りつぶしの不透明度",
+    "lineColor": "輪郭線の色",
+    "lineWidth": "輪郭の太さ",
+    "showLabels": "セルIDを表示",
+    "identifyHint": "地図をクリックしてA5セルを特定します。",
+    "selectedCell": "選択中のセル",
+    "noSelection": "セルが選択されていません",
+    "copyId": "IDをコピー",
+    "parent": "親セル",
+    "children": "子セル",
+    "neighbors": "隣接セル",
+    "center": "中心",
+    "zoomToCell": "セルにズーム",
+    "addAsLayer": "グリッドをレイヤーとして追加",
+    "exportGeoJson": "GeoJSONをエクスポート",
+    "exportCsv": "CSVをエクスポート",
+    "includeNeighbors": "選択したセルの隣接セルを含める",
+    "includeParents": "選択したセルの親セルを含める"
+  },
+  "dggridPlugin": {
+    "title": "DGGRID",
+    "controlTitle": "DGGRIDの設定",
+    "cellType": "セルの種類",
+    "topologyHexagon": "六角形",
+    "topologyDiamond": "菱形",
+    "topologyTriangle": "三角形",
+    "projection": "投影法",
+    "aperture": "アパーチャ",
+    "autoResolution": "解像度を自動設定",
+    "resolution": "解像度",
+    "cellCount": "表示範囲内に{{count}}個のセル",
+    "tooManyCells": "この表示範囲はセル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
+    "fillColor": "塗りつぶしの色",
+    "fillOpacity": "塗りつぶしの不透明度",
+    "lineColor": "輪郭線の色",
+    "lineWidth": "輪郭の太さ",
+    "showLabels": "セルIDを表示",
+    "identifyHint": "地図をクリックしてDGGRIDセルを特定します。",
+    "selectedCell": "選択中のセル",
+    "noSelection": "セルが選択されていません",
+    "copyId": "IDをコピー",
+    "parent": "親セル",
+    "children": "子セル",
+    "neighbors": "隣接セル",
+    "center": "中心",
+    "zoomToCell": "セルにズーム",
+    "addAsLayer": "グリッドをレイヤーとして追加",
+    "exportGeoJson": "GeoJSONをエクスポート",
+    "exportCsv": "CSVをエクスポート",
+    "includeNeighbors": "選択したセルの隣接セルを含める",
+    "includeParents": "選択したセルの親セルを含める"
+  },
+  "dggalPlugin": {
+    "title": "DGGAL",
+    "controlTitle": "DGGALの設定",
+    "gridType": "DGGSの種類",
+    "autoResolution": "解像度を自動設定",
+    "resolution": "解像度",
+    "cellCount": "表示範囲内に{{count}}個のセル",
+    "tooManyCells": "この表示範囲はセル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
+    "fillColor": "塗りつぶしの色",
+    "fillOpacity": "塗りつぶしの不透明度",
+    "lineColor": "輪郭線の色",
+    "lineWidth": "輪郭の太さ",
+    "showLabels": "セルIDを表示",
+    "identifyHint": "地図をクリックしてDGGALセルを特定します。",
+    "selectedCell": "選択中のセル",
+    "noSelection": "セルが選択されていません",
+    "copyId": "IDをコピー",
+    "parent": "親セル",
+    "children": "子セル",
+    "neighbors": "隣接セル",
+    "center": "中心",
+    "zoomToCell": "セルにズーム",
+    "addAsLayer": "グリッドをレイヤーとして追加",
+    "exportGeoJson": "GeoJSONをエクスポート",
+    "exportCsv": "CSVをエクスポート",
+    "includeNeighbors": "選択したセルの隣接セルを含める",
+    "includeParents": "選択したセルの親セルを含める"
+  },
+  "olcPlugin": {
+    "title": "OLC",
+    "controlTitle": "OLCの設定",
+    "autoResolution": "解像度を自動設定",
+    "resolution": "解像度",
+    "cellCount": "表示範囲内に{{count}}個のセル",
+    "tooManyCells": "この表示範囲はセル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
+    "fillColor": "塗りつぶしの色",
+    "fillOpacity": "塗りつぶしの不透明度",
+    "lineColor": "輪郭線の色",
+    "lineWidth": "輪郭の太さ",
+    "showLabels": "セルIDを表示",
+    "identifyHint": "地図をクリックしてOLCセルを特定します。",
+    "selectedCell": "選択中のセル",
+    "noSelection": "セルが選択されていません",
+    "copyId": "IDをコピー",
+    "parent": "親セル",
+    "children": "子セル",
+    "neighbors": "隣接セル",
+    "center": "中心",
+    "zoomToCell": "セルにズーム",
+    "addAsLayer": "グリッドをレイヤーとして追加",
+    "exportGeoJson": "GeoJSONをエクスポート",
+    "exportCsv": "CSVをエクスポート",
+    "includeNeighbors": "選択したセルの隣接セルを含める",
+    "includeParent": "選択したセルの親セルを含める"
+  },
+  "geohashPlugin": {
+    "title": "Geohash",
+    "controlTitle": "Geohashの設定",
+    "autoResolution": "解像度を自動設定",
+    "resolution": "解像度",
+    "cellCount": "表示範囲内に{{count}}個のセル",
+    "tooManyCells": "この表示範囲はセル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
+    "fillColor": "塗りつぶしの色",
+    "fillOpacity": "塗りつぶしの不透明度",
+    "lineColor": "輪郭線の色",
+    "lineWidth": "輪郭の太さ",
+    "showLabels": "セルIDを表示",
+    "identifyHint": "地図をクリックしてGeohashセルを特定します。",
+    "selectedCell": "選択中のセル",
+    "noSelection": "セルが選択されていません",
+    "copyId": "IDをコピー",
+    "parent": "親セル",
+    "children": "子セル",
+    "neighbors": "隣接セル",
+    "center": "中心",
+    "zoomToCell": "セルにズーム",
+    "addAsLayer": "グリッドをレイヤーとして追加",
+    "exportGeoJson": "GeoJSONをエクスポート",
+    "exportCsv": "CSVをエクスポート",
+    "includeNeighbors": "選択したセルの隣接セルを含める",
+    "includeParent": "選択したセルの親セルを含める"
+  },
+  "tilecodePlugin": {
+    "title": "Tilecode",
+    "controlTitle": "Tilecodeの設定",
+    "autoResolution": "解像度を自動設定",
+    "resolution": "解像度",
+    "cellCount": "表示範囲内に{{count}}個のタイル",
+    "tooManyCells": "この表示範囲はタイル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
+    "fillColor": "塗りつぶしの色",
+    "fillOpacity": "塗りつぶしの不透明度",
+    "lineColor": "輪郭線の色",
+    "lineWidth": "輪郭の太さ",
+    "showLabels": "タイルIDを表示",
+    "identifyHint": "地図をクリックしてタイルを特定します。",
+    "selectedCell": "選択中のタイル",
+    "noSelection": "タイルが選択されていません",
+    "copyId": "IDをコピー",
+    "quadkey": "Quadkey",
+    "parent": "親タイル",
+    "children": "子タイル",
+    "neighbors": "隣接タイル",
+    "center": "中心",
+    "zoomToCell": "タイルにズーム",
+    "addAsLayer": "グリッドをレイヤーとして追加",
+    "exportGeoJson": "GeoJSONをエクスポート",
+    "exportCsv": "CSVをエクスポート",
+    "includeNeighbors": "選択したタイルの隣接タイルを含める",
+    "includeParent": "選択したタイルの親タイルを含める"
+  },
   "timelapse": {
     "title": "タイムラプス",
     "provider": "画像ソース",
@@ -2964,6 +3348,98 @@
     "added": "{{title}} を追加しました。",
     "addError": "データセットを追加できませんでした。",
     "searchError": "検索に失敗しました。"
+  },
+  "stacPlugin": {
+    "title": "STAC カタログ",
+    "footprintLayerName": "STAC 検索範囲",
+    "catalogSearch": "STAC Index で公開カタログを検索",
+    "catalogSearchPlaceholder": "カタログ名を検索…",
+    "indexLoading": "STAC Index を読み込んでいます…",
+    "indexUnavailable": "STAC Index を利用できません: URL を入力してください",
+    "indexLoadFailed": "STAC Index を読み込めませんでした",
+    "urlLabel": "STAC カタログまたは API の URL",
+    "connect": "接続",
+    "connecting": "STAC に接続しています…",
+    "connected": "接続しました。フィルターを選んで検索してください。",
+    "connectFailed": "STAC に接続できませんでした",
+    "selectCatalog": "カタログを選択…",
+    "noMatchingCatalogs": "一致するカタログがありません",
+    "catalogApiSuffix": " (API)",
+    "catalogStaticSuffix": " (静的)",
+    "kindApi": "STAC API",
+    "kindStatic": "静的カタログ",
+    "collectionsHint": "Ctrl/Cmd を押しながら複数のコレクションを選択できます。下端をドラッグするとサイズを変更できます",
+    "limitToExtent": "現在の地図範囲に検索を限定する",
+    "bboxLabel": "バウンディングボックス（西、南、東、北）",
+    "bboxPlaceholder": "任意。地図範囲より優先されます",
+    "bboxInvalid": "有効なバウンディングボックスを入力してください: 西、南、東、北。",
+    "drawBbox": "地図上に範囲を描画",
+    "cancelDrawing": "描画をキャンセル",
+    "clearDrawnBbox": "描画した範囲をクリア",
+    "drawHint": "地図上でクリックしてドラッグすると検索範囲を描画できます。",
+    "drawnBbox": "描画した範囲: {{bbox}}",
+    "drawnBboxCleared": "描画した範囲をクリアしました。",
+    "mapNotReady": "地図の描画準備ができていません。",
+    "startDate": "開始日",
+    "endDate": "終了日",
+    "additionalParams": "追加の検索パラメーター（JSON、STAC API のみ）",
+    "additionalInvalid": "追加の検索パラメーターは JSON オブジェクトである必要があります。",
+    "searchItems": "アイテムを検索",
+    "clearResults": "結果をクリア",
+    "resultsCleared": "検索結果をクリアしました。",
+    "searching": "STAC アイテムを検索しています…",
+    "loadingMore": "さらにアイテムを読み込んでいます…",
+    "noMatchesHere": "カタログのこの部分には一致するものがありませんでした。さらに読み込んで検索を続けてください。",
+    "treeEmpty": "空",
+    "treeOpenFailed": "このカタログを開けませんでした",
+    "noResults": "これらのフィルターに一致する STAC アイテムはありません。",
+    "searchFailed": "STAC 検索に失敗しました",
+    "showing": "{{count}} 件のアイテムを表示しています。",
+    "showingOfMatched": "{{matched}} 件中 {{count}} 件のアイテムを表示しています。",
+    "loadMore": "さらに読み込む",
+    "renderOptions": "ラスター描画オプション",
+    "renderingEngine": "COG レンダリングエンジン",
+    "engineAuto": "変更しない",
+    "engineWasm": "WebAssembly タイラー (地球儀対応)",
+    "engineGpu": "GPU (deck.gl, メルカトルのみ)",
+    "engineTitiler": "TiTiler サーバー",
+    "engineHint": "どのレンダラーが画像をデコードするか。上の設定と違い、これはレイヤーごとではありません。すでに追加済みのものも含め、地図上のすべてのラスターに適用されます。",
+    "resizeResults": "検索結果のサイズを変更",
+    "bands": "バンド",
+    "bandsPlaceholder": "例: 1 または 1,2,3（既定: 自動）",
+    "colormap": "カラーマップ（単バンドのみ）",
+    "colormapDefault": "レンダラーの既定値",
+    "minValue": "最小値",
+    "maxValue": "最大値",
+    "nodata": "NoData 値",
+    "nodataPlaceholder": "ファイルの NoData タグより優先されます",
+    "renderHint": "空欄にすると GeoTIFF から値が推定されます。オプションは変更後に追加したアセットに適用されます。",
+    "initialStatus": "STAC Index からカタログを選ぶか、URL を入力してください。",
+    "catalogInfo": "{{title}} · {{kind}}",
+    "zoom": "ズーム",
+    "add": "追加",
+    "download": "ダウンロード",
+    "adding": "{{asset}} を追加しています…",
+    "added": "{{asset}} を地図に追加しました。",
+    "addUnsupported": "地図に追加できるのは GeoTIFF/COG、GeoJSON、GeoParquet、PMTiles のアセットのみです",
+    "addFailed": "アセットを追加できませんでした",
+    "addNoSourceLayers": "このアーカイブには描画できるレイヤーがありません",
+    "addNoTarget": "このアセットには描画できるものがありません",
+    "addIcechunkFailed": "この Icechunk リポジトリを開けませんでした",
+    "zarrProblemGroup": "このアセットは描画可能な 1 つの配列ではなく、配列のグループを指しています",
+    "zarrProblemMissing": "このストアにはその変数がありません",
+    "zarrProblemUnauthorized": "この Zarr ストアには、GeoLibre がまだ提供できない認証情報が必要です",
+    "zarrProblemUnsupportedUrl": "この Zarr ストアのアドレスはキー単位で読み取ることができません",
+    "zarrProblemUnavailable": "この Zarr ストアを開けませんでした",
+    "chooseTarget": "追加するものを選択",
+    "cogUnsupported": "この GeoLibre ホストはリモートの GeoTIFF アセットを表示できません",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
+    "formatUnknown": "不明な形式",
+    "notAddable": "追加不可"
   },
   "earthdataGis": {
     "hint": "NASA Earthdata GIS で画像・地図・フィーチャの各サービスを検索します。",
@@ -3187,6 +3663,10 @@
   "basemaps": {
     "confirmStyleReplace_other": "「{{name}}」に切り替えると、マップスタイル全体が置き換えられ、追加した{{count}}件の重ねたベースマップが削除されます。続行しますか?"
   },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "フィーチャのプロパティ",
+    "massingHeight": "高さ (m)"
+  },
   "annotations": {
     "toolbar": "注釈ツール",
     "layerName": "注釈",
@@ -3293,6 +3773,14 @@
       "sum": "合計",
       "mean": "平均"
     },
+    "indicatorAggregation": {
+      "count": "件数",
+      "sum": "合計",
+      "mean": "平均",
+      "min": "最小値",
+      "max": "最大値",
+      "median": "中央値"
+    },
     "chart": {
       "emptyNumeric": "プロットする数値がありません。",
       "emptyScatter": "両方のフィールドが数値である行がありません。",
@@ -3332,14 +3820,6 @@
       "colorDefault": "デフォルトのチャート配色",
       "cancel": "キャンセル",
       "save": "保存"
-    },
-    "indicatorAggregation": {
-      "count": "件数",
-      "sum": "合計",
-      "mean": "平均",
-      "min": "最小値",
-      "max": "最大値",
-      "median": "中央値"
     }
   },
   "assistant": {
@@ -3348,9 +3828,9 @@
     "clear": "会話をクリア",
     "close": "アシスタントを閉じる",
     "send": "送信",
-    "sendHint": "送信(Ctrl/Cmd+Enter)",
+    "sendHint": "送信(Enter)",
     "stop": "停止",
-    "placeholder": "データについて質問してください。例:「人口5000万人以上の国を表示」 ・ Ctrl/Cmd+Enterで送信",
+    "placeholder": "データについて質問してください。例:「人口5000万人以上の国を表示」 ・ Enterで送信、Shift+Enterで改行",
     "intro": "データとチャットしましょう。Spatial SQLの実行、レイヤーの追加・削除、スタイルの変更、マップの移動ができます。すべての変更は元に戻せます。「国を人口に応じた赤のグラデーションで色分けして」のように試してみてください。",
     "setupTitle": "AIアシスタントを設定",
     "setupStatus": "アシスタントが処理を行うにはAIプロバイダーが必要です。以下のいずれかのプロバイダーの認証情報を追加して保存すると、パネルはすぐにチャットモードに切り替わります。",
@@ -3460,6 +3940,8 @@
       "bylinePlaceholder": "著者またはクレジット表記",
       "footerText": "フッターテキスト",
       "footerPlaceholder": "各ページの下部に表示されるフッター",
+      "markers": "クリックできる位置マーカー",
+      "markersHint": "各チャプターの位置にマーカーを描画します。PDF ビューアーでマーカーをクリックすると、その座標が Google マップで開きます。",
       "startSlide": "開始スライド",
       "endSlide": "終了スライド",
       "generate": "PDFを生成",
@@ -3544,33 +4026,101 @@
       "count_other": "{{count}} 件の実行を記録",
       "toolUnavailable": "ツール「{{toolId}}」は利用できなくなりました"
     },
-    "modelBuilder": {
-      "moveStepUp": "ステップを上に移動",
-      "moveStepDown": "ステップを下に移動",
-      "removeStep": "ステップを削除",
-      "title": "バッチとモデル",
-      "description": "1 つのベクターツールを多数のレイヤーに対して実行するか、ツールを連結してプロジェクトとともに保存できる再利用可能なモデルを作成します。",
-      "tabBatch": "バッチ",
-      "tabModels": "モデル",
-      "outputPlaceholder": "ここに出力が表示されます。",
+    "batchTools": {
+      "title": "バッチツール",
+      "description": "1 つのベクターツールを多数のレイヤーに一括で実行します。",
+      "runBatch": "バッチを実行",
       "tool": "ツール",
       "sharedParameters": "共通パラメータ",
       "noExtraParameters": "このツールに追加のパラメータはありません。",
       "inputLayers": "入力レイヤー",
-      "selectAll": "すべて選択",
       "clearSelection": "選択解除",
+      "selectAll": "すべて選択",
       "noCompatibleLayers": "対応する GeoJSON レイヤーがありません。",
-      "newModel": "新しいモデル",
-      "noSavedModels": "保存されたモデルはまだありません。",
-      "untitledModel": "無題のモデル",
+      "outputPlaceholder": "ここに出力が表示されます。"
+    },
+    "modelBuilder": {
+      "title": "モデルビルダー",
+      "description": "ツールをキャンバスにドラッグし、つなげて処理モデルを作成します。",
       "modelName": "モデル名",
-      "emptyPipelineHint": "ステップを追加してパイプラインの作成を始めましょう。最初のステップは入力レイヤーを読み込み、以降の各ステップは前のステップの出力を受け取ります。",
-      "addStep": "ステップを追加",
-      "runModel": "モデルを実行",
+      "modelNamePlaceholder": "名称未設定のモデル",
+      "untitledModel": "名称未設定のモデル",
+      "newModel": "新規",
+      "discardChanges": "現在のモデルの未保存の変更を破棄しますか?",
+      "discardRunning": "モデルの実行がまだ進行中です。停止して続行しますか?",
+      "arrange": "整列",
+      "arrangeHint": "ノードを処理の流れに沿って並べます",
+      "runModel": "実行",
+      "cancelRun": "キャンセル",
+      "runCancelled": "実行をキャンセルしました。",
+      "issueMissingLayer": "入力レイヤーを選択してください。",
+      "issueUnknownTool": "不明なツール「{{tool}}」。",
+      "issueMissingInput": "「{{port}}」には接続または値が必要です。",
+      "issueUnknownPort": "接続が存在しないポートを参照しています。",
+      "issueDuplicateInput": "「{{port}}」には既に入力接続があります。",
+      "issueTypeMismatch": "これらのポートは異なる種類のデータを扱います。",
+      "issueCycle": "モデルにループが含まれています。",
+      "issueNoOutput": "結果を保持するには出力ノードを追加してください。",
+      "issueDuplicateNode": "2 つ以上のノードが同じ id を使用しています。",
+      "issueDanglingEdge": "接続が存在しないノードを指しています。",
+      "outputAddFailed": "「{{name}}」を地図に追加できませんでした",
+      "catalogUnavailable": "ツールを読み込めなかったため、モデルの確認も実行もできません。",
+      "addToolNode": "{{tool}} をキャンバスに追加",
+      "importTooLarge": "このモデルは大きすぎて開けません。",
+      "importModel": "インポート",
+      "exportModel": "エクスポート",
+      "copyPython": "Pythonスクリプトをコピー",
+      "pythonCopied": "Pythonスクリプトをクリップボードにコピーしました。",
+      "pythonCopyFailed": "Pythonスクリプトをコピーできませんでした",
+      "savedModels": "保存済みのモデル",
+      "loadModelPlaceholder": "保存済みモデルを読み込む…",
       "deleteModel": "削除",
-      "inputPreviousStep": "入力: ← 前のステップの出力",
-      "unknownTool": "不明なツール「{{id}}」",
-      "noParameters": "パラメータはありません。"
+      "deletedLog": "モデルをプロジェクトから削除しました。",
+      "searchTools": "ツールを検索",
+      "loadingTools": "ツールを読み込んでいます…",
+      "noToolsMatch": "検索に一致するツールはありません。",
+      "addInputNode": "+ 入力",
+      "addOutputNode": "+ 出力",
+      "canvasEmpty": "パレットからツールをドラッグして作成を始めます。",
+      "inputNode": "入力",
+      "outputNode": "出力",
+      "inputPort": "入力: {{port}}",
+      "outputPort": "出力: {{port}}",
+      "removeConnection": "接続を削除",
+      "removeNode": "ノードを削除",
+      "resizePanel": "パネルのサイズを変更",
+      "minimizePanel": "パネルを最小化",
+      "restorePanel": "パネルを元に戻す",
+      "resizePalette": "ツールパレットのサイズを変更",
+      "resizeInspector": "プロパティパネルのサイズを変更",
+      "resizeLog": "メッセージログのサイズを変更",
+      "selectNodeHint": "ノードを選択すると設定を編集できます。",
+      "sourceLayer": "ソースレイヤー",
+      "chooseLayer": "レイヤーを選択…",
+      "resultName": "結果名",
+      "resultNamePlaceholder": "モデル出力",
+      "noParameters": "パラメータはありません。",
+      "keepResultHint": "出力を追加すると、途中の結果も残せます。",
+      "keepResultSingle": "この結果を残す",
+      "resultKeptSingle": "この結果は残されます",
+      "keepResult": "「{{port}}」を残す",
+      "resultKept": "「{{port}}」は残されます",
+      "outputPlaceholder": "メッセージはここに表示されます。",
+      "connectCycle": "その接続はループを作成します。",
+      "connectSameNode": "ノードを自分自身に接続することはできません。",
+      "fixIssuesFirst": "実行する前に報告された問題を修正してください。",
+      "runFailed": "実行に失敗しました",
+      "runFinished": "実行が完了しました — {{outputs}} 件の出力を追加しました。",
+      "savedLog": "モデルをプロジェクトに保存しました。",
+      "exportedLog": "{{name}} をエクスポートしました",
+      "importedLog": "{{nodes}} 個のノードを持つモデルをインポートしました。",
+      "importFailed": "インポートに失敗しました",
+      "importInvalid": "このファイルにはモデルグラフが含まれていません。",
+      "importUnsupported": "このファイルは GeoLibre のモデルではありません。",
+      "rasterOutputUnsupported": "「{{name}}」はラスター結果のため、このビルドでは地図に追加できません。",
+      "portNeedsVector": "「{{port}}」にはベクターデータが必要ですが、ラスターが渡されました。",
+      "toolNoOutput": "「{{tool}}」は出力を生成しませんでした。",
+      "toolNoUsableOutput": "「{{tool}}」は利用できる出力を生成しませんでした。"
     },
     "parameterField": {
       "selectLayer": "レイヤーを選択...",
@@ -3681,6 +4231,1438 @@
       "run": "実行",
       "outputPlaceholder": "ここに出力が表示されます。",
       "resolutionRange": "解像度（0-{{max}}）"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "バッファ",
+          "description": "各フィーチャの周囲に一定距離のバッファポリゴンを作成します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "distance": {
+              "label": "距離"
+            },
+            "units": {
+              "label": "単位",
+              "options": {
+                "kilometers": "キロメートル",
+                "meters": "メートル",
+                "miles": "マイル"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "重心",
+          "description": "各フィーチャの重心点を計算します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "凸包",
+          "description": "すべてのフィーチャを囲む凸包を計算します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "ディゾルブ",
+          "description": "ポリゴンフィーチャを 1 つのジオメトリに融合します。フィールドでグループ化することもできます",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "field": {
+              "label": "ディゾルブフィールド（任意）",
+              "description": "ディゾルブの前にフィーチャをグループ化するプロパティ名"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "バウンディングボックス",
+          "description": "すべてのフィーチャを囲む矩形の範囲を計算します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "simplify": {
+          "name": "簡素化",
+          "description": "Douglas-Peucker 法で頂点数を削減します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "tolerance": {
+              "label": "許容値（度）"
+            },
+            "highQuality": {
+              "label": "高品質"
+            }
+          }
+        },
+        "clip": {
+          "name": "クリップ",
+          "description": "入力レイヤーをオーバーレイレイヤーの範囲でクリップします（入力の属性を保持）",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "overlay": {
+              "label": "オーバーレイ（クリップ）レイヤー"
+            }
+          }
+        },
+        "intersection": {
+          "name": "交差",
+          "description": "2 つのポリゴンレイヤーが重なる領域のみを残します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "overlay": {
+              "label": "オーバーレイレイヤー"
+            }
+          }
+        },
+        "difference": {
+          "name": "差分",
+          "description": "入力レイヤーからオーバーレイレイヤーの領域を取り除きます",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "overlay": {
+              "label": "オーバーレイレイヤー"
+            }
+          }
+        },
+        "union": {
+          "name": "和集合",
+          "description": "2 つのポリゴンレイヤーを 1 つの結合ジオメトリにマージします",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "overlay": {
+              "label": "オーバーレイレイヤー"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "空間結合",
+          "description": "空間関係に基づいて、結合レイヤーの属性を各入力フィーチャに付加します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "overlay": {
+              "label": "結合レイヤー"
+            },
+            "predicate": {
+              "label": "空間関係",
+              "options": {
+                "intersects": "交差する",
+                "within": "内部にある",
+                "contains": "含む"
+              }
+            },
+            "how": {
+              "label": "結合タイプ",
+              "options": {
+                "inner": "内部結合（一致したフィーチャのみ保持）",
+                "left": "左結合（すべての入力フィーチャを保持）"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "属性結合",
+          "description": "ジオメトリを使わずに、キーフィールドが一致する各入力フィーチャに結合レイヤー（テーブル）の属性を付加します。1 対 1: 最初に一致した結合行が採用されます。",
+          "params": {
+            "layer": {
+              "label": "ターゲットレイヤー"
+            },
+            "overlay": {
+              "label": "結合レイヤー（テーブル）",
+              "description": "属性の取り込み元となるレイヤー。そのジオメトリは無視されます。"
+            },
+            "target_field": {
+              "label": "ターゲットキーフィールド"
+            },
+            "join_field": {
+              "label": "結合キーフィールド"
+            },
+            "how": {
+              "label": "結合タイプ",
+              "options": {
+                "left": "左結合（すべてのターゲットフィーチャを保持）",
+                "inner": "内部結合（一致したフィーチャのみ保持）"
+              }
+            },
+            "fields": {
+              "label": "取り込むフィールド（任意）",
+              "description": "コピーする結合フィールドをカンマ区切りで指定します。空欄のままにすると、キー以外のすべての結合フィールドを取り込みます。"
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "値で選択",
+          "description": "属性値が条件に一致するフィーチャを新しいレイヤーに抽出します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "field": {
+              "label": "フィールド"
+            },
+            "operator": {
+              "label": "演算子",
+              "options": {
+                "eq": "=（等しい）",
+                "neq": "≠（等しくない）",
+                "gt": ">（より大きい）",
+                "gte": "≥（以上）",
+                "lt": "<（より小さい）",
+                "lte": "≤（以下）",
+                "contains": "含む（テキスト）",
+                "starts-with": "で始まる（テキスト）",
+                "is-null": "空である",
+                "is-not-null": "空でない"
+              }
+            },
+            "value": {
+              "label": "値",
+              "description": "両辺が数値の場合は数値として比較されます。"
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "場所で選択",
+          "description": "別のレイヤーとの空間関係によってフィーチャを新しいレイヤーに抽出します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "overlay": {
+              "label": "フィルターレイヤー"
+            },
+            "predicate": {
+              "label": "空間関係",
+              "options": {
+                "intersects": "交差する",
+                "within": "内部にある",
+                "contains": "含む",
+                "disjoint": "離れている（交差なし）"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "ランダム抽出",
+          "description": "フィーチャ数または入力に対する割合で指定したサイズのランダムなフィーチャの部分集合を新しいレイヤーに抽出します。",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "method": {
+              "label": "方法",
+              "options": {
+                "count": "フィーチャ数",
+                "percentage": "フィーチャの割合"
+              }
+            },
+            "count": {
+              "label": "フィーチャ数",
+              "description": "入力フィーチャ数より大きい場合は、その数に制限されます。"
+            },
+            "percentage": {
+              "label": "フィーチャの割合"
+            }
+          }
+        },
+        "reproject": {
+          "name": "再投影",
+          "description": "レイヤーの座標を指定した元の CRS として解釈し直し、正しい位置に表示されるよう WGS84 に変換します。サイドカーまたは Python エンジンが必要です。",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "source_crs": {
+              "label": "元の CRS",
+              "description": "レイヤーの座標が実際に使用している CRS（例: EPSG:3857）。結果は WGS84（EPSG:4326）に変換されます。"
+            }
+          }
+        },
+        "explode": {
+          "name": "マルチパートの分解",
+          "description": "マルチパートジオメトリをシングルパートのフィーチャ（パートごとに 1 フィーチャ）に分割し、各親の属性を保持します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "属性で集約",
+          "description": "同じ属性値を持つフィーチャをグループごとに 1 つのジオメトリにディゾルブし、要約統計量を付加します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "group_field": {
+              "label": "グループ化フィールド"
+            },
+            "statistic": {
+              "label": "統計量",
+              "options": {
+                "count": "個数",
+                "sum": "合計",
+                "mean": "平均",
+                "min": "最小",
+                "max": "最大",
+                "median": "中央値"
+              }
+            },
+            "stat_field": {
+              "label": "統計フィールド",
+              "description": "上の統計量で要約する数値フィールド。"
+            }
+          }
+        },
+        "smooth": {
+          "name": "スムージング",
+          "description": "Chaikin アルゴリズムでラインおよびポリゴンフィーチャの角を丸めます（頂点を追加）。頂点を削減する「簡素化」とは異なります。Z 値（標高）は保持され、ポイントはそのまま通過します。",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "iterations": {
+              "label": "反復回数",
+              "description": "反復回数が多いほど滑らかになります（1〜10）。"
+            }
+          }
+        },
+        "grid": {
+          "name": "規則的なグリッド",
+          "description": "範囲を覆う規則的な矩形グリッド（フィッシュネット）のセルを生成します。範囲のソース: 現在の地図表示、レイヤーの範囲、または手動のバウンディングボックス。",
+          "params": {
+            "source": {
+              "label": "範囲のソース",
+              "options": {
+                "viewport": "地図のビューポート",
+                "layer": "レイヤーの範囲",
+                "bbox": "手動のバウンディングボックス"
+              }
+            },
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "west": {
+              "label": "西（最小経度）"
+            },
+            "south": {
+              "label": "南（最小緯度）"
+            },
+            "east": {
+              "label": "東（最大経度）"
+            },
+            "north": {
+              "label": "北（最大緯度）"
+            },
+            "cell_width": {
+              "label": "セルの幅（度）"
+            },
+            "cell_height": {
+              "label": "セルの高さ（度）",
+              "description": "空欄のままにするとセルの幅と同じになります。"
+            },
+            "cell_type": {
+              "label": "セルタイプ",
+              "options": {
+                "polygon": "矩形",
+                "point": "ポイント（セル中心）"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "ボロノイ / ドロネー",
+          "description": "ポイントレイヤーからボロノイ図（ポイントごとに 1 ポリゴン、ポイントの範囲でクリップ）またはドロネー三角形分割を作成します。",
+          "params": {
+            "layer": {
+              "label": "入力ポイントレイヤー"
+            },
+            "type": {
+              "label": "図の種類",
+              "options": {
+                "voronoi": "ボロノイポリゴン",
+                "delaunay": "ドロネー三角形"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "基地局カバレッジ",
+          "description": "方位角・半径・ビーム幅（属性フィールドまたは固定値から取得）を使って、ポイントサイトからアンテナのセクター（扇形）ポリゴンを作成します。ビーム幅は 360°（全円）に制限され、記録されるビーム幅は制限後の値です。QGIS Shape Tools のように、携帯基地局のカバレッジに便利です。",
+          "params": {
+            "layer": {
+              "label": "入力ポイントレイヤー"
+            },
+            "azimuthField": {
+              "label": "方位角フィールド（°）",
+              "description": "セクターの向き。北から時計回りの度数です。空欄または非数値の場合は固定の方位角が使用されます。"
+            },
+            "azimuth": {
+              "label": "方位角（固定、°）"
+            },
+            "radiusField": {
+              "label": "半径フィールド",
+              "description": "カバレッジ半径。空欄または非数値の場合は固定の半径が使用されます。"
+            },
+            "radius": {
+              "label": "半径（固定）"
+            },
+            "beamwidthField": {
+              "label": "ビーム幅フィールド（°）",
+              "description": "セクターの角度幅。360°（全円）に制限されます。空欄または非数値の場合は固定のビーム幅が使用されます。"
+            },
+            "beamwidth": {
+              "label": "ビーム幅（固定、°）"
+            },
+            "units": {
+              "label": "半径の単位",
+              "options": {
+                "kilometers": "キロメートル",
+                "meters": "メートル",
+                "miles": "マイル"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "DGGS ジェネレーター",
+          "description": "領域を DGGS セル（H3、S2、A5、DGGRID、DGGAL）で埋めます。ソース: レイヤーのジオメトリ、レイヤーの範囲、現在の地図表示、または手動のバウンディングボックス。",
+          "params": {
+            "dggsType": {
+              "label": "DGGS タイプ",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID タイプ",
+              "description": "duck_dggs に dggs_params として渡すグリッド構成（ISEA/FULLER × アパーチャ × トポロジー）。",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL タイプ",
+              "description": "dggal.createDGGRS に渡す DGGRS（ISEA/IVEA/RTEA/HEALPix/GNOSIS）。",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "領域のソース",
+              "options": {
+                "polyfill": "レイヤーのジオメトリ（ポリフィル）",
+                "extent": "レイヤーの範囲（bbox）",
+                "viewport": "地図のビューポート",
+                "bbox": "手動のバウンディングボックス"
+              }
+            },
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "west": {
+              "label": "西（最小経度）"
+            },
+            "south": {
+              "label": "南（最小緯度）"
+            },
+            "east": {
+              "label": "東（最大経度）"
+            },
+            "north": {
+              "label": "北（最大緯度）"
+            },
+            "resolution": {
+              "label": "解像度",
+              "description": "範囲は DGGS タイプによって異なります。空欄のままにすると面積から自動選択されます。"
+            },
+            "compactCells": {
+              "label": "セルをコンパクト化",
+              "description": "完全に揃った兄弟セルの組を、より粗い親セルにまとめます（フィーチャ数が減り、解像度が混在します）。"
+            },
+            "fixAntimeridian": {
+              "label": "対蹠子午線を補正",
+              "description": "経度 ±180° をまたぐセルのリングを展開します。"
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "DGGS ビニング",
+          "description": "ポイントレイヤーを DGGS セルに集約します（個数、または数値フィールドの合計/平均/最小/最大）。",
+          "params": {
+            "dggsType": {
+              "label": "DGGS タイプ",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID タイプ",
+              "description": "duck_dggs に dggs_params として渡すグリッド構成（ISEA/FULLER × アパーチャ × トポロジー）。",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL タイプ",
+              "description": "dggal.createDGGRS に渡す DGGRS（ISEA/IVEA/RTEA/HEALPix/GNOSIS）。",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "入力ポイントレイヤー"
+            },
+            "aggOp": {
+              "label": "集約",
+              "options": {
+                "count": "個数",
+                "sum": "合計",
+                "mean": "平均",
+                "min": "最小",
+                "max": "最大"
+              }
+            },
+            "field": {
+              "label": "フィールド",
+              "description": "集約する数値フィールド。"
+            },
+            "resolution": {
+              "label": "解像度",
+              "description": "範囲は DGGS タイプによって異なります。空欄のままにすると面積から自動選択されます。"
+            },
+            "fixAntimeridian": {
+              "label": "対蹠子午線を補正",
+              "description": "経度 ±180° をまたぐセルのリングを展開します。"
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "DGGS コンパクト化",
+          "description": "DGGS ポリゴンセルをコンパクト化するか、均一な解像度に展開します（H3、S2、A5、DGGAL）。入力は ID プロパティを持つセルレイヤーである必要があります。",
+          "params": {
+            "dggsType": {
+              "label": "DGGS タイプ",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL タイプ",
+              "description": "dggal.createDGGRS に渡す DGGRS（ISEA/IVEA/RTEA/HEALPix/GNOSIS）。",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "モード",
+              "options": {
+                "compact": "コンパクト化",
+                "expand": "展開"
+              }
+            },
+            "layer": {
+              "label": "入力 DGGS レイヤー",
+              "description": "DGGS ジェネレーター / ビニング（または同等のツール）で作成したポリゴンセルレイヤー。"
+            },
+            "cellField": {
+              "label": "セル ID フィールド",
+              "description": "空欄の場合、選択したタイプに応じて h3、a5、s2、または dggal が既定値になります。"
+            },
+            "resolution": {
+              "label": "ターゲット解像度",
+              "description": "展開先の解像度。入力セルと同じか、より細かい必要があります。"
+            },
+            "fixAntimeridian": {
+              "label": "対蹠子午線を補正",
+              "description": "経度 ±180° をまたぐセルのリングを展開します。"
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "軌跡の速度",
+          "description": "ポイントを（ターゲットごとに）時刻順に並べ、連続するフィックスを距離・所要時間・速度を持つセグメントとして接続します。QGIS TrajecTools に相当します。",
+          "params": {
+            "layer": {
+              "label": "入力ポイントレイヤー"
+            },
+            "timeField": {
+              "label": "時刻フィールド",
+              "description": "タイムスタンプ（フィックスごと）: ISO 形式の日時文字列、またはエポック（秒またはミリ秒）。"
+            },
+            "idField": {
+              "label": "ターゲット ID フィールド",
+              "description": "ポイントを別々の軌跡に分割します。空欄のままにすると、すべてのポイントを 1 つのターゲットとして扱います。"
+            },
+            "speedUnits": {
+              "label": "速度の単位",
+              "options": {
+                "km/h": "km/h",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "停止地点の検出",
+          "description": "ターゲットが滞留した場所、つまり一定距離内にとどまる（GPS のばらつきを吸収）連続フィックスの並びが最小時間以上続く場所を見つけます。停止ごとに 1 ポイントを出力します。QGIS TrajecTools に相当します。",
+          "params": {
+            "layer": {
+              "label": "入力ポイントレイヤー"
+            },
+            "timeField": {
+              "label": "時刻フィールド",
+              "description": "タイムスタンプ（フィックスごと）: ISO 形式の日時文字列、またはエポック（秒またはミリ秒）。"
+            },
+            "idField": {
+              "label": "ターゲット ID フィールド",
+              "description": "ターゲットごとに停止を検出します。空欄のままにすると、すべてのポイントを 1 つのターゲットとして扱います。"
+            },
+            "maxDistance": {
+              "label": "最大距離",
+              "description": "停止に含まれるすべてのフィックスは、その停止の最初のフィックスからこの距離以内にある必要があります（したがって停止はこの値の最大 2 倍に及ぶことがあります）。GPS のばらつき半径に設定してください。"
+            },
+            "distanceUnits": {
+              "label": "距離の単位",
+              "options": {
+                "meters": "メートル",
+                "kilometers": "キロメートル",
+                "miles": "マイル"
+              }
+            },
+            "minDuration": {
+              "label": "最小滞在時間（秒）",
+              "description": "これより短い滞留は停止として報告されません。"
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "時空間近接",
+          "description": "空間的にも時間的にも近いポイントのペア（例: 2 つのターゲットの出会い）を見つけます。条件を満たす各ペアを結ぶラインを、距離と時間差とともに出力します。",
+          "params": {
+            "layer": {
+              "label": "入力ポイントレイヤー"
+            },
+            "timeField": {
+              "label": "時刻フィールド",
+              "description": "タイムスタンプ（ポイントごと）: ISO 形式の日時文字列、またはエポック（秒またはミリ秒）。"
+            },
+            "idField": {
+              "label": "ターゲット ID フィールド",
+              "description": "設定すると、ID 値が異なるポイント同士のみがペアになります（異なるターゲット間の遭遇）。空欄のままにすると、すべてのペアを対象にします。"
+            },
+            "maxDistance": {
+              "label": "最大距離"
+            },
+            "distanceUnits": {
+              "label": "距離の単位",
+              "options": {
+                "meters": "メートル",
+                "kilometers": "キロメートル",
+                "miles": "マイル"
+              }
+            },
+            "maxTime": {
+              "label": "最大時間差"
+            },
+            "timeUnits": {
+              "label": "時間の単位",
+              "options": {
+                "seconds": "秒",
+                "minutes": "分",
+                "hours": "時間"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "有効性チェック",
+          "description": "無効なジオメトリ（GEOS のルール: 自己交差するリング、シェルの外側にある穴など）を持つフィーチャを見つけて地図上にマークします",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "ジオメトリの修復",
+          "description": "ST_MakeValid（GEOS）で無効なジオメトリを修復します。有効なフィーチャはそのまま通過します",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "トポロジールールのチェック",
+          "description": "トポロジールール（重なり、隙間、自己交差、ダングル）に対してレイヤーを検証し、各違反を地図上にマークします",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "ruleSelfIntersect": {
+              "label": "ラインは自己交差してはならない"
+            },
+            "ruleOverlap": {
+              "label": "ポリゴンは重なってはならない"
+            },
+            "ruleGaps": {
+              "label": "ポリゴンに隙間があってはならない"
+            },
+            "ruleDangles": {
+              "label": "ラインにダングルがあってはならない"
+            },
+            "rulePointCovered": {
+              "label": "ポイントはラインに覆われていなければならない"
+            },
+            "ruleEndpointSnap": {
+              "label": "ラインの端点は許容値内で接続していなければならない"
+            },
+            "snapTolerance": {
+              "label": "スナップ許容値",
+              "description": "端点ルール用: 2 つのラインの端がどれだけ離れていても接続しているとみなすか（レイヤーの座標単位。WGS84 では度）。"
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "トポロジーの修復",
+          "description": "トポロジー違反を自動的に修復します: ほぼ接続しているラインの端点をスナップし、ダングルを修正し、ポイントをラインに投影します。近くに何もない自由端はそのまま残されます。",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "ruleEndpointSnap": {
+              "label": "ほぼ接続しているラインの端点をスナップ"
+            },
+            "ruleDangles": {
+              "label": "ダングルを修復（近くのジオメトリにスナップまたは投影）"
+            },
+            "rulePointCovered": {
+              "label": "ポイントを最も近いラインに投影"
+            },
+            "snapTolerance": {
+              "label": "スナップ許容値",
+              "description": "接続のためにジオメトリを移動できる距離（レイヤーの座標単位。WGS84 では度）。"
+            },
+            "dryRun": {
+              "label": "プレビューのみ（ドライラン）",
+              "description": "修復済みレイヤーを作成せずに、適用される修復内容を報告します。"
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "到達圏 / サービスエリア",
+          "description": "レイヤーの各ポイントからの移動時間または移動距離による到達可能範囲ポリゴン",
+          "params": {
+            "layer": {
+              "label": "出発地ポイント"
+            },
+            "mode": {
+              "label": "移動手段",
+              "options": {
+                "auto": "自動車",
+                "pedestrian": "徒歩",
+                "bicycle": "自転車"
+              }
+            },
+            "metric": {
+              "label": "指標",
+              "options": {
+                "time": "移動時間（分）",
+                "distance": "距離（km）"
+              }
+            },
+            "contours": {
+              "label": "等値線",
+              "description": "カンマ区切りの値（時間の場合は分、距離の場合は km）"
+            },
+            "endpoint": {
+              "label": "ルーティングサーバー（Valhalla）"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "OD コスト行列",
+          "description": "すべての出発地と目的地のポイント間の移動時間と距離を、結ぶラインとして出力します",
+          "params": {
+            "origins": {
+              "label": "出発地ポイント"
+            },
+            "destinations": {
+              "label": "目的地ポイント"
+            },
+            "mode": {
+              "label": "移動手段",
+              "options": {
+                "auto": "自動車",
+                "pedestrian": "徒歩",
+                "bicycle": "自転車"
+              }
+            },
+            "endpoint": {
+              "label": "ルーティングサーバー（Valhalla）"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "順次ルート（経路案内）",
+          "description": "ポイントを道路ネットワークに沿って順番に接続し、ルートを作成します。各ポイントは最も近い道路にスナップされるため、道路外の座標（基地局、センサーなど）でもルートを作成できます。順序は選択したフィールド（タイムスタンプなど）またはレイヤーのフィーチャ順に従います。",
+          "params": {
+            "layer": {
+              "label": "入力ポイント"
+            },
+            "order_field": {
+              "label": "並び順フィールド（任意）",
+              "description": "ルート作成前にこのフィールド（数値またはタイムスタンプ）でポイントを並べ替えます。空欄にするとレイヤーのフィーチャ順を使用します。"
+            },
+            "mode": {
+              "label": "移動手段",
+              "options": {
+                "auto": "自動車",
+                "pedestrian": "徒歩",
+                "bicycle": "自転車"
+              }
+            },
+            "endpoint": {
+              "label": "ルーティングサーバー（Valhalla）"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "グローバル Moran's I",
+          "description": "レイヤー全体にわたる数値属性の空間的自己相関の全体的な強さを測定します。",
+          "params": {
+            "layer": {
+              "label": "レイヤー"
+            },
+            "field": {
+              "label": "値フィールド"
+            },
+            "weightsType": {
+              "label": "空間重み",
+              "description": "各フィーチャの近傍をどのように定義するか。",
+              "options": {
+                "knn": "K 近傍",
+                "distance": "距離バンド"
+              }
+            },
+            "k": {
+              "label": "近傍数（k）"
+            },
+            "threshold": {
+              "label": "距離バンド（km）"
+            },
+            "permutations": {
+              "label": "並べ替え回数",
+              "description": "擬似 p 値を求めるためのランダム並べ替えの回数。"
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "ローカル Moran's I（LISA）",
+          "description": "フィーチャごとのクラスターと外れ値（High-High、Low-Low、High-Low、Low-High）を擬似有意性とともに算出します。",
+          "params": {
+            "layer": {
+              "label": "レイヤー"
+            },
+            "field": {
+              "label": "値フィールド"
+            },
+            "weightsType": {
+              "label": "空間重み",
+              "description": "各フィーチャの近傍をどのように定義するか。",
+              "options": {
+                "knn": "K 近傍",
+                "distance": "距離バンド"
+              }
+            },
+            "k": {
+              "label": "近傍数（k）"
+            },
+            "threshold": {
+              "label": "距離バンド（km）"
+            },
+            "permutations": {
+              "label": "並べ替え回数",
+              "description": "擬似 p 値を求めるためのランダム並べ替えの回数。"
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Getis-Ord Gi* ホットスポット",
+          "description": "数値属性の統計的に有意なホットスポットとコールドスポットを特定します。",
+          "params": {
+            "layer": {
+              "label": "レイヤー"
+            },
+            "field": {
+              "label": "値フィールド"
+            },
+            "weightsType": {
+              "label": "空間重み",
+              "description": "各フィーチャの近傍をどのように定義するか。",
+              "options": {
+                "knn": "K 近傍",
+                "distance": "距離バンド"
+              }
+            },
+            "k": {
+              "label": "近傍数（k）"
+            },
+            "threshold": {
+              "label": "距離バンド（km）"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "平均最近隣距離",
+          "description": "ポイントがクラスター化、分散、またはランダムに分布しているかを検定します（ANN 比 + z スコア）。",
+          "params": {
+            "layer": {
+              "label": "ポイントレイヤー"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "カーネル密度（ヒートマップ）",
+          "description": "四次カーネルを使って、ポイントからセルのグリッドとして密度サーフェスを推定します。",
+          "params": {
+            "layer": {
+              "label": "ポイントレイヤー"
+            },
+            "weightField": {
+              "label": "重みフィールド（任意）",
+              "description": "各ポイントに重みを付ける数値フィールド。空欄 = 等しい重み。"
+            },
+            "bandwidth": {
+              "label": "検索半径 / バンド幅（km）"
+            },
+            "cellSize": {
+              "label": "セルサイズ（km）"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "新興ホットスポット（時空間キューブ）",
+          "description": "タイムスタンプ付きポイントから時空間キューブ（フィッシュネットグリッド × 等間隔の時間ステップ）を構築し、各セルを新規・強化・持続・減衰・散発・振動・歴史的なホット/コールドスポットに分類します。時間スライスごとに Getis-Ord Gi* を実行し、各セルの Gi* 系列に Mann-Kendall トレンド検定を適用します。ArcGIS の Emerging Hot Spot Analysis と同様にクライアント側で実行されます。",
+          "params": {
+            "layer": {
+              "label": "ポイントレイヤー"
+            },
+            "timeField": {
+              "label": "時刻フィールド",
+              "description": "タイムスタンプ（ポイントごと）: ISO 形式の日時文字列、またはエポック（秒またはミリ秒）。"
+            },
+            "cellSize": {
+              "label": "セルサイズ（km）",
+              "description": "各正方形の空間ビンの一辺の長さ（キロメートル）。"
+            },
+            "timeStep": {
+              "label": "時間ステップの間隔"
+            },
+            "timeStepUnit": {
+              "label": "時間ステップの単位",
+              "options": {
+                "hours": "時間",
+                "days": "日",
+                "weeks": "週"
+              }
+            },
+            "weightField": {
+              "label": "重みフィールド（任意）",
+              "description": "ポイント数の代わりに時空間ビンごとに合計する数値フィールド。空欄 = ポイント数をカウント。"
+            },
+            "confidence": {
+              "label": "信頼水準",
+              "description": "ビンをホット/コールドスポットとみなす、およびトレンドの有意性のしきい値。",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "陰影起伏",
+          "description": "標高モデルから陰影起伏（ヒルシェード）ラスターを計算します。",
+          "params": {
+            "azimuth": {
+              "label": "方位角（度）"
+            },
+            "altitude": {
+              "label": "高度角（度）"
+            },
+            "z_factor": {
+              "label": "Z 係数"
+            }
+          }
+        },
+        "slope": {
+          "name": "傾斜",
+          "description": "標高モデルから傾斜（急峻さ）を計算します。",
+          "params": {
+            "units": {
+              "label": "単位",
+              "options": {
+                "degrees": "度",
+                "percent": "パーセント"
+              }
+            },
+            "z_factor": {
+              "label": "Z 係数"
+            }
+          }
+        },
+        "aspect": {
+          "name": "傾斜方向",
+          "description": "標高モデルから傾斜方向（最大傾斜の方角）を計算します。"
+        },
+        "reproject": {
+          "name": "再投影",
+          "description": "ラスターを別の座標参照系にワープします。",
+          "params": {
+            "dst_crs": {
+              "label": "ターゲット CRS",
+              "description": "EPSG:3857 や EPSG:4326 などの機関コード。"
+            },
+            "resampling": {
+              "label": "リサンプリング",
+              "options": {
+                "nearest": "最近傍",
+                "bilinear": "バイリニア",
+                "cubic": "キュービック"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "リサンプル",
+          "description": "ラスターを別のピクセルサイズ（解像度）にリサンプルします。",
+          "params": {
+            "resolution": {
+              "label": "ターゲットピクセルサイズ",
+              "description": "ラスターの CRS 単位での出力ピクセルサイズ。"
+            },
+            "resampling": {
+              "label": "リサンプリング",
+              "options": {
+                "nearest": "最近傍",
+                "bilinear": "バイリニア",
+                "cubic": "キュービック"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "範囲でクリップ",
+          "description": "ラスターをバウンディングボックス（ラスターの CRS）で切り抜きます。",
+          "params": {
+            "minx": {
+              "label": "最小 X"
+            },
+            "miny": {
+              "label": "最小 Y"
+            },
+            "maxx": {
+              "label": "最大 X"
+            },
+            "maxy": {
+              "label": "最大 Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "マスクレイヤーでクリップ",
+          "description": "ベクターマスクファイルのジオメトリでラスターをクリップします。",
+          "params": {
+            "mask_path": {
+              "label": "マスクレイヤー",
+              "description": "クリップ領域を定義するジオメトリを持つ GeoJSON ファイル。ラスターの CRS に自動的に再投影されます（CRS のない GeoJSON は WGS84 とみなされます）。"
+            },
+            "crop": {
+              "label": "マスクの範囲に切り抜く"
+            },
+            "all_touched": {
+              "label": "接触するすべてのピクセルを含める"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "ポリゴン化",
+          "description": "ラスターバンドをピクセル値ごとにグループ化したベクターポリゴンに変換します。",
+          "params": {
+            "band": {
+              "label": "バンド"
+            },
+            "connectivity": {
+              "label": "連結性",
+              "options": {
+                "4": "4 連結",
+                "8": "8 連結"
+              }
+            },
+            "field": {
+              "label": "値フィールド名"
+            }
+          }
+        },
+        "contour": {
+          "name": "等高線",
+          "description": "標高モデルから等高線を生成します。",
+          "params": {
+            "band": {
+              "label": "バンド"
+            },
+            "interval": {
+              "label": "間隔",
+              "description": "隣り合う等高線の標高差。"
+            },
+            "base": {
+              "label": "基準値"
+            },
+            "attribute": {
+              "label": "標高フィールド名"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "内挿（IDW / クリギング）",
+          "description": "逆距離加重法または通常クリギングを使って、ポイントレイヤーの数値属性を連続したラスターサーフェスに内挿します。",
+          "params": {
+            "field": {
+              "label": "値フィールド",
+              "description": "内挿する数値ポイント属性の名前（例: 標高、気温）。"
+            },
+            "method": {
+              "label": "方法",
+              "options": {
+                "idw": "逆距離加重法（IDW）",
+                "kriging": "通常クリギング"
+              }
+            },
+            "resolution": {
+              "label": "出力ピクセルサイズ",
+              "description": "レイヤーの CRS 単位でのセルサイズ（WGS84 では度）。グリッドはポイントの範囲を覆います。"
+            },
+            "power": {
+              "label": "IDW のべき乗",
+              "description": "値が大きいほど近くのポイントの影響が強くなります。"
+            },
+            "variogram_model": {
+              "label": "バリオグラムモデル",
+              "description": "経験セミバリオグラムに当てはめる理論モデル。クリギングは 1500 ポイントまでに制限されます。",
+              "options": {
+                "spherical": "球形",
+                "exponential": "指数",
+                "gaussian": "ガウス",
+                "linear": "線形"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "ゾーン統計",
+          "description": "ベクターレイヤーの各ポリゴン内のラスター値を要約します（個数、最小、最大、平均、合計、標準偏差、中央値）。",
+          "params": {
+            "zones_path": {
+              "label": "ゾーンレイヤー",
+              "description": "ゾーンを定義する GeoJSON ポリゴンレイヤー。ラスターの CRS に自動的に再投影されます（CRS のない GeoJSON は WGS84 とみなされます）。"
+            },
+            "band": {
+              "label": "バンド"
+            },
+            "prefix": {
+              "label": "フィールド接頭辞",
+              "description": "各統計フィールド名の前に付加されます（例: 'dem_' → 'dem_mean'）。空欄のままにすると 'mean'、'min' などそのままの名前になります。"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "ラスター計算機",
+          "description": "NumPy のバンド演算式を評価します。各入力のバンド 1 は A、B、C として、特定のバンドは A1、A2 などとして参照します。例: NDVI は (A2 - A1) / (A2 + A1)。",
+          "params": {
+            "expression": {
+              "label": "式",
+              "description": "A、B、C（および A1、A2 など）に対する NumPy の式。関数: where、log、exp、sqrt、abs、clip、minimum、maximum、sin、cos、tan。"
+            },
+            "b_path": {
+              "label": "ラスター B（任意）",
+              "description": "B / B1、B2 などとして参照される 2 つ目のラスター。A と同じ寸法である必要があります。"
+            },
+            "c_path": {
+              "label": "ラスター C（任意）",
+              "description": "C / C1、C2 などとして参照される 3 つ目のラスター。A と同じ寸法である必要があります。"
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "スペクトル指数",
+          "description": "マルチバンドラスターから名前付きのスペクトル指数（NDVI、NDWI、EVI など）を計算します。バンド配置はセンサーのプリセットを選ぶか、「カスタム」センサーでバンド番号を手動で設定します。",
+          "params": {
+            "index": {
+              "label": "指数",
+              "options": {
+                "ndvi": "NDVI（植生）",
+                "gndvi": "GNDVI（緑色植生）",
+                "ndwi": "NDWI（水域、McFeeters）",
+                "ndmi": "NDMI（水分）",
+                "ndbi": "NDBI（市街地）",
+                "nbr": "NBR（燃焼比）",
+                "evi": "EVI（強調植生）",
+                "savi": "SAVI（土壌調整植生）"
+              }
+            },
+            "sensor": {
+              "label": "センサー / バンド配置",
+              "description": "一般的なセンサー向けのプリセットバンド番号。異なる順序で積み重ねられた GeoTIFF の場合は「カスタム」を選んで手動でバンドを割り当てます。",
+              "options": {
+                "sentinel2": "Sentinel-2（B2、B3、B4、B8、B11、B12）",
+                "landsat89": "Landsat 8/9（B1〜B7）",
+                "naip": "NAIP（R、G、B、NIR）",
+                "custom": "カスタム（下でバンド番号を設定）"
+              }
+            },
+            "red": {
+              "label": "赤バンド番号"
+            },
+            "green": {
+              "label": "緑バンド番号"
+            },
+            "blue": {
+              "label": "青バンド番号"
+            },
+            "nir": {
+              "label": "NIR バンド番号"
+            },
+            "swir1": {
+              "label": "SWIR1 バンド番号"
+            },
+            "swir2": {
+              "label": "SWIR2 バンド番号"
+            },
+            "L": {
+              "label": "土壌係数（L）",
+              "description": "SAVI の土壌輝度補正（0 = 密な植被 → 1 = 裸地）。"
+            },
+            "scale": {
+              "label": "反射率スケール",
+              "description": "ピクセル値を反射率（0〜1）に変換する乗数。正規化差分指数では 1 のままにします。整数 DN 画像で EVI/SAVI を計算する場合は設定してください（例: Sentinel-2 L2A では 0.0001）。"
+            }
+          }
+        },
+        "reclassify": {
+          "name": "再分類",
+          "description": "ルールテーブルを使って値の範囲を新しいクラス値に再割り当てします。",
+          "params": {
+            "band": {
+              "label": "バンド"
+            },
+            "table": {
+              "label": "ルール",
+              "description": "カンマまたは改行区切りの 'min:max:newvalue' ルール。例: '0:10:1, 10:20:2, 20:max:3'。範囲は半開区間 [min, max) で、空欄/min/max は ±∞ を意味します。"
+            },
+            "unmatched": {
+              "label": "一致しない値",
+              "options": {
+                "nodata": "NoData に設定",
+                "original": "元の値を保持"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "モザイク / マージ",
+          "description": "最大 5 つのラスター（同じ CRS）を、それらの和領域を覆う 1 つのラスターに結合します。",
+          "params": {
+            "raster_2": {
+              "label": "2 つ目のラスター"
+            },
+            "raster_3": {
+              "label": "3 つ目のラスター（任意）"
+            },
+            "raster_4": {
+              "label": "4 つ目のラスター（任意）"
+            },
+            "raster_5": {
+              "label": "5 つ目のラスター（任意）"
+            },
+            "method": {
+              "label": "重なりの処理方法",
+              "description": "入力が重なる場所でどの値を採用するか。",
+              "options": {
+                "first": "最初",
+                "last": "最後",
+                "min": "最小",
+                "max": "最大"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "フォーカル統計",
+          "description": "ラスターバンドに移動ウィンドウ（近傍）統計を適用します。",
+          "params": {
+            "band": {
+              "label": "バンド"
+            },
+            "statistic": {
+              "label": "統計量",
+              "options": {
+                "mean": "平均",
+                "median": "中央値",
+                "min": "最小",
+                "max": "最大",
+                "sum": "合計",
+                "std": "標準偏差",
+                "range": "範囲（最大 − 最小）"
+              }
+            },
+            "size": {
+              "label": "ウィンドウサイズ",
+              "description": "ピクセル単位の奇数の近傍サイズ（3 = 3×3）。上限は 25 です。"
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "解析",
+      "clip": "クリップ",
+      "dataQuality": "データ品質",
+      "dggs": "DGGS",
+      "geometry": "ジオメトリ",
+      "join": "結合",
+      "movementTime": "移動と時間",
+      "network": "ネットワーク",
+      "overlay": "オーバーレイ",
+      "rasterToVector": "ラスターからベクター",
+      "reproject": "再投影",
+      "select": "選択",
+      "spatialStatistics": "空間統計",
+      "terrain": "地形",
+      "vectorToRaster": "ベクターからラスター"
     }
   },
   "segmentation": {
@@ -3725,6 +5707,7 @@
     "title": "物体検出",
     "description": "ONNXにエクスポートしたYOLOモデルをGeoTIFFに対して、すべてブラウザ内で実行します。検出されたボックスは地理参照され、各クラスが独自のレイヤーとして追加されます。",
     "hint": "ビルトインのCOCOモデル(一度ダウンロードしてキャッシュ)を使用するか、独自のYOLOv5/v8/v11 ONNXを持ち込めます。検出はブラウザ内でローカルに実行されます。ビルトインモデルは日常的な物体を検出します。航空画像には、上空撮影用に学習した独自のモデルを用意してください。",
+    "unavailableNoExternalCdn": "このビルドでは物体検出を利用できません。ONNX Runtimeが必要ですが、これは外部CDNから読み込まれ、このデプロイでは無効化されています。独自のモデルファイルを指定しても解決しません。",
     "imageLabel": "画像(GeoTIFF)",
     "imagePlaceholder": "GeoTIFFを選択…",
     "chooseImage": "画像を選択",
@@ -3757,6 +5740,7 @@
     "title": "すべてをセグメント化",
     "description": "SlimSAMをGeoTIFFに対して自動的に、すべてブラウザ内で実行します。検出された各物体は地理参照されたポリゴンとなり、1つのレイヤーとして追加されます。",
     "hint": "画像全体でポイントのグリッドがサンプリングされ、SlimSAM(一度ダウンロードしてキャッシュ)でセグメント化されます。クリックやラベルは不要です。グリッドが密なほど多くの物体を見つけますが、時間がかかります。",
+    "unavailableNoExternalCdn": "このビルドでは「すべてをセグメント化」を利用できません。ONNX Runtimeが必要ですが、これは外部CDNから読み込まれ、このデプロイでは無効化されています。",
     "imageLabel": "画像(GeoTIFF)",
     "imagePlaceholder": "GeoTIFFを選択…",
     "chooseImage": "画像を選択",
@@ -3898,6 +5882,7 @@
     "deleteField": "フィールドを削除",
     "joinedColumnTitle": "結合テーブルから導出された結合列です。代わりに結合テーブルまたは結合定義を編集してください。",
     "virtualColumnTitle": "式から計算される仮想フィールドです。代わりにレイヤのスタイルパネルで定義を編集してください。",
+    "trackingColumnTitle": "編集トラッキング フィールドです。自動的に管理されます。名前の変更はレイヤの編集トラッキング設定で行ってください。",
     "deleteFieldConfirm": "これにより、フィールド「{{field}}」が「{{layer}}」内のすべてのフィーチャから完全に削除されます。これを参照しているスタイルやラベルはクリアされます。この操作は元に戻せません。",
     "addFieldDescription": "「{{layer}}」内のすべてのフィーチャに新しいフィールドを追加します。",
     "fieldName": "フィールド名",
@@ -4416,11 +6401,15 @@
       "typeConvexHull": "凸包",
       "typeBuffer": "バッファ",
       "bufferDistance": "バッファ距離 (m)",
+      "bufferField": "距離フィールド",
+      "bufferFieldHint": "各フィーチャは自身の値(メートル)でバッファされます。値がないフィーチャは上の距離を使い、値が 0 の場合は何も描画されません。",
+      "fieldNone": "なし (固定)",
       "fillColor": "塗りつぶし色",
       "strokeColor": "輪郭色",
       "strokeWidth": "輪郭幅 (px)",
       "opacity": "塗りつぶし不透明度",
-      "circleRadius": "ポイント半径 (px)"
+      "circleRadius": "ポイント半径 (px)",
+      "sizeField": "サイズフィールド"
     },
     "attributeForm": {
       "heading": "属性フォーム",
@@ -4462,7 +6451,26 @@
       "save": "保存",
       "noFields": "レイヤーに設定できる属性フィールドがありません。",
       "minMaxInvalid": "最小値は最大値以下である必要があります。"
+    },
+    "editorTracking": {
+      "heading": "編集トラッキング",
+      "description": "各フィーチャを誰が作成し、誰が最後に変更したかを記録します。フィーチャの描画・編集・計算・現地収集の際に、下のフィールドが自動的に入力されます。",
+      "enable": "このレイヤの編集を記録する",
+      "identity": "あなたの名前",
+      "identityHint": "編集は「{{name}}」として記録されます。",
+      "identityFromSession": "参加中の共同編集セッションから取得しています。",
+      "createdByField": "「作成者」フィールド",
+      "createdAtField": "「作成日時」フィールド",
+      "editedByField": "「更新者」フィールド",
+      "editedAtField": "「更新日時」フィールド",
+      "blankName": "フィールド名は空にできません。",
+      "duplicateName": "トラッキング フィールドにはそれぞれ異なる名前が必要です。",
+      "columnTaken": "「{{name}}」は既に属性フィールドです。トラッキングはその値を上書きします。"
     }
+  },
+  "vectorExport": {
+    "invalidKmlCoordinatesByPosition": "座標が不正なため、KML エクスポートでフィーチャ {{position}} を書き出せませんでした。",
+    "invalidKmlCoordinatesById": "座標が不正なため、KML エクスポートで ID {{id}} のフィーチャを書き出せませんでした。"
   },
   "layers": {
     "panelCollapsedLabel": "レイヤー (折りたたみ済み)",
@@ -4483,9 +6491,17 @@
     "identifyInspectPixels": "ピクセル値を確認",
     "identifyStopInspectPixels": "ピクセル値の確認を停止",
     "identifyUnavailable": "フィーチャ情報の取得はベクター、WMS、COGレイヤーでのみ利用できます",
+    "selectFeaturesMenu": "フィーチャを選択",
+    "selectFeaturesSingle": "クリックでフィーチャを選択",
+    "selectFeaturesRectangle": "矩形でフィーチャを選択",
+    "selectFeaturesPolygon": "ポリゴンでフィーチャを選択",
+    "selectFeaturesFreehand": "フリーハンドでフィーチャを選択",
+    "selectFeaturesRadius": "半径でフィーチャを選択",
+    "selectFeaturesModifiers": "Shiftで追加、Altで削除、Shift+Altで交差します。Escキーでキャンセルします。",
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "サブセットを抽出…",
     "stylesMenu": "スタイル",
+    "exportGeoLibreStyle": "GeoLibre URLスタイルをエクスポート",
     "exportMapboxStyle": "Mapbox GLスタイルとしてエクスポート",
     "exportSldStyle": "OGC SLDとしてエクスポート",
     "exportQmlStyle": "QGIS QMLとしてエクスポート",
@@ -4493,7 +6509,7 @@
     "exportStyleDataNotReady": "レイヤーデータの準備がまだ完了していません。しばらくしてから再試行してください。",
     "exportStyleNeedsFeatures": "スタイルのエクスポートにはフィーチャを含むベクターレイヤーが必要です。",
     "exportStyleError": "このレイヤーのスタイルをエクスポートできませんでした。",
-    "importStyle": "スタイルをインポート (Mapbox GL / SLD / QML)…",
+    "importStyle": "スタイルをインポート (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "保存済みスタイル(スタイルマネージャー)…",
     "importStyleSuccess": "スタイルをインポートしました。",
     "importStyleInvalid": "そのファイルは有効なJSON、SLD、またはQMLではありません。",
@@ -4532,6 +6548,7 @@
     "bindWindowCumulative": "現在のステップまでのすべて(累積)",
     "bindCancel": "キャンセル",
     "bindConfirm": "連動",
+    "openStylePanel": "スタイルパネルを開く",
     "openRasterStylePanel": "ラスタースタイルを編集…",
     "exportRasterSuccess": "ラスターをエクスポートしました。",
     "exportRasterError": "このラスターをエクスポートできませんでした。",
@@ -4637,6 +6654,7 @@
     "refreshVectorControlError": "このレイヤーを更新できませんでした。ベクターレイヤーの追加パネルを開き直してください。",
     "refreshed": "更新しました。",
     "refreshedCount": "{{count}}件のフィーチャを更新しました。",
+    "refreshedTruncated": "{{total}} 件中 {{shown}} 件のフィーチャを更新しました。",
     "refreshError": "このレイヤーを更新できませんでした。",
     "exportNeedsFeatures": "エクスポートにはフィーチャを含むベクターレイヤーが必要です。",
     "exportedWithWarnings": "レイヤーをエクスポートしました。{{warnings}}",
@@ -4699,6 +6717,78 @@
     "nodataOff": "すべてのピクセルを描画",
     "nodataCustom": "カスタム値"
   },
+  "netcdfSymbology": {
+    "heading": "NetCDFシンボロジ",
+    "colorRampLabel": "カラーマップ",
+    "reverse": "カラーマップを反転",
+    "colorMin": "色の最小値",
+    "colorMax": "色の最大値",
+    "resetRange": "データの範囲にリセット",
+    "openCube": "3Dキューブ"
+  },
+  "netcdfCube": {
+    "heading": "3D画像キューブ",
+    "close": "閉じる",
+    "settings": "設定",
+    "setupTitle": "3D画像キューブ",
+    "setupDescription": "キューブを作成する前に、読み込む対象を選んでください。バンドごとに個別の読み込みが発生するため、範囲とバンド数が所要時間を左右します。",
+    "extent": "範囲",
+    "extentView": "現在の地図表示",
+    "extentDraw": "地図に描画",
+    "extentFull": "レイヤー全体の範囲",
+    "viewHint": "キューブ作成時に地図に表示されている内容を読み込みます。",
+    "fullHint": "グリッド全体を読み込みます。シーン規模のキューブでは低速です。",
+    "drawBbox": "地図に描画",
+    "drawing": "地図上でボックスをドラッグしてキューブの範囲を設定します",
+    "drawHint": "地図上でボックスをドラッグして範囲を設定します。",
+    "drawnExtent": "西 {{west}}、南 {{south}}、東 {{east}}、北 {{north}}",
+    "detail": "詳細度",
+    "detailOption": "1辺あたり{{size}}セル",
+    "bands": "バンド",
+    "allBands": "すべて（{{count}}）",
+    "rgbOverlay": "上面にRGB画像",
+    "rgbHint": "3つのバンドを合成したカラー画像を上面に重ねることで、キューブが場所として認識しやすくなります。",
+    "red": "赤",
+    "green": "緑",
+    "blue": "青",
+    "planeEstimate": "バンド読み込み{{count}}回",
+    "create": "キューブを作成",
+    "colorRampLabel": "カラーマップ",
+    "reverse": "反転",
+    "showRgb": "上面RGB",
+    "rgbBands": "RGBバンド",
+    "recomposing": "読み込み中...",
+    "zScale": "高さ",
+    "slice": "スライス",
+    "sliceAt": "{{band}} {{units}}で切断",
+    "reading": "{{total}}バンド中{{done}}バンドを読み込み中...",
+    "summary": "{{nx}} x {{ny}}セル、{{axis}}方向に{{nz}}バンド",
+    "errorNoCube": "このレイヤーのソースファイルはすでに閉じられているため、キューブを読み込めません。",
+    "error": {
+      "shapeMismatch": "この変数のバンド面の形状が揃っていないため、キューブとして積み重ねられません。",
+      "rgbShapeMismatch": "選択したRGBバンドはキューブの形状と一致しません。",
+      "noBands": "この変数には読み込めるバンドがありません。",
+      "noReadWindow": "このキューブはその場で更新できません。設定から作り直してください。"
+    }
+  },
+  "netcdfProfile": {
+    "heading": "スペクトルプロファイル",
+    "clear": "クリア",
+    "chartAria": "バンド軸に沿ってサンプリングされたピクセル値",
+    "popOut": "切り離す",
+    "dock": "ドッキング",
+    "poppedOutHint": "グラフは地図上のウィンドウで開いています。",
+    "noValues": "これらのピクセルにはグラフ化できる値がありません。",
+    "exportPng": "PNG",
+    "exportCsv": "CSV",
+    "exportError": "グラフをエクスポートできませんでした。",
+    "rasterFallbackName": "ラスター"
+  },
+  "netcdfIdentify": {
+    "noData": "データなし",
+    "coordinates": "経度、緯度",
+    "cell": "行、列"
+  },
   "rasterAttributeTable": {
     "title": "ラスタ属性テーブル",
     "resize": "ラスタ属性テーブルのサイズを変更",
@@ -4747,6 +6837,7 @@
     "cogConvertConfirm": "「{{name}}」は通常の(ストライプ形式の)GeoTIFFであり、直接表示できません。今すぐCloud-Optimized GeoTIFFに変換して読み込みますか?",
     "cogConvertRemoteConfirm": "「{{name}}」は通常の(ストライプ形式の)GeoTIFFであり、直接表示できません。表示するにはファイル全体をダウンロードし、ブラウザ内でCloud-Optimized GeoTIFFに変換する必要があります。大きなファイルの場合、処理に時間がかかりメモリを多く消費する可能性があります。続行しますか?",
     "cogConvertLargeConfirm": "「{{name}}」は{{width}}×{{height}}の大きなGeoTIFFで、Cloud-Optimized GeoTIFFではありません。ブラウザ内での変換は時間がかかりメモリを多く消費する可能性があります。それでも変換して読み込みますか?",
+    "cogConvertTooLarge": "「{{name}}」はブラウザーで安全に変換するには大きすぎます。gdal_translateまたはrio cogeoでCloud-Optimized GeoTIFFに変換してから、結果を読み込んでください。",
     "cogConvertFailed": "「{{name}}」をCloud-Optimized GeoTIFFに変換できませんでした。gdal_translateまたはrio cogeoで変換してから、その結果を読み込んでみてください。",
     "rasterDownloadFailed": "「{{name}}」をダウンロードできませんでした。サーバーの応答が遅い、到達できない、クロスオリジンリクエストをブロックしている、またはファイルが大きすぎてメモリに保持できない可能性があります。URLを確認して再試行してください。",
     "rasterNotGeotiff": "「{{name}}」はGeoTIFFを返しませんでした。サーバーがエラーページやログインページを返した可能性があります。URLを確認して再試行してください。"
@@ -4879,7 +6970,8 @@
       "pythonConsole": "Python コンソール",
       "sqlWorkspace": "SQL ワークスペース",
       "assistant": "アシスタント",
-      "statusBar": "ステータスバー"
+      "statusBar": "ステータスバー",
+      "modelBuilder": "モデルビルダー"
     }
   },
   "attributeStats": {
@@ -4890,10 +6982,12 @@
     "scope": "範囲",
     "scopeAll": "すべてのフィーチャ（{{total}}）",
     "scopeFiltered": "絞り込み後（{{total}}）",
+    "scopeSelected": "選択項目（{{total}}）",
     "copiedToClipboard": "クリップボードにコピーしました。",
     "copy": "コピー",
     "copyHeader": "フィールド統計 — {{field}}",
     "copyHeaderFiltered": "フィールド統計 — {{field}}（絞り込み後）",
+    "copyHeaderSelected": "フィールド統計 — {{field}}（選択項目）",
     "noValues": "集計できる値がありません。",
     "mostFrequent": "最も多い値",
     "noPopulated": "値が入力されていません。",
@@ -4935,76 +7029,6 @@
     "noPopulated": "値が入力されていません。",
     "moreValues": "他 {{total}} 個の値"
   },
-  "stacPlugin": {
-    "title": "STAC カタログ",
-    "footprintLayerName": "STAC 検索範囲",
-    "catalogSearch": "STAC Index で公開カタログを検索",
-    "catalogSearchPlaceholder": "カタログ名を検索…",
-    "indexLoading": "STAC Index を読み込んでいます…",
-    "indexUnavailable": "STAC Index を利用できません: URL を入力してください",
-    "indexLoadFailed": "STAC Index を読み込めませんでした",
-    "urlLabel": "STAC カタログまたは API の URL",
-    "connect": "接続",
-    "connecting": "STAC に接続しています…",
-    "connected": "接続しました。フィルターを選んで検索してください。",
-    "connectFailed": "STAC に接続できませんでした",
-    "selectCatalog": "カタログを選択…",
-    "noMatchingCatalogs": "一致するカタログがありません",
-    "catalogApiSuffix": " (API)",
-    "catalogStaticSuffix": " (静的)",
-    "kindApi": "STAC API",
-    "kindStatic": "静的カタログ",
-    "collectionsHint": "Ctrl/Cmd を押しながら複数のコレクションを選択できます。下端をドラッグするとサイズを変更できます",
-    "limitToExtent": "現在の地図範囲に検索を限定する",
-    "bboxLabel": "バウンディングボックス（西、南、東、北）",
-    "bboxPlaceholder": "任意。地図範囲より優先されます",
-    "bboxInvalid": "有効なバウンディングボックスを入力してください: 西、南、東、北。",
-    "drawBbox": "地図上に範囲を描画",
-    "cancelDrawing": "描画をキャンセル",
-    "clearDrawnBbox": "描画した範囲をクリア",
-    "drawHint": "地図上でクリックしてドラッグすると検索範囲を描画できます。",
-    "drawnBbox": "描画した範囲: {{bbox}}",
-    "drawnBboxCleared": "描画した範囲をクリアしました。",
-    "mapNotReady": "地図の描画準備ができていません。",
-    "startDate": "開始日",
-    "endDate": "終了日",
-    "additionalParams": "追加の検索パラメーター（JSON、STAC API のみ）",
-    "additionalInvalid": "追加の検索パラメーターは JSON オブジェクトである必要があります。",
-    "searchItems": "アイテムを検索",
-    "clearResults": "結果をクリア",
-    "resultsCleared": "検索結果をクリアしました。",
-    "searching": "STAC アイテムを検索しています…",
-    "loadingMore": "さらにアイテムを読み込んでいます…",
-    "noResults": "これらのフィルターに一致する STAC アイテムはありません。",
-    "searchFailed": "STAC 検索に失敗しました",
-    "showing": "{{count}} 件のアイテムを表示しています。",
-    "showingOfMatched": "{{matched}} 件中 {{count}} 件のアイテムを表示しています。",
-    "loadMore": "さらに読み込む",
-    "renderOptions": "ラスター描画オプション",
-    "bands": "バンド",
-    "bandsPlaceholder": "例: 1 または 1,2,3（既定: 自動）",
-    "colormap": "カラーマップ（単バンドのみ）",
-    "colormapDefault": "レンダラーの既定値",
-    "minValue": "最小値",
-    "maxValue": "最大値",
-    "nodata": "NoData 値",
-    "nodataPlaceholder": "ファイルの NoData タグより優先されます",
-    "renderHint": "空欄にすると GeoTIFF から値が推定されます。オプションは変更後に追加したアセットに適用されます。",
-    "initialStatus": "STAC Index からカタログを選ぶか、URL を入力してください。",
-    "catalogInfo": "{{title}} · {{kind}}",
-    "zoom": "ズーム",
-    "add": "追加",
-    "download": "ダウンロード",
-    "adding": "{{asset}} を追加しています…",
-    "added": "{{asset}} を地図に追加しました。",
-    "addUnsupported": "地図に追加できるのは GeoTIFF/COG と GeoJSON のアセットのみです",
-    "addFailed": "アセットを追加できませんでした",
-    "cogUnsupported": "この GeoLibre ホストはリモートの GeoTIFF アセットを表示できません"
-  },
-  "vectorExport": {
-    "invalidKmlCoordinatesByPosition": "座標が不正なため、KML エクスポートでフィーチャ {{position}} を書き出せませんでした。",
-    "invalidKmlCoordinatesById": "座標が不正なため、KML エクスポートで ID {{id}} のフィーチャを書き出せませんでした。"
-  },
   "comments": {
     "title": "コメント",
     "addDialogTitle": "レビューコメントを追加",
@@ -5013,276 +7037,49 @@
     "authorNamePlaceholder": "例: 田中 または 佐藤",
     "commentLabel": "コメント / フィードバック",
     "commentPlaceholder": "レビューのメモやフィードバックをここに入力...",
+    "post": "コメントを投稿",
+    "postShortcutTooltip": "コメントを投稿({{shortcut}})",
     "confirmDelete": "このコメントスレッドを削除してもよろしいですか？",
     "sessionDisconnected": "セッションが切断されました。",
-    "defaultAuthorName": "作成者"
-  },
-  "s2Plugin": {
-    "title": "S2グリッド",
-    "controlTitle": "S2グリッドの設定",
-    "autoResolution": "解像度を自動設定",
-    "resolution": "解像度",
-    "cellCount": "表示範囲内に{{count}}個のセル",
-    "tooManyCells": "この表示範囲はセル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
-    "fillColor": "塗りつぶしの色",
-    "fillOpacity": "塗りつぶしの不透明度",
-    "lineColor": "輪郭線の色",
-    "lineWidth": "輪郭の太さ",
-    "showLabels": "セルIDを表示",
-    "identifyHint": "地図をクリックしてS2セルを特定します。",
-    "selectedCell": "選択中のセル",
-    "noSelection": "セルが選択されていません",
-    "copyId": "IDをコピー",
-    "parent": "親セル",
-    "children": "子セル",
-    "neighbors": "隣接セル",
-    "center": "中心",
-    "zoomToCell": "セルにズーム",
-    "addAsLayer": "グリッドをレイヤーとして追加",
-    "exportGeoJson": "GeoJSONをエクスポート",
-    "exportCsv": "CSVをエクスポート",
-    "includeNeighbors": "選択したセルの隣接セルを含める",
-    "includeParents": "選択したセルの親セルを含める"
-  },
-  "a5Plugin": {
-    "title": "A5グリッド",
-    "controlTitle": "A5グリッドの設定",
-    "autoResolution": "解像度を自動設定",
-    "resolution": "解像度",
-    "cellCount": "表示範囲内に{{count}}個のセル",
-    "tooManyCells": "この表示範囲はセル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
-    "fillColor": "塗りつぶしの色",
-    "fillOpacity": "塗りつぶしの不透明度",
-    "lineColor": "輪郭線の色",
-    "lineWidth": "輪郭の太さ",
-    "showLabels": "セルIDを表示",
-    "identifyHint": "地図をクリックしてA5セルを特定します。",
-    "selectedCell": "選択中のセル",
-    "noSelection": "セルが選択されていません",
-    "copyId": "IDをコピー",
-    "parent": "親セル",
-    "children": "子セル",
-    "neighbors": "隣接セル",
-    "center": "中心",
-    "zoomToCell": "セルにズーム",
-    "addAsLayer": "グリッドをレイヤーとして追加",
-    "exportGeoJson": "GeoJSONをエクスポート",
-    "exportCsv": "CSVをエクスポート",
-    "includeNeighbors": "選択したセルの隣接セルを含める",
-    "includeParents": "選択したセルの親セルを含める"
-  },
-  "dggridPlugin": {
-    "title": "DGGRID",
-    "controlTitle": "DGGRIDの設定",
-    "cellType": "セルの種類",
-    "topologyHexagon": "六角形",
-    "topologyDiamond": "菱形",
-    "topologyTriangle": "三角形",
-    "projection": "投影法",
-    "aperture": "アパーチャ",
-    "autoResolution": "解像度を自動設定",
-    "resolution": "解像度",
-    "cellCount": "表示範囲内に{{count}}個のセル",
-    "tooManyCells": "この表示範囲はセル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
-    "fillColor": "塗りつぶしの色",
-    "fillOpacity": "塗りつぶしの不透明度",
-    "lineColor": "輪郭線の色",
-    "lineWidth": "輪郭の太さ",
-    "showLabels": "セルIDを表示",
-    "identifyHint": "地図をクリックしてDGGRIDセルを特定します。",
-    "selectedCell": "選択中のセル",
-    "noSelection": "セルが選択されていません",
-    "copyId": "IDをコピー",
-    "parent": "親セル",
-    "children": "子セル",
-    "neighbors": "隣接セル",
-    "center": "中心",
-    "zoomToCell": "セルにズーム",
-    "addAsLayer": "グリッドをレイヤーとして追加",
-    "exportGeoJson": "GeoJSONをエクスポート",
-    "exportCsv": "CSVをエクスポート",
-    "includeNeighbors": "選択したセルの隣接セルを含める",
-    "includeParents": "選択したセルの親セルを含める"
-  },
-  "dggalPlugin": {
-    "title": "DGGAL",
-    "controlTitle": "DGGALの設定",
-    "gridType": "DGGSの種類",
-    "autoResolution": "解像度を自動設定",
-    "resolution": "解像度",
-    "cellCount": "表示範囲内に{{count}}個のセル",
-    "tooManyCells": "この表示範囲はセル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
-    "fillColor": "塗りつぶしの色",
-    "fillOpacity": "塗りつぶしの不透明度",
-    "lineColor": "輪郭線の色",
-    "lineWidth": "輪郭の太さ",
-    "showLabels": "セルIDを表示",
-    "identifyHint": "地図をクリックしてDGGALセルを特定します。",
-    "selectedCell": "選択中のセル",
-    "noSelection": "セルが選択されていません",
-    "copyId": "IDをコピー",
-    "parent": "親セル",
-    "children": "子セル",
-    "neighbors": "隣接セル",
-    "center": "中心",
-    "zoomToCell": "セルにズーム",
-    "addAsLayer": "グリッドをレイヤーとして追加",
-    "exportGeoJson": "GeoJSONをエクスポート",
-    "exportCsv": "CSVをエクスポート",
-    "includeNeighbors": "選択したセルの隣接セルを含める",
-    "includeParents": "選択したセルの親セルを含める"
-  },
-  "olcPlugin": {
-    "title": "OLC",
-    "controlTitle": "OLCの設定",
-    "autoResolution": "解像度を自動設定",
-    "resolution": "解像度",
-    "cellCount": "表示範囲内に{{count}}個のセル",
-    "tooManyCells": "この表示範囲はセル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
-    "fillColor": "塗りつぶしの色",
-    "fillOpacity": "塗りつぶしの不透明度",
-    "lineColor": "輪郭線の色",
-    "lineWidth": "輪郭の太さ",
-    "showLabels": "セルIDを表示",
-    "identifyHint": "地図をクリックしてOLCセルを特定します。",
-    "selectedCell": "選択中のセル",
-    "noSelection": "セルが選択されていません",
-    "copyId": "IDをコピー",
-    "parent": "親セル",
-    "children": "子セル",
-    "neighbors": "隣接セル",
-    "center": "中心",
-    "zoomToCell": "セルにズーム",
-    "addAsLayer": "グリッドをレイヤーとして追加",
-    "exportGeoJson": "GeoJSONをエクスポート",
-    "exportCsv": "CSVをエクスポート",
-    "includeNeighbors": "選択したセルの隣接セルを含める",
-    "includeParent": "選択したセルの親セルを含める"
-  },
-  "geohashPlugin": {
-    "title": "Geohash",
-    "controlTitle": "Geohashの設定",
-    "autoResolution": "解像度を自動設定",
-    "resolution": "解像度",
-    "cellCount": "表示範囲内に{{count}}個のセル",
-    "tooManyCells": "この表示範囲はセル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
-    "fillColor": "塗りつぶしの色",
-    "fillOpacity": "塗りつぶしの不透明度",
-    "lineColor": "輪郭線の色",
-    "lineWidth": "輪郭の太さ",
-    "showLabels": "セルIDを表示",
-    "identifyHint": "地図をクリックしてGeohashセルを特定します。",
-    "selectedCell": "選択中のセル",
-    "noSelection": "セルが選択されていません",
-    "copyId": "IDをコピー",
-    "parent": "親セル",
-    "children": "子セル",
-    "neighbors": "隣接セル",
-    "center": "中心",
-    "zoomToCell": "セルにズーム",
-    "addAsLayer": "グリッドをレイヤーとして追加",
-    "exportGeoJson": "GeoJSONをエクスポート",
-    "exportCsv": "CSVをエクスポート",
-    "includeNeighbors": "選択したセルの隣接セルを含める",
-    "includeParent": "選択したセルの親セルを含める"
-  },
-  "tilecodePlugin": {
-    "title": "Tilecode",
-    "controlTitle": "Tilecodeの設定",
-    "autoResolution": "解像度を自動設定",
-    "resolution": "解像度",
-    "cellCount": "表示範囲内に{{count}}個のタイル",
-    "tooManyCells": "この表示範囲はタイル数の上限{{limit}}を超えています。ズームインするか解像度を下げてください。",
-    "fillColor": "塗りつぶしの色",
-    "fillOpacity": "塗りつぶしの不透明度",
-    "lineColor": "輪郭線の色",
-    "lineWidth": "輪郭の太さ",
-    "showLabels": "タイルIDを表示",
-    "identifyHint": "地図をクリックしてタイルを特定します。",
-    "selectedCell": "選択中のタイル",
-    "noSelection": "タイルが選択されていません",
-    "copyId": "IDをコピー",
-    "quadkey": "Quadkey",
-    "parent": "親タイル",
-    "children": "子タイル",
-    "neighbors": "隣接タイル",
-    "center": "中心",
-    "zoomToCell": "タイルにズーム",
-    "addAsLayer": "グリッドをレイヤーとして追加",
-    "exportGeoJson": "GeoJSONをエクスポート",
-    "exportCsv": "CSVをエクスポート",
-    "includeNeighbors": "選択したタイルの隣接タイルを含める",
-    "includeParent": "選択したタイルの親タイルを含める"
-  },
-  "netcdfSymbology": {
-    "heading": "NetCDFシンボロジ",
-    "colorRampLabel": "カラーマップ",
-    "reverse": "カラーマップを反転",
-    "colorMin": "色の最小値",
-    "colorMax": "色の最大値",
-    "resetRange": "データの範囲にリセット",
-    "openCube": "3Dキューブ"
-  },
-  "netcdfCube": {
-    "heading": "3D画像キューブ",
-    "close": "閉じる",
-    "settings": "設定",
-    "setupTitle": "3D画像キューブ",
-    "setupDescription": "キューブを作成する前に、読み込む対象を選んでください。バンドごとに個別の読み込みが発生するため、範囲とバンド数が所要時間を左右します。",
-    "extent": "範囲",
-    "extentView": "現在の地図表示",
-    "extentDraw": "地図に描画",
-    "extentFull": "レイヤー全体の範囲",
-    "viewHint": "キューブ作成時に地図に表示されている内容を読み込みます。",
-    "fullHint": "グリッド全体を読み込みます。シーン規模のキューブでは低速です。",
-    "drawBbox": "地図に描画",
-    "drawing": "地図上でボックスをドラッグしてキューブの範囲を設定します",
-    "drawHint": "地図上でボックスをドラッグして範囲を設定します。",
-    "drawnExtent": "西 {{west}}、南 {{south}}、東 {{east}}、北 {{north}}",
-    "detail": "詳細度",
-    "detailOption": "1辺あたり{{size}}セル",
-    "bands": "バンド",
-    "allBands": "すべて（{{count}}）",
-    "rgbOverlay": "上面にRGB画像",
-    "rgbHint": "3つのバンドを合成したカラー画像を上面に重ねることで、キューブが場所として認識しやすくなります。",
-    "red": "赤",
-    "green": "緑",
-    "blue": "青",
-    "planeEstimate": "バンド読み込み{{count}}回",
-    "create": "キューブを作成",
-    "colorRampLabel": "カラーマップ",
-    "reverse": "反転",
-    "showRgb": "上面RGB",
-    "rgbBands": "RGBバンド",
-    "recomposing": "読み込み中...",
-    "zScale": "高さ",
-    "slice": "スライス",
-    "sliceAt": "{{band}} {{units}}で切断",
-    "reading": "{{total}}バンド中{{done}}バンドを読み込み中...",
-    "summary": "{{nx}} x {{ny}}セル、{{axis}}方向に{{nz}}バンド",
-    "errorNoCube": "このレイヤーのソースファイルはすでに閉じられているため、キューブを読み込めません。",
-    "error": {
-      "shapeMismatch": "この変数のバンド面の形状が揃っていないため、キューブとして積み重ねられません。",
-      "rgbShapeMismatch": "選択したRGBバンドはキューブの形状と一致しません。",
-      "noBands": "この変数には読み込めるバンドがありません。",
-      "noReadWindow": "このキューブはその場で更新できません。設定から作り直してください。"
-    }
-  },
-  "netcdfProfile": {
-    "heading": "スペクトルプロファイル",
-    "clear": "クリア",
-    "chartAria": "バンド軸に沿ってサンプリングされたピクセル値",
-    "popOut": "切り離す",
-    "dock": "ドッキング",
-    "poppedOutHint": "グラフは地図上のウィンドウで開いています。",
-    "noValues": "これらのピクセルにはグラフ化できる値がありません。",
-    "exportPng": "PNG",
-    "exportCsv": "CSV",
-    "exportError": "グラフをエクスポートできませんでした。"
-  },
-  "netcdfIdentify": {
-    "noData": "データなし",
-    "coordinates": "経度、緯度",
-    "cell": "行、列"
+    "defaultAuthorName": "作成者",
+    "addComment": "コメントを追加",
+    "addCommentTooltip": "新しいレビューコメントを地図上に配置します",
+    "yourNamePlaceholder": "あなたの名前…",
+    "saveName": "名前を保存",
+    "noNameSet": "名前が未設定です — コメントは「{{name}}」と表示されます",
+    "changeNameTooltip": "名前を変更",
+    "setYourName": "名前を設定",
+    "changeName": "名前を変更",
+    "postingAs": "<strong>{{name}}</strong> として投稿",
+    "copy": "コピー",
+    "startLiveSession": "ライブセッションを開始",
+    "starting": "開始中…",
+    "sessionCodePlaceholder": "セッションコードを入力",
+    "connect": "接続",
+    "joining": "参加中…",
+    "liveSync": "ライブ同期({{count}}人がオンライン)",
+    "offlineWorkspace": "オフライン / プライベートワークスペース",
+    "disconnect": "切断",
+    "joinFailed": "セッションに参加できませんでした。",
+    "startFailed": "セッションを開始できませんでした。",
+    "filterOpen": "未解決({{count}})",
+    "filterResolved": "解決済み({{count}})",
+    "filterAll": "すべて({{count}})",
+    "emptyOpen": "未解決のコメントはありません",
+    "emptyResolved": "解決済みのコメントはありません",
+    "emptyHint": "上の「コメントを追加」をクリックし、地図上の任意の場所またはフィーチャを選択してレビューメモを残します。",
+    "resolvedBadge": "解決済み",
+    "zoomToLocation": "位置にズーム",
+    "markResolved": "解決済みにする",
+    "reopenThread": "コメントスレッドを再開",
+    "deleteThread": "コメントスレッドを削除",
+    "anchorFeature": "フィーチャ #{{id}} ({{layer}})",
+    "anchorPoint": "ポイント ({{coords}})",
+    "anchorMap": "地図",
+    "anchoredToFeature": "フィーチャ #{{id}} ({{layer}}) に固定",
+    "anchoredToPoint": "({{coords}}) に固定",
+    "mapPoint": "地図上のポイント",
+    "reply": "返信",
+    "replyPlaceholder": "返信を入力..."
   }
 }

@@ -182,7 +182,23 @@
     "elevationRange": "Elevasi min / maks",
     "meanSlope": "Kemiringan rata-rata",
     "computing": "Menghitung medan…",
-    "partialData": "Beberapa sampel tidak memiliki data medan"
+    "partialData": "Beberapa sampel tidak memiliki data medan",
+    "heading": "Arah",
+    "finalHeading": "Arah akhir",
+    "bodyNote": "Diukur di: {{body}} (aproksimasi bola)"
+  },
+  "statusBar": {
+    "elevation": "Elev",
+    "elevationLong": "Elevasi",
+    "cameraAltitude": "Alt. kamera",
+    "cameraAltitudeLong": "Ketinggian kamera di atas permukaan laut",
+    "coordinateFormat": {
+      "dd": "Derajat desimal",
+      "dms": "Derajat, menit, detik",
+      "ddm": "Derajat, menit desimal",
+      "utm": "UTM (zona, timur/utara)"
+    },
+    "coordinateFormatHint": "Format koordinat: {{format}}. Klik untuk mengganti."
   },
   "fileNamePrompt": {
     "title": "Simpan file sebagai",
@@ -214,7 +230,9 @@
     "invalidUrl": "Masukkan URL gaya HTTP atau HTTPS yang valid.",
     "sectionMoon": "Bulan",
     "sectionMars": "Mars",
-    "sectionOther": "Benda langit lainnya"
+    "sectionOther": "Benda langit lainnya",
+    "sectionRegional": "Regional",
+    "regionChina": "Tiongkok (中国)"
   },
   "planetSwitcher": {
     "label": "Benda langit",
@@ -263,6 +281,10 @@
         "label": "Tambahkan Layer WMTS",
         "description": "Tambahkan templat URL ubin WMTS sebagai layer raster."
       },
+      "ogcFeatures": {
+        "label": "Tambahkan Layer OGC API - Features",
+        "description": "Tambahkan fitur dari koleksi OGC API - Features sebagai layer vektor, mengikuti tautan paging layanan hingga jumlah fitur yang diminta selesai dimuat."
+      },
       "ogcVectorTiles": {
         "label": "Tambahkan OGC Vector Tiles",
         "description": "Tambahkan layanan OGC API - Tiles (vektor) dari TileJSON atau templat ubin, dengan opsi membaca layer sumbernya dari URL gaya."
@@ -297,11 +319,15 @@
       },
       "arcgis": {
         "label": "Tambahkan Layer ArcGIS",
-        "description": "Tambahkan layer ArcGIS FeatureServer, layer VectorTileServer, atau item portal."
+        "description": "Tambahkan layer ArcGIS FeatureServer, VectorTileServer, MapServer, atau ImageServer, atau item portal."
       },
       "postgres": {
         "label": "Tambahkan Layer PostgreSQL",
         "description": "Jalankan Martin secara lokal, temukan sumber PostGIS, dan tambahkan sumber sebagai ubin vektor."
+      },
+      "iceberg": {
+        "label": "Tambahkan Layer Apache Iceberg",
+        "description": "Baca tabel Iceberg (v3 atau lebih baru) dan tambahkan sebagian fiturnya."
       },
       "deckglViz": {
         "label": "Tambahkan Layer Deck.gl",
@@ -310,10 +336,6 @@
       "video": {
         "label": "Tambahkan Layer Video",
         "description": "Tambahkan overlay video bergeoreferensi dengan memasukkan URL MP4 dan empat koordinat sudut."
-      },
-      "ogcFeatures": {
-        "label": "Tambahkan Layer OGC API - Features",
-        "description": "Tambahkan fitur dari koleksi OGC API - Features sebagai layer vektor, mengikuti tautan paging layanan hingga jumlah fitur yang diminta selesai dimuat."
       }
     },
     "shared": {
@@ -421,6 +443,27 @@
       "errorUrl": "Masukkan templat URL ubin WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },
+    "ogcFeatures": {
+      "defaultName": "Layer OGC API - Features",
+      "sampleLabel": "Danau dunia (demo pygeoapi)",
+      "urlPlaceholder": "https://example.com/ogcapi",
+      "urlHint": "Halaman utama layanan, atau URL apa pun yang disalin darinya (URL /collections atau /collections/{id}/items juga bisa).",
+      "retrieveCollections": "Ambil koleksi",
+      "retrieving": "Mengambil...",
+      "retrievedCollections": "Koleksi yang diambil",
+      "selectCollection_other": "Pilih dari {{count}} koleksi",
+      "noCollectionsFound": "Tidak ada koleksi fitur yang ditemukan untuk layanan ini.",
+      "retrieveError": "Tidak dapat mengambil koleksi dari layanan ini.",
+      "collection": "Koleksi",
+      "collectionPlaceholder": "collection-id",
+      "maxFeatures": "Jumlah fitur maksimum",
+      "bbox": "Kotak pembatas",
+      "datetime": "Tanggal dan waktu",
+      "errorCollection": "Masukkan id koleksi OGC API - Features.",
+      "errorMaxFeatures": "Masukkan nilai jumlah fitur maksimum 1 atau lebih.",
+      "errorBbox": "Masukkan kotak pembatas sebagai \"barat,selatan,timur,utara\".",
+      "errorNoFeatures": "Koleksi ini tidak mengembalikan fitur apa pun."
+    },
     "ogcVectorTiles": {
       "defaultName": "Layer OGC Vector Tiles",
       "tilesUrl": "URL ubin",
@@ -441,14 +484,39 @@
       "defaultName": "Layer ArcGIS",
       "sampleFeatureLabel": "Kota-kota besar AS (fitur)",
       "sampleVectorTileLabel": "Bidang tanah Santa Monica (ubin vektor)",
+      "sampleMapServiceLabel": "Batas wilayah AS (layanan peta)",
+      "sampleImageServiceLabel": "Hillshade USGS 3DEP (layanan citra)",
       "featureLayer": "Layer fitur",
       "vectorTileLayer": "Layer ubin vektor",
+      "mapServiceLayer": "Layanan peta",
+      "imageServiceLayer": "Layanan citra",
       "portalItemId": "ID item portal",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Sublayer",
+      "sublayersPlaceholder": "Semua sublayer yang terlihat",
+      "sublayersHint": "Id sublayer opsional dipisahkan koma, misalnya 0,2,5. Memilih sublayer menggambar layanan secara dinamis alih-alih memakai ubin cache-nya.",
+      "retrieveSublayers": "Telusuri layer",
+      "retrievingSublayers": "Mengambil...",
+      "availableSublayers": "Sublayer yang tersedia",
+      "noSublayersFound": "Layanan peta ini tidak mencantumkan layer apa pun.",
+      "retrieveError": "Tidak dapat mengambil layer dari layanan peta.",
+      "errorMapServiceUrl": "Masukkan URL ArcGIS MapServer.",
+      "renderingRule": "Aturan render",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "JSON fungsi raster opsional yang diterapkan layanan. Aturan render menggambar layanan secara dinamis alih-alih memakai ubin cache-nya.",
       "portalUrl": "URL portal",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Token akses"
+      "accessToken": "Token akses",
+      "pageSize": "Rekaman per permintaan",
+      "pageSizePlaceholder": "Otomatis",
+      "maxFeatures": "Jumlah fitur maksimum",
+      "maxFeaturesPlaceholder": "Semua",
+      "pagingHint": "Layer fitur diunduh per halaman. Turunkan jumlah rekaman per permintaan jika layanan kehabisan waktu.",
+      "loadingProgress": "Memuat {{loaded}} dari {{total}} fitur…",
+      "loadingProgressUnknown": "Memuat {{loaded}} fitur…"
     },
     "gpx": {
       "defaultName": "Layer GPX",
@@ -520,6 +588,8 @@
       "errorMissingCrs": "Sistem koordinat kelas fitur ini tidak dapat terdeteksi. Masukkan CRS sumbernya untuk menambahkannya."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "Buku kerja Excel tidak memiliki lembar kerja yang berisi data.",
+      "worksheet": "Lembar kerja",
       "defaultName": "Layer Teks Berpembatas",
       "sampleLabel": "Kota-kota AS",
       "errorChooseFile": "Pilih file teks berpembatas.",
@@ -620,9 +690,44 @@
       "statusTablesFound_other": "Menemukan {{count}} tabel spasial.",
       "statusNoTables": "Tidak ada tabel spasial yang ditemukan dalam database ini.",
       "editableTable": "Tabel",
+      "geometryColumn": "Kolom geometri",
       "tableReadOnly": "{{table}} (hanya baca: tanpa kunci utama)",
       "errorSelectTable": "Pilih tabel untuk dimuat.",
       "errorRuntimeMissing": "Server pemrosesan tidak memiliki runtime PostGIS (psycopg) terpasang. Pasang ekstra 'postgis' pada geolibre-server untuk memuat layer yang dapat diedit."
+    },
+    "iceberg": {
+      "defaultName": "Layer Iceberg",
+      "notice": "Tabel Iceberg dibaca sekali, sesuai permintaan. Layer ini adalah snapshot yang dibatasi oleh batas baris di bawah dan tidak pernah dipindai ulang secara otomatis — gunakan Segarkan di menu layer untuk membacanya lagi.",
+      "mode": "Sumber Iceberg",
+      "modeTable": "Lokasi tabel",
+      "modeCatalog": "Katalog REST",
+      "location": "Lokasi metadata tabel",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "Warehouse",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "Endpoint katalog",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "Hubungkan",
+      "table": "Tabel Iceberg",
+      "sql": "SQL (opsional)",
+      "sqlHint": "Edit untuk memfilter atau mengubah bentuk data yang dirender. Pernyataan harus mengembalikan kolom GEOMETRY; biarkan seperti yang dihasilkan untuk membaca seluruh tabel.",
+      "selectTable": "Pilih tabel",
+      "geometryColumn": "Kolom geometri",
+      "rowLimit": "Batas baris",
+      "rowLimitHint": "Layer menyimpan baris-baris pertama tabel, hingga batas ini. Batas tidak boleh melebihi {{max}} baris.",
+      "rowLimitTruncates": "Tabel berisi {{total}} baris; layer akan berisi {{limit}} baris pertama.",
+      "statusConnecting": "Membaca metadata Iceberg...",
+      "statusInspecting": "Memeriksa tabel...",
+      "statusInspected": "{{rows}} baris. Geometri: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} baris, tetapi tidak ditemukan kolom GEOMETRY. Geometri Iceberg harus menggunakan tipe geometri v3.",
+      "statusTablesFound_other": "Ditemukan {{count}} tabel. Pilih salah satu untuk melanjutkan.",
+      "statusNoTables": "Katalog tidak menampilkan tabel apa pun.",
+      "errorLocation": "Masukkan lokasi metadata tabel Iceberg.",
+      "errorWarehouse": "Masukkan warehouse Iceberg yang akan dilampirkan.",
+      "errorEndpoint": "Masukkan endpoint katalog REST Iceberg.",
+      "errorConnect": "Tidak dapat membaca sumber Iceberg.",
+      "errorInspect": "Tidak dapat memeriksa tabel Iceberg.",
+      "errorConnectFirst": "Hubungkan dan pilih tabel Iceberg terlebih dahulu."
     },
     "video": {
       "defaultName": "Layer Video",
@@ -672,15 +777,15 @@
       "bandCombinationHelp": "Band tunggal digambar dengan peta warna; komposit RGB menggambar tiga band dari variabel ini sebagai kanal merah, hijau, dan biru, masing-masing direntangkan ke rentang 2-98 % miliknya sendiri.",
       "modeSingleBand": "Band tunggal (dengan peta warna)",
       "modeRgb": "Komposit RGB (tiga band)",
-      "colorMin": "Warna minimum (opsional)",
-      "colorMax": "Warna maksimum (opsional)",
-      "adding": "Menambahkan...",
-      "addLayer": "Tambah layer",
       "channel": {
         "red": "Band merah",
         "green": "Band hijau",
         "blue": "Band biru"
-      }
+      },
+      "colorMin": "Warna minimum (opsional)",
+      "colorMax": "Warna maksimum (opsional)",
+      "adding": "Menambahkan...",
+      "addLayer": "Tambah layer"
     },
     "deckViz": {
       "defaultName": "Layer Deck.gl",
@@ -713,27 +818,6 @@
       "lineWidth": "Lebar garis",
       "extrusion": "Ekstrusi 3D",
       "modelUrlPlaceholder": "https://example.com/model.glb"
-    },
-    "ogcFeatures": {
-      "defaultName": "Layer OGC API - Features",
-      "sampleLabel": "Danau dunia (demo pygeoapi)",
-      "urlPlaceholder": "https://example.com/ogcapi",
-      "urlHint": "Halaman utama layanan, atau URL apa pun yang disalin darinya (URL /collections atau /collections/{id}/items juga bisa).",
-      "retrieveCollections": "Ambil koleksi",
-      "retrieving": "Mengambil...",
-      "retrievedCollections": "Koleksi yang diambil",
-      "selectCollection_other": "Pilih dari {{count}} koleksi",
-      "noCollectionsFound": "Tidak ada koleksi fitur yang ditemukan untuk layanan ini.",
-      "retrieveError": "Tidak dapat mengambil koleksi dari layanan ini.",
-      "collection": "Koleksi",
-      "collectionPlaceholder": "collection-id",
-      "maxFeatures": "Jumlah fitur maksimum",
-      "bbox": "Kotak pembatas",
-      "datetime": "Tanggal dan waktu",
-      "errorCollection": "Masukkan id koleksi OGC API - Features.",
-      "errorMaxFeatures": "Masukkan nilai jumlah fitur maksimum 1 atau lebih.",
-      "errorBbox": "Masukkan kotak pembatas sebagai \"barat,selatan,timur,utara\".",
-      "errorNoFeatures": "Koleksi ini tidak mengembalikan fitur apa pun."
     },
     "nonGeographicCoordinates": "Koordinat pada {{names}} bukan bujur/lintang, sehingga tidak ada yang digambar di peta. CRS salah — proyeksikan ulang data (atau perbaiki .prj-nya) lalu muat kembali."
   },
@@ -1093,6 +1177,7 @@
     "guest": "Tamu",
     "connectFailed": "Tidak dapat terhubung ke server kolaborasi.",
     "copyFailed": "Tidak dapat menyalin ke papan klip.",
+    "shareFailed": "Tidak dapat membagikan perubahan proyek terbaru.",
     "connecting": "Menghubungkan…",
     "reconnecting": "Menghubungkan kembali…",
     "connected": "Sesi langsung aktif",
@@ -1114,6 +1199,9 @@
     "viewOnly": "Hanya-lihat",
     "allowEdit": "Izinkan orang ini mengedit",
     "setViewOnly": "Jadikan orang ini hanya-lihat",
+    "kick": "Keluarkan peserta",
+    "block": "Blokir peserta",
+    "requireIdentityLabel": "Wajibkan akun yang sudah masuk untuk bergabung",
     "chatLog": "Obrolan sesi",
     "chatCompose": "Ketik pesan",
     "chatEmpty": "Belum ada pesan.",
@@ -1122,7 +1210,11 @@
     "chatAttachLocation": "Lampirkan lokasi peta saat ini",
     "chatLocationAttached": "Lokasi terlampir (klik untuk menghapus)",
     "chatGoToLocation": "Buka lokasi ini",
-    "sessionStatusUnread_other": "Sesi kolaborasi langsung, {{count}} pesan belum dibaca. Klik untuk melihat siapa yang terhubung dan mengobrol."
+    "sessionStatusUnread_other": "Sesi kolaborasi langsung, {{count}} pesan belum dibaca. Klik untuk melihat siapa yang terhubung dan mengobrol.",
+    "lockLayer": "Kunci layer untuk tamu",
+    "unlockLayer": "Buka kunci layer untuk tamu",
+    "layerLocked": "Terkunci",
+    "layerLockedHint": "Layer ini dikunci oleh host dan tidak dapat diedit"
   },
   "share": {
     "title": "Bagikan proyek",
@@ -1135,6 +1227,7 @@
     "step2Description": "Tempel token ke Settings → Environment Variables pada perangkat ini.",
     "configureToken": "Konfigurasi token lokal",
     "liveAt": "Proyek Anda aktif di:",
+    "credentialsRemoved": "{{count}} bidang kredensial tidak disertakan. Penerima harus memberikan kredensial sendiri atau menggunakan referensi yang diperantarai.",
     "copyLink": "Salin tautan",
     "open": "Buka",
     "done": "Selesai",
@@ -1150,7 +1243,26 @@
     "errorFallback": "Tidak dapat membagikan proyek.",
     "usernameRequired": "Atur nama pengguna pada akun {{shareHost}} Anda sebelum membagikan. Buka pengaturan akun Anda untuk memilihnya, lalu coba lagi.",
     "openAccountSettings": "Buka pengaturan akun",
-    "credentialsRemoved": "{{count}} bidang kredensial tidak disertakan. Penerima harus memberikan kredensial sendiri atau menggunakan referensi yang diperantarai."
+    "readinessChecking": "Memeriksa apakah penerima dapat memuat data Anda…",
+    "readinessUnavailable": "Pemeriksaan sumber data tidak dapat dijalankan.",
+    "readinessAllReachable_other": "{{count}} sumber data tampaknya dapat dijangkau oleh penerima.",
+    "readinessTitle": "Sebagian data mungkin tidak dimuat untuk penerima",
+    "readinessNote": "Ini tidak menghalangi pembagian. Penerima membuka proyek di browser, tempat sumber-sumber ini dapat berperilaku berbeda dibandingkan pada perangkat Anda.",
+    "readinessTruncated_other": "Hanya {{count}} sumber awal yang diperiksa.",
+    "readinessBasemapLabel": "Peta dasar",
+    "readinessPluginLabel": "Plugin",
+    "readinessReasonCredentialStripped": "Menggunakan kredensial yang dihapus saat dibagikan.",
+    "readinessReasonAuthRequired": "Layanan menolak permintaan tanpa kredensial.",
+    "readinessReasonCors": "Browser tidak dapat mengambil data dari host ini: host tidak mengirim header lintas asal, atau tidak dapat dijangkau.",
+    "readinessReasonNotFound": "Layanan menjawab tidak ditemukan, jadi tautannya mungkin sudah kedaluwarsa atau berpindah.",
+    "readinessReasonLocalFile": "Menunjuk ke file di komputer Anda.",
+    "readinessReasonPrivateHost": "Menunjuk ke alamat jaringan privat atau lokal.",
+    "readinessReasonNoSource": "Tidak memiliki sumber yang dapat dibuka oleh penerima.",
+    "readinessReasonUnchecked": "Tidak dapat diperiksa.",
+    "readinessAdviceCredential": "Jadikan layanan ini publik, atau beri tahu penerima untuk menyediakan kredensial mereka sendiri.",
+    "readinessAdviceCors": "Layer ini tetap dimuat di aplikasi desktop, tetapi tidak di penampil browser.",
+    "readinessAdviceNotFound": "Perbarui atau ganti sumber layer ini sebelum membagikan.",
+    "readinessAdviceLocal": "Konversikan ke sumber yang dihosting, atau penerima akan melihat layer kosong."
   },
   "gallery": {
     "title": "Galeri proyek",
@@ -1266,13 +1378,19 @@
       "layer": "Layer",
       "titleLabel": "Judul",
       "position": "Posisi",
-      "filterToPage": "Hanya fitur dalam cakupan halaman",
-      "filterToPageHint": "Berlaku untuk halaman atlas dan cakupan cetak yang digambar; jika tidak, seluruh layer digunakan."
+      "pageFilter": "Filter cakupan halaman",
+      "filterAll": "Semua fitur",
+      "filterContained": "Hanya fitur yang sepenuhnya berada dalam cakupan halaman",
+      "filterIntersecting": "Hanya fitur yang berpotongan dengan cakupan halaman",
+      "filterToPageHint": "Berlaku untuk halaman atlas dan cakupan cetak yang digambar; jika tidak, seluruh layer digunakan.",
+      "filterToAtlasFeature": "Hanya fitur atlas saat ini",
+      "filterToAtlasFeatureHint": "Tersedia saat tabel memakai layer cakupan atlas. Ini lebih diprioritaskan daripada filter cakupan halaman."
     },
     "dataTable": {
       "columns": "Kolom",
       "columnsHint": "{{count}} bidang pertama dipilih secara default. Centang kolom untuk menyesuaikan.",
       "maxRows": "Baris maks",
+      "fitRows": "Sesuaikan jumlah baris agar pas dengan halaman",
       "moreRows_other": "+{{count}} lagi",
       "noRows": "Tidak ada baris untuk ditampilkan dengan pengaturan saat ini."
     },
@@ -1395,6 +1513,8 @@
       "extentMargin": "Margin di sekitar fitur",
       "extentScale": "Skala tetap",
       "marginLabel": "Margin (%)",
+      "maskOutside": "Mask area di luar fitur saat ini",
+      "maskOutsideHint": "Menerapkan isian terbalik semitransparan untuk menonjolkan fitur atlas saat ini.",
       "scaleLabel": "Skala",
       "scaleRequired": "Masukkan skala yang lebih besar dari nol.",
       "sortField": "Urutkan berdasarkan",
@@ -1459,6 +1579,19 @@
     "description": "Sesuaikan eksagerasi vertikal medan 3D. Nilai lebih tinggi membuat bukit dan gunung tampak lebih curam.",
     "label": "Eksagerasi vertikal",
     "controlLabel": "Alihkan medan (klik dua kali untuk eksagerasi)",
+    "sourceLabel": "Sumber medan",
+    "sourceDescription": "Gunakan COG pita tunggal EPSG:3857 atau EPSG:4326 sebagai sumber elevasi. Berkas harus mengizinkan CORS dan permintaan rentang HTTP.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "DEM COG lokal",
+    "localSourceDescription": "Berkas tetap berada di perangkat ini dan dibaca dalam rentang kecil saat petak medan diperlukan.",
+    "useCog": "Gunakan DEM COG",
+    "sourceLoading": "Membuka COG…",
+    "restoreDefaultSource": "Gunakan medan global",
+    "sourceError": "DEM COG tidak dapat dibuka.",
+    "sourceErrorEmpty": "Berkas itu kosong. Pilih berkas DEM COG.",
+    "sourceErrorBand": "Band yang diminta tidak ada dalam COG ini.",
+    "sourceErrorProjection": "Terrain COG hanya mendukung DEM EPSG:3857 dan EPSG:4326.",
+    "sourceErrorDetail": "DEM COG tidak dapat dibuka. ({{detail}})",
     "reset": "Atur ulang",
     "done": "Selesai"
   },
@@ -1486,6 +1619,16 @@
     "gapNote": "Segmen putus-putus menjembatani tanggal tanpa nilai (nodata atau di luar cakupan).",
     "exportCsv": "Ekspor CSV",
     "exportGeoParquet": "Ekspor GeoParquet"
+  },
+  "auth": {
+    "unavailableTitle": "Masuk tidak tersedia",
+    "unavailableDescription": "GeoLibre tidak dapat menjangkau layanan masuk, sehingga tidak dapat mengetahui apakah Anda sudah masuk. Ini biasanya bersifat sementara; jika terus terjadi, pengaturan autentikasi penerapan ini mungkin perlu diperiksa.",
+    "retry": "Coba lagi",
+    "signInTitle": "Masuk ke GeoLibre",
+    "signInDescription": "Penerapan ini memerlukan akun. Anda akan dibawa ke halaman masuk yang aman lalu dikembalikan ke sini.",
+    "signIn": "Masuk",
+    "signOut": "Keluar",
+    "account": "Akun"
   },
   "basemapExtract": {
     "title": "Ekstrak Peta Dasar Offline",
@@ -1617,8 +1760,13 @@
     "unit": {
       "meters": "m",
       "kilometers": "km",
-      "miles": "mi"
-    }
+      "miles": "mi",
+      "feet": "kaki"
+    },
+    "viewshedHere": "Area pandang dari sini ({{radius}})",
+    "viewshedLayerName": "Area pandang ({{radius}})",
+    "viewshedToolName": "Area pandang",
+    "viewshedNoResult": "Tidak ada area terlihat yang dapat dihitung di sini."
   },
   "knowledgeCard": {
     "title": "Info tempat",
@@ -1662,7 +1810,8 @@
       "geocoding": "Geocoding",
       "ai": "Penyedia AI",
       "environment": "Lingkungan",
-      "updates": "Pembaruan"
+      "updates": "Pembaruan",
+      "startup": "Saat Memulai"
     },
     "menu": {
       "mapPreferences": "Preferensi Peta",
@@ -1673,6 +1822,7 @@
       "ai": "Penyedia AI",
       "environmentVariables": "Variabel Lingkungan",
       "updates": "Pengaturan Pembaruan",
+      "startupSettings": "Pengaturan Saat Memulai",
       "managePlugins": "Kelola Plugin",
       "styleManager": "Pengelola Gaya",
       "urlOverrideNote": "Parameter tata letak URL menimpa pengaturan yang tersimpan."
@@ -1689,6 +1839,26 @@
         "minor": "Hanya rilis besar dan kecil",
         "major": "Hanya rilis besar"
       }
+    },
+    "startup": {
+      "title": "Proyek saat memulai",
+      "description": "Pilih ruang kerja yang dibuka GeoLibre saat aplikasi native dimulai.",
+      "mode": {
+        "default": "Buka ruang kerja bawaan",
+        "last": "Buka kembali proyek terakhir",
+        "specific": "Buka proyek tertentu"
+      },
+      "modeHint": {
+        "default": "Mulai dengan proyek baru tanpa judul.",
+        "last": "Buka proyek lokal yang terakhir digunakan."
+      },
+      "chooseProject": "Pilih Proyek",
+      "noProjectSelected": "Tidak ada proyek yang dipilih",
+      "globeByDefault": "Aktifkan bola dunia 3D secara bawaan",
+      "globeByDefaultHint": "Digunakan untuk ruang kerja tanpa judul saat tidak ada proyek saat memulai atau tautan proyek yang diberikan.",
+      "selectError": "Proyek yang dipilih tidak dapat dibaca.",
+      "restoring": "Membuka proyek saat memulai Anda…",
+      "loadWarning": "Proyek saat memulai tidak tersedia. GeoLibre membuka ruang kerja bawaan sebagai gantinya."
     },
     "map": {
       "constraintsTitle": "Batasan peta",
@@ -1711,7 +1881,9 @@
       "scaleUnitImperial": "Imperial (ft / mi)",
       "scaleUnitNautical": "Nautikal (nmi)",
       "scaleUnitHint": "Pilih satuan yang ditampilkan pada bilah skala di bagian bawah peta.",
-      "errorBoundsUnavailable": "Batas peta belum tersedia."
+      "errorBoundsUnavailable": "Batas peta belum tersedia.",
+      "coordinateFormat": "Format koordinat",
+      "coordinateFormatHint": "Notasi yang digunakan bilah status untuk koordinat penunjuk. Klik koordinat di bilah status untuk mengganti notasi."
     },
     "layout": {
       "title": "Tata Letak",
@@ -2047,7 +2219,8 @@
       "dashboard": "Dasbor",
       "assistant": "Asisten AI",
       "geocode": "Geocode Alamat",
-      "modelBuilder": "Batch & Model",
+      "batchTools": "Alat massal",
+      "modelBuilder": "Pembuat Model",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "Segmentasi AI",
@@ -2102,7 +2275,8 @@
       "video": "Layer Video",
       "deckglViz": "Layer Deck.gl",
       "gltfModel": "Model 3D (glTF)",
-      "postgres": "Layer PostgreSQL"
+      "postgres": "Layer PostgreSQL",
+      "iceberg": "Layer Apache Iceberg"
     },
     "conversion": {
       "vectorToVector": "Vektor ke Vektor",
@@ -2129,6 +2303,7 @@
       "rasterShape": "Membaca raster {{width}}×{{height}} dengan {{bands}} band",
       "wroteCog": "Menulis COG berubin dengan overview ({{compression}})",
       "notAGeoTiff": "File ini bukan GeoTIFF yang dapat dibaca. Di browser, Raster ke COG hanya membaca GeoTIFF; format lain memerlukan aplikasi desktop.",
+      "rasterTooLargeForBrowser": "Di browser, ini mendekode seluruh raster di WebAssembly yang dibatasi sekitar 4 GB, sehingga file ini tidak muat. Konversikan dengan aplikasi desktop GeoLibre, atau bangun COG terlebih dahulu dengan gdal_translate atau rio-cogeo.",
       "zoomRangeError": "Tingkat zoom harus memenuhi 0 ≤ min ≤ maks ≤ {{max}}.",
       "colormap": "Peta warna",
       "resampling": "Resampling",
@@ -2374,7 +2549,7 @@
       "duckdbLayer": "Layer DuckDB",
       "whitebox": "Whitebox",
       "geocode": "Geocode Alamat",
-      "modelBuilder": "Batch & Model",
+      "modelBuilder": "Pembuat Model",
       "processingHistory": "Riwayat",
       "conversion": "Konversi",
       "vector": "Vektor",
@@ -2386,7 +2561,7 @@
       "terrain": "Medan",
       "remoteSensing": "Penginderaan Jauh",
       "projection": "Proyeksi",
-      "geolibre": "GeoLibre",
+      "geolibre": "Kotak alat GeoLibre",
       "subGroupGeometry": "Geometri",
       "subGroupOverlay": "Overlay",
       "subGroupJoin": "Gabungan",
@@ -2410,6 +2585,8 @@
       "atmosphereEnabled": "Diaktifkan",
       "spinGlobe": "Bola Dunia Berputar",
       "graticule": "Garis Kisi",
+      "pointerElevation": "Elevasi",
+      "pointerElevationHint": "Tampilkan elevasi tanah di bawah penunjuk pada bilah status. Tanpa medan 3D, layanan elevasi publik akan dikueri.",
       "weather": "Cuaca",
       "weatherTooltip": "Tampilkan lapisan cuaca hampir real-time yang dapat dianimasikan.",
       "weatherPlay": "Putar animasi",
@@ -2455,6 +2632,21 @@
       "arcgisImportComplete": "Proyek ArcGIS Pro diimpor",
       "arcgisImportWarnings_other": "Proyek berhasil diimpor, tetapi {{count}} layer tidak dapat dimuat.",
       "arcgisUnknownLayerType": "tidak diketahui",
+      "importWarningLayerCount_other": "{{count}} layer",
+      "showLayerNames": "Tampilkan nama layer",
+      "hideLayerNames": "Sembunyikan nama layer",
+      "arcgisImportReason": {
+        "layer-type": "Tipe layer {{layerType}} tidak didukung.",
+        "missing-source": "Layer tidak memiliki sumber data lokal yang dapat dibaca.",
+        "format": "Format data layer tidak didukung.",
+        "file-geodatabase": "Sumber File Geodatabase (.gdb) tidak dimuat dari proyek. Di GeoLibre Desktop, tambahkan melalui Tambah Data → File Geodatabase (GDB).",
+        "file-geodatabase-raster": "Dataset raster yang disimpan dalam File Geodatabase (.gdb) tidak didukung. Ekspor raster ke GeoTIFF lalu tambahkan sebagai layer raster.",
+        "network-path": "Jalur berbagi jaringan tidak dimuat karena alasan keamanan.",
+        "service": "Layer layanan ArcGIS di dalam proyek belum didukung.",
+        "browser-local-file": "Berkas lokal dirujuk, tetapi peramban tidak dapat membuka kembali jalur data ArcGIS Pro. Gunakan GeoLibre Desktop untuk memuatnya.",
+        "map-extent": "Cakupan peta yang tersimpan memakai sistem koordinat yang tidak dapat dikonversi GeoLibre, sehingga peta dibuka pada tampilan bawaan.",
+        "nesting": "Grup ini bersarang terlalu dalam, atau proyek merujuk balik ke grup yang sudah memuatnya."
+      },
       "qgisImportComplete": "Proyek QGIS diimpor",
       "qgisImportWarnings_other": "Proyek berhasil diimpor, tetapi {{count}} layer tidak dapat dimuat.",
       "qgisUnknownProvider": "tidak diketahui",
@@ -2479,6 +2671,7 @@
       "embedVectorTitle": "Sematkan data vektor lokal?",
       "embedVectorDesc": "Proyek ini memiliki {{count}} layer vektor lokal yang dimuat dari komputer Anda. Browser tidak dapat membaca ulang layer ini saat proyek dibuka kembali, sehingga datanya harus disematkan dalam file proyek untuk dipulihkan. Menyematkan menambah sekitar {{size}} ke file.",
       "embedVectorDescDesktop": "Proyek ini memiliki {{count}} layer vektor lokal yang dimuat dari komputer Anda. Sematkan datanya agar proyek mandiri (menambah sekitar {{size}}), atau simpan referensi file yang dimuat ulang dari disk saat proyek dibuka kembali. Referensi menjaga file tetap kecil tetapi rusak jika file sumber kemudian dipindahkan atau dihapus.",
+      "embedVectorLargeWarning": "Menyematkan sekitar {{size}} menghasilkan berkas proyek yang sangat besar. Membukanya kembali bisa lambat atau gagal sama sekali, karena setiap fitur harus diurai dan disimpan di memori sekaligus. Untuk data sebesar ini, konversikan lapisan ke PMTiles atau FlatGeobuf dan tambahkan sebagai lapisan jarak jauh alih-alih menyematkannya.",
       "embedVectorEmbedButton": "Sematkan data",
       "embedVectorReferenceButton": "Simpan referensi file",
       "embedVectorSkipButton": "Simpan tanpa data",
@@ -2519,16 +2712,9 @@
       "loadingOsmPbfProgress": "Mengonversi fitur ke GeoJSON… {{processed}} dari {{total}} entitas OSM diproses.",
       "projectName": "Nama proyek",
       "storymapEllipsis": "Peta Cerita...",
-      "arcgisImportReason": {
-        "layer-type": "Tipe layer {{layerType}} tidak didukung.",
-        "missing-source": "Layer tidak memiliki sumber data lokal yang dapat dibaca.",
-        "format": "Format data layer tidak didukung.",
-        "network-path": "Jalur berbagi jaringan tidak dimuat karena alasan keamanan.",
-        "service": "Layer layanan ArcGIS di dalam proyek belum didukung.",
-        "browser-local-file": "Berkas lokal dirujuk, tetapi peramban tidak dapat membuka kembali jalur data ArcGIS Pro. Gunakan GeoLibre Desktop untuk memuatnya.",
-        "map-extent": "Cakupan peta yang tersimpan memakai sistem koordinat yang tidak dapat dikonversi GeoLibre, sehingga peta dibuka pada tampilan bawaan.",
-        "nesting": "Grup ini bersarang terlalu dalam, atau proyek merujuk balik ke grup yang sudah memuatnya."
-      }
+      "pointerElevationNoticeTitle": "Elevasi memakai layanan publik",
+      "pointerElevationNoticeDesc": "Elevasi dihitung dari medan 3D peta bila aktif, tanpa mengirim apa pun. Tanpa medan 3D, API publik Open-Meteo dikueri dan koordinat di bawah penunjuk meninggalkan perangkat Anda.",
+      "batchTools": "Alat massal"
     },
     "plugin": {
       "maplibre-gl-annotations": "Anotasi",
@@ -2598,6 +2784,7 @@
       "couldNotOpenRecentProject": "Tidak dapat membuka proyek terbaru.",
       "couldNotLoadRecentProject": "Tidak dapat memuat proyek terbaru.",
       "couldNotSaveProject": "Tidak dapat menyimpan proyek.",
+      "projectTooLargeToSave": "Proyek ini terlalu besar untuk disimpan. Konversikan data vektor yang disematkan ke PMTiles atau FlatGeobuf dan tambahkan sebagai lapisan jarak jauh alih-alih menyematkan fiturnya.",
       "couldNotExportHtml": "Tidak dapat mengekspor proyek ke HTML.",
       "osmPbfNoFeatures": "Tidak ditemukan fitur titik, garis, atau poligon dalam file OSM PBF ini.",
       "couldNotLoadOsmPbf": "Tidak dapat memuat file OSM PBF.",
@@ -2844,6 +3031,203 @@
     "includeParents": "Sertakan sel induk dari sel terpilih",
     "showIcosahedron": "Tampilkan ikosahedron"
   },
+  "s2Plugin": {
+    "title": "Grid S2",
+    "controlTitle": "Pengaturan grid S2",
+    "autoResolution": "Resolusi otomatis",
+    "resolution": "Resolusi",
+    "cellCount": "{{count}} sel dalam tampilan",
+    "tooManyCells": "Tampilan ini melebihi batas {{limit}} sel. Perbesar tampilan atau turunkan resolusinya.",
+    "fillColor": "Warna isi",
+    "fillOpacity": "Opasitas isi",
+    "lineColor": "Warna garis tepi",
+    "lineWidth": "Lebar garis tepi",
+    "showLabels": "Tampilkan id sel",
+    "identifyHint": "Klik peta untuk mengidentifikasi sel S2.",
+    "selectedCell": "Sel terpilih",
+    "noSelection": "Tidak ada sel yang dipilih",
+    "copyId": "Salin id",
+    "parent": "Sel induk",
+    "children": "Sel turunan",
+    "neighbors": "Sel tetangga",
+    "center": "Pusat",
+    "zoomToCell": "Zoom ke sel",
+    "addAsLayer": "Tambahkan grid sebagai layer",
+    "exportGeoJson": "Ekspor GeoJSON",
+    "exportCsv": "Ekspor CSV",
+    "includeNeighbors": "Sertakan sel tetangga dari sel terpilih",
+    "includeParents": "Sertakan sel induk dari sel terpilih"
+  },
+  "a5Plugin": {
+    "title": "Grid A5",
+    "controlTitle": "Pengaturan grid A5",
+    "autoResolution": "Resolusi otomatis",
+    "resolution": "Resolusi",
+    "cellCount": "{{count}} sel dalam tampilan",
+    "tooManyCells": "Tampilan ini melebihi batas {{limit}} sel. Perbesar tampilan atau turunkan resolusinya.",
+    "fillColor": "Warna isi",
+    "fillOpacity": "Opasitas isi",
+    "lineColor": "Warna garis tepi",
+    "lineWidth": "Lebar garis tepi",
+    "showLabels": "Tampilkan id sel",
+    "identifyHint": "Klik peta untuk mengidentifikasi sel A5.",
+    "selectedCell": "Sel terpilih",
+    "noSelection": "Tidak ada sel yang dipilih",
+    "copyId": "Salin id",
+    "parent": "Sel induk",
+    "children": "Sel turunan",
+    "neighbors": "Sel tetangga",
+    "center": "Pusat",
+    "zoomToCell": "Zoom ke sel",
+    "addAsLayer": "Tambahkan grid sebagai layer",
+    "exportGeoJson": "Ekspor GeoJSON",
+    "exportCsv": "Ekspor CSV",
+    "includeNeighbors": "Sertakan sel tetangga dari sel terpilih",
+    "includeParents": "Sertakan sel induk dari sel terpilih"
+  },
+  "dggridPlugin": {
+    "title": "DGGRID",
+    "controlTitle": "Pengaturan DGGRID",
+    "cellType": "Tipe sel",
+    "topologyHexagon": "Segi enam",
+    "topologyDiamond": "Belah ketupat",
+    "topologyTriangle": "Segitiga",
+    "projection": "Proyeksi",
+    "aperture": "Apertur",
+    "autoResolution": "Resolusi otomatis",
+    "resolution": "Resolusi",
+    "cellCount": "{{count}} sel dalam tampilan",
+    "tooManyCells": "Tampilan ini melebihi batas {{limit}} sel. Perbesar tampilan atau turunkan resolusinya.",
+    "fillColor": "Warna isi",
+    "fillOpacity": "Opasitas isi",
+    "lineColor": "Warna garis tepi",
+    "lineWidth": "Lebar garis tepi",
+    "showLabels": "Tampilkan id sel",
+    "identifyHint": "Klik peta untuk mengidentifikasi sel DGGRID.",
+    "selectedCell": "Sel terpilih",
+    "noSelection": "Tidak ada sel yang dipilih",
+    "copyId": "Salin id",
+    "parent": "Sel induk",
+    "children": "Sel turunan",
+    "neighbors": "Sel tetangga",
+    "center": "Pusat",
+    "zoomToCell": "Zoom ke sel",
+    "addAsLayer": "Tambahkan grid sebagai layer",
+    "exportGeoJson": "Ekspor GeoJSON",
+    "exportCsv": "Ekspor CSV",
+    "includeNeighbors": "Sertakan sel tetangga dari sel terpilih",
+    "includeParents": "Sertakan sel induk dari sel terpilih"
+  },
+  "dggalPlugin": {
+    "title": "DGGAL",
+    "controlTitle": "Pengaturan DGGAL",
+    "gridType": "Tipe DGGS",
+    "autoResolution": "Resolusi otomatis",
+    "resolution": "Resolusi",
+    "cellCount": "{{count}} sel dalam tampilan",
+    "tooManyCells": "Tampilan ini melebihi batas {{limit}} sel. Perbesar tampilan atau turunkan resolusinya.",
+    "fillColor": "Warna isi",
+    "fillOpacity": "Opasitas isi",
+    "lineColor": "Warna garis tepi",
+    "lineWidth": "Lebar garis tepi",
+    "showLabels": "Tampilkan id sel",
+    "identifyHint": "Klik peta untuk mengidentifikasi sel DGGAL.",
+    "selectedCell": "Sel terpilih",
+    "noSelection": "Tidak ada sel yang dipilih",
+    "copyId": "Salin id",
+    "parent": "Sel induk",
+    "children": "Sel turunan",
+    "neighbors": "Sel tetangga",
+    "center": "Pusat",
+    "zoomToCell": "Zoom ke sel",
+    "addAsLayer": "Tambahkan grid sebagai layer",
+    "exportGeoJson": "Ekspor GeoJSON",
+    "exportCsv": "Ekspor CSV",
+    "includeNeighbors": "Sertakan sel tetangga dari sel terpilih",
+    "includeParents": "Sertakan sel induk dari sel terpilih"
+  },
+  "olcPlugin": {
+    "title": "OLC",
+    "controlTitle": "Pengaturan OLC",
+    "autoResolution": "Resolusi otomatis",
+    "resolution": "Resolusi",
+    "cellCount": "{{count}} sel dalam tampilan",
+    "tooManyCells": "Tampilan ini melebihi batas {{limit}} sel. Perbesar tampilan atau turunkan resolusinya.",
+    "fillColor": "Warna isi",
+    "fillOpacity": "Opasitas isi",
+    "lineColor": "Warna garis tepi",
+    "lineWidth": "Lebar garis tepi",
+    "showLabels": "Tampilkan id sel",
+    "identifyHint": "Klik peta untuk mengidentifikasi sel OLC.",
+    "selectedCell": "Sel terpilih",
+    "noSelection": "Tidak ada sel yang dipilih",
+    "copyId": "Salin id",
+    "parent": "Sel induk",
+    "children": "Sel turunan",
+    "neighbors": "Sel tetangga",
+    "center": "Pusat",
+    "zoomToCell": "Zoom ke sel",
+    "addAsLayer": "Tambahkan grid sebagai layer",
+    "exportGeoJson": "Ekspor GeoJSON",
+    "exportCsv": "Ekspor CSV",
+    "includeNeighbors": "Sertakan sel tetangga dari sel terpilih",
+    "includeParent": "Sertakan sel induk dari sel terpilih"
+  },
+  "geohashPlugin": {
+    "title": "Geohash",
+    "controlTitle": "Pengaturan Geohash",
+    "autoResolution": "Resolusi otomatis",
+    "resolution": "Resolusi",
+    "cellCount": "{{count}} sel dalam tampilan",
+    "tooManyCells": "Tampilan ini melebihi batas {{limit}} sel. Perbesar tampilan atau turunkan resolusinya.",
+    "fillColor": "Warna isi",
+    "fillOpacity": "Opasitas isi",
+    "lineColor": "Warna garis tepi",
+    "lineWidth": "Lebar garis tepi",
+    "showLabels": "Tampilkan id sel",
+    "identifyHint": "Klik peta untuk mengidentifikasi sel Geohash.",
+    "selectedCell": "Sel terpilih",
+    "noSelection": "Tidak ada sel yang dipilih",
+    "copyId": "Salin id",
+    "parent": "Sel induk",
+    "children": "Sel turunan",
+    "neighbors": "Sel tetangga",
+    "center": "Pusat",
+    "zoomToCell": "Zoom ke sel",
+    "addAsLayer": "Tambahkan grid sebagai layer",
+    "exportGeoJson": "Ekspor GeoJSON",
+    "exportCsv": "Ekspor CSV",
+    "includeNeighbors": "Sertakan sel tetangga dari sel terpilih",
+    "includeParent": "Sertakan sel induk dari sel terpilih"
+  },
+  "tilecodePlugin": {
+    "title": "Tilecode",
+    "controlTitle": "Pengaturan Tilecode",
+    "autoResolution": "Resolusi otomatis",
+    "resolution": "Resolusi",
+    "cellCount": "{{count}} tile dalam tampilan",
+    "tooManyCells": "Tampilan ini melebihi batas {{limit}} tile. Perbesar tampilan atau turunkan resolusinya.",
+    "fillColor": "Warna isi",
+    "fillOpacity": "Opasitas isi",
+    "lineColor": "Warna garis tepi",
+    "lineWidth": "Lebar garis tepi",
+    "showLabels": "Tampilkan id tile",
+    "identifyHint": "Klik peta untuk mengidentifikasi tile.",
+    "selectedCell": "Tile terpilih",
+    "noSelection": "Tidak ada tile yang dipilih",
+    "copyId": "Salin id",
+    "quadkey": "Quadkey",
+    "parent": "Tile induk",
+    "children": "Tile turunan",
+    "neighbors": "Tile tetangga",
+    "center": "Pusat",
+    "zoomToCell": "Zoom ke tile",
+    "addAsLayer": "Tambahkan grid sebagai layer",
+    "exportGeoJson": "Ekspor GeoJSON",
+    "exportCsv": "Ekspor CSV",
+    "includeNeighbors": "Sertakan tile tetangga dari tile terpilih",
+    "includeParent": "Sertakan tile induk dari tile terpilih"
+  },
   "timelapse": {
     "title": "Timelapse",
     "provider": "Sumber citra",
@@ -2964,6 +3348,98 @@
     "added": "{{title}} ditambahkan.",
     "addError": "Tidak dapat menambahkan kumpulan data.",
     "searchError": "Pencarian gagal."
+  },
+  "stacPlugin": {
+    "title": "Katalog STAC",
+    "footprintLayerName": "Jejak pencarian STAC",
+    "catalogSearch": "Temukan katalog publik di STAC Index",
+    "catalogSearchPlaceholder": "Cari nama katalog…",
+    "indexLoading": "Memuat STAC Index…",
+    "indexUnavailable": "STAC Index tidak tersedia: masukkan URL",
+    "indexLoadFailed": "Tidak dapat memuat STAC Index",
+    "urlLabel": "URL katalog atau API STAC",
+    "connect": "Hubungkan",
+    "connecting": "Menghubungkan ke STAC…",
+    "connected": "Terhubung. Pilih filter lalu cari.",
+    "connectFailed": "Tidak dapat terhubung ke STAC",
+    "selectCatalog": "Pilih katalog…",
+    "noMatchingCatalogs": "Tidak ada katalog yang cocok",
+    "catalogApiSuffix": " (API)",
+    "catalogStaticSuffix": " (statis)",
+    "kindApi": "API STAC",
+    "kindStatic": "katalog statis",
+    "collectionsHint": "Tahan Ctrl/Cmd untuk memilih beberapa koleksi; seret tepi bawah untuk mengubah ukuran",
+    "limitToExtent": "Batasi pencarian ke cakupan peta saat ini",
+    "bboxLabel": "Kotak pembatas (barat, selatan, timur, utara)",
+    "bboxPlaceholder": "Opsional; menggantikan cakupan peta",
+    "bboxInvalid": "Masukkan kotak pembatas yang valid: barat, selatan, timur, utara.",
+    "drawBbox": "Gambar kotak di peta",
+    "cancelDrawing": "Batalkan penggambaran",
+    "clearDrawnBbox": "Bersihkan kotak yang digambar",
+    "drawHint": "Klik dan seret pada peta untuk menggambar kotak pencarian.",
+    "drawnBbox": "Kotak yang digambar: {{bbox}}",
+    "drawnBboxCleared": "Kotak yang digambar telah dibersihkan.",
+    "mapNotReady": "Peta belum siap untuk menggambar.",
+    "startDate": "Tanggal mulai",
+    "endDate": "Tanggal akhir",
+    "additionalParams": "Parameter pencarian tambahan (JSON, hanya API STAC)",
+    "additionalInvalid": "Parameter pencarian tambahan harus berupa objek JSON.",
+    "searchItems": "Cari item",
+    "clearResults": "Bersihkan hasil",
+    "resultsCleared": "Hasil pencarian telah dibersihkan.",
+    "searching": "Mencari item STAC…",
+    "loadingMore": "Memuat item lainnya…",
+    "noMatchesHere": "Tidak ada yang cocok di bagian katalog tersebut. Muat lebih banyak untuk melanjutkan pencarian.",
+    "treeEmpty": "Kosong",
+    "treeOpenFailed": "Tidak dapat membuka katalog ini",
+    "noResults": "Tidak ada item STAC yang cocok dengan filter ini.",
+    "searchFailed": "Pencarian STAC gagal",
+    "showing": "Menampilkan {{count}} item.",
+    "showingOfMatched": "Menampilkan {{count}} dari {{matched}} item.",
+    "loadMore": "Muat lebih banyak",
+    "renderOptions": "Opsi perenderan raster",
+    "renderingEngine": "Mesin rendering COG",
+    "engineAuto": "Biarkan tidak berubah",
+    "engineWasm": "Tiler WebAssembly (kompatibel globe)",
+    "engineGpu": "GPU (deck.gl, hanya Mercator)",
+    "engineTitiler": "Server TiTiler",
+    "engineHint": "Perender mana yang mendekode citra. Berbeda dengan pengaturan di atas, yang satu ini tidak per layer: berlaku untuk setiap raster di peta, termasuk yang sudah ditambahkan.",
+    "resizeResults": "Ubah ukuran hasil pencarian",
+    "bands": "Band",
+    "bandsPlaceholder": "mis. 1 atau 1,2,3 (bawaan: otomatis)",
+    "colormap": "Peta warna (hanya band tunggal)",
+    "colormapDefault": "Bawaan perender",
+    "minValue": "Nilai minimum",
+    "maxValue": "Nilai maksimum",
+    "nodata": "Nilai NoData",
+    "nodataPlaceholder": "Menggantikan tag NoData pada berkas",
+    "renderHint": "Biarkan kosong agar perender menyimpulkan nilainya dari GeoTIFF. Opsi berlaku untuk aset yang ditambahkan setelahnya.",
+    "initialStatus": "Pilih katalog dari STAC Index atau masukkan URL.",
+    "catalogInfo": "{{title}} · {{kind}}",
+    "zoom": "Perbesar",
+    "add": "Tambah",
+    "download": "Unduh",
+    "adding": "Menambahkan {{asset}}…",
+    "added": "{{asset}} ditambahkan ke peta.",
+    "addUnsupported": "Hanya aset GeoTIFF/COG, GeoJSON, GeoParquet, dan PMTiles yang dapat ditambahkan ke peta",
+    "addFailed": "Tidak dapat menambahkan aset",
+    "addNoSourceLayers": "Arsip ini tidak mencantumkan lapisan untuk digambar",
+    "addNoTarget": "Aset ini tidak mencantumkan apa pun untuk digambar",
+    "addIcechunkFailed": "Repositori Icechunk ini tidak dapat dibuka",
+    "zarrProblemGroup": "Aset ini menunjuk ke sebuah grup array, bukan satu array yang dapat digambar",
+    "zarrProblemMissing": "Penyimpanan ini tidak memuat variabel tersebut",
+    "zarrProblemUnauthorized": "Penyimpanan Zarr ini memerlukan kredensial yang belum dapat disediakan GeoLibre",
+    "zarrProblemUnsupportedUrl": "Alamat penyimpanan Zarr ini tidak dapat dibaca satu kunci per satu",
+    "zarrProblemUnavailable": "Penyimpanan Zarr ini tidak dapat dibuka",
+    "chooseTarget": "Pilih yang akan ditambahkan",
+    "cogUnsupported": "Host GeoLibre ini tidak dapat memvisualisasikan aset GeoTIFF jarak jauh",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
+    "formatUnknown": "Format tidak dikenal",
+    "notAddable": "tidak dapat ditambahkan"
   },
   "earthdataGis": {
     "hint": "Cari layanan citra, peta, dan fitur di NASA Earthdata GIS.",
@@ -3187,6 +3663,10 @@
   "basemaps": {
     "confirmStyleReplace_other": "Beralih ke \"{{name}}\" mengganti seluruh gaya peta dan akan menghapus {{count}} peta dasar bertumpuk yang Anda tambahkan. Lanjutkan?"
   },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "Properti fitur",
+    "massingHeight": "Tinggi (m)"
+  },
   "annotations": {
     "toolbar": "Alat anotasi",
     "layerName": "Anotasi",
@@ -3293,6 +3773,14 @@
       "sum": "Total",
       "mean": "Rata-rata"
     },
+    "indicatorAggregation": {
+      "count": "Jumlah",
+      "sum": "Jumlah total",
+      "mean": "Rata-rata",
+      "min": "Minimum",
+      "max": "Maksimum",
+      "median": "Median"
+    },
     "chart": {
       "emptyNumeric": "Tidak ada nilai numerik untuk diplot.",
       "emptyScatter": "Tidak ada baris yang memiliki kedua bidang bernilai angka.",
@@ -3332,14 +3820,6 @@
       "colorDefault": "Warna bagan default",
       "cancel": "Batal",
       "save": "Simpan"
-    },
-    "indicatorAggregation": {
-      "count": "Jumlah",
-      "sum": "Jumlah total",
-      "mean": "Rata-rata",
-      "min": "Minimum",
-      "max": "Maksimum",
-      "median": "Median"
     }
   },
   "assistant": {
@@ -3348,9 +3828,9 @@
     "clear": "Bersihkan percakapan",
     "close": "Tutup asisten",
     "send": "Kirim",
-    "sendHint": "Kirim (Ctrl/Cmd+Enter)",
+    "sendHint": "Kirim (Enter)",
     "stop": "Hentikan",
-    "placeholder": "Tanyakan tentang data Anda, mis. \"tampilkan negara dengan populasi di atas 50 juta\" · Ctrl/Cmd+Enter untuk mengirim",
+    "placeholder": "Tanyakan tentang data Anda, mis. \"tampilkan negara dengan populasi di atas 50 juta\" · Enter untuk mengirim, Shift+Enter untuk baris baru",
     "intro": "Mengobrol dengan data Anda. Saya dapat menjalankan Spatial SQL, menambah atau menghapus layer, mengubah gayanya, dan menggerakkan peta — setiap perubahan dapat diurungkan. Coba \"warnai negara berdasarkan populasi dengan gradasi merah bertingkat\".",
     "setupTitle": "Siapkan Asisten AI",
     "setupStatus": "Asisten memerlukan penyedia AI untuk berpikir. Tambahkan kredensial untuk salah satu penyedia di bawah dan panel beralih ke mode obrolan segera setelah Anda menyimpan.",
@@ -3460,6 +3940,8 @@
       "bylinePlaceholder": "Baris penulis atau kredit",
       "footerText": "Teks footer",
       "footerPlaceholder": "Footer yang ditampilkan di bawah setiap halaman",
+      "markers": "Penanda lokasi yang dapat diklik",
+      "markersHint": "Menggambar penanda di lokasi setiap bab. Mengeklik penanda di penampil PDF akan membuka koordinat tersebut di Google Maps.",
       "startSlide": "Slide awal",
       "endSlide": "Slide penutup",
       "generate": "Buat PDF",
@@ -3544,33 +4026,101 @@
       "count_other": "{{count}} proses tercatat",
       "toolUnavailable": "Alat \"{{toolId}}\" tidak lagi tersedia"
     },
-    "modelBuilder": {
-      "moveStepUp": "Pindahkan langkah ke atas",
-      "moveStepDown": "Pindahkan langkah ke bawah",
-      "removeStep": "Hapus langkah",
-      "title": "Batch & Model",
-      "description": "Jalankan satu alat vektor pada banyak layer, atau rangkai beberapa alat menjadi model yang dapat digunakan ulang dan tersimpan bersama proyek Anda.",
-      "tabBatch": "Batch",
-      "tabModels": "Model",
-      "outputPlaceholder": "Keluaran akan muncul di sini.",
+    "batchTools": {
+      "title": "Alat massal",
+      "description": "Jalankan satu alat vektor pada banyak lapisan sekaligus.",
+      "runBatch": "Jalankan massal",
       "tool": "Alat",
       "sharedParameters": "Parameter bersama",
       "noExtraParameters": "Alat ini tidak memiliki parameter tambahan.",
       "inputLayers": "Layer masukan",
-      "selectAll": "Pilih semua",
       "clearSelection": "Bersihkan",
+      "selectAll": "Pilih semua",
       "noCompatibleLayers": "Tidak ada layer GeoJSON yang kompatibel.",
-      "newModel": "Model baru",
-      "noSavedModels": "Belum ada model tersimpan.",
-      "untitledModel": "Model tanpa judul",
+      "outputPlaceholder": "Keluaran akan muncul di sini."
+    },
+    "modelBuilder": {
+      "title": "Pembuat Model",
+      "description": "Seret alat ke kanvas dan hubungkan menjadi sebuah model pemrosesan.",
       "modelName": "Nama model",
-      "emptyPipelineHint": "Tambahkan langkah untuk mulai membangun pipeline. Langkah pertama membaca layer masukan; setiap langkah berikutnya menerima keluaran langkah sebelumnya.",
-      "addStep": "Tambah langkah",
-      "runModel": "Jalankan model",
+      "modelNamePlaceholder": "Model tanpa judul",
+      "untitledModel": "Model tanpa judul",
+      "newModel": "Baru",
+      "discardChanges": "Buang perubahan yang belum disimpan pada model saat ini?",
+      "discardRunning": "Model masih berjalan. Hentikan dan lanjutkan?",
+      "arrange": "Tata",
+      "arrangeHint": "Menata simpul mengikuti alur",
+      "runModel": "Jalankan",
+      "cancelRun": "Batal",
+      "runCancelled": "Eksekusi dibatalkan.",
+      "issueMissingLayer": "Pilih lapisan masukan.",
+      "issueUnknownTool": "Alat tidak dikenal \"{{tool}}\".",
+      "issueMissingInput": "\"{{port}}\" memerlukan koneksi atau nilai.",
+      "issueUnknownPort": "Sebuah koneksi merujuk ke porta yang sudah tidak ada.",
+      "issueDuplicateInput": "\"{{port}}\" sudah memiliki koneksi masuk.",
+      "issueTypeMismatch": "Porta tersebut membawa jenis data yang berbeda.",
+      "issueCycle": "Model mengandung perulangan.",
+      "issueNoOutput": "Tambahkan simpul keluaran untuk menyimpan hasil.",
+      "issueDuplicateNode": "Dua simpul atau lebih memakai id yang sama.",
+      "issueDanglingEdge": "Sebuah koneksi menunjuk ke simpul yang sudah tidak ada.",
+      "outputAddFailed": "Tidak dapat menambahkan \"{{name}}\" ke peta",
+      "catalogUnavailable": "Alat gagal dimuat, sehingga model tidak dapat diperiksa atau dijalankan.",
+      "addToolNode": "Tambahkan {{tool}} ke kanvas",
+      "importTooLarge": "Model itu terlalu besar untuk dibuka.",
+      "importModel": "Impor",
+      "exportModel": "Ekspor",
+      "copyPython": "Salin skrip Python",
+      "pythonCopied": "Skrip Python disalin ke papan klip.",
+      "pythonCopyFailed": "Tidak dapat menyalin skrip Python",
+      "savedModels": "Model tersimpan",
+      "loadModelPlaceholder": "Muat model tersimpan...",
       "deleteModel": "Hapus",
-      "inputPreviousStep": "Masukan: ← keluaran langkah sebelumnya",
-      "unknownTool": "Alat tidak dikenal \"{{id}}\"",
-      "noParameters": "Tidak ada parameter."
+      "deletedLog": "Model dihapus dari proyek.",
+      "searchTools": "Cari alat",
+      "loadingTools": "Memuat alat...",
+      "noToolsMatch": "Tidak ada alat yang cocok dengan pencarian Anda.",
+      "addInputNode": "+ Masukan",
+      "addOutputNode": "+ Keluaran",
+      "canvasEmpty": "Seret sebuah alat dari palet untuk mulai membangun.",
+      "inputNode": "Masukan",
+      "outputNode": "Keluaran",
+      "inputPort": "Masukan: {{port}}",
+      "outputPort": "Keluaran: {{port}}",
+      "removeConnection": "Hapus koneksi",
+      "removeNode": "Hapus simpul",
+      "resizePanel": "Ubah ukuran panel",
+      "minimizePanel": "Perkecil panel",
+      "restorePanel": "Pulihkan panel",
+      "resizePalette": "Ubah ukuran palet alat",
+      "resizeInspector": "Ubah ukuran panel properti",
+      "resizeLog": "Ubah ukuran log pesan",
+      "selectNodeHint": "Pilih sebuah simpul untuk mengubah pengaturannya.",
+      "sourceLayer": "Lapisan sumber",
+      "chooseLayer": "Pilih lapisan...",
+      "resultName": "Nama hasil",
+      "resultNamePlaceholder": "Keluaran model",
+      "noParameters": "Tidak ada parameter.",
+      "keepResultHint": "Simpan hasil antara dengan menambahkan keluaran untuknya.",
+      "keepResultSingle": "Simpan hasil ini",
+      "resultKeptSingle": "Hasil ini disimpan",
+      "keepResult": "Simpan \"{{port}}\"",
+      "resultKept": "\"{{port}}\" disimpan",
+      "outputPlaceholder": "Pesan muncul di sini.",
+      "connectCycle": "Koneksi itu akan membuat perulangan.",
+      "connectSameNode": "Simpul tidak dapat terhubung ke dirinya sendiri.",
+      "fixIssuesFirst": "Perbaiki masalah yang dilaporkan sebelum menjalankan.",
+      "runFailed": "Gagal dijalankan",
+      "runFinished": "Selesai dijalankan — {{outputs}} keluaran ditambahkan.",
+      "savedLog": "Model disimpan ke proyek.",
+      "exportedLog": "{{name}} diekspor",
+      "importedLog": "Mengimpor model dengan {{nodes}} simpul.",
+      "importFailed": "Gagal mengimpor",
+      "importInvalid": "Berkas itu tidak berisi graf model.",
+      "importUnsupported": "Berkas itu bukan model GeoLibre.",
+      "rasterOutputUnsupported": "\"{{name}}\" adalah hasil raster yang tidak dapat ditambahkan ke peta oleh versi ini.",
+      "portNeedsVector": "\"{{port}}\" memerlukan data vektor, tetapi yang datang adalah raster.",
+      "toolNoOutput": "\"{{tool}}\" tidak menghasilkan keluaran.",
+      "toolNoUsableOutput": "\"{{tool}}\" tidak menghasilkan keluaran yang dapat digunakan."
     },
     "parameterField": {
       "selectLayer": "Pilih layer...",
@@ -3681,6 +4231,1438 @@
       "run": "Jalankan",
       "outputPlaceholder": "Keluaran akan muncul di sini.",
       "resolutionRange": "Resolusi (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "Buffer",
+          "description": "Membuat poligon buffer di sekitar setiap fitur dengan jarak tetap",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "distance": {
+              "label": "Jarak"
+            },
+            "units": {
+              "label": "Satuan",
+              "options": {
+                "kilometers": "Kilometer",
+                "meters": "Meter",
+                "miles": "Mil"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "Sentroid",
+          "description": "Menghitung titik sentroid setiap fitur",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "Convex hull",
+          "description": "Menghitung convex hull yang melingkupi semua fitur",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "Dissolve",
+          "description": "Menggabungkan fitur poligon menjadi satu geometri, dengan opsi pengelompokan berdasarkan bidang",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "field": {
+              "label": "Bidang dissolve (opsional)",
+              "description": "Nama properti untuk mengelompokkan fitur sebelum di-dissolve"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "Kotak pembatas",
+          "description": "Menghitung selubung persegi panjang dari semua fitur",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "simplify": {
+          "name": "Sederhanakan",
+          "description": "Mengurangi jumlah verteks menggunakan Douglas-Peucker",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "tolerance": {
+              "label": "Toleransi (derajat)"
+            },
+            "highQuality": {
+              "label": "Kualitas tinggi"
+            }
+          }
+        },
+        "clip": {
+          "name": "Potong",
+          "description": "Memotong layer masukan ke area yang dicakup layer overlay (mempertahankan atribut masukan)",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "overlay": {
+              "label": "Layer overlay (pemotong)"
+            }
+          }
+        },
+        "intersection": {
+          "name": "Irisan",
+          "description": "Hanya mempertahankan area tempat kedua layer poligon saling tumpang tindih",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "overlay": {
+              "label": "Layer overlay"
+            }
+          }
+        },
+        "difference": {
+          "name": "Selisih",
+          "description": "Menghapus area layer overlay dari layer masukan",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "overlay": {
+              "label": "Layer overlay"
+            }
+          }
+        },
+        "union": {
+          "name": "Gabungan",
+          "description": "Menggabungkan dua layer poligon menjadi satu geometri gabungan",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "overlay": {
+              "label": "Layer overlay"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "Gabungan spasial",
+          "description": "Melampirkan atribut dari layer join ke setiap fitur masukan berdasarkan hubungan spasial",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "overlay": {
+              "label": "Layer join"
+            },
+            "predicate": {
+              "label": "Hubungan spasial",
+              "options": {
+                "intersects": "Berpotongan",
+                "within": "Di dalam",
+                "contains": "Memuat"
+              }
+            },
+            "how": {
+              "label": "Tipe join",
+              "options": {
+                "inner": "Inner (hanya fitur yang cocok)",
+                "left": "Left (semua fitur masukan)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "Join atribut",
+          "description": "Melampirkan atribut dari layer join (sebuah tabel) ke setiap fitur masukan jika bidang kunci cocok, tanpa menggunakan geometri. Satu-ke-satu: baris join pertama yang cocok yang dipakai.",
+          "params": {
+            "layer": {
+              "label": "Layer target"
+            },
+            "overlay": {
+              "label": "Layer join (tabel)",
+              "description": "Layer yang atributnya akan dibawa. Geometrinya diabaikan."
+            },
+            "target_field": {
+              "label": "Bidang kunci target"
+            },
+            "join_field": {
+              "label": "Bidang kunci join"
+            },
+            "how": {
+              "label": "Tipe join",
+              "options": {
+                "left": "Left (semua fitur target)",
+                "inner": "Inner (hanya fitur yang cocok)"
+              }
+            },
+            "fields": {
+              "label": "Bidang yang dibawa (opsional)",
+              "description": "Bidang join yang disalin, dipisahkan koma. Biarkan kosong untuk membawa semua bidang join kecuali kunci."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "Pilih berdasarkan nilai",
+          "description": "Mengekstrak fitur yang nilai atributnya memenuhi suatu kondisi ke layer baru",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "field": {
+              "label": "Bidang"
+            },
+            "operator": {
+              "label": "Operator",
+              "options": {
+                "eq": "= (sama dengan)",
+                "neq": "≠ (tidak sama dengan)",
+                "gt": "> (lebih besar dari)",
+                "gte": "≥ (lebih besar atau sama dengan)",
+                "lt": "< (lebih kecil dari)",
+                "lte": "≤ (lebih kecil atau sama dengan)",
+                "contains": "mengandung (teks)",
+                "starts-with": "diawali dengan (teks)",
+                "is-null": "kosong",
+                "is-not-null": "tidak kosong"
+              }
+            },
+            "value": {
+              "label": "Nilai",
+              "description": "Dibandingkan sebagai angka jika kedua sisi numerik."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "Pilih berdasarkan lokasi",
+          "description": "Mengekstrak fitur berdasarkan hubungan spasialnya dengan layer kedua ke layer baru",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "overlay": {
+              "label": "Layer filter"
+            },
+            "predicate": {
+              "label": "Hubungan spasial",
+              "options": {
+                "intersects": "Berpotongan",
+                "within": "Di dalam",
+                "contains": "Memuat",
+                "disjoint": "Terpisah (tidak berpotongan)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "Ekstrak acak",
+          "description": "Mengekstrak subset fitur secara acak ke layer baru, dengan ukuran berupa jumlah fitur atau persentase dari masukan.",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "method": {
+              "label": "Metode",
+              "options": {
+                "count": "Jumlah fitur",
+                "percentage": "Persentase fitur"
+              }
+            },
+            "count": {
+              "label": "Jumlah fitur",
+              "description": "Dibatasi ke jumlah fitur masukan jika lebih besar."
+            },
+            "percentage": {
+              "label": "Persentase fitur"
+            }
+          }
+        },
+        "reproject": {
+          "name": "Proyeksikan ulang",
+          "description": "Menafsirkan ulang koordinat layer sebagai CRS sumber dan mentransformasikannya ke WGS84 agar tampil di lokasi yang benar. Memerlukan engine Sidecar atau Python.",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "source_crs": {
+              "label": "CRS sumber",
+              "description": "CRS yang sebenarnya digunakan koordinat layer (mis. EPSG:3857). Hasilnya ditransformasikan ke WGS84 (EPSG:4326)."
+            }
+          }
+        },
+        "explode": {
+          "name": "Pecah multibagian",
+          "description": "Memecah geometri multibagian menjadi fitur bagian tunggal (satu fitur per bagian), dengan mempertahankan atribut induknya",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "Agregasi berdasarkan atribut",
+          "description": "Men-dissolve fitur yang memiliki nilai atribut sama menjadi satu geometri per kelompok, dengan statistik ringkasan",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "group_field": {
+              "label": "Bidang pengelompokan"
+            },
+            "statistic": {
+              "label": "Statistik",
+              "options": {
+                "count": "Jumlah",
+                "sum": "Total",
+                "mean": "Rata-rata",
+                "min": "Min",
+                "max": "Maks",
+                "median": "Median"
+              }
+            },
+            "stat_field": {
+              "label": "Bidang statistik",
+              "description": "Bidang numerik yang diringkas dengan statistik di atas."
+            }
+          }
+        },
+        "smooth": {
+          "name": "Haluskan",
+          "description": "Membulatkan sudut fitur garis dan poligon dengan algoritma Chaikin (menambah verteks), berbeda dari pengurangan verteks pada Sederhanakan. Z/elevasi dipertahankan; titik diteruskan tanpa perubahan.",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "iterations": {
+              "label": "Iterasi",
+              "description": "Lebih banyak iterasi memberi hasil yang lebih halus (1-10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "Grid teratur",
+          "description": "Membuat grid persegi panjang teratur (fishnet) dari sel-sel di atas suatu cakupan. Sumber: tampilan peta saat ini, cakupan layer, atau kotak pembatas manual.",
+          "params": {
+            "source": {
+              "label": "Sumber cakupan",
+              "options": {
+                "viewport": "Tampilan peta",
+                "layer": "Cakupan layer",
+                "bbox": "Kotak pembatas manual"
+              }
+            },
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "west": {
+              "label": "Barat (bujur min)"
+            },
+            "south": {
+              "label": "Selatan (lintang min)"
+            },
+            "east": {
+              "label": "Timur (bujur maks)"
+            },
+            "north": {
+              "label": "Utara (lintang maks)"
+            },
+            "cell_width": {
+              "label": "Lebar sel (derajat)"
+            },
+            "cell_height": {
+              "label": "Tinggi sel (derajat)",
+              "description": "Biarkan kosong agar sama dengan lebar sel."
+            },
+            "cell_type": {
+              "label": "Tipe sel",
+              "options": {
+                "polygon": "Persegi panjang",
+                "point": "Titik (pusat sel)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "Membangun diagram Voronoi (satu poligon per titik, dipotong ke cakupan titik) atau triangulasi Delaunay dari layer titik.",
+          "params": {
+            "layer": {
+              "label": "Layer titik masukan"
+            },
+            "type": {
+              "label": "Diagram",
+              "options": {
+                "voronoi": "Poligon Voronoi",
+                "delaunay": "Segitiga Delaunay"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "Cakupan menara seluler",
+          "description": "Membangun poligon sektor/juring antena dari titik lokasi menggunakan azimut, radius, dan lebar berkas (dibaca dari bidang atribut atau nilai tetap). Lebar berkas dibatasi hingga 360° (lingkaran penuh); lebar berkas yang tercatat mencerminkan nilai yang dibatasi. Berguna untuk cakupan menara seluler, seperti QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "Layer titik masukan"
+            },
+            "azimuthField": {
+              "label": "Bidang azimut (°)",
+              "description": "Arah hadap sektor, dalam derajat searah jarum jam dari utara. Memakai azimut tetap jika kosong atau bukan angka."
+            },
+            "azimuth": {
+              "label": "Azimut (tetap, °)"
+            },
+            "radiusField": {
+              "label": "Bidang radius",
+              "description": "Radius cakupan. Memakai radius tetap jika kosong atau bukan angka."
+            },
+            "radius": {
+              "label": "Radius (tetap)"
+            },
+            "beamwidthField": {
+              "label": "Bidang lebar berkas (°)",
+              "description": "Lebar sudut sektor, dibatasi hingga 360° (lingkaran penuh). Memakai lebar berkas tetap jika kosong atau bukan angka."
+            },
+            "beamwidth": {
+              "label": "Lebar berkas (tetap, °)"
+            },
+            "units": {
+              "label": "Satuan radius",
+              "options": {
+                "kilometers": "Kilometer",
+                "meters": "Meter",
+                "miles": "Mil"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "Generator DGGS",
+          "description": "Mengisi suatu area dengan sel DGGS (H3, S2, A5, DGGRID, DGGAL). Sumber: geometri layer, cakupan layer, tampilan peta saat ini, atau kotak pembatas manual.",
+          "params": {
+            "dggsType": {
+              "label": "Tipe DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "Tipe DGGRID",
+              "description": "Konfigurasi grid yang diteruskan ke duck_dggs sebagai dggs_params (ISEA/FULLER × apertur × topologi).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "Tipe DGGAL",
+              "description": "DGGRS yang diteruskan ke dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "Sumber area",
+              "options": {
+                "polyfill": "Geometri layer (polyfill)",
+                "extent": "Cakupan layer (bbox)",
+                "viewport": "Tampilan peta",
+                "bbox": "Kotak pembatas manual"
+              }
+            },
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "west": {
+              "label": "Barat (bujur min)"
+            },
+            "south": {
+              "label": "Selatan (lintang min)"
+            },
+            "east": {
+              "label": "Timur (bujur maks)"
+            },
+            "north": {
+              "label": "Utara (lintang maks)"
+            },
+            "resolution": {
+              "label": "Resolusi",
+              "description": "Rentang bergantung pada tipe DGGS. Biarkan kosong untuk dipilih otomatis dari area."
+            },
+            "compactCells": {
+              "label": "Padatkan sel",
+              "description": "Menggabungkan himpunan lengkap sel sesaudara menjadi induk yang lebih kasar (lebih sedikit fitur, resolusi campuran)."
+            },
+            "fixAntimeridian": {
+              "label": "Perbaiki antimeridian",
+              "description": "Membuka lipatan cincin sel yang melintasi bujur ±180°."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "Binning DGGS",
+          "description": "Mengagregasi layer titik ke dalam sel DGGS (jumlah, atau total/rata-rata/min/maks dari bidang numerik).",
+          "params": {
+            "dggsType": {
+              "label": "Tipe DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "Tipe DGGRID",
+              "description": "Konfigurasi grid yang diteruskan ke duck_dggs sebagai dggs_params (ISEA/FULLER × apertur × topologi).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "Tipe DGGAL",
+              "description": "DGGRS yang diteruskan ke dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "Layer titik masukan"
+            },
+            "aggOp": {
+              "label": "Agregasi",
+              "options": {
+                "count": "Jumlah",
+                "sum": "Total",
+                "mean": "Rata-rata",
+                "min": "Min",
+                "max": "Maks"
+              }
+            },
+            "field": {
+              "label": "Bidang",
+              "description": "Bidang numerik yang diagregasi."
+            },
+            "resolution": {
+              "label": "Resolusi",
+              "description": "Rentang bergantung pada tipe DGGS. Biarkan kosong untuk dipilih otomatis dari area."
+            },
+            "fixAntimeridian": {
+              "label": "Perbaiki antimeridian",
+              "description": "Membuka lipatan cincin sel yang melintasi bujur ±180°."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "Pemadatan DGGS",
+          "description": "Memadatkan sel poligon DGGS, atau memperluasnya ke resolusi seragam (H3, S2, A5, DGGAL). Masukan harus berupa layer sel dengan properti ID.",
+          "params": {
+            "dggsType": {
+              "label": "Tipe DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "Tipe DGGAL",
+              "description": "DGGRS yang diteruskan ke dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "Mode",
+              "options": {
+                "compact": "Padatkan",
+                "expand": "Perluas"
+              }
+            },
+            "layer": {
+              "label": "Layer DGGS masukan",
+              "description": "Layer sel poligon dari Generator DGGS / Binning (atau yang setara)."
+            },
+            "cellField": {
+              "label": "Bidang ID sel",
+              "description": "Default ke h3, a5, s2, atau dggal sesuai tipe yang dipilih jika dibiarkan kosong."
+            },
+            "resolution": {
+              "label": "Resolusi target",
+              "description": "Resolusi tujuan perluasan. Harus setidaknya sehalus sel masukan."
+            },
+            "fixAntimeridian": {
+              "label": "Perbaiki antimeridian",
+              "description": "Membuka lipatan cincin sel yang melintasi bujur ±180°."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "Kecepatan lintasan",
+          "description": "Mengurutkan titik menurut waktu (per target) dan menghubungkan titik berurutan menjadi segmen yang membawa jarak, durasi, dan kecepatan. Seperti QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Layer titik masukan"
+            },
+            "timeField": {
+              "label": "Bidang waktu",
+              "description": "Stempel waktu per titik: string tanggal/waktu ISO atau epoch (detik atau milidetik)."
+            },
+            "idField": {
+              "label": "Bidang id target",
+              "description": "Memisahkan titik menjadi lintasan-lintasan terpisah. Biarkan kosong untuk memperlakukan semua titik sebagai satu target."
+            },
+            "speedUnits": {
+              "label": "Satuan kecepatan",
+              "options": {
+                "km/h": "km/jam",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "Deteksi perhentian",
+          "description": "Menemukan tempat target berdiam: rangkaian titik berurutan yang tetap berada dalam suatu jarak (menyerap sebaran GPS) selama setidaknya durasi minimum. Menghasilkan satu titik per perhentian. Seperti QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Layer titik masukan"
+            },
+            "timeField": {
+              "label": "Bidang waktu",
+              "description": "Stempel waktu per titik: string tanggal/waktu ISO atau epoch (detik atau milidetik)."
+            },
+            "idField": {
+              "label": "Bidang id target",
+              "description": "Mendeteksi perhentian per target. Biarkan kosong untuk memperlakukan semua titik sebagai satu target."
+            },
+            "maxDistance": {
+              "label": "Jarak maks",
+              "description": "Setiap titik dalam sebuah perhentian harus berada dalam jarak ini dari titik pertama perhentian (sehingga perhentian dapat membentang hingga dua kali nilai ini). Atur sesuai radius sebaran GPS Anda."
+            },
+            "distanceUnits": {
+              "label": "Satuan jarak",
+              "options": {
+                "meters": "Meter",
+                "kilometers": "Kilometer",
+                "miles": "Mil"
+              }
+            },
+            "minDuration": {
+              "label": "Durasi min (s)",
+              "description": "Berdiam yang lebih singkat dari ini tidak dilaporkan sebagai perhentian."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "Kedekatan ruang-waktu",
+          "description": "Menemukan pasangan titik yang berdekatan dalam ruang dan waktu — mis. dua target yang bertemu. Menghasilkan garis yang menghubungkan setiap pasangan yang memenuhi syarat, dengan jarak dan selisih waktunya.",
+          "params": {
+            "layer": {
+              "label": "Layer titik masukan"
+            },
+            "timeField": {
+              "label": "Bidang waktu",
+              "description": "Stempel waktu per titik: string tanggal/waktu ISO atau epoch (detik atau milidetik)."
+            },
+            "idField": {
+              "label": "Bidang id target",
+              "description": "Jika diisi, hanya titik dengan nilai id BERBEDA yang dipasangkan (pertemuan antar target yang berbeda). Biarkan kosong untuk mempertimbangkan setiap pasangan."
+            },
+            "maxDistance": {
+              "label": "Jarak maks"
+            },
+            "distanceUnits": {
+              "label": "Satuan jarak",
+              "options": {
+                "meters": "Meter",
+                "kilometers": "Kilometer",
+                "miles": "Mil"
+              }
+            },
+            "maxTime": {
+              "label": "Selisih waktu maks"
+            },
+            "timeUnits": {
+              "label": "Satuan waktu",
+              "options": {
+                "seconds": "Detik",
+                "minutes": "Menit",
+                "hours": "Jam"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "Periksa validitas",
+          "description": "Menemukan fitur dengan geometri tidak valid (aturan GEOS: cincin berpotongan sendiri, lubang di luar cangkang, ...) dan menandainya di peta",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "Perbaiki geometri",
+          "description": "Memperbaiki geometri tidak valid dengan ST_MakeValid (GEOS); fitur yang valid diteruskan tanpa perubahan",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "Periksa aturan topologi",
+          "description": "Memvalidasi layer terhadap aturan topologi (tumpang tindih, celah, perpotongan sendiri, ujung menggantung) dan menandai setiap pelanggaran di peta",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "ruleSelfIntersect": {
+              "label": "Garis tidak boleh berpotongan sendiri"
+            },
+            "ruleOverlap": {
+              "label": "Poligon tidak boleh tumpang tindih"
+            },
+            "ruleGaps": {
+              "label": "Poligon tidak boleh memiliki celah"
+            },
+            "ruleDangles": {
+              "label": "Garis tidak boleh memiliki ujung menggantung"
+            },
+            "rulePointCovered": {
+              "label": "Titik harus tercakup oleh garis"
+            },
+            "ruleEndpointSnap": {
+              "label": "Titik ujung garis harus terhubung dalam toleransi"
+            },
+            "snapTolerance": {
+              "label": "Toleransi snap",
+              "description": "Untuk aturan titik ujung: seberapa jauh (dalam satuan koordinat layer — derajat untuk WGS84) dua ujung garis boleh terpisah dan masih dianggap terhubung."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "Perbaiki topologi",
+          "description": "Memperbaiki pelanggaran topologi secara otomatis: snap titik ujung garis yang hampir terhubung, perbaiki ujung menggantung, dan proyeksikan titik ke garis. Ujung bebas tanpa apa pun di dekatnya dibiarkan tidak berubah.",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "ruleEndpointSnap": {
+              "label": "Snap titik ujung garis yang hampir terhubung"
+            },
+            "ruleDangles": {
+              "label": "Perbaiki ujung menggantung (snap atau proyeksikan ke geometri terdekat)"
+            },
+            "rulePointCovered": {
+              "label": "Proyeksikan titik ke garis terdekat"
+            },
+            "snapTolerance": {
+              "label": "Toleransi snap",
+              "description": "Seberapa jauh (dalam satuan koordinat layer — derajat untuk WGS84) geometri boleh bergeser untuk terhubung."
+            },
+            "dryRun": {
+              "label": "Pratinjau saja (uji coba)",
+              "description": "Melaporkan perbaikan yang akan diterapkan tanpa membuat layer hasil perbaikan."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "Isokron / area layanan",
+          "description": "Poligon jangkauan waktu tempuh atau jarak tempuh dari setiap titik dalam sebuah layer",
+          "params": {
+            "layer": {
+              "label": "Titik asal"
+            },
+            "mode": {
+              "label": "Moda perjalanan",
+              "options": {
+                "auto": "Berkendara",
+                "pedestrian": "Berjalan kaki",
+                "bicycle": "Bersepeda"
+              }
+            },
+            "metric": {
+              "label": "Metrik",
+              "options": {
+                "time": "Waktu tempuh (menit)",
+                "distance": "Jarak (km)"
+              }
+            },
+            "contours": {
+              "label": "Kontur",
+              "description": "Nilai yang dipisahkan koma (menit untuk waktu, km untuk jarak)"
+            },
+            "endpoint": {
+              "label": "Server perutean (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "Matriks biaya OD",
+          "description": "Waktu dan jarak tempuh antara setiap titik asal dan tujuan, sebagai garis penghubung",
+          "params": {
+            "origins": {
+              "label": "Titik asal"
+            },
+            "destinations": {
+              "label": "Titik tujuan"
+            },
+            "mode": {
+              "label": "Moda perjalanan",
+              "options": {
+                "auto": "Berkendara",
+                "pedestrian": "Berjalan kaki",
+                "bicycle": "Bersepeda"
+              }
+            },
+            "endpoint": {
+              "label": "Server perutean (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "Rute berurutan (petunjuk arah)",
+          "description": "Menghubungkan titik secara berurutan di sepanjang jaringan jalan menjadi sebuah rute. Setiap titik di-snap ke jalan terdekat, sehingga koordinat di luar jalan (menara seluler, sensor) tetap dapat dirutekan. Urutan mengikuti bidang yang dipilih (mis. stempel waktu) atau urutan fitur layer.",
+          "params": {
+            "layer": {
+              "label": "Titik masukan"
+            },
+            "order_field": {
+              "label": "Urutkan berdasarkan bidang (opsional)",
+              "description": "Mengurutkan titik berdasarkan bidang ini (angka atau stempel waktu) sebelum perutean. Biarkan kosong untuk memakai urutan fitur layer."
+            },
+            "mode": {
+              "label": "Moda perjalanan",
+              "options": {
+                "auto": "Berkendara",
+                "pedestrian": "Berjalan kaki",
+                "bicycle": "Bersepeda"
+              }
+            },
+            "endpoint": {
+              "label": "Server perutean (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "Moran's I Global",
+          "description": "Mengukur autokorelasi spasial keseluruhan dari atribut numerik di seluruh layer.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "field": {
+              "label": "Bidang nilai"
+            },
+            "weightsType": {
+              "label": "Bobot spasial",
+              "description": "Cara tetangga ditentukan untuk setiap fitur.",
+              "options": {
+                "knn": "K tetangga terdekat",
+                "distance": "Pita jarak"
+              }
+            },
+            "k": {
+              "label": "Tetangga (k)"
+            },
+            "threshold": {
+              "label": "Pita jarak (km)"
+            },
+            "permutations": {
+              "label": "Permutasi",
+              "description": "Permutasi acak untuk nilai p semu."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "Moran's I Lokal (LISA)",
+          "description": "Klaster dan pencilan per fitur (Tinggi-Tinggi, Rendah-Rendah, Tinggi-Rendah, Rendah-Tinggi) dengan signifikansi semu.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "field": {
+              "label": "Bidang nilai"
+            },
+            "weightsType": {
+              "label": "Bobot spasial",
+              "description": "Cara tetangga ditentukan untuk setiap fitur.",
+              "options": {
+                "knn": "K tetangga terdekat",
+                "distance": "Pita jarak"
+              }
+            },
+            "k": {
+              "label": "Tetangga (k)"
+            },
+            "threshold": {
+              "label": "Pita jarak (km)"
+            },
+            "permutations": {
+              "label": "Permutasi",
+              "description": "Permutasi acak untuk nilai p semu."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Hotspot Getis-Ord Gi*",
+          "description": "Mengidentifikasi hot spot dan cold spot yang signifikan secara statistik dari atribut numerik.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "field": {
+              "label": "Bidang nilai"
+            },
+            "weightsType": {
+              "label": "Bobot spasial",
+              "description": "Cara tetangga ditentukan untuk setiap fitur.",
+              "options": {
+                "knn": "K tetangga terdekat",
+                "distance": "Pita jarak"
+              }
+            },
+            "k": {
+              "label": "Tetangga (k)"
+            },
+            "threshold": {
+              "label": "Pita jarak (km)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "Rata-rata tetangga terdekat",
+          "description": "Menguji apakah titik mengelompok, tersebar, atau terdistribusi acak (rasio ANN + skor z).",
+          "params": {
+            "layer": {
+              "label": "Layer titik"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "Kepadatan kernel (heatmap)",
+          "description": "Memperkirakan permukaan kepadatan dari titik sebagai grid sel, menggunakan kernel kuartik.",
+          "params": {
+            "layer": {
+              "label": "Layer titik"
+            },
+            "weightField": {
+              "label": "Bidang bobot (opsional)",
+              "description": "Bidang numerik yang membobot setiap titik; kosong = bobot sama."
+            },
+            "bandwidth": {
+              "label": "Radius pencarian / bandwidth (km)"
+            },
+            "cellSize": {
+              "label": "Ukuran sel (km)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "Emerging Hot Spot (kubus ruang-waktu)",
+          "description": "Membangun kubus ruang-waktu dari titik berstempel waktu (grid fishnet × langkah waktu yang sama) dan mengklasifikasikan setiap sel sebagai hot/cold spot baru, menguat, persisten, melemah, sporadis, berosilasi, atau historis. Menjalankan Getis-Ord Gi* per irisan waktu, lalu uji tren Mann-Kendall pada deret Gi* setiap sel. Berjalan di sisi klien, seperti Emerging Hot Spot Analysis di ArcGIS.",
+          "params": {
+            "layer": {
+              "label": "Layer titik"
+            },
+            "timeField": {
+              "label": "Bidang waktu",
+              "description": "Stempel waktu per titik: string tanggal/waktu ISO atau epoch (detik atau milidetik)."
+            },
+            "cellSize": {
+              "label": "Ukuran sel (km)",
+              "description": "Panjang sisi setiap bin spasial persegi, dalam kilometer."
+            },
+            "timeStep": {
+              "label": "Interval langkah waktu"
+            },
+            "timeStepUnit": {
+              "label": "Satuan langkah waktu",
+              "options": {
+                "hours": "Jam",
+                "days": "Hari",
+                "weeks": "Minggu"
+              }
+            },
+            "weightField": {
+              "label": "Bidang bobot (opsional)",
+              "description": "Bidang numerik yang dijumlahkan per bin ruang-waktu alih-alih menghitung titik; kosong = hitung titik."
+            },
+            "confidence": {
+              "label": "Tingkat kepercayaan",
+              "description": "Ambang signifikansi agar sebuah bin dihitung sebagai hot/cold spot dan untuk tren.",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "Hillshade",
+          "description": "Menghitung raster relief berbayang (hillshade) dari model elevasi.",
+          "params": {
+            "azimuth": {
+              "label": "Azimut (derajat)"
+            },
+            "altitude": {
+              "label": "Ketinggian sudut (derajat)"
+            },
+            "z_factor": {
+              "label": "Faktor Z"
+            }
+          }
+        },
+        "slope": {
+          "name": "Kemiringan",
+          "description": "Menghitung kemiringan (kecuraman) dari model elevasi.",
+          "params": {
+            "units": {
+              "label": "Satuan",
+              "options": {
+                "degrees": "Derajat",
+                "percent": "Persen"
+              }
+            },
+            "z_factor": {
+              "label": "Faktor Z"
+            }
+          }
+        },
+        "aspect": {
+          "name": "Arah lereng",
+          "description": "Menghitung arah lereng (arah kompas dari kemiringan tercuram) dari model elevasi."
+        },
+        "reproject": {
+          "name": "Proyeksikan ulang",
+          "description": "Mentransformasikan raster ke sistem referensi koordinat lain.",
+          "params": {
+            "dst_crs": {
+              "label": "CRS target",
+              "description": "Kode otoritas seperti EPSG:3857 atau EPSG:4326."
+            },
+            "resampling": {
+              "label": "Resampling",
+              "options": {
+                "nearest": "Tetangga terdekat",
+                "bilinear": "Bilinear",
+                "cubic": "Kubik"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "Sampel ulang",
+          "description": "Me-resample raster ke ukuran piksel (resolusi) yang berbeda.",
+          "params": {
+            "resolution": {
+              "label": "Ukuran piksel target",
+              "description": "Ukuran piksel keluaran dalam satuan CRS raster."
+            },
+            "resampling": {
+              "label": "Resampling",
+              "options": {
+                "nearest": "Tetangga terdekat",
+                "bilinear": "Bilinear",
+                "cubic": "Kubik"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "Potong berdasarkan cakupan",
+          "description": "Memotong raster ke sebuah kotak pembatas (dalam CRS raster).",
+          "params": {
+            "minx": {
+              "label": "X min"
+            },
+            "miny": {
+              "label": "Y min"
+            },
+            "maxx": {
+              "label": "X maks"
+            },
+            "maxy": {
+              "label": "Y maks"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "Potong berdasarkan layer mask",
+          "description": "Memotong raster ke geometri dari file mask vektor.",
+          "params": {
+            "mask_path": {
+              "label": "Layer mask",
+              "description": "File GeoJSON yang geometrinya menentukan wilayah pemotongan. Diproyeksikan ulang ke CRS raster secara otomatis (GeoJSON tanpa CRS dianggap WGS84)."
+            },
+            "crop": {
+              "label": "Potong ke cakupan mask"
+            },
+            "all_touched": {
+              "label": "Sertakan semua piksel yang tersentuh"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "Poligonisasi",
+          "description": "Mengonversi band raster menjadi poligon vektor yang dikelompokkan menurut nilai piksel.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "connectivity": {
+              "label": "Konektivitas",
+              "options": {
+                "4": "4-terhubung",
+                "8": "8-terhubung"
+              }
+            },
+            "field": {
+              "label": "Nama bidang nilai"
+            }
+          }
+        },
+        "contour": {
+          "name": "Kontur",
+          "description": "Membuat garis kontur dari model elevasi.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "interval": {
+              "label": "Interval",
+              "description": "Selisih elevasi antara garis kontur yang berurutan."
+            },
+            "base": {
+              "label": "Dasar"
+            },
+            "attribute": {
+              "label": "Nama bidang elevasi"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "Interpolasi (IDW / Kriging)",
+          "description": "Menginterpolasi atribut numerik layer titik menjadi permukaan raster kontinu menggunakan pembobotan jarak terbalik atau ordinary kriging.",
+          "params": {
+            "field": {
+              "label": "Bidang nilai",
+              "description": "Nama atribut titik numerik yang diinterpolasi (mis. elevasi, suhu)."
+            },
+            "method": {
+              "label": "Metode",
+              "options": {
+                "idw": "Pembobotan jarak terbalik (IDW)",
+                "kriging": "Ordinary kriging"
+              }
+            },
+            "resolution": {
+              "label": "Ukuran piksel keluaran",
+              "description": "Ukuran sel dalam satuan CRS layer (derajat untuk WGS84). Grid mencakup cakupan titik-titik."
+            },
+            "power": {
+              "label": "Pangkat IDW",
+              "description": "Nilai lebih tinggi memberi pengaruh lebih besar pada titik terdekat."
+            },
+            "variogram_model": {
+              "label": "Model variogram",
+              "description": "Model teoretis yang dicocokkan ke semivariogram empiris. Kriging dibatasi hingga 1500 titik.",
+              "options": {
+                "spherical": "Sferis",
+                "exponential": "Eksponensial",
+                "gaussian": "Gaussian",
+                "linear": "Linear"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "Statistik zonal",
+          "description": "Meringkas nilai raster di dalam setiap poligon dari layer vektor (jumlah, min, maks, rata-rata, total, simpangan baku, median).",
+          "params": {
+            "zones_path": {
+              "label": "Layer zona",
+              "description": "Layer poligon GeoJSON yang menentukan zona. Diproyeksikan ulang ke CRS raster secara otomatis (GeoJSON tanpa CRS dianggap WGS84)."
+            },
+            "band": {
+              "label": "Band"
+            },
+            "prefix": {
+              "label": "Awalan bidang",
+              "description": "Ditambahkan di depan setiap nama bidang statistik (mis. 'dem_' → 'dem_mean'). Biarkan kosong untuk nama polos 'mean', 'min', …"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "Kalkulator raster",
+          "description": "Mengevaluasi ekspresi matematika band NumPy. Rujuk band 1 setiap masukan sebagai A, B, C dan band tertentu sebagai A1, A2, …; mis. NDVI adalah (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "Ekspresi",
+              "description": "Ekspresi NumPy atas A, B, C (dan A1, A2, …). Fungsi: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan."
+            },
+            "b_path": {
+              "label": "Raster B (opsional)",
+              "description": "Raster kedua, dirujuk sebagai B / B1, B2, …. Dimensinya harus sama dengan A."
+            },
+            "c_path": {
+              "label": "Raster C (opsional)",
+              "description": "Raster ketiga, dirujuk sebagai C / C1, C2, …. Dimensinya harus sama dengan A."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "Indeks spektral",
+          "description": "Menghitung indeks spektral bernama (NDVI, NDWI, EVI, …) dari raster multiband. Pilih preset sensor untuk tata letak band, atau atur nomor band secara manual dengan sensor Kustom.",
+          "params": {
+            "index": {
+              "label": "Indeks",
+              "options": {
+                "ndvi": "NDVI (vegetasi)",
+                "gndvi": "GNDVI (vegetasi hijau)",
+                "ndwi": "NDWI (air, McFeeters)",
+                "ndmi": "NDMI (kelembapan)",
+                "ndbi": "NDBI (lahan terbangun)",
+                "nbr": "NBR (rasio terbakar)",
+                "evi": "EVI (vegetasi ditingkatkan)",
+                "savi": "SAVI (vegetasi terkoreksi tanah)"
+              }
+            },
+            "sensor": {
+              "label": "Sensor / tata letak band",
+              "description": "Nomor band preset untuk sensor umum. Pilih Kustom untuk memetakan band secara manual pada GeoTIFF dengan susunan berbeda.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "Kustom (atur nomor band di bawah)"
+              }
+            },
+            "red": {
+              "label": "Nomor band merah"
+            },
+            "green": {
+              "label": "Nomor band hijau"
+            },
+            "blue": {
+              "label": "Nomor band biru"
+            },
+            "nir": {
+              "label": "Nomor band NIR"
+            },
+            "swir1": {
+              "label": "Nomor band SWIR1"
+            },
+            "swir2": {
+              "label": "Nomor band SWIR2"
+            },
+            "L": {
+              "label": "Faktor tanah (L)",
+              "description": "Koreksi kecerahan tanah SAVI (0 tutupan rapat → 1 tanah terbuka)."
+            },
+            "scale": {
+              "label": "Skala reflektansi",
+              "description": "Pengali yang mengonversi nilai piksel ke reflektansi (0–1). Biarkan 1 untuk indeks selisih ternormalisasi; atur untuk EVI/SAVI pada citra DN bilangan bulat (mis. 0.0001 untuk Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "Reklasifikasi",
+          "description": "Memetakan ulang rentang nilai ke nilai kelas baru menggunakan tabel aturan.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "table": {
+              "label": "Aturan",
+              "description": "Aturan 'min:maks:nilaibaru' yang dipisahkan koma atau baris baru, mis. '0:10:1, 10:20:2, 20:max:3'. Rentang bersifat setengah terbuka [min, maks); kosong/min/max berarti ±∞."
+            },
+            "unmatched": {
+              "label": "Nilai yang tidak cocok",
+              "options": {
+                "nodata": "Atur ke NoData",
+                "original": "Pertahankan nilai asli"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "Mosaik / gabung",
+          "description": "Menggabungkan hingga lima raster (dengan CRS yang sama) menjadi satu raster yang mencakup gabungannya.",
+          "params": {
+            "raster_2": {
+              "label": "Raster kedua"
+            },
+            "raster_3": {
+              "label": "Raster ketiga (opsional)"
+            },
+            "raster_4": {
+              "label": "Raster keempat (opsional)"
+            },
+            "raster_5": {
+              "label": "Raster kelima (opsional)"
+            },
+            "method": {
+              "label": "Metode tumpang tindih",
+              "description": "Nilai mana yang dipakai di tempat masukan saling tumpang tindih.",
+              "options": {
+                "first": "Pertama",
+                "last": "Terakhir",
+                "min": "Minimum",
+                "max": "Maksimum"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "Statistik fokal",
+          "description": "Menerapkan statistik jendela bergerak (ketetanggaan) pada band raster.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "statistic": {
+              "label": "Statistik",
+              "options": {
+                "mean": "Rata-rata",
+                "median": "Median",
+                "min": "Minimum",
+                "max": "Maksimum",
+                "sum": "Total",
+                "std": "Simpangan baku",
+                "range": "Rentang (maks − min)"
+              }
+            },
+            "size": {
+              "label": "Ukuran jendela",
+              "description": "Ukuran ketetanggaan ganjil dalam piksel (3 = 3×3). Dibatasi hingga 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "Analisis",
+      "clip": "Potong",
+      "dataQuality": "Kualitas data",
+      "dggs": "DGGS",
+      "geometry": "Geometri",
+      "join": "Gabungan",
+      "movementTime": "Pergerakan & waktu",
+      "network": "Jaringan",
+      "overlay": "Overlay",
+      "rasterToVector": "Raster ke Vektor",
+      "reproject": "Proyeksikan ulang",
+      "select": "Seleksi",
+      "spatialStatistics": "Statistik Spasial",
+      "terrain": "Medan",
+      "vectorToRaster": "Vektor ke Raster"
     }
   },
   "segmentation": {
@@ -3725,6 +5707,7 @@
     "title": "Deteksi Objek",
     "description": "Jalankan model YOLO yang diekspor ke ONNX pada GeoTIFF, sepenuhnya di browser. Kotak yang terdeteksi diberi georeferensi dan setiap kelas ditambahkan sebagai layernya sendiri.",
     "hint": "Gunakan model COCO bawaan (diunduh dan disimpan dalam cache sekali) atau bawa ONNX YOLOv5/v8/v11 Anda sendiri. Deteksi berjalan secara lokal di browser. Model bawaan mendeteksi objek sehari-hari; untuk citra udara, sediakan model Anda sendiri yang dilatih dari udara.",
+    "unavailableNoExternalCdn": "Deteksi objek tidak tersedia di build ini. Fitur ini memerlukan ONNX Runtime, yang dimuat dari CDN eksternal yang dinonaktifkan oleh penerapan ini. Menyediakan file model Anda sendiri tidak membantu.",
     "imageLabel": "Gambar (GeoTIFF)",
     "imagePlaceholder": "Pilih GeoTIFF…",
     "chooseImage": "Pilih gambar",
@@ -3757,6 +5740,7 @@
     "title": "Segmentasikan Semua",
     "description": "Jalankan SlimSAM secara otomatis pada GeoTIFF, sepenuhnya di browser. Setiap objek yang terdeteksi menjadi poligon berreferensi geografis yang ditambahkan sebagai satu layer.",
     "hint": "Grid titik disampel di seluruh gambar dan disegmentasi dengan SlimSAM (diunduh dan disimpan dalam cache sekali). Tanpa klik atau label — grid yang lebih rapat menemukan lebih banyak objek tetapi memakan waktu lebih lama.",
+    "unavailableNoExternalCdn": "“Segmentasikan Semua” tidak tersedia di build ini. Fitur ini memerlukan ONNX Runtime, yang dimuat dari CDN eksternal yang dinonaktifkan oleh penerapan ini.",
     "imageLabel": "Gambar (GeoTIFF)",
     "imagePlaceholder": "Pilih GeoTIFF…",
     "chooseImage": "Pilih gambar",
@@ -3898,6 +5882,7 @@
     "deleteField": "Hapus bidang",
     "joinedColumnTitle": "Kolom gabungan, diturunkan dari tabel gabungan. Edit tabel atau definisi gabungan sebagai gantinya.",
     "virtualColumnTitle": "Bidang virtual, dihitung dari ekspresi. Edit definisinya di panel gaya layer sebagai gantinya.",
+    "trackingColumnTitle": "Bidang pelacakan penyuntingan, dikelola otomatis. Ganti namanya di pengaturan Pelacakan Penyuntingan lapisan.",
     "deleteFieldConfirm": "Ini menghapus bidang \"{{field}}\" secara permanen dari setiap fitur di \"{{layer}}\". Penataan gaya atau label yang mengacu padanya akan dihapus. Ini tidak dapat dibatalkan.",
     "addFieldDescription": "Tambahkan bidang baru ke setiap fitur di \"{{layer}}\".",
     "fieldName": "Nama bidang",
@@ -4416,11 +6401,15 @@
       "typeConvexHull": "Cangkang cembung",
       "typeBuffer": "Buffer",
       "bufferDistance": "Jarak buffer (m)",
+      "bufferField": "Bidang jarak",
+      "bufferFieldHint": "Setiap fitur di-buffer sesuai nilainya sendiri dalam meter; fitur tanpa nilai memakai jarak di atas, dan nilai 0 tidak menggambar apa pun.",
+      "fieldNone": "Tidak ada (tetap)",
       "fillColor": "Warna isian",
       "strokeColor": "Warna garis luar",
       "strokeWidth": "Lebar garis luar (px)",
       "opacity": "Opasitas isian",
-      "circleRadius": "Radius titik (px)"
+      "circleRadius": "Radius titik (px)",
+      "sizeField": "Bidang ukuran"
     },
     "attributeForm": {
       "heading": "Formulir Atribut",
@@ -4462,7 +6451,26 @@
       "save": "Simpan",
       "noFields": "Lapisan tidak memiliki bidang atribut untuk dikonfigurasi.",
       "minMaxInvalid": "Min harus kurang dari atau sama dengan Maks."
+    },
+    "editorTracking": {
+      "heading": "Pelacakan Penyuntingan",
+      "description": "Catat siapa yang membuat setiap fitur dan siapa yang terakhir mengubahnya. Bidang di bawah diisi otomatis saat fitur digambar, disunting, dihitung, atau dikumpulkan.",
+      "enable": "Lacak suntingan pada lapisan ini",
+      "identity": "Nama Anda",
+      "identityHint": "Suntingan akan dicatat sebagai “{{name}}”.",
+      "identityFromSession": "Diambil dari sesi kolaborasi yang Anda ikuti.",
+      "createdByField": "Bidang “Dibuat oleh”",
+      "createdAtField": "Bidang “Dibuat pada”",
+      "editedByField": "Bidang “Disunting oleh”",
+      "editedAtField": "Bidang “Disunting pada”",
+      "blankName": "Nama bidang tidak boleh kosong.",
+      "duplicateName": "Setiap bidang pelacakan memerlukan nama yang berbeda.",
+      "columnTaken": "“{{name}}” sudah menjadi bidang atribut. Pelacakan akan menimpa nilainya."
     }
+  },
+  "vectorExport": {
+    "invalidKmlCoordinatesByPosition": "Ekspor KML tidak dapat menulis fitur {{position}} karena koordinatnya tidak valid.",
+    "invalidKmlCoordinatesById": "Ekspor KML tidak dapat menulis fitur dengan ID {{id}} karena koordinatnya tidak valid."
   },
   "layers": {
     "panelCollapsedLabel": "Layer (diciutkan)",
@@ -4483,9 +6491,17 @@
     "identifyInspectPixels": "Periksa nilai piksel",
     "identifyStopInspectPixels": "Berhenti memeriksa nilai piksel",
     "identifyUnavailable": "Identifikasi hanya tersedia untuk layer vektor, WMS, dan COG",
+    "selectFeaturesMenu": "Pilih fitur",
+    "selectFeaturesSingle": "Pilih fitur dengan klik",
+    "selectFeaturesRectangle": "Pilih fitur dengan persegi panjang",
+    "selectFeaturesPolygon": "Pilih fitur dengan poligon",
+    "selectFeaturesFreehand": "Pilih fitur dengan gambar bebas",
+    "selectFeaturesRadius": "Pilih fitur dengan radius",
+    "selectFeaturesModifiers": "Shift menambah, Alt menghapus, dan Shift+Alt mengambil irisan. Tekan Esc untuk membatalkan.",
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "Ekstrak subset…",
     "stylesMenu": "Gaya",
+    "exportGeoLibreStyle": "Ekspor gaya URL GeoLibre",
     "exportMapboxStyle": "Ekspor sebagai gaya Mapbox GL",
     "exportSldStyle": "Ekspor sebagai OGC SLD",
     "exportQmlStyle": "Ekspor sebagai QGIS QML",
@@ -4493,7 +6509,7 @@
     "exportStyleDataNotReady": "Data layer belum siap. Coba lagi sesaat lagi.",
     "exportStyleNeedsFeatures": "Ekspor gaya memerlukan layer vektor dengan fitur.",
     "exportStyleError": "Tidak dapat mengekspor gaya layer ini.",
-    "importStyle": "Impor gaya (Mapbox GL / SLD / QML)…",
+    "importStyle": "Impor gaya (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Gaya tersimpan (Pengelola Gaya)…",
     "importStyleSuccess": "Gaya berhasil diimpor.",
     "importStyleInvalid": "File tersebut bukan JSON, SLD, atau QML yang valid.",
@@ -4532,6 +6548,7 @@
     "bindWindowCumulative": "Semuanya hingga langkah saat ini (kumulatif)",
     "bindCancel": "Batal",
     "bindConfirm": "Ikat",
+    "openStylePanel": "Buka panel Gaya",
     "openRasterStylePanel": "Edit gaya raster…",
     "exportRasterSuccess": "Raster berhasil diekspor.",
     "exportRasterError": "Tidak dapat mengekspor raster ini.",
@@ -4637,6 +6654,7 @@
     "refreshVectorControlError": "Tidak dapat menyegarkan layer ini. Coba buka kembali panel Tambahkan Layer Vektor.",
     "refreshed": "Disegarkan.",
     "refreshedCount": "Menyegarkan {{count}} fitur.",
+    "refreshedTruncated": "Disegarkan {{shown}} dari {{total}} fitur.",
     "refreshError": "Tidak dapat menyegarkan layer ini.",
     "exportNeedsFeatures": "Ekspor memerlukan layer vektor dengan fitur.",
     "exportedWithWarnings": "Layer berhasil diekspor. {{warnings}}",
@@ -4699,6 +6717,78 @@
     "nodataOff": "Render semua piksel",
     "nodataCustom": "Nilai khusus"
   },
+  "netcdfSymbology": {
+    "heading": "Simbologi NetCDF",
+    "colorRampLabel": "Peta warna",
+    "reverse": "Balik peta warna",
+    "colorMin": "Warna min",
+    "colorMax": "Warna maks",
+    "resetRange": "Atur ulang ke rentang data",
+    "openCube": "Kubus 3D"
+  },
+  "netcdfCube": {
+    "heading": "Kubus citra 3D",
+    "close": "Tutup",
+    "settings": "Pengaturan",
+    "setupTitle": "Kubus citra 3D",
+    "setupDescription": "Pilih apa yang akan dibaca sebelum membangun kubus. Setiap band dibaca terpisah, jadi cakupan dan jumlah band menentukan lamanya proses.",
+    "extent": "Cakupan",
+    "extentView": "Tampilan peta saat ini",
+    "extentDraw": "Gambar di peta",
+    "extentFull": "Cakupan penuh layer",
+    "viewHint": "Membaca apa pun yang sedang ditampilkan peta ketika kubus dibangun.",
+    "fullHint": "Membaca seluruh grid. Lambat untuk kubus sebesar satu scene.",
+    "drawBbox": "Gambar di peta",
+    "drawing": "Seret kotak di peta untuk menetapkan cakupan kubus",
+    "drawHint": "Seret kotak di peta untuk menetapkan cakupan.",
+    "drawnExtent": "B {{west}}, S {{south}}, T {{east}}, U {{north}}",
+    "detail": "Tingkat detail",
+    "detailOption": "{{size}} sel per sisi",
+    "bands": "Band",
+    "allBands": "Semua ({{count}})",
+    "rgbOverlay": "Citra RGB di atas",
+    "rgbHint": "Menyusun tiga band menjadi citra berwarna yang dihamparkan pada sisi atas, sehingga kubus tetap dikenali sebagai sebuah tempat.",
+    "red": "Merah",
+    "green": "Hijau",
+    "blue": "Biru",
+    "planeEstimate": "{{count}} kali pembacaan band",
+    "create": "Buat kubus",
+    "colorRampLabel": "Peta warna",
+    "reverse": "Balik",
+    "showRgb": "RGB di atas",
+    "rgbBands": "Band RGB",
+    "recomposing": "membaca...",
+    "zScale": "Tinggi",
+    "slice": "Irisan",
+    "sliceAt": "dipotong di {{band}} {{units}}",
+    "reading": "Membaca band {{done}} dari {{total}}...",
+    "summary": "{{nx}} x {{ny}} sel, {{nz}} band sepanjang {{axis}}",
+    "errorNoCube": "Berkas sumber layer ini sudah tidak terbuka, jadi kubus tidak dapat dibaca.",
+    "error": {
+      "shapeMismatch": "Bidang-bidang band variabel ini tidak berbentuk sama, jadi tidak dapat ditumpuk menjadi kubus.",
+      "rgbShapeMismatch": "Band RGB yang dipilih tidak cocok dengan bentuk kubus.",
+      "noBands": "Variabel ini tidak punya band untuk dibaca.",
+      "noReadWindow": "Kubus ini tidak dapat diperbarui di tempat. Bangun ulang dari Pengaturan."
+    }
+  },
+  "netcdfProfile": {
+    "heading": "Profil spektral",
+    "clear": "Bersihkan",
+    "chartAria": "Nilai piksel yang diambil sepanjang sumbu band",
+    "popOut": "Lepas ke jendela",
+    "dock": "Tambatkan",
+    "poppedOutHint": "Bagan terbuka di sebuah jendela di atas peta.",
+    "noValues": "Tidak ada nilai yang bisa dibagankan untuk piksel ini.",
+    "exportPng": "PNG",
+    "exportCsv": "CSV",
+    "exportError": "Tidak dapat mengekspor bagan.",
+    "rasterFallbackName": "Raster"
+  },
+  "netcdfIdentify": {
+    "noData": "tanpa data",
+    "coordinates": "bujur, lintang",
+    "cell": "baris, kolom"
+  },
   "rasterAttributeTable": {
     "title": "Tabel atribut raster",
     "resize": "Ubah ukuran tabel atribut raster",
@@ -4747,6 +6837,7 @@
     "cogConvertConfirm": "\"{{name}}\" adalah GeoTIFF biasa (bergaris), yang tidak dapat ditampilkan langsung. Konversi ke Cloud-Optimized GeoTIFF sekarang dan muat itu?",
     "cogConvertRemoteConfirm": "\"{{name}}\" adalah GeoTIFF biasa (bergaris), yang tidak dapat ditampilkan langsung. Menampilkannya berarti mengunduh seluruh file dan mengonversinya menjadi Cloud-Optimized GeoTIFF di browser, yang bisa lambat dan menguras memori untuk file besar. Lanjutkan?",
     "cogConvertLargeConfirm": "\"{{name}}\" adalah GeoTIFF {{width}}×{{height}} besar yang bukan Cloud-Optimized GeoTIFF. Mengonversinya di browser mungkin lambat dan menguras memori. Konversi dan muat saja?",
+    "cogConvertTooLarge": "\"{{name}}\" terlalu besar untuk dikonversi dengan aman di browser. Konversikan menjadi Cloud-Optimized GeoTIFF dengan gdal_translate atau rio cogeo, lalu muat hasilnya.",
     "cogConvertFailed": "Tidak dapat mengonversi \"{{name}}\" menjadi Cloud-Optimized GeoTIFF. Coba konversi dengan gdal_translate atau rio cogeo, lalu muat hasilnya.",
     "rasterDownloadFailed": "Tidak dapat mengunduh \"{{name}}\". Server mungkin lambat, tidak dapat dijangkau, atau memblokir permintaan lintas asal, atau file mungkin terlalu besar untuk disimpan dalam memori. Periksa URL dan coba lagi.",
     "rasterNotGeotiff": "\"{{name}}\" tidak mengembalikan GeoTIFF. Server mungkin mengirim halaman kesalahan atau login sebagai gantinya. Periksa URL dan coba lagi."
@@ -4879,7 +6970,8 @@
       "pythonConsole": "Konsol Python",
       "sqlWorkspace": "Ruang kerja SQL",
       "assistant": "Asisten",
-      "statusBar": "Bilah status"
+      "statusBar": "Bilah status",
+      "modelBuilder": "Pembuat Model"
     }
   },
   "attributeStats": {
@@ -4890,10 +6982,12 @@
     "scope": "Cakupan",
     "scopeAll": "Semua fitur ({{total}})",
     "scopeFiltered": "Terfilter ({{total}})",
+    "scopeSelected": "Dipilih ({{total}})",
     "copiedToClipboard": "Disalin ke papan klip.",
     "copy": "Salin",
     "copyHeader": "Statistik bidang — {{field}}",
     "copyHeaderFiltered": "Statistik bidang — {{field}} (terfilter)",
+    "copyHeaderSelected": "Statistik bidang — {{field}} (dipilih)",
     "noValues": "Tidak ada nilai untuk diringkas.",
     "mostFrequent": "Nilai paling sering",
     "noPopulated": "Tidak ada nilai yang terisi.",
@@ -4935,76 +7029,6 @@
     "noPopulated": "Tidak ada nilai yang terisi.",
     "moreValues": "+{{total}} nilai lainnya"
   },
-  "stacPlugin": {
-    "title": "Katalog STAC",
-    "footprintLayerName": "Jejak pencarian STAC",
-    "catalogSearch": "Temukan katalog publik di STAC Index",
-    "catalogSearchPlaceholder": "Cari nama katalog…",
-    "indexLoading": "Memuat STAC Index…",
-    "indexUnavailable": "STAC Index tidak tersedia: masukkan URL",
-    "indexLoadFailed": "Tidak dapat memuat STAC Index",
-    "urlLabel": "URL katalog atau API STAC",
-    "connect": "Hubungkan",
-    "connecting": "Menghubungkan ke STAC…",
-    "connected": "Terhubung. Pilih filter lalu cari.",
-    "connectFailed": "Tidak dapat terhubung ke STAC",
-    "selectCatalog": "Pilih katalog…",
-    "noMatchingCatalogs": "Tidak ada katalog yang cocok",
-    "catalogApiSuffix": " (API)",
-    "catalogStaticSuffix": " (statis)",
-    "kindApi": "API STAC",
-    "kindStatic": "katalog statis",
-    "collectionsHint": "Tahan Ctrl/Cmd untuk memilih beberapa koleksi; seret tepi bawah untuk mengubah ukuran",
-    "limitToExtent": "Batasi pencarian ke cakupan peta saat ini",
-    "bboxLabel": "Kotak pembatas (barat, selatan, timur, utara)",
-    "bboxPlaceholder": "Opsional; menggantikan cakupan peta",
-    "bboxInvalid": "Masukkan kotak pembatas yang valid: barat, selatan, timur, utara.",
-    "drawBbox": "Gambar kotak di peta",
-    "cancelDrawing": "Batalkan penggambaran",
-    "clearDrawnBbox": "Bersihkan kotak yang digambar",
-    "drawHint": "Klik dan seret pada peta untuk menggambar kotak pencarian.",
-    "drawnBbox": "Kotak yang digambar: {{bbox}}",
-    "drawnBboxCleared": "Kotak yang digambar telah dibersihkan.",
-    "mapNotReady": "Peta belum siap untuk menggambar.",
-    "startDate": "Tanggal mulai",
-    "endDate": "Tanggal akhir",
-    "additionalParams": "Parameter pencarian tambahan (JSON, hanya API STAC)",
-    "additionalInvalid": "Parameter pencarian tambahan harus berupa objek JSON.",
-    "searchItems": "Cari item",
-    "clearResults": "Bersihkan hasil",
-    "resultsCleared": "Hasil pencarian telah dibersihkan.",
-    "searching": "Mencari item STAC…",
-    "loadingMore": "Memuat item lainnya…",
-    "noResults": "Tidak ada item STAC yang cocok dengan filter ini.",
-    "searchFailed": "Pencarian STAC gagal",
-    "showing": "Menampilkan {{count}} item.",
-    "showingOfMatched": "Menampilkan {{count}} dari {{matched}} item.",
-    "loadMore": "Muat lebih banyak",
-    "renderOptions": "Opsi perenderan raster",
-    "bands": "Band",
-    "bandsPlaceholder": "mis. 1 atau 1,2,3 (bawaan: otomatis)",
-    "colormap": "Peta warna (hanya band tunggal)",
-    "colormapDefault": "Bawaan perender",
-    "minValue": "Nilai minimum",
-    "maxValue": "Nilai maksimum",
-    "nodata": "Nilai NoData",
-    "nodataPlaceholder": "Menggantikan tag NoData pada berkas",
-    "renderHint": "Biarkan kosong agar perender menyimpulkan nilainya dari GeoTIFF. Opsi berlaku untuk aset yang ditambahkan setelahnya.",
-    "initialStatus": "Pilih katalog dari STAC Index atau masukkan URL.",
-    "catalogInfo": "{{title}} · {{kind}}",
-    "zoom": "Perbesar",
-    "add": "Tambah",
-    "download": "Unduh",
-    "adding": "Menambahkan {{asset}}…",
-    "added": "{{asset}} ditambahkan ke peta.",
-    "addUnsupported": "Hanya aset GeoTIFF/COG dan GeoJSON yang dapat ditambahkan ke peta",
-    "addFailed": "Tidak dapat menambahkan aset",
-    "cogUnsupported": "Host GeoLibre ini tidak dapat memvisualisasikan aset GeoTIFF jarak jauh"
-  },
-  "vectorExport": {
-    "invalidKmlCoordinatesByPosition": "Ekspor KML tidak dapat menulis fitur {{position}} karena koordinatnya tidak valid.",
-    "invalidKmlCoordinatesById": "Ekspor KML tidak dapat menulis fitur dengan ID {{id}} karena koordinatnya tidak valid."
-  },
   "comments": {
     "title": "Komentar",
     "addDialogTitle": "Tambah Komentar Tinjauan",
@@ -5013,276 +7037,49 @@
     "authorNamePlaceholder": "mis. Alex atau Sari",
     "commentLabel": "Komentar / Masukan",
     "commentPlaceholder": "Tulis catatan tinjauan atau masukan Anda di sini...",
+    "post": "Kirim Komentar",
+    "postShortcutTooltip": "Kirim Komentar ({{shortcut}})",
     "confirmDelete": "Yakin ingin menghapus utas komentar ini?",
     "sessionDisconnected": "Sesi terputus.",
-    "defaultAuthorName": "Penulis"
-  },
-  "s2Plugin": {
-    "title": "Grid S2",
-    "controlTitle": "Pengaturan grid S2",
-    "autoResolution": "Resolusi otomatis",
-    "resolution": "Resolusi",
-    "cellCount": "{{count}} sel dalam tampilan",
-    "tooManyCells": "Tampilan ini melebihi batas {{limit}} sel. Perbesar tampilan atau turunkan resolusinya.",
-    "fillColor": "Warna isi",
-    "fillOpacity": "Opasitas isi",
-    "lineColor": "Warna garis tepi",
-    "lineWidth": "Lebar garis tepi",
-    "showLabels": "Tampilkan id sel",
-    "identifyHint": "Klik peta untuk mengidentifikasi sel S2.",
-    "selectedCell": "Sel terpilih",
-    "noSelection": "Tidak ada sel yang dipilih",
-    "copyId": "Salin id",
-    "parent": "Sel induk",
-    "children": "Sel turunan",
-    "neighbors": "Sel tetangga",
-    "center": "Pusat",
-    "zoomToCell": "Zoom ke sel",
-    "addAsLayer": "Tambahkan grid sebagai layer",
-    "exportGeoJson": "Ekspor GeoJSON",
-    "exportCsv": "Ekspor CSV",
-    "includeNeighbors": "Sertakan sel tetangga dari sel terpilih",
-    "includeParents": "Sertakan sel induk dari sel terpilih"
-  },
-  "a5Plugin": {
-    "title": "Grid A5",
-    "controlTitle": "Pengaturan grid A5",
-    "autoResolution": "Resolusi otomatis",
-    "resolution": "Resolusi",
-    "cellCount": "{{count}} sel dalam tampilan",
-    "tooManyCells": "Tampilan ini melebihi batas {{limit}} sel. Perbesar tampilan atau turunkan resolusinya.",
-    "fillColor": "Warna isi",
-    "fillOpacity": "Opasitas isi",
-    "lineColor": "Warna garis tepi",
-    "lineWidth": "Lebar garis tepi",
-    "showLabels": "Tampilkan id sel",
-    "identifyHint": "Klik peta untuk mengidentifikasi sel A5.",
-    "selectedCell": "Sel terpilih",
-    "noSelection": "Tidak ada sel yang dipilih",
-    "copyId": "Salin id",
-    "parent": "Sel induk",
-    "children": "Sel turunan",
-    "neighbors": "Sel tetangga",
-    "center": "Pusat",
-    "zoomToCell": "Zoom ke sel",
-    "addAsLayer": "Tambahkan grid sebagai layer",
-    "exportGeoJson": "Ekspor GeoJSON",
-    "exportCsv": "Ekspor CSV",
-    "includeNeighbors": "Sertakan sel tetangga dari sel terpilih",
-    "includeParents": "Sertakan sel induk dari sel terpilih"
-  },
-  "dggridPlugin": {
-    "title": "DGGRID",
-    "controlTitle": "Pengaturan DGGRID",
-    "cellType": "Tipe sel",
-    "topologyHexagon": "Segi enam",
-    "topologyDiamond": "Belah ketupat",
-    "topologyTriangle": "Segitiga",
-    "projection": "Proyeksi",
-    "aperture": "Apertur",
-    "autoResolution": "Resolusi otomatis",
-    "resolution": "Resolusi",
-    "cellCount": "{{count}} sel dalam tampilan",
-    "tooManyCells": "Tampilan ini melebihi batas {{limit}} sel. Perbesar tampilan atau turunkan resolusinya.",
-    "fillColor": "Warna isi",
-    "fillOpacity": "Opasitas isi",
-    "lineColor": "Warna garis tepi",
-    "lineWidth": "Lebar garis tepi",
-    "showLabels": "Tampilkan id sel",
-    "identifyHint": "Klik peta untuk mengidentifikasi sel DGGRID.",
-    "selectedCell": "Sel terpilih",
-    "noSelection": "Tidak ada sel yang dipilih",
-    "copyId": "Salin id",
-    "parent": "Sel induk",
-    "children": "Sel turunan",
-    "neighbors": "Sel tetangga",
-    "center": "Pusat",
-    "zoomToCell": "Zoom ke sel",
-    "addAsLayer": "Tambahkan grid sebagai layer",
-    "exportGeoJson": "Ekspor GeoJSON",
-    "exportCsv": "Ekspor CSV",
-    "includeNeighbors": "Sertakan sel tetangga dari sel terpilih",
-    "includeParents": "Sertakan sel induk dari sel terpilih"
-  },
-  "dggalPlugin": {
-    "title": "DGGAL",
-    "controlTitle": "Pengaturan DGGAL",
-    "gridType": "Tipe DGGS",
-    "autoResolution": "Resolusi otomatis",
-    "resolution": "Resolusi",
-    "cellCount": "{{count}} sel dalam tampilan",
-    "tooManyCells": "Tampilan ini melebihi batas {{limit}} sel. Perbesar tampilan atau turunkan resolusinya.",
-    "fillColor": "Warna isi",
-    "fillOpacity": "Opasitas isi",
-    "lineColor": "Warna garis tepi",
-    "lineWidth": "Lebar garis tepi",
-    "showLabels": "Tampilkan id sel",
-    "identifyHint": "Klik peta untuk mengidentifikasi sel DGGAL.",
-    "selectedCell": "Sel terpilih",
-    "noSelection": "Tidak ada sel yang dipilih",
-    "copyId": "Salin id",
-    "parent": "Sel induk",
-    "children": "Sel turunan",
-    "neighbors": "Sel tetangga",
-    "center": "Pusat",
-    "zoomToCell": "Zoom ke sel",
-    "addAsLayer": "Tambahkan grid sebagai layer",
-    "exportGeoJson": "Ekspor GeoJSON",
-    "exportCsv": "Ekspor CSV",
-    "includeNeighbors": "Sertakan sel tetangga dari sel terpilih",
-    "includeParents": "Sertakan sel induk dari sel terpilih"
-  },
-  "olcPlugin": {
-    "title": "OLC",
-    "controlTitle": "Pengaturan OLC",
-    "autoResolution": "Resolusi otomatis",
-    "resolution": "Resolusi",
-    "cellCount": "{{count}} sel dalam tampilan",
-    "tooManyCells": "Tampilan ini melebihi batas {{limit}} sel. Perbesar tampilan atau turunkan resolusinya.",
-    "fillColor": "Warna isi",
-    "fillOpacity": "Opasitas isi",
-    "lineColor": "Warna garis tepi",
-    "lineWidth": "Lebar garis tepi",
-    "showLabels": "Tampilkan id sel",
-    "identifyHint": "Klik peta untuk mengidentifikasi sel OLC.",
-    "selectedCell": "Sel terpilih",
-    "noSelection": "Tidak ada sel yang dipilih",
-    "copyId": "Salin id",
-    "parent": "Sel induk",
-    "children": "Sel turunan",
-    "neighbors": "Sel tetangga",
-    "center": "Pusat",
-    "zoomToCell": "Zoom ke sel",
-    "addAsLayer": "Tambahkan grid sebagai layer",
-    "exportGeoJson": "Ekspor GeoJSON",
-    "exportCsv": "Ekspor CSV",
-    "includeNeighbors": "Sertakan sel tetangga dari sel terpilih",
-    "includeParent": "Sertakan sel induk dari sel terpilih"
-  },
-  "geohashPlugin": {
-    "title": "Geohash",
-    "controlTitle": "Pengaturan Geohash",
-    "autoResolution": "Resolusi otomatis",
-    "resolution": "Resolusi",
-    "cellCount": "{{count}} sel dalam tampilan",
-    "tooManyCells": "Tampilan ini melebihi batas {{limit}} sel. Perbesar tampilan atau turunkan resolusinya.",
-    "fillColor": "Warna isi",
-    "fillOpacity": "Opasitas isi",
-    "lineColor": "Warna garis tepi",
-    "lineWidth": "Lebar garis tepi",
-    "showLabels": "Tampilkan id sel",
-    "identifyHint": "Klik peta untuk mengidentifikasi sel Geohash.",
-    "selectedCell": "Sel terpilih",
-    "noSelection": "Tidak ada sel yang dipilih",
-    "copyId": "Salin id",
-    "parent": "Sel induk",
-    "children": "Sel turunan",
-    "neighbors": "Sel tetangga",
-    "center": "Pusat",
-    "zoomToCell": "Zoom ke sel",
-    "addAsLayer": "Tambahkan grid sebagai layer",
-    "exportGeoJson": "Ekspor GeoJSON",
-    "exportCsv": "Ekspor CSV",
-    "includeNeighbors": "Sertakan sel tetangga dari sel terpilih",
-    "includeParent": "Sertakan sel induk dari sel terpilih"
-  },
-  "tilecodePlugin": {
-    "title": "Tilecode",
-    "controlTitle": "Pengaturan Tilecode",
-    "autoResolution": "Resolusi otomatis",
-    "resolution": "Resolusi",
-    "cellCount": "{{count}} tile dalam tampilan",
-    "tooManyCells": "Tampilan ini melebihi batas {{limit}} tile. Perbesar tampilan atau turunkan resolusinya.",
-    "fillColor": "Warna isi",
-    "fillOpacity": "Opasitas isi",
-    "lineColor": "Warna garis tepi",
-    "lineWidth": "Lebar garis tepi",
-    "showLabels": "Tampilkan id tile",
-    "identifyHint": "Klik peta untuk mengidentifikasi tile.",
-    "selectedCell": "Tile terpilih",
-    "noSelection": "Tidak ada tile yang dipilih",
-    "copyId": "Salin id",
-    "quadkey": "Quadkey",
-    "parent": "Tile induk",
-    "children": "Tile turunan",
-    "neighbors": "Tile tetangga",
-    "center": "Pusat",
-    "zoomToCell": "Zoom ke tile",
-    "addAsLayer": "Tambahkan grid sebagai layer",
-    "exportGeoJson": "Ekspor GeoJSON",
-    "exportCsv": "Ekspor CSV",
-    "includeNeighbors": "Sertakan tile tetangga dari tile terpilih",
-    "includeParent": "Sertakan tile induk dari tile terpilih"
-  },
-  "netcdfSymbology": {
-    "heading": "Simbologi NetCDF",
-    "colorRampLabel": "Peta warna",
-    "reverse": "Balik peta warna",
-    "colorMin": "Warna min",
-    "colorMax": "Warna maks",
-    "resetRange": "Atur ulang ke rentang data",
-    "openCube": "Kubus 3D"
-  },
-  "netcdfCube": {
-    "heading": "Kubus citra 3D",
-    "close": "Tutup",
-    "settings": "Pengaturan",
-    "setupTitle": "Kubus citra 3D",
-    "setupDescription": "Pilih apa yang akan dibaca sebelum membangun kubus. Setiap band dibaca terpisah, jadi cakupan dan jumlah band menentukan lamanya proses.",
-    "extent": "Cakupan",
-    "extentView": "Tampilan peta saat ini",
-    "extentDraw": "Gambar di peta",
-    "extentFull": "Cakupan penuh layer",
-    "viewHint": "Membaca apa pun yang sedang ditampilkan peta ketika kubus dibangun.",
-    "fullHint": "Membaca seluruh grid. Lambat untuk kubus sebesar satu scene.",
-    "drawBbox": "Gambar di peta",
-    "drawing": "Seret kotak di peta untuk menetapkan cakupan kubus",
-    "drawHint": "Seret kotak di peta untuk menetapkan cakupan.",
-    "drawnExtent": "B {{west}}, S {{south}}, T {{east}}, U {{north}}",
-    "detail": "Tingkat detail",
-    "detailOption": "{{size}} sel per sisi",
-    "bands": "Band",
-    "allBands": "Semua ({{count}})",
-    "rgbOverlay": "Citra RGB di atas",
-    "rgbHint": "Menyusun tiga band menjadi citra berwarna yang dihamparkan pada sisi atas, sehingga kubus tetap dikenali sebagai sebuah tempat.",
-    "red": "Merah",
-    "green": "Hijau",
-    "blue": "Biru",
-    "planeEstimate": "{{count}} kali pembacaan band",
-    "create": "Buat kubus",
-    "colorRampLabel": "Peta warna",
-    "reverse": "Balik",
-    "showRgb": "RGB di atas",
-    "rgbBands": "Band RGB",
-    "recomposing": "membaca...",
-    "zScale": "Tinggi",
-    "slice": "Irisan",
-    "sliceAt": "dipotong di {{band}} {{units}}",
-    "reading": "Membaca band {{done}} dari {{total}}...",
-    "summary": "{{nx}} x {{ny}} sel, {{nz}} band sepanjang {{axis}}",
-    "errorNoCube": "Berkas sumber layer ini sudah tidak terbuka, jadi kubus tidak dapat dibaca.",
-    "error": {
-      "shapeMismatch": "Bidang-bidang band variabel ini tidak berbentuk sama, jadi tidak dapat ditumpuk menjadi kubus.",
-      "rgbShapeMismatch": "Band RGB yang dipilih tidak cocok dengan bentuk kubus.",
-      "noBands": "Variabel ini tidak punya band untuk dibaca.",
-      "noReadWindow": "Kubus ini tidak dapat diperbarui di tempat. Bangun ulang dari Pengaturan."
-    }
-  },
-  "netcdfProfile": {
-    "heading": "Profil spektral",
-    "clear": "Bersihkan",
-    "chartAria": "Nilai piksel yang diambil sepanjang sumbu band",
-    "popOut": "Lepas ke jendela",
-    "dock": "Tambatkan",
-    "poppedOutHint": "Bagan terbuka di sebuah jendela di atas peta.",
-    "noValues": "Tidak ada nilai yang bisa dibagankan untuk piksel ini.",
-    "exportPng": "PNG",
-    "exportCsv": "CSV",
-    "exportError": "Tidak dapat mengekspor bagan."
-  },
-  "netcdfIdentify": {
-    "noData": "tanpa data",
-    "coordinates": "bujur, lintang",
-    "cell": "baris, kolom"
+    "defaultAuthorName": "Penulis",
+    "addComment": "Tambah Komentar",
+    "addCommentTooltip": "Tempatkan komentar tinjauan baru di peta",
+    "yourNamePlaceholder": "Nama Anda…",
+    "saveName": "Simpan nama",
+    "noNameSet": "Nama belum diatur — komentar akan tampil sebagai “{{name}}”",
+    "changeNameTooltip": "Ubah nama",
+    "setYourName": "Atur nama Anda",
+    "changeName": "Ubah Nama",
+    "postingAs": "Mengirim sebagai <strong>{{name}}</strong>",
+    "copy": "Salin",
+    "startLiveSession": "Mulai Sesi Langsung",
+    "starting": "Memulai…",
+    "sessionCodePlaceholder": "MASUKKAN KODE SESI",
+    "connect": "Hubungkan",
+    "joining": "Bergabung…",
+    "liveSync": "Sinkronisasi Langsung ({{count}} daring)",
+    "offlineWorkspace": "Luring / Ruang Kerja Pribadi",
+    "disconnect": "Putuskan",
+    "joinFailed": "Gagal bergabung ke sesi.",
+    "startFailed": "Gagal memulai sesi.",
+    "filterOpen": "Terbuka ({{count}})",
+    "filterResolved": "Selesai ({{count}})",
+    "filterAll": "Semua ({{count}})",
+    "emptyOpen": "Tidak ada komentar terbuka",
+    "emptyResolved": "Tidak ada komentar yang selesai",
+    "emptyHint": "Klik “Tambah Komentar” di atas lalu pilih lokasi atau fitur mana pun di peta untuk meninggalkan catatan tinjauan.",
+    "resolvedBadge": "Selesai",
+    "zoomToLocation": "Zoom ke lokasi",
+    "markResolved": "Tandai selesai",
+    "reopenThread": "Buka kembali utas komentar",
+    "deleteThread": "Hapus utas komentar",
+    "anchorFeature": "Fitur #{{id}} ({{layer}})",
+    "anchorPoint": "Titik ({{coords}})",
+    "anchorMap": "Peta",
+    "anchoredToFeature": "Ditambatkan ke fitur #{{id}} ({{layer}})",
+    "anchoredToPoint": "Ditambatkan ke ({{coords}})",
+    "mapPoint": "Titik Peta",
+    "reply": "Balas",
+    "replyPlaceholder": "Tulis balasan..."
   }
 }

@@ -38,6 +38,30 @@ function config(over: Partial<LegendConfig> = {}): LegendConfig {
 
 const EN = { locale: "en" };
 
+function polygonGeojson(): NonNullable<GeoLibreLayer["geojson"]> {
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { count: 10 },
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 1],
+              [0, 0],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+}
+
 describe("formatLegendNumber", () => {
   it("abbreviates large values but keeps 4-digit values (years) exact", () => {
     assert.equal(formatLegendNumber(8918925.75, "en"), "8.9M");
@@ -64,6 +88,159 @@ describe("buildAutoLegend — vector layers", () => {
     );
     assert.equal(entries[0].shape, "line");
     assert.equal(entries[1].shape, "circle");
+  });
+
+  it("adds a fixed-size generated centroid after the parent symbol", () => {
+    const [entry] = buildAutoLegend(
+      [
+        layer({
+          name: "Regions",
+          geojson: polygonGeojson(),
+          metadata: { geometryType: "polygon" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            geometryGenerator: "centroid",
+            geometryGeneratorFillColor: "#f59e0b",
+            geometryGeneratorCircleRadius: 7,
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+
+    assert.equal(entry.headerSwatch?.color, DEFAULT_LAYER_STYLE.fillColor);
+    assert.deepEqual(
+      entry.rows.map((row) => [row.label, row.color, row.shape, row.size]),
+      [["Centroids", "#f59e0b", "circle", 7]],
+    );
+  });
+
+  it("adds the generated centroid's proportional-size ramp and field caption", () => {
+    const [entry] = buildAutoLegend(
+      [
+        layer({
+          geojson: polygonGeojson(),
+          metadata: { geometryType: "polygon" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            geometryGenerator: "centroid",
+            geometryGeneratorFillColor: "#ef4444",
+            geometryGeneratorSizeProperty: "count",
+            geometryGeneratorSizeMinValue: 0,
+            geometryGeneratorSizeMaxValue: 100,
+            geometryGeneratorSizeMinRadius: 4,
+            geometryGeneratorSizeMaxRadius: 24,
+          },
+        }),
+      ],
+      config(),
+      {
+        ...EN,
+        geometryGeneratorLabels: { centroid: "Centroides" },
+      },
+    );
+
+    assert.deepEqual(
+      entry.rows.map((row) => [row.label, row.size, row.shape, row.caption]),
+      [
+        ["0", 4, "circle", "Centroides · count"],
+        ["50", 14, "circle", undefined],
+        ["100", 24, "circle", undefined],
+      ],
+    );
+    assert.ok(entry.rows.every((row) => row.color === "#ef4444"));
+  });
+
+  it("adds generated polygon types with their own fill and label", () => {
+    for (const [geometryGenerator, expectedLabel] of [
+      ["bounding-box", "Bounding boxes"],
+      ["convex-hull", "Convex hulls"],
+      ["buffer", "Buffers"],
+    ] as const) {
+      const [entry] = buildAutoLegend(
+        [
+          layer({
+            geojson: polygonGeojson(),
+            metadata: { geometryType: "polygon" },
+            style: {
+              ...DEFAULT_LAYER_STYLE,
+              geometryGenerator,
+              geometryGeneratorFillColor: "#22c55e",
+            },
+          }),
+        ],
+        config(),
+        EN,
+      );
+      const generated = entry.rows.at(-1);
+      assert.deepEqual(
+        [generated?.label, generated?.color, generated?.shape],
+        [expectedLabel, "#22c55e", "square"],
+      );
+    }
+  });
+
+  it("omits generated geometry while the renderer suppresses it", () => {
+    const base = layer({
+      geojson: polygonGeojson(),
+      metadata: { geometryType: "polygon" },
+      style: { ...DEFAULT_LAYER_STYLE, geometryGenerator: "centroid" },
+    });
+    const suppressed = [
+      { ...base, style: { ...base.style, extrusionEnabled: true } },
+      { ...base, timeFilter: ["==", ["get", "year"], 2026] },
+      { ...base, embedFilter: ["==", ["get", "kind"], "active"] },
+      { ...base, metadata: { ...base.metadata, externalDeckLayer: true } },
+      { ...base, metadata: { ...base.metadata, nativeLayerIds: ["external-fill"] } },
+      {
+        ...base,
+        metadata: {
+          ...base.metadata,
+          sourceKind: "maplibre-gl-vector",
+          customLayerType: "fill",
+          nativeLayerIds: [],
+        },
+      },
+      {
+        ...base,
+        style: {
+          ...base.style,
+          geometryGenerator: "buffer" as const,
+          geometryGeneratorBufferDistance: 0,
+          geometryGeneratorBufferProperty: "",
+        },
+      },
+      {
+        ...base,
+        style: {
+          ...base.style,
+          vectorStyleMode: "rule-based" as const,
+          vectorRules: [
+            {
+              id: "active",
+              label: "Active",
+              filter: '["==", ["get", "kind"], "active"]',
+              color: "#22c55e",
+              isElse: false,
+            },
+            {
+              id: "else",
+              label: "Other",
+              filter: "",
+              color: "#94a3b8",
+              isElse: true,
+              enabled: false,
+            },
+          ],
+        },
+      },
+    ];
+
+    for (const candidate of suppressed) {
+      const [entry] = buildAutoLegend([candidate], config(), EN);
+      assert.ok(entry.rows.every((row) => row.label !== "Centroids"));
+    }
   });
 
   it("renders a graduated layer as range-labelled class rows with a field caption", () => {

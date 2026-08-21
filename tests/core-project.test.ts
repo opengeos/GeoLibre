@@ -4,8 +4,10 @@ import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
   DEFAULT_STORY_MAP,
+  createDefaultPrintLayout,
   createEmptyProject,
   createSampleStoryMap,
+  normalizeModelGraph,
   parseProject,
   parseStoryMapCsv,
   parseStoryMapJson,
@@ -564,6 +566,152 @@ describe("project parsing", () => {
     assert.equal(project.layers[0].geojson, undefined);
     assert.equal(project.layers[0].sourcePath, "/home/user/data/cities.geojson");
     assert.equal(project.layers[0].metadata.localFileReloadable, true);
+  });
+});
+
+describe("project serialization", () => {
+  /** A layer whose features carry enough coordinates to show the whitespace cost. */
+  const featureRichLayer = () =>
+    geojsonLayer({
+      id: "cities",
+      geojson: {
+        type: "FeatureCollection",
+        features: Array.from({ length: 200 }, (_, index) => ({
+          type: "Feature" as const,
+          properties: { name: `City ${index}` },
+          geometry: {
+            type: "LineString" as const,
+            coordinates: Array.from(
+              { length: 20 },
+              (_, point) => [index / 10 + point, point / 10] as [number, number],
+            ),
+          },
+        })),
+      },
+    });
+
+  it("writes embedded GeoJSON compactly while indenting the project structure", () => {
+    const project = createEmptyProject("Compact");
+    project.layers = [featureRichLayer()];
+    const text = serializeProject(project);
+
+    // The structure stays readable...
+    assert.match(text, /^\{\n {2}"version":/);
+    assert.match(text, /\n {2}"layers": \[\n {4}\{\n {6}"id": "cities",/);
+    // ...but the whole feature collection sits on one line, so no coordinate
+    // ever gets its own line of indentation (GeoLibre#1829).
+    assert.match(
+      text,
+      /\n {6}"geojson": \{"type":"FeatureCollection","features":\[\{"type":"Feature"/,
+    );
+    assert.ok(!text.includes('"coordinates": ['), "coordinate arrays must not be pretty-printed");
+  });
+
+  it("compacts an embedded GeoJSON copy held in layer metadata", () => {
+    const project = createEmptyProject("Embedded");
+    const { geojson, ...layer } = featureRichLayer();
+    project.layers = [{ ...layer, metadata: { embeddedGeoJSON: geojson } }];
+    const text = serializeProject(project);
+
+    assert.match(text, /"embeddedGeoJSON": \{"type":"FeatureCollection"/);
+    assert.ok(!text.includes('"coordinates": ['));
+  });
+
+  it("keeps a feature-heavy project within a few percent of a fully minified file", () => {
+    const project = createEmptyProject("Sized");
+    project.layers = [featureRichLayer()];
+    const minified = JSON.stringify(project).length;
+
+    // Pretty-printing every coordinate used to cost more than 3x; the structure
+    // that stays indented is a rounding error next to the feature data.
+    assert.ok(
+      serializeProject(project).length < minified * 1.05,
+      "serialized project should be close to the minified size",
+    );
+  });
+
+  it("formats a project without GeoJSON exactly as JSON.stringify does", () => {
+    const project = createEmptyProject("Plain");
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+  });
+
+  it("matches JSON.stringify for values it drops, empty containers, and toJSON", () => {
+    const project = createEmptyProject("Edges");
+    project.metadata = {
+      dropped: undefined,
+      inArray: [undefined, () => "fn", 1],
+      notFinite: Number.NaN,
+      emptyObject: {},
+      emptyArray: [],
+      nested: { deep: { deeper: [1, { two: 2 }] } },
+      date: new Date("2026-08-10T00:00:00.000Z"),
+      quote: 'a "quoted" \\ value\n',
+    };
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+  });
+
+  it("writes a sparse array's holes as null, matching JSON.stringify", () => {
+    const project = createEmptyProject("Sparse");
+    // eslint-disable-next-line no-sparse-arrays
+    project.metadata = { gappy: [1, , 2] };
+    const text = serializeProject(project);
+    assert.equal(text, JSON.stringify(project, null, 2));
+    assert.deepEqual((JSON.parse(text) as typeof project).metadata.gappy, [1, null, 2]);
+  });
+
+  it("passes the property key to a custom toJSON, as JSON.stringify does", () => {
+    const project = createEmptyProject("Keys");
+    const probe = { toJSON: (key: string) => `saw:${key}` };
+    project.metadata = { named: probe, list: [probe] };
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+    const parsed = JSON.parse(serializeProject(project)) as typeof project;
+    assert.equal(parsed.metadata.named, "saw:named");
+    assert.deepEqual(parsed.metadata.list, ["saw:0"]);
+  });
+
+  it("unwraps boxed primitives the way JSON.stringify does", () => {
+    const project = createEmptyProject("Boxed");
+    project.metadata = {
+      // eslint-disable-next-line no-new-wrappers
+      count: new Number(7),
+      // eslint-disable-next-line no-new-wrappers
+      label: new String("x"),
+      // eslint-disable-next-line no-new-wrappers
+      flag: new Boolean(true),
+    };
+    const text = serializeProject(project);
+    assert.equal(text, JSON.stringify(project, null, 2));
+    assert.deepEqual((JSON.parse(text) as typeof project).metadata, {
+      count: 7,
+      label: "x",
+      flag: true,
+    });
+  });
+
+  it("throws on a circular reference instead of overflowing the stack", () => {
+    const project = createEmptyProject("Cyclic");
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    project.metadata = { cycle };
+    // A RangeError here would be read as "project too large to save" by the
+    // save path, sending the user after a size problem they do not have.
+    assert.throws(() => serializeProject(project), TypeError);
+  });
+
+  it("serializes a value referenced twice side by side without calling it a cycle", () => {
+    const project = createEmptyProject("Shared");
+    const shared = { shared: true };
+    project.metadata = { first: shared, second: shared };
+    assert.equal(serializeProject(project), JSON.stringify(project, null, 2));
+  });
+
+  it("round-trips a feature-heavy project through parseProject", () => {
+    const project = createEmptyProject("Round trip");
+    project.layers = [featureRichLayer()];
+    assert.deepEqual(
+      parseProject(serializeProject(project)).layers[0].geojson,
+      project.layers[0].geojson,
+    );
   });
 });
 
@@ -1324,5 +1472,183 @@ describe("primary mapView normalization", () => {
     assert.equal(applied.mapView.zoom, 0);
     assert.equal(applied.mapView.pitch, 85);
     assert.equal(applied.mapView.bearing, 270);
+  });
+});
+
+describe("normalizeModelGraph", () => {
+  it("supplies an empty edge list when the key is missing entirely", () => {
+    // A hand-edited file without `edges` used to reach the canvas as
+    // `edges: undefined`, and the renderer's `graph.edges.map(...)` then threw
+    // out of render — past the importer's try/catch — into the error boundary,
+    // instead of showing the friendly "not a model" message.
+    const graph = normalizeModelGraph({
+      nodes: [{ id: "a", kind: "input", x: 10, y: 20, layerId: "roads" }],
+    });
+    assert.deepEqual(graph?.edges, []);
+    assert.equal(graph?.nodes.length, 1);
+  });
+
+  it("drops edges that do not connect two surviving nodes", () => {
+    const graph = normalizeModelGraph({
+      nodes: [
+        { id: "a", kind: "input", x: 0, y: 0 },
+        { id: "b", kind: "output", x: 0, y: 0 },
+        { id: "", kind: "tool", x: 0, y: 0 },
+      ],
+      edges: [
+        { id: "e1", from: "a", fromPort: "out", to: "b", toPort: "in" },
+        { id: "e2", from: "a", fromPort: "out", to: "ghost", toPort: "in" },
+        { id: "e3", from: "a", fromPort: "out", to: "a", toPort: "in" },
+      ],
+    });
+    assert.deepEqual(
+      graph?.edges.map((edge) => edge.id),
+      ["e1"],
+    );
+  });
+
+  it("rejects a node with an unknown kind rather than passing it to the runner", () => {
+    const graph = normalizeModelGraph({
+      nodes: [
+        { id: "a", kind: "wat", x: 0, y: 0 },
+        { id: "b", kind: "output", x: 0, y: 0 },
+      ],
+      edges: [],
+    });
+    assert.deepEqual(
+      graph?.nodes.map((node) => node.id),
+      ["b"],
+    );
+  });
+
+  it("returns null for a value carrying no usable nodes", () => {
+    assert.equal(normalizeModelGraph(null), null);
+    assert.equal(normalizeModelGraph({ nodes: [] }), null);
+    assert.equal(normalizeModelGraph({ nodes: "nope" }), null);
+  });
+
+  it("coerces a non-finite coordinate instead of laying the node out at NaN", () => {
+    const graph = normalizeModelGraph({
+      nodes: [{ id: "a", kind: "input", x: "left", y: Number.NaN }],
+    });
+    assert.deepEqual([graph?.nodes[0].x, graph?.nodes[0].y], [0, 0]);
+  });
+});
+
+describe("print layout persistence", () => {
+  beforeEach(() => {
+    useAppStore.getState().newProject({ name: "Layout Project" });
+  });
+
+  it("omits an untouched composer so the saved file is unchanged by this feature", () => {
+    const project = projectFromStore({
+      ...useAppStore.getState(),
+      metadata: {},
+    });
+    assert.equal(project.printLayout, undefined);
+  });
+
+  it("saves the composer settings once they differ from the defaults", () => {
+    useAppStore.getState().setPrintLayout({
+      ...createDefaultPrintLayout(),
+      title: "Filière dentaire par régions",
+      paperSize: "a3",
+      orientation: "portrait",
+    });
+    const saved = parseProject(
+      serializeProject(projectFromStore({ ...useAppStore.getState(), metadata: {} })),
+    );
+    assert.equal(saved.printLayout?.title, "Filière dentaire par régions");
+    assert.equal(saved.printLayout?.paperSize, "a3");
+    assert.equal(saved.printLayout?.orientation, "portrait");
+  });
+
+  it("restores the saved composer settings when the project is loaded", () => {
+    const project = {
+      ...createEmptyProject("Saved layout"),
+      printLayout: {
+        ...createDefaultPrintLayout(),
+        title: "Saved title",
+        orientation: "portrait" as const,
+        showNorthArrow: false,
+      },
+    };
+    useAppStore.getState().loadProject(project);
+    const restored = useAppStore.getState().printLayout;
+    assert.equal(restored.title, "Saved title");
+    assert.equal(restored.orientation, "portrait");
+    assert.equal(restored.showNorthArrow, false);
+  });
+
+  it("resets to the defaults for a project saved without a layout", () => {
+    useAppStore.getState().setPrintLayout({
+      ...createDefaultPrintLayout(),
+      title: "Previous project",
+      paperSize: "a3",
+    });
+    // The bug behind discussion #1992: opening another project must not leave
+    // the previous project's composer settings in place.
+    useAppStore.getState().loadProject(createEmptyProject("Next"));
+    assert.deepEqual(useAppStore.getState().printLayout, createDefaultPrintLayout());
+
+    useAppStore.getState().setPrintLayout({
+      ...createDefaultPrintLayout(),
+      title: "Previous project",
+    });
+    useAppStore.getState().newProject({ name: "Fresh" });
+    assert.deepEqual(useAppStore.getState().printLayout, createDefaultPrintLayout());
+  });
+
+  it("clears composer blocks that name a layer the loaded project does not carry", () => {
+    const layer = geojsonLayer({ id: "kept" });
+    const applied = applyProjectToStore({
+      ...createEmptyProject("Orphans"),
+      layers: [layer],
+      printLayout: {
+        ...createDefaultPrintLayout(),
+        showDataTable: true,
+        tableLayerId: "deleted",
+        showDataChart: true,
+        chartLayerId: "kept",
+      },
+    });
+    assert.equal(applied.printLayout.tableLayerId, "");
+    assert.equal(applied.printLayout.showDataTable, false);
+    assert.equal(applied.printLayout.chartLayerId, "kept");
+  });
+
+  it("clears a composer block when its layer is deleted from the open project", () => {
+    const store = useAppStore.getState();
+    const kept = store.addGeoJsonLayer("Kept", { type: "FeatureCollection", features: [] });
+    const doomed = useAppStore
+      .getState()
+      .addGeoJsonLayer("Doomed", { type: "FeatureCollection", features: [] });
+    useAppStore.getState().setPrintLayout({
+      ...createDefaultPrintLayout(),
+      showDataTable: true,
+      tableLayerId: doomed,
+      showDataChart: true,
+      chartLayerId: kept,
+    });
+
+    useAppStore.getState().removeLayer(doomed);
+
+    // Otherwise a save taken before the composer is next opened would write a
+    // block pointing at a layer the file no longer carries.
+    const after = useAppStore.getState().printLayout;
+    assert.equal(after.tableLayerId, "");
+    assert.equal(after.showDataTable, false);
+    assert.equal(after.chartLayerId, kept);
+    assert.equal(after.showDataChart, true);
+  });
+
+  it("ignores a write that changes nothing, so opening the composer is not an edit", () => {
+    assert.equal(useAppStore.getState().isDirty, false);
+    // The dialog replays its seeded values into the store on mount.
+    useAppStore.getState().setPrintLayout(createDefaultPrintLayout());
+    assert.equal(useAppStore.getState().isDirty, false);
+
+    useAppStore.getState().setPrintLayout({ ...createDefaultPrintLayout(), title: "Edited" });
+    assert.equal(useAppStore.getState().isDirty, true);
   });
 });

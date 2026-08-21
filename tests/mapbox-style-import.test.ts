@@ -679,6 +679,36 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.equal(result.style.strokeColor, "#123456");
   });
 
+  it("preserves a coalesce color lookup instead of replacing it with its fallback", () => {
+    const color = [
+      "coalesce",
+      [
+        "get",
+        ["coalesce", ["get", "unitsymbol"], ""],
+        ["literal", { Qa: "#fdfced", Qb: "#9b86c5" }],
+      ],
+      "rgba(0,0,0,0)",
+    ];
+    const result = parseMapboxStyle({
+      layers: [{ id: "units", type: "fill", paint: { "fill-color": color } }],
+    });
+
+    assert.equal(result.style.vectorStyleMode, "expression");
+    assert.equal(result.style.vectorStyleExpression, JSON.stringify(color));
+    assert.equal(result.style.fillColor, undefined);
+    assert.deepEqual(result.warnings, []);
+  });
+
+  it("preserves a coalesce object lookup with a literal property key", () => {
+    const color = ["coalesce", ["get", "Qa", ["literal", { Qa: "#fdfced" }]], "#000000"];
+    const result = parseMapboxStyle({
+      layers: [{ id: "units", type: "fill", paint: { "fill-color": color } }],
+    });
+
+    assert.equal(result.style.vectorStyleMode, "expression");
+    assert.equal(result.style.vectorStyleExpression, JSON.stringify(color));
+  });
+
   it("recovers fill opacity from a point layer's circle-opacity", () => {
     const { style: result } = roundTrip(style({ fillOpacity: 0.5 }), points());
     assert.equal(result.fillOpacity, 0.5);
@@ -771,19 +801,253 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.ok(result.warnings.some((w) => /constant extrusion height/.test(w)));
   });
 
-  it("warns when the style stacks multiple layers of one type", () => {
+  it("combines filtered flat-color layers of one type into rules", () => {
     const external = {
       version: 8,
       sources: {},
       layers: [
-        { id: "f1", type: "fill", source: "s", paint: { "fill-color": "#111111" } },
-        { id: "f2", type: "fill", source: "s", paint: { "fill-color": "#222222" } },
+        {
+          id: "class-a",
+          type: "fill",
+          source: "s",
+          filter: ["==", ["get", "class"], "a"],
+          paint: { "fill-color": "#111111" },
+        },
+        {
+          id: "class-b",
+          type: "fill",
+          source: "s",
+          filter: ["==", ["get", "class"], "b"],
+          paint: { "fill-color": "#222222" },
+        },
       ],
     };
     const result = parseMapboxStyle(external);
-    assert.ok(result.warnings.some((w) => /multiple fill layers/.test(w)));
-    // The first layer still wins.
+    assert.equal(result.matchedLayerCount, 2);
+    assert.equal(result.style.vectorStyleMode, "rule-based");
+    assert.deepEqual(
+      result.style.vectorRules?.map(({ label, filter, color, isElse, enabled }) => ({
+        label,
+        filter,
+        color,
+        isElse,
+        enabled,
+      })),
+      [
+        {
+          label: "class-b",
+          filter: '["==",["get","class"],"b"]',
+          color: "#222222",
+          isElse: false,
+          enabled: undefined,
+        },
+        {
+          label: "class-a",
+          filter: '["==",["get","class"],"a"]',
+          color: "#111111",
+          isElse: false,
+          enabled: undefined,
+        },
+        {
+          label: "",
+          filter: "",
+          color: DEFAULT_LAYER_STYLE.fillColor,
+          isElse: true,
+          enabled: false,
+        },
+      ],
+    );
+    assert.ok(result.warnings.some((w) => /combined as rules/.test(w)));
+  });
+
+  it("uses the union of stacked rule zoom ranges for the outer layer", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        {
+          id: "low-zoom",
+          type: "fill",
+          minzoom: 0,
+          maxzoom: 10,
+          filter: ["==", ["get", "class"], "a"],
+          paint: { "fill-color": "#111111" },
+        },
+        {
+          id: "high-zoom",
+          type: "fill",
+          minzoom: 10,
+          maxzoom: 20,
+          filter: ["==", ["get", "class"], "b"],
+          paint: { "fill-color": "#222222" },
+        },
+      ],
+    });
+
+    assert.equal(result.style.minZoom, 0);
+    assert.equal(result.style.maxZoom, 20);
+    assert.deepEqual(
+      result.style.vectorRules
+        ?.filter((rule) => !rule.isElse)
+        .map((rule) => [rule.minZoom, rule.maxZoom]),
+      [
+        [10, 20],
+        [0, 10],
+      ],
+    );
+  });
+
+  it("warns when unfiltered same-type layers cannot be combined as rules", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        { id: "f1", type: "fill", paint: { "fill-color": "#111111" } },
+        { id: "f2", type: "fill", paint: { "fill-color": "#222222" } },
+      ],
+    });
     assert.equal(result.style.fillColor, "#111111");
+    assert.ok(result.warnings.some((warning) => /only the first was imported/.test(warning)));
+  });
+
+  it("does not combine legacy layer filters into expression rules", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        {
+          id: "legacy-a",
+          type: "fill",
+          filter: ["==", "class", "a"],
+          paint: { "fill-color": "#111111" },
+        },
+        {
+          id: "legacy-b",
+          type: "fill",
+          filter: ["==", "class", "b"],
+          paint: { "fill-color": "#222222" },
+        },
+      ],
+    });
+
+    assert.equal(result.matchedLayerCount, 1);
+    assert.equal(result.style.vectorStyleMode, "single");
+    assert.equal(result.style.fillColor, "#111111");
+    assert.ok(result.warnings.some((warning) => /only the first was imported/.test(warning)));
+  });
+
+  it("does not combine legacy !has filters into expression rules", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        {
+          id: "missing-class",
+          type: "fill",
+          filter: ["!has", "class"],
+          paint: { "fill-color": "#111111" },
+        },
+        {
+          id: "parks",
+          type: "fill",
+          filter: ["==", ["get", "class"], "park"],
+          paint: { "fill-color": "#222222" },
+        },
+      ],
+    });
+
+    assert.equal(result.matchedLayerCount, 1);
+    assert.equal(result.style.vectorStyleMode, "single");
+    assert.equal(result.style.fillColor, "#111111");
+    assert.ok(result.warnings.some((warning) => /only the first was imported/.test(warning)));
+  });
+
+  it("detects legacy comparisons nested under expression negation", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        {
+          id: "not-a",
+          type: "fill",
+          filter: ["!", ["==", "class", "a"]],
+          paint: { "fill-color": "#111111" },
+        },
+        {
+          id: "parks",
+          type: "fill",
+          filter: ["==", ["get", "class"], "park"],
+          paint: { "fill-color": "#222222" },
+        },
+      ],
+    });
+
+    assert.equal(result.matchedLayerCount, 1);
+    assert.equal(result.style.vectorStyleMode, "single");
+    assert.equal(result.style.fillColor, "#111111");
+    assert.ok(result.warnings.some((warning) => /only the first was imported/.test(warning)));
+  });
+
+  it("does not combine legacy none filters wrapping expression children", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        {
+          id: "no-class",
+          type: "fill",
+          filter: ["none", ["has", "class"]],
+          paint: { "fill-color": "#111111" },
+        },
+        {
+          id: "parks",
+          type: "fill",
+          filter: ["==", ["get", "class"], "park"],
+          paint: { "fill-color": "#222222" },
+        },
+      ],
+    });
+
+    assert.equal(result.matchedLayerCount, 1);
+    assert.equal(result.style.vectorStyleMode, "single");
+    assert.equal(result.style.fillColor, "#111111");
+    assert.ok(result.warnings.some((warning) => /only the first was imported/.test(warning)));
+  });
+
+  it("combines a modern in filter with a string needle", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        {
+          id: "parks",
+          type: "fill",
+          filter: ["in", "park", ["get", "classes"]],
+          paint: { "fill-color": "#111111" },
+        },
+        {
+          id: "schools",
+          type: "fill",
+          filter: ["in", "school", ["get", "classes"]],
+          paint: { "fill-color": "#222222" },
+        },
+      ],
+    });
+
+    assert.equal(result.matchedLayerCount, 2);
+    assert.equal(result.style.vectorStyleMode, "rule-based");
+    assert.ok(result.warnings.some((warning) => /combined as rules/.test(warning)));
+  });
+
+  it("does not report stacked line rules as combined when a circle claims color", () => {
+    const result = parseMapboxStyle({
+      layers: [
+        {
+          id: "line-a",
+          type: "line",
+          filter: ["==", ["get", "class"], "a"],
+          paint: { "line-color": "#111111" },
+        },
+        {
+          id: "line-b",
+          type: "line",
+          filter: ["==", ["get", "class"], "b"],
+          paint: { "line-color": "#222222" },
+        },
+        { id: "points", type: "circle", paint: { "circle-color": "#333333" } },
+      ],
+    });
+
+    assert.equal(result.matchedLayerCount, 2);
+    assert.equal(result.style.vectorStyleMode, "single");
+    assert.ok(result.warnings.some((warning) => /multiple line layers/.test(warning)));
+    assert.ok(result.warnings.every((warning) => !/combined as rules/.test(warning)));
   });
 
   it("recognizes a bare [get] match input and text-field", () => {

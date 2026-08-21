@@ -58,6 +58,13 @@ function workerUrl(): string {
 }
 
 function createHandle(): Promise<WorkerHandle> {
+  // Resolve the indexURL *before* creating the worker: it throws in a build
+  // with external CDNs disabled and no VITE_PYODIDE_INDEX_URL mirror. Thrown
+  // from the postMessage call below instead, it would escape synchronously
+  // after the worker exists — leaking it until the init timer fires ~2 min
+  // later, and rejecting a `ready` promise that was never returned to anyone
+  // (an unhandled rejection).
+  const indexURL = getPyodideIndexUrl();
   const worker = new Worker(workerUrl());
   const ready = new Promise<void>((resolve, reject) => {
     // A fatal worker failure (failed init, or a crash after init): tear down
@@ -135,7 +142,7 @@ function createHandle(): Promise<WorkerHandle> {
 
   worker.postMessage({
     type: "init",
-    indexURL: getPyodideIndexUrl(),
+    indexURL,
     vectorOpsSource,
   });
 

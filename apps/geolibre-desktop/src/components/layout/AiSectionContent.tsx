@@ -289,24 +289,30 @@ export function AiSectionContent({
             ))}
           </div>
 
-          {/* Help link */}
+          {/* Help link — wrapped so the inline-flex anchor is its own row and
+              the container's vertical rhythm separates it from Save, rather
+              than the two inline boxes sharing a line with nothing between. */}
           {PROVIDER_DOCS_URL[newProfileProvider] ? (
-            <a
-              className="inline-flex items-center gap-1 text-xs text-primary underline"
-              href={PROVIDER_DOCS_URL[newProfileProvider]}
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              <ExternalLink className="h-3 w-3" />
-              {t("settings.ai.getCredentials", {
-                provider: PROVIDER_LABELS[newProfileProvider],
-              })}
-            </a>
+            <div>
+              <a
+                className="inline-flex items-center gap-1 text-xs text-primary underline"
+                href={PROVIDER_DOCS_URL[newProfileProvider]}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t("settings.ai.getCredentials", {
+                  provider: PROVIDER_LABELS[newProfileProvider],
+                })}
+              </a>
+            </div>
           ) : null}
 
-          <Button size="sm" onClick={commitNewProfile}>
-            {t("settings.ai.saveProfile")}
-          </Button>
+          <div>
+            <Button size="sm" onClick={commitNewProfile}>
+              {t("settings.ai.saveProfile")}
+            </Button>
+          </div>
         </div>
       ) : (
         // ── Profile list ──

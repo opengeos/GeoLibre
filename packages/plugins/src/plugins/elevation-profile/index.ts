@@ -31,7 +31,11 @@ let pendingState: Partial<ElevationProfileState> | null = null;
 
 function createControl(app: GeoLibreAppAPI): ElevationProfileControl {
   const next = new ElevationProfileControl({
-    collapsed: pendingState?.collapsed ?? true,
+    // The panel always mounts closed and `activate` opens it a tick later (see
+    // there). Mounting it already expanded would show it for a frame before the
+    // control's own click-outside handler saw the very click that enabled the
+    // plugin and closed it again.
+    collapsed: true,
     unitSystem: pendingState?.unitSystem ?? "metric",
     // Bind the host's file save so CSV/SVG export uses Tauri's native dialog on
     // the desktop (and a browser download on the web); the control falls back
@@ -39,8 +43,12 @@ function createControl(app: GeoLibreAppAPI): ElevationProfileControl {
     exportTextFile: app.exportTextFile
       ? (filename, content, options) => app.exportTextFile?.(filename, content, options)
       : undefined,
+    getSelectedFeatures: app.getSelectedFeatures,
+    onSelectionChange: app.onSelectionChange
+      ? (callback) => app.onSelectionChange?.(() => callback()) ?? (() => undefined)
+      : undefined,
   });
-  if (pendingState) next.setState(pendingState);
+  if (pendingState) next.setState({ ...pendingState, collapsed: true });
   return next;
 }
 
@@ -73,6 +81,16 @@ function isPluginState(value: unknown): value is Partial<ElevationProfileState> 
   if ("line" in candidate && candidate.line !== null && !isLngLatArray(candidate.line)) {
     return false;
   }
+  if (
+    "elevations" in candidate &&
+    candidate.elevations !== null &&
+    (!Array.isArray(candidate.elevations) ||
+      !candidate.elevations.every(
+        (elevation) => typeof elevation === "number" && Number.isFinite(elevation),
+      ))
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -82,12 +100,44 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
   version: "0.1.0",
   urlParameterNames: [ELEVATION_LINE_PARAM],
 
+  // The panel's `collapsed` flag round-trips through getProjectState, so the
+  // saved project decides whether it opens. Without this exemption the host's
+  // restore-time collapse sweep (`collapseRestoredPanel` in plugin-manager.ts)
+  // closes the panel on every project load — it defers its collapse twice
+  // precisely to land after a plugin's own `setTimeout(0)` expand, so the
+  // `openPanel` logic in `activate` below would always lose. Worse, `collapse()`
+  // mutates the control, so the next save would write `collapsed: true` back and
+  // the user's preference would be lost for good. maplibre-time-slider carries
+  // the same flag for the same reason.
+  restoresPanelCollapseState: true,
+
   activate(app) {
+    // Whether the panel should end up open. Only a project file can ask for it
+    // closed: `restoreProjectState` calls applyProjectState immediately before
+    // activate, so a saved `collapsed: true` is already in pendingState here.
+    // Every other route in (a first activation, a session deactivate, a New
+    // Project reset) leaves it open, so enabling the plugin shows the panel
+    // instead of just the collapsed mountain button.
+    const openPanel = !(pendingState?.collapsed ?? false);
     control = control ?? createControl(app);
     const added = app.addMapControl(control, position);
     if (!added) {
       control = null;
       return false;
+    }
+    // Deferred a tick: the click that chose "Activate" in the Plugins menu is
+    // still propagating, and the control's click-outside handler (registered
+    // during onAdd) would see it land outside the panel and collapse it again.
+    // The other panel plugins (Street View, EnviroAtlas, National Map…) defer
+    // their expand for the same reason. Pin the expand to the control this call
+    // activated: a deactivate (or a deactivate plus a project restore that asks
+    // for a collapsed panel) landing inside that tick would otherwise open the
+    // replacement control against its own restored state.
+    const activated = control;
+    if (openPanel) {
+      setTimeout(() => {
+        if (control === activated) activated.expand();
+      }, 0);
     }
   },
 
@@ -99,8 +149,9 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
 
   deactivate(app) {
     if (!control) return;
-    // Capture the drawn line / unit / collapse so re-activating restores it.
-    pendingState = control.getState();
+    // Capture the drawn line / unit so re-activating restores it, but not the
+    // collapse: turning the plugin back on is a request to see the panel.
+    pendingState = { ...control.getState(), collapsed: false };
     app.removeMapControl(control);
     control = null;
   },
@@ -134,12 +185,17 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
       // the previous project's profile. Mirrors maplibre-swipe /
       // maplibre-graticule, whose normalizers reset to defaults on undefined.
       const cleared: ElevationProfileState = {
-        collapsed: true,
+        collapsed: false,
         unitSystem: "metric",
         line: null,
+        elevations: null,
       };
       pendingState = cleared;
       control?.setState(cleared);
+      // setState only toggles the expanded class; expand() also re-anchors the
+      // panel to its control button, which a panel that was collapsed until now
+      // has never had done.
+      control?.expand();
       return;
     }
     pendingState = state as Partial<ElevationProfileState> & {

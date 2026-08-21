@@ -27,6 +27,7 @@ import { useTranslation } from "react-i18next";
 import { AssistantSession } from "../../lib/assistant/agent";
 import { renderAssistantMarkdown } from "../../lib/assistant/markdown";
 import { selectActiveAssistantProfile } from "../../lib/assistant/profiles";
+import { isSendKey } from "../../lib/assistant/send-key";
 import { openSettingsSection } from "../layout/SettingsDialog";
 import {
   ASSISTANT_PROVIDER_IDS,
@@ -429,7 +430,18 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   };
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    if (
+      isSendKey(
+        {
+          key: event.key,
+          shiftKey: event.shiftKey,
+          altKey: event.altKey,
+          isComposing: event.nativeEvent.isComposing,
+          keyCode: event.nativeEvent.keyCode,
+        },
+        Boolean(input.trim()) && !runningRef.current && hasKey,
+      )
+    ) {
       event.preventDefault();
       void send();
       return;

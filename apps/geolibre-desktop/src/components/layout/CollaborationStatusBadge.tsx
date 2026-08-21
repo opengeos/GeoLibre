@@ -276,7 +276,7 @@ export function CollaborationStatusBadge({ api, mapControllerRef }: Collaboratio
         {announcements.map((a) => (
           <div
             key={a.id}
-            className="pointer-events-auto flex items-center gap-1.5 rounded-md border bg-background/95 px-2 py-1 text-xs text-foreground shadow-sm backdrop-blur-sm"
+            className="pointer-events-auto flex items-center gap-1.5 rounded-md border map-glass px-2 py-1 text-xs text-foreground shadow-sm"
           >
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
             <span className="truncate">{a.text}</span>
@@ -288,7 +288,7 @@ export function CollaborationStatusBadge({ api, mapControllerRef }: Collaboratio
       {expanded && (
         <div
           id="collab-roster-panel"
-          className="pointer-events-auto rounded-md border bg-background/95 shadow-md backdrop-blur-sm"
+          className="pointer-events-auto rounded-md border map-glass shadow-md"
         >
           <div className="flex items-center justify-between border-b px-2.5 py-1.5">
             <span className="text-xs font-medium">
@@ -449,7 +449,7 @@ export function CollaborationStatusBadge({ api, mapControllerRef }: Collaboratio
               : t("collaborate.sessionStatusTooltip")
         }
         title={expanded ? t("collaborate.collapseRoster") : t("collaborate.sessionStatusTooltip")}
-        className="pointer-events-auto flex items-center gap-1.5 self-start rounded-full border bg-background/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition hover:bg-accent"
+        className="pointer-events-auto flex items-center gap-1.5 self-start rounded-full border map-glass px-2.5 py-1 text-xs font-medium text-foreground shadow-sm transition hover:bg-accent"
       >
         <span className="relative flex h-2 w-2" aria-hidden="true">
           {!connecting && (

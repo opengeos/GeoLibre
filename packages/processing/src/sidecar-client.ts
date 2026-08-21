@@ -796,6 +796,8 @@ export interface ReadPostgisTableRequest {
   connection: string;
   schema_name?: string;
   table: string;
+  /** Geometry column to load when the table registers more than one. */
+  geometry_column?: string;
   excluded_fields?: string[];
 }
 
@@ -814,6 +816,8 @@ export interface WritePostgisTableRequest {
   connection: string;
   schema_name?: string;
   table: string;
+  /** Geometry column backing this editable layer. */
+  geometry_column?: string;
   /** The edited layer as a GeoJSON FeatureCollection (WGS84). */
   geojson: FeatureCollection;
   /**

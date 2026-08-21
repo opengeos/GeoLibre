@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildStoryMapHandoutPdf,
+  hexToRgb,
   htmlToPlainText,
   type HandoutChapter,
   type HandoutOptions,
@@ -82,6 +83,19 @@ describe("htmlToPlainText", () => {
   });
 });
 
+describe("hexToRgb", () => {
+  it("parses six- and three-digit hex, with or without the hash", () => {
+    assert.deepEqual(hexToRgb("#3fb1ce"), [0x3f, 0xb1, 0xce]);
+    assert.deepEqual(hexToRgb("3FB1CE"), [0x3f, 0xb1, 0xce]);
+    assert.deepEqual(hexToRgb("#f80"), [0xff, 0x88, 0x00]);
+  });
+
+  it("falls back to the default marker blue for anything it cannot parse", () => {
+    assert.deepEqual(hexToRgb("rgb(1,2,3)"), [0x3f, 0xb1, 0xce]);
+    assert.deepEqual(hexToRgb(""), [0x3f, 0xb1, 0xce]);
+  });
+});
+
 describe("buildStoryMapHandoutPdf", () => {
   it("produces a valid PDF byte stream", () => {
     const bytes = buildStoryMapHandoutPdf(
@@ -147,6 +161,73 @@ describe("buildStoryMapHandoutPdf", () => {
       }),
     );
     assert.ok(bytes.length > 0);
+  });
+
+  it("embeds a clickable link annotation for a chapter marker", () => {
+    const url = "https://www.google.com/maps/place/40.700000,-74.000000/@40.700000,-74.000000,12z";
+    const bytes = buildStoryMapHandoutPdf(
+      [chapter({ marker: { url, color: "#3fb1ce" } })],
+      opts({ title: "T", footer: "F" }),
+    );
+    const text = Buffer.from(bytes).toString("latin1");
+    // The pin carries a /URI link annotation pointing at the chapter coordinate.
+    assert.ok(text.includes("/S /URI"));
+    assert.ok(text.includes(url));
+  });
+
+  it("omits the link annotation when a chapter has no marker", () => {
+    const bytes = buildStoryMapHandoutPdf([chapter()], opts({ title: "T", footer: "F" }));
+    const text = Buffer.from(bytes).toString("latin1");
+    assert.ok(!text.includes("/S /URI"));
+  });
+
+  it("draws a marker beside a chapter photo without throwing", () => {
+    const bytes = buildStoryMapHandoutPdf(
+      [
+        chapter({
+          photo: { data: PNG_2X2, width: 400, height: 300 },
+          marker: { url: "https://example.com/place", color: "not-a-color" },
+        }),
+      ],
+      opts(),
+    );
+    const text = Buffer.from(bytes).toString("latin1");
+    assert.ok(text.includes("https://example.com/place"));
+  });
+
+  it("skips a marker whose map image is too small to hold the pin", () => {
+    // An extremely wide image fits into a band only a few millimetres tall, so
+    // the pin would overprint the chapter title; it is dropped instead.
+    const bytes = buildStoryMapHandoutPdf(
+      [
+        chapter({
+          map: { data: PNG_2X2, width: 8000, height: 40 },
+          marker: { url: "https://example.com/place", color: "#3fb1ce" },
+        }),
+      ],
+      opts(),
+    );
+    const text = Buffer.from(bytes).toString("latin1");
+    assert.ok(!text.includes("/S /URI"));
+  });
+
+  it("skips a marker whose map image cannot hold the pin's outline", () => {
+    // 8000x480 fits to a band about 16.4mm tall on A4 landscape: over twice the
+    // bare pin height (16mm) but under twice the outlined height (16.8mm), so
+    // half the image is not enough to keep the outline inside the map. Drawing
+    // it would bleed white ink above the image, into the chapter title. This
+    // fixture fails if the guard ever goes back to measuring the bare pin.
+    const bytes = buildStoryMapHandoutPdf(
+      [
+        chapter({
+          map: { data: PNG_2X2, width: 8000, height: 480 },
+          marker: { url: "https://example.com/place", color: "#3fb1ce" },
+        }),
+      ],
+      opts(),
+    );
+    const text = Buffer.from(bytes).toString("latin1");
+    assert.ok(!text.includes("/S /URI"));
   });
 
   it("renders a full-bleed slide page", () => {

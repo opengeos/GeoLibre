@@ -38,28 +38,40 @@ interface WmsFormCache {
 }
 let wmsFormCache: WmsFormCache | null = null;
 
-export function WmsSource() {
+export function WmsSource({
+  initialUrl = "",
+  initialLayers = "",
+}: {
+  initialUrl?: string;
+  initialLayers?: string;
+}) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wms.defaultName"));
-  const [wmsEndpoint, setWmsEndpoint] = useState(wmsFormCache?.endpoint ?? "");
-  const [wmsLayers, setWmsLayers] = useState(wmsFormCache?.layers ?? "");
-  const [wmsStyles, setWmsStyles] = useState(wmsFormCache?.styles ?? "");
+  const [wmsEndpoint, setWmsEndpoint] = useState(initialUrl || wmsFormCache?.endpoint || "");
+  // A deep link brings its own service, so everything the cache holds *about a
+  // service* belongs to a different one: its layers, styles, retrieved layer
+  // list and negotiated version. Pairing a fresh endpoint with any of those
+  // would describe a service this form is no longer pointed at. Generic
+  // preferences (image format, transparency, tile size) still carry over.
+  const serviceCache = initialUrl ? null : wmsFormCache;
+  const [wmsLayers, setWmsLayers] = useState(initialLayers || (serviceCache?.layers ?? ""));
+  const [wmsStyles, setWmsStyles] = useState(serviceCache?.styles ?? "");
   const [wmsFormat, setWmsFormat] = useState(wmsFormCache?.format ?? "image/png");
   const [wmsTransparent, setWmsTransparent] = useState(wmsFormCache?.transparent ?? true);
   const [wmsTileSize, setWmsTileSize] = useState(wmsFormCache?.tileSize ?? "256");
-  const [wmsVersion, setWmsVersion] = useState(wmsFormCache?.version ?? "1.1.1");
+  const [wmsVersion, setWmsVersion] = useState(serviceCache?.version ?? "1.1.1");
   // True while the version has an explicit source — the selector, a pasted
   // URL's VERSION parameter, or a saved service entry. Capabilities
   // auto-detection only fills the version in when no explicit source exists.
   // Mirrored in a ref so the async retrieve handler reads the value current at
   // response time, not the one captured when the button was clicked.
-  const [versionTouched, setVersionTouched] = useState(wmsFormCache?.versionTouched ?? false);
+  const [versionTouched, setVersionTouched] = useState(serviceCache?.versionTouched ?? false);
   const versionTouchedRef = useRef(versionTouched);
   const markVersionTouched = (touched: boolean) => {
     versionTouchedRef.current = touched;
     setVersionTouched(touched);
   };
-  const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>(wmsFormCache?.options ?? []);
+  const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>(serviceCache?.options ?? []);
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);
   const layerListId = useId();

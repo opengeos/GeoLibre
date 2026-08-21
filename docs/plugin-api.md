@@ -3,7 +3,7 @@
 ## Interface
 
 ```typescript
-import type { FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { IControl } from "maplibre-gl";
 
 export type GeoLibreMapControlPosition =
@@ -55,6 +55,19 @@ export interface GeoLibreDeckGL {
   mapbox: typeof import("@deck.gl/mapbox");
 }
 
+export interface GeoLibreLayerSummary {
+  id: string;
+  name: string;
+  type: string;
+  visible: boolean;
+  opacity: number;
+}
+
+export interface GeoLibreSelection {
+  layerId: string | null;
+  features: Feature<Geometry | null>[];
+}
+
 export interface GeoLibreAppAPI {
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (
@@ -62,6 +75,14 @@ export interface GeoLibreAppAPI {
     data: FeatureCollection,
     sourcePath?: string,
   ) => string;
+  listLayers?: () => GeoLibreLayerSummary[];
+  getLayerFeatures?: (layerId: string) => Feature<Geometry | null>[];
+  getSelectedFeatures?: () => Feature<Geometry | null>[];
+  getSelectedLayerId?: () => string | null;
+  getDrawnFeatures?: () => Feature<Geometry | null>[];
+  onSelectionChange?: (
+    callback: (selection: GeoLibreSelection) => void,
+  ) => () => void;
   // Native raster/tile layers (see "Raster and tile layers" below). Each
   // returns the new layer's id and the layer appears in the Layers panel and
   // persists with the project, like addGeoJsonLayer does for vector data.
@@ -142,6 +163,14 @@ export interface GeoLibreAppAPI {
   getActiveRightPanel?: () => string | null;
   setActiveRightPanelDock?: (dock: GeoLibreRightPanelDock) => void;
   getActiveRightPanelDock?: () => GeoLibreRightPanelDock | null;
+  // Localization (see "Following the app language" below).
+  getLocale?: () => string;
+  onLocaleChange?: (listener: (locale: string) => void) => () => void;
+  translate?: (
+    key: string,
+    defaultValue: string,
+    params?: Record<string, string | number>,
+  ) => string;
   // Top toolbar menus (see "Toolbar menus" below).
   registerToolbarMenu?: (menu: GeoLibreToolbarMenu) => () => void;
   unregisterToolbarMenu?: (id: string) => void;
@@ -416,6 +445,48 @@ https://web.geolibre.app/?url=https://example.com/project.geolibre.json&exampleG
 
 A URL parameter activates only an already-registered (installed) plugin that owns it; it never loads a plugin from the URL. For external plugins, include the plugin manifest URL in the project `plugins` state (so the plugin is registered) before relying on its URL handler — the matching parameter then activates and dispatches it even if it is not in the active set.
 
+## Read-only layer and feature queries
+
+External plugins can inspect the current layer list, a layer's GeoJSON features,
+the current feature selection, and features in GeoEditor's Sketches layers. The
+methods are optional so the same plugin remains compatible with older hosts.
+
+```typescript
+const layers = app.listLayers?.() ?? [];
+const selectedLayerId = app.getSelectedLayerId?.() ?? null;
+const selectedFeatures = app.getSelectedFeatures?.() ?? [];
+
+if (selectedLayerId && app.getLayerFeatures) {
+  const layerFeatures = app.getLayerFeatures(selectedLayerId);
+  console.log(layers, layerFeatures, selectedFeatures);
+}
+
+const drawnFeatures = app.getDrawnFeatures?.() ?? [];
+```
+
+`getSelectedFeatures` returns every selected feature in the selected layer, not
+only the most recently selected feature. Features without a GeoJSON `id` are
+matched using their zero-based array index converted to a string. An empty
+selection returns an empty array. `getLayerFeatures` throws when the layer id is
+unknown and returns an empty array for a layer that has no GeoJSON features.
+
+Selection subscriptions fire after the selected layer or selected feature-id
+array changes. Keep and call the returned unsubscribe function during plugin
+deactivation:
+
+```typescript
+const unsubscribe = app.onSelectionChange?.(({ layerId, features }) => {
+  console.log(layerId, features);
+});
+
+// In deactivate or another cleanup path:
+unsubscribe?.();
+```
+
+These methods are a read-only query surface: calling them does not change the
+GeoLibre store. Plugins must also treat returned GeoJSON features as read-only
+and use host APIs such as `addGeoJsonLayer` when they need to add data.
+
 ## Raster and tile layers
 
 `addGeoJsonLayer` registers vector data as a native layer. For raster and tile data there are three matching helpers — `addTileLayer` (XYZ), `addWmtsLayer` (WMTS), and `addWmsLayer` (WMS). Each returns the new layer's id, and the layer appears in the Layers panel with full opacity, reorder, and styling support and persists with the project, so a plugin no longer has to call `getMap().addSource()/addLayer()` directly (which leaves the layer invisible to GeoLibre's layer store).
@@ -479,6 +550,8 @@ const cogId = await app.addCogLayer?.(
 );
 ```
 
+`options.engine` picks the renderer (`"maplibre-gl-raster"` for the GPU/deck.gl path, `"cog-tiler-wasm"` for the WebAssembly tiler, `"titiler"` for a TiTiler server). Unlike the other options it is **not per layer**: the raster control holds one engine for every raster it manages, so naming one re-renders the rasters already on the map. Pass `"auto"` to leave whatever the control is on alone; omit it and the GPU renderer is used. The GPU renderer requires a Mercator projection, so a plugin that expects to work on the globe should ask for `"cog-tiler-wasm"`.
+
 `addTileLayer`/`addWmtsLayer`/`addWmsLayer` expect **pre-rendered tiles** (e.g. a COG already served through a tiler such as titiler as an XYZ endpoint). `addCogLayer` is different: it loads the **GeoTIFF itself** and renders it client-side, exposing band selection, rescale, colormap, and nodata in the raster panel. It is async (it fetches the file's header), so it returns a `Promise<string>` and rejects if the COG cannot be read.
 
 The helpers are typed optional for forward-compatibility with host variants, so call them with optional chaining (`app.addTileLayer?.(...)`).
@@ -487,7 +560,7 @@ The helpers are typed optional for forward-compatibility with host variants, so 
 
 ## Zarr layers
 
-`addZarrLayer` renders a Zarr store (Zarr v2/v3, Icechunk over HTTP, kerchunk-backed cloud NetCDF) through **GeoLibre's own** `@carbonplan/zarr-layer` instance and mirrors the result into the Layers panel. It is the Zarr counterpart of `addCogLayer`.
+`addZarrLayer` renders a Zarr store (Zarr v2/v3 over HTTP) through **GeoLibre's own** `@carbonplan/zarr-layer` instance and mirrors the result into the Layers panel. It is the Zarr counterpart of `addCogLayer`. Stores that are not read from a URL — a kerchunk-backed cloud NetCDF, an Icechunk repository, a folder on disk — reach the same renderer through an internal `store` option that this API does not expose, so they are added by GeoLibre's own panels rather than by a plugin.
 
 Do not bundle `@carbonplan/zarr-layer` in a plugin: a second copy ships a duplicate numcodecs WASM payload, and adding the renderer's layer yourself with `getMap().addLayer()` produces a MapLibre **custom** layer, which has no paint properties for the Style panel to drive.
 
@@ -768,6 +841,49 @@ const unregister = app.registerToolbarMenu?.({
 Each item is an **action** (`onSelect`, the default when `type` is omitted), a **submenu** (nested `items`), or a **separator**. Items typically open a right panel or a floating panel, but `onSelect` can run anything. Re-registering the same `id` replaces the menu, so you can rebuild it as your plugin's state changes.
 
 Menus from **external plugins** (loaded from a zip, a manifest URL, or a bundled drop-in) render at the end of the banner, after the Help menu, so third-party menus sit together past the built-in menus. Menus from built-in plugins render beside the built-in menus. The host decides placement from the menu's owning plugin, so you do not need to do anything special.
+
+Every `label` (the menu button's, a submenu trigger's, an action's) accepts a **getter function** as well as a plain string, the same way panel titles do:
+
+```typescript
+app.registerToolbarMenu?.({
+  id: "my-plugin-menu",
+  label: () => app.translate?.("plugin.my-plugin.menu", "Workbench") ?? "Workbench",
+  items: [
+    {
+      id: "open",
+      label: () => app.translate?.("plugin.my-plugin.open", "Open workbench") ?? "Open workbench",
+      onSelect: () => app.openRightPanel?.("my-workbench"),
+    },
+  ],
+});
+```
+
+The host re-reads every label each time it renders the menu tree, and it re-renders on a language change, so a getter follows the app language without your plugin re-registering its menu. A plain string is frozen at registration time. A getter that throws or returns nothing usable degrades to the item's id path and warns once, so a broken label cannot make the menu disappear.
+
+## Following the app language
+
+The GeoLibre UI is translated with react-i18next, but a plugin renders its panels as plain DOM and cannot use the host's React hooks. Three methods bridge that gap:
+
+```typescript
+// The active catalog code ("en", "zh", "pt-BR", ...).
+const locale = app.getLocale?.() ?? "en";
+
+// Resolve a key, falling back to your own English text when no catalog has it.
+const title = app.translate?.("plugin.my-plugin.title", "Workbench") ?? "Workbench";
+const label = app.translate?.("plugin.my-plugin.count", "{{n}} features", { n: 3 });
+
+// Re-render when the user switches language. Returns an unsubscribe function —
+// call it from `deactivate`, or the listener keeps re-rendering DOM you no
+// longer own.
+const stop = app.onLocaleChange?.((next) => renderPanel(container, next));
+```
+
+Conventions:
+
+- **Always pass your own English text as `defaultValue`.** GeoLibre's catalogs do not ship your plugin's strings, so the fallback is what makes your UI read correctly today; translations are an upgrade, not a prerequisite.
+- **Namespace your keys by plugin id** (`plugin.<your-id>.<something>`) so they cannot collide with the host's own keys.
+- These methods are typed optional like the rest of the API, so call them with optional chaining and keep a literal fallback.
+- Panel titles and toolbar labels take getters precisely so they can call `app.translate?.()` and stay current; use those rather than re-registering on every language change.
 
 ## Floating panels
 

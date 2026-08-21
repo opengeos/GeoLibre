@@ -43,9 +43,15 @@ export function shouldSuppressOnboarding(env: OnboardingEnv = importMetaEnv()): 
   return (
     welcomeDisabledByEnv(env) ||
     hasProjectDeepLinkIntent() ||
+    hasDataDeepLinkIntent() ||
     embeddedByParam() ||
     welcomeDisabledByParam()
   );
+}
+
+/** A remote data/API deep link should open directly onto its imported layer. */
+function hasDataDeepLinkIntent(): boolean {
+  return typeof window !== "undefined" && new URLSearchParams(window.location.search).has("data");
 }
 
 /**

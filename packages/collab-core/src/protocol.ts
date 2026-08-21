@@ -11,6 +11,21 @@
 export type CollaborationRole = "host" | "guest";
 export type CollaborationMode = "view-only" | "co-edit";
 
+export interface ParticipantIdentity {
+  provider: string;
+  userId: string;
+  username: string;
+}
+
+export interface CollabInvite {
+  token: string;
+  role: CollaborationMode;
+  createdAt: number;
+  maxUses?: number;
+  useCount: number;
+  revoked: boolean;
+}
+
 export interface CollabParticipant {
   clientId: string;
   displayName: string;
@@ -23,6 +38,8 @@ export interface CollabParticipant {
    * (the host can always edit).
    */
   editOverride: boolean | null;
+  /** Optional account identity when signed-in identity binding is enabled. */
+  identity?: ParticipantIdentity | null;
 }
 
 export interface CollabCursor {
@@ -62,6 +79,14 @@ export interface JoinMessage {
   color: string;
   /** Presented by the session creator to claim the host role. */
   hostToken?: string;
+  /** Optional invite token carrying a baked-in role. */
+  inviteToken?: string;
+  /**
+   * Optional HMAC-signed identity credential minted by the relay's issuer. See
+   * `verifyIdentityToken` in `identity.ts` for the format; a relay with no
+   * signing secret configured ignores this field entirely.
+   */
+  identityToken?: string;
 }
 
 export interface ClientSnapshotMessage {
@@ -106,6 +131,39 @@ export interface CommentMutationMessage {
   action: CommentMutationAction;
 }
 
+export interface MintInviteMessage {
+  type: "mint-invite";
+  role: CollaborationMode;
+  maxUses?: number;
+}
+
+export interface RevokeInviteMessage {
+  type: "revoke-invite";
+  token: string;
+}
+
+export interface SetSessionConfigMessage {
+  type: "set-session-config";
+  requireIdentity?: boolean;
+}
+
+export interface KickParticipantMessage {
+  type: "kick-participant";
+  clientId: string;
+  reason?: string;
+}
+
+export interface BlockParticipantMessage {
+  type: "block-participant";
+  clientId: string;
+  reason?: string;
+}
+
+export interface SetLayerLocksMessage {
+  type: "set-layer-locks";
+  lockedLayerIds: string[];
+}
+
 export type ClientMessage =
   | JoinMessage
   | ClientSnapshotMessage
@@ -113,7 +171,13 @@ export type ClientMessage =
   | SetModeMessage
   | SetParticipantModeMessage
   | ChatSendMessage
-  | CommentMutationMessage;
+  | CommentMutationMessage
+  | MintInviteMessage
+  | RevokeInviteMessage
+  | SetSessionConfigMessage
+  | KickParticipantMessage
+  | BlockParticipantMessage
+  | SetLayerLocksMessage;
 
 // Server -> client -----------------------------------------------------------
 
@@ -130,6 +194,15 @@ export interface WelcomeMessage {
   /** Recent chat history so a late joiner sees the conversation so far (#754). */
   chat: CollabChatMessage[];
   rev: number;
+  requireIdentity?: boolean;
+  /**
+   * Whether this relay has an identity issuer configured. False means every
+   * joiner is anonymous and `requireIdentity` cannot be turned on, so the host
+   * UI hides the toggle rather than offering a gate nobody could pass.
+   */
+  identitySupported?: boolean;
+  lockedLayerIds?: string[];
+  invites?: CollabInvite[];
 }
 
 export interface PresenceEntry {
@@ -168,9 +241,41 @@ export interface ChatBroadcastMessage {
   message: CollabChatMessage;
 }
 
+export interface InviteCreatedMessage {
+  type: "invite-created";
+  invite: CollabInvite;
+}
+
+export interface InviteRevokedMessage {
+  type: "invite-revoked";
+  token: string;
+}
+
+export interface SessionConfigMessage {
+  type: "session-config";
+  requireIdentity: boolean;
+}
+
+export interface LayerLocksMessage {
+  type: "layer-locks";
+  lockedLayerIds: string[];
+}
+
+export interface KickedMessage {
+  type: "kicked";
+  reason?: string;
+}
+
 export interface ErrorMessage {
   type: "error";
-  code: "forbidden" | "too-large" | "bad-message" | "not-found";
+  code:
+    | "forbidden"
+    | "too-large"
+    | "bad-message"
+    | "not-found"
+    | "identity-required"
+    | "identity-unavailable"
+    | "layer-locked";
   message: string;
 }
 
@@ -182,4 +287,9 @@ export type ServerMessage =
   | ModeMessage
   | ChatBroadcastMessage
   | CommentMutationMessage
+  | InviteCreatedMessage
+  | InviteRevokedMessage
+  | SessionConfigMessage
+  | LayerLocksMessage
+  | KickedMessage
   | ErrorMessage;

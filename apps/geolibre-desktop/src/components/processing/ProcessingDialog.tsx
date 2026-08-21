@@ -53,7 +53,6 @@ import {
   type FileDialogFilter,
 } from "../../lib/tauri-io";
 import { clamp } from "../../lib/clamp";
-import { fetchableUrl } from "../../lib/url-utils";
 import {
   layersForSubsetUrl,
   subsetUrlFieldValues,
@@ -72,6 +71,12 @@ import {
   type DistanceUnit,
 } from "../../lib/whitebox-distance-params";
 import { parameterKind } from "../../lib/whitebox-param-kind";
+import { isTiff } from "../../lib/scripting/binary-output";
+import {
+  canUseLayerForParameter,
+  fetchLayerBytes,
+  layerPath,
+} from "../../lib/whitebox-layer-inputs";
 import {
   cornerExtentParameters,
   extentFieldValues,
@@ -136,12 +141,13 @@ function isOutputParameter(param: WhiteboxToolParameter): boolean {
 /**
  * Best-effort extension for a binary tool output, sniffed from its magic bytes.
  * Covers the formats GeoLibre `file_out` and (CRS-preserving) `vector_out` tools
- * emit today (GeoParquet, FlatGeobuf, zipped Shapefile, PNG, PMTiles); a
+ * emit today (GeoTIFF, GeoParquet, FlatGeobuf, zipped Shapefile, PNG, PMTiles); a
  * genuinely opaque output falls back to `.bin`. Extend the sniff here if a
  * future tool writes a recognizable format.
  */
 function fileOutputExtension(bytes: Uint8Array): string {
   const matches = (sig: number[]) => sig.every((b, i) => bytes[i] === b);
+  if (isTiff(bytes)) return "tif";
   if (matches([0x50, 0x41, 0x52, 0x31])) return "parquet"; // "PAR1"
   if (matches([0x66, 0x67, 0x62, 0x03])) return "fgb"; // FlatGeobuf "fgb\x03"
   if (matches([0x50, 0x4b, 0x03, 0x04])) return "zip"; // Shapefile bundle "PK\x03\x04"
@@ -186,8 +192,9 @@ function isSubsetUrlParameter(tool: WhiteboxTool, param: WhiteboxToolParameter):
 // vector inputs (points_to_line's `line_field`/`sort_field`, and ~170 other
 // tools), so the dialog can offer the selected layer's attribute names instead
 // of asking the user to recall a column name (GeoLibre#1459). The kind check is
-// what keeps a same-named *dataset* param out (join_tables' `primary_key_field`
-// is a vector input): only a scalar string names a column.
+// what keeps a same-named *dataset* param out (the catalog types
+// classify_objects_svm's `class_field` as a LiDAR input): only a scalar string
+// names a column.
 function isFieldParameter(param: WhiteboxToolParameter): boolean {
   return parameterKind(param) === "string" && isFieldParameterName(param.name);
 }
@@ -332,53 +339,6 @@ function isFeatureCollection(value: unknown): value is FeatureCollection {
     (value as { type?: unknown }).type === "FeatureCollection" &&
     Array.isArray((value as { features?: unknown }).features)
   );
-}
-
-function layerPath(layer: GeoLibreLayer): string {
-  if (layer.sourcePath) return layer.sourcePath;
-  const url = layer.source.url;
-  if (typeof url === "string") return url;
-  const tiles = layer.source.tiles;
-  if (Array.isArray(tiles) && typeof tiles[0] === "string") return tiles[0];
-  return "";
-}
-
-// Fetch a raster/LiDAR layer's underlying bytes for the in-browser WASM runner.
-// Returns null when the data is not directly fetchable (e.g. a desktop file
-// path or a tile template), in which case the caller falls back to the sidecar.
-async function fetchLayerBytes(layer: GeoLibreLayer): Promise<Uint8Array | null> {
-  const src = layer.source as Record<string, unknown>;
-  const tiles = Array.isArray(src.tiles) ? src.tiles : [];
-  // localBytesUrl is a blob URL retaining a File-loaded raster's bytes (the
-  // raster control's source.objectUrl, surfaced by the raster store sync);
-  // prefer it so locally loaded rasters are WASM-runnable.
-  const candidates = [layer.metadata.localBytesUrl, src.url, tiles[0], layer.sourcePath];
-  for (const candidate of candidates) {
-    const url = fetchableUrl(candidate);
-    if (!url) continue;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) continue;
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      if (bytes.length === 0 || bytes[0] === 0x3c) continue; // 0x3c '<' = HTML
-      return bytes;
-    } catch {
-      // try the next candidate
-    }
-  }
-  return null;
-}
-
-function canUseLayerForParameter(layer: GeoLibreLayer, param: WhiteboxToolParameter): boolean {
-  const kind = parameterKind(param);
-  if (kind === "vector_in") {
-    return Boolean(layer.geojson || layerPath(layer));
-  }
-  if (kind === "raster_in") {
-    return ["raster", "cog", "wms", "wmts", "xyz", "zarr"].includes(layer.type);
-  }
-  if (kind === "lidar_in") return layer.type === "lidar";
-  return Boolean(layerPath(layer));
 }
 
 function defaultParameterValue(param: WhiteboxToolParameter): unknown {
@@ -1455,13 +1415,18 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       // become a new raster layer; a `file_out` (e.g. write_geoparquet .parquet,
       // a rendered .png, a .pmtiles) or a CRS-preserving `vector_out`
       // (GeoParquet/FlatGeobuf/zipped Shapefile, chosen to keep a reprojection's
-      // target CRS) is not a GeoTIFF, so download it instead of handing it to the
-      // raster loader.
+      // target CRS) is downloaded instead — unless its bytes turn out to be a
+      // GeoTIFF after all, which several tools declare only as a generic file.
       for (const [name, value] of Object.entries(nextJob.outputs)) {
         if (!(value instanceof Uint8Array)) continue;
         const param = jobTool?.params?.find((item) => item.name === name);
         const outKind = param ? parameterKind(param) : "";
-        if (outKind === "file_out" || outKind === "vector_out") {
+        // A generic `file_out` can still hold a GeoTIFF — `slope` declares its
+        // output only as "Optional output path" — so sniff the bytes rather
+        // than trust the declared kind, the way the scripting/assistant path
+        // does, and put a raster on the map instead of downloading it.
+        const declaredFile = outKind === "file_out" || outKind === "vector_out";
+        if (declaredFile && (!isTiff(value) || !onAddRaster)) {
           const label = `${jobToolLabel} ${humanize(name)}`.replace(/\s+/g, "_");
           // Prefer the content signature: a `vector_out` and most binary
           // `file_out` formats (GeoParquet/FlatGeobuf/zipped Shapefile/PNG/
@@ -1673,7 +1638,14 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         // Height leaves room for the top offset (top-16) plus a bottom margin so
         // the whole panel - including the bottom-right resize grip - stays on
         // screen at small viewport heights.
-        "fixed z-40 flex h-[min(760px,calc(100vh-6rem))] w-[min(72rem,95vw)] flex-col overflow-hidden rounded-lg border bg-background shadow-xl",
+        //
+        // `@container/panel`: the responsive breakpoints inside measure this
+        // panel, not the viewport. They cannot use `sm:`/`md:` because the panel
+        // is draggable *and* resizable - `style.width` above overrides the
+        // w-[min(72rem,95vw)] class - so a viewport media query would keep the
+        // two-column layout after the user has dragged the panel down to 400px
+        // on a desktop, which is the same squeeze as a phone.
+        "@container/panel fixed z-40 flex h-[min(760px,calc(100vh-6rem))] w-[min(72rem,95vw)] flex-col overflow-hidden rounded-lg border bg-background shadow-xl",
         pos ? "" : "left-1/2 top-16 -translate-x-1/2",
       )}
     >
@@ -1744,8 +1716,17 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         </button>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(260px,320px)_minmax(0,1fr)] gap-4 overflow-hidden p-5">
-        <div className="flex min-h-0 flex-col gap-3 border-e pe-4">
+      {/* Tool list beside the parameter form, but only while the panel is wide
+          enough for both. The list column's 260px floor is a hard minimum, so
+          below roughly 576px it ate everything and left the form ~120px, where
+          the label/value rows overflowed the panel entirely (a parameter label
+          wrapped to one word per line and its input ran off the right edge).
+          Under @xl the two stack into equal-height rows instead, each scrolling
+          on its own. */}
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-4 overflow-hidden p-5 @xl/panel:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] @xl/panel:grid-rows-[minmax(0,1fr)]">
+        {/* Divider follows the axis: a bottom rule between stacked rows, an end
+            rule between side-by-side columns. */}
+        <div className="flex min-h-0 flex-col gap-3 border-b pb-4 @xl/panel:border-b-0 @xl/panel:border-e @xl/panel:pb-0 @xl/panel:pe-4">
           <div className="flex gap-2">
             <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1799,38 +1780,64 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
             </Button>
           )}
 
-          <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-            {categories.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </Select>
-
-          {hasGeolibreTools && (
+          {/* Side by side while the panel is stacked, so the two filters cost
+              one row of height instead of two and the tool list keeps most of
+              its half. Back to a column once the list has a column of its own,
+              which is narrower than the panel. Flex, not a 2-col grid, so the
+              category select still fills the row when the source filter is
+              absent (no GeoLibre-authored tools in the catalog). */}
+          <div className="flex gap-2 @xl/panel:flex-col @xl/panel:gap-3">
             <Select
-              value={source}
-              // Reset the category too: a category with no tools in the newly
-              // chosen source would otherwise leave the list empty.
-              onChange={(e) => {
-                setSource(e.target.value);
-                setCategory("All");
-              }}
-              aria-label={t("processing.whitebox.filterBySource")}
+              className="min-w-0 flex-1"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
             >
-              <option value="All">
-                {t("processing.whitebox.allSources")} ({sourceCounts.all})
-              </option>
-              <option value="geolibre">
-                {t("processing.whitebox.geolibreTools")} ({sourceCounts.geolibre})
-              </option>
-              <option value="whitebox">
-                {t("processing.whitebox.whiteboxTools")} ({sourceCounts.whitebox})
-              </option>
+              {categories.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
             </Select>
-          )}
 
-          <ScrollArea className="min-h-0 flex-1 rounded-md border">
+            {hasGeolibreTools && (
+              <Select
+                className="min-w-0 flex-1"
+                value={source}
+                // Reset the category too: a category with no tools in the newly
+                // chosen source would otherwise leave the list empty.
+                onChange={(e) => {
+                  setSource(e.target.value);
+                  setCategory("All");
+                }}
+                aria-label={t("processing.whitebox.filterBySource")}
+              >
+                <option value="All">
+                  {t("processing.whitebox.allSources")} ({sourceCounts.all})
+                </option>
+                <option value="geolibre">
+                  {t("processing.whitebox.geolibreTools")} ({sourceCounts.geolibre})
+                </option>
+                <option value="whitebox">
+                  {t("processing.whitebox.whiteboxTools")} ({sourceCounts.whitebox})
+                </option>
+              </Select>
+            )}
+          </div>
+
+          {/* `[&>div>div]:block!` targets the wrapper Radix puts inside the
+              ScrollArea viewport, which ships as `display: table; min-width:
+              100%`. Table layout sizes to content, so the widest tool name set
+              the list's width and the rows' `truncate` never engaged - at a
+              260px column, "Build Object Hierarchy Multiscale" laid out 330px
+              wide and only the scrollport's clip hid it. As a block it fills the
+              viewport instead and the names ellipsize as intended. The bang is
+              load-bearing (Radix sets that display inline) and trails the
+              utility, which is Tailwind v4's syntax and matches the same
+              override in LayerPanel. Applied here rather than in the shared
+              primitive: 129 call sites use ScrollArea and some legitimately want
+              the content-sized, horizontally scrollable behaviour (the log pane
+              below is one). */}
+          <ScrollArea className="min-h-0 flex-1 rounded-md border [&>div>div]:block!">
             <div className="divide-y">
               {loadingTools ? (
                 <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
@@ -1870,8 +1877,16 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
 
         <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3">
           <div className="min-w-0 border-b pb-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+            {/* Wraps rather than overflowing: the run-local toggle and the two
+                buttons need ~250px between them, so on a narrow panel they drop
+                to their own line under the tool name instead of running past
+                the panel edge. The name asks for 12rem (`basis-48`) so that
+                wrap actually triggers - with `flex-1` its basis is 0, and it
+                would shrink to "Build..." to keep everything on one line rather
+                than let the controls move down. `grow` still lets it take the
+                slack on a wide panel. */}
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+              <div className="min-w-0 grow basis-48">
                 <h3 className="truncate text-base font-semibold">
                   {selectedTool ? toolLabel(selectedTool) : t("processing.whitebox.noToolSelected")}
                 </h3>
@@ -1884,7 +1899,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                   local/server toggle is dropped (WASM is the only runtime). */}
               {!IS_MAS_BUILD && (
                 <label
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                  // whitespace-nowrap: the label is short enough to keep on one
+                  // line, and letting it wrap turned "Run locally (WASM)" into a
+                  // three-line stack squeezed against the buttons.
+                  className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground"
                   title={t("processing.whitebox.runLocalHint")}
                 >
                   <input
@@ -1939,7 +1957,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           </div>
 
           <ScrollArea className="min-h-0">
-            <div className="grid gap-4 pb-2 pe-5">
+            {/* A second container, because the picker/input rows below care
+                about the width of this form, not of the whole panel: once the
+                layout stacks, the form is full width even though the panel is
+                narrow. */}
+            <div className="@container/params grid gap-4 pb-2 pe-5">
               {/* The chosen layers are WGS84 and this tool takes a ground
                   distance, so its distance fields carry a unit picker
                   (GeoLibre#1540). Say once, up front, that the layers are
@@ -2372,7 +2394,7 @@ function ParameterField({
         // above) so a `url` description that happens to contain a word
         // isPathParameter matches (path/file/…) can't shadow this picker into a
         // local file-browse control.
-        <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)] gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2 @sm/params:grid-cols-[minmax(150px,200px)_minmax(0,1fr)]">
           <Select
             aria-label={t("processing.whitebox.fromLayer")}
             value=""
@@ -2431,7 +2453,7 @@ function ParameterField({
         // that layer's attribute names so the column need not be typed from
         // memory (GeoLibre#1459). The text box stays editable alongside the
         // picker, so a column the property sample missed can still be typed.
-        <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)] gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2 @sm/params:grid-cols-[minmax(150px,200px)_minmax(0,1fr)]">
           <Select
             aria-label={t("processing.whitebox.selectField")}
             value={fieldOptions.includes(valueText) ? valueText : ""}
@@ -2733,8 +2755,18 @@ function LayerOrPathInput({
   const { t } = useTranslation();
   const usingLayer = value.startsWith(LAYER_TOKEN_PREFIX);
   return (
-    <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)_2.25rem] gap-2">
-      <Select value={usingLayer ? value : ""} onChange={(event) => onChange(event.target.value)}>
+    <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2 @sm/params:grid-cols-[minmax(150px,200px)_minmax(0,1fr)_2.25rem]">
+      {/* Three children, but the narrow template has only two columns, so the
+          picker has to claim the whole first row explicitly. Left to
+          auto-placement it lands in column 1, the path Input gets squeezed into
+          the 2.25rem browse-button track, and the button wraps to a row of its
+          own. The other two converted rows stack to a single column, where any
+          child count is fine; this is the one that needs saying. */}
+      <Select
+        className="col-span-2 @sm/params:col-span-1"
+        value={usingLayer ? value : ""}
+        onChange={(event) => onChange(event.target.value)}
+      >
         <option value="">{t("processing.whitebox.optionPath")}</option>
         {layers.map((layer) => (
           <option key={layer.id} value={`${LAYER_TOKEN_PREFIX}${layer.id}`}>

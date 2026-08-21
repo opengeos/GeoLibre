@@ -184,7 +184,23 @@
     "elevationRange": "न्यूनतम / अधिकतम ऊँचाई",
     "meanSlope": "औसत ढलान",
     "computing": "भू-भाग की गणना हो रही है…",
-    "partialData": "कुछ नमूनों में भू-भाग डेटा नहीं था"
+    "partialData": "कुछ नमूनों में भू-भाग डेटा नहीं था",
+    "heading": "दिशा",
+    "finalHeading": "अंतिम दिशा",
+    "bodyNote": "मापा गया: {{body}} (गोलाकार सन्निकटन)"
+  },
+  "statusBar": {
+    "elevation": "ऊँचाई",
+    "elevationLong": "ऊँचाई",
+    "cameraAltitude": "दृष्टि ऊँचाई",
+    "cameraAltitudeLong": "समुद्र तल से कैमरे की ऊँचाई",
+    "coordinateFormat": {
+      "dd": "दशमलव डिग्री",
+      "dms": "अंश, मिनट, सेकंड",
+      "ddm": "अंश, दशमलव मिनट",
+      "utm": "UTM (ज़ोन, पूर्वी/उत्तरी)"
+    },
+    "coordinateFormatHint": "निर्देशांक प्रारूप: {{format}}। बदलने के लिए क्लिक करें।"
   },
   "fileNamePrompt": {
     "title": "फ़ाइल को इस रूप में सहेजें",
@@ -216,7 +232,9 @@
     "invalidUrl": "एक मान्य HTTP या HTTPS स्टाइल URL दर्ज करें।",
     "sectionMoon": "चंद्रमा",
     "sectionMars": "मंगल",
-    "sectionOther": "अन्य खगोलीय पिंड"
+    "sectionOther": "अन्य खगोलीय पिंड",
+    "sectionRegional": "क्षेत्रीय",
+    "regionChina": "चीन (中国)"
   },
   "planetSwitcher": {
     "label": "खगोलीय पिंड",
@@ -265,6 +283,10 @@
         "label": "WMTS लेयर जोड़ें",
         "description": "एक WMTS टाइल URL टेम्पलेट को रास्टर लेयर के रूप में जोड़ें।"
       },
+      "ogcFeatures": {
+        "label": "OGC API - Features लेयर जोड़ें",
+        "description": "OGC API - Features कलेक्शन के फ़ीचर को वेक्टर लेयर के रूप में जोड़ें; अनुरोधित फ़ीचर संख्या लोड होने तक सेवा के पेजिंग लिंक का अनुसरण किया जाता है।"
+      },
       "ogcVectorTiles": {
         "label": "OGC वेक्टर टाइल्स जोड़ें",
         "description": "TileJSON या टाइल टेम्पलेट से एक OGC API - टाइल्स (वेक्टर) सेवा जोड़ें, वैकल्पिक रूप से इसकी सोर्स लेयर को स्टाइल URL से पढ़ते हुए।"
@@ -299,11 +321,15 @@
       },
       "arcgis": {
         "label": "ArcGIS लेयर जोड़ें",
-        "description": "एक ArcGIS FeatureServer लेयर, VectorTileServer लेयर, या पोर्टल आइटम जोड़ें।"
+        "description": "ArcGIS FeatureServer, VectorTileServer, MapServer या ImageServer लेयर, या पोर्टल आइटम जोड़ें।"
       },
       "postgres": {
         "label": "PostgreSQL लेयर जोड़ें",
         "description": "Martin को स्थानीय रूप से शुरू करें, PostGIS स्रोतों की खोज करें, और एक स्रोत को वेक्टर टाइल्स के रूप में जोड़ें।"
+      },
+      "iceberg": {
+        "label": "Apache Iceberg लेयर जोड़ें",
+        "description": "एक Iceberg तालिका (v3 या उससे ऊपर) पढ़ें और उसके फ़ीचर का एक उपसमुच्चय जोड़ें।"
       },
       "deckglViz": {
         "label": "Deck.gl लेयर जोड़ें",
@@ -312,10 +338,6 @@
       "video": {
         "label": "वीडियो लेयर जोड़ें",
         "description": "MP4 URL और चार कोने के निर्देशांक देकर एक जियोरेफ़रेंस्ड वीडियो ओवरले जोड़ें।"
-      },
-      "ogcFeatures": {
-        "label": "OGC API - Features लेयर जोड़ें",
-        "description": "OGC API - Features कलेक्शन के फ़ीचर को वेक्टर लेयर के रूप में जोड़ें; अनुरोधित फ़ीचर संख्या लोड होने तक सेवा के पेजिंग लिंक का अनुसरण किया जाता है।"
       }
     },
     "shared": {
@@ -427,6 +449,28 @@
       "errorUrl": "एक WMTS टाइल URL टेम्पलेट दर्ज करें।",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },
+    "ogcFeatures": {
+      "defaultName": "OGC API - Features लेयर",
+      "sampleLabel": "विश्व की झीलें (pygeoapi डेमो)",
+      "urlPlaceholder": "https://example.com/ogcapi",
+      "urlHint": "सेवा का लैंडिंग पेज, या उससे कॉपी किया गया कोई भी URL (/collections या /collections/{id}/items URL भी चलता है)।",
+      "retrieveCollections": "कलेक्शन प्राप्त करें",
+      "retrieving": "प्राप्त किया जा रहा है...",
+      "retrievedCollections": "प्राप्त कलेक्शन",
+      "selectCollection_one": "{{count}} कलेक्शन में से चुनें",
+      "selectCollection_other": "{{count}} कलेक्शन में से चुनें",
+      "noCollectionsFound": "इस सेवा के लिए कोई फ़ीचर कलेक्शन नहीं मिला।",
+      "retrieveError": "इस सेवा से कलेक्शन प्राप्त नहीं किए जा सके।",
+      "collection": "कलेक्शन",
+      "collectionPlaceholder": "collection-id",
+      "maxFeatures": "अधिकतम फ़ीचर",
+      "bbox": "बाउंडिंग बॉक्स",
+      "datetime": "दिनांक और समय",
+      "errorCollection": "OGC API - Features कलेक्शन id दर्ज करें।",
+      "errorMaxFeatures": "अधिकतम फ़ीचर के लिए 1 या उससे अधिक मान दर्ज करें।",
+      "errorBbox": "बाउंडिंग बॉक्स को «पश्चिम,दक्षिण,पूर्व,उत्तर» के रूप में दर्ज करें।",
+      "errorNoFeatures": "इस कलेक्शन ने कोई फ़ीचर नहीं लौटाया।"
+    },
     "ogcVectorTiles": {
       "defaultName": "OGC वेक्टर टाइल्स लेयर",
       "tilesUrl": "टाइल्स URL",
@@ -447,14 +491,39 @@
       "defaultName": "ArcGIS लेयर",
       "sampleFeatureLabel": "US प्रमुख शहर (फ़ीचर)",
       "sampleVectorTileLabel": "Santa Monica पार्सल (वेक्टर टाइल्स)",
+      "sampleMapServiceLabel": "US सीमाएँ (मैप सेवा)",
+      "sampleImageServiceLabel": "USGS 3DEP हिलशेड (इमेज सेवा)",
       "featureLayer": "फ़ीचर लेयर",
       "vectorTileLayer": "वेक्टर टाइल लेयर",
+      "mapServiceLayer": "मैप सेवा",
+      "imageServiceLayer": "इमेज सेवा",
       "portalItemId": "पोर्टल आइटम ID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "उप-लेयर",
+      "sublayersPlaceholder": "सभी दृश्य उप-लेयर",
+      "sublayersHint": "वैकल्पिक अल्पविराम से अलग किए गए उप-लेयर आईडी, जैसे 0,2,5. उप-लेयर चुनने पर सेवा कैश की गई टाइल्स के बजाय गतिशील रूप से बनाई जाती है।",
+      "retrieveSublayers": "लेयर ब्राउज़ करें",
+      "retrievingSublayers": "प्राप्त किया जा रहा है...",
+      "availableSublayers": "उपलब्ध उप-लेयर",
+      "noSublayersFound": "इस मैप सेवा ने कोई लेयर घोषित नहीं की।",
+      "retrieveError": "मैप सेवा की लेयर प्राप्त नहीं हो सकीं।",
+      "errorMapServiceUrl": "एक ArcGIS MapServer URL दर्ज करें।",
+      "renderingRule": "रेंडरिंग नियम",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "सेवा द्वारा लागू किया जाने वाला वैकल्पिक रास्टर फ़ंक्शन JSON. रेंडरिंग नियम देने पर सेवा कैश की गई टाइल्स के बजाय गतिशील रूप से बनाई जाती है।",
       "portalUrl": "पोर्टल URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "एक्सेस टोकन"
+      "accessToken": "एक्सेस टोकन",
+      "pageSize": "प्रति अनुरोध रिकॉर्ड",
+      "pageSizePlaceholder": "स्वचालित",
+      "maxFeatures": "अधिकतम फ़ीचर",
+      "maxFeaturesPlaceholder": "सभी",
+      "pagingHint": "फ़ीचर लेयर पृष्ठों में डाउनलोड होती हैं। यदि सेवा का समय समाप्त हो जाए तो प्रति अनुरोध रिकॉर्ड घटाएँ।",
+      "loadingProgress": "{{total}} में से {{loaded}} फ़ीचर लोड हुए…",
+      "loadingProgressUnknown": "{{loaded}} फ़ीचर लोड हुए…"
     },
     "gpx": {
       "defaultName": "GPX लेयर",
@@ -526,6 +595,8 @@
       "errorMissingCrs": "इस फ़ीचर क्लास की निर्देशांक प्रणाली का पता नहीं चल सका। इसे जोड़ने के लिए इसका स्रोत CRS दर्ज करें।"
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "Excel कार्यपुस्तिका में कोई गैर-रिक्त कार्यपत्रक नहीं है।",
+      "worksheet": "कार्यपत्रक",
       "defaultName": "डिलिमिटेड टेक्स्ट लेयर",
       "sampleLabel": "US शहर",
       "errorChooseFile": "एक डिलिमिटेड टेक्स्ट फ़ाइल चुनें।",
@@ -635,9 +706,45 @@
       "statusTablesFound_other": "{{count}} स्थानिक टेबल मिलीं।",
       "statusNoTables": "इस डेटाबेस में कोई स्थानिक टेबल नहीं मिली।",
       "editableTable": "टेबल",
+      "geometryColumn": "ज्यामिति स्तंभ",
       "tableReadOnly": "{{table}} (केवल पढ़ने योग्य: कोई प्राइमरी की नहीं)",
       "errorSelectTable": "लोड करने के लिए एक टेबल चुनें।",
       "errorRuntimeMissing": "प्रोसेसिंग सर्वर में PostGIS रनटाइम (psycopg) इंस्टॉल नहीं है। संपादन योग्य लेयर लोड करने के लिए geolibre-server का 'postgis' एक्स्ट्रा इंस्टॉल करें।"
+    },
+    "iceberg": {
+      "defaultName": "Iceberg लेयर",
+      "notice": "Iceberg तालिकाएँ माँग पर एक बार पढ़ी जाती हैं। लेयर नीचे दी गई पंक्ति सीमा तक सीमित एक स्नैपशॉट है और इसे कभी भी स्वचालित रूप से दोबारा स्कैन नहीं किया जाता — इसे फिर से पढ़ने के लिए लेयर मेनू में रीफ़्रेश करें का उपयोग करें।",
+      "mode": "Iceberg स्रोत",
+      "modeTable": "तालिका स्थान",
+      "modeCatalog": "REST कैटलॉग",
+      "location": "तालिका मेटाडेटा स्थान",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "वेयरहाउस",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "कैटलॉग एंडपॉइंट",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "कनेक्ट करें",
+      "table": "Iceberg तालिका",
+      "sql": "SQL (वैकल्पिक)",
+      "sqlHint": "जो रेंडर किया जाता है उसे फ़िल्टर करने या पुनर्गठित करने के लिए संपादित करें। स्टेटमेंट को एक GEOMETRY कॉलम लौटाना होगा; पूरी तालिका पढ़ने के लिए इसे जैसा जनरेट हुआ है वैसा ही छोड़ दें।",
+      "selectTable": "एक तालिका चुनें",
+      "geometryColumn": "ज्यामिति कॉलम",
+      "rowLimit": "पंक्ति सीमा",
+      "rowLimitHint": "लेयर में तालिका की पहली पंक्तियाँ, इस सीमा तक, रखी जाती हैं। सीमा {{max}} पंक्तियों से अधिक नहीं हो सकती।",
+      "rowLimitTruncates": "तालिका में {{total}} पंक्तियाँ हैं; लेयर में पहली {{limit}} होंगी।",
+      "statusConnecting": "Iceberg मेटाडेटा पढ़ा जा रहा है...",
+      "statusInspecting": "तालिका का निरीक्षण हो रहा है...",
+      "statusInspected": "{{rows}} पंक्तियाँ। ज्यामिति: {{column}} ({{crs}})।",
+      "statusNoGeometry": "{{rows}} पंक्तियाँ, लेकिन कोई GEOMETRY कॉलम नहीं मिला। Iceberg ज्यामिति को v3 ज्यामिति प्रकार का उपयोग करना होगा।",
+      "statusTablesFound_one": "{{count}} तालिका मिली।",
+      "statusTablesFound_other": "{{count}} तालिकाएँ मिलीं। जारी रखने के लिए एक चुनें।",
+      "statusNoTables": "कैटलॉग कोई तालिका प्रदर्शित नहीं करता।",
+      "errorLocation": "Iceberg तालिका का मेटाडेटा स्थान दर्ज करें।",
+      "errorWarehouse": "संलग्न करने के लिए Iceberg वेयरहाउस दर्ज करें।",
+      "errorEndpoint": "Iceberg REST कैटलॉग एंडपॉइंट दर्ज करें।",
+      "errorConnect": "Iceberg स्रोत पढ़ा नहीं जा सका।",
+      "errorInspect": "Iceberg तालिका का निरीक्षण नहीं किया जा सका।",
+      "errorConnectFirst": "पहले कनेक्ट करें और एक Iceberg तालिका चुनें।"
     },
     "video": {
       "defaultName": "वीडियो लेयर",
@@ -687,15 +794,15 @@
       "bandCombinationHelp": "एकल बैंड कलरमैप से दिखाया जाता है; RGB संयोजन इस वेरिएबल के तीन बैंड को लाल, हरे और नीले चैनल के रूप में बनाता है, और हर चैनल को उसकी अपनी 2-98 % सीमा तक खींचता है।",
       "modeSingleBand": "एकल बैंड (कलरमैप के साथ)",
       "modeRgb": "RGB संयोजन (तीन बैंड)",
-      "colorMin": "रंग न्यूनतम (वैकल्पिक)",
-      "colorMax": "रंग अधिकतम (वैकल्पिक)",
-      "adding": "जोड़ा जा रहा है...",
-      "addLayer": "लेयर जोड़ें",
       "channel": {
         "red": "लाल बैंड",
         "green": "हरा बैंड",
         "blue": "नीला बैंड"
-      }
+      },
+      "colorMin": "रंग न्यूनतम (वैकल्पिक)",
+      "colorMax": "रंग अधिकतम (वैकल्पिक)",
+      "adding": "जोड़ा जा रहा है...",
+      "addLayer": "लेयर जोड़ें"
     },
     "deckViz": {
       "defaultName": "Deck.gl लेयर",
@@ -732,28 +839,6 @@
       "lineWidth": "रेखा चौड़ाई",
       "extrusion": "3D एक्सट्रूज़न",
       "modelUrlPlaceholder": "https://example.com/model.glb"
-    },
-    "ogcFeatures": {
-      "defaultName": "OGC API - Features लेयर",
-      "sampleLabel": "विश्व की झीलें (pygeoapi डेमो)",
-      "urlPlaceholder": "https://example.com/ogcapi",
-      "urlHint": "सेवा का लैंडिंग पेज, या उससे कॉपी किया गया कोई भी URL (/collections या /collections/{id}/items URL भी चलता है)।",
-      "retrieveCollections": "कलेक्शन प्राप्त करें",
-      "retrieving": "प्राप्त किया जा रहा है...",
-      "retrievedCollections": "प्राप्त कलेक्शन",
-      "selectCollection_one": "{{count}} कलेक्शन में से चुनें",
-      "selectCollection_other": "{{count}} कलेक्शन में से चुनें",
-      "noCollectionsFound": "इस सेवा के लिए कोई फ़ीचर कलेक्शन नहीं मिला।",
-      "retrieveError": "इस सेवा से कलेक्शन प्राप्त नहीं किए जा सके।",
-      "collection": "कलेक्शन",
-      "collectionPlaceholder": "collection-id",
-      "maxFeatures": "अधिकतम फ़ीचर",
-      "bbox": "बाउंडिंग बॉक्स",
-      "datetime": "दिनांक और समय",
-      "errorCollection": "OGC API - Features कलेक्शन id दर्ज करें।",
-      "errorMaxFeatures": "अधिकतम फ़ीचर के लिए 1 या उससे अधिक मान दर्ज करें।",
-      "errorBbox": "बाउंडिंग बॉक्स को «पश्चिम,दक्षिण,पूर्व,उत्तर» के रूप में दर्ज करें।",
-      "errorNoFeatures": "इस कलेक्शन ने कोई फ़ीचर नहीं लौटाया।"
     },
     "nonGeographicCoordinates": "{{names}} के निर्देशांक देशांतर/अक्षांश नहीं हैं, इसलिए मानचित्र पर कुछ भी नहीं बनेगा। CRS ग़लत दर्ज है — डेटा को पुनःप्रक्षेपित करें (या .prj ठीक करें) और दोबारा लोड करें।"
   },
@@ -1127,6 +1212,7 @@
     "guest": "अतिथि",
     "connectFailed": "सहयोग सर्वर से कनेक्ट नहीं हो सका।",
     "copyFailed": "क्लिपबोर्ड पर कॉपी नहीं हो सका।",
+    "shareFailed": "परियोजना के नवीनतम परिवर्तन साझा नहीं किए जा सके।",
     "connecting": "कनेक्ट हो रहा है…",
     "reconnecting": "पुनः कनेक्ट हो रहा है…",
     "connected": "लाइव सत्र सक्रिय है",
@@ -1148,6 +1234,9 @@
     "viewOnly": "केवल-दृश्य",
     "allowEdit": "इस व्यक्ति को संपादित करने की अनुमति दें",
     "setViewOnly": "इस व्यक्ति को केवल-दृश्य पर सेट करें",
+    "kick": "प्रतिभागी को हटाएँ",
+    "block": "प्रतिभागी को ब्लॉक करें",
+    "requireIdentityLabel": "शामिल होने के लिए साइन-इन किया गया खाता आवश्यक करें",
     "chatLog": "सत्र चैट",
     "chatCompose": "संदेश लिखें",
     "chatEmpty": "अभी तक कोई संदेश नहीं।",
@@ -1157,7 +1246,11 @@
     "chatLocationAttached": "स्थान संलग्न है (हटाने के लिए क्लिक करें)",
     "chatGoToLocation": "इस स्थान पर जाएं",
     "sessionStatusUnread_one": "लाइव सहयोग सत्र, {{count}} अपठित संदेश। कौन जुड़ा है यह देखने और चैट करने के लिए क्लिक करें।",
-    "sessionStatusUnread_other": "लाइव सहयोग सत्र, {{count}} अपठित संदेश। कौन जुड़ा है यह देखने और चैट करने के लिए क्लिक करें।"
+    "sessionStatusUnread_other": "लाइव सहयोग सत्र, {{count}} अपठित संदेश। कौन जुड़ा है यह देखने और चैट करने के लिए क्लिक करें।",
+    "lockLayer": "अतिथियों के लिए लेयर लॉक करें",
+    "unlockLayer": "अतिथियों के लिए लेयर अनलॉक करें",
+    "layerLocked": "लॉक",
+    "layerLockedHint": "यह लेयर होस्ट द्वारा लॉक की गई है और इसे संपादित नहीं किया जा सकता"
   },
   "share": {
     "title": "प्रोजेक्ट साझा करें",
@@ -1170,6 +1263,7 @@
     "step2Description": "इस डिवाइस पर Settings → Environment Variables में टोकन पेस्ट करें।",
     "configureToken": "स्थानीय टोकन कॉन्फ़िगर करें",
     "liveAt": "आपका प्रोजेक्ट यहां लाइव है:",
+    "credentialsRemoved": "{{count}} क्रेडेंशियल फ़ील्ड शामिल नहीं किए गए। प्राप्तकर्ताओं को अपने क्रेडेंशियल देने होंगे या ब्रोकर किए गए संदर्भ का उपयोग करना होगा।",
     "copyLink": "लिंक कॉपी करें",
     "open": "खोलें",
     "done": "हो गया",
@@ -1185,7 +1279,28 @@
     "errorFallback": "प्रोजेक्ट साझा नहीं किया जा सका।",
     "usernameRequired": "साझा करने से पहले अपने {{shareHost}} खाते पर एक उपयोगकर्ता नाम सेट करें। एक चुनने के लिए अपनी खाता सेटिंग्स खोलें, फिर पुनः प्रयास करें।",
     "openAccountSettings": "खाता सेटिंग्स खोलें",
-    "credentialsRemoved": "{{count}} क्रेडेंशियल फ़ील्ड शामिल नहीं किए गए। प्राप्तकर्ताओं को अपने क्रेडेंशियल देने होंगे या ब्रोकर किए गए संदर्भ का उपयोग करना होगा।"
+    "readinessChecking": "जाँचा जा रहा है कि प्राप्तकर्ता आपका डेटा लोड कर पाएँगे या नहीं…",
+    "readinessUnavailable": "डेटा स्रोत की जाँच नहीं चलाई जा सकी।",
+    "readinessAllReachable_one": "{{count}} डेटा स्रोत प्राप्तकर्ताओं के लिए पहुँच योग्य लगता है।",
+    "readinessAllReachable_other": "सभी {{count}} डेटा स्रोत प्राप्तकर्ताओं के लिए पहुँच योग्य लगते हैं।",
+    "readinessTitle": "कुछ डेटा प्राप्तकर्ताओं के लिए लोड नहीं हो सकता",
+    "readinessNote": "इससे साझा करना नहीं रुकता। प्राप्तकर्ता प्रोजेक्ट को ब्राउज़र में खोलते हैं, जहाँ ये स्रोत आपके यहाँ से अलग व्यवहार कर सकते हैं।",
+    "readinessTruncated_one": "केवल {{count}} स्रोत ही जाँचा गया।",
+    "readinessTruncated_other": "केवल पहले {{count}} स्रोत ही जाँचे गए।",
+    "readinessBasemapLabel": "बेसमैप",
+    "readinessPluginLabel": "प्लगइन",
+    "readinessReasonCredentialStripped": "ऐसा क्रेडेंशियल उपयोग करता है जो साझा करते समय हटा दिया जाता है।",
+    "readinessReasonAuthRequired": "सेवा ने क्रेडेंशियल के बिना किया गया अनुरोध अस्वीकार कर दिया।",
+    "readinessReasonCors": "ब्राउज़र इस होस्ट से डेटा नहीं ला सकता: यह क्रॉस-ओरिजिन हेडर नहीं भेजता, या यह पहुँच योग्य नहीं है।",
+    "readinessReasonNotFound": "सेवा ने “नहीं मिला” उत्तर दिया, इसलिए लिंक समाप्त हो चुका हो सकता है या बदल गया हो सकता है।",
+    "readinessReasonLocalFile": "आपकी मशीन की किसी फ़ाइल की ओर इशारा करता है।",
+    "readinessReasonPrivateHost": "किसी निजी या स्थानीय नेटवर्क पते की ओर इशारा करता है।",
+    "readinessReasonNoSource": "इसका कोई ऐसा स्रोत नहीं है जिसे प्राप्तकर्ता खोल सके।",
+    "readinessReasonUnchecked": "जाँचा नहीं जा सका।",
+    "readinessAdviceCredential": "सेवा को सार्वजनिक करें, या प्राप्तकर्ताओं से कहें कि वे अपना क्रेडेंशियल दें।",
+    "readinessAdviceCors": "यह डेस्कटॉप ऐप में तो लोड होता है, लेकिन ब्राउज़र व्यूअर में नहीं।",
+    "readinessAdviceNotFound": "साझा करने से पहले इस लेयर का स्रोत अपडेट करें या बदलें।",
+    "readinessAdviceLocal": "इसे किसी होस्टेड स्रोत में बदलें, अन्यथा प्राप्तकर्ताओं को खाली लेयर दिखेगी।"
   },
   "gallery": {
     "title": "प्रोजेक्ट गैलरी",
@@ -1302,13 +1417,19 @@
       "layer": "लेयर",
       "titleLabel": "शीर्षक",
       "position": "स्थिति",
-      "filterToPage": "केवल पेज विस्तार के भीतर की फ़ीचर",
-      "filterToPageHint": "एटलस पेज और खींचे गए प्रिंट विस्तार पर लागू होता है; अन्यथा पूरी लेयर का उपयोग होता है।"
+      "pageFilter": "पृष्ठ सीमा फ़िल्टर",
+      "filterAll": "सभी फ़ीचर",
+      "filterContained": "केवल पृष्ठ सीमा के भीतर पूरी तरह मौजूद फ़ीचर",
+      "filterIntersecting": "केवल पृष्ठ सीमा को काटने वाले फ़ीचर",
+      "filterToPageHint": "एटलस पेज और खींचे गए प्रिंट विस्तार पर लागू होता है; अन्यथा पूरी लेयर का उपयोग होता है।",
+      "filterToAtlasFeature": "केवल वर्तमान एटलस फ़ीचर",
+      "filterToAtlasFeatureHint": "तब उपलब्ध जब तालिका एटलस कवरेज लेयर का उपयोग करती है। यह पेज विस्तार फ़िल्टर पर प्राथमिकता रखता है।"
     },
     "dataTable": {
       "columns": "कॉलम",
       "columnsHint": "पहले {{count}} फ़ील्ड डिफ़ॉल्ट रूप से चुने जाते हैं। अनुकूलित करने के लिए कॉलम चेक करें।",
       "maxRows": "अधिकतम पंक्तियाँ",
+      "fitRows": "पृष्ठ के अनुरूप पंक्तियों की संख्या समायोजित करें",
       "moreRows_one": "+{{count}} और",
       "moreRows_other": "+{{count}} और",
       "noRows": "वर्तमान सेटिंग्स के साथ दिखाने के लिए कोई पंक्ति नहीं।"
@@ -1433,6 +1554,8 @@
       "extentMargin": "फ़ीचर के चारों ओर मार्जिन",
       "extentScale": "स्थिर स्केल",
       "marginLabel": "मार्जिन (%)",
+      "maskOutside": "वर्तमान फ़ीचर के बाहर का क्षेत्र मास्क करें",
+      "maskOutsideHint": "वर्तमान एटलस फ़ीचर को उभारने के लिए पारभासी उल्टा भराव लागू करता है।",
       "scaleLabel": "स्केल",
       "scaleRequired": "शून्य से बड़ा स्केल दर्ज करें।",
       "sortField": "इसके अनुसार क्रमबद्ध करें",
@@ -1500,6 +1623,19 @@
     "description": "3D भू-भाग की ऊर्ध्वाधर अतिशयोक्ति समायोजित करें। अधिक मान पहाड़ियों और पर्वतों को अधिक खड़ा दिखाते हैं।",
     "label": "ऊर्ध्वाधर अतिशयोक्ति",
     "controlLabel": "भू-भाग टॉगल करें (अतिशयोक्ति के लिए डबल-क्लिक करें)",
+    "sourceLabel": "भूभाग स्रोत",
+    "sourceDescription": "ऊंचाई स्रोत के रूप में EPSG:3857 या EPSG:4326 एकल-बैंड COG का उपयोग करें। फ़ाइल को CORS और HTTP रेंज अनुरोधों की अनुमति देनी चाहिए।",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "स्थानीय COG DEM",
+    "localSourceDescription": "फ़ाइल इसी डिवाइस पर रहती है और भूभाग टाइलों की आवश्यकता के अनुसार छोटे भागों में पढ़ी जाती है।",
+    "useCog": "COG DEM उपयोग करें",
+    "sourceLoading": "COG खोला जा रहा है…",
+    "restoreDefaultSource": "वैश्विक भूभाग उपयोग करें",
+    "sourceError": "COG DEM नहीं खोला जा सका।",
+    "sourceErrorEmpty": "यह फ़ाइल खाली है। कोई COG DEM फ़ाइल चुनें।",
+    "sourceErrorBand": "अनुरोधित बैंड इस COG में मौजूद नहीं है।",
+    "sourceErrorProjection": "COG भूभाग केवल EPSG:3857 और EPSG:4326 DEM का समर्थन करता है।",
+    "sourceErrorDetail": "COG DEM नहीं खोला जा सका। ({{detail}})",
     "reset": "रीसेट करें",
     "done": "पूर्ण"
   },
@@ -1527,6 +1663,16 @@
     "gapNote": "बिंदुदार खंड उन तिथियों को जोड़ते हैं जिनका कोई मान नहीं है (nodata या कवरेज से बाहर)।",
     "exportCsv": "CSV निर्यात करें",
     "exportGeoParquet": "GeoParquet निर्यात करें"
+  },
+  "auth": {
+    "unavailableTitle": "साइन इन उपलब्ध नहीं है",
+    "unavailableDescription": "GeoLibre साइन-इन सेवा तक नहीं पहुँच सका, इसलिए यह नहीं बता सकता कि आपने साइन इन किया है या नहीं। यह आमतौर पर अस्थायी होता है; यदि यह बना रहता है, तो इस परिनियोजन की प्रमाणीकरण सेटिंग्स पर ध्यान देने की आवश्यकता हो सकती है।",
+    "retry": "पुनः प्रयास करें",
+    "signInTitle": "GeoLibre में साइन इन करें",
+    "signInDescription": "इस परिनियोजन के लिए एक खाता आवश्यक है। आपको एक सुरक्षित साइन-इन पृष्ठ पर ले जाया जाएगा और फिर यहाँ वापस लाया जाएगा।",
+    "signIn": "साइन इन करें",
+    "signOut": "साइन आउट करें",
+    "account": "खाता"
   },
   "basemapExtract": {
     "title": "ऑफ़लाइन बेसमैप एक्सट्रैक्ट करें",
@@ -1658,8 +1804,13 @@
     "unit": {
       "meters": "मी",
       "kilometers": "किमी",
-      "miles": "मील"
-    }
+      "miles": "मील",
+      "feet": "फ़ुट"
+    },
+    "viewshedHere": "यहाँ से दृश्यक्षेत्र ({{radius}})",
+    "viewshedLayerName": "दृश्यक्षेत्र ({{radius}})",
+    "viewshedToolName": "दृश्यक्षेत्र",
+    "viewshedNoResult": "यहाँ कोई दृश्य क्षेत्र नहीं निकाला जा सका।"
   },
   "knowledgeCard": {
     "title": "स्थान जानकारी",
@@ -1703,7 +1854,8 @@
       "geocoding": "जियोकोडिंग",
       "ai": "AI प्रदाता",
       "environment": "एनवायरनमेंट",
-      "updates": "अपडेट"
+      "updates": "अपडेट",
+      "startup": "स्टार्टअप"
     },
     "menu": {
       "mapPreferences": "मानचित्र प्राथमिकताएँ",
@@ -1714,6 +1866,7 @@
       "ai": "AI प्रदाता",
       "environmentVariables": "एनवायरनमेंट वेरिएबल",
       "updates": "अपडेट सेटिंग्स",
+      "startupSettings": "स्टार्टअप सेटिंग्स",
       "managePlugins": "प्लगइन प्रबंधित करें",
       "styleManager": "स्टाइल मैनेजर",
       "urlOverrideNote": "URL लेआउट पैरामीटर सहेजी गई सेटिंग्स को ओवरराइड करते हैं।"
@@ -1730,6 +1883,26 @@
         "minor": "केवल मेजर और माइनर रिलीज़",
         "major": "केवल मेजर रिलीज़"
       }
+    },
+    "startup": {
+      "title": "स्टार्टअप प्रोजेक्ट",
+      "description": "चुनें कि नेटिव ऐप शुरू होने पर GeoLibre कौन-सा वर्कस्पेस खोले।",
+      "mode": {
+        "default": "डिफ़ॉल्ट वर्कस्पेस खोलें",
+        "last": "पिछला प्रोजेक्ट फिर से खोलें",
+        "specific": "कोई विशिष्ट प्रोजेक्ट खोलें"
+      },
+      "modeHint": {
+        "default": "एक नए, शीर्षकहीन प्रोजेक्ट से शुरू करें।",
+        "last": "सबसे हाल में उपयोग किया गया स्थानीय प्रोजेक्ट खोलें।"
+      },
+      "chooseProject": "प्रोजेक्ट चुनें",
+      "noProjectSelected": "कोई प्रोजेक्ट चयनित नहीं",
+      "globeByDefault": "डिफ़ॉल्ट रूप से 3D ग्लोब सक्षम करें",
+      "globeByDefaultHint": "जब कोई स्टार्टअप प्रोजेक्ट या प्रोजेक्ट लिंक नहीं दिया जाता, तब शीर्षकहीन वर्कस्पेस के लिए उपयोग किया जाता है।",
+      "selectError": "चयनित प्रोजेक्ट पढ़ा नहीं जा सका।",
+      "restoring": "आपका स्टार्टअप प्रोजेक्ट खोला जा रहा है…",
+      "loadWarning": "स्टार्टअप प्रोजेक्ट उपलब्ध नहीं है। GeoLibre ने इसके बजाय डिफ़ॉल्ट वर्कस्पेस खोला।"
     },
     "map": {
       "constraintsTitle": "मानचित्र बाधाएँ",
@@ -1752,7 +1925,9 @@
       "scaleUnitImperial": "इंपीरियल (फुट / मील)",
       "scaleUnitNautical": "नॉटिकल (nmi)",
       "scaleUnitHint": "मानचित्र के नीचे स्केल बार पर दिखाई जाने वाली इकाइयाँ चुनें।",
-      "errorBoundsUnavailable": "मानचित्र सीमाएँ अभी उपलब्ध नहीं हैं।"
+      "errorBoundsUnavailable": "मानचित्र सीमाएँ अभी उपलब्ध नहीं हैं।",
+      "coordinateFormat": "निर्देशांक प्रारूप",
+      "coordinateFormatHint": "स्टेटस बार पॉइंटर निर्देशांक किस नोटेशन में दिखाता है। नोटेशन बदलने के लिए स्टेटस बार में निर्देशांक पर क्लिक करें।"
     },
     "layout": {
       "title": "लेआउट",
@@ -2090,7 +2265,8 @@
       "dashboard": "डैशबोर्ड",
       "assistant": "AI सहायक",
       "geocode": "पते जियोकोड करें",
-      "modelBuilder": "बैच और मॉडल",
+      "batchTools": "बैच उपकरण",
+      "modelBuilder": "मॉडल बिल्डर",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI सेगमेंटेशन",
@@ -2145,7 +2321,8 @@
       "video": "वीडियो लेयर",
       "deckglViz": "Deck.gl लेयर",
       "gltfModel": "3D मॉडल (glTF)",
-      "postgres": "PostgreSQL लेयर"
+      "postgres": "PostgreSQL लेयर",
+      "iceberg": "Apache Iceberg लेयर"
     },
     "conversion": {
       "vectorToVector": "वेक्टर से वेक्टर",
@@ -2172,6 +2349,7 @@
       "rasterShape": "{{bands}} बैंड के साथ {{width}}×{{height}} रास्टर पढ़ा गया",
       "wroteCog": "ओवरव्यू के साथ एक टाइल्ड COG लिखा ({{compression}})",
       "notAGeoTiff": "यह फ़ाइल एक पठनीय GeoTIFF नहीं है। ब्राउज़र में, रास्टर से COG केवल GeoTIFF पढ़ता है; अन्य फ़ॉर्मैट के लिए डेस्कटॉप ऐप की आवश्यकता है।",
+      "rasterTooLargeForBrowser": "ब्राउज़र में यह पूरे रास्टर को WebAssembly में डिकोड करता है, जो लगभग 4 GB तक सीमित है, इसलिए यह फ़ाइल उसमें नहीं समाती। इसे GeoLibre डेस्कटॉप ऐप से रूपांतरित करें, या gdal_translate या rio-cogeo से पहले ही COG बना लें।",
       "zoomRangeError": "ज़ूम स्तर 0 ≤ न्यूनतम ≤ अधिकतम ≤ {{max}} को पूरा करने चाहिए।",
       "colormap": "कलरमैप",
       "resampling": "रीसैंपलिंग",
@@ -2417,7 +2595,7 @@
       "duckdbLayer": "DuckDB परत",
       "whitebox": "Whitebox",
       "geocode": "पते जियोकोड करें",
-      "modelBuilder": "बैच और मॉडल",
+      "modelBuilder": "मॉडल बिल्डर",
       "processingHistory": "इतिहास",
       "conversion": "रूपांतरण",
       "vector": "वेक्टर",
@@ -2429,7 +2607,7 @@
       "terrain": "भू-भाग",
       "remoteSensing": "रिमोट सेंसिंग",
       "projection": "प्रोजेक्शन",
-      "geolibre": "GeoLibre",
+      "geolibre": "GeoLibre टूलबॉक्स",
       "subGroupGeometry": "ज्यामिति",
       "subGroupOverlay": "ओवरले",
       "subGroupJoin": "जॉइन",
@@ -2453,6 +2631,8 @@
       "atmosphereEnabled": "सक्षम",
       "spinGlobe": "घूमता ग्लोब",
       "graticule": "ग्रिडलाइनें",
+      "pointerElevation": "ऊँचाई",
+      "pointerElevationHint": "स्टेटस बार में पॉइंटर के नीचे भूमि की ऊँचाई दिखाएँ। 3D भूभाग उपलब्ध न होने पर सार्वजनिक ऊँचाई सेवा से ऊँचाई प्राप्त की जाती है।",
       "weather": "मौसम",
       "weatherTooltip": "लगभग रीयल-टाइम मौसम परतें ओवरले करें जिन्हें आप एनिमेट कर सकते हैं।",
       "weatherPlay": "एनिमेशन चलाएं",
@@ -2499,6 +2679,22 @@
       "arcgisImportWarnings_one": "प्रोजेक्ट आयात हो गया, लेकिन {{count}} लेयर लोड नहीं की जा सकी।",
       "arcgisImportWarnings_other": "प्रोजेक्ट आयात हो गया, लेकिन {{count}} लेयर लोड नहीं की जा सकीं।",
       "arcgisUnknownLayerType": "अज्ञात",
+      "importWarningLayerCount_one": "{{count}} लेयर",
+      "importWarningLayerCount_other": "{{count}} लेयर",
+      "showLayerNames": "लेयर के नाम दिखाएँ",
+      "hideLayerNames": "लेयर के नाम छिपाएँ",
+      "arcgisImportReason": {
+        "layer-type": "{{layerType}} लेयर प्रकार समर्थित नहीं है।",
+        "missing-source": "लेयर के पास कोई पठनीय स्थानीय डेटा स्रोत नहीं है।",
+        "format": "लेयर का डेटा स्वरूप समर्थित नहीं है।",
+        "file-geodatabase": "फ़ाइल जियोडेटाबेस (.gdb) स्रोत प्रोजेक्ट से लोड नहीं किए जाते। GeoLibre Desktop में उन्हें डेटा जोड़ें → फ़ाइल जियोडेटाबेस (GDB) से जोड़ें।",
+        "file-geodatabase-raster": "फ़ाइल जियोडेटाबेस (.gdb) में संग्रहीत रास्टर डेटासेट समर्थित नहीं हैं। रास्टर को GeoTIFF में निर्यात करें और उसे रास्टर लेयर के रूप में जोड़ें।",
+        "network-path": "सुरक्षा कारणों से नेटवर्क शेयर पथ लोड नहीं किए जाते।",
+        "service": "प्रोजेक्ट में मौजूद ArcGIS सेवा लेयर अभी समर्थित नहीं हैं।",
+        "browser-local-file": "स्थानीय फ़ाइल का संदर्भ है, लेकिन ब्राउज़र ArcGIS Pro डेटा पथ दोबारा नहीं खोल सकते। इसे लोड करने के लिए GeoLibre Desktop का उपयोग करें।",
+        "map-extent": "सहेजा गया मानचित्र विस्तार ऐसी निर्देशांक प्रणाली का उपयोग करता है जिसे GeoLibre परिवर्तित नहीं कर सकता, इसलिए मानचित्र डिफ़ॉल्ट दृश्य पर खुला।",
+        "nesting": "समूह बहुत गहराई तक नेस्टेड है, या प्रोजेक्ट ऐसे समूह की ओर लौटकर संदर्भ करता है जिसमें यह पहले से शामिल है।"
+      },
       "qgisImportComplete": "QGIS प्रोजेक्ट आयात किया गया",
       "qgisImportWarnings_one": "प्रोजेक्ट आयात हो गया, लेकिन {{count}} लेयर लोड नहीं की जा सकी।",
       "qgisImportWarnings_other": "प्रोजेक्ट आयात हो गया, लेकिन {{count}} लेयर लोड नहीं की जा सकीं।",
@@ -2524,6 +2720,7 @@
       "embedVectorTitle": "स्थानीय वेक्टर डेटा एम्बेड करें?",
       "embedVectorDesc": "इस प्रोजेक्ट में आपके कंप्यूटर से लोड की गई {{count}} स्थानीय वेक्टर परत(ें) हैं। प्रोजेक्ट को फिर से खोलने पर ब्राउज़र उन्हें दोबारा नहीं पढ़ सकता, इसलिए उन्हें पुनर्स्थापित करने के लिए उनका डेटा प्रोजेक्ट फ़ाइल में एम्बेड किया जाना चाहिए। एम्बेड करने से फ़ाइल में लगभग {{size}} जुड़ जाता है।",
       "embedVectorDescDesktop": "इस प्रोजेक्ट में आपके कंप्यूटर से लोड की गई {{count}} स्थानीय वेक्टर परत(ें) हैं। प्रोजेक्ट को स्व-निहित बनाने के लिए उनका डेटा एम्बेड करें (इससे लगभग {{size}} जुड़ जाता है), या फ़ाइल संदर्भ सहेजें जो प्रोजेक्ट को फिर से खोलने पर डिस्क से फिर से लोड हों। संदर्भ फ़ाइल को छोटा रखते हैं लेकिन यदि स्रोत फ़ाइल बाद में स्थानांतरित या हटा दी जाए तो टूट जाते हैं।",
+      "embedVectorLargeWarning": "लगभग {{size}} एम्बेड करने से प्रोजेक्ट फ़ाइल बहुत बड़ी हो जाती है। इसे दोबारा खोलना धीमा हो सकता है या पूरी तरह विफल हो सकता है, क्योंकि हर फ़ीचर को एक साथ पार्स करके मेमोरी में रखना पड़ता है। इस आकार के डेटा के लिए, लेयर को PMTiles या FlatGeobuf में बदलें और उन्हें एम्बेड करने के बजाय रिमोट लेयर के रूप में जोड़ें।",
       "embedVectorEmbedButton": "डेटा एम्बेड करें",
       "embedVectorReferenceButton": "फ़ाइल संदर्भ सहेजें",
       "embedVectorSkipButton": "बिना डेटा के सहेजें",
@@ -2564,16 +2761,9 @@
       "loadingOsmPbfProgress": "फ़ीचर को GeoJSON में परिवर्तित किया जा रहा है… {{total}} में से {{processed}} OSM एंटिटी संसाधित।",
       "projectName": "प्रोजेक्ट नाम",
       "storymapEllipsis": "स्टोरी मैप...",
-      "arcgisImportReason": {
-        "layer-type": "{{layerType}} लेयर प्रकार समर्थित नहीं है।",
-        "missing-source": "लेयर के पास कोई पठनीय स्थानीय डेटा स्रोत नहीं है।",
-        "format": "लेयर का डेटा स्वरूप समर्थित नहीं है।",
-        "network-path": "सुरक्षा कारणों से नेटवर्क शेयर पथ लोड नहीं किए जाते।",
-        "service": "प्रोजेक्ट में मौजूद ArcGIS सेवा लेयर अभी समर्थित नहीं हैं।",
-        "browser-local-file": "स्थानीय फ़ाइल का संदर्भ है, लेकिन ब्राउज़र ArcGIS Pro डेटा पथ दोबारा नहीं खोल सकते। इसे लोड करने के लिए GeoLibre Desktop का उपयोग करें।",
-        "map-extent": "सहेजा गया मानचित्र विस्तार ऐसी निर्देशांक प्रणाली का उपयोग करता है जिसे GeoLibre परिवर्तित नहीं कर सकता, इसलिए मानचित्र डिफ़ॉल्ट दृश्य पर खुला।",
-        "nesting": "समूह बहुत गहराई तक नेस्टेड है, या प्रोजेक्ट ऐसे समूह की ओर लौटकर संदर्भ करता है जिसमें यह पहले से शामिल है।"
-      }
+      "pointerElevationNoticeTitle": "ऊँचाई सार्वजनिक सेवा का उपयोग करती है",
+      "pointerElevationNoticeDesc": "3D भूभाग उपलब्ध होने पर ऊँचाई मानचित्र से ही निकाली जाती है और कुछ भी नहीं भेजा जाता। 3D भूभाग उपलब्ध न होने पर सार्वजनिक Open-Meteo API से ऊँचाई प्राप्त की जाती है और पॉइंटर के नीचे के निर्देशांक आपके डिवाइस से बाहर जाते हैं।",
+      "batchTools": "बैच उपकरण"
     },
     "plugin": {
       "maplibre-gl-annotations": "एनोटेशन",
@@ -2647,6 +2837,7 @@
       "couldNotOpenRecentProject": "हाल का प्रोजेक्ट नहीं खोला जा सका।",
       "couldNotLoadRecentProject": "हाल का प्रोजेक्ट लोड नहीं किया जा सका।",
       "couldNotSaveProject": "प्रोजेक्ट सहेजा नहीं जा सका।",
+      "projectTooLargeToSave": "यह प्रोजेक्ट सहेजने के लिए बहुत बड़ा है। इसके एम्बेड किए गए वेक्टर डेटा को PMTiles या FlatGeobuf में बदलें और फ़ीचर एम्बेड करने के बजाय उन्हें रिमोट लेयर के रूप में जोड़ें।",
       "couldNotExportHtml": "प्रोजेक्ट को HTML में निर्यात नहीं किया जा सका।",
       "osmPbfNoFeatures": "इस OSM PBF फ़ाइल में कोई बिंदु, रेखा, या बहुभुज फ़ीचर नहीं मिले।",
       "couldNotLoadOsmPbf": "OSM PBF फ़ाइल लोड नहीं की जा सकी।",
@@ -2897,6 +3088,203 @@
     "includeParents": "चयनित सेल की मूल सेल शामिल करें",
     "showIcosahedron": "इकोसाहेड्रॉन दिखाएँ"
   },
+  "s2Plugin": {
+    "title": "S2 ग्रिड",
+    "controlTitle": "S2 ग्रिड सेटिंग्स",
+    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
+    "resolution": "रिज़ॉल्यूशन",
+    "cellCount": "दृश्य में {{count}} सेल",
+    "tooManyCells": "यह दृश्य {{limit}} सेल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
+    "fillColor": "फ़िल रंग",
+    "fillOpacity": "फ़िल अपारदर्शिता",
+    "lineColor": "आउटलाइन रंग",
+    "lineWidth": "आउटलाइन चौड़ाई",
+    "showLabels": "सेल id दिखाएँ",
+    "identifyHint": "S2 सेल की पहचान के लिए मानचित्र पर क्लिक करें।",
+    "selectedCell": "चयनित सेल",
+    "noSelection": "कोई सेल चयनित नहीं",
+    "copyId": "id कॉपी करें",
+    "parent": "मूल सेल",
+    "children": "संतति सेल",
+    "neighbors": "पड़ोसी सेल",
+    "center": "केंद्र",
+    "zoomToCell": "सेल पर ज़ूम करें",
+    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
+    "exportGeoJson": "GeoJSON निर्यात करें",
+    "exportCsv": "CSV निर्यात करें",
+    "includeNeighbors": "चयनित सेल के पड़ोसी सेल शामिल करें",
+    "includeParents": "चयनित सेल की मूल सेल शामिल करें"
+  },
+  "a5Plugin": {
+    "title": "A5 ग्रिड",
+    "controlTitle": "A5 ग्रिड सेटिंग्स",
+    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
+    "resolution": "रिज़ॉल्यूशन",
+    "cellCount": "दृश्य में {{count}} सेल",
+    "tooManyCells": "यह दृश्य {{limit}} सेल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
+    "fillColor": "फ़िल रंग",
+    "fillOpacity": "फ़िल अपारदर्शिता",
+    "lineColor": "आउटलाइन रंग",
+    "lineWidth": "आउटलाइन चौड़ाई",
+    "showLabels": "सेल id दिखाएँ",
+    "identifyHint": "A5 सेल की पहचान के लिए मानचित्र पर क्लिक करें।",
+    "selectedCell": "चयनित सेल",
+    "noSelection": "कोई सेल चयनित नहीं",
+    "copyId": "id कॉपी करें",
+    "parent": "मूल सेल",
+    "children": "संतति सेल",
+    "neighbors": "पड़ोसी सेल",
+    "center": "केंद्र",
+    "zoomToCell": "सेल पर ज़ूम करें",
+    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
+    "exportGeoJson": "GeoJSON निर्यात करें",
+    "exportCsv": "CSV निर्यात करें",
+    "includeNeighbors": "चयनित सेल के पड़ोसी सेल शामिल करें",
+    "includeParents": "चयनित सेल की मूल सेल शामिल करें"
+  },
+  "dggridPlugin": {
+    "title": "DGGRID",
+    "controlTitle": "DGGRID सेटिंग्स",
+    "cellType": "सेल प्रकार",
+    "topologyHexagon": "षट्भुज",
+    "topologyDiamond": "समचतुर्भुज",
+    "topologyTriangle": "त्रिभुज",
+    "projection": "प्रक्षेप",
+    "aperture": "अपर्चर",
+    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
+    "resolution": "रिज़ॉल्यूशन",
+    "cellCount": "दृश्य में {{count}} सेल",
+    "tooManyCells": "यह दृश्य {{limit}} सेल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
+    "fillColor": "फ़िल रंग",
+    "fillOpacity": "फ़िल अपारदर्शिता",
+    "lineColor": "आउटलाइन रंग",
+    "lineWidth": "आउटलाइन चौड़ाई",
+    "showLabels": "सेल id दिखाएँ",
+    "identifyHint": "DGGRID सेल की पहचान के लिए मानचित्र पर क्लिक करें।",
+    "selectedCell": "चयनित सेल",
+    "noSelection": "कोई सेल चयनित नहीं",
+    "copyId": "id कॉपी करें",
+    "parent": "मूल सेल",
+    "children": "संतति सेल",
+    "neighbors": "पड़ोसी सेल",
+    "center": "केंद्र",
+    "zoomToCell": "सेल पर ज़ूम करें",
+    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
+    "exportGeoJson": "GeoJSON निर्यात करें",
+    "exportCsv": "CSV निर्यात करें",
+    "includeNeighbors": "चयनित सेल के पड़ोसी सेल शामिल करें",
+    "includeParents": "चयनित सेल की मूल सेल शामिल करें"
+  },
+  "dggalPlugin": {
+    "title": "DGGAL",
+    "controlTitle": "DGGAL सेटिंग्स",
+    "gridType": "DGGS प्रकार",
+    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
+    "resolution": "रिज़ॉल्यूशन",
+    "cellCount": "दृश्य में {{count}} सेल",
+    "tooManyCells": "यह दृश्य {{limit}} सेल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
+    "fillColor": "फ़िल रंग",
+    "fillOpacity": "फ़िल अपारदर्शिता",
+    "lineColor": "आउटलाइन रंग",
+    "lineWidth": "आउटलाइन चौड़ाई",
+    "showLabels": "सेल id दिखाएँ",
+    "identifyHint": "DGGAL सेल की पहचान के लिए मानचित्र पर क्लिक करें।",
+    "selectedCell": "चयनित सेल",
+    "noSelection": "कोई सेल चयनित नहीं",
+    "copyId": "id कॉपी करें",
+    "parent": "मूल सेल",
+    "children": "संतति सेल",
+    "neighbors": "पड़ोसी सेल",
+    "center": "केंद्र",
+    "zoomToCell": "सेल पर ज़ूम करें",
+    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
+    "exportGeoJson": "GeoJSON निर्यात करें",
+    "exportCsv": "CSV निर्यात करें",
+    "includeNeighbors": "चयनित सेल के पड़ोसी सेल शामिल करें",
+    "includeParents": "चयनित सेल की मूल सेल शामिल करें"
+  },
+  "olcPlugin": {
+    "title": "OLC",
+    "controlTitle": "OLC सेटिंग्स",
+    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
+    "resolution": "रिज़ॉल्यूशन",
+    "cellCount": "दृश्य में {{count}} सेल",
+    "tooManyCells": "यह दृश्य {{limit}} सेल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
+    "fillColor": "फ़िल रंग",
+    "fillOpacity": "फ़िल अपारदर्शिता",
+    "lineColor": "आउटलाइन रंग",
+    "lineWidth": "आउटलाइन चौड़ाई",
+    "showLabels": "सेल id दिखाएँ",
+    "identifyHint": "OLC सेल की पहचान के लिए मानचित्र पर क्लिक करें।",
+    "selectedCell": "चयनित सेल",
+    "noSelection": "कोई सेल चयनित नहीं",
+    "copyId": "id कॉपी करें",
+    "parent": "मूल सेल",
+    "children": "संतति सेल",
+    "neighbors": "पड़ोसी सेल",
+    "center": "केंद्र",
+    "zoomToCell": "सेल पर ज़ूम करें",
+    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
+    "exportGeoJson": "GeoJSON निर्यात करें",
+    "exportCsv": "CSV निर्यात करें",
+    "includeNeighbors": "चयनित सेल के पड़ोसी सेल शामिल करें",
+    "includeParent": "चयनित सेल की मूल सेल शामिल करें"
+  },
+  "geohashPlugin": {
+    "title": "Geohash",
+    "controlTitle": "Geohash सेटिंग्स",
+    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
+    "resolution": "रिज़ॉल्यूशन",
+    "cellCount": "दृश्य में {{count}} सेल",
+    "tooManyCells": "यह दृश्य {{limit}} सेल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
+    "fillColor": "फ़िल रंग",
+    "fillOpacity": "फ़िल अपारदर्शिता",
+    "lineColor": "आउटलाइन रंग",
+    "lineWidth": "आउटलाइन चौड़ाई",
+    "showLabels": "सेल id दिखाएँ",
+    "identifyHint": "Geohash सेल की पहचान के लिए मानचित्र पर क्लिक करें।",
+    "selectedCell": "चयनित सेल",
+    "noSelection": "कोई सेल चयनित नहीं",
+    "copyId": "id कॉपी करें",
+    "parent": "मूल सेल",
+    "children": "संतति सेल",
+    "neighbors": "पड़ोसी सेल",
+    "center": "केंद्र",
+    "zoomToCell": "सेल पर ज़ूम करें",
+    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
+    "exportGeoJson": "GeoJSON निर्यात करें",
+    "exportCsv": "CSV निर्यात करें",
+    "includeNeighbors": "चयनित सेल के पड़ोसी सेल शामिल करें",
+    "includeParent": "चयनित सेल की मूल सेल शामिल करें"
+  },
+  "tilecodePlugin": {
+    "title": "Tilecode",
+    "controlTitle": "Tilecode सेटिंग्स",
+    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
+    "resolution": "रिज़ॉल्यूशन",
+    "cellCount": "दृश्य में {{count}} टाइल",
+    "tooManyCells": "यह दृश्य {{limit}} टाइल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
+    "fillColor": "फ़िल रंग",
+    "fillOpacity": "फ़िल अपारदर्शिता",
+    "lineColor": "आउटलाइन रंग",
+    "lineWidth": "आउटलाइन चौड़ाई",
+    "showLabels": "टाइल id दिखाएँ",
+    "identifyHint": "टाइल की पहचान के लिए मानचित्र पर क्लिक करें।",
+    "selectedCell": "चयनित टाइल",
+    "noSelection": "कोई टाइल चयनित नहीं",
+    "copyId": "id कॉपी करें",
+    "quadkey": "क्वाडकी",
+    "parent": "मूल टाइल",
+    "children": "संतति टाइल",
+    "neighbors": "पड़ोसी टाइल",
+    "center": "केंद्र",
+    "zoomToCell": "टाइल पर ज़ूम करें",
+    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
+    "exportGeoJson": "GeoJSON निर्यात करें",
+    "exportCsv": "CSV निर्यात करें",
+    "includeNeighbors": "चयनित टाइल की पड़ोसी टाइल शामिल करें",
+    "includeParent": "चयनित टाइल की मूल टाइल शामिल करें"
+  },
   "timelapse": {
     "title": "टाइमलैप्स",
     "provider": "इमेजरी स्रोत",
@@ -3017,6 +3405,98 @@
     "added": "{{title}} जोड़ा गया।",
     "addError": "डेटासेट नहीं जोड़ा जा सका।",
     "searchError": "खोज विफल रही।"
+  },
+  "stacPlugin": {
+    "title": "STAC कैटलॉग",
+    "footprintLayerName": "STAC खोज सीमाएँ",
+    "catalogSearch": "STAC Index में सार्वजनिक कैटलॉग खोजें",
+    "catalogSearchPlaceholder": "कैटलॉग नाम खोजें…",
+    "indexLoading": "STAC Index लोड हो रहा है…",
+    "indexUnavailable": "STAC Index उपलब्ध नहीं है: URL दर्ज करें",
+    "indexLoadFailed": "STAC Index लोड नहीं हो सका",
+    "urlLabel": "STAC कैटलॉग या API URL",
+    "connect": "कनेक्ट करें",
+    "connecting": "STAC से कनेक्ट हो रहा है…",
+    "connected": "कनेक्ट हो गया। फ़िल्टर चुनें और खोजें।",
+    "connectFailed": "STAC से कनेक्ट नहीं हो सका",
+    "selectCatalog": "एक कैटलॉग चुनें…",
+    "noMatchingCatalogs": "कोई मेल खाता कैटलॉग नहीं",
+    "catalogApiSuffix": " (API)",
+    "catalogStaticSuffix": " (स्थिर)",
+    "kindApi": "STAC API",
+    "kindStatic": "स्थिर कैटलॉग",
+    "collectionsHint": "एक से अधिक संग्रह चुनने के लिए Ctrl/Cmd दबाए रखें; आकार बदलने के लिए निचला किनारा खींचें",
+    "limitToExtent": "खोज को वर्तमान मानचित्र सीमा तक सीमित करें",
+    "bboxLabel": "बाउंडिंग बॉक्स (पश्चिम, दक्षिण, पूर्व, उत्तर)",
+    "bboxPlaceholder": "वैकल्पिक; मानचित्र सीमा को अधिलेखित करता है",
+    "bboxInvalid": "मान्य बाउंडिंग बॉक्स दर्ज करें: पश्चिम, दक्षिण, पूर्व, उत्तर।",
+    "drawBbox": "मानचित्र पर बॉक्स बनाएँ",
+    "cancelDrawing": "ड्रॉइंग रद्द करें",
+    "clearDrawnBbox": "बनाया गया बॉक्स हटाएँ",
+    "drawHint": "खोज बॉक्स बनाने के लिए मानचित्र पर क्लिक करके खींचें।",
+    "drawnBbox": "बनाया गया बॉक्स: {{bbox}}",
+    "drawnBboxCleared": "बनाया गया बॉक्स हटा दिया गया।",
+    "mapNotReady": "मानचित्र अभी ड्रॉइंग के लिए तैयार नहीं है।",
+    "startDate": "प्रारंभ तिथि",
+    "endDate": "समाप्ति तिथि",
+    "additionalParams": "अतिरिक्त खोज पैरामीटर (JSON, केवल STAC API)",
+    "additionalInvalid": "अतिरिक्त खोज पैरामीटर एक JSON ऑब्जेक्ट होना चाहिए।",
+    "searchItems": "आइटम खोजें",
+    "clearResults": "परिणाम साफ़ करें",
+    "resultsCleared": "खोज परिणाम साफ़ कर दिए गए।",
+    "searching": "STAC आइटम खोजे जा रहे हैं…",
+    "loadingMore": "और आइटम लोड हो रहे हैं…",
+    "noMatchesHere": "कैटलॉग के उस हिस्से में कुछ भी मेल नहीं खाया। खोज जारी रखने के लिए और लोड करें।",
+    "treeEmpty": "खाली",
+    "treeOpenFailed": "यह कैटलॉग नहीं खोला जा सका",
+    "noResults": "इन फ़िल्टर से मेल खाता कोई STAC आइटम नहीं है।",
+    "searchFailed": "STAC खोज विफल रही",
+    "showing": "{{count}} आइटम दिखाए जा रहे हैं।",
+    "showingOfMatched": "{{matched}} में से {{count}} आइटम दिखाए जा रहे हैं।",
+    "loadMore": "और लोड करें",
+    "renderOptions": "रैस्टर रेंडरिंग विकल्प",
+    "renderingEngine": "COG रेंडरिंग इंजन",
+    "engineAuto": "अपरिवर्तित रहने दें",
+    "engineWasm": "WebAssembly टाइलर (ग्लोब संगत)",
+    "engineGpu": "GPU (deck.gl, केवल मर्केटर)",
+    "engineTitiler": "TiTiler सर्वर",
+    "engineHint": "कौन-सा रेंडरर इमेजरी को डिकोड करता है। ऊपर की सेटिंग्स के विपरीत यह प्रति लेयर नहीं है: यह मानचित्र के हर रास्टर पर लागू होती है, पहले से जोड़े गए रास्टर पर भी।",
+    "resizeResults": "खोज परिणामों का आकार बदलें",
+    "bands": "बैंड",
+    "bandsPlaceholder": "जैसे 1 या 1,2,3 (डिफ़ॉल्ट: स्वतः)",
+    "colormap": "कलरमैप (केवल एकल बैंड)",
+    "colormapDefault": "रेंडरर डिफ़ॉल्ट",
+    "minValue": "न्यूनतम मान",
+    "maxValue": "अधिकतम मान",
+    "nodata": "NoData मान",
+    "nodataPlaceholder": "फ़ाइल के NoData टैग को अधिलेखित करता है",
+    "renderHint": "रेंडरर को GeoTIFF से मान अनुमानित करने देने के लिए फ़ील्ड खाली छोड़ें। विकल्प बदलाव के बाद जोड़ी गई एसेट पर लागू होते हैं।",
+    "initialStatus": "STAC Index से कैटलॉग चुनें या URL दर्ज करें।",
+    "catalogInfo": "{{title}} · {{kind}}",
+    "zoom": "ज़ूम करें",
+    "add": "जोड़ें",
+    "download": "डाउनलोड करें",
+    "adding": "{{asset}} जोड़ा जा रहा है…",
+    "added": "{{asset}} मानचित्र में जोड़ा गया।",
+    "addUnsupported": "मानचित्र में केवल GeoTIFF/COG, GeoJSON, GeoParquet और PMTiles एसेट जोड़ी जा सकती हैं",
+    "addFailed": "एसेट नहीं जोड़ी जा सकी",
+    "addNoSourceLayers": "इस संग्रह में बनाने के लिए कोई लेयर सूचीबद्ध नहीं है",
+    "addNoTarget": "इस एसेट में बनाने के लिए कुछ भी सूचीबद्ध नहीं है",
+    "addIcechunkFailed": "यह Icechunk रिपॉज़िटरी खोली नहीं जा सकी",
+    "zarrProblemGroup": "यह एसेट ऐरे के एक समूह का नाम देता है, किसी ऐसे ऐरे का नहीं जिसे बनाया जा सके",
+    "zarrProblemMissing": "इस स्टोर में वह वेरिएबल नहीं है",
+    "zarrProblemUnauthorized": "इस Zarr स्टोर को ऐसे क्रेडेंशियल चाहिए जो GeoLibre अभी प्रदान नहीं कर सकता",
+    "zarrProblemUnsupportedUrl": "इस Zarr स्टोर का पता एक-एक कुंजी करके नहीं पढ़ा जा सकता",
+    "zarrProblemUnavailable": "यह Zarr स्टोर खोला नहीं जा सका",
+    "chooseTarget": "चुनें कि क्या जोड़ना है",
+    "cogUnsupported": "यह GeoLibre होस्ट दूरस्थ GeoTIFF एसेट प्रदर्शित नहीं कर सकता",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
+    "formatUnknown": "अज्ञात प्रारूप",
+    "notAddable": "जोड़ा नहीं जा सकता"
   },
   "earthdataGis": {
     "hint": "इमेजरी, मानचित्र और फ़ीचर सेवाओं के लिए NASA Earthdata GIS खोजें।",
@@ -3246,6 +3726,10 @@
     "confirmStyleReplace_one": "\"{{name}}\" पर स्विच करने से पूरी मैप शैली बदल जाएगी और आपके द्वारा जोड़ा गया स्टैक्ड बेसमैप हट जाएगा। जारी रखें?",
     "confirmStyleReplace_other": "\"{{name}}\" पर स्विच करने से पूरी मैप शैली बदल जाएगी और आपके द्वारा जोड़े गए {{count}} स्टैक्ड बेसमैप हट जाएँगे। जारी रखें?"
   },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "फ़ीचर गुण",
+    "massingHeight": "ऊँचाई (मी)"
+  },
   "annotations": {
     "toolbar": "एनोटेशन टूल्स",
     "layerName": "एनोटेशन्स",
@@ -3354,6 +3838,14 @@
       "sum": "योग",
       "mean": "औसत"
     },
+    "indicatorAggregation": {
+      "count": "गणना",
+      "sum": "योग",
+      "mean": "औसत",
+      "min": "न्यूनतम",
+      "max": "अधिकतम",
+      "median": "मध्यिका"
+    },
     "chart": {
       "emptyNumeric": "प्लॉट करने के लिए कोई संख्यात्मक मान नहीं है।",
       "emptyScatter": "किसी भी पंक्ति में दोनों फ़ील्ड संख्या के रूप में सेट नहीं हैं।",
@@ -3395,14 +3887,6 @@
       "colorDefault": "डिफ़ॉल्ट चार्ट रंग",
       "cancel": "रद्द करें",
       "save": "सेव करें"
-    },
-    "indicatorAggregation": {
-      "count": "गणना",
-      "sum": "योग",
-      "mean": "औसत",
-      "min": "न्यूनतम",
-      "max": "अधिकतम",
-      "median": "मध्यिका"
     }
   },
   "assistant": {
@@ -3411,9 +3895,9 @@
     "clear": "बातचीत साफ़ करें",
     "close": "सहायक बंद करें",
     "send": "भेजें",
-    "sendHint": "भेजें (Ctrl/Cmd+Enter)",
+    "sendHint": "भेजें (Enter)",
     "stop": "रोकें",
-    "placeholder": "अपने डेटा के बारे में पूछें, जैसे \"50 मिलियन से अधिक जनसंख्या वाले देश दिखाएँ\" · भेजने के लिए Ctrl/Cmd+Enter",
+    "placeholder": "अपने डेटा के बारे में पूछें, जैसे \"50 मिलियन से अधिक जनसंख्या वाले देश दिखाएँ\" · भेजने के लिए Enter, नई पंक्ति के लिए Shift+Enter",
     "intro": "अपने डेटा से चैट करें। मैं Spatial SQL चला सकता हूँ, लेयर जोड़ या हटा सकता हूँ, उन्हें फिर से स्टाइल कर सकता हूँ, और मैप को स्थानांतरित कर सकता हूँ — हर बदलाव को पूर्ववत किया जा सकता है। \"देशों को जनसंख्या के अनुसार ग्रेजुएटेड लाल रैंप से रंगें\" जैसा प्रयास करें।",
     "setupTitle": "AI सहायक सेट करें",
     "setupStatus": "सहायक को सोचने के लिए एक AI प्रदाता चाहिए। नीचे दिए गए किसी भी एक प्रदाता के लिए क्रेडेंशियल जोड़ें और सेव करते ही पैनल चैट मोड में बदल जाएगा।",
@@ -3523,6 +4007,8 @@
       "bylinePlaceholder": "लेखक या श्रेय पंक्ति",
       "footerText": "फुटर टेक्स्ट",
       "footerPlaceholder": "प्रत्येक पृष्ठ के निचले भाग में दिखाया गया फुटर",
+      "markers": "क्लिक करने योग्य स्थान मार्कर",
+      "markersHint": "प्रत्येक अध्याय के स्थान पर एक मार्कर बनाया जाता है। PDF व्यूअर में मार्कर पर क्लिक करने से वह निर्देशांक Google Maps में खुलता है।",
       "startSlide": "प्रारंभिक स्लाइड",
       "endSlide": "समापन स्लाइड",
       "generate": "PDF जनरेट करें",
@@ -3608,33 +4094,101 @@
       "count_other": "{{count}} रन दर्ज",
       "toolUnavailable": "टूल \"{{toolId}}\" अब उपलब्ध नहीं है"
     },
-    "modelBuilder": {
-      "moveStepUp": "चरण ऊपर ले जाएं",
-      "moveStepDown": "चरण नीचे ले जाएं",
-      "removeStep": "चरण हटाएं",
-      "title": "बैच और मॉडल",
-      "description": "कई लेयर पर एक वेक्टर टूल चलाएँ, या टूल को जोड़कर एक पुन: प्रयोज्य मॉडल बनाएँ जो आपकी परियोजना के साथ सहेजा जाता है।",
-      "tabBatch": "बैच",
-      "tabModels": "मॉडल",
-      "outputPlaceholder": "आउटपुट यहाँ दिखाई देगा।",
+    "batchTools": {
+      "title": "बैच उपकरण",
+      "description": "एक ही वेक्टर उपकरण को कई परतों पर एक साथ चलाएँ।",
+      "runBatch": "बैच चलाएँ",
       "tool": "टूल",
       "sharedParameters": "साझा पैरामीटर",
       "noExtraParameters": "इस टूल में कोई अतिरिक्त पैरामीटर नहीं है।",
       "inputLayers": "इनपुट लेयर",
-      "selectAll": "सभी चुनें",
       "clearSelection": "साफ़ करें",
+      "selectAll": "सभी चुनें",
       "noCompatibleLayers": "कोई संगत GeoJSON लेयर नहीं।",
-      "newModel": "नया मॉडल",
-      "noSavedModels": "अभी तक कोई सहेजा गया मॉडल नहीं।",
+      "outputPlaceholder": "आउटपुट यहाँ दिखाई देगा।"
+    },
+    "modelBuilder": {
+      "title": "मॉडल बिल्डर",
+      "description": "उपकरणों को कैनवास पर खींचें और उन्हें जोड़कर एक प्रोसेसिंग मॉडल बनाएँ।",
+      "modelName": "मॉडल नाम",
+      "modelNamePlaceholder": "बिना शीर्षक मॉडल",
       "untitledModel": "बिना शीर्षक मॉडल",
-      "modelName": "मॉडल का नाम",
-      "emptyPipelineHint": "पाइपलाइन बनाना शुरू करने के लिए एक चरण जोड़ें। पहला चरण एक इनपुट लेयर पढ़ता है; उसके बाद हर चरण पिछले चरण का आउटपुट लेता है।",
-      "addStep": "चरण जोड़ें",
-      "runModel": "मॉडल चलाएँ",
+      "newModel": "नया",
+      "discardChanges": "वर्तमान मॉडल में असेव्ड बदलाव त्यागें?",
+      "discardRunning": "मॉडल अभी भी चल रहा है। इसे रोककर आगे बढ़ें?",
+      "arrange": "व्यवस्थित करें",
+      "arrangeHint": "नोड्स को प्रवाह के अनुसार व्यवस्थित करें",
+      "runModel": "चलाएँ",
+      "cancelRun": "रद्द करें",
+      "runCancelled": "चलना रद्द किया गया।",
+      "issueMissingLayer": "एक इनपुट परत चुनें।",
+      "issueUnknownTool": "अज्ञात उपकरण \"{{tool}}\"।",
+      "issueMissingInput": "\"{{port}}\" को एक कनेक्शन या मान चाहिए।",
+      "issueUnknownPort": "एक कनेक्शन ऐसे पोर्ट को संदर्भित करता है जो अब मौजूद नहीं है।",
+      "issueDuplicateInput": "\"{{port}}\" के पास पहले से एक आने वाला कनेक्शन है।",
+      "issueTypeMismatch": "वे पोर्ट अलग-अलग प्रकार का डेटा ले जाते हैं।",
+      "issueCycle": "मॉडल में एक लूप है।",
+      "issueNoOutput": "परिणाम रखने के लिए एक आउटपुट नोड जोड़ें।",
+      "issueDuplicateNode": "दो या अधिक नोड एक ही id साझा करते हैं।",
+      "issueDanglingEdge": "एक कनेक्शन ऐसे नोड की ओर इशारा करता है जो अब मौजूद नहीं है।",
+      "outputAddFailed": "\"{{name}}\" को मानचित्र में नहीं जोड़ा जा सका",
+      "catalogUnavailable": "उपकरण लोड नहीं हो सके, इसलिए मॉडल की जाँच या उसे चलाया नहीं जा सकता।",
+      "addToolNode": "{{tool}} को कैनवास में जोड़ें",
+      "importTooLarge": "वह मॉडल खोलने के लिए बहुत बड़ा है।",
+      "importModel": "आयात",
+      "exportModel": "निर्यात",
+      "copyPython": "Python स्क्रिप्ट कॉपी करें",
+      "pythonCopied": "Python स्क्रिप्ट क्लिपबोर्ड पर कॉपी की गई।",
+      "pythonCopyFailed": "Python स्क्रिप्ट कॉपी नहीं की जा सकी",
+      "savedModels": "सहेजे गए मॉडल",
+      "loadModelPlaceholder": "सहेजा गया मॉडल लोड करें...",
       "deleteModel": "हटाएँ",
-      "inputPreviousStep": "इनपुट: ← पिछले चरण का आउटपुट",
-      "unknownTool": "अज्ञात टूल \"{{id}}\"",
-      "noParameters": "कोई पैरामीटर नहीं।"
+      "deletedLog": "मॉडल परियोजना से हटाया गया।",
+      "searchTools": "उपकरण खोजें",
+      "loadingTools": "उपकरण लोड हो रहे हैं...",
+      "noToolsMatch": "आपकी खोज से कोई उपकरण मेल नहीं खाता।",
+      "addInputNode": "+ इनपुट",
+      "addOutputNode": "+ आउटपुट",
+      "canvasEmpty": "बनाना शुरू करने के लिए पैलेट से कोई उपकरण खींचें।",
+      "inputNode": "इनपुट",
+      "outputNode": "आउटपुट",
+      "inputPort": "इनपुट: {{port}}",
+      "outputPort": "आउटपुट: {{port}}",
+      "removeConnection": "कनेक्शन हटाएँ",
+      "removeNode": "नोड हटाएँ",
+      "resizePanel": "पैनल का आकार बदलें",
+      "minimizePanel": "पैनल छोटा करें",
+      "restorePanel": "पैनल पुनर्स्थापित करें",
+      "resizePalette": "उपकरण पैलेट का आकार बदलें",
+      "resizeInspector": "गुण पैनल का आकार बदलें",
+      "resizeLog": "संदेश लॉग का आकार बदलें",
+      "selectNodeHint": "सेटिंग्स संपादित करने के लिए कोई नोड चुनें।",
+      "sourceLayer": "स्रोत परत",
+      "chooseLayer": "एक परत चुनें...",
+      "resultName": "परिणाम नाम",
+      "resultNamePlaceholder": "मॉडल आउटपुट",
+      "noParameters": "कोई पैरामीटर नहीं।",
+      "keepResultHint": "किसी मध्यवर्ती परिणाम के लिए आउटपुट जोड़कर उसे सहेजें।",
+      "keepResultSingle": "यह परिणाम सहेजें",
+      "resultKeptSingle": "यह परिणाम सहेजा गया है",
+      "keepResult": "\"{{port}}\" सहेजें",
+      "resultKept": "\"{{port}}\" सहेजा गया है",
+      "outputPlaceholder": "संदेश यहाँ दिखाई देंगे।",
+      "connectCycle": "वह कनेक्शन एक लूप बना देगा।",
+      "connectSameNode": "कोई नोड स्वयं से नहीं जुड़ सकता।",
+      "fixIssuesFirst": "चलाने से पहले बताई गई समस्याएँ ठीक करें।",
+      "runFailed": "चलाना विफल रहा",
+      "runFinished": "चलना पूरा हुआ — {{outputs}} आउटपुट जोड़े गए।",
+      "savedLog": "मॉडल परियोजना में सहेजा गया।",
+      "exportedLog": "{{name}} निर्यात किया गया",
+      "importedLog": "{{nodes}} नोड वाला मॉडल आयात किया गया।",
+      "importFailed": "आयात विफल रहा",
+      "importInvalid": "उस फ़ाइल में मॉडल ग्राफ़ नहीं है।",
+      "importUnsupported": "वह फ़ाइल GeoLibre मॉडल नहीं है।",
+      "rasterOutputUnsupported": "\"{{name}}\" एक रास्टर परिणाम है, जिसे यह बिल्ड मानचित्र में नहीं जोड़ सकता।",
+      "portNeedsVector": "\"{{port}}\" को वेक्टर डेटा चाहिए, लेकिन रास्टर मिला।",
+      "toolNoOutput": "\"{{tool}}\" ने कोई आउटपुट नहीं बनाया।",
+      "toolNoUsableOutput": "\"{{tool}}\" ने कोई उपयोगी आउटपुट नहीं बनाया।"
     },
     "parameterField": {
       "selectLayer": "एक लेयर चुनें...",
@@ -3746,6 +4300,1438 @@
       "run": "चलाएँ",
       "outputPlaceholder": "आउटपुट यहाँ दिखाई देगा।",
       "resolutionRange": "रिज़ॉल्यूशन (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "बफर",
+          "description": "प्रत्येक फ़ीचर के चारों ओर एक निश्चित दूरी का बफर बहुभुज बनाएँ",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "distance": {
+              "label": "दूरी"
+            },
+            "units": {
+              "label": "इकाइयाँ",
+              "options": {
+                "kilometers": "किलोमीटर",
+                "meters": "मीटर",
+                "miles": "मील"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "केंद्रक",
+          "description": "प्रत्येक फ़ीचर के केंद्रक बिंदु की गणना करें",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "उत्तल पिंड (Convex hull)",
+          "description": "सभी फ़ीचर को घेरने वाले उत्तल पिंड की गणना करें",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "डिज़ॉल्व",
+          "description": "बहुभुज फ़ीचर को एक ही ज्यामिति में मिलाएँ, वैकल्पिक रूप से किसी फ़ील्ड के अनुसार समूहित करके",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "field": {
+              "label": "डिज़ॉल्व फ़ील्ड (वैकल्पिक)",
+              "description": "डिज़ॉल्व करने से पहले फ़ीचर को समूहित करने के लिए गुण का नाम"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "बाउंडिंग बॉक्स",
+          "description": "सभी फ़ीचर के आयताकार आवरण की गणना करें",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            }
+          }
+        },
+        "simplify": {
+          "name": "सरल बनाएं",
+          "description": "Douglas-Peucker का उपयोग करके शीर्षों की संख्या घटाएँ",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "tolerance": {
+              "label": "सहनशीलता (डिग्री)"
+            },
+            "highQuality": {
+              "label": "उच्च गुणवत्ता"
+            }
+          }
+        },
+        "clip": {
+          "name": "क्लिप",
+          "description": "इनपुट लेयर को ओवरले लेयर द्वारा कवर किए गए क्षेत्र तक क्लिप करें (इनपुट विशेषताएँ बनी रहती हैं)",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "overlay": {
+              "label": "ओवरले (क्लिप) लेयर"
+            }
+          }
+        },
+        "intersection": {
+          "name": "प्रतिच्छेदन",
+          "description": "केवल वे क्षेत्र रखें जहाँ दोनों बहुभुज लेयर ओवरलैप होती हैं",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "overlay": {
+              "label": "ओवरले लेयर"
+            }
+          }
+        },
+        "difference": {
+          "name": "अंतर",
+          "description": "इनपुट लेयर से ओवरले लेयर का क्षेत्र हटाएँ",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "overlay": {
+              "label": "ओवरले लेयर"
+            }
+          }
+        },
+        "union": {
+          "name": "संघ (Union)",
+          "description": "दो बहुभुज लेयर को एक संयुक्त ज्यामिति में मिलाएँ",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "overlay": {
+              "label": "ओवरले लेयर"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "स्थानिक जॉइन",
+          "description": "स्थानिक संबंध के आधार पर जॉइन लेयर की विशेषताएँ प्रत्येक इनपुट फ़ीचर से जोड़ें",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "overlay": {
+              "label": "जॉइन लेयर"
+            },
+            "predicate": {
+              "label": "स्थानिक संबंध",
+              "options": {
+                "intersects": "प्रतिच्छेद करता है",
+                "within": "के भीतर",
+                "contains": "समाहित करता है"
+              }
+            },
+            "how": {
+              "label": "जॉइन प्रकार",
+              "options": {
+                "inner": "इनर (केवल मेल खाने वाले फ़ीचर रखें)",
+                "left": "लेफ़्ट (सभी इनपुट फ़ीचर रखें)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "विशेषता जॉइन",
+          "description": "ज्यामिति का उपयोग किए बिना, जहाँ कुंजी फ़ील्ड मेल खाती है वहाँ जॉइन लेयर (एक तालिका) की विशेषताएँ प्रत्येक इनपुट फ़ीचर से जोड़ें। एक-से-एक: पहली मेल खाने वाली जॉइन पंक्ति मान्य होती है।",
+          "params": {
+            "layer": {
+              "label": "लक्ष्य लेयर"
+            },
+            "overlay": {
+              "label": "जॉइन लेयर (तालिका)",
+              "description": "वह लेयर जिसकी विशेषताएँ लाई जाती हैं। इसकी ज्यामिति की उपेक्षा की जाती है।"
+            },
+            "target_field": {
+              "label": "लक्ष्य कुंजी फ़ील्ड"
+            },
+            "join_field": {
+              "label": "जॉइन कुंजी फ़ील्ड"
+            },
+            "how": {
+              "label": "जॉइन प्रकार",
+              "options": {
+                "left": "लेफ़्ट (सभी लक्ष्य फ़ीचर रखें)",
+                "inner": "इनर (केवल मेल खाने वाले फ़ीचर रखें)"
+              }
+            },
+            "fields": {
+              "label": "लाने के लिए फ़ील्ड (वैकल्पिक)",
+              "description": "कॉपी करने के लिए अल्पविराम से अलग किए गए जॉइन फ़ील्ड। कुंजी को छोड़कर सभी जॉइन फ़ील्ड लाने के लिए खाली छोड़ें।"
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "मान द्वारा चुनें",
+          "description": "जिन फ़ीचर का विशेषता मान किसी शर्त से मेल खाता है उन्हें एक नई लेयर में निकालें",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "field": {
+              "label": "फ़ील्ड"
+            },
+            "operator": {
+              "label": "ऑपरेटर",
+              "options": {
+                "eq": "= (बराबर)",
+                "neq": "≠ (बराबर नहीं)",
+                "gt": "> (से बड़ा)",
+                "gte": "≥ (से बड़ा या बराबर)",
+                "lt": "< (से छोटा)",
+                "lte": "≤ (से छोटा या बराबर)",
+                "contains": "शामिल है (टेक्स्ट)",
+                "starts-with": "से शुरू होता है (टेक्स्ट)",
+                "is-null": "खाली है",
+                "is-not-null": "खाली नहीं है"
+              }
+            },
+            "value": {
+              "label": "मान",
+              "description": "जब दोनों पक्ष संख्यात्मक हों तो संख्या के रूप में तुलना की जाती है।"
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "स्थान द्वारा चुनें",
+          "description": "दूसरी लेयर के साथ स्थानिक संबंध के आधार पर फ़ीचर को एक नई लेयर में निकालें",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "overlay": {
+              "label": "फ़िल्टर लेयर"
+            },
+            "predicate": {
+              "label": "स्थानिक संबंध",
+              "options": {
+                "intersects": "प्रतिच्छेद करता है",
+                "within": "के भीतर",
+                "contains": "समाहित करता है",
+                "disjoint": "असंयुक्त (कोई प्रतिच्छेदन नहीं)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "यादृच्छिक निष्कर्षण",
+          "description": "फ़ीचर का एक यादृच्छिक उपसमुच्चय एक नई लेयर में निकालें, जिसका आकार फ़ीचर संख्या या इनपुट के प्रतिशत से तय हो।",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "method": {
+              "label": "विधि",
+              "options": {
+                "count": "फ़ीचर की संख्या",
+                "percentage": "फ़ीचर का प्रतिशत"
+              }
+            },
+            "count": {
+              "label": "फ़ीचर की संख्या",
+              "description": "बड़ा होने पर इनपुट फ़ीचर की संख्या तक सीमित किया जाता है।"
+            },
+            "percentage": {
+              "label": "फ़ीचर का प्रतिशत"
+            }
+          }
+        },
+        "reproject": {
+          "name": "पुनः प्रोजेक्ट करें",
+          "description": "किसी लेयर के निर्देशांकों को स्रोत CRS के रूप में मानकर उन्हें WGS84 में रूपांतरित करें ताकि वे सही स्थान पर प्रदर्शित हों। साइडकार या Python इंजन आवश्यक है।",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "source_crs": {
+              "label": "स्रोत CRS",
+              "description": "वह CRS जिसमें लेयर के निर्देशांक वास्तव में हैं (उदा. EPSG:3857)। परिणाम WGS84 (EPSG:4326) में रूपांतरित किया जाता है।"
+            }
+          }
+        },
+        "explode": {
+          "name": "एक्सप्लोड करें",
+          "description": "बहु-भाग ज्यामितियों को एकल-भाग फ़ीचर में विभाजित करें (प्रति भाग एक फ़ीचर), प्रत्येक मूल फ़ीचर की विशेषताएँ बनाए रखते हुए",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "विशेषता द्वारा एकत्रित करें",
+          "description": "समान विशेषता मान वाले फ़ीचर को प्रति समूह एक ज्यामिति में डिज़ॉल्व करें, एक सारांश सांख्यिकी के साथ",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "group_field": {
+              "label": "समूहन फ़ील्ड"
+            },
+            "statistic": {
+              "label": "सांख्यिकी",
+              "options": {
+                "count": "गणना",
+                "sum": "योग",
+                "mean": "माध्य",
+                "min": "न्यूनतम",
+                "max": "अधिकतम",
+                "median": "माध्यिका"
+              }
+            },
+            "stat_field": {
+              "label": "सांख्यिकी फ़ील्ड",
+              "description": "ऊपर दी गई सांख्यिकी द्वारा सारांशित किया जाने वाला संख्यात्मक फ़ील्ड।"
+            }
+          }
+        },
+        "smooth": {
+          "name": "स्मूथ करें",
+          "description": "Chaikin के एल्गोरिदम से रेखा और बहुभुज फ़ीचर के कोनों को गोल करें (शीर्ष जोड़ता है), जो सरल बनाएं के शीर्ष-घटाव से अलग है। Z/ऊँचाई सुरक्षित रहती है; बिंदु अपरिवर्तित रहते हैं।",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "iterations": {
+              "label": "पुनरावृत्तियाँ",
+              "description": "अधिक पुनरावृत्तियाँ अधिक स्मूथ परिणाम देती हैं (1-10)।"
+            }
+          }
+        },
+        "grid": {
+          "name": "नियमित ग्रिड",
+          "description": "किसी सीमा पर कोशिकाओं का एक नियमित आयताकार ग्रिड (फ़िशनेट) बनाएँ। स्रोत: वर्तमान मानचित्र दृश्य, किसी लेयर की सीमा, या मैन्युअल बाउंडिंग बॉक्स।",
+          "params": {
+            "source": {
+              "label": "सीमा स्रोत",
+              "options": {
+                "viewport": "मानचित्र व्यूपोर्ट",
+                "layer": "लेयर सीमा",
+                "bbox": "मैन्युअल बाउंडिंग बॉक्स"
+              }
+            },
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "west": {
+              "label": "पश्चिम (न्यूनतम देशांतर)"
+            },
+            "south": {
+              "label": "दक्षिण (न्यूनतम अक्षांश)"
+            },
+            "east": {
+              "label": "पूर्व (अधिकतम देशांतर)"
+            },
+            "north": {
+              "label": "उत्तर (अधिकतम अक्षांश)"
+            },
+            "cell_width": {
+              "label": "कोशिका चौड़ाई (डिग्री)"
+            },
+            "cell_height": {
+              "label": "कोशिका ऊँचाई (डिग्री)",
+              "description": "कोशिका चौड़ाई के बराबर रखने के लिए खाली छोड़ें।"
+            },
+            "cell_type": {
+              "label": "कोशिका प्रकार",
+              "options": {
+                "polygon": "आयत",
+                "point": "बिंदु (कोशिका केंद्र)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "किसी बिंदु लेयर से Voronoi आरेख (प्रति बिंदु एक बहुभुज, बिंदुओं की सीमा तक क्लिप किया हुआ) या Delaunay त्रिभुजन बनाएँ।",
+          "params": {
+            "layer": {
+              "label": "इनपुट बिंदु लेयर"
+            },
+            "type": {
+              "label": "आरेख",
+              "options": {
+                "voronoi": "Voronoi बहुभुज",
+                "delaunay": "Delaunay त्रिभुज"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "सेल-साइट कवरेज",
+          "description": "बिंदु साइटों से दिगंश, त्रिज्या और बीमविड्थ (विशेषता फ़ील्ड या निश्चित मानों से पढ़कर) का उपयोग करके एंटीना सेक्टर/वेज बहुभुज बनाएँ। बीमविड्थ 360° (पूर्ण वृत्त) तक सीमित है; दर्ज की गई बीमविड्थ सीमित मान दर्शाती है। सेल-टावर कवरेज के लिए उपयोगी, QGIS Shape Tools की तरह।",
+          "params": {
+            "layer": {
+              "label": "इनपुट बिंदु लेयर"
+            },
+            "azimuthField": {
+              "label": "दिगंश फ़ील्ड (°)",
+              "description": "सेक्टर जिस दिशा में है, उत्तर से दक्षिणावर्त डिग्री में। खाली या गैर-संख्यात्मक होने पर निश्चित दिगंश का उपयोग होता है।"
+            },
+            "azimuth": {
+              "label": "दिगंश (निश्चित, °)"
+            },
+            "radiusField": {
+              "label": "त्रिज्या फ़ील्ड",
+              "description": "कवरेज त्रिज्या। खाली या गैर-संख्यात्मक होने पर निश्चित त्रिज्या का उपयोग होता है।"
+            },
+            "radius": {
+              "label": "त्रिज्या (निश्चित)"
+            },
+            "beamwidthField": {
+              "label": "बीमविड्थ फ़ील्ड (°)",
+              "description": "सेक्टर की कोणीय चौड़ाई, 360° (पूर्ण वृत्त) तक सीमित। खाली या गैर-संख्यात्मक होने पर निश्चित बीमविड्थ का उपयोग होता है।"
+            },
+            "beamwidth": {
+              "label": "बीमविड्थ (निश्चित, °)"
+            },
+            "units": {
+              "label": "त्रिज्या इकाइयाँ",
+              "options": {
+                "kilometers": "किलोमीटर",
+                "meters": "मीटर",
+                "miles": "मील"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "DGGS जनरेटर",
+          "description": "किसी क्षेत्र को DGGS कोशिकाओं (H3, S2, A5, DGGRID, DGGAL) से भरें। स्रोत: किसी लेयर की ज्यामिति, किसी लेयर की सीमा, वर्तमान मानचित्र दृश्य, या मैन्युअल बाउंडिंग बॉक्स।",
+          "params": {
+            "dggsType": {
+              "label": "DGGS प्रकार",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID प्रकार",
+              "description": "duck_dggs को dggs_params के रूप में दिया गया ग्रिड कॉन्फ़िगरेशन (ISEA/FULLER × अपर्चर × टोपोलॉजी)।",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL प्रकार",
+              "description": "dggal.createDGGRS को दिया गया DGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS)।",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "क्षेत्र स्रोत",
+              "options": {
+                "polyfill": "लेयर ज्यामिति (पॉलीफ़िल)",
+                "extent": "लेयर सीमा (bbox)",
+                "viewport": "मानचित्र व्यूपोर्ट",
+                "bbox": "मैन्युअल बाउंडिंग बॉक्स"
+              }
+            },
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "west": {
+              "label": "पश्चिम (न्यूनतम देशांतर)"
+            },
+            "south": {
+              "label": "दक्षिण (न्यूनतम अक्षांश)"
+            },
+            "east": {
+              "label": "पूर्व (अधिकतम देशांतर)"
+            },
+            "north": {
+              "label": "उत्तर (अधिकतम अक्षांश)"
+            },
+            "resolution": {
+              "label": "रिज़ॉल्यूशन",
+              "description": "सीमा DGGS प्रकार पर निर्भर करती है। क्षेत्र से स्वतः चुनने के लिए खाली छोड़ें।"
+            },
+            "compactCells": {
+              "label": "कोशिकाएँ सघन करें",
+              "description": "सहोदर कोशिकाओं के पूर्ण समुच्चयों को मोटे मूल कोशिकाओं में मिलाएँ (कम फ़ीचर, मिश्रित रिज़ॉल्यूशन)।"
+            },
+            "fixAntimeridian": {
+              "label": "प्रतियाम्योत्तर ठीक करें",
+              "description": "±180° देशांतर को पार करने वाले कोशिका वलयों को खोलें।"
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "DGGS बिनिंग",
+          "description": "किसी बिंदु लेयर को DGGS कोशिकाओं में एकत्रित करें (गणना, या किसी संख्यात्मक फ़ील्ड का योग/माध्य/न्यूनतम/अधिकतम)।",
+          "params": {
+            "dggsType": {
+              "label": "DGGS प्रकार",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID प्रकार",
+              "description": "duck_dggs को dggs_params के रूप में दिया गया ग्रिड कॉन्फ़िगरेशन (ISEA/FULLER × अपर्चर × टोपोलॉजी)।",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL प्रकार",
+              "description": "dggal.createDGGRS को दिया गया DGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS)।",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "इनपुट बिंदु लेयर"
+            },
+            "aggOp": {
+              "label": "एकत्रीकरण",
+              "options": {
+                "count": "गणना",
+                "sum": "योग",
+                "mean": "माध्य",
+                "min": "न्यूनतम",
+                "max": "अधिकतम"
+              }
+            },
+            "field": {
+              "label": "फ़ील्ड",
+              "description": "एकत्रित करने के लिए संख्यात्मक फ़ील्ड।"
+            },
+            "resolution": {
+              "label": "रिज़ॉल्यूशन",
+              "description": "सीमा DGGS प्रकार पर निर्भर करती है। क्षेत्र से स्वतः चुनने के लिए खाली छोड़ें।"
+            },
+            "fixAntimeridian": {
+              "label": "प्रतियाम्योत्तर ठीक करें",
+              "description": "±180° देशांतर को पार करने वाले कोशिका वलयों को खोलें।"
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "DGGS सघनीकरण",
+          "description": "DGGS बहुभुज कोशिकाओं को सघन करें, या उन्हें एक समान रिज़ॉल्यूशन तक विस्तारित करें (H3, S2, A5, DGGAL)। इनपुट एक ID गुण वाली कोशिका लेयर होनी चाहिए।",
+          "params": {
+            "dggsType": {
+              "label": "DGGS प्रकार",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL प्रकार",
+              "description": "dggal.createDGGRS को दिया गया DGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS)।",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "मोड",
+              "options": {
+                "compact": "सघन करें",
+                "expand": "विस्तारित करें"
+              }
+            },
+            "layer": {
+              "label": "इनपुट DGGS लेयर",
+              "description": "DGGS जनरेटर / बिनिंग (या समकक्ष) से प्राप्त बहुभुज कोशिका लेयर।"
+            },
+            "cellField": {
+              "label": "कोशिका ID फ़ील्ड",
+              "description": "खाली छोड़ने पर चयनित प्रकार के लिए डिफ़ॉल्ट रूप से h3, a5, s2 या dggal होता है।"
+            },
+            "resolution": {
+              "label": "लक्ष्य रिज़ॉल्यूशन",
+              "description": "वह रिज़ॉल्यूशन जिस तक विस्तारित करना है। इनपुट कोशिकाओं के बराबर या उससे सूक्ष्म होना चाहिए।"
+            },
+            "fixAntimeridian": {
+              "label": "प्रतियाम्योत्तर ठीक करें",
+              "description": "±180° देशांतर को पार करने वाले कोशिका वलयों को खोलें।"
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "प्रक्षेपवक्र गति",
+          "description": "बिंदुओं को समय के अनुसार (प्रति लक्ष्य) क्रमबद्ध करें और लगातार फ़िक्स को दूरी, अवधि और गति वाले खंडों में जोड़ें। QGIS TrajecTools की तरह।",
+          "params": {
+            "layer": {
+              "label": "इनपुट बिंदु लेयर"
+            },
+            "timeField": {
+              "label": "समय फ़ील्ड",
+              "description": "प्रति फ़िक्स टाइमस्टैम्प: एक ISO दिनांक/समय स्ट्रिंग या एक epoch (सेकंड या मिलीसेकंड)।"
+            },
+            "idField": {
+              "label": "लक्ष्य id फ़ील्ड",
+              "description": "बिंदुओं को अलग-अलग प्रक्षेपवक्रों में विभाजित करता है। सभी बिंदुओं को एक लक्ष्य मानने के लिए खाली छोड़ें।"
+            },
+            "speedUnits": {
+              "label": "गति इकाइयाँ",
+              "options": {
+                "km/h": "किमी/घंटा",
+                "m/s": "मी/से",
+                "mph": "मील/घंटा"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "रुकावटें पहचानें",
+          "description": "वे स्थान खोजें जहाँ कोई लक्ष्य ठहरता है: लगातार फ़िक्स की ऐसी श्रृंखलाएँ जो कम से कम एक न्यूनतम अवधि तक एक दूरी के भीतर रहती हैं (GPS बिखराव को समाहित करते हुए)। प्रति रुकावट एक बिंदु आउटपुट करता है। QGIS TrajecTools की तरह।",
+          "params": {
+            "layer": {
+              "label": "इनपुट बिंदु लेयर"
+            },
+            "timeField": {
+              "label": "समय फ़ील्ड",
+              "description": "प्रति फ़िक्स टाइमस्टैम्प: एक ISO दिनांक/समय स्ट्रिंग या एक epoch (सेकंड या मिलीसेकंड)।"
+            },
+            "idField": {
+              "label": "लक्ष्य id फ़ील्ड",
+              "description": "प्रति लक्ष्य रुकावटें पहचानता है। सभी बिंदुओं को एक लक्ष्य मानने के लिए खाली छोड़ें।"
+            },
+            "maxDistance": {
+              "label": "अधिकतम दूरी",
+              "description": "रुकावट का प्रत्येक फ़िक्स रुकावट के पहले फ़िक्स से इस दूरी के भीतर होना चाहिए (इसलिए एक रुकावट इस मान के दोगुने तक फैल सकती है)। इसे अपने GPS बिखराव की त्रिज्या पर सेट करें।"
+            },
+            "distanceUnits": {
+              "label": "दूरी इकाइयाँ",
+              "options": {
+                "meters": "मीटर",
+                "kilometers": "किलोमीटर",
+                "miles": "मील"
+              }
+            },
+            "minDuration": {
+              "label": "न्यूनतम अवधि (से)",
+              "description": "इससे छोटा ठहराव रुकावट के रूप में दर्ज नहीं किया जाता।"
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "स्थान-समय निकटता",
+          "description": "स्थान और समय दोनों में निकट बिंदुओं के जोड़े खोजें — उदा. दो लक्ष्यों का मिलना। प्रत्येक योग्य जोड़े को जोड़ने वाली एक रेखा आउटपुट करता है, जिसमें दूरी और समय अंतराल दर्ज होते हैं।",
+          "params": {
+            "layer": {
+              "label": "इनपुट बिंदु लेयर"
+            },
+            "timeField": {
+              "label": "समय फ़ील्ड",
+              "description": "प्रति बिंदु टाइमस्टैम्प: एक ISO दिनांक/समय स्ट्रिंग या एक epoch (सेकंड या मिलीसेकंड)।"
+            },
+            "idField": {
+              "label": "लक्ष्य id फ़ील्ड",
+              "description": "सेट होने पर केवल भिन्न id मान वाले बिंदुओं को ही जोड़ा जाता है (अलग-अलग लक्ष्यों के बीच मुलाक़ातें)। हर जोड़े पर विचार करने के लिए खाली छोड़ें।"
+            },
+            "maxDistance": {
+              "label": "अधिकतम दूरी"
+            },
+            "distanceUnits": {
+              "label": "दूरी इकाइयाँ",
+              "options": {
+                "meters": "मीटर",
+                "kilometers": "किलोमीटर",
+                "miles": "मील"
+              }
+            },
+            "maxTime": {
+              "label": "अधिकतम समय अंतर"
+            },
+            "timeUnits": {
+              "label": "समय इकाइयाँ",
+              "options": {
+                "seconds": "सेकंड",
+                "minutes": "मिनट",
+                "hours": "घंटे"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "वैधता जाँचें",
+          "description": "अमान्य ज्यामिति वाले फ़ीचर खोजें (GEOS नियम: स्वयं-प्रतिच्छेदी वलय, शेल के बाहर छिद्र, ...) और उन्हें मानचित्र पर चिह्नित करें",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "ज्यामिति ठीक करें",
+          "description": "ST_MakeValid (GEOS) से अमान्य ज्यामितियों की मरम्मत करें; वैध फ़ीचर अपरिवर्तित रहते हैं",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "टोपोलॉजी नियम जाँचें",
+          "description": "लेयर को टोपोलॉजी नियमों (ओवरलैप, अंतराल, स्वयं-प्रतिच्छेदन, डैंगल) के विरुद्ध जाँचें और प्रत्येक उल्लंघन को मानचित्र पर चिह्नित करें",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "ruleSelfIntersect": {
+              "label": "रेखाएँ स्वयं को प्रतिच्छेद न करें"
+            },
+            "ruleOverlap": {
+              "label": "बहुभुज ओवरलैप न हों"
+            },
+            "ruleGaps": {
+              "label": "बहुभुजों में अंतराल न हों"
+            },
+            "ruleDangles": {
+              "label": "रेखाओं में डैंगल न हों"
+            },
+            "rulePointCovered": {
+              "label": "बिंदु किसी रेखा से ढके हों"
+            },
+            "ruleEndpointSnap": {
+              "label": "रेखा के अंतबिंदु सहनशीलता के भीतर जुड़े हों"
+            },
+            "snapTolerance": {
+              "label": "स्नैप सहनशीलता",
+              "description": "अंतबिंदु नियम के लिए: दो रेखा-सिरे कितनी दूर (लेयर निर्देशांक इकाइयों में — WGS84 के लिए डिग्री) हो सकते हैं और फिर भी जुड़े हुए माने जाएँ।"
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "टोपोलॉजी ठीक करें",
+          "description": "टोपोलॉजी उल्लंघनों की स्वचालित मरम्मत करें: लगभग जुड़े रेखा अंतबिंदुओं को स्नैप करें, डैंगल ठीक करें, और बिंदुओं को रेखाओं पर प्रक्षेपित करें। जिन मुक्त सिरों के पास कुछ नहीं है वे अपरिवर्तित रहते हैं।",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "ruleEndpointSnap": {
+              "label": "लगभग जुड़े रेखा अंतबिंदुओं को स्नैप करें"
+            },
+            "ruleDangles": {
+              "label": "डैंगल की मरम्मत करें (पास की ज्यामिति पर स्नैप या प्रक्षेपित करें)"
+            },
+            "rulePointCovered": {
+              "label": "बिंदुओं को निकटतम रेखा पर प्रक्षेपित करें"
+            },
+            "snapTolerance": {
+              "label": "स्नैप सहनशीलता",
+              "description": "जुड़ने के लिए ज्यामिति कितनी दूर (लेयर निर्देशांक इकाइयों में — WGS84 के लिए डिग्री) खिसक सकती है।"
+            },
+            "dryRun": {
+              "label": "केवल पूर्वावलोकन (ड्राई रन)",
+              "description": "मरम्मत की गई लेयर बनाए बिना उन सुधारों की रिपोर्ट करें जो लागू किए जाएँगे।"
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "आइसोक्रोन / सेवा क्षेत्र",
+          "description": "किसी लेयर के प्रत्येक बिंदु से यात्रा-समय या यात्रा-दूरी पहुँच बहुभुज",
+          "params": {
+            "layer": {
+              "label": "उद्गम बिंदु"
+            },
+            "mode": {
+              "label": "यात्रा मोड",
+              "options": {
+                "auto": "ड्राइविंग",
+                "pedestrian": "पैदल",
+                "bicycle": "साइकिल"
+              }
+            },
+            "metric": {
+              "label": "मापदंड",
+              "options": {
+                "time": "यात्रा समय (मिनट)",
+                "distance": "दूरी (किमी)"
+              }
+            },
+            "contours": {
+              "label": "कंटूर",
+              "description": "अल्पविराम से अलग किए गए मान (समय के लिए मिनट, दूरी के लिए किमी)"
+            },
+            "endpoint": {
+              "label": "रूटिंग सर्वर (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "OD लागत मैट्रिक्स",
+          "description": "प्रत्येक उद्गम और गंतव्य बिंदु के बीच यात्रा समय और दूरी, जोड़ने वाली रेखाओं के रूप में",
+          "params": {
+            "origins": {
+              "label": "उद्गम बिंदु"
+            },
+            "destinations": {
+              "label": "गंतव्य बिंदु"
+            },
+            "mode": {
+              "label": "यात्रा मोड",
+              "options": {
+                "auto": "ड्राइविंग",
+                "pedestrian": "पैदल",
+                "bicycle": "साइकिल"
+              }
+            },
+            "endpoint": {
+              "label": "रूटिंग सर्वर (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "क्रमिक मार्ग (दिशा-निर्देश)",
+          "description": "बिंदुओं को सड़क नेटवर्क के साथ क्रम में जोड़कर एक मार्ग बनाएँ। प्रत्येक बिंदु निकटतम सड़क पर स्नैप किया जाता है, इसलिए सड़क से दूर के निर्देशांक (सेल साइट, सेंसर) भी रूट होते हैं। क्रम चुने गए फ़ील्ड (उदा. टाइमस्टैम्प) या लेयर के फ़ीचर क्रम का अनुसरण करता है।",
+          "params": {
+            "layer": {
+              "label": "इनपुट बिंदु"
+            },
+            "order_field": {
+              "label": "फ़ील्ड के अनुसार क्रम (वैकल्पिक)",
+              "description": "रूटिंग से पहले बिंदुओं को इस फ़ील्ड (संख्याएँ या टाइमस्टैम्प) के अनुसार क्रमबद्ध करें। लेयर के फ़ीचर क्रम का उपयोग करने के लिए खाली छोड़ें।"
+            },
+            "mode": {
+              "label": "यात्रा मोड",
+              "options": {
+                "auto": "ड्राइविंग",
+                "pedestrian": "पैदल",
+                "bicycle": "साइकिल"
+              }
+            },
+            "endpoint": {
+              "label": "रूटिंग सर्वर (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "ग्लोबल मोरन का I",
+          "description": "पूरी लेयर में किसी संख्यात्मक विशेषता के समग्र स्थानिक स्वसहसंबंध को मापें।",
+          "params": {
+            "layer": {
+              "label": "लेयर"
+            },
+            "field": {
+              "label": "मान फ़ील्ड"
+            },
+            "weightsType": {
+              "label": "स्थानिक भार",
+              "description": "प्रत्येक फ़ीचर के लिए पड़ोसी कैसे परिभाषित किए जाते हैं।",
+              "options": {
+                "knn": "K निकटतम पड़ोसी",
+                "distance": "दूरी बैंड"
+              }
+            },
+            "k": {
+              "label": "पड़ोसी (k)"
+            },
+            "threshold": {
+              "label": "दूरी बैंड (किमी)"
+            },
+            "permutations": {
+              "label": "क्रमचय",
+              "description": "छद्म p-मान के लिए यादृच्छिक क्रमचय।"
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "लोकल मोरन का I (LISA)",
+          "description": "छद्म सार्थकता के साथ प्रति-फ़ीचर क्लस्टर और आउटलायर (उच्च-उच्च, निम्न-निम्न, उच्च-निम्न, निम्न-उच्च)।",
+          "params": {
+            "layer": {
+              "label": "लेयर"
+            },
+            "field": {
+              "label": "मान फ़ील्ड"
+            },
+            "weightsType": {
+              "label": "स्थानिक भार",
+              "description": "प्रत्येक फ़ीचर के लिए पड़ोसी कैसे परिभाषित किए जाते हैं।",
+              "options": {
+                "knn": "K निकटतम पड़ोसी",
+                "distance": "दूरी बैंड"
+              }
+            },
+            "k": {
+              "label": "पड़ोसी (k)"
+            },
+            "threshold": {
+              "label": "दूरी बैंड (किमी)"
+            },
+            "permutations": {
+              "label": "क्रमचय",
+              "description": "छद्म p-मान के लिए यादृच्छिक क्रमचय।"
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Getis-Ord Gi* हॉटस्पॉट",
+          "description": "किसी संख्यात्मक विशेषता के सांख्यिकीय रूप से सार्थक हॉट स्पॉट और कोल्ड स्पॉट पहचानें।",
+          "params": {
+            "layer": {
+              "label": "लेयर"
+            },
+            "field": {
+              "label": "मान फ़ील्ड"
+            },
+            "weightsType": {
+              "label": "स्थानिक भार",
+              "description": "प्रत्येक फ़ीचर के लिए पड़ोसी कैसे परिभाषित किए जाते हैं।",
+              "options": {
+                "knn": "K निकटतम पड़ोसी",
+                "distance": "दूरी बैंड"
+              }
+            },
+            "k": {
+              "label": "पड़ोसी (k)"
+            },
+            "threshold": {
+              "label": "दूरी बैंड (किमी)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "औसत निकटतम पड़ोसी",
+          "description": "जाँचें कि बिंदु क्लस्टर्ड, बिखरे हुए या यादृच्छिक रूप से वितरित हैं (ANN अनुपात + z-स्कोर)।",
+          "params": {
+            "layer": {
+              "label": "बिंदु लेयर"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "कर्नेल घनत्व (हीटमैप)",
+          "description": "क्वार्टिक कर्नेल का उपयोग करके बिंदुओं से कोशिकाओं के ग्रिड के रूप में घनत्व सतह का अनुमान लगाएँ।",
+          "params": {
+            "layer": {
+              "label": "बिंदु लेयर"
+            },
+            "weightField": {
+              "label": "भार फ़ील्ड (वैकल्पिक)",
+              "description": "प्रत्येक बिंदु को भार देने वाला संख्यात्मक फ़ील्ड; खाली = समान भार।"
+            },
+            "bandwidth": {
+              "label": "खोज त्रिज्या / बैंडविड्थ (किमी)"
+            },
+            "cellSize": {
+              "label": "कोशिका आकार (किमी)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "उभरते हॉटस्पॉट (स्थान-समय क्यूब)",
+          "description": "टाइमस्टैम्प वाले बिंदुओं से एक स्थान-समय क्यूब (फ़िशनेट ग्रिड × समान समय चरण) बनाएँ और प्रत्येक कोशिका को नए, तीव्र होते, स्थायी, घटते, छिटपुट, दोलायमान या ऐतिहासिक हॉट/कोल्ड स्पॉट के रूप में वर्गीकृत करें। प्रति समय स्लाइस Getis-Ord Gi* चलाता है, फिर प्रत्येक कोशिका की Gi* श्रृंखला पर Mann-Kendall प्रवृत्ति परीक्षण। क्लाइंट-साइड, ArcGIS Emerging Hot Spot Analysis की तरह।",
+          "params": {
+            "layer": {
+              "label": "बिंदु लेयर"
+            },
+            "timeField": {
+              "label": "समय फ़ील्ड",
+              "description": "प्रति बिंदु टाइमस्टैम्प: एक ISO दिनांक/समय स्ट्रिंग या एक epoch (सेकंड या मिलीसेकंड)।"
+            },
+            "cellSize": {
+              "label": "कोशिका आकार (किमी)",
+              "description": "प्रत्येक वर्गाकार स्थानिक बिन की भुजा की लंबाई, किलोमीटर में।"
+            },
+            "timeStep": {
+              "label": "समय-चरण अंतराल"
+            },
+            "timeStepUnit": {
+              "label": "समय-चरण इकाई",
+              "options": {
+                "hours": "घंटे",
+                "days": "दिन",
+                "weeks": "सप्ताह"
+              }
+            },
+            "weightField": {
+              "label": "भार फ़ील्ड (वैकल्पिक)",
+              "description": "बिंदुओं की गणना के बजाय प्रति स्थान-समय बिन जोड़ा जाने वाला संख्यात्मक फ़ील्ड; खाली = बिंदुओं की गणना।"
+            },
+            "confidence": {
+              "label": "विश्वास स्तर",
+              "description": "किसी बिन को हॉट/कोल्ड स्पॉट मानने और प्रवृत्ति के लिए सार्थकता सीमा।",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "हिलशेड",
+          "description": "किसी ऊँचाई मॉडल से छायांकित-उच्चावच (हिलशेड) रास्टर की गणना करें।",
+          "params": {
+            "azimuth": {
+              "label": "दिगंश (डिग्री)"
+            },
+            "altitude": {
+              "label": "उन्नतांश (डिग्री)"
+            },
+            "z_factor": {
+              "label": "Z गुणक"
+            }
+          }
+        },
+        "slope": {
+          "name": "ढाल",
+          "description": "किसी ऊँचाई मॉडल से ढाल (तीव्रता) की गणना करें।",
+          "params": {
+            "units": {
+              "label": "इकाइयाँ",
+              "options": {
+                "degrees": "डिग्री",
+                "percent": "प्रतिशत"
+              }
+            },
+            "z_factor": {
+              "label": "Z गुणक"
+            }
+          }
+        },
+        "aspect": {
+          "name": "अभिमुखता",
+          "description": "किसी ऊँचाई मॉडल से अभिमुखता (सबसे तीव्र ढाल की दिशा) की गणना करें।"
+        },
+        "reproject": {
+          "name": "पुनःप्रक्षेपण",
+          "description": "किसी रास्टर को एक भिन्न निर्देशांक संदर्भ प्रणाली में वार्प करें।",
+          "params": {
+            "dst_crs": {
+              "label": "लक्ष्य CRS",
+              "description": "EPSG:3857 या EPSG:4326 जैसा एक प्राधिकरण कोड।"
+            },
+            "resampling": {
+              "label": "पुनः नमूनाकरण",
+              "options": {
+                "nearest": "निकटतम पड़ोसी",
+                "bilinear": "द्विरेखीय",
+                "cubic": "घन (Cubic)"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "पुनः नमूनाकरण",
+          "description": "किसी रास्टर को एक भिन्न पिक्सेल आकार (रिज़ॉल्यूशन) में पुनः नमूनित करें।",
+          "params": {
+            "resolution": {
+              "label": "लक्ष्य पिक्सेल आकार",
+              "description": "रास्टर की CRS इकाइयों में आउटपुट पिक्सेल आकार।"
+            },
+            "resampling": {
+              "label": "पुनः नमूनाकरण",
+              "options": {
+                "nearest": "निकटतम पड़ोसी",
+                "bilinear": "द्विरेखीय",
+                "cubic": "घन (Cubic)"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "सीमा द्वारा क्लिप करें",
+          "description": "किसी रास्टर को एक बाउंडिंग बॉक्स (रास्टर के CRS में) तक काटें।",
+          "params": {
+            "minx": {
+              "label": "न्यूनतम X"
+            },
+            "miny": {
+              "label": "न्यूनतम Y"
+            },
+            "maxx": {
+              "label": "अधिकतम X"
+            },
+            "maxy": {
+              "label": "अधिकतम Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "मास्क लेयर द्वारा क्लिप करें",
+          "description": "किसी रास्टर को एक वेक्टर मास्क फ़ाइल की ज्यामितियों तक क्लिप करें।",
+          "params": {
+            "mask_path": {
+              "label": "मास्क लेयर",
+              "description": "एक GeoJSON फ़ाइल जिसकी ज्यामितियाँ क्लिप क्षेत्र परिभाषित करती हैं। इसे स्वचालित रूप से रास्टर के CRS में पुनः प्रक्षेपित किया जाता है (बिना CRS वाली GeoJSON को WGS84 माना जाता है)।"
+            },
+            "crop": {
+              "label": "मास्क सीमा तक काटें"
+            },
+            "all_touched": {
+              "label": "सभी स्पर्शित पिक्सेल शामिल करें"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "पॉलीगनाइज़ करें",
+          "description": "किसी रास्टर बैंड को पिक्सेल मान के अनुसार समूहित वेक्टर बहुभुजों में बदलें।",
+          "params": {
+            "band": {
+              "label": "बैंड"
+            },
+            "connectivity": {
+              "label": "संयोजकता",
+              "options": {
+                "4": "4-संयोजित",
+                "8": "8-संयोजित"
+              }
+            },
+            "field": {
+              "label": "मान फ़ील्ड नाम"
+            }
+          }
+        },
+        "contour": {
+          "name": "कंटूर",
+          "description": "किसी ऊँचाई मॉडल से कंटूर रेखाएँ बनाएँ।",
+          "params": {
+            "band": {
+              "label": "बैंड"
+            },
+            "interval": {
+              "label": "अंतराल",
+              "description": "क्रमिक कंटूर रेखाओं के बीच ऊँचाई का अंतर।"
+            },
+            "base": {
+              "label": "आधार"
+            },
+            "attribute": {
+              "label": "ऊँचाई फ़ील्ड नाम"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "प्रक्षेप (IDW / Kriging)",
+          "description": "व्युत्क्रम दूरी भारण या साधारण क्रिगिंग का उपयोग करके किसी बिंदु लेयर की संख्यात्मक विशेषता को एक सतत रास्टर सतह में प्रक्षेपित करें।",
+          "params": {
+            "field": {
+              "label": "मान फ़ील्ड",
+              "description": "प्रक्षेपित की जाने वाली संख्यात्मक बिंदु विशेषता का नाम (उदा. ऊँचाई, तापमान)।"
+            },
+            "method": {
+              "label": "विधि",
+              "options": {
+                "idw": "व्युत्क्रम दूरी भारण (IDW)",
+                "kriging": "साधारण क्रिगिंग"
+              }
+            },
+            "resolution": {
+              "label": "आउटपुट पिक्सेल आकार",
+              "description": "लेयर की CRS इकाइयों में कोशिका आकार (WGS84 के लिए डिग्री)। ग्रिड बिंदुओं की सीमा को कवर करता है।"
+            },
+            "power": {
+              "label": "IDW घात",
+              "description": "उच्च मान निकट बिंदुओं को अधिक प्रभाव देते हैं।"
+            },
+            "variogram_model": {
+              "label": "वैरियोग्राम मॉडल",
+              "description": "अनुभवजन्य सेमीवैरियोग्राम पर फ़िट किया गया सैद्धांतिक मॉडल। क्रिगिंग 1500 बिंदुओं तक सीमित है।",
+              "options": {
+                "spherical": "गोलीय",
+                "exponential": "घातांकीय",
+                "gaussian": "गाउसीय",
+                "linear": "रैखिक"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "क्षेत्रीय सांख्यिकी",
+          "description": "किसी वेक्टर लेयर के प्रत्येक बहुभुज के भीतर रास्टर मानों का सारांश बनाएँ (गणना, न्यूनतम, अधिकतम, माध्य, योग, मानक विचलन, माध्यिका)।",
+          "params": {
+            "zones_path": {
+              "label": "ज़ोन लेयर",
+              "description": "ज़ोन परिभाषित करने वाली एक GeoJSON बहुभुज लेयर। इसे स्वचालित रूप से रास्टर के CRS में पुनः प्रक्षेपित किया जाता है (बिना CRS वाली GeoJSON को WGS84 माना जाता है)।"
+            },
+            "band": {
+              "label": "बैंड"
+            },
+            "prefix": {
+              "label": "फ़ील्ड उपसर्ग",
+              "description": "प्रत्येक सांख्यिकी फ़ील्ड नाम के आगे जोड़ा जाता है (उदा. 'dem_' → 'dem_mean')। केवल 'mean', 'min', … के लिए खाली छोड़ें"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "रैस्टर कैलकुलेटर",
+          "description": "एक NumPy बैंड-गणित अभिव्यक्ति का मूल्यांकन करें। प्रत्येक इनपुट के बैंड 1 को A, B, C के रूप में और विशिष्ट बैंड को A1, A2, … के रूप में संदर्भित करें; उदा. NDVI है (A2 - A1) / (A2 + A1)।",
+          "params": {
+            "expression": {
+              "label": "अभिव्यक्ति",
+              "description": "A, B, C (और A1, A2, …) पर एक NumPy अभिव्यक्ति। फ़ंक्शन: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan।"
+            },
+            "b_path": {
+              "label": "रास्टर B (वैकल्पिक)",
+              "description": "एक दूसरा रास्टर, जिसे B / B1, B2, … के रूप में संदर्भित किया जाता है। A के आयामों से मेल खाना चाहिए।"
+            },
+            "c_path": {
+              "label": "रास्टर C (वैकल्पिक)",
+              "description": "एक तीसरा रास्टर, जिसे C / C1, C2, … के रूप में संदर्भित किया जाता है। A के आयामों से मेल खाना चाहिए।"
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "स्पेक्ट्रल इंडेक्स",
+          "description": "किसी बहु-बैंड रास्टर से एक नामित स्पेक्ट्रल इंडेक्स (NDVI, NDWI, EVI, …) की गणना करें। बैंड लेआउट के लिए एक सेंसर प्रीसेट चुनें, या कस्टम सेंसर के साथ बैंड संख्याएँ मैन्युअल रूप से सेट करें।",
+          "params": {
+            "index": {
+              "label": "इंडेक्स",
+              "options": {
+                "ndvi": "NDVI (वनस्पति)",
+                "gndvi": "GNDVI (हरित वनस्पति)",
+                "ndwi": "NDWI (जल, McFeeters)",
+                "ndmi": "NDMI (नमी)",
+                "ndbi": "NDBI (निर्मित क्षेत्र)",
+                "nbr": "NBR (दहन अनुपात)",
+                "evi": "EVI (उन्नत वनस्पति)",
+                "savi": "SAVI (मृदा-समायोजित वनस्पति)"
+              }
+            },
+            "sensor": {
+              "label": "सेंसर / बैंड लेआउट",
+              "description": "सामान्य सेंसरों के लिए प्रीसेट बैंड संख्याएँ। अलग ढंग से स्टैक किए गए GeoTIFF के लिए बैंड हाथ से मैप करने हेतु कस्टम चुनें।",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "कस्टम (नीचे बैंड संख्याएँ सेट करें)"
+              }
+            },
+            "red": {
+              "label": "लाल बैंड संख्या"
+            },
+            "green": {
+              "label": "हरा बैंड संख्या"
+            },
+            "blue": {
+              "label": "नीला बैंड संख्या"
+            },
+            "nir": {
+              "label": "NIR बैंड संख्या"
+            },
+            "swir1": {
+              "label": "SWIR1 बैंड संख्या"
+            },
+            "swir2": {
+              "label": "SWIR2 बैंड संख्या"
+            },
+            "L": {
+              "label": "मृदा गुणक (L)",
+              "description": "SAVI मृदा-चमक सुधार (0 घना आवरण → 1 नंगी मिट्टी)।"
+            },
+            "scale": {
+              "label": "परावर्तन स्केल",
+              "description": "पिक्सेल मानों को परावर्तन (0–1) में बदलने वाला गुणक। सामान्यीकृत-अंतर इंडेक्स के लिए 1 पर रहने दें; पूर्णांक-DN इमेजरी पर EVI/SAVI के लिए इसे सेट करें (उदा. Sentinel-2 L2A के लिए 0.0001)।"
+            }
+          }
+        },
+        "reclassify": {
+          "name": "पुनर्वर्गीकृत करें",
+          "description": "एक नियम तालिका का उपयोग करके मान श्रेणियों को नए वर्ग मानों में पुनः मैप करें।",
+          "params": {
+            "band": {
+              "label": "बैंड"
+            },
+            "table": {
+              "label": "नियम",
+              "description": "अल्पविराम या नई पंक्ति से अलग किए गए 'min:max:newvalue' नियम, उदा. '0:10:1, 10:20:2, 20:max:3'। श्रेणियाँ अर्ध-खुली [min, max) हैं; खाली/min/max का अर्थ ±∞ है।"
+            },
+            "unmatched": {
+              "label": "बेमेल मान",
+              "options": {
+                "nodata": "NoData पर सेट करें",
+                "original": "मूल मान रखें"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "मोज़ेक / मर्ज करें",
+          "description": "पाँच तक रास्टर (समान CRS वाले) को उनके संघ को कवर करने वाले एक ही रास्टर में मिलाएँ।",
+          "params": {
+            "raster_2": {
+              "label": "दूसरा रास्टर"
+            },
+            "raster_3": {
+              "label": "तीसरा रास्टर (वैकल्पिक)"
+            },
+            "raster_4": {
+              "label": "चौथा रास्टर (वैकल्पिक)"
+            },
+            "raster_5": {
+              "label": "पाँचवाँ रास्टर (वैकल्पिक)"
+            },
+            "method": {
+              "label": "ओवरलैप विधि",
+              "description": "जहाँ इनपुट ओवरलैप होते हैं वहाँ कौन सा मान मान्य होता है।",
+              "options": {
+                "first": "पहला",
+                "last": "अंतिम",
+                "min": "न्यूनतम",
+                "max": "अधिकतम"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "फोकल सांख्यिकी",
+          "description": "किसी रास्टर बैंड पर एक गतिमान-विंडो (पड़ोस) सांख्यिकी लागू करें।",
+          "params": {
+            "band": {
+              "label": "बैंड"
+            },
+            "statistic": {
+              "label": "सांख्यिकी",
+              "options": {
+                "mean": "माध्य",
+                "median": "माध्यिका",
+                "min": "न्यूनतम",
+                "max": "अधिकतम",
+                "sum": "योग",
+                "std": "मानक विचलन",
+                "range": "परास (अधिकतम − न्यूनतम)"
+              }
+            },
+            "size": {
+              "label": "विंडो आकार",
+              "description": "पिक्सेल में विषम पड़ोस आकार (3 = 3×3)। अधिकतम 25।"
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "विश्लेषण",
+      "clip": "क्लिप",
+      "dataQuality": "डेटा गुणवत्ता",
+      "dggs": "DGGS",
+      "geometry": "ज्यामिति",
+      "join": "जॉइन",
+      "movementTime": "गति और समय",
+      "network": "नेटवर्क",
+      "overlay": "ओवरले",
+      "rasterToVector": "रास्टर से वेक्टर",
+      "reproject": "पुनः प्रोजेक्ट करें",
+      "select": "चयन",
+      "spatialStatistics": "स्थानिक सांख्यिकी",
+      "terrain": "भू-भाग",
+      "vectorToRaster": "वेक्टर से रास्टर"
     }
   },
   "segmentation": {
@@ -3790,6 +5776,7 @@
     "title": "ऑब्जेक्ट डिटेक्शन",
     "description": "ONNX में निर्यात किए गए YOLO मॉडल को पूरी तरह ब्राउज़र में एक GeoTIFF पर चलाएँ। पहचाने गए बॉक्स जियोरेफ़रेंस्ड होते हैं और प्रत्येक क्लास अपनी लेयर के रूप में जोड़ी जाती है।",
     "hint": "एक अंतर्निहित COCO मॉडल (एक बार डाउनलोड और कैश किया गया) उपयोग करें या अपना स्वयं का YOLOv5/v8/v11 ONNX लाएँ। डिटेक्शन स्थानीय रूप से ब्राउज़र में चलता है। अंतर्निहित मॉडल रोज़मर्रा की वस्तुओं का पता लगाते हैं; हवाई इमेजरी के लिए, अपना स्वयं का ऊपरी-दृश्य पर प्रशिक्षित मॉडल दें।",
+    "unavailableNoExternalCdn": "इस बिल्ड में ऑब्जेक्ट डिटेक्शन उपलब्ध नहीं है। इसके लिए ONNX Runtime चाहिए, जो एक बाहरी CDN से लोड होता है और इस परिनियोजन ने उसे अक्षम कर दिया है। अपनी मॉडल फ़ाइल देने से भी काम नहीं चलेगा।",
     "imageLabel": "छवि (GeoTIFF)",
     "imagePlaceholder": "एक GeoTIFF चुनें…",
     "chooseImage": "छवि चुनें",
@@ -3822,6 +5809,7 @@
     "title": "सब कुछ सेगमेंट करें",
     "description": "SlimSAM को स्वचालित रूप से पूरी तरह ब्राउज़र में एक GeoTIFF पर चलाएँ। पहचानी गई प्रत्येक वस्तु एक जियोरेफ़रेंस्ड बहुभुज बन जाती है जो एक लेयर के रूप में जोड़ी जाती है।",
     "hint": "छवि पर बिंदुओं का एक ग्रिड नमूना लिया जाता है और SlimSAM (एक बार डाउनलोड और कैश किया गया) के साथ सेगमेंट किया जाता है। कोई क्लिक या लेबल नहीं — सघन ग्रिड अधिक वस्तुएँ खोजते हैं लेकिन अधिक समय लेते हैं।",
+    "unavailableNoExternalCdn": "इस बिल्ड में “सब कुछ सेगमेंट करें” उपलब्ध नहीं है। इसके लिए ONNX Runtime चाहिए, जो एक बाहरी CDN से लोड होता है और इस परिनियोजन ने उसे अक्षम कर दिया है।",
     "imageLabel": "छवि (GeoTIFF)",
     "imagePlaceholder": "एक GeoTIFF चुनें…",
     "chooseImage": "छवि चुनें",
@@ -3966,6 +5954,7 @@
     "deleteField": "फ़ील्ड हटाएं",
     "joinedColumnTitle": "जॉइन तालिका से व्युत्पन्न जुड़ा कॉलम। इसके बजाय जॉइन तालिका या जॉइन परिभाषा संपादित करें।",
     "virtualColumnTitle": "एक एक्सप्रेशन से परिकलित वर्चुअल फ़ील्ड। इसके बजाय लेयर के स्टाइल पैनल में इसकी परिभाषा संपादित करें।",
+    "trackingColumnTitle": "संपादन ट्रैकिंग फ़ील्ड, जो स्वतः बनी रहती है। इसका नाम लेयर की संपादन ट्रैकिंग सेटिंग्स में बदलें।",
     "deleteFieldConfirm": "यह \"{{layer}}\" के प्रत्येक फ़ीचर से फ़ील्ड \"{{field}}\" को स्थायी रूप से हटा देता है। इसका संदर्भ देने वाली स्टाइलिंग या लेबल साफ़ कर दिए जाएंगे। इसे पूर्ववत नहीं किया जा सकता।",
     "addFieldDescription": "\"{{layer}}\" के प्रत्येक फ़ीचर में एक नया फ़ील्ड जोड़ें।",
     "fieldName": "फ़ील्ड नाम",
@@ -4488,11 +6477,15 @@
       "typeConvexHull": "उत्तल आवरण",
       "typeBuffer": "बफ़र",
       "bufferDistance": "बफ़र दूरी (मी)",
+      "bufferField": "दूरी फ़ील्ड",
+      "bufferFieldHint": "हर फ़ीचर अपने स्वयं के मान (मीटर में) से बफ़र होता है; जिन फ़ीचर का मान नहीं है वे ऊपर दी गई दूरी का उपयोग करते हैं, और 0 मान कुछ भी नहीं बनाता।",
+      "fieldNone": "कोई नहीं (स्थिर)",
       "fillColor": "भराव रंग",
       "strokeColor": "रूपरेखा रंग",
       "strokeWidth": "रूपरेखा चौड़ाई (px)",
       "opacity": "भराव अपारदर्शिता",
-      "circleRadius": "बिंदु त्रिज्या (px)"
+      "circleRadius": "बिंदु त्रिज्या (px)",
+      "sizeField": "आकार फ़ील्ड"
     },
     "attributeForm": {
       "heading": "विशेषता फ़ॉर्म",
@@ -4534,7 +6527,26 @@
       "save": "सहेजें",
       "noFields": "परत में कॉन्फ़िगर करने के लिए कोई विशेषता फ़ील्ड नहीं है।",
       "minMaxInvalid": "न्यूनतम, अधिकतम से कम या उसके बराबर होना चाहिए।"
+    },
+    "editorTracking": {
+      "heading": "संपादन ट्रैकिंग",
+      "description": "रिकॉर्ड करें कि प्रत्येक फ़ीचर किसने बनाया और अंतिम बार किसने बदला। फ़ीचर बनाते, संपादित करते, परिकलित करते या एकत्र करते समय नीचे दिए फ़ील्ड अपने आप भर जाते हैं।",
+      "enable": "इस लेयर के संपादन ट्रैक करें",
+      "identity": "आपका नाम",
+      "identityHint": "संपादन “{{name}}” के रूप में दर्ज किए जाएँगे।",
+      "identityFromSession": "आप जिस सहयोग सत्र में हैं, उससे लिया गया।",
+      "createdByField": "“बनाने वाला” फ़ील्ड",
+      "createdAtField": "“बनाने का समय” फ़ील्ड",
+      "editedByField": "“संपादक” फ़ील्ड",
+      "editedAtField": "“संपादन का समय” फ़ील्ड",
+      "blankName": "फ़ील्ड के नाम खाली नहीं हो सकते।",
+      "duplicateName": "प्रत्येक ट्रैकिंग फ़ील्ड का नाम अलग होना चाहिए।",
+      "columnTaken": "“{{name}}” पहले से एक विशेषता फ़ील्ड है। ट्रैकिंग उसके मान अधिलेखित कर देगी।"
     }
+  },
+  "vectorExport": {
+    "invalidKmlCoordinatesByPosition": "KML निर्यात फ़ीचर {{position}} नहीं लिख सका क्योंकि उसके निर्देशांक अमान्य हैं।",
+    "invalidKmlCoordinatesById": "KML निर्यात ID {{id}} वाला फ़ीचर नहीं लिख सका क्योंकि उसके निर्देशांक अमान्य हैं।"
   },
   "layers": {
     "panelCollapsedLabel": "लेयर (संक्षिप्त)",
@@ -4555,9 +6567,17 @@
     "identifyInspectPixels": "पिक्सेल मान जांचें",
     "identifyStopInspectPixels": "पिक्सेल मान जांचना बंद करें",
     "identifyUnavailable": "पहचान केवल वेक्टर, WMS और COG लेयर के लिए उपलब्ध है",
+    "selectFeaturesMenu": "फ़ीचर चुनें",
+    "selectFeaturesSingle": "क्लिक करके फ़ीचर चुनें",
+    "selectFeaturesRectangle": "आयत से फ़ीचर चुनें",
+    "selectFeaturesPolygon": "बहुभुज से फ़ीचर चुनें",
+    "selectFeaturesFreehand": "फ़्रीहैंड से फ़ीचर चुनें",
+    "selectFeaturesRadius": "त्रिज्या से फ़ीचर चुनें",
+    "selectFeaturesModifiers": "Shift जोड़ता है, Alt हटाता है, और Shift+Alt प्रतिच्छेदन करता है। रद्द करने के लिए Esc दबाएँ।",
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "उपसमुच्चय निकालें…",
     "stylesMenu": "शैलियां",
+    "exportGeoLibreStyle": "GeoLibre URL शैली निर्यात करें",
     "exportMapboxStyle": "Mapbox GL शैली के रूप में निर्यात करें",
     "exportSldStyle": "OGC SLD के रूप में निर्यात करें",
     "exportQmlStyle": "QGIS QML के रूप में निर्यात करें",
@@ -4565,7 +6585,7 @@
     "exportStyleDataNotReady": "लेयर डेटा अभी तैयार नहीं है। कुछ समय बाद पुनः प्रयास करें।",
     "exportStyleNeedsFeatures": "शैली निर्यात के लिए फ़ीचर वाली एक वेक्टर लेयर आवश्यक है।",
     "exportStyleError": "इस लेयर की शैली निर्यात नहीं की जा सकी।",
-    "importStyle": "शैली आयात करें (Mapbox GL / SLD / QML)…",
+    "importStyle": "शैली आयात करें (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "सहेजी गई स्टाइल (स्टाइल मैनेजर)…",
     "importStyleSuccess": "शैली आयात की गई।",
     "importStyleInvalid": "यह फ़ाइल मान्य JSON, SLD, या QML नहीं है।",
@@ -4604,6 +6624,7 @@
     "bindWindowCumulative": "वर्तमान चरण तक सब कुछ (संचयी)",
     "bindCancel": "रद्द करें",
     "bindConfirm": "बाइंड करें",
+    "openStylePanel": "स्टाइल पैनल खोलें",
     "openRasterStylePanel": "रास्टर शैली संपादित करें…",
     "exportRasterSuccess": "रास्टर निर्यात किया गया।",
     "exportRasterError": "यह रास्टर निर्यात नहीं किया जा सका।",
@@ -4709,6 +6730,7 @@
     "refreshVectorControlError": "इस लेयर को रीफ़्रेश नहीं किया जा सका। Add Vector Layer पैनल को फिर से खोलने का प्रयास करें।",
     "refreshed": "रीफ़्रेश किया गया।",
     "refreshedCount": "{{count}} फ़ीचर रीफ़्रेश किए गए।",
+    "refreshedTruncated": "{{total}} में से {{shown}} फ़ीचर रीफ़्रेश किए गए।",
     "refreshError": "इस लेयर को रीफ़्रेश नहीं किया जा सका।",
     "exportNeedsFeatures": "निर्यात के लिए फ़ीचर वाली एक वेक्टर लेयर आवश्यक है।",
     "exportedWithWarnings": "लेयर निर्यात की गई। {{warnings}}",
@@ -4771,6 +6793,78 @@
     "nodataOff": "सभी पिक्सेल रेंडर करें",
     "nodataCustom": "कस्टम मान"
   },
+  "netcdfSymbology": {
+    "heading": "NetCDF सिंबोलॉजी",
+    "colorRampLabel": "कलरमैप",
+    "reverse": "कलरमैप उलटें",
+    "colorMin": "रंग न्यूनतम",
+    "colorMax": "रंग अधिकतम",
+    "resetRange": "डेटा की सीमा पर रीसेट करें",
+    "openCube": "3D क्यूब"
+  },
+  "netcdfCube": {
+    "heading": "3D इमेज क्यूब",
+    "close": "बंद करें",
+    "settings": "सेटिंग्स",
+    "setupTitle": "3D इमेज क्यूब",
+    "setupDescription": "क्यूब बनाने से पहले चुनें कि क्या पढ़ना है। हर बैंड अलग से पढ़ा जाता है, इसलिए विस्तार और बैंड की संख्या तय करती है कि कितना समय लगेगा।",
+    "extent": "विस्तार",
+    "extentView": "मौजूदा मानचित्र दृश्य",
+    "extentDraw": "मानचित्र पर खींचें",
+    "extentFull": "लेयर का पूरा विस्तार",
+    "viewHint": "क्यूब बनते समय मानचित्र जो दिखा रहा हो, वही पढ़ता है।",
+    "fullHint": "पूरा ग्रिड पढ़ता है। दृश्य के आकार के क्यूब के लिए धीमा।",
+    "drawBbox": "मानचित्र पर खींचें",
+    "drawing": "क्यूब का विस्तार तय करने के लिए मानचित्र पर एक बॉक्स खींचें",
+    "drawHint": "विस्तार तय करने के लिए मानचित्र पर एक बॉक्स खींचें।",
+    "drawnExtent": "प. {{west}}, द. {{south}}, पू. {{east}}, उ. {{north}}",
+    "detail": "विस्तार-स्तर",
+    "detailOption": "प्रति भुजा {{size}} सेल",
+    "bands": "बैंड",
+    "allBands": "सभी ({{count}})",
+    "rgbOverlay": "ऊपर RGB छवि",
+    "rgbHint": "तीन बैंड को एक रंगीन छवि में जोड़कर ऊपरी सतह पर बिछाता है, ताकि क्यूब एक जगह के रूप में पहचाना जा सके।",
+    "red": "लाल",
+    "green": "हरा",
+    "blue": "नीला",
+    "planeEstimate": "{{count}} बैंड पठन",
+    "create": "क्यूब बनाएँ",
+    "colorRampLabel": "कलरमैप",
+    "reverse": "उलटें",
+    "showRgb": "ऊपर RGB",
+    "rgbBands": "RGB बैंड",
+    "recomposing": "पढ़ा जा रहा है...",
+    "zScale": "ऊंचाई",
+    "slice": "स्लाइस",
+    "sliceAt": "{{band}} {{units}} पर कटा",
+    "reading": "{{total}} में से {{done}} बैंड पढ़ा जा रहा है...",
+    "summary": "{{nx}} x {{ny}} सेल, {{axis}} के साथ {{nz}} बैंड",
+    "errorNoCube": "इस लेयर की स्रोत फ़ाइल अब खुली नहीं है, इसलिए क्यूब नहीं पढ़ा जा सकता।",
+    "error": {
+      "shapeMismatch": "इस वेरिएबल के बैंड तलों का आकार एक जैसा नहीं है, इसलिए उन्हें क्यूब में नहीं जमाया जा सकता।",
+      "rgbShapeMismatch": "चुने गए RGB बैंड क्यूब के आकार से मेल नहीं खाते।",
+      "noBands": "इस वेरिएबल में पढ़ने के लिए कोई बैंड नहीं है।",
+      "noReadWindow": "यह क्यूब यथास्थान अपडेट नहीं किया जा सकता। इसे सेटिंग्स से दोबारा बनाएँ।"
+    }
+  },
+  "netcdfProfile": {
+    "heading": "स्पेक्ट्रल प्रोफ़ाइल",
+    "clear": "साफ़ करें",
+    "chartAria": "बैंड अक्ष के साथ नमूना लिए गए पिक्सेल मान",
+    "popOut": "अलग विंडो में खोलें",
+    "dock": "वापस जोड़ें",
+    "poppedOutHint": "चार्ट मानचित्र पर एक विंडो में खुला है।",
+    "noValues": "इन पिक्सेल के लिए चार्ट बनाने योग्य कोई मान नहीं है।",
+    "exportPng": "PNG",
+    "exportCsv": "CSV",
+    "exportError": "चार्ट निर्यात नहीं किया जा सका।",
+    "rasterFallbackName": "रास्टर"
+  },
+  "netcdfIdentify": {
+    "noData": "कोई डेटा नहीं",
+    "coordinates": "देशांतर, अक्षांश",
+    "cell": "पंक्ति, स्तंभ"
+  },
   "rasterAttributeTable": {
     "title": "रास्टर विशेषता तालिका",
     "resize": "रास्टर विशेषता तालिका का आकार बदलें",
@@ -4819,6 +6913,7 @@
     "cogConvertConfirm": "\"{{name}}\" एक सामान्य (striped) GeoTIFF है, जिसे सीधे प्रदर्शित नहीं किया जा सकता। क्या इसे अभी Cloud-Optimized GeoTIFF में बदलकर लोड करें?",
     "cogConvertRemoteConfirm": "\"{{name}}\" एक सामान्य (striped) GeoTIFF है, जिसे सीधे प्रदर्शित नहीं किया जा सकता। इसे प्रदर्शित करने के लिए पूरी फ़ाइल डाउनलोड करके ब्राउज़र में उसे Cloud-Optimized GeoTIFF में बदलना होगा, जो बड़ी फ़ाइलों के लिए धीमा और मेमोरी-गहन हो सकता है। जारी रखें?",
     "cogConvertLargeConfirm": "\"{{name}}\" एक बड़ी {{width}}×{{height}} GeoTIFF है जो Cloud-Optimized GeoTIFF नहीं है। इसे ब्राउज़र में बदलना धीमा और मेमोरी-गहन हो सकता है। फिर भी बदलकर लोड करें?",
+    "cogConvertTooLarge": "\"{{name}}\" ब्राउज़र में सुरक्षित रूप से बदलने के लिए बहुत बड़ा है। इसे gdal_translate या rio cogeo से Cloud-Optimized GeoTIFF में बदलें, फिर परिणाम लोड करें।",
     "cogConvertFailed": "\"{{name}}\" को Cloud-Optimized GeoTIFF में नहीं बदला जा सका। gdal_translate या rio cogeo से बदलने का प्रयास करें, फिर परिणाम लोड करें।",
     "rasterDownloadFailed": "\"{{name}}\" डाउनलोड नहीं की जा सकी। सर्वर धीमा, अनुपलब्ध, या क्रॉस-ओरिजिन रिक्वेस्ट ब्लॉक कर रहा हो सकता है, या फ़ाइल मेमोरी में रखने के लिए बहुत बड़ी हो सकती है। URL जांचें और पुनः प्रयास करें।",
     "rasterNotGeotiff": "\"{{name}}\" ने GeoTIFF नहीं लौटाई। सर्वर ने इसके बजाय एक त्रुटि या लॉगिन पेज भेजा हो सकता है। URL जांचें और पुनः प्रयास करें।"
@@ -4956,7 +7051,8 @@
       "pythonConsole": "Python कंसोल",
       "sqlWorkspace": "SQL कार्यक्षेत्र",
       "assistant": "सहायक",
-      "statusBar": "स्टेटस बार"
+      "statusBar": "स्टेटस बार",
+      "modelBuilder": "मॉडल बिल्डर"
     }
   },
   "attributeStats": {
@@ -4967,10 +7063,12 @@
     "scope": "दायरा",
     "scopeAll": "सभी फ़ीचर ({{total}})",
     "scopeFiltered": "फ़िल्टर किए गए ({{total}})",
+    "scopeSelected": "चयनित ({{total}})",
     "copiedToClipboard": "क्लिपबोर्ड में कॉपी किया गया।",
     "copy": "कॉपी करें",
     "copyHeader": "फ़ील्ड सांख्यिकी — {{field}}",
     "copyHeaderFiltered": "फ़ील्ड सांख्यिकी — {{field}} (फ़िल्टर किए गए)",
+    "copyHeaderSelected": "फ़ील्ड सांख्यिकी — {{field}} (चयनित)",
     "noValues": "सारांश के लिए कोई मान नहीं।",
     "mostFrequent": "सबसे अधिक बार आने वाले मान",
     "noPopulated": "कोई भरा हुआ मान नहीं।",
@@ -5012,76 +7110,6 @@
     "noPopulated": "कोई भरा हुआ मान नहीं।",
     "moreValues": "+{{total}} और मान"
   },
-  "stacPlugin": {
-    "title": "STAC कैटलॉग",
-    "footprintLayerName": "STAC खोज सीमाएँ",
-    "catalogSearch": "STAC Index में सार्वजनिक कैटलॉग खोजें",
-    "catalogSearchPlaceholder": "कैटलॉग नाम खोजें…",
-    "indexLoading": "STAC Index लोड हो रहा है…",
-    "indexUnavailable": "STAC Index उपलब्ध नहीं है: URL दर्ज करें",
-    "indexLoadFailed": "STAC Index लोड नहीं हो सका",
-    "urlLabel": "STAC कैटलॉग या API URL",
-    "connect": "कनेक्ट करें",
-    "connecting": "STAC से कनेक्ट हो रहा है…",
-    "connected": "कनेक्ट हो गया। फ़िल्टर चुनें और खोजें।",
-    "connectFailed": "STAC से कनेक्ट नहीं हो सका",
-    "selectCatalog": "एक कैटलॉग चुनें…",
-    "noMatchingCatalogs": "कोई मेल खाता कैटलॉग नहीं",
-    "catalogApiSuffix": " (API)",
-    "catalogStaticSuffix": " (स्थिर)",
-    "kindApi": "STAC API",
-    "kindStatic": "स्थिर कैटलॉग",
-    "collectionsHint": "एक से अधिक संग्रह चुनने के लिए Ctrl/Cmd दबाए रखें; आकार बदलने के लिए निचला किनारा खींचें",
-    "limitToExtent": "खोज को वर्तमान मानचित्र सीमा तक सीमित करें",
-    "bboxLabel": "बाउंडिंग बॉक्स (पश्चिम, दक्षिण, पूर्व, उत्तर)",
-    "bboxPlaceholder": "वैकल्पिक; मानचित्र सीमा को अधिलेखित करता है",
-    "bboxInvalid": "मान्य बाउंडिंग बॉक्स दर्ज करें: पश्चिम, दक्षिण, पूर्व, उत्तर।",
-    "drawBbox": "मानचित्र पर बॉक्स बनाएँ",
-    "cancelDrawing": "ड्रॉइंग रद्द करें",
-    "clearDrawnBbox": "बनाया गया बॉक्स हटाएँ",
-    "drawHint": "खोज बॉक्स बनाने के लिए मानचित्र पर क्लिक करके खींचें।",
-    "drawnBbox": "बनाया गया बॉक्स: {{bbox}}",
-    "drawnBboxCleared": "बनाया गया बॉक्स हटा दिया गया।",
-    "mapNotReady": "मानचित्र अभी ड्रॉइंग के लिए तैयार नहीं है।",
-    "startDate": "प्रारंभ तिथि",
-    "endDate": "समाप्ति तिथि",
-    "additionalParams": "अतिरिक्त खोज पैरामीटर (JSON, केवल STAC API)",
-    "additionalInvalid": "अतिरिक्त खोज पैरामीटर एक JSON ऑब्जेक्ट होना चाहिए।",
-    "searchItems": "आइटम खोजें",
-    "clearResults": "परिणाम साफ़ करें",
-    "resultsCleared": "खोज परिणाम साफ़ कर दिए गए।",
-    "searching": "STAC आइटम खोजे जा रहे हैं…",
-    "loadingMore": "और आइटम लोड हो रहे हैं…",
-    "noResults": "इन फ़िल्टर से मेल खाता कोई STAC आइटम नहीं है।",
-    "searchFailed": "STAC खोज विफल रही",
-    "showing": "{{count}} आइटम दिखाए जा रहे हैं।",
-    "showingOfMatched": "{{matched}} में से {{count}} आइटम दिखाए जा रहे हैं।",
-    "loadMore": "और लोड करें",
-    "renderOptions": "रैस्टर रेंडरिंग विकल्प",
-    "bands": "बैंड",
-    "bandsPlaceholder": "जैसे 1 या 1,2,3 (डिफ़ॉल्ट: स्वतः)",
-    "colormap": "कलरमैप (केवल एकल बैंड)",
-    "colormapDefault": "रेंडरर डिफ़ॉल्ट",
-    "minValue": "न्यूनतम मान",
-    "maxValue": "अधिकतम मान",
-    "nodata": "NoData मान",
-    "nodataPlaceholder": "फ़ाइल के NoData टैग को अधिलेखित करता है",
-    "renderHint": "रेंडरर को GeoTIFF से मान अनुमानित करने देने के लिए फ़ील्ड खाली छोड़ें। विकल्प बदलाव के बाद जोड़ी गई एसेट पर लागू होते हैं।",
-    "initialStatus": "STAC Index से कैटलॉग चुनें या URL दर्ज करें।",
-    "catalogInfo": "{{title}} · {{kind}}",
-    "zoom": "ज़ूम करें",
-    "add": "जोड़ें",
-    "download": "डाउनलोड करें",
-    "adding": "{{asset}} जोड़ा जा रहा है…",
-    "added": "{{asset}} मानचित्र में जोड़ा गया।",
-    "addUnsupported": "मानचित्र में केवल GeoTIFF/COG और GeoJSON एसेट जोड़ी जा सकती हैं",
-    "addFailed": "एसेट नहीं जोड़ी जा सकी",
-    "cogUnsupported": "यह GeoLibre होस्ट दूरस्थ GeoTIFF एसेट प्रदर्शित नहीं कर सकता"
-  },
-  "vectorExport": {
-    "invalidKmlCoordinatesByPosition": "KML निर्यात फ़ीचर {{position}} नहीं लिख सका क्योंकि उसके निर्देशांक अमान्य हैं।",
-    "invalidKmlCoordinatesById": "KML निर्यात ID {{id}} वाला फ़ीचर नहीं लिख सका क्योंकि उसके निर्देशांक अमान्य हैं।"
-  },
   "comments": {
     "title": "टिप्पणियाँ",
     "addDialogTitle": "समीक्षा टिप्पणी जोड़ें",
@@ -5090,276 +7118,49 @@
     "authorNamePlaceholder": "उदा. अमित या सारा",
     "commentLabel": "टिप्पणी / प्रतिक्रिया",
     "commentPlaceholder": "अपना समीक्षा नोट या प्रतिक्रिया यहाँ लिखें...",
+    "post": "टिप्पणी पोस्ट करें",
+    "postShortcutTooltip": "टिप्पणी पोस्ट करें ({{shortcut}})",
     "confirmDelete": "क्या आप वाकई इस टिप्पणी थ्रेड को हटाना चाहते हैं?",
     "sessionDisconnected": "सत्र डिस्कनेक्ट हो गया।",
-    "defaultAuthorName": "लेखक"
-  },
-  "s2Plugin": {
-    "title": "S2 ग्रिड",
-    "controlTitle": "S2 ग्रिड सेटिंग्स",
-    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
-    "resolution": "रिज़ॉल्यूशन",
-    "cellCount": "दृश्य में {{count}} सेल",
-    "tooManyCells": "यह दृश्य {{limit}} सेल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
-    "fillColor": "फ़िल रंग",
-    "fillOpacity": "फ़िल अपारदर्शिता",
-    "lineColor": "आउटलाइन रंग",
-    "lineWidth": "आउटलाइन चौड़ाई",
-    "showLabels": "सेल id दिखाएँ",
-    "identifyHint": "S2 सेल की पहचान के लिए मानचित्र पर क्लिक करें।",
-    "selectedCell": "चयनित सेल",
-    "noSelection": "कोई सेल चयनित नहीं",
-    "copyId": "id कॉपी करें",
-    "parent": "मूल सेल",
-    "children": "संतति सेल",
-    "neighbors": "पड़ोसी सेल",
-    "center": "केंद्र",
-    "zoomToCell": "सेल पर ज़ूम करें",
-    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
-    "exportGeoJson": "GeoJSON निर्यात करें",
-    "exportCsv": "CSV निर्यात करें",
-    "includeNeighbors": "चयनित सेल के पड़ोसी सेल शामिल करें",
-    "includeParents": "चयनित सेल की मूल सेल शामिल करें"
-  },
-  "a5Plugin": {
-    "title": "A5 ग्रिड",
-    "controlTitle": "A5 ग्रिड सेटिंग्स",
-    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
-    "resolution": "रिज़ॉल्यूशन",
-    "cellCount": "दृश्य में {{count}} सेल",
-    "tooManyCells": "यह दृश्य {{limit}} सेल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
-    "fillColor": "फ़िल रंग",
-    "fillOpacity": "फ़िल अपारदर्शिता",
-    "lineColor": "आउटलाइन रंग",
-    "lineWidth": "आउटलाइन चौड़ाई",
-    "showLabels": "सेल id दिखाएँ",
-    "identifyHint": "A5 सेल की पहचान के लिए मानचित्र पर क्लिक करें।",
-    "selectedCell": "चयनित सेल",
-    "noSelection": "कोई सेल चयनित नहीं",
-    "copyId": "id कॉपी करें",
-    "parent": "मूल सेल",
-    "children": "संतति सेल",
-    "neighbors": "पड़ोसी सेल",
-    "center": "केंद्र",
-    "zoomToCell": "सेल पर ज़ूम करें",
-    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
-    "exportGeoJson": "GeoJSON निर्यात करें",
-    "exportCsv": "CSV निर्यात करें",
-    "includeNeighbors": "चयनित सेल के पड़ोसी सेल शामिल करें",
-    "includeParents": "चयनित सेल की मूल सेल शामिल करें"
-  },
-  "dggridPlugin": {
-    "title": "DGGRID",
-    "controlTitle": "DGGRID सेटिंग्स",
-    "cellType": "सेल प्रकार",
-    "topologyHexagon": "षट्भुज",
-    "topologyDiamond": "समचतुर्भुज",
-    "topologyTriangle": "त्रिभुज",
-    "projection": "प्रक्षेप",
-    "aperture": "अपर्चर",
-    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
-    "resolution": "रिज़ॉल्यूशन",
-    "cellCount": "दृश्य में {{count}} सेल",
-    "tooManyCells": "यह दृश्य {{limit}} सेल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
-    "fillColor": "फ़िल रंग",
-    "fillOpacity": "फ़िल अपारदर्शिता",
-    "lineColor": "आउटलाइन रंग",
-    "lineWidth": "आउटलाइन चौड़ाई",
-    "showLabels": "सेल id दिखाएँ",
-    "identifyHint": "DGGRID सेल की पहचान के लिए मानचित्र पर क्लिक करें।",
-    "selectedCell": "चयनित सेल",
-    "noSelection": "कोई सेल चयनित नहीं",
-    "copyId": "id कॉपी करें",
-    "parent": "मूल सेल",
-    "children": "संतति सेल",
-    "neighbors": "पड़ोसी सेल",
-    "center": "केंद्र",
-    "zoomToCell": "सेल पर ज़ूम करें",
-    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
-    "exportGeoJson": "GeoJSON निर्यात करें",
-    "exportCsv": "CSV निर्यात करें",
-    "includeNeighbors": "चयनित सेल के पड़ोसी सेल शामिल करें",
-    "includeParents": "चयनित सेल की मूल सेल शामिल करें"
-  },
-  "dggalPlugin": {
-    "title": "DGGAL",
-    "controlTitle": "DGGAL सेटिंग्स",
-    "gridType": "DGGS प्रकार",
-    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
-    "resolution": "रिज़ॉल्यूशन",
-    "cellCount": "दृश्य में {{count}} सेल",
-    "tooManyCells": "यह दृश्य {{limit}} सेल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
-    "fillColor": "फ़िल रंग",
-    "fillOpacity": "फ़िल अपारदर्शिता",
-    "lineColor": "आउटलाइन रंग",
-    "lineWidth": "आउटलाइन चौड़ाई",
-    "showLabels": "सेल id दिखाएँ",
-    "identifyHint": "DGGAL सेल की पहचान के लिए मानचित्र पर क्लिक करें।",
-    "selectedCell": "चयनित सेल",
-    "noSelection": "कोई सेल चयनित नहीं",
-    "copyId": "id कॉपी करें",
-    "parent": "मूल सेल",
-    "children": "संतति सेल",
-    "neighbors": "पड़ोसी सेल",
-    "center": "केंद्र",
-    "zoomToCell": "सेल पर ज़ूम करें",
-    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
-    "exportGeoJson": "GeoJSON निर्यात करें",
-    "exportCsv": "CSV निर्यात करें",
-    "includeNeighbors": "चयनित सेल के पड़ोसी सेल शामिल करें",
-    "includeParents": "चयनित सेल की मूल सेल शामिल करें"
-  },
-  "olcPlugin": {
-    "title": "OLC",
-    "controlTitle": "OLC सेटिंग्स",
-    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
-    "resolution": "रिज़ॉल्यूशन",
-    "cellCount": "दृश्य में {{count}} सेल",
-    "tooManyCells": "यह दृश्य {{limit}} सेल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
-    "fillColor": "फ़िल रंग",
-    "fillOpacity": "फ़िल अपारदर्शिता",
-    "lineColor": "आउटलाइन रंग",
-    "lineWidth": "आउटलाइन चौड़ाई",
-    "showLabels": "सेल id दिखाएँ",
-    "identifyHint": "OLC सेल की पहचान के लिए मानचित्र पर क्लिक करें।",
-    "selectedCell": "चयनित सेल",
-    "noSelection": "कोई सेल चयनित नहीं",
-    "copyId": "id कॉपी करें",
-    "parent": "मूल सेल",
-    "children": "संतति सेल",
-    "neighbors": "पड़ोसी सेल",
-    "center": "केंद्र",
-    "zoomToCell": "सेल पर ज़ूम करें",
-    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
-    "exportGeoJson": "GeoJSON निर्यात करें",
-    "exportCsv": "CSV निर्यात करें",
-    "includeNeighbors": "चयनित सेल के पड़ोसी सेल शामिल करें",
-    "includeParent": "चयनित सेल की मूल सेल शामिल करें"
-  },
-  "geohashPlugin": {
-    "title": "Geohash",
-    "controlTitle": "Geohash सेटिंग्स",
-    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
-    "resolution": "रिज़ॉल्यूशन",
-    "cellCount": "दृश्य में {{count}} सेल",
-    "tooManyCells": "यह दृश्य {{limit}} सेल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
-    "fillColor": "फ़िल रंग",
-    "fillOpacity": "फ़िल अपारदर्शिता",
-    "lineColor": "आउटलाइन रंग",
-    "lineWidth": "आउटलाइन चौड़ाई",
-    "showLabels": "सेल id दिखाएँ",
-    "identifyHint": "Geohash सेल की पहचान के लिए मानचित्र पर क्लिक करें।",
-    "selectedCell": "चयनित सेल",
-    "noSelection": "कोई सेल चयनित नहीं",
-    "copyId": "id कॉपी करें",
-    "parent": "मूल सेल",
-    "children": "संतति सेल",
-    "neighbors": "पड़ोसी सेल",
-    "center": "केंद्र",
-    "zoomToCell": "सेल पर ज़ूम करें",
-    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
-    "exportGeoJson": "GeoJSON निर्यात करें",
-    "exportCsv": "CSV निर्यात करें",
-    "includeNeighbors": "चयनित सेल के पड़ोसी सेल शामिल करें",
-    "includeParent": "चयनित सेल की मूल सेल शामिल करें"
-  },
-  "tilecodePlugin": {
-    "title": "Tilecode",
-    "controlTitle": "Tilecode सेटिंग्स",
-    "autoResolution": "स्वचालित रिज़ॉल्यूशन",
-    "resolution": "रिज़ॉल्यूशन",
-    "cellCount": "दृश्य में {{count}} टाइल",
-    "tooManyCells": "यह दृश्य {{limit}} टाइल की सीमा से अधिक है। ज़ूम इन करें या रिज़ॉल्यूशन घटाएँ।",
-    "fillColor": "फ़िल रंग",
-    "fillOpacity": "फ़िल अपारदर्शिता",
-    "lineColor": "आउटलाइन रंग",
-    "lineWidth": "आउटलाइन चौड़ाई",
-    "showLabels": "टाइल id दिखाएँ",
-    "identifyHint": "टाइल की पहचान के लिए मानचित्र पर क्लिक करें।",
-    "selectedCell": "चयनित टाइल",
-    "noSelection": "कोई टाइल चयनित नहीं",
-    "copyId": "id कॉपी करें",
-    "quadkey": "क्वाडकी",
-    "parent": "मूल टाइल",
-    "children": "संतति टाइल",
-    "neighbors": "पड़ोसी टाइल",
-    "center": "केंद्र",
-    "zoomToCell": "टाइल पर ज़ूम करें",
-    "addAsLayer": "ग्रिड को लेयर के रूप में जोड़ें",
-    "exportGeoJson": "GeoJSON निर्यात करें",
-    "exportCsv": "CSV निर्यात करें",
-    "includeNeighbors": "चयनित टाइल की पड़ोसी टाइल शामिल करें",
-    "includeParent": "चयनित टाइल की मूल टाइल शामिल करें"
-  },
-  "netcdfSymbology": {
-    "heading": "NetCDF सिंबोलॉजी",
-    "colorRampLabel": "कलरमैप",
-    "reverse": "कलरमैप उलटें",
-    "colorMin": "रंग न्यूनतम",
-    "colorMax": "रंग अधिकतम",
-    "resetRange": "डेटा की सीमा पर रीसेट करें",
-    "openCube": "3D क्यूब"
-  },
-  "netcdfCube": {
-    "heading": "3D इमेज क्यूब",
-    "close": "बंद करें",
-    "settings": "सेटिंग्स",
-    "setupTitle": "3D इमेज क्यूब",
-    "setupDescription": "क्यूब बनाने से पहले चुनें कि क्या पढ़ना है। हर बैंड अलग से पढ़ा जाता है, इसलिए विस्तार और बैंड की संख्या तय करती है कि कितना समय लगेगा।",
-    "extent": "विस्तार",
-    "extentView": "मौजूदा मानचित्र दृश्य",
-    "extentDraw": "मानचित्र पर खींचें",
-    "extentFull": "लेयर का पूरा विस्तार",
-    "viewHint": "क्यूब बनते समय मानचित्र जो दिखा रहा हो, वही पढ़ता है।",
-    "fullHint": "पूरा ग्रिड पढ़ता है। दृश्य के आकार के क्यूब के लिए धीमा।",
-    "drawBbox": "मानचित्र पर खींचें",
-    "drawing": "क्यूब का विस्तार तय करने के लिए मानचित्र पर एक बॉक्स खींचें",
-    "drawHint": "विस्तार तय करने के लिए मानचित्र पर एक बॉक्स खींचें।",
-    "drawnExtent": "प. {{west}}, द. {{south}}, पू. {{east}}, उ. {{north}}",
-    "detail": "विस्तार-स्तर",
-    "detailOption": "प्रति भुजा {{size}} सेल",
-    "bands": "बैंड",
-    "allBands": "सभी ({{count}})",
-    "rgbOverlay": "ऊपर RGB छवि",
-    "rgbHint": "तीन बैंड को एक रंगीन छवि में जोड़कर ऊपरी सतह पर बिछाता है, ताकि क्यूब एक जगह के रूप में पहचाना जा सके।",
-    "red": "लाल",
-    "green": "हरा",
-    "blue": "नीला",
-    "planeEstimate": "{{count}} बैंड पठन",
-    "create": "क्यूब बनाएँ",
-    "colorRampLabel": "कलरमैप",
-    "reverse": "उलटें",
-    "showRgb": "ऊपर RGB",
-    "rgbBands": "RGB बैंड",
-    "recomposing": "पढ़ा जा रहा है...",
-    "zScale": "ऊंचाई",
-    "slice": "स्लाइस",
-    "sliceAt": "{{band}} {{units}} पर कटा",
-    "reading": "{{total}} में से {{done}} बैंड पढ़ा जा रहा है...",
-    "summary": "{{nx}} x {{ny}} सेल, {{axis}} के साथ {{nz}} बैंड",
-    "errorNoCube": "इस लेयर की स्रोत फ़ाइल अब खुली नहीं है, इसलिए क्यूब नहीं पढ़ा जा सकता।",
-    "error": {
-      "shapeMismatch": "इस वेरिएबल के बैंड तलों का आकार एक जैसा नहीं है, इसलिए उन्हें क्यूब में नहीं जमाया जा सकता।",
-      "rgbShapeMismatch": "चुने गए RGB बैंड क्यूब के आकार से मेल नहीं खाते।",
-      "noBands": "इस वेरिएबल में पढ़ने के लिए कोई बैंड नहीं है।",
-      "noReadWindow": "यह क्यूब यथास्थान अपडेट नहीं किया जा सकता। इसे सेटिंग्स से दोबारा बनाएँ।"
-    }
-  },
-  "netcdfProfile": {
-    "heading": "स्पेक्ट्रल प्रोफ़ाइल",
-    "clear": "साफ़ करें",
-    "chartAria": "बैंड अक्ष के साथ नमूना लिए गए पिक्सेल मान",
-    "popOut": "अलग विंडो में खोलें",
-    "dock": "वापस जोड़ें",
-    "poppedOutHint": "चार्ट मानचित्र पर एक विंडो में खुला है।",
-    "noValues": "इन पिक्सेल के लिए चार्ट बनाने योग्य कोई मान नहीं है।",
-    "exportPng": "PNG",
-    "exportCsv": "CSV",
-    "exportError": "चार्ट निर्यात नहीं किया जा सका।"
-  },
-  "netcdfIdentify": {
-    "noData": "कोई डेटा नहीं",
-    "coordinates": "देशांतर, अक्षांश",
-    "cell": "पंक्ति, स्तंभ"
+    "defaultAuthorName": "लेखक",
+    "addComment": "टिप्पणी जोड़ें",
+    "addCommentTooltip": "मानचित्र पर एक नई समीक्षा टिप्पणी रखें",
+    "yourNamePlaceholder": "आपका नाम…",
+    "saveName": "नाम सहेजें",
+    "noNameSet": "कोई नाम सेट नहीं — टिप्पणियाँ “{{name}}” के रूप में दिखेंगी",
+    "changeNameTooltip": "नाम बदलें",
+    "setYourName": "अपना नाम सेट करें",
+    "changeName": "नाम बदलें",
+    "postingAs": "<strong>{{name}}</strong> के रूप में पोस्ट किया जा रहा है",
+    "copy": "कॉपी करें",
+    "startLiveSession": "लाइव सत्र शुरू करें",
+    "starting": "शुरू हो रहा है…",
+    "sessionCodePlaceholder": "सत्र कोड दर्ज करें",
+    "connect": "कनेक्ट करें",
+    "joining": "जुड़ा जा रहा है…",
+    "liveSync": "लाइव सिंक ({{count}} ऑनलाइन)",
+    "offlineWorkspace": "ऑफ़लाइन / निजी वर्कस्पेस",
+    "disconnect": "डिस्कनेक्ट करें",
+    "joinFailed": "सत्र में शामिल नहीं हो सके।",
+    "startFailed": "सत्र शुरू नहीं हो सका।",
+    "filterOpen": "खुली ({{count}})",
+    "filterResolved": "हल की गई ({{count}})",
+    "filterAll": "सभी ({{count}})",
+    "emptyOpen": "कोई खुली टिप्पणी नहीं",
+    "emptyResolved": "कोई हल की गई टिप्पणी नहीं",
+    "emptyHint": "ऊपर “टिप्पणी जोड़ें” पर क्लिक करें और समीक्षा नोट छोड़ने के लिए मानचित्र पर कोई स्थान या फ़ीचर चुनें।",
+    "resolvedBadge": "हल किया गया",
+    "zoomToLocation": "स्थान पर ज़ूम करें",
+    "markResolved": "हल किया गया चिह्नित करें",
+    "reopenThread": "टिप्पणी थ्रेड फिर से खोलें",
+    "deleteThread": "टिप्पणी थ्रेड हटाएँ",
+    "anchorFeature": "फ़ीचर #{{id}} ({{layer}})",
+    "anchorPoint": "बिंदु ({{coords}})",
+    "anchorMap": "मानचित्र",
+    "anchoredToFeature": "फ़ीचर #{{id}} ({{layer}}) से जुड़ा",
+    "anchoredToPoint": "({{coords}}) से जुड़ा",
+    "mapPoint": "मानचित्र बिंदु",
+    "reply": "उत्तर दें",
+    "replyPlaceholder": "उत्तर लिखें..."
   }
 }

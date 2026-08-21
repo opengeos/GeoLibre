@@ -2,6 +2,8 @@
 
 The **Add Data** menu is the main way to bring layers into GeoLibre. It groups sources into Files, Web services, Cloud formats, 3D layers, and Databases. You can also drag files straight onto the map.
 
+To collect supported dataset links from a catalog or other webpage and open several at once, use the [GeoLibre Chrome extension](chrome-extension.md), available from the [Chrome Web Store](https://chromewebstore.google.com/detail/open-data-in-geolibre/joinecgbfoldanidcoakpjgkbaceaooj).
+
 ![Add Data menu](https://data.geolibre.app/images/geolibre-add-data-menu.webp)
 
 ## Files
@@ -11,6 +13,7 @@ The **Add Data** menu is the main way to bring layers into GeoLibre. It groups s
 | **Vector Layer** | Opens the Add Vector panel (backed by `maplibre-gl-vector`). Loads GeoJSON, GeoParquet, FlatGeobuf, zipped Shapefile, GeoPackage, KML/KMZ, GML, and other vector formats from a file or URL. |
 | **Raster Layer** | Opens the Add Raster panel (backed by `maplibre-gl-raster`). Loads GeoTIFF and Cloud-Optimized GeoTIFF (COG) from a file or URL. |
 | **Delimited Text Layer** | Loads CSV/TSV from a file or URL, using longitude and latitude columns to build point features, or by geocoding one or more address columns (see [Geocoding](data-integrations.md#geocoding)). |
+| **Encoded Polyline** | Loads Google (precision 5) or Valhalla/Mapbox (precision 6) encoded polyline strings from pasted text or uploaded text files. |
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |
 | **MBTiles Layer** | Loads a local MBTiles tile archive (desktop app). |
 
@@ -30,8 +33,8 @@ Vector files are reprojected to EPSG:4326 on load. In the browser, vector import
     in memory, because that is where memory rather than file size becomes the
     limit — a small GeoParquet can hold millions of rows.
 
-    For very large data, converting first still pays: **Processing → Conversion
-    → Vector to PMTiles** writes a tiled format the map loads one tile at a
+    For very large data, converting first still pays: **Processing → GeoLibre
+    Toolbox → Conversion → Vector to PMTiles** writes a tiled format the map loads one tile at a
     time instead of reading the whole file. Converting to **GeoParquet**
     instead gives a compact columnar format that reads far faster than text,
     though it is not tiled. GeoJSON is the most expensive option at any size —
@@ -51,8 +54,36 @@ Vector files are reprojected to EPSG:4326 on load. In the browser, vector import
 | **WMS Layer** | A Web Map Service layer, with click-to-identify through GetFeatureInfo where supported. |
 | **WFS Layer** | A Web Feature Service layer, with optional automatic refresh. |
 | **WMTS Layer** | A Web Map Tile Service layer. |
-| **ArcGIS Layer** | An ArcGIS FeatureServer or VectorTileServer layer. |
+| **ArcGIS Layer** | An ArcGIS FeatureServer, VectorTileServer, MapServer, or ImageServer layer. See [ArcGIS services](#arcgis-services). |
 | **STAC Layer** | Searches a STAC catalog and adds the matching raster items. |
+
+### ArcGIS services
+
+Pick the **Layer type** that matches the service, then give it a service URL or a
+portal item ID (with an access token for a secured service).
+
+| Layer type | Service | How it loads |
+| --- | --- | --- |
+| **Feature layer** | FeatureServer | Downloaded page by page as a GeoJSON layer, so labels, the attribute table, identify, symbology, and export all work on it. |
+| **Vector tile layer** | VectorTileServer | Rendered from the service's own style. |
+| **Map service** | MapServer | A raster layer. Cached services are read as tiles; dynamic ones are drawn per tile through `/export`. |
+| **Image service** | ImageServer | A raster layer drawn through `/exportImage` (or the service's tile cache). |
+
+Map and image services become ordinary raster layers, so opacity, the Style
+panel's brightness/contrast/saturation controls, reordering, and saving to a
+project all work on them.
+
+Two optional fields shape what the service draws:
+
+- **Sublayers** (map service) takes the sublayer ids to draw, such as `0,2,5`.
+  Leave it blank for the service's own default set. Pasting a URL that ends in a
+  sublayer id (`.../MapServer/3`) selects that sublayer for you.
+- **Rendering rule** (image service) takes an Esri raster function as JSON, such
+  as `{"rasterFunction":"Hillshade"}`, applied by the server before the image is
+  sent.
+
+Either choice draws the service dynamically, because a cached service's tiles
+were rendered before the choice existed and cannot honor it.
 
 ## Cloud formats
 

@@ -22,6 +22,22 @@ interface NativeHttpOptions {
   context?: string;
 }
 
+/**
+ * Options for {@link fetchUrlBytes}. `timeoutSecs` lives here rather than on
+ * {@link NativeHttpOptions} because only the `fetch_url_bytes` command accepts
+ * a timeout argument; `resolve_url_redirect` hardcodes its own, so offering the
+ * field there would invite a caller to set it and silently have no effect.
+ */
+interface FetchUrlBytesOptions extends NativeHttpOptions {
+  /**
+   * Request budget in seconds, overriding the command's tile-sized default.
+   * Set it for calls that carry a whole dataset rather than a tile. The backend
+   * clamps it into `[8, 600]`, so a smaller value is raised to 8 and a larger
+   * one is capped at 600; the timeout can be raised but never removed.
+   */
+  timeoutSecs?: number;
+}
+
 function recordSource(command: NativeHttpCommand, context?: string): string {
   return context ? `native ${command} — ${context}` : `native ${command}`;
 }
@@ -79,11 +95,16 @@ export function nativeHttpFailureRecord(
 async function invokeNativeHttp<T>(
   command: NativeHttpCommand,
   url: string,
-  options?: NativeHttpOptions,
+  options?: FetchUrlBytesOptions,
 ): Promise<T> {
   const startedAt = performance.now();
   try {
-    const result = await invoke<T>(command, { url });
+    // `timeoutSecs` is omitted rather than sent as undefined so the Rust side
+    // sees an absent argument and applies its own default.
+    const result = await invoke<T>(command, {
+      url,
+      ...(options?.timeoutSecs === undefined ? {} : { timeoutSecs: options.timeoutSecs }),
+    });
     appendDiagnostic(
       nativeHttpSuccessRecord(
         command,
@@ -112,12 +133,13 @@ async function invokeNativeHttp<T>(
  * subject to browser CORS), recording the request in the diagnostics log.
  *
  * @param url - The absolute HTTP(S) URL to fetch.
- * @param options - Optional context label for the diagnostics record.
+ * @param options - Optional context label for the diagnostics record, and an
+ *   optional request budget for callers downloading more than a tile.
  * @returns The response body bytes (Tauri may hand back a plain number array).
  */
 export function fetchUrlBytes(
   url: string,
-  options?: NativeHttpOptions,
+  options?: FetchUrlBytesOptions,
 ): Promise<number[] | Uint8Array> {
   return invokeNativeHttp<number[] | Uint8Array>("fetch_url_bytes", url, options);
 }

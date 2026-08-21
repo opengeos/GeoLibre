@@ -30,6 +30,7 @@ import {
 import { Puzzle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { usePluginRegistry } from "../../../hooks/usePlugins";
+import { pluginDisplayName } from "../../../lib/plugin-display-name";
 import { type AppApi, PLUGIN_POSITION_ITEMS, type ToolbarChrome } from "./constants";
 
 type PluginRegistry = ReturnType<typeof usePluginRegistry>;
@@ -68,10 +69,7 @@ export function PluginsMenu({
 
   const renderPluginMenuItem = (p: RegisteredPlugin) => {
     const pluginPosition = getMapControlPosition(p.id);
-    // Translate the plugin's display name when a locale string exists for its id,
-    // falling back to the registered (English) name — brand/proper-noun plugins
-    // (Mapillary, NASA Earthdata, …) simply have no key and stay as-is.
-    const pluginName = t(`toolbar.plugin.${p.id}`, { defaultValue: p.name });
+    const pluginName = pluginDisplayName(t, p);
     if (!pluginPosition) {
       return (
         <DropdownMenuItem key={p.id} onClick={() => toggle(p.id, appApi)}>

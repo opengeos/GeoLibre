@@ -6,7 +6,7 @@ import convex from "@turf/convex";
 import mask from "@turf/mask";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type { GeometryGeneratorType, LayerStyle } from "@geolibre/core";
-import { styleValue } from "@geolibre/core";
+import { bodyLengthToEarth, getActiveBodyRadiusRatio, styleValue } from "@geolibre/core";
 
 /**
  * Derived feature collections for the symbology pack (#1323): the inverted
@@ -96,7 +96,8 @@ function computeInvertedMask(
  * - `"centroid"`: a point per feature (any geometry kind).
  * - `"bounding-box"`: the feature's axis-aligned bbox polygon.
  * - `"convex-hull"`: the feature's convex hull (needs ≥3 distinct vertices).
- * - `"buffer"`: a polygon buffer of `bufferDistance` meters.
+ * - `"buffer"`: a polygon buffer of `bufferDistance` meters, or of each
+ *   feature's own `bufferProperty` value when that field is set.
  *
  * Features whose derived geometry cannot be computed (e.g. the hull of a
  * single point, a negative buffer that consumes the polygon) are skipped
@@ -104,7 +105,10 @@ function computeInvertedMask(
  *
  * @param collection - The layer's feature collection.
  * @param type - The generator preset.
- * @param bufferDistance - Buffer distance in meters (buffer preset only).
+ * @param bufferDistance - Buffer distance in meters (buffer preset only), and
+ *   the fallback for features the buffer field cannot be read from.
+ * @param bufferProperty - Attribute holding a per-feature buffer distance in
+ *   meters; empty buffers every feature by `bufferDistance`.
  * @returns The derived collection (possibly empty), or null when the
  *   generator is `"none"`.
  */
@@ -112,12 +116,20 @@ export function buildGeneratedGeometry(
   collection: FeatureCollection,
   type: GeometryGeneratorType,
   bufferDistance: number,
+  bufferProperty = "",
 ): FeatureCollection | null {
   if (type === "none") return null;
   if (collection.features.length > MAX_DERIVED_FEATURES) return EMPTY;
   const distance = type === "buffer" && Number.isFinite(bufferDistance) ? bufferDistance : 0;
-  if (type === "buffer" && distance === 0) return EMPTY;
-  const key = type === "buffer" ? `buffer:${distance}` : type;
+  const property = type === "buffer" ? bufferProperty.trim() : "";
+  // A zero flat distance buffers nothing — unless a field supplies the real
+  // distances, in which case it is only the fallback for unreadable values.
+  if (type === "buffer" && distance === 0 && !property) return EMPTY;
+  // The body's radius ratio is part of the buffer's identity: switching planets
+  // changes the ground distance those metres cover, so it must not hit a cache
+  // entry computed for the previous body.
+  const key =
+    type === "buffer" ? `buffer:${distance}:${property}:${getActiveBodyRadiusRatio()}` : type;
   let byKey = generatorCache.get(collection);
   if (!byKey) {
     byKey = new Map();
@@ -125,7 +137,7 @@ export function buildGeneratedGeometry(
   }
   const cached = byKey.get(key);
   if (cached) return cached;
-  const result = computeGeneratedGeometry(collection, type, distance);
+  const result = computeGeneratedGeometry(collection, type, distance, property);
   // The buffer key space is user-typed and unbounded, so cap the
   // per-collection cache (oldest evicted first) — unlike the sibling caches
   // whose key cardinality is naturally small.
@@ -141,11 +153,15 @@ function computeGeneratedGeometry(
   collection: FeatureCollection,
   type: Exclude<GeometryGeneratorType, "none">,
   bufferDistance: number,
+  bufferProperty: string,
 ): FeatureCollection {
   const features: Feature[] = [];
   for (const feature of collection.features) {
     if (!feature.geometry) continue;
-    const derived = deriveFeature(feature, type, bufferDistance);
+    const distance = bufferProperty
+      ? featureBufferDistance(feature, bufferProperty, bufferDistance)
+      : bufferDistance;
+    const derived = deriveFeature(feature, type, distance);
     if (derived) {
       features.push({
         type: "Feature",
@@ -155,6 +171,26 @@ function computeGeneratedGeometry(
     }
   }
   return { type: "FeatureCollection", features };
+}
+
+/**
+ * The buffer distance for one feature in data-defined mode: its own numeric
+ * value for `property`, falling back to the flat distance when the attribute
+ * is missing, null, blank, or not a number. Mirrors QGIS, where a
+ * data-defined override that evaluates to NULL leaves the static value in
+ * place rather than dropping the symbol.
+ */
+function featureBufferDistance(feature: Feature, property: string, fallback: number): number {
+  const raw = feature.properties?.[property];
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : fallback;
+  // Number("") and Number(" ") are both 0 (it trims first), so a blank
+  // attribute would otherwise read as a real zero-distance buffer — which
+  // drops the feature — instead of as a miss.
+  // Only strings are coerced: Number() turns `true` into a 1 m buffer and
+  // `[1000]` into a 1 km one, and those are no more a distance than a name is.
+  if (typeof raw !== "string" || raw.trim() === "") return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : fallback;
 }
 
 function deriveFeature(
@@ -183,7 +219,15 @@ function deriveFeature(
       case "convex-hull":
         return convex({ type: "FeatureCollection", features: [feature] });
       case "buffer":
-        return buffer(feature, bufferDistance, { units: "meters" }) ?? null;
+        // In data-defined mode the collection-wide zero guard no longer
+        // applies, and turf's zero buffer returns the source geometry — which
+        // would draw the untouched feature as if it were its own buffer.
+        if (bufferDistance === 0) return null;
+        // turf bakes in Earth's radius, so on a Moon/Mars project the metres
+        // the user asked for would be laid out as Earth metres. Convert to the
+        // Earth-equivalent distance that spans the same ground on this body
+        // (GeoLibre#1128); a no-op on Earth.
+        return buffer(feature, bodyLengthToEarth(bufferDistance), { units: "meters" }) ?? null;
     }
   } catch {
     // Per-feature failures (invalid geometry) skip that feature only.

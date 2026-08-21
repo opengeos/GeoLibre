@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { Feature } from "geojson";
+import type { Feature, Polygon } from "geojson";
 import {
   applySelectionMode,
   featureSelectionId,
@@ -10,6 +10,10 @@ import {
 } from "@geolibre/core";
 import { matchFeaturesByLocation } from "../packages/processing/src/vector-tools";
 import { applyMatchedSelection } from "../apps/geolibre-desktop/src/lib/selection-actions";
+import {
+  featuresIntersectingPolygon,
+  selectionModeFromModifiers,
+} from "../packages/map/src/feature-selection";
 
 const point = (
   coords: [number, number],
@@ -250,5 +254,70 @@ describe("applyMatchedSelection", () => {
     assert.equal(state.selectedLayerId, "L2");
     assert.deepEqual(state.selectedFeatureIds, []);
     assert.equal(state.selectedFeatureId, null);
+  });
+});
+
+describe("map feature selection", () => {
+  it("maps QGIS-style modifiers to selection modes", () => {
+    assert.equal(selectionModeFromModifiers(false, false), "new");
+    assert.equal(selectionModeFromModifiers(true, false), "add");
+    assert.equal(selectionModeFromModifiers(false, true), "remove");
+    assert.equal(selectionModeFromModifiers(true, true), "intersect");
+  });
+
+  it("selects points and lines intersecting a drawn polygon", () => {
+    const features: Feature[] = [
+      point([1, 1], {}, "point"),
+      {
+        type: "Feature",
+        id: "line",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [-1, 1],
+            [1, 1],
+          ],
+        },
+      },
+      point([5, 5], {}, "outside"),
+    ];
+    const selectionPolygon: Polygon = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [2, 0],
+          [2, 2],
+          [0, 2],
+          [0, 0],
+        ],
+      ],
+    };
+    assert.deepEqual(featuresIntersectingPolygon(features, selectionPolygon), ["point", "line"]);
+  });
+
+  it("falls back to the feature index for an id-less match and skips null geometry", () => {
+    const features: Feature[] = [
+      point([1, 1], {}, "explicit"),
+      // No id: featureSelectionId falls back to the array index, "1".
+      point([1.5, 1.5]),
+      // Inside the polygon's bounds but carrying no geometry to test.
+      { type: "Feature", id: "no-geometry", properties: {}, geometry: null },
+      point([5, 5], {}, "outside"),
+    ];
+    const selectionPolygon: Polygon = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [2, 0],
+          [2, 2],
+          [0, 2],
+          [0, 0],
+        ],
+      ],
+    };
+    assert.deepEqual(featuresIntersectingPolygon(features, selectionPolygon), ["explicit", "1"]);
   });
 });

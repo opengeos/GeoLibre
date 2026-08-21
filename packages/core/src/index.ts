@@ -4,10 +4,12 @@ export * from "./marker-shape";
 export * from "./hyperlink";
 export * from "./photo";
 export * from "./ellipsoids";
+export * from "./regional-basemaps";
 export * from "./geojson-z";
 export * from "./color-ramp";
 export * from "./paths";
 export * from "./routing";
+export * from "./polyline";
 export * from "./vector-color";
 export * from "./expressions";
 export * from "./external-native-paint";
@@ -15,13 +17,17 @@ export * from "./attribute-form";
 export * from "./joins";
 export * from "./virtual-fields";
 export * from "./selection";
+export * from "./selection-actions";
 export * from "./scale-units";
+export * from "./elevation";
+export * from "./camera-altitude";
 export * from "./project";
 export * from "./style-library";
 export * from "./layer-library";
 export * from "./layer-defaults";
 export * from "./layer-style-clipboard";
 export * from "./layer-groups";
+export * from "./print-layout-config";
 export { createSampleStoryMap } from "./storymap-sample";
 export {
   scrubWidgetsForRemovedLayers,
@@ -126,10 +132,19 @@ export {
   stripGoogleMapsApiKeyHeader,
 } from "./three-d-tiles";
 export {
+  isCredentialFieldName,
+  MAX_REDACT_DEPTH,
   PROJECT_CREDENTIAL_FIELDS,
+  PUBLISHABLE_PLUGIN_SETTINGS,
   redactCredentials,
   redactProjectCredentials,
   redactUrlCredentials,
   type CredentialRedactionResult,
 } from "./credentials";
 export { excludeHiddenFieldsFromGeojson, excludeHiddenFieldsFromProject } from "./visibility";
+export * from "./editor-tracking";
+export {
+  currentEditorIdentity,
+  readStoredAuthorName,
+  setStoredAuthorName,
+} from "./editor-identity";

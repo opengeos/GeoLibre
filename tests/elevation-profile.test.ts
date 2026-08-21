@@ -6,6 +6,7 @@ import {
   cumulativeDistances,
   resampleLine,
   computeStats,
+  thinIndices,
   type LngLat,
 } from "../packages/plugins/src/plugins/elevation-profile/elevation/geometry";
 import {
@@ -22,6 +23,7 @@ import {
 } from "../packages/plugins/src/plugins/elevation-profile/elevation/client";
 import { profileToCsv } from "../packages/plugins/src/plugins/elevation-profile/export/csv";
 import { buildChartGeometry } from "../packages/plugins/src/plugins/elevation-profile/chart/profileChart";
+import { selectedProfileLine } from "../packages/plugins/src/plugins/elevation-profile/elevation/selection";
 import {
   encodeLine,
   parseLine,
@@ -69,6 +71,24 @@ describe("elevation-profile geometry", () => {
     assert.ok(distances[4] > distances[3]);
   });
 
+  it("thinIndices caps a dense line at the target, keeping both endpoints", () => {
+    const indices = thinIndices(10_000, 2000);
+    assert.equal(indices.length, 2000);
+    assert.equal(indices[0], 0);
+    assert.equal(indices[indices.length - 1], 9999);
+    // Strictly ascending, so the thinned profile stays in along-line order.
+    for (let i = 1; i < indices.length; i += 1) {
+      assert.ok(indices[i] > indices[i - 1], `index ${i} is not ascending`);
+    }
+  });
+
+  it("thinIndices returns every index when the line is already short enough", () => {
+    assert.deepEqual(thinIndices(4, 2000), [0, 1, 2, 3]);
+    assert.deepEqual(thinIndices(0, 2000), []);
+    // A target below two still yields the two endpoints.
+    assert.deepEqual(thinIndices(5, 1), [0, 4]);
+  });
+
   it("resampleLine handles degenerate (single / identical-vertex) lines", () => {
     assert.deepEqual(resampleLine([], 4), { coords: [], distances: [] });
     assert.deepEqual(resampleLine([[1, 2]], 4), {
@@ -103,6 +123,133 @@ describe("elevation-profile geometry", () => {
       loss: 0,
       totalDistance: 0,
     });
+  });
+});
+
+describe("elevation-profile selected lines", () => {
+  it("uses embedded elevations from a selected GPX-style LineString", () => {
+    const selected = selectedProfileLine([
+      {
+        type: "Feature",
+        properties: { gpx_kind: "track" },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [4.87, 45.82, 267.8],
+            [4.88, 45.83, 274.2],
+          ],
+        },
+      },
+    ]);
+    assert.deepEqual(selected, {
+      coords: [
+        [4.87, 45.82],
+        [4.88, 45.83],
+      ],
+      elevations: [267.8, 274.2],
+    });
+  });
+
+  it("falls back to sampled elevations for a two-dimensional line", () => {
+    const selected = selectedProfileLine([
+      {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
+      },
+    ]);
+    assert.deepEqual(selected, {
+      coords: [
+        [0, 0],
+        [1, 1],
+      ],
+      elevations: null,
+    });
+  });
+
+  it("skips non-line selections and concatenates a selected multi-part line", () => {
+    const selected = selectedProfileLine([
+      {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "Point", coordinates: [0, 0] },
+      },
+      {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "MultiLineString",
+          coordinates: [
+            [
+              [1, 1, 10],
+              [2, 2, 20],
+            ],
+            [
+              [2, 2, 20],
+              [3, 3, 30],
+            ],
+          ],
+        },
+      },
+    ]);
+    assert.deepEqual(selected, {
+      coords: [
+        [1, 1],
+        [2, 2],
+        [2, 2],
+        [3, 3],
+      ],
+      elevations: [10, 20, 20, 30],
+    });
+    assert.equal(selectedProfileLine(undefined), null);
+  });
+
+  it("treats an all-zero Z as placeholder padding and falls back to the service", () => {
+    // Many GPX/GeoJSON producers write 0 rather than omitting the third
+    // ordinate, so [x, y, 0] vertices describe a 2D line, not a sea-level one.
+    const selected = selectedProfileLine([
+      {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0, 0],
+            [1, 1, 0],
+            [2, 2, 0],
+          ],
+        },
+      },
+    ]);
+    assert.deepEqual(selected?.coords, [
+      [0, 0],
+      [1, 1],
+      [2, 2],
+    ]);
+    assert.equal(selected?.elevations, null);
+  });
+
+  it("keeps embedded elevations when only some vertices sit at zero", () => {
+    const selected = selectedProfileLine([
+      {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0, 0],
+            [1, 1, 12],
+          ],
+        },
+      },
+    ]);
+    assert.deepEqual(selected?.elevations, [0, 12]);
   });
 });
 

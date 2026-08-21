@@ -182,7 +182,23 @@
     "elevationRange": "최소 / 최대 고도",
     "meanSlope": "평균 경사",
     "computing": "지형 계산 중…",
-    "partialData": "일부 샘플에 지형 데이터가 없습니다"
+    "partialData": "일부 샘플에 지형 데이터가 없습니다",
+    "heading": "방위",
+    "finalHeading": "최종 방위",
+    "bodyNote": "측정 대상: {{body}} (구형 근사)"
+  },
+  "statusBar": {
+    "elevation": "고도",
+    "elevationLong": "고도",
+    "cameraAltitude": "시점 고도",
+    "cameraAltitudeLong": "해수면 기준 카메라 고도",
+    "coordinateFormat": {
+      "dd": "십진 도",
+      "dms": "도, 분, 초",
+      "ddm": "도, 십진 분",
+      "utm": "UTM (구역, 동거/북거)"
+    },
+    "coordinateFormatHint": "좌표 형식: {{format}}. 클릭하여 전환."
   },
   "fileNamePrompt": {
     "title": "다른 이름으로 저장",
@@ -214,7 +230,9 @@
     "invalidUrl": "유효한 HTTP 또는 HTTPS 스타일 URL을 입력하세요.",
     "sectionMoon": "달",
     "sectionMars": "화성",
-    "sectionOther": "기타 천체"
+    "sectionOther": "기타 천체",
+    "sectionRegional": "지역",
+    "regionChina": "중국 (中国)"
   },
   "planetSwitcher": {
     "label": "천체",
@@ -263,6 +281,10 @@
         "label": "WMTS 레이어 추가",
         "description": "WMTS 타일 URL 템플릿을 래스터 레이어로 추가합니다."
       },
+      "ogcFeatures": {
+        "label": "OGC API - Features 레이어 추가",
+        "description": "OGC API - Features 컬렉션의 피처를 벡터 레이어로 추가합니다. 요청한 피처 수가 모두 로드될 때까지 서비스의 페이징 링크를 따라갑니다."
+      },
       "ogcVectorTiles": {
         "label": "OGC 벡터 타일 추가",
         "description": "TileJSON 또는 타일 템플릿으로 OGC API - Tiles(벡터) 서비스를 추가합니다. 필요하면 스타일 URL에서 소스 레이어를 읽어올 수 있습니다."
@@ -297,11 +319,15 @@
       },
       "arcgis": {
         "label": "ArcGIS 레이어 추가",
-        "description": "ArcGIS FeatureServer 레이어, VectorTileServer 레이어, 또는 포털 항목을 추가합니다."
+        "description": "ArcGIS FeatureServer, VectorTileServer, MapServer, ImageServer 레이어 또는 포털 항목을 추가합니다."
       },
       "postgres": {
         "label": "PostgreSQL 레이어 추가",
         "description": "Martin을 로컬에서 실행하여 PostGIS 소스를 검색하고 벡터 타일로 추가합니다."
+      },
+      "iceberg": {
+        "label": "Apache Iceberg 레이어 추가",
+        "description": "Iceberg 테이블(v3 이상)을 읽고 피처의 일부를 추가합니다."
       },
       "deckglViz": {
         "label": "Deck.gl 레이어 추가",
@@ -310,10 +336,6 @@
       "video": {
         "label": "비디오 레이어 추가",
         "description": "MP4 URL과 네 모서리 좌표를 입력하여 지리참조된 비디오 오버레이를 추가합니다."
-      },
-      "ogcFeatures": {
-        "label": "OGC API - Features 레이어 추가",
-        "description": "OGC API - Features 컬렉션의 피처를 벡터 레이어로 추가합니다. 요청한 피처 수가 모두 로드될 때까지 서비스의 페이징 링크를 따라갑니다."
       }
     },
     "shared": {
@@ -421,6 +443,27 @@
       "errorUrl": "WMTS 타일 URL 템플릿을 입력하세요.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },
+    "ogcFeatures": {
+      "defaultName": "OGC API - Features 레이어",
+      "sampleLabel": "세계의 호수 (pygeoapi 데모)",
+      "urlPlaceholder": "https://example.com/ogcapi",
+      "urlHint": "서비스의 랜딩 페이지 또는 거기에서 복사한 URL (/collections 또는 /collections/{id}/items URL도 사용할 수 있습니다).",
+      "retrieveCollections": "컬렉션 조회",
+      "retrieving": "조회하는 중...",
+      "retrievedCollections": "조회한 컬렉션",
+      "selectCollection_other": "{{count}}개 컬렉션에서 선택",
+      "noCollectionsFound": "이 서비스에서 피처 컬렉션을 찾지 못했습니다.",
+      "retrieveError": "이 서비스에서 컬렉션을 조회할 수 없습니다.",
+      "collection": "컬렉션",
+      "collectionPlaceholder": "collection-id",
+      "maxFeatures": "최대 피처 수",
+      "bbox": "경계 상자",
+      "datetime": "날짜 및 시간",
+      "errorCollection": "OGC API - Features 컬렉션 id를 입력하세요.",
+      "errorMaxFeatures": "최대 피처 수를 1 이상으로 입력하세요.",
+      "errorBbox": "경계 상자를 “서,남,동,북” 형식으로 입력하세요.",
+      "errorNoFeatures": "이 컬렉션은 피처를 반환하지 않았습니다."
+    },
     "ogcVectorTiles": {
       "defaultName": "OGC 벡터 타일 레이어",
       "tilesUrl": "타일 URL",
@@ -441,14 +484,39 @@
       "defaultName": "ArcGIS 레이어",
       "sampleFeatureLabel": "미국 주요 도시(피처)",
       "sampleVectorTileLabel": "산타모니카 필지(벡터 타일)",
+      "sampleMapServiceLabel": "미국 행정 경계(맵 서비스)",
+      "sampleImageServiceLabel": "USGS 3DEP 음영기복(이미지 서비스)",
       "featureLayer": "피처 레이어",
       "vectorTileLayer": "벡터 타일 레이어",
+      "mapServiceLayer": "맵 서비스",
+      "imageServiceLayer": "이미지 서비스",
       "portalItemId": "포털 항목 ID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "하위 레이어",
+      "sublayersPlaceholder": "표시된 모든 하위 레이어",
+      "sublayersHint": "선택 사항인 하위 레이어 ID를 쉼표로 구분해 입력합니다(예: 0,2,5). 하위 레이어를 선택하면 캐시된 타일 대신 서비스를 동적으로 그립니다.",
+      "retrieveSublayers": "레이어 찾아보기",
+      "retrievingSublayers": "조회하는 중...",
+      "availableSublayers": "사용 가능한 하위 레이어",
+      "noSublayersFound": "이 맵 서비스는 레이어를 제공하지 않았습니다.",
+      "retrieveError": "맵 서비스의 레이어를 조회할 수 없습니다.",
+      "errorMapServiceUrl": "ArcGIS MapServer URL을 입력하세요.",
+      "renderingRule": "렌더링 규칙",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "서비스가 적용하는 래스터 함수 JSON(선택 사항)입니다. 렌더링 규칙을 지정하면 캐시된 타일 대신 서비스를 동적으로 그립니다.",
       "portalUrl": "포털 URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "액세스 토큰"
+      "accessToken": "액세스 토큰",
+      "pageSize": "요청당 레코드 수",
+      "pageSizePlaceholder": "자동",
+      "maxFeatures": "최대 피처 수",
+      "maxFeaturesPlaceholder": "전체",
+      "pagingHint": "피처 레이어는 페이지 단위로 다운로드됩니다. 서비스에서 시간 초과가 발생하면 요청당 레코드 수를 줄이세요.",
+      "loadingProgress": "전체 {{total}}개 중 피처 {{loaded}}개를 불러왔습니다…",
+      "loadingProgressUnknown": "피처 {{loaded}}개를 불러왔습니다…"
     },
     "gpx": {
       "defaultName": "GPX 레이어",
@@ -520,6 +588,8 @@
       "errorMissingCrs": "이 피처 클래스의 좌표계를 감지할 수 없습니다. 추가하려면 원본 CRS를 입력하세요."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "Excel 통합 문서에 비어 있지 않은 워크시트가 없습니다.",
+      "worksheet": "워크시트",
       "defaultName": "구분 텍스트 레이어",
       "sampleLabel": "미국 도시",
       "errorChooseFile": "구분 텍스트 파일을 선택하세요.",
@@ -620,9 +690,44 @@
       "statusTablesFound_other": "공간 테이블 {{count}}개를 찾았습니다.",
       "statusNoTables": "이 데이터베이스에서 공간 테이블을 찾을 수 없습니다.",
       "editableTable": "테이블",
+      "geometryColumn": "지오메트리 열",
       "tableReadOnly": "{{table}}(읽기 전용: 기본 키 없음)",
       "errorSelectTable": "불러올 테이블을 선택하세요.",
       "errorRuntimeMissing": "처리 서버에 PostGIS 런타임(psycopg)이 설치되어 있지 않습니다. 편집 가능한 레이어를 불러오려면 geolibre-server의 'postgis' 추가 패키지를 설치하세요."
+    },
+    "iceberg": {
+      "defaultName": "Iceberg 레이어",
+      "notice": "Iceberg 테이블은 요청 시 한 번만 읽습니다. 레이어는 아래 행 제한까지의 스냅샷이며 자동으로 다시 스캔되지 않습니다. 다시 읽으려면 레이어 메뉴의 새로고침을 사용하세요.",
+      "mode": "Iceberg 소스",
+      "modeTable": "테이블 위치",
+      "modeCatalog": "REST 카탈로그",
+      "location": "테이블 메타데이터 위치",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "웨어하우스",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "카탈로그 엔드포인트",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "연결",
+      "table": "Iceberg 테이블",
+      "sql": "SQL(선택 사항)",
+      "sqlHint": "렌더링할 내용을 필터링하거나 재구성하려면 편집하세요. 문은 GEOMETRY 열을 반환해야 하며, 테이블 전체를 읽으려면 생성된 그대로 두세요.",
+      "selectTable": "테이블 선택",
+      "geometryColumn": "지오메트리 열",
+      "rowLimit": "행 제한",
+      "rowLimitHint": "레이어에는 이 제한까지 테이블의 첫 행들이 포함됩니다. 제한은 {{max}}행을 초과할 수 없습니다.",
+      "rowLimitTruncates": "테이블에는 {{total}}개 행이 있으며, 레이어에는 처음 {{limit}}개 행이 포함됩니다.",
+      "statusConnecting": "Iceberg 메타데이터를 읽는 중...",
+      "statusInspecting": "테이블을 검사하는 중...",
+      "statusInspected": "{{rows}}개 행. 지오메트리: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}}개 행이 있지만 GEOMETRY 열을 찾을 수 없습니다. Iceberg 지오메트리는 v3 geometry 유형을 사용해야 합니다.",
+      "statusTablesFound_other": "테이블 {{count}}개를 찾았습니다. 계속하려면 하나를 선택하세요.",
+      "statusNoTables": "카탈로그에 테이블이 없습니다.",
+      "errorLocation": "Iceberg 테이블의 메타데이터 위치를 입력하세요.",
+      "errorWarehouse": "연결할 Iceberg 웨어하우스를 입력하세요.",
+      "errorEndpoint": "Iceberg REST 카탈로그 엔드포인트를 입력하세요.",
+      "errorConnect": "Iceberg 소스를 읽을 수 없습니다.",
+      "errorInspect": "Iceberg 테이블을 검사할 수 없습니다.",
+      "errorConnectFirst": "먼저 연결한 후 Iceberg 테이블을 선택하세요."
     },
     "video": {
       "defaultName": "비디오 레이어",
@@ -672,15 +777,15 @@
       "bandCombinationHelp": "단일 밴드는 컬러맵으로 그려지고, RGB 합성은 이 변수의 세 밴드를 빨강, 초록, 파랑 채널로 그리며 각 채널을 자체 2-98 % 범위로 스트레치합니다.",
       "modeSingleBand": "단일 밴드(컬러맵)",
       "modeRgb": "RGB 합성(세 밴드)",
-      "colorMin": "색상 최솟값(선택 사항)",
-      "colorMax": "색상 최댓값(선택 사항)",
-      "adding": "추가하는 중...",
-      "addLayer": "레이어 추가",
       "channel": {
         "red": "빨강 밴드",
         "green": "초록 밴드",
         "blue": "파랑 밴드"
-      }
+      },
+      "colorMin": "색상 최솟값(선택 사항)",
+      "colorMax": "색상 최댓값(선택 사항)",
+      "adding": "추가하는 중...",
+      "addLayer": "레이어 추가"
     },
     "deckViz": {
       "defaultName": "Deck.gl 레이어",
@@ -713,27 +818,6 @@
       "lineWidth": "선 두께",
       "extrusion": "3D 돌출",
       "modelUrlPlaceholder": "https://example.com/model.glb"
-    },
-    "ogcFeatures": {
-      "defaultName": "OGC API - Features 레이어",
-      "sampleLabel": "세계의 호수 (pygeoapi 데모)",
-      "urlPlaceholder": "https://example.com/ogcapi",
-      "urlHint": "서비스의 랜딩 페이지 또는 거기에서 복사한 URL (/collections 또는 /collections/{id}/items URL도 사용할 수 있습니다).",
-      "retrieveCollections": "컬렉션 조회",
-      "retrieving": "조회하는 중...",
-      "retrievedCollections": "조회한 컬렉션",
-      "selectCollection_other": "{{count}}개 컬렉션에서 선택",
-      "noCollectionsFound": "이 서비스에서 피처 컬렉션을 찾지 못했습니다.",
-      "retrieveError": "이 서비스에서 컬렉션을 조회할 수 없습니다.",
-      "collection": "컬렉션",
-      "collectionPlaceholder": "collection-id",
-      "maxFeatures": "최대 피처 수",
-      "bbox": "경계 상자",
-      "datetime": "날짜 및 시간",
-      "errorCollection": "OGC API - Features 컬렉션 id를 입력하세요.",
-      "errorMaxFeatures": "최대 피처 수를 1 이상으로 입력하세요.",
-      "errorBbox": "경계 상자를 “서,남,동,북” 형식으로 입력하세요.",
-      "errorNoFeatures": "이 컬렉션은 피처를 반환하지 않았습니다."
     },
     "nonGeographicCoordinates": "{{names}}의 좌표가 경위도가 아니므로 지도에 아무것도 그려지지 않습니다. CRS가 잘못 지정되어 있습니다 — 데이터를 재투영하거나 .prj를 수정한 뒤 다시 불러오세요."
   },
@@ -1093,6 +1177,7 @@
     "guest": "게스트",
     "connectFailed": "공동작업 서버에 연결할 수 없습니다.",
     "copyFailed": "클립보드에 복사할 수 없습니다.",
+    "shareFailed": "최신 프로젝트 변경 사항을 공유할 수 없습니다.",
     "connecting": "연결 중…",
     "reconnecting": "재연결 중…",
     "connected": "실시간 세션 활성화됨",
@@ -1114,6 +1199,9 @@
     "viewOnly": "보기 전용",
     "allowEdit": "이 사용자에게 편집 허용",
     "setViewOnly": "이 사용자를 보기 전용으로 설정",
+    "kick": "참가자 내보내기",
+    "block": "참가자 차단",
+    "requireIdentityLabel": "참가하려면 로그인한 계정 필요",
     "chatLog": "세션 채팅",
     "chatCompose": "메시지 입력",
     "chatEmpty": "아직 메시지가 없습니다.",
@@ -1122,7 +1210,11 @@
     "chatAttachLocation": "현재 지도 위치 첨부",
     "chatLocationAttached": "위치가 첨부됨(클릭하여 제거)",
     "chatGoToLocation": "이 위치로 이동",
-    "sessionStatusUnread_other": "실시간 공동작업 세션, 읽지 않은 메시지 {{count}}개. 클릭하여 접속자를 확인하고 채팅하세요."
+    "sessionStatusUnread_other": "실시간 공동작업 세션, 읽지 않은 메시지 {{count}}개. 클릭하여 접속자를 확인하고 채팅하세요.",
+    "lockLayer": "게스트에 대해 레이어 잠금",
+    "unlockLayer": "게스트에 대해 레이어 잠금 해제",
+    "layerLocked": "잠김",
+    "layerLockedHint": "이 레이어는 호스트가 잠갔으므로 편집할 수 없습니다"
   },
   "share": {
     "title": "프로젝트 공유",
@@ -1135,6 +1227,7 @@
     "step2Description": "이 기기의 설정 → 환경 변수에 토큰을 붙여넣으세요.",
     "configureToken": "로컬 토큰 구성",
     "liveAt": "프로젝트가 게시된 위치:",
+    "credentialsRemoved": "자격 증명 필드 {{count}}개가 포함되지 않았습니다. 수신자는 자신의 자격 증명을 제공하거나 브로커 참조를 사용해야 합니다.",
     "copyLink": "링크 복사",
     "open": "열기",
     "done": "완료",
@@ -1150,7 +1243,26 @@
     "errorFallback": "프로젝트를 공유할 수 없습니다.",
     "usernameRequired": "공유하기 전에 {{shareHost}} 계정에 사용자 이름을 설정하세요. 계정 설정을 열어 사용자 이름을 선택한 다음 다시 시도하세요.",
     "openAccountSettings": "계정 설정 열기",
-    "credentialsRemoved": "자격 증명 필드 {{count}}개가 포함되지 않았습니다. 수신자는 자신의 자격 증명을 제공하거나 브로커 참조를 사용해야 합니다."
+    "readinessChecking": "수신자가 데이터를 불러올 수 있는지 확인하는 중…",
+    "readinessUnavailable": "데이터 소스 확인을 실행할 수 없습니다.",
+    "readinessAllReachable_other": "데이터 소스 {{count}}개 모두 수신자가 접근할 수 있는 것으로 보입니다.",
+    "readinessTitle": "일부 데이터가 수신자에게 표시되지 않을 수 있습니다",
+    "readinessNote": "이 때문에 공유가 차단되지는 않습니다. 수신자는 브라우저에서 프로젝트를 열기 때문에 이러한 소스가 본인 환경과 다르게 동작할 수 있습니다.",
+    "readinessTruncated_other": "처음 {{count}}개 소스만 확인했습니다.",
+    "readinessBasemapLabel": "배경지도",
+    "readinessPluginLabel": "플러그인",
+    "readinessReasonCredentialStripped": "공유할 때 제거되는 자격 증명을 사용합니다.",
+    "readinessReasonAuthRequired": "서비스가 자격 증명 없는 요청을 거부했습니다.",
+    "readinessReasonCors": "브라우저가 이 호스트를 가져올 수 없습니다. 교차 출처 헤더를 보내지 않거나 접근할 수 없습니다.",
+    "readinessReasonNotFound": "서비스가 찾을 수 없음으로 응답했습니다. 링크가 만료되었거나 이동했을 수 있습니다.",
+    "readinessReasonLocalFile": "내 컴퓨터의 파일을 가리킵니다.",
+    "readinessReasonPrivateHost": "사설 또는 로컬 네트워크 주소를 가리킵니다.",
+    "readinessReasonNoSource": "수신자가 열 수 있는 소스가 없습니다.",
+    "readinessReasonUnchecked": "확인할 수 없습니다.",
+    "readinessAdviceCredential": "서비스를 공개하거나, 수신자에게 자신의 자격 증명을 준비하도록 알리세요.",
+    "readinessAdviceCors": "데스크톱 앱에서는 계속 불러올 수 있지만 브라우저 뷰어에서는 불러올 수 없습니다.",
+    "readinessAdviceNotFound": "공유하기 전에 이 레이어의 소스를 업데이트하거나 교체하세요.",
+    "readinessAdviceLocal": "호스팅되는 소스로 변환하세요. 그러지 않으면 수신자에게 빈 레이어가 표시됩니다."
   },
   "gallery": {
     "title": "프로젝트 갤러리",
@@ -1266,13 +1378,19 @@
       "layer": "레이어",
       "titleLabel": "제목",
       "position": "위치",
-      "filterToPage": "페이지 범위 내 피처만",
-      "filterToPageHint": "아틀라스 페이지와 그려진 인쇄 범위에 적용됩니다. 그 외에는 전체 레이어가 사용됩니다."
+      "pageFilter": "페이지 범위 필터",
+      "filterAll": "모든 피처",
+      "filterContained": "페이지 범위 안에 완전히 포함된 피처만",
+      "filterIntersecting": "페이지 범위와 교차하는 피처만",
+      "filterToPageHint": "아틀라스 페이지와 그려진 인쇄 범위에 적용됩니다. 그 외에는 전체 레이어가 사용됩니다.",
+      "filterToAtlasFeature": "현재 아틀라스 피처만",
+      "filterToAtlasFeatureHint": "테이블이 아틀라스 커버리지 레이어를 사용할 때 사용할 수 있습니다. 페이지 범위 필터보다 우선합니다."
     },
     "dataTable": {
       "columns": "열",
       "columnsHint": "기본적으로 처음 {{count}}개 필드가 선택됩니다. 열을 선택하여 사용자 지정하세요.",
       "maxRows": "최대 행 수",
+      "fitRows": "페이지에 맞게 행 수 조정",
       "moreRows_other": "+{{count}}개 더",
       "noRows": "현재 설정으로 표시할 행이 없습니다."
     },
@@ -1395,6 +1513,8 @@
       "extentMargin": "피처 주변 여백",
       "extentScale": "고정 축척",
       "marginLabel": "여백 (%)",
+      "maskOutside": "현재 피처 바깥 영역 마스크",
+      "maskOutsideHint": "반투명 반전 채우기를 적용해 현재 아틀라스 피처를 강조합니다.",
       "scaleLabel": "축척",
       "scaleRequired": "0보다 큰 축척을 입력하세요.",
       "sortField": "정렬 기준",
@@ -1459,6 +1579,19 @@
     "description": "3D 지형의 수직 과장 정도를 조정합니다. 값이 클수록 언덕과 산이 더 가파르게 표시됩니다.",
     "label": "수직 과장",
     "controlLabel": "지형 켜기/끄기(과장 설정은 더블클릭)",
+    "sourceLabel": "지형 소스",
+    "sourceDescription": "EPSG:3857 또는 EPSG:4326 단일 밴드 COG를 고도 소스로 사용합니다. 파일에서 CORS 및 HTTP 범위 요청을 허용해야 합니다.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "로컬 COG DEM",
+    "localSourceDescription": "파일은 이 기기에 유지되며 지형 타일이 필요할 때 작은 범위로 읽습니다.",
+    "useCog": "COG DEM 사용",
+    "sourceLoading": "COG 여는 중…",
+    "restoreDefaultSource": "전 세계 지형 사용",
+    "sourceError": "COG DEM을 열 수 없습니다.",
+    "sourceErrorEmpty": "해당 파일이 비어 있습니다. COG DEM 파일을 선택하세요.",
+    "sourceErrorBand": "요청한 밴드가 이 COG에 없습니다.",
+    "sourceErrorProjection": "COG 지형은 EPSG:3857 및 EPSG:4326 DEM만 지원합니다.",
+    "sourceErrorDetail": "COG DEM을 열 수 없습니다. ({{detail}})",
     "reset": "초기화",
     "done": "완료"
   },
@@ -1486,6 +1619,16 @@
     "gapNote": "점선 구간은 값이 없는 날짜(nodata 또는 적용 범위 밖)를 연결합니다.",
     "exportCsv": "CSV 내보내기",
     "exportGeoParquet": "GeoParquet 내보내기"
+  },
+  "auth": {
+    "unavailableTitle": "로그인을 사용할 수 없습니다",
+    "unavailableDescription": "GeoLibre가 로그인 서비스에 연결하지 못해 로그인 여부를 확인할 수 없습니다. 대개 일시적인 문제이며, 계속된다면 이 배포의 인증 설정을 확인해야 할 수 있습니다.",
+    "retry": "다시 시도",
+    "signInTitle": "GeoLibre에 로그인",
+    "signInDescription": "이 배포에는 계정이 필요합니다. 보안 로그인 페이지로 이동한 뒤 이곳으로 돌아옵니다.",
+    "signIn": "로그인",
+    "signOut": "로그아웃",
+    "account": "계정"
   },
   "basemapExtract": {
     "title": "오프라인 베이스맵 추출",
@@ -1617,8 +1760,13 @@
     "unit": {
       "meters": "m",
       "kilometers": "km",
-      "miles": "마일"
-    }
+      "miles": "마일",
+      "feet": "ft"
+    },
+    "viewshedHere": "여기서 본 가시권 ({{radius}})",
+    "viewshedLayerName": "가시권 ({{radius}})",
+    "viewshedToolName": "가시권",
+    "viewshedNoResult": "여기서는 가시 영역을 계산할 수 없습니다."
   },
   "knowledgeCard": {
     "title": "장소 정보",
@@ -1662,7 +1810,8 @@
       "geocoding": "지오코딩",
       "ai": "AI 제공자",
       "environment": "환경",
-      "updates": "업데이트"
+      "updates": "업데이트",
+      "startup": "시작"
     },
     "menu": {
       "mapPreferences": "지도 환경설정",
@@ -1673,6 +1822,7 @@
       "ai": "AI 제공자",
       "environmentVariables": "환경 변수",
       "updates": "업데이트 설정",
+      "startupSettings": "시작 설정",
       "managePlugins": "플러그인 관리",
       "styleManager": "스타일 관리자",
       "urlOverrideNote": "URL 레이아웃 매개변수가 저장된 설정보다 우선 적용됩니다."
@@ -1689,6 +1839,26 @@
         "minor": "주 및 부 버전만",
         "major": "주 버전만"
       }
+    },
+    "startup": {
+      "title": "시작 프로젝트",
+      "description": "네이티브 앱이 시작될 때 GeoLibre가 여는 작업 공간을 선택하세요.",
+      "mode": {
+        "default": "기본 작업 공간 열기",
+        "last": "마지막 프로젝트 다시 열기",
+        "specific": "특정 프로젝트 열기"
+      },
+      "modeHint": {
+        "default": "새 제목 없는 프로젝트로 시작합니다.",
+        "last": "가장 최근에 사용한 로컬 프로젝트를 엽니다."
+      },
+      "chooseProject": "프로젝트 선택",
+      "noProjectSelected": "선택된 프로젝트 없음",
+      "globeByDefault": "기본적으로 3D 지구본 사용",
+      "globeByDefaultHint": "시작 프로젝트나 프로젝트 링크가 지정되지 않은 경우 제목 없는 작업 공간에 사용됩니다.",
+      "selectError": "선택한 프로젝트를 읽을 수 없습니다.",
+      "restoring": "시작 프로젝트를 여는 중…",
+      "loadWarning": "시작 프로젝트를 사용할 수 없습니다. GeoLibre가 대신 기본 작업 공간을 열었습니다."
     },
     "map": {
       "constraintsTitle": "지도 제약 조건",
@@ -1711,7 +1881,9 @@
       "scaleUnitImperial": "야드파운드법 (ft / mi)",
       "scaleUnitNautical": "해상 (nmi)",
       "scaleUnitHint": "지도 하단의 축척 막대에 표시할 단위를 선택하세요.",
-      "errorBoundsUnavailable": "지도 경계를 아직 사용할 수 없습니다."
+      "errorBoundsUnavailable": "지도 경계를 아직 사용할 수 없습니다.",
+      "coordinateFormat": "좌표 형식",
+      "coordinateFormatHint": "상태 표시줄이 포인터 좌표를 표시하는 표기법입니다. 상태 표시줄의 좌표를 클릭하면 표기법이 전환됩니다."
     },
     "layout": {
       "title": "레이아웃",
@@ -2047,7 +2219,8 @@
       "dashboard": "대시보드",
       "assistant": "AI 어시스턴트",
       "geocode": "주소 지오코딩",
-      "modelBuilder": "배치 및 모델",
+      "batchTools": "일괄 도구",
+      "modelBuilder": "모델 빌더",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI 분할",
@@ -2102,7 +2275,8 @@
       "video": "동영상 레이어",
       "deckglViz": "Deck.gl 레이어",
       "gltfModel": "3D 모델 (glTF)",
-      "postgres": "PostgreSQL 레이어"
+      "postgres": "PostgreSQL 레이어",
+      "iceberg": "Apache Iceberg 레이어"
     },
     "conversion": {
       "vectorToVector": "벡터에서 벡터로",
@@ -2129,6 +2303,7 @@
       "rasterShape": "{{bands}}개 밴드의 {{width}}×{{height}} 래스터를 읽음",
       "wroteCog": "오버뷰가 있는 타일 COG를 작성함 ({{compression}})",
       "notAGeoTiff": "이 파일은 읽을 수 있는 GeoTIFF가 아닙니다. 브라우저에서 래스터를 COG로 변환은 GeoTIFF만 읽으며, 다른 형식은 데스크톱 앱이 필요합니다.",
+      "rasterTooLargeForBrowser": "브라우저에서는 래스터 전체를 WebAssembly로 디코딩하는데, WebAssembly는 약 4GB로 제한되므로 이 파일은 처리할 수 없습니다. GeoLibre 데스크톱 앱으로 변환하거나, gdal_translate 또는 rio-cogeo로 COG를 미리 만드세요.",
       "zoomRangeError": "확대/축소 레벨은 0 ≤ 최소 ≤ 최대 ≤ {{max}}을(를) 만족해야 합니다.",
       "colormap": "색상표",
       "resampling": "리샘플링",
@@ -2374,7 +2549,7 @@
       "duckdbLayer": "DuckDB 레이어",
       "whitebox": "Whitebox",
       "geocode": "주소 지오코딩",
-      "modelBuilder": "배치 및 모델",
+      "modelBuilder": "모델 빌더",
       "processingHistory": "기록",
       "conversion": "변환",
       "vector": "벡터",
@@ -2386,7 +2561,7 @@
       "terrain": "지형",
       "remoteSensing": "원격 탐사",
       "projection": "투영법",
-      "geolibre": "GeoLibre",
+      "geolibre": "GeoLibre 도구 상자",
       "subGroupGeometry": "지오메트리",
       "subGroupOverlay": "오버레이",
       "subGroupJoin": "조인",
@@ -2410,6 +2585,8 @@
       "atmosphereEnabled": "사용",
       "spinGlobe": "회전하는 지구본",
       "graticule": "격자선",
+      "pointerElevation": "고도",
+      "pointerElevationHint": "상태 표시줄에 포인터 아래 지면 고도를 표시합니다. 3D 지형이 없으면 공개 고도 서비스를 조회합니다.",
       "weather": "날씨",
       "weatherTooltip": "애니메이션할 수 있는 거의 실시간 날씨 레이어를 오버레이합니다.",
       "weatherPlay": "애니메이션 재생",
@@ -2455,6 +2632,21 @@
       "arcgisImportComplete": "ArcGIS Pro 프로젝트를 가져왔습니다",
       "arcgisImportWarnings_other": "프로젝트를 가져왔지만 레이어 {{count}}개를 불러오지 못했습니다.",
       "arcgisUnknownLayerType": "알 수 없음",
+      "importWarningLayerCount_other": "레이어 {{count}}개",
+      "showLayerNames": "레이어 이름 표시",
+      "hideLayerNames": "레이어 이름 숨기기",
+      "arcgisImportReason": {
+        "layer-type": "{{layerType}} 레이어 유형은 지원되지 않습니다.",
+        "missing-source": "레이어에 읽을 수 있는 로컬 데이터 소스가 없습니다.",
+        "format": "레이어의 데이터 형식은 지원되지 않습니다.",
+        "file-geodatabase": "파일 지오데이터베이스(.gdb) 소스는 프로젝트에서 불러오지 않습니다. GeoLibre Desktop에서 데이터 추가 → 파일 지오데이터베이스 (GDB)로 추가하세요.",
+        "file-geodatabase-raster": "파일 지오데이터베이스(.gdb)에 저장된 래스터 데이터셋은 지원되지 않습니다. 래스터를 GeoTIFF로 내보낸 뒤 래스터 레이어로 추가하세요.",
+        "network-path": "네트워크 공유 경로는 보안상의 이유로 불러오지 않습니다.",
+        "service": "프로젝트에 포함된 ArcGIS 서비스 레이어는 아직 지원되지 않습니다.",
+        "browser-local-file": "로컬 파일이 참조되어 있지만 브라우저는 ArcGIS Pro 데이터 경로를 다시 열 수 없습니다. GeoLibre Desktop으로 불러오세요.",
+        "map-extent": "저장된 지도 범위가 GeoLibre가 변환할 수 없는 좌표계를 사용하므로 지도를 기본 보기로 열었습니다.",
+        "nesting": "그룹의 중첩이 너무 깊거나, 프로젝트가 이 그룹을 이미 포함한 그룹을 다시 참조합니다."
+      },
       "qgisImportComplete": "QGIS 프로젝트를 가져왔습니다",
       "qgisImportWarnings_other": "프로젝트를 가져왔지만 레이어 {{count}}개를 불러오지 못했습니다.",
       "qgisUnknownProvider": "알 수 없음",
@@ -2479,6 +2671,7 @@
       "embedVectorTitle": "로컬 벡터 데이터를 포함하시겠습니까?",
       "embedVectorDesc": "이 프로젝트에는 컴퓨터에서 불러온 로컬 벡터 레이어가 {{count}}개 있습니다. 프로젝트를 다시 열 때 브라우저가 이 파일들을 다시 읽을 수 없으므로, 복원하려면 데이터를 프로젝트 파일에 포함해야 합니다. 포함하면 파일 크기가 약 {{size}} 늘어납니다.",
       "embedVectorDescDesktop": "이 프로젝트에는 컴퓨터에서 불러온 로컬 벡터 레이어가 {{count}}개 있습니다. 데이터를 포함하면 프로젝트가 독립적으로 완결되지만(약 {{size}} 추가), 프로젝트를 다시 열 때 디스크에서 다시 불러오는 파일 참조로 저장할 수도 있습니다. 참조는 파일 크기를 작게 유지하지만 원본 파일이 나중에 이동되거나 삭제되면 깨집니다.",
+      "embedVectorLargeWarning": "약 {{size}}를 포함하면 프로젝트 파일이 매우 커집니다. 모든 피처를 한 번에 파싱해 메모리에 유지해야 하므로 다시 열 때 느리거나 아예 실패할 수 있습니다. 이 정도 크기의 데이터는 레이어를 PMTiles 또는 FlatGeobuf로 변환한 뒤, 포함하지 말고 원격 레이어로 추가하세요.",
       "embedVectorEmbedButton": "데이터 포함",
       "embedVectorReferenceButton": "파일 참조 저장",
       "embedVectorSkipButton": "데이터 없이 저장",
@@ -2519,16 +2712,9 @@
       "loadingOsmPbfProgress": "피처를 GeoJSON으로 변환하는 중… OSM 엔티티 {{total}}개 중 {{processed}}개 처리됨.",
       "projectName": "프로젝트 이름",
       "storymapEllipsis": "스토리 맵...",
-      "arcgisImportReason": {
-        "layer-type": "{{layerType}} 레이어 유형은 지원되지 않습니다.",
-        "missing-source": "레이어에 읽을 수 있는 로컬 데이터 소스가 없습니다.",
-        "format": "레이어의 데이터 형식은 지원되지 않습니다.",
-        "network-path": "네트워크 공유 경로는 보안상의 이유로 불러오지 않습니다.",
-        "service": "프로젝트에 포함된 ArcGIS 서비스 레이어는 아직 지원되지 않습니다.",
-        "browser-local-file": "로컬 파일이 참조되어 있지만 브라우저는 ArcGIS Pro 데이터 경로를 다시 열 수 없습니다. GeoLibre Desktop으로 불러오세요.",
-        "map-extent": "저장된 지도 범위가 GeoLibre가 변환할 수 없는 좌표계를 사용하므로 지도를 기본 보기로 열었습니다.",
-        "nesting": "그룹의 중첩이 너무 깊거나, 프로젝트가 이 그룹을 이미 포함한 그룹을 다시 참조합니다."
-      }
+      "pointerElevationNoticeTitle": "고도는 공개 서비스를 사용합니다",
+      "pointerElevationNoticeDesc": "3D 지형이 켜져 있으면 고도는 지도 자체에서 계산되며 아무것도 전송되지 않습니다. 3D 지형이 없으면 공개 Open-Meteo API를 조회하며 포인터 아래 좌표가 기기를 벗어납니다.",
+      "batchTools": "일괄 도구"
     },
     "plugin": {
       "maplibre-gl-annotations": "주석",
@@ -2598,6 +2784,7 @@
       "couldNotOpenRecentProject": "최근 프로젝트를 열 수 없습니다.",
       "couldNotLoadRecentProject": "최근 프로젝트를 불러올 수 없습니다.",
       "couldNotSaveProject": "프로젝트를 저장할 수 없습니다.",
+      "projectTooLargeToSave": "이 프로젝트는 너무 커서 저장할 수 없습니다. 포함된 벡터 데이터를 PMTiles 또는 FlatGeobuf로 변환한 뒤, 피처를 포함하지 말고 원격 레이어로 추가하세요.",
       "couldNotExportHtml": "프로젝트를 HTML로 내보낼 수 없습니다.",
       "osmPbfNoFeatures": "이 OSM PBF 파일에서 점, 선, 폴리곤 피처를 찾을 수 없습니다.",
       "couldNotLoadOsmPbf": "OSM PBF 파일을 불러올 수 없습니다.",
@@ -2844,6 +3031,203 @@
     "includeParents": "선택한 셀의 상위 셀 포함",
     "showIcosahedron": "정이십면체 표시"
   },
+  "s2Plugin": {
+    "title": "S2 격자",
+    "controlTitle": "S2 격자 설정",
+    "autoResolution": "해상도 자동 설정",
+    "resolution": "해상도",
+    "cellCount": "화면에 {{count}}개 셀",
+    "tooManyCells": "이 화면은 셀 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
+    "fillColor": "채우기 색상",
+    "fillOpacity": "채우기 불투명도",
+    "lineColor": "윤곽선 색상",
+    "lineWidth": "외곽선 두께",
+    "showLabels": "셀 ID 표시",
+    "identifyHint": "지도를 클릭하여 S2 셀을 확인하세요.",
+    "selectedCell": "선택한 셀",
+    "noSelection": "선택한 셀 없음",
+    "copyId": "ID 복사",
+    "parent": "상위 셀",
+    "children": "하위 셀",
+    "neighbors": "인접 셀",
+    "center": "중심",
+    "zoomToCell": "셀로 확대",
+    "addAsLayer": "격자를 레이어로 추가",
+    "exportGeoJson": "GeoJSON 내보내기",
+    "exportCsv": "CSV 내보내기",
+    "includeNeighbors": "선택한 셀의 인접 셀 포함",
+    "includeParents": "선택한 셀의 상위 셀 포함"
+  },
+  "a5Plugin": {
+    "title": "A5 격자",
+    "controlTitle": "A5 격자 설정",
+    "autoResolution": "해상도 자동 설정",
+    "resolution": "해상도",
+    "cellCount": "화면에 {{count}}개 셀",
+    "tooManyCells": "이 화면은 셀 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
+    "fillColor": "채우기 색상",
+    "fillOpacity": "채우기 불투명도",
+    "lineColor": "윤곽선 색상",
+    "lineWidth": "외곽선 두께",
+    "showLabels": "셀 ID 표시",
+    "identifyHint": "지도를 클릭하여 A5 셀을 확인하세요.",
+    "selectedCell": "선택한 셀",
+    "noSelection": "선택한 셀 없음",
+    "copyId": "ID 복사",
+    "parent": "상위 셀",
+    "children": "하위 셀",
+    "neighbors": "인접 셀",
+    "center": "중심",
+    "zoomToCell": "셀로 확대",
+    "addAsLayer": "격자를 레이어로 추가",
+    "exportGeoJson": "GeoJSON 내보내기",
+    "exportCsv": "CSV 내보내기",
+    "includeNeighbors": "선택한 셀의 인접 셀 포함",
+    "includeParents": "선택한 셀의 상위 셀 포함"
+  },
+  "dggridPlugin": {
+    "title": "DGGRID",
+    "controlTitle": "DGGRID 설정",
+    "cellType": "셀 유형",
+    "topologyHexagon": "육각형",
+    "topologyDiamond": "마름모",
+    "topologyTriangle": "삼각형",
+    "projection": "투영법",
+    "aperture": "구경",
+    "autoResolution": "해상도 자동 설정",
+    "resolution": "해상도",
+    "cellCount": "화면에 {{count}}개 셀",
+    "tooManyCells": "이 화면은 셀 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
+    "fillColor": "채우기 색상",
+    "fillOpacity": "채우기 불투명도",
+    "lineColor": "윤곽선 색상",
+    "lineWidth": "외곽선 두께",
+    "showLabels": "셀 ID 표시",
+    "identifyHint": "지도를 클릭하여 DGGRID 셀을 확인하세요.",
+    "selectedCell": "선택한 셀",
+    "noSelection": "선택한 셀 없음",
+    "copyId": "ID 복사",
+    "parent": "상위 셀",
+    "children": "하위 셀",
+    "neighbors": "인접 셀",
+    "center": "중심",
+    "zoomToCell": "셀로 확대",
+    "addAsLayer": "격자를 레이어로 추가",
+    "exportGeoJson": "GeoJSON 내보내기",
+    "exportCsv": "CSV 내보내기",
+    "includeNeighbors": "선택한 셀의 인접 셀 포함",
+    "includeParents": "선택한 셀의 상위 셀 포함"
+  },
+  "dggalPlugin": {
+    "title": "DGGAL",
+    "controlTitle": "DGGAL 설정",
+    "gridType": "DGGS 유형",
+    "autoResolution": "해상도 자동 설정",
+    "resolution": "해상도",
+    "cellCount": "화면에 {{count}}개 셀",
+    "tooManyCells": "이 화면은 셀 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
+    "fillColor": "채우기 색상",
+    "fillOpacity": "채우기 불투명도",
+    "lineColor": "윤곽선 색상",
+    "lineWidth": "외곽선 두께",
+    "showLabels": "셀 ID 표시",
+    "identifyHint": "지도를 클릭하여 DGGAL 셀을 확인하세요.",
+    "selectedCell": "선택한 셀",
+    "noSelection": "선택한 셀 없음",
+    "copyId": "ID 복사",
+    "parent": "상위 셀",
+    "children": "하위 셀",
+    "neighbors": "인접 셀",
+    "center": "중심",
+    "zoomToCell": "셀로 확대",
+    "addAsLayer": "격자를 레이어로 추가",
+    "exportGeoJson": "GeoJSON 내보내기",
+    "exportCsv": "CSV 내보내기",
+    "includeNeighbors": "선택한 셀의 인접 셀 포함",
+    "includeParents": "선택한 셀의 상위 셀 포함"
+  },
+  "olcPlugin": {
+    "title": "OLC",
+    "controlTitle": "OLC 설정",
+    "autoResolution": "해상도 자동 설정",
+    "resolution": "해상도",
+    "cellCount": "화면에 {{count}}개 셀",
+    "tooManyCells": "이 화면은 셀 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
+    "fillColor": "채우기 색상",
+    "fillOpacity": "채우기 불투명도",
+    "lineColor": "윤곽선 색상",
+    "lineWidth": "외곽선 두께",
+    "showLabels": "셀 ID 표시",
+    "identifyHint": "지도를 클릭하여 OLC 셀을 확인하세요.",
+    "selectedCell": "선택한 셀",
+    "noSelection": "선택한 셀 없음",
+    "copyId": "ID 복사",
+    "parent": "상위 셀",
+    "children": "하위 셀",
+    "neighbors": "인접 셀",
+    "center": "중심",
+    "zoomToCell": "셀로 확대",
+    "addAsLayer": "격자를 레이어로 추가",
+    "exportGeoJson": "GeoJSON 내보내기",
+    "exportCsv": "CSV 내보내기",
+    "includeNeighbors": "선택한 셀의 인접 셀 포함",
+    "includeParent": "선택한 셀의 상위 셀 포함"
+  },
+  "geohashPlugin": {
+    "title": "Geohash",
+    "controlTitle": "Geohash 설정",
+    "autoResolution": "해상도 자동 설정",
+    "resolution": "해상도",
+    "cellCount": "화면에 {{count}}개 셀",
+    "tooManyCells": "이 화면은 셀 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
+    "fillColor": "채우기 색상",
+    "fillOpacity": "채우기 불투명도",
+    "lineColor": "윤곽선 색상",
+    "lineWidth": "외곽선 두께",
+    "showLabels": "셀 ID 표시",
+    "identifyHint": "지도를 클릭하여 Geohash 셀을 확인하세요.",
+    "selectedCell": "선택한 셀",
+    "noSelection": "선택한 셀 없음",
+    "copyId": "ID 복사",
+    "parent": "상위 셀",
+    "children": "하위 셀",
+    "neighbors": "인접 셀",
+    "center": "중심",
+    "zoomToCell": "셀로 확대",
+    "addAsLayer": "격자를 레이어로 추가",
+    "exportGeoJson": "GeoJSON 내보내기",
+    "exportCsv": "CSV 내보내기",
+    "includeNeighbors": "선택한 셀의 인접 셀 포함",
+    "includeParent": "선택한 셀의 상위 셀 포함"
+  },
+  "tilecodePlugin": {
+    "title": "Tilecode",
+    "controlTitle": "Tilecode 설정",
+    "autoResolution": "해상도 자동 설정",
+    "resolution": "해상도",
+    "cellCount": "화면에 타일 {{count}}개",
+    "tooManyCells": "이 화면은 타일 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
+    "fillColor": "채우기 색상",
+    "fillOpacity": "채우기 불투명도",
+    "lineColor": "윤곽선 색상",
+    "lineWidth": "외곽선 두께",
+    "showLabels": "타일 ID 표시",
+    "identifyHint": "지도를 클릭하여 타일을 확인하세요.",
+    "selectedCell": "선택한 타일",
+    "noSelection": "선택한 타일 없음",
+    "copyId": "ID 복사",
+    "quadkey": "쿼드키",
+    "parent": "상위 타일",
+    "children": "하위 타일",
+    "neighbors": "인접 타일",
+    "center": "중심",
+    "zoomToCell": "타일로 확대",
+    "addAsLayer": "격자를 레이어로 추가",
+    "exportGeoJson": "GeoJSON 내보내기",
+    "exportCsv": "CSV 내보내기",
+    "includeNeighbors": "선택한 타일의 인접 타일 포함",
+    "includeParent": "선택한 타일의 상위 타일 포함"
+  },
   "timelapse": {
     "title": "타임랩스",
     "provider": "이미지 소스",
@@ -2964,6 +3348,98 @@
     "added": "{{title}}을(를) 추가했습니다.",
     "addError": "데이터셋을 추가할 수 없습니다.",
     "searchError": "검색에 실패했습니다."
+  },
+  "stacPlugin": {
+    "title": "STAC 카탈로그",
+    "footprintLayerName": "STAC 검색 범위",
+    "catalogSearch": "STAC Index에서 공개 카탈로그 찾기",
+    "catalogSearchPlaceholder": "카탈로그 이름 검색…",
+    "indexLoading": "STAC Index 로드 중…",
+    "indexUnavailable": "STAC Index를 사용할 수 없습니다: URL을 입력하세요",
+    "indexLoadFailed": "STAC Index를 불러오지 못했습니다",
+    "urlLabel": "STAC 카탈로그 또는 API URL",
+    "connect": "연결",
+    "connecting": "STAC에 연결 중…",
+    "connected": "연결되었습니다. 필터를 선택하고 검색하세요.",
+    "connectFailed": "STAC에 연결하지 못했습니다",
+    "selectCatalog": "카탈로그 선택…",
+    "noMatchingCatalogs": "일치하는 카탈로그 없음",
+    "catalogApiSuffix": " (API)",
+    "catalogStaticSuffix": " (정적)",
+    "kindApi": "STAC API",
+    "kindStatic": "정적 카탈로그",
+    "collectionsHint": "Ctrl/Cmd를 누른 채 여러 컬렉션을 선택할 수 있습니다. 아래쪽 가장자리를 끌어 크기를 조절하세요",
+    "limitToExtent": "현재 지도 범위로 검색 제한",
+    "bboxLabel": "경계 상자(서, 남, 동, 북)",
+    "bboxPlaceholder": "선택 사항이며 지도 범위보다 우선합니다",
+    "bboxInvalid": "올바른 경계 상자를 입력하세요: 서, 남, 동, 북.",
+    "drawBbox": "지도에 상자 그리기",
+    "cancelDrawing": "그리기 취소",
+    "clearDrawnBbox": "그린 상자 지우기",
+    "drawHint": "지도에서 클릭한 뒤 끌어 검색 상자를 그리세요.",
+    "drawnBbox": "그린 상자: {{bbox}}",
+    "drawnBboxCleared": "그린 상자를 지웠습니다.",
+    "mapNotReady": "지도가 아직 그리기 준비되지 않았습니다.",
+    "startDate": "시작 날짜",
+    "endDate": "종료 날짜",
+    "additionalParams": "추가 검색 매개변수(JSON, STAC API 전용)",
+    "additionalInvalid": "추가 검색 매개변수는 JSON 객체여야 합니다.",
+    "searchItems": "항목 검색",
+    "clearResults": "결과 지우기",
+    "resultsCleared": "검색 결과를 지웠습니다.",
+    "searching": "STAC 항목 검색 중…",
+    "loadingMore": "항목 더 불러오는 중…",
+    "noMatchesHere": "카탈로그의 해당 부분에서 일치하는 항목이 없습니다. 계속 검색하려면 더 불러오세요.",
+    "treeEmpty": "비어 있음",
+    "treeOpenFailed": "이 카탈로그를 열 수 없습니다",
+    "noResults": "이 필터와 일치하는 STAC 항목이 없습니다.",
+    "searchFailed": "STAC 검색에 실패했습니다",
+    "showing": "{{count}}개 항목을 표시하고 있습니다.",
+    "showingOfMatched": "{{matched}}개 중 {{count}}개 항목을 표시하고 있습니다.",
+    "loadMore": "더 불러오기",
+    "renderOptions": "래스터 렌더링 옵션",
+    "renderingEngine": "COG 렌더링 엔진",
+    "engineAuto": "변경하지 않음",
+    "engineWasm": "WebAssembly 타일러 (지구본 호환)",
+    "engineGpu": "GPU (deck.gl, 메르카토르 전용)",
+    "engineTitiler": "TiTiler 서버",
+    "engineHint": "어떤 렌더러가 영상을 디코딩할지 정합니다. 위 설정과 달리 레이어별이 아니며, 이미 추가된 것을 포함해 지도의 모든 래스터에 적용됩니다.",
+    "resizeResults": "검색 결과 크기 조절",
+    "bands": "밴드",
+    "bandsPlaceholder": "예: 1 또는 1,2,3(기본값: 자동)",
+    "colormap": "컬러맵(단일 밴드 전용)",
+    "colormapDefault": "렌더러 기본값",
+    "minValue": "최솟값",
+    "maxValue": "최댓값",
+    "nodata": "NoData 값",
+    "nodataPlaceholder": "파일의 NoData 태그보다 우선합니다",
+    "renderHint": "비워 두면 렌더러가 GeoTIFF에서 값을 추론합니다. 옵션은 변경 후 추가한 자산에 적용됩니다.",
+    "initialStatus": "STAC Index에서 카탈로그를 선택하거나 URL을 입력하세요.",
+    "catalogInfo": "{{title}} · {{kind}}",
+    "zoom": "확대",
+    "add": "추가",
+    "download": "다운로드",
+    "adding": "{{asset}} 추가 중…",
+    "added": "{{asset}}을(를) 지도에 추가했습니다.",
+    "addUnsupported": "GeoTIFF/COG, GeoJSON, GeoParquet 및 PMTiles 자산만 지도에 추가할 수 있습니다",
+    "addFailed": "자산을 추가하지 못했습니다",
+    "addNoSourceLayers": "이 아카이브에는 그릴 레이어가 없습니다",
+    "addNoTarget": "이 에셋에는 그릴 수 있는 항목이 없습니다",
+    "addIcechunkFailed": "이 Icechunk 리포지토리를 열 수 없습니다",
+    "zarrProblemGroup": "이 에셋은 그릴 수 있는 단일 배열이 아니라 배열 그룹을 가리킵니다",
+    "zarrProblemMissing": "이 스토어에는 해당 변수가 없습니다",
+    "zarrProblemUnauthorized": "이 Zarr 스토어에는 GeoLibre가 아직 제공할 수 없는 자격 증명이 필요합니다",
+    "zarrProblemUnsupportedUrl": "이 Zarr 스토어의 주소는 키 단위로 읽을 수 없습니다",
+    "zarrProblemUnavailable": "이 Zarr 스토어를 열 수 없습니다",
+    "chooseTarget": "추가할 항목 선택",
+    "cogUnsupported": "이 GeoLibre 호스트는 원격 GeoTIFF 자산을 표시할 수 없습니다",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
+    "formatUnknown": "알 수 없는 형식",
+    "notAddable": "추가할 수 없음"
   },
   "earthdataGis": {
     "hint": "NASA Earthdata GIS에서 영상, 지도, 피처 서비스를 검색하세요.",
@@ -3187,6 +3663,10 @@
   "basemaps": {
     "confirmStyleReplace_other": "\"{{name}}\"(으)로 전환하면 전체 지도 스타일이 교체되며 추가한 {{count}}개의 중첩 베이스맵이 제거됩니다. 계속하시겠습니까?"
   },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "피처 속성",
+    "massingHeight": "높이 (m)"
+  },
   "annotations": {
     "toolbar": "주석 도구",
     "layerName": "주석",
@@ -3293,6 +3773,14 @@
       "sum": "합계",
       "mean": "평균"
     },
+    "indicatorAggregation": {
+      "count": "개수",
+      "sum": "합계",
+      "mean": "평균",
+      "min": "최솟값",
+      "max": "최댓값",
+      "median": "중앙값"
+    },
     "chart": {
       "emptyNumeric": "표시할 숫자 값이 없습니다.",
       "emptyScatter": "두 필드 모두 숫자로 설정된 행이 없습니다.",
@@ -3332,14 +3820,6 @@
       "colorDefault": "기본 차트 색상",
       "cancel": "취소",
       "save": "저장"
-    },
-    "indicatorAggregation": {
-      "count": "개수",
-      "sum": "합계",
-      "mean": "평균",
-      "min": "최솟값",
-      "max": "최댓값",
-      "median": "중앙값"
     }
   },
   "assistant": {
@@ -3348,9 +3828,9 @@
     "clear": "대화 지우기",
     "close": "어시스턴트 닫기",
     "send": "보내기",
-    "sendHint": "보내기 (Ctrl/Cmd+Enter)",
+    "sendHint": "보내기 (Enter)",
     "stop": "중지",
-    "placeholder": "데이터에 대해 질문하세요. 예: \"인구가 5천만 명이 넘는 국가 표시\" · Ctrl/Cmd+Enter로 전송",
+    "placeholder": "데이터에 대해 질문하세요. 예: \"인구가 5천만 명이 넘는 국가 표시\" · Enter로 전송, Shift+Enter로 줄 바꿈",
     "intro": "데이터와 대화하세요. Spatial SQL을 실행하고, 레이어를 추가하거나 제거하고, 스타일을 다시 지정하고, 지도를 이동할 수 있습니다. 모든 변경 사항은 실행 취소가 가능합니다. \"국가를 인구에 따라 붉은색 계열 그라데이션으로 표시해줘\"를 시도해보세요.",
     "setupTitle": "AI 어시스턴트 설정",
     "setupStatus": "어시스턴트가 작업을 수행하려면 AI 제공자가 필요합니다. 아래에서 제공자 하나를 선택해 자격 증명을 추가하면 저장 즉시 패널이 채팅 모드로 전환됩니다.",
@@ -3460,6 +3940,8 @@
       "bylinePlaceholder": "작성자 또는 크레딧",
       "footerText": "바닥글 텍스트",
       "footerPlaceholder": "각 페이지 하단에 표시되는 바닥글",
+      "markers": "클릭 가능한 위치 마커",
+      "markersHint": "각 챕터 위치에 마커를 그립니다. PDF 뷰어에서 마커를 클릭하면 해당 좌표가 Google 지도에서 열립니다.",
       "startSlide": "시작 슬라이드",
       "endSlide": "마무리 슬라이드",
       "generate": "PDF 생성",
@@ -3544,33 +4026,101 @@
       "count_other": "{{count}}개 실행 기록됨",
       "toolUnavailable": "도구 \"{{toolId}}\"을(를) 더 이상 사용할 수 없습니다"
     },
-    "modelBuilder": {
-      "moveStepUp": "단계 위로 이동",
-      "moveStepDown": "단계 아래로 이동",
-      "removeStep": "단계 제거",
-      "title": "일괄 처리 및 모델",
-      "description": "여러 레이어에 벡터 도구를 실행하거나, 도구를 연결해 프로젝트와 함께 저장되는 재사용 가능한 모델을 만듭니다.",
-      "tabBatch": "일괄 처리",
-      "tabModels": "모델",
-      "outputPlaceholder": "여기에 출력이 표시됩니다.",
+    "batchTools": {
+      "title": "일괄 도구",
+      "description": "하나의 벡터 도구를 여러 레이어에 한 번에 실행합니다.",
+      "runBatch": "일괄 실행",
       "tool": "도구",
       "sharedParameters": "공통 매개변수",
       "noExtraParameters": "이 도구에는 추가 매개변수가 없습니다.",
       "inputLayers": "입력 레이어",
-      "selectAll": "모두 선택",
       "clearSelection": "선택 해제",
+      "selectAll": "모두 선택",
       "noCompatibleLayers": "호환되는 GeoJSON 레이어가 없습니다.",
-      "newModel": "새 모델",
-      "noSavedModels": "저장된 모델이 아직 없습니다.",
-      "untitledModel": "제목 없는 모델",
+      "outputPlaceholder": "여기에 출력이 표시됩니다."
+    },
+    "modelBuilder": {
+      "title": "모델 빌더",
+      "description": "도구를 캔버스로 끌어다 놓고 서로 연결하여 처리 모델을 만듭니다.",
       "modelName": "모델 이름",
-      "emptyPipelineHint": "단계를 추가해 파이프라인을 구성하세요. 첫 단계는 입력 레이어를 읽고, 이후 각 단계는 이전 단계의 출력을 받습니다.",
-      "addStep": "단계 추가",
-      "runModel": "모델 실행",
+      "modelNamePlaceholder": "제목 없는 모델",
+      "untitledModel": "제목 없는 모델",
+      "newModel": "새로 만들기",
+      "discardChanges": "현재 모델의 저장되지 않은 변경 사항을 취소하시겠습니까?",
+      "discardRunning": "모델 실행이 아직 진행 중입니다. 중지하고 계속하시겠습니까?",
+      "arrange": "정렬",
+      "arrangeHint": "노드를 처리 흐름에 따라 배치합니다",
+      "runModel": "실행",
+      "cancelRun": "취소",
+      "runCancelled": "실행을 취소했습니다.",
+      "issueMissingLayer": "입력 레이어를 선택하세요.",
+      "issueUnknownTool": "알 수 없는 도구 \"{{tool}}\".",
+      "issueMissingInput": "\"{{port}}\"에는 연결 또는 값이 필요합니다.",
+      "issueUnknownPort": "연결이 더 이상 존재하지 않는 포트를 가리킵니다.",
+      "issueDuplicateInput": "\"{{port}}\"에는 이미 들어오는 연결이 있습니다.",
+      "issueTypeMismatch": "해당 포트들은 서로 다른 종류의 데이터를 전달합니다.",
+      "issueCycle": "모델에 순환이 있습니다.",
+      "issueNoOutput": "결과를 남기려면 출력 노드를 추가하세요.",
+      "issueDuplicateNode": "두 개 이상의 노드가 같은 id를 사용합니다.",
+      "issueDanglingEdge": "연결이 더 이상 존재하지 않는 노드를 가리킵니다.",
+      "outputAddFailed": "\"{{name}}\"을(를) 지도에 추가하지 못했습니다",
+      "catalogUnavailable": "도구를 불러오지 못해 모델을 확인하거나 실행할 수 없습니다.",
+      "addToolNode": "{{tool}}을(를) 캔버스에 추가",
+      "importTooLarge": "이 모델은 너무 커서 열 수 없습니다.",
+      "importModel": "가져오기",
+      "exportModel": "내보내기",
+      "copyPython": "Python 스크립트 복사",
+      "pythonCopied": "Python 스크립트를 클립보드에 복사했습니다.",
+      "pythonCopyFailed": "Python 스크립트를 복사할 수 없습니다",
+      "savedModels": "저장된 모델",
+      "loadModelPlaceholder": "저장된 모델 불러오기...",
       "deleteModel": "삭제",
-      "inputPreviousStep": "입력: ← 이전 단계의 출력",
-      "unknownTool": "알 수 없는 도구 \"{{id}}\"",
-      "noParameters": "매개변수가 없습니다."
+      "deletedLog": "모델을 프로젝트에서 삭제했습니다.",
+      "searchTools": "도구 검색",
+      "loadingTools": "도구를 불러오는 중...",
+      "noToolsMatch": "검색과 일치하는 도구가 없습니다.",
+      "addInputNode": "+ 입력",
+      "addOutputNode": "+ 출력",
+      "canvasEmpty": "팔레트에서 도구를 끌어다 놓아 시작하세요.",
+      "inputNode": "입력",
+      "outputNode": "출력",
+      "inputPort": "입력: {{port}}",
+      "outputPort": "출력: {{port}}",
+      "removeConnection": "연결 제거",
+      "removeNode": "노드 제거",
+      "resizePanel": "패널 크기 조정",
+      "minimizePanel": "패널 최소화",
+      "restorePanel": "패널 복원",
+      "resizePalette": "도구 팔레트 크기 조정",
+      "resizeInspector": "속성 패널 크기 조정",
+      "resizeLog": "메시지 로그 크기 조정",
+      "selectNodeHint": "노드를 선택하면 설정을 편집할 수 있습니다.",
+      "sourceLayer": "원본 레이어",
+      "chooseLayer": "레이어 선택...",
+      "resultName": "결과 이름",
+      "resultNamePlaceholder": "모델 출력",
+      "noParameters": "매개변수가 없습니다.",
+      "keepResultHint": "출력을 추가하면 중간 결과도 남길 수 있습니다.",
+      "keepResultSingle": "이 결과 남기기",
+      "resultKeptSingle": "이 결과를 남김",
+      "keepResult": "\"{{port}}\" 남기기",
+      "resultKept": "\"{{port}}\" 남김",
+      "outputPlaceholder": "메시지가 여기에 표시됩니다.",
+      "connectCycle": "그 연결은 순환을 만듭니다.",
+      "connectSameNode": "노드는 자기 자신에 연결할 수 없습니다.",
+      "fixIssuesFirst": "실행하기 전에 보고된 문제를 해결하세요.",
+      "runFailed": "실행 실패",
+      "runFinished": "실행 완료 — 출력 {{outputs}}개를 추가했습니다.",
+      "savedLog": "모델을 프로젝트에 저장했습니다.",
+      "exportedLog": "{{name}}을(를) 내보냈습니다",
+      "importedLog": "노드 {{nodes}}개인 모델을 가져왔습니다.",
+      "importFailed": "가져오기 실패",
+      "importInvalid": "해당 파일에는 모델 그래프가 없습니다.",
+      "importUnsupported": "해당 파일은 GeoLibre 모델이 아닙니다.",
+      "rasterOutputUnsupported": "\"{{name}}\"은(는) 래스터 결과이며 이 빌드에서는 지도에 추가할 수 없습니다.",
+      "portNeedsVector": "\"{{port}}\"에는 벡터 데이터가 필요하지만 래스터가 전달되었습니다.",
+      "toolNoOutput": "\"{{tool}}\"이(가) 출력을 생성하지 않았습니다.",
+      "toolNoUsableOutput": "\"{{tool}}\"이(가) 사용할 수 있는 출력을 생성하지 않았습니다."
     },
     "parameterField": {
       "selectLayer": "레이어 선택...",
@@ -3681,6 +4231,1438 @@
       "run": "실행",
       "outputPlaceholder": "여기에 출력이 표시됩니다.",
       "resolutionRange": "해상도(0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "버퍼",
+          "description": "각 피처 주위에 고정 거리의 버퍼 폴리곤을 생성합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "distance": {
+              "label": "거리"
+            },
+            "units": {
+              "label": "단위",
+              "options": {
+                "kilometers": "킬로미터",
+                "meters": "미터",
+                "miles": "마일"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "중심점",
+          "description": "각 피처의 중심점을 계산합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "볼록 껍질",
+          "description": "모든 피처를 감싸는 볼록 껍질을 계산합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "디졸브",
+          "description": "폴리곤 피처를 하나의 지오메트리로 병합합니다. 필드별로 그룹화할 수도 있습니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "field": {
+              "label": "디졸브 필드(선택 사항)",
+              "description": "디졸브하기 전에 피처를 그룹화할 속성 이름"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "경계 상자",
+          "description": "모든 피처의 직사각형 경계(엔벨로프)를 계산합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            }
+          }
+        },
+        "simplify": {
+          "name": "단순화",
+          "description": "Douglas-Peucker 알고리즘으로 정점 수를 줄입니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "tolerance": {
+              "label": "허용 오차(도)"
+            },
+            "highQuality": {
+              "label": "고품질"
+            }
+          }
+        },
+        "clip": {
+          "name": "자르기",
+          "description": "입력 레이어를 오버레이 레이어가 덮는 영역으로 자릅니다(입력 속성 유지)",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "overlay": {
+              "label": "오버레이(자르기) 레이어"
+            }
+          }
+        },
+        "intersection": {
+          "name": "교집합",
+          "description": "두 폴리곤 레이어가 중첩되는 영역만 유지합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "overlay": {
+              "label": "오버레이 레이어"
+            }
+          }
+        },
+        "difference": {
+          "name": "차집합",
+          "description": "입력 레이어에서 오버레이 레이어의 영역을 제거합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "overlay": {
+              "label": "오버레이 레이어"
+            }
+          }
+        },
+        "union": {
+          "name": "합집합",
+          "description": "두 폴리곤 레이어를 하나의 결합된 지오메트리로 병합합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "overlay": {
+              "label": "오버레이 레이어"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "공간 조인",
+          "description": "공간 관계를 기준으로 조인 레이어의 속성을 각 입력 피처에 연결합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "overlay": {
+              "label": "조인 레이어"
+            },
+            "predicate": {
+              "label": "공간 관계",
+              "options": {
+                "intersects": "교차",
+                "within": "내부에 포함",
+                "contains": "포함"
+              }
+            },
+            "how": {
+              "label": "조인 유형",
+              "options": {
+                "inner": "내부 조인(일치하는 피처만 유지)",
+                "left": "왼쪽 조인(모든 입력 피처 유지)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "속성 조인",
+          "description": "지오메트리를 사용하지 않고 키 필드가 일치하는 곳에서 조인 레이어(테이블)의 속성을 각 입력 피처에 연결합니다. 일대일: 처음 일치하는 조인 행이 사용됩니다.",
+          "params": {
+            "layer": {
+              "label": "대상 레이어"
+            },
+            "overlay": {
+              "label": "조인 레이어(테이블)",
+              "description": "속성을 가져올 레이어입니다. 이 레이어의 지오메트리는 무시됩니다."
+            },
+            "target_field": {
+              "label": "대상 키 필드"
+            },
+            "join_field": {
+              "label": "조인 키 필드"
+            },
+            "how": {
+              "label": "조인 유형",
+              "options": {
+                "left": "왼쪽 조인(모든 대상 피처 유지)",
+                "inner": "내부 조인(일치하는 피처만 유지)"
+              }
+            },
+            "fields": {
+              "label": "가져올 필드(선택 사항)",
+              "description": "복사할 조인 필드를 쉼표로 구분하여 입력합니다. 비워 두면 키를 제외한 모든 조인 필드를 가져옵니다."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "값으로 선택",
+          "description": "속성 값이 조건과 일치하는 피처를 새 레이어로 추출합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "field": {
+              "label": "필드"
+            },
+            "operator": {
+              "label": "연산자",
+              "options": {
+                "eq": "= (같음)",
+                "neq": "≠ (같지 않음)",
+                "gt": "> (초과)",
+                "gte": "≥ (이상)",
+                "lt": "< (미만)",
+                "lte": "≤ (이하)",
+                "contains": "포함(텍스트)",
+                "starts-with": "다음으로 시작(텍스트)",
+                "is-null": "비어 있음",
+                "is-not-null": "비어 있지 않음"
+              }
+            },
+            "value": {
+              "label": "값",
+              "description": "양쪽이 모두 숫자이면 숫자로 비교합니다."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "위치로 선택",
+          "description": "두 번째 레이어와의 공간 관계를 기준으로 피처를 새 레이어로 추출합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "overlay": {
+              "label": "필터 레이어"
+            },
+            "predicate": {
+              "label": "공간 관계",
+              "options": {
+                "intersects": "교차",
+                "within": "내부에 포함",
+                "contains": "포함",
+                "disjoint": "분리(교차 없음)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "무작위 추출",
+          "description": "피처 개수 또는 입력 대비 비율로 크기를 정해 피처의 무작위 부분집합을 새 레이어로 추출합니다.",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "method": {
+              "label": "방법",
+              "options": {
+                "count": "피처 수",
+                "percentage": "피처 비율(%)"
+              }
+            },
+            "count": {
+              "label": "피처 수",
+              "description": "입력 피처 수보다 크면 입력 피처 수로 제한됩니다."
+            },
+            "percentage": {
+              "label": "피처 비율(%)"
+            }
+          }
+        },
+        "reproject": {
+          "name": "재투영",
+          "description": "레이어의 좌표를 원본 CRS로 해석하고 WGS84로 변환하여 올바른 위치에 표시되도록 합니다. 사이드카 또는 Python 엔진이 필요합니다.",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "source_crs": {
+              "label": "원본 CRS",
+              "description": "레이어 좌표가 실제로 사용하는 CRS입니다(예: EPSG:3857). 결과는 WGS84(EPSG:4326)로 변환됩니다."
+            }
+          }
+        },
+        "explode": {
+          "name": "분해",
+          "description": "멀티파트 지오메트리를 단일 파트 피처(파트당 피처 하나)로 분할하며, 각 상위 피처의 속성을 유지합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "속성별 집계",
+          "description": "같은 속성 값을 공유하는 피처를 그룹당 하나의 지오메트리로 디졸브하고 요약 통계를 계산합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "group_field": {
+              "label": "그룹화 필드"
+            },
+            "statistic": {
+              "label": "통계",
+              "options": {
+                "count": "개수",
+                "sum": "합계",
+                "mean": "평균",
+                "min": "최소",
+                "max": "최대",
+                "median": "중앙값"
+              }
+            },
+            "stat_field": {
+              "label": "통계 필드",
+              "description": "위 통계로 요약할 숫자 필드입니다."
+            }
+          }
+        },
+        "smooth": {
+          "name": "평활화",
+          "description": "Chaikin 알고리즘으로 선과 폴리곤 피처의 모서리를 둥글게 만듭니다(정점 추가). 정점을 줄이는 단순화와는 다릅니다. Z/고도는 유지되며 점은 변경 없이 통과합니다.",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "iterations": {
+              "label": "반복 횟수",
+              "description": "반복 횟수가 많을수록 더 매끄러운 결과가 나옵니다(1-10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "정규 격자",
+          "description": "범위 위에 정규 직사각형 격자(피시넷) 셀을 생성합니다. 소스: 현재 지도 보기, 레이어 범위 또는 수동 경계 상자.",
+          "params": {
+            "source": {
+              "label": "범위 소스",
+              "options": {
+                "viewport": "지도 뷰포트",
+                "layer": "레이어 범위",
+                "bbox": "수동 경계 상자"
+              }
+            },
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "west": {
+              "label": "서쪽(최소 경도)"
+            },
+            "south": {
+              "label": "남쪽(최소 위도)"
+            },
+            "east": {
+              "label": "동쪽(최대 경도)"
+            },
+            "north": {
+              "label": "북쪽(최대 위도)"
+            },
+            "cell_width": {
+              "label": "셀 너비(도)"
+            },
+            "cell_height": {
+              "label": "셀 높이(도)",
+              "description": "비워 두면 셀 너비와 같게 설정됩니다."
+            },
+            "cell_type": {
+              "label": "셀 유형",
+              "options": {
+                "polygon": "사각형",
+                "point": "점(셀 중심)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "점 레이어에서 Voronoi 다이어그램(점당 폴리곤 하나, 점 범위로 자름) 또는 Delaunay 삼각망을 생성합니다.",
+          "params": {
+            "layer": {
+              "label": "입력 점 레이어"
+            },
+            "type": {
+              "label": "다이어그램",
+              "options": {
+                "voronoi": "Voronoi 폴리곤",
+                "delaunay": "Delaunay 삼각형"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "기지국 커버리지",
+          "description": "방위각, 반경, 빔폭(속성 필드 또는 고정값)을 사용하여 점 사이트에서 안테나 섹터/부채꼴 폴리곤을 생성합니다. 빔폭은 360°(완전한 원)로 제한되며, 기록되는 빔폭은 제한된 값을 반영합니다. QGIS Shape Tools처럼 기지국 커버리지에 유용합니다.",
+          "params": {
+            "layer": {
+              "label": "입력 점 레이어"
+            },
+            "azimuthField": {
+              "label": "방위각 필드(°)",
+              "description": "섹터가 향하는 방향으로, 북쪽에서 시계 방향으로 잰 도 단위입니다. 비어 있거나 숫자가 아니면 고정 방위각을 사용합니다."
+            },
+            "azimuth": {
+              "label": "방위각(고정, °)"
+            },
+            "radiusField": {
+              "label": "반경 필드",
+              "description": "커버리지 반경입니다. 비어 있거나 숫자가 아니면 고정 반경을 사용합니다."
+            },
+            "radius": {
+              "label": "반경(고정)"
+            },
+            "beamwidthField": {
+              "label": "빔폭 필드(°)",
+              "description": "섹터의 각도 폭으로, 360°(완전한 원)로 제한됩니다. 비어 있거나 숫자가 아니면 고정 빔폭을 사용합니다."
+            },
+            "beamwidth": {
+              "label": "빔폭(고정, °)"
+            },
+            "units": {
+              "label": "반경 단위",
+              "options": {
+                "kilometers": "킬로미터",
+                "meters": "미터",
+                "miles": "마일"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "DGGS 생성기",
+          "description": "영역을 DGGS 셀(H3, S2, A5, DGGRID, DGGAL)로 채웁니다. 소스: 레이어 지오메트리, 레이어 범위, 현재 지도 보기 또는 수동 경계 상자.",
+          "params": {
+            "dggsType": {
+              "label": "DGGS 유형",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID 유형",
+              "description": "duck_dggs에 dggs_params로 전달되는 격자 구성(ISEA/FULLER × 구경 × 위상)입니다.",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL 유형",
+              "description": "dggal.createDGGRS에 전달되는 DGGRS(ISEA/IVEA/RTEA/HEALPix/GNOSIS)입니다.",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "영역 소스",
+              "options": {
+                "polyfill": "레이어 지오메트리(폴리필)",
+                "extent": "레이어 범위(경계 상자)",
+                "viewport": "지도 뷰포트",
+                "bbox": "수동 경계 상자"
+              }
+            },
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "west": {
+              "label": "서쪽(최소 경도)"
+            },
+            "south": {
+              "label": "남쪽(최소 위도)"
+            },
+            "east": {
+              "label": "동쪽(최대 경도)"
+            },
+            "north": {
+              "label": "북쪽(최대 위도)"
+            },
+            "resolution": {
+              "label": "해상도",
+              "description": "범위는 DGGS 유형에 따라 다릅니다. 비워 두면 영역에 맞춰 자동으로 선택합니다."
+            },
+            "compactCells": {
+              "label": "셀 압축",
+              "description": "완전한 형제 셀 집합을 더 거친 상위 셀로 병합합니다(피처 수 감소, 혼합 해상도)."
+            },
+            "fixAntimeridian": {
+              "label": "날짜 변경선 보정",
+              "description": "경도 ±180°를 가로지르는 셀 링을 펼칩니다."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "DGGS 비닝",
+          "description": "점 레이어를 DGGS 셀로 집계합니다(개수 또는 숫자 필드의 합계/평균/최소/최대).",
+          "params": {
+            "dggsType": {
+              "label": "DGGS 유형",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID 유형",
+              "description": "duck_dggs에 dggs_params로 전달되는 격자 구성(ISEA/FULLER × 구경 × 위상)입니다.",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL 유형",
+              "description": "dggal.createDGGRS에 전달되는 DGGRS(ISEA/IVEA/RTEA/HEALPix/GNOSIS)입니다.",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "입력 점 레이어"
+            },
+            "aggOp": {
+              "label": "집계",
+              "options": {
+                "count": "개수",
+                "sum": "합계",
+                "mean": "평균",
+                "min": "최소",
+                "max": "최대"
+              }
+            },
+            "field": {
+              "label": "필드",
+              "description": "집계할 숫자 필드입니다."
+            },
+            "resolution": {
+              "label": "해상도",
+              "description": "범위는 DGGS 유형에 따라 다릅니다. 비워 두면 영역에 맞춰 자동으로 선택합니다."
+            },
+            "fixAntimeridian": {
+              "label": "날짜 변경선 보정",
+              "description": "경도 ±180°를 가로지르는 셀 링을 펼칩니다."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "DGGS 압축",
+          "description": "DGGS 폴리곤 셀을 압축하거나 균일한 해상도로 확장합니다(H3, S2, A5, DGGAL). 입력은 ID 속성이 있는 셀 레이어여야 합니다.",
+          "params": {
+            "dggsType": {
+              "label": "DGGS 유형",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL 유형",
+              "description": "dggal.createDGGRS에 전달되는 DGGRS(ISEA/IVEA/RTEA/HEALPix/GNOSIS)입니다.",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "모드",
+              "options": {
+                "compact": "압축",
+                "expand": "확장"
+              }
+            },
+            "layer": {
+              "label": "입력 DGGS 레이어",
+              "description": "DGGS 생성기 / 비닝(또는 이에 상응하는 도구)에서 생성된 폴리곤 셀 레이어입니다."
+            },
+            "cellField": {
+              "label": "셀 ID 필드",
+              "description": "비워 두면 선택한 유형에 따라 h3, a5, s2 또는 dggal이 기본값으로 사용됩니다."
+            },
+            "resolution": {
+              "label": "대상 해상도",
+              "description": "확장할 해상도입니다. 입력 셀보다 같거나 더 세밀해야 합니다."
+            },
+            "fixAntimeridian": {
+              "label": "날짜 변경선 보정",
+              "description": "경도 ±180°를 가로지르는 셀 링을 펼칩니다."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "궤적 속도",
+          "description": "점을 시간순(대상별)으로 정렬하고 연속된 측위를 거리, 소요 시간, 속도를 담은 구간으로 연결합니다. QGIS TrajecTools과 유사합니다.",
+          "params": {
+            "layer": {
+              "label": "입력 점 레이어"
+            },
+            "timeField": {
+              "label": "시간 필드",
+              "description": "측위별 타임스탬프: ISO 날짜/시간 문자열 또는 에포크(초 또는 밀리초)입니다."
+            },
+            "idField": {
+              "label": "대상 ID 필드",
+              "description": "점을 별도의 궤적으로 분리합니다. 비워 두면 모든 점을 하나의 대상으로 취급합니다."
+            },
+            "speedUnits": {
+              "label": "속도 단위",
+              "options": {
+                "km/h": "km/h",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "정지 지점 감지",
+          "description": "대상이 머무는 장소를 찾습니다: 최소 지속 시간 이상 일정 거리 이내에 머무는(GPS 산포 흡수) 연속 측위 구간입니다. 정지 지점당 점 하나를 출력합니다. QGIS TrajecTools과 유사합니다.",
+          "params": {
+            "layer": {
+              "label": "입력 점 레이어"
+            },
+            "timeField": {
+              "label": "시간 필드",
+              "description": "측위별 타임스탬프: ISO 날짜/시간 문자열 또는 에포크(초 또는 밀리초)입니다."
+            },
+            "idField": {
+              "label": "대상 ID 필드",
+              "description": "대상별로 정지 지점을 감지합니다. 비워 두면 모든 점을 하나의 대상으로 취급합니다."
+            },
+            "maxDistance": {
+              "label": "최대 거리",
+              "description": "정지 지점의 모든 측위는 첫 측위로부터 이 거리 이내에 있어야 합니다(따라서 정지 지점은 이 값의 최대 두 배까지 걸칠 수 있음). GPS 산포 반경으로 설정하세요."
+            },
+            "distanceUnits": {
+              "label": "거리 단위",
+              "options": {
+                "meters": "미터",
+                "kilometers": "킬로미터",
+                "miles": "마일"
+              }
+            },
+            "minDuration": {
+              "label": "최소 지속 시간(초)",
+              "description": "이보다 짧게 머문 경우는 정지 지점으로 보고하지 않습니다."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "시공간 근접성",
+          "description": "공간과 시간 모두에서 가까운 점 쌍(예: 두 대상의 만남)을 찾습니다. 조건을 만족하는 각 쌍을 연결하는 선을 거리와 시간 차이와 함께 출력합니다.",
+          "params": {
+            "layer": {
+              "label": "입력 점 레이어"
+            },
+            "timeField": {
+              "label": "시간 필드",
+              "description": "점별 타임스탬프: ISO 날짜/시간 문자열 또는 에포크(초 또는 밀리초)입니다."
+            },
+            "idField": {
+              "label": "대상 ID 필드",
+              "description": "설정하면 ID 값이 서로 다른 점끼리만 짝을 짓습니다(서로 다른 대상 간의 조우). 비워 두면 모든 쌍을 고려합니다."
+            },
+            "maxDistance": {
+              "label": "최대 거리"
+            },
+            "distanceUnits": {
+              "label": "거리 단위",
+              "options": {
+                "meters": "미터",
+                "kilometers": "킬로미터",
+                "miles": "마일"
+              }
+            },
+            "maxTime": {
+              "label": "최대 시간 차이"
+            },
+            "timeUnits": {
+              "label": "시간 단위",
+              "options": {
+                "seconds": "초",
+                "minutes": "분",
+                "hours": "시간"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "유효성 검사",
+          "description": "지오메트리가 유효하지 않은 피처(GEOS 규칙: 자체 교차 링, 외곽 밖의 구멍 등)를 찾아 지도에 표시합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "지오메트리 수정",
+          "description": "ST_MakeValid(GEOS)로 유효하지 않은 지오메트리를 복구합니다. 유효한 피처는 그대로 통과합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "토폴로지 규칙 검사",
+          "description": "토폴로지 규칙(중첩, 틈, 자체 교차, 댕글)에 대해 레이어를 검증하고 각 위반을 지도에 표시합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "ruleSelfIntersect": {
+              "label": "선은 자체 교차하면 안 됨"
+            },
+            "ruleOverlap": {
+              "label": "폴리곤은 중첩되면 안 됨"
+            },
+            "ruleGaps": {
+              "label": "폴리곤 사이에 틈이 있으면 안 됨"
+            },
+            "ruleDangles": {
+              "label": "선에 댕글(매달린 끝점)이 있으면 안 됨"
+            },
+            "rulePointCovered": {
+              "label": "점은 선 위에 있어야 함"
+            },
+            "ruleEndpointSnap": {
+              "label": "선 끝점은 허용 오차 내에서 연결되어야 함"
+            },
+            "snapTolerance": {
+              "label": "스냅 허용 오차",
+              "description": "끝점 규칙용: 두 선 끝이 연결된 것으로 간주되는 최대 간격입니다(레이어 좌표 단위, WGS84는 도)."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "토폴로지 수정",
+          "description": "토폴로지 위반을 자동으로 복구합니다: 거의 연결된 선 끝점을 스냅하고, 댕글을 수정하고, 점을 선 위로 투영합니다. 근처에 아무것도 없는 자유 끝점은 변경하지 않습니다.",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "ruleEndpointSnap": {
+              "label": "거의 연결된 선 끝점 스냅"
+            },
+            "ruleDangles": {
+              "label": "댕글 수정(인접 지오메트리에 스냅 또는 투영)"
+            },
+            "rulePointCovered": {
+              "label": "점을 가장 가까운 선 위로 투영"
+            },
+            "snapTolerance": {
+              "label": "스냅 허용 오차",
+              "description": "연결을 위해 지오메트리가 이동할 수 있는 최대 거리입니다(레이어 좌표 단위, WGS84는 도)."
+            },
+            "dryRun": {
+              "label": "미리보기만(시험 실행)",
+              "description": "수정된 레이어를 만들지 않고 적용될 수정 사항만 보고합니다."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "등시선 / 서비스 권역",
+          "description": "레이어의 각 점에서 이동 시간 또는 이동 거리 기준 도달 가능 폴리곤을 생성합니다",
+          "params": {
+            "layer": {
+              "label": "출발 지점"
+            },
+            "mode": {
+              "label": "이동 수단",
+              "options": {
+                "auto": "자동차",
+                "pedestrian": "도보",
+                "bicycle": "자전거"
+              }
+            },
+            "metric": {
+              "label": "측정 기준",
+              "options": {
+                "time": "이동 시간(분)",
+                "distance": "거리 (km)"
+              }
+            },
+            "contours": {
+              "label": "등치선",
+              "description": "쉼표로 구분된 값(시간은 분, 거리는 km)"
+            },
+            "endpoint": {
+              "label": "라우팅 서버(Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "OD 비용 행렬",
+          "description": "모든 출발 지점과 도착 지점 사이의 이동 시간과 거리를 연결선으로 계산합니다",
+          "params": {
+            "origins": {
+              "label": "출발 지점"
+            },
+            "destinations": {
+              "label": "도착 지점"
+            },
+            "mode": {
+              "label": "이동 수단",
+              "options": {
+                "auto": "자동차",
+                "pedestrian": "도보",
+                "bicycle": "자전거"
+              }
+            },
+            "endpoint": {
+              "label": "라우팅 서버(Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "순차 경로 (길찾기)",
+          "description": "도로망을 따라 점을 순서대로 연결하여 경로를 만듭니다. 각 점은 가장 가까운 도로에 스냅되므로 도로 밖 좌표(기지국, 센서)도 경로를 찾을 수 있습니다. 순서는 선택한 필드(예: 타임스탬프) 또는 레이어의 피처 순서를 따릅니다.",
+          "params": {
+            "layer": {
+              "label": "입력 점"
+            },
+            "order_field": {
+              "label": "정렬 기준 필드(선택 사항)",
+              "description": "라우팅 전에 이 필드(숫자 또는 타임스탬프)로 점을 정렬합니다. 비워 두면 레이어의 피처 순서를 사용합니다."
+            },
+            "mode": {
+              "label": "이동 수단",
+              "options": {
+                "auto": "자동차",
+                "pedestrian": "도보",
+                "bicycle": "자전거"
+              }
+            },
+            "endpoint": {
+              "label": "라우팅 서버(Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "전역 Moran's I",
+          "description": "레이어 전체에 걸친 숫자 속성의 전반적인 공간 자기상관을 측정합니다.",
+          "params": {
+            "layer": {
+              "label": "레이어"
+            },
+            "field": {
+              "label": "값 필드"
+            },
+            "weightsType": {
+              "label": "공간 가중치",
+              "description": "각 피처의 이웃을 정의하는 방법입니다.",
+              "options": {
+                "knn": "K 최근접 이웃",
+                "distance": "거리 밴드"
+              }
+            },
+            "k": {
+              "label": "이웃 수 (k)"
+            },
+            "threshold": {
+              "label": "거리 밴드 (km)"
+            },
+            "permutations": {
+              "label": "순열 횟수",
+              "description": "의사 p-값 계산을 위한 무작위 순열 횟수입니다."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "국지 Moran's I (LISA)",
+          "description": "피처별 군집과 이상치(High-High, Low-Low, High-Low, Low-High)를 의사 유의성과 함께 계산합니다.",
+          "params": {
+            "layer": {
+              "label": "레이어"
+            },
+            "field": {
+              "label": "값 필드"
+            },
+            "weightsType": {
+              "label": "공간 가중치",
+              "description": "각 피처의 이웃을 정의하는 방법입니다.",
+              "options": {
+                "knn": "K 최근접 이웃",
+                "distance": "거리 밴드"
+              }
+            },
+            "k": {
+              "label": "이웃 수 (k)"
+            },
+            "threshold": {
+              "label": "거리 밴드 (km)"
+            },
+            "permutations": {
+              "label": "순열 횟수",
+              "description": "의사 p-값 계산을 위한 무작위 순열 횟수입니다."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Getis-Ord Gi* 핫스팟",
+          "description": "숫자 속성의 통계적으로 유의한 핫스팟과 콜드스팟을 식별합니다.",
+          "params": {
+            "layer": {
+              "label": "레이어"
+            },
+            "field": {
+              "label": "값 필드"
+            },
+            "weightsType": {
+              "label": "공간 가중치",
+              "description": "각 피처의 이웃을 정의하는 방법입니다.",
+              "options": {
+                "knn": "K 최근접 이웃",
+                "distance": "거리 밴드"
+              }
+            },
+            "k": {
+              "label": "이웃 수 (k)"
+            },
+            "threshold": {
+              "label": "거리 밴드 (km)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "평균 최근접 이웃",
+          "description": "점이 군집, 분산 또는 무작위로 분포하는지 검정합니다(ANN 비율 + z-점수).",
+          "params": {
+            "layer": {
+              "label": "점 레이어"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "커널 밀도 (히트맵)",
+          "description": "4차 커널을 사용하여 점으로부터 밀도 표면을 셀 격자로 추정합니다.",
+          "params": {
+            "layer": {
+              "label": "점 레이어"
+            },
+            "weightField": {
+              "label": "가중치 필드(선택 사항)",
+              "description": "각 점에 가중치를 주는 숫자 필드입니다. 비워 두면 동일 가중치입니다."
+            },
+            "bandwidth": {
+              "label": "검색 반경 / 대역폭 (km)"
+            },
+            "cellSize": {
+              "label": "셀 크기 (km)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "신흥 핫스팟(시공간 큐브)",
+          "description": "타임스탬프가 있는 점으로 시공간 큐브(피시넷 격자 × 동일 시간 단계)를 만들고 각 셀을 신규, 강화, 지속, 감소, 산발, 진동 또는 과거 핫/콜드스팟으로 분류합니다. 시간 조각별로 Getis-Ord Gi*를 실행한 뒤 각 셀의 Gi* 시계열에 Mann-Kendall 추세 검정을 적용합니다. ArcGIS Emerging Hot Spot Analysis처럼 클라이언트 측에서 실행됩니다.",
+          "params": {
+            "layer": {
+              "label": "점 레이어"
+            },
+            "timeField": {
+              "label": "시간 필드",
+              "description": "점별 타임스탬프: ISO 날짜/시간 문자열 또는 에포크(초 또는 밀리초)입니다."
+            },
+            "cellSize": {
+              "label": "셀 크기 (km)",
+              "description": "각 정사각형 공간 구간의 변 길이(킬로미터)입니다."
+            },
+            "timeStep": {
+              "label": "시간 단계 간격"
+            },
+            "timeStepUnit": {
+              "label": "시간 단계 단위",
+              "options": {
+                "hours": "시간",
+                "days": "일",
+                "weeks": "주"
+              }
+            },
+            "weightField": {
+              "label": "가중치 필드(선택 사항)",
+              "description": "점 개수 대신 시공간 구간별로 합산할 숫자 필드입니다. 비워 두면 점 개수를 셉니다."
+            },
+            "confidence": {
+              "label": "신뢰 수준",
+              "description": "구간을 핫/콜드스팟으로 판정하고 추세를 판정하기 위한 유의 수준 임계값입니다.",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "음영 기복",
+          "description": "고도 모델에서 음영 기복(힐셰이드) 래스터를 계산합니다.",
+          "params": {
+            "azimuth": {
+              "label": "방위각(도)"
+            },
+            "altitude": {
+              "label": "고도각(도)"
+            },
+            "z_factor": {
+              "label": "Z 계수"
+            }
+          }
+        },
+        "slope": {
+          "name": "경사",
+          "description": "고도 모델에서 경사(급경사도)를 계산합니다.",
+          "params": {
+            "units": {
+              "label": "단위",
+              "options": {
+                "degrees": "도",
+                "percent": "퍼센트"
+              }
+            },
+            "z_factor": {
+              "label": "Z 계수"
+            }
+          }
+        },
+        "aspect": {
+          "name": "사면향",
+          "description": "고도 모델에서 사면향(가장 가파른 경사의 나침반 방향)을 계산합니다."
+        },
+        "reproject": {
+          "name": "재투영",
+          "description": "래스터를 다른 좌표 참조 체계로 변환합니다.",
+          "params": {
+            "dst_crs": {
+              "label": "대상 CRS",
+              "description": "EPSG:3857 또는 EPSG:4326과 같은 기관 코드입니다."
+            },
+            "resampling": {
+              "label": "리샘플링",
+              "options": {
+                "nearest": "최근접 이웃",
+                "bilinear": "쌍선형",
+                "cubic": "3차 회선"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "리샘플링",
+          "description": "래스터를 다른 픽셀 크기(해상도)로 리샘플링합니다.",
+          "params": {
+            "resolution": {
+              "label": "대상 픽셀 크기",
+              "description": "래스터 CRS 단위의 출력 픽셀 크기입니다."
+            },
+            "resampling": {
+              "label": "리샘플링",
+              "options": {
+                "nearest": "최근접 이웃",
+                "bilinear": "쌍선형",
+                "cubic": "3차 회선"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "범위로 자르기",
+          "description": "래스터를 경계 상자(래스터 CRS 기준)로 잘라냅니다.",
+          "params": {
+            "minx": {
+              "label": "최소 X"
+            },
+            "miny": {
+              "label": "최소 Y"
+            },
+            "maxx": {
+              "label": "최대 X"
+            },
+            "maxy": {
+              "label": "최대 Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "마스크 레이어로 자르기",
+          "description": "래스터를 벡터 마스크 파일의 지오메트리로 자릅니다.",
+          "params": {
+            "mask_path": {
+              "label": "마스크 레이어",
+              "description": "자르기 영역을 정의하는 지오메트리가 담긴 GeoJSON 파일입니다. 래스터의 CRS로 자동 재투영됩니다(CRS가 없는 GeoJSON은 WGS84로 간주)."
+            },
+            "crop": {
+              "label": "마스크 범위로 잘라내기"
+            },
+            "all_touched": {
+              "label": "닿는 모든 픽셀 포함"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "폴리곤화",
+          "description": "래스터 밴드를 픽셀 값별로 그룹화된 벡터 폴리곤으로 변환합니다.",
+          "params": {
+            "band": {
+              "label": "밴드"
+            },
+            "connectivity": {
+              "label": "연결성",
+              "options": {
+                "4": "4-연결",
+                "8": "8-연결"
+              }
+            },
+            "field": {
+              "label": "값 필드 이름"
+            }
+          }
+        },
+        "contour": {
+          "name": "등고선",
+          "description": "고도 모델에서 등고선을 생성합니다.",
+          "params": {
+            "band": {
+              "label": "밴드"
+            },
+            "interval": {
+              "label": "간격",
+              "description": "연속된 등고선 사이의 고도 차이입니다."
+            },
+            "base": {
+              "label": "기준값"
+            },
+            "attribute": {
+              "label": "고도 필드 이름"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "보간 (IDW / 크리깅)",
+          "description": "역거리 가중법 또는 정규 크리깅을 사용하여 점 레이어의 숫자 속성을 연속 래스터 표면으로 보간합니다.",
+          "params": {
+            "field": {
+              "label": "값 필드",
+              "description": "보간할 숫자 점 속성의 이름입니다(예: 고도, 기온)."
+            },
+            "method": {
+              "label": "방법",
+              "options": {
+                "idw": "역거리 가중법(IDW)",
+                "kriging": "정규 크리깅"
+              }
+            },
+            "resolution": {
+              "label": "출력 픽셀 크기",
+              "description": "레이어 CRS 단위의 셀 크기입니다(WGS84는 도). 격자는 점의 범위를 덮습니다."
+            },
+            "power": {
+              "label": "IDW 거듭제곱",
+              "description": "값이 클수록 가까운 점의 영향이 커집니다."
+            },
+            "variogram_model": {
+              "label": "베리오그램 모델",
+              "description": "경험적 세미베리오그램에 적합시키는 이론 모델입니다. 크리깅은 최대 1500개 점으로 제한됩니다.",
+              "options": {
+                "spherical": "구형",
+                "exponential": "지수형",
+                "gaussian": "가우시안",
+                "linear": "선형"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "구역 통계",
+          "description": "벡터 레이어의 각 폴리곤 내 래스터 값을 요약합니다(개수, 최소, 최대, 평균, 합계, 표준 편차, 중앙값).",
+          "params": {
+            "zones_path": {
+              "label": "구역 레이어",
+              "description": "구역을 정의하는 GeoJSON 폴리곤 레이어입니다. 래스터의 CRS로 자동 재투영됩니다(CRS가 없는 GeoJSON은 WGS84로 간주)."
+            },
+            "band": {
+              "label": "밴드"
+            },
+            "prefix": {
+              "label": "필드 접두사",
+              "description": "각 통계 필드 이름 앞에 붙입니다(예: 'dem_' → 'dem_mean'). 비워 두면 'mean', 'min', … 그대로 사용합니다."
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "래스터 계산기",
+          "description": "NumPy 밴드 연산 표현식을 평가합니다. 각 입력의 밴드 1은 A, B, C로, 특정 밴드는 A1, A2, …로 참조합니다. 예: NDVI는 (A2 - A1) / (A2 + A1)입니다.",
+          "params": {
+            "expression": {
+              "label": "표현식",
+              "description": "A, B, C(및 A1, A2, …)에 대한 NumPy 표현식입니다. 함수: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan."
+            },
+            "b_path": {
+              "label": "래스터 B(선택 사항)",
+              "description": "B / B1, B2, …로 참조되는 두 번째 래스터입니다. A와 크기가 같아야 합니다."
+            },
+            "c_path": {
+              "label": "래스터 C(선택 사항)",
+              "description": "C / C1, C2, …로 참조되는 세 번째 래스터입니다. A와 크기가 같아야 합니다."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "분광 지수",
+          "description": "다중 밴드 래스터에서 이름 있는 분광 지수(NDVI, NDWI, EVI, …)를 계산합니다. 밴드 배치에 맞는 센서 사전 설정을 선택하거나 사용자 지정 센서로 밴드 번호를 직접 설정하세요.",
+          "params": {
+            "index": {
+              "label": "지수",
+              "options": {
+                "ndvi": "NDVI(식생)",
+                "gndvi": "GNDVI(녹색 식생)",
+                "ndwi": "NDWI(수역, McFeeters)",
+                "ndmi": "NDMI(수분)",
+                "ndbi": "NDBI(시가지)",
+                "nbr": "NBR(연소 비율)",
+                "evi": "EVI(강화 식생)",
+                "savi": "SAVI(토양 보정 식생)"
+              }
+            },
+            "sensor": {
+              "label": "센서 / 밴드 배치",
+              "description": "일반 센서용 사전 설정 밴드 번호입니다. 밴드 순서가 다른 GeoTIFF는 사용자 지정을 선택하여 밴드를 직접 지정하세요.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "사용자 지정(아래에서 밴드 번호 설정)"
+              }
+            },
+            "red": {
+              "label": "빨강 밴드 번호"
+            },
+            "green": {
+              "label": "초록 밴드 번호"
+            },
+            "blue": {
+              "label": "파랑 밴드 번호"
+            },
+            "nir": {
+              "label": "NIR 밴드 번호"
+            },
+            "swir1": {
+              "label": "SWIR1 밴드 번호"
+            },
+            "swir2": {
+              "label": "SWIR2 밴드 번호"
+            },
+            "L": {
+              "label": "토양 계수 (L)",
+              "description": "SAVI 토양 밝기 보정값(0 = 밀집 식생 → 1 = 나지)."
+            },
+            "scale": {
+              "label": "반사율 스케일",
+              "description": "픽셀 값을 반사율(0–1)로 변환하는 배율입니다. 정규화 차이 지수는 1로 두고, 정수 DN 영상에서 EVI/SAVI를 계산할 때 설정하세요(예: Sentinel-2 L2A는 0.0001)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "재분류",
+          "description": "규칙 표를 사용하여 값 범위를 새 클래스 값으로 다시 매핑합니다.",
+          "params": {
+            "band": {
+              "label": "밴드"
+            },
+            "table": {
+              "label": "규칙",
+              "description": "쉼표 또는 줄바꿈으로 구분된 'min:max:newvalue' 규칙입니다(예: '0:10:1, 10:20:2, 20:max:3'). 범위는 반개구간 [min, max)이며, 공백/min/max는 ±∞를 의미합니다."
+            },
+            "unmatched": {
+              "label": "일치하지 않는 값",
+              "options": {
+                "nodata": "NoData로 설정",
+                "original": "원래 값 유지"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "모자이크 / 병합",
+          "description": "CRS를 공유하는 최대 5개의 래스터를 합집합 영역을 덮는 단일 래스터로 결합합니다.",
+          "params": {
+            "raster_2": {
+              "label": "두 번째 래스터"
+            },
+            "raster_3": {
+              "label": "세 번째 래스터(선택 사항)"
+            },
+            "raster_4": {
+              "label": "네 번째 래스터(선택 사항)"
+            },
+            "raster_5": {
+              "label": "다섯 번째 래스터(선택 사항)"
+            },
+            "method": {
+              "label": "중첩 처리 방법",
+              "description": "입력이 중첩되는 곳에서 어떤 값을 사용할지 정합니다.",
+              "options": {
+                "first": "첫 번째",
+                "last": "마지막",
+                "min": "최소",
+                "max": "최대"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "초점 통계",
+          "description": "래스터 밴드에 이동 윈도(이웃) 통계를 적용합니다.",
+          "params": {
+            "band": {
+              "label": "밴드"
+            },
+            "statistic": {
+              "label": "통계",
+              "options": {
+                "mean": "평균",
+                "median": "중앙값",
+                "min": "최소",
+                "max": "최대",
+                "sum": "합계",
+                "std": "표준 편차",
+                "range": "범위(최대 − 최소)"
+              }
+            },
+            "size": {
+              "label": "윈도 크기",
+              "description": "픽셀 단위의 홀수 이웃 크기(3 = 3×3)입니다. 최대 25입니다."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "분석",
+      "clip": "자르기",
+      "dataQuality": "데이터 품질",
+      "dggs": "DGGS",
+      "geometry": "지오메트리",
+      "join": "조인",
+      "movementTime": "이동 및 시간",
+      "network": "네트워크",
+      "overlay": "오버레이",
+      "rasterToVector": "래스터에서 벡터로",
+      "reproject": "재투영",
+      "select": "선택",
+      "spatialStatistics": "공간 통계",
+      "terrain": "지형",
+      "vectorToRaster": "벡터에서 래스터로"
     }
   },
   "segmentation": {
@@ -3725,6 +5707,7 @@
     "title": "객체 탐지",
     "description": "ONNX로 내보낸 YOLO 모델을 GeoTIFF에 대해 전적으로 브라우저에서 실행합니다. 탐지된 상자는 지오레퍼런싱되며 각 클래스가 개별 레이어로 추가됩니다.",
     "hint": "내장 COCO 모델(한 번 다운로드 후 캐시됨)을 사용하거나 직접 만든 YOLOv5/v8/v11 ONNX를 가져오세요. 탐지는 브라우저에서 로컬로 실행됩니다. 내장 모델은 일상적인 객체를 탐지합니다. 항공 영상의 경우 직접 상공 촬영으로 학습한 모델을 제공하세요.",
+    "unavailableNoExternalCdn": "이 빌드에서는 객체 탐지를 사용할 수 없습니다. ONNX Runtime이 필요하지만 외부 CDN에서 로드되며 이 배포에서는 비활성화되어 있습니다. 직접 모델 파일을 제공해도 해결되지 않습니다.",
     "imageLabel": "이미지 (GeoTIFF)",
     "imagePlaceholder": "GeoTIFF 선택…",
     "chooseImage": "이미지 선택",
@@ -3757,6 +5740,7 @@
     "title": "전체 세그먼트",
     "description": "SlimSAM을 GeoTIFF에 대해 자동으로 전적으로 브라우저에서 실행합니다. 탐지된 모든 객체가 지오레퍼런싱된 폴리곤이 되어 하나의 레이어로 추가됩니다.",
     "hint": "이미지 전체에 점 격자를 샘플링하여 SlimSAM(한 번 다운로드 후 캐시됨)으로 세그먼트화합니다. 클릭이나 레이블이 필요 없습니다 — 격자가 조밀할수록 더 많은 객체를 찾지만 시간이 더 걸립니다.",
+    "unavailableNoExternalCdn": "이 빌드에서는 “전체 세그먼트”를 사용할 수 없습니다. ONNX Runtime이 필요하지만 외부 CDN에서 로드되며 이 배포에서는 비활성화되어 있습니다.",
     "imageLabel": "이미지 (GeoTIFF)",
     "imagePlaceholder": "GeoTIFF 선택…",
     "chooseImage": "이미지 선택",
@@ -3898,6 +5882,7 @@
     "deleteField": "필드 삭제",
     "joinedColumnTitle": "조인 테이블에서 파생된 조인 열입니다. 대신 조인 테이블이나 조인 정의를 편집하세요.",
     "virtualColumnTitle": "표현식으로 계산되는 가상 필드입니다. 대신 레이어의 스타일 패널에서 정의를 편집하세요.",
+    "trackingColumnTitle": "편집 추적 필드로, 자동으로 관리됩니다. 이름은 레이어의 편집 추적 설정에서 변경하세요.",
     "deleteFieldConfirm": "이 작업은 \"{{layer}}\"의 모든 피처에서 필드 \"{{field}}\"를 영구적으로 제거합니다. 이를 참조하는 스타일이나 라벨은 지워집니다. 이 작업은 되돌릴 수 없습니다.",
     "addFieldDescription": "\"{{layer}}\"의 모든 피처에 새 필드를 추가합니다.",
     "fieldName": "필드 이름",
@@ -4416,11 +6401,15 @@
       "typeConvexHull": "볼록 껍질",
       "typeBuffer": "버퍼",
       "bufferDistance": "버퍼 거리 (m)",
+      "bufferField": "거리 필드",
+      "bufferFieldHint": "각 피처는 자체 값(미터)으로 버퍼링됩니다. 값이 없는 피처는 위의 거리를 사용하며, 값이 0이면 아무것도 그리지 않습니다.",
+      "fieldNone": "없음 (고정)",
       "fillColor": "채우기 색상",
       "strokeColor": "윤곽선 색상",
       "strokeWidth": "윤곽선 너비 (px)",
       "opacity": "채우기 불투명도",
-      "circleRadius": "점 반지름 (px)"
+      "circleRadius": "점 반지름 (px)",
+      "sizeField": "크기 필드"
     },
     "attributeForm": {
       "heading": "속성 폼",
@@ -4462,7 +6451,26 @@
       "save": "저장",
       "noFields": "레이어에 구성할 속성 필드가 없습니다.",
       "minMaxInvalid": "최소값은 최대값보다 작거나 같아야 합니다."
+    },
+    "editorTracking": {
+      "heading": "편집 추적",
+      "description": "각 피처를 누가 만들었고 누가 마지막으로 변경했는지 기록합니다. 피처를 그리거나 편집, 계산, 수집할 때 아래 필드가 자동으로 채워집니다.",
+      "enable": "이 레이어의 편집 추적",
+      "identity": "이름",
+      "identityHint": "편집은 “{{name}}”(으)로 기록됩니다.",
+      "identityFromSession": "참여 중인 공동 작업 세션에서 가져왔습니다.",
+      "createdByField": "‘만든 사람’ 필드",
+      "createdAtField": "‘만든 시간’ 필드",
+      "editedByField": "‘편집한 사람’ 필드",
+      "editedAtField": "‘편집한 시간’ 필드",
+      "blankName": "필드 이름은 비워 둘 수 없습니다.",
+      "duplicateName": "추적 필드마다 다른 이름이 필요합니다.",
+      "columnTaken": "“{{name}}”은(는) 이미 속성 필드입니다. 추적이 해당 값을 덮어씁니다."
     }
+  },
+  "vectorExport": {
+    "invalidKmlCoordinatesByPosition": "좌표가 올바르지 않아 KML 내보내기에서 {{position}}번째 피처를 기록하지 못했습니다.",
+    "invalidKmlCoordinatesById": "좌표가 올바르지 않아 KML 내보내기에서 ID {{id}} 피처를 기록하지 못했습니다."
   },
   "layers": {
     "panelCollapsedLabel": "레이어(접힘)",
@@ -4483,9 +6491,17 @@
     "identifyInspectPixels": "픽셀 값 검사",
     "identifyStopInspectPixels": "픽셀 값 검사 중지",
     "identifyUnavailable": "식별은 벡터, WMS, COG 레이어에서만 사용할 수 있습니다",
+    "selectFeaturesMenu": "피처 선택",
+    "selectFeaturesSingle": "클릭으로 피처 선택",
+    "selectFeaturesRectangle": "사각형으로 피처 선택",
+    "selectFeaturesPolygon": "폴리곤으로 피처 선택",
+    "selectFeaturesFreehand": "자유형으로 피처 선택",
+    "selectFeaturesRadius": "반경으로 피처 선택",
+    "selectFeaturesModifiers": "Shift는 추가, Alt는 제거, Shift+Alt는 교차입니다. Esc를 눌러 취소합니다.",
     "exportGeoTiff": "GeoTIFF(COG)",
     "extractSubset": "부분 추출…",
     "stylesMenu": "스타일",
+    "exportGeoLibreStyle": "GeoLibre URL 스타일 내보내기",
     "exportMapboxStyle": "Mapbox GL 스타일로 내보내기",
     "exportSldStyle": "OGC SLD로 내보내기",
     "exportQmlStyle": "QGIS QML로 내보내기",
@@ -4493,7 +6509,7 @@
     "exportStyleDataNotReady": "레이어 데이터가 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.",
     "exportStyleNeedsFeatures": "스타일 내보내기는 피처가 있는 벡터 레이어가 필요합니다.",
     "exportStyleError": "이 레이어의 스타일을 내보낼 수 없습니다.",
-    "importStyle": "스타일 가져오기(Mapbox GL / SLD / QML)…",
+    "importStyle": "스타일 가져오기(GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "저장된 스타일 (스타일 관리자)…",
     "importStyleSuccess": "스타일을 가져왔습니다.",
     "importStyleInvalid": "해당 파일은 유효한 JSON, SLD, QML이 아닙니다.",
@@ -4532,6 +6548,7 @@
     "bindWindowCumulative": "현재 단계까지 전체 (누적)",
     "bindCancel": "취소",
     "bindConfirm": "연결",
+    "openStylePanel": "스타일 패널 열기",
     "openRasterStylePanel": "래스터 스타일 편집…",
     "exportRasterSuccess": "래스터를 내보냈습니다.",
     "exportRasterError": "이 래스터를 내보낼 수 없습니다.",
@@ -4637,6 +6654,7 @@
     "refreshVectorControlError": "이 레이어를 새로고침할 수 없습니다. 벡터 레이어 추가 패널을 다시 열어 보세요.",
     "refreshed": "새로고침했습니다.",
     "refreshedCount": "{{count}}개의 피처를 새로고침했습니다.",
+    "refreshedTruncated": "피처 {{total}}개 중 {{shown}}개를 새로고침했습니다.",
     "refreshError": "이 레이어를 새로고침할 수 없습니다.",
     "exportNeedsFeatures": "내보내기는 피처가 있는 벡터 레이어가 필요합니다.",
     "exportedWithWarnings": "레이어를 내보냈습니다. {{warnings}}",
@@ -4699,6 +6717,78 @@
     "nodataOff": "모든 픽셀 렌더링",
     "nodataCustom": "사용자 지정 값"
   },
+  "netcdfSymbology": {
+    "heading": "NetCDF 심볼",
+    "colorRampLabel": "컬러맵",
+    "reverse": "컬러맵 반전",
+    "colorMin": "색상 최소",
+    "colorMax": "색상 최대",
+    "resetRange": "데이터 범위로 초기화",
+    "openCube": "3D 큐브"
+  },
+  "netcdfCube": {
+    "heading": "3D 영상 큐브",
+    "close": "닫기",
+    "settings": "설정",
+    "setupTitle": "3D 영상 큐브",
+    "setupDescription": "큐브를 만들기 전에 무엇을 읽을지 선택하세요. 밴드마다 별도로 읽으므로 범위와 밴드 수가 소요 시간을 좌우합니다.",
+    "extent": "범위",
+    "extentView": "현재 지도 화면",
+    "extentDraw": "지도에 그리기",
+    "extentFull": "레이어 전체 범위",
+    "viewHint": "큐브를 만드는 시점에 지도에 보이는 영역을 읽습니다.",
+    "fullHint": "격자 전체를 읽습니다. 장면 크기의 큐브에서는 느립니다.",
+    "drawBbox": "지도에 그리기",
+    "drawing": "지도에서 상자를 드래그하여 큐브의 범위를 설정하세요",
+    "drawHint": "지도에서 상자를 드래그하여 범위를 설정하세요.",
+    "drawnExtent": "서 {{west}}, 남 {{south}}, 동 {{east}}, 북 {{north}}",
+    "detail": "상세도",
+    "detailOption": "한 변당 {{size}}개 셀",
+    "bands": "밴드",
+    "allBands": "전체({{count}})",
+    "rgbOverlay": "윗면에 RGB 영상",
+    "rgbHint": "세 밴드를 합성한 컬러 영상을 윗면에 덮어, 큐브를 하나의 장소로 알아볼 수 있게 합니다.",
+    "red": "빨강",
+    "green": "초록",
+    "blue": "파랑",
+    "planeEstimate": "밴드 읽기 {{count}}회",
+    "create": "큐브 만들기",
+    "colorRampLabel": "컬러맵",
+    "reverse": "반전",
+    "showRgb": "윗면 RGB",
+    "rgbBands": "RGB 밴드",
+    "recomposing": "읽는 중...",
+    "zScale": "높이",
+    "slice": "단면",
+    "sliceAt": "{{band}} {{units}}에서 자름",
+    "reading": "{{total}}개 밴드 중 {{done}}번째를 읽는 중...",
+    "summary": "{{nx}} x {{ny}} 셀, {{axis}} 축을 따라 {{nz}}개 밴드",
+    "errorNoCube": "이 레이어의 원본 파일이 더 이상 열려 있지 않아 큐브를 읽을 수 없습니다.",
+    "error": {
+      "shapeMismatch": "이 변수의 밴드 평면들이 같은 형태가 아니어서 큐브로 쌓을 수 없습니다.",
+      "rgbShapeMismatch": "선택한 RGB 밴드가 큐브의 형태와 맞지 않습니다.",
+      "noBands": "이 변수에는 읽을 밴드가 없습니다.",
+      "noReadWindow": "이 큐브는 그 자리에서 갱신할 수 없습니다. 설정에서 다시 만드세요."
+    }
+  },
+  "netcdfProfile": {
+    "heading": "분광 프로파일",
+    "clear": "지우기",
+    "chartAria": "밴드 축을 따라 추출한 픽셀 값",
+    "popOut": "떼어내기",
+    "dock": "도킹",
+    "poppedOutHint": "차트가 지도 위의 창에 열려 있습니다.",
+    "noValues": "이 픽셀들에는 차트로 그릴 값이 없습니다.",
+    "exportPng": "PNG",
+    "exportCsv": "CSV",
+    "exportError": "차트를 내보낼 수 없습니다.",
+    "rasterFallbackName": "래스터"
+  },
+  "netcdfIdentify": {
+    "noData": "데이터 없음",
+    "coordinates": "경도, 위도",
+    "cell": "행, 열"
+  },
   "rasterAttributeTable": {
     "title": "래스터 속성 테이블",
     "resize": "래스터 속성 테이블 크기 조정",
@@ -4747,6 +6837,7 @@
     "cogConvertConfirm": "\"{{name}}\"은(는) 직접 표시할 수 없는 일반(스트라이프) GeoTIFF입니다. 지금 Cloud-Optimized GeoTIFF로 변환하여 불러오시겠습니까?",
     "cogConvertRemoteConfirm": "\"{{name}}\"은(는) 직접 표시할 수 없는 일반(스트라이프) GeoTIFF입니다. 표시하려면 전체 파일을 다운로드하여 브라우저에서 Cloud-Optimized GeoTIFF로 변환해야 하며, 파일이 클 경우 느리고 메모리를 많이 사용할 수 있습니다. 계속하시겠습니까?",
     "cogConvertLargeConfirm": "\"{{name}}\"은(는) {{width}}×{{height}} 크기의 대용량 GeoTIFF로, Cloud-Optimized GeoTIFF가 아닙니다. 브라우저에서 변환하면 느리고 메모리를 많이 사용할 수 있습니다. 그래도 변환하여 불러오시겠습니까?",
+    "cogConvertTooLarge": "\"{{name}}\"은(는) 브라우저에서 안전하게 변환하기에는 너무 큽니다. gdal_translate 또는 rio cogeo를 사용하여 Cloud-Optimized GeoTIFF로 변환한 후 결과를 불러오세요.",
     "cogConvertFailed": "\"{{name}}\"을(를) Cloud-Optimized GeoTIFF로 변환할 수 없습니다. gdal_translate 또는 rio cogeo로 변환한 후 결과를 불러오세요.",
     "rasterDownloadFailed": "\"{{name}}\"을(를) 다운로드할 수 없습니다. 서버가 느리거나 응답하지 않거나 교차 출처 요청을 차단하고 있을 수 있으며, 또는 파일이 너무 커서 메모리에 담을 수 없을 수 있습니다. URL을 확인한 후 다시 시도하세요.",
     "rasterNotGeotiff": "\"{{name}}\"이(가) GeoTIFF를 반환하지 않았습니다. 서버가 대신 오류 또는 로그인 페이지를 보냈을 수 있습니다. URL을 확인한 후 다시 시도하세요."
@@ -4879,7 +6970,8 @@
       "pythonConsole": "Python 콘솔",
       "sqlWorkspace": "SQL 작업 공간",
       "assistant": "어시스턴트",
-      "statusBar": "상태 표시줄"
+      "statusBar": "상태 표시줄",
+      "modelBuilder": "모델 빌더"
     }
   },
   "attributeStats": {
@@ -4890,10 +6982,12 @@
     "scope": "범위",
     "scopeAll": "전체 피처({{total}})",
     "scopeFiltered": "필터링됨({{total}})",
+    "scopeSelected": "선택 항목({{total}})",
     "copiedToClipboard": "클립보드에 복사했습니다.",
     "copy": "복사",
     "copyHeader": "필드 통계 — {{field}}",
     "copyHeaderFiltered": "필드 통계 — {{field}}(필터링됨)",
+    "copyHeaderSelected": "필드 통계 — {{field}}(선택 항목)",
     "noValues": "요약할 값이 없습니다.",
     "mostFrequent": "가장 빈번한 값",
     "noPopulated": "입력된 값이 없습니다.",
@@ -4935,76 +7029,6 @@
     "noPopulated": "입력된 값이 없습니다.",
     "moreValues": "+{{total}}개 값 더 보기"
   },
-  "stacPlugin": {
-    "title": "STAC 카탈로그",
-    "footprintLayerName": "STAC 검색 범위",
-    "catalogSearch": "STAC Index에서 공개 카탈로그 찾기",
-    "catalogSearchPlaceholder": "카탈로그 이름 검색…",
-    "indexLoading": "STAC Index 로드 중…",
-    "indexUnavailable": "STAC Index를 사용할 수 없습니다: URL을 입력하세요",
-    "indexLoadFailed": "STAC Index를 불러오지 못했습니다",
-    "urlLabel": "STAC 카탈로그 또는 API URL",
-    "connect": "연결",
-    "connecting": "STAC에 연결 중…",
-    "connected": "연결되었습니다. 필터를 선택하고 검색하세요.",
-    "connectFailed": "STAC에 연결하지 못했습니다",
-    "selectCatalog": "카탈로그 선택…",
-    "noMatchingCatalogs": "일치하는 카탈로그 없음",
-    "catalogApiSuffix": " (API)",
-    "catalogStaticSuffix": " (정적)",
-    "kindApi": "STAC API",
-    "kindStatic": "정적 카탈로그",
-    "collectionsHint": "Ctrl/Cmd를 누른 채 여러 컬렉션을 선택할 수 있습니다. 아래쪽 가장자리를 끌어 크기를 조절하세요",
-    "limitToExtent": "현재 지도 범위로 검색 제한",
-    "bboxLabel": "경계 상자(서, 남, 동, 북)",
-    "bboxPlaceholder": "선택 사항이며 지도 범위보다 우선합니다",
-    "bboxInvalid": "올바른 경계 상자를 입력하세요: 서, 남, 동, 북.",
-    "drawBbox": "지도에 상자 그리기",
-    "cancelDrawing": "그리기 취소",
-    "clearDrawnBbox": "그린 상자 지우기",
-    "drawHint": "지도에서 클릭한 뒤 끌어 검색 상자를 그리세요.",
-    "drawnBbox": "그린 상자: {{bbox}}",
-    "drawnBboxCleared": "그린 상자를 지웠습니다.",
-    "mapNotReady": "지도가 아직 그리기 준비되지 않았습니다.",
-    "startDate": "시작 날짜",
-    "endDate": "종료 날짜",
-    "additionalParams": "추가 검색 매개변수(JSON, STAC API 전용)",
-    "additionalInvalid": "추가 검색 매개변수는 JSON 객체여야 합니다.",
-    "searchItems": "항목 검색",
-    "clearResults": "결과 지우기",
-    "resultsCleared": "검색 결과를 지웠습니다.",
-    "searching": "STAC 항목 검색 중…",
-    "loadingMore": "항목 더 불러오는 중…",
-    "noResults": "이 필터와 일치하는 STAC 항목이 없습니다.",
-    "searchFailed": "STAC 검색에 실패했습니다",
-    "showing": "{{count}}개 항목을 표시하고 있습니다.",
-    "showingOfMatched": "{{matched}}개 중 {{count}}개 항목을 표시하고 있습니다.",
-    "loadMore": "더 불러오기",
-    "renderOptions": "래스터 렌더링 옵션",
-    "bands": "밴드",
-    "bandsPlaceholder": "예: 1 또는 1,2,3(기본값: 자동)",
-    "colormap": "컬러맵(단일 밴드 전용)",
-    "colormapDefault": "렌더러 기본값",
-    "minValue": "최솟값",
-    "maxValue": "최댓값",
-    "nodata": "NoData 값",
-    "nodataPlaceholder": "파일의 NoData 태그보다 우선합니다",
-    "renderHint": "비워 두면 렌더러가 GeoTIFF에서 값을 추론합니다. 옵션은 변경 후 추가한 자산에 적용됩니다.",
-    "initialStatus": "STAC Index에서 카탈로그를 선택하거나 URL을 입력하세요.",
-    "catalogInfo": "{{title}} · {{kind}}",
-    "zoom": "확대",
-    "add": "추가",
-    "download": "다운로드",
-    "adding": "{{asset}} 추가 중…",
-    "added": "{{asset}}을(를) 지도에 추가했습니다.",
-    "addUnsupported": "GeoTIFF/COG 및 GeoJSON 자산만 지도에 추가할 수 있습니다",
-    "addFailed": "자산을 추가하지 못했습니다",
-    "cogUnsupported": "이 GeoLibre 호스트는 원격 GeoTIFF 자산을 표시할 수 없습니다"
-  },
-  "vectorExport": {
-    "invalidKmlCoordinatesByPosition": "좌표가 올바르지 않아 KML 내보내기에서 {{position}}번째 피처를 기록하지 못했습니다.",
-    "invalidKmlCoordinatesById": "좌표가 올바르지 않아 KML 내보내기에서 ID {{id}} 피처를 기록하지 못했습니다."
-  },
   "comments": {
     "title": "댓글",
     "addDialogTitle": "검토 의견 추가",
@@ -5013,276 +7037,49 @@
     "authorNamePlaceholder": "예: 홍길동 또는 김철수",
     "commentLabel": "의견 / 피드백",
     "commentPlaceholder": "여기에 검토 메모나 피드백을 입력하세요...",
+    "post": "댓글 게시",
+    "postShortcutTooltip": "댓글 게시({{shortcut}})",
     "confirmDelete": "이 의견 스레드를 삭제하시겠습니까?",
     "sessionDisconnected": "세션 연결이 끊어졌습니다.",
-    "defaultAuthorName": "작성자"
-  },
-  "s2Plugin": {
-    "title": "S2 격자",
-    "controlTitle": "S2 격자 설정",
-    "autoResolution": "해상도 자동 설정",
-    "resolution": "해상도",
-    "cellCount": "화면에 {{count}}개 셀",
-    "tooManyCells": "이 화면은 셀 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
-    "fillColor": "채우기 색상",
-    "fillOpacity": "채우기 불투명도",
-    "lineColor": "윤곽선 색상",
-    "lineWidth": "외곽선 두께",
-    "showLabels": "셀 ID 표시",
-    "identifyHint": "지도를 클릭하여 S2 셀을 확인하세요.",
-    "selectedCell": "선택한 셀",
-    "noSelection": "선택한 셀 없음",
-    "copyId": "ID 복사",
-    "parent": "상위 셀",
-    "children": "하위 셀",
-    "neighbors": "인접 셀",
-    "center": "중심",
-    "zoomToCell": "셀로 확대",
-    "addAsLayer": "격자를 레이어로 추가",
-    "exportGeoJson": "GeoJSON 내보내기",
-    "exportCsv": "CSV 내보내기",
-    "includeNeighbors": "선택한 셀의 인접 셀 포함",
-    "includeParents": "선택한 셀의 상위 셀 포함"
-  },
-  "a5Plugin": {
-    "title": "A5 격자",
-    "controlTitle": "A5 격자 설정",
-    "autoResolution": "해상도 자동 설정",
-    "resolution": "해상도",
-    "cellCount": "화면에 {{count}}개 셀",
-    "tooManyCells": "이 화면은 셀 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
-    "fillColor": "채우기 색상",
-    "fillOpacity": "채우기 불투명도",
-    "lineColor": "윤곽선 색상",
-    "lineWidth": "외곽선 두께",
-    "showLabels": "셀 ID 표시",
-    "identifyHint": "지도를 클릭하여 A5 셀을 확인하세요.",
-    "selectedCell": "선택한 셀",
-    "noSelection": "선택한 셀 없음",
-    "copyId": "ID 복사",
-    "parent": "상위 셀",
-    "children": "하위 셀",
-    "neighbors": "인접 셀",
-    "center": "중심",
-    "zoomToCell": "셀로 확대",
-    "addAsLayer": "격자를 레이어로 추가",
-    "exportGeoJson": "GeoJSON 내보내기",
-    "exportCsv": "CSV 내보내기",
-    "includeNeighbors": "선택한 셀의 인접 셀 포함",
-    "includeParents": "선택한 셀의 상위 셀 포함"
-  },
-  "dggridPlugin": {
-    "title": "DGGRID",
-    "controlTitle": "DGGRID 설정",
-    "cellType": "셀 유형",
-    "topologyHexagon": "육각형",
-    "topologyDiamond": "마름모",
-    "topologyTriangle": "삼각형",
-    "projection": "투영법",
-    "aperture": "구경",
-    "autoResolution": "해상도 자동 설정",
-    "resolution": "해상도",
-    "cellCount": "화면에 {{count}}개 셀",
-    "tooManyCells": "이 화면은 셀 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
-    "fillColor": "채우기 색상",
-    "fillOpacity": "채우기 불투명도",
-    "lineColor": "윤곽선 색상",
-    "lineWidth": "외곽선 두께",
-    "showLabels": "셀 ID 표시",
-    "identifyHint": "지도를 클릭하여 DGGRID 셀을 확인하세요.",
-    "selectedCell": "선택한 셀",
-    "noSelection": "선택한 셀 없음",
-    "copyId": "ID 복사",
-    "parent": "상위 셀",
-    "children": "하위 셀",
-    "neighbors": "인접 셀",
-    "center": "중심",
-    "zoomToCell": "셀로 확대",
-    "addAsLayer": "격자를 레이어로 추가",
-    "exportGeoJson": "GeoJSON 내보내기",
-    "exportCsv": "CSV 내보내기",
-    "includeNeighbors": "선택한 셀의 인접 셀 포함",
-    "includeParents": "선택한 셀의 상위 셀 포함"
-  },
-  "dggalPlugin": {
-    "title": "DGGAL",
-    "controlTitle": "DGGAL 설정",
-    "gridType": "DGGS 유형",
-    "autoResolution": "해상도 자동 설정",
-    "resolution": "해상도",
-    "cellCount": "화면에 {{count}}개 셀",
-    "tooManyCells": "이 화면은 셀 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
-    "fillColor": "채우기 색상",
-    "fillOpacity": "채우기 불투명도",
-    "lineColor": "윤곽선 색상",
-    "lineWidth": "외곽선 두께",
-    "showLabels": "셀 ID 표시",
-    "identifyHint": "지도를 클릭하여 DGGAL 셀을 확인하세요.",
-    "selectedCell": "선택한 셀",
-    "noSelection": "선택한 셀 없음",
-    "copyId": "ID 복사",
-    "parent": "상위 셀",
-    "children": "하위 셀",
-    "neighbors": "인접 셀",
-    "center": "중심",
-    "zoomToCell": "셀로 확대",
-    "addAsLayer": "격자를 레이어로 추가",
-    "exportGeoJson": "GeoJSON 내보내기",
-    "exportCsv": "CSV 내보내기",
-    "includeNeighbors": "선택한 셀의 인접 셀 포함",
-    "includeParents": "선택한 셀의 상위 셀 포함"
-  },
-  "olcPlugin": {
-    "title": "OLC",
-    "controlTitle": "OLC 설정",
-    "autoResolution": "해상도 자동 설정",
-    "resolution": "해상도",
-    "cellCount": "화면에 {{count}}개 셀",
-    "tooManyCells": "이 화면은 셀 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
-    "fillColor": "채우기 색상",
-    "fillOpacity": "채우기 불투명도",
-    "lineColor": "윤곽선 색상",
-    "lineWidth": "외곽선 두께",
-    "showLabels": "셀 ID 표시",
-    "identifyHint": "지도를 클릭하여 OLC 셀을 확인하세요.",
-    "selectedCell": "선택한 셀",
-    "noSelection": "선택한 셀 없음",
-    "copyId": "ID 복사",
-    "parent": "상위 셀",
-    "children": "하위 셀",
-    "neighbors": "인접 셀",
-    "center": "중심",
-    "zoomToCell": "셀로 확대",
-    "addAsLayer": "격자를 레이어로 추가",
-    "exportGeoJson": "GeoJSON 내보내기",
-    "exportCsv": "CSV 내보내기",
-    "includeNeighbors": "선택한 셀의 인접 셀 포함",
-    "includeParent": "선택한 셀의 상위 셀 포함"
-  },
-  "geohashPlugin": {
-    "title": "Geohash",
-    "controlTitle": "Geohash 설정",
-    "autoResolution": "해상도 자동 설정",
-    "resolution": "해상도",
-    "cellCount": "화면에 {{count}}개 셀",
-    "tooManyCells": "이 화면은 셀 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
-    "fillColor": "채우기 색상",
-    "fillOpacity": "채우기 불투명도",
-    "lineColor": "윤곽선 색상",
-    "lineWidth": "외곽선 두께",
-    "showLabels": "셀 ID 표시",
-    "identifyHint": "지도를 클릭하여 Geohash 셀을 확인하세요.",
-    "selectedCell": "선택한 셀",
-    "noSelection": "선택한 셀 없음",
-    "copyId": "ID 복사",
-    "parent": "상위 셀",
-    "children": "하위 셀",
-    "neighbors": "인접 셀",
-    "center": "중심",
-    "zoomToCell": "셀로 확대",
-    "addAsLayer": "격자를 레이어로 추가",
-    "exportGeoJson": "GeoJSON 내보내기",
-    "exportCsv": "CSV 내보내기",
-    "includeNeighbors": "선택한 셀의 인접 셀 포함",
-    "includeParent": "선택한 셀의 상위 셀 포함"
-  },
-  "tilecodePlugin": {
-    "title": "Tilecode",
-    "controlTitle": "Tilecode 설정",
-    "autoResolution": "해상도 자동 설정",
-    "resolution": "해상도",
-    "cellCount": "화면에 타일 {{count}}개",
-    "tooManyCells": "이 화면은 타일 {{limit}}개 한도를 초과합니다. 확대하거나 해상도를 낮추세요.",
-    "fillColor": "채우기 색상",
-    "fillOpacity": "채우기 불투명도",
-    "lineColor": "윤곽선 색상",
-    "lineWidth": "외곽선 두께",
-    "showLabels": "타일 ID 표시",
-    "identifyHint": "지도를 클릭하여 타일을 확인하세요.",
-    "selectedCell": "선택한 타일",
-    "noSelection": "선택한 타일 없음",
-    "copyId": "ID 복사",
-    "quadkey": "쿼드키",
-    "parent": "상위 타일",
-    "children": "하위 타일",
-    "neighbors": "인접 타일",
-    "center": "중심",
-    "zoomToCell": "타일로 확대",
-    "addAsLayer": "격자를 레이어로 추가",
-    "exportGeoJson": "GeoJSON 내보내기",
-    "exportCsv": "CSV 내보내기",
-    "includeNeighbors": "선택한 타일의 인접 타일 포함",
-    "includeParent": "선택한 타일의 상위 타일 포함"
-  },
-  "netcdfSymbology": {
-    "heading": "NetCDF 심볼",
-    "colorRampLabel": "컬러맵",
-    "reverse": "컬러맵 반전",
-    "colorMin": "색상 최소",
-    "colorMax": "색상 최대",
-    "resetRange": "데이터 범위로 초기화",
-    "openCube": "3D 큐브"
-  },
-  "netcdfCube": {
-    "heading": "3D 영상 큐브",
-    "close": "닫기",
-    "settings": "설정",
-    "setupTitle": "3D 영상 큐브",
-    "setupDescription": "큐브를 만들기 전에 무엇을 읽을지 선택하세요. 밴드마다 별도로 읽으므로 범위와 밴드 수가 소요 시간을 좌우합니다.",
-    "extent": "범위",
-    "extentView": "현재 지도 화면",
-    "extentDraw": "지도에 그리기",
-    "extentFull": "레이어 전체 범위",
-    "viewHint": "큐브를 만드는 시점에 지도에 보이는 영역을 읽습니다.",
-    "fullHint": "격자 전체를 읽습니다. 장면 크기의 큐브에서는 느립니다.",
-    "drawBbox": "지도에 그리기",
-    "drawing": "지도에서 상자를 드래그하여 큐브의 범위를 설정하세요",
-    "drawHint": "지도에서 상자를 드래그하여 범위를 설정하세요.",
-    "drawnExtent": "서 {{west}}, 남 {{south}}, 동 {{east}}, 북 {{north}}",
-    "detail": "상세도",
-    "detailOption": "한 변당 {{size}}개 셀",
-    "bands": "밴드",
-    "allBands": "전체({{count}})",
-    "rgbOverlay": "윗면에 RGB 영상",
-    "rgbHint": "세 밴드를 합성한 컬러 영상을 윗면에 덮어, 큐브를 하나의 장소로 알아볼 수 있게 합니다.",
-    "red": "빨강",
-    "green": "초록",
-    "blue": "파랑",
-    "planeEstimate": "밴드 읽기 {{count}}회",
-    "create": "큐브 만들기",
-    "colorRampLabel": "컬러맵",
-    "reverse": "반전",
-    "showRgb": "윗면 RGB",
-    "rgbBands": "RGB 밴드",
-    "recomposing": "읽는 중...",
-    "zScale": "높이",
-    "slice": "단면",
-    "sliceAt": "{{band}} {{units}}에서 자름",
-    "reading": "{{total}}개 밴드 중 {{done}}번째를 읽는 중...",
-    "summary": "{{nx}} x {{ny}} 셀, {{axis}} 축을 따라 {{nz}}개 밴드",
-    "errorNoCube": "이 레이어의 원본 파일이 더 이상 열려 있지 않아 큐브를 읽을 수 없습니다.",
-    "error": {
-      "shapeMismatch": "이 변수의 밴드 평면들이 같은 형태가 아니어서 큐브로 쌓을 수 없습니다.",
-      "rgbShapeMismatch": "선택한 RGB 밴드가 큐브의 형태와 맞지 않습니다.",
-      "noBands": "이 변수에는 읽을 밴드가 없습니다.",
-      "noReadWindow": "이 큐브는 그 자리에서 갱신할 수 없습니다. 설정에서 다시 만드세요."
-    }
-  },
-  "netcdfProfile": {
-    "heading": "분광 프로파일",
-    "clear": "지우기",
-    "chartAria": "밴드 축을 따라 추출한 픽셀 값",
-    "popOut": "떼어내기",
-    "dock": "도킹",
-    "poppedOutHint": "차트가 지도 위의 창에 열려 있습니다.",
-    "noValues": "이 픽셀들에는 차트로 그릴 값이 없습니다.",
-    "exportPng": "PNG",
-    "exportCsv": "CSV",
-    "exportError": "차트를 내보낼 수 없습니다."
-  },
-  "netcdfIdentify": {
-    "noData": "데이터 없음",
-    "coordinates": "경도, 위도",
-    "cell": "행, 열"
+    "defaultAuthorName": "작성자",
+    "addComment": "댓글 추가",
+    "addCommentTooltip": "지도에 새 검토 의견 배치",
+    "yourNamePlaceholder": "내 이름…",
+    "saveName": "이름 저장",
+    "noNameSet": "이름이 설정되지 않음 — 댓글이 “{{name}}”(으)로 표시됩니다",
+    "changeNameTooltip": "이름 변경",
+    "setYourName": "이름 설정",
+    "changeName": "이름 변경",
+    "postingAs": "<strong>{{name}}</strong>(으)로 게시",
+    "copy": "복사",
+    "startLiveSession": "라이브 세션 시작",
+    "starting": "시작하는 중…",
+    "sessionCodePlaceholder": "세션 코드 입력",
+    "connect": "연결",
+    "joining": "참가하는 중…",
+    "liveSync": "라이브 동기화({{count}}명 접속 중)",
+    "offlineWorkspace": "오프라인 / 개인 작업 공간",
+    "disconnect": "연결 끊기",
+    "joinFailed": "세션에 참가하지 못했습니다.",
+    "startFailed": "세션을 시작하지 못했습니다.",
+    "filterOpen": "미해결({{count}})",
+    "filterResolved": "해결됨({{count}})",
+    "filterAll": "전체({{count}})",
+    "emptyOpen": "미해결 댓글이 없습니다",
+    "emptyResolved": "해결된 댓글이 없습니다",
+    "emptyHint": "위의 “댓글 추가”를 클릭한 다음 지도에서 위치나 피처를 선택해 검토 메모를 남기세요.",
+    "resolvedBadge": "해결됨",
+    "zoomToLocation": "위치로 확대",
+    "markResolved": "해결됨으로 표시",
+    "reopenThread": "의견 스레드 다시 열기",
+    "deleteThread": "의견 스레드 삭제",
+    "anchorFeature": "피처 #{{id}}({{layer}})",
+    "anchorPoint": "지점({{coords}})",
+    "anchorMap": "지도",
+    "anchoredToFeature": "피처 #{{id}}({{layer}})에 고정됨",
+    "anchoredToPoint": "({{coords}})에 고정됨",
+    "mapPoint": "지도 지점",
+    "reply": "답글",
+    "replyPlaceholder": "답글을 입력하세요..."
   }
 }

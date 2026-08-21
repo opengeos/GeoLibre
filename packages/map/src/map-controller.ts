@@ -3,7 +3,11 @@ import {
   DEFAULT_BASEMAP,
   DEFAULT_PROJECT_PREFERENCES,
   getPlanetaryBasemapByStyleUrl,
+  getRegionalBasemapByStyleUrl,
+  isRegionalBasemapSentinel,
   PLANETARY_BASEMAP_SENTINEL_PREFIX,
+  type RegionalBasemap,
+  scaleAltitudeToActiveBody,
   useAppStore,
 } from "@geolibre/core";
 import type {
@@ -18,21 +22,26 @@ import type {
 } from "@geolibre/core";
 import bbox from "@turf/bbox";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { LayerControl, type CustomLayerAdapter, type LayerState } from "maplibre-gl-layer-control";
 import { CollapsedAttributionControl } from "./collapsed-attribution-control";
 import {
   circleLayerId,
+  clusterCountLayerId,
+  clusterLayerId,
   fillExtrusionLayerId,
   fillLayerId,
   getLayerBounds,
+  heatmapLayerId,
   highlightCircleLayerId,
   highlightFillLayerId,
   highlightLineLayerId,
   highlightSourceId,
+  labelLayerId,
   lineLayerId,
   markerLayerId,
   sourceId,
+  textLayerId,
 } from "./geojson-loader";
 import {
   mbtilesStyleLayerIds,
@@ -50,6 +59,25 @@ import { getOfflineBasemapStyle, isOfflineBasemapSentinel } from "./protomaps-ba
 import { ResetBearingControl } from "./reset-bearing-control";
 import { MaptoolkitLogoControl } from "./maptoolkit-logo-control";
 import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control";
+import { getDynamicPaintProperty, setDynamicPaintProperty } from "./dynamic-style-property";
+import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
+import { installMapTransformCompat } from "./map-transform-compat";
+
+// Before any `Map` is constructed: re-expose `map.transform` for the packages
+// we do not control that still read it (deck.gl above all). See the module for
+// why it cannot wait until a map exists.
+installMapTransformCompat();
+
+/**
+ * GeolocateControl is constructed through this indirection so tests can
+ * substitute a fake. Assigning over `maplibregl.GeolocateControl` is not an
+ * option: a MapLibre v6 ESM namespace is sealed and rejects assignment
+ * (`TypeError: Cannot assign to property 'GeolocateControl' of [object Module]`).
+ */
+export const geolocateControlFactory = {
+  create: (options: maplibregl.GeolocateControlOptions): maplibregl.GeolocateControl =>
+    new maplibregl.GeolocateControl(options),
+};
 
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
   type: "globe",
@@ -85,7 +113,7 @@ const OPACITY_PAINT_PROPERTIES: Record<string, string[]> = {
   symbol: ["icon-opacity", "text-opacity"],
 };
 const TERRAIN_SOURCE_ID = "geolibre-terrain-dem";
-const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
+const DEFAULT_TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
   type: "raster-dem",
   tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
   tileSize: 256,
@@ -217,6 +245,21 @@ function createBlankMapStyle(): maplibregl.StyleSpecification {
   };
 }
 
+/**
+ * Whether a basemap style URL is one of GeoLibre's internal sentinels rather
+ * than something fetchable. Every sentinel kind — planetary (`geolibre://
+ * basemap/`), offline (`geolibre://offline-basemap/`), and regional
+ * (`geolibre://regional-basemap/`) — is expanded to an inline style by
+ * {@link resolveMapStyle} and would throw if handed to `fetch`.
+ *
+ * Matching on the scheme rather than enumerating the three prefixes keeps a
+ * fourth sentinel kind from silently reintroducing that fetch, and covers a
+ * sentinel whose id no longer resolves (which the per-kind lookups miss).
+ */
+function isGeoLibreSentinelStyleUrl(styleUrl: string | undefined): boolean {
+  return Boolean(styleUrl?.startsWith("geolibre://"));
+}
+
 function resolveMapStyle(styleUrl: string | undefined): string | maplibregl.StyleSpecification {
   if (styleUrl === BLANK_BASEMAP) return createBlankMapStyle();
   const offline = getOfflineBasemapStyle(styleUrl);
@@ -245,7 +288,66 @@ function resolveMapStyle(styleUrl: string | undefined): string | maplibregl.Styl
     console.warn(`Unknown planetary basemap "${styleUrl}"; falling back to the default basemap.`);
     return DEFAULT_BASEMAP;
   }
+  const regional = getRegionalBasemapByStyleUrl(styleUrl);
+  if (regional) return createRegionalMapStyle(regional);
+  // Same guard as the planetary path: a regional sentinel that no longer
+  // resolves must not be handed to MapLibre as a style URL.
+  if (isRegionalBasemapSentinel(styleUrl)) {
+    console.warn(`Unknown regional basemap "${styleUrl}"; falling back to the default basemap.`);
+    return DEFAULT_BASEMAP;
+  }
   return styleUrl ?? DEFAULT_BASEMAP;
+}
+
+/**
+ * A raster style for a {@link RegionalBasemap} — today the mainland-China
+ * providers, whose tiles are ordinary Web-Mercator images (XYZ, or TMS when
+ * `scheme` says so). A basemap with an `overlayTileUrl` (Amap Hybrid) stacks
+ * its transparent roads-and-labels tiles above the imagery, so one selection
+ * gives a labeled satellite basemap.
+ *
+ * Unlike the planetary styles this uses a light background rather than black:
+ * these cover Earth, so a gap should read as missing map, not as space.
+ */
+function createRegionalMapStyle(basemap: RegionalBasemap): maplibregl.StyleSpecification {
+  const rasterSource = (tiles: string, withAttribution: boolean) =>
+    ({
+      type: "raster",
+      tiles: [tiles],
+      tileSize: 256,
+      maxzoom: basemap.maxZoom,
+      ...(basemap.scheme ? { scheme: basemap.scheme } : {}),
+      // Credit the provider once; repeating it on the overlay would print the
+      // same attribution twice in the map's attribution control.
+      ...(withAttribution ? { attribution: basemap.attribution } : {}),
+    }) satisfies maplibregl.RasterSourceSpecification;
+
+  return {
+    version: 8,
+    sources: {
+      "regional-basemap": rasterSource(basemap.tileUrl, true),
+      ...(basemap.overlayTileUrl
+        ? { "regional-basemap-overlay": rasterSource(basemap.overlayTileUrl, false) }
+        : {}),
+    },
+    layers: [
+      {
+        id: BLANK_BACKGROUND_LAYER_ID,
+        type: "background",
+        paint: { "background-color": BLANK_BACKGROUND_COLOR },
+      },
+      { id: "regional-basemap", type: "raster", source: "regional-basemap" },
+      ...(basemap.overlayTileUrl
+        ? [
+            {
+              id: "regional-basemap-overlay",
+              type: "raster" as const,
+              source: "regional-basemap-overlay",
+            },
+          ]
+        : []),
+    ],
+  };
 }
 
 /**
@@ -363,6 +465,13 @@ export class MapController {
   private geolocateControl: maplibregl.GeolocateControl | null = null;
   private globeControl: maplibregl.GlobeControl | null = null;
   private terrainControl: TerrainControl | null = null;
+  private terrainSource: maplibregl.RasterDEMSourceSpecification = DEFAULT_TERRAIN_SOURCE;
+  private cogDemRegistration: CogDemSourceRegistration | null = null;
+  private cogDemUrl: string | null = null;
+  private cogDemGeneration = 0;
+  // Seam for tests: opening a COG needs a real GeoTIFF over the network, which
+  // the generation-guard tests in setTerrainCogSource have no use for.
+  private openCogDem: typeof registerCogDemSource = registerCogDemSource;
   private terrainExaggeration = DEFAULT_TERRAIN_EXAGGERATION;
   // Undefined until the React layer supplies a translated label; the control
   // falls back to its own default in the meantime (single source for the string).
@@ -644,11 +753,11 @@ export class MapController {
       const props = OPACITY_PAINT_PROPERTIES[styleLayer.type] ?? [];
       for (const prop of props) {
         if (typeof durationMs === "number" && durationMs >= 0) {
-          this.map.setPaintProperty(nativeId, `${prop}-transition`, {
+          setDynamicPaintProperty(this.map, nativeId, `${prop}-transition`, {
             duration: durationMs,
           });
         }
-        this.map.setPaintProperty(nativeId, prop, clamped);
+        setDynamicPaintProperty(this.map, nativeId, prop, clamped);
       }
     }
   }
@@ -674,7 +783,7 @@ export class MapController {
           const styleLayer = this.map.getLayer(nativeId);
           if (!styleLayer) continue;
           for (const prop of OPACITY_PAINT_PROPERTIES[styleLayer.type] ?? []) {
-            this.map.setPaintProperty(nativeId, `${prop}-transition`, {
+            setDynamicPaintProperty(this.map, nativeId, `${prop}-transition`, {
               duration: 0,
             });
           }
@@ -877,6 +986,11 @@ export class MapController {
     this.removeGeolocateControl();
     this.removeGlobeControl();
     this.removeTerrainControl();
+    // Bumping the generation first invalidates a COG registration still being
+    // opened, so it disposes itself instead of attaching to a destroyed map.
+    this.cogDemGeneration += 1;
+    this.cogDemRegistration?.dispose();
+    this.cogDemRegistration = null;
     this.removeScaleControl();
     this.removeAttributionControl();
     this.removeLogoControl();
@@ -944,7 +1058,11 @@ export class MapController {
 
     if (!isMapboxStyleUrl(url)) {
       this.beginStyleSwap();
-      map.setStyle(resolveMapStyle(url));
+      // GeoLibre deliberately rebuilds every style-owned control and layer in
+      // style.load, so diffing cannot preserve any work for us. Disabling it
+      // also avoids MapLibre's noisy fallback when a second basemap arrives
+      // before the current style has finished loading.
+      map.setStyle(resolveMapStyle(url), { diff: false });
       return;
     }
 
@@ -954,7 +1072,7 @@ export class MapController {
       .then((style) => {
         if (this.map !== map || this.styleGeneration !== generation) return;
         this.beginStyleSwap();
-        map.setStyle(style, { validate: false });
+        map.setStyle(style, { diff: false, validate: false });
       })
       .catch((error: unknown) => {
         if (this.map !== map || this.styleGeneration !== generation) return;
@@ -1003,6 +1121,8 @@ export class MapController {
 
   applyView(view: MapViewState): void {
     if (!this.map) return;
+    // jumpTo stop()s drag handlers, so skip while the user is still panning.
+    if (this.map.dragPan.isActive() || this.map.dragRotate.isActive()) return;
     this.map.jumpTo(constrainMapView(view, this.mapPreferences, this.map));
   }
 
@@ -1069,6 +1189,33 @@ export class MapController {
       pitch: this.map.getPitch(),
       bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
     };
+  }
+
+  /**
+   * The camera's height above sea level in metres — Google Earth Pro's
+   * "Eye alt" (issue #1816). Corrected for the active body, since MapLibre
+   * computes it from the Earth-based Mercator scale.
+   *
+   * v6 split `Camera` out of `Map`, moving the transform to `_camera`; v5
+   * exposed it on the map itself. Both are read because `getCameraAltitude` is
+   * also a newer addition, so the whole chain is probed defensively: a MapLibre
+   * bump that drops or renames either should blank the readout, not throw
+   * inside a `moveend` handler.
+   */
+  readCameraAltitude(): number | null {
+    const host = this.map as
+      | {
+          _camera?: { transform?: { getCameraAltitude?: () => number } };
+          transform?: { getCameraAltitude?: () => number };
+        }
+      | undefined;
+    const transform = host?._camera?.transform ?? host?.transform;
+    if (typeof transform?.getCameraAltitude !== "function") return null;
+    try {
+      return scaleAltitudeToActiveBody(transform.getCameraAltitude());
+    } catch {
+      return null;
+    }
   }
 
   syncLayers(layers: GeoLibreLayer[]): void {
@@ -1181,10 +1328,28 @@ export class MapController {
     const userStyleLayerIds = new Set(
       this.syncedLayers.flatMap((layer) => this.getCandidateStyleLayers(layer).map(({ id }) => id)),
     );
+    // A control that rebuilds its own render layers (maplibre-gl-vector swaps
+    // circle <-> heatmap <-> cluster layers on a point-renderer change) does so
+    // asynchronously, so `metadata.nativeLayerIds` can name layers the map no
+    // longer has while the live replacements are missing from the set above.
+    // Those replacements are still the user's data — always drawn from the
+    // layer's own source — so claim every style layer that reads one of the
+    // synced layers' sources. Without this the Background pass mistakes them
+    // for basemap layers: it pins their opacity to whatever it first saw
+    // (breaking the panel's opacity slider) and forces them back to the
+    // basemap's visibility (re-showing a hidden heatmap, #1882). Reuse
+    // getLayerSourceIds so this stays in step with the rest of the controller:
+    // it also covers the singular `metadata.sourceId` some registrations use.
+    const userSourceIds = new Set(
+      this.syncedLayers.flatMap((layer) => this.getLayerSourceIds(layer)),
+    );
     const nonBasemapStyleLayerIds = new Set(NON_BASEMAP_STYLE_LAYER_IDS);
 
     return (map.getStyle().layers ?? []).filter(
-      (layer) => !userStyleLayerIds.has(layer.id) && !nonBasemapStyleLayerIds.has(layer.id),
+      (layer) =>
+        !userStyleLayerIds.has(layer.id) &&
+        !nonBasemapStyleLayerIds.has(layer.id) &&
+        !("source" in layer && typeof layer.source === "string" && userSourceIds.has(layer.source)),
     );
   }
 
@@ -1197,7 +1362,7 @@ export class MapController {
       this.basemapOriginalPaintValues.set(layerId, originalPaintValues);
     }
     if (!originalPaintValues.has(property)) {
-      originalPaintValues.set(property, this.map.getPaintProperty(layerId, property));
+      originalPaintValues.set(property, getDynamicPaintProperty(this.map, layerId, property));
     }
 
     const original = originalPaintValues.get(property);
@@ -1208,9 +1373,9 @@ export class MapController {
           ? original * this.basemapOpacity
           : this.basemapOpacity;
     try {
-      const current = this.map.getPaintProperty(layerId, property);
+      const current = getDynamicPaintProperty(this.map, layerId, property);
       if (styleValuesEqual(current, opacity)) return;
-      this.map.setPaintProperty(layerId, property, opacity);
+      setDynamicPaintProperty(this.map, layerId, property, opacity);
     } catch {
       // Some third-party custom style layers may not expose paint properties.
     }
@@ -1728,7 +1893,7 @@ export class MapController {
       return false;
     }
     if (this.map.getSource(TERRAIN_SOURCE_ID)) return true;
-    this.map.addSource(TERRAIN_SOURCE_ID, TERRAIN_SOURCE);
+    this.map.addSource(TERRAIN_SOURCE_ID, this.terrainSource);
     return true;
   }
 
@@ -1740,16 +1905,14 @@ export class MapController {
     this.layerControlSignature = this.createLayerControlSignature(layerControlConfig);
     this.layerControl = new LayerControl({
       // The layer control fetches this URL to introspect the basemap's layers.
-      // Both planetary and offline basemaps use a non-fetchable `geolibre://`
-      // sentinel (expanded to an inline style by resolveMapStyle), so hand the
-      // control the blank sentinel instead — like blank/raster basemaps it then
-      // skips the fetch (which would otherwise throw "Failed to fetch" on the
+      // Planetary, offline, and regional basemaps all use a non-fetchable
+      // `geolibre://` sentinel (expanded to an inline style by resolveMapStyle),
+      // so hand the control the blank sentinel instead — like blank/raster
+      // basemaps it then skips the fetch (which would otherwise throw on the
       // sentinel URL) and shows a single background entry.
-      basemapStyleUrl:
-        getPlanetaryBasemapByStyleUrl(this.basemapStyleUrl) ||
-        isOfflineBasemapSentinel(this.basemapStyleUrl)
-          ? BLANK_BASEMAP
-          : this.basemapStyleUrl,
+      basemapStyleUrl: isGeoLibreSentinelStyleUrl(this.basemapStyleUrl)
+        ? BLANK_BASEMAP
+        : this.basemapStyleUrl,
       collapsed: true,
       panelWidth: 340,
       panelMinWidth: 240,
@@ -2193,8 +2356,13 @@ export class MapController {
         { id: fillExtrusionLayerId(layer.id), suffix: "Extrusions" },
         { id: fillLayerId(layer.id), suffix: "Polygons" },
         { id: lineLayerId(layer.id), suffix: "Lines" },
+        { id: heatmapLayerId(layer.id), suffix: "Heatmap" },
+        { id: clusterLayerId(layer.id), suffix: "Clusters" },
+        { id: clusterCountLayerId(layer.id), suffix: "Cluster counts" },
         { id: circleLayerId(layer.id), suffix: "Points" },
         { id: markerLayerId(layer.id), suffix: "Markers" },
+        { id: textLayerId(layer.id), suffix: "Text" },
+        { id: labelLayerId(layer.id), suffix: "Labels" },
       ];
     }
 
@@ -2244,14 +2412,15 @@ export class MapController {
       // style, so getNamedStyleLayers (which filters to existing style layers)
       // skips them. Publish their store id -> name directly so the Layer Swipe
       // panel, which lists them by store id via its COG layerProvider, shows a
-      // friendly name instead of the raw id. Scoped to "cog-url" (the
-      // CogLayerControl rasters the provider lists) to match that scope. See
-      // opengeos/GeoLibre#1240.
+      // friendly name instead of the raw id. Scoped to the two kinds that
+      // provider lists -- "cog-url" (CogLayerControl) and "maplibre-gl-raster"
+      // (RasterControl) -- to match that scope. See opengeos/GeoLibre#1240.
       ...layers
         .filter(
           (layer) =>
             layer.type === "cog" &&
-            layer.metadata.sourceKind === "cog-url" &&
+            (layer.metadata.sourceKind === "cog-url" ||
+              layer.metadata.sourceKind === "maplibre-gl-raster") &&
             layer.metadata.externalNativeLayer === true,
         )
         .map((layer): [string, string] => [layer.id, layer.name]),
@@ -2355,7 +2524,7 @@ export class MapController {
     if (!this.map || this.geolocateControl || !this.controlVisibility.geolocate) {
       return false;
     }
-    const control = new maplibregl.GeolocateControl({
+    const control = geolocateControlFactory.create({
       positionOptions: {
         enableHighAccuracy: true,
       },
@@ -2478,6 +2647,81 @@ export class MapController {
   /** Whether GeoLibre's built-in 3D terrain is currently active. */
   isTerrainEnabled(): boolean {
     return this.map?.getTerrain()?.source === TERRAIN_SOURCE_ID;
+  }
+
+  /** The custom HTTP COG DEM URL, or null for a local file / built-in terrain. */
+  getTerrainCogSource(): string | null {
+    return this.cogDemUrl;
+  }
+
+  /** Whether terrain is backed by either a local or HTTP COG DEM. */
+  hasCustomTerrainSource(): boolean {
+    return this.cogDemRegistration !== null;
+  }
+
+  /**
+   * Replace the built-in global terrain with a DEM read directly from a COG.
+   * Passing null restores the default AWS Terrarium source. The COG is opened
+   * and validated before the active terrain is disturbed, so a bad URL leaves
+   * the currently working source in place.
+   *
+   * Resolves true once the source is applied, and false when a later call has
+   * already superseded this one — including when that later call failed, since
+   * the source the user asked for most recently is the one that decides what
+   * happens, and quietly loading an earlier pick behind a visible error would
+   * be the greater surprise. Concurrent callers can tell the two apart.
+   */
+  async setTerrainCogSource(source: string | Blob | null, band = 1): Promise<boolean> {
+    const normalizedSource = typeof source === "string" ? source.trim() || null : source;
+    const generation = ++this.cogDemGeneration;
+    let registration: CogDemSourceRegistration | null = null;
+    try {
+      registration = normalizedSource ? await this.openCogDem(normalizedSource, band) : null;
+    } catch (error) {
+      // A superseded request's failure is as stale as its success would be:
+      // reporting it would let an older pick put an error over the source the
+      // user actually chose last.
+      if (generation === this.cogDemGeneration) throw error;
+      return false;
+    }
+    // A slower, older request must not replace a source selected after it.
+    if (generation !== this.cogDemGeneration) {
+      registration?.dispose();
+      return false;
+    }
+
+    const wasEnabled = this.isTerrainEnabled();
+    if (wasEnabled) {
+      if (this.terrainControl) this.terrainControl.setEnabled(false);
+      else this.map?.setTerrain(null);
+    }
+    if (this.map?.getSource(TERRAIN_SOURCE_ID)) this.map.removeSource(TERRAIN_SOURCE_ID);
+
+    const previous = this.cogDemRegistration;
+    this.cogDemRegistration = registration;
+    this.cogDemUrl = typeof normalizedSource === "string" ? normalizedSource : null;
+    this.terrainSource = registration
+      ? {
+          type: "raster-dem",
+          tiles: registration.tiles,
+          tileSize: 256,
+          maxzoom: 22,
+          encoding: "terrarium",
+          ...(registration.bounds ? { bounds: registration.bounds } : {}),
+          attribution: "Elevation from user-provided Cloud Optimized GeoTIFF",
+        }
+      : DEFAULT_TERRAIN_SOURCE;
+    previous?.dispose();
+
+    if (this.map && this.isStyleReady()) this.addTerrainSource();
+    // A style reload that started while the COG was opening leaves both calls
+    // bailing on their own style guard, which would drop terrain until the user
+    // toggled it again. Defer to handleStyleReady the way autoEnableTerrain
+    // does so it comes back on its own.
+    if (wasEnabled && !this.setTerrainEnabled(true) && this.terrainControl) {
+      this.terrainEnablePending = true;
+    }
+    return true;
   }
 
   /**

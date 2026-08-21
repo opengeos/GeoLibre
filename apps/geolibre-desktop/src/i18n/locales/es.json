@@ -184,7 +184,23 @@
     "elevationRange": "Elevación mín. / máx.",
     "meanSlope": "Pendiente media",
     "computing": "Calculando terreno…",
-    "partialData": "Algunas muestras no tenían datos de terreno"
+    "partialData": "Algunas muestras no tenían datos de terreno",
+    "heading": "Rumbo",
+    "finalHeading": "Rumbo final",
+    "bodyNote": "Medido en: {{body}} (aproximación esférica)"
+  },
+  "statusBar": {
+    "elevation": "Elev",
+    "elevationLong": "Elevación",
+    "cameraAltitude": "Alt. cámara",
+    "cameraAltitudeLong": "Altitud de la cámara sobre el nivel del mar",
+    "coordinateFormat": {
+      "dd": "Grados decimales",
+      "dms": "Grados, minutos, segundos",
+      "ddm": "Grados, minutos decimales",
+      "utm": "UTM (huso, este/norte)"
+    },
+    "coordinateFormatHint": "Formato de coordenadas: {{format}}. Haga clic para cambiar."
   },
   "fileNamePrompt": {
     "title": "Guardar archivo como",
@@ -216,7 +232,9 @@
     "invalidUrl": "Introduzca una URL de estilo HTTP o HTTPS válida.",
     "sectionMoon": "La Luna",
     "sectionMars": "Marte",
-    "sectionOther": "Otros cuerpos celestes"
+    "sectionOther": "Otros cuerpos celestes",
+    "sectionRegional": "Regional",
+    "regionChina": "China (中国)"
   },
   "planetSwitcher": {
     "label": "Cuerpo celeste",
@@ -265,6 +283,10 @@
         "label": "Añadir capa WMTS",
         "description": "Añade una plantilla de URL de teselas WMTS como capa ráster."
       },
+      "ogcFeatures": {
+        "label": "Añadir capa OGC API - Features",
+        "description": "Añade las entidades de una colección OGC API - Features como capa vectorial, siguiendo los enlaces de paginación del servicio hasta cargar el número de entidades solicitado."
+      },
       "ogcVectorTiles": {
         "label": "Añadir teselas vectoriales OGC",
         "description": "Añade un servicio OGC API - Tiles (vectorial) a partir de un TileJSON o una plantilla de teselas, leyendo opcionalmente sus capas de origen desde una URL de estilo."
@@ -299,11 +321,15 @@
       },
       "arcgis": {
         "label": "Añadir capa de ArcGIS",
-        "description": "Añade una capa FeatureServer de ArcGIS, una capa VectorTileServer o un elemento del portal."
+        "description": "Añade una capa de ArcGIS FeatureServer, VectorTileServer, MapServer o ImageServer, o un elemento de portal."
       },
       "postgres": {
         "label": "Añadir capa de PostgreSQL",
         "description": "Inicia Martin localmente, descubre fuentes PostGIS y añade una fuente como teselas vectoriales."
+      },
+      "iceberg": {
+        "label": "Añadir capa Apache Iceberg",
+        "description": "Lee una tabla Iceberg (v3 o superior) y añade un subconjunto de sus entidades."
       },
       "deckglViz": {
         "label": "Añadir capa Deck.gl",
@@ -312,10 +338,6 @@
       "video": {
         "label": "Añadir capa de vídeo",
         "description": "Añade una superposición de vídeo georreferenciado indicando una URL MP4 y cuatro coordenadas de esquina."
-      },
-      "ogcFeatures": {
-        "label": "Añadir capa OGC API - Features",
-        "description": "Añade las entidades de una colección OGC API - Features como capa vectorial, siguiendo los enlaces de paginación del servicio hasta cargar el número de entidades solicitado."
       }
     },
     "shared": {
@@ -427,6 +449,28 @@
       "errorUrl": "Introduzca una plantilla de URL de teselas WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },
+    "ogcFeatures": {
+      "defaultName": "Capa OGC API - Features",
+      "sampleLabel": "Lagos del mundo (demo de pygeoapi)",
+      "urlPlaceholder": "https://example.com/ogcapi",
+      "urlHint": "La página principal del servicio, o cualquier URL copiada de ella (también sirve una URL /collections o /collections/{id}/items).",
+      "retrieveCollections": "Recuperar colecciones",
+      "retrieving": "Recuperando...",
+      "retrievedCollections": "Colecciones recuperadas",
+      "selectCollection_one": "Seleccionar entre {{count}} colección",
+      "selectCollection_other": "Seleccionar entre {{count}} colecciones",
+      "noCollectionsFound": "No se encontraron colecciones de entidades para este servicio.",
+      "retrieveError": "No se pudieron recuperar las colecciones de este servicio.",
+      "collection": "Colección",
+      "collectionPlaceholder": "collection-id",
+      "maxFeatures": "Máximo de entidades",
+      "bbox": "Cuadro delimitador",
+      "datetime": "Fecha y hora",
+      "errorCollection": "Introduzca un id de colección de OGC API - Features.",
+      "errorMaxFeatures": "Introduzca un máximo de entidades de 1 o más.",
+      "errorBbox": "Introduzca el cuadro delimitador como «oeste,sur,este,norte».",
+      "errorNoFeatures": "Esta colección no devolvió ninguna entidad."
+    },
     "ogcVectorTiles": {
       "defaultName": "Capa de teselas vectoriales OGC",
       "tilesUrl": "URL de teselas",
@@ -447,14 +491,39 @@
       "defaultName": "Capa de ArcGIS",
       "sampleFeatureLabel": "Principales ciudades de EE. UU. (entidades)",
       "sampleVectorTileLabel": "Parcelas de Santa Monica (teselas vectoriales)",
+      "sampleMapServiceLabel": "Límites de EE. UU. (servicio de mapas)",
+      "sampleImageServiceLabel": "Relieve sombreado USGS 3DEP (servicio de imágenes)",
       "featureLayer": "Capa de entidades",
       "vectorTileLayer": "Capa de teselas vectoriales",
+      "mapServiceLayer": "Servicio de mapas",
+      "imageServiceLayer": "Servicio de imágenes",
       "portalItemId": "ID del elemento del portal",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Subcapas",
+      "sublayersPlaceholder": "Todas las subcapas visibles",
+      "sublayersHint": "Ids de subcapas opcionales separados por comas, por ejemplo 0,2,5. Seleccionar subcapas dibuja el servicio de forma dinámica en lugar de usar sus teselas en caché.",
+      "retrieveSublayers": "Explorar capas",
+      "retrievingSublayers": "Recuperando...",
+      "availableSublayers": "Subcapas disponibles",
+      "noSublayersFound": "Este servicio de mapas no publicó ninguna capa.",
+      "retrieveError": "No se pudieron recuperar las capas del servicio de mapas.",
+      "errorMapServiceUrl": "Introduzca una URL de ArcGIS MapServer.",
+      "renderingRule": "Regla de representación",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "JSON opcional de una función ráster que aplica el servicio. Una regla de representación dibuja el servicio de forma dinámica en lugar de usar sus teselas en caché.",
       "portalUrl": "URL del portal",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Token de acceso"
+      "accessToken": "Token de acceso",
+      "pageSize": "Registros por solicitud",
+      "pageSizePlaceholder": "Automático",
+      "maxFeatures": "Máximo de entidades",
+      "maxFeaturesPlaceholder": "Todas",
+      "pagingHint": "Las capas de entidades se descargan por páginas. Reduzca los registros por solicitud si el servicio agota el tiempo de espera.",
+      "loadingProgress": "Se cargaron {{loaded}} de {{total}} entidades…",
+      "loadingProgressUnknown": "Se cargaron {{loaded}} entidades…"
     },
     "gpx": {
       "defaultName": "Capa GPX",
@@ -526,6 +595,8 @@
       "errorMissingCrs": "No se pudo detectar el sistema de coordenadas de esta clase de entidad. Introduzca su CRS de origen para añadirla."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "El libro de Excel no contiene hojas de cálculo con datos.",
+      "worksheet": "Hoja de cálculo",
       "defaultName": "Capa de texto delimitado",
       "sampleLabel": "Ciudades de EE. UU.",
       "errorChooseFile": "Elija un archivo de texto delimitado.",
@@ -635,9 +706,45 @@
       "statusTablesFound_other": "Se encontraron {{count}} tablas espaciales.",
       "statusNoTables": "No se encontraron tablas espaciales en esta base de datos.",
       "editableTable": "Tabla",
+      "geometryColumn": "Columna de geometría",
       "tableReadOnly": "{{table}} (solo lectura: sin clave primaria)",
       "errorSelectTable": "Seleccione una tabla para cargar.",
       "errorRuntimeMissing": "El servidor de procesamiento no tiene instalado el entorno de ejecución de PostGIS (psycopg). Instale el extra «postgis» de geolibre-server para cargar capas editables."
+    },
+    "iceberg": {
+      "defaultName": "Capa Iceberg",
+      "notice": "Las tablas Iceberg se leen una sola vez, bajo demanda. La capa es una instantánea limitada al límite de filas indicado abajo y nunca se vuelve a escanear automáticamente; use Actualizar en el menú de la capa para leerla de nuevo.",
+      "mode": "Origen Iceberg",
+      "modeTable": "Ubicación de la tabla",
+      "modeCatalog": "Catálogo REST",
+      "location": "Ubicación de los metadatos de la tabla",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "Almacén (warehouse)",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "Punto de acceso del catálogo",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "Conectar",
+      "table": "Tabla Iceberg",
+      "sql": "SQL (opcional)",
+      "sqlHint": "Edítelo para filtrar o transformar lo que se renderiza. La sentencia debe devolver una columna GEOMETRY; déjela tal como se generó para leer toda la tabla.",
+      "selectTable": "Seleccione una tabla",
+      "geometryColumn": "Columna de geometría",
+      "rowLimit": "Límite de filas",
+      "rowLimitHint": "La capa contiene las primeras filas de la tabla, hasta este límite. El límite no puede superar {{max}} filas.",
+      "rowLimitTruncates": "La tabla contiene {{total}} filas; la capa contendrá las primeras {{limit}}.",
+      "statusConnecting": "Leyendo metadatos de Iceberg...",
+      "statusInspecting": "Inspeccionando la tabla...",
+      "statusInspected": "{{rows}} filas. Geometría: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} filas, pero no se encontró ninguna columna GEOMETRY. La geometría Iceberg debe usar el tipo de geometría de la v3.",
+      "statusTablesFound_one": "Se encontró {{count}} tabla.",
+      "statusTablesFound_other": "Se encontraron {{count}} tablas. Seleccione una para continuar.",
+      "statusNoTables": "El catálogo no expone ninguna tabla.",
+      "errorLocation": "Introduzca la ubicación de los metadatos de la tabla Iceberg.",
+      "errorWarehouse": "Introduzca el almacén (warehouse) Iceberg que desea adjuntar.",
+      "errorEndpoint": "Introduzca el punto de acceso del catálogo REST de Iceberg.",
+      "errorConnect": "No se pudo leer el origen Iceberg.",
+      "errorInspect": "No se pudo inspeccionar la tabla Iceberg.",
+      "errorConnectFirst": "Conecte y seleccione primero una tabla Iceberg."
     },
     "video": {
       "defaultName": "Capa de vídeo",
@@ -687,15 +794,15 @@
       "bandCombinationHelp": "Una sola banda se representa con un mapa de colores; una composición RGB dibuja tres bandas de esta variable como los canales rojo, verde y azul, cada uno ajustado a su propio rango del 2-98 %.",
       "modeSingleBand": "Banda única (con mapa de colores)",
       "modeRgb": "Composición RGB (tres bandas)",
-      "colorMin": "Color mínimo (opcional)",
-      "colorMax": "Color máximo (opcional)",
-      "adding": "Añadiendo...",
-      "addLayer": "Añadir capa",
       "channel": {
         "red": "Banda roja",
         "green": "Banda verde",
         "blue": "Banda azul"
-      }
+      },
+      "colorMin": "Color mínimo (opcional)",
+      "colorMax": "Color máximo (opcional)",
+      "adding": "Añadiendo...",
+      "addLayer": "Añadir capa"
     },
     "deckViz": {
       "defaultName": "Capa Deck.gl",
@@ -732,28 +839,6 @@
       "lineWidth": "Ancho de línea",
       "extrusion": "Extrusión 3D",
       "modelUrlPlaceholder": "https://example.com/model.glb"
-    },
-    "ogcFeatures": {
-      "defaultName": "Capa OGC API - Features",
-      "sampleLabel": "Lagos del mundo (demo de pygeoapi)",
-      "urlPlaceholder": "https://example.com/ogcapi",
-      "urlHint": "La página principal del servicio, o cualquier URL copiada de ella (también sirve una URL /collections o /collections/{id}/items).",
-      "retrieveCollections": "Recuperar colecciones",
-      "retrieving": "Recuperando...",
-      "retrievedCollections": "Colecciones recuperadas",
-      "selectCollection_one": "Seleccionar entre {{count}} colección",
-      "selectCollection_other": "Seleccionar entre {{count}} colecciones",
-      "noCollectionsFound": "No se encontraron colecciones de entidades para este servicio.",
-      "retrieveError": "No se pudieron recuperar las colecciones de este servicio.",
-      "collection": "Colección",
-      "collectionPlaceholder": "collection-id",
-      "maxFeatures": "Máximo de entidades",
-      "bbox": "Cuadro delimitador",
-      "datetime": "Fecha y hora",
-      "errorCollection": "Introduzca un id de colección de OGC API - Features.",
-      "errorMaxFeatures": "Introduzca un máximo de entidades de 1 o más.",
-      "errorBbox": "Introduzca el cuadro delimitador como «oeste,sur,este,norte».",
-      "errorNoFeatures": "Esta colección no devolvió ninguna entidad."
     },
     "nonGeographicCoordinates": "Las coordenadas de {{names}} no son de longitud/latitud, por lo que no se dibujará nada en el mapa. El CRS está mal declarado: reproyecte los datos (o corrija su .prj) y vuelva a cargarlos."
   },
@@ -1127,6 +1212,7 @@
     "guest": "Invitado",
     "connectFailed": "No se pudo conectar con el servidor de colaboración.",
     "copyFailed": "No se pudo copiar al portapapeles.",
+    "shareFailed": "No se pudieron compartir los últimos cambios del proyecto.",
     "connecting": "Conectando…",
     "reconnecting": "Reconectando…",
     "connected": "Sesión en vivo activa",
@@ -1148,6 +1234,9 @@
     "viewOnly": "Solo lectura",
     "allowEdit": "Permitir que esta persona edite",
     "setViewOnly": "Poner a esta persona en solo lectura",
+    "kick": "Expulsar al participante",
+    "block": "Bloquear al participante",
+    "requireIdentityLabel": "Requerir una cuenta con sesión iniciada para unirse",
     "chatLog": "Chat de la sesión",
     "chatCompose": "Escriba un mensaje",
     "chatEmpty": "Aún no hay mensajes.",
@@ -1157,7 +1246,11 @@
     "chatLocationAttached": "Ubicación adjunta (haga clic para quitarla)",
     "chatGoToLocation": "Ir a esta ubicación",
     "sessionStatusUnread_one": "Sesión de colaboración en vivo, {{count}} mensaje sin leer. Haga clic para ver quién está conectado y chatear.",
-    "sessionStatusUnread_other": "Sesión de colaboración en vivo, {{count}} mensajes sin leer. Haga clic para ver quién está conectado y chatear."
+    "sessionStatusUnread_other": "Sesión de colaboración en vivo, {{count}} mensajes sin leer. Haga clic para ver quién está conectado y chatear.",
+    "lockLayer": "Bloquear capa para los invitados",
+    "unlockLayer": "Desbloquear capa para los invitados",
+    "layerLocked": "Bloqueada",
+    "layerLockedHint": "Esta capa está bloqueada por el anfitrión y no se puede editar"
   },
   "share": {
     "title": "Compartir proyecto",
@@ -1170,6 +1263,7 @@
     "step2Description": "Pegue el token en Configuración → Variables de entorno en este dispositivo.",
     "configureToken": "Configurar token local",
     "liveAt": "Su proyecto está publicado en:",
+    "credentialsRemoved": "No se incluyeron {{count}} campo(s) de credenciales. Los destinatarios deben proporcionar sus propias credenciales o usar una referencia intermediada.",
     "copyLink": "Copiar enlace",
     "open": "Abrir",
     "done": "Listo",
@@ -1185,7 +1279,28 @@
     "errorFallback": "No se pudo compartir el proyecto.",
     "usernameRequired": "Configure un nombre de usuario en su cuenta de {{shareHost}} antes de compartir. Abra la configuración de su cuenta para elegir uno y vuelva a intentarlo.",
     "openAccountSettings": "Abrir configuración de la cuenta",
-    "credentialsRemoved": "No se incluyeron {{count}} campo(s) de credenciales. Los destinatarios deben proporcionar sus propias credenciales o usar una referencia intermediada."
+    "readinessChecking": "Comprobando si los destinatarios pueden cargar sus datos…",
+    "readinessUnavailable": "No se pudo ejecutar la comprobación de las fuentes de datos.",
+    "readinessAllReachable_one": "{{count}} fuente de datos parece accesible para los destinatarios.",
+    "readinessAllReachable_other": "Las {{count}} fuentes de datos parecen accesibles para los destinatarios.",
+    "readinessTitle": "Puede que algunos datos no se carguen para los destinatarios",
+    "readinessNote": "Esto no impide compartir. Los destinatarios abren el proyecto en un navegador, donde estas fuentes pueden comportarse de forma distinta a como lo hacen en su equipo.",
+    "readinessTruncated_one": "Solo se comprobó {{count}} fuente.",
+    "readinessTruncated_other": "Solo se comprobaron las primeras {{count}} fuentes.",
+    "readinessBasemapLabel": "Mapa base",
+    "readinessPluginLabel": "Complemento",
+    "readinessReasonCredentialStripped": "Usa una credencial que se elimina al compartir.",
+    "readinessReasonAuthRequired": "El servicio rechazó una solicitud sin credenciales.",
+    "readinessReasonCors": "Un navegador no puede acceder a este host: no envía encabezados entre orígenes, o no está disponible.",
+    "readinessReasonNotFound": "El servicio respondió «no encontrado», por lo que el enlace puede haber caducado o cambiado de dirección.",
+    "readinessReasonLocalFile": "Apunta a un archivo de su equipo.",
+    "readinessReasonPrivateHost": "Apunta a una dirección de red privada o local.",
+    "readinessReasonNoSource": "No tiene ninguna fuente que un destinatario pueda abrir.",
+    "readinessReasonUnchecked": "No se pudo comprobar.",
+    "readinessAdviceCredential": "Haga público el servicio, o pida a los destinatarios que aporten su propia credencial.",
+    "readinessAdviceCors": "Se sigue cargando en la aplicación de escritorio, pero no en el visor del navegador.",
+    "readinessAdviceNotFound": "Actualice o sustituya la fuente de esta capa antes de compartir.",
+    "readinessAdviceLocal": "Conviértala en una fuente alojada, o cuente con que los destinatarios verán una capa vacía."
   },
   "gallery": {
     "title": "Galería de proyectos",
@@ -1302,13 +1417,19 @@
       "layer": "Capa",
       "titleLabel": "Encabezado",
       "position": "Posición",
-      "filterToPage": "Solo entidades en la extensión de la página",
-      "filterToPageHint": "Se aplica a las páginas de atlas y a una extensión de impresión dibujada; en caso contrario se usa toda la capa."
+      "pageFilter": "Filtro de extensión de página",
+      "filterAll": "Todas las entidades",
+      "filterContained": "Solo entidades completamente dentro de la extensión de página",
+      "filterIntersecting": "Solo entidades que intersectan la extensión de página",
+      "filterToPageHint": "Se aplica a las páginas de atlas y a una extensión de impresión dibujada; en caso contrario se usa toda la capa.",
+      "filterToAtlasFeature": "Solo la entidad actual del atlas",
+      "filterToAtlasFeatureHint": "Disponible cuando la tabla usa la capa de cobertura del atlas. Tiene prioridad sobre el filtro de extensión de página."
     },
     "dataTable": {
       "columns": "Columnas",
       "columnsHint": "Los primeros {{count}} campos se seleccionan de forma predeterminada. Marque columnas para personalizar.",
       "maxRows": "Máx. de filas",
+      "fitRows": "Ajustar el número de filas a la página",
       "moreRows_one": "+{{count}} más",
       "moreRows_other": "+{{count}} más",
       "noRows": "No hay filas que mostrar con la configuración actual."
@@ -1433,6 +1554,8 @@
       "extentMargin": "Margen alrededor de la entidad",
       "extentScale": "Escala fija",
       "marginLabel": "Margen (%)",
+      "maskOutside": "Enmascarar el área fuera de la entidad actual",
+      "maskOutsideHint": "Aplica un relleno invertido translúcido para resaltar la entidad actual del atlas.",
       "scaleLabel": "Escala",
       "scaleRequired": "Introduzca una escala mayor que cero.",
       "sortField": "Ordenar por",
@@ -1500,6 +1623,19 @@
     "description": "Ajuste la exageración vertical del terreno 3D. Los valores más altos hacen que las colinas y montañas parezcan más pronunciadas.",
     "label": "Exageración vertical",
     "controlLabel": "Alternar terreno (doble clic para exageración)",
+    "sourceLabel": "Fuente de terreno",
+    "sourceDescription": "Utilice un COG de una sola banda en EPSG:3857 o EPSG:4326 como fuente de elevación. El archivo debe permitir CORS y solicitudes de rango HTTP.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "DEM COG local",
+    "localSourceDescription": "El archivo permanece en este dispositivo y se lee en pequeños rangos a medida que se necesitan teselas de terreno.",
+    "useCog": "Usar DEM COG",
+    "sourceLoading": "Abriendo COG…",
+    "restoreDefaultSource": "Usar terreno global",
+    "sourceError": "No se pudo abrir el DEM COG.",
+    "sourceErrorEmpty": "Ese archivo está vacío. Elija un archivo DEM COG.",
+    "sourceErrorBand": "La banda solicitada no existe en este COG.",
+    "sourceErrorProjection": "El relieve COG solo admite DEM en EPSG:3857 y EPSG:4326.",
+    "sourceErrorDetail": "No se pudo abrir el DEM COG. ({{detail}})",
     "reset": "Restablecer",
     "done": "Listo"
   },
@@ -1527,6 +1663,16 @@
     "gapNote": "Los segmentos discontinuos abarcan fechas sin lectura (nodata o fuera de la cobertura).",
     "exportCsv": "Exportar CSV",
     "exportGeoParquet": "Exportar GeoParquet"
+  },
+  "auth": {
+    "unavailableTitle": "El inicio de sesión no está disponible",
+    "unavailableDescription": "GeoLibre no pudo conectar con el servicio de inicio de sesión, por lo que no puede saber si ha iniciado sesión. Esto suele ser temporal; si persiste, es posible que haya que revisar la configuración de autenticación de esta implementación.",
+    "retry": "Intentar de nuevo",
+    "signInTitle": "Inicie sesión en GeoLibre",
+    "signInDescription": "Esta implementación requiere una cuenta. Se le llevará a una página de inicio de sesión segura y volverá aquí.",
+    "signIn": "Iniciar sesión",
+    "signOut": "Cerrar sesión",
+    "account": "Cuenta"
   },
   "basemapExtract": {
     "title": "Extraer mapa base sin conexión",
@@ -1658,8 +1804,13 @@
     "unit": {
       "meters": "m",
       "kilometers": "km",
-      "miles": "mi"
-    }
+      "miles": "mi",
+      "feet": "ft"
+    },
+    "viewshedHere": "Cuenca visual desde aquí ({{radius}})",
+    "viewshedLayerName": "Cuenca visual ({{radius}})",
+    "viewshedToolName": "Cuenca visual",
+    "viewshedNoResult": "No se pudo calcular un área visible aquí."
   },
   "knowledgeCard": {
     "title": "Información del lugar",
@@ -1703,7 +1854,8 @@
       "geocoding": "Geocodificación",
       "ai": "Proveedores de IA",
       "environment": "Entorno",
-      "updates": "Actualizaciones"
+      "updates": "Actualizaciones",
+      "startup": "Inicio"
     },
     "menu": {
       "mapPreferences": "Preferencias del mapa",
@@ -1714,6 +1866,7 @@
       "ai": "Proveedores de IA",
       "environmentVariables": "Variables de entorno",
       "updates": "Configuración de actualizaciones",
+      "startupSettings": "Configuración de inicio",
       "managePlugins": "Administrar complementos",
       "styleManager": "Administrador de estilos",
       "urlOverrideNote": "Los parámetros de diseño de la URL anulan la configuración guardada."
@@ -1730,6 +1883,26 @@
         "minor": "Solo versiones mayores y menores",
         "major": "Solo versiones mayores"
       }
+    },
+    "startup": {
+      "title": "Proyecto de inicio",
+      "description": "Elija el espacio de trabajo que GeoLibre abre al iniciarse la aplicación nativa.",
+      "mode": {
+        "default": "Abrir el espacio de trabajo predeterminado",
+        "last": "Volver a abrir el último proyecto",
+        "specific": "Abrir un proyecto específico"
+      },
+      "modeHint": {
+        "default": "Empezar con un proyecto nuevo sin título.",
+        "last": "Abrir el proyecto local usado más recientemente."
+      },
+      "chooseProject": "Elegir proyecto",
+      "noProjectSelected": "Ningún proyecto seleccionado",
+      "globeByDefault": "Activar el globo 3D de forma predeterminada",
+      "globeByDefaultHint": "Se usa para el espacio de trabajo sin título cuando no se indica un proyecto de inicio ni un enlace de proyecto.",
+      "selectError": "No se pudo leer el proyecto seleccionado.",
+      "restoring": "Abriendo su proyecto de inicio…",
+      "loadWarning": "El proyecto de inicio no está disponible. GeoLibre abrió el espacio de trabajo predeterminado en su lugar."
     },
     "map": {
       "constraintsTitle": "Restricciones del mapa",
@@ -1752,7 +1925,9 @@
       "scaleUnitImperial": "Imperiales (ft / mi)",
       "scaleUnitNautical": "Náuticas (nmi)",
       "scaleUnitHint": "Elija las unidades que se muestran en la barra de escala en la parte inferior del mapa.",
-      "errorBoundsUnavailable": "Los límites del mapa aún no están disponibles."
+      "errorBoundsUnavailable": "Los límites del mapa aún no están disponibles.",
+      "coordinateFormat": "Formato de coordenadas",
+      "coordinateFormatHint": "Notación con la que la barra de estado muestra la coordenada del puntero. Haga clic en las coordenadas de la barra de estado para cambiar de notación."
     },
     "layout": {
       "title": "Diseño",
@@ -2090,7 +2265,8 @@
       "dashboard": "Panel de control",
       "assistant": "Asistente de IA",
       "geocode": "Geocodificar direcciones",
-      "modelBuilder": "Lotes y modelos",
+      "batchTools": "Herramientas por lotes",
+      "modelBuilder": "Constructor de modelos",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "Segmentación con IA",
@@ -2145,7 +2321,8 @@
       "video": "Capa de vídeo",
       "deckglViz": "Capa Deck.gl",
       "gltfModel": "Modelo 3D (glTF)",
-      "postgres": "Capa de PostgreSQL"
+      "postgres": "Capa de PostgreSQL",
+      "iceberg": "Capa Apache Iceberg"
     },
     "conversion": {
       "vectorToVector": "Vectorial a vectorial",
@@ -2172,6 +2349,7 @@
       "rasterShape": "Se leyó un ráster de {{width}}×{{height}} con {{bands}} banda(s)",
       "wroteCog": "Se escribió un COG teselado con vistas generales ({{compression}})",
       "notAGeoTiff": "Este archivo no es un GeoTIFF legible. En el navegador, Ráster a COG solo lee GeoTIFF; otros formatos necesitan la aplicación de escritorio.",
+      "rasterTooLargeForBrowser": "En el navegador esto descodifica el ráster completo en WebAssembly, que está limitado a unos 4 GB, por lo que este no cabe. Conviértalo con la aplicación de escritorio de GeoLibre, o cree el COG previamente con gdal_translate o rio-cogeo.",
       "zoomRangeError": "Los niveles de zoom deben cumplir 0 ≤ mín ≤ máx ≤ {{max}}.",
       "colormap": "Mapa de colores",
       "resampling": "Remuestreo",
@@ -2417,7 +2595,7 @@
       "duckdbLayer": "Capa DuckDB",
       "whitebox": "Whitebox",
       "geocode": "Geocodificar direcciones",
-      "modelBuilder": "Lotes y modelos",
+      "modelBuilder": "Constructor de modelos",
       "processingHistory": "Historial",
       "conversion": "Conversión",
       "vector": "Vectorial",
@@ -2429,7 +2607,7 @@
       "terrain": "Terreno",
       "remoteSensing": "Teledetección",
       "projection": "Proyección",
-      "geolibre": "GeoLibre",
+      "geolibre": "Caja de herramientas de GeoLibre",
       "subGroupGeometry": "Geometría",
       "subGroupOverlay": "Superposición",
       "subGroupJoin": "Unión",
@@ -2453,6 +2631,8 @@
       "atmosphereEnabled": "Activado",
       "spinGlobe": "Globo giratorio",
       "graticule": "Cuadrícula",
+      "pointerElevation": "Elevación",
+      "pointerElevationHint": "Mostrar la elevación del terreno bajo el puntero en la barra de estado. Sin terreno 3D se consulta un servicio público de elevación.",
       "weather": "Clima",
       "weatherTooltip": "Superponga capas meteorológicas casi en tiempo real que puede animar.",
       "weatherPlay": "Reproducir animación",
@@ -2499,6 +2679,22 @@
       "arcgisImportWarnings_one": "El proyecto se importó, pero no se pudo cargar {{count}} capa.",
       "arcgisImportWarnings_other": "El proyecto se importó, pero no se pudieron cargar {{count}} capas.",
       "arcgisUnknownLayerType": "desconocido",
+      "importWarningLayerCount_one": "{{count}} capa",
+      "importWarningLayerCount_other": "{{count}} capas",
+      "showLayerNames": "Mostrar los nombres de las capas",
+      "hideLayerNames": "Ocultar los nombres de las capas",
+      "arcgisImportReason": {
+        "layer-type": "El tipo de capa {{layerType}} no es compatible.",
+        "missing-source": "La capa no tiene una fuente de datos local legible.",
+        "format": "El formato de datos de la capa no es compatible.",
+        "file-geodatabase": "Las fuentes de geodatabase de archivos (.gdb) no se cargan desde los proyectos. En GeoLibre Desktop, añádelas con Añadir datos → Geodatabase de archivos (GDB).",
+        "file-geodatabase-raster": "Los conjuntos de datos ráster almacenados en una geodatabase de archivos (.gdb) no son compatibles. Exporta el ráster a GeoTIFF y añádelo como capa ráster.",
+        "network-path": "Las rutas de recursos compartidos de red no se cargan por motivos de seguridad.",
+        "service": "Las capas de servicio de ArcGIS incluidas en proyectos aún no son compatibles.",
+        "browser-local-file": "Se hace referencia al archivo local, pero los navegadores no pueden volver a abrir rutas de datos de ArcGIS Pro. Use GeoLibre Desktop para cargarlo.",
+        "map-extent": "La extensión de mapa guardada usa un sistema de coordenadas que GeoLibre no puede convertir, así que el mapa se abrió en una vista predeterminada.",
+        "nesting": "El grupo está anidado a demasiada profundidad, o el proyecto remite a un grupo que ya lo contiene."
+      },
       "qgisImportComplete": "Proyecto de QGIS importado",
       "qgisImportWarnings_one": "El proyecto se importó, pero no se pudo cargar {{count}} capa.",
       "qgisImportWarnings_other": "El proyecto se importó, pero no se pudieron cargar {{count}} capas.",
@@ -2524,6 +2720,7 @@
       "embedVectorTitle": "¿Incrustar datos vectoriales locales?",
       "embedVectorDesc": "Este proyecto tiene {{count}} capa(s) vectorial(es) local(es) cargadas desde su equipo. El navegador no puede volver a leerlas cuando se reabre el proyecto, así que sus datos deben incrustarse en el archivo del proyecto para poder restaurarse. Incrustarlas añade aproximadamente {{size}} al archivo.",
       "embedVectorDescDesktop": "Este proyecto tiene {{count}} capa(s) vectorial(es) local(es) cargadas desde su equipo. Incruste sus datos para hacer el proyecto autónomo (añade aproximadamente {{size}}), o guarde referencias de archivo que se recarguen desde el disco al reabrir el proyecto. Las referencias mantienen el archivo pequeño, pero se rompen si el archivo de origen se mueve o elimina más adelante.",
+      "embedVectorLargeWarning": "Incrustar unos {{size}} genera un archivo de proyecto muy grande. Volver a abrirlo puede ser lento o fallar por completo, porque hay que analizar y mantener en memoria todas las entidades a la vez. Para datos de este tamaño, convierta las capas a PMTiles o FlatGeobuf y añádalas como capas remotas en lugar de incrustarlas.",
       "embedVectorEmbedButton": "Incrustar datos",
       "embedVectorReferenceButton": "Guardar referencias de archivo",
       "embedVectorSkipButton": "Guardar sin datos",
@@ -2564,16 +2761,9 @@
       "loadingOsmPbfProgress": "Convirtiendo entidades a GeoJSON… {{processed}} de {{total}} entidades OSM procesadas.",
       "projectName": "Nombre del proyecto",
       "storymapEllipsis": "Mapa narrativo...",
-      "arcgisImportReason": {
-        "layer-type": "El tipo de capa {{layerType}} no es compatible.",
-        "missing-source": "La capa no tiene una fuente de datos local legible.",
-        "format": "El formato de datos de la capa no es compatible.",
-        "network-path": "Las rutas de recursos compartidos de red no se cargan por motivos de seguridad.",
-        "service": "Las capas de servicio de ArcGIS incluidas en proyectos aún no son compatibles.",
-        "browser-local-file": "Se hace referencia al archivo local, pero los navegadores no pueden volver a abrir rutas de datos de ArcGIS Pro. Use GeoLibre Desktop para cargarlo.",
-        "map-extent": "La extensión de mapa guardada usa un sistema de coordenadas que GeoLibre no puede convertir, así que el mapa se abrió en una vista predeterminada.",
-        "nesting": "El grupo está anidado a demasiada profundidad, o el proyecto remite a un grupo que ya lo contiene."
-      }
+      "pointerElevationNoticeTitle": "La elevación se obtiene de un servicio público",
+      "pointerElevationNoticeDesc": "La elevación se obtiene del relieve 3D del mapa cuando está activo, sin enviar nada. Sin relieve 3D se consulta la API pública de Open-Meteo y las coordenadas bajo el puntero salen de su dispositivo.",
+      "batchTools": "Herramientas por lotes"
     },
     "plugin": {
       "maplibre-gl-annotations": "Anotaciones",
@@ -2647,6 +2837,7 @@
       "couldNotOpenRecentProject": "No se pudo abrir el proyecto reciente.",
       "couldNotLoadRecentProject": "No se pudo cargar el proyecto reciente.",
       "couldNotSaveProject": "No se pudo guardar el proyecto.",
+      "projectTooLargeToSave": "Este proyecto es demasiado grande para guardarlo. Convierta sus datos vectoriales incrustados a PMTiles o FlatGeobuf y añádalos como capas remotas en lugar de incrustar las entidades.",
       "couldNotExportHtml": "No se pudo exportar el proyecto a HTML.",
       "osmPbfNoFeatures": "No se encontraron entidades de puntos, líneas o polígonos en este archivo OSM PBF.",
       "couldNotLoadOsmPbf": "No se pudo cargar el archivo OSM PBF.",
@@ -2897,6 +3088,203 @@
     "includeParents": "Incluir las celdas padre de la celda seleccionada",
     "showIcosahedron": "Mostrar el icosaedro"
   },
+  "s2Plugin": {
+    "title": "Cuadrícula S2",
+    "controlTitle": "Configuración de la cuadrícula S2",
+    "autoResolution": "Resolución automática",
+    "resolution": "Resolución",
+    "cellCount": "Celdas en la vista: {{count}}",
+    "tooManyCells": "Esta vista supera el límite de {{limit}} celdas. Acerque el zoom o reduzca la resolución.",
+    "fillColor": "Color de relleno",
+    "fillOpacity": "Opacidad de relleno",
+    "lineColor": "Color de contorno",
+    "lineWidth": "Ancho del contorno",
+    "showLabels": "Mostrar los id de celda",
+    "identifyHint": "Haga clic en el mapa para identificar una celda S2.",
+    "selectedCell": "Celda seleccionada",
+    "noSelection": "Ninguna celda seleccionada",
+    "copyId": "Copiar id",
+    "parent": "Celda padre",
+    "children": "Celdas hijas",
+    "neighbors": "Vecinas",
+    "center": "Centro",
+    "zoomToCell": "Ajustar zoom a la celda",
+    "addAsLayer": "Añadir la cuadrícula como capa",
+    "exportGeoJson": "Exportar GeoJSON",
+    "exportCsv": "Exportar CSV",
+    "includeNeighbors": "Incluir las vecinas de la celda seleccionada",
+    "includeParents": "Incluir las celdas padre de la celda seleccionada"
+  },
+  "a5Plugin": {
+    "title": "Cuadrícula A5",
+    "controlTitle": "Configuración de la cuadrícula A5",
+    "autoResolution": "Resolución automática",
+    "resolution": "Resolución",
+    "cellCount": "Celdas en la vista: {{count}}",
+    "tooManyCells": "Esta vista supera el límite de {{limit}} celdas. Acerque el zoom o reduzca la resolución.",
+    "fillColor": "Color de relleno",
+    "fillOpacity": "Opacidad de relleno",
+    "lineColor": "Color de contorno",
+    "lineWidth": "Ancho del contorno",
+    "showLabels": "Mostrar los id de celda",
+    "identifyHint": "Haga clic en el mapa para identificar una celda A5.",
+    "selectedCell": "Celda seleccionada",
+    "noSelection": "Ninguna celda seleccionada",
+    "copyId": "Copiar id",
+    "parent": "Celda padre",
+    "children": "Celdas hijas",
+    "neighbors": "Vecinas",
+    "center": "Centro",
+    "zoomToCell": "Ajustar zoom a la celda",
+    "addAsLayer": "Añadir la cuadrícula como capa",
+    "exportGeoJson": "Exportar GeoJSON",
+    "exportCsv": "Exportar CSV",
+    "includeNeighbors": "Incluir las vecinas de la celda seleccionada",
+    "includeParents": "Incluir las celdas padre de la celda seleccionada"
+  },
+  "dggridPlugin": {
+    "title": "DGGRID",
+    "controlTitle": "Configuración de DGGRID",
+    "cellType": "Tipo de celda",
+    "topologyHexagon": "Hexágono",
+    "topologyDiamond": "Rombo",
+    "topologyTriangle": "Triángulo",
+    "projection": "Proyección",
+    "aperture": "Apertura",
+    "autoResolution": "Resolución automática",
+    "resolution": "Resolución",
+    "cellCount": "Celdas en la vista: {{count}}",
+    "tooManyCells": "Esta vista supera el límite de {{limit}} celdas. Acerque el zoom o reduzca la resolución.",
+    "fillColor": "Color de relleno",
+    "fillOpacity": "Opacidad de relleno",
+    "lineColor": "Color de contorno",
+    "lineWidth": "Ancho del contorno",
+    "showLabels": "Mostrar los id de celda",
+    "identifyHint": "Haga clic en el mapa para identificar una celda DGGRID.",
+    "selectedCell": "Celda seleccionada",
+    "noSelection": "Ninguna celda seleccionada",
+    "copyId": "Copiar id",
+    "parent": "Celda padre",
+    "children": "Celdas hijas",
+    "neighbors": "Vecinas",
+    "center": "Centro",
+    "zoomToCell": "Ajustar zoom a la celda",
+    "addAsLayer": "Añadir la cuadrícula como capa",
+    "exportGeoJson": "Exportar GeoJSON",
+    "exportCsv": "Exportar CSV",
+    "includeNeighbors": "Incluir las vecinas de la celda seleccionada",
+    "includeParents": "Incluir las celdas padre de la celda seleccionada"
+  },
+  "dggalPlugin": {
+    "title": "DGGAL",
+    "controlTitle": "Configuración de DGGAL",
+    "gridType": "Tipo de DGGS",
+    "autoResolution": "Resolución automática",
+    "resolution": "Resolución",
+    "cellCount": "Celdas en la vista: {{count}}",
+    "tooManyCells": "Esta vista supera el límite de {{limit}} celdas. Acerque el zoom o reduzca la resolución.",
+    "fillColor": "Color de relleno",
+    "fillOpacity": "Opacidad de relleno",
+    "lineColor": "Color de contorno",
+    "lineWidth": "Ancho del contorno",
+    "showLabels": "Mostrar los id de celda",
+    "identifyHint": "Haga clic en el mapa para identificar una celda DGGAL.",
+    "selectedCell": "Celda seleccionada",
+    "noSelection": "Ninguna celda seleccionada",
+    "copyId": "Copiar id",
+    "parent": "Celda padre",
+    "children": "Celdas hijas",
+    "neighbors": "Vecinas",
+    "center": "Centro",
+    "zoomToCell": "Ajustar zoom a la celda",
+    "addAsLayer": "Añadir la cuadrícula como capa",
+    "exportGeoJson": "Exportar GeoJSON",
+    "exportCsv": "Exportar CSV",
+    "includeNeighbors": "Incluir las vecinas de la celda seleccionada",
+    "includeParents": "Incluir las celdas padre de la celda seleccionada"
+  },
+  "olcPlugin": {
+    "title": "OLC",
+    "controlTitle": "Configuración de OLC",
+    "autoResolution": "Resolución automática",
+    "resolution": "Resolución",
+    "cellCount": "Celdas en la vista: {{count}}",
+    "tooManyCells": "Esta vista supera el límite de {{limit}} celdas. Acerque el zoom o reduzca la resolución.",
+    "fillColor": "Color de relleno",
+    "fillOpacity": "Opacidad de relleno",
+    "lineColor": "Color de contorno",
+    "lineWidth": "Ancho del contorno",
+    "showLabels": "Mostrar los id de celda",
+    "identifyHint": "Haga clic en el mapa para identificar una celda OLC.",
+    "selectedCell": "Celda seleccionada",
+    "noSelection": "Ninguna celda seleccionada",
+    "copyId": "Copiar id",
+    "parent": "Celda padre",
+    "children": "Celdas hijas",
+    "neighbors": "Vecinas",
+    "center": "Centro",
+    "zoomToCell": "Ajustar zoom a la celda",
+    "addAsLayer": "Añadir la cuadrícula como capa",
+    "exportGeoJson": "Exportar GeoJSON",
+    "exportCsv": "Exportar CSV",
+    "includeNeighbors": "Incluir las vecinas de la celda seleccionada",
+    "includeParent": "Incluir la celda padre de la celda seleccionada"
+  },
+  "geohashPlugin": {
+    "title": "Geohash",
+    "controlTitle": "Configuración de Geohash",
+    "autoResolution": "Resolución automática",
+    "resolution": "Resolución",
+    "cellCount": "Celdas en la vista: {{count}}",
+    "tooManyCells": "Esta vista supera el límite de {{limit}} celdas. Acerque el zoom o reduzca la resolución.",
+    "fillColor": "Color de relleno",
+    "fillOpacity": "Opacidad de relleno",
+    "lineColor": "Color de contorno",
+    "lineWidth": "Ancho del contorno",
+    "showLabels": "Mostrar los id de celda",
+    "identifyHint": "Haga clic en el mapa para identificar una celda Geohash.",
+    "selectedCell": "Celda seleccionada",
+    "noSelection": "Ninguna celda seleccionada",
+    "copyId": "Copiar id",
+    "parent": "Celda padre",
+    "children": "Celdas hijas",
+    "neighbors": "Vecinas",
+    "center": "Centro",
+    "zoomToCell": "Ajustar zoom a la celda",
+    "addAsLayer": "Añadir la cuadrícula como capa",
+    "exportGeoJson": "Exportar GeoJSON",
+    "exportCsv": "Exportar CSV",
+    "includeNeighbors": "Incluir las vecinas de la celda seleccionada",
+    "includeParent": "Incluir la celda padre de la celda seleccionada"
+  },
+  "tilecodePlugin": {
+    "title": "Tilecode",
+    "controlTitle": "Configuración de Tilecode",
+    "autoResolution": "Resolución automática",
+    "resolution": "Resolución",
+    "cellCount": "{{count}} teselas en la vista",
+    "tooManyCells": "Esta vista supera el límite de {{limit}} teselas. Acerque el zoom o reduzca la resolución.",
+    "fillColor": "Color de relleno",
+    "fillOpacity": "Opacidad de relleno",
+    "lineColor": "Color de contorno",
+    "lineWidth": "Ancho del contorno",
+    "showLabels": "Mostrar los id de tesela",
+    "identifyHint": "Haga clic en el mapa para identificar una tesela.",
+    "selectedCell": "Tesela seleccionada",
+    "noSelection": "Ninguna tesela seleccionada",
+    "copyId": "Copiar id",
+    "quadkey": "Quadkey",
+    "parent": "Tesela padre",
+    "children": "Teselas hijas",
+    "neighbors": "Vecinas",
+    "center": "Centro",
+    "zoomToCell": "Ajustar zoom a la tesela",
+    "addAsLayer": "Añadir la cuadrícula como capa",
+    "exportGeoJson": "Exportar GeoJSON",
+    "exportCsv": "Exportar CSV",
+    "includeNeighbors": "Incluir las vecinas de la tesela seleccionada",
+    "includeParent": "Incluir la tesela padre de la tesela seleccionada"
+  },
   "timelapse": {
     "title": "Timelapse",
     "provider": "Fuente de imágenes",
@@ -3017,6 +3405,98 @@
     "added": "Se añadió {{title}}.",
     "addError": "No se pudo añadir el conjunto de datos.",
     "searchError": "La búsqueda falló."
+  },
+  "stacPlugin": {
+    "title": "Catálogos STAC",
+    "footprintLayerName": "Huellas de búsqueda STAC",
+    "catalogSearch": "Buscar un catálogo público en STAC Index",
+    "catalogSearchPlaceholder": "Buscar nombres de catálogos…",
+    "indexLoading": "Cargando STAC Index…",
+    "indexUnavailable": "STAC Index no disponible: introduce una URL",
+    "indexLoadFailed": "No se pudo cargar STAC Index",
+    "urlLabel": "URL del catálogo o de la API STAC",
+    "connect": "Conectar",
+    "connecting": "Conectando con STAC…",
+    "connected": "Conectado. Elige filtros y busca.",
+    "connectFailed": "No se pudo conectar con STAC",
+    "selectCatalog": "Selecciona un catálogo…",
+    "noMatchingCatalogs": "No hay catálogos coincidentes",
+    "catalogApiSuffix": " (API)",
+    "catalogStaticSuffix": " (estático)",
+    "kindApi": "API STAC",
+    "kindStatic": "catálogo estático",
+    "collectionsHint": "Mantén Ctrl/Cmd para seleccionar varias colecciones; arrastra el borde inferior para cambiar el tamaño",
+    "limitToExtent": "Limitar la búsqueda a la extensión actual del mapa",
+    "bboxLabel": "Cuadro delimitador (oeste, sur, este, norte)",
+    "bboxPlaceholder": "Opcional; anula la extensión del mapa",
+    "bboxInvalid": "Introduce un cuadro delimitador válido: oeste, sur, este, norte.",
+    "drawBbox": "Dibujar cuadro en el mapa",
+    "cancelDrawing": "Cancelar dibujo",
+    "clearDrawnBbox": "Borrar cuadro dibujado",
+    "drawHint": "Haz clic y arrastra sobre el mapa para dibujar un cuadro de búsqueda.",
+    "drawnBbox": "Cuadro dibujado: {{bbox}}",
+    "drawnBboxCleared": "Cuadro dibujado borrado.",
+    "mapNotReady": "El mapa no está listo para dibujar.",
+    "startDate": "Fecha de inicio",
+    "endDate": "Fecha de fin",
+    "additionalParams": "Parámetros de búsqueda adicionales (JSON, solo API STAC)",
+    "additionalInvalid": "Los parámetros de búsqueda adicionales deben ser un objeto JSON.",
+    "searchItems": "Buscar elementos",
+    "clearResults": "Borrar resultados",
+    "resultsCleared": "Resultados de búsqueda borrados.",
+    "searching": "Buscando elementos STAC…",
+    "loadingMore": "Cargando más elementos…",
+    "noMatchesHere": "Nada coincidió en esa parte del catálogo. Carga más para seguir buscando.",
+    "treeEmpty": "Vacío",
+    "treeOpenFailed": "No se pudo abrir este catálogo",
+    "noResults": "Ningún elemento STAC coincide con estos filtros.",
+    "searchFailed": "Error en la búsqueda STAC",
+    "showing": "Mostrando {{count}} elementos.",
+    "showingOfMatched": "Mostrando {{count}} de {{matched}} elementos.",
+    "loadMore": "Cargar más",
+    "renderOptions": "Opciones de representación ráster",
+    "renderingEngine": "Motor de renderizado COG",
+    "engineAuto": "Dejar sin cambios",
+    "engineWasm": "Teselador WebAssembly (compatible con el globo)",
+    "engineGpu": "GPU (deck.gl, solo Mercator)",
+    "engineTitiler": "Servidor TiTiler",
+    "engineHint": "Qué renderizador descodifica las imágenes. A diferencia de los ajustes anteriores, este no es por capa: se aplica a todos los ráster del mapa, incluidos los ya añadidos.",
+    "resizeResults": "Redimensionar los resultados de búsqueda",
+    "bands": "Bandas",
+    "bandsPlaceholder": "p. ej., 1 o 1,2,3 (predeterminado: automático)",
+    "colormap": "Mapa de colores (solo una banda)",
+    "colormapDefault": "Predeterminado del renderizador",
+    "minValue": "Valor mínimo",
+    "maxValue": "Valor máximo",
+    "nodata": "Valor NoData",
+    "nodataPlaceholder": "Anula la etiqueta NoData del archivo",
+    "renderHint": "Deja un campo vacío para que el renderizador lo deduzca del GeoTIFF. Las opciones se aplican a los recursos añadidos después de cambiarlas.",
+    "initialStatus": "Elige un catálogo de STAC Index o introduce una URL.",
+    "catalogInfo": "{{title}} · {{kind}}",
+    "zoom": "Acercar",
+    "add": "Añadir",
+    "download": "Descargar",
+    "adding": "Añadiendo {{asset}}…",
+    "added": "{{asset}} añadido al mapa.",
+    "addUnsupported": "Solo se pueden añadir al mapa recursos GeoTIFF/COG, GeoJSON, GeoParquet y PMTiles",
+    "addFailed": "No se pudo añadir el recurso",
+    "addNoSourceLayers": "Este archivo no incluye capas que dibujar",
+    "addNoTarget": "Este recurso no incluye nada que dibujar",
+    "addIcechunkFailed": "No se pudo abrir este repositorio Icechunk",
+    "zarrProblemGroup": "Este recurso designa un grupo de matrices, no una que se pueda dibujar",
+    "zarrProblemMissing": "Este almacén no contiene esa variable",
+    "zarrProblemUnauthorized": "Este almacén Zarr necesita credenciales que GeoLibre aún no puede proporcionar",
+    "zarrProblemUnsupportedUrl": "La dirección de este almacén Zarr no se puede leer clave por clave",
+    "zarrProblemUnavailable": "No se pudo abrir este almacén Zarr",
+    "chooseTarget": "Elige qué añadir",
+    "cogUnsupported": "Este host de GeoLibre no puede visualizar recursos GeoTIFF remotos",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
+    "formatUnknown": "Formato desconocido",
+    "notAddable": "no se puede añadir"
   },
   "earthdataGis": {
     "hint": "Busque en NASA Earthdata GIS servicios de imágenes, de mapas y de entidades.",
@@ -3246,6 +3726,10 @@
     "confirmStyleReplace_one": "Cambiar a «{{name}}» reemplaza todo el estilo del mapa y eliminará el mapa base apilado que añadió. ¿Continuar?",
     "confirmStyleReplace_other": "Cambiar a «{{name}}» reemplaza todo el estilo del mapa y eliminará los {{count}} mapas base apilados que añadió. ¿Continuar?"
   },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "Propiedades de la entidad",
+    "massingHeight": "Altura (m)"
+  },
   "annotations": {
     "toolbar": "Herramientas de anotación",
     "layerName": "Anotaciones",
@@ -3411,9 +3895,9 @@
     "clear": "Borrar conversación",
     "close": "Cerrar asistente",
     "send": "Enviar",
-    "sendHint": "Enviar (Ctrl/Cmd+Intro)",
+    "sendHint": "Enviar (Intro)",
     "stop": "Detener",
-    "placeholder": "Pregunte sobre sus datos, p. ej., «mostrar países con población superior a 50 millones» · Ctrl/Cmd+Intro para enviar",
+    "placeholder": "Pregunte sobre sus datos, p. ej., «mostrar países con población superior a 50 millones» · Intro para enviar, Mayús+Intro para una nueva línea",
     "intro": "Chatee con sus datos. Puedo ejecutar SQL espacial, añadir o quitar capas, restilizarlas y mover el mapa; todos los cambios se pueden deshacer. Pruebe con «colorea los países por población con una rampa roja graduada».",
     "setupTitle": "Configurar el asistente de IA",
     "setupStatus": "El asistente necesita un proveedor de IA para razonar. Añada credenciales para cualquier proveedor a continuación y el panel cambiará al modo de chat en cuanto guarde.",
@@ -3523,6 +4007,8 @@
       "bylinePlaceholder": "Autor o línea de crédito",
       "footerText": "Texto de pie de página",
       "footerPlaceholder": "Pie de página mostrado en la parte inferior de cada página",
+      "markers": "Marcadores de ubicación en los que se puede hacer clic",
+      "markersHint": "Se dibuja un marcador en la ubicación de cada capítulo. Al hacer clic en el marcador en un visor de PDF se abre esa coordenada en Google Maps.",
       "startSlide": "Diapositiva inicial",
       "endSlide": "Diapositiva de cierre",
       "generate": "Generar PDF",
@@ -3608,33 +4094,101 @@
       "count_other": "{{count}} ejecuciones registradas",
       "toolUnavailable": "La herramienta «{{toolId}}» ya no está disponible"
     },
-    "modelBuilder": {
-      "moveStepUp": "Mover paso arriba",
-      "moveStepDown": "Mover paso abajo",
-      "removeStep": "Quitar paso",
-      "title": "Lotes y modelos",
-      "description": "Ejecute una herramienta vectorial sobre muchas capas, o encadene herramientas en un modelo reutilizable guardado con su proyecto.",
-      "tabBatch": "Lote",
-      "tabModels": "Modelos",
-      "outputPlaceholder": "La salida aparecerá aquí.",
+    "batchTools": {
+      "title": "Herramientas por lotes",
+      "description": "Ejecutar una herramienta vectorial sobre muchas capas a la vez.",
+      "runBatch": "Ejecutar lote",
       "tool": "Herramienta",
       "sharedParameters": "Parámetros compartidos",
       "noExtraParameters": "Esta herramienta no tiene parámetros adicionales.",
       "inputLayers": "Capas de entrada",
-      "selectAll": "Seleccionar todo",
       "clearSelection": "Limpiar",
+      "selectAll": "Seleccionar todo",
       "noCompatibleLayers": "No hay capas GeoJSON compatibles.",
-      "newModel": "Nuevo modelo",
-      "noSavedModels": "Aún no hay modelos guardados.",
-      "untitledModel": "Modelo sin título",
+      "outputPlaceholder": "La salida aparecerá aquí."
+    },
+    "modelBuilder": {
+      "title": "Constructor de modelos",
+      "description": "Arrastre herramientas al lienzo y conéctelas para formar un modelo de procesamiento.",
       "modelName": "Nombre del modelo",
-      "emptyPipelineHint": "Añada un paso para empezar a construir la cadena. El primer paso lee una capa de entrada; cada paso posterior recibe la salida del paso anterior.",
-      "addStep": "Añadir paso",
-      "runModel": "Ejecutar el modelo",
+      "modelNamePlaceholder": "Modelo sin título",
+      "untitledModel": "Modelo sin título",
+      "newModel": "Nuevo",
+      "discardChanges": "¿Descartar los cambios sin guardar del modelo actual?",
+      "discardRunning": "Todavía se está ejecutando un modelo. ¿Detenerlo y continuar?",
+      "arrange": "Organizar",
+      "arrangeHint": "Distribuir los nodos siguiendo el flujo",
+      "runModel": "Ejecutar",
+      "cancelRun": "Cancelar",
+      "runCancelled": "Ejecución cancelada.",
+      "issueMissingLayer": "Elija una capa de entrada.",
+      "issueUnknownTool": "Herramienta desconocida «{{tool}}».",
+      "issueMissingInput": "«{{port}}» necesita una conexión o un valor.",
+      "issueUnknownPort": "Una conexión hace referencia a un puerto que ya no existe.",
+      "issueDuplicateInput": "«{{port}}» ya tiene una conexión entrante.",
+      "issueTypeMismatch": "Esos puertos transportan tipos de datos distintos.",
+      "issueCycle": "El modelo contiene un bucle.",
+      "issueNoOutput": "Añada un nodo de salida para conservar un resultado.",
+      "issueDuplicateNode": "Dos o más nodos comparten el mismo identificador.",
+      "issueDanglingEdge": "Una conexión apunta a un nodo que ya no existe.",
+      "outputAddFailed": "No se pudo añadir «{{name}}» al mapa",
+      "catalogUnavailable": "No se pudieron cargar las herramientas, así que el modelo no puede comprobarse ni ejecutarse.",
+      "addToolNode": "Añadir {{tool}} al lienzo",
+      "importTooLarge": "Ese modelo es demasiado grande para abrirlo.",
+      "importModel": "Importar",
+      "exportModel": "Exportar",
+      "copyPython": "Copiar script de Python",
+      "pythonCopied": "El script de Python se copió al portapapeles.",
+      "pythonCopyFailed": "No se pudo copiar el script de Python",
+      "savedModels": "Modelos guardados",
+      "loadModelPlaceholder": "Cargar un modelo guardado...",
       "deleteModel": "Eliminar",
-      "inputPreviousStep": "Entrada: ← salida del paso anterior",
-      "unknownTool": "Herramienta desconocida «{{id}}»",
-      "noParameters": "Sin parámetros."
+      "deletedLog": "Modelo eliminado del proyecto.",
+      "searchTools": "Buscar herramientas",
+      "loadingTools": "Cargando herramientas...",
+      "noToolsMatch": "Ninguna herramienta coincide con su búsqueda.",
+      "addInputNode": "+ Entrada",
+      "addOutputNode": "+ Salida",
+      "canvasEmpty": "Arrastre una herramienta desde la paleta para empezar.",
+      "inputNode": "Entrada",
+      "outputNode": "Salida",
+      "inputPort": "Entrada: {{port}}",
+      "outputPort": "Salida: {{port}}",
+      "removeConnection": "Quitar conexión",
+      "removeNode": "Quitar nodo",
+      "resizePanel": "Cambiar el tamaño del panel",
+      "minimizePanel": "Minimizar el panel",
+      "restorePanel": "Restaurar el panel",
+      "resizePalette": "Cambiar el tamaño de la paleta de herramientas",
+      "resizeInspector": "Cambiar el tamaño del panel de propiedades",
+      "resizeLog": "Cambiar el tamaño del registro de mensajes",
+      "selectNodeHint": "Seleccione un nodo para editar su configuración.",
+      "sourceLayer": "Capa de origen",
+      "chooseLayer": "Elija una capa...",
+      "resultName": "Nombre del resultado",
+      "resultNamePlaceholder": "Salida del modelo",
+      "noParameters": "Sin parámetros.",
+      "keepResultHint": "Conserva un resultado intermedio añadiéndole una salida.",
+      "keepResultSingle": "Conservar este resultado",
+      "resultKeptSingle": "Este resultado se conserva",
+      "keepResult": "Conservar «{{port}}»",
+      "resultKept": "«{{port}}» se conserva",
+      "outputPlaceholder": "Los mensajes aparecen aquí.",
+      "connectCycle": "Esa conexión crearía un bucle.",
+      "connectSameNode": "Un nodo no puede conectarse consigo mismo.",
+      "fixIssuesFirst": "Corrija los problemas indicados antes de ejecutar.",
+      "runFailed": "La ejecución falló",
+      "runFinished": "Ejecución terminada: se añadieron {{outputs}} salida(s).",
+      "savedLog": "Modelo guardado en el proyecto.",
+      "exportedLog": "{{name}} exportado",
+      "importedLog": "Se importó un modelo con {{nodes}} nodo(s).",
+      "importFailed": "La importación falló",
+      "importInvalid": "Ese archivo no contiene un grafo de modelo.",
+      "importUnsupported": "Ese archivo no es un modelo de GeoLibre.",
+      "rasterOutputUnsupported": "«{{name}}» es un resultado ráster que esta versión no puede añadir al mapa.",
+      "portNeedsVector": "«{{port}}» necesita datos vectoriales, pero llegó un ráster.",
+      "toolNoOutput": "«{{tool}}» no produjo ningún resultado.",
+      "toolNoUsableOutput": "«{{tool}}» no produjo ningún resultado utilizable."
     },
     "parameterField": {
       "selectLayer": "Seleccionar una capa...",
@@ -3746,6 +4300,1438 @@
       "run": "Ejecutar",
       "outputPlaceholder": "La salida aparecerá aquí.",
       "resolutionRange": "Resolución (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "Búfer",
+          "description": "Crea un polígono de búfer alrededor de cada entidad a una distancia fija",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "distance": {
+              "label": "Distancia"
+            },
+            "units": {
+              "label": "Unidades",
+              "options": {
+                "kilometers": "Kilómetros",
+                "meters": "Metros",
+                "miles": "Millas"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "Centroides",
+          "description": "Calcula el punto centroide de cada entidad",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "Envolvente convexa",
+          "description": "Calcula la envolvente convexa que encierra todas las entidades",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "Disolver",
+          "description": "Fusiona entidades poligonales en una sola geometría, opcionalmente agrupadas por un campo",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "field": {
+              "label": "Campo de disolución (opcional)",
+              "description": "Nombre de la propiedad por la que agrupar las entidades antes de disolver"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "Cuadro delimitador",
+          "description": "Calcula el rectángulo envolvente de todas las entidades",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            }
+          }
+        },
+        "simplify": {
+          "name": "Simplificar",
+          "description": "Reduce el número de vértices mediante Douglas-Peucker",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "tolerance": {
+              "label": "Tolerancia (grados)"
+            },
+            "highQuality": {
+              "label": "Alta calidad"
+            }
+          }
+        },
+        "clip": {
+          "name": "Recortar",
+          "description": "Recorta la capa de entrada al área cubierta por una capa de superposición (conserva los atributos de entrada)",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "overlay": {
+              "label": "Capa de superposición (recorte)"
+            }
+          }
+        },
+        "intersection": {
+          "name": "Intersección",
+          "description": "Conserva solo las áreas donde ambas capas poligonales se superponen",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "overlay": {
+              "label": "Capa de superposición"
+            }
+          }
+        },
+        "difference": {
+          "name": "Diferencia",
+          "description": "Elimina el área de la capa de superposición de la capa de entrada",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "overlay": {
+              "label": "Capa de superposición"
+            }
+          }
+        },
+        "union": {
+          "name": "Unión",
+          "description": "Fusiona dos capas poligonales en una sola geometría combinada",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "overlay": {
+              "label": "Capa de superposición"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "Unión espacial",
+          "description": "Adjunta atributos de una capa de unión a cada entidad de entrada según una relación espacial",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "overlay": {
+              "label": "Capa de unión"
+            },
+            "predicate": {
+              "label": "Relación espacial",
+              "options": {
+                "intersects": "Interseca",
+                "within": "Dentro de",
+                "contains": "Contiene"
+              }
+            },
+            "how": {
+              "label": "Tipo de unión",
+              "options": {
+                "inner": "Interna (conservar solo las entidades coincidentes)",
+                "left": "Izquierda (conservar todas las entidades de entrada)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "Unión de atributos",
+          "description": "Adjunta atributos de una capa de unión (una tabla) a cada entidad de entrada donde coincide un campo clave, sin usar la geometría. Uno a uno: gana la primera fila de unión coincidente.",
+          "params": {
+            "layer": {
+              "label": "Capa de destino"
+            },
+            "overlay": {
+              "label": "Capa de unión (tabla)",
+              "description": "La capa cuyos atributos se incorporan. Su geometría se ignora."
+            },
+            "target_field": {
+              "label": "Campo clave de destino"
+            },
+            "join_field": {
+              "label": "Campo clave de unión"
+            },
+            "how": {
+              "label": "Tipo de unión",
+              "options": {
+                "left": "Izquierda (conservar todas las entidades de destino)",
+                "inner": "Interna (conservar solo las entidades coincidentes)"
+              }
+            },
+            "fields": {
+              "label": "Campos a incorporar (opcional)",
+              "description": "Campos de unión a copiar, separados por comas. Déjelo en blanco para incorporar todos los campos de unión excepto la clave."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "Seleccionar por valor",
+          "description": "Extrae a una nueva capa las entidades cuyo valor de atributo cumple una condición",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "field": {
+              "label": "Campo"
+            },
+            "operator": {
+              "label": "Operador",
+              "options": {
+                "eq": "= (igual a)",
+                "neq": "≠ (distinto de)",
+                "gt": "> (mayor que)",
+                "gte": "≥ (mayor o igual que)",
+                "lt": "< (menor que)",
+                "lte": "≤ (menor o igual que)",
+                "contains": "contiene (texto)",
+                "starts-with": "empieza por (texto)",
+                "is-null": "está vacío",
+                "is-not-null": "no está vacío"
+              }
+            },
+            "value": {
+              "label": "Valor",
+              "description": "Se compara como número cuando ambos lados son numéricos."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "Seleccionar por ubicación",
+          "description": "Extrae a una nueva capa las entidades según su relación espacial con una segunda capa",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "overlay": {
+              "label": "Capa de filtro"
+            },
+            "predicate": {
+              "label": "Relación espacial",
+              "options": {
+                "intersects": "Interseca",
+                "within": "Dentro de",
+                "contains": "Contiene",
+                "disjoint": "Disjunto (sin intersección)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "Extracción aleatoria",
+          "description": "Extrae a una nueva capa un subconjunto aleatorio de entidades, definido por un número de entidades o un porcentaje de la entrada.",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "method": {
+              "label": "Método",
+              "options": {
+                "count": "Número de entidades",
+                "percentage": "Porcentaje de entidades"
+              }
+            },
+            "count": {
+              "label": "Número de entidades",
+              "description": "Se limita al número de entidades de entrada cuando es mayor."
+            },
+            "percentage": {
+              "label": "Porcentaje de entidades"
+            }
+          }
+        },
+        "reproject": {
+          "name": "Reproyectar",
+          "description": "Reinterpreta las coordenadas de una capa como un CRS de origen y las transforma a WGS84 para que se muestren en la ubicación correcta. Requiere el motor Sidecar o Python.",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "source_crs": {
+              "label": "CRS de origen",
+              "description": "El CRS en el que realmente están las coordenadas de la capa (p. ej., EPSG:3857). El resultado se transforma a WGS84 (EPSG:4326)."
+            }
+          }
+        },
+        "explode": {
+          "name": "Explosionar",
+          "description": "Divide las geometrías multiparte en entidades de una sola parte (una entidad por parte), conservando los atributos de cada entidad original",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "Agregar por atributo",
+          "description": "Disuelve las entidades que comparten un valor de atributo en una geometría por grupo, con una estadística de resumen",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "group_field": {
+              "label": "Campo de agrupación"
+            },
+            "statistic": {
+              "label": "Estadística",
+              "options": {
+                "count": "Recuento",
+                "sum": "Suma",
+                "mean": "Media",
+                "min": "Mín.",
+                "max": "Máx.",
+                "median": "Mediana"
+              }
+            },
+            "stat_field": {
+              "label": "Campo de la estadística",
+              "description": "Campo numérico resumido por la estadística anterior."
+            }
+          }
+        },
+        "smooth": {
+          "name": "Suavizar",
+          "description": "Redondea las esquinas de líneas y polígonos con el algoritmo de Chaikin (añade vértices), a diferencia de la reducción de vértices de Simplificar. Se conserva la Z/elevación; los puntos pasan sin cambios.",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "iterations": {
+              "label": "Iteraciones",
+              "description": "Más iteraciones dan un resultado más suave (1-10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "Cuadrícula regular",
+          "description": "Genera una cuadrícula rectangular regular (malla) de celdas sobre una extensión. Origen: la vista actual del mapa, la extensión de una capa o un cuadro delimitador manual.",
+          "params": {
+            "source": {
+              "label": "Origen de la extensión",
+              "options": {
+                "viewport": "Vista del mapa",
+                "layer": "Extensión de la capa",
+                "bbox": "Cuadro delimitador manual"
+              }
+            },
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "west": {
+              "label": "Oeste (lon. mín.)"
+            },
+            "south": {
+              "label": "Sur (lat. mín.)"
+            },
+            "east": {
+              "label": "Este (lon. máx.)"
+            },
+            "north": {
+              "label": "Norte (lat. máx.)"
+            },
+            "cell_width": {
+              "label": "Ancho de celda (grados)"
+            },
+            "cell_height": {
+              "label": "Alto de celda (grados)",
+              "description": "Déjelo en blanco para que coincida con el ancho de celda."
+            },
+            "cell_type": {
+              "label": "Tipo de celda",
+              "options": {
+                "polygon": "Rectángulos",
+                "point": "Puntos (centros de celda)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "Construye un diagrama de Voronoi (un polígono por punto, recortado a la extensión de los puntos) o una triangulación de Delaunay a partir de una capa de puntos.",
+          "params": {
+            "layer": {
+              "label": "Capa de puntos de entrada"
+            },
+            "type": {
+              "label": "Diagrama",
+              "options": {
+                "voronoi": "Polígonos de Voronoi",
+                "delaunay": "Triángulos de Delaunay"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "Cobertura de sitios celulares",
+          "description": "Construye polígonos de sector/cuña de antena a partir de sitios puntuales usando acimut, radio y ancho de haz (leídos de campos de atributos o valores fijos). El ancho de haz se limita a 360° (círculo completo); el ancho de haz registrado refleja el valor limitado. Útil para la cobertura de torres de telefonía, como QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "Capa de puntos de entrada"
+            },
+            "azimuthField": {
+              "label": "Campo de acimut (°)",
+              "description": "Dirección a la que mira el sector, en grados en sentido horario desde el norte. Si está en blanco o no es numérico, se usa el acimut fijo."
+            },
+            "azimuth": {
+              "label": "Acimut (fijo, °)"
+            },
+            "radiusField": {
+              "label": "Campo de radio",
+              "description": "Radio de cobertura. Si está en blanco o no es numérico, se usa el radio fijo."
+            },
+            "radius": {
+              "label": "Radio (fijo)"
+            },
+            "beamwidthField": {
+              "label": "Campo de ancho de haz (°)",
+              "description": "Anchura angular del sector, limitada a 360° (círculo completo). Si está en blanco o no es numérico, se usa el ancho de haz fijo."
+            },
+            "beamwidth": {
+              "label": "Ancho de haz (fijo, °)"
+            },
+            "units": {
+              "label": "Unidades del radio",
+              "options": {
+                "kilometers": "Kilómetros",
+                "meters": "Metros",
+                "miles": "Millas"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "Generador DGGS",
+          "description": "Rellena un área con celdas DGGS (H3, S2, A5, DGGRID, DGGAL). Origen: la geometría de una capa, la extensión de una capa, la vista actual del mapa o un cuadro delimitador manual.",
+          "params": {
+            "dggsType": {
+              "label": "Tipo de DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "Tipo de DGGRID",
+              "description": "Configuración de la cuadrícula que se pasa a duck_dggs como dggs_params (ISEA/FULLER × apertura × topología).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "Tipo de DGGAL",
+              "description": "DGGRS que se pasa a dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "Origen del área",
+              "options": {
+                "polyfill": "Geometría de la capa (relleno de polígonos)",
+                "extent": "Extensión de la capa (bbox)",
+                "viewport": "Vista del mapa",
+                "bbox": "Cuadro delimitador manual"
+              }
+            },
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "west": {
+              "label": "Oeste (lon. mín.)"
+            },
+            "south": {
+              "label": "Sur (lat. mín.)"
+            },
+            "east": {
+              "label": "Este (lon. máx.)"
+            },
+            "north": {
+              "label": "Norte (lat. máx.)"
+            },
+            "resolution": {
+              "label": "Resolución",
+              "description": "El rango depende del tipo de DGGS. Déjelo en blanco para elegirla automáticamente según el área."
+            },
+            "compactCells": {
+              "label": "Compactar celdas",
+              "description": "Fusiona conjuntos completos de celdas hermanas en celdas padre más gruesas (menos entidades, resoluciones mixtas)."
+            },
+            "fixAntimeridian": {
+              "label": "Corregir antimeridiano",
+              "description": "Desenvuelve los anillos de celdas que cruzan la longitud ±180°."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "Agrupación DGGS",
+          "description": "Agrega una capa de puntos en celdas DGGS (recuento, o suma/media/mín./máx. de un campo numérico).",
+          "params": {
+            "dggsType": {
+              "label": "Tipo de DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "Tipo de DGGRID",
+              "description": "Configuración de la cuadrícula que se pasa a duck_dggs como dggs_params (ISEA/FULLER × apertura × topología).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "Tipo de DGGAL",
+              "description": "DGGRS que se pasa a dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "Capa de puntos de entrada"
+            },
+            "aggOp": {
+              "label": "Agregación",
+              "options": {
+                "count": "Recuento",
+                "sum": "Suma",
+                "mean": "Media",
+                "min": "Mín.",
+                "max": "Máx."
+              }
+            },
+            "field": {
+              "label": "Campo",
+              "description": "Campo numérico a agregar."
+            },
+            "resolution": {
+              "label": "Resolución",
+              "description": "El rango depende del tipo de DGGS. Déjelo en blanco para elegirla automáticamente según el área."
+            },
+            "fixAntimeridian": {
+              "label": "Corregir antimeridiano",
+              "description": "Desenvuelve los anillos de celdas que cruzan la longitud ±180°."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "Compactación DGGS",
+          "description": "Compacta celdas poligonales DGGS, o las expande a una resolución uniforme (H3, S2, A5, DGGAL). La entrada debe ser una capa de celdas con una propiedad de identificador.",
+          "params": {
+            "dggsType": {
+              "label": "Tipo de DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "Tipo de DGGAL",
+              "description": "DGGRS que se pasa a dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "Modo",
+              "options": {
+                "compact": "Compactar",
+                "expand": "Expandir"
+              }
+            },
+            "layer": {
+              "label": "Capa DGGS de entrada",
+              "description": "Capa de celdas poligonales del Generador DGGS / Agrupación DGGS (o equivalente)."
+            },
+            "cellField": {
+              "label": "Campo de identificador de celda",
+              "description": "Si se deja en blanco, se usa h3, a5, s2 o dggal según el tipo seleccionado."
+            },
+            "resolution": {
+              "label": "Resolución de destino",
+              "description": "Resolución a la que expandir. Debe ser al menos tan fina como las celdas de entrada."
+            },
+            "fixAntimeridian": {
+              "label": "Corregir antimeridiano",
+              "description": "Desenvuelve los anillos de celdas que cruzan la longitud ±180°."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "Velocidad de trayectoria",
+          "description": "Ordena los puntos por tiempo (por objetivo) y conecta las posiciones consecutivas en segmentos con distancia, duración y velocidad. Como QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Capa de puntos de entrada"
+            },
+            "timeField": {
+              "label": "Campo de tiempo",
+              "description": "Marca de tiempo de cada posición: una cadena de fecha/hora ISO o una época Unix (segundos o milisegundos)."
+            },
+            "idField": {
+              "label": "Campo de identificador del objetivo",
+              "description": "Divide los puntos en trayectorias separadas. Déjelo en blanco para tratar todos los puntos como un solo objetivo."
+            },
+            "speedUnits": {
+              "label": "Unidades de velocidad",
+              "options": {
+                "km/h": "km/h",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "Detectar paradas",
+          "description": "Encuentra los lugares donde un objetivo permanece: series de posiciones consecutivas que se mantienen dentro de una distancia (absorbiendo la dispersión del GPS) durante al menos una duración mínima. Genera un punto por parada. Como QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Capa de puntos de entrada"
+            },
+            "timeField": {
+              "label": "Campo de tiempo",
+              "description": "Marca de tiempo de cada posición: una cadena de fecha/hora ISO o una época Unix (segundos o milisegundos)."
+            },
+            "idField": {
+              "label": "Campo de identificador del objetivo",
+              "description": "Detecta paradas por objetivo. Déjelo en blanco para tratar todos los puntos como un solo objetivo."
+            },
+            "maxDistance": {
+              "label": "Distancia máxima",
+              "description": "Cada posición de una parada debe estar a menos de esta distancia de la primera posición de la parada (de modo que una parada puede abarcar hasta el doble de este valor). Ajústelo al radio de dispersión de su GPS."
+            },
+            "distanceUnits": {
+              "label": "Unidades de distancia",
+              "options": {
+                "meters": "Metros",
+                "kilometers": "Kilómetros",
+                "miles": "Millas"
+              }
+            },
+            "minDuration": {
+              "label": "Duración mínima (s)",
+              "description": "Una permanencia más corta que esta no se notifica como parada."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "Proximidad espacio-temporal",
+          "description": "Encuentra pares de puntos cercanos tanto en el espacio como en el tiempo; p. ej., dos objetivos que se encuentran. Genera una línea que conecta cada par válido, con la distancia y la diferencia de tiempo.",
+          "params": {
+            "layer": {
+              "label": "Capa de puntos de entrada"
+            },
+            "timeField": {
+              "label": "Campo de tiempo",
+              "description": "Marca de tiempo de cada punto: una cadena de fecha/hora ISO o una época Unix (segundos o milisegundos)."
+            },
+            "idField": {
+              "label": "Campo de identificador del objetivo",
+              "description": "Si se indica, solo se emparejan puntos con valores de identificador DISTINTOS (encuentros entre objetivos diferentes). Déjelo en blanco para considerar todos los pares."
+            },
+            "maxDistance": {
+              "label": "Distancia máxima"
+            },
+            "distanceUnits": {
+              "label": "Unidades de distancia",
+              "options": {
+                "meters": "Metros",
+                "kilometers": "Kilómetros",
+                "miles": "Millas"
+              }
+            },
+            "maxTime": {
+              "label": "Diferencia de tiempo máxima"
+            },
+            "timeUnits": {
+              "label": "Unidades de tiempo",
+              "options": {
+                "seconds": "Segundos",
+                "minutes": "Minutos",
+                "hours": "Horas"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "Comprobar validez",
+          "description": "Encuentra entidades con geometría no válida (reglas GEOS: anillos autointersecantes, huecos fuera del contorno, ...) y las marca en el mapa",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "Corregir geometrías",
+          "description": "Repara geometrías no válidas con ST_MakeValid (GEOS); las entidades válidas pasan sin cambios",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "Comprobar reglas de topología",
+          "description": "Valida la capa según reglas de topología (superposiciones, huecos, autointersecciones, extremos sueltos) y marca cada infracción en el mapa",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "ruleSelfIntersect": {
+              "label": "Las líneas no deben autointersecarse"
+            },
+            "ruleOverlap": {
+              "label": "Los polígonos no deben superponerse"
+            },
+            "ruleGaps": {
+              "label": "Los polígonos no deben tener huecos"
+            },
+            "ruleDangles": {
+              "label": "Las líneas no deben tener extremos sueltos"
+            },
+            "rulePointCovered": {
+              "label": "Los puntos deben estar cubiertos por una línea"
+            },
+            "ruleEndpointSnap": {
+              "label": "Los extremos de las líneas deben conectarse dentro de la tolerancia"
+            },
+            "snapTolerance": {
+              "label": "Tolerancia de ajuste",
+              "description": "Para la regla de extremos: distancia máxima (en unidades de coordenadas de la capa; grados para WGS84) a la que pueden estar dos extremos de línea y aun así contar como conectados."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "Corregir topología",
+          "description": "Repara automáticamente las infracciones de topología: ajusta extremos de línea casi conectados, corrige extremos sueltos y proyecta puntos sobre líneas. Los extremos libres sin nada cerca se dejan sin cambios.",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "ruleEndpointSnap": {
+              "label": "Ajustar extremos de línea casi conectados"
+            },
+            "ruleDangles": {
+              "label": "Reparar extremos sueltos (ajustar o proyectar sobre la geometría cercana)"
+            },
+            "rulePointCovered": {
+              "label": "Proyectar los puntos sobre la línea más cercana"
+            },
+            "snapTolerance": {
+              "label": "Tolerancia de ajuste",
+              "description": "Distancia (en unidades de coordenadas de la capa; grados para WGS84) que la geometría puede desplazarse para conectarse."
+            },
+            "dryRun": {
+              "label": "Solo vista previa (simulación)",
+              "description": "Informa de las correcciones que se aplicarían sin crear una capa reparada."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "Isócrona / área de servicio",
+          "description": "Polígonos de alcance por tiempo o distancia de viaje desde cada punto de una capa",
+          "params": {
+            "layer": {
+              "label": "Puntos de origen"
+            },
+            "mode": {
+              "label": "Modo de desplazamiento",
+              "options": {
+                "auto": "En coche",
+                "pedestrian": "A pie",
+                "bicycle": "En bicicleta"
+              }
+            },
+            "metric": {
+              "label": "Métrica",
+              "options": {
+                "time": "Tiempo de viaje (minutos)",
+                "distance": "Distancia (km)"
+              }
+            },
+            "contours": {
+              "label": "Contornos",
+              "description": "Valores separados por comas (minutos para tiempo, km para distancia)"
+            },
+            "endpoint": {
+              "label": "Servidor de rutas (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "Matriz de costos OD",
+          "description": "Tiempo y distancia de viaje entre cada punto de origen y de destino, como líneas de conexión",
+          "params": {
+            "origins": {
+              "label": "Puntos de origen"
+            },
+            "destinations": {
+              "label": "Puntos de destino"
+            },
+            "mode": {
+              "label": "Modo de desplazamiento",
+              "options": {
+                "auto": "En coche",
+                "pedestrian": "A pie",
+                "bicycle": "En bicicleta"
+              }
+            },
+            "endpoint": {
+              "label": "Servidor de rutas (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "Ruta secuencial (direcciones)",
+          "description": "Conecta los puntos en secuencia a lo largo de la red vial para formar una ruta. Cada punto se ajusta a la vía más cercana, de modo que las coordenadas fuera de la vía (sitios celulares, sensores) también se enrutan. El orden sigue el campo elegido (p. ej., una marca de tiempo) o el orden de las entidades de la capa.",
+          "params": {
+            "layer": {
+              "label": "Puntos de entrada"
+            },
+            "order_field": {
+              "label": "Ordenar por campo (opcional)",
+              "description": "Ordena los puntos por este campo (números o marcas de tiempo) antes de calcular la ruta. Déjelo vacío para usar el orden de las entidades de la capa."
+            },
+            "mode": {
+              "label": "Modo de desplazamiento",
+              "options": {
+                "auto": "En coche",
+                "pedestrian": "A pie",
+                "bicycle": "En bicicleta"
+              }
+            },
+            "endpoint": {
+              "label": "Servidor de rutas (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "I de Moran global",
+          "description": "Mide la autocorrelación espacial global de un atributo numérico en toda la capa.",
+          "params": {
+            "layer": {
+              "label": "Capa"
+            },
+            "field": {
+              "label": "Campo de valores"
+            },
+            "weightsType": {
+              "label": "Pesos espaciales",
+              "description": "Cómo se definen los vecinos de cada entidad.",
+              "options": {
+                "knn": "K vecinos más cercanos",
+                "distance": "Banda de distancia"
+              }
+            },
+            "k": {
+              "label": "Vecinos (k)"
+            },
+            "threshold": {
+              "label": "Banda de distancia (km)"
+            },
+            "permutations": {
+              "label": "Permutaciones",
+              "description": "Permutaciones aleatorias para el pseudovalor p."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "I de Moran local (LISA)",
+          "description": "Clústeres y valores atípicos por entidad (Alto-Alto, Bajo-Bajo, Alto-Bajo, Bajo-Alto) con pseudosignificancia.",
+          "params": {
+            "layer": {
+              "label": "Capa"
+            },
+            "field": {
+              "label": "Campo de valores"
+            },
+            "weightsType": {
+              "label": "Pesos espaciales",
+              "description": "Cómo se definen los vecinos de cada entidad.",
+              "options": {
+                "knn": "K vecinos más cercanos",
+                "distance": "Banda de distancia"
+              }
+            },
+            "k": {
+              "label": "Vecinos (k)"
+            },
+            "threshold": {
+              "label": "Banda de distancia (km)"
+            },
+            "permutations": {
+              "label": "Permutaciones",
+              "description": "Permutaciones aleatorias para el pseudovalor p."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Puntos calientes Getis-Ord Gi*",
+          "description": "Identifica puntos calientes y fríos estadísticamente significativos de un atributo numérico.",
+          "params": {
+            "layer": {
+              "label": "Capa"
+            },
+            "field": {
+              "label": "Campo de valores"
+            },
+            "weightsType": {
+              "label": "Pesos espaciales",
+              "description": "Cómo se definen los vecinos de cada entidad.",
+              "options": {
+                "knn": "K vecinos más cercanos",
+                "distance": "Banda de distancia"
+              }
+            },
+            "k": {
+              "label": "Vecinos (k)"
+            },
+            "threshold": {
+              "label": "Banda de distancia (km)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "Vecino más cercano promedio",
+          "description": "Comprueba si los puntos están agrupados, dispersos o distribuidos aleatoriamente (razón ANN + puntuación z).",
+          "params": {
+            "layer": {
+              "label": "Capa de puntos"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "Densidad de kernel (mapa de calor)",
+          "description": "Estima una superficie de densidad a partir de puntos como una cuadrícula de celdas, usando un kernel cuártico.",
+          "params": {
+            "layer": {
+              "label": "Capa de puntos"
+            },
+            "weightField": {
+              "label": "Campo de ponderación (opcional)",
+              "description": "Campo numérico que pondera cada punto; en blanco = mismo peso."
+            },
+            "bandwidth": {
+              "label": "Radio de búsqueda / ancho de banda (km)"
+            },
+            "cellSize": {
+              "label": "Tamaño de celda (km)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "Puntos calientes emergentes (cubo espacio-temporal)",
+          "description": "Construye un cubo espacio-temporal a partir de puntos con marca de tiempo (una malla × intervalos de tiempo iguales) y clasifica cada celda como punto caliente/frío nuevo, en intensificación, persistente, en disminución, esporádico, oscilante o histórico. Ejecuta Getis-Ord Gi* por intervalo de tiempo y luego una prueba de tendencia de Mann-Kendall sobre la serie Gi* de cada celda. En el cliente, como el análisis de puntos calientes emergentes de ArcGIS.",
+          "params": {
+            "layer": {
+              "label": "Capa de puntos"
+            },
+            "timeField": {
+              "label": "Campo de tiempo",
+              "description": "Marca de tiempo de cada punto: una cadena de fecha/hora ISO o una época Unix (segundos o milisegundos)."
+            },
+            "cellSize": {
+              "label": "Tamaño de celda (km)",
+              "description": "Longitud del lado de cada celda espacial cuadrada, en kilómetros."
+            },
+            "timeStep": {
+              "label": "Intervalo del paso de tiempo"
+            },
+            "timeStepUnit": {
+              "label": "Unidad del paso de tiempo",
+              "options": {
+                "hours": "Horas",
+                "days": "Días",
+                "weeks": "Semanas"
+              }
+            },
+            "weightField": {
+              "label": "Campo de ponderación (opcional)",
+              "description": "Campo numérico que se suma por celda espacio-temporal en lugar de contar puntos; en blanco = contar puntos."
+            },
+            "confidence": {
+              "label": "Nivel de confianza",
+              "description": "Umbral de significancia para que una celda cuente como punto caliente/frío y para la tendencia.",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "Sombreado de relieve",
+          "description": "Calcula un ráster de relieve sombreado a partir de un modelo de elevación.",
+          "params": {
+            "azimuth": {
+              "label": "Acimut (grados)"
+            },
+            "altitude": {
+              "label": "Altitud (grados)"
+            },
+            "z_factor": {
+              "label": "Factor Z"
+            }
+          }
+        },
+        "slope": {
+          "name": "Pendiente",
+          "description": "Calcula la pendiente (inclinación) a partir de un modelo de elevación.",
+          "params": {
+            "units": {
+              "label": "Unidades",
+              "options": {
+                "degrees": "Grados",
+                "percent": "Porcentaje"
+              }
+            },
+            "z_factor": {
+              "label": "Factor Z"
+            }
+          }
+        },
+        "aspect": {
+          "name": "Orientación",
+          "description": "Calcula la orientación (dirección de la brújula de la pendiente máxima) a partir de un modelo de elevación."
+        },
+        "reproject": {
+          "name": "Reproyectar",
+          "description": "Transforma un ráster a otro sistema de referencia de coordenadas.",
+          "params": {
+            "dst_crs": {
+              "label": "CRS de destino",
+              "description": "Un código de autoridad como EPSG:3857 o EPSG:4326."
+            },
+            "resampling": {
+              "label": "Remuestreo",
+              "options": {
+                "nearest": "Vecino más cercano",
+                "bilinear": "Bilineal",
+                "cubic": "Cúbico"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "Remuestrear",
+          "description": "Remuestrea un ráster a otro tamaño de píxel (resolución).",
+          "params": {
+            "resolution": {
+              "label": "Tamaño de píxel de destino",
+              "description": "Tamaño de píxel de salida en las unidades del CRS del ráster."
+            },
+            "resampling": {
+              "label": "Remuestreo",
+              "options": {
+                "nearest": "Vecino más cercano",
+                "bilinear": "Bilineal",
+                "cubic": "Cúbico"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "Recortar por extensión",
+          "description": "Recorta un ráster a un cuadro delimitador (en el CRS del ráster).",
+          "params": {
+            "minx": {
+              "label": "X mín."
+            },
+            "miny": {
+              "label": "Y mín."
+            },
+            "maxx": {
+              "label": "X máx."
+            },
+            "maxy": {
+              "label": "Y máx."
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "Recortar por capa de máscara",
+          "description": "Recorta un ráster a las geometrías de un archivo vectorial de máscara.",
+          "params": {
+            "mask_path": {
+              "label": "Capa de máscara",
+              "description": "Un archivo GeoJSON cuyas geometrías definen la región de recorte. Se reproyecta automáticamente al CRS del ráster (un GeoJSON sin CRS se asume en WGS84)."
+            },
+            "crop": {
+              "label": "Recortar a la extensión de la máscara"
+            },
+            "all_touched": {
+              "label": "Incluir todos los píxeles tocados"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "Poligonizar",
+          "description": "Convierte una banda ráster en polígonos vectoriales agrupados por valor de píxel.",
+          "params": {
+            "band": {
+              "label": "Banda"
+            },
+            "connectivity": {
+              "label": "Conectividad",
+              "options": {
+                "4": "Conectividad 4",
+                "8": "Conectividad 8"
+              }
+            },
+            "field": {
+              "label": "Nombre del campo de valor"
+            }
+          }
+        },
+        "contour": {
+          "name": "Curvas de nivel",
+          "description": "Genera curvas de nivel a partir de un modelo de elevación.",
+          "params": {
+            "band": {
+              "label": "Banda"
+            },
+            "interval": {
+              "label": "Intervalo",
+              "description": "Diferencia de elevación entre curvas de nivel sucesivas."
+            },
+            "base": {
+              "label": "Base"
+            },
+            "attribute": {
+              "label": "Nombre del campo de elevación"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "Interpolación (IDW / Kriging)",
+          "description": "Interpola el atributo numérico de una capa de puntos en una superficie ráster continua mediante ponderación por distancia inversa o kriging ordinario.",
+          "params": {
+            "field": {
+              "label": "Campo de valores",
+              "description": "Nombre del atributo numérico de los puntos a interpolar (p. ej., elevación, temperatura)."
+            },
+            "method": {
+              "label": "Método",
+              "options": {
+                "idw": "Ponderación por distancia inversa (IDW)",
+                "kriging": "Kriging ordinario"
+              }
+            },
+            "resolution": {
+              "label": "Tamaño de píxel de salida",
+              "description": "Tamaño de celda en las unidades del CRS de la capa (grados para WGS84). La cuadrícula cubre la extensión de los puntos."
+            },
+            "power": {
+              "label": "Potencia IDW",
+              "description": "Valores más altos dan más influencia a los puntos cercanos."
+            },
+            "variogram_model": {
+              "label": "Modelo de variograma",
+              "description": "Modelo teórico ajustado al semivariograma empírico. El kriging está limitado a 1500 puntos.",
+              "options": {
+                "spherical": "Esférico",
+                "exponential": "Exponencial",
+                "gaussian": "Gaussiano",
+                "linear": "Lineal"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "Estadísticas zonales",
+          "description": "Resume los valores ráster dentro de cada polígono de una capa vectorial (recuento, mín., máx., media, suma, desv. est., mediana).",
+          "params": {
+            "zones_path": {
+              "label": "Capa de zonas",
+              "description": "Una capa de polígonos GeoJSON que define las zonas. Se reproyecta automáticamente al CRS del ráster (un GeoJSON sin CRS se asume en WGS84)."
+            },
+            "band": {
+              "label": "Banda"
+            },
+            "prefix": {
+              "label": "Prefijo de campo",
+              "description": "Se antepone al nombre de cada campo de estadística (p. ej., 'dem_' → 'dem_mean'). Déjelo en blanco para usar solo 'mean', 'min', …"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "Calculadora ráster",
+          "description": "Evalúa una expresión de álgebra de bandas de NumPy. Haga referencia a la banda 1 de cada entrada como A, B, C y a bandas concretas como A1, A2, …; p. ej., NDVI es (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "Expresión",
+              "description": "Una expresión de NumPy sobre A, B, C (y A1, A2, …). Funciones: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan."
+            },
+            "b_path": {
+              "label": "Ráster B (opcional)",
+              "description": "Un segundo ráster, referenciado como B / B1, B2, …. Debe coincidir con las dimensiones de A."
+            },
+            "c_path": {
+              "label": "Ráster C (opcional)",
+              "description": "Un tercer ráster, referenciado como C / C1, C2, …. Debe coincidir con las dimensiones de A."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "Índice espectral",
+          "description": "Calcula un índice espectral con nombre (NDVI, NDWI, EVI, …) a partir de un ráster multibanda. Elija un preajuste de sensor para la disposición de bandas, o indique los números de banda manualmente con el sensor Personalizado.",
+          "params": {
+            "index": {
+              "label": "Índice",
+              "options": {
+                "ndvi": "NDVI (vegetación)",
+                "gndvi": "GNDVI (vegetación verde)",
+                "ndwi": "NDWI (agua, McFeeters)",
+                "ndmi": "NDMI (humedad)",
+                "ndbi": "NDBI (zonas edificadas)",
+                "nbr": "NBR (razón de quema)",
+                "evi": "EVI (índice de vegetación mejorado)",
+                "savi": "SAVI (índice de vegetación ajustado al suelo)"
+              }
+            },
+            "sensor": {
+              "label": "Sensor / disposición de bandas",
+              "description": "Números de banda preajustados para sensores comunes. Elija Personalizado para asignar las bandas a mano en un GeoTIFF apilado de otra forma.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "Personalizado (indique los números de banda abajo)"
+              }
+            },
+            "red": {
+              "label": "Número de la banda roja"
+            },
+            "green": {
+              "label": "Número de la banda verde"
+            },
+            "blue": {
+              "label": "Número de la banda azul"
+            },
+            "nir": {
+              "label": "Número de la banda NIR"
+            },
+            "swir1": {
+              "label": "Número de la banda SWIR1"
+            },
+            "swir2": {
+              "label": "Número de la banda SWIR2"
+            },
+            "L": {
+              "label": "Factor de suelo (L)",
+              "description": "Corrección de brillo del suelo de SAVI (0 cobertura densa → 1 suelo desnudo)."
+            },
+            "scale": {
+              "label": "Escala de reflectancia",
+              "description": "Multiplicador que convierte los valores de píxel en reflectancia (0–1). Déjelo en 1 para índices de diferencia normalizada; ajústelo para EVI/SAVI en imágenes con ND enteros (p. ej., 0.0001 para Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "Reclasificar",
+          "description": "Reasigna rangos de valores a nuevos valores de clase mediante una tabla de reglas.",
+          "params": {
+            "band": {
+              "label": "Banda"
+            },
+            "table": {
+              "label": "Reglas",
+              "description": "Reglas 'mín:máx:nuevovalor' separadas por comas o saltos de línea, p. ej., '0:10:1, 10:20:2, 20:max:3'. Los rangos son semiabiertos [mín, máx); en blanco/min/max significan ±∞."
+            },
+            "unmatched": {
+              "label": "Valores sin coincidencia",
+              "options": {
+                "nodata": "Establecer como NoData",
+                "original": "Conservar el valor original"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "Mosaico / fusión",
+          "description": "Combina hasta cinco rásteres (con el mismo CRS) en un único ráster que cubre su unión.",
+          "params": {
+            "raster_2": {
+              "label": "Segundo ráster"
+            },
+            "raster_3": {
+              "label": "Tercer ráster (opcional)"
+            },
+            "raster_4": {
+              "label": "Cuarto ráster (opcional)"
+            },
+            "raster_5": {
+              "label": "Quinto ráster (opcional)"
+            },
+            "method": {
+              "label": "Método de superposición",
+              "description": "Qué valor prevalece donde las entradas se superponen.",
+              "options": {
+                "first": "Primero",
+                "last": "Último",
+                "min": "Mínimo",
+                "max": "Máximo"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "Estadísticas focales",
+          "description": "Aplica una estadística de ventana móvil (vecindad) a una banda ráster.",
+          "params": {
+            "band": {
+              "label": "Banda"
+            },
+            "statistic": {
+              "label": "Estadística",
+              "options": {
+                "mean": "Media",
+                "median": "Mediana",
+                "min": "Mínimo",
+                "max": "Máximo",
+                "sum": "Suma",
+                "std": "Desviación estándar",
+                "range": "Rango (máx. − mín.)"
+              }
+            },
+            "size": {
+              "label": "Tamaño de ventana",
+              "description": "Tamaño impar de la vecindad en píxeles (3 = 3×3). Limitado a 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "Análisis",
+      "clip": "Recorte",
+      "dataQuality": "Calidad de datos",
+      "dggs": "DGGS",
+      "geometry": "Geometría",
+      "join": "Unión",
+      "movementTime": "Movimiento y tiempo",
+      "network": "Red",
+      "overlay": "Superposición",
+      "rasterToVector": "Ráster a vectorial",
+      "reproject": "Reproyección",
+      "select": "Selección",
+      "spatialStatistics": "Estadísticas espaciales",
+      "terrain": "Terreno",
+      "vectorToRaster": "Vectorial a ráster"
     }
   },
   "segmentation": {
@@ -3790,6 +5776,7 @@
     "title": "Detección de objetos",
     "description": "Ejecute un modelo YOLO exportado a ONNX sobre un GeoTIFF, completamente en el navegador. Los cuadros detectados se georreferencian y cada clase se añade como su propia capa.",
     "hint": "Use un modelo COCO integrado (que se descarga y almacena en caché una vez) o aporte su propio ONNX de YOLOv5/v8/v11. La detección se ejecuta localmente en el navegador. Los modelos integrados detectan objetos cotidianos; para imágenes aéreas, aporte su propio modelo entrenado con vistas cenitales.",
+    "unavailableNoExternalCdn": "La detección de objetos no está disponible en esta compilación. Necesita ONNX Runtime, que se carga desde una CDN externa que esta implementación ha deshabilitado. Proporcionar su propio archivo de modelo no soluciona el problema.",
     "imageLabel": "Imagen (GeoTIFF)",
     "imagePlaceholder": "Elija un GeoTIFF…",
     "chooseImage": "Elegir imagen",
@@ -3822,6 +5809,7 @@
     "title": "Segmentar todo",
     "description": "Ejecute SlimSAM automáticamente sobre un GeoTIFF, completamente en el navegador. Cada objeto detectado se convierte en un polígono georreferenciado añadido como una sola capa.",
     "hint": "Se muestrea una cuadrícula de puntos por toda la imagen y se segmenta con SlimSAM (que se descarga y almacena en caché una vez). Sin clics ni etiquetas: las cuadrículas más densas encuentran más objetos, pero tardan más.",
+    "unavailableNoExternalCdn": "«Segmentar todo» no está disponible en esta compilación. Necesita ONNX Runtime, que se carga desde una CDN externa que esta implementación ha deshabilitado.",
     "imageLabel": "Imagen (GeoTIFF)",
     "imagePlaceholder": "Elija un GeoTIFF…",
     "chooseImage": "Elegir imagen",
@@ -3966,6 +5954,7 @@
     "deleteField": "Eliminar campo",
     "joinedColumnTitle": "Columna unida, derivada de una tabla de unión. Edita la tabla o la definición de la unión en su lugar.",
     "virtualColumnTitle": "Campo virtual, calculado a partir de una expresión. Edita su definición en el panel de estilo de la capa en su lugar.",
+    "trackingColumnTitle": "Campo de seguimiento de edición, mantenido automáticamente. Cámbiale el nombre en la configuración de seguimiento de edición de la capa.",
     "deleteFieldConfirm": "Esto elimina permanentemente el campo \"{{field}}\" de todas las entidades de \"{{layer}}\". El estilo o las etiquetas que lo referencian se borrarán. Esto no se puede deshacer.",
     "addFieldDescription": "Añada un nuevo campo a todas las entidades de \"{{layer}}\".",
     "fieldName": "Nombre del campo",
@@ -4488,11 +6477,15 @@
       "typeConvexHull": "Envolventes convexas",
       "typeBuffer": "Zonas de influencia",
       "bufferDistance": "Distancia de influencia (m)",
+      "bufferField": "Campo de distancia",
+      "bufferFieldHint": "A cada entidad se le aplica una zona de influencia según su propio valor en metros; las entidades sin valor usan la distancia indicada arriba y un valor de 0 no dibuja nada.",
+      "fieldNone": "Ninguno (fijo)",
       "fillColor": "Color de relleno",
       "strokeColor": "Color de contorno",
       "strokeWidth": "Ancho de contorno (px)",
       "opacity": "Opacidad de relleno",
-      "circleRadius": "Radio de punto (px)"
+      "circleRadius": "Radio de punto (px)",
+      "sizeField": "Campo de tamaño"
     },
     "attributeForm": {
       "heading": "Formulario de atributos",
@@ -4534,7 +6527,26 @@
       "save": "Guardar",
       "noFields": "La capa no tiene campos de atributos para configurar.",
       "minMaxInvalid": "El mínimo debe ser menor o igual que el máximo."
+    },
+    "editorTracking": {
+      "heading": "Seguimiento de edición",
+      "description": "Registra quién creó cada entidad y quién la modificó por última vez. Los campos siguientes se rellenan automáticamente cuando se dibujan, editan, calculan o capturan entidades.",
+      "enable": "Registrar las ediciones de esta capa",
+      "identity": "Tu nombre",
+      "identityHint": "Las ediciones se registrarán como «{{name}}».",
+      "identityFromSession": "Tomado de la sesión de colaboración en la que estás.",
+      "createdByField": "Campo «Creado por»",
+      "createdAtField": "Campo «Creado el»",
+      "editedByField": "Campo «Editado por»",
+      "editedAtField": "Campo «Editado el»",
+      "blankName": "Los nombres de campo no pueden estar vacíos.",
+      "duplicateName": "Cada campo de seguimiento necesita un nombre distinto.",
+      "columnTaken": "«{{name}}» ya es una columna de atributos. El seguimiento sobrescribiría sus valores."
     }
+  },
+  "vectorExport": {
+    "invalidKmlCoordinatesByPosition": "La exportación KML no pudo escribir la entidad {{position}} porque tiene coordenadas no válidas.",
+    "invalidKmlCoordinatesById": "La exportación KML no pudo escribir la entidad con ID {{id}} porque tiene coordenadas no válidas."
   },
   "layers": {
     "panelCollapsedLabel": "Capas (contraído)",
@@ -4555,9 +6567,17 @@
     "identifyInspectPixels": "Inspeccionar valores de píxel",
     "identifyStopInspectPixels": "Dejar de inspeccionar valores de píxel",
     "identifyUnavailable": "Identificar solo está disponible para capas vectoriales, WMS y COG",
+    "selectFeaturesMenu": "Seleccionar entidades",
+    "selectFeaturesSingle": "Seleccionar entidades por clic",
+    "selectFeaturesRectangle": "Seleccionar entidades por rectángulo",
+    "selectFeaturesPolygon": "Seleccionar entidades por polígono",
+    "selectFeaturesFreehand": "Seleccionar entidades a mano alzada",
+    "selectFeaturesRadius": "Seleccionar entidades por radio",
+    "selectFeaturesModifiers": "Shift añade, Alt quita y Shift+Alt interseca. Pulse Esc para cancelar.",
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "Extraer subconjunto…",
     "stylesMenu": "Estilos",
+    "exportGeoLibreStyle": "Exportar estilo URL de GeoLibre",
     "exportMapboxStyle": "Exportar como estilo de Mapbox GL",
     "exportSldStyle": "Exportar como OGC SLD",
     "exportQmlStyle": "Exportar como QML de QGIS",
@@ -4565,7 +6585,7 @@
     "exportStyleDataNotReady": "Los datos de la capa aún no están listos. Inténtelo de nuevo en un momento.",
     "exportStyleNeedsFeatures": "La exportación de estilo requiere una capa vectorial con entidades.",
     "exportStyleError": "No se pudo exportar el estilo de esta capa.",
-    "importStyle": "Importar estilo (Mapbox GL / SLD / QML)…",
+    "importStyle": "Importar estilo (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Estilos guardados (Administrador de estilos)…",
     "importStyleSuccess": "Estilo importado.",
     "importStyleInvalid": "Ese archivo no es un JSON, SLD o QML válido.",
@@ -4604,6 +6624,7 @@
     "bindWindowCumulative": "Todo hasta el paso actual (acumulativo)",
     "bindCancel": "Cancelar",
     "bindConfirm": "Vincular",
+    "openStylePanel": "Abrir panel de estilo",
     "openRasterStylePanel": "Editar estilo ráster…",
     "exportRasterSuccess": "Ráster exportado.",
     "exportRasterError": "No se pudo exportar este ráster.",
@@ -4709,6 +6730,7 @@
     "refreshVectorControlError": "No se pudo actualizar esta capa. Intente volver a abrir el panel Añadir capa vectorial.",
     "refreshed": "Actualizado.",
     "refreshedCount": "Se actualizaron {{count}} entidades.",
+    "refreshedTruncated": "Se actualizaron {{shown}} de {{total}} entidades.",
     "refreshError": "No se pudo actualizar esta capa.",
     "exportNeedsFeatures": "La exportación requiere una capa vectorial con entidades.",
     "exportedWithWarnings": "Capa exportada. {{warnings}}",
@@ -4771,6 +6793,78 @@
     "nodataOff": "Representar todos los píxeles",
     "nodataCustom": "Valor personalizado"
   },
+  "netcdfSymbology": {
+    "heading": "Simbología NetCDF",
+    "colorRampLabel": "Mapa de colores",
+    "reverse": "Invertir el mapa de colores",
+    "colorMin": "Color mín",
+    "colorMax": "Color máx",
+    "resetRange": "Restablecer al rango de los datos",
+    "openCube": "Cubo 3D"
+  },
+  "netcdfCube": {
+    "heading": "Cubo de imagen 3D",
+    "close": "Cerrar",
+    "settings": "Configuración",
+    "setupTitle": "Cubo de imagen 3D",
+    "setupDescription": "Elija qué leer antes de construir el cubo. Cada banda es una lectura independiente, así que la extensión y el número de bandas determinan cuánto tarda.",
+    "extent": "Extensión",
+    "extentView": "Vista actual del mapa",
+    "extentDraw": "Dibujar en el mapa",
+    "extentFull": "Extensión completa de la capa",
+    "viewHint": "Lee lo que el mapa esté mostrando cuando se construya el cubo.",
+    "fullHint": "Lee toda la malla. Lento para un cubo del tamaño de una escena.",
+    "drawBbox": "Dibujar en el mapa",
+    "drawing": "Arrastre un cuadro en el mapa para definir la extensión del cubo",
+    "drawHint": "Arrastre un cuadro en el mapa para definir la extensión.",
+    "drawnExtent": "O {{west}}, S {{south}}, E {{east}}, N {{north}}",
+    "detail": "Detalle",
+    "detailOption": "{{size}} celdas por lado",
+    "bands": "Bandas",
+    "allBands": "Todas ({{count}})",
+    "rgbOverlay": "Imagen RGB superpuesta",
+    "rgbHint": "Compone tres bandas en una imagen en color colocada sobre la cara superior, para que el cubo se reconozca como un lugar.",
+    "red": "Rojo",
+    "green": "Verde",
+    "blue": "Azul",
+    "planeEstimate": "{{count}} lecturas de banda",
+    "create": "Crear el cubo",
+    "colorRampLabel": "Mapa de colores",
+    "reverse": "Invertir",
+    "showRgb": "RGB superpuesto",
+    "rgbBands": "Bandas RGB",
+    "recomposing": "leyendo...",
+    "zScale": "Alto",
+    "slice": "Corte",
+    "sliceAt": "corte en {{band}} {{units}}",
+    "reading": "Leyendo la banda {{done}} de {{total}}...",
+    "summary": "{{nx}} x {{ny}} celdas, {{nz}} bandas a lo largo de {{axis}}",
+    "errorNoCube": "El archivo de origen de esta capa ya no está abierto, así que no se puede leer un cubo.",
+    "error": {
+      "shapeMismatch": "Los planos de banda de la variable no comparten una misma forma, así que no se pueden apilar en un cubo.",
+      "rgbShapeMismatch": "Las bandas RGB elegidas no coinciden con la forma del cubo.",
+      "noBands": "Esta variable no tiene bandas que leer.",
+      "noReadWindow": "Este cubo no se puede actualizar en su sitio. Vuelva a construirlo desde Configuración."
+    }
+  },
+  "netcdfProfile": {
+    "heading": "Perfil espectral",
+    "clear": "Borrar",
+    "chartAria": "Valores de píxel muestreados a lo largo del eje de bandas",
+    "popOut": "Desacoplar",
+    "dock": "Acoplar",
+    "poppedOutHint": "El gráfico está abierto en una ventana sobre el mapa.",
+    "noValues": "No hay valores que representar para estos píxeles.",
+    "exportPng": "PNG",
+    "exportCsv": "CSV",
+    "exportError": "No se pudo exportar el gráfico.",
+    "rasterFallbackName": "Ráster"
+  },
+  "netcdfIdentify": {
+    "noData": "sin datos",
+    "coordinates": "lon, lat",
+    "cell": "fila, columna"
+  },
   "rasterAttributeTable": {
     "title": "Tabla de atributos ráster",
     "resize": "Cambiar el tamaño de la tabla de atributos ráster",
@@ -4819,6 +6913,7 @@
     "cogConvertConfirm": "«{{name}}» es un GeoTIFF simple (por franjas), que no se puede mostrar directamente. ¿Convertirlo ahora a un GeoTIFF optimizado para la nube y cargar ese?",
     "cogConvertRemoteConfirm": "«{{name}}» es un GeoTIFF simple (por franjas), que no se puede mostrar directamente. Mostrarlo implica descargar el archivo completo y convertirlo a un GeoTIFF optimizado para la nube en el navegador, lo que puede ser lento y usar mucha memoria en archivos grandes. ¿Continuar?",
     "cogConvertLargeConfirm": "«{{name}}» es un GeoTIFF grande de {{width}}×{{height}} que no está optimizado para la nube. Convertirlo en el navegador puede ser lento y usar mucha memoria. ¿Convertirlo y cargarlo de todos modos?",
+    "cogConvertTooLarge": "«{{name}}» es demasiado grande para convertirlo de forma segura en el navegador. Conviértalo en un GeoTIFF optimizado para la nube con gdal_translate o rio cogeo y cargue el resultado.",
     "cogConvertFailed": "No se pudo convertir «{{name}}» a un GeoTIFF optimizado para la nube. Intente convertirlo con gdal_translate o rio cogeo y luego cargue el resultado.",
     "rasterDownloadFailed": "No se pudo descargar «{{name}}». Es posible que el servidor esté lento, no esté disponible o bloquee solicitudes entre orígenes, o que el archivo sea demasiado grande para mantenerlo en memoria. Compruebe la URL e inténtelo de nuevo.",
     "rasterNotGeotiff": "«{{name}}» no devolvió un GeoTIFF. Es posible que el servidor haya enviado una página de error o de inicio de sesión en su lugar. Compruebe la URL e inténtelo de nuevo."
@@ -4956,7 +7051,8 @@
       "pythonConsole": "Consola de Python",
       "sqlWorkspace": "Espacio de trabajo SQL",
       "assistant": "Asistente",
-      "statusBar": "Barra de estado"
+      "statusBar": "Barra de estado",
+      "modelBuilder": "Constructor de modelos"
     }
   },
   "attributeStats": {
@@ -4967,10 +7063,12 @@
     "scope": "Ámbito",
     "scopeAll": "Todas las entidades ({{total}})",
     "scopeFiltered": "Filtradas ({{total}})",
+    "scopeSelected": "Seleccionadas ({{total}})",
     "copiedToClipboard": "Copiado al portapapeles.",
     "copy": "Copiar",
     "copyHeader": "Estadísticas de campo — {{field}}",
     "copyHeaderFiltered": "Estadísticas de campo — {{field}} (filtradas)",
+    "copyHeaderSelected": "Estadísticas de campo — {{field}} (seleccionadas)",
     "noValues": "No hay valores que resumir.",
     "mostFrequent": "Valores más frecuentes",
     "noPopulated": "No hay valores rellenados.",
@@ -5012,76 +7110,6 @@
     "noPopulated": "No hay valores rellenados.",
     "moreValues": "+{{total}} valores más"
   },
-  "stacPlugin": {
-    "title": "Catálogos STAC",
-    "footprintLayerName": "Huellas de búsqueda STAC",
-    "catalogSearch": "Buscar un catálogo público en STAC Index",
-    "catalogSearchPlaceholder": "Buscar nombres de catálogos…",
-    "indexLoading": "Cargando STAC Index…",
-    "indexUnavailable": "STAC Index no disponible: introduce una URL",
-    "indexLoadFailed": "No se pudo cargar STAC Index",
-    "urlLabel": "URL del catálogo o de la API STAC",
-    "connect": "Conectar",
-    "connecting": "Conectando con STAC…",
-    "connected": "Conectado. Elige filtros y busca.",
-    "connectFailed": "No se pudo conectar con STAC",
-    "selectCatalog": "Selecciona un catálogo…",
-    "noMatchingCatalogs": "No hay catálogos coincidentes",
-    "catalogApiSuffix": " (API)",
-    "catalogStaticSuffix": " (estático)",
-    "kindApi": "API STAC",
-    "kindStatic": "catálogo estático",
-    "collectionsHint": "Mantén Ctrl/Cmd para seleccionar varias colecciones; arrastra el borde inferior para cambiar el tamaño",
-    "limitToExtent": "Limitar la búsqueda a la extensión actual del mapa",
-    "bboxLabel": "Cuadro delimitador (oeste, sur, este, norte)",
-    "bboxPlaceholder": "Opcional; anula la extensión del mapa",
-    "bboxInvalid": "Introduce un cuadro delimitador válido: oeste, sur, este, norte.",
-    "drawBbox": "Dibujar cuadro en el mapa",
-    "cancelDrawing": "Cancelar dibujo",
-    "clearDrawnBbox": "Borrar cuadro dibujado",
-    "drawHint": "Haz clic y arrastra sobre el mapa para dibujar un cuadro de búsqueda.",
-    "drawnBbox": "Cuadro dibujado: {{bbox}}",
-    "drawnBboxCleared": "Cuadro dibujado borrado.",
-    "mapNotReady": "El mapa no está listo para dibujar.",
-    "startDate": "Fecha de inicio",
-    "endDate": "Fecha de fin",
-    "additionalParams": "Parámetros de búsqueda adicionales (JSON, solo API STAC)",
-    "additionalInvalid": "Los parámetros de búsqueda adicionales deben ser un objeto JSON.",
-    "searchItems": "Buscar elementos",
-    "clearResults": "Borrar resultados",
-    "resultsCleared": "Resultados de búsqueda borrados.",
-    "searching": "Buscando elementos STAC…",
-    "loadingMore": "Cargando más elementos…",
-    "noResults": "Ningún elemento STAC coincide con estos filtros.",
-    "searchFailed": "Error en la búsqueda STAC",
-    "showing": "Mostrando {{count}} elementos.",
-    "showingOfMatched": "Mostrando {{count}} de {{matched}} elementos.",
-    "loadMore": "Cargar más",
-    "renderOptions": "Opciones de representación ráster",
-    "bands": "Bandas",
-    "bandsPlaceholder": "p. ej., 1 o 1,2,3 (predeterminado: automático)",
-    "colormap": "Mapa de colores (solo una banda)",
-    "colormapDefault": "Predeterminado del renderizador",
-    "minValue": "Valor mínimo",
-    "maxValue": "Valor máximo",
-    "nodata": "Valor NoData",
-    "nodataPlaceholder": "Anula la etiqueta NoData del archivo",
-    "renderHint": "Deja un campo vacío para que el renderizador lo deduzca del GeoTIFF. Las opciones se aplican a los recursos añadidos después de cambiarlas.",
-    "initialStatus": "Elige un catálogo de STAC Index o introduce una URL.",
-    "catalogInfo": "{{title}} · {{kind}}",
-    "zoom": "Acercar",
-    "add": "Añadir",
-    "download": "Descargar",
-    "adding": "Añadiendo {{asset}}…",
-    "added": "{{asset}} añadido al mapa.",
-    "addUnsupported": "Solo se pueden añadir al mapa recursos GeoTIFF/COG y GeoJSON",
-    "addFailed": "No se pudo añadir el recurso",
-    "cogUnsupported": "Este host de GeoLibre no puede visualizar recursos GeoTIFF remotos"
-  },
-  "vectorExport": {
-    "invalidKmlCoordinatesByPosition": "La exportación KML no pudo escribir la entidad {{position}} porque tiene coordenadas no válidas.",
-    "invalidKmlCoordinatesById": "La exportación KML no pudo escribir la entidad con ID {{id}} porque tiene coordenadas no válidas."
-  },
   "comments": {
     "title": "Comentarios",
     "addDialogTitle": "Añadir comentario de revisión",
@@ -5090,276 +7118,49 @@
     "authorNamePlaceholder": "p. ej., Alex o Sara",
     "commentLabel": "Comentario / Observaciones",
     "commentPlaceholder": "Escriba aquí su nota de revisión u observaciones...",
+    "post": "Publicar comentario",
+    "postShortcutTooltip": "Publicar comentario ({{shortcut}})",
     "confirmDelete": "¿Seguro que desea eliminar este hilo de comentarios?",
     "sessionDisconnected": "Sesión desconectada.",
-    "defaultAuthorName": "Autor"
-  },
-  "s2Plugin": {
-    "title": "Cuadrícula S2",
-    "controlTitle": "Configuración de la cuadrícula S2",
-    "autoResolution": "Resolución automática",
-    "resolution": "Resolución",
-    "cellCount": "Celdas en la vista: {{count}}",
-    "tooManyCells": "Esta vista supera el límite de {{limit}} celdas. Acerque el zoom o reduzca la resolución.",
-    "fillColor": "Color de relleno",
-    "fillOpacity": "Opacidad de relleno",
-    "lineColor": "Color de contorno",
-    "lineWidth": "Ancho del contorno",
-    "showLabels": "Mostrar los id de celda",
-    "identifyHint": "Haga clic en el mapa para identificar una celda S2.",
-    "selectedCell": "Celda seleccionada",
-    "noSelection": "Ninguna celda seleccionada",
-    "copyId": "Copiar id",
-    "parent": "Celda padre",
-    "children": "Celdas hijas",
-    "neighbors": "Vecinas",
-    "center": "Centro",
-    "zoomToCell": "Ajustar zoom a la celda",
-    "addAsLayer": "Añadir la cuadrícula como capa",
-    "exportGeoJson": "Exportar GeoJSON",
-    "exportCsv": "Exportar CSV",
-    "includeNeighbors": "Incluir las vecinas de la celda seleccionada",
-    "includeParents": "Incluir las celdas padre de la celda seleccionada"
-  },
-  "a5Plugin": {
-    "title": "Cuadrícula A5",
-    "controlTitle": "Configuración de la cuadrícula A5",
-    "autoResolution": "Resolución automática",
-    "resolution": "Resolución",
-    "cellCount": "Celdas en la vista: {{count}}",
-    "tooManyCells": "Esta vista supera el límite de {{limit}} celdas. Acerque el zoom o reduzca la resolución.",
-    "fillColor": "Color de relleno",
-    "fillOpacity": "Opacidad de relleno",
-    "lineColor": "Color de contorno",
-    "lineWidth": "Ancho del contorno",
-    "showLabels": "Mostrar los id de celda",
-    "identifyHint": "Haga clic en el mapa para identificar una celda A5.",
-    "selectedCell": "Celda seleccionada",
-    "noSelection": "Ninguna celda seleccionada",
-    "copyId": "Copiar id",
-    "parent": "Celda padre",
-    "children": "Celdas hijas",
-    "neighbors": "Vecinas",
-    "center": "Centro",
-    "zoomToCell": "Ajustar zoom a la celda",
-    "addAsLayer": "Añadir la cuadrícula como capa",
-    "exportGeoJson": "Exportar GeoJSON",
-    "exportCsv": "Exportar CSV",
-    "includeNeighbors": "Incluir las vecinas de la celda seleccionada",
-    "includeParents": "Incluir las celdas padre de la celda seleccionada"
-  },
-  "dggridPlugin": {
-    "title": "DGGRID",
-    "controlTitle": "Configuración de DGGRID",
-    "cellType": "Tipo de celda",
-    "topologyHexagon": "Hexágono",
-    "topologyDiamond": "Rombo",
-    "topologyTriangle": "Triángulo",
-    "projection": "Proyección",
-    "aperture": "Apertura",
-    "autoResolution": "Resolución automática",
-    "resolution": "Resolución",
-    "cellCount": "Celdas en la vista: {{count}}",
-    "tooManyCells": "Esta vista supera el límite de {{limit}} celdas. Acerque el zoom o reduzca la resolución.",
-    "fillColor": "Color de relleno",
-    "fillOpacity": "Opacidad de relleno",
-    "lineColor": "Color de contorno",
-    "lineWidth": "Ancho del contorno",
-    "showLabels": "Mostrar los id de celda",
-    "identifyHint": "Haga clic en el mapa para identificar una celda DGGRID.",
-    "selectedCell": "Celda seleccionada",
-    "noSelection": "Ninguna celda seleccionada",
-    "copyId": "Copiar id",
-    "parent": "Celda padre",
-    "children": "Celdas hijas",
-    "neighbors": "Vecinas",
-    "center": "Centro",
-    "zoomToCell": "Ajustar zoom a la celda",
-    "addAsLayer": "Añadir la cuadrícula como capa",
-    "exportGeoJson": "Exportar GeoJSON",
-    "exportCsv": "Exportar CSV",
-    "includeNeighbors": "Incluir las vecinas de la celda seleccionada",
-    "includeParents": "Incluir las celdas padre de la celda seleccionada"
-  },
-  "dggalPlugin": {
-    "title": "DGGAL",
-    "controlTitle": "Configuración de DGGAL",
-    "gridType": "Tipo de DGGS",
-    "autoResolution": "Resolución automática",
-    "resolution": "Resolución",
-    "cellCount": "Celdas en la vista: {{count}}",
-    "tooManyCells": "Esta vista supera el límite de {{limit}} celdas. Acerque el zoom o reduzca la resolución.",
-    "fillColor": "Color de relleno",
-    "fillOpacity": "Opacidad de relleno",
-    "lineColor": "Color de contorno",
-    "lineWidth": "Ancho del contorno",
-    "showLabels": "Mostrar los id de celda",
-    "identifyHint": "Haga clic en el mapa para identificar una celda DGGAL.",
-    "selectedCell": "Celda seleccionada",
-    "noSelection": "Ninguna celda seleccionada",
-    "copyId": "Copiar id",
-    "parent": "Celda padre",
-    "children": "Celdas hijas",
-    "neighbors": "Vecinas",
-    "center": "Centro",
-    "zoomToCell": "Ajustar zoom a la celda",
-    "addAsLayer": "Añadir la cuadrícula como capa",
-    "exportGeoJson": "Exportar GeoJSON",
-    "exportCsv": "Exportar CSV",
-    "includeNeighbors": "Incluir las vecinas de la celda seleccionada",
-    "includeParents": "Incluir las celdas padre de la celda seleccionada"
-  },
-  "olcPlugin": {
-    "title": "OLC",
-    "controlTitle": "Configuración de OLC",
-    "autoResolution": "Resolución automática",
-    "resolution": "Resolución",
-    "cellCount": "Celdas en la vista: {{count}}",
-    "tooManyCells": "Esta vista supera el límite de {{limit}} celdas. Acerque el zoom o reduzca la resolución.",
-    "fillColor": "Color de relleno",
-    "fillOpacity": "Opacidad de relleno",
-    "lineColor": "Color de contorno",
-    "lineWidth": "Ancho del contorno",
-    "showLabels": "Mostrar los id de celda",
-    "identifyHint": "Haga clic en el mapa para identificar una celda OLC.",
-    "selectedCell": "Celda seleccionada",
-    "noSelection": "Ninguna celda seleccionada",
-    "copyId": "Copiar id",
-    "parent": "Celda padre",
-    "children": "Celdas hijas",
-    "neighbors": "Vecinas",
-    "center": "Centro",
-    "zoomToCell": "Ajustar zoom a la celda",
-    "addAsLayer": "Añadir la cuadrícula como capa",
-    "exportGeoJson": "Exportar GeoJSON",
-    "exportCsv": "Exportar CSV",
-    "includeNeighbors": "Incluir las vecinas de la celda seleccionada",
-    "includeParent": "Incluir la celda padre de la celda seleccionada"
-  },
-  "geohashPlugin": {
-    "title": "Geohash",
-    "controlTitle": "Configuración de Geohash",
-    "autoResolution": "Resolución automática",
-    "resolution": "Resolución",
-    "cellCount": "Celdas en la vista: {{count}}",
-    "tooManyCells": "Esta vista supera el límite de {{limit}} celdas. Acerque el zoom o reduzca la resolución.",
-    "fillColor": "Color de relleno",
-    "fillOpacity": "Opacidad de relleno",
-    "lineColor": "Color de contorno",
-    "lineWidth": "Ancho del contorno",
-    "showLabels": "Mostrar los id de celda",
-    "identifyHint": "Haga clic en el mapa para identificar una celda Geohash.",
-    "selectedCell": "Celda seleccionada",
-    "noSelection": "Ninguna celda seleccionada",
-    "copyId": "Copiar id",
-    "parent": "Celda padre",
-    "children": "Celdas hijas",
-    "neighbors": "Vecinas",
-    "center": "Centro",
-    "zoomToCell": "Ajustar zoom a la celda",
-    "addAsLayer": "Añadir la cuadrícula como capa",
-    "exportGeoJson": "Exportar GeoJSON",
-    "exportCsv": "Exportar CSV",
-    "includeNeighbors": "Incluir las vecinas de la celda seleccionada",
-    "includeParent": "Incluir la celda padre de la celda seleccionada"
-  },
-  "tilecodePlugin": {
-    "title": "Tilecode",
-    "controlTitle": "Configuración de Tilecode",
-    "autoResolution": "Resolución automática",
-    "resolution": "Resolución",
-    "cellCount": "{{count}} teselas en la vista",
-    "tooManyCells": "Esta vista supera el límite de {{limit}} teselas. Acerque el zoom o reduzca la resolución.",
-    "fillColor": "Color de relleno",
-    "fillOpacity": "Opacidad de relleno",
-    "lineColor": "Color de contorno",
-    "lineWidth": "Ancho del contorno",
-    "showLabels": "Mostrar los id de tesela",
-    "identifyHint": "Haga clic en el mapa para identificar una tesela.",
-    "selectedCell": "Tesela seleccionada",
-    "noSelection": "Ninguna tesela seleccionada",
-    "copyId": "Copiar id",
-    "quadkey": "Quadkey",
-    "parent": "Tesela padre",
-    "children": "Teselas hijas",
-    "neighbors": "Vecinas",
-    "center": "Centro",
-    "zoomToCell": "Ajustar zoom a la tesela",
-    "addAsLayer": "Añadir la cuadrícula como capa",
-    "exportGeoJson": "Exportar GeoJSON",
-    "exportCsv": "Exportar CSV",
-    "includeNeighbors": "Incluir las vecinas de la tesela seleccionada",
-    "includeParent": "Incluir la tesela padre de la tesela seleccionada"
-  },
-  "netcdfSymbology": {
-    "heading": "Simbología NetCDF",
-    "colorRampLabel": "Mapa de colores",
-    "reverse": "Invertir el mapa de colores",
-    "colorMin": "Color mín",
-    "colorMax": "Color máx",
-    "resetRange": "Restablecer al rango de los datos",
-    "openCube": "Cubo 3D"
-  },
-  "netcdfCube": {
-    "heading": "Cubo de imagen 3D",
-    "close": "Cerrar",
-    "settings": "Configuración",
-    "setupTitle": "Cubo de imagen 3D",
-    "setupDescription": "Elija qué leer antes de construir el cubo. Cada banda es una lectura independiente, así que la extensión y el número de bandas determinan cuánto tarda.",
-    "extent": "Extensión",
-    "extentView": "Vista actual del mapa",
-    "extentDraw": "Dibujar en el mapa",
-    "extentFull": "Extensión completa de la capa",
-    "viewHint": "Lee lo que el mapa esté mostrando cuando se construya el cubo.",
-    "fullHint": "Lee toda la malla. Lento para un cubo del tamaño de una escena.",
-    "drawBbox": "Dibujar en el mapa",
-    "drawing": "Arrastre un cuadro en el mapa para definir la extensión del cubo",
-    "drawHint": "Arrastre un cuadro en el mapa para definir la extensión.",
-    "drawnExtent": "O {{west}}, S {{south}}, E {{east}}, N {{north}}",
-    "detail": "Detalle",
-    "detailOption": "{{size}} celdas por lado",
-    "bands": "Bandas",
-    "allBands": "Todas ({{count}})",
-    "rgbOverlay": "Imagen RGB superpuesta",
-    "rgbHint": "Compone tres bandas en una imagen en color colocada sobre la cara superior, para que el cubo se reconozca como un lugar.",
-    "red": "Rojo",
-    "green": "Verde",
-    "blue": "Azul",
-    "planeEstimate": "{{count}} lecturas de banda",
-    "create": "Crear el cubo",
-    "colorRampLabel": "Mapa de colores",
-    "reverse": "Invertir",
-    "showRgb": "RGB superpuesto",
-    "rgbBands": "Bandas RGB",
-    "recomposing": "leyendo...",
-    "zScale": "Alto",
-    "slice": "Corte",
-    "sliceAt": "corte en {{band}} {{units}}",
-    "reading": "Leyendo la banda {{done}} de {{total}}...",
-    "summary": "{{nx}} x {{ny}} celdas, {{nz}} bandas a lo largo de {{axis}}",
-    "errorNoCube": "El archivo de origen de esta capa ya no está abierto, así que no se puede leer un cubo.",
-    "error": {
-      "shapeMismatch": "Los planos de banda de la variable no comparten una misma forma, así que no se pueden apilar en un cubo.",
-      "rgbShapeMismatch": "Las bandas RGB elegidas no coinciden con la forma del cubo.",
-      "noBands": "Esta variable no tiene bandas que leer.",
-      "noReadWindow": "Este cubo no se puede actualizar en su sitio. Vuelva a construirlo desde Configuración."
-    }
-  },
-  "netcdfProfile": {
-    "heading": "Perfil espectral",
-    "clear": "Borrar",
-    "chartAria": "Valores de píxel muestreados a lo largo del eje de bandas",
-    "popOut": "Desacoplar",
-    "dock": "Acoplar",
-    "poppedOutHint": "El gráfico está abierto en una ventana sobre el mapa.",
-    "noValues": "No hay valores que representar para estos píxeles.",
-    "exportPng": "PNG",
-    "exportCsv": "CSV",
-    "exportError": "No se pudo exportar el gráfico."
-  },
-  "netcdfIdentify": {
-    "noData": "sin datos",
-    "coordinates": "lon, lat",
-    "cell": "fila, columna"
+    "defaultAuthorName": "Autor",
+    "addComment": "Añadir comentario",
+    "addCommentTooltip": "Colocar un nuevo comentario de revisión en el mapa",
+    "yourNamePlaceholder": "Su nombre…",
+    "saveName": "Guardar nombre",
+    "noNameSet": "Sin nombre definido — los comentarios aparecerán como «{{name}}»",
+    "changeNameTooltip": "Cambiar nombre",
+    "setYourName": "Definir su nombre",
+    "changeName": "Cambiar nombre",
+    "postingAs": "Publicando como <strong>{{name}}</strong>",
+    "copy": "Copiar",
+    "startLiveSession": "Iniciar sesión en vivo",
+    "starting": "Iniciando…",
+    "sessionCodePlaceholder": "INTRODUZCA EL CÓDIGO DE SESIÓN",
+    "connect": "Conectar",
+    "joining": "Uniéndose…",
+    "liveSync": "Sincronización en vivo ({{count}} en línea)",
+    "offlineWorkspace": "Sin conexión / Espacio de trabajo privado",
+    "disconnect": "Desconectar",
+    "joinFailed": "No se pudo unir a la sesión.",
+    "startFailed": "No se pudo iniciar la sesión.",
+    "filterOpen": "Abiertos ({{count}})",
+    "filterResolved": "Resueltos ({{count}})",
+    "filterAll": "Todos ({{count}})",
+    "emptyOpen": "No hay comentarios abiertos",
+    "emptyResolved": "No hay comentarios resueltos",
+    "emptyHint": "Haga clic en «Añadir comentario» arriba y seleccione cualquier ubicación o entidad del mapa para dejar una nota de revisión.",
+    "resolvedBadge": "Resuelto",
+    "zoomToLocation": "Ajustar zoom a la ubicación",
+    "markResolved": "Marcar como resuelto",
+    "reopenThread": "Reabrir el hilo de comentarios",
+    "deleteThread": "Eliminar el hilo de comentarios",
+    "anchorFeature": "Entidad n.º {{id}} ({{layer}})",
+    "anchorPoint": "Punto ({{coords}})",
+    "anchorMap": "Mapa",
+    "anchoredToFeature": "Anclado a la entidad n.º {{id}} ({{layer}})",
+    "anchoredToPoint": "Anclado a ({{coords}})",
+    "mapPoint": "Punto del mapa",
+    "reply": "Responder",
+    "replyPlaceholder": "Escriba una respuesta..."
   }
 }

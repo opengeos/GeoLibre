@@ -464,22 +464,39 @@ export function filterProducts(products: SourceCoopProduct[], query: string): So
     .map((entry) => entry.product);
 }
 
-/** Merges catalog sources, preferring the richer record for a duplicate id. */
+/**
+ * Merges catalog sources field-by-field for a duplicate id: empty `description`
+ * and `tags` values are filled from a later record, `featured` is true if any
+ * source flags it, and every other field keeps the first-seen value. The fill is
+ * deliberately one-way for `description` and `tags` only — when both sources
+ * carry a non-empty value for either, the later one is dropped rather than
+ * unioned (`featured` is unaffected; a later `true` always wins). That is safe
+ * for the only caller (`fetchCatalog` merges `featured` before `recent`, and the
+ * feed never contributes tags) but is worth revisiting before reusing this with
+ * two sources that can each populate the same field differently.
+ */
 export function mergeProducts(...groups: SourceCoopProduct[][]): SourceCoopProduct[] {
   const byId = new Map<string, SourceCoopProduct>();
   for (const group of groups) {
     for (const product of group) {
       const id = `${product.accountId}/${product.productId}`;
       const existing = byId.get(id);
-      // The feed carries no tags, `/products/*` does; prefer whichever record
-      // actually has them so a merged entry never loses searchable text.
-      if (
-        !existing ||
-        (existing.tags.length === 0 && product.tags.length > 0) ||
-        (!existing.description && product.description)
-      ) {
-        byId.set(id, { ...existing, ...product });
+      if (!existing) {
+        byId.set(id, product);
+        continue;
       }
+      // The feed carries no tags, `/products/*` does; the two sources can
+      // enrich different fields (one adds tags, the other a description). Fill
+      // only empty fields from the later record so neither enrichment is lost,
+      // and keep first-seen values when both sides already have one — matching
+      // title/url/updatedAt. Featured is true if either source flags it, so a
+      // feed record (`featured: false`) never un-flags an API featured product.
+      byId.set(id, {
+        ...existing,
+        description: existing.description || product.description,
+        tags: existing.tags.length > 0 ? existing.tags : product.tags,
+        featured: existing.featured || product.featured,
+      });
     }
   }
   return [...byId.values()];

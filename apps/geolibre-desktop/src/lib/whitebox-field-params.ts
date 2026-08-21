@@ -17,9 +17,12 @@ export const FIELD_PARAM_SUFFIX = /(^|_)(fields?|attributes?)$/i;
 /**
  * Whether a parameter name reads as an attribute-column name.
  *
- * Callers must also check the parameter is a scalar string: `join_tables`
- * exposes `primary_key_field` as a *dataset* input, and a dataset parameter
- * names a file, not a column.
+ * Callers must also check the parameter is a scalar string: the sidecar's
+ * catalog exposes `classify_objects_svm`'s `class_field` as a *dataset* input,
+ * and a dataset parameter names a file, not a column. (The WASM manifests used
+ * to mistype ~40 of these the same way, `dissolve_field` among them, until
+ * opengeos/whitebox-wasm#19 taught the manifest inference that a `*_field` name
+ * is a column; the sidecar catalog still carries a few.)
  *
  * @param name - The tool parameter's name.
  * @returns `true` when the name ends in a field/attribute suffix.

@@ -18,3 +18,14 @@ const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
 export function selectDuckDbBundle(): Promise<duckdb.DuckDBBundle> {
   return duckdb.selectBundle(MANUAL_BUNDLES);
 }
+
+/**
+ * A worker running the bundled script.
+ *
+ * Same-origin, so the URL goes straight to `new Worker`. The CDN variant has to
+ * take a detour through a blob shim; keeping worker creation behind this shared
+ * export is what lets the two differ without the caller knowing.
+ */
+export function createDuckDbWorker(bundle: duckdb.DuckDBBundle): Worker {
+  return new Worker(bundle.mainWorker!, { type: "module" });
+}

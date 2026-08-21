@@ -30,6 +30,9 @@ import {
   supportsBridgedOpacity,
   useAppStore,
   excludeHiddenFieldsFromGeojson,
+  layerGroupDepth,
+  layerGroupMoveability,
+  layerPanelGroupHeaders,
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
@@ -52,21 +55,24 @@ import {
   materializeEmbeddableVectorLayers,
   RASTER_SOURCE_KIND,
   reloadVectorControlLayer,
+  replayVectorControlLayerById,
   SKETCHES_SOURCE_KIND,
   TIME_SLIDER_PLUGIN_ID,
   type TimePropertyCandidate,
   type TimePropertyRecord,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
+import { startFeatureSelection, type MapController } from "@geolibre/map";
 import {
   applyMapboxStyleImport,
   applyQmlImport,
   applySldImport,
   buildMapboxStyle,
+  buildGeoLibreQueryStyle,
   buildQml,
   buildSld,
   isPlaceholderLayer,
   mapboxStyleToJson,
+  geoLibreStyleSourceName,
   parseMapboxStyle,
   parseQml,
   parseSld,
@@ -87,6 +93,7 @@ import {
   zoomToSelection,
 } from "../../lib/selection-actions";
 import { isMobile } from "../../lib/is-mobile";
+import { PLANET_SWITCHER_LABEL_KEYS } from "../../lib/planet-labels";
 import { masHidesDataSource } from "../../lib/mas-build";
 import {
   DATA_SOURCE_CATALOG,
@@ -127,6 +134,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  CircleDashed,
   ClipboardPaste,
   Copy,
   Database,
@@ -140,9 +148,11 @@ import {
   FolderPlus,
   GripVertical,
   Info,
+  LassoSelect,
   Layers,
   Library,
   Locate,
+  Lock,
   Map as MapIcon,
   MoreHorizontal,
   MousePointerClick,
@@ -153,6 +163,7 @@ import {
   Pencil,
   PencilRuler,
   PenTool,
+  Pentagon,
   RefreshCw,
   Save,
   Shuffle,
@@ -164,6 +175,7 @@ import {
   TableProperties,
   Timer,
   Trash2,
+  Unlock,
   Upload,
   X,
   ZoomIn,
@@ -177,8 +189,10 @@ import {
   refreshGeoJsonLayer,
   setLayerConnectionResult,
   setLayerRefreshConfig,
+  supportsAutoRefresh,
   supportsRefreshFailurePolicy,
 } from "../../lib/layer-refresh";
+import { isIcebergLayer, refreshIcebergLayer } from "../../lib/iceberg";
 import {
   getLayerWatchConfig,
   isLocalFileLayer,
@@ -205,6 +219,7 @@ import {
   exportVectorLayer,
   geojsonVectorSourceId,
   kmlExportErrorMessage,
+  layerSupportsPolylineExport,
   resolveLayerGeojson,
   sanitizeExportFileName,
   shapefileFieldWarnings,
@@ -222,12 +237,15 @@ import {
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { isTauri } from "../../lib/is-tauri";
 import { getNetcdfLayerState } from "../../lib/netcdf-image-symbology";
+import { participantCanEditLayer } from "../../lib/collab-protocol";
+import type { CollaborationApi } from "../../hooks/useCollaboration";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
 import { LayerSwatchIcon } from "./LayerSwatchIcon";
 
 interface LayerPanelProps {
   mapControllerRef: RefObject<MapController | null>;
+  collaborationApi?: CollaborationApi;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   /** Id of the layer currently in a geometry-edit session, or null. */
   geometryEditLayerId: string | null;
@@ -239,6 +257,13 @@ interface LayerPanelProps {
   onMaterializeDuckDBLayer: (layer: GeoLibreLayer) => void;
   /** Open the floating Add Raster Layer panel for advanced raster styling. */
   onOpenRasterStylePanel: () => void;
+  /**
+   * Select the target layer and expand the built-in Style panel. Left undefined
+   * when that panel is hidden (Settings → "Show Style panel"), which also hides
+   * the menu item — the panel is not mounted then, so the request would be
+   * dropped rather than queued.
+   */
+  onOpenStylePanel?: () => void;
   /**
    * Open the floating Extract Subset panel for a COG/WMS/XYZ layer, letting the
    * user draw a bounding box and export a clipped GeoTIFF.
@@ -297,22 +322,6 @@ const SYNC_CLOCK_TICK_MS = 60_000;
 const ADD_DATA_DIALOG_SOURCES = DATA_SOURCE_CATALOG.filter(
   (entry): entry is DataSourceCatalogEntry & { id: AddDataKind } => entry.id in KIND_I18N_KEY,
 );
-
-/** Menu labels for the planet switcher, keyed by celestial body. */
-const PLANET_SWITCHER_LABEL_KEYS: Record<EllipsoidId, ParseKeys> = {
-  earth: "planetSwitcher.earth",
-  mercury: "planetSwitcher.mercury",
-  venus: "planetSwitcher.venus",
-  moon: "planetSwitcher.moon",
-  mars: "planetSwitcher.mars",
-  io: "planetSwitcher.io",
-  europa: "planetSwitcher.europa",
-  ganymede: "planetSwitcher.ganymede",
-  callisto: "planetSwitcher.callisto",
-  titan: "planetSwitcher.titan",
-  pluto: "planetSwitcher.pluto",
-  charon: "planetSwitcher.charon",
-};
 
 type LayerRefreshStatus = {
   type: "refreshing" | "success" | "error" | "warning";
@@ -598,12 +607,14 @@ function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
 
 export function LayerPanel({
   mapControllerRef,
+  collaborationApi,
   onResizeStart,
   geometryEditLayerId,
   onToggleGeometryEdit,
   onCancelGeometryEdit,
   onMaterializeDuckDBLayer,
   onOpenRasterStylePanel,
+  onOpenStylePanel,
   onOpenRasterSubset,
   autoCollapse = false,
   collapsed: controlledCollapsed,
@@ -692,6 +703,40 @@ export function LayerPanel({
   const setRasterAttributeTableOpen = useAppStore((s) => s.setRasterAttributeTableOpen);
   const setLoadEditorFeaturesOpen = useAppStore((s) => s.setLoadEditorFeaturesOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
+  const collaboration = useAppStore((s) => s.collaboration);
+  const selfParticipant = useMemo(() => {
+    if (!collaboration.isActive || !collaboration.clientId) return null;
+    return collaboration.participants.find((p) => p.clientId === collaboration.clientId) ?? null;
+  }, [collaboration.isActive, collaboration.clientId, collaboration.participants]);
+
+  const canEditLayer = useCallback(
+    (layerId: string): boolean => {
+      if (!collaboration.isActive) return true;
+      if (collaborationApi?.canEditLayer) return collaborationApi.canEditLayer(layerId);
+      if (!selfParticipant) {
+        if (collaboration.role === "host") return true;
+        return (
+          collaboration.mode === "co-edit" &&
+          !(collaboration.lockedLayerIds ?? []).includes(layerId)
+        );
+      }
+      return participantCanEditLayer(
+        selfParticipant,
+        collaboration.mode,
+        layerId,
+        collaboration.lockedLayerIds ?? [],
+      );
+    },
+    [
+      collaboration.isActive,
+      collaboration.role,
+      collaboration.mode,
+      collaboration.lockedLayerIds,
+      selfParticipant,
+      collaborationApi,
+    ],
+  );
+
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
@@ -884,19 +929,7 @@ export function LayerPanel({
     [layerGroups],
   );
   const groupDepth = useCallback(
-    (group: LayerGroup) => {
-      let depth = 0;
-      let parentId = group.parentId;
-      const visited = new Set([group.id]);
-      while (parentId && !visited.has(parentId)) {
-        visited.add(parentId);
-        const parent = groupById.get(parentId);
-        if (!parent) break;
-        depth += 1;
-        parentId = parent.parentId;
-      }
-      return depth;
-    },
+    (group: LayerGroup) => layerGroupDepth(group, groupById),
     [groupById],
   );
   const hasCollapsedAncestor = useCallback(
@@ -929,59 +962,19 @@ export function LayerPanel({
       }),
     [groupById, layerGroups],
   );
-  const firstMemberIdByGroup = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const layer of visibleLayers) {
-      if (layer.groupId && !map.has(layer.groupId)) {
-        map.set(layer.groupId, layer.id);
-      }
-    }
-    return map;
-  }, [visibleLayers]);
-  const descendantLayerAnchorByGroup = useMemo(() => {
-    const result = new Map<string, string>();
-    const displayGroupIds = visibleLayers
-      .map((layer) => layer.groupId)
-      .filter((id): id is string => Boolean(id && groupById.has(id)));
-    for (const group of layerGroups) {
-      if (firstMemberIdByGroup.has(group.id)) continue;
-      const anchor = displayGroupIds.find((candidateId) => {
-        let parentId = groupById.get(candidateId)?.parentId;
-        const visited = new Set<string>();
-        while (parentId && !visited.has(parentId)) {
-          if (parentId === group.id) return true;
-          visited.add(parentId);
-          parentId = groupById.get(parentId)?.parentId;
-        }
-        return false;
-      });
-      if (anchor) result.set(group.id, anchor);
-    }
-    return result;
-  }, [firstMemberIdByGroup, groupById, layerGroups, visibleLayers]);
-  const organizerHeadersByAnchor = useMemo(() => {
-    const result = new Map<string, LayerGroup[]>();
-    for (const group of layerGroups) {
-      const anchor = descendantLayerAnchorByGroup.get(group.id);
-      if (!anchor) continue;
-      const headers = result.get(anchor) ?? [];
-      headers.push(group);
-      result.set(anchor, headers);
-    }
-    for (const headers of result.values()) {
-      headers.sort((a, b) => groupDepth(a) - groupDepth(b));
-    }
-    return result;
-  }, [descendantLayerAnchorByGroup, groupDepth, layerGroups]);
-  // Empty folders have no member to anchor them, so they render pinned at the
-  // top of the panel where they are easy to drop layers into.
-  const emptyGroups = useMemo(
-    () =>
-      layerGroups.filter(
-        (group) =>
-          !firstMemberIdByGroup.has(group.id) && !descendantLayerAnchorByGroup.has(group.id),
-      ),
-    [descendantLayerAnchorByGroup, firstMemberIdByGroup, layerGroups],
+  // Every group header — the group a row belongs to, the organizers above it
+  // whose layers all live in child groups, and the folders holding no layer at
+  // all — comes from one core walk, anchored to the layer row it is drawn
+  // above. Deriving them together is what keeps a nested folder below the
+  // parent it sits in, and lets an empty folder keep its spot relative to its
+  // siblings when one of them gains a layer (GeoLibre#1739).
+  const groupHeaders = useMemo(
+    () => layerPanelGroupHeaders(layers, layerGroups),
+    [layers, layerGroups],
+  );
+  const groupMoveability = useMemo(
+    () => layerGroupMoveability(layers, layerGroups),
+    [layers, layerGroups],
   );
   // Resize the metadata dialog from its bottom-end grip. The dialog is centred
   // via a -50% transform, so each edge moves by half the size change; growing
@@ -1391,6 +1384,47 @@ export function LayerPanel({
           scheduleStatusClear(layer.id);
           return;
         }
+        if (isIcebergLayer(layer)) {
+          // Iceberg layers re-run their stored, row-capped scan. This is the
+          // only path that re-reads the table: they are excluded from the
+          // interval scheduling below, so `automatic` is never true here.
+          const { geojson, featureCount, totalRows, truncated } = await refreshIcebergLayer(layer);
+          const latest = useAppStore
+            .getState()
+            .layers.find((candidate) => candidate.id === layer.id);
+          if (!latest) return;
+
+          updateLayer(layer.id, {
+            geojson,
+            ...setLayerConnectionResult(latest, {
+              syncedAt: new Date().toISOString(),
+              error: null,
+            }),
+            metadata: {
+              ...latest.metadata,
+              featureCount,
+              icebergTotalRows: totalRows,
+              icebergTruncated: truncated,
+            },
+          });
+
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: {
+              type: "success",
+              message: truncated
+                ? t("layers.refreshedTruncated", {
+                    shown: featureCount.toLocaleString(),
+                    total: totalRows.toLocaleString(),
+                  })
+                : t("layers.refreshedCount", {
+                    count: featureCount.toLocaleString(),
+                  }),
+            },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
         if (isLocalFileLayer(layer)) {
           // Local-file vector layers re-read their features from disk (the same
           // conversion the import ran) rather than fetching a URL.
@@ -1425,10 +1459,16 @@ export function LayerPanel({
           return;
         }
         if (isVectorControlRefreshLayer(layer)) {
-          const info = await reloadVectorControlLayer(layer.id);
+          // A layer whose restore failed stays in the project but never made it
+          // into the control, so reloadLayer cannot find it. Replaying it is
+          // what brings such a layer back once the source is reachable again,
+          // which is why refresh (manual and automatic) tries that second.
+          const info =
+            (await reloadVectorControlLayer(layer.id)) ??
+            (await replayVectorControlLayerById(layer.id));
           if (!info) {
             // The control is unavailable (panel never opened, or torn down
-            // and not yet replayed) or no longer knows this layer id.
+            // and not yet replayed) or the replay above did not succeed.
             // Automatic ticks fire on a timer the user didn't initiate, so
             // skip silently and clear the transient note instead of surfacing
             // an error every interval until the control comes back.
@@ -1517,7 +1557,9 @@ export function LayerPanel({
           updateLayer(layer.id, {
             ...setLayerConnectionResult(latest, { error: message }),
             ...(latest.connection?.onFailure === "clear" && latest.geojson
-              ? { geojson: { type: "FeatureCollection" as const, features: [] } }
+              ? {
+                  geojson: { type: "FeatureCollection" as const, features: [] },
+                }
               : {}),
           });
         }
@@ -1537,7 +1579,7 @@ export function LayerPanel({
   );
 
   const handleExportLayer = useCallback(
-    async (layer: GeoLibreLayer, format: VectorExportFormat) => {
+    async (layer: GeoLibreLayer, format: VectorExportFormat, precision?: number) => {
       clearRefreshStatusTimer(layer.id);
       try {
         const geojson = await resolveLayerGeojson(
@@ -1562,11 +1604,17 @@ export function LayerPanel({
         const egressGeojson = layer.fieldVisibility
           ? excludeHiddenFieldsFromGeojson(geojson, layer.fieldVisibility)
           : geojson;
+        const polylinePrecision =
+          precision ??
+          (typeof layer.metadata?.polylinePrecision === "number"
+            ? layer.metadata.polylinePrecision
+            : 5);
         const savedPath = await exportVectorLayer(
           egressGeojson,
           format,
           sanitizeExportFileName(layer.name),
           layer.name,
+          polylinePrecision,
         );
         // A null path means the user cancelled the save dialog, so no note.
         if (savedPath !== null) {
@@ -1702,6 +1750,42 @@ export function LayerPanel({
     [exportLayerStyle, t],
   );
 
+  // Export the compact style consumed by `?data=…&style=…`. Its render-layer
+  // source is the original data filename stem, which also lets one style file
+  // target individual GeoJSON members of a ZIP archive.
+  const handleExportGeoLibreStyle = useCallback(
+    (layer: GeoLibreLayer) =>
+      exportLayerStyle(
+        layer,
+        (geojson) => {
+          if (!geojson) {
+            return {
+              error:
+                geojsonVectorSourceId(layer) !== null
+                  ? t("layers.exportStyleDataNotReady")
+                  : t("layers.exportStyleNeedsFeatures"),
+            };
+          }
+          const result = buildGeoLibreQueryStyle(layer, geojson);
+          return { text: mapboxStyleToJson(result), warnings: result.warnings };
+        },
+        {
+          defaultName: `${sanitizeExportFileName(
+            geoLibreStyleSourceName(layer),
+          )}.geolibre.style.json`,
+          filters: [{ name: "GeoLibre URL style", extensions: ["json"] }],
+          browserTypes: [
+            {
+              description: "GeoLibre URL style",
+              accept: { "application/json": [".json"] },
+            },
+          ],
+          mimeType: "application/json",
+        },
+      ),
+    [exportLayerStyle, t],
+  );
+
   // Export a vector layer's symbology as an OGC SLD document, the interchange
   // format QGIS, GeoServer, MapServer, and ArcGIS speak. Unlike the Mapbox
   // export, SLD carries no data, so a layer whose features are not readable can
@@ -1755,7 +1839,8 @@ export function LayerPanel({
     [exportLayerStyle],
   );
 
-  // Import a symbology file (Mapbox GL / MapLibre style JSON or an OGC SLD) and
+  // Import a symbology file (including GeoLibre URL and Mapbox/MapLibre style
+  // JSON, or an OGC SLD/QGIS QML) and
   // apply it to a vector layer, so cartography authored elsewhere (QGIS,
   // GeoServer, another map, or a style exported from GeoLibre) can be brought
   // back in instead of being rebuilt by hand. The format is detected from the
@@ -1768,10 +1853,14 @@ export function LayerPanel({
         const picked = await openLocalDataFileWithFallback({
           filters: [
             {
-              name: "Style (Mapbox GL / SLD / QML)",
+              name: "Style (GeoLibre URL / Mapbox GL / SLD / QML)",
               extensions: ["json", "sld", "qml", "xml"],
             },
           ],
+          // Android filters document pickers by MIME type, but SLD and QML do
+          // not have consistently reported MIME types. Leave the native picker
+          // broad there, then validate the selected file by content below.
+          androidFilters: [],
           accept: ".json,.sld,.qml,.xml,application/json,application/xml,text/xml",
           readText: true,
         });
@@ -1784,7 +1873,9 @@ export function LayerPanel({
         // Detect the format from the content, which is more reliable than the
         // file extension (a `.xml` can hold either XML dialect): a QGIS QML has
         // a `<qgis>`/`renderer-v2` root, an SLD a `StyledLayerDescriptor` root,
-        // and everything else is parsed as a Mapbox GL style JSON.
+        // and everything else (including a `.geolibre.style.json` export) is
+        // parsed as Mapbox GL style JSON. Its source binding is intentionally
+        // irrelevant here: importing applies symbology to the selected layer.
         const trimmed = picked.text.trimStart();
         const isXml = trimmed.startsWith("<");
         const isQml = isXml && isQmlStyleXml(picked.text);
@@ -1915,10 +2006,15 @@ export function LayerPanel({
               ? layer.metadata.postgisSchema
               : "public";
           const table = layer.metadata.postgisTable as string;
+          const geometryColumn =
+            typeof layer.metadata.postgisGeometryColumn === "string"
+              ? layer.metadata.postgisGeometryColumn
+              : undefined;
           const result = await writePostgisTable({
             connection,
             schema_name: schema,
             table,
+            geometry_column: geometryColumn,
             geojson,
             // Scope deletions to the rows this session actually read so a
             // save cannot sweep away rows inserted concurrently elsewhere.
@@ -1935,6 +2031,7 @@ export function LayerPanel({
               connection,
               schema_name: schema,
               table,
+              geometry_column: geometryColumn,
               excluded_fields: layer.fieldVisibility
                 ? Object.keys(layer.fieldVisibility).filter(
                     (k) => layer.fieldVisibility![k] === "excluded",
@@ -2298,7 +2395,7 @@ export function LayerPanel({
 
     for (const layer of layers) {
       const config = getLayerRefreshConfig(layer);
-      if (!config.enabled || !isRefreshableLayer(layer)) continue;
+      if (!config.enabled || !isRefreshableLayer(layer) || !supportsAutoRefresh(layer)) continue;
 
       activeLayerIds.add(layer.id);
       const existing = refreshTimersRef.current.get(layer.id);
@@ -2312,6 +2409,7 @@ export function LayerPanel({
 
         const latestConfig = getLayerRefreshConfig(latest);
         if (!latestConfig.enabled || !isRefreshableLayer(latest)) return;
+        if (!supportsAutoRefresh(latest)) return;
         void handleRefreshLayerRef.current(latest, true);
       }, config.intervalMs);
 
@@ -2336,7 +2434,7 @@ export function LayerPanel({
       const now = Date.now();
       for (const layer of useAppStore.getState().layers) {
         const config = getLayerRefreshConfig(layer);
-        if (!config.enabled || !isRefreshableLayer(layer)) continue;
+        if (!config.enabled || !isRefreshableLayer(layer) || !supportsAutoRefresh(layer)) continue;
         const lastSynced = layer.connection?.lastSyncedAt
           ? new Date(layer.connection.lastSyncedAt).getTime()
           : 0;
@@ -2442,19 +2540,21 @@ export function LayerPanel({
 
   useEffect(() => {
     const watchers = watchUnsubsRef.current;
+    const refreshTimers = refreshTimersRef.current;
+    const refreshStatusTimers = refreshStatusTimersRef.current;
     return () => {
       for (const entry of watchers.values()) {
         entry.unwatch();
       }
       watchers.clear();
-      for (const entry of refreshTimersRef.current.values()) {
+      for (const entry of refreshTimers.values()) {
         window.clearInterval(entry.timer);
       }
-      refreshTimersRef.current.clear();
-      for (const timer of refreshStatusTimersRef.current.values()) {
+      refreshTimers.clear();
+      for (const timer of refreshStatusTimers.values()) {
         window.clearTimeout(timer);
       }
-      refreshStatusTimersRef.current.clear();
+      refreshStatusTimers.clear();
     };
   }, []);
 
@@ -2583,8 +2683,7 @@ export function LayerPanel({
   const renderGroupHeader = (group: LayerGroup) => {
     if (hasCollapsedAncestor(group)) return null;
     const isDropTarget = dropTargetGroupId === group.id;
-    const canReorderGroup =
-      firstMemberIdByGroup.has(group.id) || descendantLayerAnchorByGroup.has(group.id);
+    const moveability = groupMoveability.get(group.id);
     const moveTargets = groupMoveTargets(group);
     return (
       <div
@@ -2746,7 +2845,7 @@ export function LayerPanel({
                   menu on select; only the rename item above keeps it, so the
                   menu's close does not race its input autofocus. */}
               <DropdownMenuItem
-                disabled={!canReorderGroup}
+                disabled={!moveability?.up}
                 onSelect={() => {
                   reorderLayerGroup(group.id, "up");
                 }}
@@ -2755,7 +2854,7 @@ export function LayerPanel({
                 {t("layers.moveGroupUp")}
               </DropdownMenuItem>
               <DropdownMenuItem
-                disabled={!canReorderGroup}
+                disabled={!moveability?.down}
                 onSelect={() => {
                   reorderLayerGroup(group.id, "down");
                 }}
@@ -2827,9 +2926,17 @@ export function LayerPanel({
   }
 
   return (
+    // The two named rows do not have to match the child count: the header takes
+    // the `auto` row, the layer list takes `minmax(0, 1fr)`, and the separator
+    // and place search below it fall into implicit auto rows (the dialogs and
+    // menus after them render through Radix portals, so they take no row at
+    // all). Only the list sits in the flexible row, which is what makes it the
+    // part that shrinks and scrolls once the panel reaches its max height — so
+    // a new direct child added here must not displace the ScrollArea from the
+    // second in-flow position.
     <aside
       aria-label={t("sharedRail.layers")}
-      className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-b bg-card max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-e"
+      className="relative grid max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 grid-rows-[auto_minmax(0,1fr)] border-b bg-card max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-e"
     >
       <div
         role="separator"
@@ -2934,10 +3041,15 @@ export function LayerPanel({
         </div>
       </div>
       <ScrollArea
-        className="flex-1 [&_[data-radix-scroll-area-viewport]>div]:block! [&_[data-radix-scroll-area-viewport]>div]:w-full! [&_[data-radix-scroll-area-viewport]>div]:min-w-0!"
+        className="min-h-0 [&_[data-radix-scroll-area-viewport]]:touch-pan-y [&_[data-radix-scroll-area-viewport]]:overscroll-contain [&_[data-radix-scroll-area-viewport]>div]:block! [&_[data-radix-scroll-area-viewport]>div]:w-full! [&_[data-radix-scroll-area-viewport]>div]:min-w-0!"
         // Radix measures scroll content with an injected display:table
         // wrapper. Opt this viewport into block sizing so long layer names
-        // cannot establish a wider min-content table.
+        // cannot establish a wider min-content table. The panel's minmax(0, 1fr)
+        // content row constrains overflowing cards without making short lists fill
+        // the mobile panel's maximum height. `-webkit-overflow-scrolling` is not
+        // set here: Radix already injects it for every viewport, and it is a
+        // legacy iOS property that does nothing on the Android WebView this fix
+        // targets.
       >
         <div className="w-full min-w-0 space-y-1 p-2">
           {layers.length === 0 && (
@@ -2945,12 +3057,8 @@ export function LayerPanel({
               {isBeginnerProfile ? t("layers.emptyBeginner") : t("layers.empty")}
             </p>
           )}
-          {emptyGroups.map((group) => (
-            <Fragment key={group.id}>{renderGroupHeader(group)}</Fragment>
-          ))}
           {visibleLayers.map((layer, displayIndex) => {
             const group = layer.groupId ? groupById.get(layer.groupId) : undefined;
-            const isFirstOfGroup = group ? firstMemberIdByGroup.get(group.id) === layer.id : false;
             const groupCollapsed = group?.collapsed ?? false;
             const groupAncestorCollapsed = group ? hasCollapsedAncestor(group) : false;
             // When an ancestor group is hidden, a layer whose own visibility
@@ -2962,8 +3070,8 @@ export function LayerPanel({
             // immediate parent, so a hidden grandparent gets the cue too. Given
             // the memoized `groupById` rather than the array, so folding every
             // row does not rebuild that map once per layer.
-            const groupHidden =
-              layer.visible && !effectiveLayerRenderState(layer, groupById).visible;
+            const layerRendered = effectiveLayerRenderState(layer, groupById).visible;
+            const groupHidden = layer.visible && !layerRendered;
             const visibilityToggleLabel = groupHidden
               ? `${t("layers.hiddenByGroup")} — ${t("layers.hideLayer")}`
               : layer.visible
@@ -3033,6 +3141,7 @@ export function LayerPanel({
             // Export writes the layer's GeoJSON features to disk; only
             // geojson-backed vector layers carry those features.
             const canExportLayer = layer.type === "geojson";
+            const canExportPolyline = canExportLayer && layerSupportsPolylineExport(layer);
             // Importing a style (Mapbox GL or SLD) only writes the layer's
             // vector symbology, so it applies to any vector-styled layer (local
             // GeoJSON and vector tiles), not just the export-capable GeoJSON
@@ -3083,6 +3192,13 @@ export function LayerPanel({
             // dismissed (and its on-map icon removed) when closed.
             const canEditRasterStyle = layer.metadata.sourceKind === RASTER_SOURCE_KIND;
             const canRefresh = isRefreshableLayer(layer);
+            // Iceberg layers refresh only on demand: scanning a table that
+            // large on a timer is never what the user meant, so the interval
+            // settings are unavailable even though Refresh is not.
+            const canAutoRefresh = canRefresh && supportsAutoRefresh(layer);
+            const isLayerLocked =
+              collaboration.isActive && (collaboration.lockedLayerIds ?? []).includes(layer.id);
+            const layerEditable = canEditLayer(layer.id);
             const refreshConfig = getLayerRefreshConfig(layer);
             // Live SQL query layers (issue #1295) refresh by re-running their
             // stored DuckDB statement and offer a shortcut to edit it.
@@ -3113,14 +3229,9 @@ export function LayerPanel({
             const moveIds = selectedMoveIds(layer.id);
             return (
               <Fragment key={layer.id}>
-                {isFirstOfGroup &&
-                  group &&
-                  organizerHeadersByAnchor
-                    .get(group.id)
-                    ?.map((organizer) => (
-                      <Fragment key={organizer.id}>{renderGroupHeader(organizer)}</Fragment>
-                    ))}
-                {isFirstOfGroup && group && renderGroupHeader(group)}
+                {groupHeaders.aboveLayer.get(layer.id)?.map((header) => (
+                  <Fragment key={header.id}>{renderGroupHeader(header)}</Fragment>
+                ))}
                 {!groupCollapsed && !groupAncestorCollapsed && (
                   <div
                     data-layer-card=""
@@ -3149,6 +3260,10 @@ export function LayerPanel({
                     aria-pressed={selectedLayerIds.has(layer.id)}
                     onClick={(e) => handleLayerSelection(e, layer.id)}
                     onKeyDown={(e) => {
+                      // Only act on the card itself: preventDefault here would
+                      // otherwise cancel the Enter activation of the action
+                      // buttons nested inside it.
+                      if (e.target !== e.currentTarget) return;
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         setSelectedLayerIds(new Set([layer.id]));
@@ -3239,16 +3354,28 @@ export function LayerPanel({
                             groupHidden ? "text-muted-foreground" : ""
                           }`}
                           title={
-                            groupHidden
-                              ? `${t("layers.hiddenByGroup")} — ${t("layers.doubleClickToRename")}`
-                              : t("layers.doubleClickToRename")
+                            isLayerLocked
+                              ? t("collaborate.layerLockedHint")
+                              : groupHidden
+                                ? `${t("layers.hiddenByGroup")} — ${t(
+                                    "layers.doubleClickToRename",
+                                  )}`
+                                : t("layers.doubleClickToRename")
                           }
                           onDoubleClick={(e: ReactMouseEvent) => {
                             e.stopPropagation();
-                            beginRename(layer);
+                            if (layerEditable) beginRename(layer);
                           }}
                         >
                           {layer.name}
+                        </span>
+                      )}
+                      {isLayerLocked && (
+                        <span title={t("collaborate.layerLockedHint")}>
+                          <Lock
+                            className="h-3 w-3 shrink-0 text-amber-500"
+                            aria-label={t("collaborate.layerLockedHint")}
+                          />
                         </span>
                       )}
                       <span className="shrink-0 text-[10px] uppercase text-muted-foreground">
@@ -3318,7 +3445,7 @@ export function LayerPanel({
                         onChange={(v) => setLayerOpacity(layer.id, v)}
                       />
                     )}
-                    <div className="mt-2 flex gap-1">
+                    <div className="mt-2 flex flex-wrap gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -3378,6 +3505,22 @@ export function LayerPanel({
                       >
                         <MousePointerClick className="h-3.5 w-3.5" />
                       </Button>
+                      {onOpenStylePanel && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title={t("layers.openStylePanel")}
+                          aria-label={t("layers.openStylePanel")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            selectLayer(layer.id);
+                            onOpenStylePanel();
+                          }}
+                        >
+                          <Palette className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -3397,13 +3540,40 @@ export function LayerPanel({
                           align="end"
                           onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                         >
-                          {/* Rename is always available — name is a display-only
-                          label, so no per-layer-type guard is needed here.
+                          {collaboration.isActive && collaboration.role === "host" && (
+                            <>
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  const currentLocks = collaboration.lockedLayerIds ?? [];
+                                  const nextLocks = currentLocks.includes(layer.id)
+                                    ? currentLocks.filter((id) => id !== layer.id)
+                                    : [...currentLocks, layer.id];
+                                  collaborationApi?.setLayerLocks(nextLocks);
+                                }}
+                              >
+                                {isLayerLocked ? (
+                                  <>
+                                    <Unlock className="me-2 h-3.5 w-3.5 text-amber-500" />
+                                    {t("collaborate.unlockLayer")}
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock className="me-2 h-3.5 w-3.5" />
+                                    {t("collaborate.lockLayer")}
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                            </>
+                          )}
+                          {/* Rename is available when layer is editable.
                           preventDefault keeps the menu's default close from
                           racing autoFocus on the rename input. */}
                           <DropdownMenuItem
+                            disabled={!layerEditable}
                             onSelect={(e: Event) => {
                               e.preventDefault();
+                              if (!layerEditable) return;
                               beginRename(layer);
                             }}
                           >
@@ -3416,6 +3586,17 @@ export function LayerPanel({
                           action item below has no such focus target, so each
                           lets Radix dismiss the menu on select rather than
                           leaving it pinned open. */}
+                          {onOpenStylePanel && (
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                selectLayer(layer.id);
+                                onOpenStylePanel();
+                              }}
+                            >
+                              <Palette className="me-2 h-3.5 w-3.5" />
+                              {t("layers.openStylePanel")}
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             onSelect={() => {
                               addLayerGroup(undefined, moveIds);
@@ -3466,7 +3647,9 @@ export function LayerPanel({
                           {canMaterializeDuckDB && (
                             <>
                               <DropdownMenuItem
+                                disabled={!layerEditable}
                                 onSelect={() => {
+                                  if (!layerEditable) return;
                                   onMaterializeDuckDBLayer(layer);
                                 }}
                               >
@@ -3478,8 +3661,9 @@ export function LayerPanel({
                           )}
                           {(canEditGeometry || geometryEditActive) && (
                             <DropdownMenuItem
-                              disabled={geometryEditElsewhere}
+                              disabled={geometryEditElsewhere || !layerEditable}
                               onSelect={() => {
+                                if (!layerEditable) return;
                                 selectLayer(layer.id);
                                 if (identifyActive) setIdentifyLayer(null);
                                 onToggleGeometryEdit(layer.id);
@@ -3493,7 +3677,9 @@ export function LayerPanel({
                           )}
                           {canLoadIntoEditor && (
                             <DropdownMenuItem
+                              disabled={!layerEditable}
                               onSelect={() => {
+                                if (!layerEditable) return;
                                 selectLayer(layer.id);
                                 setLoadEditorFeaturesOpen(true, layer.id);
                               }}
@@ -3600,6 +3786,54 @@ export function LayerPanel({
                           )}
                           {canSelectFeatures && (
                             <>
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                  <MousePointerClick className="h-3.5 w-3.5" />
+                                  {t("layers.selectFeaturesMenu")}
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                  {(
+                                    [
+                                      ["single", MousePointerClick, "layers.selectFeaturesSingle"],
+                                      ["rectangle", SquareDashed, "layers.selectFeaturesRectangle"],
+                                      ["polygon", Pentagon, "layers.selectFeaturesPolygon"],
+                                      ["freehand", LassoSelect, "layers.selectFeaturesFreehand"],
+                                      ["radius", CircleDashed, "layers.selectFeaturesRadius"],
+                                    ] as const
+                                  ).map(([shape, Icon, label]) => (
+                                    <DropdownMenuItem
+                                      key={shape}
+                                      // Drawing on the map only makes sense
+                                      // against features the user can see, and
+                                      // a click gesture on a hidden layer would
+                                      // match nothing at all.
+                                      disabled={!layerRendered}
+                                      onSelect={() => {
+                                        if (identifyActive) setIdentifyLayer(null);
+                                        startFeatureSelection({
+                                          layerId: layer.id,
+                                          shape,
+                                        });
+                                      }}
+                                    >
+                                      <Icon className="me-2 h-3.5 w-3.5" />
+                                      {t(label)}
+                                    </DropdownMenuItem>
+                                  ))}
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    disabled={!holdsSelection}
+                                    onSelect={clearFeatureSelection}
+                                  >
+                                    <X className="me-2 h-3.5 w-3.5" />
+                                    {t("toolbar.item.clearSelection")}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuLabel className="max-w-64 whitespace-normal text-xs font-normal text-muted-foreground">
+                                    {t("layers.selectFeaturesModifiers")}
+                                  </DropdownMenuLabel>
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
                               {/* Not selectLayer() + open: that would clear the
                               live selection the dialogs' add/remove/intersect
                               modes combine with, so the target travels via the
@@ -3725,6 +3959,24 @@ export function LayerPanel({
                                 >
                                   CSV (attributes only)
                                 </DropdownMenuItem>
+                                {canExportPolyline && (
+                                  <>
+                                    <DropdownMenuItem
+                                      onSelect={() => {
+                                        void handleExportLayer(layer, "polyline", 5);
+                                      }}
+                                    >
+                                      {t("layers.exportPolyline", { precision: 5 })}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onSelect={() => {
+                                        void handleExportLayer(layer, "polyline", 6);
+                                      }}
+                                    >
+                                      {t("layers.exportPolyline", { precision: 6 })}
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
                               </DropdownMenuSubContent>
                             </DropdownMenuSub>
                           )}
@@ -3739,6 +3991,14 @@ export function LayerPanel({
                               <DropdownMenuSubContent>
                                 {canExportLayer && (
                                   <>
+                                    <DropdownMenuItem
+                                      onSelect={() => {
+                                        void handleExportGeoLibreStyle(layer);
+                                      }}
+                                    >
+                                      <Download className="me-2 h-3.5 w-3.5" />
+                                      {t("layers.exportGeoLibreStyle")}
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem
                                       onSelect={() => {
                                         void handleExportStyle(layer);
@@ -3955,7 +4215,7 @@ export function LayerPanel({
                                 {t("layers.refresh")}
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                disabled={!canRefresh}
+                                disabled={!canAutoRefresh}
                                 onSelect={() => {
                                   setRefreshSettingsLayerId(layer.id);
                                 }}
@@ -4008,11 +4268,17 @@ export function LayerPanel({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-destructive"
-                        title={t("layers.removeLayer")}
+                        className="h-7 w-7 text-destructive disabled:opacity-40"
+                        title={
+                          !layerEditable
+                            ? t("collaborate.layerLockedHint")
+                            : t("layers.removeLayer")
+                        }
                         aria-label={t("layers.removeLayer")}
+                        disabled={!layerEditable}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (!layerEditable) return;
                           setLayerPendingRemoval(layer);
                         }}
                       >
@@ -4024,6 +4290,11 @@ export function LayerPanel({
               </Fragment>
             );
           })}
+          {/* Headers placed below the last layer row: the panel has no layer
+              left to anchor them above. */}
+          {groupHeaders.bottom.map((group) => (
+            <Fragment key={group.id}>{renderGroupHeader(group)}</Fragment>
+          ))}
           <div
             data-layer-card=""
             className={`rounded-md border p-2 transition-colors ${

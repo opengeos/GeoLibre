@@ -1,16 +1,11 @@
-import {
-  DEFAULT_BASEMAP,
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_BASEMAP, useAppStore } from "@geolibre/core";
 import {
   buildProtomapsBasemapStyle,
+  createPMTilesStoreLayer,
   evictOfflineBasemapStyle,
   hasPMTilesArchive,
   type MapController,
   OFFLINE_BASEMAP_SENTINEL_PREFIX,
-  pmtilesNativeLayerIds,
   PROTOMAPS_FLAVORS,
   type ProtomapsFlavor,
   readPMTilesArchiveInfo,
@@ -708,39 +703,19 @@ export function BasemapExtractPanel({ open, onClose, mapControllerRef }: Basemap
         setBasemapStyleUrl(registerOfflineBasemapStyle(layerId, style));
         trackStyledBasemap(layerId, `${layerId}.pmtiles`);
       } else {
-        const fillColor = DEFAULT_LAYER_STYLE.fillColor;
-        const layer: GeoLibreLayer = {
-          id: layerId,
-          name: fileName,
-          type: "pmtiles",
-          source: {
-            sourceId: layerId,
-            sourceLayers: info.sourceLayers,
-            tileType: info.tileType,
-            type: info.tileType === "raster" ? "raster" : "vector",
+        addLayer(
+          createPMTilesStoreLayer({
+            id: layerId,
+            name: fileName,
             url: layerUrl,
-          },
-          visible: true,
-          // Raster basemaps render dimmed (raster-opacity reads the layer-level
-          // `opacity`, not style.fillOpacity); vector renders fully opaque.
-          opacity: info.tileType === "raster" ? 0.6 : 1,
-          style: {
-            ...DEFAULT_LAYER_STYLE,
-            fillColor,
-            strokeColor: fillColor,
-          },
-          metadata: {
-            externalNativeLayer: true,
-            nativeLayerIds: pmtilesNativeLayerIds(layerId, info.tileType, info.sourceLayers),
-            pickable: true,
-            sourceId: layerId,
-            sourceKind: "pmtiles-url",
-            sourceLayers: info.sourceLayers,
             tileType: info.tileType,
-          },
-          sourcePath: layerUrl,
-        };
-        addLayer(layer);
+            ...(info.encoding ? { encoding: info.encoding } : {}),
+            sourceLayers: info.sourceLayers,
+            // Raster basemaps render dimmed (raster-opacity reads the layer-level
+            // `opacity`, not style.fillOpacity); vector renders fully opaque.
+            opacity: info.tileType === "raster" ? 0.6 : 1,
+          }),
+        );
       }
       setPhase("done");
 

@@ -321,3 +321,51 @@ describe("getColumnSettings", () => {
     );
   });
 });
+
+describe("rename/delete of a maintained editor tracking column", () => {
+  // The attribute table already disables these menu items, but renaming or
+  // deleting one of these columns detaches the data from the config that names
+  // it: the next stamp recreates the configured name and the old values are
+  // orphaned. Guard the operations themselves, not just the menu.
+  const tracked = () =>
+    makeLayer({
+      editorTracking: { enabled: true },
+      geojson: fc([
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: { name: "A", created_by: "ada", edited_by: "ada" },
+        },
+      ]),
+    });
+  const discovered = ["name", "created_by", "edited_by"];
+
+  it("refuses to rename one", () => {
+    assert.equal(renameColumn(tracked(), discovered, "created_by", "author"), null);
+  });
+
+  it("refuses to delete one", () => {
+    assert.equal(deleteColumn(tracked(), "edited_by"), null);
+  });
+
+  it("still allows renaming an ordinary column on a tracked layer", () => {
+    const patch = renameColumn(tracked(), discovered, "name", "label");
+    assert.ok(patch?.geojson);
+    assert.equal(patch.geojson.features[0].properties?.label, "A");
+  });
+
+  it("allows both once tracking is turned off", () => {
+    // The columns become ordinary data the moment nothing maintains them.
+    const untracked = makeLayer({
+      geojson: fc([
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: { name: "A", created_by: "ada", edited_by: "ada" },
+        },
+      ]),
+    });
+    assert.ok(renameColumn(untracked, discovered, "created_by", "author"));
+    assert.ok(deleteColumn(untracked, "edited_by"));
+  });
+});

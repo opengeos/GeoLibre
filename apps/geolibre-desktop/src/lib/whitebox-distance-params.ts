@@ -61,7 +61,10 @@ const DISTANCE_NAMES = new Set(["cell_size", "width", "height"]);
  * Names that match a segment above but measure something dimensionless, so
  * offering a metric unit picker for them would convert a number that was never
  * a length. `corridor_mapping_intelligence`'s `corridor_tolerance` is a fraction
- * above optimal cost in 0-1, not a width.
+ * above optimal cost in 0-1, not a width. `contiguous_cartogram`'s
+ * `densify_spacing` is an edge length counted in cells of the cartogram's own
+ * diffusion grid, not ground units — and unlike `corridor_tolerance` that tool
+ * takes only vector inputs, so the picker really does reach it.
  *
  * The catalog scan behind this list looked for a matching `double` whose
  * description reads as a fraction, ratio, angle or weight; re-run it when
@@ -69,7 +72,7 @@ const DISTANCE_NAMES = new Set(["cell_size", "width", "height"]);
  * incidental. That re-check is recorded in `CLAUDE.md`'s Conventions section
  * alongside the repo's other name/version mirrors.
  */
-const NON_DISTANCE_NAMES = new Set(["corridor_tolerance"]);
+const NON_DISTANCE_NAMES = new Set(["corridor_tolerance", "densify_spacing"]);
 
 const DISTANCE_SEGMENT_PATTERN = new RegExp(`(^|_)(${DISTANCE_SEGMENTS.join("|")})(_|$)`, "i");
 

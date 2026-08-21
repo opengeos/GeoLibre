@@ -56,4 +56,18 @@ describe("getLayerBounds", () => {
   it("returns null when there is no geojson", () => {
     assert.equal(getLayerBounds(layerWith(undefined)), null);
   });
+
+  it("uses stored source bounds for a non-GeoJSON layer", () => {
+    const layer = layerWith(undefined);
+    layer.type = "raster";
+    layer.source = { type: "raster", bounds: [-80, 30, -70, 40] };
+    assert.deepEqual(getLayerBounds(layer), [-80, 30, -70, 40]);
+  });
+
+  it("falls back to metadata bounds when source bounds are invalid", () => {
+    const layer = layerWith(undefined);
+    layer.source.bounds = [-80, Number.NaN, -70, 40];
+    layer.metadata.bounds = [-10, -5, 10, 5];
+    assert.deepEqual(getLayerBounds(layer), [-10, -5, 10, 5]);
+  });
 });

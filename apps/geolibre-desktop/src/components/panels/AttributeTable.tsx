@@ -2,13 +2,18 @@ import { useTranslation } from "react-i18next";
 import {
   attributeLinkUrl,
   coerceAttributeFormValue,
+  currentEditorIdentity,
+  editorTrackingFieldNames,
+  ensureEditorTrackingFields,
   isDuckDBQueryLayer,
+  stampFeaturePropertiesEditorTracking,
   useAppStore,
   validateAttributeFormValues,
   excludeHiddenFieldsFromGeojson,
   type AttributeFormConfig,
   type AttributeFormFieldConfig,
   type AttributeFormFieldError,
+  type EditorTrackingStampOptions,
 } from "@geolibre/core";
 import {
   getDuckDBLayerRows,
@@ -106,6 +111,7 @@ import {
   type CalcOutputType,
 } from "../../lib/attribute-expression";
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
+import { coerceNumericStringRows, pickAnalysisRows } from "../../lib/attribute-charts";
 import { computeRowSelection } from "../../lib/attribute-selection";
 import { RESERVED_PROPERTY_KEYS } from "../../lib/field-collection";
 import {
@@ -123,6 +129,7 @@ import {
   formatAttributeValue,
   geojsonVectorSourceId,
   kmlExportErrorMessage,
+  layerSupportsPolylineExport,
   sanitizeExportFileName,
   shapefileFieldWarnings,
   type VectorExportFormat,
@@ -237,6 +244,7 @@ function applyDraftsToFeatures(
   features: Feature[],
   drafts: AttributeDrafts,
   formFields?: Map<string, AttributeFormFieldConfig>,
+  tracking?: EditorTrackingStampOptions,
 ): Feature[] {
   // Derived from the whole collection, so an edit to an empty cell adopts the
   // column's type rather than the cell's (absent) one.
@@ -246,7 +254,7 @@ function applyDraftsToFeatures(
     const rowDrafts = drafts[featureId];
     if (!rowDrafts) return feature;
 
-    const properties = { ...(feature.properties ?? {}) };
+    let properties: Record<string, unknown> = { ...(feature.properties ?? {}) };
     for (const [column, draft] of Object.entries(rowDrafts)) {
       const previousValue = feature.properties?.[column];
       // Skip drafts that are invalid JSON for an object-typed cell so we never
@@ -259,6 +267,13 @@ function applyDraftsToFeatures(
       properties[column] = config
         ? coerceAttributeFormValue(config, draft)
         : parseAttributeDraft(draft, previousValue, columnTypes?.get(column));
+    }
+
+    // Only the rows that carried a draft reach here, so this stamps exactly the
+    // features the user edited. Passed only on save — the export preview runs
+    // the same transform and must not record an edit that never happened.
+    if (tracking) {
+      properties = stampFeaturePropertiesEditorTracking(properties, "update", tracking);
     }
 
     return { ...feature, properties };
@@ -459,15 +474,39 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     () => new Set([...joinDerivedColumns, ...virtualFieldColumns]),
     [joinDerivedColumns, virtualFieldColumns],
   );
-  const features = layer?.geojson?.features ?? [];
+  // Editor tracking columns are maintained by the app on every create/update,
+  // so a hand-typed value would be overwritten by the next edit and a rename
+  // would detach the column from the configuration that names it. They are
+  // shown, but not edited here — the Editor Tracking section owns them.
+  const trackingColumns = useMemo(
+    () => new Set(editorTrackingFieldNames(layer?.editorTracking) ?? []),
+    [layer?.editorTracking],
+  );
+  // Every column the user may not type into or restructure from this table.
+  const readOnlyColumns = useMemo(
+    () => new Set([...derivedColumns, ...trackingColumns]),
+    [derivedColumns, trackingColumns],
+  );
+  const features = useMemo(() => layer?.geojson?.features ?? [], [layer?.geojson]);
   const isDuckDBLayer = isDuckDBQueryLayer(layer);
   const duckdbRows = layer && isDuckDBLayer ? getDuckDBLayerRows(layer.id) : [];
-  const attributeRows: AttributeTableRow[] = isDuckDBLayer
-    ? duckDBRowsToAttributeRows(duckdbRows)
-    : features.map((feature, index) => ({
+  // Memoized so the analysis adapters below (and everything else keyed on these
+  // rows) only rebuild when the layer's features actually change, not on every
+  // render caused by scrolling, filtering or selection. The DuckDB branch stays
+  // unmemoized because `getDuckDBLayerRows` reads a mutable store and returns a
+  // fresh array each call; delimited-text layers — the ones that pay for the
+  // numeric-string adapter below — are geojson-backed and take this path.
+  const geojsonRows: AttributeTableRow[] = useMemo(
+    () =>
+      features.map((feature, index) => ({
         featureId: String(feature.id ?? index),
         properties: (feature.properties ?? {}) as Record<string, unknown>,
-      }));
+      })),
+    [features],
+  );
+  const attributeRows: AttributeTableRow[] = isDuckDBLayer
+    ? duckDBRowsToAttributeRows(duckdbRows)
+    : geojsonRows;
   const hasAttributeSource = Boolean(layer?.geojson || isDuckDBLayer);
   // Add Vector Layer (geojson-mode) layers render from a MapLibre source the
   // control owns, and their `layer.geojson` is dropped when a project is saved.
@@ -612,14 +651,35 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // O(1) lookups for the multi-selection while rendering thousands of rows.
   const selectedIdSet = useMemo(() => new Set(selectedFeatureIds), [selectedFeatureIds]);
 
-  const filterLower = attributeFilter.toLowerCase();
-  const filtered = attributeRows.filter(({ properties, featureId }) => {
-    // "Show Selected Features" restricts the table to the current selection.
-    if (featureView === "selected" && !selectedIdSet.has(featureId)) return false;
-    if (!filterLower) return true;
-    const props = JSON.stringify(properties).toLowerCase();
-    return featureId.includes(filterLower) || props.includes(filterLower);
-  });
+  const filtered = useMemo(() => {
+    const filterLower = attributeFilter.toLowerCase();
+    return attributeRows.filter(({ properties, featureId }) => {
+      // "Show Selected Features" restricts the table to the current selection.
+      if (featureView === "selected" && !selectedIdSet.has(featureId)) return false;
+      if (!filterLower) return true;
+      const props = JSON.stringify(properties).toLowerCase();
+      return featureId.includes(filterLower) || props.includes(filterLower);
+    });
+  }, [attributeFilter, attributeRows, featureView, selectedIdSet]);
+  // String-oriented sources can encode measurements as text. Adapt only the
+  // rows sent to analysis dialogs, leaving the table and source data intact.
+  const adaptAnalysisRows = chartOpen || statsOpen || explorerOpen;
+  const analysisRows = useMemo(
+    () => (adaptAnalysisRows ? coerceNumericStringRows(attributeRows) : attributeRows),
+    [adaptAnalysisRows, attributeRows],
+  );
+  // Both subsets are picked out of the already-adapted full-layer rows so a field
+  // keeps the same numeric/text inference whichever statistics scope is showing.
+  const analysisFilteredRows = useMemo(() => {
+    if (!adaptAnalysisRows) return filtered;
+    if (filtered.length === attributeRows.length) return analysisRows;
+    const filteredIds = new Set(filtered.map(({ featureId }) => featureId));
+    return pickAnalysisRows(analysisRows, attributeRows, filteredIds);
+  }, [adaptAnalysisRows, analysisRows, attributeRows, filtered]);
+  const analysisSelectedRows = useMemo(() => {
+    if (!adaptAnalysisRows || selectedIdSet.size === 0) return [];
+    return pickAnalysisRows(analysisRows, attributeRows, selectedIdSet);
+  }, [adaptAnalysisRows, analysisRows, attributeRows, selectedIdSet]);
   const sorted = [...filtered].sort((a, b) => {
     const aValue = sort.key === "__featureId" ? a.featureId : a.properties[sort.key];
     const bValue = sort.key === "__featureId" ? b.featureId : b.properties[sort.key];
@@ -714,7 +774,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       if (!RESERVED_IMAGE_KEYS.has(k)) propKeys.add(k);
     }
   }
-  const discoveredColumns = Array.from(propKeys);
+  // Tracking columns are listed even before any feature carries one, so a layer
+  // that just turned tracking on shows what it is about to maintain (and the
+  // Field Calculator's "new field" name check sees them as taken).
+  const discoveredColumns = ensureEditorTrackingFields(Array.from(propKeys), layer?.editorTracking);
   const columnSettings = getColumnSettings(layer);
   // Columns rendered in the table, honoring saved order and hidden state.
   const columns = visibleColumns(discoveredColumns, columnSettings);
@@ -906,7 +969,19 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
 
     const geojson = {
       ...layer.geojson,
-      features: applyDraftsToFeatures(layer.geojson.features, drafts, formFields),
+      features: applyDraftsToFeatures(
+        layer.geojson.features,
+        drafts,
+        formFields,
+        editorTrackingFieldNames(layer.editorTracking)
+          ? {
+              config: layer.editorTracking,
+              userIdentity: currentEditorIdentity(),
+              // One timestamp for the save, so rows edited together agree.
+              timestamp: new Date().toISOString(),
+            }
+          : undefined,
+      ),
     };
 
     updateLayer(layer.id, { geojson });
@@ -923,7 +998,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     };
   };
 
-  const exportLayer = async (format: VectorExportFormat) => {
+  const exportLayer = async (format: VectorExportFormat, precision?: number) => {
     if (!layer?.geojson) return;
 
     try {
@@ -936,7 +1011,18 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       }
 
       const baseName = sanitizeExportFileName(layer.name);
-      const savedPath = await exportVectorLayer(exportGeojson, format, baseName, layer.name);
+      const polylinePrecision =
+        precision ??
+        (typeof layer.metadata?.polylinePrecision === "number"
+          ? layer.metadata.polylinePrecision
+          : 5);
+      const savedPath = await exportVectorLayer(
+        exportGeojson,
+        format,
+        baseName,
+        layer.name,
+        polylinePrecision,
+      );
       // Surface Shapefile field-name limitations (10-char truncation and any
       // resulting collisions) only when a file was actually written; a null
       // path means the user cancelled the save dialog.
@@ -1082,7 +1168,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // The Field Calculator must not target a derived column (joined or virtual)
   // either: the calculated value would be overwritten by the re-derivation in
   // the same store update.
-  const calculatorTargetColumns = discoveredColumns.filter((col) => !derivedColumns.has(col));
+  const calculatorTargetColumns = discoveredColumns.filter((col) => !readOnlyColumns.has(col));
 
   const openCalculator = () => {
     const hasColumns = calculatorTargetColumns.length > 0;
@@ -1376,7 +1462,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              disabled={derivedColumns.has(col)}
+              disabled={readOnlyColumns.has(col)}
               onSelect={() => beginColumnRename(col)}
             >
               <Pencil className="me-2 h-3.5 w-3.5" />
@@ -1409,7 +1495,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              disabled={derivedColumns.has(col)}
+              disabled={readOnlyColumns.has(col)}
               onSelect={() => setColumnPendingDelete(col)}
             >
               <Trash2 className="me-2 h-3.5 w-3.5" />
@@ -1699,6 +1785,16 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuItem onSelect={() => void exportLayer("csv")}>
               CSV (attributes only)
             </DropdownMenuItem>
+            {layer && layerSupportsPolylineExport(layer) && (
+              <>
+                <DropdownMenuItem onSelect={() => void exportLayer("polyline", 5)}>
+                  {t("layers.exportPolyline", { precision: 5 })}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void exportLayer("polyline", 6)}>
+                  {t("layers.exportPolyline", { precision: 6 })}
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         {isEditing ? (
@@ -1861,7 +1957,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                             : "h-7 min-w-0 px-2 text-xs";
                         const config = formFields.get(col);
                         const current = draft ?? formatAttributeValue(value);
-                        const isEditableCell = isEditing && !derivedColumns.has(col);
+                        const isEditableCell = isEditing && !readOnlyColumns.has(col);
                         const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
                         const invalidTitle = invalid
                           ? formError
@@ -1884,7 +1980,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                                 ? t("attributeTable.virtualColumnTitle")
                                 : joinDerivedColumns.has(col)
                                   ? t("attributeTable.joinedColumnTitle")
-                                  : undefined
+                                  : trackingColumns.has(col)
+                                    ? t("attributeTable.trackingColumnTitle")
+                                    : undefined
                             }
                           >
                             {isEditableCell ? (
@@ -2320,23 +2418,24 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       <AttributeChartDialog
         open={chartOpen}
         onOpenChange={setChartOpen}
-        rows={attributeRows}
+        rows={analysisRows}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
       />
       <AttributeStatsDialog
         open={statsOpen}
         onOpenChange={setStatsOpen}
-        rows={attributeRows}
-        filteredRows={filtered}
+        rows={analysisRows}
+        filteredRows={analysisFilteredRows}
+        selectedRows={analysisSelectedRows}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
       />
       <ColumnExplorerDialog
         open={explorerOpen}
         onOpenChange={setExplorerOpen}
-        rows={attributeRows}
-        filteredRows={filtered}
+        rows={analysisRows}
+        filteredRows={analysisFilteredRows}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
       />

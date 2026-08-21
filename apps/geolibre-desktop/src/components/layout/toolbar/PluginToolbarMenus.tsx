@@ -1,4 +1,8 @@
-import type { GeoLibreToolbarMenu, GeoLibreToolbarMenuItem } from "@geolibre/plugins";
+import {
+  type GeoLibreToolbarMenu,
+  type GeoLibreToolbarMenuItem,
+  resolveToolbarLabel,
+} from "@geolibre/plugins";
 import {
   Button,
   DropdownMenu,
@@ -11,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import { Puzzle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useToolbarMenus } from "../../../hooks/usePluginUiSurfaces";
 import { isExternalPluginId } from "../../../lib/external-plugins";
 import { isImageSource } from "../../../lib/icon-source";
@@ -57,7 +62,7 @@ function renderItems(items: GeoLibreToolbarMenuItem[], menuId: string, depth = 0
             {/* No me-2: DropdownMenuSubTrigger already spaces its leading icon
                 (matches the built-in menus' submenu triggers). */}
             <MenuIcon icon={item.icon} className="h-4 w-4 shrink-0 object-contain" />
-            {item.label}
+            {resolveToolbarLabel(item.label, `${menuId}.${item.id}`)}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             {renderItems(item.items, `${menuId}.${item.id}`, depth + 1)}
@@ -79,13 +84,14 @@ function renderItems(items: GeoLibreToolbarMenuItem[], menuId: string, depth = 0
         }}
       >
         <MenuIcon icon={item.icon} className="me-2 h-4 w-4 shrink-0 object-contain" />
-        {item.label}
+        {resolveToolbarLabel(item.label, `${menuId}.${item.id}`)}
       </DropdownMenuItem>
     );
   });
 }
 
 function PluginToolbarMenu({ menu, chrome }: { menu: GeoLibreToolbarMenu; chrome: ToolbarChrome }) {
+  const label = resolveToolbarLabel(menu.label, menu.id);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -93,14 +99,14 @@ function PluginToolbarMenu({ menu, chrome }: { menu: GeoLibreToolbarMenu; chrome
           className={chrome.secondaryButtonClass}
           variant="ghost"
           size={chrome.buttonSize}
-          aria-label={menu.label}
+          aria-label={label}
         >
           {menu.icon && isImageSource(menu.icon) ? (
             <img src={menu.icon} alt="" className={chrome.iconClassName} />
           ) : (
             <Puzzle className={chrome.iconClassName} />
           )}
-          {chrome.renderLabel(menu.label)}
+          {chrome.renderLabel(label)}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-52">
@@ -119,6 +125,11 @@ function PluginToolbarMenu({ menu, chrome }: { menu: GeoLibreToolbarMenu; chrome
  */
 export function PluginToolbarMenus({ chrome, placement }: PluginToolbarMenusProps) {
   const { entries } = useToolbarMenus();
+  // Subscribed purely for its `languageChanged` re-render: a menu whose labels
+  // are getters keeps them in step with the app language only if the host
+  // re-reads the tree after a switch, and the registry itself has no i18n
+  // subscription (same contract as the panel-title getters).
+  useTranslation();
   // Skip menus with no items so a plugin never shows a button that opens to a
   // blank dropdown, and keep only the menus that belong in this placement. A
   // menu is "external" when its owning plugin was loaded from an external

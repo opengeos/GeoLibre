@@ -11,11 +11,15 @@ import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
   getCogRasterMainVisibility,
   getSwipeCogRasters,
+  getSwipeMaplibreRasters,
   setCogRasterMainVisibility,
   subscribeSwipeCogChanges,
   type SwipeCogRasterSnapshot,
 } from "./maplibre-components";
 import { SwipeCogMirror } from "./swipe-cog-mirror";
+import { getRasterMainVisibility, setRasterMainVisibility } from "./maplibre-raster";
+import { setTransientRasterVisibility } from "./raster-layer-sync";
+import { SwipeRasterMirror } from "./swipe-raster-mirror";
 
 /**
  * Plugin id for the Layer Swipe control. Exported so the app can coordinate it
@@ -40,10 +44,18 @@ let unsubscribeBasemap: (() => void) | null = null;
 // The comparison-map raster mirror, recreated whenever the swipe control makes a
 // fresh comparison map (basemap change, re-activation).
 let cogMirror: SwipeCogMirror | null = null;
+let rasterMirror: SwipeRasterMirror | null = null;
 // The main-map visibility this provider last forced per raster id (with the
 // opacity to restore when showing it again), so it only toggles on change and
-// can restore visibility on teardown.
-const cogMainForced = new Map<string, { visible: boolean; opacity: number }>();
+// can restore visibility on teardown. `kind` records which control owns the
+// raster -- CogLayerControl or maplibre-gl-raster's RasterControl -- so teardown
+// restores through that one instead of poking both and relying on the other to
+// no-op an id it never managed.
+type ForcedRasterKind = "cog" | "raster";
+const cogMainForced = new Map<
+  string,
+  { kind: ForcedRasterKind; visible: boolean; opacity: number }
+>();
 // Side assignments accumulated during one _updateLayerVisibility pass (the
 // control calls applySide once per provider layer); reconciled together so the
 // comparison mirror syncs in a single pass.
@@ -54,7 +66,7 @@ let unsubscribeCogRasterChanges: (() => void) | null = null;
 
 const cogSwipeProvider: SwipeLayerProvider = {
   getLayers: () =>
-    getSwipeCogRasters().map((raster) => ({
+    [...getSwipeCogRasters(), ...getSwipeMaplibreRasters()].map((raster) => ({
       id: raster.id,
       type: "raster",
       visible: raster.visible,
@@ -92,13 +104,21 @@ function reconcileCogSwipe(): void {
     cogMirror?.destroy();
     cogMirror = new SwipeCogMirror(comparisonMap);
   }
+  if (!comparisonMap) {
+    rasterMirror?.destroy();
+    rasterMirror = null;
+  } else if (!rasterMirror || rasterMirror.getMap() !== comparisonMap) {
+    rasterMirror?.destroy();
+    rasterMirror = new SwipeRasterMirror(comparisonMap);
+  }
 
   const rasters = getSwipeCogRasters();
+  const maplibreRasters = getSwipeMaplibreRasters();
 
   // Drop bookkeeping for rasters removed from the store while swiping (the loop
   // below only visits still-present rasters, so their entries would otherwise
   // linger until teardown).
-  const rasterIds = new Set(rasters.map((raster) => raster.id));
+  const rasterIds = new Set([...rasters, ...maplibreRasters].map((raster) => raster.id));
   for (const id of [...cogMainForced.keys()]) {
     if (!rasterIds.has(id)) cogMainForced.delete(id);
   }
@@ -115,6 +135,11 @@ function reconcileCogSwipe(): void {
   if (cogMirror) {
     void cogMirror.sync(
       rasters.filter((raster) => raster.visible && onComparison(sideFor(raster))),
+    );
+  }
+  if (rasterMirror) {
+    void rasterMirror.sync(
+      maplibreRasters.filter((raster) => raster.visible && onComparison(sideFor(raster))),
     );
   }
 
@@ -134,6 +159,26 @@ function reconcileCogSwipe(): void {
       setCogRasterMainVisibility(raster.id, wantVisible, raster.opacity);
     }
     cogMainForced.set(raster.id, {
+      kind: "cog",
+      visible: wantVisible,
+      opacity: raster.opacity,
+    });
+  }
+  for (const raster of maplibreRasters) {
+    if (!raster.visible) {
+      // The user hid it: drop this provider's bookkeeping so teardown does not
+      // show it again, and clear the transient marker so the next control-side
+      // visibility change is mirrored back to the store as a real edit.
+      cogMainForced.delete(raster.id);
+      setTransientRasterVisibility(raster.id, false);
+      continue;
+    }
+    const wantVisible = sideFor(raster) !== "right";
+    if (getRasterMainVisibility(raster.id) !== wantVisible) {
+      setRasterMainVisibility(raster.id, wantVisible);
+    }
+    cogMainForced.set(raster.id, {
+      kind: "raster",
       visible: wantVisible,
       opacity: raster.opacity,
     });
@@ -143,12 +188,17 @@ function reconcileCogSwipe(): void {
 function teardownCogSwipe(): void {
   cogMirror?.destroy();
   cogMirror = null;
+  rasterMirror?.destroy();
+  rasterMirror = null;
   cogPendingSides.clear();
   cogPendingComparisonMap = undefined;
   cogReconcileScheduled = false;
-  // Restore any raster this provider hid on the main map.
+  // Restore any raster this provider hid on the main map, through the control
+  // that owns it.
   for (const [id, forced] of cogMainForced) {
-    if (!forced.visible) setCogRasterMainVisibility(id, true, forced.opacity);
+    if (forced.visible) continue;
+    if (forced.kind === "cog") setCogRasterMainVisibility(id, true, forced.opacity);
+    else setRasterMainVisibility(id, true);
   }
   cogMainForced.clear();
 }

@@ -236,6 +236,7 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_flatgeobuf(data, name=, **style)` | Add a FlatGeobuf dataset (URL or local file). |
 | `add_shp(data, name=, **style)` | Add a Shapefile (zipped URL or local `.shp`). |
 | `add_kml(data, name=, **style)` / `add_gpkg(data, name=, layer=None, **style)` | Add KML/KMZ or GeoPackage data. |
+| `add_polyline(polyline, name="Polyline", precision=5, **style)` | Add an Encoded Polyline layer from a string or list of strings (precision 5 or 6). |
 | `add_vector_tiles(url, name=, source_layers=, source_layer=, **style)` | Add a vector tile layer from a TileJSON endpoint. |
 | `add_pmtiles(url, name=, tile_type=, source_layers=, **style)` | Add a PMTiles archive (vector or raster). |
 | `add_tile_layer(url, name=, tile_size=, attribution=)` | Add a raster XYZ tile layer. |
@@ -253,13 +254,58 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_colormap(colormap, vmin=, vmax=, label=, **kwargs)` | Add a colorbar from a named colormap (leafmap-style alias of `add_colorbar`). |
 | `set_center(lng, lat, zoom=None)` | Center (and optionally zoom) the map. |
 | `set_center_zoom(lng, lat, zoom=None)` | Alias of `set_center` (leafmap compatibility). |
-| `remove_layer(layer_id)` / `clear_layers()` | Remove layers. |
+| `set_zoom(zoom)` / `set_bearing(bearing)` / `set_pitch(pitch)` / `fit_project_bounds(bounds)` | Persist camera changes without requiring the widget to be displayed. |
+| `center` / `zoom` / `bearing` / `pitch` / `basemap` / `name` | Read persisted project and camera state; `name` is writable. |
+| `rename_layer(layer, name)` / `move_layer(layer, index)` / `duplicate_layer(layer, name=)` / `show_layer(layer)` / `hide_layer(layer)` | Manage layers by id, name, or `Layer` handle. |
+| `layer_properties(layer)` / `column_values(layer, column)` / `describe()` | Inspect inlined data and summarize a project without a browser round trip. |
+| `remove_layer(layer_id)` / `clear_layers()` | Remove one layer by id, name, or handle, or remove all layers. |
 | `to_project(keep_credentials=False)` | Return the current project as a dict, credentials redacted unless `keep_credentials=True`. |
 | `load_project(src)` | Replace the project from a dict, JSON string, or `.geolibre.json` path. |
 | `save_project(path, keep_credentials=False)` | Write the current project to a `.geolibre.json` file, credentials redacted unless `keep_credentials=True`. |
 
 Style keyword arguments (for example `fillColor`, `strokeColor`, `strokeWidth`,
 `circleRadius`) map to the GeoLibre [layer style fields](project-format.md).
+
+## Use in marimo
+
+[marimo](https://marimo.io/) can render GeoLibre's anywidget, but its browser
+may not be able to reach the random `127.0.0.1` port where GeoLibre normally
+serves the bundled app. The symptom is an iframe displaying
+`127.0.0.1 refused to connect`. Point the widget at GeoLibre's hosted app before
+displaying it:
+
+```python
+from geolibre import Map
+
+m = Map(center=(-100, 40), zoom=4)
+m._app_url = "https://web.geolibre.app/"
+m.add_basemap("dark")
+m.add_vector(
+    "https://data.source.coop/giswqs/opengeos/world_cities.geojson",
+    name="World cities",
+)
+m
+```
+
+This uses the same project-sync bridge as the regular widget; only the app's
+location changes. Set `_app_url` before returning `m` from the cell so the
+iframe uses the hosted URL on its first render.
+
+The example uses `add_vector()` so the hosted browser app fetches the remote
+GeoJSON directly. `add_geojson(url)` instead downloads and inlines the file in
+Python, which can fail when a data host rejects Python's HTTP client.
+
+Because the hosted app cannot access files exposed by the kernel's temporary
+localhost server, use hosted URLs for rasters and other sources the browser
+loads directly. Local GeoJSON, CSV, and vector files that GeoLibre reads in
+Python and inlines into the project continue to work. The `_app_url` attribute
+is currently an internal compatibility workaround rather than a public
+constructor option.
+
+**Privacy:** The widget sends its synchronized project, including any inlined
+local data, to the origin in `_app_url` through `window.postMessage`. Use only a
+trusted app URL, or host the GeoLibre app yourself, when working with sensitive
+data.
 
 ## How it works
 
@@ -269,10 +315,12 @@ that app in an iframe and exchanges the project over `window.postMessage`.
 Adding data from Python rewrites the synced project and pushes it into the app;
 UI edits flow back the same way.
 
+<!-- markdownlint-disable MD046 -->
+
 !!! note "Environment support"
 
-    The interactive widget works in **local Jupyter, VS Code, Google Colab, and
-    JupyterHub / remote servers**:
+    The interactive widget works in **local Jupyter, VS Code, Google Colab,
+    JupyterHub / remote servers, and marimo**:
 
     - **Local Jupyter / VS Code** - the app is served directly from localhost.
     - **Google Colab** - routes through Colab's built-in port proxy
@@ -291,12 +339,17 @@ UI edits flow back the same way.
           wherever `jupyter-server-proxy` is installed.
     - **Other remote servers** (Binder, remote JupyterLab over SSH/network) -
       pass `Map(server_proxy=True)` to use that same dual-route remote path.
+    - **marimo** - use the hosted app URL shown in [Use in
+      marimo](#use-in-marimo); Jupyter's proxy and server-extension routes are
+      not available in marimo.
 
     Set `Map(server_proxy=False)` to force the direct localhost path. If the app
     fails to load on a hub, either install `jupyter-server-proxy`, or confirm the
     extension is enabled with `jupyter server extension list` (look for
     `geolibre`; run `jupyter server extension enable geolibre` if absent) and
     **restart** the Jupyter server so the extension loads.
+
+<!-- markdownlint-enable MD046 -->
 
 !!! warning "URL fetching"
 
@@ -308,6 +361,21 @@ UI edits flow back the same way.
     capped at 50 MB. Tile and service layers are fetched by the **browser**
     instead, so those can still point at a local server. Do not load untrusted
     `.geolibre.json` projects or URLs on a shared/multi-tenant kernel.
+
+## MCP server
+
+The same package ships an [MCP](https://modelcontextprotocol.io) server that
+authors `.geolibre.json` projects from an AI client, with no notebook and no
+running app involved:
+
+```bash
+pip install "geolibre[mcp]"
+geolibre-mcp --root ~/maps
+```
+
+It builds projects through the same builders this package uses, so anything it
+writes opens in the widget (and in the desktop and web apps) unchanged. See
+[MCP server](mcp.md) for the tool list and client configuration.
 
 ## Building from source
 

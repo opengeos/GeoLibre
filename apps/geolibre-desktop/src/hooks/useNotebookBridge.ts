@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { type RefObject, useEffect } from "react";
 import type { MapController } from "@geolibre/map";
 import { createScriptingHandlers } from "../lib/scripting/scriptingApi";

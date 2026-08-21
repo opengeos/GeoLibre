@@ -305,16 +305,36 @@ async function readZarrTimeAttributes(
   const fromV3 = attributesFromConsolidatedV3(rootV3, dimension);
   if (fromV3) return fromV3;
 
+  return readCoordinateTimeAttributes(fetchJson, dimension);
+}
+
+/**
+ * Walk a coordinate's own metadata documents for its CF `units`/`calendar`.
+ *
+ * Both Zarr versions are tried (`.zattrs`, then a v3 node's `attributes`), each
+ * at the root and one level down, where a multiscale pyramid keeps its
+ * coordinates. The reader is the seam: over HTTP, out of a folder on disk, or
+ * through an Icechunk manifest — and only the last two can answer at all for a
+ * store whose keys are not URLs.
+ *
+ * @param readDocument - Reads one store-relative key as parsed JSON.
+ * @param dimension - The coordinate's name, e.g. `"time"`.
+ * @returns Its `units`/`calendar`, or null when no document declares either.
+ */
+export async function readCoordinateTimeAttributes(
+  readDocument: (key: string) => Promise<unknown>,
+  dimension: string,
+): Promise<ZarrTimeAttributes | null> {
   for (const prefix of ["", "0/"]) {
-    const zattrs = await fetchJson(`${prefix}${dimension}/.zattrs`);
-    const fromZattrs = pickTimeAttributes(zattrs);
-    if (fromZattrs) return fromZattrs;
-
-    const nodeV3 = await fetchJson(`${prefix}${dimension}/zarr.json`);
-    const fromNode = pickTimeAttributes((nodeV3 as { attributes?: unknown } | null)?.attributes);
-    if (fromNode) return fromNode;
+    for (const key of [`${prefix}${dimension}/.zattrs`, `${prefix}${dimension}/zarr.json`]) {
+      const document = await readDocument(key);
+      const attributes = key.endsWith("zarr.json")
+        ? (document as { attributes?: unknown } | null | undefined)?.attributes
+        : document;
+      const picked = pickTimeAttributes(attributes);
+      if (picked) return picked;
+    }
   }
-
   return null;
 }
 

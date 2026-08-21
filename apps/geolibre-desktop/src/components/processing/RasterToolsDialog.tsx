@@ -1,7 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import { addCogRasterLayer } from "@geolibre/plugins";
+import { addRasterToMap } from "@geolibre/plugins";
 import {
   RASTER_TOOLS,
   getRasterTool,
@@ -10,6 +10,8 @@ import {
   runRasterTool,
   readRasterData,
   runRasterToolClient,
+  convertGeoTiffToCog,
+  exceedsBrowserCogConversionLimit,
   buildSpectralIndexExpression,
   type AlgorithmParameter,
   type ConversionJob,
@@ -66,6 +68,12 @@ import {
 import { createAppAPI } from "../../hooks/usePlugins";
 import { canExportRasterLayer, rasterExportUrl } from "../../lib/raster-export";
 import { fetchableUrl } from "../../lib/url-utils";
+import {
+  translateParameter,
+  translateToolDescription,
+  translateToolGroup,
+  translateToolName,
+} from "../../lib/processing-tool-i18n";
 
 /**
  * The input URL the Python sidecar can read for an added raster layer, or null
@@ -561,16 +569,26 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       // Persist the result before the map add so the Download button survives a
       // render failure (the compute already succeeded — don't discard it).
       setClientResult({ name: outName, bytes });
+      const resultSampleCount = result.width * result.height * result.bands.length;
+      if (exceedsBrowserCogConversionLimit(resultSampleCount)) {
+        const message = t("raster.cogConvertTooLarge", { name: outName });
+        setError(message);
+        setClientLog((prev) => [...prev, message]);
+        tracker.finish("error", message);
+        return;
+      }
       const app = createAppAPI(mapControllerRef);
       try {
-        await addCogRasterLayer(app, {
-          url: outName,
-          data: bytes,
-          name: outName.replace(/\.tiff?$/i, ""),
-          // The renderer reads NoData from options (not the file's tag), so pass
-          // it explicitly for correct transparency of masked/edge cells.
-          ...(result.nodata != null ? { nodata: result.nodata } : {}),
-        });
+        const cogBytes = await convertGeoTiffToCog(new Uint8Array(bytes));
+        await addRasterToMap(
+          app,
+          // TypeScript widens wasm byte buffers to ArrayBufferLike, which is
+          // not directly assignable to BlobPart's ArrayBufferView.
+          new File([cogBytes as Uint8Array<ArrayBuffer>], outName, { type: "image/tiff" }),
+          {
+            name: outName.replace(/\.tiff?$/i, ""),
+          },
+        );
         setClientLog((prev) => [...prev, t("toolbar.rasterTool.addedToMap", { name: outName })]);
         tracker.addOutputLayer(outName);
       } catch (mapError) {
@@ -643,7 +661,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
               {groups.map((group) => (
                 <div key={group.group} className="mb-1">
                   <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                    {group.group}
+                    {translateToolGroup(t, group.group)}
                   </div>
                   {group.tools.map((entry) => (
                     <button
@@ -655,7 +673,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                         entry.id === selectedId && "bg-accent font-medium text-accent-foreground",
                       )}
                     >
-                      {entry.name}
+                      {translateToolName(t, "raster", entry)}
                     </button>
                   ))}
                 </div>
@@ -665,7 +683,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
 
           {/* Parameter form + run + log */}
           <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <p className="text-sm text-muted-foreground">{tool.description}</p>
+            <p className="text-sm text-muted-foreground">
+              {translateToolDescription(t, "raster", tool)}
+            </p>
 
             {/* Engine selector (only for tools with a browser implementation). */}
             {tool.supportsClient && (
@@ -826,7 +846,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
             {tool.parameters.filter(isParamVisible).map((param) => (
               <RasterParameterField
                 key={param.id}
-                param={param}
+                param={translateParameter(t, "raster", tool.id, param)}
                 value={params[param.id]}
                 onChange={(value) => setParam(param.id, value)}
                 onPick={() => void pickPathParam(param)}

@@ -15,10 +15,11 @@ import {
   wkbRowsToFeatureCollection,
 } from "./duckdb-geometry";
 import { confirmLargeDataset, type DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
+import { readDxfCodepage, recodeCadFeatureCollection } from "./cad-encoding";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
 import { prjSidecarCrs } from "./prj-sidecar";
-import { selectDuckDbBundle } from "./duckdb-wasm-bundles";
+import { createDuckDbWorker, selectDuckDbBundle } from "./duckdb-wasm-bundles";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
 
 // Re-exported for existing importers (sql-workspace, duckdb-processing, etc.)
@@ -164,6 +165,7 @@ export async function resetSqlDatabase(poisoned: duckdb.AsyncDuckDB): Promise<vo
   if (current !== poisoned || sqlDbPromise !== previous) return;
   sqlDbPromise = null;
   spatialExtensionByDb.delete(poisoned);
+  icebergExtensionByDb.delete(poisoned);
   // Terminate now if idle; otherwise let the last in-flight query's release do it.
   if ((sqlDbInFlight.get(poisoned) ?? 0) > 0) {
     sqlDbTerminateWhenIdle.add(poisoned);
@@ -280,9 +282,51 @@ export const ensureA5Extension = createCommunityExtensionLoader("a5");
  */
 export const ensureDuckDggsExtension = createCommunityExtensionLoader("duck_dggs");
 
+// Iceberg load state, keyed per instance so each DuckDB instance tracks its own
+// load (mirroring spatialExtensionByDb). Memoized as a promise so concurrent
+// callers share one INSTALL/LOAD.
+const icebergExtensionByDb = new WeakMap<duckdb.AsyncDuckDB, Promise<void>>();
+
+/**
+ * Install and load DuckDB's `iceberg` extension once per database instance, so
+ * `iceberg_scan()` and `ATTACH ... (TYPE ICEBERG)` are available.
+ *
+ * Unlike {@link ensureH3Extension} this is a **core** DuckDB extension (no
+ * `FROM community`), published for the WASM platforms alongside `spatial`.
+ * Reading a table also reads its Parquet data files over HTTP, so callers must
+ * have run the pre-spatial remote warm-up first — see
+ * {@link ensureSpatialExtension}, whose `beforeLoad` exists for exactly that.
+ *
+ * @param db The instance the load is memoized against.
+ * @param connection The connection to run INSTALL/LOAD on.
+ */
+export async function ensureIcebergExtension(
+  db: duckdb.AsyncDuckDB,
+  connection: duckdb.AsyncDuckDBConnection,
+): Promise<void> {
+  let promise = icebergExtensionByDb.get(db);
+  if (!promise) {
+    promise = (async () => {
+      await connection.query("INSTALL iceberg");
+      await connection.query("LOAD iceberg");
+    })();
+    icebergExtensionByDb.set(db, promise);
+  }
+  try {
+    await promise;
+  } catch (error) {
+    // Only clear the memo if it still points at this failed load, so a retry a
+    // concurrent caller already installed is not wiped out.
+    if (icebergExtensionByDb.get(db) === promise) icebergExtensionByDb.delete(db);
+    throw error;
+  }
+}
+
 async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
   const bundle = await selectDuckDbBundle();
-  const worker = new Worker(bundle.mainWorker!, { type: "module" });
+  // Not `new Worker(bundle.mainWorker)`: a CDN-loaded bundle needs a same-origin
+  // blob shim, so each bundles variant supplies its own worker factory.
+  const worker = createDuckDbWorker(bundle);
   const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
   const db = new duckdb.AsyncDuckDB(logger, worker);
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
@@ -604,6 +648,10 @@ export async function loadDuckDbVectorFile(
     // Inside the try so the finally still closes the connection if it throws.
     // `prjSidecarCrs` is `.shp`-scoped, so a non-shapefile's siblings are safe.
     const prjCrs = prjSidecarCrs(file);
+    // Read $DWGCODEPAGE / $ACADVER before registerFileBuffer transfers (and
+    // detaches) the bytes. WASM GDAL has no iconv, so DXF TEXT is recoded
+    // after ST_Read. Other formats skip this (null → no-op).
+    const dxfCodepage = file.extension === "dxf" ? readDxfCodepage(file.data) : null;
 
     await registerVectorFileBuffers(db, file);
     await ensureSpatialExtension(
@@ -653,7 +701,10 @@ export async function loadDuckDbVectorFile(
       );
       // Features may carry a null geometry; the app's layer model treats them
       // as a regular FeatureCollection and the map ignores null geometries.
-      return toFeatureCollection(rowsFromResult(result), detected.column) as FeatureCollection;
+      return recodeCadFeatureCollection(
+        toFeatureCollection(rowsFromResult(result), detected.column) as FeatureCollection,
+        dxfCodepage,
+      );
     } catch (error) {
       // DuckDB Spatial's WKB reader rejects surface geometries (TIN /
       // PolyhedralSurface), which its bundled GDAL emits for ESRI MultiPatch
@@ -675,7 +726,15 @@ export async function loadDuckDbVectorFile(
       if (isParquetExtension(file.extension) || !isSurfaceError) {
         throw error;
       }
-      return loadViaKeepWkbFallback(db, file, options, sourceCrs, error, guardConfirmed);
+      return loadViaKeepWkbFallback(
+        db,
+        file,
+        options,
+        sourceCrs,
+        error,
+        guardConfirmed,
+        dxfCodepage,
+      );
     }
   } finally {
     await connection.close();
@@ -698,6 +757,10 @@ export async function loadDuckDbVectorFile(
  * @param guardConfirmed Whether the normal path already confirmed the
  *   large-dataset guard; when false (the error fired on the count guard) it is
  *   re-run here so a huge file is not loaded without confirmation.
+ * @param dxfCodepage The drawing codepage the normal path read from the DXF
+ *   header, or null. A DXF with a 3DFACE/PolyfaceMesh entity can reach this
+ *   fallback too, so its TEXT is recoded here as well; without it the
+ *   attributes would keep the Latin-1 mojibake the normal path repairs.
  */
 async function loadViaKeepWkbFallback(
   db: duckdb.AsyncDuckDB,
@@ -706,6 +769,7 @@ async function loadViaKeepWkbFallback(
   sourceCrs: string | null,
   originalError: unknown,
   guardConfirmed: boolean,
+  dxfCodepage: string | null,
 ): Promise<FeatureCollection> {
   // Read on a fresh connection: re-running ST_Read on the connection that
   // already scanned the file trips a "Missing DB manager" GDAL assertion in the
@@ -752,8 +816,14 @@ async function loadViaKeepWkbFallback(
     }
     // The decoded geometry is in the file's own CRS; reproject to WGS84 with the
     // same source CRS the normal path resolved. Reuses the shared ST_Transform
-    // path, which handles the MultiPolygon the TIN decoded to.
-    return reprojectFeatureCollectionToWgs84(collection, sourceCrs);
+    // path, which handles the MultiPolygon the TIN decoded to. Recode first, at
+    // this `ST_Read` boundary: reprojection re-reads the collection as GeoJSON,
+    // which OGR already treats as UTF-8, so it is not the layer that mangled
+    // the strings and must not be handed mojibake to round-trip.
+    return reprojectFeatureCollectionToWgs84(
+      recodeCadFeatureCollection(collection, dxfCodepage),
+      sourceCrs,
+    );
   } finally {
     await connection.close();
   }

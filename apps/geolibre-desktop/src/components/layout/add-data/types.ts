@@ -16,8 +16,10 @@ export type AddDataKind =
   | "gdb"
   | "photos"
   | "mbtiles"
+  | "polyline"
   | "arcgis"
   | "postgres"
+  | "iceberg"
   | "deckgl-viz"
   | "video";
 

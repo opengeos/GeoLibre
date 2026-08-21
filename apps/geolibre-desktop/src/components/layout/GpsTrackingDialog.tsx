@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import type { Feature, FeatureCollection } from "geojson";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import type { MapController } from "@geolibre/map";
 import { useAppStore } from "@geolibre/core";
 import {

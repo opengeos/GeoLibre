@@ -184,7 +184,23 @@
     "elevationRange": "Min / max elevation",
     "meanSlope": "Mean slope",
     "computing": "Computing terrain…",
-    "partialData": "Some samples had no terrain data"
+    "partialData": "Some samples had no terrain data",
+    "heading": "Heading",
+    "finalHeading": "Final heading",
+    "bodyNote": "Measured on: {{body}} (spherical approximation)"
+  },
+  "statusBar": {
+    "elevation": "Elev",
+    "elevationLong": "Elevation",
+    "cameraAltitude": "Eye alt",
+    "cameraAltitudeLong": "Camera altitude above sea level",
+    "coordinateFormat": {
+      "dd": "Decimal degrees",
+      "dms": "Degrees, minutes, seconds",
+      "ddm": "Degrees, decimal minutes",
+      "utm": "UTM (zone, easting/northing)"
+    },
+    "coordinateFormatHint": "Coordinate format: {{format}}. Click to switch."
   },
   "fileNamePrompt": {
     "title": "Save file as",
@@ -216,7 +232,9 @@
     "invalidUrl": "Enter a valid HTTP or HTTPS style URL.",
     "sectionMoon": "The Moon",
     "sectionMars": "Mars",
-    "sectionOther": "Other celestial bodies"
+    "sectionOther": "Other celestial bodies",
+    "sectionRegional": "Regional",
+    "regionChina": "China (中国)"
   },
   "planetSwitcher": {
     "label": "Celestial body",
@@ -303,11 +321,15 @@
       },
       "arcgis": {
         "label": "Add ArcGIS Layer",
-        "description": "Add an ArcGIS FeatureServer layer, VectorTileServer layer, or portal item."
+        "description": "Add an ArcGIS FeatureServer, VectorTileServer, MapServer, or ImageServer layer, or a portal item."
       },
       "postgres": {
         "label": "Add PostgreSQL Layer",
         "description": "Start Martin locally, discover PostGIS sources, and add a source as vector tiles."
+      },
+      "iceberg": {
+        "label": "Add Apache Iceberg Layer",
+        "description": "Read an Iceberg table (v3 or above) and add a subset of its features."
       },
       "deckglViz": {
         "label": "Add Deck.gl Layer",
@@ -316,6 +338,10 @@
       "video": {
         "label": "Add Video Layer",
         "description": "Add a georeferenced video overlay by supplying an MP4 URL and four corner coordinates."
+      },
+      "polyline": {
+        "label": "Add Encoded Polyline Layer",
+        "description": "Import encoded polyline strings (Google, OSRM, Valhalla) from text or files as vector lines."
       }
     },
     "shared": {
@@ -469,14 +495,39 @@
       "defaultName": "ArcGIS Layer",
       "sampleFeatureLabel": "US major cities (feature)",
       "sampleVectorTileLabel": "Santa Monica parcels (vector tiles)",
+      "sampleMapServiceLabel": "US boundaries (map service)",
+      "sampleImageServiceLabel": "USGS 3DEP hillshade (image service)",
       "featureLayer": "Feature layer",
       "vectorTileLayer": "Vector tile layer",
+      "mapServiceLayer": "Map service",
+      "imageServiceLayer": "Image service",
       "portalItemId": "Portal item ID",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "Sublayers",
+      "sublayersPlaceholder": "All visible sublayers",
+      "sublayersHint": "Optional comma-separated sublayer ids, for example 0,2,5. Selecting sublayers draws the service dynamically instead of using its cached tiles.",
+      "retrieveSublayers": "Browse layers",
+      "retrievingSublayers": "Retrieving…",
+      "availableSublayers": "Available sublayers",
+      "noSublayersFound": "This map service did not advertise any layers.",
+      "retrieveError": "Could not retrieve the map service layers.",
+      "errorMapServiceUrl": "Enter an ArcGIS MapServer URL.",
+      "renderingRule": "Rendering rule",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "Optional raster function JSON applied by the service. A rendering rule draws the service dynamically instead of using its cached tiles.",
       "portalUrl": "Portal URL",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "Access token"
+      "accessToken": "Access token",
+      "pageSize": "Records per request",
+      "pageSizePlaceholder": "Auto",
+      "maxFeatures": "Maximum features",
+      "maxFeaturesPlaceholder": "All",
+      "pagingHint": "Feature layers download in pages. Lower the records per request if the service times out.",
+      "loadingProgress": "Loaded {{loaded}} of {{total}} features…",
+      "loadingProgressUnknown": "Loaded {{loaded}} features…"
     },
     "gpx": {
       "defaultName": "GPX Layer",
@@ -548,6 +599,8 @@
       "errorMissingCrs": "This feature class's coordinate system could not be detected. Enter its source CRS to add it."
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "The Excel workbook has no non-empty worksheets.",
+      "worksheet": "Worksheet",
       "defaultName": "Delimited Text Layer",
       "sampleLabel": "US cities",
       "errorChooseFile": "Choose a delimited text file.",
@@ -657,9 +710,45 @@
       "statusTablesFound_other": "Found {{count}} spatial tables.",
       "statusNoTables": "No spatial tables were found in this database.",
       "editableTable": "Table",
+      "geometryColumn": "Geometry column",
       "tableReadOnly": "{{table}} (read-only: no primary key)",
       "errorSelectTable": "Select a table to load.",
       "errorRuntimeMissing": "The processing server does not have the PostGIS runtime (psycopg) installed. Install the geolibre-server 'postgis' extra to load editable layers."
+    },
+    "iceberg": {
+      "defaultName": "Iceberg Layer",
+      "notice": "Iceberg tables are read once, on demand. The layer is a snapshot capped at the row limit below and is never re-scanned automatically — use Refresh in the layer menu to read it again.",
+      "mode": "Iceberg source",
+      "modeTable": "Table location",
+      "modeCatalog": "REST catalog",
+      "location": "Table metadata location",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "Warehouse",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "Catalog endpoint",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "Connect",
+      "table": "Iceberg table",
+      "sql": "SQL (optional)",
+      "sqlHint": "Edit to filter or reshape what is rendered. The statement must return a GEOMETRY column; leave it as generated to read the whole table.",
+      "selectTable": "Select a table",
+      "geometryColumn": "Geometry column",
+      "rowLimit": "Row limit",
+      "rowLimitHint": "The layer holds the table's first rows, up to this limit. The limit cannot exceed {{max}} rows.",
+      "rowLimitTruncates": "The table holds {{total}} rows; the layer will contain the first {{limit}}.",
+      "statusConnecting": "Reading Iceberg metadata...",
+      "statusInspecting": "Inspecting table...",
+      "statusInspected": "{{rows}} rows. Geometry: {{column}} ({{crs}}).",
+      "statusNoGeometry": "{{rows}} rows, but no GEOMETRY column was found. Iceberg geometry must use the v3 geometry type.",
+      "statusTablesFound_one": "Found {{count}} table.",
+      "statusTablesFound_other": "Found {{count}} tables. Select one to continue.",
+      "statusNoTables": "The catalog exposes no tables.",
+      "errorLocation": "Enter the Iceberg table's metadata location.",
+      "errorWarehouse": "Enter the Iceberg warehouse to attach.",
+      "errorEndpoint": "Enter the Iceberg REST catalog endpoint.",
+      "errorConnect": "Could not read the Iceberg source.",
+      "errorInspect": "Could not inspect the Iceberg table.",
+      "errorConnectFirst": "Connect and select an Iceberg table first."
     },
     "video": {
       "defaultName": "Video Layer",
@@ -683,6 +772,47 @@
       "bottomRight": "Bottom-right (lng, lat)",
       "bottomLeft": "Bottom-left (lng, lat)",
       "cornersNote": "The four corners georeference the video on the map. The video must be served over HTTPS and the host must allow cross-origin requests (CORS) for the frames to render."
+    },
+    "polyline": {
+      "defaultName": "Polyline",
+      "modePaste": "Paste text",
+      "modeFile": "Choose file",
+      "precisionLabel": "Precision",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "Unescape backslashes (\\\\ to \\)",
+      "delimiterLabel": "Polyline delimiter",
+      "delimNewline": "Newline (default)",
+      "delimSemicolon": "Semicolon (;)",
+      "delimComma": "Comma (,)",
+      "delimTab": "Tab",
+      "delimCustom": "Custom delimiter",
+      "customDelimPlaceholder": "Custom delimiter (e.g. | or ---)",
+      "outputGeometryLabel": "Output geometry",
+      "separateLines": "Separate LineStrings",
+      "multiLineString": "Single MultiLineString",
+      "textLabel": "Encoded polyline string(s)",
+      "placeholder": "Paste encoded polyline string (e.g. _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "Decoded {{lines}} line(s) with {{points}} total coordinate points.",
+      "previewTitle": "Decoded Geometry Preview",
+      "previewExtent": "Extent",
+      "previewLength": "Length",
+      "previewCoordinates": "Inspect coordinates",
+      "previewLine": "Line",
+      "previewPoints": "points",
+      "previewStart": "Start",
+      "previewEnd": "End",
+      "errorFileMissing": "The selected file is empty or could not be read.",
+      "readError": "Could not read the polyline file.",
+      "errorChooseFile": "Please choose a polyline file to load.",
+      "errorEmptyInput": "Enter one or more encoded polyline strings.",
+      "errorNoValidLines": "No valid polyline coordinates could be decoded.",
+      "sampleGoogle": "Google / OSRM (precision 5)",
+      "sampleValhalla": "Valhalla / Mapbox (precision 6)",
+      "sampleEscaped": "Escaped backslashes (JSON string format)",
+      "sampleMultiLine": "Multi-line route batch (3 segments)",
+      "unitMeters": "{{value}} m",
+      "unitKm": "{{value}} km"
     },
     "netcdf": {
       "sampleLabel": "Air temperature",
@@ -1127,6 +1257,7 @@
     "guest": "Guest",
     "connectFailed": "Could not connect to the collaboration server.",
     "copyFailed": "Could not copy to clipboard.",
+    "shareFailed": "Could not share the latest project changes.",
     "connecting": "Connecting…",
     "reconnecting": "Reconnecting…",
     "connected": "Live session active",
@@ -1148,6 +1279,9 @@
     "viewOnly": "View-only",
     "allowEdit": "Allow this person to edit",
     "setViewOnly": "Set this person to view-only",
+    "kick": "Kick participant",
+    "block": "Block participant",
+    "requireIdentityLabel": "Require signed-in account to join",
     "chatLog": "Session chat",
     "chatCompose": "Type a message",
     "chatEmpty": "No messages yet.",
@@ -1157,7 +1291,11 @@
     "chatLocationAttached": "Location attached (click to remove)",
     "chatGoToLocation": "Go to this location",
     "sessionStatusUnread_one": "Live collaboration session, {{count}} unread message. Click to see who's connected and chat.",
-    "sessionStatusUnread_other": "Live collaboration session, {{count}} unread messages. Click to see who's connected and chat."
+    "sessionStatusUnread_other": "Live collaboration session, {{count}} unread messages. Click to see who's connected and chat.",
+    "lockLayer": "Lock layer for guests",
+    "unlockLayer": "Unlock layer for guests",
+    "layerLocked": "Locked",
+    "layerLockedHint": "This layer is locked by the host and cannot be edited"
   },
   "share": {
     "title": "Share project",
@@ -1185,7 +1323,29 @@
     "sharing": "Sharing…",
     "errorFallback": "Could not share the project.",
     "usernameRequired": "Set a username on your {{shareHost}} account before sharing. Open your account settings to choose one, then try again.",
-    "openAccountSettings": "Open account settings"
+    "openAccountSettings": "Open account settings",
+    "readinessChecking": "Checking whether recipients can load your data…",
+    "readinessUnavailable": "The data source check could not run.",
+    "readinessAllReachable_one": "{{count}} data source looks reachable for recipients.",
+    "readinessAllReachable_other": "All {{count}} data sources look reachable for recipients.",
+    "readinessTitle": "Some data may not load for recipients",
+    "readinessNote": "This does not block sharing. Recipients open the project in a browser, where these sources can behave differently than they do for you.",
+    "readinessTruncated_one": "Only {{count}} source was checked.",
+    "readinessTruncated_other": "Only the first {{count}} sources were checked.",
+    "readinessBasemapLabel": "Basemap",
+    "readinessPluginLabel": "Plugin",
+    "readinessReasonCredentialStripped": "Uses a credential that is removed when sharing.",
+    "readinessReasonAuthRequired": "The service refused a request without credentials.",
+    "readinessReasonCors": "A browser cannot fetch this host: it sends no cross-origin headers, or it is unreachable.",
+    "readinessReasonNotFound": "The service answered not found, so the link may have expired or moved.",
+    "readinessReasonLocalFile": "Points at a file on your machine.",
+    "readinessReasonPrivateHost": "Points at a private or local network address.",
+    "readinessReasonNoSource": "Has no source a recipient could open.",
+    "readinessReasonUnchecked": "Could not be checked.",
+    "readinessAdviceCredential": "Make the service public, or tell recipients to supply their own credential.",
+    "readinessAdviceCors": "It still loads in the desktop app, but not in the browser viewer.",
+    "readinessAdviceNotFound": "Update or replace this layer's source before sharing.",
+    "readinessAdviceLocal": "Convert it to a hosted source, or expect recipients to see an empty layer."
   },
   "gallery": {
     "title": "Project gallery",
@@ -1302,13 +1462,19 @@
       "layer": "Layer",
       "titleLabel": "Heading",
       "position": "Position",
-      "filterToPage": "Only features in the page extent",
-      "filterToPageHint": "Applies to atlas pages and a drawn print extent; otherwise the whole layer is used."
+      "pageFilter": "Page extent filter",
+      "filterAll": "All features",
+      "filterContained": "Only features completely within the page extent",
+      "filterIntersecting": "Only features intersecting the page extent",
+      "filterToPageHint": "Applies to atlas pages and a drawn print extent; otherwise the whole layer is used.",
+      "filterToAtlasFeature": "Only the current atlas feature",
+      "filterToAtlasFeatureHint": "Available when the table uses the atlas coverage layer. This takes priority over the page extent filter."
     },
     "dataTable": {
       "columns": "Columns",
       "columnsHint": "The first {{count}} fields are selected by default. Check columns to customize.",
       "maxRows": "Max rows",
+      "fitRows": "Adjust number of rows to fit page",
       "moreRows_one": "+{{count}} more",
       "moreRows_other": "+{{count}} more",
       "noRows": "No rows to show with the current settings."
@@ -1433,6 +1599,8 @@
       "extentMargin": "Margin around feature",
       "extentScale": "Fixed scale",
       "marginLabel": "Margin (%)",
+      "maskOutside": "Mask area outside current feature",
+      "maskOutsideHint": "Applies a translucent inverted fill to emphasize the current atlas feature.",
       "scaleLabel": "Scale",
       "scaleRequired": "Enter a scale greater than zero.",
       "sortField": "Sort by",
@@ -1500,6 +1668,19 @@
     "description": "Adjust the vertical exaggeration of the 3D terrain. Higher values make hills and mountains appear steeper.",
     "label": "Vertical exaggeration",
     "controlLabel": "Toggle terrain (double-click for exaggeration)",
+    "sourceLabel": "Terrain source",
+    "sourceDescription": "Use an EPSG:3857 or EPSG:4326 single-band COG as the elevation source. The file must allow CORS and HTTP range requests.",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "Local COG DEM",
+    "localSourceDescription": "The file stays on this device and is read in small ranges as terrain tiles are needed.",
+    "useCog": "Use COG DEM",
+    "sourceLoading": "Opening COG…",
+    "restoreDefaultSource": "Use global terrain",
+    "sourceError": "Could not open the COG DEM.",
+    "sourceErrorEmpty": "That file is empty. Choose a COG DEM file.",
+    "sourceErrorBand": "The requested band does not exist in this COG.",
+    "sourceErrorProjection": "COG terrain supports EPSG:3857 and EPSG:4326 DEMs only.",
+    "sourceErrorDetail": "Could not open the COG DEM. ({{detail}})",
     "reset": "Reset",
     "done": "Done"
   },
@@ -1527,6 +1708,16 @@
     "gapNote": "Dashed segments span dates with no reading (nodata or outside coverage).",
     "exportCsv": "Export CSV",
     "exportGeoParquet": "Export GeoParquet"
+  },
+  "auth": {
+    "unavailableTitle": "Sign-in is unavailable",
+    "unavailableDescription": "GeoLibre could not reach the sign-in service, so it cannot tell whether you are signed in. This is usually temporary; if it persists, this deployment's authentication settings may need attention.",
+    "retry": "Try again",
+    "signInTitle": "Sign in to GeoLibre",
+    "signInDescription": "This deployment requires an account. You will be taken to a secure sign-in page and returned here.",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "account": "Account"
   },
   "basemapExtract": {
     "title": "Extract Offline Basemap",
@@ -1658,8 +1849,13 @@
     "unit": {
       "meters": "m",
       "kilometers": "km",
-      "miles": "mi"
-    }
+      "miles": "mi",
+      "feet": "ft"
+    },
+    "viewshedHere": "Viewshed from here ({{radius}})",
+    "viewshedLayerName": "Viewshed ({{radius}})",
+    "viewshedToolName": "Viewshed",
+    "viewshedNoResult": "No visible area could be computed here."
   },
   "knowledgeCard": {
     "title": "Place info",
@@ -1703,7 +1899,8 @@
       "geocoding": "Geocoding",
       "ai": "AI Providers",
       "environment": "Environment",
-      "updates": "Updates"
+      "updates": "Updates",
+      "startup": "Startup"
     },
     "menu": {
       "mapPreferences": "Map Preferences",
@@ -1714,6 +1911,7 @@
       "ai": "AI Providers",
       "environmentVariables": "Environment Variables",
       "updates": "Update Settings",
+      "startupSettings": "Startup Settings",
       "managePlugins": "Manage Plugins",
       "styleManager": "Style Manager",
       "urlOverrideNote": "URL layout parameters override saved settings."
@@ -1730,6 +1928,26 @@
         "minor": "Major and minor releases only",
         "major": "Major releases only"
       }
+    },
+    "startup": {
+      "title": "Startup project",
+      "description": "Choose how GeoLibre opens a new session.",
+      "mode": {
+        "default": "Open the default workspace",
+        "last": "Reopen the last project",
+        "specific": "Open a specific project"
+      },
+      "modeHint": {
+        "default": "Start with a new, untitled project.",
+        "last": "Open the most recently used local project."
+      },
+      "chooseProject": "Choose Project",
+      "noProjectSelected": "No project selected",
+      "globeByDefault": "Enable 3D globe by default",
+      "globeByDefaultHint": "Used for the untitled workspace when no startup project or project link is provided.",
+      "selectError": "The selected project could not be read.",
+      "restoring": "Opening your startup project…",
+      "loadWarning": "The startup project is unavailable. GeoLibre opened the default workspace instead."
     },
     "map": {
       "constraintsTitle": "Map constraints",
@@ -1752,7 +1970,9 @@
       "scaleUnitImperial": "Imperial (ft / mi)",
       "scaleUnitNautical": "Nautical (nmi)",
       "scaleUnitHint": "Choose the units shown on the scale bar at the bottom of the map.",
-      "errorBoundsUnavailable": "The map bounds are not available yet."
+      "errorBoundsUnavailable": "The map bounds are not available yet.",
+      "coordinateFormat": "Coordinate format",
+      "coordinateFormatHint": "Notation the status bar reports the pointer coordinate in. Click the coordinates in the status bar to switch notation."
     },
     "layout": {
       "title": "Layout",
@@ -2090,7 +2310,8 @@
       "dashboard": "Dashboard",
       "assistant": "AI Assistant",
       "geocode": "Geocode Addresses",
-      "modelBuilder": "Batch & Models",
+      "batchTools": "Batch tools",
+      "modelBuilder": "Model Builder",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI Segmentation",
@@ -2133,6 +2354,7 @@
       "delimitedText": "Delimited Text Layer",
       "photos": "Geotagged Photos",
       "gpx": "GPX Layer",
+      "polyline": "Encoded Polyline",
       "mbtiles": "MBTiles Layer",
       "xyz": "XYZ Layer",
       "wms": "WMS Layer",
@@ -2145,7 +2367,8 @@
       "video": "Video Layer",
       "deckglViz": "Deck.gl Layer",
       "gltfModel": "3D Model (glTF)",
-      "postgres": "PostgreSQL Layer"
+      "postgres": "PostgreSQL Layer",
+      "iceberg": "Apache Iceberg Layer"
     },
     "conversion": {
       "vectorToVector": "Vector to Vector",
@@ -2172,6 +2395,7 @@
       "rasterShape": "Read {{width}}×{{height}} raster with {{bands}} band(s)",
       "wroteCog": "Wrote a tiled COG with overviews ({{compression}})",
       "notAGeoTiff": "This file is not a readable GeoTIFF. In the browser, Raster to COG reads GeoTIFF only; other formats need the desktop app.",
+      "rasterTooLargeForBrowser": "In the browser this decodes the whole raster in WebAssembly, which is limited to about 4 GB, so this one does not fit. Convert it with the GeoLibre desktop app, or build the COG beforehand with gdal_translate or rio-cogeo.",
       "zoomRangeError": "Zoom levels must satisfy 0 ≤ min ≤ max ≤ {{max}}.",
       "colormap": "Colormap",
       "resampling": "Resampling",
@@ -2231,6 +2455,8 @@
       "dissolve": "Dissolve",
       "boundingBox": "Bounding box",
       "simplify": "Simplify",
+      "decodePolyline": "Decode polyline",
+      "encodePolyline": "Encode line to polyline",
       "clip": "Clip",
       "intersection": "Intersection",
       "difference": "Difference",
@@ -2419,7 +2645,7 @@
       "duckdbLayer": "DuckDB Layer",
       "whitebox": "Whitebox",
       "geocode": "Geocode Addresses",
-      "modelBuilder": "Batch & Models",
+      "modelBuilder": "Model Builder",
       "processingHistory": "History",
       "conversion": "Conversion",
       "vector": "Vector",
@@ -2431,7 +2657,7 @@
       "terrain": "Terrain",
       "remoteSensing": "Remote Sensing",
       "projection": "Projection",
-      "geolibre": "GeoLibre",
+      "geolibre": "GeoLibre Toolbox",
       "subGroupGeometry": "Geometry",
       "subGroupOverlay": "Overlay",
       "subGroupJoin": "Join",
@@ -2455,6 +2681,8 @@
       "atmosphereEnabled": "Enabled",
       "spinGlobe": "Spinning Globe",
       "graticule": "Gridlines",
+      "pointerElevation": "Elevation",
+      "pointerElevationHint": "Show ground elevation under the pointer in the status bar. Without 3D terrain this looks up a public elevation service.",
       "weather": "Weather",
       "weatherTooltip": "Overlay near-realtime weather layers you can animate.",
       "weatherPlay": "Play animation",
@@ -2501,10 +2729,16 @@
       "arcgisImportWarnings_one": "The project was imported, but {{count}} layer could not be loaded.",
       "arcgisImportWarnings_other": "The project was imported, but {{count}} layers could not be loaded.",
       "arcgisUnknownLayerType": "unknown",
+      "importWarningLayerCount_one": "{{count}} layer",
+      "importWarningLayerCount_other": "{{count}} layers",
+      "showLayerNames": "Show layer names",
+      "hideLayerNames": "Hide layer names",
       "arcgisImportReason": {
         "layer-type": "The {{layerType}} layer type is not supported.",
         "missing-source": "The layer has no readable local data source.",
         "format": "The layer's data format is not supported.",
+        "file-geodatabase": "File Geodatabase (.gdb) sources are not loaded from projects. In GeoLibre Desktop, add them with Add Data → File Geodatabase (GDB).",
+        "file-geodatabase-raster": "Raster datasets stored in a File Geodatabase (.gdb) are not supported. Export the raster to GeoTIFF and add it as a raster layer.",
         "network-path": "Network share paths are not loaded for security reasons.",
         "service": "ArcGIS service layers in projects are not supported yet.",
         "browser-local-file": "The local file is referenced, but browsers cannot reopen ArcGIS Pro data paths. Use GeoLibre Desktop to load it.",
@@ -2536,6 +2770,7 @@
       "embedVectorTitle": "Embed local vector data?",
       "embedVectorDesc": "This project has {{count}} local vector layer(s) loaded from your computer. The browser cannot re-read them when the project is reopened, so their data must be embedded in the project file to be restored. Embedding adds about {{size}} to the file.",
       "embedVectorDescDesktop": "This project has {{count}} local vector layer(s) loaded from your computer. Embed their data to make the project self-contained (adds about {{size}}), or save file references that reload from disk when the project is reopened. References keep the file small but break if a source file is later moved or deleted.",
+      "embedVectorLargeWarning": "Embedding about {{size}} makes a very large project file. Reopening it may be slow or fail outright, because every feature has to be parsed and held in memory at once. For data this size, convert the layers to PMTiles or FlatGeobuf and add them as remote layers instead of embedding them.",
       "embedVectorEmbedButton": "Embed data",
       "embedVectorReferenceButton": "Save file references",
       "embedVectorSkipButton": "Save without data",
@@ -2575,7 +2810,10 @@
       "loadingOsmPbfDesc": "Parsing the file and converting features to GeoJSON. This runs in the background and may take a moment for large extracts.",
       "loadingOsmPbfProgress": "Converting features to GeoJSON… {{processed}} of {{total}} OSM entities processed.",
       "projectName": "Project name",
-      "storymapEllipsis": "Story Map..."
+      "storymapEllipsis": "Story Map...",
+      "pointerElevationNoticeTitle": "Elevation uses a public elevation service",
+      "pointerElevationNoticeDesc": "The status bar's elevation readout is resolved from the map's own 3D terrain when that is enabled, which sends nothing anywhere. Without 3D terrain it falls back to the public Open-Meteo elevation API, and the coordinates under your pointer leave your device for those requests.",
+      "batchTools": "Batch tools"
     },
     "plugin": {
       "maplibre-gl-annotations": "Annotations",
@@ -2649,6 +2887,7 @@
       "couldNotOpenRecentProject": "Could not open the recent project.",
       "couldNotLoadRecentProject": "Could not load the recent project.",
       "couldNotSaveProject": "Could not save the project.",
+      "projectTooLargeToSave": "This project is too large to save. Convert its embedded vector data to PMTiles or FlatGeobuf and add those as remote layers instead of embedding the features.",
       "couldNotExportHtml": "Could not export the project to HTML.",
       "osmPbfNoFeatures": "No point, line, or polygon features were found in this OSM PBF file.",
       "couldNotLoadOsmPbf": "Could not load the OSM PBF file.",
@@ -3257,12 +3496,22 @@
     "resultsCleared": "Search results cleared.",
     "searching": "Searching STAC items…",
     "loadingMore": "Loading more items…",
+    "noMatchesHere": "Nothing matched in that part of the catalog. Load more to keep searching.",
+    "treeEmpty": "Empty",
+    "treeOpenFailed": "Could not open this catalog",
     "noResults": "No STAC items matched these filters.",
     "searchFailed": "STAC search failed",
     "showing": "Showing {{count}} items.",
     "showingOfMatched": "Showing {{count}} of {{matched}} items.",
     "loadMore": "Load more",
     "renderOptions": "Raster rendering options",
+    "renderingEngine": "COG rendering engine",
+    "engineAuto": "Leave unchanged",
+    "engineWasm": "WebAssembly tiler (globe compatible)",
+    "engineGpu": "GPU (deck.gl, Mercator only)",
+    "engineTitiler": "TiTiler server",
+    "engineHint": "Which renderer decodes the imagery. Unlike the settings above this is not per layer: it applies to every raster on the map, including ones already added.",
+    "resizeResults": "Resize search results",
     "bands": "Bands",
     "bandsPlaceholder": "e.g. 1 or 1,2,3 (default: auto)",
     "colormap": "Colormap (single-band only)",
@@ -3279,9 +3528,25 @@
     "download": "Download",
     "adding": "Adding {{asset}}…",
     "added": "Added {{asset}} to the map.",
-    "addUnsupported": "Only GeoTIFF/COG and GeoJSON assets can be added to the map",
+    "addUnsupported": "Only GeoTIFF/COG, GeoJSON, GeoParquet, PMTiles, and Zarr assets can be added to the map",
     "addFailed": "Could not add asset",
-    "cogUnsupported": "This GeoLibre host cannot visualize remote GeoTIFF assets"
+    "addNoSourceLayers": "This archive lists no layers to draw",
+    "addNoTarget": "This asset lists nothing to draw",
+    "addIcechunkFailed": "This Icechunk repository could not be opened",
+    "zarrProblemGroup": "This asset names a group of arrays, not one that can be drawn",
+    "zarrProblemMissing": "This store does not hold that variable",
+    "zarrProblemUnauthorized": "This Zarr store needs credentials GeoLibre cannot supply yet",
+    "zarrProblemUnsupportedUrl": "This Zarr store's address cannot be read one key at a time",
+    "zarrProblemUnavailable": "This Zarr store could not be opened",
+    "chooseTarget": "Choose what to add",
+    "cogUnsupported": "This GeoLibre host cannot visualize remote GeoTIFF assets",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
+    "formatUnknown": "Unknown format",
+    "notAddable": "not addable"
   },
   "earthdataGis": {
     "hint": "Search NASA Earthdata GIS for imagery, map, and feature services.",
@@ -3511,6 +3776,10 @@
     "confirmStyleReplace_one": "Switching to \"{{name}}\" replaces the whole map style and will remove the stacked basemap you added. Continue?",
     "confirmStyleReplace_other": "Switching to \"{{name}}\" replaces the whole map style and will remove the {{count}} stacked basemaps you added. Continue?"
   },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "Feature properties",
+    "massingHeight": "Height (m)"
+  },
   "annotations": {
     "toolbar": "Annotation tools",
     "layerName": "Annotations",
@@ -3676,9 +3945,9 @@
     "clear": "Clear conversation",
     "close": "Close assistant",
     "send": "Send",
-    "sendHint": "Send (Ctrl/Cmd+Enter)",
+    "sendHint": "Send (Enter)",
     "stop": "Stop",
-    "placeholder": "Ask about your data, e.g. \"show countries with population over 50 million\" · Ctrl/Cmd+Enter to send",
+    "placeholder": "Ask about your data, e.g. \"show countries with population over 50 million\" · Enter to send, Shift+Enter for a new line",
     "intro": "Chat with your data. I can run Spatial SQL, add or remove layers, restyle them, and move the map — every change is undoable. Try \"color the countries by population with a graduated red ramp\".",
     "setupTitle": "Set up the AI Assistant",
     "setupStatus": "The assistant needs an AI provider to do the thinking. Add credentials for any one provider below and the panel switches to chat mode as soon as you save.",
@@ -3788,6 +4057,8 @@
       "bylinePlaceholder": "Author or credit line",
       "footerText": "Footer text",
       "footerPlaceholder": "Footer shown at the bottom of each page",
+      "markers": "Clickable location markers",
+      "markersHint": "Draws a marker at each chapter's location. In a PDF viewer, clicking a marker opens that coordinate in Google Maps.",
       "startSlide": "Start slide",
       "endSlide": "Closing slide",
       "generate": "Generate PDF",
@@ -3873,33 +4144,101 @@
       "count_other": "{{count}} runs recorded",
       "toolUnavailable": "Tool \"{{toolId}}\" is no longer available"
     },
-    "modelBuilder": {
-      "moveStepUp": "Move step up",
-      "moveStepDown": "Move step down",
-      "removeStep": "Remove step",
-      "title": "Batch & Models",
-      "description": "Run a vector tool across many layers, or chain tools into a reusable model saved with your project.",
-      "tabBatch": "Batch",
-      "tabModels": "Models",
-      "outputPlaceholder": "Output will appear here.",
+    "batchTools": {
+      "title": "Batch tools",
+      "description": "Run one vector tool across many layers at once.",
+      "runBatch": "Run batch",
       "tool": "Tool",
       "sharedParameters": "Shared parameters",
       "noExtraParameters": "This tool has no extra parameters.",
       "inputLayers": "Input layers",
-      "selectAll": "Select all",
       "clearSelection": "Clear",
+      "selectAll": "Select all",
       "noCompatibleLayers": "No compatible GeoJSON layers.",
-      "newModel": "New model",
-      "noSavedModels": "No saved models yet.",
-      "untitledModel": "Untitled model",
+      "outputPlaceholder": "Output will appear here."
+    },
+    "modelBuilder": {
+      "title": "Model Builder",
+      "description": "Drag tools onto the canvas and connect them into a processing model.",
       "modelName": "Model name",
-      "emptyPipelineHint": "Add a step to start building the pipeline. The first step reads an input layer; each later step receives the previous step's output.",
-      "addStep": "Add step",
-      "runModel": "Run model",
+      "modelNamePlaceholder": "Untitled model",
+      "untitledModel": "Untitled model",
+      "newModel": "New",
+      "discardChanges": "Discard unsaved changes to the current model?",
+      "discardRunning": "A model run is still in progress. Stop it and continue?",
+      "arrange": "Arrange",
+      "arrangeHint": "Lay the nodes out along the flow",
+      "runModel": "Run",
+      "cancelRun": "Cancel",
+      "runCancelled": "Run cancelled.",
+      "issueMissingLayer": "Choose an input layer.",
+      "issueUnknownTool": "Unknown tool \"{{tool}}\".",
+      "issueMissingInput": "\"{{port}}\" needs a connection or a value.",
+      "issueUnknownPort": "A connection refers to a port that no longer exists.",
+      "issueDuplicateInput": "\"{{port}}\" already has an incoming connection.",
+      "issueTypeMismatch": "Those ports carry different kinds of data.",
+      "issueCycle": "The model contains a loop.",
+      "issueNoOutput": "Add an output node to keep a result.",
+      "issueDuplicateNode": "Two or more nodes share the same id.",
+      "issueDanglingEdge": "A connection points at a node that no longer exists.",
+      "outputAddFailed": "Could not add \"{{name}}\" to the map",
+      "catalogUnavailable": "Tools could not be loaded, so the model cannot be checked or run.",
+      "addToolNode": "Add {{tool}} to the canvas",
+      "importTooLarge": "That model is too large to open.",
+      "importModel": "Import",
+      "exportModel": "Export",
+      "copyPython": "Copy Python script",
+      "pythonCopied": "Python script copied to the clipboard.",
+      "pythonCopyFailed": "Could not copy the Python script",
+      "savedModels": "Saved models",
+      "loadModelPlaceholder": "Load a saved model...",
       "deleteModel": "Delete",
-      "inputPreviousStep": "Input: ← previous step output",
-      "unknownTool": "Unknown tool \"{{id}}\"",
-      "noParameters": "No parameters."
+      "deletedLog": "Model deleted from the project.",
+      "searchTools": "Search tools",
+      "loadingTools": "Loading tools...",
+      "noToolsMatch": "No tools match your search.",
+      "addInputNode": "+ Input",
+      "addOutputNode": "+ Output",
+      "canvasEmpty": "Drag a tool from the palette to start building.",
+      "inputNode": "Input",
+      "outputNode": "Output",
+      "inputPort": "Input: {{port}}",
+      "outputPort": "Output: {{port}}",
+      "removeConnection": "Remove connection",
+      "removeNode": "Remove node",
+      "resizePanel": "Resize panel",
+      "minimizePanel": "Minimize panel",
+      "restorePanel": "Restore panel",
+      "resizePalette": "Resize the tool palette",
+      "resizeInspector": "Resize the properties panel",
+      "resizeLog": "Resize the message log",
+      "selectNodeHint": "Select a node to edit its settings.",
+      "sourceLayer": "Source layer",
+      "chooseLayer": "Choose a layer...",
+      "resultName": "Result name",
+      "resultNamePlaceholder": "Model output",
+      "noParameters": "No parameters.",
+      "keepResultHint": "Keep an intermediate result by adding an output for it.",
+      "keepResultSingle": "Keep this result",
+      "resultKeptSingle": "This result is kept",
+      "keepResult": "Keep \"{{port}}\"",
+      "resultKept": "\"{{port}}\" is kept",
+      "outputPlaceholder": "Messages appear here.",
+      "connectCycle": "That connection would create a loop.",
+      "connectSameNode": "A node cannot connect to itself.",
+      "fixIssuesFirst": "Fix the reported problems before running.",
+      "runFailed": "Run failed",
+      "runFinished": "Run finished — {{outputs}} output(s) added.",
+      "savedLog": "Model saved to the project.",
+      "exportedLog": "Exported {{name}}",
+      "importedLog": "Imported a model with {{nodes}} node(s).",
+      "importFailed": "Import failed",
+      "importInvalid": "That file does not contain a model graph.",
+      "importUnsupported": "That file is not a GeoLibre model.",
+      "rasterOutputUnsupported": "\"{{name}}\" is a raster result, which this build cannot add to the map.",
+      "portNeedsVector": "\"{{port}}\" needs vector data, but a raster arrived.",
+      "toolNoOutput": "\"{{tool}}\" produced no output.",
+      "toolNoUsableOutput": "\"{{tool}}\" produced no usable output."
     },
     "parameterField": {
       "selectLayer": "Select a layer...",
@@ -3929,7 +4268,7 @@
       "allSources": "All sources",
       "geolibreTools": "GeoLibre tools",
       "whiteboxTools": "Whitebox tools",
-      "toolbox": "Whitebox toolbox",
+      "toolbox": "Whitebox Toolbox",
       "checkingRuntime": "Checking runtime.",
       "toolsAvailable_one": "{{count}} tool available.",
       "toolsAvailable_other": "{{count}} tools available.",
@@ -4011,6 +4350,1478 @@
       "run": "Run",
       "outputPlaceholder": "Output will appear here.",
       "resolutionRange": "Resolution (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "Buffer",
+          "description": "Create a buffer polygon around each feature by a fixed distance",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "distance": {
+              "label": "Distance"
+            },
+            "units": {
+              "label": "Units",
+              "options": {
+                "kilometers": "Kilometers",
+                "meters": "Meters",
+                "miles": "Miles"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "Centroids",
+          "description": "Compute the centroid point of each feature",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "Convex hull",
+          "description": "Compute the convex hull enclosing all features",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "Dissolve",
+          "description": "Merge polygon features into a single geometry, optionally grouped by a field",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "field": {
+              "label": "Dissolve field (optional)",
+              "description": "Property name to group features by before dissolving"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "Bounding box",
+          "description": "Compute the rectangular envelope of all features",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            }
+          }
+        },
+        "simplify": {
+          "name": "Simplify",
+          "description": "Reduce the number of vertices using Douglas-Peucker",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "tolerance": {
+              "label": "Tolerance (degrees)"
+            },
+            "highQuality": {
+              "label": "High quality"
+            }
+          }
+        },
+        "clip": {
+          "name": "Clip",
+          "description": "Clip the input layer to the area covered by an overlay layer (keeps input attributes)",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "overlay": {
+              "label": "Overlay (clip) layer"
+            }
+          }
+        },
+        "intersection": {
+          "name": "Intersection",
+          "description": "Keep only the areas where both polygon layers overlap",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "overlay": {
+              "label": "Overlay layer"
+            }
+          }
+        },
+        "difference": {
+          "name": "Difference",
+          "description": "Remove the overlay layer's area from the input layer",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "overlay": {
+              "label": "Overlay layer"
+            }
+          }
+        },
+        "union": {
+          "name": "Union",
+          "description": "Merge two polygon layers into a single combined geometry",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "overlay": {
+              "label": "Overlay layer"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "Spatial join",
+          "description": "Attach attributes from a join layer to each input feature based on a spatial relationship",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "overlay": {
+              "label": "Join layer"
+            },
+            "predicate": {
+              "label": "Spatial relationship",
+              "options": {
+                "intersects": "Intersects",
+                "within": "Within",
+                "contains": "Contains"
+              }
+            },
+            "how": {
+              "label": "Join type",
+              "options": {
+                "inner": "Inner (keep only matched features)",
+                "left": "Left (keep all input features)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "Attribute join",
+          "description": "Attach attributes from a join layer (a table) onto each input feature where a key field matches, without using geometry. One-to-one: the first matching join row wins.",
+          "params": {
+            "layer": {
+              "label": "Target layer"
+            },
+            "overlay": {
+              "label": "Join layer (table)",
+              "description": "The layer whose attributes are brought over. Its geometry is ignored."
+            },
+            "target_field": {
+              "label": "Target key field"
+            },
+            "join_field": {
+              "label": "Join key field"
+            },
+            "how": {
+              "label": "Join type",
+              "options": {
+                "left": "Left (keep all target features)",
+                "inner": "Inner (keep only matched features)"
+              }
+            },
+            "fields": {
+              "label": "Fields to bring over (optional)",
+              "description": "Comma-separated join fields to copy. Leave blank to bring over every join field except the key."
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "Select by value",
+          "description": "Extract features whose attribute value matches a condition into a new layer",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "field": {
+              "label": "Field"
+            },
+            "operator": {
+              "label": "Operator",
+              "options": {
+                "eq": "= (equals)",
+                "neq": "≠ (not equals)",
+                "gt": "> (greater than)",
+                "gte": "≥ (greater than or equal)",
+                "lt": "< (less than)",
+                "lte": "≤ (less than or equal)",
+                "contains": "contains (text)",
+                "starts-with": "starts with (text)",
+                "is-null": "is empty",
+                "is-not-null": "is not empty"
+              }
+            },
+            "value": {
+              "label": "Value",
+              "description": "Compared as a number when both sides are numeric."
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "Select by location",
+          "description": "Extract features by their spatial relationship to a second layer into a new layer",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "overlay": {
+              "label": "Filter layer"
+            },
+            "predicate": {
+              "label": "Spatial relationship",
+              "options": {
+                "intersects": "Intersects",
+                "within": "Within",
+                "contains": "Contains",
+                "disjoint": "Disjoint (no intersection)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "Random extract",
+          "description": "Extract a random subset of features into a new layer, sized by a feature count or a percentage of the input.",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "method": {
+              "label": "Method",
+              "options": {
+                "count": "Number of features",
+                "percentage": "Percentage of features"
+              }
+            },
+            "count": {
+              "label": "Number of features",
+              "description": "Clamped to the number of input features when larger."
+            },
+            "percentage": {
+              "label": "Percentage of features"
+            }
+          }
+        },
+        "reproject": {
+          "name": "Reproject",
+          "description": "Reinterpret a layer's coordinates as a source CRS and transform them to WGS84 so they display in the correct location. Requires the Sidecar or Python engine.",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "source_crs": {
+              "label": "Source CRS",
+              "description": "The CRS the layer's coordinates are really in (e.g. EPSG:3857). The result is transformed to WGS84 (EPSG:4326)."
+            }
+          }
+        },
+        "explode": {
+          "name": "Explode",
+          "description": "Split multipart geometries into single-part features (one feature per part), keeping each parent's attributes",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "Aggregate by attribute",
+          "description": "Dissolve features that share an attribute value into one geometry per group, with a summary statistic",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "group_field": {
+              "label": "Group by field"
+            },
+            "statistic": {
+              "label": "Statistic",
+              "options": {
+                "count": "Count",
+                "sum": "Sum",
+                "mean": "Mean",
+                "min": "Min",
+                "max": "Max",
+                "median": "Median"
+              }
+            },
+            "stat_field": {
+              "label": "Statistic field",
+              "description": "Numeric field summarized by the statistic above."
+            }
+          }
+        },
+        "smooth": {
+          "name": "Smooth",
+          "description": "Round the corners of line and polygon features with Chaikin's algorithm (adds vertices), distinct from Simplify's vertex reduction. Z/elevation is preserved; points pass through unchanged.",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "iterations": {
+              "label": "Iterations",
+              "description": "More iterations give a smoother result (1-10)."
+            }
+          }
+        },
+        "grid": {
+          "name": "Regular grid",
+          "description": "Generate a regular rectangular grid (fishnet) of cells over an extent. Source: the current map view, a layer's extent, or a manual bounding box.",
+          "params": {
+            "source": {
+              "label": "Extent source",
+              "options": {
+                "viewport": "Map viewport",
+                "layer": "Layer extent",
+                "bbox": "Manual bounding box"
+              }
+            },
+            "layer": {
+              "label": "Input layer"
+            },
+            "west": {
+              "label": "West (min lon)"
+            },
+            "south": {
+              "label": "South (min lat)"
+            },
+            "east": {
+              "label": "East (max lon)"
+            },
+            "north": {
+              "label": "North (max lat)"
+            },
+            "cell_width": {
+              "label": "Cell width (degrees)"
+            },
+            "cell_height": {
+              "label": "Cell height (degrees)",
+              "description": "Leave blank to match the cell width."
+            },
+            "cell_type": {
+              "label": "Cell type",
+              "options": {
+                "polygon": "Rectangles",
+                "point": "Points (cell centers)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "Build a Voronoi diagram (one polygon per point, clipped to the points' extent) or a Delaunay triangulation from a point layer.",
+          "params": {
+            "layer": {
+              "label": "Input point layer"
+            },
+            "type": {
+              "label": "Diagram",
+              "options": {
+                "voronoi": "Voronoi polygons",
+                "delaunay": "Delaunay triangles"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "Cell-site coverage",
+          "description": "Build antenna sector/wedge polygons from point sites using azimuth, radius and beamwidth (read from attribute fields or fixed values). Beamwidth is clamped to 360° (a full circle); the recorded beamwidth reflects the clamped value. Useful for cell-tower coverage, like QGIS Shape Tools.",
+          "params": {
+            "layer": {
+              "label": "Input point layer"
+            },
+            "azimuthField": {
+              "label": "Azimuth field (°)",
+              "description": "Direction the sector faces, in degrees clockwise from north. Falls back to the fixed azimuth when blank or non-numeric."
+            },
+            "azimuth": {
+              "label": "Azimuth (fixed, °)"
+            },
+            "radiusField": {
+              "label": "Radius field",
+              "description": "Coverage radius. Falls back to the fixed radius when blank or non-numeric."
+            },
+            "radius": {
+              "label": "Radius (fixed)"
+            },
+            "beamwidthField": {
+              "label": "Beamwidth field (°)",
+              "description": "Angular width of the sector, clamped to 360° (a full circle). Falls back to the fixed beamwidth when blank or non-numeric."
+            },
+            "beamwidth": {
+              "label": "Beamwidth (fixed, °)"
+            },
+            "units": {
+              "label": "Radius units",
+              "options": {
+                "kilometers": "Kilometers",
+                "meters": "Meters",
+                "miles": "Miles"
+              }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "Decode polyline",
+          "description": "Decode encoded polyline strings from an attribute field into a LineString vector layer",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "field": {
+              "label": "Polyline field",
+              "description": "Attribute field containing the encoded polyline string"
+            },
+            "precision": {
+              "label": "Precision",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "Encode line to polyline",
+          "description": "Encode LineString and MultiLineString geometries into an encoded polyline attribute string",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "precision": {
+              "label": "Precision",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "Output field name",
+              "description": "Name of the attribute column to store encoded polylines (default: polyline)"
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "DGGS Generator",
+          "description": "Fill an area with DGGS cells (H3, S2, A5, DGGRID, DGGAL). Source: a layer's geometry, a layer's extent, the current map view, or a manual bounding box.",
+          "params": {
+            "dggsType": {
+              "label": "DGGS type",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID type",
+              "description": "Grid configuration passed to duck_dggs as dggs_params (ISEA/FULLER × aperture × topology).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL type",
+              "description": "DGGRS passed to dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "Area source",
+              "options": {
+                "polyfill": "Layer geometry (polyfill)",
+                "extent": "Layer extent (bbox)",
+                "viewport": "Map viewport",
+                "bbox": "Manual bounding box"
+              }
+            },
+            "layer": {
+              "label": "Input layer"
+            },
+            "west": {
+              "label": "West (min lon)"
+            },
+            "south": {
+              "label": "South (min lat)"
+            },
+            "east": {
+              "label": "East (max lon)"
+            },
+            "north": {
+              "label": "North (max lat)"
+            },
+            "resolution": {
+              "label": "Resolution",
+              "description": "Range depends on DGGS type. Leave blank to auto-pick from the area."
+            },
+            "compactCells": {
+              "label": "Compact cells",
+              "description": "Merge complete sets of sibling cells into coarser parents (fewer features, mixed resolutions)."
+            },
+            "fixAntimeridian": {
+              "label": "Fix antimeridian",
+              "description": "Unwrap cell rings that cross ±180° longitude."
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "DGGS Binning",
+          "description": "Aggregate a point layer into DGGS cells (count, or sum/mean/min/max of a numeric field).",
+          "params": {
+            "dggsType": {
+              "label": "DGGS type",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID type",
+              "description": "Grid configuration passed to duck_dggs as dggs_params (ISEA/FULLER × aperture × topology).",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL type",
+              "description": "DGGRS passed to dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "Input point layer"
+            },
+            "aggOp": {
+              "label": "Aggregate",
+              "options": {
+                "count": "Count",
+                "sum": "Sum",
+                "mean": "Mean",
+                "min": "Min",
+                "max": "Max"
+              }
+            },
+            "field": {
+              "label": "Field",
+              "description": "Numeric field to aggregate."
+            },
+            "resolution": {
+              "label": "Resolution",
+              "description": "Range depends on DGGS type. Leave blank to auto-pick from the area."
+            },
+            "fixAntimeridian": {
+              "label": "Fix antimeridian",
+              "description": "Unwrap cell rings that cross ±180° longitude."
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "DGGS Compact",
+          "description": "Compact DGGS polygon cells, or expand them to a uniform resolution (H3, S2, A5, DGGAL). Input must be a cell layer with an ID property.",
+          "params": {
+            "dggsType": {
+              "label": "DGGS type",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL type",
+              "description": "DGGRS passed to dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS).",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "Mode",
+              "options": {
+                "compact": "Compact",
+                "expand": "Expand"
+              }
+            },
+            "layer": {
+              "label": "Input DGGS layer",
+              "description": "Polygon cell layer from DGGS Generator / Binning (or equivalent)."
+            },
+            "cellField": {
+              "label": "Cell ID field",
+              "description": "Defaults to h3, a5, s2, or dggal for the selected type when left blank."
+            },
+            "resolution": {
+              "label": "Target resolution",
+              "description": "Resolution to expand to. Must be at least as fine as the input cells."
+            },
+            "fixAntimeridian": {
+              "label": "Fix antimeridian",
+              "description": "Unwrap cell rings that cross ±180° longitude."
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "Trajectory speed",
+          "description": "Order points by time (per target) and connect consecutive fixes into segments carrying distance, duration and speed. Like QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Input point layer"
+            },
+            "timeField": {
+              "label": "Time field",
+              "description": "Timestamp per fix: an ISO date/time string or an epoch (seconds or milliseconds)."
+            },
+            "idField": {
+              "label": "Target id field",
+              "description": "Splits the points into separate trajectories. Leave blank to treat all points as one target."
+            },
+            "speedUnits": {
+              "label": "Speed units",
+              "options": {
+                "km/h": "km/h",
+                "m/s": "m/s",
+                "mph": "mph"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "Detect stops",
+          "description": "Find places where a target dwells: runs of consecutive fixes that stay within a distance (absorbing GPS scatter) for at least a minimum duration. Outputs one point per stop. Like QGIS TrajecTools.",
+          "params": {
+            "layer": {
+              "label": "Input point layer"
+            },
+            "timeField": {
+              "label": "Time field",
+              "description": "Timestamp per fix: an ISO date/time string or an epoch (seconds or milliseconds)."
+            },
+            "idField": {
+              "label": "Target id field",
+              "description": "Detects stops per target. Leave blank to treat all points as one target."
+            },
+            "maxDistance": {
+              "label": "Max distance",
+              "description": "Every fix in a stop must be within this distance of the stop's first fix (so a stop can span up to twice this value). Set it to your GPS scatter radius."
+            },
+            "distanceUnits": {
+              "label": "Distance units",
+              "options": {
+                "meters": "Meters",
+                "kilometers": "Kilometers",
+                "miles": "Miles"
+              }
+            },
+            "minDuration": {
+              "label": "Min duration (s)",
+              "description": "A dwell shorter than this is not reported as a stop."
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "Space-time proximity",
+          "description": "Find pairs of points close in both space and time — e.g. two targets meeting. Outputs a line connecting each qualifying pair, carrying the distance and time gap.",
+          "params": {
+            "layer": {
+              "label": "Input point layer"
+            },
+            "timeField": {
+              "label": "Time field",
+              "description": "Timestamp per point: an ISO date/time string or an epoch (seconds or milliseconds)."
+            },
+            "idField": {
+              "label": "Target id field",
+              "description": "When set, only points with DIFFERENT id values are paired (encounters between distinct targets). Leave blank to consider every pair."
+            },
+            "maxDistance": {
+              "label": "Max distance"
+            },
+            "distanceUnits": {
+              "label": "Distance units",
+              "options": {
+                "meters": "Meters",
+                "kilometers": "Kilometers",
+                "miles": "Miles"
+              }
+            },
+            "maxTime": {
+              "label": "Max time difference"
+            },
+            "timeUnits": {
+              "label": "Time units",
+              "options": {
+                "seconds": "Seconds",
+                "minutes": "Minutes",
+                "hours": "Hours"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "Check validity",
+          "description": "Find features with invalid geometry (GEOS rules: self-intersecting rings, holes outside shells, ...) and mark them on the map",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "Fix geometries",
+          "description": "Repair invalid geometries with ST_MakeValid (GEOS); valid features pass through untouched",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "Check topology rules",
+          "description": "Validate the layer against topology rules (overlaps, gaps, self-intersections, dangles) and mark each violation on the map",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "ruleSelfIntersect": {
+              "label": "Lines must not self-intersect"
+            },
+            "ruleOverlap": {
+              "label": "Polygons must not overlap"
+            },
+            "ruleGaps": {
+              "label": "Polygons must not have gaps"
+            },
+            "ruleDangles": {
+              "label": "Lines must not have dangles"
+            },
+            "rulePointCovered": {
+              "label": "Points must be covered by a line"
+            },
+            "ruleEndpointSnap": {
+              "label": "Line endpoints must connect within tolerance"
+            },
+            "snapTolerance": {
+              "label": "Snap tolerance",
+              "description": "For the endpoint rule: how far apart (in layer coordinate units — degrees for WGS84) two line ends may be and still count as connected."
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "Fix topology",
+          "description": "Automatically repair topology violations: snap nearly-connected line endpoints, fix dangles, and project points onto lines. Free ends with nothing nearby are left unchanged.",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "ruleEndpointSnap": {
+              "label": "Snap nearly-connected line endpoints"
+            },
+            "ruleDangles": {
+              "label": "Repair dangles (snap or project onto nearby geometry)"
+            },
+            "rulePointCovered": {
+              "label": "Project points onto the nearest line"
+            },
+            "snapTolerance": {
+              "label": "Snap tolerance",
+              "description": "How far (in layer coordinate units — degrees for WGS84) geometry may move to connect."
+            },
+            "dryRun": {
+              "label": "Preview only (dry run)",
+              "description": "Report the fixes that would be applied without creating a repaired layer."
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "Isochrone / service area",
+          "description": "Travel-time or travel-distance reachability polygons from each point in a layer",
+          "params": {
+            "layer": {
+              "label": "Origin points"
+            },
+            "mode": {
+              "label": "Travel mode",
+              "options": {
+                "auto": "Driving",
+                "pedestrian": "Walking",
+                "bicycle": "Cycling"
+              }
+            },
+            "metric": {
+              "label": "Metric",
+              "options": {
+                "time": "Travel time (minutes)",
+                "distance": "Distance (km)"
+              }
+            },
+            "contours": {
+              "label": "Contours",
+              "description": "Comma-separated values (minutes for time, km for distance)"
+            },
+            "endpoint": {
+              "label": "Routing server (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "OD cost matrix",
+          "description": "Travel time and distance between every origin and destination point, as connecting lines",
+          "params": {
+            "origins": {
+              "label": "Origin points"
+            },
+            "destinations": {
+              "label": "Destination points"
+            },
+            "mode": {
+              "label": "Travel mode",
+              "options": {
+                "auto": "Driving",
+                "pedestrian": "Walking",
+                "bicycle": "Cycling"
+              }
+            },
+            "endpoint": {
+              "label": "Routing server (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "Sequential route (directions)",
+          "description": "Connect points in sequence along the road network into a route. Each point is snapped to the nearest road, so off-road coordinates (cell sites, sensors) still route. Order follows the chosen field (e.g. a timestamp) or the layer's feature order.",
+          "params": {
+            "layer": {
+              "label": "Input points"
+            },
+            "order_field": {
+              "label": "Order by field (optional)",
+              "description": "Sort points by this field (numbers or timestamps) before routing. Leave empty to use the layer's feature order."
+            },
+            "mode": {
+              "label": "Travel mode",
+              "options": {
+                "auto": "Driving",
+                "pedestrian": "Walking",
+                "bicycle": "Cycling"
+              }
+            },
+            "endpoint": {
+              "label": "Routing server (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "Global Moran's I",
+          "description": "Measure overall spatial autocorrelation of a numeric attribute across the whole layer.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "field": {
+              "label": "Value field"
+            },
+            "weightsType": {
+              "label": "Spatial weights",
+              "description": "How neighbors are defined for each feature.",
+              "options": {
+                "knn": "K nearest neighbors",
+                "distance": "Distance band"
+              }
+            },
+            "k": {
+              "label": "Neighbors (k)"
+            },
+            "threshold": {
+              "label": "Distance band (km)"
+            },
+            "permutations": {
+              "label": "Permutations",
+              "description": "Random permutations for the pseudo p-value."
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "Local Moran's I (LISA)",
+          "description": "Per-feature clusters and outliers (High-High, Low-Low, High-Low, Low-High) with pseudo significance.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "field": {
+              "label": "Value field"
+            },
+            "weightsType": {
+              "label": "Spatial weights",
+              "description": "How neighbors are defined for each feature.",
+              "options": {
+                "knn": "K nearest neighbors",
+                "distance": "Distance band"
+              }
+            },
+            "k": {
+              "label": "Neighbors (k)"
+            },
+            "threshold": {
+              "label": "Distance band (km)"
+            },
+            "permutations": {
+              "label": "Permutations",
+              "description": "Random permutations for the pseudo p-value."
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Getis-Ord Gi* hotspots",
+          "description": "Identify statistically significant hot spots and cold spots of a numeric attribute.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "field": {
+              "label": "Value field"
+            },
+            "weightsType": {
+              "label": "Spatial weights",
+              "description": "How neighbors are defined for each feature.",
+              "options": {
+                "knn": "K nearest neighbors",
+                "distance": "Distance band"
+              }
+            },
+            "k": {
+              "label": "Neighbors (k)"
+            },
+            "threshold": {
+              "label": "Distance band (km)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "Average nearest neighbor",
+          "description": "Test whether points are clustered, dispersed, or randomly distributed (ANN ratio + z-score).",
+          "params": {
+            "layer": {
+              "label": "Point layer"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "Kernel density (heatmap)",
+          "description": "Estimate a density surface from points as a grid of cells, using a quartic kernel.",
+          "params": {
+            "layer": {
+              "label": "Point layer"
+            },
+            "weightField": {
+              "label": "Weight field (optional)",
+              "description": "Numeric field weighting each point; blank = equal weight."
+            },
+            "bandwidth": {
+              "label": "Search radius / bandwidth (km)"
+            },
+            "cellSize": {
+              "label": "Cell size (km)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "Emerging Hot Spot (space-time cube)",
+          "description": "Build a space-time cube from timestamped points (a fishnet grid × equal time steps) and classify each cell as a new, intensifying, persistent, diminishing, sporadic, oscillating, or historical hot/cold spot. Runs Getis-Ord Gi* per time slice, then a Mann-Kendall trend test on each cell's Gi* series. Client-side, like ArcGIS Emerging Hot Spot Analysis.",
+          "params": {
+            "layer": {
+              "label": "Point layer"
+            },
+            "timeField": {
+              "label": "Time field",
+              "description": "Timestamp per point: an ISO date/time string or an epoch (seconds or milliseconds)."
+            },
+            "cellSize": {
+              "label": "Cell size (km)",
+              "description": "Edge length of each square spatial bin, in kilometres."
+            },
+            "timeStep": {
+              "label": "Time-step interval"
+            },
+            "timeStepUnit": {
+              "label": "Time-step unit",
+              "options": {
+                "hours": "Hours",
+                "days": "Days",
+                "weeks": "Weeks"
+              }
+            },
+            "weightField": {
+              "label": "Weight field (optional)",
+              "description": "Numeric field summed per space-time bin instead of counting points; blank = count points."
+            },
+            "confidence": {
+              "label": "Confidence level",
+              "description": "Significance threshold for a bin to count as a hot/cold spot and for the trend.",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "Hillshade",
+          "description": "Compute a shaded-relief (hillshade) raster from an elevation model.",
+          "params": {
+            "azimuth": {
+              "label": "Azimuth (degrees)"
+            },
+            "altitude": {
+              "label": "Altitude (degrees)"
+            },
+            "z_factor": {
+              "label": "Z factor"
+            }
+          }
+        },
+        "slope": {
+          "name": "Slope",
+          "description": "Compute slope (steepness) from an elevation model.",
+          "params": {
+            "units": {
+              "label": "Units",
+              "options": {
+                "degrees": "Degrees",
+                "percent": "Percent"
+              }
+            },
+            "z_factor": {
+              "label": "Z factor"
+            }
+          }
+        },
+        "aspect": {
+          "name": "Aspect",
+          "description": "Compute aspect (compass direction of the steepest slope) from an elevation model."
+        },
+        "reproject": {
+          "name": "Reproject",
+          "description": "Warp a raster to a different coordinate reference system.",
+          "params": {
+            "dst_crs": {
+              "label": "Target CRS",
+              "description": "An authority code such as EPSG:3857 or EPSG:4326."
+            },
+            "resampling": {
+              "label": "Resampling",
+              "options": {
+                "nearest": "Nearest neighbour",
+                "bilinear": "Bilinear",
+                "cubic": "Cubic"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "Resample",
+          "description": "Resample a raster to a different pixel size (resolution).",
+          "params": {
+            "resolution": {
+              "label": "Target pixel size",
+              "description": "Output pixel size in the raster's CRS units."
+            },
+            "resampling": {
+              "label": "Resampling",
+              "options": {
+                "nearest": "Nearest neighbour",
+                "bilinear": "Bilinear",
+                "cubic": "Cubic"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "Clip by extent",
+          "description": "Crop a raster to a bounding box (in the raster's CRS).",
+          "params": {
+            "minx": {
+              "label": "Min X"
+            },
+            "miny": {
+              "label": "Min Y"
+            },
+            "maxx": {
+              "label": "Max X"
+            },
+            "maxy": {
+              "label": "Max Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "Clip by mask layer",
+          "description": "Clip a raster to the geometries of a vector mask file.",
+          "params": {
+            "mask_path": {
+              "label": "Mask layer",
+              "description": "A GeoJSON file whose geometries define the clip region. It is reprojected to the raster's CRS automatically (a GeoJSON with no CRS is assumed to be WGS84)."
+            },
+            "crop": {
+              "label": "Crop to mask extent"
+            },
+            "all_touched": {
+              "label": "Include all touched pixels"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "Polygonize",
+          "description": "Convert a raster band into vector polygons grouped by pixel value.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "connectivity": {
+              "label": "Connectivity",
+              "options": {
+                "4": "4-connected",
+                "8": "8-connected"
+              }
+            },
+            "field": {
+              "label": "Value field name"
+            }
+          }
+        },
+        "contour": {
+          "name": "Contour",
+          "description": "Generate contour lines from an elevation model.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "interval": {
+              "label": "Interval",
+              "description": "Elevation difference between successive contour lines."
+            },
+            "base": {
+              "label": "Base"
+            },
+            "attribute": {
+              "label": "Elevation field name"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "Interpolation (IDW / Kriging)",
+          "description": "Interpolate a point layer's numeric attribute into a continuous raster surface using inverse distance weighting or ordinary kriging.",
+          "params": {
+            "field": {
+              "label": "Value field",
+              "description": "Name of the numeric point attribute to interpolate (e.g. elevation, temperature)."
+            },
+            "method": {
+              "label": "Method",
+              "options": {
+                "idw": "Inverse distance weighting (IDW)",
+                "kriging": "Ordinary kriging"
+              }
+            },
+            "resolution": {
+              "label": "Output pixel size",
+              "description": "Cell size in the layer's CRS units (degrees for WGS84). The grid covers the points' extent."
+            },
+            "power": {
+              "label": "IDW power",
+              "description": "Higher values give nearby points more influence."
+            },
+            "variogram_model": {
+              "label": "Variogram model",
+              "description": "Theoretical model fitted to the empirical semivariogram. Kriging is capped at 1500 points.",
+              "options": {
+                "spherical": "Spherical",
+                "exponential": "Exponential",
+                "gaussian": "Gaussian",
+                "linear": "Linear"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "Zonal statistics",
+          "description": "Summarize raster values within each polygon of a vector layer (count, min, max, mean, sum, std, median).",
+          "params": {
+            "zones_path": {
+              "label": "Zones layer",
+              "description": "A GeoJSON polygon layer defining the zones. It is reprojected to the raster's CRS automatically (a GeoJSON with no CRS is assumed to be WGS84)."
+            },
+            "band": {
+              "label": "Band"
+            },
+            "prefix": {
+              "label": "Field prefix",
+              "description": "Prepended to each statistic field name (e.g. 'dem_' → 'dem_mean'). Leave blank for bare 'mean', 'min', …"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "Raster calculator",
+          "description": "Evaluate a NumPy band-math expression. Reference band 1 of each input as A, B, C and specific bands as A1, A2, …; e.g. NDVI is (A2 - A1) / (A2 + A1).",
+          "params": {
+            "expression": {
+              "label": "Expression",
+              "description": "A NumPy expression over A, B, C (and A1, A2, …). Functions: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan."
+            },
+            "b_path": {
+              "label": "Raster B (optional)",
+              "description": "A second raster, referenced as B / B1, B2, …. Must match A's dimensions."
+            },
+            "c_path": {
+              "label": "Raster C (optional)",
+              "description": "A third raster, referenced as C / C1, C2, …. Must match A's dimensions."
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "Spectral index",
+          "description": "Compute a named spectral index (NDVI, NDWI, EVI, …) from a multiband raster. Pick a sensor preset for the band layout, or set band numbers manually with the Custom sensor.",
+          "params": {
+            "index": {
+              "label": "Index",
+              "options": {
+                "ndvi": "NDVI (vegetation)",
+                "gndvi": "GNDVI (green vegetation)",
+                "ndwi": "NDWI (water, McFeeters)",
+                "ndmi": "NDMI (moisture)",
+                "ndbi": "NDBI (built-up)",
+                "nbr": "NBR (burn ratio)",
+                "evi": "EVI (enhanced vegetation)",
+                "savi": "SAVI (soil-adjusted vegetation)"
+              }
+            },
+            "sensor": {
+              "label": "Sensor / band layout",
+              "description": "Preset band numbers for common sensors. Choose Custom to map bands by hand for a differently stacked GeoTIFF.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "Custom (set band numbers below)"
+              }
+            },
+            "red": {
+              "label": "Red band number"
+            },
+            "green": {
+              "label": "Green band number"
+            },
+            "blue": {
+              "label": "Blue band number"
+            },
+            "nir": {
+              "label": "NIR band number"
+            },
+            "swir1": {
+              "label": "SWIR1 band number"
+            },
+            "swir2": {
+              "label": "SWIR2 band number"
+            },
+            "L": {
+              "label": "Soil factor (L)",
+              "description": "SAVI soil-brightness correction (0 dense cover → 1 bare soil)."
+            },
+            "scale": {
+              "label": "Reflectance scale",
+              "description": "Multiplier converting pixel values to reflectance (0–1). Leave at 1 for normalized-difference indices; set it for EVI/SAVI on integer-DN imagery (e.g. 0.0001 for Sentinel-2 L2A)."
+            }
+          }
+        },
+        "reclassify": {
+          "name": "Reclassify",
+          "description": "Remap value ranges to new class values using a rule table.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "table": {
+              "label": "Rules",
+              "description": "Comma- or newline-separated 'min:max:newvalue' rules, e.g. '0:10:1, 10:20:2, 20:max:3'. Ranges are half-open [min, max); blank/min/max mean ±∞."
+            },
+            "unmatched": {
+              "label": "Unmatched values",
+              "options": {
+                "nodata": "Set to NoData",
+                "original": "Keep original value"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "Mosaic / merge",
+          "description": "Combine up to five rasters (sharing a CRS) into a single raster covering their union.",
+          "params": {
+            "raster_2": {
+              "label": "Second raster"
+            },
+            "raster_3": {
+              "label": "Third raster (optional)"
+            },
+            "raster_4": {
+              "label": "Fourth raster (optional)"
+            },
+            "raster_5": {
+              "label": "Fifth raster (optional)"
+            },
+            "method": {
+              "label": "Overlap method",
+              "description": "Which value wins where inputs overlap.",
+              "options": {
+                "first": "First",
+                "last": "Last",
+                "min": "Minimum",
+                "max": "Maximum"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "Focal statistics",
+          "description": "Apply a moving-window (neighbourhood) statistic to a raster band.",
+          "params": {
+            "band": {
+              "label": "Band"
+            },
+            "statistic": {
+              "label": "Statistic",
+              "options": {
+                "mean": "Mean",
+                "median": "Median",
+                "min": "Minimum",
+                "max": "Maximum",
+                "sum": "Sum",
+                "std": "Standard deviation",
+                "range": "Range (max − min)"
+              }
+            },
+            "size": {
+              "label": "Window size",
+              "description": "Odd neighbourhood size in pixels (3 = 3×3). Capped at 25."
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "Analysis",
+      "clip": "Clip",
+      "dataQuality": "Data quality",
+      "dggs": "DGGS",
+      "geometry": "Geometry",
+      "join": "Join",
+      "movementTime": "Movement & time",
+      "network": "Network",
+      "overlay": "Overlay",
+      "rasterToVector": "Raster to Vector",
+      "reproject": "Reproject",
+      "select": "Select",
+      "spatialStatistics": "Spatial Statistics",
+      "terrain": "Terrain",
+      "vectorToRaster": "Vector to Raster"
     }
   },
   "segmentation": {
@@ -4055,6 +5866,7 @@
     "title": "Object Detection",
     "description": "Run a YOLO model exported to ONNX over a GeoTIFF or geotagged photo, fully in the browser. Each detected class is added as its own layer.",
     "hint": "Use a built-in COCO model (downloaded and cached once) or bring your own YOLOv5/v8/v11 ONNX. GeoTIFF detections become georeferenced boxes. Photo detections become points at the camera's GPS location because a photo does not define a ground footprint.",
+    "unavailableNoExternalCdn": "Object detection is unavailable in this build. It needs the ONNX Runtime, which is loaded from an external CDN that this deployment has disabled. Supplying your own model file does not help.",
     "imageLabel": "Image (GeoTIFF or geotagged photo)",
     "imagePlaceholder": "Choose a GeoTIFF, JPEG, PNG, or WebP…",
     "chooseImage": "Choose image",
@@ -4087,6 +5899,7 @@
     "title": "Segment Everything",
     "description": "Run SlimSAM automatically over a GeoTIFF, fully in the browser. Every detected object becomes a georeferenced polygon added as one layer.",
     "hint": "A grid of points is sampled across the image and segmented with SlimSAM (downloaded and cached once). No clicks or labels — denser grids find more objects but take longer.",
+    "unavailableNoExternalCdn": "Segment Everything is unavailable in this build. It needs the ONNX Runtime, which is loaded from an external CDN that this deployment has disabled.",
     "imageLabel": "Image (GeoTIFF)",
     "imagePlaceholder": "Choose a GeoTIFF…",
     "chooseImage": "Choose image",
@@ -4231,6 +6044,7 @@
     "deleteField": "Delete field",
     "joinedColumnTitle": "Joined column, derived from a join table. Edit the join table or the join definition instead.",
     "virtualColumnTitle": "Virtual field, computed from an expression. Edit its definition in the layer's style panel instead.",
+    "trackingColumnTitle": "Editor tracking column, maintained automatically. Rename it in the layer's Editor Tracking settings.",
     "deleteFieldConfirm": "This permanently removes the field \"{{field}}\" from every feature in \"{{layer}}\". Styling or labels that reference it will be cleared. This cannot be undone.",
     "addFieldDescription": "Add a new field to every feature in \"{{layer}}\".",
     "fieldName": "Field name",
@@ -4753,11 +6567,15 @@
       "typeConvexHull": "Convex hulls",
       "typeBuffer": "Buffers",
       "bufferDistance": "Buffer distance (m)",
+      "bufferField": "Distance field",
+      "bufferFieldHint": "Each feature is buffered by its own value in meters; features with no value use the distance above, and a value of 0 draws nothing.",
+      "fieldNone": "None (fixed)",
       "fillColor": "Fill color",
       "strokeColor": "Outline color",
       "strokeWidth": "Outline width (px)",
       "opacity": "Fill opacity",
-      "circleRadius": "Point radius (px)"
+      "circleRadius": "Point radius (px)",
+      "sizeField": "Size field"
     },
     "attributeForm": {
       "heading": "Attributes Form",
@@ -4799,6 +6617,21 @@
       "save": "Save",
       "noFields": "The layer has no attribute fields to configure.",
       "minMaxInvalid": "Min must be less than or equal to Max."
+    },
+    "editorTracking": {
+      "heading": "Editor Tracking",
+      "description": "Record who created each feature and who last changed it. The columns below are filled in automatically when features are drawn, edited, calculated, or captured.",
+      "enable": "Track edits on this layer",
+      "identity": "Your name",
+      "identityHint": "Edits will be recorded as “{{name}}”.",
+      "identityFromSession": "Taken from the collaboration session you are in.",
+      "createdByField": "Created by column",
+      "createdAtField": "Created at column",
+      "editedByField": "Edited by column",
+      "editedAtField": "Edited at column",
+      "blankName": "Column names cannot be blank.",
+      "duplicateName": "Each tracking column needs a different name.",
+      "columnTaken": "“{{name}}” is already an attribute column. Tracking would overwrite its values."
     }
   },
   "vectorExport": {
@@ -4824,9 +6657,17 @@
     "identifyInspectPixels": "Inspect pixel values",
     "identifyStopInspectPixels": "Stop inspecting pixel values",
     "identifyUnavailable": "Identify is only available for vector, WMS, and COG layers",
+    "selectFeaturesMenu": "Select features",
+    "selectFeaturesSingle": "Select features by click",
+    "selectFeaturesRectangle": "Select features by rectangle",
+    "selectFeaturesPolygon": "Select features by polygon",
+    "selectFeaturesFreehand": "Select features by freehand",
+    "selectFeaturesRadius": "Select features by radius",
+    "selectFeaturesModifiers": "Shift adds, Alt removes, and Shift+Alt intersects. Press Esc to cancel.",
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "Extract subset…",
     "stylesMenu": "Styles",
+    "exportGeoLibreStyle": "Export GeoLibre URL style",
     "exportMapboxStyle": "Export as Mapbox GL style",
     "exportSldStyle": "Export as OGC SLD",
     "exportQmlStyle": "Export as QGIS QML",
@@ -4834,7 +6675,7 @@
     "exportStyleDataNotReady": "Layer data is not ready yet. Try again in a moment.",
     "exportStyleNeedsFeatures": "Style export requires a vector layer with features.",
     "exportStyleError": "Could not export this layer's style.",
-    "importStyle": "Import style (Mapbox GL / SLD / QML)…",
+    "importStyle": "Import style (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "Saved styles (Style Manager)…",
     "importStyleSuccess": "Style imported.",
     "importStyleInvalid": "That file is not valid JSON, SLD, or QML.",
@@ -4873,6 +6714,7 @@
     "bindWindowCumulative": "Everything up to the current step (cumulative)",
     "bindCancel": "Cancel",
     "bindConfirm": "Bind",
+    "openStylePanel": "Open Style panel",
     "openRasterStylePanel": "Edit raster style…",
     "exportRasterSuccess": "Raster exported.",
     "exportRasterError": "Could not export this raster.",
@@ -4978,11 +6820,13 @@
     "refreshVectorControlError": "Could not refresh this layer. Try re-opening the Add Vector Layer panel.",
     "refreshed": "Refreshed.",
     "refreshedCount": "Refreshed {{count}} features.",
+    "refreshedTruncated": "Refreshed {{shown}} of {{total}} features.",
     "refreshError": "Could not refresh this layer.",
     "exportNeedsFeatures": "Export requires a vector layer with features.",
     "exportedWithWarnings": "Layer exported. {{warnings}}",
     "exported": "Layer exported.",
     "exportLayerError": "Could not export this layer.",
+    "exportPolyline": "Encoded Polyline (precision {{precision}})",
     "refreshIntervals": {
       "off": "Off",
       "s15": "15 seconds",
@@ -5104,7 +6948,8 @@
     "noValues": "No values to chart for these pixels.",
     "exportPng": "PNG",
     "exportCsv": "CSV",
-    "exportError": "Could not export the chart."
+    "exportError": "Could not export the chart.",
+    "rasterFallbackName": "Raster"
   },
   "netcdfIdentify": {
     "noData": "no data",
@@ -5159,6 +7004,7 @@
     "cogConvertConfirm": "\"{{name}}\" is a plain (striped) GeoTIFF, which cannot be displayed directly. Convert it to a Cloud-Optimized GeoTIFF now and load that?",
     "cogConvertRemoteConfirm": "\"{{name}}\" is a plain (striped) GeoTIFF, which cannot be displayed directly. Displaying it means downloading the full file and converting it to a Cloud-Optimized GeoTIFF in the browser, which can be slow and memory-intensive for large files. Proceed?",
     "cogConvertLargeConfirm": "\"{{name}}\" is a large {{width}}×{{height}} GeoTIFF that is not a Cloud-Optimized GeoTIFF. Converting it in the browser may be slow and memory-intensive. Convert and load it anyway?",
+    "cogConvertTooLarge": "\"{{name}}\" is too large to convert safely in the browser. Convert it to a Cloud-Optimized GeoTIFF with gdal_translate or rio cogeo, then load the result.",
     "cogConvertFailed": "Could not convert \"{{name}}\" to a Cloud-Optimized GeoTIFF. Try converting it with gdal_translate or rio cogeo, then load the result.",
     "rasterDownloadFailed": "Could not download \"{{name}}\". The server may be slow, unreachable, or blocking cross-origin requests, or the file may be too large to hold in memory. Check the URL and try again.",
     "rasterNotGeotiff": "\"{{name}}\" did not return a GeoTIFF. The server may have sent an error or login page instead. Check the URL and try again."
@@ -5281,6 +7127,7 @@
       "pluginPanelRightOfLayers": "Plugin panel (right of Layers)",
       "map": "Map",
       "pluginFloatingPanels": "Plugin floating panels",
+      "modelBuilder": "Model Builder",
       "selectionPanels": "Selection panels",
       "sunSimulationPanel": "Sun simulation panel",
       "routeAnimationPanel": "Route animation panel",
@@ -5307,10 +7154,12 @@
     "scope": "Scope",
     "scopeAll": "All features ({{total}})",
     "scopeFiltered": "Filtered ({{total}})",
+    "scopeSelected": "Selected ({{total}})",
     "copiedToClipboard": "Copied to clipboard.",
     "copy": "Copy",
     "copyHeader": "Field statistics — {{field}}",
     "copyHeaderFiltered": "Field statistics — {{field}} (filtered)",
+    "copyHeaderSelected": "Field statistics — {{field}} (selected)",
     "noValues": "No values to summarize.",
     "mostFrequent": "Most frequent values",
     "noPopulated": "No populated values.",
@@ -5360,8 +7209,49 @@
     "authorNamePlaceholder": "e.g. Alex or Sarah",
     "commentLabel": "Comment / Feedback",
     "commentPlaceholder": "Type your review note or feedback here...",
+    "post": "Post Comment",
+    "postShortcutTooltip": "Post Comment ({{shortcut}})",
     "confirmDelete": "Are you sure you want to delete this comment thread?",
     "sessionDisconnected": "Session disconnected.",
-    "defaultAuthorName": "Author"
+    "defaultAuthorName": "Author",
+    "addComment": "Add Comment",
+    "addCommentTooltip": "Place a new review comment on the map",
+    "yourNamePlaceholder": "Your name…",
+    "saveName": "Save name",
+    "noNameSet": "No name set — comments will show as \"{{name}}\"",
+    "changeNameTooltip": "Change name",
+    "setYourName": "Set your name",
+    "changeName": "Change Name",
+    "postingAs": "Posting as <strong>{{name}}</strong>",
+    "copy": "Copy",
+    "startLiveSession": "Start Live Session",
+    "starting": "Starting…",
+    "sessionCodePlaceholder": "ENTER SESSION CODE",
+    "connect": "Connect",
+    "joining": "Joining…",
+    "liveSync": "Live Sync ({{count}} online)",
+    "offlineWorkspace": "Offline / Private Workspace",
+    "disconnect": "Disconnect",
+    "joinFailed": "Failed to join session.",
+    "startFailed": "Failed to start session.",
+    "filterOpen": "Open ({{count}})",
+    "filterResolved": "Resolved ({{count}})",
+    "filterAll": "All ({{count}})",
+    "emptyOpen": "No open comments",
+    "emptyResolved": "No resolved comments",
+    "emptyHint": "Click \"Add Comment\" above and select any location or feature on the map to drop a review note.",
+    "resolvedBadge": "Resolved",
+    "zoomToLocation": "Zoom to location",
+    "markResolved": "Mark as resolved",
+    "reopenThread": "Reopen comment thread",
+    "deleteThread": "Delete comment thread",
+    "anchorFeature": "Feature #{{id}} ({{layer}})",
+    "anchorPoint": "Point ({{coords}})",
+    "anchorMap": "Map",
+    "anchoredToFeature": "Anchored to Feature #{{id}} ({{layer}})",
+    "anchoredToPoint": "Anchored to ({{coords}})",
+    "mapPoint": "Map Point",
+    "reply": "Reply",
+    "replyPlaceholder": "Write a reply..."
   }
 }

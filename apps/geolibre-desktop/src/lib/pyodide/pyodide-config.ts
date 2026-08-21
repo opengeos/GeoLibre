@@ -6,10 +6,13 @@
 // As of Pyodide 0.27.x, geopandas/shapely/pyproj (with PROJ data) ship in the
 // distribution, so a single loadPackage("geopandas") pulls the whole graph.
 import { getRuntimeEnvironment } from "@geolibre/core";
+import { NO_EXTERNAL_CDN } from "../build-flags";
 
 export const PYODIDE_VERSION = "0.27.7";
 
-const DEFAULT_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+const DEFAULT_INDEX_URL = NO_EXTERNAL_CDN
+  ? ""
+  : `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 
 /**
  * Resolve the Pyodide indexURL (where pyodide.js, the wasm runtime, the
@@ -24,12 +27,25 @@ const DEFAULT_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/
  *
  * Returns:
  *   The indexURL string, guaranteed to end with a slash.
+ *
+ * Raises:
+ *   Error: When the build disabled external CDNs and no `VITE_PYODIDE_INDEX_URL`
+ *     mirror was configured, so there is nowhere to load Pyodide from.
  */
 export function getPyodideIndexUrl(
   env: Record<string, string | undefined> = getRuntimeEnvironment(),
 ): string {
   const override = env.VITE_PYODIDE_INDEX_URL?.trim();
   const url = override || DEFAULT_INDEX_URL;
+  // Without an override the default is empty in a no-external-CDN build.
+  // Falling through would hand callers "/" — a bogus same-origin path that
+  // fails later with an opaque 404 — so fail here with the reason instead.
+  if (!url) {
+    throw new Error(
+      "Pyodide is unavailable in this build (external CDN resources are disabled). " +
+        "Set VITE_PYODIDE_INDEX_URL to a self-hosted Pyodide mirror to enable it.",
+    );
+  }
   return url.endsWith("/") ? url : `${url}/`;
 }
 
@@ -48,5 +64,8 @@ export function getPyodideIndexUrl(
  *   True when `indexURL` is the default CDN URL.
  */
 export function isDefaultPyodideIndexUrl(indexURL: string): boolean {
-  return indexURL === DEFAULT_INDEX_URL;
+  // There is no default CDN in a no-external-CDN build, so nothing can match
+  // it — guard the empty default rather than reporting an empty indexURL as
+  // "the CDN default" and skipping the mirror's CSP workaround.
+  return DEFAULT_INDEX_URL !== "" && indexURL === DEFAULT_INDEX_URL;
 }

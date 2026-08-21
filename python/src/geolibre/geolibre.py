@@ -13,19 +13,21 @@ import os
 import pathlib
 import re
 import time
+import urllib.parse
 import uuid
 import warnings
-from typing import Any, Callable
+from collections.abc import Callable, Sequence
+from typing import Any
 from urllib.error import URLError
 
 import anywidget
 import traitlets
 
+from . import authoring as _authoring
 from . import project as _project
 from ._server import app_port, register_local_file, serve_app
 from .basemaps import resolve_basemap
-from .color_ramp import graduated_stops
-from .legends import get_builtin_legend
+from .polyline import polyline_to_geojson
 
 _HERE = pathlib.Path(__file__).parent
 _STATIC_APP = _HERE / "static" / "app"
@@ -34,13 +36,6 @@ _STATIC_APP = _HERE / "static" / "app"
 # a typo surfaces immediately instead of silently falling back in the front-end.
 _VALID_LAYOUTS = frozenset({"embed", "full", "maponly"})
 _VALID_THEMES = frozenset({"light", "dark"})
-
-# Accepted values for the split-map / legend / colorbar helpers, validated up
-# front so a typo surfaces in Python instead of silently falling back in the app.
-# Reuse the canonical corner set from project.py so the two cannot drift.
-_VALID_CONTROL_POSITIONS = _project.CONTROL_POSITIONS
-_VALID_ORIENTATIONS = frozenset({"vertical", "horizontal"})
-_VALID_LEGEND_SHAPES = frozenset({"square", "circle", "line"})
 
 # CSV/tabular input is inlined into the project exactly like GeoJSON is, so the
 # same 50 MB ceiling applies to a fetched response or a local file.
@@ -165,7 +160,7 @@ _HTML_EXPORT_TEMPLATE = """<!doctype html>
     loaded = true;
     frame.contentWindow.postMessage(
       {{ type: "geolibre:load-project", project: project, seq: 1 }},
-      "*"
+      {app_origin}
     );
   }}
   // The app posts "geolibre:ready" once mounted; reply with the project. Guard
@@ -180,6 +175,84 @@ _HTML_EXPORT_TEMPLATE = """<!doctype html>
 </body>
 </html>
 """
+
+# Where a standalone export loads the app from by default: the hosted viewer, so
+# the exported file stays portable once the kernel is gone.
+DEFAULT_HTML_APP_URL = "https://web.geolibre.app/"
+
+
+def render_project_html(
+    project: dict[str, Any],
+    *,
+    title: str = "GeoLibre Map",
+    width: str = "100%",
+    height: str = "800px",
+    app_url: str | None = None,
+) -> str:
+    """Render a project dict as a standalone HTML page.
+
+    The page embeds the GeoLibre app in an ``<iframe>`` and injects the project
+    into it over the same ``postMessage`` bridge the widget uses, so it renders
+    the map as configured. Credentials are stripped from the inlined project on
+    the way out, exactly as :meth:`Map.to_html` does.
+
+    This is the widget-free half of :meth:`Map.to_html`; the MCP server calls it
+    to export a project that was never attached to a live map.
+
+    Args:
+        project: The project dict to embed.
+        title: The exported page's ``<title>``.
+        width: CSS width of the embedded map (e.g. ``"100%"`` or ``"800px"``).
+        height: CSS height of the embedded map.
+        app_url: Base URL of the GeoLibre app to embed. Defaults to
+            :data:`DEFAULT_HTML_APP_URL`.
+
+    Returns:
+        The HTML document as a string.
+
+    Raises:
+        ValueError: If ``width`` or ``height`` is not a plain CSS dimension, or
+            ``app_url`` is not an ``http``/``https`` URL.
+    """
+    base_url = app_url or DEFAULT_HTML_APP_URL
+    # The project is posted into the frame, so the app URL decides where it
+    # lands. Pin it to http(s) with a real host, and post to that exact origin
+    # rather than "*": the MCP server takes app_url straight from a tool call,
+    # and a model can pick an argument up from content it is reading. A
+    # redacted project still carries inlined features and layer URLs.
+    origin = urllib.parse.urlsplit(base_url)
+    if origin.scheme not in ("http", "https") or not origin.netloc:
+        raise ValueError(f"to_html: app_url must be an http(s) URL, got {base_url!r}")
+    app_origin = f"{origin.scheme}://{origin.netloc}"
+    # Force the embed bridge on (isEmbedded() honours ?embed=1). Insert the
+    # parameter into the query string *before* any URL fragment: a "#..."
+    # fragment would otherwise swallow a trailing "?embed=1" (browsers read it
+    # as part of the fragment), so the app never sees the flag. partition keeps
+    # the fragment and its "#" intact when present and yields "" when absent.
+    base, hash_sep, fragment = base_url.partition("#")
+    separator = "&" if "?" in base else "?"
+    iframe_src = f"{base}{separator}embed=1{hash_sep}{fragment}"
+    # width/height land inside a <style> rule; _html_escape does not neutralise
+    # CSS metacharacters like "}" or ";", so validate them as plain CSS
+    # dimensions to keep a stray value from closing the rule and injecting CSS.
+    if not _CSS_DIMENSION_RE.match(width):
+        raise ValueError(f"to_html: invalid CSS width value {width!r}")
+    if not _CSS_DIMENSION_RE.match(height):
+        raise ValueError(f"to_html: invalid CSS height value {height!r}")
+    # Inline the project inside a JSON <script> block and escape "<" so a
+    # property value can never break out of the script element; "<" is valid
+    # JSON that JSON.parse restores to "<".
+    project_json = json.dumps(_project.redact_credentials(project)).replace("<", "\\u003c")
+    return _HTML_EXPORT_TEMPLATE.format(
+        title=_html_escape(title),
+        width=_html_escape(width),
+        height=_html_escape(height),
+        iframe_src=_html_escape(iframe_src),
+        project_json=project_json,
+        # json.dumps supplies the surrounding quotes, so the template field is
+        # the whole JS string literal.
+        app_origin=json.dumps(app_origin),
+    )
 
 
 class Map(anywidget.AnyWidget):
@@ -770,6 +843,62 @@ class Map(anywidget.AnyWidget):
             timeout=timeout,
         )
 
+    def run_model_builder(
+        self,
+        graph: dict[str, Any],
+        *,
+        timeout: float = 600.0,
+    ) -> dict[str, Any]:
+        """Run a serialized GeoLibre Model Builder graph in the displayed app.
+
+        Sending the complete graph in one request also makes copied Model
+        Builder scripts portable to JupyterLite, whose browser kernel cannot
+        synchronously retrieve each intermediate layer id.
+        """
+        return self.request("runModelBuilder", {"graph": graph}, timeout=timeout)
+
+    def list_whitebox_tools(self, *, timeout: float = 30.0) -> list[dict[str, Any]]:
+        """List the bundled Whitebox/GeoLibre WASM tools and their parameters.
+
+        The catalog is resolved by the displayed app because the same browser
+        runtime executes the tools. Display the map before calling this method.
+        """
+        return self.request("listWhiteboxTools", timeout=timeout)
+
+    def run_whitebox_tool(
+        self,
+        tool_id: str,
+        parameters: dict[str, Any] | None = None,
+        *,
+        timeout: float = 300.0,
+    ) -> dict[str, Any]:
+        """Run a bundled Whitebox tool locally in the browser via WASM.
+
+        Dataset parameters may be layer ids or :class:`Layer` handles. Vector
+        and raster outputs are added to the map automatically; a tool that
+        writes a plain file instead (a CSV, GeoParquet, PMTiles, …) reports it
+        in ``logs``, since only the Processing panel can download one.
+
+        Args:
+            tool_id: An id from :meth:`list_whitebox_tools`, such as ``"slope"``.
+            parameters: Tool parameters. Pass a :class:`Layer` handle for an
+                input-layer parameter, or its id as a string.
+            timeout: Seconds to wait; terrain and LiDAR tools may need several
+                minutes for large inputs.
+
+        Returns:
+            ``{"logs": [...], "resultLayerIds": [...]}``.
+        """
+        resolved = {
+            key: self._resolve_layer(value).id if isinstance(value, Layer) else value
+            for key, value in (parameters or {}).items()
+        }
+        return self.request(
+            "runWhiteboxTool",
+            {"id": str(tool_id), "params": resolved},
+            timeout=timeout,
+        )
+
     def to_image(self, path: str | None = None, *, timeout: float = 30.0) -> bytes | None:
         """Capture the current map view as a PNG.
 
@@ -792,11 +921,6 @@ class Map(anywidget.AnyWidget):
             out.write_bytes(png)
             return None
         return png
-
-    # Hosted GeoLibre viewer used as the default to_html() app, so an exported
-    # file is portable (loads the app over the network instead of the
-    # session-bound localhost bundle).
-    _DEFAULT_HTML_APP_URL = "https://web.geolibre.app/"
 
     def to_html(
         self,
@@ -837,34 +961,12 @@ class Map(anywidget.AnyWidget):
             exported page cannot reach them once the kernel stops. Use hosted
             URLs or tile sources for a fully self-contained export.
         """
-        base_url = app_url or self._DEFAULT_HTML_APP_URL
-        # Force the embed bridge on (isEmbedded() honours ?embed=1). Insert the
-        # parameter into the query string *before* any URL fragment: a "#..."
-        # fragment would otherwise swallow a trailing "?embed=1" (browsers read
-        # it as part of the fragment), so the app never sees the flag. partition
-        # keeps the fragment and its "#" intact when present and yields "" when
-        # absent.
-        base, hash_sep, fragment = base_url.partition("#")
-        separator = "&" if "?" in base else "?"
-        iframe_src = f"{base}{separator}embed=1{hash_sep}{fragment}"
-        # width/height land inside a <style> rule; _html_escape does not neutralise
-        # CSS metacharacters like "}" or ";", so validate them as plain CSS
-        # dimensions to keep a stray value from closing the rule and injecting CSS.
-        frame_height = height or self.height
-        if not _CSS_DIMENSION_RE.match(width):
-            raise ValueError(f"to_html: invalid CSS width value {width!r}")
-        if not _CSS_DIMENSION_RE.match(frame_height):
-            raise ValueError(f"to_html: invalid CSS height value {frame_height!r}")
-        # Inline the project inside a JSON <script> block and escape "<" so a
-        # property value can never break out of the script element; "<" is
-        # valid JSON that JSON.parse restores to "<".
-        project_json = json.dumps(_project.redact_credentials(self.project)).replace("<", "\\u003c")
-        html = _HTML_EXPORT_TEMPLATE.format(
-            title=_html_escape(title),
-            width=_html_escape(width),
-            height=_html_escape(frame_height),
-            iframe_src=_html_escape(iframe_src),
-            project_json=project_json,
+        html = render_project_html(
+            self.project,
+            title=title,
+            width=width,
+            height=height or self.height,
+            app_url=app_url,
         )
         if path is not None:
             out = pathlib.Path(path).expanduser()
@@ -916,13 +1018,12 @@ class Map(anywidget.AnyWidget):
             # Access verifies that a stale handle has not been removed.
             layer._layer()
             return layer
-        try:
-            return self.get_layer(str(layer))
-        except ValueError:
-            match = self.find_layer(str(layer))
-            if match is not None:
-                return match
-        raise ValueError(f"No layer with id or name {layer!r}")
+        # Share the authoring resolver so scripting and the MCP tools agree on
+        # what a reference means: an id wins outright, then an exact name, then a
+        # case-insensitive one, and a name several layers share is an error rather
+        # than an arbitrary pick. `find_layer` returns the first name match by
+        # design (leafmap compatibility), so it is not the resolver for mutations.
+        return Layer(self, str(_authoring.find_layer(self.project, str(layer))["id"]))
 
     def set_layer_visibility(self, layer: str | Layer, visible: bool = True) -> None:
         """Show or hide a layer addressed by id, name, or layer handle."""
@@ -931,6 +1032,99 @@ class Map(anywidget.AnyWidget):
     def set_layer_opacity(self, layer: str | Layer, opacity: float) -> None:
         """Set a layer's opacity in ``[0, 1]``."""
         self._resolve_layer(layer).opacity = opacity
+
+    def rename_layer(self, layer: str | Layer, name: str) -> None:
+        """Rename a layer addressed by id, name, or handle.
+
+        Args:
+            layer: The layer to rename, by id, name, or handle.
+            name: The new display name, surrounding whitespace stripped.
+
+        Raises:
+            ValueError: If ``name`` is blank or the reserved basemap pseudo-id.
+        """
+        handle = self._resolve_layer(layer)
+        clean = self._clean_layer_name(name)
+        self._update_project(lambda p: _authoring.update_layer(p, handle.id, name=clean))
+
+    @staticmethod
+    def _clean_layer_name(name: str) -> str:
+        """Strip a display name and refuse a blank one.
+
+        `authoring.update_layer` guards only the reserved basemap pseudo-id, so
+        emptiness is checked here, matching the `name` setter. A layer named ""
+        or "   " renders as a blank row that cannot be referenced back by name.
+        """
+        clean = str(name).strip()
+        if not clean:
+            raise ValueError("name must be a non-empty string")
+        return clean
+
+    def move_layer(self, layer: str | Layer, index: int) -> None:
+        """Move a layer to ``index`` in the project's draw order.
+
+        Negative indices count from the end the way sequence *indexing* does, so
+        ``-1`` moves the layer to the last position (not ``list.insert(-1, ...)``,
+        which would leave it second to last). Out-of-range indices are clamped.
+        """
+        handle = self._resolve_layer(layer)
+
+        def _move(project: dict[str, Any]) -> None:
+            destination = int(index)
+            if destination < 0:
+                destination = max(0, len(project.get("layers", [])) + destination)
+            _authoring.update_layer(project, handle.id, index=destination)
+
+        self._update_project(_move)
+
+    def duplicate_layer(self, layer: str | Layer, *, name: str | None = None) -> str:
+        """Duplicate a layer, returning the new layer id.
+
+        The copy is appended to the draw order (drawn on top), the same place a
+        newly added layer lands, rather than next to its source. Use
+        :meth:`move_layer` to put it elsewhere.
+
+        Args:
+            layer: The layer to copy, by id, name, or handle.
+            name: Name for the copy, surrounding whitespace stripped; defaults
+                to the source name plus ``copy``.
+
+        Raises:
+            ValueError: If ``name`` is blank or the reserved basemap pseudo-id.
+        """
+        if name is not None:
+            name = self._clean_layer_name(name)
+        source = copy.deepcopy(self._resolve_layer(layer)._layer())
+        source["id"] = str(uuid.uuid4())
+        source["name"] = name if name is not None else f"{source.get('name', 'Layer')} copy"
+        # `_add_layer` appends raw; `authoring.add_layer` is the entry point that
+        # applies the reserved-name check `rename_layer` gets from `update_layer`.
+        self._update_project(lambda p: _authoring.add_layer(p, source))
+        return str(source["id"])
+
+    def show_layer(self, layer: str | Layer) -> None:
+        """Show a layer."""
+        self.set_layer_visibility(layer, True)
+
+    def hide_layer(self, layer: str | Layer) -> None:
+        """Hide a layer."""
+        self.set_layer_visibility(layer, False)
+
+    def layer_properties(self, layer: str | Layer) -> dict[str, list[Any]]:
+        """Return sampled property values for an inlined GeoJSON layer."""
+        return _authoring.layer_properties(self._resolve_layer(layer)._layer())
+
+    def column_values(self, layer: str | Layer, column: str) -> list[Any]:
+        """Return one property column from an inlined GeoJSON layer."""
+        return _authoring.column_values(self._resolve_layer(layer)._layer(), column)
+
+    def describe(self) -> dict[str, Any]:
+        """Return a compact, JSON-serializable project summary."""
+        # Copy the summary, not the project: `describe_project` hands back the
+        # live `mapView`, so the result needs detaching, but deep-copying the
+        # project first would duplicate every inlined GeoJSON blob only to
+        # report a feature count.
+        return copy.deepcopy(_authoring.describe_project(self.project))
 
     def _mutate_layer(self, layer_id: str, mutate: Callable[[dict[str, Any]], None]) -> None:
         """Apply an in-place mutation to one layer through the project trait."""
@@ -1004,6 +1198,31 @@ class Map(anywidget.AnyWidget):
             source_layer=layer,
             **style,
         )
+
+    def add_polyline(
+        self,
+        polyline: str | Sequence[str],
+        name: str = "Polyline",
+        *,
+        precision: int = 5,
+        unescape: bool = False,
+        **style: Any,
+    ) -> str:
+        """Add an Encoded Polyline layer.
+
+        Args:
+            polyline: A single polyline string (e.g. Google or Valhalla encoded)
+                or a list of polyline strings.
+            name: Layer display name.
+            precision: Decimal digits of precision (5 for Google/OSRM, 6 for Valhalla/Mapbox).
+            unescape: Whether to unescape double-escaped backslashes before decoding.
+            **style: Style overrides (e.g. ``lineColor="#ff0000"``, ``lineWidth=3``).
+
+        Returns:
+            The id of the added layer.
+        """
+        fc = polyline_to_geojson(polyline, precision=precision, unescape=unescape)
+        return self.add_geojson(fc, name=name, **style)
 
     # -- markers ---------------------------------------------------------
 
@@ -1339,34 +1558,16 @@ class Map(anywidget.AnyWidget):
         ]
         if all(value is None for value in values):
             raise ValueError(f"Column {column!r} not found in any feature's properties")
-
-        def _is_numeric(value: Any) -> bool:
-            try:
-                return math.isfinite(float(value))
-            except (TypeError, ValueError):
-                return False
-
-        # graduated_stops would otherwise fall back to index-based stops for a
-        # non-numeric column, succeeding with misleading symbology; reject it.
-        if not any(_is_numeric(value) for value in values):
-            raise ValueError(
-                f"Column {column!r} must contain at least one numeric value for "
-                "a graduated choropleth"
-            )
-        stops = graduated_stops(
+        # build_choropleth_style rejects a wholly non-numeric column: graduated
+        # stops would otherwise fall back to index-based breaks and succeed with
+        # misleading symbology.
+        choropleth_style = _authoring.build_choropleth_style(
             values,
+            column,
             class_count=class_count,
-            color_ramp=colormap,
-            classification_scheme=scheme,
+            colormap=colormap,
+            scheme=scheme,
         )
-        choropleth_style: dict[str, Any] = {
-            "vectorStyleMode": "graduated",
-            "vectorStyleProperty": column,
-            "vectorStyleClassCount": min(12, max(2, int(class_count))),
-            "vectorStyleColorRamp": colormap,
-            "vectorStyleClassificationScheme": scheme,
-            "vectorStyleStops": stops,
-        }
         # Caller overrides win over the computed symbology.
         choropleth_style.update(style)
         return self._add_layer(
@@ -1875,17 +2076,20 @@ class Map(anywidget.AnyWidget):
         url_list = [urls] if isinstance(urls, str) else list(urls)
         return self._add_layer(_project.video_layer(name, url_list, coordinates, **style))
 
-    def remove_layer(self, layer_id: str) -> None:
-        """Remove a layer by id.
+    def remove_layer(self, layer_id: str | Layer) -> None:
+        """Remove a layer by id, display name, or handle.
 
         Args:
-            layer_id: The id returned when the layer was added.
+            layer_id: A layer id, display name, or :class:`Layer` handle.
+
+        Raises:
+            ValueError: If the reference matches no layer, or matches a display
+                name several layers share. Removing an unknown layer used to be
+                a silent no-op; it now reports the miss.
         """
 
-        def _drop(p: dict[str, Any]) -> None:
-            p["layers"] = [layer for layer in p["layers"] if layer.get("id") != layer_id]
-
-        self._update_project(_drop)
+        resolved_id = self._resolve_layer(layer_id).id
+        self._update_project(lambda p: _authoring.remove_layer(p, resolved_id))
 
     def clear_layers(self) -> None:
         """Remove all layers from the map."""
@@ -1919,16 +2123,75 @@ class Map(anywidget.AnyWidget):
             lat: Latitude of the new center.
             zoom: Optional zoom level.
         """
-
-        def mutate(p: dict[str, Any]) -> None:
-            p["mapView"]["center"] = [float(lng), float(lat)]
-            if zoom is not None:
-                p["mapView"]["zoom"] = float(zoom)
-
-        self._update_project(mutate)
+        self._update_project(
+            lambda p: _authoring.set_view(p, center=(lng, lat), zoom=zoom),
+        )
 
     # leafmap compatibility alias for set_center
     set_center_zoom = set_center
+
+    def set_zoom(self, zoom: float) -> None:
+        """Set the map zoom while preserving the other camera fields."""
+        self._update_project(lambda p: _authoring.set_view(p, zoom=zoom))
+
+    def set_bearing(self, bearing: float) -> None:
+        """Set clockwise camera bearing in degrees."""
+        self._update_project(lambda p: _authoring.set_view(p, bearing=bearing))
+
+    def set_pitch(self, pitch: float) -> None:
+        """Set camera pitch in degrees (clamped to the supported range)."""
+        self._update_project(lambda p: _authoring.set_view(p, pitch=pitch))
+
+    def fit_project_bounds(self, bounds: list[float] | tuple[float, float, float, float]) -> None:
+        """Persist a fitted camera for ``[west, south, east, north]`` bounds.
+
+        Unlike :meth:`fit_bounds`, this is a pure project mutation and does not
+        require a live browser connection.
+        """
+        self._update_project(lambda p: _authoring.fit_bounds(p, bounds))
+
+    @property
+    def center(self) -> tuple[float, float]:
+        """The persisted ``(longitude, latitude)`` camera center."""
+        center = self.project.get("mapView", {}).get("center", [0, 0])
+        return float(center[0]), float(center[1])
+
+    @property
+    def zoom(self) -> float:
+        """The persisted camera zoom."""
+        return float(self.project.get("mapView", {}).get("zoom", 0))
+
+    @property
+    def bearing(self) -> float:
+        """The persisted clockwise camera bearing in degrees."""
+        return float(self.project.get("mapView", {}).get("bearing", 0))
+
+    @property
+    def pitch(self) -> float:
+        """The persisted camera pitch in degrees."""
+        return float(self.project.get("mapView", {}).get("pitch", 0))
+
+    @property
+    def basemap(self) -> str | None:
+        """The current basemap style URL, embedded credentials redacted.
+
+        MapTiler, Stadia and others put an API key in the style URL itself, so
+        this is swept like :attr:`Layer.source` rather than printed into a
+        notebook cell. Read :attr:`project` for the URL exactly as stored.
+        """
+        value = self.project.get("basemapStyleUrl")
+        return _project.redact_url(str(value)) if value is not None else None
+
+    @property
+    def name(self) -> str:
+        """The project name."""
+        return str(self.project.get("name", ""))
+
+    @name.setter
+    def name(self, value: str) -> None:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("name must be a non-empty string")
+        self._update_project(lambda p: p.update(name=value.strip()))
 
     # -- map controls: split map / legend / colorbar --------------------
 
@@ -2005,66 +2268,21 @@ class Map(anywidget.AnyWidget):
             ValueError: If ``orientation``, ``control_position``, or a layer
                 reference is invalid.
         """
-        if orientation not in _VALID_ORIENTATIONS:
-            raise ValueError(
-                f"orientation must be one of {sorted(_VALID_ORIENTATIONS)}, got {orientation!r}"
-            )
-        if control_position not in _VALID_CONTROL_POSITIONS:
-            raise ValueError(
-                "control_position must be one of "
-                f"{sorted(_VALID_CONTROL_POSITIONS)}, got {control_position!r}"
-            )
+        # Layer objects are resolved to ids here (authoring.py works on plain
+        # project dicts and knows nothing about the Layer handle); the rest of
+        # the validation and state building is shared with the MCP server.
         left = self._coerce_layer_ids(left_layers)
         right = self._coerce_layer_ids(right_layers)
-        clamped = min(100.0, max(0.0, float(position)))
-        state = _project.swipe_state(
-            left_layers=left,
-            right_layers=right,
-            orientation=orientation,
-            position=clamped,
+        self._update_project(
+            lambda p: _authoring.add_swipe(
+                p,
+                left_layers=left,
+                right_layers=right,
+                orientation=orientation,
+                position=position,
+                control_position=control_position,
+            )
         )
-
-        def mutate(p: dict[str, Any]) -> None:
-            _project.set_plugin_state(
-                p,
-                _project.SWIPE_PLUGIN_ID,
-                state,
-                position=control_position,
-            )
-
-        self._update_project(mutate)
-
-    def _update_components_state(
-        self, key: str, entry_state_builder: Callable[[Any], dict[str, Any]]
-    ) -> None:
-        """Merge one feature's state into the Components plugin settings.
-
-        The Components plugin (legend / colorbar / html) stores all its features
-        under a single settings blob keyed by feature name, so a new legend must
-        be merged in without dropping an existing colorbar (and vice versa).
-
-        Args:
-            key: The feature key (``"legend"`` or ``"colorbar"``).
-            entry_state_builder: Called with the feature's current state (or
-                ``None``) and returns its new state.
-        """
-
-        def mutate(p: dict[str, Any]) -> None:
-            plugins = _project.ensure_plugins_block(p)
-            current = plugins["settings"].get(_project.COMPONENTS_PLUGIN_ID)
-            components = dict(current) if isinstance(current, dict) else {}
-            components[key] = entry_state_builder(components.get(key))
-            # The legend/colorbar restore from their settings blob alone, so the
-            # plugin is configured but not added to activePluginIds (activating
-            # it would also mount the full Components toolbar).
-            _project.set_plugin_state(
-                p,
-                _project.COMPONENTS_PLUGIN_ID,
-                components,
-                activate=False,
-            )
-
-        self._update_project(mutate)
 
     def add_legend(
         self,
@@ -2102,54 +2320,17 @@ class Map(anywidget.AnyWidget):
             ValueError: If no entries are supplied, ``labels``/``colors`` lengths
                 differ, or ``position``/``shape``/``builtin`` is invalid.
         """
-        if position not in _VALID_CONTROL_POSITIONS:
-            raise ValueError(
-                f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, got {position!r}"
+        self._update_project(
+            lambda p: _authoring.add_legend(
+                p,
+                title,
+                legend_dict=legend_dict,
+                labels=labels,
+                colors=colors,
+                builtin=builtin,
+                position=position,
+                shape=shape,
             )
-        if shape not in _VALID_LEGEND_SHAPES:
-            raise ValueError(f"shape must be one of {sorted(_VALID_LEGEND_SHAPES)}, got {shape!r}")
-
-        # The three ways to supply entries are mutually exclusive; reject a
-        # combination rather than silently letting one win by check order.
-        sources = (
-            builtin is not None,
-            legend_dict is not None,
-            labels is not None or colors is not None,
-        )
-        if sum(sources) > 1:
-            raise ValueError(
-                "Provide legend entries via exactly one of: builtin=, "
-                "legend_dict=, or labels= and colors=."
-            )
-
-        pairs: list[tuple[str, str]]
-        if builtin is not None:
-            preset = get_builtin_legend(builtin)
-            pairs = list(preset["items"])
-            if title is None:
-                title = preset["title"]
-        elif legend_dict is not None:
-            pairs = [(str(label), str(color)) for label, color in legend_dict.items()]
-        elif labels is not None or colors is not None:
-            if labels is None or colors is None:
-                raise ValueError("labels and colors must be provided together")
-            if len(labels) != len(colors):
-                raise ValueError(
-                    f"labels and colors must have the same length ({len(labels)} != {len(colors)})"
-                )
-            pairs = [(str(label), str(color)) for label, color in zip(labels, colors)]
-        else:
-            raise ValueError(
-                "Provide legend entries via builtin=, legend_dict=, or labels= and colors=."
-            )
-        if not pairs:
-            raise ValueError("Legend has no items")
-
-        items = [{"label": label, "color": color, "shape": shape} for label, color in pairs]
-        entry = _project.legend_gui_entry(title or "Legend", items, position)
-        self._update_components_state(
-            "legend",
-            lambda existing: _project.legend_gui_state(entry, existing=existing),
         )
 
     def add_colorbar(
@@ -2188,41 +2369,18 @@ class Map(anywidget.AnyWidget):
                 ``vmin`` is not less than ``vmax``, or ``colors`` is given but
                 empty.
         """
-        if orientation not in _VALID_ORIENTATIONS:
-            raise ValueError(
-                f"orientation must be one of {sorted(_VALID_ORIENTATIONS)}, got {orientation!r}"
+        self._update_project(
+            lambda p: _authoring.add_colorbar(
+                p,
+                colormap=colormap,
+                vmin=vmin,
+                vmax=vmax,
+                label=label,
+                units=units,
+                colors=colors,
+                orientation=orientation,
+                position=position,
             )
-        if position not in _VALID_CONTROL_POSITIONS:
-            raise ValueError(
-                f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, got {position!r}"
-            )
-        vmin_f, vmax_f = float(vmin), float(vmax)
-        # The app's normalizer only fixes vmin == vmax; an inverted range would
-        # otherwise render a reversed gradient, so reject it here.
-        if vmin_f >= vmax_f:
-            raise ValueError(f"vmin ({vmin_f}) must be less than vmax ({vmax_f})")
-        if colors is not None:
-            if not colors:
-                raise ValueError("colors must be a non-empty list when provided")
-            mode = "custom"
-            custom_colors = ", ".join(str(color) for color in colors)
-        else:
-            mode = "named"
-            custom_colors = ""
-        entry = _project.colorbar_gui_entry(
-            mode=mode,
-            colormap=colormap,
-            custom_colors=custom_colors,
-            vmin=vmin_f,
-            vmax=vmax_f,
-            label=label,
-            units=units,
-            orientation=orientation,
-            position=position,
-        )
-        self._update_components_state(
-            "colorbar",
-            lambda existing: _project.colorbar_gui_state(entry, existing=existing),
         )
 
     def add_colormap(
@@ -2412,7 +2570,7 @@ class Layer:
 
     @name.setter
     def name(self, value: str) -> None:
-        self._map._mutate_layer(self._id, lambda layer: layer.update(name=value))
+        self._map.rename_layer(self, value)
 
     @property
     def visible(self) -> bool:
@@ -2440,6 +2598,42 @@ class Layer:
         """A copy of the layer's style object."""
         return copy.deepcopy(self._layer().get("style", {}))
 
+    @property
+    def source(self) -> Any:
+        """A detached copy of the layer source configuration.
+
+        Credentials are swept the way :meth:`Map.to_project` sweeps them: a
+        notebook auto-displays whatever a cell returns, and a source built with
+        ``request_headers`` or a signed URL would otherwise print its secrets
+        into an output that often gets committed or shared. Read
+        :attr:`Map.project` for the record exactly as stored.
+        """
+        # Sweep the one field rather than the whole layer: `redact_layer` would
+        # copy an inlined geojson blob first, only to discard it here.
+        return _project.redact_layer_field(self._layer().get("source"))
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """A detached copy of the complete layer record.
+
+        Credentials are swept, as in :attr:`source`. "Complete" is literal: an
+        inlined ``geojson`` blob is copied whole, which for a large layer is
+        tens of megabytes to copy and to display. Use :meth:`properties` or
+        :meth:`Map.describe` when a summary will do.
+        """
+        return _project.redact_layer(self._layer())
+
+    @property
+    def index(self) -> int:
+        """The layer's current index in draw order.
+
+        Raises:
+            ValueError: If the layer has been removed, matching the other
+                accessors rather than raising ``StopIteration``.
+        """
+        self._layer()
+        return next(i for i, layer in enumerate(self._map.layers) if layer.id == self._id)
+
     def set_style(self, **style: Any) -> None:
         """Merge style overrides into the layer (e.g. ``fillColor="#ff0000"``)."""
 
@@ -2451,6 +2645,22 @@ class Layer:
     def get_features(self, *, timeout: float = 10.0) -> list[Feature]:
         """Return this layer's features (see :meth:`Map.get_features`)."""
         return self._map.get_features(self._id, timeout=timeout)
+
+    def properties(self) -> dict[str, list[Any]]:
+        """Return sampled property values for inlined GeoJSON."""
+        return self._map.layer_properties(self)
+
+    def column(self, name: str) -> list[Any]:
+        """Return a property column from inlined GeoJSON."""
+        return self._map.column_values(self, name)
+
+    def move(self, index: int) -> None:
+        """Move this layer to an index in draw order."""
+        self._map.move_layer(self, index)
+
+    def duplicate(self, *, name: str | None = None) -> Layer:
+        """Duplicate this layer and return its new handle."""
+        return self._map.get_layer(self._map.duplicate_layer(self, name=name))
 
     def zoom_to(self, *, timeout: float = 10.0) -> None:
         """Fit the map camera to this layer's extent."""

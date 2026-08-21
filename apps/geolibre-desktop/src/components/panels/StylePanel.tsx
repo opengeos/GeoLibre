@@ -54,6 +54,7 @@ import { type MapController } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { AttributeFormSection } from "./AttributeFormSection";
+import { EditorTrackingSection } from "./EditorTrackingSection";
 import { LayerJoinsSection } from "./LayerJoinsSection";
 import { VirtualFieldsSection } from "./VirtualFieldsSection";
 import { getNetcdfLayerState, NETCDF_IMAGE_SOURCE_KIND } from "../../lib/netcdf-image-symbology";
@@ -173,6 +174,8 @@ function labelOverrideInvalid(
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  /** Incremented when another part of the UI explicitly requests this panel. */
+  openRequest?: number;
   /**
    * When this flips to `true` the panel collapses to its thin rail (it is not
    * unmounted). Used to clear room when the notebook opens beside the map; the
@@ -709,9 +712,11 @@ function validateExpressionJson(value: string, label: string, t: TFunction): str
 }
 
 // Shared shell classes for every expanded StylePanel return branch. On phones
-// (max-md) it overlays the map as a bottom sheet instead of squeezing it.
+// (max-md) it overlays the map as a bottom sheet instead of squeezing it. The
+// sheet needs a definite height so the Radix ScrollArea viewport can resolve
+// its percentage height and scroll instead of growing to the content height.
 const STYLE_PANEL_ASIDE_CLASS =
-  "relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--style-panel-width)] md:border-s md:border-t-0";
+  "relative flex h-[min(24rem,42vh)] supports-[height:1dvh]:h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:shadow-xl md:h-auto md:w-[var(--style-panel-width)] md:border-s md:border-t-0";
 
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
@@ -984,6 +989,7 @@ function RasterStyleSlider({
 export function StylePanel({
   mapControllerRef,
   onResizeStart,
+  openRequest = 0,
   autoCollapse = false,
   collapsed: controlledCollapsed,
   onCollapsedChange,
@@ -998,8 +1004,8 @@ export function StylePanel({
   const updateLayer = useAppStore((s) => s.updateLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const projectName = useAppStore((s) => s.projectName);
-  // Style starts on its rail on every platform. Selecting a real layer below
-  // expands it; selecting the special Background row does not.
+  // Style starts on its rail on every platform and remains there until the
+  // user explicitly expands it.
   const [internalCollapsed, setInternalCollapsed] = useState(true);
   // In the shared right-sidebar mode the parent owns collapse (controlled);
   // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
@@ -1013,23 +1019,19 @@ export function StylePanel({
     },
     [isControlled, onCollapsedChange],
   );
-  // Selecting a real layer expands the panel from its rail. Skipped while
-  // `autoCollapse` holds it closed (the notebook or a story-map presentation
-  // owns the workspace), so a selection made there cannot pop Style back open
-  // over them and defeat the auto-collapse below.
-  const previousSelectedLayerId = useRef(selectedLayerId);
+  // An explicit request (Layers → "Open Style panel") expands the panel from its
+  // rail. Skipped while `autoCollapse` holds it closed (the notebook or a
+  // story-map presentation owns the workspace), so a request made there cannot
+  // pop Style back open over them: the `autoCollapse` effect below acts only on
+  // transitions, so an expand that slipped through would stick until the
+  // notebook was closed and reopened. The request is still consumed so it does
+  // not fire later.
+  const previousOpenRequest = useRef(openRequest);
   useEffect(() => {
-    const previous = previousSelectedLayerId.current;
-    previousSelectedLayerId.current = selectedLayerId;
-    if (
-      !autoCollapse &&
-      selectedLayerId &&
-      selectedLayerId !== previous &&
-      layers.some((candidate) => candidate.id === selectedLayerId)
-    ) {
-      setIsCollapsed(false);
-    }
-  }, [autoCollapse, layers, selectedLayerId, setIsCollapsed]);
+    if (openRequest === previousOpenRequest.current) return;
+    previousOpenRequest.current = openRequest;
+    if (!autoCollapse) setIsCollapsed(false);
+  }, [autoCollapse, openRequest, setIsCollapsed]);
   // Collapse to the rail when `autoCollapse` flips on (e.g. the notebook opens),
   // and restore the prior expand/collapse state when it flips back off (notebook
   // closes). Both act only on the transition so the user can still toggle the
@@ -1636,13 +1638,16 @@ export function StylePanel({
     diagramStyleSize,
     diagramStyleSizeProperty,
   ]);
-  // Numeric-attribute candidates for the diagram field pickers. Unlike
-  // graduated classification (which needs a value spread), one finite value
-  // qualifies. Memoized on the geojson/metadata (not the layer object) so
-  // unrelated panel edits never re-run the per-property feature scans. Kept
-  // before the early returns below so the hook order stays stable.
+  // Numeric-attribute candidates for the diagram and geometry-generator field
+  // pickers. Unlike graduated classification (which needs a value spread), one
+  // finite value qualifies. Both consumers only exist on layers that carry a
+  // local `geojson`, so scanning it directly (rather than the tiled sampling
+  // the proportional-size picker needs) is enough. Memoized on the
+  // geojson/metadata (not the layer object) so unrelated panel edits never
+  // re-run the per-property feature scans. Kept before the early returns below
+  // so the hook order stays stable.
   const diagramMetadata = layer?.metadata;
-  const diagramNumericProperties = useMemo(() => {
+  const numericPropertyOptions = useMemo(() => {
     if (!diagramGeojson) return [];
     const probe = { geojson: diagramGeojson, metadata: diagramMetadata ?? {} };
     return getAttributePropertyNames(probe).filter((property) =>
@@ -3393,6 +3398,68 @@ export function StylePanel({
   );
   // --- Geometry generator (per-feature derived geometry symbology) ---
   const generatorType = styleValue(style, "geometryGenerator");
+  const generatorSizeProperty = styleValue(style, "geometryGeneratorSizeProperty");
+  /**
+   * Picking a size field seeds the value range from the data, since an
+   * unseeded 0..100 default would map a population column onto a single
+   * radius. Unlike the proportional-size picker, this one offers numeric
+   * columns only, so there is no bad pick to reject after the fact — but
+   * `numericPropertyOptions` admits a column with a single numeric value,
+   * which has no spread to derive a range from. That case falls back to the
+   * defaults rather than keeping the previous field's range, which would
+   * scale the new field against numbers that never came from it.
+   */
+  const chooseGeneratorSizeProperty = (property: string) => {
+    if (!property) {
+      setLayerStyle(layer.id, { geometryGeneratorSizeProperty: "" });
+      return;
+    }
+    const bounds = proportionalSizeBounds(layer, property);
+    setLayerStyle(layer.id, {
+      geometryGeneratorSizeProperty: property,
+      geometryGeneratorSizeMinValue:
+        bounds?.min ?? DEFAULT_LAYER_STYLE.geometryGeneratorSizeMinValue,
+      geometryGeneratorSizeMaxValue:
+        bounds?.max ?? DEFAULT_LAYER_STYLE.geometryGeneratorSizeMaxValue,
+    });
+  };
+  const generatorFieldSelect = (
+    id: string,
+    label: string,
+    value: string,
+    onSelect: (property: string) => void,
+  ) => (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Select
+        id={id}
+        value={value}
+        onChange={(event) => onSelect(event.target.value)}
+        disabled={numericPropertyOptions.length === 0 && value === ""}
+      >
+        {numericPropertyOptions.length === 0 && value === "" ? (
+          <option value="">{t("style.labels.noAttributes")}</option>
+        ) : (
+          <>
+            <option value="">{t("style.generator.fieldNone")}</option>
+            {numericPropertyOptions.map((property) => (
+              <option key={property} value={property}>
+                {property}
+              </option>
+            ))}
+            {/* A stored field that is not a numeric column here — a style
+                pasted from another layer, a `?style=` import, or data whose
+                schema changed — still renders as the selection. Without it
+                the browser would fall back to "None (fixed)" while the style
+                kept sizing by a field that resolves to null everywhere. */}
+            {value !== "" && !numericPropertyOptions.includes(value) ? (
+              <option value={value}>{value}</option>
+            ) : null}
+          </>
+        )}
+      </Select>
+    </div>
+  );
   const generatorControls = (
     <div className="space-y-3">
       <div className="space-y-2">
@@ -3416,17 +3483,31 @@ export function StylePanel({
       {generatorType !== "none" && (
         <>
           {generatorType === "buffer" && (
-            <NumericStyleInput
-              id="geometryGeneratorBufferDistance"
-              label={t("style.generator.bufferDistance")}
-              min={-100000}
-              max={1000000}
-              step={10}
-              value={styleValue(style, "geometryGeneratorBufferDistance")}
-              onChange={(geometryGeneratorBufferDistance) =>
-                setLayerStyle(layer.id, { geometryGeneratorBufferDistance })
-              }
-            />
+            <>
+              <NumericStyleInput
+                id="geometryGeneratorBufferDistance"
+                label={t("style.generator.bufferDistance")}
+                min={-100000}
+                max={1000000}
+                step={10}
+                value={styleValue(style, "geometryGeneratorBufferDistance")}
+                onChange={(geometryGeneratorBufferDistance) =>
+                  setLayerStyle(layer.id, { geometryGeneratorBufferDistance })
+                }
+              />
+              {generatorFieldSelect(
+                "geometryGeneratorBufferProperty",
+                t("style.generator.bufferField"),
+                styleValue(style, "geometryGeneratorBufferProperty"),
+                (geometryGeneratorBufferProperty) =>
+                  setLayerStyle(layer.id, { geometryGeneratorBufferProperty }),
+              )}
+              {styleValue(style, "geometryGeneratorBufferProperty") !== "" && (
+                <p className="text-xs text-muted-foreground">
+                  {t("style.generator.bufferFieldHint")}
+                </p>
+              )}
+            </>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
@@ -3477,24 +3558,88 @@ export function StylePanel({
             />
           </div>
           {generatorType === "centroid" && (
-            <NumericStyleInput
-              id="geometryGeneratorCircleRadius"
-              label={t("style.generator.circleRadius")}
-              min={1}
-              max={40}
-              step={1}
-              value={styleValue(style, "geometryGeneratorCircleRadius")}
-              onChange={(geometryGeneratorCircleRadius) =>
-                setLayerStyle(layer.id, { geometryGeneratorCircleRadius })
-              }
-            />
+            <>
+              {/* Stays visible with a size field chosen: it is the radius
+                  `generatorCircleRadiusValue` falls back to whenever the
+                  field's range turns out degenerate, so hiding it would leave
+                  the radius actually in use unreachable. */}
+              <NumericStyleInput
+                id="geometryGeneratorCircleRadius"
+                label={t("style.generator.circleRadius")}
+                min={1}
+                max={40}
+                step={1}
+                value={styleValue(style, "geometryGeneratorCircleRadius")}
+                onChange={(geometryGeneratorCircleRadius) =>
+                  setLayerStyle(layer.id, { geometryGeneratorCircleRadius })
+                }
+              />
+              {generatorFieldSelect(
+                "geometryGeneratorSizeProperty",
+                t("style.generator.sizeField"),
+                generatorSizeProperty,
+                chooseGeneratorSizeProperty,
+              )}
+              {generatorSizeProperty !== "" && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <NumericStyleInput
+                      id="geometryGeneratorSizeMinValue"
+                      label={t("style.symbology.minValue")}
+                      min={-1_000_000_000}
+                      max={1_000_000_000}
+                      step={1}
+                      value={styleValue(style, "geometryGeneratorSizeMinValue")}
+                      onChange={(geometryGeneratorSizeMinValue) =>
+                        setLayerStyle(layer.id, { geometryGeneratorSizeMinValue })
+                      }
+                    />
+                    <NumericStyleInput
+                      id="geometryGeneratorSizeMaxValue"
+                      label={t("style.symbology.maxValue")}
+                      min={-1_000_000_000}
+                      max={1_000_000_000}
+                      step={1}
+                      value={styleValue(style, "geometryGeneratorSizeMaxValue")}
+                      onChange={(geometryGeneratorSizeMaxValue) =>
+                        setLayerStyle(layer.id, { geometryGeneratorSizeMaxValue })
+                      }
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <NumericStyleInput
+                      id="geometryGeneratorSizeMinRadius"
+                      label={t("style.symbology.minSize")}
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={styleValue(style, "geometryGeneratorSizeMinRadius")}
+                      onChange={(geometryGeneratorSizeMinRadius) =>
+                        setLayerStyle(layer.id, { geometryGeneratorSizeMinRadius })
+                      }
+                    />
+                    <NumericStyleInput
+                      id="geometryGeneratorSizeMaxRadius"
+                      label={t("style.symbology.maxSize")}
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={styleValue(style, "geometryGeneratorSizeMaxRadius")}
+                      onChange={(geometryGeneratorSizeMaxRadius) =>
+                        setLayerStyle(layer.id, { geometryGeneratorSizeMaxRadius })
+                      }
+                    />
+                  </div>
+                </>
+              )}
+            </>
           )}
         </>
       )}
     </div>
   );
   // --- Diagram symbology (per-feature pie/bar charts, immediate writes) ---
-  // The numeric-attribute candidates (diagramNumericProperties) are memoized
+  // The numeric-attribute candidates (numericPropertyOptions) are memoized
   // above the early returns.
   const diagramType = styleValue(style, "diagramType");
   const diagramFields = styleValue(style, "diagramFields");
@@ -3503,7 +3648,7 @@ export function StylePanel({
     setLayerStyle(layer.id, { diagramFields: fields });
   const addDiagramField = () => {
     const used = new Set(diagramFields.map((field) => field.property));
-    const property = diagramNumericProperties.find((candidate) => !used.has(candidate)) ?? "";
+    const property = numericPropertyOptions.find((candidate) => !used.has(candidate)) ?? "";
     setDiagramFields([...diagramFields, { property, color: nextStopColor(diagramFields.length) }]);
   };
   const updateDiagramField = (index: number, patch: Partial<DiagramField>) =>
@@ -3518,7 +3663,7 @@ export function StylePanel({
     !!layer.geojson &&
     !hasExternalDeckLayer(layer) &&
     (!supportsPointRenderer || pointRenderer === "single") &&
-    (diagramNumericProperties.length > 0 || diagramFields.length > 0);
+    (numericPropertyOptions.length > 0 || diagramFields.length > 0);
 
   const diagramControls = (
     <div className="space-y-3">
@@ -3535,10 +3680,10 @@ export function StylePanel({
             if (
               nextType !== "none" &&
               diagramFields.length === 0 &&
-              diagramNumericProperties.length > 0
+              numericPropertyOptions.length > 0
             ) {
               setDiagramFields(
-                diagramNumericProperties.slice(0, 2).map((property, index) => ({
+                numericPropertyOptions.slice(0, 2).map((property, index) => ({
                   property,
                   color: nextStopColor(index),
                 })),
@@ -3601,13 +3746,12 @@ export function StylePanel({
                       }
                     >
                       <option value="">{t("style.symbology.chooseField")}</option>
-                      {diagramNumericProperties.map((property) => (
+                      {numericPropertyOptions.map((property) => (
                         <option key={property} value={property}>
                           {property}
                         </option>
                       ))}
-                      {field.property !== "" &&
-                      !diagramNumericProperties.includes(field.property) ? (
+                      {field.property !== "" && !numericPropertyOptions.includes(field.property) ? (
                         <option value={field.property}>{field.property}</option>
                       ) : null}
                     </Select>
@@ -3656,13 +3800,13 @@ export function StylePanel({
                 }
               >
                 <option value="">{t("style.symbology.chooseField")}</option>
-                {diagramNumericProperties.map((property) => (
+                {numericPropertyOptions.map((property) => (
                   <option key={property} value={property}>
                     {property}
                   </option>
                 ))}
                 {styleValue(style, "diagramSizeProperty") !== "" &&
-                !diagramNumericProperties.includes(styleValue(style, "diagramSizeProperty")) ? (
+                !numericPropertyOptions.includes(styleValue(style, "diagramSizeProperty")) ? (
                   <option value={styleValue(style, "diagramSizeProperty")}>
                     {styleValue(style, "diagramSizeProperty")}
                   </option>
@@ -4598,6 +4742,13 @@ export function StylePanel({
             {layer.metadata.sourceKind === TIME_SLIDER_SOURCE_KIND && (
               <TimeSliderSymbologySection layer={layer} />
             )}
+            {/* The same section the NetCDF branch renders below: a multiband COG
+                identified with the pixel inspector samples into the same store
+                (see useCogSpectralIdentify), so its spectra need a home on the
+                branch a raster layer actually lands on. The section renders null
+                until this layer has a sampled pixel, so it costs nothing for the
+                single-band and tile rasters that also come through here. */}
+            <NetcdfProfilePanel layerId={layer.id} />
             <Separator />
             <Button
               type="button"
@@ -4864,6 +5015,16 @@ export function StylePanel({
             <>
               <Separator />
               <AttributeFormSection key={`af-${layer.id}`} layer={layer} />
+            </>
+          ) : null}
+          {/* Editor tracking stamps the features as they are created and edited,
+              so it needs the layer's features in the store as well. Keyed like
+              the sections above so a half-typed column name never carries over
+              to the next layer. */}
+          {layer.geojson ? (
+            <>
+              <Separator />
+              <EditorTrackingSection key={`et-${layer.id}`} layer={layer} />
             </>
           ) : null}
         </div>

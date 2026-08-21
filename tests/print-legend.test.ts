@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  DEFAULT_LAYER_STYLE,
   DEFAULT_LEGEND_CONFIG,
   type GeoLibreLayer,
   type LayerStyle,
@@ -34,6 +35,166 @@ function makeLayer(overrides: Partial<GeoLibreLayer>): GeoLibreLayer {
     ...overrides,
   } as unknown as GeoLibreLayer;
 }
+
+function polygonGeojson(): NonNullable<GeoLibreLayer["geojson"]> {
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { count: 10 },
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 1],
+              [0, 0],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+}
+
+describe("buildLegend geometry generators", () => {
+  it("lists a fixed-size generated centroid after the parent geometry", () => {
+    const [entry] = buildLegend([
+      makeLayer({
+        name: "Regions",
+        geojson: polygonGeojson(),
+        metadata: { geometryType: "polygon" },
+        style: {
+          ...DEFAULT_LAYER_STYLE,
+          geometryGenerator: "centroid",
+          geometryGeneratorFillColor: "#f59e0b",
+          geometryGeneratorCircleRadius: 7,
+        },
+      }),
+    ]);
+
+    assert.deepEqual(entry.swatches, [
+      { color: DEFAULT_LAYER_STYLE.fillColor, label: "Regions" },
+      { color: "#f59e0b", label: "Centroids", size: 7 },
+    ]);
+  });
+
+  it("lists an attribute-sized generated centroid ramp with localized labels", () => {
+    const [entry] = buildLegend(
+      [
+        makeLayer({
+          geojson: polygonGeojson(),
+          metadata: { geometryType: "polygon" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            geometryGenerator: "centroid",
+            geometryGeneratorFillColor: "#ef4444",
+            geometryGeneratorSizeProperty: "count",
+            geometryGeneratorSizeMinValue: 0,
+            geometryGeneratorSizeMaxValue: 100,
+            geometryGeneratorSizeMinRadius: 4,
+            geometryGeneratorSizeMaxRadius: 24,
+          },
+        }),
+      ],
+      { labels: { centroid: "Centroides" } },
+    );
+
+    assert.deepEqual(
+      entry.swatches.slice(1).map((swatch) => [swatch.label, swatch.size, swatch.color]),
+      [
+        ["Centroides (count): 0", 4, "#ef4444"],
+        ["Centroides (count): 50", 14, "#ef4444"],
+        ["Centroides (count): 100", 24, "#ef4444"],
+      ],
+    );
+  });
+
+  it("lists generated polygon types and omits renderer-suppressed generators", () => {
+    for (const [geometryGenerator, expectedLabel] of [
+      ["bounding-box", "Bounding boxes"],
+      ["convex-hull", "Convex hulls"],
+      ["buffer", "Buffers"],
+    ] as const) {
+      const [entry] = buildLegend([
+        makeLayer({
+          geojson: polygonGeojson(),
+          metadata: { geometryType: "polygon" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            geometryGenerator,
+            geometryGeneratorFillColor: "#22c55e",
+          },
+        }),
+      ]);
+      assert.deepEqual(entry.swatches.at(-1), {
+        color: "#22c55e",
+        label: expectedLabel,
+      });
+    }
+
+    const base = makeLayer({
+      geojson: polygonGeojson(),
+      metadata: { geometryType: "polygon" },
+      style: { ...DEFAULT_LAYER_STYLE, geometryGenerator: "centroid" },
+    });
+    for (const candidate of [
+      { ...base, style: { ...base.style, extrusionEnabled: true } },
+      { ...base, timeFilter: ["==", ["get", "year"], 2026] },
+      { ...base, embedFilter: ["==", ["get", "kind"], "active"] },
+      { ...base, metadata: { ...base.metadata, externalDeckLayer: true } },
+      { ...base, metadata: { ...base.metadata, nativeLayerIds: ["external-fill"] } },
+      {
+        ...base,
+        metadata: {
+          ...base.metadata,
+          sourceKind: "maplibre-gl-vector",
+          customLayerType: "fill",
+          nativeLayerIds: [],
+        },
+      },
+      {
+        ...base,
+        style: {
+          ...base.style,
+          geometryGenerator: "buffer" as const,
+          geometryGeneratorBufferDistance: 0,
+          geometryGeneratorBufferProperty: "",
+        },
+      },
+      {
+        ...base,
+        style: {
+          ...base.style,
+          vectorStyleMode: "rule-based" as const,
+          vectorRules: [
+            {
+              id: "active",
+              label: "Active",
+              filter: '["==", ["get", "kind"], "active"]',
+              color: "#22c55e",
+              isElse: false,
+            },
+            {
+              id: "else",
+              label: "Other",
+              filter: "",
+              color: "#94a3b8",
+              isElse: true,
+              enabled: false,
+            },
+          ],
+        },
+      },
+    ]) {
+      const [entry] = buildLegend([candidate]);
+      assert.equal(entry.swatches.length, 1);
+    }
+  });
+});
 
 describe("buildLegend rule-based swatches", () => {
   it("lists drawable rules plus the else rule, skipping disabled and group rules", () => {

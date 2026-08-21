@@ -182,7 +182,23 @@
     "elevationRange": "ความสูงต่ำสุด / สูงสุด",
     "meanSlope": "ความชันเฉลี่ย",
     "computing": "กำลังคำนวณภูมิประเทศ…",
-    "partialData": "ตัวอย่างบางจุดไม่มีข้อมูลภูมิประเทศ"
+    "partialData": "ตัวอย่างบางจุดไม่มีข้อมูลภูมิประเทศ",
+    "heading": "ทิศทาง",
+    "finalHeading": "ทิศทางสุดท้าย",
+    "bodyNote": "วัดบน: {{body}} (การประมาณทรงกลม)"
+  },
+  "statusBar": {
+    "elevation": "ระดับ",
+    "elevationLong": "ระดับความสูง",
+    "cameraAltitude": "ระดับมุมมอง",
+    "cameraAltitudeLong": "ระดับความสูงของกล้องเหนือระดับน้ำทะเล",
+    "coordinateFormat": {
+      "dd": "องศาทศนิยม",
+      "dms": "องศา ลิปดา ฟิลิปดา",
+      "ddm": "องศา ลิปดาทศนิยม",
+      "utm": "UTM (โซน, ตะวันออก/เหนือ)"
+    },
+    "coordinateFormatHint": "รูปแบบพิกัด: {{format}} คลิกเพื่อสลับ"
   },
   "fileNamePrompt": {
     "title": "บันทึกไฟล์เป็น",
@@ -214,7 +230,9 @@
     "invalidUrl": "ป้อน URL สไตล์แบบ HTTP หรือ HTTPS ที่ถูกต้อง",
     "sectionMoon": "ดวงจันทร์",
     "sectionMars": "ดาวอังคาร",
-    "sectionOther": "เทหวัตถุอื่น ๆ"
+    "sectionOther": "เทหวัตถุอื่น ๆ",
+    "sectionRegional": "ระดับภูมิภาค",
+    "regionChina": "จีน (中国)"
   },
   "planetSwitcher": {
     "label": "เทหวัตถุ",
@@ -301,11 +319,15 @@
       },
       "arcgis": {
         "label": "เพิ่มเลเยอร์ ArcGIS",
-        "description": "เพิ่มเลเยอร์ ArcGIS FeatureServer, เลเยอร์ VectorTileServer หรือรายการจากพอร์ทัล"
+        "description": "เพิ่มเลเยอร์ ArcGIS แบบ FeatureServer, VectorTileServer, MapServer หรือ ImageServer หรือรายการพอร์ทัล"
       },
       "postgres": {
         "label": "เพิ่มเลเยอร์ PostgreSQL",
         "description": "เริ่ม Martin ในเครื่อง ค้นหาแหล่งข้อมูล PostGIS แล้วเพิ่มแหล่งข้อมูลเป็นไทล์เวกเตอร์"
+      },
+      "iceberg": {
+        "label": "เพิ่มเลเยอร์ Apache Iceberg",
+        "description": "อ่านตาราง Iceberg (เวอร์ชัน 3 ขึ้นไป) แล้วเพิ่มฟีเจอร์บางส่วนของตาราง"
       },
       "deckglViz": {
         "label": "เพิ่มเลเยอร์ Deck.gl",
@@ -462,14 +484,39 @@
       "defaultName": "เลเยอร์ ArcGIS",
       "sampleFeatureLabel": "เมืองสำคัญของสหรัฐฯ (ฟีเจอร์)",
       "sampleVectorTileLabel": "แปลงที่ดินซานตาโมนิกา (ไทล์เวกเตอร์)",
+      "sampleMapServiceLabel": "ขอบเขตการปกครองสหรัฐฯ (บริการแผนที่)",
+      "sampleImageServiceLabel": "ภาพเงาภูมิประเทศ USGS 3DEP (บริการภาพ)",
       "featureLayer": "เลเยอร์ฟีเจอร์",
       "vectorTileLayer": "เลเยอร์ไทล์เวกเตอร์",
+      "mapServiceLayer": "บริการแผนที่",
+      "imageServiceLayer": "บริการภาพ",
       "portalItemId": "รหัสรายการในพอร์ทัล",
       "featureUrlPlaceholder": "https://services.arcgis.com/.../FeatureServer/0",
       "vectorTileUrlPlaceholder": "https://.../arcgis/rest/services/.../VectorTileServer",
+      "mapServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../MapServer",
+      "imageServiceUrlPlaceholder": "https://.../arcgis/rest/services/.../ImageServer",
+      "sublayers": "เลเยอร์ย่อย",
+      "sublayersPlaceholder": "เลเยอร์ย่อยที่แสดงทั้งหมด",
+      "sublayersHint": "ระบุรหัสเลเยอร์ย่อยคั่นด้วยจุลภาคได้ตามต้องการ เช่น 0,2,5 การเลือกเลเยอร์ย่อยจะวาดบริการแบบไดนามิกแทนการใช้ไทล์ที่แคชไว้",
+      "retrieveSublayers": "เรียกดูเลเยอร์",
+      "retrievingSublayers": "กำลังดึงข้อมูล...",
+      "availableSublayers": "เลเยอร์ย่อยที่ใช้ได้",
+      "noSublayersFound": "บริการแผนที่นี้ไม่ได้ระบุเลเยอร์ใดไว้",
+      "retrieveError": "ไม่สามารถดึงรายการเลเยอร์ของบริการแผนที่ได้",
+      "errorMapServiceUrl": "ป้อน URL ของ ArcGIS MapServer",
+      "renderingRule": "กฎการเรนเดอร์",
+      "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
+      "renderingRuleHint": "JSON ของฟังก์ชันแรสเตอร์ที่บริการนำไปใช้ (ไม่บังคับ) การกำหนดกฎการเรนเดอร์จะวาดบริการแบบไดนามิกแทนการใช้ไทล์ที่แคชไว้",
       "portalUrl": "URL ของพอร์ทัล",
       "portalUrlPlaceholder": "https://www.arcgis.com/sharing/rest",
-      "accessToken": "โทเค็นการเข้าถึง"
+      "accessToken": "โทเค็นการเข้าถึง",
+      "pageSize": "จำนวนระเบียนต่อคำขอ",
+      "pageSizePlaceholder": "อัตโนมัติ",
+      "maxFeatures": "จำนวนฟีเจอร์สูงสุด",
+      "maxFeaturesPlaceholder": "ทั้งหมด",
+      "pagingHint": "เลเยอร์ฟีเจอร์จะดาวน์โหลดเป็นหน้า ๆ ลดจำนวนระเบียนต่อคำขอหากบริการหมดเวลา",
+      "loadingProgress": "โหลดฟีเจอร์แล้ว {{loaded}} จาก {{total}} รายการ…",
+      "loadingProgressUnknown": "โหลดฟีเจอร์แล้ว {{loaded}} รายการ…"
     },
     "gpx": {
       "defaultName": "เลเยอร์ GPX",
@@ -541,6 +588,8 @@
       "errorMissingCrs": "ไม่สามารถตรวจพบระบบพิกัดของคลาสฟีเจอร์นี้ได้ กรุณาป้อนระบบพิกัดต้นทางเพื่อเพิ่มเลเยอร์"
     },
     "delimitedText": {
+      "errorWorkbookEmpty": "สมุดงาน Excel ไม่มีเวิร์กชีตที่มีข้อมูล",
+      "worksheet": "เวิร์กชีต",
       "defaultName": "เลเยอร์ข้อความคั่นด้วยตัวแบ่ง",
       "sampleLabel": "เมืองในสหรัฐฯ",
       "errorChooseFile": "เลือกไฟล์ข้อความคั่นด้วยตัวแบ่ง",
@@ -641,9 +690,44 @@
       "statusTablesFound_other": "พบตารางเชิงพื้นที่ {{count}} ตาราง",
       "statusNoTables": "ไม่พบตารางเชิงพื้นที่ในฐานข้อมูลนี้",
       "editableTable": "ตาราง",
+      "geometryColumn": "คอลัมน์เรขาคณิต",
       "tableReadOnly": "{{table}} (อ่านอย่างเดียว: ไม่มีคีย์หลัก)",
       "errorSelectTable": "เลือกตารางที่ต้องการโหลด",
       "errorRuntimeMissing": "เซิร์ฟเวอร์ประมวลผลไม่ได้ติดตั้งรันไทม์ PostGIS (psycopg) ไว้ กรุณาติดตั้งส่วนเสริม 'postgis' ของ geolibre-server เพื่อโหลดเลเยอร์ที่แก้ไขได้"
+    },
+    "iceberg": {
+      "defaultName": "เลเยอร์ Iceberg",
+      "notice": "ตาราง Iceberg จะถูกอ่านเพียงครั้งเดียวเมื่อต้องการ เลเยอร์นี้เป็นสแนปช็อตที่จำกัดตามจำนวนแถวสูงสุดด้านล่าง และจะไม่ถูกสแกนซ้ำโดยอัตโนมัติ — ใช้คำสั่งรีเฟรชในเมนูเลเยอร์เพื่ออ่านอีกครั้ง",
+      "mode": "แหล่งข้อมูล Iceberg",
+      "modeTable": "ตำแหน่งของตาราง",
+      "modeCatalog": "แคตตาล็อก REST",
+      "location": "ตำแหน่งเมทาดาทาของตาราง",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehouse": "คลังข้อมูล (Warehouse)",
+      "warehousePlaceholder": "my_warehouse",
+      "endpoint": "ปลายทางของแคตตาล็อก",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "connect": "เชื่อมต่อ",
+      "table": "ตาราง Iceberg",
+      "sql": "SQL (ไม่บังคับ)",
+      "sqlHint": "แก้ไขเพื่อกรองหรือปรับรูปแบบข้อมูลที่จะแสดงผล คำสั่งต้องคืนค่าคอลัมน์ GEOMETRY หนึ่งคอลัมน์ ปล่อยไว้ตามที่สร้างให้เพื่ออ่านทั้งตาราง",
+      "selectTable": "เลือกตาราง",
+      "geometryColumn": "คอลัมน์เรขาคณิต",
+      "rowLimit": "จำนวนแถวสูงสุด",
+      "rowLimitHint": "เลเยอร์จะเก็บแถวแรก ๆ ของตารางไม่เกินจำนวนนี้ โดยจำกัดได้ไม่เกิน {{max}} แถว",
+      "rowLimitTruncates": "ตารางมี {{total}} แถว เลเยอร์จะมีเพียง {{limit}} แถวแรก",
+      "statusConnecting": "กำลังอ่านเมทาดาทาของ Iceberg...",
+      "statusInspecting": "กำลังตรวจสอบตาราง...",
+      "statusInspected": "{{rows}} แถว เรขาคณิต: {{column}} ({{crs}})",
+      "statusNoGeometry": "{{rows}} แถว แต่ไม่พบคอลัมน์ GEOMETRY เรขาคณิตของ Iceberg ต้องใช้ชนิดเรขาคณิตของเวอร์ชัน 3",
+      "statusTablesFound_other": "พบ {{count}} ตาราง เลือกหนึ่งตารางเพื่อดำเนินการต่อ",
+      "statusNoTables": "แคตตาล็อกนี้ไม่มีตารางให้ใช้งาน",
+      "errorLocation": "ป้อนตำแหน่งเมทาดาทาของตาราง Iceberg",
+      "errorWarehouse": "ป้อนคลังข้อมูล Iceberg ที่ต้องการเชื่อมต่อ",
+      "errorEndpoint": "ป้อนปลายทางของแคตตาล็อก REST ของ Iceberg",
+      "errorConnect": "ไม่สามารถอ่านแหล่งข้อมูล Iceberg ได้",
+      "errorInspect": "ไม่สามารถตรวจสอบตาราง Iceberg ได้",
+      "errorConnectFirst": "กรุณาเชื่อมต่อและเลือกตาราง Iceberg ก่อน"
     },
     "video": {
       "defaultName": "เลเยอร์วิดีโอ",
@@ -693,15 +777,15 @@
       "bandCombinationHelp": "แบนด์เดียวจะแสดงด้วยแผนผังสี ส่วนภาพผสม RGB จะวาดสามแบนด์ของตัวแปรนี้เป็นช่องสีแดง เขียว และน้ำเงิน โดยยืดค่าแต่ละช่องตามช่วง 2-98 % ของตัวเอง",
       "modeSingleBand": "แบนด์เดียว (ใช้แผนผังสี)",
       "modeRgb": "ภาพผสม RGB (สามแบนด์)",
-      "colorMin": "ค่าสีต่ำสุด (ไม่บังคับ)",
-      "colorMax": "ค่าสีสูงสุด (ไม่บังคับ)",
-      "adding": "กำลังเพิ่ม...",
-      "addLayer": "เพิ่มเลเยอร์",
       "channel": {
         "red": "แบนด์สีแดง",
         "green": "แบนด์สีเขียว",
         "blue": "แบนด์สีน้ำเงิน"
-      }
+      },
+      "colorMin": "ค่าสีต่ำสุด (ไม่บังคับ)",
+      "colorMax": "ค่าสีสูงสุด (ไม่บังคับ)",
+      "adding": "กำลังเพิ่ม...",
+      "addLayer": "เพิ่มเลเยอร์"
     },
     "deckViz": {
       "defaultName": "เลเยอร์ Deck.gl",
@@ -1093,6 +1177,7 @@
     "guest": "ผู้เยี่ยมชม",
     "connectFailed": "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์การทำงานร่วมกันได้",
     "copyFailed": "ไม่สามารถคัดลอกไปยังคลิปบอร์ดได้",
+    "shareFailed": "ไม่สามารถแชร์การเปลี่ยนแปลงล่าสุดของโปรเจกต์ได้",
     "connecting": "กำลังเชื่อมต่อ…",
     "reconnecting": "กำลังเชื่อมต่อใหม่…",
     "connected": "เซสชันสดกำลังทำงาน",
@@ -1114,6 +1199,9 @@
     "viewOnly": "ดูอย่างเดียว",
     "allowEdit": "อนุญาตให้ผู้นี้แก้ไขได้",
     "setViewOnly": "ตั้งให้ผู้นี้ดูอย่างเดียว",
+    "kick": "นำผู้เข้าร่วมออก",
+    "block": "บล็อกผู้เข้าร่วม",
+    "requireIdentityLabel": "ต้องลงชื่อเข้าใช้บัญชีจึงจะเข้าร่วมได้",
     "chatLog": "แชทของเซสชัน",
     "chatCompose": "พิมพ์ข้อความ",
     "chatEmpty": "ยังไม่มีข้อความ",
@@ -1122,7 +1210,11 @@
     "chatAttachLocation": "แนบตำแหน่งแผนที่ปัจจุบัน",
     "chatLocationAttached": "แนบตำแหน่งแล้ว (คลิกเพื่อนำออก)",
     "chatGoToLocation": "ไปยังตำแหน่งนี้",
-    "sessionStatusUnread_other": "เซสชันการทำงานร่วมกันแบบสด มีข้อความที่ยังไม่ได้อ่าน {{count}} ข้อความ คลิกเพื่อดูว่าใครเชื่อมต่ออยู่และเริ่มแชท"
+    "sessionStatusUnread_other": "เซสชันการทำงานร่วมกันแบบสด มีข้อความที่ยังไม่ได้อ่าน {{count}} ข้อความ คลิกเพื่อดูว่าใครเชื่อมต่ออยู่และเริ่มแชท",
+    "lockLayer": "ล็อกเลเยอร์สำหรับผู้เยี่ยมชม",
+    "unlockLayer": "ปลดล็อกเลเยอร์สำหรับผู้เยี่ยมชม",
+    "layerLocked": "ถูกล็อก",
+    "layerLockedHint": "เลเยอร์นี้ถูกผู้จัดล็อกไว้ จึงแก้ไขไม่ได้"
   },
   "share": {
     "title": "แชร์โปรเจกต์",
@@ -1135,6 +1227,7 @@
     "step2Description": "วางโทเค็นลงใน ตั้งค่า → ตัวแปรสภาพแวดล้อม บนอุปกรณ์นี้",
     "configureToken": "ตั้งค่าโทเค็นในเครื่อง",
     "liveAt": "โปรเจกต์ของคุณเผยแพร่อยู่ที่:",
+    "credentialsRemoved": "ไม่ได้รวมช่องข้อมูลประจำตัว {{count}} ช่อง ผู้รับต้องระบุข้อมูลประจำตัวของตนเองหรือใช้การอ้างอิงผ่านนายหน้า",
     "copyLink": "คัดลอกลิงก์",
     "open": "เปิด",
     "done": "เสร็จสิ้น",
@@ -1150,7 +1243,26 @@
     "errorFallback": "ไม่สามารถแชร์โปรเจกต์ได้",
     "usernameRequired": "กรุณาตั้งชื่อผู้ใช้ในบัญชี {{shareHost}} ของคุณก่อนแชร์ เปิดการตั้งค่าบัญชีเพื่อเลือกชื่อผู้ใช้แล้วลองใหม่",
     "openAccountSettings": "เปิดการตั้งค่าบัญชี",
-    "credentialsRemoved": "ไม่ได้รวมช่องข้อมูลประจำตัว {{count}} ช่อง ผู้รับต้องระบุข้อมูลประจำตัวของตนเองหรือใช้การอ้างอิงผ่านนายหน้า"
+    "readinessChecking": "กำลังตรวจสอบว่าผู้รับจะโหลดข้อมูลของคุณได้หรือไม่…",
+    "readinessUnavailable": "ไม่สามารถเรียกใช้การตรวจสอบแหล่งข้อมูลได้",
+    "readinessAllReachable_other": "แหล่งข้อมูลทั้ง {{count}} รายการดูเหมือนว่าผู้รับจะเข้าถึงได้",
+    "readinessTitle": "ข้อมูลบางอย่างอาจไม่โหลดสำหรับผู้รับ",
+    "readinessNote": "เรื่องนี้ไม่ได้ขัดขวางการแชร์ ผู้รับจะเปิดโปรเจกต์ในเบราว์เซอร์ ซึ่งแหล่งข้อมูลเหล่านี้อาจทำงานต่างจากที่เป็นอยู่ในเครื่องของคุณ",
+    "readinessTruncated_other": "ตรวจสอบเฉพาะแหล่งข้อมูล {{count}} รายการแรกเท่านั้น",
+    "readinessBasemapLabel": "แผนที่ฐาน",
+    "readinessPluginLabel": "ปลั๊กอิน",
+    "readinessReasonCredentialStripped": "ใช้ข้อมูลประจำตัวที่จะถูกนำออกเมื่อแชร์",
+    "readinessReasonAuthRequired": "บริการปฏิเสธคำขอที่ไม่มีข้อมูลประจำตัว",
+    "readinessReasonCors": "เบราว์เซอร์ไม่สามารถดึงข้อมูลจากโฮสต์นี้ได้ เนื่องจากโฮสต์ไม่ได้ส่งส่วนหัวข้ามต้นทาง หรือเข้าถึงไม่ได้",
+    "readinessReasonNotFound": "บริการตอบกลับว่าไม่พบ ลิงก์จึงอาจหมดอายุหรือย้ายไปแล้ว",
+    "readinessReasonLocalFile": "ชี้ไปยังไฟล์ในเครื่องของคุณ",
+    "readinessReasonPrivateHost": "ชี้ไปยังที่อยู่เครือข่ายส่วนตัวหรือเครือข่ายภายใน",
+    "readinessReasonNoSource": "ไม่มีแหล่งข้อมูลที่ผู้รับจะเปิดได้",
+    "readinessReasonUnchecked": "ไม่สามารถตรวจสอบได้",
+    "readinessAdviceCredential": "ทำให้บริการเป็นสาธารณะ หรือแจ้งให้ผู้รับใช้ข้อมูลประจำตัวของตนเอง",
+    "readinessAdviceCors": "ยังโหลดได้ในแอปเดสก์ท็อป แต่โหลดไม่ได้ในโปรแกรมดูบนเบราว์เซอร์",
+    "readinessAdviceNotFound": "อัปเดตหรือเปลี่ยนแหล่งข้อมูลของเลเยอร์นี้ก่อนแชร์",
+    "readinessAdviceLocal": "แปลงเป็นแหล่งข้อมูลที่โฮสต์ไว้ มิฉะนั้นผู้รับจะเห็นเลเยอร์ว่างเปล่า"
   },
   "gallery": {
     "title": "แกลเลอรีโปรเจกต์",
@@ -1266,13 +1378,19 @@
       "layer": "เลเยอร์",
       "titleLabel": "หัวข้อ",
       "position": "ตำแหน่ง",
-      "filterToPage": "เฉพาะฟีเจอร์ที่อยู่ในขอบเขตของหน้า",
-      "filterToPageHint": "ใช้กับหน้าของแอตลาสและขอบเขตการพิมพ์ที่วาดไว้ มิฉะนั้นจะใช้ทั้งเลเยอร์"
+      "pageFilter": "ตัวกรองขอบเขตหน้า",
+      "filterAll": "ฟีเจอร์ทั้งหมด",
+      "filterContained": "เฉพาะฟีเจอร์ที่อยู่ภายในขอบเขตหน้าทั้งหมด",
+      "filterIntersecting": "เฉพาะฟีเจอร์ที่ตัดกับขอบเขตหน้า",
+      "filterToPageHint": "ใช้กับหน้าของแอตลาสและขอบเขตการพิมพ์ที่วาดไว้ มิฉะนั้นจะใช้ทั้งเลเยอร์",
+      "filterToAtlasFeature": "เฉพาะฟีเจอร์แอตลาสปัจจุบัน",
+      "filterToAtlasFeatureHint": "ใช้ได้เมื่อตารางใช้เลเยอร์ขอบเขตครอบคลุมของแอตลาส ตัวเลือกนี้มีลำดับความสำคัญเหนือตัวกรองขอบเขตของหน้า"
     },
     "dataTable": {
       "columns": "คอลัมน์",
       "columnsHint": "ระบบเลือกฟิลด์ {{count}} ฟิลด์แรกไว้เป็นค่าเริ่มต้น ทำเครื่องหมายที่คอลัมน์เพื่อปรับแต่งเอง",
       "maxRows": "จำนวนแถวสูงสุด",
+      "fitRows": "ปรับจำนวนแถวให้พอดีกับหน้า",
       "moreRows_other": "+อีก {{count}} รายการ",
       "noRows": "ไม่มีแถวที่จะแสดงด้วยการตั้งค่าปัจจุบัน"
     },
@@ -1395,6 +1513,8 @@
       "extentMargin": "ระยะขอบรอบฟีเจอร์",
       "extentScale": "มาตราส่วนคงที่",
       "marginLabel": "ระยะขอบ (%)",
+      "maskOutside": "ปิดบังพื้นที่นอกฟีเจอร์ปัจจุบัน",
+      "maskOutsideHint": "ใช้สีเติมแบบกลับด้านกึ่งโปร่งแสงเพื่อเน้นฟีเจอร์แอตลาสปัจจุบัน",
       "scaleLabel": "มาตราส่วน",
       "scaleRequired": "ป้อนมาตราส่วนที่มากกว่าศูนย์",
       "sortField": "เรียงตาม",
@@ -1459,6 +1579,19 @@
     "description": "ปรับอัตราขยายแนวดิ่งของภูมิประเทศ 3 มิติ ค่าที่สูงขึ้นจะทำให้เนินเขาและภูเขาดูชันขึ้น",
     "label": "อัตราขยายแนวดิ่ง",
     "controlLabel": "เปิด/ปิดภูมิประเทศ (ดับเบิลคลิกเพื่อปรับอัตราขยาย)",
+    "sourceLabel": "แหล่งข้อมูลภูมิประเทศ",
+    "sourceDescription": "ใช้ COG แบบแบนด์เดียวใน EPSG:3857 หรือ EPSG:4326 เป็นแหล่งข้อมูลระดับความสูง ไฟล์ต้องอนุญาต CORS และคำขอช่วง HTTP",
+    "sourcePlaceholder": "https://example.com/dem.tif",
+    "localSourceLabel": "DEM แบบ COG ในเครื่อง",
+    "localSourceDescription": "ไฟล์จะอยู่บนอุปกรณ์นี้และถูกอ่านเป็นช่วงเล็ก ๆ เมื่อจำเป็นต้องใช้ไทล์ภูมิประเทศ",
+    "useCog": "ใช้ DEM แบบ COG",
+    "sourceLoading": "กำลังเปิด COG…",
+    "restoreDefaultSource": "ใช้ภูมิประเทศทั่วโลก",
+    "sourceError": "ไม่สามารถเปิด DEM แบบ COG ได้",
+    "sourceErrorEmpty": "ไฟล์นี้ว่างเปล่า เลือกไฟล์ DEM แบบ COG",
+    "sourceErrorBand": "ไม่มีแบนด์ที่ร้องขอในไฟล์ COG นี้",
+    "sourceErrorProjection": "ภูมิประเทศ COG รองรับเฉพาะ DEM แบบ EPSG:3857 และ EPSG:4326 เท่านั้น",
+    "sourceErrorDetail": "ไม่สามารถเปิด DEM แบบ COG ได้ ({{detail}})",
     "reset": "รีเซ็ต",
     "done": "เสร็จสิ้น"
   },
@@ -1486,6 +1619,16 @@
     "gapNote": "ช่วงที่เป็นเส้นประคือวันที่ไม่มีค่าที่อ่านได้ (nodata หรืออยู่นอกพื้นที่ครอบคลุม)",
     "exportCsv": "ส่งออก CSV",
     "exportGeoParquet": "ส่งออก GeoParquet"
+  },
+  "auth": {
+    "unavailableTitle": "ไม่สามารถลงชื่อเข้าใช้ได้",
+    "unavailableDescription": "GeoLibre ไม่สามารถเชื่อมต่อบริการลงชื่อเข้าใช้ได้ จึงไม่ทราบว่าคุณลงชื่อเข้าใช้อยู่หรือไม่ โดยทั่วไปปัญหานี้เกิดขึ้นชั่วคราว หากยังคงเกิดขึ้น อาจต้องตรวจสอบการตั้งค่าการยืนยันตัวตนของการติดตั้งใช้งานนี้",
+    "retry": "ลองอีกครั้ง",
+    "signInTitle": "ลงชื่อเข้าใช้ GeoLibre",
+    "signInDescription": "การติดตั้งใช้งานนี้ต้องมีบัญชี ระบบจะพาคุณไปยังหน้าลงชื่อเข้าใช้ที่ปลอดภัย แล้วกลับมาที่นี่",
+    "signIn": "ลงชื่อเข้าใช้",
+    "signOut": "ออกจากระบบ",
+    "account": "บัญชี"
   },
   "basemapExtract": {
     "title": "แยกแผนที่ฐานสำหรับใช้ออฟไลน์",
@@ -1617,8 +1760,13 @@
     "unit": {
       "meters": "m",
       "kilometers": "km",
-      "miles": "mi"
-    }
+      "miles": "mi",
+      "feet": "ฟุต"
+    },
+    "viewshedHere": "พื้นที่มองเห็นจากจุดนี้ ({{radius}})",
+    "viewshedLayerName": "พื้นที่มองเห็น ({{radius}})",
+    "viewshedToolName": "พื้นที่มองเห็น",
+    "viewshedNoResult": "ไม่สามารถคำนวณพื้นที่ที่มองเห็นได้ที่นี่"
   },
   "knowledgeCard": {
     "title": "ข้อมูลสถานที่",
@@ -1662,7 +1810,8 @@
       "geocoding": "การแปลงที่อยู่เป็นพิกัด",
       "ai": "ผู้ให้บริการ AI",
       "environment": "สภาพแวดล้อม",
-      "updates": "การอัปเดต"
+      "updates": "การอัปเดต",
+      "startup": "การเริ่มโปรแกรม"
     },
     "menu": {
       "mapPreferences": "ตัวเลือกแผนที่",
@@ -1673,6 +1822,7 @@
       "ai": "ผู้ให้บริการ AI",
       "environmentVariables": "ตัวแปรสภาพแวดล้อม",
       "updates": "ตั้งค่าการอัปเดต",
+      "startupSettings": "ตั้งค่าการเริ่มโปรแกรม",
       "managePlugins": "จัดการปลั๊กอิน",
       "styleManager": "ตัวจัดการสไตล์",
       "urlOverrideNote": "พารามิเตอร์เลย์เอาต์ใน URL จะแทนที่การตั้งค่าที่บันทึกไว้"
@@ -1689,6 +1839,26 @@
         "minor": "เฉพาะรุ่นใหญ่และรุ่นย่อย",
         "major": "เฉพาะรุ่นใหญ่"
       }
+    },
+    "startup": {
+      "title": "โปรเจกต์เมื่อเริ่มโปรแกรม",
+      "description": "เลือกพื้นที่ทำงานที่ GeoLibre จะเปิดเมื่อเริ่มแอปเนทีฟ",
+      "mode": {
+        "default": "เปิดพื้นที่ทำงานเริ่มต้น",
+        "last": "เปิดโปรเจกต์ล่าสุดอีกครั้ง",
+        "specific": "เปิดโปรเจกต์ที่ระบุ"
+      },
+      "modeHint": {
+        "default": "เริ่มด้วยโปรเจกต์ใหม่ที่ยังไม่มีชื่อ",
+        "last": "เปิดโปรเจกต์ในเครื่องที่ใช้ล่าสุด"
+      },
+      "chooseProject": "เลือกโปรเจกต์",
+      "noProjectSelected": "ยังไม่ได้เลือกโปรเจกต์",
+      "globeByDefault": "เปิดใช้ลูกโลก 3 มิติเป็นค่าเริ่มต้น",
+      "globeByDefaultHint": "ใช้กับพื้นที่ทำงานที่ยังไม่มีชื่อ เมื่อไม่ได้ระบุโปรเจกต์เมื่อเริ่มโปรแกรมหรือลิงก์โปรเจกต์",
+      "selectError": "ไม่สามารถอ่านโปรเจกต์ที่เลือกได้",
+      "restoring": "กำลังเปิดโปรเจกต์เมื่อเริ่มโปรแกรมของคุณ…",
+      "loadWarning": "โปรเจกต์เมื่อเริ่มโปรแกรมไม่พร้อมใช้งาน GeoLibre จึงเปิดพื้นที่ทำงานเริ่มต้นแทน"
     },
     "map": {
       "constraintsTitle": "ข้อจำกัดของแผนที่",
@@ -1711,7 +1881,9 @@
       "scaleUnitImperial": "อิมพีเรียล (ft / mi)",
       "scaleUnitNautical": "หน่วยเดินเรือ (nmi)",
       "scaleUnitHint": "เลือกหน่วยที่แสดงบนมาตราส่วนแบบแท่งที่ด้านล่างของแผนที่",
-      "errorBoundsUnavailable": "ยังไม่มีข้อมูลขอบเขตของแผนที่"
+      "errorBoundsUnavailable": "ยังไม่มีข้อมูลขอบเขตของแผนที่",
+      "coordinateFormat": "รูปแบบพิกัด",
+      "coordinateFormatHint": "รูปแบบที่แถบสถานะใช้แสดงพิกัดของตัวชี้ คลิกพิกัดในแถบสถานะเพื่อสลับรูปแบบ"
     },
     "layout": {
       "title": "เลย์เอาต์",
@@ -2047,7 +2219,8 @@
       "dashboard": "แดชบอร์ด",
       "assistant": "ผู้ช่วย AI",
       "geocode": "แปลงที่อยู่เป็นพิกัด",
-      "modelBuilder": "งานแบบชุดและโมเดล",
+      "batchTools": "เครื่องมือแบบกลุ่ม",
+      "modelBuilder": "ตัวสร้างแบบจำลอง",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "การแบ่งส่วนภาพด้วย AI",
@@ -2102,7 +2275,8 @@
       "video": "เลเยอร์วิดีโอ",
       "deckglViz": "เลเยอร์ Deck.gl",
       "gltfModel": "โมเดล 3 มิติ (glTF)",
-      "postgres": "เลเยอร์ PostgreSQL"
+      "postgres": "เลเยอร์ PostgreSQL",
+      "iceberg": "เลเยอร์ Apache Iceberg"
     },
     "conversion": {
       "vectorToVector": "เวกเตอร์เป็นเวกเตอร์",
@@ -2129,6 +2303,7 @@
       "rasterShape": "อ่านแรสเตอร์ขนาด {{width}}×{{height}} ที่มี {{bands}} แบนด์",
       "wroteCog": "เขียนไฟล์ COG แบบแบ่งไทล์พร้อมภาพย่อแล้ว ({{compression}})",
       "notAGeoTiff": "ไฟล์นี้ไม่ใช่ GeoTIFF ที่อ่านได้ ในเบราว์เซอร์ การแปลงแรสเตอร์เป็น COG อ่านได้เฉพาะ GeoTIFF เท่านั้น รูปแบบอื่นต้องใช้แอปเดสก์ท็อป",
+      "rasterTooLargeForBrowser": "ในเบราว์เซอร์ การทำงานนี้จะถอดรหัสแรสเตอร์ทั้งไฟล์ใน WebAssembly ซึ่งจำกัดอยู่ที่ประมาณ 4 GB ไฟล์นี้จึงมีขนาดเกิน แปลงไฟล์ด้วยแอปเดสก์ท็อป GeoLibre หรือสร้าง COG ไว้ล่วงหน้าด้วย gdal_translate หรือ rio-cogeo",
       "zoomRangeError": "ระดับซูมต้องเป็นไปตามเงื่อนไข 0 ≤ ต่ำสุด ≤ สูงสุด ≤ {{max}}",
       "colormap": "แผนผังสี",
       "resampling": "การสุ่มตัวอย่างใหม่",
@@ -2374,7 +2549,7 @@
       "duckdbLayer": "เลเยอร์ DuckDB",
       "whitebox": "Whitebox",
       "geocode": "แปลงที่อยู่เป็นพิกัด",
-      "modelBuilder": "งานแบบชุดและโมเดล",
+      "modelBuilder": "ตัวสร้างแบบจำลอง",
       "processingHistory": "ประวัติ",
       "conversion": "การแปลงรูปแบบ",
       "vector": "เวกเตอร์",
@@ -2386,7 +2561,7 @@
       "terrain": "ภูมิประเทศ",
       "remoteSensing": "การรับรู้จากระยะไกล",
       "projection": "การฉายแผนที่",
-      "geolibre": "GeoLibre",
+      "geolibre": "กล่องเครื่องมือ GeoLibre",
       "subGroupGeometry": "เรขาคณิต",
       "subGroupOverlay": "การซ้อนทับ",
       "subGroupJoin": "การเชื่อมข้อมูล",
@@ -2410,6 +2585,8 @@
       "atmosphereEnabled": "เปิดใช้งาน",
       "spinGlobe": "ลูกโลกหมุน",
       "graticule": "เส้นกริด",
+      "pointerElevation": "ระดับความสูง",
+      "pointerElevationHint": "แสดงระดับความสูงของพื้นดินใต้ตัวชี้ในแถบสถานะ หากไม่มีภูมิประเทศ 3 มิติ จะสอบถามบริการระดับความสูงสาธารณะ",
       "weather": "สภาพอากาศ",
       "weatherTooltip": "ซ้อนทับเลเยอร์สภาพอากาศแบบเกือบเรียลไทม์ที่เล่นเป็นแอนิเมชันได้",
       "weatherPlay": "เล่นแอนิเมชัน",
@@ -2455,10 +2632,15 @@
       "arcgisImportComplete": "นำเข้าโปรเจกต์ ArcGIS Pro แล้ว",
       "arcgisImportWarnings_other": "นำเข้าโปรเจกต์แล้ว แต่มี {{count}} เลเยอร์ที่โหลดไม่ได้",
       "arcgisUnknownLayerType": "ไม่ทราบ",
+      "importWarningLayerCount_other": "{{count}} เลเยอร์",
+      "showLayerNames": "แสดงชื่อเลเยอร์",
+      "hideLayerNames": "ซ่อนชื่อเลเยอร์",
       "arcgisImportReason": {
         "layer-type": "ไม่รองรับเลเยอร์ชนิด {{layerType}}",
         "missing-source": "เลเยอร์นี้ไม่มีแหล่งข้อมูลในเครื่องที่อ่านได้",
         "format": "ไม่รองรับรูปแบบข้อมูลของเลเยอร์นี้",
+        "file-geodatabase": "แหล่งข้อมูล File Geodatabase (.gdb) จะไม่ถูกโหลดจากโปรเจกต์ ใน GeoLibre Desktop ให้เพิ่มผ่านเพิ่มข้อมูล → File Geodatabase (GDB)",
+        "file-geodatabase-raster": "ชุดข้อมูลแรสเตอร์ที่จัดเก็บใน File Geodatabase (.gdb) ไม่รองรับ ให้ส่งออกแรสเตอร์เป็น GeoTIFF แล้วเพิ่มเป็นเลเยอร์แรสเตอร์",
         "network-path": "ไม่โหลดพาธจากไดรฟ์ที่แชร์บนเครือข่ายด้วยเหตุผลด้านความปลอดภัย",
         "service": "ยังไม่รองรับเลเยอร์บริการของ ArcGIS ในโปรเจกต์",
         "browser-local-file": "มีการอ้างอิงไฟล์ในเครื่อง แต่เบราว์เซอร์ไม่สามารถเปิดพาธข้อมูลของ ArcGIS Pro ได้อีก กรุณาใช้ GeoLibre Desktop เพื่อโหลด",
@@ -2489,6 +2671,7 @@
       "embedVectorTitle": "ฝังข้อมูลเวกเตอร์ในเครื่องหรือไม่?",
       "embedVectorDesc": "โปรเจกต์นี้มีเลเยอร์เวกเตอร์ในเครื่อง {{count}} เลเยอร์ที่โหลดมาจากคอมพิวเตอร์ของคุณ เบราว์เซอร์ไม่สามารถอ่านไฟล์เหล่านั้นซ้ำได้เมื่อเปิดโปรเจกต์อีกครั้ง จึงต้องฝังข้อมูลไว้ในไฟล์โปรเจกต์เพื่อให้กู้คืนได้ การฝังข้อมูลจะเพิ่มขนาดไฟล์ประมาณ {{size}}",
       "embedVectorDescDesktop": "โปรเจกต์นี้มีเลเยอร์เวกเตอร์ในเครื่อง {{count}} เลเยอร์ที่โหลดมาจากคอมพิวเตอร์ของคุณ คุณสามารถฝังข้อมูลเพื่อให้โปรเจกต์สมบูรณ์ในตัว (เพิ่มขนาดประมาณ {{size}}) หรือบันทึกเป็นการอ้างอิงไฟล์ที่จะโหลดจากดิสก์เมื่อเปิดโปรเจกต์อีกครั้ง การอ้างอิงจะทำให้ไฟล์มีขนาดเล็ก แต่จะใช้ไม่ได้หากไฟล์ต้นทางถูกย้ายหรือลบในภายหลัง",
+      "embedVectorLargeWarning": "การฝังข้อมูลประมาณ {{size}} ทำให้ไฟล์โปรเจกต์มีขนาดใหญ่มาก การเปิดใหม่อาจช้าหรือล้มเหลวไปเลย เพราะต้องแยกวิเคราะห์และเก็บทุกฟีเจอร์ไว้ในหน่วยความจำพร้อมกัน สำหรับข้อมูลขนาดนี้ ให้แปลงชั้นข้อมูลเป็น PMTiles หรือ FlatGeobuf แล้วเพิ่มเป็นชั้นข้อมูลระยะไกลแทนการฝัง",
       "embedVectorEmbedButton": "ฝังข้อมูล",
       "embedVectorReferenceButton": "บันทึกเป็นการอ้างอิงไฟล์",
       "embedVectorSkipButton": "บันทึกโดยไม่รวมข้อมูล",
@@ -2528,7 +2711,10 @@
       "loadingOsmPbfDesc": "กำลังแปลงไฟล์และเปลี่ยนฟีเจอร์เป็น GeoJSON กระบวนการนี้ทำงานเบื้องหลังและอาจใช้เวลาสักครู่สำหรับข้อมูลขนาดใหญ่",
       "loadingOsmPbfProgress": "กำลังแปลงฟีเจอร์เป็น GeoJSON… ประมวลผลแล้ว {{processed}} จาก {{total}} รายการ OSM",
       "projectName": "ชื่อโปรเจกต์",
-      "storymapEllipsis": "แผนที่เล่าเรื่อง..."
+      "storymapEllipsis": "แผนที่เล่าเรื่อง...",
+      "pointerElevationNoticeTitle": "ระดับความสูงใช้บริการสาธารณะ",
+      "pointerElevationNoticeDesc": "เมื่อเปิดภูมิประเทศ 3 มิติ ระดับความสูงจะคำนวณจากแผนที่เองโดยไม่ส่งข้อมูลใด ๆ หากไม่มีภูมิประเทศ 3 มิติ จะสอบถาม Open-Meteo API สาธารณะ และพิกัดใต้ตัวชี้จะออกจากอุปกรณ์ของคุณ",
+      "batchTools": "เครื่องมือแบบกลุ่ม"
     },
     "plugin": {
       "maplibre-gl-annotations": "คำอธิบายประกอบ",
@@ -2598,6 +2784,7 @@
       "couldNotOpenRecentProject": "ไม่สามารถเปิดโปรเจกต์ล่าสุดได้",
       "couldNotLoadRecentProject": "ไม่สามารถโหลดโปรเจกต์ล่าสุดได้",
       "couldNotSaveProject": "ไม่สามารถบันทึกโปรเจกต์ได้",
+      "projectTooLargeToSave": "โปรเจกต์นี้ใหญ่เกินกว่าจะบันทึกได้ ให้แปลงข้อมูลเวกเตอร์ที่ฝังไว้เป็น PMTiles หรือ FlatGeobuf แล้วเพิ่มเป็นชั้นข้อมูลระยะไกลแทนการฝังฟีเจอร์",
       "couldNotExportHtml": "ไม่สามารถส่งออกโปรเจกต์เป็น HTML ได้",
       "osmPbfNoFeatures": "ไม่พบฟีเจอร์แบบจุด เส้น หรือรูปหลายเหลี่ยมในไฟล์ OSM PBF นี้",
       "couldNotLoadOsmPbf": "ไม่สามารถโหลดไฟล์ OSM PBF ได้",
@@ -3202,12 +3389,22 @@
     "resultsCleared": "ล้างผลการค้นหาแล้ว",
     "searching": "กำลังค้นหารายการ STAC…",
     "loadingMore": "กำลังโหลดรายการเพิ่มเติม…",
+    "noMatchesHere": "ไม่พบรายการที่ตรงกันในส่วนนั้นของแคตตาล็อก โหลดเพิ่มเติมเพื่อค้นหาต่อ",
+    "treeEmpty": "ว่าง",
+    "treeOpenFailed": "ไม่สามารถเปิดแคตตาล็อกนี้ได้",
     "noResults": "ไม่มีรายการ STAC ที่ตรงกับตัวกรองเหล่านี้",
     "searchFailed": "การค้นหา STAC ล้มเหลว",
     "showing": "กำลังแสดง {{count}} รายการ",
     "showingOfMatched": "กำลังแสดง {{count}} จาก {{matched}} รายการ",
     "loadMore": "โหลดเพิ่มเติม",
     "renderOptions": "ตัวเลือกการแสดงผลแรสเตอร์",
+    "renderingEngine": "เอนจินการแสดงผล COG",
+    "engineAuto": "ไม่เปลี่ยนแปลง",
+    "engineWasm": "ตัวสร้างไทล์แบบ WebAssembly (รองรับลูกโลก)",
+    "engineGpu": "GPU (deck.gl, เมอร์เคเตอร์เท่านั้น)",
+    "engineTitiler": "เซิร์ฟเวอร์ TiTiler",
+    "engineHint": "กำหนดว่าตัวแสดงผลใดจะถอดรหัสภาพถ่าย ต่างจากการตั้งค่าด้านบน ค่านี้ไม่ได้แยกตามเลเยอร์ แต่มีผลกับแรสเตอร์ทุกตัวบนแผนที่ รวมถึงที่เพิ่มไปแล้ว",
+    "resizeResults": "ปรับขนาดผลการค้นหา",
     "bands": "แบนด์",
     "bandsPlaceholder": "เช่น 1 หรือ 1,2,3 (ค่าเริ่มต้น: อัตโนมัติ)",
     "colormap": "แผนผังสี (เฉพาะแบนด์เดียว)",
@@ -3224,9 +3421,25 @@
     "download": "ดาวน์โหลด",
     "adding": "กำลังเพิ่ม {{asset}}…",
     "added": "เพิ่ม {{asset}} ลงในแผนที่แล้ว",
-    "addUnsupported": "เพิ่มลงแผนที่ได้เฉพาะแอสเซตแบบ GeoTIFF/COG และ GeoJSON เท่านั้น",
+    "addUnsupported": "เพิ่มลงแผนที่ได้เฉพาะแอสเซตแบบ GeoTIFF/COG, GeoJSON, GeoParquet และ PMTiles เท่านั้น",
     "addFailed": "ไม่สามารถเพิ่มแอสเซตได้",
-    "cogUnsupported": "โฮสต์ GeoLibre นี้ไม่สามารถแสดงผลแอสเซต GeoTIFF จากระยะไกลได้"
+    "addNoSourceLayers": "ไฟล์เก็บถาวรนี้ไม่มีเลเยอร์ให้วาด",
+    "addNoTarget": "แอสเซตนี้ไม่มีรายการใดให้วาด",
+    "addIcechunkFailed": "ไม่สามารถเปิดที่เก็บข้อมูล Icechunk นี้ได้",
+    "zarrProblemGroup": "แอสเซตนี้ระบุกลุ่มของอาร์เรย์ ไม่ใช่อาร์เรย์เดียวที่วาดได้",
+    "zarrProblemMissing": "ที่เก็บข้อมูลนี้ไม่มีตัวแปรดังกล่าว",
+    "zarrProblemUnauthorized": "ที่เก็บข้อมูล Zarr นี้ต้องใช้ข้อมูลรับรองซึ่ง GeoLibre ยังไม่รองรับ",
+    "zarrProblemUnsupportedUrl": "ที่อยู่ของที่เก็บข้อมูล Zarr นี้ไม่สามารถอ่านทีละคีย์ได้",
+    "zarrProblemUnavailable": "ไม่สามารถเปิดที่เก็บข้อมูล Zarr นี้ได้",
+    "chooseTarget": "เลือกสิ่งที่จะเพิ่ม",
+    "cogUnsupported": "โฮสต์ GeoLibre นี้ไม่สามารถแสดงผลแอสเซต GeoTIFF จากระยะไกลได้",
+    "formatCog": "COG",
+    "formatGeoJson": "GeoJSON",
+    "formatPmtiles": "PMTiles",
+    "formatParquet": "Parquet",
+    "formatZarr": "Zarr",
+    "formatUnknown": "รูปแบบที่ไม่รู้จัก",
+    "notAddable": "ไม่สามารถเพิ่มได้"
   },
   "earthdataGis": {
     "hint": "ค้นหาบริการภาพถ่าย แผนที่ และฟีเจอร์จาก NASA Earthdata GIS",
@@ -3450,6 +3663,10 @@
   "basemaps": {
     "confirmStyleReplace_other": "การเปลี่ยนไปใช้ \"{{name}}\" จะแทนที่สไตล์แผนที่ทั้งหมด และจะนำแผนที่ฐานที่คุณซ้อนไว้ {{count}} รายการออก ต้องการดำเนินการต่อหรือไม่?"
   },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "คุณสมบัติของฟีเจอร์",
+    "massingHeight": "ความสูง (m)"
+  },
   "annotations": {
     "toolbar": "เครื่องมือคำอธิบายประกอบ",
     "layerName": "คำอธิบายประกอบ",
@@ -3611,9 +3828,9 @@
     "clear": "ล้างบทสนทนา",
     "close": "ปิดผู้ช่วย",
     "send": "ส่ง",
-    "sendHint": "ส่ง (Ctrl/Cmd+Enter)",
+    "sendHint": "ส่ง (Enter)",
     "stop": "หยุด",
-    "placeholder": "ถามเกี่ยวกับข้อมูลของคุณ เช่น \"แสดงประเทศที่มีประชากรมากกว่า 50 ล้านคน\" · Ctrl/Cmd+Enter เพื่อส่ง",
+    "placeholder": "ถามเกี่ยวกับข้อมูลของคุณ เช่น \"แสดงประเทศที่มีประชากรมากกว่า 50 ล้านคน\" · Enter เพื่อส่ง, Shift+Enter เพื่อขึ้นบรรทัดใหม่",
     "intro": "สนทนากับข้อมูลของคุณ ฉันสามารถเรียกใช้ Spatial SQL เพิ่มหรือนำเลเยอร์ออก ปรับสไตล์ และเลื่อนแผนที่ได้ ทุกการเปลี่ยนแปลงเลิกทำได้ ลองพิมพ์ \"ระบายสีประเทศตามจำนวนประชากรด้วยไล่เฉดสีแดง\"",
     "setupTitle": "ตั้งค่าผู้ช่วย AI",
     "setupStatus": "ผู้ช่วยต้องใช้ผู้ให้บริการ AI ในการประมวลผล กรุณาเพิ่มข้อมูลรับรองของผู้ให้บริการรายใดรายหนึ่งด้านล่าง แล้วแผงนี้จะเปลี่ยนเป็นโหมดสนทนาทันทีที่คุณบันทึก",
@@ -3723,6 +3940,8 @@
       "bylinePlaceholder": "ผู้จัดทำหรือข้อความให้เครดิต",
       "footerText": "ข้อความส่วนท้าย",
       "footerPlaceholder": "ส่วนท้ายที่แสดงด้านล่างของทุกหน้า",
+      "markers": "เครื่องหมายตำแหน่งที่คลิกได้",
+      "markersHint": "วาดเครื่องหมายที่ตำแหน่งของแต่ละบท เมื่อคลิกเครื่องหมายในโปรแกรมอ่าน PDF จะเปิดพิกัดนั้นใน Google Maps",
       "startSlide": "สไลด์เริ่มต้น",
       "endSlide": "สไลด์ปิดท้าย",
       "generate": "สร้าง PDF",
@@ -3807,33 +4026,101 @@
       "count_other": "บันทึกการประมวลผลไว้ {{count}} ครั้ง",
       "toolUnavailable": "ไม่มีเครื่องมือ \"{{toolId}}\" ให้ใช้งานแล้ว"
     },
-    "modelBuilder": {
-      "moveStepUp": "เลื่อนขั้นตอนขึ้น",
-      "moveStepDown": "เลื่อนขั้นตอนลง",
-      "removeStep": "นำขั้นตอนออก",
-      "title": "งานแบบชุดและโมเดล",
-      "description": "เรียกใช้เครื่องมือเวกเตอร์กับหลายเลเยอร์พร้อมกัน หรือเชื่อมโยงเครื่องมือหลายตัวเป็นโมเดลที่นำกลับมาใช้ใหม่ได้และบันทึกไว้กับโปรเจกต์ของคุณ",
-      "tabBatch": "งานแบบชุด",
-      "tabModels": "โมเดล",
-      "outputPlaceholder": "ผลลัพธ์จะแสดงที่นี่",
+    "batchTools": {
+      "title": "เครื่องมือแบบกลุ่ม",
+      "description": "เรียกใช้เครื่องมือเวกเตอร์เดียวกับหลายชั้นข้อมูลพร้อมกัน",
+      "runBatch": "เรียกใช้แบบกลุ่ม",
       "tool": "เครื่องมือ",
       "sharedParameters": "พารามิเตอร์ที่ใช้ร่วมกัน",
       "noExtraParameters": "เครื่องมือนี้ไม่มีพารามิเตอร์เพิ่มเติม",
       "inputLayers": "เลเยอร์นำเข้า",
-      "selectAll": "เลือกทั้งหมด",
       "clearSelection": "ล้าง",
+      "selectAll": "เลือกทั้งหมด",
       "noCompatibleLayers": "ไม่มีเลเยอร์ GeoJSON ที่ใช้งานร่วมกันได้",
-      "newModel": "โมเดลใหม่",
-      "noSavedModels": "ยังไม่มีโมเดลที่บันทึกไว้",
-      "untitledModel": "โมเดลไม่มีชื่อ",
-      "modelName": "ชื่อโมเดล",
-      "emptyPipelineHint": "เพิ่มขั้นตอนเพื่อเริ่มสร้างไปป์ไลน์ ขั้นตอนแรกจะอ่านเลเยอร์นำเข้า ส่วนขั้นตอนถัดไปจะรับผลลัพธ์จากขั้นตอนก่อนหน้า",
-      "addStep": "เพิ่มขั้นตอน",
-      "runModel": "เรียกใช้โมเดล",
+      "outputPlaceholder": "ผลลัพธ์จะแสดงที่นี่"
+    },
+    "modelBuilder": {
+      "title": "ตัวสร้างแบบจำลอง",
+      "description": "ลากเครื่องมือมาวางบนพื้นที่ทำงานแล้วเชื่อมต่อกันเป็นแบบจำลองการประมวลผล",
+      "modelName": "ชื่อแบบจำลอง",
+      "modelNamePlaceholder": "แบบจำลองไม่มีชื่อ",
+      "untitledModel": "แบบจำลองไม่มีชื่อ",
+      "newModel": "ใหม่",
+      "discardChanges": "ทิ้งการเปลี่ยนแปลงที่ยังไม่ได้บันทึกของแบบจำลองปัจจุบันหรือไม่?",
+      "discardRunning": "การเรียกใช้แบบจำลองยังดำเนินอยู่ ต้องการหยุดและดำเนินการต่อหรือไม่?",
+      "arrange": "จัดเรียง",
+      "arrangeHint": "จัดเรียงโหนดตามลำดับการไหลของงาน",
+      "runModel": "เรียกใช้",
+      "cancelRun": "ยกเลิก",
+      "runCancelled": "ยกเลิกการเรียกใช้แล้ว",
+      "issueMissingLayer": "เลือกชั้นข้อมูลนำเข้า",
+      "issueUnknownTool": "ไม่รู้จักเครื่องมือ \"{{tool}}\"",
+      "issueMissingInput": "\"{{port}}\" ต้องการการเชื่อมต่อหรือค่า",
+      "issueUnknownPort": "การเชื่อมต่อหนึ่งอ้างถึงพอร์ตที่ไม่มีอยู่แล้ว",
+      "issueDuplicateInput": "\"{{port}}\" มีการเชื่อมต่อขาเข้าอยู่แล้ว",
+      "issueTypeMismatch": "พอร์ตเหล่านั้นรับส่งข้อมูลคนละชนิด",
+      "issueCycle": "แบบจำลองมีวงวน",
+      "issueNoOutput": "เพิ่มโหนดเอาต์พุตเพื่อเก็บผลลัพธ์",
+      "issueDuplicateNode": "มีโหนดตั้งแต่สองโหนดขึ้นไปใช้ id เดียวกัน",
+      "issueDanglingEdge": "การเชื่อมต่อหนึ่งชี้ไปยังโหนดที่ไม่มีอยู่แล้ว",
+      "outputAddFailed": "ไม่สามารถเพิ่ม \"{{name}}\" ลงในแผนที่",
+      "catalogUnavailable": "โหลดเครื่องมือไม่สำเร็จ จึงไม่สามารถตรวจสอบหรือเรียกใช้แบบจำลองได้",
+      "addToolNode": "เพิ่ม {{tool}} ลงในพื้นที่ทำงาน",
+      "importTooLarge": "แบบจำลองนั้นใหญ่เกินกว่าจะเปิดได้",
+      "importModel": "นำเข้า",
+      "exportModel": "ส่งออก",
+      "copyPython": "คัดลอกสคริปต์ Python",
+      "pythonCopied": "คัดลอกสคริปต์ Python ไปยังคลิปบอร์ดแล้ว",
+      "pythonCopyFailed": "ไม่สามารถคัดลอกสคริปต์ Python ได้",
+      "savedModels": "แบบจำลองที่บันทึกไว้",
+      "loadModelPlaceholder": "โหลดแบบจำลองที่บันทึกไว้...",
       "deleteModel": "ลบ",
-      "inputPreviousStep": "ข้อมูลนำเข้า: ← ผลลัพธ์จากขั้นตอนก่อนหน้า",
-      "unknownTool": "ไม่รู้จักเครื่องมือ \"{{id}}\"",
-      "noParameters": "ไม่มีพารามิเตอร์"
+      "deletedLog": "ลบแบบจำลองออกจากโครงการแล้ว",
+      "searchTools": "ค้นหาเครื่องมือ",
+      "loadingTools": "กำลังโหลดเครื่องมือ...",
+      "noToolsMatch": "ไม่มีเครื่องมือที่ตรงกับการค้นหาของคุณ",
+      "addInputNode": "+ อินพุต",
+      "addOutputNode": "+ เอาต์พุต",
+      "canvasEmpty": "ลากเครื่องมือจากแผงเครื่องมือเพื่อเริ่มสร้าง",
+      "inputNode": "อินพุต",
+      "outputNode": "เอาต์พุต",
+      "inputPort": "อินพุต: {{port}}",
+      "outputPort": "เอาต์พุต: {{port}}",
+      "removeConnection": "ลบการเชื่อมต่อ",
+      "removeNode": "ลบโหนด",
+      "resizePanel": "ปรับขนาดแผง",
+      "minimizePanel": "ย่อแผง",
+      "restorePanel": "คืนขนาดแผง",
+      "resizePalette": "ปรับขนาดแผงเครื่องมือ",
+      "resizeInspector": "ปรับขนาดแผงคุณสมบัติ",
+      "resizeLog": "ปรับขนาดบันทึกข้อความ",
+      "selectNodeHint": "เลือกโหนดเพื่อแก้ไขการตั้งค่า",
+      "sourceLayer": "ชั้นข้อมูลต้นทาง",
+      "chooseLayer": "เลือกชั้นข้อมูล...",
+      "resultName": "ชื่อผลลัพธ์",
+      "resultNamePlaceholder": "เอาต์พุตของแบบจำลอง",
+      "noParameters": "ไม่มีพารามิเตอร์",
+      "keepResultHint": "เก็บผลลัพธ์ระหว่างทางได้ด้วยการเพิ่มเอาต์พุตให้กับมัน",
+      "keepResultSingle": "เก็บผลลัพธ์นี้",
+      "resultKeptSingle": "เก็บผลลัพธ์นี้ไว้แล้ว",
+      "keepResult": "เก็บ \"{{port}}\"",
+      "resultKept": "เก็บ \"{{port}}\" ไว้แล้ว",
+      "outputPlaceholder": "ข้อความจะปรากฏที่นี่",
+      "connectCycle": "การเชื่อมต่อนั้นจะทำให้เกิดวงวน",
+      "connectSameNode": "โหนดไม่สามารถเชื่อมต่อกับตัวเองได้",
+      "fixIssuesFirst": "แก้ไขปัญหาที่รายงานก่อนเรียกใช้",
+      "runFailed": "เรียกใช้ไม่สำเร็จ",
+      "runFinished": "เรียกใช้เสร็จสิ้น — เพิ่มเอาต์พุตแล้ว {{outputs}} รายการ",
+      "savedLog": "บันทึกแบบจำลองลงในโครงการแล้ว",
+      "exportedLog": "ส่งออก {{name}} แล้ว",
+      "importedLog": "นำเข้าแบบจำลองที่มี {{nodes}} โหนดแล้ว",
+      "importFailed": "นำเข้าไม่สำเร็จ",
+      "importInvalid": "ไฟล์นั้นไม่มีกราฟของแบบจำลอง",
+      "importUnsupported": "ไฟล์นั้นไม่ใช่แบบจำลองของ GeoLibre",
+      "rasterOutputUnsupported": "\"{{name}}\" เป็นผลลัพธ์แรสเตอร์ซึ่งรุ่นนี้ไม่สามารถเพิ่มลงในแผนที่ได้",
+      "portNeedsVector": "\"{{port}}\" ต้องการข้อมูลเวกเตอร์ แต่ได้รับแรสเตอร์",
+      "toolNoOutput": "\"{{tool}}\" ไม่ได้สร้างผลลัพธ์",
+      "toolNoUsableOutput": "\"{{tool}}\" ไม่ได้สร้างผลลัพธ์ที่ใช้งานได้"
     },
     "parameterField": {
       "selectLayer": "เลือกเลเยอร์...",
@@ -3944,6 +4231,1438 @@
       "run": "เรียกใช้",
       "outputPlaceholder": "ผลลัพธ์จะแสดงที่นี่",
       "resolutionRange": "ความละเอียด (0-{{max}})"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "บัฟเฟอร์",
+          "description": "สร้างรูปหลายเหลี่ยมบัฟเฟอร์รอบแต่ละฟีเจอร์ด้วยระยะทางคงที่",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "distance": {
+              "label": "ระยะทาง"
+            },
+            "units": {
+              "label": "หน่วย",
+              "options": {
+                "kilometers": "กิโลเมตร",
+                "meters": "เมตร",
+                "miles": "ไมล์"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "จุดศูนย์กลาง",
+          "description": "คำนวณจุดศูนย์กลาง (เซนทรอยด์) ของแต่ละฟีเจอร์",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "ขอบเขตนูน",
+          "description": "คำนวณขอบเขตนูน (convex hull) ที่ล้อมรอบฟีเจอร์ทั้งหมด",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "รวมพื้นที่ติดกัน",
+          "description": "ผสานฟีเจอร์รูปหลายเหลี่ยมให้เป็นเรขาคณิตเดียว โดยเลือกจัดกลุ่มตามฟิลด์ได้",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "field": {
+              "label": "ฟิลด์สำหรับรวม (ไม่บังคับ)",
+              "description": "ชื่อคุณสมบัติที่ใช้จัดกลุ่มฟีเจอร์ก่อนรวมพื้นที่"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "กรอบขอบเขต",
+          "description": "คำนวณกรอบสี่เหลี่ยมที่ล้อมรอบฟีเจอร์ทั้งหมด",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            }
+          }
+        },
+        "simplify": {
+          "name": "ลดทอนรายละเอียด",
+          "description": "ลดจำนวนจุดยอดด้วยอัลกอริทึม Douglas-Peucker",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "tolerance": {
+              "label": "ค่าความคลาดเคลื่อนที่ยอมรับ (องศา)"
+            },
+            "highQuality": {
+              "label": "คุณภาพสูง"
+            }
+          }
+        },
+        "clip": {
+          "name": "ตัดตามขอบเขต",
+          "description": "ตัดเลเยอร์นำเข้าตามพื้นที่ที่เลเยอร์ซ้อนทับครอบคลุม (คงแอตทริบิวต์ของเลเยอร์นำเข้า)",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "overlay": {
+              "label": "เลเยอร์ซ้อนทับ (ตัด)"
+            }
+          }
+        },
+        "intersection": {
+          "name": "ส่วนที่ซ้อนทับกัน",
+          "description": "คงไว้เฉพาะพื้นที่ที่เลเยอร์รูปหลายเหลี่ยมทั้งสองซ้อนทับกัน",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "overlay": {
+              "label": "เลเยอร์ซ้อนทับ"
+            }
+          }
+        },
+        "difference": {
+          "name": "ส่วนต่าง",
+          "description": "ลบพื้นที่ของเลเยอร์ซ้อนทับออกจากเลเยอร์นำเข้า",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "overlay": {
+              "label": "เลเยอร์ซ้อนทับ"
+            }
+          }
+        },
+        "union": {
+          "name": "ยูเนียน",
+          "description": "ผสานเลเยอร์รูปหลายเหลี่ยมสองเลเยอร์ให้เป็นเรขาคณิตรวมเดียว",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "overlay": {
+              "label": "เลเยอร์ซ้อนทับ"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "เชื่อมโยงเชิงพื้นที่",
+          "description": "แนบแอตทริบิวต์จากเลเยอร์ที่ใช้เชื่อมโยงให้กับแต่ละฟีเจอร์นำเข้าตามความสัมพันธ์เชิงพื้นที่",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "overlay": {
+              "label": "เลเยอร์ที่ใช้เชื่อมโยง"
+            },
+            "predicate": {
+              "label": "ความสัมพันธ์เชิงพื้นที่",
+              "options": {
+                "intersects": "ตัดกัน",
+                "within": "อยู่ภายใน",
+                "contains": "บรรจุ"
+              }
+            },
+            "how": {
+              "label": "ชนิดการเชื่อมโยง",
+              "options": {
+                "inner": "Inner (คงไว้เฉพาะฟีเจอร์ที่จับคู่ได้)",
+                "left": "Left (คงฟีเจอร์นำเข้าทั้งหมด)"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "เชื่อมโยงแอตทริบิวต์",
+          "description": "แนบแอตทริบิวต์จากเลเยอร์ที่ใช้เชื่อมโยง (ตาราง) ให้กับแต่ละฟีเจอร์นำเข้าเมื่อฟิลด์คีย์ตรงกัน โดยไม่ใช้เรขาคณิต แบบหนึ่งต่อหนึ่ง: แถวที่จับคู่ได้แถวแรกจะถูกใช้",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์เป้าหมาย"
+            },
+            "overlay": {
+              "label": "เลเยอร์ที่ใช้เชื่อมโยง (ตาราง)",
+              "description": "เลเยอร์ที่จะนำแอตทริบิวต์มาใช้ เรขาคณิตของเลเยอร์นี้จะถูกละเว้น"
+            },
+            "target_field": {
+              "label": "ฟิลด์คีย์ของเป้าหมาย"
+            },
+            "join_field": {
+              "label": "ฟิลด์คีย์ที่ใช้เชื่อมโยง"
+            },
+            "how": {
+              "label": "ชนิดการเชื่อมโยง",
+              "options": {
+                "left": "Left (คงฟีเจอร์เป้าหมายทั้งหมด)",
+                "inner": "Inner (คงไว้เฉพาะฟีเจอร์ที่จับคู่ได้)"
+              }
+            },
+            "fields": {
+              "label": "ฟิลด์ที่จะนำมา (ไม่บังคับ)",
+              "description": "ฟิลด์ของเลเยอร์ที่ใช้เชื่อมโยงที่จะคัดลอก คั่นด้วยจุลภาค เว้นว่างไว้เพื่อนำทุกฟิลด์มายกเว้นฟิลด์คีย์"
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "เลือกตามค่า",
+          "description": "แยกฟีเจอร์ที่มีค่าแอตทริบิวต์ตรงตามเงื่อนไขออกเป็นเลเยอร์ใหม่",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "field": {
+              "label": "ฟิลด์"
+            },
+            "operator": {
+              "label": "ตัวดำเนินการ",
+              "options": {
+                "eq": "= (เท่ากับ)",
+                "neq": "≠ (ไม่เท่ากับ)",
+                "gt": "> (มากกว่า)",
+                "gte": "≥ (มากกว่าหรือเท่ากับ)",
+                "lt": "< (น้อยกว่า)",
+                "lte": "≤ (น้อยกว่าหรือเท่ากับ)",
+                "contains": "มีข้อความ (ข้อความ)",
+                "starts-with": "ขึ้นต้นด้วย (ข้อความ)",
+                "is-null": "ว่างเปล่า",
+                "is-not-null": "ไม่ว่างเปล่า"
+              }
+            },
+            "value": {
+              "label": "ค่า",
+              "description": "เปรียบเทียบแบบตัวเลขเมื่อทั้งสองฝั่งเป็นตัวเลข"
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "เลือกตามตำแหน่ง",
+          "description": "แยกฟีเจอร์ตามความสัมพันธ์เชิงพื้นที่กับเลเยอร์ที่สองออกเป็นเลเยอร์ใหม่",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "overlay": {
+              "label": "เลเยอร์ตัวกรอง"
+            },
+            "predicate": {
+              "label": "ความสัมพันธ์เชิงพื้นที่",
+              "options": {
+                "intersects": "ตัดกัน",
+                "within": "อยู่ภายใน",
+                "contains": "บรรจุ",
+                "disjoint": "แยกจากกัน (ไม่ตัดกัน)"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "สุ่มแยกฟีเจอร์",
+          "description": "แยกฟีเจอร์ชุดย่อยแบบสุ่มออกเป็นเลเยอร์ใหม่ โดยกำหนดขนาดเป็นจำนวนฟีเจอร์หรือร้อยละของข้อมูลนำเข้า",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "method": {
+              "label": "วิธีการ",
+              "options": {
+                "count": "จำนวนฟีเจอร์",
+                "percentage": "ร้อยละของฟีเจอร์"
+              }
+            },
+            "count": {
+              "label": "จำนวนฟีเจอร์",
+              "description": "หากมากกว่าจำนวนฟีเจอร์นำเข้า จะถูกจำกัดไว้ที่จำนวนฟีเจอร์นำเข้า"
+            },
+            "percentage": {
+              "label": "ร้อยละของฟีเจอร์"
+            }
+          }
+        },
+        "reproject": {
+          "name": "ฉายพิกัดใหม่",
+          "description": "ตีความพิกัดของเลเยอร์ว่าอยู่ในระบบพิกัดต้นทาง แล้วแปลงเป็น WGS84 เพื่อให้แสดงในตำแหน่งที่ถูกต้อง ต้องใช้เอนจิน Sidecar หรือ Python",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "source_crs": {
+              "label": "ระบบพิกัดต้นทาง",
+              "description": "ระบบพิกัดที่แท้จริงของพิกัดในเลเยอร์ (เช่น EPSG:3857) ผลลัพธ์จะถูกแปลงเป็น WGS84 (EPSG:4326)"
+            }
+          }
+        },
+        "explode": {
+          "name": "แยกส่วน",
+          "description": "แยกเรขาคณิตแบบหลายส่วนออกเป็นฟีเจอร์ส่วนเดียว (หนึ่งฟีเจอร์ต่อหนึ่งส่วน) โดยคงแอตทริบิวต์ของฟีเจอร์ต้นทางไว้",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "รวมกลุ่มตามแอตทริบิวต์",
+          "description": "รวมฟีเจอร์ที่มีค่าแอตทริบิวต์เดียวกันให้เป็นเรขาคณิตเดียวต่อกลุ่ม พร้อมค่าสถิติสรุป",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "group_field": {
+              "label": "ฟิลด์ที่ใช้จัดกลุ่ม"
+            },
+            "statistic": {
+              "label": "สถิติ",
+              "options": {
+                "count": "จำนวน",
+                "sum": "ผลรวม",
+                "mean": "ค่าเฉลี่ย",
+                "min": "ค่าต่ำสุด",
+                "max": "ค่าสูงสุด",
+                "median": "มัธยฐาน"
+              }
+            },
+            "stat_field": {
+              "label": "ฟิลด์สำหรับสถิติ",
+              "description": "ฟิลด์ตัวเลขที่จะสรุปด้วยสถิติด้านบน"
+            }
+          }
+        },
+        "smooth": {
+          "name": "ปรับให้เรียบ",
+          "description": "ปรับมุมของฟีเจอร์เส้นและรูปหลายเหลี่ยมให้โค้งมนด้วยอัลกอริทึมของ Chaikin (เพิ่มจุดยอด) ซึ่งต่างจากการลดจุดยอดของเครื่องมือลดทอนรายละเอียด ค่า Z/ความสูงจะถูกคงไว้ ส่วนจุดจะผ่านไปโดยไม่เปลี่ยนแปลง",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "iterations": {
+              "label": "จำนวนรอบ",
+              "description": "จำนวนรอบที่มากขึ้นให้ผลลัพธ์ที่เรียบขึ้น (1-10)"
+            }
+          }
+        },
+        "grid": {
+          "name": "กริดปกติ",
+          "description": "สร้างกริดสี่เหลี่ยมปกติ (ตาข่าย) ของเซลล์ครอบคลุมขอบเขตหนึ่ง แหล่งที่มา: มุมมองแผนที่ปัจจุบัน ขอบเขตของเลเยอร์ หรือกรอบขอบเขตที่กำหนดเอง",
+          "params": {
+            "source": {
+              "label": "แหล่งที่มาของขอบเขต",
+              "options": {
+                "viewport": "มุมมองแผนที่",
+                "layer": "ขอบเขตของเลเยอร์",
+                "bbox": "กรอบขอบเขตที่กำหนดเอง"
+              }
+            },
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "west": {
+              "label": "ตะวันตก (ลองจิจูดต่ำสุด)"
+            },
+            "south": {
+              "label": "ใต้ (ละติจูดต่ำสุด)"
+            },
+            "east": {
+              "label": "ตะวันออก (ลองจิจูดสูงสุด)"
+            },
+            "north": {
+              "label": "เหนือ (ละติจูดสูงสุด)"
+            },
+            "cell_width": {
+              "label": "ความกว้างของเซลล์ (องศา)"
+            },
+            "cell_height": {
+              "label": "ความสูงของเซลล์ (องศา)",
+              "description": "เว้นว่างไว้เพื่อให้เท่ากับความกว้างของเซลล์"
+            },
+            "cell_type": {
+              "label": "ชนิดของเซลล์",
+              "options": {
+                "polygon": "สี่เหลี่ยม",
+                "point": "จุด (จุดกึ่งกลางเซลล์)"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "สร้างแผนภาพ Voronoi (หนึ่งรูปหลายเหลี่ยมต่อหนึ่งจุด ตัดตามขอบเขตของจุด) หรือโครงข่ายสามเหลี่ยม Delaunay จากเลเยอร์จุด",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์จุดนำเข้า"
+            },
+            "type": {
+              "label": "แผนภาพ",
+              "options": {
+                "voronoi": "รูปหลายเหลี่ยม Voronoi",
+                "delaunay": "สามเหลี่ยม Delaunay"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "พื้นที่ครอบคลุมของสถานีฐาน",
+          "description": "สร้างรูปหลายเหลี่ยมเซกเตอร์/ลิ่มของสายอากาศจากจุดที่ตั้งสถานี โดยใช้มุมแอซิมัท รัศมี และความกว้างลำคลื่น (อ่านจากฟิลด์แอตทริบิวต์หรือค่าคงที่) ความกว้างลำคลื่นจะถูกจำกัดไว้ที่ 360° (วงกลมเต็ม) และค่าที่บันทึกจะเป็นค่าหลังจำกัด เหมาะสำหรับพื้นที่ครอบคลุมของเสาสัญญาณ เช่นเดียวกับ QGIS Shape Tools",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์จุดนำเข้า"
+            },
+            "azimuthField": {
+              "label": "ฟิลด์มุมแอซิมัท (°)",
+              "description": "ทิศทางที่เซกเตอร์หันไป เป็นองศาตามเข็มนาฬิกาจากทิศเหนือ จะใช้ค่าแอซิมัทคงที่แทนเมื่อว่างหรือไม่ใช่ตัวเลข"
+            },
+            "azimuth": {
+              "label": "มุมแอซิมัท (ค่าคงที่, °)"
+            },
+            "radiusField": {
+              "label": "ฟิลด์รัศมี",
+              "description": "รัศมีครอบคลุม จะใช้ค่ารัศมีคงที่แทนเมื่อว่างหรือไม่ใช่ตัวเลข"
+            },
+            "radius": {
+              "label": "รัศมี (ค่าคงที่)"
+            },
+            "beamwidthField": {
+              "label": "ฟิลด์ความกว้างลำคลื่น (°)",
+              "description": "ความกว้างเชิงมุมของเซกเตอร์ จำกัดไว้ที่ 360° (วงกลมเต็ม) จะใช้ค่าความกว้างลำคลื่นคงที่แทนเมื่อว่างหรือไม่ใช่ตัวเลข"
+            },
+            "beamwidth": {
+              "label": "ความกว้างลำคลื่น (ค่าคงที่, °)"
+            },
+            "units": {
+              "label": "หน่วยของรัศมี",
+              "options": {
+                "kilometers": "กิโลเมตร",
+                "meters": "เมตร",
+                "miles": "ไมล์"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "ตัวสร้าง DGGS",
+          "description": "เติมพื้นที่ด้วยเซลล์ DGGS (H3, S2, A5, DGGRID, DGGAL) แหล่งที่มา: เรขาคณิตของเลเยอร์ ขอบเขตของเลเยอร์ มุมมองแผนที่ปัจจุบัน หรือกรอบขอบเขตที่กำหนดเอง",
+          "params": {
+            "dggsType": {
+              "label": "ชนิด DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "ชนิด DGGRID",
+              "description": "การกำหนดค่ากริดที่ส่งให้ duck_dggs เป็น dggs_params (ISEA/FULLER × aperture × topology)",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "ชนิด DGGAL",
+              "description": "DGGRS ที่ส่งให้ dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS)",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "source": {
+              "label": "แหล่งที่มาของพื้นที่",
+              "options": {
+                "polyfill": "เรขาคณิตของเลเยอร์ (polyfill)",
+                "extent": "ขอบเขตของเลเยอร์ (bbox)",
+                "viewport": "มุมมองแผนที่",
+                "bbox": "กรอบขอบเขตที่กำหนดเอง"
+              }
+            },
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "west": {
+              "label": "ตะวันตก (ลองจิจูดต่ำสุด)"
+            },
+            "south": {
+              "label": "ใต้ (ละติจูดต่ำสุด)"
+            },
+            "east": {
+              "label": "ตะวันออก (ลองจิจูดสูงสุด)"
+            },
+            "north": {
+              "label": "เหนือ (ละติจูดสูงสุด)"
+            },
+            "resolution": {
+              "label": "ความละเอียด",
+              "description": "ช่วงค่าขึ้นอยู่กับชนิด DGGS เว้นว่างไว้เพื่อให้เลือกอัตโนมัติจากขนาดพื้นที่"
+            },
+            "compactCells": {
+              "label": "บีบอัดเซลล์",
+              "description": "ผสานชุดเซลล์ลูกที่ครบสมบูรณ์ให้เป็นเซลล์แม่ที่หยาบกว่า (ฟีเจอร์น้อยลง ความละเอียดปะปนกัน)"
+            },
+            "fixAntimeridian": {
+              "label": "แก้ไขเส้นแอนติเมริเดียน",
+              "description": "คลี่วงของเซลล์ที่ข้ามเส้นลองจิจูด ±180°"
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "การจัดกลุ่ม DGGS",
+          "description": "รวมเลเยอร์จุดเข้าเป็นเซลล์ DGGS (นับจำนวน หรือผลรวม/ค่าเฉลี่ย/ค่าต่ำสุด/ค่าสูงสุดของฟิลด์ตัวเลข)",
+          "params": {
+            "dggsType": {
+              "label": "ชนิด DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "ชนิด DGGRID",
+              "description": "การกำหนดค่ากริดที่ส่งให้ duck_dggs เป็น dggs_params (ISEA/FULLER × aperture × topology)",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "ชนิด DGGAL",
+              "description": "DGGRS ที่ส่งให้ dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS)",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "layer": {
+              "label": "เลเยอร์จุดนำเข้า"
+            },
+            "aggOp": {
+              "label": "การรวมค่า",
+              "options": {
+                "count": "จำนวน",
+                "sum": "ผลรวม",
+                "mean": "ค่าเฉลี่ย",
+                "min": "ค่าต่ำสุด",
+                "max": "ค่าสูงสุด"
+              }
+            },
+            "field": {
+              "label": "ฟิลด์",
+              "description": "ฟิลด์ตัวเลขที่จะรวมค่า"
+            },
+            "resolution": {
+              "label": "ความละเอียด",
+              "description": "ช่วงค่าขึ้นอยู่กับชนิด DGGS เว้นว่างไว้เพื่อให้เลือกอัตโนมัติจากขนาดพื้นที่"
+            },
+            "fixAntimeridian": {
+              "label": "แก้ไขเส้นแอนติเมริเดียน",
+              "description": "คลี่วงของเซลล์ที่ข้ามเส้นลองจิจูด ±180°"
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "บีบอัด DGGS",
+          "description": "บีบอัดเซลล์รูปหลายเหลี่ยม DGGS หรือขยายให้มีความละเอียดสม่ำเสมอ (H3, S2, A5, DGGAL) ข้อมูลนำเข้าต้องเป็นเลเยอร์เซลล์ที่มีคุณสมบัติ ID",
+          "params": {
+            "dggsType": {
+              "label": "ชนิด DGGS",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggalType": {
+              "label": "ชนิด DGGAL",
+              "description": "DGGRS ที่ส่งให้ dggal.createDGGRS (ISEA/IVEA/RTEA/HEALPix/GNOSIS)",
+              "options": {
+                "gnosis": "GNOSISGlobalGrid",
+                "isea4r": "ISEA4R",
+                "isea9r": "ISEA9R",
+                "isea3h": "ISEA3H",
+                "isea7h": "ISEA7H",
+                "isea7h_z7": "ISEA7H_Z7",
+                "ivea4r": "IVEA4R",
+                "ivea9r": "IVEA9R",
+                "ivea3h": "IVEA3H",
+                "ivea7h": "IVEA7H",
+                "ivea7h_z7": "IVEA7H_Z7",
+                "rtea4r": "RTEA4R",
+                "rtea9r": "RTEA9R",
+                "rtea3h": "RTEA3H",
+                "rtea7h": "RTEA7H",
+                "rtea7h_z7": "RTEA7H_Z7",
+                "healpix": "HEALPix",
+                "rhealpix": "rHEALPix"
+              }
+            },
+            "mode": {
+              "label": "โหมด",
+              "options": {
+                "compact": "บีบอัด",
+                "expand": "ขยาย"
+              }
+            },
+            "layer": {
+              "label": "เลเยอร์ DGGS นำเข้า",
+              "description": "เลเยอร์เซลล์รูปหลายเหลี่ยมจากตัวสร้าง DGGS / การจัดกลุ่ม DGGS (หรือเทียบเท่า)"
+            },
+            "cellField": {
+              "label": "ฟิลด์ ID ของเซลล์",
+              "description": "หากเว้นว่าง จะใช้ค่าเริ่มต้นเป็น h3, a5, s2 หรือ dggal ตามชนิดที่เลือก"
+            },
+            "resolution": {
+              "label": "ความละเอียดเป้าหมาย",
+              "description": "ความละเอียดที่จะขยายไปถึง ต้องละเอียดอย่างน้อยเท่ากับเซลล์นำเข้า"
+            },
+            "fixAntimeridian": {
+              "label": "แก้ไขเส้นแอนติเมริเดียน",
+              "description": "คลี่วงของเซลล์ที่ข้ามเส้นลองจิจูด ±180°"
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "ความเร็วของเส้นทางเคลื่อนที่",
+          "description": "เรียงลำดับจุดตามเวลา (ต่อเป้าหมาย) แล้วเชื่อมตำแหน่งที่ต่อเนื่องกันเป็นส่วนของเส้นที่มีระยะทาง ระยะเวลา และความเร็ว เช่นเดียวกับ QGIS TrajecTools",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์จุดนำเข้า"
+            },
+            "timeField": {
+              "label": "ฟิลด์เวลา",
+              "description": "เวลาประทับของแต่ละตำแหน่ง: สตริงวันที่/เวลาแบบ ISO หรือค่า epoch (วินาทีหรือมิลลิวินาที)"
+            },
+            "idField": {
+              "label": "ฟิลด์ ID ของเป้าหมาย",
+              "description": "แยกจุดออกเป็นเส้นทางเคลื่อนที่แต่ละเส้น เว้นว่างไว้เพื่อถือว่าจุดทั้งหมดเป็นเป้าหมายเดียว"
+            },
+            "speedUnits": {
+              "label": "หน่วยความเร็ว",
+              "options": {
+                "km/h": "กม./ชม.",
+                "m/s": "ม./วินาที",
+                "mph": "ไมล์/ชม."
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "ตรวจหาจุดหยุด",
+          "description": "ค้นหาตำแหน่งที่เป้าหมายหยุดอยู่: ชุดของตำแหน่งต่อเนื่องที่อยู่ภายในระยะทางหนึ่ง (ดูดซับความคลาดเคลื่อนของ GPS) เป็นเวลาอย่างน้อยตามระยะเวลาขั้นต่ำ ให้ผลลัพธ์หนึ่งจุดต่อหนึ่งจุดหยุด เช่นเดียวกับ QGIS TrajecTools",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์จุดนำเข้า"
+            },
+            "timeField": {
+              "label": "ฟิลด์เวลา",
+              "description": "เวลาประทับของแต่ละตำแหน่ง: สตริงวันที่/เวลาแบบ ISO หรือค่า epoch (วินาทีหรือมิลลิวินาที)"
+            },
+            "idField": {
+              "label": "ฟิลด์ ID ของเป้าหมาย",
+              "description": "ตรวจหาจุดหยุดแยกตามเป้าหมาย เว้นว่างไว้เพื่อถือว่าจุดทั้งหมดเป็นเป้าหมายเดียว"
+            },
+            "maxDistance": {
+              "label": "ระยะทางสูงสุด",
+              "description": "ทุกตำแหน่งในจุดหยุดต้องอยู่ภายในระยะนี้จากตำแหน่งแรกของจุดหยุด (จุดหยุดจึงกว้างได้ถึงสองเท่าของค่านี้) ตั้งค่าเท่ากับรัศมีความคลาดเคลื่อนของ GPS ของคุณ"
+            },
+            "distanceUnits": {
+              "label": "หน่วยระยะทาง",
+              "options": {
+                "meters": "เมตร",
+                "kilometers": "กิโลเมตร",
+                "miles": "ไมล์"
+              }
+            },
+            "minDuration": {
+              "label": "ระยะเวลาขั้นต่ำ (วินาที)",
+              "description": "การหยุดที่สั้นกว่านี้จะไม่ถูกรายงานเป็นจุดหยุด"
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "ความใกล้เชิงพื้นที่-เวลา",
+          "description": "ค้นหาคู่ของจุดที่อยู่ใกล้กันทั้งในเชิงพื้นที่และเวลา เช่น เป้าหมายสองรายการมาพบกัน ให้ผลลัพธ์เป็นเส้นเชื่อมแต่ละคู่ที่เข้าเงื่อนไข พร้อมระยะทางและช่วงห่างของเวลา",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์จุดนำเข้า"
+            },
+            "timeField": {
+              "label": "ฟิลด์เวลา",
+              "description": "เวลาประทับของแต่ละจุด: สตริงวันที่/เวลาแบบ ISO หรือค่า epoch (วินาทีหรือมิลลิวินาที)"
+            },
+            "idField": {
+              "label": "ฟิลด์ ID ของเป้าหมาย",
+              "description": "เมื่อกำหนด จะจับคู่เฉพาะจุดที่มีค่า ID ต่างกันเท่านั้น (การพบกันระหว่างเป้าหมายคนละรายการ) เว้นว่างไว้เพื่อพิจารณาทุกคู่"
+            },
+            "maxDistance": {
+              "label": "ระยะทางสูงสุด"
+            },
+            "distanceUnits": {
+              "label": "หน่วยระยะทาง",
+              "options": {
+                "meters": "เมตร",
+                "kilometers": "กิโลเมตร",
+                "miles": "ไมล์"
+              }
+            },
+            "maxTime": {
+              "label": "ผลต่างเวลาสูงสุด"
+            },
+            "timeUnits": {
+              "label": "หน่วยเวลา",
+              "options": {
+                "seconds": "วินาที",
+                "minutes": "นาที",
+                "hours": "ชั่วโมง"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "ตรวจสอบความถูกต้อง",
+          "description": "ค้นหาฟีเจอร์ที่มีเรขาคณิตไม่ถูกต้อง (ตามกฎของ GEOS: วงที่ตัดกันเอง รูที่อยู่นอกเปลือก ...) แล้วทำเครื่องหมายบนแผนที่",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "ซ่อมแซมเรขาคณิต",
+          "description": "ซ่อมแซมเรขาคณิตที่ไม่ถูกต้องด้วย ST_MakeValid (GEOS) ฟีเจอร์ที่ถูกต้องอยู่แล้วจะผ่านไปโดยไม่เปลี่ยนแปลง",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "ตรวจสอบกฎทอพอโลยี",
+          "description": "ตรวจสอบเลเยอร์ตามกฎทอพอโลยี (การซ้อนทับ ช่องว่าง การตัดกันเอง ปลายลอย) แล้วทำเครื่องหมายแต่ละข้อผิดพลาดบนแผนที่",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "ruleSelfIntersect": {
+              "label": "เส้นต้องไม่ตัดกันเอง"
+            },
+            "ruleOverlap": {
+              "label": "รูปหลายเหลี่ยมต้องไม่ซ้อนทับกัน"
+            },
+            "ruleGaps": {
+              "label": "รูปหลายเหลี่ยมต้องไม่มีช่องว่าง"
+            },
+            "ruleDangles": {
+              "label": "เส้นต้องไม่มีปลายลอย"
+            },
+            "rulePointCovered": {
+              "label": "จุดต้องอยู่บนเส้น"
+            },
+            "ruleEndpointSnap": {
+              "label": "จุดปลายของเส้นต้องเชื่อมต่อกันภายในค่าความคลาดเคลื่อนที่ยอมรับ"
+            },
+            "snapTolerance": {
+              "label": "ค่าความคลาดเคลื่อนในการสแนป",
+              "description": "สำหรับกฎจุดปลาย: ปลายเส้นสองเส้นห่างกันได้เท่าใด (ในหน่วยพิกัดของเลเยอร์ — องศาสำหรับ WGS84) โดยยังถือว่าเชื่อมต่อกัน"
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "ซ่อมแซมทอพอโลยี",
+          "description": "ซ่อมแซมข้อผิดพลาดทางทอพอโลยีโดยอัตโนมัติ: สแนปจุดปลายของเส้นที่เกือบเชื่อมต่อกัน แก้ไขปลายลอย และฉายจุดลงบนเส้น ปลายอิสระที่ไม่มีสิ่งใดอยู่ใกล้จะไม่ถูกเปลี่ยนแปลง",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "ruleEndpointSnap": {
+              "label": "สแนปจุดปลายของเส้นที่เกือบเชื่อมต่อกัน"
+            },
+            "ruleDangles": {
+              "label": "ซ่อมแซมปลายลอย (สแนปหรือฉายลงบนเรขาคณิตใกล้เคียง)"
+            },
+            "rulePointCovered": {
+              "label": "ฉายจุดลงบนเส้นที่ใกล้ที่สุด"
+            },
+            "snapTolerance": {
+              "label": "ค่าความคลาดเคลื่อนในการสแนป",
+              "description": "เรขาคณิตเคลื่อนที่ได้ไกลเท่าใด (ในหน่วยพิกัดของเลเยอร์ — องศาสำหรับ WGS84) เพื่อเชื่อมต่อกัน"
+            },
+            "dryRun": {
+              "label": "ดูตัวอย่างเท่านั้น (ทดลองรัน)",
+              "description": "รายงานการแก้ไขที่จะถูกนำไปใช้โดยไม่สร้างเลเยอร์ที่ซ่อมแซมแล้ว"
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "ไอโซโครน / พื้นที่ให้บริการ",
+          "description": "รูปหลายเหลี่ยมแสดงพื้นที่ที่เข้าถึงได้ตามเวลาหรือระยะทางการเดินทางจากแต่ละจุดในเลเยอร์",
+          "params": {
+            "layer": {
+              "label": "จุดต้นทาง"
+            },
+            "mode": {
+              "label": "รูปแบบการเดินทาง",
+              "options": {
+                "auto": "ขับรถ",
+                "pedestrian": "เดินเท้า",
+                "bicycle": "จักรยาน"
+              }
+            },
+            "metric": {
+              "label": "เกณฑ์วัด",
+              "options": {
+                "time": "เวลาเดินทาง (นาที)",
+                "distance": "ระยะทาง (กม.)"
+              }
+            },
+            "contours": {
+              "label": "เส้นชั้น",
+              "description": "ค่าที่คั่นด้วยจุลภาค (นาทีสำหรับเวลา กม. สำหรับระยะทาง)"
+            },
+            "endpoint": {
+              "label": "เซิร์ฟเวอร์คำนวณเส้นทาง (Valhalla)"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "เมทริกซ์ต้นทุน OD",
+          "description": "เวลาและระยะทางการเดินทางระหว่างจุดต้นทางและจุดปลายทางทุกคู่ แสดงเป็นเส้นเชื่อม",
+          "params": {
+            "origins": {
+              "label": "จุดต้นทาง"
+            },
+            "destinations": {
+              "label": "จุดปลายทาง"
+            },
+            "mode": {
+              "label": "รูปแบบการเดินทาง",
+              "options": {
+                "auto": "ขับรถ",
+                "pedestrian": "เดินเท้า",
+                "bicycle": "จักรยาน"
+              }
+            },
+            "endpoint": {
+              "label": "เซิร์ฟเวอร์คำนวณเส้นทาง (Valhalla)"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "เส้นทางตามลำดับ (การนำทาง)",
+          "description": "เชื่อมจุดตามลำดับไปตามโครงข่ายถนนให้เป็นเส้นทาง แต่ละจุดจะถูกสแนปเข้ากับถนนที่ใกล้ที่สุด พิกัดที่อยู่นอกถนน (สถานีฐาน เซ็นเซอร์) จึงยังคำนวณเส้นทางได้ ลำดับเป็นไปตามฟิลด์ที่เลือก (เช่น เวลาประทับ) หรือลำดับฟีเจอร์ของเลเยอร์",
+          "params": {
+            "layer": {
+              "label": "จุดนำเข้า"
+            },
+            "order_field": {
+              "label": "เรียงลำดับตามฟิลด์ (ไม่บังคับ)",
+              "description": "เรียงลำดับจุดตามฟิลด์นี้ (ตัวเลขหรือเวลาประทับ) ก่อนคำนวณเส้นทาง เว้นว่างไว้เพื่อใช้ลำดับฟีเจอร์ของเลเยอร์"
+            },
+            "mode": {
+              "label": "รูปแบบการเดินทาง",
+              "options": {
+                "auto": "ขับรถ",
+                "pedestrian": "เดินเท้า",
+                "bicycle": "จักรยาน"
+              }
+            },
+            "endpoint": {
+              "label": "เซิร์ฟเวอร์คำนวณเส้นทาง (Valhalla)"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "global-morans-i": {
+          "name": "Moran's I ระดับรวม",
+          "description": "วัดสหสัมพันธ์เชิงพื้นที่โดยรวมของแอตทริบิวต์ตัวเลขทั่วทั้งเลเยอร์",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์"
+            },
+            "field": {
+              "label": "ฟิลด์ค่า"
+            },
+            "weightsType": {
+              "label": "น้ำหนักเชิงพื้นที่",
+              "description": "วิธีกำหนดเพื่อนบ้านของแต่ละฟีเจอร์",
+              "options": {
+                "knn": "เพื่อนบ้านใกล้ที่สุด k ตัว",
+                "distance": "แถบระยะทาง"
+              }
+            },
+            "k": {
+              "label": "จำนวนเพื่อนบ้าน (k)"
+            },
+            "threshold": {
+              "label": "แถบระยะทาง (กม.)"
+            },
+            "permutations": {
+              "label": "จำนวนการสับเปลี่ยน",
+              "description": "จำนวนการสับเปลี่ยนแบบสุ่มสำหรับคำนวณค่า p เทียม"
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "Moran's I เฉพาะที่ (LISA)",
+          "description": "กลุ่มและค่าผิดปกติรายฟีเจอร์ (สูง-สูง, ต่ำ-ต่ำ, สูง-ต่ำ, ต่ำ-สูง) พร้อมนัยสำคัญเทียม",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์"
+            },
+            "field": {
+              "label": "ฟิลด์ค่า"
+            },
+            "weightsType": {
+              "label": "น้ำหนักเชิงพื้นที่",
+              "description": "วิธีกำหนดเพื่อนบ้านของแต่ละฟีเจอร์",
+              "options": {
+                "knn": "เพื่อนบ้านใกล้ที่สุด k ตัว",
+                "distance": "แถบระยะทาง"
+              }
+            },
+            "k": {
+              "label": "จำนวนเพื่อนบ้าน (k)"
+            },
+            "threshold": {
+              "label": "แถบระยะทาง (กม.)"
+            },
+            "permutations": {
+              "label": "จำนวนการสับเปลี่ยน",
+              "description": "จำนวนการสับเปลี่ยนแบบสุ่มสำหรับคำนวณค่า p เทียม"
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "จุดร้อน Getis-Ord Gi*",
+          "description": "ระบุจุดร้อนและจุดเย็นที่มีนัยสำคัญทางสถิติของแอตทริบิวต์ตัวเลข",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์"
+            },
+            "field": {
+              "label": "ฟิลด์ค่า"
+            },
+            "weightsType": {
+              "label": "น้ำหนักเชิงพื้นที่",
+              "description": "วิธีกำหนดเพื่อนบ้านของแต่ละฟีเจอร์",
+              "options": {
+                "knn": "เพื่อนบ้านใกล้ที่สุด k ตัว",
+                "distance": "แถบระยะทาง"
+              }
+            },
+            "k": {
+              "label": "จำนวนเพื่อนบ้าน (k)"
+            },
+            "threshold": {
+              "label": "แถบระยะทาง (กม.)"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "เพื่อนบ้านใกล้ที่สุดเฉลี่ย",
+          "description": "ทดสอบว่าจุดมีการกระจายแบบเกาะกลุ่ม กระจายตัว หรือแบบสุ่ม (อัตราส่วน ANN + คะแนน z)",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์จุด"
+            }
+          }
+        },
+        "kernel-density": {
+          "name": "ความหนาแน่นเคอร์เนล (แผนที่ความร้อน)",
+          "description": "ประมาณพื้นผิวความหนาแน่นจากจุดเป็นกริดของเซลล์ โดยใช้เคอร์เนลแบบควอร์ติก",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์จุด"
+            },
+            "weightField": {
+              "label": "ฟิลด์น้ำหนัก (ไม่บังคับ)",
+              "description": "ฟิลด์ตัวเลขที่ใช้ถ่วงน้ำหนักแต่ละจุด เว้นว่าง = น้ำหนักเท่ากัน"
+            },
+            "bandwidth": {
+              "label": "รัศมีค้นหา / แบนด์วิดท์ (กม.)"
+            },
+            "cellSize": {
+              "label": "ขนาดเซลล์ (กม.)"
+            }
+          }
+        },
+        "emerging-hot-spot": {
+          "name": "จุดร้อนอุบัติใหม่ (ลูกบาศก์พื้นที่-เวลา)",
+          "description": "สร้างลูกบาศก์พื้นที่-เวลาจากจุดที่มีเวลาประทับ (กริดตาข่าย × ช่วงเวลาเท่า ๆ กัน) แล้วจำแนกแต่ละเซลล์เป็นจุดร้อน/จุดเย็นแบบใหม่ ทวีความรุนแรง คงอยู่ ลดลง ประปราย แกว่งไปมา หรือในอดีต โดยรัน Getis-Ord Gi* ต่อช่วงเวลา จากนั้นทดสอบแนวโน้ม Mann-Kendall กับอนุกรม Gi* ของแต่ละเซลล์ ทำงานฝั่งไคลเอนต์ เช่นเดียวกับ Emerging Hot Spot Analysis ของ ArcGIS",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์จุด"
+            },
+            "timeField": {
+              "label": "ฟิลด์เวลา",
+              "description": "เวลาประทับของแต่ละจุด: สตริงวันที่/เวลาแบบ ISO หรือค่า epoch (วินาทีหรือมิลลิวินาที)"
+            },
+            "cellSize": {
+              "label": "ขนาดเซลล์ (กม.)",
+              "description": "ความยาวด้านของแต่ละช่องสี่เหลี่ยมจัตุรัสเชิงพื้นที่ เป็นกิโลเมตร"
+            },
+            "timeStep": {
+              "label": "ช่วงของขั้นเวลา"
+            },
+            "timeStepUnit": {
+              "label": "หน่วยของขั้นเวลา",
+              "options": {
+                "hours": "ชั่วโมง",
+                "days": "วัน",
+                "weeks": "สัปดาห์"
+              }
+            },
+            "weightField": {
+              "label": "ฟิลด์น้ำหนัก (ไม่บังคับ)",
+              "description": "ฟิลด์ตัวเลขที่จะรวมผลต่อช่องพื้นที่-เวลาแทนการนับจุด เว้นว่าง = นับจุด"
+            },
+            "confidence": {
+              "label": "ระดับความเชื่อมั่น",
+              "description": "เกณฑ์นัยสำคัญสำหรับถือว่าช่องหนึ่งเป็นจุดร้อน/จุดเย็น และสำหรับแนวโน้ม",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        }
+      },
+      "raster": {
+        "hillshade": {
+          "name": "การแรเงาภูมิประเทศ",
+          "description": "คำนวณแรสเตอร์ภาพแรเงาภูมิประเทศ (hillshade) จากแบบจำลองระดับความสูง",
+          "params": {
+            "azimuth": {
+              "label": "มุมแอซิมัท (องศา)"
+            },
+            "altitude": {
+              "label": "มุมเงย (องศา)"
+            },
+            "z_factor": {
+              "label": "ตัวคูณ Z"
+            }
+          }
+        },
+        "slope": {
+          "name": "ความชัน",
+          "description": "คำนวณความชัน (ความลาดชัน) จากแบบจำลองระดับความสูง",
+          "params": {
+            "units": {
+              "label": "หน่วย",
+              "options": {
+                "degrees": "องศา",
+                "percent": "ร้อยละ"
+              }
+            },
+            "z_factor": {
+              "label": "ตัวคูณ Z"
+            }
+          }
+        },
+        "aspect": {
+          "name": "ทิศด้านลาด",
+          "description": "คำนวณทิศด้านลาด (ทิศทางเข็มทิศของความชันสูงสุด) จากแบบจำลองระดับความสูง"
+        },
+        "reproject": {
+          "name": "ฉายพิกัดใหม่",
+          "description": "แปลงแรสเตอร์ไปยังระบบพิกัดอ้างอิงอื่น",
+          "params": {
+            "dst_crs": {
+              "label": "ระบบพิกัดเป้าหมาย",
+              "description": "รหัสหน่วยงาน เช่น EPSG:3857 หรือ EPSG:4326"
+            },
+            "resampling": {
+              "label": "การสุ่มตัวอย่างใหม่",
+              "options": {
+                "nearest": "เพื่อนบ้านใกล้ที่สุด",
+                "bilinear": "ไบลิเนียร์",
+                "cubic": "คิวบิก"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "สุ่มตัวอย่างใหม่",
+          "description": "สุ่มตัวอย่างแรสเตอร์ใหม่ให้มีขนาดพิกเซล (ความละเอียด) ต่างออกไป",
+          "params": {
+            "resolution": {
+              "label": "ขนาดพิกเซลเป้าหมาย",
+              "description": "ขนาดพิกเซลผลลัพธ์ในหน่วยของระบบพิกัดของแรสเตอร์"
+            },
+            "resampling": {
+              "label": "การสุ่มตัวอย่างใหม่",
+              "options": {
+                "nearest": "เพื่อนบ้านใกล้ที่สุด",
+                "bilinear": "ไบลิเนียร์",
+                "cubic": "คิวบิก"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "ตัดตามขอบเขต",
+          "description": "ครอบตัดแรสเตอร์ตามกรอบขอบเขต (ในระบบพิกัดของแรสเตอร์)",
+          "params": {
+            "minx": {
+              "label": "X ต่ำสุด"
+            },
+            "miny": {
+              "label": "Y ต่ำสุด"
+            },
+            "maxx": {
+              "label": "X สูงสุด"
+            },
+            "maxy": {
+              "label": "Y สูงสุด"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "ตัดตามเลเยอร์มาสก์",
+          "description": "ตัดแรสเตอร์ตามเรขาคณิตของไฟล์มาสก์เวกเตอร์",
+          "params": {
+            "mask_path": {
+              "label": "เลเยอร์มาสก์",
+              "description": "ไฟล์ GeoJSON ที่เรขาคณิตใช้กำหนดพื้นที่ตัด จะถูกฉายพิกัดใหม่เป็นระบบพิกัดของแรสเตอร์โดยอัตโนมัติ (GeoJSON ที่ไม่ระบุระบบพิกัดจะถือว่าเป็น WGS84)"
+            },
+            "crop": {
+              "label": "ครอบตัดตามขอบเขตของมาสก์"
+            },
+            "all_touched": {
+              "label": "รวมพิกเซลทั้งหมดที่สัมผัส"
+            }
+          }
+        },
+        "polygonize": {
+          "name": "แปลงเป็นรูปหลายเหลี่ยม",
+          "description": "แปลงแบนด์ของแรสเตอร์เป็นรูปหลายเหลี่ยมเวกเตอร์ โดยจัดกลุ่มตามค่าพิกเซล",
+          "params": {
+            "band": {
+              "label": "แบนด์"
+            },
+            "connectivity": {
+              "label": "การเชื่อมต่อ",
+              "options": {
+                "4": "เชื่อมต่อ 4 ทิศ",
+                "8": "เชื่อมต่อ 8 ทิศ"
+              }
+            },
+            "field": {
+              "label": "ชื่อฟิลด์ค่า"
+            }
+          }
+        },
+        "contour": {
+          "name": "เส้นชั้นความสูง",
+          "description": "สร้างเส้นชั้นความสูงจากแบบจำลองระดับความสูง",
+          "params": {
+            "band": {
+              "label": "แบนด์"
+            },
+            "interval": {
+              "label": "ช่วงห่าง",
+              "description": "ผลต่างระดับความสูงระหว่างเส้นชั้นความสูงที่ติดกัน"
+            },
+            "base": {
+              "label": "ค่าฐาน"
+            },
+            "attribute": {
+              "label": "ชื่อฟิลด์ระดับความสูง"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "การประมาณค่าในช่วง (IDW / Kriging)",
+          "description": "ประมาณค่าแอตทริบิวต์ตัวเลขของเลเยอร์จุดให้เป็นพื้นผิวแรสเตอร์ต่อเนื่อง โดยใช้การถ่วงน้ำหนักผกผันกับระยะทางหรือ ordinary kriging",
+          "params": {
+            "field": {
+              "label": "ฟิลด์ค่า",
+              "description": "ชื่อแอตทริบิวต์ตัวเลขของจุดที่จะประมาณค่า (เช่น ระดับความสูง อุณหภูมิ)"
+            },
+            "method": {
+              "label": "วิธีการ",
+              "options": {
+                "idw": "การถ่วงน้ำหนักผกผันกับระยะทาง (IDW)",
+                "kriging": "Ordinary kriging"
+              }
+            },
+            "resolution": {
+              "label": "ขนาดพิกเซลผลลัพธ์",
+              "description": "ขนาดเซลล์ในหน่วยของระบบพิกัดของเลเยอร์ (องศาสำหรับ WGS84) กริดจะครอบคลุมขอบเขตของจุด"
+            },
+            "power": {
+              "label": "กำลังของ IDW",
+              "description": "ค่าที่สูงขึ้นทำให้จุดใกล้เคียงมีอิทธิพลมากขึ้น"
+            },
+            "variogram_model": {
+              "label": "แบบจำลองวาริโอแกรม",
+              "description": "แบบจำลองทางทฤษฎีที่ปรับให้เข้ากับเซมิวาริโอแกรมเชิงประจักษ์ Kriging จำกัดไว้ที่ 1500 จุด",
+              "options": {
+                "spherical": "ทรงกลม",
+                "exponential": "เอกซ์โพเนนเชียล",
+                "gaussian": "เกาส์เซียน",
+                "linear": "เชิงเส้น"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "สถิติเชิงโซน",
+          "description": "สรุปค่าแรสเตอร์ภายในแต่ละรูปหลายเหลี่ยมของเลเยอร์เวกเตอร์ (จำนวน ค่าต่ำสุด ค่าสูงสุด ค่าเฉลี่ย ผลรวม ส่วนเบี่ยงเบนมาตรฐาน มัธยฐาน)",
+          "params": {
+            "zones_path": {
+              "label": "เลเยอร์โซน",
+              "description": "เลเยอร์รูปหลายเหลี่ยม GeoJSON ที่กำหนดโซน จะถูกฉายพิกัดใหม่เป็นระบบพิกัดของแรสเตอร์โดยอัตโนมัติ (GeoJSON ที่ไม่ระบุระบบพิกัดจะถือว่าเป็น WGS84)"
+            },
+            "band": {
+              "label": "แบนด์"
+            },
+            "prefix": {
+              "label": "คำนำหน้าฟิลด์",
+              "description": "เติมหน้าชื่อฟิลด์สถิติแต่ละฟิลด์ (เช่น 'dem_' → 'dem_mean') เว้นว่างไว้เพื่อใช้ชื่อ 'mean', 'min', … ตามเดิม"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "เครื่องคำนวณแรสเตอร์",
+          "description": "ประเมินนิพจน์คณิตศาสตร์ระหว่างแบนด์แบบ NumPy อ้างถึงแบนด์ 1 ของแต่ละข้อมูลนำเข้าเป็น A, B, C และแบนด์เฉพาะเป็น A1, A2, … เช่น NDVI คือ (A2 - A1) / (A2 + A1)",
+          "params": {
+            "expression": {
+              "label": "นิพจน์",
+              "description": "นิพจน์ NumPy บน A, B, C (และ A1, A2, …) ฟังก์ชันที่ใช้ได้: where, log, exp, sqrt, abs, clip, minimum, maximum, sin, cos, tan"
+            },
+            "b_path": {
+              "label": "แรสเตอร์ B (ไม่บังคับ)",
+              "description": "แรสเตอร์ที่สอง อ้างถึงเป็น B / B1, B2, … ต้องมีขนาดตรงกับ A"
+            },
+            "c_path": {
+              "label": "แรสเตอร์ C (ไม่บังคับ)",
+              "description": "แรสเตอร์ที่สาม อ้างถึงเป็น C / C1, C2, … ต้องมีขนาดตรงกับ A"
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "ดัชนีสเปกตรัม",
+          "description": "คำนวณดัชนีสเปกตรัมที่มีชื่อเรียก (NDVI, NDWI, EVI, …) จากแรสเตอร์หลายแบนด์ เลือกค่าตั้งต้นของเซนเซอร์สำหรับการจัดเรียงแบนด์ หรือกำหนดหมายเลขแบนด์เองด้วยเซนเซอร์แบบกำหนดเอง",
+          "params": {
+            "index": {
+              "label": "ดัชนี",
+              "options": {
+                "ndvi": "NDVI (พืชพรรณ)",
+                "gndvi": "GNDVI (พืชพรรณช่วงคลื่นเขียว)",
+                "ndwi": "NDWI (น้ำ, McFeeters)",
+                "ndmi": "NDMI (ความชื้น)",
+                "ndbi": "NDBI (สิ่งปลูกสร้าง)",
+                "nbr": "NBR (อัตราส่วนพื้นที่ไฟไหม้)",
+                "evi": "EVI (พืชพรรณแบบปรับปรุง)",
+                "savi": "SAVI (พืชพรรณปรับแก้ผลของดิน)"
+              }
+            },
+            "sensor": {
+              "label": "เซนเซอร์ / การจัดเรียงแบนด์",
+              "description": "หมายเลขแบนด์ตั้งต้นสำหรับเซนเซอร์ที่พบบ่อย เลือกกำหนดเองเพื่อระบุแบนด์ด้วยตนเองสำหรับ GeoTIFF ที่จัดเรียงแบนด์ต่างออกไป",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "กำหนดเอง (ระบุหมายเลขแบนด์ด้านล่าง)"
+              }
+            },
+            "red": {
+              "label": "หมายเลขแบนด์สีแดง"
+            },
+            "green": {
+              "label": "หมายเลขแบนด์สีเขียว"
+            },
+            "blue": {
+              "label": "หมายเลขแบนด์สีน้ำเงิน"
+            },
+            "nir": {
+              "label": "หมายเลขแบนด์ NIR"
+            },
+            "swir1": {
+              "label": "หมายเลขแบนด์ SWIR1"
+            },
+            "swir2": {
+              "label": "หมายเลขแบนด์ SWIR2"
+            },
+            "L": {
+              "label": "ตัวประกอบดิน (L)",
+              "description": "ค่าปรับแก้ความสว่างของดินสำหรับ SAVI (0 พืชปกคลุมหนาแน่น → 1 ดินเปล่า)"
+            },
+            "scale": {
+              "label": "สเกลค่าสะท้อน",
+              "description": "ตัวคูณสำหรับแปลงค่าพิกเซลเป็นค่าสะท้อน (0–1) ปล่อยไว้ที่ 1 สำหรับดัชนีแบบผลต่างนอร์มัลไลซ์ และตั้งค่าสำหรับ EVI/SAVI บนภาพค่า DN จำนวนเต็ม (เช่น 0.0001 สำหรับ Sentinel-2 L2A)"
+            }
+          }
+        },
+        "reclassify": {
+          "name": "จัดชั้นข้อมูลใหม่",
+          "description": "จับคู่ช่วงค่าไปยังค่าชั้นข้อมูลใหม่โดยใช้ตารางกฎ",
+          "params": {
+            "band": {
+              "label": "แบนด์"
+            },
+            "table": {
+              "label": "กฎ",
+              "description": "กฎรูปแบบ 'min:max:newvalue' คั่นด้วยจุลภาคหรือขึ้นบรรทัดใหม่ เช่น '0:10:1, 10:20:2, 20:max:3' ช่วงเป็นแบบเปิดครึ่ง [min, max) ค่าว่าง/min/max หมายถึง ±∞"
+            },
+            "unmatched": {
+              "label": "ค่าที่ไม่ตรงกับกฎ",
+              "options": {
+                "nodata": "ตั้งเป็น NoData",
+                "original": "คงค่าเดิม"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "ต่อภาพ / ผสาน",
+          "description": "รวมแรสเตอร์ได้สูงสุดห้าภาพ (ที่ใช้ระบบพิกัดเดียวกัน) เป็นแรสเตอร์เดียวที่ครอบคลุมพื้นที่รวมของทั้งหมด",
+          "params": {
+            "raster_2": {
+              "label": "แรสเตอร์ที่สอง"
+            },
+            "raster_3": {
+              "label": "แรสเตอร์ที่สาม (ไม่บังคับ)"
+            },
+            "raster_4": {
+              "label": "แรสเตอร์ที่สี่ (ไม่บังคับ)"
+            },
+            "raster_5": {
+              "label": "แรสเตอร์ที่ห้า (ไม่บังคับ)"
+            },
+            "method": {
+              "label": "วิธีจัดการส่วนซ้อนทับ",
+              "description": "ค่าใดจะถูกใช้ในบริเวณที่ข้อมูลนำเข้าซ้อนทับกัน",
+              "options": {
+                "first": "ภาพแรก",
+                "last": "ภาพสุดท้าย",
+                "min": "ค่าต่ำสุด",
+                "max": "ค่าสูงสุด"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "สถิติเฉพาะจุด",
+          "description": "ใช้สถิติแบบหน้าต่างเคลื่อนที่ (พื้นที่ใกล้เคียง) กับแบนด์ของแรสเตอร์",
+          "params": {
+            "band": {
+              "label": "แบนด์"
+            },
+            "statistic": {
+              "label": "สถิติ",
+              "options": {
+                "mean": "ค่าเฉลี่ย",
+                "median": "มัธยฐาน",
+                "min": "ค่าต่ำสุด",
+                "max": "ค่าสูงสุด",
+                "sum": "ผลรวม",
+                "std": "ส่วนเบี่ยงเบนมาตรฐาน",
+                "range": "พิสัย (สูงสุด − ต่ำสุด)"
+              }
+            },
+            "size": {
+              "label": "ขนาดหน้าต่าง",
+              "description": "ขนาดพื้นที่ใกล้เคียงเป็นจำนวนคี่ของพิกเซล (3 = 3×3) จำกัดไว้ที่ 25"
+            }
+          }
+        }
+      }
+    },
+    "toolGroup": {
+      "analysis": "การวิเคราะห์",
+      "clip": "ตัดตามขอบเขต",
+      "dataQuality": "คุณภาพข้อมูล",
+      "dggs": "DGGS",
+      "geometry": "เรขาคณิต",
+      "join": "เชื่อมโยง",
+      "movementTime": "การเคลื่อนที่และเวลา",
+      "network": "โครงข่าย",
+      "overlay": "ซ้อนทับ",
+      "rasterToVector": "แรสเตอร์เป็นเวกเตอร์",
+      "reproject": "ฉายพิกัดใหม่",
+      "select": "เลือก",
+      "spatialStatistics": "สถิติเชิงพื้นที่",
+      "terrain": "ภูมิประเทศ",
+      "vectorToRaster": "เวกเตอร์เป็นแรสเตอร์"
     }
   },
   "segmentation": {
@@ -3988,6 +5707,7 @@
     "title": "การตรวจจับวัตถุ",
     "description": "เรียกใช้โมเดล YOLO ที่ส่งออกเป็น ONNX กับไฟล์ GeoTIFF หรือรูปภาพที่มีพิกัดภูมิศาสตร์ ทำงานในเบราว์เซอร์ทั้งหมด วัตถุแต่ละประเภทที่ตรวจพบจะถูกเพิ่มเป็นเลเยอร์ของตัวเอง",
     "hint": "ใช้โมเดล COCO ในตัว (ดาวน์โหลดและแคชไว้ครั้งเดียว) หรือใช้โมเดล ONNX ของ YOLOv5/v8/v11 ของคุณเอง ผลการตรวจจับจาก GeoTIFF จะกลายเป็นกรอบที่อ้างอิงพิกัดภูมิศาสตร์ ส่วนผลจากรูปภาพจะกลายเป็นจุด ณ ตำแหน่ง GPS ของกล้อง เนื่องจากรูปภาพไม่ได้ระบุขอบเขตพื้นที่บนพื้นดิน",
+    "unavailableNoExternalCdn": "การตรวจจับวัตถุใช้ไม่ได้ในบิลด์นี้ เพราะต้องใช้ ONNX Runtime ซึ่งโหลดจาก CDN ภายนอกที่การติดตั้งใช้งานนี้ปิดไว้ การระบุไฟล์โมเดลของคุณเองก็ไม่ช่วย",
     "imageLabel": "ภาพ (GeoTIFF หรือรูปภาพที่มีพิกัดภูมิศาสตร์)",
     "imagePlaceholder": "เลือกไฟล์ GeoTIFF, JPEG, PNG หรือ WebP…",
     "chooseImage": "เลือกภาพ",
@@ -4020,6 +5740,7 @@
     "title": "แบ่งส่วนทุกวัตถุ",
     "description": "เรียกใช้ SlimSAM แบบอัตโนมัติกับไฟล์ GeoTIFF ทำงานในเบราว์เซอร์ทั้งหมด วัตถุทุกชิ้นที่ตรวจพบจะกลายเป็นรูปหลายเหลี่ยมที่อ้างอิงพิกัดภูมิศาสตร์และเพิ่มเป็นเลเยอร์เดียว",
     "hint": "ระบบจะสุ่มตัวอย่างจุดเป็นกริดทั่วทั้งภาพแล้วแบ่งส่วนด้วย SlimSAM (ดาวน์โหลดและแคชไว้ครั้งเดียว) โดยไม่ต้องคลิกหรือกำกับป้ายใด ๆ กริดที่ถี่กว่าจะพบวัตถุมากกว่าแต่ใช้เวลานานกว่า",
+    "unavailableNoExternalCdn": "“แบ่งส่วนทุกวัตถุ” ใช้ไม่ได้ในบิลด์นี้ เพราะต้องใช้ ONNX Runtime ซึ่งโหลดจาก CDN ภายนอกที่การติดตั้งใช้งานนี้ปิดไว้",
     "imageLabel": "ภาพ (GeoTIFF)",
     "imagePlaceholder": "เลือกไฟล์ GeoTIFF…",
     "chooseImage": "เลือกภาพ",
@@ -4161,6 +5882,7 @@
     "deleteField": "ลบฟิลด์",
     "joinedColumnTitle": "คอลัมน์ที่เชื่อมมา ซึ่งได้มาจากตารางที่เชื่อมข้อมูล กรุณาแก้ไขที่ตารางต้นทางหรือที่นิยามการเชื่อมข้อมูลแทน",
     "virtualColumnTitle": "ฟิลด์เสมือนที่คำนวณจากนิพจน์ กรุณาแก้ไขนิยามของฟิลด์นี้ในแผงสไตล์ของเลเยอร์แทน",
+    "trackingColumnTitle": "ฟิลด์ติดตามการแก้ไข ระบบดูแลให้อัตโนมัติ เปลี่ยนชื่อได้ในการตั้งค่าการติดตามการแก้ไขของชั้นข้อมูล",
     "deleteFieldConfirm": "การกระทำนี้จะลบฟิลด์ \"{{field}}\" ออกจากทุกฟีเจอร์ใน \"{{layer}}\" อย่างถาวร สไตล์หรือป้ายกำกับที่อ้างอิงฟิลด์นี้จะถูกล้างไปด้วย และไม่สามารถเลิกทำได้",
     "addFieldDescription": "เพิ่มฟิลด์ใหม่ให้ทุกฟีเจอร์ใน \"{{layer}}\"",
     "fieldName": "ชื่อฟิลด์",
@@ -4679,11 +6401,15 @@
       "typeConvexHull": "รูปนูนห่อหุ้ม",
       "typeBuffer": "บัฟเฟอร์",
       "bufferDistance": "ระยะบัฟเฟอร์ (m)",
+      "bufferField": "ฟิลด์ระยะทาง",
+      "bufferFieldHint": "แต่ละฟีเจอร์จะสร้างบัฟเฟอร์ตามค่าของตนเองเป็นเมตร ฟีเจอร์ที่ไม่มีค่าจะใช้ระยะทางด้านบน และค่า 0 จะไม่วาดอะไรเลย",
+      "fieldNone": "ไม่มี (คงที่)",
       "fillColor": "สีเติม",
       "strokeColor": "สีเส้นขอบ",
       "strokeWidth": "ความหนาเส้นขอบ (พิกเซล)",
       "opacity": "ความทึบของสีเติม",
-      "circleRadius": "รัศมีของจุด (พิกเซล)"
+      "circleRadius": "รัศมีของจุด (พิกเซล)",
+      "sizeField": "ฟิลด์ขนาด"
     },
     "attributeForm": {
       "heading": "แบบฟอร์มแอตทริบิวต์",
@@ -4725,6 +6451,21 @@
       "save": "บันทึก",
       "noFields": "เลเยอร์นี้ไม่มีฟิลด์แอตทริบิวต์ให้ตั้งค่า",
       "minMaxInvalid": "ค่าต่ำสุดต้องน้อยกว่าหรือเท่ากับค่าสูงสุด"
+    },
+    "editorTracking": {
+      "heading": "การติดตามการแก้ไข",
+      "description": "บันทึกว่าใครสร้างแต่ละฟีเจอร์และใครแก้ไขล่าสุด ฟิลด์ด้านล่างจะถูกเติมโดยอัตโนมัติเมื่อมีการวาด แก้ไข คำนวณ หรือเก็บข้อมูลฟีเจอร์",
+      "enable": "ติดตามการแก้ไขในชั้นข้อมูลนี้",
+      "identity": "ชื่อของคุณ",
+      "identityHint": "การแก้ไขจะถูกบันทึกในชื่อ “{{name}}”",
+      "identityFromSession": "นำมาจากเซสชันการทำงานร่วมกันที่คุณอยู่",
+      "createdByField": "ฟิลด์ “สร้างโดย”",
+      "createdAtField": "ฟิลด์ “สร้างเมื่อ”",
+      "editedByField": "ฟิลด์ “แก้ไขโดย”",
+      "editedAtField": "ฟิลด์ “แก้ไขเมื่อ”",
+      "blankName": "ชื่อฟิลด์ต้องไม่ว่าง",
+      "duplicateName": "ฟิลด์ติดตามแต่ละฟิลด์ต้องมีชื่อต่างกัน",
+      "columnTaken": "“{{name}}” เป็นฟิลด์แอตทริบิวต์อยู่แล้ว การติดตามจะเขียนทับค่าเดิม"
     }
   },
   "vectorExport": {
@@ -4750,9 +6491,17 @@
     "identifyInspectPixels": "ตรวจดูค่าพิกเซล",
     "identifyStopInspectPixels": "หยุดตรวจดูค่าพิกเซล",
     "identifyUnavailable": "การระบุข้อมูลใช้ได้เฉพาะเลเยอร์เวกเตอร์ WMS และ COG เท่านั้น",
+    "selectFeaturesMenu": "เลือกฟีเจอร์",
+    "selectFeaturesSingle": "เลือกฟีเจอร์ด้วยการคลิก",
+    "selectFeaturesRectangle": "เลือกฟีเจอร์ด้วยรูปสี่เหลี่ยม",
+    "selectFeaturesPolygon": "เลือกฟีเจอร์ด้วยรูปหลายเหลี่ยม",
+    "selectFeaturesFreehand": "เลือกฟีเจอร์ด้วยการวาดอิสระ",
+    "selectFeaturesRadius": "เลือกฟีเจอร์ด้วยรัศมี",
+    "selectFeaturesModifiers": "Shift เพิ่ม Alt นำออก และ Shift+Alt ตัดกัน กด Esc เพื่อยกเลิก",
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "แยกชุดข้อมูลย่อย…",
     "stylesMenu": "สไตล์",
+    "exportGeoLibreStyle": "ส่งออกสไตล์ URL ของ GeoLibre",
     "exportMapboxStyle": "ส่งออกเป็นสไตล์ Mapbox GL",
     "exportSldStyle": "ส่งออกเป็น OGC SLD",
     "exportQmlStyle": "ส่งออกเป็น QGIS QML",
@@ -4760,7 +6509,7 @@
     "exportStyleDataNotReady": "ข้อมูลของเลเยอร์ยังไม่พร้อม กรุณาลองใหม่อีกสักครู่",
     "exportStyleNeedsFeatures": "การส่งออกสไตล์ต้องใช้เลเยอร์เวกเตอร์ที่มีฟีเจอร์",
     "exportStyleError": "ไม่สามารถส่งออกสไตล์ของเลเยอร์นี้ได้",
-    "importStyle": "นำเข้าสไตล์ (Mapbox GL / SLD / QML)…",
+    "importStyle": "นำเข้าสไตล์ (GeoLibre URL / Mapbox GL / SLD / QML)…",
     "openStyleManager": "สไตล์ที่บันทึกไว้ (ตัวจัดการสไตล์)…",
     "importStyleSuccess": "นำเข้าสไตล์แล้ว",
     "importStyleInvalid": "ไฟล์นั้นไม่ใช่ JSON, SLD หรือ QML ที่ถูกต้อง",
@@ -4799,6 +6548,7 @@
     "bindWindowCumulative": "ทั้งหมดจนถึงขั้นเวลาปัจจุบัน (สะสม)",
     "bindCancel": "ยกเลิก",
     "bindConfirm": "ผูก",
+    "openStylePanel": "เปิดแผงสไตล์",
     "openRasterStylePanel": "แก้ไขสไตล์แรสเตอร์…",
     "exportRasterSuccess": "ส่งออกแรสเตอร์แล้ว",
     "exportRasterError": "ไม่สามารถส่งออกแรสเตอร์นี้ได้",
@@ -4904,6 +6654,7 @@
     "refreshVectorControlError": "ไม่สามารถรีเฟรชเลเยอร์นี้ได้ กรุณาลองเปิดแผงเพิ่มเลเยอร์เวกเตอร์ใหม่",
     "refreshed": "รีเฟรชแล้ว",
     "refreshedCount": "รีเฟรชแล้ว {{count}} ฟีเจอร์",
+    "refreshedTruncated": "รีเฟรชแล้ว {{shown}} จาก {{total}} ฟีเจอร์",
     "refreshError": "ไม่สามารถรีเฟรชเลเยอร์นี้ได้",
     "exportNeedsFeatures": "การส่งออกต้องใช้เลเยอร์เวกเตอร์ที่มีฟีเจอร์",
     "exportedWithWarnings": "ส่งออกเลเยอร์แล้ว {{warnings}}",
@@ -4966,6 +6717,78 @@
     "nodataOff": "แสดงผลทุกพิกเซล",
     "nodataCustom": "ค่าที่กำหนดเอง"
   },
+  "netcdfSymbology": {
+    "heading": "สัญลักษณ์ของ NetCDF",
+    "colorRampLabel": "แผนผังสี",
+    "reverse": "กลับด้านแผนผังสี",
+    "colorMin": "สีต่ำสุด",
+    "colorMax": "สีสูงสุด",
+    "resetRange": "รีเซ็ตเป็นช่วงของข้อมูล",
+    "openCube": "คิวบ์ 3 มิติ"
+  },
+  "netcdfCube": {
+    "heading": "คิวบ์ภาพ 3 มิติ",
+    "close": "ปิด",
+    "settings": "ตั้งค่า",
+    "setupTitle": "คิวบ์ภาพ 3 มิติ",
+    "setupDescription": "เลือกสิ่งที่จะอ่านก่อนสร้างคิวบ์ แต่ละแบนด์จะถูกอ่านแยกกัน ดังนั้นขอบเขตและจำนวนแบนด์จึงเป็นตัวกำหนดเวลาที่ใช้",
+    "extent": "ขอบเขต",
+    "extentView": "มุมมองแผนที่ปัจจุบัน",
+    "extentDraw": "วาดบนแผนที่",
+    "extentFull": "ขอบเขตทั้งหมดของเลเยอร์",
+    "viewHint": "อ่านสิ่งที่แผนที่แสดงอยู่ ณ ตอนที่สร้างคิวบ์",
+    "fullHint": "อ่านกริดทั้งหมด ซึ่งจะช้าสำหรับคิวบ์ขนาดเท่าฉากภาพ",
+    "drawBbox": "วาดบนแผนที่",
+    "drawing": "ลากกรอบบนแผนที่เพื่อกำหนดขอบเขตของคิวบ์",
+    "drawHint": "ลากกรอบบนแผนที่เพื่อกำหนดขอบเขต",
+    "drawnExtent": "ตะวันตก {{west}}, ใต้ {{south}}, ตะวันออก {{east}}, เหนือ {{north}}",
+    "detail": "ระดับรายละเอียด",
+    "detailOption": "ด้านละ {{size}} เซลล์",
+    "bands": "แบนด์",
+    "allBands": "ทั้งหมด ({{count}})",
+    "rgbOverlay": "วางภาพ RGB ไว้ด้านบน",
+    "rgbHint": "ผสมสามแบนด์เป็นภาพสีแล้ววางไว้บนหน้าด้านบน เพื่อให้คิวบ์ยังดูออกว่าเป็นสถานที่ใด",
+    "red": "แดง",
+    "green": "เขียว",
+    "blue": "น้ำเงิน",
+    "planeEstimate": "อ่านแบนด์ {{count}} ครั้ง",
+    "create": "สร้างคิวบ์",
+    "colorRampLabel": "แผนผังสี",
+    "reverse": "กลับด้าน",
+    "showRgb": "RGB ด้านบน",
+    "rgbBands": "แบนด์ RGB",
+    "recomposing": "กำลังอ่าน...",
+    "zScale": "ความสูง",
+    "slice": "ระนาบตัด",
+    "sliceAt": "ตัดที่ {{band}} {{units}}",
+    "reading": "กำลังอ่านแบนด์ที่ {{done}} จาก {{total}}...",
+    "summary": "{{nx}} x {{ny}} เซลล์, {{nz}} แบนด์ตามแกน {{axis}}",
+    "errorNoCube": "ไฟล์ต้นทางของเลเยอร์นี้ไม่ได้เปิดอยู่แล้ว จึงอ่านคิวบ์ไม่ได้",
+    "error": {
+      "shapeMismatch": "ระนาบแบนด์ของตัวแปรนี้มีรูปทรงไม่ตรงกัน จึงซ้อนเป็นคิวบ์ไม่ได้",
+      "rgbShapeMismatch": "แบนด์ RGB ที่เลือกไม่ตรงกับรูปทรงของคิวบ์",
+      "noBands": "ตัวแปรนี้ไม่มีแบนด์ให้อ่าน",
+      "noReadWindow": "คิวบ์นี้อัปเดตในที่เดิมไม่ได้ กรุณาสร้างใหม่จากการตั้งค่า"
+    }
+  },
+  "netcdfProfile": {
+    "heading": "โปรไฟล์เชิงสเปกตรัม",
+    "clear": "ล้าง",
+    "chartAria": "ค่าพิกเซลที่สุ่มอ่านตามแกนแบนด์",
+    "popOut": "แยกออกเป็นหน้าต่าง",
+    "dock": "ผนึกเข้าที่",
+    "poppedOutHint": "แผนภูมิเปิดอยู่ในหน้าต่างบนแผนที่",
+    "noValues": "ไม่มีค่าที่จะพล็อตสำหรับพิกเซลเหล่านี้",
+    "exportPng": "PNG",
+    "exportCsv": "CSV",
+    "exportError": "ไม่สามารถส่งออกแผนภูมิได้",
+    "rasterFallbackName": "แรสเตอร์"
+  },
+  "netcdfIdentify": {
+    "noData": "ไม่มีข้อมูล",
+    "coordinates": "ลองจิจูด, ละติจูด",
+    "cell": "แถว, คอลัมน์"
+  },
   "rasterAttributeTable": {
     "title": "ตารางแอตทริบิวต์แรสเตอร์",
     "resize": "ปรับขนาดตารางแอตทริบิวต์แรสเตอร์",
@@ -5014,6 +6837,7 @@
     "cogConvertConfirm": "\"{{name}}\" เป็น GeoTIFF ธรรมดา (แบบแถบ) ซึ่งแสดงผลโดยตรงไม่ได้ ต้องการแปลงเป็น Cloud-Optimized GeoTIFF ตอนนี้แล้วโหลดไฟล์นั้นหรือไม่?",
     "cogConvertRemoteConfirm": "\"{{name}}\" เป็น GeoTIFF ธรรมดา (แบบแถบ) ซึ่งแสดงผลโดยตรงไม่ได้ การแสดงผลจะต้องดาวน์โหลดไฟล์ทั้งไฟล์แล้วแปลงเป็น Cloud-Optimized GeoTIFF ในเบราว์เซอร์ ซึ่งอาจช้าและใช้หน่วยความจำมากสำหรับไฟล์ขนาดใหญ่ ต้องการดำเนินการต่อหรือไม่?",
     "cogConvertLargeConfirm": "\"{{name}}\" เป็นไฟล์ GeoTIFF ขนาดใหญ่ {{width}}×{{height}} ที่ไม่ใช่ Cloud-Optimized GeoTIFF การแปลงในเบราว์เซอร์อาจช้าและใช้หน่วยความจำมาก ต้องการแปลงและโหลดต่อไปหรือไม่?",
+    "cogConvertTooLarge": "\"{{name}}\" มีขนาดใหญ่เกินกว่าจะแปลงในเบราว์เซอร์ได้อย่างปลอดภัย โปรดแปลงเป็น Cloud-Optimized GeoTIFF ด้วย gdal_translate หรือ rio cogeo แล้วโหลดผลลัพธ์",
     "cogConvertFailed": "ไม่สามารถแปลง \"{{name}}\" เป็น Cloud-Optimized GeoTIFF ได้ กรุณาลองแปลงด้วย gdal_translate หรือ rio cogeo แล้วโหลดไฟล์ผลลัพธ์",
     "rasterDownloadFailed": "ไม่สามารถดาวน์โหลด \"{{name}}\" ได้ เซิร์ฟเวอร์อาจตอบสนองช้า เข้าถึงไม่ได้ หรือบล็อกคำขอข้ามต้นทาง หรือไฟล์อาจมีขนาดใหญ่เกินกว่าจะเก็บไว้ในหน่วยความจำ กรุณาตรวจสอบ URL แล้วลองใหม่",
     "rasterNotGeotiff": "\"{{name}}\" ไม่ได้ส่งคืนไฟล์ GeoTIFF เซิร์ฟเวอร์อาจส่งหน้าข้อผิดพลาดหรือหน้าเข้าสู่ระบบมาแทน กรุณาตรวจสอบ URL แล้วลองใหม่"
@@ -5146,7 +6970,8 @@
       "pythonConsole": "คอนโซล Python",
       "sqlWorkspace": "พื้นที่ทำงาน SQL",
       "assistant": "ผู้ช่วย",
-      "statusBar": "แถบสถานะ"
+      "statusBar": "แถบสถานะ",
+      "modelBuilder": "ตัวสร้างแบบจำลอง"
     }
   },
   "attributeStats": {
@@ -5157,10 +6982,12 @@
     "scope": "ขอบเขต",
     "scopeAll": "ทุกฟีเจอร์ ({{total}})",
     "scopeFiltered": "เฉพาะที่กรองไว้ ({{total}})",
+    "scopeSelected": "เฉพาะที่เลือก ({{total}})",
     "copiedToClipboard": "คัดลอกไปยังคลิปบอร์ดแล้ว",
     "copy": "คัดลอก",
     "copyHeader": "สถิติของฟิลด์ — {{field}}",
     "copyHeaderFiltered": "สถิติของฟิลด์ — {{field}} (เฉพาะที่กรองไว้)",
+    "copyHeaderSelected": "สถิติของฟิลด์ — {{field}} (เฉพาะที่เลือก)",
     "noValues": "ไม่มีค่าให้สรุปข้อมูล",
     "mostFrequent": "ค่าที่พบบ่อยที่สุด",
     "noPopulated": "ไม่มีค่าที่กรอกไว้",
@@ -5210,79 +7037,49 @@
     "authorNamePlaceholder": "เช่น สมชาย หรือ สุดา",
     "commentLabel": "ความคิดเห็น / ข้อเสนอแนะ",
     "commentPlaceholder": "พิมพ์บันทึกการตรวจทานหรือข้อเสนอแนะของคุณที่นี่...",
+    "post": "โพสต์ความคิดเห็น",
+    "postShortcutTooltip": "โพสต์ความคิดเห็น ({{shortcut}})",
     "confirmDelete": "คุณแน่ใจหรือไม่ว่าต้องการลบกระทู้ความคิดเห็นนี้?",
     "sessionDisconnected": "เซสชันถูกตัดการเชื่อมต่อ",
-    "defaultAuthorName": "ผู้เขียน"
-  },
-  "netcdfSymbology": {
-    "heading": "สัญลักษณ์ของ NetCDF",
-    "colorRampLabel": "แผนผังสี",
-    "reverse": "กลับด้านแผนผังสี",
-    "colorMin": "สีต่ำสุด",
-    "colorMax": "สีสูงสุด",
-    "resetRange": "รีเซ็ตเป็นช่วงของข้อมูล",
-    "openCube": "คิวบ์ 3 มิติ"
-  },
-  "netcdfCube": {
-    "heading": "คิวบ์ภาพ 3 มิติ",
-    "close": "ปิด",
-    "settings": "ตั้งค่า",
-    "setupTitle": "คิวบ์ภาพ 3 มิติ",
-    "setupDescription": "เลือกสิ่งที่จะอ่านก่อนสร้างคิวบ์ แต่ละแบนด์จะถูกอ่านแยกกัน ดังนั้นขอบเขตและจำนวนแบนด์จึงเป็นตัวกำหนดเวลาที่ใช้",
-    "extent": "ขอบเขต",
-    "extentView": "มุมมองแผนที่ปัจจุบัน",
-    "extentDraw": "วาดบนแผนที่",
-    "extentFull": "ขอบเขตทั้งหมดของเลเยอร์",
-    "viewHint": "อ่านสิ่งที่แผนที่แสดงอยู่ ณ ตอนที่สร้างคิวบ์",
-    "fullHint": "อ่านกริดทั้งหมด ซึ่งจะช้าสำหรับคิวบ์ขนาดเท่าฉากภาพ",
-    "drawBbox": "วาดบนแผนที่",
-    "drawing": "ลากกรอบบนแผนที่เพื่อกำหนดขอบเขตของคิวบ์",
-    "drawHint": "ลากกรอบบนแผนที่เพื่อกำหนดขอบเขต",
-    "drawnExtent": "ตะวันตก {{west}}, ใต้ {{south}}, ตะวันออก {{east}}, เหนือ {{north}}",
-    "detail": "ระดับรายละเอียด",
-    "detailOption": "ด้านละ {{size}} เซลล์",
-    "bands": "แบนด์",
-    "allBands": "ทั้งหมด ({{count}})",
-    "rgbOverlay": "วางภาพ RGB ไว้ด้านบน",
-    "rgbHint": "ผสมสามแบนด์เป็นภาพสีแล้ววางไว้บนหน้าด้านบน เพื่อให้คิวบ์ยังดูออกว่าเป็นสถานที่ใด",
-    "red": "แดง",
-    "green": "เขียว",
-    "blue": "น้ำเงิน",
-    "planeEstimate": "อ่านแบนด์ {{count}} ครั้ง",
-    "create": "สร้างคิวบ์",
-    "colorRampLabel": "แผนผังสี",
-    "reverse": "กลับด้าน",
-    "showRgb": "RGB ด้านบน",
-    "rgbBands": "แบนด์ RGB",
-    "recomposing": "กำลังอ่าน...",
-    "zScale": "ความสูง",
-    "slice": "ระนาบตัด",
-    "sliceAt": "ตัดที่ {{band}} {{units}}",
-    "reading": "กำลังอ่านแบนด์ที่ {{done}} จาก {{total}}...",
-    "summary": "{{nx}} x {{ny}} เซลล์, {{nz}} แบนด์ตามแกน {{axis}}",
-    "errorNoCube": "ไฟล์ต้นทางของเลเยอร์นี้ไม่ได้เปิดอยู่แล้ว จึงอ่านคิวบ์ไม่ได้",
-    "error": {
-      "shapeMismatch": "ระนาบแบนด์ของตัวแปรนี้มีรูปทรงไม่ตรงกัน จึงซ้อนเป็นคิวบ์ไม่ได้",
-      "rgbShapeMismatch": "แบนด์ RGB ที่เลือกไม่ตรงกับรูปทรงของคิวบ์",
-      "noBands": "ตัวแปรนี้ไม่มีแบนด์ให้อ่าน",
-      "noReadWindow": "คิวบ์นี้อัปเดตในที่เดิมไม่ได้ กรุณาสร้างใหม่จากการตั้งค่า"
-    }
-  },
-  "netcdfProfile": {
-    "heading": "โปรไฟล์เชิงสเปกตรัม",
-    "clear": "ล้าง",
-    "chartAria": "ค่าพิกเซลที่สุ่มอ่านตามแกนแบนด์",
-    "popOut": "แยกออกเป็นหน้าต่าง",
-    "dock": "ผนึกเข้าที่",
-    "poppedOutHint": "แผนภูมิเปิดอยู่ในหน้าต่างบนแผนที่",
-    "noValues": "ไม่มีค่าที่จะพล็อตสำหรับพิกเซลเหล่านี้",
-    "exportPng": "PNG",
-    "exportCsv": "CSV",
-    "exportError": "ไม่สามารถส่งออกแผนภูมิได้"
-  },
-  "netcdfIdentify": {
-    "noData": "ไม่มีข้อมูล",
-    "coordinates": "ลองจิจูด, ละติจูด",
-    "cell": "แถว, คอลัมน์"
+    "defaultAuthorName": "ผู้เขียน",
+    "addComment": "เพิ่มความคิดเห็น",
+    "addCommentTooltip": "วางความคิดเห็นสำหรับการตรวจทานใหม่บนแผนที่",
+    "yourNamePlaceholder": "ชื่อของคุณ…",
+    "saveName": "บันทึกชื่อ",
+    "noNameSet": "ยังไม่ได้ตั้งชื่อ — ความคิดเห็นจะแสดงเป็น “{{name}}”",
+    "changeNameTooltip": "เปลี่ยนชื่อ",
+    "setYourName": "ตั้งชื่อของคุณ",
+    "changeName": "เปลี่ยนชื่อ",
+    "postingAs": "โพสต์ในชื่อ <strong>{{name}}</strong>",
+    "copy": "คัดลอก",
+    "startLiveSession": "เริ่มเซสชันสด",
+    "starting": "กำลังเริ่ม…",
+    "sessionCodePlaceholder": "ป้อนรหัสเซสชัน",
+    "connect": "เชื่อมต่อ",
+    "joining": "กำลังเข้าร่วม…",
+    "liveSync": "ซิงก์สด ({{count}} คนออนไลน์)",
+    "offlineWorkspace": "ออฟไลน์ / พื้นที่ทำงานส่วนตัว",
+    "disconnect": "ตัดการเชื่อมต่อ",
+    "joinFailed": "เข้าร่วมเซสชันไม่สำเร็จ",
+    "startFailed": "เริ่มเซสชันไม่สำเร็จ",
+    "filterOpen": "ยังไม่แก้ไข ({{count}})",
+    "filterResolved": "แก้ไขแล้ว ({{count}})",
+    "filterAll": "ทั้งหมด ({{count}})",
+    "emptyOpen": "ไม่มีความคิดเห็นที่ยังไม่แก้ไข",
+    "emptyResolved": "ไม่มีความคิดเห็นที่แก้ไขแล้ว",
+    "emptyHint": "คลิก “เพิ่มความคิดเห็น” ด้านบน แล้วเลือกตำแหน่งหรือฟีเจอร์ใดก็ได้บนแผนที่เพื่อฝากบันทึกการตรวจทาน",
+    "resolvedBadge": "แก้ไขแล้ว",
+    "zoomToLocation": "ซูมไปยังตำแหน่ง",
+    "markResolved": "ทำเครื่องหมายว่าแก้ไขแล้ว",
+    "reopenThread": "เปิดกระทู้ความคิดเห็นอีกครั้ง",
+    "deleteThread": "ลบกระทู้ความคิดเห็น",
+    "anchorFeature": "ฟีเจอร์ #{{id}} ({{layer}})",
+    "anchorPoint": "จุด ({{coords}})",
+    "anchorMap": "แผนที่",
+    "anchoredToFeature": "ยึดกับฟีเจอร์ #{{id}} ({{layer}})",
+    "anchoredToPoint": "ยึดกับ ({{coords}})",
+    "mapPoint": "จุดบนแผนที่",
+    "reply": "ตอบกลับ",
+    "replyPlaceholder": "เขียนคำตอบ..."
   }
 }

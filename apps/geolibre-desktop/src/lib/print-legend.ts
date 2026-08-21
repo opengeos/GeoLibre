@@ -5,11 +5,14 @@
 import {
   diagramsSuppressedByPointRenderer,
   effectiveVectorRules,
+  generatorSizeRange,
   isHexColor,
   normalizeHexColor,
   proportionalSizeRange,
+  ruleBasedVisibilityFilter,
   styleValue,
   type GeoLibreLayer,
+  type GeometryGeneratorType,
   type LayerStyle,
   type LayerType,
   type LegendConfig,
@@ -18,6 +21,7 @@ import {
   type ProportionalSizeRange,
   type VectorStyleStop,
 } from "@geolibre/core";
+import { buildGeneratedGeometry } from "@geolibre/map/derived-geometry";
 import type { LegendEntry, LegendMarker, LegendSwatch } from "./print-layout";
 
 /** Layer types styled as vectors (colored fills the legend can represent). */
@@ -42,6 +46,34 @@ export const NON_LEGEND_TYPES: ReadonlySet<LayerType> = new Set<LayerType>([
 
 const NEUTRAL_SWATCH = "#94a3b8";
 const MAX_RAMP_SWATCHES = 6;
+
+type ActiveGeometryGeneratorType = Exclude<GeometryGeneratorType, "none">;
+
+/** Localized names for the geometry-generator legend rows. */
+export type GeometryGeneratorLegendLabels = Record<ActiveGeometryGeneratorType, string>;
+
+/** English fallbacks for pure callers and tests that do not have an i18n context. */
+export const DEFAULT_GEOMETRY_GENERATOR_LEGEND_LABELS: GeometryGeneratorLegendLabels = {
+  centroid: "Centroids",
+  "bounding-box": "Bounding boxes",
+  "convex-hull": "Convex hulls",
+  buffer: "Buffers",
+};
+
+/** Options shared by the Print Layout and on-map legend derivations. */
+export interface GeometryGeneratorLegendOptions {
+  labels?: Partial<GeometryGeneratorLegendLabels>;
+  formatValue?: (value: number) => string;
+}
+
+/** Display-ready description of a geometry-generator symbol layer. */
+export interface GeometryGeneratorLegendParts {
+  label: string;
+  shape: "circle" | "square";
+  fieldLabel?: string;
+  swatches: LegendSwatch[];
+}
+
 /**
  * Upper bound on categorized class rows. Categories are nominal values, so
  * dropping one loses information no neighbouring row implies (unlike a
@@ -61,14 +93,18 @@ export const MAX_CATEGORY_SWATCHES = 100;
  * omitted.
  *
  * @param layers - All layers from the store, in render order (bottom first).
+ * @param options - Localized generator labels and optional value formatting.
  * @returns Legend entries in top-of-stack-first order.
  */
-export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
+export function buildLegend(
+  layers: GeoLibreLayer[],
+  options: GeometryGeneratorLegendOptions = {},
+): LegendEntry[] {
   const entries: LegendEntry[] = [];
   // Render order in the store is bottom-first; legends read top-first.
   for (const layer of [...layers].reverse()) {
     if (!layer.visible) continue;
-    const swatches = legendSwatchesForLayer(layer);
+    const swatches = legendSwatchesForLayer(layer, options);
     // No swatches means a type with no meaningful legend representation.
     if (swatches.length === 0) continue;
     entries.push({ id: layer.id, name: layer.name, swatches });
@@ -83,10 +119,30 @@ export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
  * an empty array for types with no meaningful legend representation
  * ({@link NON_LEGEND_TYPES}); every legend-able layer yields at least one swatch.
  */
-export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
+export function legendSwatchesForLayer(
+  layer: GeoLibreLayer,
+  options: GeometryGeneratorLegendOptions = {},
+): LegendSwatch[] {
   if (NON_LEGEND_TYPES.has(layer.type)) return [];
 
   if (isVectorStyledLayer(layer)) {
+    const generator = geometryGeneratorLegendParts(layer, options);
+    const withGenerator = (base: LegendSwatch[]): LegendSwatch[] => {
+      if (!generator) return base;
+      // A formerly single-symbol entry becomes a grouped entry once the
+      // generated geometry is appended. Give its otherwise-unlabelled base
+      // swatch a useful caption so Print Layout never draws a blank row.
+      const labelledBase = base.map((swatch) =>
+        swatch.label === undefined ? { ...swatch, label: layer.name } : swatch,
+      );
+      const generated = generator.swatches.map((swatch) => ({
+        ...swatch,
+        label: generator.fieldLabel
+          ? `${generator.label} (${generator.fieldLabel}): ${swatch.label ?? ""}`
+          : generator.label,
+      }));
+      return [...labelledBase, ...generated];
+    };
     const mode = styleValue(layer.style, "vectorStyleMode");
     const stops = styleValue(layer.style, "vectorStyleStops");
     // Diagram symbology adds one labeled swatch per charted attribute after the
@@ -123,47 +179,132 @@ export function legendSwatchesForLayer(layer: GeoLibreLayer): LegendSwatch[] {
       // Same field classified and sized: merge sizes into the class rows so the
       // print legend matches the on-map auto-legend (one block, not two).
       if (sizeRange && mode === "graduated" && sizeRange.property === classProperty) {
-        return [...sizeClassSwatches(ramp, displayedStops, sizeRange, sizeMarker), ...diagrams];
+        return withGenerator([
+          ...sizeClassSwatches(ramp, displayedStops, sizeRange, sizeMarker),
+          ...diagrams,
+        ]);
       }
-      return [
+      return withGenerator([
         ...ramp,
         ...(sizeRange
           ? proportionalSizeSwatches(sizeRange, sizeRampColor(ramp, layer.style), sizeMarker)
           : []),
         ...diagrams,
-      ];
+      ]);
     }
     if (mode === "rule-based") {
       const swatches = ruleSwatches(layer);
       if (swatches.length > 0) {
-        return [
+        return withGenerator([
           ...swatches,
           ...(sizeRange
             ? proportionalSizeSwatches(sizeRange, sizeRampColor(swatches, layer.style), sizeMarker)
             : []),
           ...diagrams,
-        ];
+        ]);
       }
     }
     // Single symbology with proportional sizing: the size ramp IS the legend.
     if (sizeRange) {
-      return [
+      return withGenerator([
         ...proportionalSizeSwatches(
           sizeRange,
           styleValue(layer.style, "fillColor") || NEUTRAL_SWATCH,
           sizeMarker,
         ),
         ...diagrams,
-      ];
+      ]);
     }
     const primary = pointMarkerSwatch(layer.style) ?? {
       color: styleValue(layer.style, "fillColor"),
     };
-    return [primary, ...diagrams];
+    return withGenerator([primary, ...diagrams]);
   }
 
   // Raster / service layers: a single neutral marker swatch.
   return [{ color: NEUTRAL_SWATCH }];
+}
+
+/**
+ * Derive legend symbols for the companion geometry-generator layers.
+ *
+ * The visibility guards mirror `applyGeometryGeneratorLayers`: generators
+ * require local features and are suppressed while extrusion or a transient
+ * feature filter is active. Centroids carry their actual fixed radius or the
+ * same validated proportional-size range used by the map. Other generator
+ * types are represented by their generated polygon fill.
+ */
+export function geometryGeneratorLegendParts(
+  layer: GeoLibreLayer,
+  options: GeometryGeneratorLegendOptions = {},
+): GeometryGeneratorLegendParts | null {
+  const generator = styleValue(layer.style, "geometryGenerator");
+  const hasFeatureFilter =
+    (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
+    (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
+    ruleBasedVisibilityFilter(layer.style) !== null;
+  const hasExternalNativeLayers =
+    Array.isArray(layer.metadata.nativeLayerIds) && layer.metadata.nativeLayerIds.length > 0;
+  const isVectorControlLayer =
+    layer.metadata.sourceKind === "maplibre-gl-vector" &&
+    typeof layer.metadata.customLayerType === "string";
+  if (
+    generator === "none" ||
+    layer.type !== "geojson" ||
+    !layer.geojson ||
+    layer.metadata.externalDeckLayer === true ||
+    hasExternalNativeLayers ||
+    isVectorControlLayer ||
+    layer.style.extrusionEnabled ||
+    hasFeatureFilter
+  ) {
+    return null;
+  }
+
+  // Ask the same cached derivation the renderer uses whether any companion
+  // geometry exists. A non-empty source can still derive nothing, including a
+  // zero-distance buffer, invalid/degenerate features, or a collection above
+  // the synchronous safety cap.
+  const derived = buildGeneratedGeometry(
+    layer.geojson,
+    generator,
+    styleValue(layer.style, "geometryGeneratorBufferDistance"),
+    styleValue(layer.style, "geometryGeneratorBufferProperty"),
+  );
+  if (!derived || derived.features.length === 0) return null;
+
+  const label = options.labels?.[generator] ?? DEFAULT_GEOMETRY_GENERATOR_LEGEND_LABELS[generator];
+  const color = styleValue(layer.style, "geometryGeneratorFillColor") || NEUTRAL_SWATCH;
+  if (generator !== "centroid") {
+    return { label, shape: "square", swatches: [{ color, label }] };
+  }
+
+  const range = generatorSizeRange(layer.style);
+  if (!range) {
+    return {
+      label,
+      shape: "circle",
+      swatches: [
+        {
+          color,
+          label,
+          size: Math.max(1, styleValue(layer.style, "geometryGeneratorCircleRadius")),
+        },
+      ],
+    };
+  }
+
+  const formatValue = options.formatValue ?? formatStopValue;
+  return {
+    label,
+    shape: "circle",
+    fieldLabel: range.property,
+    swatches: [0, 0.5, 1].map((ratio) => ({
+      color,
+      label: formatValue(lerp(range.minValue, range.maxValue, ratio)),
+      size: lerp(range.minRadius, range.maxRadius, ratio),
+    })),
+  };
 }
 
 /**

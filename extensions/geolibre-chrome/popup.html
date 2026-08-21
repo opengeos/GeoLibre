@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open data in GeoLibre</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <img
+          class="brand-mark"
+          src="icons/geolibre-48.png"
+          alt=""
+          width="42"
+          height="42"
+        />
+        <div>
+          <p class="eyebrow">GeoLibre field reader</p>
+          <h1>Datasets on this page</h1>
+        </div>
+      </header>
+
+      <section class="page-context" aria-label="Current page">
+        <span class="pulse" aria-hidden="true"></span>
+        <span id="page-host">Inspecting current page…</span>
+      </section>
+
+      <section id="loading" class="state-panel" aria-live="polite">
+        <div class="scan-line" aria-hidden="true"></div>
+        <strong>Reading data links</strong>
+        <span>Checking links, metadata, and map service requests.</span>
+      </section>
+
+      <section id="empty" class="state-panel" hidden aria-live="polite">
+        <strong>No supported datasets found</strong>
+        <span
+          >Try a page with geospatial file links or an active web map.</span
+        >
+      </section>
+
+      <section id="error" class="state-panel state-error" hidden role="alert">
+        <strong>This page cannot be inspected</strong>
+        <span id="error-message"
+          >Chrome protects browser and extension pages from scanning.</span
+        >
+      </section>
+
+      <section id="results" hidden>
+        <div class="list-toolbar">
+          <div class="result-count">
+            <span id="selected-count">0</span>
+            <span id="total-label">of 0 selected</span>
+          </div>
+          <div class="bulk-actions">
+            <button id="select-all" class="text-button" type="button">
+              All
+            </button>
+            <span aria-hidden="true">·</span>
+            <button id="select-none" class="text-button" type="button">
+              None
+            </button>
+          </div>
+        </div>
+        <div
+          class="filter-tabs"
+          role="group"
+          aria-label="Filter datasets by type"
+        >
+          <button
+            class="filter-tab is-active"
+            type="button"
+            data-filter="all"
+            aria-pressed="true"
+          >
+            All <span id="all-count">0</span>
+          </button>
+          <button
+            class="filter-tab"
+            type="button"
+            data-filter="vector"
+            aria-pressed="false"
+          >
+            Vector <span id="vector-count">0</span>
+          </button>
+          <button
+            class="filter-tab"
+            type="button"
+            data-filter="raster"
+            aria-pressed="false"
+          >
+            Raster <span id="raster-count">0</span>
+          </button>
+        </div>
+        <div class="dataset-frame">
+          <div
+            id="dataset-list"
+            class="dataset-list"
+            role="group"
+            aria-label="Available datasets"
+          ></div>
+          <p id="filter-empty" class="filter-empty" hidden>
+            No datasets match this filter.
+          </p>
+        </div>
+      </section>
+
+      <footer>
+        <button id="open-button" class="open-button" type="button" disabled>
+          <span>Open in GeoLibre</span>
+          <span id="button-count" class="button-count" aria-hidden="true"
+            >0</span
+          >
+        </button>
+        <p id="open-error" class="open-error" hidden role="alert"></p>
+        <p>
+          GeoLibre fetches selected links directly. The source server must allow
+          CORS.
+        </p>
+        <a
+          class="geolibre-link"
+          href="https://geolibre.app/"
+          target="_blank"
+          rel="noopener"
+        >
+          Visit GeoLibre
+        </a>
+      </footer>
+    </main>
+    <script type="module" src="popup.mjs"></script>
+  </body>
+</html>

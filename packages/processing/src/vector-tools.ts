@@ -28,9 +28,19 @@ import type {
   Point,
   Polygon,
   Position,
+  MultiLineString,
   MultiPolygon,
 } from "geojson";
-import { layerJoinKey, type GeoLibreLayer } from "@geolibre/core";
+import {
+  bodyLengthToEarth,
+  decodePolyline,
+  decodePolylineDetailed,
+  earthLengthToBody,
+  encodePolyline,
+  getActiveBodyRadiusRatio,
+  layerJoinKey,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
 import { createDggsGridTool, dggsBinPointsTool, dggsCompactTool } from "./dggs-tools";
 import { TOPOLOGY_TOOLS } from "./topology-tools";
@@ -92,6 +102,42 @@ function explodeToPolygons(features: Feature[]): Feature<Polygon>[] {
     }
   }
   return result;
+}
+
+/** Reassemble Turf dissolve parts into one Polygon/MultiPolygon per group. */
+function collectDissolveParts(
+  dissolved: FeatureCollection<Polygon>,
+  field?: string,
+  originalProperties?: ReadonlyMap<string, GeoJsonProperties>,
+): FeatureCollection<Polygon | MultiPolygon> {
+  const groups = new Map<string, Feature<Polygon>[]>();
+  for (const feature of dissolved.features) {
+    const key = field ? String(feature.properties?.[field]) : "";
+    const group = groups.get(key);
+    if (group) group.push(feature);
+    else groups.set(key, [feature]);
+  }
+
+  const features: Feature<Polygon | MultiPolygon>[] = [...groups.entries()].map(([key, parts]) => {
+    // Mirror GeoPandas' `dissolve` (aggfunc="first"): every merged feature keeps
+    // the first source feature's whole attribute set, so the dissolve field keeps
+    // its original type and the other attributes survive the merge — whether or
+    // not the group happened to stay connected.
+    const source = originalProperties?.get(key) ?? parts[0].properties;
+    const properties: GeoJsonProperties = source ? { ...source } : {};
+    if (parts.length === 1) {
+      return { ...parts[0], properties };
+    }
+    return {
+      type: "Feature" as const,
+      properties,
+      geometry: {
+        type: "MultiPolygon" as const,
+        coordinates: parts.map((part) => part.geometry.coordinates),
+      },
+    };
+  });
+  return featureCollection(features);
 }
 
 /** Merge all polygons of a collection into a single (multi)polygon feature. */
@@ -186,7 +232,10 @@ export const bufferTool: ProcessingAlgorithm = {
     if (!fc) return;
     const distance = numberParam(ctx, "distance", 1);
     const units = (ctx.parameters.units as string) || "kilometers";
-    const buffered = buffer(fc, distance, {
+    // turf bakes in Earth's radius, so the requested distance would lay out as
+    // Earth ground on a Moon/Mars project. Convert to the Earth-equivalent that
+    // spans the same distance on this body (GeoLibre#1128) — a no-op on Earth.
+    const buffered = buffer(fc, bodyLengthToEarth(distance), {
       units: units as "kilometers" | "meters" | "miles",
     });
     const features = ((buffered?.features ?? []) as Feature[]).filter((f) => Boolean(f?.geometry));
@@ -266,9 +315,17 @@ export const dissolveTool: ProcessingAlgorithm = {
       return;
     }
     const field = (ctx.parameters.field as string)?.trim();
-    const dissolved = dissolve(featureCollection(polys), {
+    // Remember the first source feature of each group so the merged output can
+    // carry its attributes through, the way the sidecar's GeoPandas dissolve does.
+    const originalProperties = new Map<string, GeoJsonProperties>();
+    for (const polygon of polys) {
+      const key = field ? String(polygon.properties?.[field]) : "";
+      if (!originalProperties.has(key)) originalProperties.set(key, polygon.properties);
+    }
+    const dissolvedParts = dissolve(featureCollection(polys), {
       propertyName: field || undefined,
     });
+    const dissolved = collectDissolveParts(dissolvedParts, field || undefined, originalProperties);
     ctx.log(`Dissolved ${polys.length} polygon(s) into ${dissolved.features.length} feature(s)`);
     ctx.addResultLayer?.("Dissolve", dissolved);
   },
@@ -2367,9 +2424,13 @@ export const cellSectorsTool: ProcessingAlgorithm = {
       // after normalization), so draw an omnidirectional site as a circle.
       if (angle > 360) angle = 360;
       const full = angle === 360; // only reachable once the clamp above fired
+      // turf's circle/sector are Earth-radius based, so scale the site radius
+      // into its Earth equivalent to cover the intended ground on this body
+      // (GeoLibre#1128). A no-op on Earth.
+      const turfRadius = bodyLengthToEarth(radius);
       const wedge = full
-        ? circle(point.geometry.coordinates, radius, { units: units as LinearUnit })
-        : sector(point.geometry.coordinates, radius, azimuth - angle / 2, azimuth + angle / 2, {
+        ? circle(point.geometry.coordinates, turfRadius, { units: units as LinearUnit })
+        : sector(point.geometry.coordinates, turfRadius, azimuth - angle / 2, azimuth + angle / 2, {
             units: units as LinearUnit,
           });
       if (!wedge?.geometry) {
@@ -2462,11 +2523,15 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
     }
     const { groups, skipped, skippedNoId } = collectTimedPoints(fc, timeField, idField);
     const segments: Feature<LineString>[] = [];
+    // turf measures on Earth; rescale to this body's ground distance
+    // (GeoLibre#1128) so the derived speeds are correct off Earth too. Read the
+    // ratio once rather than per segment.
+    const bodyRatio = getActiveBodyRadiusRatio();
     for (const [key, pts] of groups) {
       for (let i = 1; i < pts.length; i += 1) {
         const a = pts[i - 1];
         const b = pts[i];
-        const meters = distance(a.coord, b.coord, { units: "meters" });
+        const meters = distance(a.coord, b.coord, { units: "meters" }) * bodyRatio;
         const seconds = (b.time - a.time) / 1000;
         // Equal timestamps (the only non-positive gap after sorting) give an
         // undefined speed; emit the segment with null rather than Infinity.
@@ -2606,6 +2671,10 @@ export const detectStopsTool: ProcessingAlgorithm = {
       return;
     }
     const stops: Feature<Point>[] = [];
+    // Convert the threshold into turf's Earth-based units once, rather than
+    // converting every measured distance inside the O(n²) scan below
+    // (GeoLibre#1128). Equivalent comparison, no per-iteration ellipsoid lookup.
+    const maxTurfDistance = bodyLengthToEarth(maxDistance);
     for (const [key, pts] of groups) {
       let i = 0;
       while (i < pts.length) {
@@ -2622,7 +2691,7 @@ export const detectStopsTool: ProcessingAlgorithm = {
           j < pts.length &&
           distance(pts[i].coord, pts[j].coord, {
             units: distanceUnits as LinearUnit,
-          }) <= maxDistance
+          }) <= maxTurfDistance
         ) {
           j += 1;
         }
@@ -2837,15 +2906,21 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
     // Sort by time so the inner loop can stop once the time gap is exceeded.
     timed.sort((a, b) => a.time - b.time);
     const pairs: Feature<LineString>[] = [];
+    // As in stop detection: convert the threshold into turf's Earth-based units
+    // once so the O(n²) candidate scan does no per-iteration conversion
+    // (GeoLibre#1128). Only the pairs that survive the test are converted back
+    // to this body's ground distance for the reported `distance` property.
+    const maxTurfDistance = bodyLengthToEarth(maxDistance);
     for (let i = 0; i < n; i += 1) {
       for (let j = i + 1; j < n; j += 1) {
         const dt = timed[j].time - timed[i].time; // >= 0 (sorted)
         if (dt > maxTimeMs) break; // later j only widens the gap
         if (idField && timed[i].id === timed[j].id) continue;
-        const dist = distance(timed[i].coord, timed[j].coord, {
+        const turfDistance = distance(timed[i].coord, timed[j].coord, {
           units: distanceUnits as LinearUnit,
         });
-        if (dist > maxDistance) continue;
+        if (turfDistance > maxTurfDistance) continue;
+        const dist = earthLengthToBody(turfDistance);
         pairs.push({
           type: "Feature",
           properties: {
@@ -2869,6 +2944,213 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
       `Space-time proximity: found ${pairs.length} pair(s) within ${maxDistance} ${distanceUnits} and ${maxTimeValue} ${timeUnits}`,
     );
     ctx.addResultLayer?.("Space-time proximity", featureCollection(pairs));
+  },
+};
+
+export const decodePolylineTool: ProcessingAlgorithm = {
+  id: "decode-polyline",
+  name: "Decode polyline",
+  description:
+    "Decode encoded polyline strings from an attribute field into a LineString vector layer",
+  group: "Geometry",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+    },
+    {
+      id: "field",
+      label: "Polyline field",
+      type: "field",
+      description: "Attribute field containing the encoded polyline string",
+      required: true,
+    },
+    {
+      id: "precision",
+      label: "Precision",
+      type: "select",
+      options: [
+        { label: "5 (Google / OSRM)", value: "5" },
+        { label: "6 (Valhalla / Mapbox)", value: "6" },
+      ],
+      default: "5",
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const field = (ctx.parameters.field as string)?.trim();
+    if (!field) {
+      ctx.log("Error: please specify a polyline field");
+      return;
+    }
+    const rawPrecision = ctx.parameters.precision;
+    const precision = rawPrecision === "6" || rawPrecision === 6 ? 6 : 5;
+
+    const outFeatures: Feature<LineString | MultiLineString>[] = [];
+    let skipped = 0;
+
+    for (const feature of fc.features) {
+      const rawVal = feature.properties?.[field];
+      if (typeof rawVal !== "string" || !rawVal.trim()) {
+        skipped++;
+        continue;
+      }
+      const val = rawVal.trim();
+      const parts = val
+        .split(";")
+        .map((p) => p.trim())
+        .filter(Boolean);
+      if (parts.length === 0) {
+        skipped++;
+        continue;
+      }
+
+      let valid = true;
+      const multiCoords: [number, number][][] = [];
+
+      for (const part of parts) {
+        for (let i = 0; i < part.length; i++) {
+          const code = part.charCodeAt(i);
+          if (code < 63 || code > 126) {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) break;
+
+        const decodeResult = decodePolylineDetailed(part, precision);
+        if (!decodeResult.complete) {
+          valid = false;
+          break;
+        }
+
+        const coords = decodeResult.coordinates;
+        if (coords.length < 2) {
+          valid = false;
+          break;
+        }
+
+        for (const [lon, lat] of coords) {
+          if (
+            !Number.isFinite(lon) ||
+            !Number.isFinite(lat) ||
+            lon < -180 ||
+            lon > 180 ||
+            lat < -90 ||
+            lat > 90
+          ) {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) break;
+
+        multiCoords.push(coords);
+      }
+
+      if (!valid || multiCoords.length === 0) {
+        skipped++;
+        continue;
+      }
+
+      if (multiCoords.length === 1) {
+        outFeatures.push({
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}) },
+          geometry: {
+            type: "LineString",
+            coordinates: multiCoords[0],
+          },
+        });
+      } else {
+        outFeatures.push({
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}) },
+          geometry: {
+            type: "MultiLineString",
+            coordinates: multiCoords,
+          },
+        });
+      }
+    }
+
+    if (skipped > 0) {
+      ctx.log(`Skipped ${skipped} feature(s) with missing or invalid polyline string`);
+    }
+    ctx.log(`Decoded ${outFeatures.length} line feature(s) from "${field}"`);
+    ctx.addResultLayer?.("Decoded polylines", featureCollection(outFeatures));
+  },
+};
+
+export const encodePolylineTool: ProcessingAlgorithm = {
+  id: "encode-polyline",
+  name: "Encode line to polyline",
+  description:
+    "Encode LineString and MultiLineString geometries into an encoded polyline attribute string",
+  group: "Geometry",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["line"],
+    },
+    {
+      id: "precision",
+      label: "Precision",
+      type: "select",
+      options: [
+        { label: "5 (Google / OSRM)", value: "5" },
+        { label: "6 (Valhalla / Mapbox)", value: "6" },
+      ],
+      default: "5",
+    },
+    {
+      id: "targetField",
+      label: "Output field name",
+      type: "string",
+      description: "Name of the attribute column to store encoded polylines (default: polyline)",
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const rawPrecision = ctx.parameters.precision;
+    const precision = rawPrecision === "6" || rawPrecision === 6 ? 6 : 5;
+    const targetField = ((ctx.parameters.targetField as string) || "").trim() || "polyline";
+
+    const outFeatures: Feature[] = [];
+    let encodedCount = 0;
+
+    for (const feature of fc.features) {
+      const geometry = feature.geometry;
+      let polylineStr = "";
+      if (geometry?.type === "LineString") {
+        polylineStr = encodePolyline(geometry.coordinates as [number, number][], precision);
+      } else if (geometry?.type === "MultiLineString") {
+        polylineStr = geometry.coordinates
+          .map((lineCoords) => encodePolyline(lineCoords as [number, number][], precision))
+          .filter(Boolean)
+          .join(";");
+      }
+      if (polylineStr) encodedCount++;
+      outFeatures.push({
+        ...feature,
+        properties: {
+          ...(feature.properties ?? {}),
+          [targetField]: polylineStr,
+        },
+      });
+    }
+
+    ctx.log(
+      `Encoded ${encodedCount} line feature(s) into field "${targetField}" (precision ${precision})`,
+    );
+    ctx.addResultLayer?.("Encoded polylines", featureCollection(outFeatures));
   },
 };
 
@@ -2897,6 +3179,8 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   gridTool,
   voronoiTool,
   cellSectorsTool,
+  decodePolylineTool,
+  encodePolylineTool,
   createDggsGridTool,
   dggsBinPointsTool,
   dggsCompactTool,

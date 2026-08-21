@@ -99,6 +99,13 @@ let storeSyncSuspended = 0;
 // and back would land on the pushed value again and have that second edit
 // misread as an echo and dropped.
 const controlRenderState = new Map<string, { visible?: boolean; opacity?: number }>();
+const transientControlVisibility = new Set<string>();
+
+/** Mark visibility changes made only for a swipe comparison, not by the user. */
+export function setTransientRasterVisibility(id: string, transient: boolean): void {
+  if (transient) transientControlVisibility.add(id);
+  else transientControlVisibility.delete(id);
+}
 
 /**
  * Record what the control now holds for a raster, so the next control->store
@@ -281,6 +288,11 @@ export function syncRasterLayersToStoreWithOptions(
   for (const id of controlRenderState.keys()) {
     if (!infoIds.has(id)) controlRenderState.delete(id);
   }
+  // Same for a swipe's transient hide: a stale id would make a later raster
+  // added under it ignore genuine control-side visibility changes.
+  for (const id of transientControlVisibility) {
+    if (!infoIds.has(id)) transientControlVisibility.delete(id);
+  }
 
   syncingLayersToStore = true;
   try {
@@ -323,7 +335,10 @@ export function syncRasterLayersToStoreWithOptions(
       const visibleIsEcho = known?.visible !== undefined && layer.visible === known.visible;
       const opacityIsEcho =
         known?.opacity !== undefined && numbersEqual(layer.opacity, known.opacity);
-      const visible = visibleIsEcho ? existing.visible : layer.visible;
+      const visible =
+        transientControlVisibility.has(layer.id) || visibleIsEcho
+          ? existing.visible
+          : layer.visible;
       const opacity = opacityIsEcho ? existing.opacity : layer.opacity;
       if (!visibleIsEcho || !opacityIsEcho) {
         rememberControlRasterRenderState(layer.id, {

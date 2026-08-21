@@ -48,8 +48,24 @@ const THREE_D_TILES_LAYER_ID = "geolibre-3d-tiles";
 // against. Only used as a fallback when the control does not expose its own
 // decoder paths (see getThreeDTilesDecoderOptions).
 const THREE_VERSION = "0.184.0";
-const DEFAULT_DRACO_DECODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/draco/`;
-const DEFAULT_KTX2_TRANSCODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
+
+// Injected by vite.config.ts; declared locally (module scope, so it does not
+// collide with the app's global declaration in vite-env.d.ts) because this
+// package must stay importable from a plain Node test where the define is
+// absent.
+declare const __NO_EXTERNAL_CDN__: boolean;
+
+// When the build strips external CDN references there is no host to fetch the
+// Draco/KTX2 decoders from, so the fallback paths are left empty and only the
+// control's own decoder paths (if it exposes any) are used.
+const NO_EXTERNAL_CDN = typeof __NO_EXTERNAL_CDN__ !== "undefined" && __NO_EXTERNAL_CDN__;
+
+const DEFAULT_DRACO_DECODER_PATH = NO_EXTERNAL_CDN
+  ? ""
+  : `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/draco/`;
+const DEFAULT_KTX2_TRANSCODER_PATH = NO_EXTERNAL_CDN
+  ? ""
+  : `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
 const GOOGLE_PHOTOREALISTIC_TILES_URL = "https://tile.googleapis.com/v1/3dtiles/root.json";
 const GOOGLE_PHOTOREALISTIC_TILES_LABEL = "Google Photorealistic 3D Tiles";
 const ARCGIS_I3S_SAMPLE_TILES_URL =
@@ -1504,8 +1520,12 @@ function getThreeDTilesDecoderOptions(control: ThreeDTilesControl): {
     // When it does not, fall back to a CDN build of three pinned to the
     // version maplibre-gl-3d-tiles depends on (THREE_VERSION). This is a
     // network-dependent supply-chain fallback, so surface it for diagnosis.
+    // A no-external-CDN build has no such fallback to offer, so say that
+    // rather than naming a unpkg URL this build will never request.
     console.warn(
-      `[GeoLibre] ThreeDTilesControl decoder paths unavailable; falling back to unpkg three@${THREE_VERSION}. Compressed tilesets will fail offline.`,
+      NO_EXTERNAL_CDN
+        ? "[GeoLibre] ThreeDTilesControl decoder paths unavailable and external CDNs are disabled in this build; Draco/KTX2-compressed tilesets will fail to load."
+        : `[GeoLibre] ThreeDTilesControl decoder paths unavailable; falling back to unpkg three@${THREE_VERSION}. Compressed tilesets will fail offline.`,
     );
   }
   return {

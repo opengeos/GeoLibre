@@ -6,7 +6,7 @@
 
 import type { GeoLibreLayer } from "@geolibre/core";
 import { Button, Input, Label, Select } from "@geolibre/ui";
-import { Globe2, Map as MapIcon } from "lucide-react";
+import { AlertCircle, Globe2, Map as MapIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAddDataShell } from "./context";
@@ -203,6 +203,48 @@ export function InsertBeforeField({
   );
 }
 
+/**
+ * The error surface shared by every Add Data source.
+ *
+ * Deliberately a bordered, tinted box rather than bare red text: the messages
+ * here are often raw engine output (a failed DuckDB scan arrives as several
+ * lines of SQL with a `LINE 1: ... ^` marker, wrapping into a wall of red), and
+ * a loose red paragraph both reads as low-contrast noise and pushes the dialog
+ * footer buttons off-screen as it grows.
+ *
+ * The dark-mode colours are overridden rather than inherited. `--destructive`
+ * is `0 62.8% 30.6%` in dark mode - a *background* tone paired with a near-white
+ * `--destructive-foreground` for destructive buttons - so `text-destructive`
+ * paints dark red on the dark card and is close to unreadable. The `dark:`
+ * overrides here follow the workaround DiagnosticsDialog already uses; the token
+ * itself is left alone because every destructive button depends on it.
+ */
+export function AddDataError({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 dark:border-red-400/40 dark:bg-red-950/40"
+    >
+      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive dark:text-red-300" />
+      {/* `whitespace-pre-wrap` keeps the line breaks engine errors carry and
+          `break-words` wraps the long unbroken URLs they quote. The height cap
+          keeps a large error scrolling inside its own box rather than pushing
+          the Cancel/Add buttons out of the dialog. */}
+      {/* Focusable so the cap above can be scrolled by keyboard as well as by
+          pointer; without it a long engine error is partly unreadable without a
+          mouse. `aria-label` gives the focus stop a name, since a scrollable
+          region announced as unlabelled is worse than no stop at all. */}
+      <span
+        tabIndex={0}
+        aria-label={message}
+        className="max-h-40 min-w-0 overflow-y-auto whitespace-pre-wrap break-words text-sm text-destructive dark:text-red-300"
+      >
+        {message}
+      </span>
+    </div>
+  );
+}
+
 export function AddDataFooter({
   error,
   submitDisabled,
@@ -217,7 +259,7 @@ export function AddDataFooter({
   const { isSubmitting, closeDialog } = useAddDataShell();
   return (
     <>
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <AddDataError message={error} /> : null}
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={closeDialog} disabled={isSubmitting}>
