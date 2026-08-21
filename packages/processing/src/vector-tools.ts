@@ -2774,8 +2774,8 @@ export const mergeLayersTool: ProcessingAlgorithm = {
   ],
   run: (ctx) => {
     const ids = Array.isArray(ctx.parameters.layers) ? (ctx.parameters.layers as string[]) : [];
-    if (!ids.length) {
-      ctx.log('Error: parameter "layers" has no layers selected');
+    if (ids.length < 2) {
+      ctx.log('Error: parameter "layers" requires at least two selected layers');
       return;
     }
     const addSource = ctx.parameters.addSourceField !== false;
@@ -2791,6 +2791,22 @@ export const mergeLayersTool: ProcessingAlgorithm = {
       ctx.log("Error: none of the selected layers has GeoJSON features");
       return;
     }
+    // The source field is written last and would otherwise overwrite an input
+    // attribute of the same name, so refuse rather than silently drop data.
+    if (
+      addSource &&
+      selected.some((layer) =>
+        layer.geojson!.features.some((feature) =>
+          Object.prototype.hasOwnProperty.call(feature.properties ?? {}, sourceField),
+        ),
+      )
+    ) {
+      ctx.log(
+        `Error: source field '${sourceField}' already exists in an input layer; choose a different source field name`,
+      );
+      return;
+    }
+
     // Union of property keys in first-seen order, so the merged attribute
     // schema is stable regardless of feature iteration.
     const schema: string[] = [];

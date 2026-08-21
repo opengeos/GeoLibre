@@ -123,14 +123,46 @@ describe("merge layers tool", () => {
     assert.ok(skipped.messages.some((m) => m.includes("Skipped 1")));
     assert.equal(skipped.results[0].features.length, 2);
 
-    const failed = runMerge([empty], { layers: ["empty"] });
+    const other = makeLayer("empty2", "Empty 2", { type: "FeatureCollection", features: [] });
+    const failed = runMerge([empty, other], { layers: ["empty", "empty2"] });
     assert.equal(failed.results.length, 0);
-    assert.ok(failed.messages.some((m) => m.startsWith("Error:")));
+    assert.ok(failed.messages.some((m) => m.includes("none of the selected layers")));
   });
 
-  it("errors when no layer is selected at all", () => {
-    const failed = runMerge([pointsA], {});
+  it("errors when fewer than two layers are selected", () => {
+    const none = runMerge([pointsA], {});
+    assert.equal(none.results.length, 0);
+    assert.ok(none.messages.some((m) => m.includes('parameter "layers"')));
+
+    const one = runMerge([pointsA], { layers: ["a"] });
+    assert.equal(one.results.length, 0);
+    assert.ok(one.messages.some((m) => m.includes("at least two")));
+  });
+
+  it("refuses to overwrite an input attribute with the source field", () => {
+    const collides = makeLayer("c", "Collides", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { source: "keep me" },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+      ],
+    });
+    const failed = runMerge([pointsA, collides], { layers: ["a", "c"] });
     assert.equal(failed.results.length, 0);
-    assert.ok(failed.messages.some((m) => m.includes('parameter "layers"')));
+    assert.ok(failed.messages.some((m) => m.includes("already exists")));
+
+    // A different field name, or no source field at all, still merges.
+    const renamed = runMerge([pointsA, collides], {
+      layers: ["a", "c"],
+      sourceFieldName: "origin",
+    });
+    assert.equal(renamed.results[0].features.length, 3);
+    assert.equal(renamed.results[0].features[2].properties?.source, "keep me");
+
+    const without = runMerge([pointsA, collides], { layers: ["a", "c"], addSourceField: false });
+    assert.equal(without.results[0].features.length, 3);
   });
 });
