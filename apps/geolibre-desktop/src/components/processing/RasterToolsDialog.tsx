@@ -1,7 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import { addCogRasterLayer } from "@geolibre/plugins";
+import { addRasterToMap } from "@geolibre/plugins";
 import {
   RASTER_TOOLS,
   getRasterTool,
@@ -10,6 +10,7 @@ import {
   runRasterTool,
   readRasterData,
   runRasterToolClient,
+  convertGeoTiffToCog,
   buildSpectralIndexExpression,
   type AlgorithmParameter,
   type ConversionJob,
@@ -558,7 +559,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         ]);
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
       }
-      const { raster: result, bytes } = runRasterToolClient(tool.id, raster, params);
+      const { bytes } = runRasterToolClient(tool.id, raster, params);
       setClientLog((prev) => [
         ...prev,
         t("toolbar.rasterTool.computedInBrowser", { tool: tool.name }),
@@ -569,14 +570,14 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       setClientResult({ name: outName, bytes });
       const app = createAppAPI(mapControllerRef);
       try {
-        await addCogRasterLayer(app, {
-          url: outName,
-          data: bytes,
-          name: outName.replace(/\.tiff?$/i, ""),
-          // The renderer reads NoData from options (not the file's tag), so pass
-          // it explicitly for correct transparency of masked/edge cells.
-          ...(result.nodata != null ? { nodata: result.nodata } : {}),
-        });
+        const cogBytes = await convertGeoTiffToCog(new Uint8Array(bytes));
+        await addRasterToMap(
+          app,
+          new File([cogBytes as Uint8Array<ArrayBuffer>], outName, { type: "image/tiff" }),
+          {
+            name: outName.replace(/\.tiff?$/i, ""),
+          },
+        );
         setClientLog((prev) => [...prev, t("toolbar.rasterTool.addedToMap", { name: outName })]);
         tracker.addOutputLayer(outName);
       } catch (mapError) {

@@ -75,8 +75,6 @@ const PRESERVED_GEO_KEYS = [
   "GTRasterTypeGeoKey",
   "GeographicTypeGeoKey",
   "ProjectedCSTypeGeoKey",
-  "GeogCitationGeoKey",
-  "GTCitationGeoKey",
 ] as const;
 
 /**
@@ -544,7 +542,7 @@ export function rasterCalc(input: RasterData, params: RasterCalcParams): RasterD
       continue;
     }
     args[0] = args[1]; // A === band 1
-    const value = fn(...args, ...(helpers as unknown as number[]));
+    const value = Number(fn(...args, ...(helpers as unknown as number[])));
     out[p] = Number.isFinite(value) ? value : outNoData;
   }
   return singleBandResult(input, out, outNoData);
