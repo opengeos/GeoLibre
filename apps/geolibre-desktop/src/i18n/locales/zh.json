@@ -6772,6 +6772,2237 @@
             }
           }
         }
+      },
+      "whitebox": {
+        "build_object_hierarchy_multiscale": {
+          "name": "多尺度对象层次构建"
+        },
+        "classify_objects_ensemble_pro": {
+          "name": "集成模型对象分类 (Pro)"
+        },
+        "classify_objects_random_forest": {
+          "name": "随机森林对象分类"
+        },
+        "classify_objects_rules_basic": {
+          "name": "基本规则对象分类"
+        },
+        "classify_objects_rules_hierarchical": {
+          "name": "层次规则对象分类"
+        },
+        "classify_objects_svm": {
+          "name": "SVM 对象分类"
+        },
+        "evaluate_object_classification_accuracy": {
+          "name": "评估对象分类精度"
+        },
+        "evaluate_segmentation_quality_pro": {
+          "name": "评估分割质量 (Pro)"
+        },
+        "image_segmentation": {
+          "name": "影像分割"
+        },
+        "image_slider": {
+          "name": "影像滑动对比"
+        },
+        "image_stack_profile": {
+          "name": "影像堆叠剖面"
+        },
+        "obia_audit_report_pro": {
+          "name": "OBIA 审计报告 (Pro)"
+        },
+        "obia_batch_orchestrator_pro": {
+          "name": "OBIA 批量编排 (Pro)"
+        },
+        "obia_pipeline_basic": {
+          "name": "OBIA 基础流程"
+        },
+        "object_class_probability_maps": {
+          "name": "对象类别概率图"
+        },
+        "object_features_context_neighbors": {
+          "name": "对象特征 - 上下文邻域"
+        },
+        "object_features_shape_basic": {
+          "name": "对象特征 - 形状 (基础)"
+        },
+        "object_features_spectral_basic": {
+          "name": "对象特征 - 光谱 (基础)"
+        },
+        "object_features_texture_glcm_basic": {
+          "name": "对象特征 - GLCM 纹理 (基础)"
+        },
+        "object_features_topology_relations": {
+          "name": "对象特征 - 拓扑关系"
+        },
+        "object_uncertainty_diagnostics_pro": {
+          "name": "对象不确定性诊断 (Pro)"
+        },
+        "objects_boundary_refinement_pro": {
+          "name": "对象边界精化 (Pro)"
+        },
+        "objects_enforce_min_mapping_unit": {
+          "name": "对象最小制图单元约束"
+        },
+        "polygons_to_segments": {
+          "name": "多边形转分割"
+        },
+        "propagate_labels_across_hierarchy": {
+          "name": "跨层次传播标签"
+        },
+        "segment_graph_felzenszwalb": {
+          "name": "图分割 (Felzenszwalb)"
+        },
+        "segment_multiresolution_hierarchical": {
+          "name": "多分辨率层次分割"
+        },
+        "segment_scale_parameter_optimizer": {
+          "name": "分割尺度参数优化"
+        },
+        "segment_slic_superpixels": {
+          "name": "SLIC 超像素分割"
+        },
+        "segment_watershed_markers": {
+          "name": "标记分水岭分割"
+        },
+        "segments_merge_small_regions": {
+          "name": "合并小分割区域"
+        },
+        "segments_split_low_cohesion": {
+          "name": "分裂低内聚分割"
+        },
+        "segments_to_polygons": {
+          "name": "分割转多边形"
+        },
+        "evaluate_training_sites": {
+          "name": "评估训练样本"
+        },
+        "fuzzy_knn_classification": {
+          "name": "模糊 KNN 分类"
+        },
+        "generalize_classified_raster": {
+          "name": "概括分类栅格"
+        },
+        "generalize_with_similarity": {
+          "name": "相似性概括"
+        },
+        "k_means_clustering": {
+          "name": "K 均值聚类"
+        },
+        "knn_classification": {
+          "name": "KNN 分类"
+        },
+        "knn_regression": {
+          "name": "KNN 回归"
+        },
+        "logistic_regression": {
+          "name": "逻辑回归"
+        },
+        "min_dist_classification": {
+          "name": "最小距离分类"
+        },
+        "modified_k_means_clustering": {
+          "name": "改进 K 均值聚类"
+        },
+        "nnd_classification": {
+          "name": "NND 分类"
+        },
+        "otsu_thresholding": {
+          "name": "Otsu 阈值分割"
+        },
+        "parallelepiped_classification": {
+          "name": "平行六面体分类"
+        },
+        "random_forest_classification": {
+          "name": "随机森林分类"
+        },
+        "random_forest_regression": {
+          "name": "随机森林回归"
+        },
+        "svm_classification": {
+          "name": "SVM 分类"
+        },
+        "svm_regression": {
+          "name": "SVM 回归"
+        },
+        "change_vector_analysis": {
+          "name": "变化矢量分析"
+        },
+        "image_difference_change_detection": {
+          "name": "影像差值变化检测"
+        },
+        "pca_based_change_detection": {
+          "name": "基于 PCA 的变化检测"
+        },
+        "post_classification_change": {
+          "name": "分类后变化检测"
+        },
+        "write_function_memory_insertion": {
+          "name": "写入函数内存插入"
+        },
+        "brdf_normalization": {
+          "name": "BRDF 归一化"
+        },
+        "correct_vignetting": {
+          "name": "渐晕校正"
+        },
+        "dark_object_subtraction": {
+          "name": "暗目标减法"
+        },
+        "dn_to_toa_reflectance": {
+          "name": "DN 转表观反射率"
+        },
+        "terrain_corrected_optical_analytics": {
+          "name": "地形校正光学分析"
+        },
+        "land_surface_temperature_single_channel": {
+          "name": "地表温度 (单通道)"
+        },
+        "land_surface_temperature_split_window": {
+          "name": "地表温度 (劈窗)"
+        },
+        "ndvi_based_emissivity": {
+          "name": "基于 NDVI 的发射率"
+        },
+        "continuum_removal": {
+          "name": "连续统去除"
+        },
+        "linear_spectral_unmixing": {
+          "name": "线性光谱解混"
+        },
+        "minimum_noise_fraction": {
+          "name": "最小噪声分量"
+        },
+        "spectral_angle_mapper": {
+          "name": "光谱角制图"
+        },
+        "spectral_library_matching": {
+          "name": "光谱库匹配"
+        },
+        "canny_edge_detection": {
+          "name": "Canny 边缘检测"
+        },
+        "corner_detection": {
+          "name": "角点检测"
+        },
+        "laplacian_filter": {
+          "name": "拉普拉斯滤波"
+        },
+        "laplacian_of_gaussians_filter": {
+          "name": "高斯拉普拉斯滤波"
+        },
+        "prewitt_filter": {
+          "name": "Prewitt 滤波"
+        },
+        "roberts_cross_filter": {
+          "name": "Roberts 交叉滤波"
+        },
+        "sobel_filter": {
+          "name": "Sobel 滤波"
+        },
+        "balance_contrast_enhancement": {
+          "name": "均衡对比度增强"
+        },
+        "create_colour_composite": {
+          "name": "创建彩色合成"
+        },
+        "direct_decorrelation_stretch": {
+          "name": "直接去相关拉伸"
+        },
+        "false_colour_composite": {
+          "name": "假彩色合成"
+        },
+        "gamma_correction": {
+          "name": "伽马校正"
+        },
+        "gaussian_contrast_stretch": {
+          "name": "高斯对比度拉伸"
+        },
+        "histogram_equalization": {
+          "name": "直方图均衡化"
+        },
+        "histogram_matching": {
+          "name": "直方图匹配"
+        },
+        "histogram_matching_two_images": {
+          "name": "两幅影像直方图匹配"
+        },
+        "ihs_to_rgb": {
+          "name": "IHS 转 RGB"
+        },
+        "min_max_contrast_stretch": {
+          "name": "最小最大值对比度拉伸"
+        },
+        "mosaic": {
+          "name": "镶嵌"
+        },
+        "mosaic_with_feathering": {
+          "name": "羽化镶嵌"
+        },
+        "normalized_difference_index": {
+          "name": "归一化差异指数"
+        },
+        "panchromatic_sharpening": {
+          "name": "全色锐化"
+        },
+        "percentage_contrast_stretch": {
+          "name": "百分比对比度拉伸"
+        },
+        "piecewise_contrast_stretch": {
+          "name": "分段对比度拉伸"
+        },
+        "resample": {
+          "name": "重采样"
+        },
+        "rgb_to_ihs": {
+          "name": "RGB 转 IHS"
+        },
+        "sigmoidal_contrast_stretch": {
+          "name": "S 形对比度拉伸"
+        },
+        "split_colour_composite": {
+          "name": "拆分彩色合成"
+        },
+        "standard_deviation_contrast_stretch": {
+          "name": "标准差对比度拉伸"
+        },
+        "true_colour_composite": {
+          "name": "真彩色合成"
+        },
+        "adaptive_filter": {
+          "name": "自适应滤波"
+        },
+        "anisotropic_diffusion_filter": {
+          "name": "各向异性扩散滤波"
+        },
+        "bilateral_filter": {
+          "name": "双边滤波"
+        },
+        "closing": {
+          "name": "闭运算"
+        },
+        "conservative_smoothing_filter": {
+          "name": "保守平滑滤波"
+        },
+        "diff_of_gaussians_filter": {
+          "name": "高斯差分滤波"
+        },
+        "diversity_filter": {
+          "name": "多样性滤波"
+        },
+        "edge_preserving_mean_filter": {
+          "name": "保边均值滤波"
+        },
+        "emboss_filter": {
+          "name": "浮雕滤波"
+        },
+        "fast_almost_gaussian_filter": {
+          "name": "快速近似高斯滤波"
+        },
+        "flip_image": {
+          "name": "翻转影像"
+        },
+        "frangi_filter": {
+          "name": "Frangi 滤波"
+        },
+        "gabor_filter_bank": {
+          "name": "Gabor 滤波器组"
+        },
+        "gaussian_filter": {
+          "name": "高斯滤波"
+        },
+        "glcm_texture": {
+          "name": "GLCM 纹理"
+        },
+        "guided_filter": {
+          "name": "导向滤波"
+        },
+        "high_pass_bilateral_filter": {
+          "name": "高通双边滤波"
+        },
+        "high_pass_filter": {
+          "name": "高通滤波"
+        },
+        "high_pass_median_filter": {
+          "name": "高通中值滤波"
+        },
+        "integral_image_transform": {
+          "name": "积分图变换"
+        },
+        "k_nearest_mean_filter": {
+          "name": "K 最近邻均值滤波"
+        },
+        "kuwahara_filter": {
+          "name": "Kuwahara 滤波"
+        },
+        "lee_filter": {
+          "name": "Lee 滤波"
+        },
+        "line_detection_filter": {
+          "name": "线检测滤波"
+        },
+        "line_thinning": {
+          "name": "线细化"
+        },
+        "lidar_ground_point_filter": {
+          "name": "LiDAR 地面点滤波"
+        },
+        "majority_filter": {
+          "name": "众数滤波"
+        },
+        "maximum_filter": {
+          "name": "最大值滤波"
+        },
+        "mean_filter": {
+          "name": "均值滤波"
+        },
+        "median_filter": {
+          "name": "中值滤波"
+        },
+        "minimum_filter": {
+          "name": "最小值滤波"
+        },
+        "non_local_means_filter": {
+          "name": "非局部均值滤波"
+        },
+        "opening": {
+          "name": "开运算"
+        },
+        "olympic_filter": {
+          "name": "奥林匹克滤波"
+        },
+        "percentile_filter": {
+          "name": "百分位滤波"
+        },
+        "range_filter": {
+          "name": "值域滤波"
+        },
+        "remove_spurs": {
+          "name": "去除毛刺"
+        },
+        "savitzky_golay_2d_filter": {
+          "name": "二维 Savitzky-Golay 滤波"
+        },
+        "scharr_filter": {
+          "name": "Scharr 滤波"
+        },
+        "standard_deviation_filter": {
+          "name": "标准差滤波"
+        },
+        "thicken_raster_line": {
+          "name": "加粗栅格线"
+        },
+        "tophat_transform": {
+          "name": "顶帽变换"
+        },
+        "total_filter": {
+          "name": "全滤波"
+        },
+        "unsharp_masking": {
+          "name": "非锐化掩模"
+        },
+        "user_defined_weights_filter": {
+          "name": "自定义权重滤波"
+        },
+        "wiener_filter": {
+          "name": "维纳滤波"
+        },
+        "cloude_pottier_decomposition": {
+          "name": "Cloude-Pottier 分解"
+        },
+        "enhanced_lee_filter": {
+          "name": "增强 Lee 滤波"
+        },
+        "freeman_durden_decomposition": {
+          "name": "Freeman-Durden 分解"
+        },
+        "frost_filter": {
+          "name": "Frost 滤波"
+        },
+        "gamma_map_filter": {
+          "name": "Gamma Map 滤波"
+        },
+        "h_alpha_wisart_classification": {
+          "name": "H-α-Wishart 分类"
+        },
+        "kuan_filter": {
+          "name": "Kuan 滤波"
+        },
+        "refined_lee_filter": {
+          "name": "改进 Lee 滤波"
+        },
+        "wisart_iterative_clustering": {
+          "name": "Wishart 迭代聚类"
+        },
+        "yamaguchi_4component_decomposition": {
+          "name": "Yamaguchi 四分量分解"
+        },
+        "ascii_to_las": {
+          "name": "ASCII 转 LAS"
+        },
+        "las_to_ascii": {
+          "name": "LAS 转 ASCII"
+        },
+        "las_to_shapefile": {
+          "name": "LAS 转 Shapefile"
+        },
+        "lidar_colourize": {
+          "name": "LiDAR 着色"
+        },
+        "lidar_join": {
+          "name": "LiDAR 合并"
+        },
+        "lidar_shift": {
+          "name": "LiDAR 平移"
+        },
+        "lidar_tile": {
+          "name": "LiDAR 切片"
+        },
+        "lidar_tophat_transform": {
+          "name": "LiDAR 顶帽变换"
+        },
+        "recover_flightline_info": {
+          "name": "恢复航线信息"
+        },
+        "select_tiles_by_polygon": {
+          "name": "按多边形选择切片"
+        },
+        "sort_lidar": {
+          "name": "LiDAR 排序"
+        },
+        "split_lidar": {
+          "name": "LiDAR 拆分"
+        },
+        "classify_buildings_in_lidar": {
+          "name": "LiDAR 建筑分类"
+        },
+        "classify_lidar": {
+          "name": "LiDAR 分类"
+        },
+        "classify_overlap_points": {
+          "name": "重叠点分类"
+        },
+        "clip_lidar_to_polygon": {
+          "name": "按多边形裁剪 LiDAR"
+        },
+        "erase_polygon_from_lidar": {
+          "name": "从 LiDAR 擦除多边形"
+        },
+        "filter_lidar": {
+          "name": "LiDAR 滤波"
+        },
+        "filter_lidar_by_percentile": {
+          "name": "按百分位滤波 LiDAR"
+        },
+        "filter_lidar_by_reference_surface": {
+          "name": "按参考面滤波 LiDAR"
+        },
+        "filter_lidar_classes": {
+          "name": "LiDAR 类别筛选"
+        },
+        "filter_lidar_noise": {
+          "name": "LiDAR 去噪"
+        },
+        "filter_lidar_scan_angles": {
+          "name": "LiDAR 扫描角筛选"
+        },
+        "height_above_ground": {
+          "name": "离地高度"
+        },
+        "improved_ground_point_filter": {
+          "name": "改进地面点滤波"
+        },
+        "individual_tree_segmentation": {
+          "name": "单木分割"
+        },
+        "lidar_classify_subset": {
+          "name": "LiDAR 子集分类"
+        },
+        "lidar_elevation_slice": {
+          "name": "LiDAR 高程切片"
+        },
+        "lidar_remove_outliers": {
+          "name": "LiDAR 去除异常值"
+        },
+        "lidar_segmentation": {
+          "name": "LiDAR 分割"
+        },
+        "lidar_segmentation_based_filter": {
+          "name": "基于分割的 LiDAR 滤波"
+        },
+        "modify_lidar": {
+          "name": "修改 LiDAR"
+        },
+        "normalize_lidar": {
+          "name": "LiDAR 归一化"
+        },
+        "remove_duplicates": {
+          "name": "去除重复点"
+        },
+        "flightline_overlap": {
+          "name": "航线重叠"
+        },
+        "lidar_block_maximum": {
+          "name": "LiDAR 块最大值"
+        },
+        "lidar_block_minimum": {
+          "name": "LiDAR 块最小值"
+        },
+        "lidar_construct_vector_tin": {
+          "name": "LiDAR 构建矢量 TIN"
+        },
+        "lidar_contour": {
+          "name": "LiDAR 等高线"
+        },
+        "lidar_digital_surface_model": {
+          "name": "LiDAR 数字表面模型"
+        },
+        "lidar_hex_bin": {
+          "name": "LiDAR 六边形分箱"
+        },
+        "lidar_hillshade": {
+          "name": "LiDAR 山体阴影"
+        },
+        "lidar_idw_interpolation": {
+          "name": "LiDAR IDW 插值"
+        },
+        "lidar_nearest_neighbour_gridding": {
+          "name": "LiDAR 最近邻网格化"
+        },
+        "lidar_radial_basis_function_interpolation": {
+          "name": "LiDAR 径向基函数插值"
+        },
+        "lidar_sibson_interpolation": {
+          "name": "LiDAR Sibson 插值"
+        },
+        "lidar_thin": {
+          "name": "LiDAR 抽稀"
+        },
+        "lidar_thin_high_density": {
+          "name": "LiDAR 高密度抽稀"
+        },
+        "lidar_tile_footprint": {
+          "name": "LiDAR 切片范围"
+        },
+        "lidar_tin_gridding": {
+          "name": "LiDAR TIN 网格化"
+        },
+        "colourize_based_on_class": {
+          "name": "按分类着色"
+        },
+        "colourize_based_on_point_returns": {
+          "name": "按点回波着色"
+        },
+        "find_flightline_edge_points": {
+          "name": "查找航线边缘点"
+        },
+        "individual_tree_detection": {
+          "name": "单木检测"
+        },
+        "lidar_eigenvalue_features": {
+          "name": "LiDAR 特征值特征"
+        },
+        "lidar_histogram": {
+          "name": "LiDAR 直方图"
+        },
+        "lidar_info": {
+          "name": "LiDAR 信息"
+        },
+        "lidar_kappa": {
+          "name": "LiDAR Kappa"
+        },
+        "lidar_point_density": {
+          "name": "LiDAR 点密度"
+        },
+        "lidar_point_return_analysis": {
+          "name": "LiDAR 点回波分析"
+        },
+        "lidar_point_stats": {
+          "name": "LiDAR 点统计"
+        },
+        "lidar_ransac_planes": {
+          "name": "LiDAR RANSAC 平面"
+        },
+        "lidar_rooftop_analysis": {
+          "name": "LiDAR 屋顶分析"
+        },
+        "normal_vectors": {
+          "name": "法向量"
+        },
+        "snap_events_to_routes": {
+          "name": "事件吸附到路径"
+        },
+        "locate_points_along_routes": {
+          "name": "沿路径定位点"
+        },
+        "points_along_lines": {
+          "name": "沿线生成点"
+        },
+        "route_calibrate": {
+          "name": "路径校准"
+        },
+        "route_event_lines_from_layer": {
+          "name": "从图层创建路径事件线"
+        },
+        "route_event_lines_from_table": {
+          "name": "从表格创建路径事件线"
+        },
+        "route_event_merge": {
+          "name": "路径事件合并"
+        },
+        "route_event_overlay": {
+          "name": "路径事件叠加"
+        },
+        "route_event_points_from_layer": {
+          "name": "从图层创建路径事件点"
+        },
+        "route_event_points_from_table": {
+          "name": "从表格创建路径事件点"
+        },
+        "route_event_split": {
+          "name": "路径事件分割"
+        },
+        "route_measure_qa": {
+          "name": "路径度量质检"
+        },
+        "route_recalibrate": {
+          "name": "路径重新校准"
+        },
+        "build_network_topology": {
+          "name": "构建网络拓扑"
+        },
+        "closest_facility_network": {
+          "name": "最近设施网络"
+        },
+        "generate_network_nodes": {
+          "name": "生成网络节点"
+        },
+        "k_shortest_paths_network": {
+          "name": "K 最短路径网络"
+        },
+        "location_allocation_network": {
+          "name": "选址分配网络"
+        },
+        "map_matching_v1": {
+          "name": "地图匹配 V1"
+        },
+        "multimodal_od_cost_matrix": {
+          "name": "多模式 OD 成本矩阵"
+        },
+        "multimodal_routes_from_od": {
+          "name": "多模式 OD 路径"
+        },
+        "multimodal_shortest_path": {
+          "name": "多模式最短路径"
+        },
+        "network_accessibility_metrics": {
+          "name": "网络可达性指标"
+        },
+        "network_centrality_metrics": {
+          "name": "网络中心性指标"
+        },
+        "network_connected_components": {
+          "name": "网络连通分量"
+        },
+        "network_node_degree": {
+          "name": "网络节点度"
+        },
+        "network_od_cost_matrix": {
+          "name": "网络 OD 成本矩阵"
+        },
+        "network_routes_from_od": {
+          "name": "网络 OD 路径"
+        },
+        "network_service_area": {
+          "name": "网络服务区"
+        },
+        "network_topology_audit": {
+          "name": "网络拓扑审计"
+        },
+        "od_sensitivity_analysis": {
+          "name": "OD 敏感性分析"
+        },
+        "shortest_path_network": {
+          "name": "最短路径网络"
+        },
+        "split_lines_at_intersections": {
+          "name": "在交叉处分割线"
+        },
+        "snap_points_to_network": {
+          "name": "点吸附到网络"
+        },
+        "transfer_attributes": {
+          "name": "传递属性"
+        },
+        "travelling_salesman_problem": {
+          "name": "旅行商问题"
+        },
+        "vehicle_routing_cvrp": {
+          "name": "车辆路径 (CVRP)"
+        },
+        "vehicle_routing_pickup_delivery": {
+          "name": "车辆路径 (取送货)"
+        },
+        "vehicle_routing_vrptw": {
+          "name": "车辆路径 (VRPTW)"
+        },
+        "clip": {
+          "name": "裁剪"
+        },
+        "difference": {
+          "name": "差值"
+        },
+        "dissolve": {
+          "name": "融合"
+        },
+        "erase": {
+          "name": "擦除"
+        },
+        "identity": {
+          "name": "恒等"
+        },
+        "intersect": {
+          "name": "求交"
+        },
+        "line_intersections": {
+          "name": "线相交"
+        },
+        "line_polygon_clip": {
+          "name": "线多边形裁剪"
+        },
+        "near": {
+          "name": "近邻"
+        },
+        "select_by_location": {
+          "name": "按位置选择"
+        },
+        "spatial_join": {
+          "name": "空间连接"
+        },
+        "symmetrical_difference": {
+          "name": "对称差值"
+        },
+        "union": {
+          "name": "并集"
+        },
+        "update": {
+          "name": "更新"
+        },
+        "centroid_vector": {
+          "name": "矢量质心"
+        },
+        "concave_hull": {
+          "name": "凹包"
+        },
+        "densify_features": {
+          "name": "要素加密"
+        },
+        "eliminate_coincident_points": {
+          "name": "消除重合点"
+        },
+        "extend_vector_lines": {
+          "name": "延伸矢量线"
+        },
+        "merge_line_segments": {
+          "name": "合并线段"
+        },
+        "minimum_bounding_box": {
+          "name": "最小包围盒"
+        },
+        "minimum_bounding_circle": {
+          "name": "最小包围圆"
+        },
+        "minimum_bounding_envelope": {
+          "name": "最小包围矩形"
+        },
+        "minimum_convex_hull": {
+          "name": "最小凸包"
+        },
+        "polygonize": {
+          "name": "多边形化"
+        },
+        "representative_point_vector": {
+          "name": "代表点 (矢量)"
+        },
+        "simplify_features": {
+          "name": "要素简化"
+        },
+        "smooth_vectors": {
+          "name": "矢量平滑"
+        },
+        "snap_endnodes": {
+          "name": "吸附端节点"
+        },
+        "split_vector_lines": {
+          "name": "分割矢量线"
+        },
+        "split_with_lines": {
+          "name": "按线分割"
+        },
+        "compactness_ratio": {
+          "name": "紧凑度比率"
+        },
+        "deviation_from_regional_direction": {
+          "name": "偏离区域方向"
+        },
+        "elongation_ratio": {
+          "name": "长宽比"
+        },
+        "hole_proportion": {
+          "name": "孔洞比例"
+        },
+        "linearity_index": {
+          "name": "线性指数"
+        },
+        "narrowness_index_vector": {
+          "name": "窄度指数 (矢量)"
+        },
+        "patch_orientation": {
+          "name": "图斑朝向"
+        },
+        "perimeter_area_ratio": {
+          "name": "周长面积比"
+        },
+        "polygon_area": {
+          "name": "多边形面积"
+        },
+        "polygon_long_axis": {
+          "name": "多边形长轴"
+        },
+        "polygon_perimeter": {
+          "name": "多边形周长"
+        },
+        "polygon_short_axis": {
+          "name": "多边形短轴"
+        },
+        "related_circumscribing_circle": {
+          "name": "相关外接圆"
+        },
+        "shape_complexity_index_vector": {
+          "name": "形状复杂度指数 (矢量)"
+        },
+        "global_morans_i": {
+          "name": "全局 Moran's I"
+        },
+        "getis_ord_gi_star": {
+          "name": "Getis-Ord Gi*"
+        },
+        "local_morans_i_lisa": {
+          "name": "局部 Moran's I LISA"
+        },
+        "nearest_neighbour_index": {
+          "name": "最近邻指数"
+        },
+        "quadrat_count_test": {
+          "name": "样方计数检验"
+        },
+        "spatial_lag_regression": {
+          "name": "空间滞后回归"
+        },
+        "spatial_error_regression": {
+          "name": "空间误差回归"
+        },
+        "geographically_weighted_regression": {
+          "name": "地理加权回归"
+        },
+        "ripleys_k_test": {
+          "name": "Ripley's K 检验"
+        },
+        "envelope_test": {
+          "name": "包络检验"
+        },
+        "point_process_residuals": {
+          "name": "点过程残差"
+        },
+        "ripleys_k_function": {
+          "name": "Ripley's K 函数"
+        },
+        "point_pattern_envelope": {
+          "name": "点模式包络"
+        },
+        "inhomogeneous_baseline": {
+          "name": "非均匀基线"
+        },
+        "hotspot_vs_process": {
+          "name": "热点 vs 过程"
+        },
+        "point_process_residuals_comparison": {
+          "name": "点过程残差对比"
+        },
+        "construct_vector_tin": {
+          "name": "构建矢量 TIN"
+        },
+        "contours_from_points": {
+          "name": "基于点生成等高线"
+        },
+        "contours_from_raster": {
+          "name": "基于栅格生成等高线"
+        },
+        "extract_nodes": {
+          "name": "提取节点"
+        },
+        "extract_raster_values_at_points": {
+          "name": "提取点处栅格值"
+        },
+        "find_lowest_or_highest_points": {
+          "name": "查找最低或最高点"
+        },
+        "hexagonal_grid_from_raster_base": {
+          "name": "基于栅格创建六边形网格"
+        },
+        "hexagonal_grid_from_vector_base": {
+          "name": "基于矢量创建六边形网格"
+        },
+        "layer_footprint_raster": {
+          "name": "栅格图层范围"
+        },
+        "layer_footprint_vector": {
+          "name": "矢量图层范围"
+        },
+        "medoid": {
+          "name": "中心点"
+        },
+        "random_points_in_polygon": {
+          "name": "多边形内随机点"
+        },
+        "rectangular_grid_from_raster_base": {
+          "name": "基于栅格创建矩形网格"
+        },
+        "rectangular_grid_from_vector_base": {
+          "name": "基于矢量创建矩形网格"
+        },
+        "vector_hex_binning": {
+          "name": "矢量六边形分箱"
+        },
+        "voronoi_diagram": {
+          "name": "Voronoi 图"
+        },
+        "add_field": {
+          "name": "添加字段"
+        },
+        "add_geometry_attributes": {
+          "name": "添加几何属性"
+        },
+        "attribute_correlation": {
+          "name": "属性相关性"
+        },
+        "attribute_histogram": {
+          "name": "属性直方图"
+        },
+        "attribute_scattergram": {
+          "name": "属性散点图"
+        },
+        "delete_field": {
+          "name": "删除字段"
+        },
+        "extract_by_attribute": {
+          "name": "按属性提取"
+        },
+        "field_calculator": {
+          "name": "字段计算器"
+        },
+        "filter_vector_features_by_area": {
+          "name": "按面积筛选矢量要素"
+        },
+        "list_unique_values": {
+          "name": "唯一值列表"
+        },
+        "rename_field": {
+          "name": "重命名字段"
+        },
+        "download_osm_vector": {
+          "name": "下载 OSM 矢量"
+        },
+        "assign_projection_lidar": {
+          "name": "为 LiDAR 分配投影"
+        },
+        "assign_projection_raster": {
+          "name": "为栅格分配投影"
+        },
+        "assign_projection_vector": {
+          "name": "为矢量分配投影"
+        },
+        "georeference_raster_from_control_points": {
+          "name": "基于控制点栅格地理配准"
+        },
+        "reproject_lidar": {
+          "name": "LiDAR 重投影"
+        },
+        "reproject_raster": {
+          "name": "栅格重投影"
+        },
+        "reproject_vector": {
+          "name": "矢量重投影"
+        },
+        "orthorectification": {
+          "name": "正射校正"
+        },
+        "average_flowpath_slope": {
+          "name": "平均流径坡度"
+        },
+        "average_upslope_flowpath_length": {
+          "name": "平均上坡流径长度"
+        },
+        "d8_flow_accum": {
+          "name": "D8 流量累积"
+        },
+        "d8_mass_flux": {
+          "name": "D8 质量通量"
+        },
+        "d8_pointer": {
+          "name": "D8 指向"
+        },
+        "dinf_flow_accum": {
+          "name": "Dinf 流量累积"
+        },
+        "dinf_mass_flux": {
+          "name": "Dinf 质量通量"
+        },
+        "dinf_pointer": {
+          "name": "Dinf 指向"
+        },
+        "downslope_flowpath_length": {
+          "name": "下坡流径长度"
+        },
+        "fd8_flow_accum": {
+          "name": "FD8 流量累积"
+        },
+        "fd8_pointer": {
+          "name": "FD8 指向"
+        },
+        "flow_accum_full_workflow": {
+          "name": "流量累积完整工作流"
+        },
+        "flow_length_diff": {
+          "name": "流径长度差异"
+        },
+        "max_upslope_flowpath_length": {
+          "name": "最大上坡流径长度"
+        },
+        "max_upslope_value": {
+          "name": "最大上坡值"
+        },
+        "mdinf_flow_accum": {
+          "name": "MDinf 流量累积"
+        },
+        "minimal_dispersion_flow_algorithm": {
+          "name": "最小分散流算法"
+        },
+        "num_inflowing_neighbours": {
+          "name": "入流邻域数"
+        },
+        "qin_flow_accumulation": {
+          "name": "Qin 流量累积"
+        },
+        "quinn_flow_accumulation": {
+          "name": "Quinn 流量累积"
+        },
+        "rho8_flow_accum": {
+          "name": "Rho8 流量累积"
+        },
+        "rho8_pointer": {
+          "name": "Rho8 指向"
+        },
+        "trace_downslope_flowpaths": {
+          "name": "追踪下坡流径"
+        },
+        "breach_depressions_least_cost": {
+          "name": "最低成本打通洼地"
+        },
+        "breach_single_cell_pits": {
+          "name": "打通单像元凹坑"
+        },
+        "burn_streams": {
+          "name": "刻入河流"
+        },
+        "burn_streams_at_roads": {
+          "name": "在道路处刻入河流"
+        },
+        "depth_in_sink": {
+          "name": "汇内深度"
+        },
+        "fill_burn": {
+          "name": "填充-刻入"
+        },
+        "fill_depressions": {
+          "name": "填充洼地"
+        },
+        "fill_depressions_planchon_and_darboux": {
+          "name": "填充洼地 (Planchon-Darboux)"
+        },
+        "fill_depressions_wang_and_liu": {
+          "name": "填充洼地 (Wang-Liu)"
+        },
+        "fill_pits": {
+          "name": "填充凹坑"
+        },
+        "flatten_lakes": {
+          "name": "压平湖泊"
+        },
+        "impoundment_size_index": {
+          "name": "蓄水区大小指数"
+        },
+        "insert_dams": {
+          "name": "插入水坝"
+        },
+        "raise_walls": {
+          "name": "抬升边界墙"
+        },
+        "sink": {
+          "name": "汇"
+        },
+        "stochastic_depression_analysis": {
+          "name": "随机洼地分析"
+        },
+        "topological_breach_burn": {
+          "name": "拓扑打通-刻入"
+        },
+        "upslope_depression_storage": {
+          "name": "上坡洼地蓄水量"
+        },
+        "basins": {
+          "name": "流域"
+        },
+        "flood_order": {
+          "name": "汇水序"
+        },
+        "hillslopes": {
+          "name": "山坡"
+        },
+        "isobasins": {
+          "name": "等流域"
+        },
+        "jenson_snap_pour_points": {
+          "name": "Jenson 吸附倾泻点"
+        },
+        "longest_flowpath": {
+          "name": "最长流径"
+        },
+        "max_branch_length": {
+          "name": "最大分支长度"
+        },
+        "snap_pour_points": {
+          "name": "吸附倾泻点"
+        },
+        "subbasins": {
+          "name": "子流域"
+        },
+        "unnest_basins": {
+          "name": "展开嵌套流域"
+        },
+        "watershed": {
+          "name": "流域"
+        },
+        "watershed_from_raster_pour_points": {
+          "name": "基于栅格倾泻点的流域"
+        },
+        "depth_to_water": {
+          "name": "到水体深度"
+        },
+        "distance_to_outlet": {
+          "name": "到出口距离"
+        },
+        "downslope_distance_to_stream": {
+          "name": "下坡到河流距离"
+        },
+        "downslope_index": {
+          "name": "下坡指数"
+        },
+        "edge_contamination": {
+          "name": "边缘污染"
+        },
+        "elev_relative_to_watershed_min_max": {
+          "name": "相对于流域极值的高程"
+        },
+        "elevation_above_stream": {
+          "name": "河上高程"
+        },
+        "elevation_above_stream_euclidean": {
+          "name": "河上高程 (欧氏距离)"
+        },
+        "find_noflow_cells": {
+          "name": "查找无流像元"
+        },
+        "find_parallel_flow": {
+          "name": "查找平行流"
+        },
+        "hydrologic_connectivity": {
+          "name": "水文连通性"
+        },
+        "relative_stream_power_index": {
+          "name": "相对河流功率指数"
+        },
+        "sediment_transport_index": {
+          "name": "泥沙输移指数"
+        },
+        "wetness_index": {
+          "name": "湿度指数"
+        },
+        "extract_streams": {
+          "name": "提取河流"
+        },
+        "extract_valleys": {
+          "name": "提取谷地"
+        },
+        "prune_vector_streams": {
+          "name": "裁剪矢量河流"
+        },
+        "raster_streams_to_vector": {
+          "name": "栅格河流转矢量"
+        },
+        "rasterize_streams": {
+          "name": "河流栅格化"
+        },
+        "remove_short_streams": {
+          "name": "移除短河流"
+        },
+        "repair_stream_vector_topology": {
+          "name": "修复河流矢量拓扑"
+        },
+        "river_centerlines": {
+          "name": "河流中心线"
+        },
+        "farthest_channel_head": {
+          "name": "最远沟头"
+        },
+        "find_main_stem": {
+          "name": "查找主河道"
+        },
+        "length_of_upstream_channels": {
+          "name": "上游河道长度"
+        },
+        "long_profile": {
+          "name": "纵剖面"
+        },
+        "long_profile_from_points": {
+          "name": "基于点的纵剖面"
+        },
+        "hack_stream_order": {
+          "name": "Hack 河流级别"
+        },
+        "horton_ratios": {
+          "name": "Horton 比率"
+        },
+        "horton_stream_order": {
+          "name": "Horton 河流级别"
+        },
+        "shreve_stream_magnitude": {
+          "name": "Shreve 河流量级"
+        },
+        "strahler_order_basins": {
+          "name": "Strahler 级别流域"
+        },
+        "strahler_stream_order": {
+          "name": "Strahler 河流级别"
+        },
+        "stream_link_class": {
+          "name": "河段等级"
+        },
+        "stream_link_identifier": {
+          "name": "河段标识符"
+        },
+        "stream_link_length": {
+          "name": "河段长度"
+        },
+        "stream_link_slope": {
+          "name": "河段坡度"
+        },
+        "stream_slope_continuous": {
+          "name": "连续河流坡度"
+        },
+        "topological_stream_order": {
+          "name": "拓扑河流级别"
+        },
+        "tributary_identifier": {
+          "name": "支流标识符"
+        },
+        "vector_stream_network_analysis": {
+          "name": "矢量河流网络分析"
+        },
+        "add_point_coordinates_to_table": {
+          "name": "添加点坐标到表格"
+        },
+        "clean_vector": {
+          "name": "清理矢量"
+        },
+        "csv_points_to_vector": {
+          "name": "CSV 点转矢量"
+        },
+        "export_table_to_csv": {
+          "name": "导出表格为 CSV"
+        },
+        "join_tables": {
+          "name": "连接表格"
+        },
+        "merge_table_with_csv": {
+          "name": "合并表格与 CSV"
+        },
+        "merge_vectors": {
+          "name": "合并矢量"
+        },
+        "reinitialize_attribute_table": {
+          "name": "重新初始化属性表"
+        },
+        "vector_summary_statistics": {
+          "name": "矢量汇总统计"
+        },
+        "fix_dangling_arcs": {
+          "name": "修复悬挂弧段"
+        },
+        "lines_to_polygons": {
+          "name": "线转多边形"
+        },
+        "multipart_to_singlepart": {
+          "name": "多部件转单部件"
+        },
+        "polygons_to_lines": {
+          "name": "多边形转线"
+        },
+        "remove_polygon_holes": {
+          "name": "移除多边形孔洞"
+        },
+        "singlepart_to_multipart": {
+          "name": "单部件转多部件"
+        },
+        "topology_rule_autofix": {
+          "name": "拓扑规则自动修复"
+        },
+        "topology_rule_validate": {
+          "name": "拓扑规则验证"
+        },
+        "topology_validation_report": {
+          "name": "拓扑验证报告"
+        },
+        "convert_nodata_to_zero": {
+          "name": "无数据值转零"
+        },
+        "modify_nodata_value": {
+          "name": "修改无数据值"
+        },
+        "new_raster_from_base_raster": {
+          "name": "基于基准栅格创建新栅格"
+        },
+        "new_raster_from_base_vector": {
+          "name": "基于基准矢量创建新栅格"
+        },
+        "raster_to_vector_lines": {
+          "name": "栅格转矢量线"
+        },
+        "raster_to_vector_points": {
+          "name": "栅格转矢量点"
+        },
+        "raster_to_vector_polygons": {
+          "name": "栅格转矢量多边形"
+        },
+        "remove_raster_polygon_holes": {
+          "name": "移除栅格多边形孔洞"
+        },
+        "set_nodata_value": {
+          "name": "设置无数据值"
+        },
+        "vector_lines_to_raster": {
+          "name": "矢量线转栅格"
+        },
+        "vector_points_to_raster": {
+          "name": "矢量点转栅格"
+        },
+        "vector_polygons_to_raster": {
+          "name": "矢量多边形转栅格"
+        },
+        "local_morans_i_lisa_raster": {
+          "name": "局部 Moran's I LISA (栅格)"
+        },
+        "getis_ord_gi_star_raster": {
+          "name": "Getis-Ord Gi* (栅格)"
+        },
+        "ordinary_kriging": {
+          "name": "普通克里金"
+        },
+        "local_kriging": {
+          "name": "局部克里金"
+        },
+        "simple_kriging": {
+          "name": "简单克里金"
+        },
+        "universal_kriging": {
+          "name": "通用克里金"
+        },
+        "spacetime_kriging": {
+          "name": "时空克里金"
+        },
+        "spatial_lag_regression_raster": {
+          "name": "空间滞后回归 (栅格)"
+        },
+        "spatial_error_regression_raster": {
+          "name": "空间误差回归 (栅格)"
+        },
+        "geographically_weighted_regression_raster": {
+          "name": "地理加权回归 (栅格)"
+        },
+        "inhomogeneous_intensity_raster": {
+          "name": "非均匀强度 (栅格)"
+        },
+        "add": {
+          "name": "加"
+        },
+        "average_overlay": {
+          "name": "平均叠加"
+        },
+        "bool_and": {
+          "name": "布尔与"
+        },
+        "bool_not": {
+          "name": "布尔非"
+        },
+        "bool_or": {
+          "name": "布尔或"
+        },
+        "bool_xor": {
+          "name": "布尔异或"
+        },
+        "count_if": {
+          "name": "条件计数"
+        },
+        "divide": {
+          "name": "除"
+        },
+        "highest_position": {
+          "name": "最高位置"
+        },
+        "lowest_position": {
+          "name": "最低位置"
+        },
+        "max_absolute_overlay": {
+          "name": "最大绝对值叠加"
+        },
+        "max_overlay": {
+          "name": "最大值叠加"
+        },
+        "min_absolute_overlay": {
+          "name": "最小绝对值叠加"
+        },
+        "min_overlay": {
+          "name": "最小值叠加"
+        },
+        "modulo": {
+          "name": "取模"
+        },
+        "multiply": {
+          "name": "乘"
+        },
+        "multiply_overlay": {
+          "name": "乘积叠加"
+        },
+        "percent_equal_to": {
+          "name": "等于百分比"
+        },
+        "percent_greater_than": {
+          "name": "大于百分比"
+        },
+        "percent_less_than": {
+          "name": "小于百分比"
+        },
+        "pick_from_list": {
+          "name": "从列表选取"
+        },
+        "power": {
+          "name": "幂"
+        },
+        "standard_deviation_overlay": {
+          "name": "标准差叠加"
+        },
+        "subtract": {
+          "name": "减"
+        },
+        "sum_overlay": {
+          "name": "求和叠加"
+        },
+        "update_nodata_cells": {
+          "name": "更新无数据像元"
+        },
+        "weighted_overlay": {
+          "name": "加权叠加"
+        },
+        "weighted_sum": {
+          "name": "加权和"
+        },
+        "image_correlation_neighbourhood_analysis": {
+          "name": "影像相关邻域分析"
+        },
+        "natural_neighbour_interpolation": {
+          "name": "自然邻域插值"
+        },
+        "nearest_neighbour_interpolation": {
+          "name": "最近邻插值"
+        },
+        "conditional_evaluation": {
+          "name": "条件求值"
+        },
+        "reclass": {
+          "name": "重分类"
+        },
+        "reclass_equal_interval": {
+          "name": "等间距重分类"
+        },
+        "buffer_raster": {
+          "name": "栅格缓冲区"
+        },
+        "cost_allocation": {
+          "name": "成本分配"
+        },
+        "cost_distance": {
+          "name": "成本距离"
+        },
+        "cost_pathway": {
+          "name": "成本路径"
+        },
+        "euclidean_allocation": {
+          "name": "欧氏分配"
+        },
+        "euclidean_distance": {
+          "name": "欧氏距离"
+        },
+        "abs": {
+          "name": "绝对值"
+        },
+        "aggregate_raster": {
+          "name": "聚合栅格"
+        },
+        "anova": {
+          "name": "方差分析"
+        },
+        "arccos": {
+          "name": "反余弦"
+        },
+        "arcosh": {
+          "name": "反双曲余弦"
+        },
+        "arcsin": {
+          "name": "反正弦"
+        },
+        "arctan": {
+          "name": "反正切"
+        },
+        "arsinh": {
+          "name": "反双曲正弦"
+        },
+        "artanh": {
+          "name": "反双曲正切"
+        },
+        "atan2": {
+          "name": "二参数反正切"
+        },
+        "block_maximum": {
+          "name": "块最大值"
+        },
+        "block_minimum": {
+          "name": "块最小值"
+        },
+        "boundary_shape_complexity": {
+          "name": "边界形状复杂度"
+        },
+        "ceil": {
+          "name": "向上取整"
+        },
+        "centroid_raster": {
+          "name": "栅格质心"
+        },
+        "clip_raster_to_polygon": {
+          "name": "按多边形裁剪栅格"
+        },
+        "clump": {
+          "name": "聚类"
+        },
+        "cos": {
+          "name": "余弦"
+        },
+        "cosh": {
+          "name": "双曲余弦"
+        },
+        "create_plane": {
+          "name": "创建平面"
+        },
+        "crispness_index": {
+          "name": "清晰度指数"
+        },
+        "cross_tabulation": {
+          "name": "交叉表"
+        },
+        "cumulative_distribution": {
+          "name": "累积分布"
+        },
+        "dbscan": {
+          "name": "DBSCAN 聚类"
+        },
+        "decrement": {
+          "name": "减一"
+        },
+        "edge_proportion": {
+          "name": "边缘比例"
+        },
+        "equal_to": {
+          "name": "等于"
+        },
+        "erase_polygon_from_raster": {
+          "name": "从栅格擦除多边形"
+        },
+        "exp": {
+          "name": "指数"
+        },
+        "exp2": {
+          "name": "2 的幂"
+        },
+        "fft_random_field": {
+          "name": "FFT 随机场"
+        },
+        "filter_raster_features_by_area": {
+          "name": "按面积筛选栅格要素"
+        },
+        "find_patch_edge_cells": {
+          "name": "查找图斑边缘像元"
+        },
+        "floor": {
+          "name": "向下取整"
+        },
+        "greater_than": {
+          "name": "大于"
+        },
+        "heat_map": {
+          "name": "热力图"
+        },
+        "idw_interpolation": {
+          "name": "IDW 插值"
+        },
+        "image_autocorrelation": {
+          "name": "影像自相关"
+        },
+        "image_correlation": {
+          "name": "影像相关"
+        },
+        "image_regression": {
+          "name": "影像回归"
+        },
+        "increment": {
+          "name": "加一"
+        },
+        "inplace_add": {
+          "name": "原地加"
+        },
+        "inplace_divide": {
+          "name": "原地除"
+        },
+        "inplace_multiply": {
+          "name": "原地乘"
+        },
+        "inplace_subtract": {
+          "name": "原地减"
+        },
+        "integer_division": {
+          "name": "整数除法"
+        },
+        "inverse_pca": {
+          "name": "逆主成分分析"
+        },
+        "is_nodata": {
+          "name": "是否无数据"
+        },
+        "kappa_index": {
+          "name": "Kappa 指数"
+        },
+        "ks_normality_test": {
+          "name": "KS 正态性检验"
+        },
+        "less_than": {
+          "name": "小于"
+        },
+        "list_unique_values_raster": {
+          "name": "栅格唯一值列表"
+        },
+        "ln": {
+          "name": "自然对数"
+        },
+        "log10": {
+          "name": "常用对数"
+        },
+        "log2": {
+          "name": "以 2 为底对数"
+        },
+        "map_features": {
+          "name": "映射要素"
+        },
+        "max": {
+          "name": "最大值"
+        },
+        "min": {
+          "name": "最小值"
+        },
+        "modified_shepard_interpolation": {
+          "name": "改进 Shepard 插值"
+        },
+        "narrowness_index": {
+          "name": "窄度指数"
+        },
+        "negate": {
+          "name": "取反"
+        },
+        "nibble": {
+          "name": "邻域替换"
+        },
+        "not_equal_to": {
+          "name": "不等于"
+        },
+        "paired_sample_t_test": {
+          "name": "配对样本 t 检验"
+        },
+        "phi_coefficient": {
+          "name": "Phi 系数"
+        },
+        "principal_component_analysis": {
+          "name": "主成分分析"
+        },
+        "print_geotiff_tags": {
+          "name": "打印 GeoTIFF 标签"
+        },
+        "quantiles": {
+          "name": "分位数"
+        },
+        "radial_basis_function_interpolation": {
+          "name": "径向基函数插值"
+        },
+        "radius_of_gyration": {
+          "name": "回转半径"
+        },
+        "random_field": {
+          "name": "随机场"
+        },
+        "random_forest_classification_fit": {
+          "name": "随机森林分类拟合"
+        },
+        "random_forest_classification_predict": {
+          "name": "随机森林分类预测"
+        },
+        "random_forest_regression_fit": {
+          "name": "随机森林回归拟合"
+        },
+        "random_forest_regression_predict": {
+          "name": "随机森林回归预测"
+        },
+        "random_sample": {
+          "name": "随机采样"
+        },
+        "raster_area": {
+          "name": "栅格面积"
+        },
+        "raster_calculator": {
+          "name": "栅格计算器"
+        },
+        "raster_cell_assignment": {
+          "name": "栅格像元赋值"
+        },
+        "raster_histogram": {
+          "name": "栅格直方图"
+        },
+        "raster_perimeter": {
+          "name": "栅格周长"
+        },
+        "raster_summary_stats": {
+          "name": "栅格汇总统计"
+        },
+        "reciprocal": {
+          "name": "倒数"
+        },
+        "rescale_value_range": {
+          "name": "值域重缩放"
+        },
+        "root_mean_square_error": {
+          "name": "均方根误差"
+        },
+        "round": {
+          "name": "四舍五入"
+        },
+        "shape_complexity_index_raster": {
+          "name": "形状复杂度指数 (栅格)"
+        },
+        "sieve": {
+          "name": "筛选"
+        },
+        "sin": {
+          "name": "正弦"
+        },
+        "sinh": {
+          "name": "双曲正弦"
+        },
+        "sqrt": {
+          "name": "平方根"
+        },
+        "square": {
+          "name": "平方"
+        },
+        "tan": {
+          "name": "正切"
+        },
+        "tanh": {
+          "name": "双曲正切"
+        },
+        "tin_interpolation": {
+          "name": "TIN 插值"
+        },
+        "to_degrees": {
+          "name": "转角度"
+        },
+        "to_radians": {
+          "name": "转弧度"
+        },
+        "trend_surface": {
+          "name": "趋势面"
+        },
+        "trend_surface_vector_points": {
+          "name": "趋势面矢量点"
+        },
+        "truncate": {
+          "name": "截断"
+        },
+        "turning_bands_simulation": {
+          "name": "旋转带模拟"
+        },
+        "two_sample_ks_test": {
+          "name": "双样本 KS 检验"
+        },
+        "wilcoxon_signed_rank_test": {
+          "name": "Wilcoxon 符号秩检验"
+        },
+        "z_scores": {
+          "name": "Z 分数"
+        },
+        "zonal_statistics": {
+          "name": "分区统计"
+        },
+        "assess_route": {
+          "name": "路线评估"
+        },
+        "breakline_mapping": {
+          "name": "断裂线制图"
+        },
+        "convergence_index": {
+          "name": "汇合指数"
+        },
+        "dem_void_filling": {
+          "name": "DEM 空值填充"
+        },
+        "deviation_from_mean_elevation": {
+          "name": "偏离平均高程"
+        },
+        "difference_from_mean_elevation": {
+          "name": "与平均高程之差"
+        },
+        "directional_relief": {
+          "name": "方向起伏"
+        },
+        "elev_above_pit": {
+          "name": "凹坑上高程"
+        },
+        "elev_above_pit_dist": {
+          "name": "凹坑上高程距离"
+        },
+        "elevation_percentile": {
+          "name": "高程百分位"
+        },
+        "embankment_mapping": {
+          "name": "堤坝制图"
+        },
+        "exposure_towards_wind_flux": {
+          "name": "风向暴露度"
+        },
+        "feature_preserving_smoothing": {
+          "name": "保特征平滑"
+        },
+        "feature_preserving_smoothing_multiscale": {
+          "name": "多尺度保特征平滑",
+          "params": {
+            "input": {
+              "label": "输入",
+              "description": "输入 DEM 栅格路径或类型化的栅格对象。"
+            },
+            "smoothing_amount": {
+              "label": "平滑程度",
+              "description": "总体平滑程度，范围 [0,1]（默认 0.65）。值越高，扩散预算越大，粗尺度上尤其明显。"
+            },
+            "edge_preservation": {
+              "label": "边缘保持",
+              "description": "边缘保持强度，范围 [0,1]（默认 0.75）。值越高，越能更强地抑制跨明显坡度断裂处的平滑。"
+            },
+            "scale_levels": {
+              "label": "尺度层级",
+              "description": "用于粗到细平滑的金字塔层数（默认 3）。"
+            },
+            "fidelity": {
+              "label": "保真度",
+              "description": "筛选泊松重建的数据保真权重（默认 0.45）。值越高，结果越接近源 DEM。"
+            },
+            "z_factor": {
+              "label": "Z 系数",
+              "description": "可选 z 换算系数（默认 1.0）。"
+            },
+            "output": {
+              "label": "输出",
+              "description": "可选输出路径。省略时，结果保留在内存中。"
+            }
+          }
+        },
+        "fetch_analysis": {
+          "name": "风浪区分析"
+        },
+        "fill_missing_data": {
+          "name": "填充缺失数据"
+        },
+        "find_ridges": {
+          "name": "查找山脊"
+        },
+        "hillshade": {
+          "name": "山体阴影"
+        },
+        "hypsometrically_tinted_hillshade": {
+          "name": "高程着色山体阴影"
+        },
+        "local_hypsometric_analysis": {
+          "name": "局部高程分析"
+        },
+        "low_points_on_headwater_divides": {
+          "name": "分水岭低点"
+        },
+        "max_downslope_elev_change": {
+          "name": "最大下坡高程变化"
+        },
+        "max_upslope_elev_change": {
+          "name": "最大上坡高程变化"
+        },
+        "min_downslope_elev_change": {
+          "name": "最小下坡高程变化"
+        },
+        "multidirectional_hillshade": {
+          "name": "多方向山体阴影"
+        },
+        "num_downslope_neighbours": {
+          "name": "下坡邻域数"
+        },
+        "num_upslope_neighbours": {
+          "name": "上坡邻域数"
+        },
+        "profile": {
+          "name": "剖面"
+        },
+        "slope_vs_aspect_plot": {
+          "name": "坡度-坡向图"
+        },
+        "slope_vs_elev_plot": {
+          "name": "坡度-高程图"
+        },
+        "surface_area_ratio": {
+          "name": "表面面积比"
+        },
+        "topographic_hachures": {
+          "name": "地形晕滃线"
+        },
+        "map_off_terrain_objects": {
+          "name": "离地物体制图"
+        },
+        "remove_off_terrain_objects": {
+          "name": "移除离地物体"
+        },
+        "ridge_and_valley_vectors": {
+          "name": "山脊与山谷矢量"
+        },
+        "smooth_vegetation_residual": {
+          "name": "平滑植被残差"
+        },
+        "average_horizon_distance": {
+          "name": "平均地平线距离"
+        },
+        "horizon_angle": {
+          "name": "地平线角度"
+        },
+        "horizon_area": {
+          "name": "地平线面积"
+        },
+        "openness": {
+          "name": "开阔度"
+        },
+        "shadow_animation": {
+          "name": "阴影动画"
+        },
+        "shadow_image": {
+          "name": "阴影影像"
+        },
+        "sky_view_factor": {
+          "name": "天空可视因子"
+        },
+        "skyline_analysis": {
+          "name": "天际线分析"
+        },
+        "time_in_daylight": {
+          "name": "日照时间"
+        },
+        "viewshed": {
+          "name": "可视域"
+        },
+        "visibility_index": {
+          "name": "可见性指数"
+        },
+        "accumulation_curvature": {
+          "name": "累积曲率"
+        },
+        "aspect": {
+          "name": "坡向"
+        },
+        "casorati_curvature": {
+          "name": "Casorati 曲率"
+        },
+        "curvedness": {
+          "name": "弯曲度"
+        },
+        "difference_curvature": {
+          "name": "差值曲率"
+        },
+        "gaussian_curvature": {
+          "name": "高斯曲率"
+        },
+        "generating_function": {
+          "name": "生成函数"
+        },
+        "horizontal_excess_curvature": {
+          "name": "水平多余曲率"
+        },
+        "maximal_curvature": {
+          "name": "最大曲率"
+        },
+        "mean_curvature": {
+          "name": "平均曲率"
+        },
+        "minimal_curvature": {
+          "name": "最小曲率"
+        },
+        "plan_curvature": {
+          "name": "平面曲率"
+        },
+        "principal_curvature_direction": {
+          "name": "主曲率方向"
+        },
+        "profile_curvature": {
+          "name": "剖面曲率"
+        },
+        "relative_aspect": {
+          "name": "相对坡向"
+        },
+        "ring_curvature": {
+          "name": "环曲率"
+        },
+        "rotor": {
+          "name": "旋度"
+        },
+        "shape_index": {
+          "name": "形状指数"
+        },
+        "slope": {
+          "name": "坡度"
+        },
+        "tangential_curvature": {
+          "name": "切线曲率"
+        },
+        "total_curvature": {
+          "name": "总曲率"
+        },
+        "unsphericity": {
+          "name": "非球面度"
+        },
+        "vertical_excess_curvature": {
+          "name": "垂直多余曲率"
+        },
+        "average_normal_vector_angular_deviation": {
+          "name": "平均法向角偏差"
+        },
+        "circular_variance_of_aspect": {
+          "name": "坡向圆方差"
+        },
+        "edge_density": {
+          "name": "边缘密度"
+        },
+        "ruggedness_index": {
+          "name": "崎岖度指数"
+        },
+        "spherical_std_dev_of_normals": {
+          "name": "法向球面标准差"
+        },
+        "standard_deviation_of_slope": {
+          "name": "坡度标准差"
+        },
+        "elev_relative_to_min_max": {
+          "name": "相对极值高程"
+        },
+        "geomorphons": {
+          "name": "地貌形态"
+        },
+        "hypsometric_analysis": {
+          "name": "高程分析"
+        },
+        "multiscale_topographic_position_class": {
+          "name": "多尺度地形位置分类"
+        },
+        "pennock_landform_classification": {
+          "name": "Pennock 地貌分类"
+        },
+        "percent_elev_range": {
+          "name": "高程范围百分比"
+        },
+        "relative_topographic_position": {
+          "name": "相对地形位置"
+        },
+        "max_anisotropy_dev": {
+          "name": "最大各向异性偏差"
+        },
+        "max_anisotropy_dev_signature": {
+          "name": "最大各向异性偏差特征"
+        },
+        "max_difference_from_mean": {
+          "name": "与均值最大差"
+        },
+        "max_elevation_deviation": {
+          "name": "最大高程偏差"
+        },
+        "max_elev_dev_signature": {
+          "name": "最大高程偏差特征"
+        },
+        "multiscale_curvatures": {
+          "name": "多尺度曲率"
+        },
+        "multiscale_elevated_index": {
+          "name": "多尺度高凸指数"
+        },
+        "multiscale_elevation_percentile": {
+          "name": "多尺度高程百分位"
+        },
+        "multiscale_low_lying_index": {
+          "name": "多尺度低洼指数"
+        },
+        "multiscale_roughness": {
+          "name": "多尺度粗糙度"
+        },
+        "multiscale_roughness_signature": {
+          "name": "多尺度粗糙度特征"
+        },
+        "multiscale_std_dev_normals": {
+          "name": "多尺度法向标准差"
+        },
+        "multiscale_std_dev_normals_signature": {
+          "name": "多尺度法向标准差特征"
+        },
+        "multiscale_topographic_position_image": {
+          "name": "多尺度地形位置图"
+        },
+        "topographic_position_animation": {
+          "name": "地形位置动画"
+        },
+        "topo_render": {
+          "name": "地形渲染"
+        }
       }
     }
   },

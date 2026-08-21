@@ -433,19 +433,23 @@ export function ModelBuilderPanel({
   }, [issues]);
 
   const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
-  // The palette renders translated names and group headings, so the search has
-  // to see them too or a user can only find a tool by its English name.
+  // The palette renders translated names and owned-catalog group headings, so
+  // the search has to see them too or a user can only find a tool by its
+  // English name.
   const filtered = useMemo(
     () =>
       searchModelTools(catalog, search, (descriptor) => {
         const catalogName = modelProviderCatalog(descriptor.provider);
-        // Whitebox metadata is not translated, and its raw name/group are
-        // already in the haystack, so there is nothing to add for those.
+        // Whitebox categories render verbatim (see translateModelToolGroup), so
+        // only its tool name is added to the localized haystack.
         if (!catalogName) return "";
-        return `${translateToolName(t, catalogName, {
+        const name = translateToolName(t, catalogName, {
           id: descriptor.toolId,
           name: descriptor.name,
-        })} ${translateToolGroup(t, descriptor.group)}`;
+        });
+        const group =
+          descriptor.provider === "vector" ? translateToolGroup(t, descriptor.group) : "";
+        return `${name} ${group}`;
       }),
     [catalog, search, t],
   );

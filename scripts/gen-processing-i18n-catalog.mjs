@@ -1,19 +1,19 @@
 #!/usr/bin/env node
-// Regenerate the English baseline for GeoLibre's processing tool metadata in
+// Regenerate the English baseline for processing tool metadata in
 // apps/geolibre-desktop/src/i18n/locales/en.json.
 //
 // Usage: node scripts/gen-processing-i18n-catalog.mjs
 //        node scripts/gen-processing-i18n-catalog.mjs --check
 //
 // Tool names, descriptions, group labels, parameter labels/help text and select
-// option labels live in `@geolibre/processing`, a package with no i18n access.
-// The Processing dialogs render them through `lib/processing-tool-i18n.ts`,
-// which resolves `processing.toolMeta.<catalog>.<toolId>.…` and falls back to
-// the registry's own string. This script writes those registry strings into
-// `en.json` so translators have a target: English is already correct without
-// them (that is what the fallback is for), but a key absent from `en.json`
-// cannot be added to any other locale — `tests/i18n-catalogs.test.ts` rejects a
-// locale key with no English counterpart.
+// option labels live in registries that have no i18n access. The Processing
+// dialogs render them through `lib/processing-tool-i18n.ts`, which resolves
+// `processing.toolMeta.<catalog>.<toolId>.…` and falls back to the registry's
+// own string. This script writes those registry strings into `en.json` so
+// translators have a target: English is already correct without them (that is
+// what the fallback is for), but a key absent from `en.json` cannot be added to
+// any other locale — `tests/i18n-catalogs.test.ts` rejects a locale key with no
+// English counterpart.
 //
 // So: after adding or renaming a tool, a parameter or a select option, re-run
 // this and commit the result, or the new strings stay untranslatable. Drift is
@@ -40,6 +40,12 @@ import { toolGroupKey } from "../apps/geolibre-desktop/src/lib/processing-tool-i
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const enPath = join(repoRoot, "apps/geolibre-desktop/src/i18n/locales/en.json");
+const whiteboxSnapshotPath = join(
+  repoRoot,
+  "apps/geolibre-desktop/public/whitebox-catalog-snapshot.json",
+);
+
+const whiteboxSnapshot = JSON.parse(readFileSync(whiteboxSnapshotPath, "utf8"));
 
 /**
  * Catalog name → tools, matching `ProcessingToolCatalog`. Tool ids are unique
@@ -51,7 +57,20 @@ const CATALOGS = {
   network: NETWORK_TOOLS,
   statistics: STATISTICS_TOOLS,
   raster: RASTER_TOOLS,
+  // The offline snapshot is the toolbox's metadata fallback. Locked tools are
+  // hidden and cannot run, so they are not part of the translator baseline.
+  whitebox: whiteboxSnapshot.tools.filter((tool) => !tool.locked),
 };
+
+function humanize(value) {
+  return (
+    value
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Parameter"
+  );
+}
 
 /** Build the `processing.toolMeta` subtree from the registries. */
 function buildToolMeta() {
@@ -59,18 +78,21 @@ function buildToolMeta() {
   for (const [catalog, tools] of Object.entries(CATALOGS)) {
     const entries = {};
     for (const tool of tools) {
-      const entry = { name: tool.name };
+      const isWhitebox = catalog === "whitebox";
+      const entry = { name: isWhitebox ? tool.display_name || tool.id : tool.name };
       if (tool.description) entry.description = tool.description;
       const params = {};
-      for (const param of tool.parameters ?? []) {
-        const paramEntry = { label: param.label };
+      for (const param of isWhitebox ? tool.params ?? [] : tool.parameters ?? []) {
+        const paramEntry = { label: isWhitebox ? humanize(param.name) : param.label };
         if (param.description) paramEntry.description = param.description;
-        if (param.options?.length) {
+        // Whitebox enum values are CLI values, not display labels owned by the
+        // host; leave them verbatim in the dropdown.
+        if (!isWhitebox && param.options?.length) {
           const options = {};
           for (const option of param.options) options[option.value] = option.label;
           paramEntry.options = options;
         }
-        params[param.id] = paramEntry;
+        params[isWhitebox ? param.name : param.id] = paramEntry;
       }
       if (Object.keys(params).length > 0) entry.params = params;
       entries[tool.id] = entry;
@@ -91,7 +113,10 @@ function buildToolGroups() {
   // the collision lookup below would read `Object.prototype.constructor` and
   // throw on the very first tool in that group.
   const groups = Object.create(null);
-  for (const tools of Object.values(CATALOGS)) {
+  for (const [catalog, tools] of Object.entries(CATALOGS)) {
+    // Whitebox categories are not routed through this shared namespace; see
+    // translateModelToolGroup for the raw-label collision details.
+    if (catalog === "whitebox") continue;
     for (const tool of tools) {
       if (!tool.group) continue;
       const key = toolGroupKey(tool.group);

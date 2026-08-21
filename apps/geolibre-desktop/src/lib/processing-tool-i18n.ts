@@ -1,10 +1,9 @@
-import type { AlgorithmParameter } from "@geolibre/processing";
+import type { AlgorithmParameter, WhiteboxToolParameter } from "@geolibre/processing";
 import type { TFunction } from "i18next";
 
 /**
- * Translation layer for the metadata the GeoLibre-native processing registries
- * carry: tool names, descriptions, grouping labels, parameter labels/help text
- * and select-option labels.
+ * Translation layer for processing registry metadata: tool names, descriptions,
+ * grouping labels, parameter labels/help text and select-option labels.
  *
  * Those strings live in `@geolibre/processing`, a package with no i18n access,
  * so the Processing *menu* entries were translated while the dialog they opened
@@ -24,23 +23,28 @@ import type { TFunction } from "i18next";
  * layer) and a raster tool (warp a GeoTIFF) — so the catalog name is part of
  * every key.
  */
-export type ProcessingToolCatalog = "vector" | "network" | "statistics" | "raster";
+export type ProcessingToolCatalog =
+  | "vector"
+  | "network"
+  | "statistics"
+  | "raster"
+  | "whitebox";
 
 /**
- * A catalog, or `null` for tool metadata GeoLibre does not own and so cannot
- * translate — today that is the Whitebox WASM catalog, whose ~800 tool
- * descriptions come from the bundled binary. Passing `null` returns the
- * registry's own text unchanged, so a caller that mixes owned and unowned tools
- * (the Model Builder palette) needs no branch of its own.
+ * A catalog, or `null` for tool metadata the host cannot translate. Passing
+ * `null` returns the registry's own text unchanged, so a caller that mixes
+ * supported and unsupported providers needs no branch of its own.
  */
 export type ProcessingToolCatalogOrNone = ProcessingToolCatalog | null;
 
 /**
  * Catalog backing a Model Builder descriptor's `provider`, or `null` when the
- * provider's metadata is not GeoLibre's to translate.
+ * provider's metadata the host cannot translate.
  */
 export function modelProviderCatalog(provider: string): ProcessingToolCatalogOrNone {
-  return provider === "vector" ? "vector" : null;
+  if (provider === "vector") return "vector";
+  if (provider === "whitebox") return "whitebox";
+  return null;
 }
 
 /** Root of the generated tool-metadata namespace in the message catalogs. */
@@ -152,18 +156,16 @@ export function translateToolGroup(t: TFunction, group: string): string {
  * `processing.toolGroup.terrain`, which would render the palette with two
  * identically-labelled headings.
  *
- * So a heading is translated only when at least one of its tools comes from a
- * catalog GeoLibre owns. A group of purely Whitebox categories renders its
- * label verbatim, the way the rest of that catalog's metadata does; a mixed
- * group (none exist today, since no Whitebox category matches an owned label
- * exactly) counts as owned, because an owned tool sitting under the heading
- * means the label is ours to translate.
+ * So a heading is translated only when at least one of its tools comes from the
+ * vector registry, whose labels share the generated tool-group namespace.
+ * Whitebox categories still render verbatim: they key on raw category text and
+ * can collide with an owned label after slugging.
  */
 export function translateModelToolGroup(
   t: TFunction,
   group: { group: string; tools: { provider: string }[] },
 ): string {
-  const owned = group.tools.some((tool) => modelProviderCatalog(tool.provider) !== null);
+  const owned = group.tools.some((tool) => tool.provider === "vector");
   return owned ? translateToolGroup(t, group.group) : group.group;
 }
 
@@ -202,4 +204,24 @@ export function translateParameter<T extends AlgorithmParameter>(
     }));
   }
   return translated;
+}
+
+/**
+ * A Whitebox manifest parameter's help text for the active locale.
+ *
+ * The Processing toolbox uses the raw manifest for control selection as well as
+ * display: heuristics such as path, CRS, field, and extent detection read the
+ * English description. Translating the whole object would make those choices
+ * depend on the active locale, so callers should use this text for display and
+ * keep passing the original parameter to behavior-bearing code.
+ */
+export function translateWhiteboxParameterDescription(
+  t: TFunction,
+  toolId: string,
+  param: WhiteboxToolParameter,
+): string | undefined {
+  if (!param.description) return param.description;
+  return t(parameterDescriptionKey("whitebox", toolId, param.name), {
+    defaultValue: param.description,
+  });
 }

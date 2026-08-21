@@ -9,6 +9,7 @@ import {
   translateToolDescription,
   translateToolGroup,
   translateToolName,
+  translateWhiteboxParameterDescription,
 } from "../apps/geolibre-desktop/src/lib/processing-tool-i18n";
 
 function fakeT(catalog: Record<string, string> = {}): TFunction {
@@ -147,6 +148,54 @@ describe("translateParameter", () => {
   });
 });
 
+describe("Whitebox metadata translation", () => {
+  it("routes Model Builder Whitebox metadata through its own catalog namespace", () => {
+    assert.equal(modelProviderCatalog("whitebox"), "whitebox");
+  });
+
+  it("translates a Whitebox tool name", () => {
+    const t = fakeT({
+      "processing.toolMeta.whitebox.feature_preserving_smoothing_multiscale.name":
+        "多尺度保特征平滑",
+    });
+    assert.equal(
+      translateToolName(t, "whitebox", {
+        id: "feature_preserving_smoothing_multiscale",
+        name: "Feature Preserving Smoothing Multiscale",
+      }),
+      "多尺度保特征平滑",
+    );
+  });
+
+  it("translates Whitebox parameter display text without changing the manifest object", () => {
+    const param = {
+      name: "input",
+      description: "Input DEM raster path or typed raster object.",
+    };
+    const t = fakeT({
+      "processing.toolMeta.whitebox.feature_preserving_smoothing_multiscale.params.input.description":
+        "输入 DEM 栅格路径或类型化的栅格对象。",
+    });
+    assert.equal(
+      translateWhiteboxParameterDescription(
+        t,
+        "feature_preserving_smoothing_multiscale",
+        param,
+      ),
+      "输入 DEM 栅格路径或类型化的栅格对象。",
+    );
+    assert.equal(param.description, "Input DEM raster path or typed raster object.");
+  });
+
+  it("falls back to the manifest description for untranslated Whitebox parameters", () => {
+    const param = { name: "input", description: "Input DEM raster path." };
+    assert.equal(
+      translateWhiteboxParameterDescription(fakeT(), "a_tool", param),
+      "Input DEM raster path.",
+    );
+  });
+});
+
 describe("translateModelToolGroup", () => {
   const t = fakeT({ "processing.toolGroup.terrain": "地形" });
 
@@ -187,10 +236,8 @@ describe("modelProviderCatalog", () => {
     assert.equal(modelProviderCatalog("vector"), "vector");
   });
 
-  it("returns null for metadata GeoLibre does not own", () => {
-    // Whitebox tool names/descriptions come from the bundled WASM binary, so
-    // the host has no keys for them and must render them verbatim.
-    assert.equal(modelProviderCatalog("whitebox"), null);
+  it("returns null for unsupported providers", () => {
+    assert.equal(modelProviderCatalog("unknown"), null);
   });
 
   it("passes registry text straight through for a null catalog", () => {

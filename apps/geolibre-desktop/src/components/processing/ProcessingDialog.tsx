@@ -45,6 +45,7 @@ import {
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   isTauri,
   openLocalDataFileWithFallback,
@@ -94,6 +95,11 @@ import {
 } from "../../lib/processing-history";
 import { CrsPickerInput } from "./CrsPickerInput";
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
+import {
+  translateToolDescription,
+  translateToolName,
+  translateWhiteboxParameterDescription,
+} from "../../lib/processing-tool-i18n";
 
 interface ProcessingDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
@@ -116,8 +122,11 @@ const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
 const PANEL_MIN_W = 560;
 const PANEL_MIN_H = 400;
 
-function toolLabel(tool: WhiteboxTool): string {
-  return tool.display_name || humanize(tool.id);
+function toolLabel(t: TFunction, tool: WhiteboxTool): string {
+  return translateToolName(t, "whitebox", {
+    id: tool.id,
+    name: tool.display_name || humanize(tool.id),
+  });
 }
 
 function humanize(value: string): string {
@@ -130,8 +139,12 @@ function humanize(value: string): string {
   );
 }
 
-function parameterLabel(param: WhiteboxToolParameter): string {
-  return param.description || humanize(param.name);
+function parameterLabel(
+  t: TFunction,
+  toolId: string,
+  param: WhiteboxToolParameter,
+): string {
+  return translateWhiteboxParameterDescription(t, toolId, param) || humanize(param.name);
 }
 
 function isOutputParameter(param: WhiteboxToolParameter): boolean {
@@ -899,12 +912,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       }
       if (!matchesSource(tool)) return false;
       if (!normalizedQuery) return true;
-      return [tool.id, toolLabel(tool), tool.category || "", tool.summary || ""]
+      return [tool.id, toolLabel(t, tool), tool.category || "", tool.summary || ""]
         .join(" ")
         .toLowerCase()
         .includes(normalizedQuery);
     });
-  }, [category, matchesSource, query, tools]);
+  }, [category, matchesSource, query, t, tools]);
 
   const loadWhitebox = useCallback(async () => {
     setLoadingTools(true);
@@ -1395,7 +1408,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       // `selectedTool`, so switching tools while a job finishes does not
       // mislabel the imported layer.
       const jobTool = tools.find((item) => item.id === nextJob.tool_id);
-      const jobToolLabel = jobTool ? toolLabel(jobTool) : humanize(nextJob.tool_id);
+      const jobToolLabel = jobTool ? toolLabel(t, jobTool) : humanize(nextJob.tool_id);
       // This job's own run parameters (not a shared slot), consumed once here so a
       // concurrent re-run cannot repoint the output-path lookup below.
       const runParameters = runParametersByJobRef.current.get(nextJob.id) ?? {};
@@ -1451,7 +1464,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         }
       }
     },
-    [addGeoJsonLayer, mapControllerRef, onAddRaster, tools],
+    [addGeoJsonLayer, mapControllerRef, onAddRaster, t, tools],
   );
 
   useEffect(() => {
@@ -1479,7 +1492,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         !isOutputParameter(param) &&
         (value === undefined || value === null || value === "")
       ) {
-        setError(`Missing required parameter: ${parameterLabel(param)}`);
+        setError(`Missing required parameter: ${parameterLabel(t, selectedTool.id, param)}`);
         setRunningLocal(false);
         return;
       }
@@ -1544,7 +1557,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     const tracker = beginProcessingRun({
       kind: "whitebox",
       toolId: selectedTool.id,
-      toolName: toolLabel(selectedTool),
+      toolName: toolLabel(t, selectedTool),
       engine: runLocal ? "wasm" : "sidecar",
       parameters: { ...values },
     });
@@ -1863,7 +1876,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                   >
                     <span className="block truncate font-medium">
                       {tool.locked ? "[Locked] " : ""}
-                      {toolLabel(tool)}
+                      {toolLabel(t, tool)}
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">
                       {tool.category || "General"}
@@ -1888,7 +1901,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
             <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
               <div className="min-w-0 grow basis-48">
                 <h3 className="truncate text-base font-semibold">
-                  {selectedTool ? toolLabel(selectedTool) : t("processing.whitebox.noToolSelected")}
+                  {selectedTool ? toolLabel(t, selectedTool) : t("processing.whitebox.noToolSelected")}
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {selectedTool?.id}
@@ -1946,7 +1959,13 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               </Button>
             </div>
             {selectedTool?.summary && (
-              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{selectedTool.summary}</p>
+              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                {translateToolDescription(t, "whitebox", {
+                  id: selectedTool.id,
+                  name: toolLabel(t, selectedTool),
+                  description: selectedTool.summary,
+                })}
+              </p>
             )}
             {selectedTool?.locked && (
               <p className="mt-2 flex items-center gap-2 text-sm text-destructive">
@@ -2304,7 +2323,9 @@ function ParameterField({
   // Loaded layers that can fill this subset `url` field, only computed for the
   // url param the dialog wired `onPopulateFromLayer` to.
   const subsetUrlLayers = onPopulateFromLayer ? layersForSubsetUrl(toolId, layers) : [];
-  const label = parameterLabel(param);
+  // Display text resolves through i18n, while the original manifest parameter
+  // continues to feed the control-selection heuristics below.
+  const label = parameterLabel(t, toolId, param);
   const valueText = value === undefined || value === null ? "" : String(value);
 
   return (

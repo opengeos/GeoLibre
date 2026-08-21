@@ -11,6 +11,16 @@ import { parameterKind } from "./whitebox-param-kind";
 /** Palette group for Whitebox tools that arrive without a category. */
 const UNCATEGORIZED = "Other";
 
+function humanize(value: string): string {
+  return (
+    value
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Parameter"
+  );
+}
+
 /**
  * Build the palette key for a tool. Whitebox and the client vector registry both
  * define e.g. `buffer`, so the provider has to be part of the identity.
@@ -71,7 +81,7 @@ function whiteboxScalarParameter(
 ): AlgorithmParameter | null {
   const base = {
     id: param.name,
-    label: param.name,
+    label: humanize(param.name),
     required: param.required,
     description: param.description,
     default: param.default,
