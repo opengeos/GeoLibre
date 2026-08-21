@@ -16,6 +16,11 @@ import { Wrench } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanel } from "../../../hooks/useToolbarPanels";
+import type { ParseKeys } from "i18next";
+/** Convert a Whitebox subcategory label to an i18n key. */
+function subcatKey(label: string): string {
+  return `processing.whitebox.menuSubcategory.${label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/_+$/, "")}`;
+}
 import { isMobile } from "../../../lib/is-mobile";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { masHidesMenuItem } from "../../../lib/mas-build";
@@ -166,19 +171,19 @@ export function ProcessingMenu({
                 {cat.subcategories.length === 1
                   ? cat.subcategories[0].tools.map((tool) => (
                       <DropdownMenuItem key={tool.id} onSelect={() => openWhiteboxTool(tool.id)}>
-                        {tool.name}
+                        {t(`processing.whitebox.menuTool.${tool.id}` as ParseKeys)}
                       </DropdownMenuItem>
                     ))
                   : cat.subcategories.map((sub) => (
                       <DropdownMenuSub key={sub.label}>
-                        <DropdownMenuSubTrigger>{sub.label}</DropdownMenuSubTrigger>
+                        <DropdownMenuSubTrigger>{t(subcatKey(sub.label) as ParseKeys)}</DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                           {sub.tools.map((tool) => (
                             <DropdownMenuItem
                               key={tool.id}
                               onSelect={() => openWhiteboxTool(tool.id)}
                             >
-                              {tool.name}
+                              {t(`processing.whitebox.menuTool.${tool.id}` as ParseKeys)}
                             </DropdownMenuItem>
                           ))}
                         </DropdownMenuSubContent>

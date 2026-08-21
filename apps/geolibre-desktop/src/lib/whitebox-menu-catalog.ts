@@ -5,8 +5,9 @@
 // are grouped under a "GeoLibre (WASM)" subheading. Tool ids match the
 // runtime/sidecar/WASM catalog used by ProcessingDialog.
 // Regenerate with scripts/gen-whitebox-menu-catalog.mjs; do not hand-edit.
-// Tool/subcategory names are catalog data and are intentionally not
-// translated, matching the Whitebox toolbox dialog.
+// Tool/subcategory names are translated via i18n (processing.whitebox.menuTool.*
+// and processing.whitebox.menuSubcategory.*). English values live here;
+// ProcessingMenu.tsx renders them through t() for localization.
 
 import type { ParseKeys } from "i18next";
 
@@ -18,7 +19,7 @@ export interface WhiteboxMenuTool {
 }
 
 export interface WhiteboxMenuSubcategory {
-  /** Subcategory label (catalog data, not translated). */
+  /** Subcategory label (English); translated at render time via i18n. */
   label: string;
   tools: WhiteboxMenuTool[];
 }
