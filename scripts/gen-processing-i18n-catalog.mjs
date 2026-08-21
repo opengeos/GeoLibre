@@ -80,7 +80,9 @@ function buildToolMeta() {
     for (const tool of tools) {
       const isWhitebox = catalog === "whitebox";
       const entry = { name: isWhitebox ? tool.display_name || tool.id : tool.name };
-      if (tool.description) entry.description = tool.description;
+      // Whitebox snapshot stores tool summaries in `summary`, not `description`.
+      const desc = isWhitebox ? tool.summary || tool.description : tool.description;
+      if (desc) entry.description = desc;
       const params = {};
       for (const param of isWhitebox ? tool.params ?? [] : tool.parameters ?? []) {
         const paramEntry = { label: isWhitebox ? humanize(param.name) : param.label };

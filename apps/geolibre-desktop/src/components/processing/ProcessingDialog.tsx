@@ -99,6 +99,7 @@ import {
   translateToolDescription,
   translateToolName,
   translateWhiteboxParameterDescription,
+  translateWhiteboxParameterLabel,
 } from "../../lib/processing-tool-i18n";
 
 interface ProcessingDialogProps {
@@ -144,7 +145,12 @@ function parameterLabel(
   toolId: string,
   param: WhiteboxToolParameter,
 ): string {
-  return translateWhiteboxParameterDescription(t, toolId, param) || humanize(param.name);
+  const label = translateWhiteboxParameterLabel(t, toolId, param);
+  const desc = translateWhiteboxParameterDescription(t, toolId, param);
+  // Show the translated label; append a translated description only when it
+  // adds information beyond the humanized name.
+  return desc && desc !== label ? `${label}: ${desc}` : label;
+
 }
 
 function isOutputParameter(param: WhiteboxToolParameter): boolean {

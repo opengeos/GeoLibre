@@ -206,8 +206,32 @@ export function translateParameter<T extends AlgorithmParameter>(
   return translated;
 }
 
+/** Humanize a snake_case identifier into a Title Case display string. */
+function humanize(value: string): string {
+  return (
+    value
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Parameter"
+  );
+}
+
 /**
- * A Whitebox manifest parameter's help text for the active locale.
+ * A Whitebox manifest parameter label (humanized name) for the active locale.
+ */
+export function translateWhiteboxParameterLabel(
+  t: TFunction,
+  toolId: string,
+  param: WhiteboxToolParameter,
+): string {
+  return t(parameterLabelKey("whitebox", toolId, param.name), {
+    defaultValue: humanize(param.name),
+  });
+}
+
+/**
+ * A Whitebox manifest parameter help text for the active locale.
  *
  * The Processing toolbox uses the raw manifest for control selection as well as
  * display: heuristics such as path, CRS, field, and extent detection read the
