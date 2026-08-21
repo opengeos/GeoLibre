@@ -72,6 +72,9 @@ export function decodePolylineDetailed(
       if (index >= len) return { coordinates, complete: false };
       byte = cleanEncoded.charCodeAt(index++) - 63;
       if (byte < 0 || byte > 63) return { coordinates, complete: false };
+      if (shift > 30 || (shift === 30 && (byte & 0x1f) > 0x03)) {
+        return { coordinates, complete: false };
+      }
       result |= (byte & 0x1f) << shift;
       shift += 5;
       if (byte < 0x20) {
@@ -94,6 +97,9 @@ export function decodePolylineDetailed(
       if (index >= len) return { coordinates, complete: false };
       byte = cleanEncoded.charCodeAt(index++) - 63;
       if (byte < 0 || byte > 63) return { coordinates, complete: false };
+      if (shift > 30 || (shift === 30 && (byte & 0x1f) > 0x03)) {
+        return { coordinates, complete: false };
+      }
       result |= (byte & 0x1f) << shift;
       shift += 5;
       if (byte < 0x20) {

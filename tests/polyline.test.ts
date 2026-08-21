@@ -61,6 +61,10 @@ describe("polyline codec", () => {
         assert.ok(Number.isFinite(lat));
       }
     });
+
+    it("rejects overlong varint input '_______?' exceeding 30-bit shift bounds", () => {
+      assert.deepEqual(decodePolyline("_______?", 5), []);
+    });
   });
 
   describe("encodePolyline", () => {
@@ -550,6 +554,53 @@ describe("polyline codec", () => {
         layers: [layerWithIncompletePoly as any],
         parameters: {
           layer: "test-poly-layer-incomplete",
+          field: "poly",
+          precision: "5",
+        },
+        log: (msg) => logs.push(msg),
+        addResultLayer: (_name, fc) => {
+          resultFc = fc;
+        },
+      });
+
+      assert.ok(resultFc);
+      assert.equal(resultFc.features.length, 0);
+      assert.ok(logs.some((msg) => msg.includes("Skipped 1 feature(s)")));
+    });
+
+    it("decodePolylineTool skips overlong varint input '_______?' and does not accept it as LineString", async () => {
+      const { decodePolylineTool } = await import("@geolibre/processing");
+      const layerWithOverlongPoly = {
+        id: "test-poly-layer-overlong",
+        name: "Overlong Polyline",
+        type: "geojson" as const,
+        visible: true,
+        opacity: 1,
+        style: {} as any,
+        metadata: {},
+        source: { type: "geojson" as const },
+        geojson: {
+          type: "FeatureCollection" as const,
+          features: [
+            {
+              type: "Feature" as const,
+              properties: {
+                routeId: "Overlong",
+                poly: "_______?",
+              },
+              geometry: null as any,
+            },
+          ],
+        },
+      };
+
+      let resultFc: FeatureCollection | undefined;
+      const logs: string[] = [];
+
+      decodePolylineTool.run({
+        layers: [layerWithOverlongPoly as any],
+        parameters: {
+          layer: "test-poly-layer-overlong",
           field: "poly",
           precision: "5",
         },

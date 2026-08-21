@@ -207,14 +207,15 @@ def test_polyline_to_geojson_unescape_default():
 def test_decode_polyline_out_of_range_bounds():
     from geolibre.polyline import _encode_signed_number
 
-    # Latitude > 90 and < -90
-    lat_high = _encode_signed_number(9500000) + _encode_signed_number(0)
-    assert decode_polyline(lat_high, precision=5) == []
-    lat_low = _encode_signed_number(-9500000) + _encode_signed_number(0)
-    assert decode_polyline(lat_low, precision=5) == []
+    for precision in (5, 6):
+        factor = 10**precision
 
-    # Longitude > 180 and < -180
-    lon_high = _encode_signed_number(0) + _encode_signed_number(19000000)
-    assert decode_polyline(lon_high, precision=5) == []
-    lon_low = _encode_signed_number(0) + _encode_signed_number(-19000000)
-    assert decode_polyline(lon_low, precision=5) == []
+        lat_high = _encode_signed_number(95 * factor) + _encode_signed_number(0)
+        assert decode_polyline(lat_high, precision=precision) == []
+        lat_low = _encode_signed_number(-95 * factor) + _encode_signed_number(0)
+        assert decode_polyline(lat_low, precision=precision) == []
+
+        lon_high = _encode_signed_number(0) + _encode_signed_number(190 * factor)
+        assert decode_polyline(lon_high, precision=precision) == []
+        lon_low = _encode_signed_number(0) + _encode_signed_number(-190 * factor)
+        assert decode_polyline(lon_low, precision=precision) == []

@@ -210,8 +210,8 @@ export function shapefileFieldWarnings(geojson: FeatureCollection): string[] {
   if (fileFamily !== null && demoted > 0) {
     warnings.push(
       `${demoted} feature(s) whose geometry differs from the ${fileFamily} ` +
-        "type will be written without geometry (Shapefile allows one geometry " +
-        "type per file).",
+      "type will be written without geometry (Shapefile allows one geometry " +
+      "type per file).",
     );
   }
   return warnings;
@@ -270,7 +270,7 @@ export function layerSupportsPolylineExport(layer: GeoLibreLayer): boolean {
   });
   const hasNonLine = features.some((f) => {
     const type = f.geometry?.type;
-    return type != null && type !== "LineString" && type !== "MultiLineString";
+    return type !== "LineString" && type !== "MultiLineString";
   });
 
   return hasLine && !hasNonLine;
