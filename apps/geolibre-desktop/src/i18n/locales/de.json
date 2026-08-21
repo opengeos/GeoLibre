@@ -4304,7 +4304,7 @@
       "vector": {
         "buffer": {
           "name": "Puffer",
-          "description": "Um jedes Objekt ein Pufferpolygon mit festem Abstand erzeugen",
+          "description": "Um jedes Objekt ein Pufferpolygon mit festem Abstand zu erzeugen",
           "params": {
             "layer": {
               "label": "Eingabeebene"

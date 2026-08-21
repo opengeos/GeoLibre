@@ -5679,7 +5679,7 @@
           }
         },
         "aspect": {
-          "name": "الاتجاه القبلي",
+          "name": "اتجاه الانحدار",
           "description": "حساب الاتجاه القبلي (اتجاه البوصلة لأشد انحدار) من نموذج ارتفاعات."
         },
         "reproject": {
@@ -7032,7 +7032,7 @@
     "refreshVectorControlError": "تعذر تحديث هذه الطبقة. جرّب إعادة فتح لوحة إضافة طبقة متجهات.",
     "refreshed": "تم التحديث.",
     "refreshedCount": "تم تحديث {{count}} من المعالم.",
-    "refreshedTruncated": "تم تحديث {{shown}} من أصل {{total}} معلم.",
+    "refreshedTruncated": "تم تحديث {{shown}} من أصل {{total}} من المعالم.",
     "refreshError": "تعذر تحديث هذه الطبقة.",
     "exportNeedsFeatures": "يتطلب التصدير طبقة متجهات تحتوي على معالم.",
     "exportedWithWarnings": "تم تصدير الطبقة. {{warnings}}",

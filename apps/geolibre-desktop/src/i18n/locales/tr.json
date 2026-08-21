@@ -3485,7 +3485,7 @@
     "addIcechunk": "Icechunk depoları henüz okunamıyor",
     "zarrProblemGroup": "Bu varlık çizilebilir tek bir dizi değil, bir dizi grubu adlandırıyor",
     "zarrProblemUnauthorized": "Bu Zarr deposu, GeoLibre'nin henüz sağlayamadığı kimlik bilgileri gerektiriyor",
-    "zarrProblemUnsupportedUrl": "Bu Zarr deposunun adresi anahtar anahtar okunamıyor",
+    "zarrProblemUnsupportedUrl": "Bu Zarr deposunun adresi anahtar bazında okunamıyor",
     "zarrProblemUnavailable": "Bu Zarr deposu açılamadı",
     "chooseTarget": "Ne ekleneceğini seçin",
     "cogUnsupported": "Bu GeoLibre ana bilgisayarı uzak GeoTIFF varlıklarını görselleştiremiyor",

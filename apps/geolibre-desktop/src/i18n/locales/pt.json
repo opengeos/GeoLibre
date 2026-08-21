@@ -3483,7 +3483,7 @@
     "addNoSourceLayers": "Este arquivo não lista camadas para desenhar",
     "addNoTarget": "Este ativo não lista nada para desenhar",
     "addIcechunk": "Repositórios Icechunk ainda não podem ser lidos",
-    "zarrProblemGroup": "Este ativo nomeia um grupo de arrays, não um que possa ser desenhado",
+    "zarrProblemGroup": "Este ativo nomeia um grupo de arrays, não um array que possa ser desenhado",
     "zarrProblemUnauthorized": "Este repositório Zarr precisa de credenciais que o GeoLibre ainda não pode fornecer",
     "zarrProblemUnsupportedUrl": "O endereço deste repositório Zarr não pode ser lido chave por chave",
     "zarrProblemUnavailable": "Não foi possível abrir este repositório Zarr",

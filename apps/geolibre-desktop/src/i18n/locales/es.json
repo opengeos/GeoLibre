@@ -3487,7 +3487,7 @@
     "zarrProblemUnauthorized": "Este almacén Zarr necesita credenciales que GeoLibre aún no puede proporcionar",
     "zarrProblemUnsupportedUrl": "La dirección de este almacén Zarr no se puede leer clave por clave",
     "zarrProblemUnavailable": "No se pudo abrir este almacén Zarr",
-    "chooseTarget": "Elija qué añadir",
+    "chooseTarget": "Elige qué añadir",
     "cogUnsupported": "Este host de GeoLibre no puede visualizar recursos GeoTIFF remotos",
     "formatCog": "COG",
     "formatGeoJson": "GeoJSON",
@@ -5598,8 +5598,8 @@
                 "ndmi": "NDMI (humedad)",
                 "ndbi": "NDBI (zonas edificadas)",
                 "nbr": "NBR (razón de quema)",
-                "evi": "EVI (vegetación mejorado)",
-                "savi": "SAVI (vegetación ajustado al suelo)"
+                "evi": "EVI (índice de vegetación mejorado)",
+                "savi": "SAVI (índice de vegetación ajustado al suelo)"
               }
             },
             "sensor": {

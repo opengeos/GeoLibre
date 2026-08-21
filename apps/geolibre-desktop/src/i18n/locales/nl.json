@@ -730,12 +730,12 @@
       "selectTable": "Selecteer een tabel",
       "geometryColumn": "Geometriekolom",
       "rowLimit": "Rijlimiet",
-      "rowLimitHint": "De laag bevat de eerste rijen van de tabel, tot aan deze limiet. De limiet mag niet groter zijn dan {{max}} rijen.",
-      "rowLimitTruncates": "De tabel bevat {{total}} rijen; de laag zal de eerste {{limit}} bevatten.",
+      "rowLimitHint": "De laag bevat de eerste rijen van de tabel, tot aan deze limiet. De limiet mag niet groter zijn dan {{max}} (aantal rijen).",
+      "rowLimitTruncates": "Aantal rijen in de tabel: {{total}}; de laag bevat de eerste {{limit}}.",
       "statusConnecting": "Iceberg-metadata lezen...",
       "statusInspecting": "Tabel inspecteren...",
-      "statusInspected": "{{rows}} rijen. Geometrie: {{column}} ({{crs}}).",
-      "statusNoGeometry": "{{rows}} rijen, maar er is geen GEOMETRY-kolom gevonden. Iceberg-geometrie moet het v3-geometrietype gebruiken.",
+      "statusInspected": "Aantal rijen: {{rows}}. Geometrie: {{column}} ({{crs}}).",
+      "statusNoGeometry": "Aantal rijen: {{rows}}, maar er is geen GEOMETRY-kolom gevonden. Iceberg-geometrie moet het v3-geometrietype gebruiken.",
       "statusTablesFound_one": "{{count}} tabel gevonden.",
       "statusTablesFound_other": "{{count}} tabellen gevonden. Selecteer er een om door te gaan.",
       "statusNoTables": "De catalogus bevat geen tabellen.",
@@ -5302,7 +5302,7 @@
           }
         },
         "average-nearest-neighbor": {
-          "name": "Gemiddelde naaste buur",
+          "name": "Gemiddelde dichtstbijzijnde buur",
           "description": "Test of punten geclusterd, verspreid of willekeurig verdeeld zijn (ANN-ratio + z-score).",
           "params": {
             "layer": {
@@ -6729,7 +6729,7 @@
     "refreshVectorControlError": "Kon deze laag niet vernieuwen. Probeer het paneel Vectorlaag toevoegen opnieuw te openen.",
     "refreshed": "Vernieuwd.",
     "refreshedCount": "{{count}} objecten vernieuwd.",
-    "refreshedTruncated": "{{shown}} van {{total}} objecten vernieuwd.",
+    "refreshedTruncated": "Vernieuwd: {{shown}} van {{total}} (aantal objecten).",
     "refreshError": "Kon deze laag niet vernieuwen.",
     "exportNeedsFeatures": "Exporteren vereist een vectorlaag met objecten.",
     "exportedWithWarnings": "Laag geëxporteerd. {{warnings}}",

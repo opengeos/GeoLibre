@@ -4309,7 +4309,7 @@
           }
         },
         "clip": {
-          "name": "Clip",
+          "name": "Potong",
           "description": "Memotong layer masukan ke area yang dicakup layer overlay (mempertahankan atribut masukan)",
           "params": {
             "layer": {
@@ -4321,7 +4321,7 @@
           }
         },
         "intersection": {
-          "name": "Intersection",
+          "name": "Irisan",
           "description": "Hanya mempertahankan area tempat kedua layer poligon saling tumpang tindih",
           "params": {
             "layer": {
@@ -4333,7 +4333,7 @@
           }
         },
         "difference": {
-          "name": "Difference",
+          "name": "Selisih",
           "description": "Menghapus area layer overlay dari layer masukan",
           "params": {
             "layer": {
@@ -4345,7 +4345,7 @@
           }
         },
         "union": {
-          "name": "Union",
+          "name": "Gabungan",
           "description": "Menggabungkan dua layer poligon menjadi satu geometri gabungan",
           "params": {
             "layer": {
@@ -4357,7 +4357,7 @@
           }
         },
         "spatial-join": {
-          "name": "Spatial join",
+          "name": "Gabungan spasial",
           "description": "Melampirkan atribut dari layer join ke setiap fitur masukan berdasarkan hubungan spasial",
           "params": {
             "layer": {
@@ -5357,7 +5357,7 @@
           }
         },
         "resample": {
-          "name": "Resample",
+          "name": "Sampel ulang",
           "description": "Me-resample raster ke ukuran piksel (resolusi) yang berbeda.",
           "params": {
             "resolution": {
@@ -5375,7 +5375,7 @@
           }
         },
         "clip-extent": {
-          "name": "Clip berdasarkan cakupan",
+          "name": "Potong berdasarkan cakupan",
           "description": "Memotong raster ke sebuah kotak pembatas (dalam CRS raster).",
           "params": {
             "minx": {
@@ -5393,7 +5393,7 @@
           }
         },
         "clip-mask": {
-          "name": "Clip berdasarkan layer mask",
+          "name": "Potong berdasarkan layer mask",
           "description": "Memotong raster ke geometri dari file mask vektor.",
           "params": {
             "mask_path": {
@@ -5648,11 +5648,11 @@
     },
     "toolGroup": {
       "analysis": "Analisis",
-      "clip": "Clip",
+      "clip": "Potong",
       "dataQuality": "Kualitas data",
       "dggs": "DGGS",
       "geometry": "Geometri",
-      "join": "Join",
+      "join": "Gabungan",
       "movementTime": "Pergerakan & waktu",
       "network": "Jaringan",
       "overlay": "Overlay",

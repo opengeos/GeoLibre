@@ -4341,7 +4341,7 @@
           }
         },
         "dissolve": {
-          "name": "Dissolvenza",
+          "name": "Dissolvi",
           "description": "Unisce gli elementi poligonali in un'unica geometria, facoltativamente raggruppati per campo",
           "params": {
             "layer": {
