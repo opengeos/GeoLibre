@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, setActiveEllipsoidId, type GeoLibreLayer } from "@geolibre/core";
 import { getVectorTool } from "@geolibre/processing";
 import distance from "@turf/distance";
-import type { FeatureCollection, Point } from "geojson";
+import type { FeatureCollection, Point, Position } from "geojson";
 
 function makeLayer(id: string, name: string, fc: FeatureCollection): GeoLibreLayer {
   return {
@@ -248,5 +248,157 @@ describe("points along geometry tool", () => {
     });
     assert.equal(wrongFamily.results.length, 0);
     assert.ok(wrongFamily.messages.some((m) => m.includes("no line or polygon features")));
+  });
+
+  it("places interval points geodesically so the distance column matches the coordinate", () => {
+    // A 90-degree longitude span at 60N: linear lon/lat interpolation puts the
+    // midpoint at [45, 60], which is ~53% of the haversine length, not 50%.
+    const start: Position = [0, 60];
+    const end: Position = [90, 60];
+    const arc = makeLayer("arc", "Arc", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: [start, end] },
+        },
+      ],
+    });
+    const total = distance(start, end, { units: "kilometers" });
+    const { results } = runTool("points-along-geometry", [arc], {
+      layer: "arc",
+      interval: total / 2,
+      units: "kilometers",
+    });
+    const points = results[0].features;
+    assert.equal(points.length, 3);
+    const mid = points[1];
+    assert.equal(mid.properties?.distance, total / 2);
+    const measured = distance(start, mid.geometry.coordinates, { units: "kilometers" });
+    assert.ok(Math.abs(measured / total - 0.5) < 1e-6, `midpoint sits at ${measured / total}`);
+    // It does NOT sit on the linear interpolation [45, 60].
+    assert.ok(mid.geometry.coordinates[1] > 60.5, `lat ${mid.geometry.coordinates[1]}`);
+    assert.deepEqual(points[2].geometry.coordinates, end);
+  });
+
+  it("walks a multi-segment line once and carries distance across vertices", () => {
+    const poly = makeLayer("poly", "Poly", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [1, 0],
+              [2, 0],
+              [3, 0],
+            ],
+          },
+        },
+      ],
+    });
+    const { results } = runTool("points-along-geometry", [poly], {
+      layer: "poly",
+      interval: 100,
+      units: "kilometers",
+    });
+    const points = results[0].features;
+    assert.deepEqual(
+      points.slice(0, 4).map((p) => p.properties?.distance),
+      [0, 100, 200, 300],
+    );
+    assert.equal(points.length, 5);
+    assert.deepEqual(points[4].geometry.coordinates, [3, 0]);
+    for (const p of points) {
+      const measured = distance([0, 0], p.geometry.coordinates, { units: "kilometers" });
+      assert.ok(Math.abs(measured - (p.properties?.distance as number)) < 1e-3);
+    }
+    // Longitudes strictly increase: no vertex was emitted twice.
+    for (let i = 1; i < points.length; i += 1) {
+      assert.ok(points[i].geometry.coordinates[0] > points[i - 1].geometry.coordinates[0]);
+    }
+  });
+
+  it("refuses an interval that would generate more points than the hard cap", () => {
+    const { messages, results } = runTool("points-along-geometry", [line], {
+      layer: "line",
+      interval: 0.000001,
+      units: "meters",
+    });
+    assert.equal(results.length, 0);
+    assert.match(messages[0], /^Error: this interval would generate about/);
+  });
+
+  it("rejects unknown units before touching Turf", () => {
+    const { messages, results } = runTool("points-along-geometry", [line], {
+      layer: "line",
+      interval: 1,
+      units: "furlongs",
+    });
+    assert.equal(results.length, 0);
+    assert.equal(messages[0], "Error: unknown units 'furlongs'");
+  });
+
+  it("never snaps a point from a previous part when a part is degenerate", () => {
+    const multi = makeLayer("multi", "Multi", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "MultiLineString",
+            coordinates: [
+              [
+                [0, 0],
+                [0, 0.001],
+              ],
+              // Every vertex identical: zero length, ends where part 0 ended.
+              [
+                [0, 0.001],
+                [0, 0.001],
+              ],
+            ],
+          },
+        },
+      ],
+    });
+    const { results } = runTool("points-along-geometry", [multi], {
+      layer: "multi",
+      interval: 1,
+      units: "kilometers",
+    });
+    const points = results[0].features;
+    // Part 0: start + end. Part 1: its own end vertex only, at distance 0.
+    assert.equal(points.length, 3);
+    assert.equal(points[1].properties?.distance, Number(distance([0, 0], [0, 0.001]).toFixed(6)));
+    assert.equal(points[2].properties?.distance, 0);
+  });
+
+  it("scales the interval and distance column by the active body's radius", () => {
+    // Mars' mean radius is ~0.53 of Earth's, so a 100 km Mars interval covers
+    // ~1.88x the angle a 100 km Earth interval does: fewer points on the same
+    // line, and the distance column still reads in Mars kilometres.
+    setActiveEllipsoidId("mars");
+    try {
+      const { results } = runTool("points-along-geometry", [line], {
+        layer: "line",
+        interval: 100,
+        units: "kilometers",
+      });
+      const points = results[0].features;
+      const earthTotal = distance([0, 0], [3, 0], { units: "kilometers" });
+      const marsTotal = points[points.length - 1].properties?.distance as number;
+      assert.ok(marsTotal < earthTotal * 0.6, `${marsTotal} vs ${earthTotal}`);
+      // 0 and 100 km fit; 200 km does not (~177 km on Mars).
+      assert.deepEqual(points.map((p) => p.properties?.distance).slice(0, 2), [0, 100]);
+      assert.equal(points.length, 3);
+    } finally {
+      setActiveEllipsoidId("earth");
+    }
   });
 });

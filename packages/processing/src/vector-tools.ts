@@ -1774,8 +1774,9 @@ type AlongUnits = "kilometers" | "meters" | "miles";
 const POINTS_ALONG_HARD_CAP = 1_000_000;
 
 /**
- * Forward-only cursor that yields a point every {@link interval} along an open
- * coordinate ring. Segment lengths are haversine and the position inside a
+ * Forward-only cursor that yields a point every {@link interval} (in Turf's
+ * Earth-scaled units; see {@link bodyLengthToEarth}) along an open coordinate
+ * ring, together with the interval multiple it sits on. Segment lengths are haversine and the position inside a
  * segment is found geodesically (bearing + destination), so the measured
  * `distance` attribute and the emitted coordinate agree even on long
  * high-latitude segments where linear lon/lat interpolation drifts. Each
@@ -1786,9 +1787,10 @@ function* walkAlong(
   positions: Position[],
   interval: number,
   units: AlongUnits,
-): Generator<{ position: Position; distance: number }> {
+): Generator<{ position: Position; step: number }> {
   let travelled = 0;
   let atDistance = 0;
+  let step = 0;
   for (let i = 1; i < positions.length; i += 1) {
     const start = positions[i - 1];
     const end = positions[i];
@@ -1804,8 +1806,9 @@ function* walkAlong(
         heading ??= bearing(start, end);
         position = destination(start, offset, heading, { units }).geometry.coordinates;
       }
-      yield { position, distance: atDistance };
-      atDistance += interval;
+      yield { position, step };
+      step += 1;
+      atDistance = step * interval;
     }
     travelled += segment;
   }
@@ -1864,7 +1867,16 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
       ctx.log("Error: interval must be greater than 0");
       return;
     }
-    const units = ((ctx.parameters.units as string) || "kilometers") as AlongUnits;
+    const units = (ctx.parameters.units as string) || "kilometers";
+    if (!LINEAR_UNITS.has(units)) {
+      ctx.log(`Error: unknown units '${units}'`);
+      return;
+    }
+    const alongUnits = units as AlongUnits;
+    // Turf is Earth-locked: pre-scale the user's ground interval into Turf's
+    // frame for the walk, and post-scale every length Turf measures back into
+    // the active body's frame before it reaches the distance column.
+    const turfInterval = bodyLengthToEarth(interval);
     const parts: { feature: Feature; part: Position[] }[] = [];
     let skipped = 0;
     let estimated = 0;
@@ -1877,7 +1889,7 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
       for (const part of geometryParts(geometry)) {
         if (part.length < 2) continue;
         // Interval multiples plus the closing end vertex.
-        estimated += Math.floor(ringLength(part, units) / interval) + 2;
+        estimated += Math.floor(ringLength(part, alongUnits) / turfInterval) + 2;
         parts.push({ feature, part });
       }
     }
@@ -1893,15 +1905,16 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
       // Walk every interval multiple, then always close with the part's
       // final vertex so endpoints survive rounding of the total length.
       let lastPushed: Feature<Point> | undefined;
-      for (const step of walkAlong(part, interval, units)) {
+      for (const { position, step } of walkAlong(part, turfInterval, alongUnits)) {
         lastPushed = {
           type: "Feature",
-          properties: { ...(feature.properties ?? {}), distance: step.distance },
-          geometry: { type: "Point", coordinates: step.position },
+          properties: { ...(feature.properties ?? {}), distance: step * interval },
+          geometry: { type: "Point", coordinates: position },
         };
         points.push(lastPushed);
       }
       const last = part[part.length - 1];
+      const endDistance = Number(earthLengthToBody(ringLength(part, alongUnits)).toFixed(6));
       const previous = lastPushed?.geometry.coordinates;
       // When the length is an (near) exact multiple of the interval, the last
       // stepped point already sits on the end vertex; keep one point but snap
@@ -1914,14 +1927,11 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
         Math.abs(previous[1] - last[1]) < 1e-9;
       if (duplicatesEnd && lastPushed) {
         lastPushed.geometry.coordinates = [...last] as Position;
-        lastPushed.properties!.distance = Number(ringLength(part, units).toFixed(6));
+        lastPushed.properties!.distance = endDistance;
       } else if (!duplicatesEnd) {
         points.push({
           type: "Feature",
-          properties: {
-            ...(feature.properties ?? {}),
-            distance: Number(ringLength(part, units).toFixed(6)),
-          },
+          properties: { ...(feature.properties ?? {}), distance: endDistance },
           geometry: { type: "Point", coordinates: [...last] as Position },
         });
       }
