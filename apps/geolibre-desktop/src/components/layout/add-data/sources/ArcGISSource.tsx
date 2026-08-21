@@ -42,6 +42,9 @@ const URL_PLACEHOLDER_KEYS = {
   "image-service": "addData.arcgis.imageServiceUrlPlaceholder",
 } as const satisfies Record<ArcGISLayerType, string>;
 
+const CUSTOM_RENDERING_RULE_OPTION = "custom-rendering-rule";
+const RASTER_FUNCTION_OPTION_PREFIX = "raster-function:";
+
 /** The raster function name carried by a rule with no custom arguments. */
 function simpleRenderingRuleFunctionName(renderingRule: string): string | null {
   try {
@@ -194,7 +197,9 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
     (rasterFunction) => rasterFunction.name === renderingRuleFunction,
   );
   const rasterFunctionSelectValue = arcgisRenderingRule.trim()
-    ? (selectedRasterFunction?.name ?? "__custom__")
+    ? selectedRasterFunction
+      ? `${RASTER_FUNCTION_OPTION_PREFIX}${selectedRasterFunction.name}`
+      : CUSTOM_RENDERING_RULE_OPTION
     : "";
 
   // The access token is intentionally excluded from saved fields — credentials
@@ -470,8 +475,11 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
                   id="arcgis-raster-function"
                   value={rasterFunctionSelectValue}
                   onChange={(event) => {
-                    const rasterFunction = event.target.value;
-                    if (rasterFunction === "__custom__") return;
+                    const optionValue = event.target.value;
+                    if (optionValue === CUSTOM_RENDERING_RULE_OPTION) return;
+                    const rasterFunction = optionValue.startsWith(RASTER_FUNCTION_OPTION_PREFIX)
+                      ? optionValue.slice(RASTER_FUNCTION_OPTION_PREFIX.length)
+                      : "";
                     setArcgisRenderingRule(
                       rasterFunction ? JSON.stringify({ rasterFunction }) : "",
                     );
@@ -479,12 +487,17 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
                 >
                   <option value="">{t("addData.arcgis.serviceDefaultRasterFunction")}</option>
                   {rasterFunctionOptions.map((rasterFunction) => (
-                    <option key={rasterFunction.name} value={rasterFunction.name}>
+                    <option
+                      key={rasterFunction.name}
+                      value={`${RASTER_FUNCTION_OPTION_PREFIX}${rasterFunction.name}`}
+                    >
                       {rasterFunction.name}
                     </option>
                   ))}
                   {arcgisRenderingRule.trim() && !selectedRasterFunction ? (
-                    <option value="__custom__">{t("addData.arcgis.customRenderingRule")}</option>
+                    <option value={CUSTOM_RENDERING_RULE_OPTION}>
+                      {t("addData.arcgis.customRenderingRule")}
+                    </option>
                   ) : null}
                 </Select>
                 <Button
