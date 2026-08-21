@@ -322,6 +322,13 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupDataManagement")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("merge-layers")}>
+                      {t("toolbar.vectorTool.mergeLayers")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
                       {t("toolbar.item.subGroupDataQuality")}
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("check-validity")}>

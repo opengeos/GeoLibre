@@ -129,6 +129,7 @@ export type VectorToolKind =
   | "trajectory-speed"
   | "detect-stops"
   | "space-time-proximity"
+  | "merge-layers"
   | "check-validity"
   | "fix-geometries"
   | "check-topology-rules"

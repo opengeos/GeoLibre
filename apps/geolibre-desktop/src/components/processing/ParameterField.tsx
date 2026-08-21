@@ -58,6 +58,40 @@ export function ParameterField({
     );
   }
 
+  if (param.type === "layers") {
+    const selected = Array.isArray(value) ? (value as string[]) : [];
+    return (
+      <div className="flex flex-col gap-1">
+        {label}
+        <select
+          id={param.id}
+          multiple
+          value={selected}
+          size={Math.min(Math.max(layerOptions.length, 2), 6)}
+          onChange={(e) => {
+            const next = Array.from(e.target.selectedOptions, (option) => option.value);
+            onChange(next);
+          }}
+          className="flex h-auto w-full appearance-none rounded-md border border-input bg-background py-1 ps-3 pe-3 text-sm shadow-xs transition-colors focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {layerOptions.map((layer) => (
+            <option key={layer.id} value={layer.id}>
+              {layer.name}
+            </option>
+          ))}
+        </select>
+        {selected.length ? (
+          <p className="text-xs text-muted-foreground">
+            {t("processing.parameterField.layersSelected", { count: selected.length })}
+          </p>
+        ) : null}
+        {param.description ? (
+          <p className="text-xs text-muted-foreground">{param.description}</p>
+        ) : null}
+      </div>
+    );
+  }
+
   if (param.type === "select") {
     return (
       <div className="flex flex-col gap-1">

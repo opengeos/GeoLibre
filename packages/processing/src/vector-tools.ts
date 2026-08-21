@@ -2668,6 +2668,99 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
   },
 };
 
+export const mergeLayersTool: ProcessingAlgorithm = {
+  id: "merge-layers",
+  name: "Merge layers",
+  description:
+    "Combine several vector layers into one, uniting their attribute schemas (missing attributes become null)",
+  group: "Data management",
+  parameters: [
+    {
+      id: "layers",
+      label: "Input layers",
+      type: "layers",
+      required: true,
+      description: "Select two or more layers; they are concatenated in the order shown",
+    },
+    {
+      id: "addSourceField",
+      label: "Add source layer field",
+      type: "boolean",
+      default: true,
+      description: "Record each output feature's originating layer name",
+    },
+    {
+      id: "sourceFieldName",
+      label: "Source field name",
+      type: "string",
+      default: "source",
+      description: "Name of the field that stores the originating layer name",
+    },
+  ],
+  run: (ctx) => {
+    const ids = Array.isArray(ctx.parameters.layers) ? (ctx.parameters.layers as string[]) : [];
+    if (!ids.length) {
+      ctx.log('Error: parameter "layers" has no layers selected');
+      return;
+    }
+    const addSource = ctx.parameters.addSourceField !== false;
+    const rawFieldName = (ctx.parameters.sourceFieldName as string)?.trim();
+    const sourceField = rawFieldName || "source";
+
+    const selected = ids
+      .map((id) => ctx.layers.find((l) => l.id === id))
+      .filter((l): l is GeoLibreLayer => Boolean(l?.geojson?.features?.length));
+    const skipped = ids.length - selected.length;
+    if (skipped) ctx.log(`Skipped ${skipped} selected layer(s) with no GeoJSON features`);
+    if (!selected.length) {
+      ctx.log("Error: none of the selected layers has GeoJSON features");
+      return;
+    }
+
+    // Union of property keys in first-seen order, so the merged attribute
+    // schema is stable regardless of feature iteration.
+    const schema: string[] = [];
+    const seen = new Set<string>();
+    if (addSource) {
+      schema.push(sourceField);
+      seen.add(sourceField);
+    }
+    for (const layer of selected) {
+      for (const feature of layer.geojson!.features) {
+        for (const key of Object.keys(feature.properties ?? {})) {
+          if (!seen.has(key)) {
+            seen.add(key);
+            schema.push(key);
+          }
+        }
+      }
+    }
+
+    const out = featureCollection(
+      selected.flatMap((layer) =>
+        layer.geojson!.features
+          .filter((feature) => feature.geometry)
+          .map((feature) => ({
+            type: "Feature" as const,
+            properties: Object.fromEntries(
+              schema.map((key) =>
+                key === sourceField && addSource
+                  ? [key, layer.name]
+                  : [key, (feature.properties ?? {})[key] ?? null],
+              ),
+            ),
+            geometry: feature.geometry!,
+          })),
+      ),
+    );
+
+    ctx.log(
+      `Merged ${selected.length} layer(s): ${out.features.length} feature(s), ${schema.length} attribute(s)`,
+    );
+    ctx.addResultLayer?.("Merged layers", out);
+  },
+};
+
 export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   bufferTool,
   centroidsTool,
@@ -2699,6 +2792,7 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   trajectorySpeedTool,
   detectStopsTool,
   spaceTimeProximityTool,
+  mergeLayersTool,
   // Data-quality tools (validity + topology rules) last, matching the menu.
   ...TOPOLOGY_TOOLS,
 ];

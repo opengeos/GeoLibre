@@ -2253,6 +2253,7 @@
       "trajectorySpeed": "Trajectory speed",
       "detectStops": "Detect stops",
       "spaceTimeProximity": "Space-time proximity",
+      "mergeLayers": "Merge layers",
       "checkValidity": "Check validity",
       "fixGeometries": "Fix geometries",
       "checkTopologyRules": "Check topology rules",
@@ -2437,6 +2438,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "DGGS",
       "subGroupMovement": "Movement & time",
+      "subGroupDataManagement": "Data management",
       "subGroupDataQuality": "Data quality",
       "subGroupTerrain": "Terrain",
       "subGroupReproject": "Reproject",
@@ -3902,7 +3904,9 @@
     "parameterField": {
       "selectLayer": "Select a layer...",
       "selectField": "Select a field...",
-      "selectLayerFirst": "Select a layer first"
+      "selectLayerFirst": "Select a layer first",
+      "layersSelected_one": "{{count}} layer selected",
+      "layersSelected_other": "{{count}} layers selected"
     },
     "whitebox": {
       "run": "Run",
