@@ -42,3 +42,23 @@ export function parameterKind(param: WhiteboxToolParameter): string {
   }
   return "string";
 }
+
+/** Whether a dataset input accepts a stack/list rather than one dataset. */
+export function isMultipleDatasetParameter(param: WhiteboxToolParameter): boolean {
+  if (!parameterKind(param).endsWith("_in")) return false;
+  const schema =
+    param.schema && typeof param.schema === "object"
+      ? (param.schema as Record<string, unknown>)
+      : {};
+  if (String(schema.cardinality ?? "").toLowerCase() === "multiple") return true;
+
+  // Some upstream Whitebox manifests currently say cardinality=single even
+  // though the argument is explicitly an array/list of dataset paths (notably
+  // merge_vectors). Keep these usable until their catalog metadata is fixed.
+  const description = param.description ?? "";
+  return (
+    /\b(array|list|stack) of (?:input )?(?:[\w-]+ )?(?:paths?|rasters?|vectors?|layers?|files?)\b/i.test(
+      description,
+    ) || /\b(?:paths?|rasters?|vectors?|layers?|files?) (?:as|in) an array\b/i.test(description)
+  );
+}

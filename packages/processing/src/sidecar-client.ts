@@ -206,7 +206,7 @@ export interface RunWhiteboxToolRequest {
   tool_id: string;
   parameters: Record<string, unknown>;
   tool?: WhiteboxTool;
-  layer_inputs?: Record<string, WhiteboxLayerInput>;
+  layer_inputs?: Record<string, WhiteboxLayerInput | WhiteboxLayerInput[]>;
   include_pro?: boolean;
   tier?: string;
   /** WASM runner only: format for `vector_out` outputs (default `"geojson"`). */

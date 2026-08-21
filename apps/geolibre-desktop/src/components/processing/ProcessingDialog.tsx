@@ -70,7 +70,7 @@ import {
   wgs84VectorLayerIds,
   type DistanceUnit,
 } from "../../lib/whitebox-distance-params";
-import { parameterKind } from "../../lib/whitebox-param-kind";
+import { isMultipleDatasetParameter, parameterKind } from "../../lib/whitebox-param-kind";
 import { isTiff } from "../../lib/scripting/binary-output";
 import {
   canUseLayerForParameter,
@@ -250,7 +250,10 @@ function wgs84ToolLayerIds(tool: WhiteboxTool | null, values: ParameterValues): 
   const vectorInputs = params.filter((_, index) => kinds[index] === "vector_in");
   if (!vectorInputs.length) return null;
   return wgs84VectorLayerIds(
-    vectorInputs.map((param) => ({ required: param.required, value: values[param.name] })),
+    vectorInputs.map((param) => ({
+      required: param.required,
+      value: values[param.name],
+    })),
     LAYER_TOKEN_PREFIX,
   );
 }
@@ -1373,7 +1376,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           // not valid JSON; fall back to raw bytes
         }
       }
-      browsedInputsRef.current.set(paramName, { name: fileName, bytes, geojson });
+      browsedInputsRef.current.set(paramName, {
+        name: fileName,
+        bytes,
+        geojson,
+      });
       setValues((prev) => ({ ...prev, [paramName]: fileName }));
     },
     [],
@@ -1470,14 +1477,17 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     // blocks the main thread).
     setRunningLocal(true);
     const parameters: Record<string, unknown> = {};
-    const layerInputs: Record<string, WhiteboxLayerInput> = {};
+    const layerInputs: Record<string, WhiteboxLayerInput | WhiteboxLayerInput[]> = {};
 
     for (const param of selectedTool.params ?? []) {
       const value = values[param.name];
       if (
         param.required &&
         !isOutputParameter(param) &&
-        (value === undefined || value === null || value === "")
+        (value === undefined ||
+          value === null ||
+          value === "" ||
+          (Array.isArray(value) && value.length === 0))
       ) {
         setError(`Missing required parameter: ${parameterLabel(param)}`);
         setRunningLocal(false);
@@ -1495,7 +1505,35 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         continue;
       }
 
-      if (typeof value === "string" && value.startsWith(LAYER_TOKEN_PREFIX)) {
+      if (isMultipleDatasetParameter(param) && Array.isArray(value)) {
+        const selectedLayers = value
+          .filter(
+            (item): item is string =>
+              typeof item === "string" && item.startsWith(LAYER_TOKEN_PREFIX),
+          )
+          .map((item) => layers.find((layer) => layer.id === item.slice(LAYER_TOKEN_PREFIX.length)))
+          .filter((layer): layer is GeoLibreLayer => Boolean(layer));
+        const kind = parameterKind(param);
+        if (runLocal && kind === "vector_in") {
+          layerInputs[param.name] = selectedLayers.map((layer) => ({
+            name: layer.name,
+            kind,
+            geojson: layer.geojson,
+          }));
+        } else if (runLocal) {
+          layerInputs[param.name] = await Promise.all(
+            selectedLayers.map(async (layer) => ({
+              name: layer.name,
+              kind,
+              bytes: (await fetchLayerBytes(layer)) ?? undefined,
+            })),
+          );
+        } else {
+          // Whitebox list arguments use comma-delimited paths. The browser
+          // runner builds the same form after staging each selected dataset.
+          parameters[param.name] = selectedLayers.map(layerPath).filter(Boolean).join(",");
+        }
+      } else if (typeof value === "string" && value.startsWith(LAYER_TOKEN_PREFIX)) {
         const layerId = value.slice(LAYER_TOKEN_PREFIX.length);
         const layer = layers.find((item) => item.id === layerId);
         if (!layer) continue;
@@ -2418,14 +2456,23 @@ function ParameterField({
           />
         </div>
       ) : isDataInputParameter(param) && availableLayers.length > 0 ? (
-        <LayerOrPathInput
-          id={`whitebox-${param.name}`}
-          layers={availableLayers}
-          param={param}
-          value={valueText}
-          onChange={onChange}
-          onPickFile={onPickFile}
-        />
+        isMultipleDatasetParameter(param) ? (
+          <MultiLayerOrPathInput
+            id={`whitebox-${param.name}`}
+            layers={availableLayers}
+            value={value}
+            onChange={onChange}
+          />
+        ) : (
+          <LayerOrPathInput
+            id={`whitebox-${param.name}`}
+            layers={availableLayers}
+            param={param}
+            value={valueText}
+            onChange={onChange}
+            onPickFile={onPickFile}
+          />
+        )
       ) : kind === "vector_out" && runLocal ? (
         // In WASM mode a vector output is either a WGS84 map layer (GeoJSON) or a
         // downloaded file in a CRS-preserving format that keeps a reprojection's
@@ -2695,7 +2742,10 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
       ? t("processing.distance.convertedEmpty", { latitude: latitudeLabel })
       : draftValue === null
         ? t("processing.distance.notANumber")
-        : t("processing.distance.converted", { degrees: value, latitude: latitudeLabel });
+        : t("processing.distance.converted", {
+            degrees: value,
+            latitude: latitudeLabel,
+          });
 
   return (
     <div className="grid gap-1.5">
@@ -2742,6 +2792,55 @@ interface LayerOrPathInputProps {
   onPickFile?: (fileName: string, bytes: Uint8Array) => void;
   param: WhiteboxToolParameter;
   value: string;
+}
+
+interface MultiLayerOrPathInputProps {
+  id: string;
+  layers: GeoLibreLayer[];
+  onChange: (value: unknown) => void;
+  value: unknown;
+}
+
+/** Dataset-list picker used by merge, overlay, statistics, and stack tools. */
+function MultiLayerOrPathInput({ id, layers, onChange, value }: MultiLayerOrPathInputProps) {
+  const { t } = useTranslation();
+  const selected = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+  const usingLayers = Array.isArray(value);
+  return (
+    <div className="grid gap-2">
+      <div id={id} className="grid max-h-40 gap-1 overflow-y-auto rounded-md border p-2">
+        {layers.map((layer) => {
+          const token = `${LAYER_TOKEN_PREFIX}${layer.id}`;
+          return (
+            <label key={layer.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm">
+              <input
+                type="checkbox"
+                checked={selected.includes(token)}
+                onChange={(event) =>
+                  onChange(
+                    event.target.checked
+                      ? [...selected, token]
+                      : selected.filter((item) => item !== token),
+                  )
+                }
+              />
+              <span className="truncate">{layer.name}</span>
+            </label>
+          );
+        })}
+      </div>
+      <Input
+        value={usingLayers ? "" : String(value ?? "")}
+        placeholder={
+          usingLayers ? t("processing.whitebox.selectedLayer") : t("processing.whitebox.filePath")
+        }
+        disabled={usingLayers && selected.length > 0}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </div>
+  );
 }
 
 function LayerOrPathInput({

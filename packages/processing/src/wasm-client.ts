@@ -657,7 +657,8 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
   const args: string[] = [];
   const parameterOverrides: Record<string, unknown> = {};
   let geographicBufferInput: FeatureCollection | null = null;
-  const geojson = request.layer_inputs?.input?.geojson;
+  const rawInput = request.layer_inputs?.input;
+  const geojson = (Array.isArray(rawInput) ? rawInput[0] : rawInput)?.geojson;
   if (request.tool_id === "buffer_vector" && geojson) {
     const prepared = prepareGeographicBufferInput(geojson, request.parameters.distance);
     if (prepared) {
@@ -691,23 +692,33 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
     const name = param.name;
 
     if (kind === "vector_in") {
-      let geojson = request.layer_inputs?.[name]?.geojson;
-      if (!geojson) throw new Error(`Missing vector input for "${name}"`);
+      const supplied = request.layer_inputs?.[name];
+      const layerInputs = Array.isArray(supplied) ? supplied : supplied ? [supplied] : [];
+      if (!layerInputs.length || layerInputs.some((item) => !item.geojson)) {
+        throw new Error(`Missing vector input for "${name}"`);
+      }
       // A map layer is RFC 7946 WGS84, while Whitebox's buffer tools are
       // Cartesian. Run them in Web Mercator; the EPSG tag makes the GeoJSON
       // writer return WGS84.
-      if (name === "input" && geographicBufferInput) geojson = geographicBufferInput;
-      const file = `${name}.geojson`;
-      input[file] = encoder.encode(JSON.stringify(geojson));
-      args.push(`--${name}=/work/${file}`);
+      const files = layerInputs.map((item, index) => {
+        const geojson =
+          name === "input" && geographicBufferInput ? geographicBufferInput : item.geojson!;
+        const file = layerInputs.length === 1 ? `${name}.geojson` : `${name}_${index + 1}.geojson`;
+        input[file] = encoder.encode(JSON.stringify(geojson));
+        return `/work/${file}`;
+      });
+      args.push(`--${name}=${files.join(",")}`);
     } else if (kind === "raster_in" || kind === "lidar_in" || kind === "file_in") {
       // Prefer bytes the caller resolved (the dialog fetches the layer's data);
       // otherwise try to fetch the parameter as a URL.
       const provided = request.parameters[name];
       const hasValue = typeof provided === "string" ? provided.length > 0 : provided != null;
-      const bytes =
-        request.layer_inputs?.[name]?.bytes ?? (hasValue ? await fetchBytes(provided) : null);
-      if (!bytes) {
+      const supplied = request.layer_inputs?.[name];
+      const suppliedInputs = Array.isArray(supplied) ? supplied : supplied ? [supplied] : [];
+      const byteInputs = suppliedInputs.length
+        ? suppliedInputs.map((item) => item.bytes ?? null)
+        : [hasValue ? await fetchBytes(provided) : null];
+      if (byteInputs.some((bytes) => !bytes)) {
         // An optional data input the user left blank is simply omitted rather
         // than force-fetched: e.g. extract_cog_subset's `input` when a `url` is
         // supplied instead (the tool reads the COG by byte-range from that url).
@@ -718,20 +729,23 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
           `Could not read input "${name}" in the browser. Its data is not fetchable here (only available via the sidecar); turn off "Run locally (WASM)" to use the sidecar.`,
         );
       }
-      if (kind === "raster_in" && !isTiff(bytes)) {
+      if (kind === "raster_in" && byteInputs.some((bytes) => !isTiff(bytes!))) {
         throw new Error(
-          `Input "${name}" is not a readable GeoTIFF in the browser (received ${describeBytes(bytes)}). Load the raster as a COG/GeoTIFF, or use the sidecar.`,
+          `Input "${name}" is not a readable GeoTIFF in the browser. Load the rasters as COG/GeoTIFF, or use the sidecar.`,
         );
       }
-      if (kind === "lidar_in" && !isLas(bytes)) {
+      if (kind === "lidar_in" && byteInputs.some((bytes) => !isLas(bytes!))) {
         throw new Error(
-          `Input "${name}" is not a readable LAS/LAZ file in the browser (received ${describeBytes(bytes)}). Load a LAS/LAZ file, or use the sidecar.`,
+          `Input "${name}" is not a readable LAS/LAZ file in the browser. Load LAS/LAZ files, or use the sidecar.`,
         );
       }
       const ext = kind === "lidar_in" ? "las" : kind === "file_in" ? "dat" : "tif";
-      const file = `${name}.${ext}`;
-      input[file] = bytes;
-      args.push(`--${name}=/work/${file}`);
+      const files = byteInputs.map((bytes, index) => {
+        const file = byteInputs.length === 1 ? `${name}.${ext}` : `${name}_${index + 1}.${ext}`;
+        input[file] = bytes!;
+        return `/work/${file}`;
+      });
+      args.push(`--${name}=${files.join(",")}`);
     } else if (kind === "vector_out") {
       const base = outputBaseName(request.tool_id, name);
       // GeoJSON is reprojected to WGS84 on write (a map layer); the other formats
@@ -760,7 +774,11 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
       const ext =
         kind === "file_out" ? fileOutputTargetExtension(param, request.parameters[name]) : "tif";
       const file = `${outputBaseName(request.tool_id, name)}.${ext}`;
-      outputs.push({ name, file, kind: kind === "raster_out" ? "raster" : "bytes" });
+      outputs.push({
+        name,
+        file,
+        kind: kind === "raster_out" ? "raster" : "bytes",
+      });
       args.push(`--${name}=/work/${file}`);
     } else {
       const value = parameterOverrides[name] ?? request.parameters[name];
