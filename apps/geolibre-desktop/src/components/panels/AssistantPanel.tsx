@@ -22,8 +22,10 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { getAssistantToolsSnapshot, subscribeAssistantTools } from "@geolibre/plugins";
 import { AssistantSession } from "../../lib/assistant/agent";
 import { renderAssistantMarkdown } from "../../lib/assistant/markdown";
 import { selectActiveAssistantProfile } from "../../lib/assistant/profiles";
@@ -270,6 +272,19 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       }),
     [mapControllerRef, commitQueue],
   );
+
+  // Rebuild the agent when a plugin (de)registers an assistant tool: the
+  // Strands agent snapshots its tool list (and its system prompt) when it is
+  // built, so a live session would otherwise never see tools registered after
+  // its first prompt. Reset drops the cached agent only — the visible
+  // transcript stays — and the mount-time run is a no-op (no agent yet).
+  const assistantToolsVersion = useSyncExternalStore(
+    subscribeAssistantTools,
+    () => getAssistantToolsSnapshot().version,
+  );
+  useEffect(() => {
+    session.reset();
+  }, [session, assistantToolsVersion]);
 
   // Tear down the session and any in-flight run on unmount. Drain the queue ref
   // synchronously (resolving each pending approval as declined) so their blocked

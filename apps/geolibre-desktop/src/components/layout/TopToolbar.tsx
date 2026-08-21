@@ -55,6 +55,9 @@ import {
   REVERSE_GEOCODE_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
   openRightPanel,
+  getAssistantToolsSnapshot,
+  subscribeAssistantTools,
+  resolveToolbarLabel,
 } from "@geolibre/plugins";
 import { Button, cn, Input } from "@geolibre/ui";
 import {
@@ -93,7 +96,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI, getPluginManager, usePluginRegistry } from "../../hooks/usePlugins";
 import { useConsentGatedActions } from "../../hooks/useConsentGatedActions";
@@ -1230,6 +1233,14 @@ export function TopToolbar({
     );
   }, [maptoolkitBasemapActive, mapControllerRef]);
 
+  // Plugin-contributed assistant tools that opted into the command palette
+  // (see @geolibre/plugins' assistant-tool-registry). Subscribed reactively so
+  // a plugin (de)registering a tool updates the palette without a remount.
+  const assistantToolsSnapshot = useSyncExternalStore(
+    subscribeAssistantTools,
+    getAssistantToolsSnapshot,
+  );
+
   // The command registry: the single source of truth shared by the command
   // palette, the global shortcut layer, and the keyboard cheat sheet. Each
   // entry reuses the same handler the matching menu item calls, so behaviour is
@@ -1788,6 +1799,25 @@ export function TopToolbar({
         keywords: isActive(plugin.id) ? "plugin deactivate" : "plugin activate",
         run: () => toggle(plugin.id, appApi),
       })),
+    // Plugin-contributed assistant tools that opted into the palette. Selecting
+    // one runs the tool with an empty input (only all-optional-input tools
+    // should opt in — see GeoLibreAssistantToolCommand).
+    ...assistantToolsSnapshot.entries
+      .filter((entry) => entry.tool.command !== undefined)
+      .map((entry) => {
+        const command = entry.tool.command;
+        return {
+          id: `plugin.tool.${entry.qualifiedName}`,
+          title: command ? resolveToolbarLabel(command.title, entry.qualifiedName) : entry.qualifiedName,
+          group: t("toolbar.commandGroup.plugins"),
+          keywords: command?.keywords ?? "assistant plugin tool",
+          run: () => {
+            void Promise.resolve(entry.tool.execute({})).catch((error: unknown) => {
+              console.error(`Assistant tool "${entry.qualifiedName}" failed:`, error);
+            });
+          },
+        };
+      }),
     // Settings
     // The Mac App Store build omits the plugin marketplace: installing
     // external plugins is not allowed there, and bundled plugins need no

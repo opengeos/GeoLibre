@@ -2,6 +2,7 @@ import type { ProjectPluginState } from "@geolibre/core";
 import type { IControl } from "maplibre-gl";
 import type {
   GeoLibreAppAPI,
+  GeoLibreAssistantTool,
   GeoLibreMapControlPosition,
   GeoLibrePlugin,
   GeoLibreToolbarMenu,
@@ -547,9 +548,20 @@ function scopeAppToPlugin(
 ): GeoLibreAppAPI {
   const { onControlAdded } = options;
   const register = app.registerToolbarMenu;
+  const registerTool = app.registerAssistantTool;
+  const unregisterTool = app.unregisterAssistantTool;
   const activatePlugin = app.activatePlugin;
   const deactivatePlugin = app.deactivatePlugin;
-  if (!register && !onControlAdded && !activatePlugin && !deactivatePlugin) return app;
+  if (
+    !register &&
+    !registerTool &&
+    !unregisterTool &&
+    !onControlAdded &&
+    !activatePlugin &&
+    !deactivatePlugin
+  ) {
+    return app;
+  }
 
   const scoped: GeoLibreAppAPI = { ...app };
 
@@ -562,6 +574,24 @@ function scopeAppToPlugin(
       ownerPluginId: string,
     ) => () => void;
     scoped.registerToolbarMenu = (menu) => registerWithOwner(menu, pluginId);
+  }
+
+  if (registerTool) {
+    // Same host-side owner injection as registerToolbarMenu: the owner prefixes
+    // the model-facing tool name (see assistant-tool-registry).
+    const registerToolWithOwner = registerTool as (
+      tool: GeoLibreAssistantTool,
+      ownerPluginId: string,
+    ) => () => void;
+    scoped.registerAssistantTool = (tool) => registerToolWithOwner(tool, pluginId);
+  }
+
+  if (unregisterTool) {
+    const unregisterToolWithOwner = unregisterTool as (
+      name: string,
+      ownerPluginId: string,
+    ) => void;
+    scoped.unregisterAssistantTool = (name) => unregisterToolWithOwner(name, pluginId);
   }
 
   if (onControlAdded) {

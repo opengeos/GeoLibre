@@ -8,7 +8,12 @@ import {
 } from "./provider";
 import { configForProfile } from "./profiles";
 import type { AssistantProfile } from "./provider";
-import { createAssistantTools, describeLayers, type AssistantToolDeps } from "./tools";
+import {
+  createAssistantTools,
+  describeLayers,
+  describePluginTools,
+  type AssistantToolDeps,
+} from "./tools";
 
 /** System prompt establishing the assistant's role, tools, and guardrails. */
 const SYSTEM_PROMPT = `You are GeoLibre's geospatial assistant. You help the user explore and analyze the data already loaded in their map by calling the provided tools.
@@ -118,7 +123,9 @@ export class AssistantSession {
     this.agent = new Agent({
       model,
       tools: createAssistantTools(this.deps),
-      systemPrompt: SYSTEM_PROMPT,
+      // Plugin-contributed tools are appended at build time; the panel resets
+      // the session when the registry changes, so the prompt stays current.
+      systemPrompt: SYSTEM_PROMPT + describePluginTools(),
     });
     return this.agent;
   }

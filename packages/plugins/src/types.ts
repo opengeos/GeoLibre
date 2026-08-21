@@ -747,6 +747,20 @@ export interface GeoLibreAppAPI {
   /** Remove a previously registered toolbar menu. */
   unregisterToolbarMenu?: (id: string) => void;
   /**
+   * Register a typed tool the AI assistant can call, and (when the tool opts in
+   * via {@link GeoLibreAssistantTool.command}) a matching command-palette entry.
+   * Returns an unregister function (call it from `deactivate`). Re-registering
+   * the same name replaces the tool. The model sees the tool under a
+   * `plugin_<id>_`-prefixed name so plugin tools can never collide with the
+   * built-in ones; the owning plugin id is injected internally by the
+   * PluginManager, so plugins never pass an owner here. Typed optional for
+   * forward-compatibility with hosts that have no assistant, so call it with
+   * optional chaining.
+   */
+  registerAssistantTool?: (tool: GeoLibreAssistantTool) => () => void;
+  /** Remove a previously registered assistant tool by its plugin-local name. */
+  unregisterAssistantTool?: (name: string) => void;
+  /**
    * Register a plugin-owned floating panel: a draggable, closeable card the
    * host overlays on the map's top-left corner. Returns an unregister function
    * (call it from `deactivate`). The panel is not shown until
@@ -762,6 +776,56 @@ export interface GeoLibreAppAPI {
   closeFloatingPanel?: (id: string) => void;
   /** Ids of the currently open floating panels, in stacking order. */
   getOpenFloatingPanels?: () => string[];
+}
+
+/**
+ * Optional command-palette exposure for a {@link GeoLibreAssistantTool}. When
+ * present, the host lists the tool in the command palette (Ctrl/Cmd+K) under
+ * the Plugins group and runs it with an empty input object when selected — so
+ * only tools whose inputs are all optional should opt in.
+ */
+export interface GeoLibreAssistantToolCommand {
+  /**
+   * Label shown in the palette. Pass a getter to make it reactive (it follows
+   * the app language the way toolbar-menu labels do); a plain string is frozen
+   * at registration time.
+   */
+  title: GeoLibreToolbarLabel;
+  /** Extra search terms that should match this command in the palette. */
+  keywords?: string;
+}
+
+/**
+ * A typed tool a plugin contributes to the AI assistant through
+ * {@link GeoLibreAppAPI.registerAssistantTool}. The assistant's language model
+ * sees the tool's description and JSON Schema and decides when to call it; the
+ * host then runs `execute` with the model-chosen input and returns its
+ * JSON-serializable result to the model.
+ *
+ * The tool runs with the plugin's own (already trusted) capabilities — the
+ * model only chooses its inputs, exactly as for the built-in `run_algorithm` —
+ * so it is not gated behind the code-execution confirmation that guards
+ * model-*authored* code. Validate inputs defensively: the model can be steered
+ * by untrusted content (web results, layer attributes) into calling any tool.
+ */
+export interface GeoLibreAssistantTool {
+  /**
+   * Tool name in lowercase `snake_case` (`^[a-z][a-z0-9_]*$`), unique within
+   * the plugin. The model-facing name is prefixed with the plugin id; the
+   * combined name must stay within 64 characters.
+   */
+  name: string;
+  /** What the tool does and when the model should call it. */
+  description: string;
+  /**
+   * JSON Schema for the tool's input object. Omit for a tool that takes no
+   * input (the host defaults to an empty object schema).
+   */
+  inputSchema?: Record<string, unknown>;
+  /** Runs the tool. The return value is JSON-serialized back to the model. */
+  execute: (input: unknown) => unknown | Promise<unknown>;
+  /** Opt the tool into the command palette. See {@link GeoLibreAssistantToolCommand}. */
+  command?: GeoLibreAssistantToolCommand;
 }
 
 /**

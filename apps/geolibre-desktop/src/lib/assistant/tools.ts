@@ -6,7 +6,8 @@ import {
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import type { ModelToolDescriptor } from "@geolibre/processing";
-import type { InvokableTool, JSONValue } from "@strands-agents/sdk";
+import { listAssistantToolEntries } from "@geolibre/plugins";
+import type { InvokableTool, JSONSchema, JSONValue } from "@strands-agents/sdk";
 import * as maplibregl from "maplibre-gl";
 import { tool } from "@strands-agents/sdk";
 import type { FeatureCollection } from "geojson";
@@ -1054,7 +1055,7 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
     },
   });
 
-  return [
+  const builtIns = [
     listLayers,
     runSql,
     addLayerFromUrl,
@@ -1077,4 +1078,50 @@ export function createAssistantTools(deps: AssistantToolDeps): InvokableTool<unk
     runMaplibreJs,
     runPython,
   ] as InvokableTool<unknown, unknown>[];
+
+  // Plugin-contributed tools (see @geolibre/plugins' assistant-tool-registry).
+  // Their names are owner-prefixed at registration, so a collision with a
+  // built-in name is a registry bug — skipped defensively rather than letting
+  // the agent build fail on a duplicate. A plugin tool runs plugin-authored
+  // code with model-chosen inputs (like run_algorithm), so it is not routed
+  // through confirmCodeExecution, which guards model-authored code only.
+  const takenNames = new Set(
+    builtIns
+      .map((builtIn) => (builtIn as { name?: unknown }).name)
+      .filter((name): name is string => typeof name === "string"),
+  );
+  const pluginTools = listAssistantToolEntries()
+    .filter((entry) => {
+      if (!takenNames.has(entry.qualifiedName)) return true;
+      console.warn(
+        `Assistant tool "${entry.qualifiedName}" collides with a built-in tool name; skipped.`,
+      );
+      return false;
+    })
+    .map((entry) =>
+      tool({
+        name: entry.qualifiedName,
+        description: entry.tool.description,
+        ...(entry.tool.inputSchema
+          ? { inputSchema: entry.tool.inputSchema as JSONSchema }
+          : {}),
+        callback: async (input: unknown) => json(await entry.tool.execute(input)),
+      }),
+    );
+
+  return [...builtIns, ...pluginTools] as InvokableTool<unknown, unknown>[];
+}
+
+/**
+ * A system-prompt section enumerating the plugin-contributed tools, so the
+ * model discovers them the way the built-in prompt enumerates its own tools.
+ * Empty when no plugin tool is registered. The assistant rebuilds its agent
+ * whenever the registry changes, so this stays in step with
+ * {@link createAssistantTools}.
+ */
+export function describePluginTools(): string {
+  const entries = listAssistantToolEntries();
+  if (entries.length === 0) return "";
+  const lines = entries.map((entry) => `- ${entry.qualifiedName}: ${entry.tool.description}`);
+  return `\n\nPlugins have contributed these additional tools — call them like any built-in tool:\n${lines.join("\n")}`;
 }

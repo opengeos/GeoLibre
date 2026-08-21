@@ -860,6 +860,38 @@ app.registerToolbarMenu?.({
 
 The host re-reads every label each time it renders the menu tree, and it re-renders on a language change, so a getter follows the app language without your plugin re-registering its menu. A plain string is frozen at registration time. A getter that throws or returns nothing usable degrades to the item's id path and warns once, so a broken label cannot make the menu disappear.
 
+## Assistant tools
+
+A plugin can contribute typed tools to the AI assistant: the model sees each tool's description and JSON Schema, decides when to call it, and the host runs your `execute` with the model-chosen input, returning its JSON-serializable result to the model. Register in `activate` and unregister in `deactivate`:
+
+```typescript
+const unregister = app.registerAssistantTool?.({
+  name: "count_features",
+  description:
+    "Count the features of a loaded vector layer. Call it when the user asks how many features a layer has.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      layerId: { type: "string", description: "A layer id from list_layers." },
+    },
+    required: ["layerId"],
+  },
+  execute: (input) => {
+    const { layerId } = input as { layerId: string };
+    const features = app.getLayerFeatures?.(layerId) ?? [];
+    return { layerId, featureCount: features.length };
+  },
+});
+```
+
+Rules and behavior:
+
+- **Naming.** `name` is lowercase `snake_case` (`^[a-z][a-z0-9_]*$`). The model actually sees `plugin_<your-id>_<name>` (the id sanitized to the same alphabet), so your tools can never collide with the built-in tools or another plugin's; the combined name must stay within 64 characters. Re-registering the same name replaces the tool.
+- **Prompt discovery.** The assistant's system prompt lists your tool's qualified name and description, and its agent is rebuilt whenever a tool is (de)registered — including mid-conversation, where the visible transcript is kept.
+- **Inputs are model-chosen.** Validate them defensively: the model can be steered by untrusted content (web results, layer attributes) into calling any tool with any input. Your tool runs with your plugin's own capabilities and is **not** gated behind the `run_python`/`run_maplibre_js` code-execution confirmation — that gate exists for model-*authored* code, whereas your tool is plugin-authored code.
+- **Command palette.** Add `command: { title, keywords? }` to also list the tool in the palette (Ctrl/Cmd+K) under the Plugins group. Selecting it runs `execute({})`, so only opt in for tools whose inputs are all optional. `title` accepts a getter like toolbar labels do.
+- Like the rest of the API, the methods are typed optional (`registerAssistantTool?.`) — a host without an assistant just returns nothing.
+
 ## Following the app language
 
 The GeoLibre UI is translated with react-i18next, but a plugin renders its panels as plain DOM and cannot use the host's React hooks. Three methods bridge that gap:

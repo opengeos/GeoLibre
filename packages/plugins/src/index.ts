@@ -30,6 +30,16 @@ export {
   type ToolbarMenuEntry,
 } from "./toolbar-menu-registry";
 export {
+  registerAssistantTool,
+  unregisterAssistantTool,
+  listAssistantToolEntries,
+  getAssistantToolsSnapshot,
+  subscribeAssistantTools,
+  qualifiedAssistantToolName,
+  type AssistantToolEntry,
+  type AssistantToolsSnapshot,
+} from "./assistant-tool-registry";
+export {
   registerFloatingPanel,
   unregisterFloatingPanel,
   openFloatingPanel,
