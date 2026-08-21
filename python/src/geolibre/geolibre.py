@@ -16,7 +16,7 @@ import time
 import urllib.parse
 import uuid
 import warnings
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 from urllib.error import URLError
 
 import anywidget
