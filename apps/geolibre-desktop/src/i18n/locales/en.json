@@ -7041,6 +7041,10 @@
               "label": "Min Area",
               "description": "Min Area"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -7358,6 +7362,10 @@
               "label": "Min Area",
               "description": "Min Area"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -7420,6 +7428,10 @@
             "min_area": {
               "label": "Min Area",
               "description": "Min Area"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -7551,6 +7563,10 @@
               "label": "M",
               "description": "M"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -7667,6 +7683,10 @@
               "label": "Use Clipping",
               "description": "Use Clipping"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -7700,6 +7720,10 @@
               "label": "Distance Weighting",
               "description": "Distance Weighting"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -7729,6 +7753,10 @@
               "label": "Alpha",
               "description": "Alpha"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -7753,6 +7781,10 @@
             "dist_threshold": {
               "label": "Dist Threshold",
               "description": "Dist Threshold"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -7824,6 +7856,10 @@
               "label": "K",
               "description": "K"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -7857,6 +7893,10 @@
             "class_field_name": {
               "label": "Class Field Name",
               "description": "Class Field Name"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -7895,6 +7935,10 @@
               "label": "Min Samples Split",
               "description": "Min Samples Split"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -7931,6 +7975,10 @@
             "min_samples_split": {
               "label": "Min Samples Split",
               "description": "Min Samples Split"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -7972,6 +8020,10 @@
             "epoch": {
               "label": "Epoch",
               "description": "Epoch"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -8017,6 +8069,10 @@
             "tol": {
               "label": "Tol",
               "description": "Tol"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -9238,6 +9294,10 @@
             "method": {
               "label": "Method",
               "description": "Method"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -20265,6 +20325,10 @@
               "label": "Input Rasters",
               "description": "Input Rasters"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -20350,6 +20414,10 @@
               "label": "Comparison Value",
               "description": "Comparison Value"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -20380,6 +20448,10 @@
               "label": "Input Rasters",
               "description": "Input Rasters"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -20392,6 +20464,10 @@
             "input_rasters": {
               "label": "Input Rasters",
               "description": "Input Rasters"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -20406,6 +20482,10 @@
               "label": "Input Rasters",
               "description": "Input Rasters"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -20418,6 +20498,10 @@
             "input_rasters": {
               "label": "Input Rasters",
               "description": "Input Rasters"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -20432,6 +20516,10 @@
               "label": "Input Rasters",
               "description": "Input Rasters"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -20444,6 +20532,10 @@
             "input_rasters": {
               "label": "Input Rasters",
               "description": "Input Rasters"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -20492,6 +20584,10 @@
               "label": "Input Rasters",
               "description": "Input Rasters"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -20508,6 +20604,10 @@
             "comparison": {
               "label": "Comparison",
               "description": "Comparison"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -20526,6 +20626,10 @@
               "label": "Comparison",
               "description": "Comparison"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -20543,6 +20647,10 @@
               "label": "Comparison",
               "description": "Comparison"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -20559,6 +20667,10 @@
             "pos_input": {
               "label": "Pos Input",
               "description": "Pos Input"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -20598,6 +20710,10 @@
               "label": "Input Rasters",
               "description": "Input Rasters"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -20627,6 +20743,10 @@
             "input_rasters": {
               "label": "Input Rasters",
               "description": "Input Rasters"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -20690,6 +20810,10 @@
             "weights": {
               "label": "Weights",
               "description": "Weights"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",
@@ -21906,6 +22030,10 @@
               "label": "Pca Report",
               "description": "Pca Report"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -22289,6 +22417,10 @@
               "label": "Standardized",
               "description": "Standardized"
             },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
+            },
             "output": {
               "label": "Output",
               "description": "Output"
@@ -22560,6 +22692,10 @@
             "input_rasters": {
               "label": "Input Rasters",
               "description": "Input Rasters"
+            },
+            "auto_reproject_method": {
+              "label": "Auto Reproject Method",
+              "description": "Optional reprojection resampling method override: nearest, bilinear, cubic, lanczos, average, min, max, mode, median, stddev."
             },
             "output": {
               "label": "Output",

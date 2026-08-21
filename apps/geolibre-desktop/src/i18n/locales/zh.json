@@ -6799,7 +6799,13 @@
           "name": "评估分割质量 (Pro)"
         },
         "image_segmentation": {
-          "name": "影像分割"
+          "name": "影像分割",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "image_slider": {
           "name": "影像滑动对比"
@@ -6850,7 +6856,13 @@
           "name": "跨层次传播标签"
         },
         "segment_graph_felzenszwalb": {
-          "name": "图分割 (Felzenszwalb)"
+          "name": "图分割 (Felzenszwalb)",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "segment_multiresolution_hierarchical": {
           "name": "多分辨率层次分割"
@@ -6859,7 +6871,13 @@
           "name": "分割尺度参数优化"
         },
         "segment_slic_superpixels": {
-          "name": "SLIC 超像素分割"
+          "name": "SLIC 超像素分割",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "segment_watershed_markers": {
           "name": "标记分水岭分割"
@@ -6877,7 +6895,13 @@
           "name": "评估训练样本"
         },
         "fuzzy_knn_classification": {
-          "name": "模糊 KNN 分类"
+          "name": "模糊 KNN 分类",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "generalize_classified_raster": {
           "name": "概括分类栅格"
@@ -6889,40 +6913,100 @@
           "name": "K 均值聚类"
         },
         "knn_classification": {
-          "name": "KNN 分类"
+          "name": "KNN 分类",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "knn_regression": {
-          "name": "KNN 回归"
+          "name": "KNN 回归",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "logistic_regression": {
-          "name": "逻辑回归"
+          "name": "逻辑回归",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "min_dist_classification": {
-          "name": "最小距离分类"
+          "name": "最小距离分类",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "modified_k_means_clustering": {
           "name": "改进 K 均值聚类"
         },
         "nnd_classification": {
-          "name": "NND 分类"
+          "name": "NND 分类",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "otsu_thresholding": {
           "name": "Otsu 阈值分割"
         },
         "parallelepiped_classification": {
-          "name": "平行六面体分类"
+          "name": "平行六面体分类",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "random_forest_classification": {
-          "name": "随机森林分类"
+          "name": "随机森林分类",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "random_forest_regression": {
-          "name": "随机森林回归"
+          "name": "随机森林回归",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "svm_classification": {
-          "name": "SVM 分类"
+          "name": "SVM 分类",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "svm_regression": {
-          "name": "SVM 回归"
+          "name": "SVM 回归",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "change_vector_analysis": {
           "name": "变化矢量分析"
@@ -7033,7 +7117,13 @@
           "name": "最小最大值对比度拉伸"
         },
         "mosaic": {
-          "name": "镶嵌"
+          "name": "镶嵌",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "mosaic_with_feathering": {
           "name": "羽化镶嵌"
@@ -8245,7 +8335,13 @@
           "name": "加"
         },
         "average_overlay": {
-          "name": "平均叠加"
+          "name": "平均叠加",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "bool_and": {
           "name": "布尔与"
@@ -8260,28 +8356,70 @@
           "name": "布尔异或"
         },
         "count_if": {
-          "name": "条件计数"
+          "name": "条件计数",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "divide": {
           "name": "除"
         },
         "highest_position": {
-          "name": "最高位置"
+          "name": "最高位置",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "lowest_position": {
-          "name": "最低位置"
+          "name": "最低位置",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "max_absolute_overlay": {
-          "name": "最大绝对值叠加"
+          "name": "最大绝对值叠加",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "max_overlay": {
-          "name": "最大值叠加"
+          "name": "最大值叠加",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "min_absolute_overlay": {
-          "name": "最小绝对值叠加"
+          "name": "最小绝对值叠加",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "min_overlay": {
-          "name": "最小值叠加"
+          "name": "最小值叠加",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "modulo": {
           "name": "取模"
@@ -8290,31 +8428,73 @@
           "name": "乘"
         },
         "multiply_overlay": {
-          "name": "乘积叠加"
+          "name": "乘积叠加",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "percent_equal_to": {
-          "name": "等于百分比"
+          "name": "等于百分比",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "percent_greater_than": {
-          "name": "大于百分比"
+          "name": "大于百分比",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "percent_less_than": {
-          "name": "小于百分比"
+          "name": "小于百分比",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "pick_from_list": {
-          "name": "从列表选取"
+          "name": "从列表选取",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "power": {
           "name": "幂"
         },
         "standard_deviation_overlay": {
-          "name": "标准差叠加"
+          "name": "标准差叠加",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "subtract": {
           "name": "减"
         },
         "sum_overlay": {
-          "name": "求和叠加"
+          "name": "求和叠加",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "update_nodata_cells": {
           "name": "更新无数据像元"
@@ -8323,7 +8503,13 @@
           "name": "加权叠加"
         },
         "weighted_sum": {
-          "name": "加权和"
+          "name": "加权和",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "image_correlation_neighbourhood_analysis": {
           "name": "影像相关邻域分析"
@@ -8500,7 +8686,13 @@
           "name": "整数除法"
         },
         "inverse_pca": {
-          "name": "逆主成分分析"
+          "name": "逆主成分分析",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "is_nodata": {
           "name": "是否无数据"
@@ -8557,7 +8749,13 @@
           "name": "Phi 系数"
         },
         "principal_component_analysis": {
-          "name": "主成分分析"
+          "name": "主成分分析",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "print_geotiff_tags": {
           "name": "打印 GeoTIFF 标签"
@@ -8593,7 +8791,13 @@
           "name": "栅格面积"
         },
         "raster_calculator": {
-          "name": "栅格计算器"
+          "name": "栅格计算器",
+          "params": {
+            "auto_reproject_method": {
+              "description": "可选的重投影重采样方法覆盖配置：nearest、bilinear、cubic、lanczos、average、min、max、mode、median、stddev。",
+              "label": "自动重投影方法"
+            }
+          }
         },
         "raster_cell_assignment": {
           "name": "栅格像元赋值"
