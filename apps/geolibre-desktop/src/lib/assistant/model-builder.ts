@@ -66,6 +66,9 @@ function parameterTypeMatches(param: AlgorithmParameter, value: unknown): boolea
         typeof value === "string" &&
         (!param.options?.length || param.options.some((option) => option.value === value))
       );
+    case "layers":
+      // A multi-layer picker arrives as an array of layer ids, not as text.
+      return Array.isArray(value) && value.every((entry) => typeof entry === "string");
     default:
       // layer / string / field / path all arrive as text.
       return typeof value === "string";
@@ -111,7 +114,12 @@ function checkStepParameters(
     if (!param.required || wired.has(param.id) || param.default !== undefined) continue;
     if (!isParameterVisible(param, values, declared)) continue;
     const value = values[param.id];
-    if (value === undefined || value === null || value === "") {
+    if (
+      value === undefined ||
+      value === null ||
+      value === "" ||
+      (Array.isArray(value) && value.length === 0)
+    ) {
       throw new Error(`Parameter "${param.id}" of "${step.algorithm}" is required.`);
     }
   }

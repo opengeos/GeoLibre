@@ -37,6 +37,18 @@ const CLIP: ModelToolDescriptor = {
   ],
 };
 
+/** A tool whose input is the multi-layer `"layers"` parameter, not a `"layer"` port. */
+const MERGE: ModelToolDescriptor = {
+  key: "vector:merge-layers",
+  provider: "vector",
+  toolId: "merge-layers",
+  name: "Merge layers",
+  group: "Data management",
+  inputs: [],
+  outputs: [{ id: "out", label: "Output", kind: "vector" }],
+  parameters: [{ id: "layers", label: "Input layers", type: "layers", required: true }],
+};
+
 /** A same-id tool from the other registry, the collision `modelToolKey` guards. */
 const WHITEBOX_BUFFER: ModelToolDescriptor = {
   key: "whitebox:buffer",
@@ -350,6 +362,56 @@ describe("AI-created Model Builder models", () => {
           ids(),
         ),
       /"distance" of "buffer" is required/,
+    );
+  });
+
+  it("accepts a layer-id array for a multi-layer parameter", () => {
+    const base = {
+      name: "Merged",
+      inputs: [],
+      steps: [
+        {
+          key: "result",
+          algorithm: "merge-layers",
+          inputs: {},
+          parameters: { layers: ["roads-id", "counties-id"] } as Record<string, unknown>,
+        },
+      ],
+      outputs: [{ source: "result", name: "Result" }],
+    };
+    // A "layers" value arrives as an array, so the text check the other
+    // non-numeric types use would reject every valid value.
+    assert.doesNotThrow(() => buildAssistantModel(base, layers, [MERGE], ids()));
+
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layers: "roads-id" } }] },
+          layers,
+          [MERGE],
+          ids(),
+        ),
+      /expects a layers value/,
+    );
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layers: [1, 2] } }] },
+          layers,
+          [MERGE],
+          ids(),
+        ),
+      /expects a layers value/,
+    );
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layers: [] } }] },
+          layers,
+          [MERGE],
+          ids(),
+        ),
+      /"layers" of "merge-layers" is required/,
     );
   });
 
