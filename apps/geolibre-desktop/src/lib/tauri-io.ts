@@ -2612,6 +2612,43 @@ export async function openLocalDataFileWithFallback(options: LocalDataFileOption
   });
 }
 
+/** Open a multi-file picker and read every selected file as bytes. */
+export async function openLocalDataFilesWithFallback(
+  options: LocalDataFileOptions,
+): Promise<Array<{ data: ArrayBuffer; path: string }>> {
+  if (isTauri()) {
+    const selected = await open({
+      multiple: true,
+      filters: nativeFileDialogFilters(options.filters, options.androidFilters),
+    });
+    const paths = Array.isArray(selected) ? selected : selected ? [selected] : [];
+    return Promise.all(
+      paths.map(async (path) => ({ data: toArrayBuffer(await readFile(path)), path })),
+    );
+  }
+
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.accept = options.accept;
+    input.onchange = async () => {
+      try {
+        const files = Array.from(input.files ?? []);
+        resolve(
+          await Promise.all(
+            files.map(async (file) => ({ data: await file.arrayBuffer(), path: file.name })),
+          ),
+        );
+      } catch (error) {
+        reject(error);
+      }
+    };
+    input.addEventListener("cancel", () => resolve([]));
+    input.click();
+  });
+}
+
 export async function pickLocalPathWithFallback(
   options: PickLocalPathOptions = {},
 ): Promise<string | null> {
@@ -2628,6 +2665,19 @@ export async function pickLocalPathWithFallback(
   // require a real path. Return null so callers surface the desktop-only
   // message rather than passing a non-resolvable bare file name.
   return null;
+}
+
+/** Pick several native filesystem paths (desktop only). */
+export async function pickLocalPathsWithFallback(
+  options: PickLocalPathOptions = {},
+): Promise<string[]> {
+  if (!isTauri()) return [];
+  const selected = await open({
+    directory: options.directory ?? false,
+    filters: options.filters,
+    multiple: true,
+  });
+  return Array.isArray(selected) ? selected : selected ? [selected] : [];
 }
 
 /**

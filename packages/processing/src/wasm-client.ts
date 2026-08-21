@@ -694,7 +694,7 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
     if (kind === "vector_in") {
       const supplied = request.layer_inputs?.[name];
       const layerInputs = Array.isArray(supplied) ? supplied : supplied ? [supplied] : [];
-      if (!layerInputs.length || layerInputs.some((item) => !item.geojson)) {
+      if (!layerInputs.length || layerInputs.some((item) => !item.geojson && !item.bytes)) {
         throw new Error(`Missing vector input for "${name}"`);
       }
       // A map layer is RFC 7946 WGS84, while Whitebox's buffer tools are
@@ -702,9 +702,13 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
       // writer return WGS84.
       const files = layerInputs.map((item, index) => {
         const geojson =
-          name === "input" && geographicBufferInput ? geographicBufferInput : item.geojson!;
-        const file = layerInputs.length === 1 ? `${name}.geojson` : `${name}_${index + 1}.geojson`;
-        input[file] = encoder.encode(JSON.stringify(geojson));
+          name === "input" && geographicBufferInput ? geographicBufferInput : item.geojson;
+        const extension = item.geojson
+          ? "geojson"
+          : (item.name.match(/\.([A-Za-z0-9]+)$/)?.[1]?.toLowerCase() ?? "dat");
+        const file =
+          layerInputs.length === 1 ? `${name}.${extension}` : `${name}_${index + 1}.${extension}`;
+        input[file] = geojson ? encoder.encode(JSON.stringify(geojson)) : item.bytes!;
         return `/work/${file}`;
       });
       args.push(`--${name}=${files.join(",")}`);
