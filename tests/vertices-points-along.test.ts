@@ -401,4 +401,39 @@ describe("points along geometry tool", () => {
       setActiveEllipsoidId("earth");
     }
   });
+
+  it("unwraps GeometryCollection members instead of skipping the feature", () => {
+    const collection = makeLayer("gc", "GC", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "GeometryCollection",
+            geometries: [
+              { type: "Point", coordinates: [5, 5] },
+              {
+                type: "LineString",
+                coordinates: [
+                  [0, 0],
+                  [1, 0],
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const { messages, results } = runTool("points-along-geometry", [collection], {
+      layer: "gc",
+      interval: 50,
+      units: "kilometers",
+    });
+    // ~111 km line → 0/50/100 km plus the end vertex; the point member is ignored.
+    assert.equal(results[0].features.length, 4);
+    assert.ok(!messages.some((m) => m.startsWith("Skipped")));
+    const vertices = runTool("extract-vertices", [collection], { layer: "gc" });
+    assert.equal(vertices.results[0].features.length, 3);
+  });
 });

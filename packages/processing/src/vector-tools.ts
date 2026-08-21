@@ -1712,9 +1712,17 @@ function geometryParts(geometry: Geometry): Position[][] {
       return geometry.coordinates;
     case "MultiPolygon":
       return geometry.coordinates.flat();
+    case "GeometryCollection":
+      return geometry.geometries.flatMap(geometryParts);
     default:
       return [];
   }
+}
+
+/** Line/polygon coordinate rings of a geometry, unwrapping GeometryCollections. */
+function linearParts(geometry: Geometry): Position[][] {
+  if (geometry.type === "GeometryCollection") return geometry.geometries.flatMap(linearParts);
+  return isFamily(geometry, "line") || isFamily(geometry, "polygon") ? geometryParts(geometry) : [];
 }
 
 export const extractVerticesTool: ProcessingAlgorithm = {
@@ -1797,13 +1805,17 @@ function* walkAlong(
     const segment = distance(start, end, { units });
     if (segment <= 0) continue;
     let heading: number | null = null;
-    while (atDistance <= travelled + segment) {
+    // A step landing within float noise of a vertex snaps to the vertex itself
+    // (exact coordinates), so the caller's endpoint dedup never sees a point a
+    // few ulps short of the end vertex.
+    const epsilon = segment * 1e-9;
+    while (atDistance <= travelled + segment + epsilon) {
       const offset = atDistance - travelled;
       let position: Position;
       // Exact vertices keep their full position (Z included); only the
       // geodesically interpolated interior points are necessarily 2-D.
-      if (offset <= 0) position = [...start] as Position;
-      else if (offset >= segment) position = [...end] as Position;
+      if (offset <= epsilon) position = [...start] as Position;
+      else if (offset >= segment - epsilon) position = [...end] as Position;
       else {
         heading ??= bearing(start, end);
         position = destination(start, offset, heading, { units }).geometry.coordinates;
@@ -1884,11 +1896,12 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
     let estimated = 0;
     for (const feature of fc.features) {
       const geometry = feature.geometry;
-      if (!geometry || !(isFamily(geometry, "line") || isFamily(geometry, "polygon"))) {
+      const linear = geometry ? linearParts(geometry) : [];
+      if (!linear.length) {
         skipped += 1;
         continue;
       }
-      for (const part of geometryParts(geometry)) {
+      for (const part of linear) {
         if (part.length < 2) continue;
         // Interval multiples plus the closing end vertex.
         const length = ringLength(part, alongUnits);
