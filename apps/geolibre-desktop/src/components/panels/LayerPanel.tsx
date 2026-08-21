@@ -3966,14 +3966,14 @@ export function LayerPanel({
                                         void handleExportLayer(layer, "polyline", 5);
                                       }}
                                     >
-                                      Encoded Polyline (precision 5)
+                                      {t("layers.exportPolyline", { precision: 5 })}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       onSelect={() => {
                                         void handleExportLayer(layer, "polyline", 6);
                                       }}
                                     >
-                                      Encoded Polyline (precision 6)
+                                      {t("layers.exportPolyline", { precision: 6 })}
                                     </DropdownMenuItem>
                                   </>
                                 )}

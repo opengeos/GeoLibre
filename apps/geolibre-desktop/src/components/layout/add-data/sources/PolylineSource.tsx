@@ -14,25 +14,25 @@ export type GeometryOutputType = "single" | "multi";
 
 const SAMPLE_POLYLINES = [
   {
-    label: "Google / OSRM (precision 5)",
+    key: "sampleGoogle",
     value: "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
     precision: 5,
     unescape: true,
   },
   {
-    label: "Valhalla / Mapbox (precision 6)",
+    key: "sampleValhalla",
     value: "_o`diA~gw}qC_pR_pR_pR_af@",
     precision: 6,
     unescape: true,
   },
   {
-    label: "Escaped backslashes (JSON string format)",
+    key: "sampleEscaped",
     value: "_p~iF~ps|U_ulLnnqC_mqNvxq\\`@",
     precision: 5,
     unescape: true,
   },
   {
-    label: "Multi-line route batch (3 segments)",
+    key: "sampleMultiLine",
     value: "_p~iF~ps|U_ulLnnqC_mqNvxq`@\n_ibE_seK_seK_seK\nmc_Ie}hV_c_@_c_@",
     precision: 5,
     unescape: true,
@@ -412,8 +412,12 @@ export function PolylineSource() {
                   {t("addData.polyline.previewLength")}:{" "}
                 </span>
                 {parsedData.totalLengthKm < 1
-                  ? `${(parsedData.totalLengthKm * 1000).toFixed(0)} m`
-                  : `${parsedData.totalLengthKm.toFixed(2)} km`}
+                  ? t("addData.polyline.unitMeters", {
+                      value: (parsedData.totalLengthKm * 1000).toFixed(0),
+                    })
+                  : t("addData.polyline.unitKm", {
+                      value: parsedData.totalLengthKm.toFixed(2),
+                    })}
               </div>
               <div className="truncate">
                 <span className="font-semibold text-foreground">
@@ -448,7 +452,9 @@ export function PolylineSource() {
                         </span>
                         <span>
                           {l.pointsCount} {t("addData.polyline.previewPoints")} ·{" "}
-                          {l.lengthKm.toFixed(2)} km
+                          {t("addData.polyline.unitKm", {
+                            value: l.lengthKm.toFixed(2),
+                          })}
                         </span>
                       </div>
                       <div className="flex gap-2 text-[10px] text-muted-foreground">
@@ -474,7 +480,7 @@ export function PolylineSource() {
         {polylineMode === "paste" && (
           <SampleDataSelect
             samples={SAMPLE_POLYLINES.map((s) => ({
-              label: s.label,
+              label: t(`addData.polyline.${s.key}`),
               value: s.value,
             }))}
             onSelect={(val) => {

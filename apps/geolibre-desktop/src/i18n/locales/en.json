@@ -806,7 +806,13 @@
       "readError": "Could not read the polyline file.",
       "errorChooseFile": "Please choose a polyline file to load.",
       "errorEmptyInput": "Enter one or more encoded polyline strings.",
-      "errorNoValidLines": "No valid polyline coordinates could be decoded."
+      "errorNoValidLines": "No valid polyline coordinates could be decoded.",
+      "sampleGoogle": "Google / OSRM (precision 5)",
+      "sampleValhalla": "Valhalla / Mapbox (precision 6)",
+      "sampleEscaped": "Escaped backslashes (JSON string format)",
+      "sampleMultiLine": "Multi-line route batch (3 segments)",
+      "unitMeters": "{{value}} m",
+      "unitKm": "{{value}} km"
     },
     "netcdf": {
       "sampleLabel": "Air temperature",
@@ -6817,6 +6823,7 @@
     "exportedWithWarnings": "Layer exported. {{warnings}}",
     "exported": "Layer exported.",
     "exportLayerError": "Could not export this layer.",
+    "exportPolyline": "Encoded Polyline (precision {{precision}})",
     "refreshIntervals": {
       "off": "Off",
       "s15": "15 seconds",

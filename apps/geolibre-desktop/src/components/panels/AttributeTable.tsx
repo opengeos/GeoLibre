@@ -1788,10 +1788,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             {layer && layerSupportsPolylineExport(layer) && (
               <>
                 <DropdownMenuItem onSelect={() => void exportLayer("polyline", 5)}>
-                  Encoded Polyline (precision 5)
+                  {t("layers.exportPolyline", { precision: 5 })}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => void exportLayer("polyline", 6)}>
-                  Encoded Polyline (precision 6)
+                  {t("layers.exportPolyline", { precision: 6 })}
                 </DropdownMenuItem>
               </>
             )}

@@ -467,9 +467,54 @@ describe("polyline codec", () => {
       assert.ok(decodedFc);
       assert.equal(decodedFc.features.length, 1);
       const decodedGeom = decodedFc.features[0].geometry;
+      assert.ok(decodedGeom);
       assert.equal(decodedGeom.type, "MultiLineString");
       assert.equal((decodedGeom as MultiLineString).coordinates.length, 2);
       assert.equal(decodedFc.features[0].properties?.routeGroup, "Multi1");
+    });
+
+    it("decodePolylineTool skips oversized-varint input that exceeds coordinate bounds", async () => {
+      const { decodePolylineTool } = await import("@geolibre/processing");
+      const layerWithOversizedPoly = {
+        id: "test-poly-layer-oversized",
+        name: "Oversized Polyline",
+        type: "geojson" as const,
+        visible: true,
+        opacity: 1,
+        style: {} as any,
+        metadata: {},
+        source: { type: "geojson" as const },
+        geojson: {
+          type: "FeatureCollection" as const,
+          features: [
+            {
+              type: "Feature" as const,
+              properties: { routeId: "Oversized", poly: "_o`diA~gw}qC_pR_pR_pR_af@" },
+              geometry: null as any,
+            },
+          ],
+        },
+      };
+
+      let resultFc: FeatureCollection | undefined;
+      const logs: string[] = [];
+
+      decodePolylineTool.run({
+        layers: [layerWithOversizedPoly as any],
+        parameters: {
+          layer: "test-poly-layer-oversized",
+          field: "poly",
+          precision: "5",
+        },
+        log: (msg) => logs.push(msg),
+        addResultLayer: (_name, fc) => {
+          resultFc = fc;
+        },
+      });
+
+      assert.ok(resultFc);
+      assert.equal(resultFc.features.length, 0);
+      assert.ok(logs.some((msg) => msg.includes("Skipped 1 feature(s)")));
     });
   });
 

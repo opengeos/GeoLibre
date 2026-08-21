@@ -2820,6 +2820,22 @@ export const decodePolylineTool: ProcessingAlgorithm = {
           valid = false;
           break;
         }
+
+        for (const [lon, lat] of coords) {
+          if (
+            !Number.isFinite(lon) ||
+            !Number.isFinite(lat) ||
+            lon < -180 ||
+            lon > 180 ||
+            lat < -90 ||
+            lat > 90
+          ) {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) break;
+
         multiCoords.push(coords);
       }
 

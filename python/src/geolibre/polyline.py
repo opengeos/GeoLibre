@@ -55,6 +55,8 @@ def decode_polyline(
                 return coordinates
             byte = ord(clean_encoded[index]) - 63
             index += 1
+            if byte < 0 or byte > 63:
+                return []
             result |= (byte & 0x1F) << shift
             shift += 5
             if byte < 0x20:
@@ -71,6 +73,8 @@ def decode_polyline(
                 return coordinates
             byte = ord(clean_encoded[index]) - 63
             index += 1
+            if byte < 0 or byte > 63:
+                return []
             result |= (byte & 0x1F) << shift
             shift += 5
             if byte < 0x20:
@@ -117,10 +121,14 @@ def encode_polyline(
 
     for coord in coordinates:
         if len(coord) < 2:
-            continue
+            raise ValueError(f"Coordinate pair must have at least 2 elements, got {coord!r}")
         lon, lat = float(coord[0]), float(coord[1])
         if not (math.isfinite(lon) and math.isfinite(lat)):
-            continue
+            raise ValueError(f"Coordinates must be finite numbers, got ({lon}, {lat})")
+        if not (-180.0 <= lon <= 180.0 and -90.0 <= lat <= 90.0):
+            raise ValueError(
+                f"Coordinates out of bounds: longitude must be in [-180, 180], latitude in [-90, 90], got lon={lon}, lat={lat}"
+            )
 
         round_lat = math.floor(lat * factor + 0.5)
         round_lon = math.floor(lon * factor + 0.5)
@@ -140,7 +148,7 @@ def encode_polyline(
 def polyline_to_geojson(
     polyline: str | Sequence[str],
     precision: int = 5,
-    unescape: bool = True,
+    unescape: bool = False,
     delimiter: str | None = None,
     properties: dict[str, Any] | None = None,
 ) -> dict[str, Any]:

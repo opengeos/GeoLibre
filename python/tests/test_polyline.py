@@ -168,3 +168,35 @@ def test_map_add_polyline(m):
     assert last["geojson"]["type"] == "FeatureCollection"
     assert len(last["geojson"]["features"]) == 1
     assert last["geojson"]["features"][0]["geometry"]["type"] == "LineString"
+
+
+def test_encode_polyline_invalid_coords():
+    with pytest.raises(ValueError, match="at least 2 elements"):
+        encode_polyline([[10.0]])  # type: ignore
+
+    with pytest.raises(ValueError, match="finite numbers"):
+        encode_polyline([(float("nan"), 10.0)])
+
+    with pytest.raises(ValueError, match="out of bounds"):
+        encode_polyline([(200.0, 10.0)])
+
+    with pytest.raises(ValueError, match="out of bounds"):
+        encode_polyline([(10.0, 100.0)])
+
+
+def test_decode_polyline_malformed_chars():
+    # '/' has ASCII 47 (< 63), which must be rejected
+    assert decode_polyline("_p~iF/invalid", precision=5) == []
+
+
+def test_polyline_to_geojson_unescape_default():
+    # Double backslash should NOT be automatically unescaped by default
+    raw_with_double_backslash = "_p~iF~ps|U_ulLnnqC_mqNvxq\\\\`@"
+    fc_default = polyline_to_geojson(raw_with_double_backslash, precision=5)
+    # Default unescape=False treats consecutive backslashes literally (4 points decoded)
+    assert len(fc_default["features"][0]["geometry"]["coordinates"]) == 4
+
+    # Explicit unescape=True unescapes \\ to \ (3 points decoded)
+    fc_explicit = polyline_to_geojson(raw_with_double_backslash, precision=5, unescape=True)
+    assert len(fc_explicit["features"][0]["geometry"]["coordinates"]) == 3
+    assert math.isclose(fc_explicit["features"][0]["geometry"]["coordinates"][2][0], -125.79764, abs_tol=1e-5)

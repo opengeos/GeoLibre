@@ -1205,6 +1205,7 @@ class Map(anywidget.AnyWidget):
         name: str = "Polyline",
         *,
         precision: int = 5,
+        unescape: bool = False,
         **style: Any,
     ) -> str:
         """Add an Encoded Polyline layer.
@@ -1214,12 +1215,13 @@ class Map(anywidget.AnyWidget):
                 or a list of polyline strings.
             name: Layer display name.
             precision: Decimal digits of precision (5 for Google/OSRM, 6 for Valhalla/Mapbox).
+            unescape: Whether to unescape double-escaped backslashes before decoding.
             **style: Style overrides (e.g. ``lineColor="#ff0000"``, ``lineWidth=3``).
 
         Returns:
             The id of the added layer.
         """
-        fc = polyline_to_geojson(polyline, precision=precision)
+        fc = polyline_to_geojson(polyline, precision=precision, unescape=unescape)
         return self.add_geojson(fc, name=name, **style)
 
     # -- markers ---------------------------------------------------------
