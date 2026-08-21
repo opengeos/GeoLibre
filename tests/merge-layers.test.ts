@@ -202,6 +202,36 @@ describe("merge layers tool", () => {
     assert.ok(results[0].features.every((f) => f.id === undefined));
   });
 
+  it('fills a "__proto__" column with null rather than Object.prototype', () => {
+    // JSON.parse creates an *own* "__proto__" key, so this reaches the merge
+    // from an ordinary GeoJSON file.
+    const withProto = makeLayer(
+      "p",
+      "Proto",
+      JSON.parse(String.raw`{
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": { "__proto__": 5 },
+            "geometry": { "type": "Point", "coordinates": [0, 0] }
+          }
+        ]
+      }`) as FeatureCollection,
+    );
+    const { results } = runMerge([withProto, pointsA], {
+      layers: ["p", "a"],
+      addSourceField: false,
+    });
+    assert.equal(results[0].features.length, 3);
+    // pointsA's features have no "__proto__" of their own, so the column is null
+    // for them -- not a reference to Object.prototype.
+    for (const feature of results[0].features.slice(1)) {
+      const value = Object.getOwnPropertyDescriptor(feature.properties ?? {}, "__proto__")?.value;
+      assert.equal(value, null);
+    }
+  });
+
   it("de-duplicates repeated layer ids", () => {
     const dup = runMerge([pointsA, linesB], { layers: ["a", "a", "b"], addSourceField: false });
     // "a" contributes its 2 features once, not twice.

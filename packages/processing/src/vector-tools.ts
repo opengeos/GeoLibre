@@ -2854,11 +2854,18 @@ export const mergeLayersTool: ProcessingAlgorithm = {
           .map((feature) => ({
             type: "Feature" as const,
             properties: Object.fromEntries(
-              schema.map((key) =>
-                key === sourceField && addSource
-                  ? [key, layer.name]
-                  : [key, (feature.properties ?? {})[key] ?? null],
-              ),
+              schema.map((key) => {
+                if (key === sourceField && addSource) return [key, layer.name];
+                const props = feature.properties ?? {};
+                // Own-property lookup: a bare `props[key]` resolves "__proto__"
+                // to Object.prototype for a feature that lacks it, and `?? null`
+                // does not catch that because it is not nullish. JSON.parse does
+                // create an own "__proto__" key, so this is reachable from a file.
+                return [
+                  key,
+                  Object.prototype.hasOwnProperty.call(props, key) ? (props[key] ?? null) : null,
+                ];
+              }),
             ),
             geometry: feature.geometry!,
           })),
