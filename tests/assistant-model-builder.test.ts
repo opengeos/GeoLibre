@@ -415,6 +415,39 @@ describe("AI-created Model Builder models", () => {
     );
   });
 
+  it("resolves layer names inside a multi-layer parameter to ids", () => {
+    const base = {
+      name: "Merged",
+      inputs: [],
+      steps: [
+        {
+          key: "result",
+          algorithm: "merge-layers",
+          inputs: {},
+          parameters: { layers: ["Roads", "counties-id"] } as Record<string, unknown>,
+        },
+      ],
+      outputs: [{ source: "result", name: "Result" }],
+    };
+    // The assistant may write a layer name where the canvas would store an id,
+    // so the saved graph must hold ids only -- as it does for a "layer" slot.
+    const model = buildAssistantModel(base, layers, [MERGE], ids());
+    const step = model.graph?.nodes.find((node) => node.kind === "tool");
+    assert.deepEqual(step?.parameters.layers, ["roads-id", "counties-id"]);
+
+    // An unknown name fails at build time rather than silently at Run time.
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layers: ["Roads", "Nowhere"] } }] },
+          layers,
+          [MERGE],
+          ids(),
+        ),
+      /No layer matching "Nowhere" for "layers" of "merge-layers"/,
+    );
+  });
+
   it("takes a governing parameter's declared default into account", () => {
     const base = {
       name: "Counted",

@@ -266,8 +266,10 @@ export function buildAssistantModel(
     // `layerToModelValue` looks the value up by exact id. Resolve it here the
     // way `definition.inputs` is resolved, so the saved graph holds ids only.
     const layerSlots = new Set(descriptor.inputs.map((port) => port.id));
+    const multiLayerSlots = new Set<string>();
     for (const param of descriptor.parameters) {
       if (param.type === "layer") layerSlots.add(param.id);
+      else if (param.type === "layers") multiLayerSlots.add(param.id);
     }
     for (const slot of layerSlots) {
       if (wired.has(slot)) continue;
@@ -278,6 +280,21 @@ export function buildAssistantModel(
         throw new Error(`No layer matching "${raw}" for "${slot}" of "${step.algorithm}".`);
       }
       parameters[slot] = layer.id;
+    }
+    // A multi-layer slot holds an array of the same references, so resolve each
+    // entry the same way rather than leaving names to fail at Run time.
+    for (const slot of multiLayerSlots) {
+      if (wired.has(slot)) continue;
+      const raw = parameters[slot];
+      if (!Array.isArray(raw)) continue;
+      parameters[slot] = raw.map((entry) => {
+        if (typeof entry !== "string" || !entry) return entry;
+        const layer = resolveLayer(entry);
+        if (!layer) {
+          throw new Error(`No layer matching "${entry}" for "${slot}" of "${step.algorithm}".`);
+        }
+        return layer.id;
+      });
     }
     checkStepParameters(step, descriptor, parameters, wired);
     nodes.push({
