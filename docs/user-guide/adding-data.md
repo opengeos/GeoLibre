@@ -78,9 +78,11 @@ Two optional fields shape what the service draws:
 - **Sublayers** (map service) takes the sublayer ids to draw, such as `0,2,5`.
   Leave it blank for the service's own default set. Pasting a URL that ends in a
   sublayer id (`.../MapServer/3`) selects that sublayer for you.
-- **Rendering rule** (image service) takes an Esri raster function as JSON, such
-  as `{"rasterFunction":"Hillshade"}`, applied by the server before the image is
-  sent.
+- **Raster function** (image service) can be selected from the functions the
+  service advertises with **Browse functions**. The selected function is applied
+  by the server before the image is sent. The **Custom rendering rule** field
+  remains available for Esri raster function JSON with additional arguments,
+  such as `{"rasterFunction":"Hillshade"}`.
 
 Either choice draws the service dynamically, because a cached service's tiles
 were rendered before the choice existed and cannot honor it.
