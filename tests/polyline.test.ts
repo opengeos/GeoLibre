@@ -171,6 +171,20 @@ describe("polyline codec", () => {
       assert.equal(fc.features[0].geometry.type, "MultiLineString");
       assert.equal((fc.features[0].geometry as MultiLineString).coordinates.length, 2);
     });
+
+    it("skips malformed, truncated, or invalid lines in batch decoding", () => {
+      const text = [
+        "_p~iF~ps|U_ulLnnqC_mqNvxq`@", // valid line (3 points)
+        "invalid/character/in/line",     // invalid chars (< 63)
+        "_p~iF~ps|U_ulLnnqC_mqN",        // truncated varint
+        "_______?",                      // overlong varint shift
+        "_p~iF~ps|U_ulLnnqC_mqNvxq`@", // valid line (3 points)
+      ].join("\n");
+      const fc = batchDecodePolylines(text, { precision: 5 });
+      assert.equal(fc.features.length, 2);
+      assert.equal(fc.features[0].geometry.coordinates.length, 3);
+      assert.equal(fc.features[1].geometry.coordinates.length, 3);
+    });
   });
 
   describe("polylineStrToGeoJSON", () => {

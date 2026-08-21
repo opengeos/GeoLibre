@@ -298,8 +298,9 @@ export function batchDecodePolylines(
     const cleaned = raw.replace(/^["']|["']$/g, "").trim();
     if (!cleaned) continue;
 
-    const coords = decodePolyline(cleaned, precision, unescape);
-    if (coords.length >= 2) {
+    const decodeResult = decodePolylineDetailed(cleaned, precision, unescape);
+    if (decodeResult.complete && decodeResult.coordinates.length >= 2) {
+      const coords = decodeResult.coordinates;
       validLineCoords.push(coords);
       features.push({
         type: "Feature",

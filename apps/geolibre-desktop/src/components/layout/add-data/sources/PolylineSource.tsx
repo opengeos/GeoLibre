@@ -1,7 +1,7 @@
 import { batchDecodePolylines, decodePolyline, unescapePolyline } from "@geolibre/core";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import type { FeatureCollection, LineString, MultiLineString } from "geojson";
-import { ChevronDown, ChevronUp, FileUp, Info, MapPin } from "lucide-react";
+import { ChevronDown, ChevronUp, FileUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
