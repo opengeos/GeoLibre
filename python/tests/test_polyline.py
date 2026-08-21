@@ -199,4 +199,6 @@ def test_polyline_to_geojson_unescape_default():
     # Explicit unescape=True unescapes \\ to \ (3 points decoded)
     fc_explicit = polyline_to_geojson(raw_with_double_backslash, precision=5, unescape=True)
     assert len(fc_explicit["features"][0]["geometry"]["coordinates"]) == 3
-    assert math.isclose(fc_explicit["features"][0]["geometry"]["coordinates"][2][0], -125.79764, abs_tol=1e-5)
+    assert math.isclose(
+        fc_explicit["features"][0]["geometry"]["coordinates"][2][0], -125.79764, abs_tol=1e-5
+    )
