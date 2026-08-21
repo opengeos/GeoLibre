@@ -173,6 +173,17 @@ describe("merge layers tool", () => {
     assert.ok(one.messages.some((m) => m.includes("at least two")));
   });
 
+  it("de-duplicates repeated layer ids", () => {
+    const dup = runMerge([pointsA, linesB], { layers: ["a", "a", "b"], addSourceField: false });
+    // "a" contributes its 2 features once, not twice.
+    assert.equal(dup.results[0].features.length, 3);
+
+    // A repeat is not a second layer, so this is still a one-layer selection.
+    const single = runMerge([pointsA], { layers: ["a", "a"] });
+    assert.equal(single.results.length, 0);
+    assert.ok(single.messages.some((m) => m.includes("at least two")));
+  });
+
   it("refuses to overwrite an input attribute with the source field", () => {
     const collides = makeLayer("c", "Collides", {
       type: "FeatureCollection",

@@ -2773,7 +2773,11 @@ export const mergeLayersTool: ProcessingAlgorithm = {
     },
   ],
   run: (ctx) => {
-    const ids = Array.isArray(ctx.parameters.layers) ? (ctx.parameters.layers as string[]) : [];
+    // De-duplicate: the multi-select cannot repeat an option, but a replayed
+    // History entry could, and merging a layer into itself twice is never meant.
+    const ids = Array.isArray(ctx.parameters.layers)
+      ? [...new Set(ctx.parameters.layers as string[])]
+      : [];
     if (ids.length < 2) {
       ctx.log('Error: parameter "layers" requires at least two selected layers');
       return;
