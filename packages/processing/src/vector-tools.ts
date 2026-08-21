@@ -2843,6 +2843,10 @@ export const mergeLayersTool: ProcessingAlgorithm = {
       }
     }
 
+    // Build fresh features (no `id`): two input layers routinely number their
+    // features from the same base, so carrying ids across a merge would emit
+    // duplicates, which would corrupt MapLibre feature state. Same reasoning as
+    // the one-to-many spatial join above.
     const out = featureCollection(
       selected.flatMap((layer) =>
         layer

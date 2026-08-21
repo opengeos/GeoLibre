@@ -173,6 +173,35 @@ describe("merge layers tool", () => {
     assert.ok(one.messages.some((m) => m.includes("at least two")));
   });
 
+  it("drops feature ids so colliding ids across layers cannot survive the merge", () => {
+    const one = makeLayer("x", "X", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: 0,
+          properties: {},
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+      ],
+    });
+    const two = makeLayer("y", "Y", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: 0,
+          properties: {},
+          geometry: { type: "Point", coordinates: [1, 1] },
+        },
+      ],
+    });
+    const { results } = runMerge([one, two], { layers: ["x", "y"], addSourceField: false });
+    assert.equal(results[0].features.length, 2);
+    // Both inputs use id 0; carrying them through would emit duplicates.
+    assert.ok(results[0].features.every((f) => f.id === undefined));
+  });
+
   it("de-duplicates repeated layer ids", () => {
     const dup = runMerge([pointsA, linesB], { layers: ["a", "a", "b"], addSourceField: false });
     // "a" contributes its 2 features once, not twice.
