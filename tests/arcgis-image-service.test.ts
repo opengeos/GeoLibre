@@ -566,6 +566,7 @@ describe("fetchArcGISImageServiceRasterFunctions", () => {
         rasterFunctionInfos: [
           null,
           { description: "Missing name" },
+          { name: 42, description: "Non-string name" },
           { name: "", description: "Blank name" },
           { name: "Missing description" },
           {

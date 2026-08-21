@@ -42,11 +42,20 @@ const URL_PLACEHOLDER_KEYS = {
   "image-service": "addData.arcgis.imageServiceUrlPlaceholder",
 } as const satisfies Record<ArcGISLayerType, string>;
 
-/** The raster function name carried by a simple or parameterized rendering rule. */
-function renderingRuleFunctionName(renderingRule: string): string | null {
+/** The raster function name carried by a rule with no custom arguments. */
+function simpleRenderingRuleFunctionName(renderingRule: string): string | null {
   try {
-    const parsed = JSON.parse(renderingRule) as { rasterFunction?: unknown };
-    return typeof parsed.rasterFunction === "string" ? parsed.rasterFunction : null;
+    const parsed = JSON.parse(renderingRule) as unknown;
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed) ||
+      Object.keys(parsed).length !== 1
+    ) {
+      return null;
+    }
+    const rasterFunction = (parsed as { rasterFunction?: unknown }).rasterFunction;
+    return typeof rasterFunction === "string" ? rasterFunction : null;
   } catch {
     return null;
   }
@@ -180,7 +189,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
     else next.delete(String(id));
     setArcgisSublayers([...next].sort((a, b) => Number(a) - Number(b)).join(","));
   };
-  const renderingRuleFunction = renderingRuleFunctionName(arcgisRenderingRule);
+  const renderingRuleFunction = simpleRenderingRuleFunctionName(arcgisRenderingRule);
   const selectedRasterFunction = rasterFunctionOptions.find(
     (rasterFunction) => rasterFunction.name === renderingRuleFunction,
   );
@@ -507,9 +516,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
               ) : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="arcgis-rendering-rule">
-                {t("addData.arcgis.customRenderingRule")}
-              </Label>
+              <Label htmlFor="arcgis-rendering-rule">{t("addData.arcgis.renderingRule")}</Label>
               <Input
                 id="arcgis-rendering-rule"
                 placeholder={t("addData.arcgis.renderingRulePlaceholder")}

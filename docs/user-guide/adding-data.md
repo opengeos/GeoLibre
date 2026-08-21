@@ -80,7 +80,7 @@ Two optional fields shape what the service draws:
   sublayer id (`.../MapServer/3`) selects that sublayer for you.
 - **Raster function** (image service) can be selected from the functions the
   service advertises with **Browse functions**. The selected function is applied
-  by the server before the image is sent. The **Custom rendering rule** field
+  by the server before the image is sent. The **Rendering rule** field
   remains available for Esri raster function JSON with additional arguments,
   such as `{"rasterFunction":"Hillshade"}`.
 

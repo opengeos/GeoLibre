@@ -380,7 +380,7 @@ export async function fetchArcGISImageServiceRasterFunctions(params: {
   for (const rasterFunction of json.rasterFunctionInfos) {
     if (typeof rasterFunction !== "object" || rasterFunction === null) continue;
     const candidate = rasterFunction as Partial<ArcGISImageServiceRasterFunction>;
-    const name = candidate.name?.trim();
+    const name = typeof candidate.name === "string" ? candidate.name.trim() : undefined;
     if (!name || names.has(name)) continue;
     names.add(name);
     rasterFunctions.push({
