@@ -11,6 +11,7 @@ import {
   readRasterData,
   runRasterToolClient,
   convertGeoTiffToCog,
+  exceedsBrowserCogConversionLimit,
   buildSpectralIndexExpression,
   type AlgorithmParameter,
   type ConversionJob,
@@ -550,6 +551,13 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       // thread blocks; a Web Worker would be the full fix for very large rasters.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       const pixelCount = raster.width * raster.height;
+      if (exceedsBrowserCogConversionLimit(pixelCount)) {
+        const message = t("raster.cogConvertTooLarge", { name: tool.defaultOutputName });
+        setError(message);
+        setClientLog((prev) => [...prev, message]);
+        tracker.finish("error", message);
+        return;
+      }
       if (pixelCount > 2_000_000) {
         setClientLog((prev) => [
           ...prev,
@@ -573,6 +581,8 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         const cogBytes = await convertGeoTiffToCog(new Uint8Array(bytes));
         await addRasterToMap(
           app,
+          // TypeScript widens wasm byte buffers to ArrayBufferLike, which is
+          // not directly assignable to BlobPart's ArrayBufferView.
           new File([cogBytes as Uint8Array<ArrayBuffer>], outName, { type: "image/tiff" }),
           {
             name: outName.replace(/\.tiff?$/i, ""),
