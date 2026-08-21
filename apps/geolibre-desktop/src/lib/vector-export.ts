@@ -242,7 +242,7 @@ function geojsonToPolylineText(geojson: FeatureCollection, precision = 5): strin
 
 /**
  * Whether a layer contains line geometries (LineString or MultiLineString)
- * suitable for Encoded Polyline export. Returns false for points, polygons, or non-line layers.
+ * suitable for Encoded Polyline export. Returns false for points, polygons, or mixed layers.
  */
 export function layerSupportsPolylineExport(layer: GeoLibreLayer): boolean {
   if (layer.type !== "geojson") return false;
@@ -250,9 +250,6 @@ export function layerSupportsPolylineExport(layer: GeoLibreLayer): boolean {
     typeof layer.metadata?.geometryType === "string"
       ? layer.metadata.geometryType.toLowerCase()
       : null;
-  if (rawType === "line" || rawType === "linestring" || rawType === "multilinestring") {
-    return true;
-  }
   if (
     rawType === "point" ||
     rawType === "multipoint" ||
@@ -263,11 +260,20 @@ export function layerSupportsPolylineExport(layer: GeoLibreLayer): boolean {
   }
 
   const features = layer.geojson?.features;
-  if (!features || features.length === 0) return false;
-  return features.some((f) => {
+  if (!features || features.length === 0) {
+    return rawType === "line" || rawType === "linestring" || rawType === "multilinestring";
+  }
+
+  const hasLine = features.some((f) => {
     const type = f.geometry?.type;
     return type === "LineString" || type === "MultiLineString";
   });
+  const hasNonLine = features.some((f) => {
+    const type = f.geometry?.type;
+    return type != null && type !== "LineString" && type !== "MultiLineString";
+  });
+
+  return hasLine && !hasNonLine;
 }
 
 async function textExportContent(

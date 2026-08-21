@@ -30,20 +30,29 @@ export function unescapePolyline(str: string): string {
   return str.replace(/\\\\/g, "\\").replace(/\\"/g, '"').replace(/\\'/g, "'");
 }
 
+export interface PolylineDecodeResult {
+  coordinates: [number, number][];
+  complete: boolean;
+}
+
 /**
- * Decodes an encoded polyline string into an array of `[lon, lat]` coordinates.
+ * Decodes an encoded polyline string into an array of `[lon, lat]` coordinates,
+ * along with a `complete` flag indicating whether the entire string was consumed
+ * as complete coordinate pairs without truncation or malformed characters.
  *
  * @param encoded - The ASCII-encoded polyline string.
  * @param precision - Number of decimal digits (default: 5).
  * @param unescape - Whether to unescape double-escaped backslashes before decoding (default: false).
- * @returns Array of `[lon, lat]` coordinate pairs in GeoJSON order.
+ * @returns Object with decoded `coordinates` and `complete` boolean status.
  */
-export function decodePolyline(
+export function decodePolylineDetailed(
   encoded: string,
   precision = 5,
   unescape = false,
-): [number, number][] {
-  if (!encoded || typeof encoded !== "string") return [];
+): PolylineDecodeResult {
+  if (!encoded || typeof encoded !== "string") {
+    return { coordinates: [], complete: true };
+  }
   const cleanEncoded = unescape ? unescapePolyline(encoded) : encoded;
   const factor = 10 ** precision;
   const len = cleanEncoded.length;
@@ -58,12 +67,20 @@ export function decodePolyline(
     let byte: number;
 
     // Decode latitude delta
+    let latComplete = false;
     do {
-      if (index >= len) return coordinates;
+      if (index >= len) return { coordinates, complete: false };
       byte = cleanEncoded.charCodeAt(index++) - 63;
+      if (byte < 0 || byte > 63) return { coordinates, complete: false };
       result |= (byte & 0x1f) << shift;
       shift += 5;
+      if (byte < 0x20) {
+        latComplete = true;
+        break;
+      }
     } while (byte >= 0x20);
+
+    if (!latComplete) return { coordinates, complete: false };
 
     // Unsigned right shift (>>>) for 32-bit safe zigzag decoding
     lat += result & 1 ? ~(result >>> 1) : result >>> 1;
@@ -72,19 +89,43 @@ export function decodePolyline(
     result = 0;
 
     // Decode longitude delta
+    let lonComplete = false;
     do {
-      if (index >= len) return coordinates;
+      if (index >= len) return { coordinates, complete: false };
       byte = cleanEncoded.charCodeAt(index++) - 63;
+      if (byte < 0 || byte > 63) return { coordinates, complete: false };
       result |= (byte & 0x1f) << shift;
       shift += 5;
+      if (byte < 0x20) {
+        lonComplete = true;
+        break;
+      }
     } while (byte >= 0x20);
+
+    if (!lonComplete) return { coordinates, complete: false };
 
     lon += result & 1 ? ~(result >>> 1) : result >>> 1;
 
     coordinates.push([lon / factor, lat / factor]);
   }
 
-  return coordinates;
+  return { coordinates, complete: true };
+}
+
+/**
+ * Decodes an encoded polyline string into an array of `[lon, lat]` coordinates.
+ *
+ * @param encoded - The ASCII-encoded polyline string.
+ * @param precision - Number of decimal digits (default: 5).
+ * @param unescape - Whether to unescape double-escaped backslashes before decoding (default: false).
+ * @returns Array of `[lon, lat]` coordinate pairs in GeoJSON order.
+ */
+export function decodePolyline(
+  encoded: string,
+  precision = 5,
+  unescape = false,
+): [number, number][] {
+  return decodePolylineDetailed(encoded, precision, unescape).coordinates;
 }
 
 /**

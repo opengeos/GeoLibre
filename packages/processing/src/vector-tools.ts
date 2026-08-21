@@ -28,11 +28,13 @@ import type {
   Point,
   Polygon,
   Position,
+  MultiLineString,
   MultiPolygon,
 } from "geojson";
 import {
   bodyLengthToEarth,
   decodePolyline,
+  decodePolylineDetailed,
   earthLengthToBody,
   encodePolyline,
   getActiveBodyRadiusRatio,
@@ -2815,7 +2817,13 @@ export const decodePolylineTool: ProcessingAlgorithm = {
         }
         if (!valid) break;
 
-        const coords = decodePolyline(part, precision);
+        const decodeResult = decodePolylineDetailed(part, precision);
+        if (!decodeResult.complete) {
+          valid = false;
+          break;
+        }
+
+        const coords = decodeResult.coordinates;
         if (coords.length < 2) {
           valid = false;
           break;

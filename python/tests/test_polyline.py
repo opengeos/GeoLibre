@@ -202,3 +202,20 @@ def test_polyline_to_geojson_unescape_default():
     assert math.isclose(
         fc_explicit["features"][0]["geometry"]["coordinates"][2][0], -125.79764, abs_tol=1e-5
     )
+
+
+def test_decode_polyline_out_of_range_bounds():
+    from geolibre.polyline import _encode_signed_number
+
+    # Latitude > 90 and < -90
+    lat_high = _encode_signed_number(9500000) + _encode_signed_number(0)
+    assert decode_polyline(lat_high, precision=5) == []
+    lat_low = _encode_signed_number(-9500000) + _encode_signed_number(0)
+    assert decode_polyline(lat_low, precision=5) == []
+
+    # Longitude > 180 and < -180
+    lon_high = _encode_signed_number(0) + _encode_signed_number(19000000)
+    assert decode_polyline(lon_high, precision=5) == []
+    lon_low = _encode_signed_number(0) + _encode_signed_number(-19000000)
+    assert decode_polyline(lon_low, precision=5) == []
+

@@ -14,25 +14,25 @@ export type GeometryOutputType = "single" | "multi";
 
 const SAMPLE_POLYLINES = [
   {
-    key: "sampleGoogle",
+    key: "addData.polyline.sampleGoogle" as const,
     value: "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
     precision: 5,
     unescape: true,
   },
   {
-    key: "sampleValhalla",
+    key: "addData.polyline.sampleValhalla" as const,
     value: "_o`diA~gw}qC_pR_pR_pR_af@",
     precision: 6,
     unescape: true,
   },
   {
-    key: "sampleEscaped",
+    key: "addData.polyline.sampleEscaped" as const,
     value: "_p~iF~ps|U_ulLnnqC_mqNvxq\\`@",
     precision: 5,
     unescape: true,
   },
   {
-    key: "sampleMultiLine",
+    key: "addData.polyline.sampleMultiLine" as const,
     value: "_p~iF~ps|U_ulLnnqC_mqNvxq`@\n_ibE_seK_seK_seK\nmc_Ie}hV_c_@_c_@",
     precision: 5,
     unescape: true,
@@ -43,7 +43,8 @@ const SAMPLE_POLYLINES = [
 function haversineDistanceKm(c1: [number, number], c2: [number, number]): number {
   const R = 6371.0088;
   const dLat = ((c2[1] - c1[1]) * Math.PI) / 180;
-  const dLon = ((c2[0] - c1[0]) * Math.PI) / 180;
+  const deltaLon = ((c2[0] - c1[0] + 540) % 360) - 180;
+  const dLon = (deltaLon * Math.PI) / 180;
   const lat1 = (c1[1] * Math.PI) / 180;
   const lat2 = (c2[1] * Math.PI) / 180;
   const a =
@@ -51,6 +52,10 @@ function haversineDistanceKm(c1: [number, number], c2: [number, number]): number
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+function formatDistance(km: number): string {
+  return km < 1 ? `${(km * 1000).toFixed(0)} m` : `${km.toFixed(2)} km`;
 }
 
 export function PolylineSource() {
@@ -131,7 +136,12 @@ export function PolylineSource() {
         delimiter: activeDelimiter,
         asMultiLine: outputGeometry === "multi",
         baseProperties: {
-          source: polylineMode === "file" ? (selectedFile?.path ?? "file") : "polyline",
+          source:
+            polylineMode === "file"
+              ? selectedFile
+                ? fileNameFromPath(selectedFile.path)
+                : "file"
+              : "polyline",
         },
       });
 
@@ -411,13 +421,7 @@ export function PolylineSource() {
                 <span className="font-semibold text-foreground">
                   {t("addData.polyline.previewLength")}:{" "}
                 </span>
-                {parsedData.totalLengthKm < 1
-                  ? t("addData.polyline.unitMeters", {
-                      value: (parsedData.totalLengthKm * 1000).toFixed(0),
-                    })
-                  : t("addData.polyline.unitKm", {
-                      value: parsedData.totalLengthKm.toFixed(2),
-                    })}
+                {formatDistance(parsedData.totalLengthKm)}
               </div>
               <div className="truncate">
                 <span className="font-semibold text-foreground">
@@ -452,9 +456,7 @@ export function PolylineSource() {
                         </span>
                         <span>
                           {l.pointsCount} {t("addData.polyline.previewPoints")} ·{" "}
-                          {t("addData.polyline.unitKm", {
-                            value: l.lengthKm.toFixed(2),
-                          })}
+                          {formatDistance(l.lengthKm)}
                         </span>
                       </div>
                       <div className="flex gap-2 text-[10px] text-muted-foreground">
@@ -480,7 +482,7 @@ export function PolylineSource() {
         {polylineMode === "paste" && (
           <SampleDataSelect
             samples={SAMPLE_POLYLINES.map((s) => ({
-              label: t(`addData.polyline.${s.key}`),
+              label: t(s.key),
               value: s.value,
             }))}
             onSelect={(val) => {

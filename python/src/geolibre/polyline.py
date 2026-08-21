@@ -83,7 +83,12 @@ def decode_polyline(
         delta_lon = ~(result >> 1) if (result & 1) else (result >> 1)
         lon += delta_lon
 
-        coordinates.append((lon / factor, lat / factor))
+        lat_deg = lat / factor
+        lon_deg = lon / factor
+        if not (-90.0 <= lat_deg <= 90.0 and -180.0 <= lon_deg <= 180.0):
+            return []
+
+        coordinates.append((lon_deg, lat_deg))
 
     return coordinates
 
@@ -127,7 +132,8 @@ def encode_polyline(
             raise ValueError(f"Coordinates must be finite numbers, got ({lon}, {lat})")
         if not (-180.0 <= lon <= 180.0 and -90.0 <= lat <= 90.0):
             raise ValueError(
-                f"Coordinates out of bounds: longitude must be in [-180, 180], latitude in [-90, 90], got lon={lon}, lat={lat}"
+                "Coordinates out of bounds: longitude must be in [-180, 180], "
+                f"latitude in [-90, 90], got lon={lon}, lat={lat}"
             )
 
         round_lat = math.floor(lat * factor + 0.5)

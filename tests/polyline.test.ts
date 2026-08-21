@@ -516,6 +516,53 @@ describe("polyline codec", () => {
       assert.equal(resultFc.features.length, 0);
       assert.ok(logs.some((msg) => msg.includes("Skipped 1 feature(s)")));
     });
+
+    it("decodePolylineTool skips valid polyline with an appended incomplete coordinate", async () => {
+      const { decodePolylineTool } = await import("@geolibre/processing");
+      const layerWithIncompletePoly = {
+        id: "test-poly-layer-incomplete",
+        name: "Incomplete Polyline",
+        type: "geojson" as const,
+        visible: true,
+        opacity: 1,
+        style: {} as any,
+        metadata: {},
+        source: { type: "geojson" as const },
+        geojson: {
+          type: "FeatureCollection" as const,
+          features: [
+            {
+              type: "Feature" as const,
+              properties: {
+                routeId: "Incomplete",
+                poly: "_p~iF~ps|U_ulLnnqC_mqNvxq`@_mqN",
+              },
+              geometry: null as any,
+            },
+          ],
+        },
+      };
+
+      let resultFc: FeatureCollection | undefined;
+      const logs: string[] = [];
+
+      decodePolylineTool.run({
+        layers: [layerWithIncompletePoly as any],
+        parameters: {
+          layer: "test-poly-layer-incomplete",
+          field: "poly",
+          precision: "5",
+        },
+        log: (msg) => logs.push(msg),
+        addResultLayer: (_name, fc) => {
+          resultFc = fc;
+        },
+      });
+
+      assert.ok(resultFc);
+      assert.equal(resultFc.features.length, 0);
+      assert.ok(logs.some((msg) => msg.includes("Skipped 1 feature(s)")));
+    });
   });
 
   describe("drag and drop file ingestion", () => {
@@ -624,9 +671,45 @@ describe("polyline codec", () => {
         },
       };
 
+      const mixedLayer = {
+        id: "m1",
+        name: "Mixed Layer",
+        type: "geojson" as const,
+        visible: true,
+        opacity: 1,
+        style: {} as any,
+        metadata: {},
+        source: { type: "geojson" as const },
+        geojson: {
+          type: "FeatureCollection" as const,
+          features: [
+            {
+              type: "Feature" as const,
+              properties: {},
+              geometry: {
+                type: "LineString" as const,
+                coordinates: [
+                  [0, 0],
+                  [1, 1],
+                ],
+              },
+            },
+            {
+              type: "Feature" as const,
+              properties: {},
+              geometry: {
+                type: "Point" as const,
+                coordinates: [0, 0],
+              },
+            },
+          ],
+        },
+      };
+
       assert.equal(layerSupportsPolylineExport(lineLayer as any), true);
       assert.equal(layerSupportsPolylineExport(pointLayer as any), false);
       assert.equal(layerSupportsPolylineExport(polygonLayer as any), false);
+      assert.equal(layerSupportsPolylineExport(mixedLayer as any), false);
     });
   });
 });
