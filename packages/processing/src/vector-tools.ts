@@ -2827,6 +2827,9 @@ export const mergeLayersTool: ProcessingAlgorithm = {
     }
     for (const layer of selected) {
       for (const feature of layer.geojson!.features) {
+        // Skip features the output builder drops, so a property carried only
+        // by a null-geometry feature does not become an always-null column.
+        if (!feature.geometry) continue;
         for (const key of Object.keys(feature.properties ?? {})) {
           if (!seen.has(key)) {
             seen.add(key);

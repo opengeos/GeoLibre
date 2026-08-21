@@ -143,6 +143,26 @@ describe("merge layers tool", () => {
     assert.equal(run.results[0].features.length, 2);
   });
 
+  it("builds the schema only from features that reach the output", () => {
+    const mixed = makeLayer("m", "Mixed", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { kept: 1 },
+          geometry: { type: "Point", coordinates: [1, 1] },
+        },
+        // Dropped by the geometry filter, so "dropped" must not become a column.
+        { type: "Feature", properties: { dropped: 2 }, geometry: null },
+      ],
+    });
+    const { results } = runMerge([pointsA, mixed], { layers: ["a", "m"], addSourceField: false });
+    const props = results[0].features.map((f) => f.properties ?? {});
+    assert.equal(results[0].features.length, 3);
+    assert.ok(props.every((p) => !("dropped" in p)));
+    assert.ok(props.every((p) => "kept" in p));
+  });
+
   it("errors when fewer than two layers are selected", () => {
     const none = runMerge([pointsA], {});
     assert.equal(none.results.length, 0);
