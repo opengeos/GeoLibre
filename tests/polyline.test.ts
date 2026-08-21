@@ -175,9 +175,9 @@ describe("polyline codec", () => {
     it("skips malformed, truncated, or invalid lines in batch decoding", () => {
       const text = [
         "_p~iF~ps|U_ulLnnqC_mqNvxq`@", // valid line (3 points)
-        "invalid/character/in/line",     // invalid chars (< 63)
-        "_p~iF~ps|U_ulLnnqC_mqN",        // truncated varint
-        "_______?",                      // overlong varint shift
+        "invalid/character/in/line", // invalid chars (< 63)
+        "_p~iF~ps|U_ulLnnqC_mqN", // truncated varint
+        "_______?", // overlong varint shift
         "_p~iF~ps|U_ulLnnqC_mqNvxq`@", // valid line (3 points)
       ].join("\n");
       const fc = batchDecodePolylines(text, { precision: 5 });
