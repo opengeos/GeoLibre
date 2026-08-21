@@ -13,6 +13,8 @@ import tin from "@turf/tin";
 import sector from "@turf/sector";
 import circle from "@turf/circle";
 import distance from "@turf/distance";
+import bearing from "@turf/bearing";
+import destination from "@turf/destination";
 import bbox from "@turf/bbox";
 import booleanIntersects from "@turf/boolean-intersects";
 import booleanContains from "@turf/boolean-contains";
@@ -1719,7 +1721,7 @@ export const extractVerticesTool: ProcessingAlgorithm = {
   id: "extract-vertices",
   name: "Extract vertices",
   description:
-    "Convert every vertex of the input features into a point, keeping the original attributes plus vertex/part indices",
+    "Convert every vertex of the input features into a point, keeping the original attributes plus vertex_index and part_index columns (same-named source attributes are overwritten)",
   group: "Geometry",
   parameters: [{ id: "layer", label: "Input layer", type: "layer", required: true }],
   run: (ctx) => {
@@ -1766,35 +1768,63 @@ export const extractVerticesTool: ProcessingAlgorithm = {
 type AlongUnits = "kilometers" | "meters" | "miles";
 
 /**
- * Interpolate a point at {@link atDistance} along an open coordinate ring,
- * walking haversine segment lengths and interpolating linearly within the
- * segment that contains the target. Returns null when the target is past the
- * end (degenerate zero-length rings have no interior points).
+ * Hard ceiling on generated points so a tiny interval on a long geometry
+ * cannot freeze the tab (the same guard {@link GRID_HARD_CAP} gives the grid).
  */
-function interpolateAlong(
+const POINTS_ALONG_HARD_CAP = 1_000_000;
+
+/**
+ * Forward-only cursor that yields a point every {@link interval} along an open
+ * coordinate ring. Segment lengths are haversine and the position inside a
+ * segment is found geodesically (bearing + destination), so the measured
+ * `distance` attribute and the emitted coordinate agree even on long
+ * high-latitude segments where linear lon/lat interpolation drifts. Each
+ * segment is visited once, so a walk is O(points + vertices) rather than
+ * re-scanning the ring from its first vertex for every point.
+ */
+function* walkAlong(
   positions: Position[],
-  atDistance: number,
+  interval: number,
   units: AlongUnits,
-): Position | null {
+): Generator<{ position: Position; distance: number }> {
   let travelled = 0;
+  let atDistance = 0;
   for (let i = 1; i < positions.length; i += 1) {
     const start = positions[i - 1];
     const end = positions[i];
     const segment = distance(start, end, { units });
-    if (travelled + segment >= atDistance && segment > 0) {
-      const t = (atDistance - travelled) / segment;
-      return [start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t];
+    if (segment <= 0) continue;
+    let heading: number | null = null;
+    while (atDistance <= travelled + segment) {
+      const offset = atDistance - travelled;
+      let position: Position;
+      if (offset <= 0) position = [start[0], start[1]];
+      else if (offset >= segment) position = [end[0], end[1]];
+      else {
+        heading ??= bearing(start, end);
+        position = destination(start, offset, heading, { units }).geometry.coordinates;
+      }
+      yield { position, distance: atDistance };
+      atDistance += interval;
     }
     travelled += segment;
   }
-  return null;
+}
+
+/** Haversine length of an open coordinate ring. */
+function ringLength(positions: Position[], units: AlongUnits): number {
+  let total = 0;
+  for (let i = 1; i < positions.length; i += 1) {
+    total += distance(positions[i - 1], positions[i], { units });
+  }
+  return total;
 }
 
 export const pointsAlongGeometryTool: ProcessingAlgorithm = {
   id: "points-along-geometry",
   name: "Points along geometry",
   description:
-    "Generate points at a fixed distance interval along lines and polygon boundaries; the first and last vertices are always included",
+    "Generate points at a fixed distance interval along lines and polygon boundaries; the first and last vertices are always included. Each point gets a distance column (a same-named source attribute is overwritten)",
   group: "Geometry",
   parameters: [
     {
@@ -1835,8 +1865,9 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
       return;
     }
     const units = ((ctx.parameters.units as string) || "kilometers") as AlongUnits;
-    const points: Feature<Point>[] = [];
+    const parts: { feature: Feature; part: Position[] }[] = [];
     let skipped = 0;
+    let estimated = 0;
     for (const feature of fc.features) {
       const geometry = feature.geometry;
       if (!geometry || !(isFamily(geometry, "line") || isFamily(geometry, "polygon"))) {
@@ -1845,44 +1876,54 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
       }
       for (const part of geometryParts(geometry)) {
         if (part.length < 2) continue;
-        // Walk every interval multiple, then always close with the part's
-        // final vertex so endpoints survive rounding of the total length.
-        let atDistance = 0;
-        for (;;) {
-          const position = interpolateAlong(part, atDistance, units);
-          if (!position) break;
-          points.push({
-            type: "Feature",
-            properties: { ...(feature.properties ?? {}), distance: atDistance },
-            geometry: { type: "Point", coordinates: position },
-          });
-          atDistance += interval;
-        }
-        const last = part[part.length - 1];
-        const previousFeature = points[points.length - 1];
-        const previous = previousFeature?.geometry.coordinates;
-        // When the length is an (near) exact multiple of the interval, the last
-        // stepped point already sits on the end vertex; keep one point but snap
-        // it to the exact end vertex so endpoints are never off by float noise.
-        const duplicatesEnd =
-          previous &&
-          Math.abs(previous[0] - last[0]) < 1e-9 &&
-          Math.abs(previous[1] - last[1]) < 1e-9;
-        if (duplicatesEnd && previousFeature) {
-          previousFeature.geometry.coordinates = [...last] as Position;
-          previousFeature.properties!.distance = Number(
-            distance(part[0], last, { units }).toFixed(6),
-          );
-        } else if (!duplicatesEnd) {
-          points.push({
-            type: "Feature",
-            properties: {
-              ...(feature.properties ?? {}),
-              distance: Number(distance(part[0], last, { units }).toFixed(6)),
-            },
-            geometry: { type: "Point", coordinates: [...last] as Position },
-          });
-        }
+        // Interval multiples plus the closing end vertex.
+        estimated += Math.floor(ringLength(part, units) / interval) + 2;
+        parts.push({ feature, part });
+      }
+    }
+    // Bail before allocating anything, the way gridTool does for its cells.
+    if (estimated > POINTS_ALONG_HARD_CAP) {
+      ctx.log(
+        `Error: this interval would generate about ${estimated.toLocaleString()} points (cap ${POINTS_ALONG_HARD_CAP.toLocaleString()}); use a larger interval.`,
+      );
+      return;
+    }
+    const points: Feature<Point>[] = [];
+    for (const { feature, part } of parts) {
+      // Walk every interval multiple, then always close with the part's
+      // final vertex so endpoints survive rounding of the total length.
+      let lastPushed: Feature<Point> | undefined;
+      for (const step of walkAlong(part, interval, units)) {
+        lastPushed = {
+          type: "Feature",
+          properties: { ...(feature.properties ?? {}), distance: step.distance },
+          geometry: { type: "Point", coordinates: step.position },
+        };
+        points.push(lastPushed);
+      }
+      const last = part[part.length - 1];
+      const previous = lastPushed?.geometry.coordinates;
+      // When the length is an (near) exact multiple of the interval, the last
+      // stepped point already sits on the end vertex; keep one point but snap
+      // it to the exact end vertex so endpoints are never off by float noise.
+      // `lastPushed` is scoped to this part, so a degenerate part (all
+      // segments zero-length) can never snap a point from another part.
+      const duplicatesEnd =
+        previous &&
+        Math.abs(previous[0] - last[0]) < 1e-9 &&
+        Math.abs(previous[1] - last[1]) < 1e-9;
+      if (duplicatesEnd && lastPushed) {
+        lastPushed.geometry.coordinates = [...last] as Position;
+        lastPushed.properties!.distance = Number(ringLength(part, units).toFixed(6));
+      } else if (!duplicatesEnd) {
+        points.push({
+          type: "Feature",
+          properties: {
+            ...(feature.properties ?? {}),
+            distance: Number(ringLength(part, units).toFixed(6)),
+          },
+          geometry: { type: "Point", coordinates: [...last] as Position },
+        });
       }
     }
     if (!points.length) {
