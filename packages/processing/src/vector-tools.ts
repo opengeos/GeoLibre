@@ -1634,6 +1634,213 @@ export const smoothTool: ProcessingAlgorithm = {
   },
 };
 
+/**
+ * Split any geometry into its linear "parts": each ring of a polygon, each
+ * line of a (multi)linestring, or the single coordinate of a point. Used by
+ * Extract vertices and Points along geometry to walk coordinates uniformly.
+ */
+function geometryParts(geometry: Geometry): Position[][] {
+  switch (geometry.type) {
+    case "Point":
+      return [[geometry.coordinates]];
+    case "MultiPoint":
+      return geometry.coordinates.map((pos) => [pos]);
+    case "LineString":
+      return [geometry.coordinates];
+    case "MultiLineString":
+      return geometry.coordinates;
+    case "Polygon":
+      return geometry.coordinates;
+    case "MultiPolygon":
+      return geometry.coordinates.flat();
+    default:
+      return [];
+  }
+}
+
+export const extractVerticesTool: ProcessingAlgorithm = {
+  id: "extract-vertices",
+  name: "Extract vertices",
+  description:
+    "Convert every vertex of the input features into a point, keeping the original attributes plus vertex/part indices",
+  group: "Geometry",
+  parameters: [{ id: "layer", label: "Input layer", type: "layer", required: true }],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const points: Feature<Point>[] = [];
+    let skipped = 0;
+    for (const feature of fc.features) {
+      const geometry = feature.geometry;
+      if (!geometry) {
+        skipped += 1;
+        continue;
+      }
+      const parts = geometryParts(geometry);
+      if (!parts.length) {
+        skipped += 1;
+        continue;
+      }
+      for (const [partIndex, part] of parts.entries()) {
+        for (const [vertexIndex, position] of part.entries()) {
+          points.push({
+            type: "Feature",
+            properties: {
+              ...(feature.properties ?? {}),
+              vertex_index: vertexIndex,
+              part_index: partIndex,
+            },
+            geometry: { type: "Point", coordinates: [...position] as Position },
+          });
+        }
+      }
+    }
+    if (!points.length) {
+      ctx.log("Error: no vertices found in the input layer");
+      return;
+    }
+    if (skipped) ctx.log(`Skipped ${skipped} feature(s) with no usable geometry`);
+    ctx.log(`Extracted ${points.length} vertex point(s)`);
+    ctx.addResultLayer?.("Vertices", featureCollection(points));
+  },
+};
+
+/** Units accepted by Points along geometry; @turf/distance speaks all three. */
+type AlongUnits = "kilometers" | "meters" | "miles";
+
+/**
+ * Interpolate a point at {@link atDistance} along an open coordinate ring,
+ * walking haversine segment lengths and interpolating linearly within the
+ * segment that contains the target. Returns null when the target is past the
+ * end (degenerate zero-length rings have no interior points).
+ */
+function interpolateAlong(
+  positions: Position[],
+  atDistance: number,
+  units: AlongUnits,
+): Position | null {
+  let travelled = 0;
+  for (let i = 1; i < positions.length; i += 1) {
+    const start = positions[i - 1];
+    const end = positions[i];
+    const segment = distance(start, end, { units });
+    if (travelled + segment >= atDistance && segment > 0) {
+      const t = (atDistance - travelled) / segment;
+      return [
+        start[0] + (end[0] - start[0]) * t,
+        start[1] + (end[1] - start[1]) * t,
+      ];
+    }
+    travelled += segment;
+  }
+  return null;
+}
+
+export const pointsAlongGeometryTool: ProcessingAlgorithm = {
+  id: "points-along-geometry",
+  name: "Points along geometry",
+  description:
+    "Generate points at a fixed distance interval along lines and polygon boundaries; the first and last vertices are always included",
+  group: "Geometry",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["line", "polygon"],
+    },
+    {
+      id: "interval",
+      label: "Interval",
+      type: "number",
+      required: true,
+      default: 1,
+      min: 0.000001,
+      step: 0.1,
+      description: "Distance between generated points",
+    },
+    {
+      id: "units",
+      label: "Units",
+      type: "select",
+      default: "kilometers",
+      options: [
+        { value: "kilometers", label: "Kilometers" },
+        { value: "meters", label: "Meters" },
+        { value: "miles", label: "Miles" },
+      ],
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const interval = numberParam(ctx, "interval", 1);
+    if (!(interval > 0)) {
+      ctx.log("Error: interval must be greater than 0");
+      return;
+    }
+    const units = ((ctx.parameters.units as string) || "kilometers") as AlongUnits;
+    const points: Feature<Point>[] = [];
+    let skipped = 0;
+    for (const feature of fc.features) {
+      const geometry = feature.geometry;
+      if (!geometry || !(isFamily(geometry, "line") || isFamily(geometry, "polygon"))) {
+        skipped += 1;
+        continue;
+      }
+      for (const part of geometryParts(geometry)) {
+        if (part.length < 2) continue;
+        // Walk every interval multiple, then always close with the part's
+        // final vertex so endpoints survive rounding of the total length.
+        let atDistance = 0;
+        for (;;) {
+          const position = interpolateAlong(part, atDistance, units);
+          if (!position) break;
+          points.push({
+            type: "Feature",
+            properties: { ...(feature.properties ?? {}), distance: atDistance },
+            geometry: { type: "Point", coordinates: position },
+          });
+          atDistance += interval;
+        }
+        const last = part[part.length - 1];
+        const previousFeature = points[points.length - 1];
+        const previous = previousFeature?.geometry.coordinates;
+        // When the length is an (near) exact multiple of the interval, the last
+        // stepped point already sits on the end vertex; keep one point but snap
+        // it to the exact end vertex so endpoints are never off by float noise.
+        const duplicatesEnd =
+          previous &&
+          Math.abs(previous[0] - last[0]) < 1e-9 &&
+          Math.abs(previous[1] - last[1]) < 1e-9;
+        if (duplicatesEnd && previousFeature) {
+          previousFeature.geometry.coordinates = [...last] as Position;
+          previousFeature.properties!.distance = Number(
+            distance(part[0], last, { units }).toFixed(6),
+          );
+        } else if (!duplicatesEnd) {
+          points.push({
+            type: "Feature",
+            properties: {
+              ...(feature.properties ?? {}),
+              distance: Number(distance(part[0], last, { units }).toFixed(6)),
+            },
+            geometry: { type: "Point", coordinates: [...last] as Position },
+          });
+        }
+      }
+    }
+    if (!points.length) {
+      ctx.log("Error: no line or polygon features found in the input layer");
+      return;
+    }
+    if (skipped) ctx.log(`Skipped ${skipped} feature(s) that are not lines or polygons`);
+    ctx.log(`Generated ${points.length} point(s) every ${interval} ${units}`);
+    ctx.addResultLayer?.("Points along geometry", featureCollection(points));
+  },
+};
+
 /** Hard ceiling on grid cells so a tiny cell size cannot freeze the tab. */
 const GRID_HARD_CAP = 1_000_000;
 
@@ -2688,6 +2895,8 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   explodeTool,
   aggregateTool,
   smoothTool,
+  extractVerticesTool,
+  pointsAlongGeometryTool,
   gridTool,
   voronoiTool,
   cellSectorsTool,

@@ -259,6 +259,12 @@ export function ProcessingMenu({
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("smooth")}>
                       {t("toolbar.vectorTool.smooth")}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("extract-vertices")}>
+                      {t("toolbar.vectorTool.extractVertices")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("points-along-geometry")}>
+                      {t("toolbar.vectorTool.pointsAlongGeometry")}
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("grid")}>
                       {t("toolbar.vectorTool.grid")}
                     </DropdownMenuItem>

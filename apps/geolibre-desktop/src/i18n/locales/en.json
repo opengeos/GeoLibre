@@ -2244,6 +2244,8 @@
       "explode": "Explode",
       "aggregate": "Aggregate by attribute",
       "smooth": "Smooth",
+      "extractVertices": "Extract vertices",
+      "pointsAlongGeometry": "Points along geometry",
       "grid": "Regular grid",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Cell-site coverage",

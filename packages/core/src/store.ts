@@ -120,6 +120,8 @@ export type VectorToolKind =
   | "explode"
   | "aggregate"
   | "smooth"
+  | "extract-vertices"
+  | "points-along-geometry"
   | "grid"
   | "voronoi"
   | "cell-sectors"
