@@ -699,6 +699,15 @@ function hasValidPolylineCoordinates(fc: FeatureCollection): boolean {
  * If precision 5 yields coordinates outside valid WGS84 bounds (which occurs when
  * precision 6 data with latitude > 9° or longitude > 18° is scaled up by 10x),
  * it falls back to precision 6 (Valhalla / Mapbox standard, factor 1e6).
+ *
+ * That bounds check only settles the cases it can: the two decodes of the same
+ * bytes differ by exactly a factor of 10, so whenever precision 5 lands in
+ * bounds precision 6 necessarily does too, and nothing in the data says which
+ * one the author meant. Precision-6 data close to the prime meridian and the
+ * equator (|lon| <= 18°, |lat| <= 9°) therefore imports at precision 5, ten
+ * times too large, with no error. Drag-and-drop has nowhere to ask, so it takes
+ * the more common of the two; Add Data → Encoded Polyline is the path with an
+ * explicit precision picker and a preview to check the result against.
  */
 function parsePolylineFileLayers(text: string, path: string): LoadedVectorLayer[] {
   let fc = batchDecodePolylines(text, { precision: 5, unescape: true });

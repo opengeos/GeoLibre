@@ -4,6 +4,7 @@ import type { FeatureCollection, LineString, MultiLineString } from "geojson";
 import { ChevronDown, ChevronUp, FileUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SAMPLE_POLYLINES } from "../../../../lib/polyline-samples";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import { createBaseLayer, errorMessage, fileNameFromPath, layerNameFromPath } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
@@ -11,34 +12,6 @@ import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared
 export type PolylineMode = "paste" | "file";
 export type DelimiterType = "newline" | "semicolon" | "comma" | "tab" | "custom";
 export type GeometryOutputType = "single" | "multi";
-
-const SAMPLE_POLYLINES = [
-  {
-    key: "addData.polyline.sampleGoogle" as const,
-    value: "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
-    precision: 5,
-    unescape: true,
-  },
-  {
-    key: "addData.polyline.sampleValhalla" as const,
-    value: "_o`diA~gw}qC_pR_pR_pR_af@",
-    precision: 6,
-    unescape: true,
-  },
-  {
-    key: "addData.polyline.sampleEscaped" as const,
-    value:
-      "otnyWckdxrCnlAsyAv~JrjAriIkjHvkL_|BbkL~tCfc@_iIb}C?goDkdUj`Cs}IwGktMvjE{_L{w@k~CjiF_uH~qGgkZfzFoaI{nB_}DoPcjT{|J?{r@swGnaDsuCoAgsQrhGkxKsbOswQjfEwQrbJcp`@~bBn_@ffAofI{eDguKwkLwrKwzGkt\\krg@gfqAg|@{uKcwKocHsaC{fFsjF_g@_rBf|OwdHvB?",
-    precision: 5,
-    unescape: true,
-  },
-  {
-    key: "addData.polyline.sampleMultiLine" as const,
-    value: "_p~iF~ps|U_ulLnnqC_mqNvxq`@\n_ibE_seK_seK_seK\nmc_Ie}hV_c_@_c_@",
-    precision: 5,
-    unescape: true,
-  },
-];
 
 /** Haversine distance in kilometers between two [lon, lat] coordinates. */
 function haversineDistanceKm(c1: [number, number], c2: [number, number]): number {
