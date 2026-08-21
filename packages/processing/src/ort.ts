@@ -11,7 +11,35 @@
 // (tests/object-detection.test.ts) so a dependency bump that forgets this
 // constant fails CI instead of breaking inference at runtime.
 export const ORT_VERSION = "1.27.0";
-const ORT_WASM_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
+
+// Injected by vite.config.ts; declared locally (module scope, so it does not
+// collide with the app's global declaration in vite-env.d.ts) because this
+// package must stay importable from a plain Node test where the define is
+// absent.
+declare const __NO_EXTERNAL_CDN__: boolean;
+
+/**
+ * True when the build strips every external CDN reference, which leaves the
+ * runtime with no host to fetch its `.wasm` from — so inference is disabled
+ * rather than left to fail on a blocked request.
+ */
+const NO_EXTERNAL_CDN = typeof __NO_EXTERNAL_CDN__ !== "undefined" && __NO_EXTERNAL_CDN__;
+
+const ORT_WASM_BASE = NO_EXTERNAL_CDN
+  ? ""
+  : `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
+
+/**
+ * Whether the ONNX Runtime WASM backend can load at all in this build.
+ *
+ * False only in a no-external-CDN build, where the runtime has no host to fetch
+ * its `.wasm` from and `loadOrt()` always rejects. UI that would otherwise let
+ * a user select an image and a model, then fail at the end of the run, should
+ * check this up front and fail closed instead.
+ */
+export function isOrtAvailable(): boolean {
+  return !NO_EXTERNAL_CDN;
+}
 
 // A promise singleton: the import-and-configure runs exactly once and every
 // caller awaits the same settled promise, so concurrent tool calls cannot race
@@ -30,6 +58,14 @@ let ortPromise: Promise<typeof import("onnxruntime-web/wasm")> | null = null;
  */
 export function loadOrt(): Promise<typeof import("onnxruntime-web/wasm")> {
   if (!ortPromise) {
+    if (NO_EXTERNAL_CDN) {
+      ortPromise = Promise.reject(
+        new Error(
+          "ONNX Runtime WASM is unavailable in this build (external CDN resources are disabled).",
+        ),
+      );
+      return ortPromise;
+    }
     ortPromise = import("onnxruntime-web/wasm")
       .then((ort) => {
         ort.env.wasm.numThreads = 1;

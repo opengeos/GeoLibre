@@ -102,6 +102,18 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
   // Escape "<" so a property value can't break out of the JSON <script> block.
   const projectJson = JSON.stringify(redactCredentials(project)).replace(/</g, "\\u003c");
 
+  // The iframe sandbox below withholds top-navigation and popups, but each of
+  // the tokens it does grant is load-bearing - don't trim them:
+  //   allow-scripts       the framed page is the app itself
+  //   allow-same-origin   without it the frame's origin is opaque ("null"), so
+  //                       the event.origin === viewerOrigin check below never
+  //                       matches and the ready/load-project handshake dies
+  //                       (it also keeps the app's storage/IndexedDB working)
+  //   allow-forms         in-app form submits
+  //   allow-downloads     the framed app is the full viewer, so anchor-download
+  //                       exports (Save Project, chart/processing/georeferencer
+  //                       output) run from inside the frame; browsers block
+  //                       those silently without this token
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -114,7 +126,7 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
 </style>
 </head>
 <body>
-<iframe id="geolibre-frame" src="${escapeHtml(iframeSrc)}" allow="fullscreen" allowfullscreen></iframe>
+<iframe id="geolibre-frame" src="${escapeHtml(iframeSrc)}" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads" allow="fullscreen" allowfullscreen></iframe>
 <script type="application/json" id="geolibre-project">${projectJson}</script>
 <script>
 (function () {

@@ -9,10 +9,16 @@ import {
   Input,
   Label,
 } from "@geolibre/ui";
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
+import {
+  LARGE_EMBED_WARNING_BYTES,
+  type ProjectFileActions,
+} from "../../../hooks/useProjectFileActions";
+import type { ArcgisProjectImportWarning } from "../../../lib/arcgis-project-import";
+import type { QgisProjectImportWarning } from "../../../lib/qgis-project-import";
 import { SaveTemplateDialog } from "../SaveTemplateDialog";
+import { ImportWarningList } from "./ImportWarningList";
 
 interface ProjectFileDialogsProps {
   projectFiles: ProjectFileActions;
@@ -31,6 +37,22 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
     lastSaveNamePrompt.current = projectFiles.saveNamePrompt;
   }
   const saveNameLabels = projectFiles.saveNamePrompt ?? lastSaveNamePrompt.current;
+
+  // Stable identities so the warning lists regroup only when the warnings change.
+  const describeArcgisWarning = useCallback(
+    (warning: ArcgisProjectImportWarning) =>
+      t(`toolbar.item.arcgisImportReason.${warning.reason}`, {
+        layerType: warning.layerType || t("toolbar.item.arcgisUnknownLayerType"),
+      }),
+    [t],
+  );
+  const describeQgisWarning = useCallback(
+    (warning: QgisProjectImportWarning) =>
+      t(`toolbar.item.qgisImportReason.${warning.reason}`, {
+        provider: warning.provider || t("toolbar.item.qgisUnknownProvider"),
+      }),
+    [t],
+  );
 
   return (
     <>
@@ -91,16 +113,10 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               })}
             </DialogDescription>
           </DialogHeader>
-          <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
-            {projectFiles.arcgisImportWarnings?.map((warning, index) => (
-              <li key={`${warning.layerName}-${index}`}>
-                <strong>{warning.layerName}:</strong>{" "}
-                {t(`toolbar.item.arcgisImportReason.${warning.reason}`, {
-                  layerType: warning.layerType || t("toolbar.item.arcgisUnknownLayerType"),
-                })}
-              </li>
-            ))}
-          </ul>
+          <ImportWarningList
+            warnings={projectFiles.arcgisImportWarnings ?? []}
+            describe={describeArcgisWarning}
+          />
           <div className="flex justify-end">
             <Button onClick={() => projectFiles.setArcgisImportWarnings(null)}>
               {t("common.ok")}
@@ -141,16 +157,10 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               })}
             </DialogDescription>
           </DialogHeader>
-          <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
-            {projectFiles.qgisImportWarnings?.map((warning, index) => (
-              <li key={`${warning.layerName}-${index}`}>
-                <strong>{warning.layerName}:</strong>{" "}
-                {t(`toolbar.item.qgisImportReason.${warning.reason}`, {
-                  provider: warning.provider || t("toolbar.item.qgisUnknownProvider"),
-                })}
-              </li>
-            ))}
-          </ul>
+          <ImportWarningList
+            warnings={projectFiles.qgisImportWarnings ?? []}
+            describe={describeQgisWarning}
+          />
           <div className="flex justify-end">
             <Button onClick={() => projectFiles.setQgisImportWarnings(null)}>
               {t("common.ok")}
@@ -250,6 +260,16 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               )}
             </DialogDescription>
           </DialogHeader>
+          {(projectFiles.embedVectorDataPrompt?.bytes ?? 0) >= LARGE_EMBED_WARNING_BYTES ? (
+            <p
+              role="alert"
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            >
+              {t("toolbar.item.embedVectorLargeWarning", {
+                size: formatByteSize(projectFiles.embedVectorDataPrompt?.bytes ?? 0),
+              })}
+            </p>
+          ) : null}
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"

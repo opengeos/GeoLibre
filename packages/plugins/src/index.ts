@@ -46,6 +46,15 @@ export {
 // reuse the title-resolve-or-fallback + per-id warning-dedup behavior instead
 // of re-implementing (and drifting from) it.
 export { PanelTitleResolver } from "./panel-title";
+// Same rationale as PanelTitleResolver: the toolbar-menu label resolver is the
+// one place that decides how a `string | (() => string)` label becomes display
+// text, so hosts rendering plugin menus share its fallback/dedup behavior.
+export {
+  isToolbarLabel,
+  resetToolbarLabelWarnings,
+  resolveToolbarLabel,
+  type GeoLibreToolbarLabel,
+} from "./toolbar-menu-label";
 export { maplibreLayerControlPlugin } from "./plugins/layer-control";
 export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";
@@ -58,8 +67,19 @@ export {
 } from "./plugins/maplibre-basemap-control";
 export {
   addArcGISLayer,
+  fetchArcGISMapServiceSublayers,
+  ARCGIS_FEATURE_SOURCE_KIND,
+  ARCGIS_IMAGE_SERVICE_SOURCE_KIND,
+  ARCGIS_LAYER_TYPES,
+  ARCGIS_MAP_SERVICE_SOURCE_KIND,
+  ARCGIS_MAP_SERVICE_URL_ERROR,
+  parseArcGISLayerType,
+  refreshArcGISFeatureLayer,
+  reloadArcGISViewportLayer,
+  restoreArcGISViewportLayers,
   type ArcGISLayerOptions,
   type ArcGISLayerType,
+  type ArcGISMapServiceSublayer,
   type ArcGISSourceType,
 } from "./plugins/arcgis-layer";
 export {
@@ -99,6 +119,7 @@ export {
   restoreLidarLayers,
   openMeasurePanel,
   openMinimapPanel,
+  addPMTilesLayerFromUrl,
   openPMTilesLayerPanel,
   openPrintPanel,
   openSearchPlacesPanel,
@@ -252,13 +273,15 @@ export {
   type PaletteLegendEntry,
 } from "./plugins/raster-palette";
 export { colormapColors, normalizeRampColor, warmColormapColors } from "./plugins/colormap-colors";
-export { setTerrainMeasureLabels } from "./plugins/terrain-measure";
+export { setTerrainMeasureBodyNames, setTerrainMeasureLabels } from "./plugins/terrain-measure";
 export {
+  addVectorLayerFromUrl,
   closeVectorLayerPanel,
   getVectorLayerPropertyValues,
   materializeEmbeddableVectorLayers,
   openVectorLayerPanel,
   reloadVectorControlLayer,
+  replayVectorControlLayerById,
   restoreVectorLayers,
   setKmlFileImportHandler,
   isKmlFileSelection,
@@ -373,6 +396,9 @@ export { maplibreFemaWmsPlugin } from "./plugins/maplibre-fema-wms";
 export {
   maplibreGeoEditorPlugin,
   GEO_EDITOR_PLUGIN_ID,
+  DEFAULT_GEO_EDITOR_LABELS,
+  setGeoEditorLabels,
+  type GeoEditorLabels,
   canEditLayerGeometry,
   SKETCHES_SOURCE_KIND,
   startLayerGeometryEdit,
@@ -462,19 +488,26 @@ export {
   type StacLabels,
 } from "./plugins/maplibre-stac";
 export {
+  assetDisplayFormat,
+  assetFormat,
   connectStac,
   isVisualizableAsset,
   itemBbox,
   loadStacIndex,
+  openCatalogNode,
   searchStacApi,
   searchStaticStac,
   STAC_INDEX_CATALOGS_URL,
   type StacAsset,
+  type StacCatalogNode,
   type StacCollection,
   type StacConnection,
+  type StacOpenedNode,
   type StacIndexCatalog,
   type StacItem,
   type StacNextPage,
+  type StacAssetFormat,
+  type StacAssetDisplayFormat,
   type StacSearchOptions,
   type StacSearchResult,
 } from "./plugins/stac-api";
@@ -566,6 +599,9 @@ export {
   type GraticuleLabels,
   type GraticuleLabelFormat,
   type GraticuleLabelEdges,
+  lngLatToUtm,
+  utmZoneDesignation,
+  type UtmCoordinate,
 } from "./plugins/maplibre-graticule";
 export {
   maplibreH3Plugin,

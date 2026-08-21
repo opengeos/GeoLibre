@@ -11,7 +11,6 @@ import {
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
 } from "@geolibre/core";
-import { closeRightPanel, collapseRightPanel, openRightPanel } from "@geolibre/plugins";
 import {
   Button,
   Dialog,
@@ -43,6 +42,7 @@ import {
   Check,
   Crosshair,
   DownloadCloud,
+  FolderOpen,
   ExternalLink,
   Eye,
   EyeOff,
@@ -82,6 +82,7 @@ import {
   type ExperienceLevel,
   type UiProfileSettings,
   type UpdateSettings,
+  type StartupSettings,
 } from "../../hooks/useDesktopSettings";
 import { useLanguage } from "../../hooks/useLanguage";
 import { BROWSER_PANEL_ID } from "../../hooks/useRegisterBrowserPanel";
@@ -89,10 +90,14 @@ import { COMMENTS_PANEL_ID } from "../../hooks/useRegisterCommentsPanel";
 import { useRightPanelState } from "../../hooks/useRightPanels";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/is-tauri";
+import { applyRightPanelVisibility } from "../../lib/persisted-right-panel";
+import { COORDINATE_FORMATS, normalizeCoordinateFormat } from "../../lib/coordinate-format";
 import { THEME_SCHEMES, normalizeHexColor, type ThemeScheme } from "../../lib/theme-schemes";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
+import { pluginDisplayName } from "../../lib/plugin-display-name";
 import { resolveShareHost, shareHostLabel } from "../../lib/share-geolibre";
 import { IS_STORE_BUILD, type UpdateNotificationLevel } from "../../lib/updates";
+import { ensureStartupProjectSnapshot, openProjectFile } from "../../lib/tauri-io";
 import {
   DATA_SOURCE_CATALOG,
   DATA_SOURCE_SECTION_LABEL_KEYS,
@@ -130,7 +135,8 @@ export type SettingsSection =
   | "geocoding"
   | "ai"
   | "environment"
-  | "updates";
+  | "updates"
+  | "startup";
 
 /** A field a deep-link can ask Settings to focus once the section renders. */
 export type SettingsFocusTarget = "shareToken" | "accentColor";
@@ -205,6 +211,7 @@ const SECTION_ITEMS: Array<{
     labelKey: "settings.section.updates",
     icon: DownloadCloud,
   },
+  { id: "startup", labelKey: "settings.section.startup", icon: FolderOpen },
 ];
 
 // The menu-item id that gates each Settings section, mirroring the dropdown.
@@ -239,6 +246,7 @@ interface DraftDesktopSettings {
   defaultAiProfileId: string | null;
   uiProfile: UiProfileSettings;
   updates: UpdateSettings;
+  startup: StartupSettings;
 }
 
 function createDraftId(): string {
@@ -279,6 +287,7 @@ function cloneDesktopSettings(settings: DesktopSettings): DraftDesktopSettings {
       hiddenMenuItems: [...settings.uiProfile.hiddenMenuItems],
     },
     updates: { ...settings.updates },
+    startup: { ...settings.startup },
   };
 }
 
@@ -409,31 +418,17 @@ export function SettingsDialog({
   const showSettingsItem = (id: string) => isMenuItemVisible(desktopSettings.uiProfile, id);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
-  // The Browser is a dockable right panel (open/close via the registry), not a
-  // persisted layout preference, so its Layout toggle acts on the live registry
-  // state directly rather than through the draft settings.
+  // Browser and Comments are dockable right panels: the registry owns whether
+  // they are on screen and `registerPersistedRightPanel` mirrors that into
+  // `layout.browserPanelVisible` / `layout.commentsPanelVisible`, so the toggle
+  // no longer resets on every launch (#1935). Because the mirror is the single
+  // writer, moving the panel is all these controls have to do: the setting
+  // follows, so the two can never disagree about what the checkbox should say.
   const rightPanelState = useRightPanelState();
   const browserPanelOpen = rightPanelState.visibleIds.includes(BROWSER_PANEL_ID);
   const commentsPanelOpen = rightPanelState.visibleIds.includes(COMMENTS_PANEL_ID);
-  // Show it collapsed on the shared Layers rail, matching its default state, so
-  // re-enabling from Settings doesn't jump to an expanded panel that buries the
-  // Layers panel.
-  const toggleBrowserPanel = (show: boolean) => {
-    if (show) {
-      openRightPanel(BROWSER_PANEL_ID);
-      collapseRightPanel(BROWSER_PANEL_ID);
-    } else {
-      closeRightPanel(BROWSER_PANEL_ID);
-    }
-  };
-  const toggleCommentsPanel = (show: boolean) => {
-    if (show) {
-      openRightPanel(COMMENTS_PANEL_ID);
-      collapseRightPanel(COMMENTS_PANEL_ID);
-    } else {
-      closeRightPanel(COMMENTS_PANEL_ID);
-    }
-  };
+  const toggleBrowserPanel = (show: boolean) => applyRightPanelVisibility(BROWSER_PANEL_ID, show);
+  const toggleCommentsPanel = (show: boolean) => applyRightPanelVisibility(COMMENTS_PANEL_ID, show);
   // A field a deep-link asked us to focus once its section renders; cleared
   // after the focus lands so a later open without a focus request stays put.
   const [pendingFocus, setPendingFocus] = useState<SettingsFocusTarget | null>(null);
@@ -976,6 +971,29 @@ export function SettingsDialog({
     updateDraftUpdateSettings(DEFAULT_UPDATE_SETTINGS);
   };
 
+  const updateDraftStartupSettings = (patch: Partial<StartupSettings>) => {
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      startup: { ...current.startup, ...patch },
+    }));
+    setError(null);
+  };
+
+  const chooseStartupProject = async () => {
+    try {
+      const result = await openProjectFile();
+      if (!result) return;
+      updateDraftStartupSettings({
+        mode: "specific",
+        projectPath: result.path,
+        projectName: result.project.name,
+      });
+    } catch (error) {
+      console.error("Could not select a startup project.", error);
+      setError(t("settings.startup.selectError"));
+    }
+  };
+
   // Live updates from the Settings dropdown's Interface submenu (not the draft,
   // which only the dialog commits on Save). Reads the latest state so rapid
   // toggles do not clobber each other.
@@ -1169,7 +1187,21 @@ export function SettingsDialog({
       defaultAiProfileId: draftDesktopSettings.defaultAiProfileId,
       uiProfile: committedUiProfile,
       updates: draftDesktopSettings.updates,
+      startup: draftDesktopSettings.startup,
     });
+    // On Android the project behind the preference just saved is reachable only
+    // until this process ends, so keep a copy the next launch can open
+    // (GeoLibre#1948). A no-op on every other platform.
+    void ensureStartupProjectSnapshot(
+      draftDesktopSettings.startup,
+      useAppStore.getState().recentProjects,
+    );
+    // The dockable panels are the one layout row nothing renders from the store:
+    // the registry owns what is on screen, so move it to match what was just
+    // saved (a no-op for a panel already there, so an untouched Save cannot
+    // collapse one the user had expanded).
+    applyRightPanelVisibility(BROWSER_PANEL_ID, draftDesktopSettings.layout.browserPanelVisible);
+    applyRightPanelVisibility(COMMENTS_PANEL_ID, draftDesktopSettings.layout.commentsPanelVisible);
     setOpen(false);
   };
 
@@ -1472,6 +1504,17 @@ export function SettingsDialog({
               {t("settings.menu.updates")}
             </DropdownMenuItem>
           )}
+          {isSectionVisible("startup") && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setSection("startup");
+                setOpen(true);
+              }}
+            >
+              <FolderOpen className="me-2 h-3.5 w-3.5" />
+              {t("settings.menu.startupSettings")}
+            </DropdownMenuItem>
+          )}
           {/* The Mac App Store build has no plugin marketplace (external
               plugin installs are not allowed there), so its entry point is
               dropped; composed with the profile gate like the Store build's
@@ -1686,6 +1729,27 @@ export function SettingsDialog({
                       {t("settings.map.scaleUnitHint")}
                     </p>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settings-coordinate-format">
+                      {t("settings.map.coordinateFormat")}
+                    </Label>
+                    <Select
+                      id="settings-coordinate-format"
+                      value={normalizeCoordinateFormat(draftPreferences.map.coordinateFormat)}
+                      onChange={(event) =>
+                        updateMapPreferences({ coordinateFormat: event.target.value })
+                      }
+                    >
+                      {COORDINATE_FORMATS.map((format) => (
+                        <option key={format} value={format}>
+                          {t(`statusBar.coordinateFormat.${format}`)}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.map.coordinateFormatHint")}
+                    </p>
+                  </div>
                 </div>
               ) : null}
               {effectiveSection === "layout" ? (
@@ -1771,8 +1835,12 @@ export function SettingsDialog({
                       <input
                         className="h-4 w-4"
                         type="checkbox"
-                        checked={browserPanelOpen}
-                        onChange={(event) => toggleBrowserPanel(event.target.checked)}
+                        checked={draftDesktopSettings.layout.browserPanelVisible}
+                        onChange={(event) =>
+                          updateDraftLayoutSettings({
+                            browserPanelVisible: event.target.checked,
+                          })
+                        }
                       />
                       <FolderTree className="h-4 w-4 text-muted-foreground" />
                       <span>{t("settings.layout.showBrowserPanel")}</span>
@@ -1781,8 +1849,12 @@ export function SettingsDialog({
                       <input
                         className="h-4 w-4"
                         type="checkbox"
-                        checked={commentsPanelOpen}
-                        onChange={(event) => toggleCommentsPanel(event.target.checked)}
+                        checked={draftDesktopSettings.layout.commentsPanelVisible}
+                        onChange={(event) =>
+                          updateDraftLayoutSettings({
+                            commentsPanelVisible: event.target.checked,
+                          })
+                        }
                       />
                       <MessageSquare className="h-4 w-4 text-muted-foreground" />
                       <span>{t("settings.layout.showCommentsPanel")}</span>
@@ -2076,7 +2148,7 @@ export function SettingsDialog({
                                 togglePluginHidden(plugin.id, event.target.checked)
                               }
                             />
-                            <span>{plugin.name}</span>
+                            <span>{pluginDisplayName(t, plugin)}</span>
                           </label>
                         ))}
                       </div>
@@ -2471,6 +2543,80 @@ export function SettingsDialog({
                       })}
                     </div>
                   )}
+                </div>
+              ) : null}
+              {effectiveSection === "startup" ? (
+                <div className="space-y-5">
+                  <div>
+                    <h3 className="text-sm font-semibold">{t("settings.startup.title")}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.startup.description")}
+                    </p>
+                  </div>
+                  <div className={isTauri() ? "space-y-2" : "hidden"}>
+                    {(["default", "last"] as const).map((mode) => (
+                      <label
+                        key={mode}
+                        className="flex items-start gap-3 rounded-md border p-3 text-sm"
+                      >
+                        <input
+                          className="mt-0.5 h-4 w-4"
+                          type="radio"
+                          name="startup-project-mode"
+                          checked={draftDesktopSettings.startup.mode === mode}
+                          onChange={() => updateDraftStartupSettings({ mode })}
+                        />
+                        <span className="space-y-1">
+                          <span className="block">{t(`settings.startup.mode.${mode}`)}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {t(`settings.startup.modeHint.${mode}`)}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                    <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                      <input
+                        className="mt-0.5 h-4 w-4"
+                        type="radio"
+                        name="startup-project-mode"
+                        checked={draftDesktopSettings.startup.mode === "specific"}
+                        disabled={!draftDesktopSettings.startup.projectPath}
+                        onChange={() => updateDraftStartupSettings({ mode: "specific" })}
+                      />
+                      <span className="min-w-0 flex-1 space-y-1">
+                        <span className="block">{t("settings.startup.mode.specific")}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {draftDesktopSettings.startup.projectName ??
+                            t("settings.startup.noProjectSelected")}
+                        </span>
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void chooseStartupProject()}
+                      >
+                        <FolderOpen className="h-3.5 w-3.5" />
+                        {t("settings.startup.chooseProject")}
+                      </Button>
+                    </label>
+                  </div>
+                  <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                    <input
+                      className="mt-0.5 h-4 w-4"
+                      type="checkbox"
+                      checked={draftDesktopSettings.startup.globeByDefault}
+                      onChange={(event) =>
+                        updateDraftStartupSettings({ globeByDefault: event.target.checked })
+                      }
+                    />
+                    <span className="space-y-1">
+                      <span className="block">{t("settings.startup.globeByDefault")}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {t("settings.startup.globeByDefaultHint")}
+                      </span>
+                    </span>
+                  </label>
                 </div>
               ) : null}
               {effectiveSection === "updates" ? (

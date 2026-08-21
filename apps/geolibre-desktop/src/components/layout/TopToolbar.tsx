@@ -27,6 +27,7 @@ import {
   openVectorLayerPanel,
   setAnnotationLabels,
   setBasemapControlLabels,
+  setGeoEditorLabels,
   setGraticuleLabels,
   setH3Labels,
   setS2Labels,
@@ -86,6 +87,7 @@ import {
   Save,
   Sparkles,
   Sun,
+  Layers,
   Workflow,
   Wrench,
   ZoomIn,
@@ -111,9 +113,11 @@ import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
 import { useViewportHistory } from "../../hooks/useViewportHistory";
 import type { Command } from "../../lib/commands";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
+import { pluginDisplayName } from "../../lib/plugin-display-name";
 import { masHidesDataSource } from "../../lib/mas-build";
 import { IS_STORE_BUILD } from "../../lib/updates";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
+import { serviceUrlParameter } from "../../lib/data-url";
 import {
   OPEN_ADD_DATA_EVENT,
   type OpenAddDataDetail,
@@ -187,8 +191,19 @@ interface TopToolbarProps {
   // Opens the Offline Basemap Extract panel, mounted in DesktopShell over the
   // map so it can stay non-modal (the map is interactive for drawing a bbox).
   onOpenBasemapExtract: () => void;
+  /** Activates the map tool for placing an anchored review comment. */
+  onAddComment: () => void;
   viewer?: boolean;
 }
+
+/** Translation keys for the reasons a Zarr variable cannot be added. */
+const ZARR_PROBLEM_KEYS = {
+  group: "stacPlugin.zarrProblemGroup",
+  missing: "stacPlugin.zarrProblemMissing",
+  unauthorized: "stacPlugin.zarrProblemUnauthorized",
+  "unsupported-url": "stacPlugin.zarrProblemUnsupportedUrl",
+  unavailable: "stacPlugin.zarrProblemUnavailable",
+} as const;
 
 export function TopToolbar({
   compact = false,
@@ -204,6 +219,7 @@ export function TopToolbar({
   onOpenProjectHistory,
   onToggleThemeMode,
   onOpenBasemapExtract,
+  onAddComment,
   viewer = false,
 }: TopToolbarProps) {
   const { t, i18n } = useTranslation();
@@ -580,6 +596,10 @@ export function TopToolbar({
       engineTitiler: t("huggingFace.engineTitiler"),
       resetDefaults: t("huggingFace.resetDefaults"),
     });
+    setGeoEditorLabels({
+      attributePanelTitle: t("geoEditorPlugin.attributePanelTitle"),
+      massingHeight: t("geoEditorPlugin.massingHeight"),
+    });
     setGraticuleLabels({
       title: t("graticule.title"),
       getTitle: () => i18n.t("graticule.title"),
@@ -903,12 +923,22 @@ export function TopToolbar({
       resultsCleared: t("stacPlugin.resultsCleared"),
       searching: t("stacPlugin.searching"),
       loadingMore: t("stacPlugin.loadingMore"),
+      noMatchesHere: t("stacPlugin.noMatchesHere"),
+      treeEmpty: t("stacPlugin.treeEmpty"),
+      treeOpenFailed: t("stacPlugin.treeOpenFailed"),
       noResults: t("stacPlugin.noResults"),
       searchFailed: t("stacPlugin.searchFailed"),
       showing: (count) => t("stacPlugin.showing", { count }),
       showingOfMatched: (count, matched) => t("stacPlugin.showingOfMatched", { count, matched }),
       loadMore: t("stacPlugin.loadMore"),
       renderOptions: t("stacPlugin.renderOptions"),
+      renderingEngine: t("stacPlugin.renderingEngine"),
+      engineAuto: t("stacPlugin.engineAuto"),
+      engineGpu: t("stacPlugin.engineGpu"),
+      engineWasm: t("stacPlugin.engineWasm"),
+      engineTitiler: t("stacPlugin.engineTitiler"),
+      engineHint: t("stacPlugin.engineHint"),
+      resizeResults: t("stacPlugin.resizeResults"),
       bands: t("stacPlugin.bands"),
       bandsPlaceholder: t("stacPlugin.bandsPlaceholder"),
       colormap: t("stacPlugin.colormap"),
@@ -927,7 +957,19 @@ export function TopToolbar({
       added: (asset) => t("stacPlugin.added", { asset }),
       addUnsupported: t("stacPlugin.addUnsupported"),
       addFailed: t("stacPlugin.addFailed"),
+      addNoSourceLayers: t("stacPlugin.addNoSourceLayers"),
       cogUnsupported: t("stacPlugin.cogUnsupported"),
+      formatCog: t("stacPlugin.formatCog"),
+      formatGeoJson: t("stacPlugin.formatGeoJson"),
+      formatPmtiles: t("stacPlugin.formatPmtiles"),
+      formatParquet: t("stacPlugin.formatParquet"),
+      formatZarr: t("stacPlugin.formatZarr"),
+      formatUnknown: t("stacPlugin.formatUnknown"),
+      addNoTarget: t("stacPlugin.addNoTarget"),
+      addIcechunkFailed: t("stacPlugin.addIcechunkFailed"),
+      zarrProblem: (problem) => t(ZARR_PROBLEM_KEYS[problem]),
+      chooseTarget: t("stacPlugin.chooseTarget"),
+      notAddable: t("stacPlugin.notAddable"),
     });
   }, [t]);
 
@@ -936,6 +978,7 @@ export function TopToolbar({
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
   const setModelBuilderOpen = useAppStore((s) => s.setModelBuilderOpen);
+  const setBatchToolsOpen = useAppStore((s) => s.setBatchToolsOpen);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
@@ -1023,7 +1066,16 @@ export function TopToolbar({
       {} as Record<ToolbarMapControl, boolean>,
     ),
   );
-  const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
+  const [initialService, setInitialService] = useState(() =>
+    viewer || typeof window === "undefined" ? null : serviceUrlParameter(window.location.search),
+  );
+  const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(() => {
+    const kind = initialService?.kind as AddDataKind | undefined;
+    // Every other path that opens this dialog from outside the component
+    // filters MAS-hidden sources first; a deep link must not be the way around
+    // that, even though no service kind is hidden today.
+    return kind && !masHidesDataSource(kind) ? kind : null;
+  });
   const [addDataTargetGroupId, setAddDataTargetGroupId] = useState<string | null>(null);
   const addDataInitialLayerIdsRef = useRef<Set<string>>(new Set());
   // Every path that opens the dialog outside the OPEN_ADD_DATA_EVENT listener
@@ -1143,20 +1195,40 @@ export function TopToolbar({
     });
   };
 
-  // The Maptoolkit logo is Maptoolkit-basemap attribution, so it must not linger
-  // over a different basemap. When no Maptoolkit basemap is active (see
-  // isMaptoolkitBasemapActive), turn the logo back off through the same path as
-  // the menu, so the map controller and this menu's checkmark stay in sync.
+  // The Maptoolkit logo is Maptoolkit-basemap attribution, required by their
+  // terms whenever a Maptoolkit basemap is in use (see isMaptoolkitBasemapActive)
+  // and meaningless otherwise, so it tracks that flag automatically: shown the
+  // moment a Maptoolkit basemap activates, hidden the moment it doesn't. The
+  // imperative call is made directly in the effect body, not inside the
+  // setControlsVisible updater — React (Strict Mode) runs a mount effect twice,
+  // and add/removeMaptoolkitLogoControl report "already there"/"already gone" as
+  // false, which isn't a failure; gating the state update on that return value
+  // made the second of the two mount runs read as failed and leave the control
+  // (and desired-vs-applied state) permanently out of sync. Calling it
+  // unconditionally is safe: both helpers no-op when already in the desired
+  // state.
+  //
+  // Deliberately NOT keyed on mapReadyGeneration (unlike
+  // useVectorTileGeometryBackfill above): that generation bumps on every
+  // basemap style load, not just the controller's first readiness (see
+  // MapCanvas's per-basemap-change `onControllerReadyRef` call), so including
+  // it here re-fires this effect on every Maptoolkit-to-Maptoolkit style
+  // switch — reapplying the flag and silently clobbering a manual toggle the
+  // user made while that basemap stayed active. The effect depends only on
+  // the flag itself (edge-triggered), so a manual toggle from the menu is left
+  // alone until the flag actually flips; the trade-off is that an activation
+  // landing before the controller exists (mapControllerRef.current still
+  // null) is not retried, which our mount ordering does not otherwise hit.
   const maptoolkitBasemapActive = useAppStore((s) =>
     isMaptoolkitBasemapActive(s.basemapStyleUrl, s.layers),
   );
   useEffect(() => {
-    if (maptoolkitBasemapActive) return;
-    setControlsVisible((current) => {
-      if (!current["maptoolkit-logo"]) return current;
-      mapControllerRef.current?.setBuiltInControlVisible("maptoolkit-logo", false);
-      return { ...current, "maptoolkit-logo": false };
-    });
+    mapControllerRef.current?.setBuiltInControlVisible("maptoolkit-logo", maptoolkitBasemapActive);
+    setControlsVisible((current) =>
+      current["maptoolkit-logo"] === maptoolkitBasemapActive
+        ? current
+        : { ...current, "maptoolkit-logo": maptoolkitBasemapActive },
+    );
   }, [maptoolkitBasemapActive, mapControllerRef]);
 
   // The command registry: the single source of truth shared by the command
@@ -1331,6 +1403,15 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.addData"),
       run: addLayer.duckdb,
     },
+    {
+      id: "add.comment",
+      title: t("comments.addDialogTitle"),
+      group: t("toolbar.commandGroup.addData"),
+      keywords: "review note feedback",
+      icon: MessageSquare,
+      shortcut: { key: "c", shift: false },
+      run: onAddComment,
+    },
     // Processing
     {
       id: "proc.whitebox",
@@ -1374,9 +1455,17 @@ export function TopToolbar({
       id: "proc.modelBuilder",
       title: t("toolbar.command.modelBuilder"),
       group: t("toolbar.commandGroup.processing"),
-      keywords: "batch model pipeline chain modeler workflow graphical",
+      keywords: "model builder pipeline chain modeler workflow graph canvas node",
       icon: Workflow,
       run: () => setModelBuilderOpen(true),
+    },
+    {
+      id: "proc.batchTools",
+      title: t("toolbar.command.batchTools"),
+      group: t("toolbar.commandGroup.processing"),
+      keywords: "batch bulk many layers repeat vector tool",
+      icon: Layers,
+      run: () => setBatchToolsOpen(true),
     },
     // The Mac App Store build omits AI Segmentation: it is sidecar-only (the
     // App Sandbox forbids the sidecar) and has no client-side fallback.
@@ -1695,7 +1784,7 @@ export function TopToolbar({
       )
       .map((plugin) => ({
         id: `plugin.${plugin.id}`,
-        title: t("toolbar.command.togglePlugin", { name: plugin.name }),
+        title: t("toolbar.command.togglePlugin", { name: pluginDisplayName(t, plugin) }),
         group: t("toolbar.commandGroup.plugins"),
         keywords: isActive(plugin.id) ? "plugin deactivate" : "plugin activate",
         run: () => toggle(plugin.id, appApi),
@@ -1736,8 +1825,9 @@ export function TopToolbar({
   // The shortcut layer is narrowed rather than switched off, because the View
   // menu *does* stay visible in this mode: `view.*` is camera and theme work
   // only, so dropping its keys would leave those items clickable but silently
-  // keyless. Every command carrying a `shortcut` is either `view.*` or
-  // `project.*`, so this is the whole authoring keyboard surface.
+  // keyless. Everything else carrying a `shortcut` authors the project
+  // (`project.*`, `add.comment`), so filtering to `view.*` drops exactly the
+  // authoring keyboard surface.
   const shortcutCommands = useMemo(
     () => (viewer ? commands.filter((command) => command.id.startsWith("view.")) : commands),
     [commands, viewer],
@@ -1899,6 +1989,7 @@ export function TopToolbar({
           onToggleDirections={consent.handleToggleDirections}
           onToggleReverseGeocode={consent.handleToggleReverseGeocode}
           onToggleGraticule={() => toggle(GRATICULE_PLUGIN_ID, appApi)}
+          onTogglePointerElevation={consent.handleTogglePointerElevation}
           onToggleClouds={() => toggle(CLOUDS_PLUGIN_ID, appApi)}
           onTogglePrecipitation={() => toggle(PRECIPITATION_PLUGIN_ID, appApi)}
           onOpenFieldCollection={() => setFieldCollectionOpen(true)}
@@ -1946,7 +2037,11 @@ export function TopToolbar({
           mapControllerRef={mapControllerRef}
         />
       )}
+      {/* Remount on every project load so the composer starts from the opened
+          project's saved layout instead of keeping the previous project's
+          settings and captured map (GeoLibre discussion #1992). */}
       <PrintLayoutDialog
+        key={`print-layout-${projectGeneration}`}
         open={printLayoutOpen}
         onOpenChange={setPrintLayoutOpen}
         mapControllerRef={mapControllerRef}
@@ -2048,6 +2143,13 @@ export function TopToolbar({
         mapControllerRef={mapControllerRef}
         initialDeckVizKind={addDataDeckVizKind}
         initialPostgres={addDataPostgres}
+        initialUrl={addDataKind === initialService?.kind ? initialService.url : undefined}
+        initialLayer={
+          addDataKind === initialService?.kind ? (initialService.layer ?? undefined) : undefined
+        }
+        initialStyleUrl={
+          addDataKind === initialService?.kind ? (initialService.styleUrl ?? undefined) : undefined
+        }
         onOpenChange={(open: boolean) => {
           if (!open) {
             if (addDataTargetGroupId) {
@@ -2060,6 +2162,7 @@ export function TopToolbar({
               }
             }
             setAddDataKind(null);
+            setInitialService(null);
             setAddDataTargetGroupId(null);
             setAddDataDeckVizKind(undefined);
             setAddDataPostgres(undefined);

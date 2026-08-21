@@ -1,4 +1,12 @@
-import { styleValue, type GeoLibreLayer, type LayerStyle } from "@geolibre/core";
+import {
+  currentEditorIdentity,
+  editorTrackingFieldNames,
+  isMaintainedEditorTrackingField,
+  stampFeaturePropertiesEditorTracking,
+  styleValue,
+  type GeoLibreLayer,
+  type LayerStyle,
+} from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
   coerceComputedValue,
@@ -302,6 +310,11 @@ export function calculateField(
   if (!target) return null;
   if (createField && discovered.includes(target)) return null; // would clobber
   if (!createField && !discovered.includes(target)) return null; // nothing to set
+  // A maintained tracking column is written by the app, not by the user: a
+  // calculated value would be overwritten by the next edit's stamp, and the
+  // column would stop meaning what its name says. The UI already hides these
+  // from the target picker; this is the guard for a hand-typed new-field name.
+  if (isMaintainedEditorTrackingField(target, layer.editorTracking)) return null;
 
   let compiled;
   try {
@@ -316,11 +329,25 @@ export function calculateField(
   let evaluated = 0;
   let errors = 0;
 
+  // One identity and timestamp for the whole run: a calculation is a single
+  // edit, however many features it touches. Gated on the resolved field names
+  // rather than `enabled` alone, so a config a hand-edited project or an older
+  // client left unusable reads as "not tracked" here exactly as it already does
+  // in the attribute table, instead of throwing out of the click that ran this.
+  const stampOptions = editorTrackingFieldNames(layer.editorTracking)
+    ? {
+        config: layer.editorTracking,
+        userIdentity: currentEditorIdentity(),
+        timestamp: new Date().toISOString(),
+      }
+    : null;
+
   const features = layer.geojson.features.map((feature, index) => {
     const inScope = scoped === null || scoped.has(featureKey(feature, index));
     if (!inScope) {
       // Out-of-scope feature on a new field: seed null so the column exists for
-      // every feature. An existing field is left exactly as it was.
+      // every feature. An existing field is left exactly as it was. Seeding a
+      // null is not an edit to that feature's attributes, so it is not stamped.
       if (!createField) return feature;
       return {
         ...feature,
@@ -338,7 +365,13 @@ export function calculateField(
       evaluated += 1;
       errors += 1;
     }
-    return { ...feature, properties: { ...props, [target]: value } };
+    const properties = { ...props, [target]: value };
+    return {
+      ...feature,
+      properties: stampOptions
+        ? stampFeaturePropertiesEditorTracking(properties, "update", stampOptions)
+        : properties,
+    };
   });
 
   const geojson: FeatureCollection = { ...layer.geojson, features };
@@ -369,6 +402,11 @@ export function renameColumn(
   if (!layer.geojson || !newKey || newKey === oldKey) return null;
   if (!discovered.includes(oldKey)) return null; // nothing to rename
   if (discovered.includes(newKey)) return null; // would clobber another column
+  // Renaming a maintained tracking column detaches the data from the config
+  // that names it: the next stamp recreates the configured name and the renamed
+  // copy is orphaned. Rename it in the layer's Editor Tracking settings, which
+  // is what the attribute table's disabled menu item points at.
+  if (isMaintainedEditorTrackingField(oldKey, layer.editorTracking)) return null;
   const settings = getColumnSettings(layer);
   return {
     geojson: renameFieldInGeojson(layer.geojson, oldKey, newKey),
@@ -386,6 +424,9 @@ export function deleteColumn(layer: GeoLibreLayer, key: string): Partial<GeoLibr
     (feature) => feature.properties != null && key in feature.properties,
   );
   if (!keyExists) return null;
+  // Same reason as renameColumn: the next stamp would recreate the column the
+  // config names, so deleting it here only discards the history it held.
+  if (isMaintainedEditorTrackingField(key, layer.editorTracking)) return null;
   const settings = getColumnSettings(layer);
   return {
     geojson: deleteFieldInGeojson(layer.geojson, key),

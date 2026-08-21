@@ -2,10 +2,14 @@ import {
   clearExternalNativePaintBridge,
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
+  getActiveMeanRadiusMeters,
+  getEllipsoid,
   interpolateRampColors,
+  meanRadiusMeters,
   setExternalNativePaintBridge,
   useAppStore,
 } from "@geolibre/core";
+import { createPMTilesStoreLayer } from "@geolibre/map/pmtiles-layer";
 import type {
   QueryGeometry,
   QueryOptions,
@@ -17,7 +21,7 @@ import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import { RasterLayer, type RasterLayerProps } from "@developmentseed/deck.gl-raster";
 import { fromArrayBuffer } from "geotiff";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import proj4 from "proj4";
 import type {
   AddVectorControl,
@@ -77,6 +81,8 @@ import { ensureMercatorProjection } from "./map-projection-utils";
 import { ensureSharedDeckOverlay, setSharedDeckLayers } from "./shared-deck-overlay";
 import { attachTerrainMeasure, measurePanelElement, type TerrainMapLike } from "./terrain-measure";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
+import { savedRasterState } from "./raster-layer-sync";
+import type { SwipeRasterSnapshot } from "./swipe-raster-mirror";
 import {
   KerchunkReferenceStore,
   loadKerchunkReference,
@@ -87,7 +93,12 @@ import {
   registerTemporalLayer,
   unregisterTemporalLayer,
 } from "./temporal-layers";
-import { pickTimeDimension, resolveZarrTimeAxis, type ZarrTimeAttributes } from "./zarr-time-axis";
+import {
+  pickTimeDimension,
+  readCoordinateTimeAttributes,
+  resolveZarrTimeAxis,
+  type ZarrTimeAttributes,
+} from "./zarr-time-axis";
 import {
   ZarrDirectoryStore,
   createDirectoryZarrMetadataReader,
@@ -729,6 +740,10 @@ let searchControl: SearchControl | null = null;
 let spinGlobeControl: SpinGlobeControl | null = null;
 let measureControl: MeasureControl | null = null;
 let measureTerrainDetach: (() => void) | null = null;
+/** Drops the store subscription that follows the project's celestial body. */
+let measureRadiusUnsubscribe: (() => void) | null = null;
+/** The body the mounted Measure control's radius currently reflects. */
+let measureEllipsoidId: string | null = null;
 let bookmarkControl: BookmarkControl | null = null;
 let minimapControl: MinimapControl | null = null;
 let viewStateControl: ViewStateControl | null = null;
@@ -1744,7 +1759,11 @@ export function openPMTilesLayerPanel(app: GeoLibreAppAPI): void {
  * @returns True when the archive was added.
  * @throws If the archive could not be loaded (unreachable, not PMTiles, 403).
  */
-export async function addPMTilesLayerFromUrl(app: GeoLibreAppAPI, url: string): Promise<boolean> {
+export async function addPMTilesLayerFromUrl(
+  app: GeoLibreAppAPI,
+  url: string,
+  options: { fit?: boolean } = {},
+): Promise<boolean> {
   const { PMTilesLayerControl: PMTilesLayerControlClass } = await getComponentsConstructors();
 
   pmtilesControl ??= createPMTilesControl(PMTilesLayerControlClass);
@@ -1761,7 +1780,41 @@ export async function addPMTilesLayerFromUrl(app: GeoLibreAppAPI, url: string): 
     pmtilesControl.hide();
   }
 
-  await pmtilesControl.addLayer(url);
+  const map = options.fit === false ? app.getMap?.() : undefined;
+  const readCamera = () =>
+    map
+      ? {
+          center: map.getCenter(),
+          zoom: map.getZoom(),
+          bearing: map.getBearing(),
+          pitch: map.getPitch(),
+        }
+      : null;
+  let camera = readCamera();
+  let userMoving = false;
+  const onMoveStart = (event: { originalEvent?: unknown }) => {
+    if (event.originalEvent) userMoving = true;
+  };
+  const onMoveEnd = () => {
+    if (userMoving) {
+      camera = readCamera();
+      userMoving = false;
+    }
+  };
+  map?.on("movestart", onMoveStart);
+  map?.on("moveend", onMoveEnd);
+  try {
+    await pmtilesControl.addLayer(url);
+  } finally {
+    // Preserve a host user's camera interaction that happened while the archive
+    // header was loading, rather than restoring the older pre-load position.
+    if (userMoving) camera = readCamera();
+    map?.off("movestart", onMoveStart);
+    map?.off("moveend", onMoveEnd);
+  }
+  // The upstream PMTiles control always frames a newly added archive. Restore
+  // the host's camera when a programmatic caller explicitly opts out.
+  if (camera) map?.jumpTo(camera);
   // A failed load does NOT reject: the control catches it, records it on
   // `state.error`, and emits "error" (same convention as CogLayerControl, which
   // addLayerWithCogRasterControl has to check the same way). Without this a
@@ -2301,7 +2354,7 @@ function applyZarrLayerBounds(layerId: string, bounds: [number, number, number, 
 
 /** Options for {@link addZarrRasterLayer}. */
 export interface ZarrRasterLayerOptions {
-  /** URL of the Zarr store (Zarr v2/v3, Icechunk over HTTP). */
+  /** URL of a plain Zarr store (v2/v3). Anything else is read through `store`. */
   url: string;
   /** Layer name shown in the Layers panel. Defaults to `<store> - <variable>`. */
   name?: string;
@@ -2698,22 +2751,7 @@ function localZarrTimeAttributesReader(url: string): ZarrTimeAttributesReader | 
   const reader = zarrLocalStoreReaders.get(url);
   if (!reader) return null;
   const read = createDirectoryZarrMetadataReader(reader);
-  return async (dimension: string) => {
-    for (const prefix of ["", "0/"]) {
-      for (const key of [`${prefix}${dimension}/.zattrs`, `${prefix}${dimension}/zarr.json`]) {
-        const document = await read(key);
-        const attributes = key.endsWith("zarr.json")
-          ? (document as { attributes?: unknown } | undefined)?.attributes
-          : document;
-        if (!attributes || typeof attributes !== "object") continue;
-        const record = attributes as Record<string, unknown>;
-        const units = typeof record.units === "string" ? record.units : undefined;
-        const calendar = typeof record.calendar === "string" ? record.calendar : undefined;
-        if (units !== undefined || calendar !== undefined) return { units, calendar };
-      }
-    }
-    return null;
-  };
+  return (dimension: string) => readCoordinateTimeAttributes(read, dimension);
 }
 
 /** Read a coordinate's `units`/`calendar` out of an inline kerchunk `.zattrs`. */
@@ -3503,6 +3541,11 @@ export interface SwipeCogRasterSnapshot {
   nodata?: number;
 }
 
+// The snapshot getSwipeMaplibreRasters produces is exactly what SwipeRasterMirror
+// consumes, so the mirror owns the shape and this is an alias rather than a
+// second copy to keep in sync by hand.
+export type SwipeMaplibreRasterSnapshot = SwipeRasterSnapshot;
+
 // Notified when the set/state of CogLayerControl rasters changes, so the swipe
 // provider can refresh its list and re-mirror. Backed by a single store
 // subscription while at least one listener is registered.
@@ -3528,7 +3571,7 @@ function notifySwipeCogChange(): void {
 function swipeCogFingerprint(layers: GeoLibreLayer[]): string {
   const parts: unknown[][] = [];
   for (const layer of layers) {
-    if (!isCogRasterControlLayer(layer)) continue;
+    if (!isCogRasterControlLayer(layer) && !isMaplibreRasterControlLayer(layer)) continue;
     const source = layer.source as {
       url?: unknown;
       bands?: unknown;
@@ -3550,6 +3593,11 @@ function swipeCogFingerprint(layers: GeoLibreLayer[]): string {
       source.rescaleMin,
       source.rescaleMax,
       source.nodata,
+      // maplibre-gl-raster layers keep their visualization (mode/bands/
+      // colormap/rescale/nodata/...) in metadata.rasterState, not on `source`;
+      // without it a restyle of a mirrored raster would not notify. Always
+      // undefined for cog-url layers, so this is a no-op there.
+      layer.metadata.rasterState,
     ]);
   }
   return JSON.stringify(parts);
@@ -3630,6 +3678,30 @@ export function getSwipeCogRasters(): SwipeCogRasterSnapshot[] {
     });
   }
   return snapshots;
+}
+
+/** Snapshot the newer maplibre-gl-raster layers, including project restores. */
+export function getSwipeMaplibreRasters(): SwipeMaplibreRasterSnapshot[] {
+  return useAppStore
+    .getState()
+    .layers.filter(isMaplibreRasterControlLayer)
+    .flatMap((layer) => {
+      const url = (layer.source as { url?: unknown }).url;
+      if (typeof url !== "string") return [];
+      return [
+        {
+          id: layer.id,
+          name: layer.name,
+          url,
+          visible: layer.visible,
+          opacity: layer.opacity,
+          // Sanitized the same way the normal restore path does, so a
+          // hand-edited project file cannot push malformed fields straight
+          // into the mirror control's addRaster.
+          state: savedRasterState(layer),
+        },
+      ];
+    });
 }
 
 /**
@@ -3945,7 +4017,28 @@ function createSearchControl(SearchControlClass: SearchControlConstructor): Sear
 }
 
 function createMeasureControl(MeasureControlClass: MeasureControlConstructor): MeasureControl {
-  const control = new MeasureControlClass(MEASURE_OPTIONS);
+  // The control derives distances and areas from lon/lat angles scaled by a
+  // radius that defaults to Earth's, so on a Moon/Mars project every readout
+  // would be wrong by that body's radius ratio (GeoLibre#1128). Seed it with the
+  // project's body and follow the planet switcher for the rest of the session.
+  const control = new MeasureControlClass({
+    ...MEASURE_OPTIONS,
+    radius: getActiveMeanRadiusMeters(),
+  });
+  // Seed from the store rather than at module load: the body may already have
+  // changed before the user first opens the panel, and a stale baseline would
+  // swallow the switch *back* to that body as a no-op.
+  measureEllipsoidId = useAppStore.getState().preferences.map.ellipsoidId;
+  measureRadiusUnsubscribe?.();
+  measureRadiusUnsubscribe = useAppStore.subscribe((state) => {
+    const id = state.preferences.map.ellipsoidId;
+    if (id === measureEllipsoidId) return;
+    measureEllipsoidId = id;
+    // Resolve the radius from the id in hand rather than the active-ellipsoid
+    // singleton, so this does not depend on the store's own mirroring
+    // subscription having run before ours.
+    control.setRadius(meanRadiusMeters(getEllipsoid(id)));
+  });
   return control;
 }
 
@@ -4350,6 +4443,8 @@ function setSearchPlacesPanelVisible(visible: boolean): void {
 function teardownMeasureControl(app: GeoLibreAppAPI): void {
   measureTerrainDetach?.();
   measureTerrainDetach = null;
+  measureRadiusUnsubscribe?.();
+  measureRadiusUnsubscribe = null;
   if (measureControl && measureControlMounted) {
     app.removeMapControl(measureControl);
   }
@@ -4708,7 +4803,7 @@ function createPMTilesLayerAddHandler(): PMTilesLayerEventHandler {
     if (!layerInfo) return;
 
     const store = useAppStore.getState();
-    const layer = createPMTilesStoreLayer(event.layerId, layerInfo);
+    const layer = pmtilesStoreLayer(event.layerId, layerInfo);
     if (store.layers.some((item) => item.id === layer.id)) {
       store.updateLayer(layer.id, {
         metadata: layer.metadata,
@@ -5315,43 +5410,22 @@ function createGeoTiffRasterStoreLayer(state: GeoTiffRasterLayerState): GeoLibre
   };
 }
 
-function createPMTilesStoreLayer(id: string, layerInfo: PMTilesLayerInfo): GeoLibreLayer {
-  const firstSourceLayer = layerInfo.sourceLayers[0];
-  const fillColor =
-    (firstSourceLayer && layerInfo.sourceLayerColors?.[firstSourceLayer]) ??
-    DEFAULT_LAYER_STYLE.fillColor;
-
-  return {
+/** @internal Exported only so the control's layer shape can be unit-tested. */
+export function pmtilesStoreLayer(id: string, layerInfo: PMTilesLayerInfo): GeoLibreLayer {
+  return createPMTilesStoreLayer({
     id,
     name: layerInfo.name || layerNameFromUrl(layerInfo.url, id),
-    type: "pmtiles",
-    source: {
-      sourceId: layerInfo.id,
-      sourceLayers: layerInfo.sourceLayers,
-      tileType: layerInfo.tileType,
-      type: layerInfo.tileType === "raster" ? "raster" : "vector",
-      url: layerInfo.url,
-    },
-    visible: true,
+    url: layerInfo.url,
+    // The control also reports "unknown", which it and the map both draw as vector tiles.
+    tileType: layerInfo.tileType === "raster" ? "raster" : "vector",
+    sourceLayers: layerInfo.sourceLayers,
     opacity: layerInfo.opacity,
-    style: {
-      ...DEFAULT_LAYER_STYLE,
-      fillOpacity: layerInfo.tileType === "raster" ? 0.6 : 1,
-      fillColor,
-      strokeColor: fillColor,
-    },
-    metadata: {
-      externalNativeLayer: true,
-      nativeLayerIds: layerInfo.layerIds,
-      pickable: layerInfo.pickable,
-      sourceId: layerInfo.id,
-      sourceKind: "pmtiles-url",
-      sourceLayerColors: layerInfo.sourceLayerColors,
-      sourceLayers: layerInfo.sourceLayers,
-      tileType: layerInfo.tileType,
-    },
-    sourcePath: layerInfo.url,
-  };
+    style: { fillOpacity: layerInfo.tileType === "raster" ? 0.6 : 1 },
+    pickable: layerInfo.pickable,
+    // The control created these MapLibre layers itself, so its ids stand rather than derived ones.
+    nativeLayerIds: layerInfo.layerIds,
+    ...(layerInfo.sourceLayerColors ? { sourceLayerColors: layerInfo.sourceLayerColors } : {}),
+  });
 }
 
 function createZarrStoreLayer(id: string, layerInfo: ZarrLayerInfo): GeoLibreLayer {
@@ -5545,6 +5619,14 @@ function isCogRasterControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "cog" &&
     layer.metadata.sourceKind === "cog-url" &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
+function isMaplibreRasterControlLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "cog" &&
+    layer.metadata.sourceKind === "maplibre-gl-raster" &&
     layer.metadata.externalNativeLayer === true
   );
 }

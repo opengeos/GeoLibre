@@ -18,12 +18,20 @@ interface OgcSample {
  * API TileJSON often omits them). Rendering uses GeoLibre's default per-source
  * layer styling; the style's own paint is not applied.
  */
-export function OgcVectorTilesSource() {
+export function OgcVectorTilesSource({
+  initialUrl = "",
+  initialStyleUrl = "",
+  initialSourceLayers = "",
+}: {
+  initialUrl?: string;
+  initialStyleUrl?: string;
+  initialSourceLayers?: string;
+}) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.ogcVectorTiles.defaultName"));
-  const [tilesUrl, setTilesUrl] = useState("");
-  const [styleUrl, setStyleUrl] = useState("");
-  const [sourceLayersText, setSourceLayersText] = useState("");
+  const [tilesUrl, setTilesUrl] = useState(initialUrl);
+  const [styleUrl, setStyleUrl] = useState(initialStyleUrl);
+  const [sourceLayersText, setSourceLayersText] = useState(initialSourceLayers);
 
   // Cancel the in-flight metadata/style/collections fetches if the dialog closes
   // mid-request, so a slow response cannot add the layer after the user leaves.

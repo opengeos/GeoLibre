@@ -7,7 +7,7 @@ import type {
   RasterSampleDataset,
   RenderEngine,
 } from "maplibre-gl-raster";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
+import type { GeoLibreAppAPI, GeoLibreCogRenderEngine, GeoLibreMapControlPosition } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
 import {
   ensureSharedDeckOverlay,
@@ -22,6 +22,7 @@ import {
   resetRasterStoreSyncSuspension,
   runWithRasterStoreSyncSuspended,
   savedRasterState,
+  setTransientRasterVisibility,
   syncRasterLayersToStoreWithOptions,
   unwireRasterStoreSync,
   wireRasterStoreSync,
@@ -33,6 +34,7 @@ import {
 } from "./raster-symbology-texture";
 import { disposeAllPaletteLegends, disposePaletteLegend } from "./raster-palette";
 import { isNonTiledRasterError } from "./non-tiled-raster-error";
+import { convertTiffYCbCrToRgb } from "./tiff-ycbcr";
 
 const rasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const RASTER_PANEL_CLASS = "geolibre-raster-panel";
@@ -132,10 +134,41 @@ type RasterLayerManagerInternals = {
     createOverlay?: (map: MapControlHost, options: OverlayFactoryOptions) => OverlayLike;
     removeOverlay?: (map: MapControlHost, overlay: OverlayLike) => void;
     loadGeoTIFF?: (url: string) => Promise<unknown>;
+    loadCogTiler?: () => Promise<CogTilerModule>;
+    geolibreJpegTablesPatched?: boolean;
     geolibreTransparentOverlayPatched?: boolean;
     geolibreTauriNodataPatched?: boolean;
     geolibreSharedOverlayPatched?: boolean;
   };
+};
+type CogTilerModule = {
+  openCog: (source: unknown) => Promise<unknown>;
+  [key: string]: unknown;
+};
+type GeoTiffImage = {
+  fileDirectory?: {
+    PhotometricInterpretation?: number;
+    getValue?: (tag: number) => unknown;
+    hasTag?: (tag: number) => boolean;
+    loadValue?: (tag: number) => Promise<unknown>;
+  };
+  readRasters: (options: {
+    window: [number, number, number, number];
+  }) => Promise<ArrayLike<ArrayLike<number>>>;
+};
+type CogSourceInternals = {
+  levels?: Array<{ compression?: string }>;
+  tiff?: unknown;
+  _tiffImage?: (level: number) => Promise<GeoTiffImage>;
+  _assembleWindow?: (
+    level: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    band?: number,
+  ) => Promise<ArrayLike<number>>;
+  geolibreJpegTablesPatched?: boolean;
 };
 type RasterTileArray = {
   bands?: unknown[];
@@ -417,6 +450,18 @@ export interface RasterVisualizationDefaults {
  */
 export type RasterRenderEngine = RenderEngine;
 
+// `GeoLibreCogRenderEngine` in ../types hand-mirrors this union: types.ts is the
+// public plugin-API surface, so it must not make `maplibre-gl-raster`'s types a
+// hard dependency of every external plugin. Nothing otherwise links the two, and
+// a renamed or dropped identifier would reach `control.setEngine()` as a string
+// the control no longer knows, with no build error. These assert both directions
+// so a bump of `maplibre-gl-raster` fails `npm run typecheck` instead.
+type Mirrors<Mirror extends Source, Source> = never;
+export type CogRenderEngineMirrorIsExact = [
+  Mirrors<GeoLibreCogRenderEngine, RasterRenderEngine>,
+  Mirrors<RasterRenderEngine, GeoLibreCogRenderEngine>,
+];
+
 /**
  * Applies a default RGB band triple once the header has loaded.
  *
@@ -455,6 +500,18 @@ function applyRgbBandDefaults(
  */
 export function applyRasterLayerOrder(layerId: string, beforeId: string | undefined): void {
   rasterControl?.setRasterBeforeId(layerId, beforeId ?? null);
+}
+
+/** Change the live main-map visibility without mutating the persisted store. */
+export function setRasterMainVisibility(layerId: string, visible: boolean): void {
+  setTransientRasterVisibility(layerId, !visible);
+  rememberControlRasterRenderState(layerId, { visible });
+  runWithRasterStoreSyncSuspended(() => rasterControl?.setVisible(layerId, visible));
+}
+
+/** Read the live main-map visibility used by Layer Swipe. */
+export function getRasterMainVisibility(layerId: string): boolean {
+  return rasterControl?.getRaster(layerId)?.state.visible ?? true;
 }
 
 export function closeRasterLayerPanel(app: GeoLibreAppAPI): void {
@@ -707,6 +764,7 @@ async function ensureRasterControl(app: GeoLibreAppAPI): Promise<RasterControl |
     // The control mounts hidden: project restore must not surface a map
     // button the user never asked for. openRasterLayerPanel shows it.
     await patchTauriRasterOverlayFactory(rasterControl);
+    patchCogTilerJpegTables(rasterControl);
     await warmTauriWasmEngine(rasterControl);
     // On web the control renders interleaved, which shares deck.gl's per-map
     // Deck with the other interleaved overlays; route it through the shared
@@ -724,6 +782,92 @@ async function ensureRasterControl(app: GeoLibreAppAPI): Promise<RasterControl |
   }
 
   return rasterControl;
+}
+
+/**
+ * Decode abbreviated JPEG-in-TIFF tiles through geotiff.js.
+ *
+ * GDAL commonly stores the quantization/Huffman tables once in TIFF tag 347
+ * (`JPEGTables`) and omits them from each compressed tile. The whitebox-wasm
+ * streaming decoder used by cog-tiler-wasm 0.3.1 treats each tile as a complete
+ * JPEG, so these otherwise valid COGs fail with "use of unset quantization
+ * table" and the protocol returns transparent tiles. cog-tiler-wasm already
+ * opens multi-band projected rasters with geotiff.js for their CRS metadata;
+ * use that same range-aware reader for JPEG windows because it joins JPEGTables
+ * to the tile payload before decoding.
+ */
+function patchCogTilerJpegTables(control: RasterControl): void {
+  const manager = (control as unknown as RasterControlInternals)._layerManager;
+  const deps = manager?._deps;
+  if (!deps?.loadCogTiler || deps.geolibreJpegTablesPatched) return;
+
+  const loadCogTiler = deps.loadCogTiler;
+  deps.loadCogTiler = async () => {
+    const module = await loadCogTiler();
+    return {
+      ...module,
+      openCog: async (input: unknown) => patchJpegCogSource(await module.openCog(input)),
+    };
+  };
+  deps.geolibreJpegTablesPatched = true;
+}
+
+function patchJpegCogSource(source: unknown): unknown {
+  const cog = source as CogSourceInternals;
+  if (
+    cog.geolibreJpegTablesPatched ||
+    !/jpeg/i.test(cog.levels?.[0]?.compression ?? "") ||
+    !cog.tiff ||
+    !cog._tiffImage ||
+    !cog._assembleWindow
+  ) {
+    return source;
+  }
+
+  const windowCache = new Map<string, Promise<ArrayLike<ArrayLike<number>>>>();
+  cog._assembleWindow = async (level, x, y, width, height, band = 0) => {
+    const key = `${level}/${x}/${y}/${width}/${height}`;
+    let decoded = windowCache.get(key);
+    if (!decoded) {
+      decoded = cog._tiffImage!(level).then(async (image) => {
+        const rasters = await image.readRasters({ window: [x, y, x + width, y + height] });
+        // geotiff.js expands the chroma subsampling but deliberately returns
+        // the TIFF's native Y/Cb/Cr samples. The renderer expects RGB bands,
+        // like the GPU engine, so perform the TIFF/JPEG color transform once
+        // for the shared three-band window.
+        const photometric =
+          image.fileDirectory?.PhotometricInterpretation ?? image.fileDirectory?.getValue?.(262);
+        if (photometric !== 6 || rasters.length < 3) {
+          return rasters;
+        }
+        const directory = image.fileDirectory;
+        const readTag = async (tag: number): Promise<ArrayLike<number> | undefined> => {
+          if (directory?.hasTag?.(tag) === false) return undefined;
+          const value = directory?.loadValue
+            ? await directory.loadValue(tag)
+            : directory?.getValue?.(tag);
+          return value as ArrayLike<number> | undefined;
+        };
+        const [coefficients, referenceBlackWhite] = await Promise.all([readTag(529), readTag(532)]);
+        return convertTiffYCbCrToRgb(
+          rasters[0],
+          rasters[1],
+          rasters[2],
+          coefficients,
+          referenceBlackWhite,
+        );
+      });
+      windowCache.set(key, decoded);
+      void decoded.catch(() => {
+        if (windowCache.get(key) === decoded) windowCache.delete(key);
+      });
+      if (windowCache.size > 32) windowCache.delete(windowCache.keys().next().value!);
+    }
+    const rasters = await decoded;
+    return rasters[band] ?? rasters[0];
+  };
+  cog.geolibreJpegTablesPatched = true;
+  return source;
 }
 
 function getRasterControlClass(): Promise<RasterControlConstructor> {

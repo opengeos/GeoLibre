@@ -1,7 +1,9 @@
 import {
+  CogDemError,
   DEFAULT_TERRAIN_EXAGGERATION,
   TERRAIN_SETTINGS_CLOSE_EVENT,
   TERRAIN_SETTINGS_EVENT,
+  type CogDemErrorCode,
   type MapController,
 } from "@geolibre/map";
 import {
@@ -27,6 +29,14 @@ import {
 // Default sourced from the map package so it can't drift from the control's.
 const DEFAULT_EXAGGERATION = DEFAULT_TERRAIN_EXAGGERATION;
 
+// @geolibre/map is i18n-agnostic and throws English messages, so the failure
+// kinds it tags are mapped to the catalog here rather than shown verbatim.
+const SOURCE_ERROR_KEYS = {
+  "empty-source": "terrainSettings.sourceErrorEmpty",
+  "unsupported-band": "terrainSettings.sourceErrorBand",
+  "unsupported-projection": "terrainSettings.sourceErrorProjection",
+} as const satisfies Record<CogDemErrorCode, string>;
+
 export interface TerrainSettingsDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
 }
@@ -41,6 +51,9 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [exaggeration, setExaggeration] = useState(DEFAULT_EXAGGERATION);
+  const [terrainUrl, setTerrainUrl] = useState("");
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceError, setSourceError] = useState<string | null>(null);
   // Free-text draft for the number input so a fractional value like "2.5" can be
   // typed without the controlled numeric value snapping the field mid-keystroke.
   // Committed (parsed/clamped) on blur or Enter; kept in sync when the value
@@ -61,6 +74,14 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       );
       setExaggeration(value);
       setDraft(String(value));
+      setTerrainUrl(mapControllerRef.current?.getTerrainCogSource() ?? "");
+      setSourceError(null);
+      // A COG still opening from a previous session of this dialog would
+      // otherwise leave the controls disabled and the button reading "Opening
+      // COG…" with nothing in flight that the user can see. Its own finally
+      // clears the flag again; a second request racing it is settled by the
+      // controller, which reports the superseded one as not applied.
+      setSourceLoading(false);
       setOpen(true);
     };
     // Close if the terrain control is removed (e.g. hidden from the Controls
@@ -79,6 +100,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
   // setTerrain calls — each of which reprocesses the terrain mesh — per second.
   const frameRef = useRef<number | null>(null);
   const pendingRef = useRef<number | null>(null);
+  const sourceRequestRef = useRef(0);
   useEffect(
     () => () => {
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
@@ -113,6 +135,53 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
     // (e.g. "7" committed while already at the max of 5).
     setDraft(String(clamped));
   };
+
+  // Anything the map package did not tag — a network or decode failure — keeps
+  // its message as detail inside a translated sentence, so the user still sees
+  // why it failed without the whole line arriving in English.
+  const translateSourceError = (error: unknown): string => {
+    if (error instanceof CogDemError) return t(SOURCE_ERROR_KEYS[error.code]);
+    const detail = error instanceof Error ? error.message.trim() : "";
+    return detail
+      ? t("terrainSettings.sourceErrorDetail", { detail })
+      : t("terrainSettings.sourceError");
+  };
+
+  // Optional chaining on the ref would resolve to undefined and read as a
+  // successful source change, leaving the dialog claiming a switch that never
+  // happened. Surface the failure instead.
+  const applyTerrainSource = async (source: string | File | null, onApplied?: () => void) => {
+    const controller = mapControllerRef.current;
+    if (!controller) {
+      setSourceError(t("terrainSettings.sourceError"));
+      return;
+    }
+    // Requests share the loading and error state, so an older one settling late
+    // would clear the spinner or post its error over a newer request that is
+    // still running. Only the newest touches that state.
+    const request = ++sourceRequestRef.current;
+    const isCurrent = () => sourceRequestRef.current === request;
+    setSourceLoading(true);
+    setSourceError(null);
+    try {
+      // False means another caller's newer selection won, so this request must
+      // not clear the field or otherwise report itself as the applied source.
+      if ((await controller.setTerrainCogSource(source)) && isCurrent()) onApplied?.();
+    } catch (error) {
+      if (isCurrent()) setSourceError(translateSourceError(error));
+    } finally {
+      if (isCurrent()) setSourceLoading(false);
+    }
+  };
+
+  const applyCogSource = () => applyTerrainSource(terrainUrl);
+
+  // Keep the URL input empty: a local filename is not a fetchable URL, and
+  // leaving it in this field would let a later "Use COG DEM" click try to open
+  // it as an HTTP source.
+  const applyLocalCogSource = (file: File) => applyTerrainSource(file, () => setTerrainUrl(""));
+
+  const restoreDefaultSource = () => applyTerrainSource(null, () => setTerrainUrl(""));
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -149,6 +218,68 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
               value={[exaggeration]}
               onValueChange={(value: number[]) => applyExaggeration(value[0])}
             />
+          </div>
+          <div className="space-y-2 border-t pt-4">
+            <Label htmlFor="terrain-cog-url">{t("terrainSettings.sourceLabel")}</Label>
+            <p className="text-muted-foreground text-sm">
+              {t("terrainSettings.sourceDescription")}
+            </p>
+            <Input
+              id="terrain-cog-url"
+              type="url"
+              inputMode="url"
+              placeholder={t("terrainSettings.sourcePlaceholder")}
+              value={terrainUrl}
+              disabled={sourceLoading || !mapControllerRef.current}
+              onChange={(event) => setTerrainUrl(event.target.value)}
+              onKeyDown={(event) => {
+                // Gated like the button: a second Enter before React repaints
+                // would otherwise start an overlapping request.
+                if (event.key === "Enter" && !sourceLoading && terrainUrl.trim()) {
+                  void applyCogSource();
+                }
+              }}
+            />
+            <div className="space-y-1">
+              <Label htmlFor="terrain-cog-file">{t("terrainSettings.localSourceLabel")}</Label>
+              <Input
+                id="terrain-cog-file"
+                type="file"
+                accept=".tif,.tiff,image/tiff"
+                disabled={sourceLoading || !mapControllerRef.current}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void applyLocalCogSource(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <p className="text-muted-foreground text-xs">
+                {t("terrainSettings.localSourceDescription")}
+              </p>
+            </div>
+            {sourceError ? (
+              <p className="text-destructive text-sm" role="alert">
+                {sourceError}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={sourceLoading || !terrainUrl.trim() || !mapControllerRef.current}
+                onClick={() => void applyCogSource()}
+              >
+                {sourceLoading ? t("terrainSettings.sourceLoading") : t("terrainSettings.useCog")}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={sourceLoading || !mapControllerRef.current?.hasCustomTerrainSource()}
+                onClick={() => void restoreDefaultSource()}
+              >
+                {t("terrainSettings.restoreDefaultSource")}
+              </Button>
+            </div>
           </div>
           <div className="flex justify-between gap-2">
             <Button

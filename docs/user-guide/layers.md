@@ -14,12 +14,30 @@ The **Layers panel** on the left lists every layer in the project, from the topm
 
 Each layer exposes a set of actions:
 
+- **Open Style panel**: when the built-in Style panel is enabled, use the palette button on the layer card to select the layer and open its styling controls.
 - **Zoom to layer**: fit the map to the layer's extent (for layers whose bounds are known).
-- **Identify features**: click features on the map to see their attributes in a popup.
+- **Identify features**: click features on the map to see their attributes in a popup. On a raster layer this reads the pixel value instead, and on a multiband raster it also builds a [spectral profile](styling.md#spectral-profile).
 - **Labels**: toggle text labels for vector layers that have a label field.
 - **Metadata / Properties**: inspect the layer's source and configuration.
 - **Remove layer**: delete the layer from the project.
 - **Insert before**: control where a new layer is placed in the stack.
+
+### Importing and exporting styles
+
+Vector layers have a **Layer actions → Styles** submenu for symbology interchange:
+
+- **Export GeoLibre URL style** writes a compact `.geolibre.style.json` file designed for the [`data` and `style` URL parameters](embedding.md#open-remote-data). It contains no feature data. Its MapLibre render layers use the original GeoJSON filename stem as `source`, allowing one style document to distinguish GeoJSON members in a ZIP.
+- **Export as Mapbox GL style** writes a self-contained Mapbox/MapLibre style with the layer's GeoJSON embedded.
+- **Export as OGC SLD** and **Export as QGIS QML** produce styles for other desktop and server GIS software.
+- **Import style (GeoLibre URL / Mapbox GL / SLD / QML)…** applies a supported style file to the selected layer. When importing a GeoLibre URL style interactively, the filename-based `source` association is ignored because the selected layer is the target.
+
+To use a GeoLibre URL style, upload it to a CORS-enabled web host and open GeoLibre with both URLs:
+
+```text
+https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson&style=https://assets.geolibre.app/data/sample.style.json
+```
+
+See [Embedding & Sharing](embedding.md#open-remote-data) for GeoParquet and PMTiles deep links, ZIP source matching, REST API responses, raster-style JSON, and encoding nested URLs.
 
 ## Layer groups
 

@@ -281,6 +281,47 @@ function utmProjDef(zone: number, south: boolean): string {
   return `+proj=utm +zone=${zone}${south ? " +south" : ""} +datum=WGS84 +units=m +no_defs +type=crs`;
 }
 
+/**
+ * A point's full UTM coordinate: zone number, latitude band, hemisphere, and
+ * easting/northing in metres.
+ */
+export interface UtmCoordinate {
+  zone: number;
+  band: string;
+  south: boolean;
+  easting: number;
+  northing: number;
+}
+
+/**
+ * Project a lng/lat to its UTM zone's easting/northing.
+ *
+ * Shared with the status bar's coordinate readout (issue #1814) so the grid the
+ * user sees and the numbers they read come from one projection, rather than the
+ * grid using proj4 here and the readout re-deriving UTM somewhere else.
+ *
+ * Returns null outside UTM's valid latitude range (-80 to 84) or when proj4
+ * cannot project the point, so callers can fall back rather than print a
+ * meaningless number. Uses the regular 6-degree zones; the Norway/Svalbard
+ * exceptions are not applied, matching the grid overlay.
+ */
+export function lngLatToUtm(lng: number, lat: number): UtmCoordinate | null {
+  const band = utmLatBand(lat);
+  if (!band) return null;
+  const zone = utmZoneForLon(lng);
+  const south = lat < 0;
+  try {
+    const [easting, northing] = proj4("EPSG:4326", utmProjDef(zone, south), [lng, lat]) as [
+      number,
+      number,
+    ];
+    if (!Number.isFinite(easting) || !Number.isFinite(northing)) return null;
+    return { zone, band, south, easting, northing };
+  } catch {
+    return null;
+  }
+}
+
 /** Format a UTM easting for display, e.g. `500000mE`. */
 export function formatEasting(easting: number): string {
   return `${Math.round(easting)}mE`;

@@ -24,6 +24,8 @@ A GeoLibre project captures your whole workspace in a single `.geolibre.json` fi
 !!! note "Loading a project at startup"
     You can open a project directly by passing its URL with the `url` query parameter, for example `?url=https://share.geolibre.app/you/project.geolibre.json`. See [Embedding & Sharing](embedding.md).
 
+    On the desktop app you can also have GeoLibre reopen the last local project — or one specific local project — every time it launches; remote share links are never replayed on launch. See [Settings → Startup](settings.md#startup). A project URL in the address bar always takes precedence over that preference.
+
 ## Save and Save As
 
 - **Save** writes back to the project's existing file path.
@@ -50,13 +52,13 @@ Snapshots are stored per project — keyed by file path, or by name for a projec
 
 **Project → Import → Import QGIS Project…** reads a QGIS `.qgs` or `.qgz` project and rebuilds it as a GeoLibre project: its layers, layer groups (including nested ones), group visibility, layer order, styling, and the saved map view.
 
-The importer targets file-based vector layers plus rasters the app can open, and it reports what it could not bring across rather than failing the whole import — you get the project plus a per-layer list of skipped layers and the reason (an unsupported data provider, an unsupported file format, a missing source, a network share path, or a remote source). In the browser build, layers that reference a local path on disk are listed as skipped because a browser cannot reopen those paths; open the same project in GeoLibre Desktop to load them.
+The importer targets file-based vector layers plus rasters the app can open, and it reports what it could not bring across rather than failing the whole import — you get the project plus a list of skipped layers and the reason (an unsupported data provider, an unsupported file format, a missing source, a network share path, or a remote source). Layers skipped for the same reason are grouped into one line with a count, so a project where hundreds of layers share one root cause reads at a glance; expand a group to see the layer names. In the browser build, layers that reference a local path on disk are listed as skipped because a browser cannot reopen those paths; open the same project in GeoLibre Desktop to load them.
 
 ## Importing an ArcGIS Pro project
 
 **Project → Import → Import ArcGIS Pro Project…** reads an ArcGIS Pro `.aprx` project or standalone `.mapx` map. GeoLibre reads the CIM JSON stored in the file directly, so ArcGIS Pro and ArcPy do not need to be installed.
 
-An ArcGIS Pro project can contain several maps; GeoLibre imports its first 2D map. The importer preserves the saved extent, file-based feature layers and GeoTIFF rasters, nested groups, visibility, simple symbols, field-based labels, ArcGIS vector-tile portal items, and cached map services. Unsupported sources such as file geodatabases, scenes, and network-share paths are listed after the rest of the project is imported. Local data paths cannot be reopened by the browser build.
+An ArcGIS Pro project can contain several maps; GeoLibre imports its first 2D map. The importer preserves the saved extent, file-based feature layers and GeoTIFF rasters, nested groups, visibility, simple symbols, field-based labels, ArcGIS vector-tile portal items, and cached map services. Unsupported sources such as file geodatabases, scenes, and network-share paths are listed, grouped by reason, after the rest of the project is imported. A File Geodatabase layer is named as such rather than reported as a generic unsupported format, and feature layers and rasters are reported separately, because their workarounds differ: in the desktop build a geodatabase's feature classes can be added with **Add Data → File Geodatabase (GDB)**, while a raster stored in a `.gdb` has to be exported to GeoTIFF first. Local data paths cannot be reopened by the browser build.
 
 ## Templates
 
@@ -65,6 +67,17 @@ An ArcGIS Pro project can contain several maps; GeoLibre imports its first 2D ma
 ## Share
 
 **Project → Share...** uploads the current project to `share.geolibre.app` and returns a public URL you can send to anyone or open in the live viewer. Sharing uses a personal API token, which you set once as the **Share.GeoLibre API token** in **Settings → Environment Variables**. The shared file is the same `.geolibre.json` the app saves locally, so anyone who opens the link sees the same layers, styles, and map view. See the [Sharing & Embedding tutorial](../tutorials/sharing-embedding.md).
+
+### Share-readiness check
+
+A project file is mostly references, so a project can upload cleanly and still draw nothing for the person you sent it to. When the Share dialog opens it checks the data sources the project points at and lists the ones a recipient will not be able to load, with the reason and what to do about it:
+
+- **Uses a credential that is removed when sharing.** Tokens and API keys are stripped from the upload, so the recipient gets the URL without the secret. Make the service public, or tell them to supply their own key.
+- **A browser cannot fetch this host.** The host sends no cross-origin (CORS) headers, or it did not answer. Layers like this keep working in the desktop app, which is not subject to browser CORS, but stay empty in the browser viewer.
+- **The service answered not found.** A signed URL that has expired, or a file that moved.
+- **Points at a file on your machine, or at a private network address.** Local vector data is embedded in the upload automatically, but a local raster, an intranet service, or a database-backed layer only resolves where you authored it.
+
+The check runs in the browser, without your credentials attached, so it sees what a recipient sees. It never blocks the upload: sharing an intranet map with intranet colleagues is a normal thing to do, and the list is there to inform you, not to stop you.
 
 ## Export as HTML
 

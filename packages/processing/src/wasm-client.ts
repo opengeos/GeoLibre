@@ -8,6 +8,7 @@
 import type { FeatureCollection } from "geojson";
 import { convertGeoTiffToCog } from "./cog-convert";
 import { normalizeVectorOutputFormat } from "./sidecar-client";
+import { runWasmToolInBackground } from "./wasm-tool-runner";
 import type {
   RunWhiteboxToolRequest,
   VectorOutputFormat,
@@ -417,14 +418,25 @@ export function fileOutputTargetExtension(
 /**
  * The text/tabular output format a `file_out` parameter declares through its
  * name, description, or `table` data kind, as a bare extension (`csv`/`html`/
- * `json`), or `null` when nothing recognizable is found. Shared by the WASM
- * runner's {@link fileOutputTargetExtension} and the dialog's default-name and
- * download-naming code so the two hint lists cannot drift apart.
+ * `json`/...), or `null` when nothing recognizable is found. Shared by the
+ * WASM runner's {@link fileOutputTargetExtension} and the dialog's
+ * default-name and download-naming code so the two hint lists cannot drift
+ * apart.
  *
  * @param param - The output parameter.
- * @returns `"csv" | "html" | "json"`, or `null` if no text format is implied.
+ * @returns A bare extension, or `null` if no text format is implied.
  */
 export function outputTextFormatHint(param: WhiteboxToolParameter): string | null {
+  // An explicit "<ext> recommended" in the description is the tool author's
+  // own guidance and wins over every heuristic below. `excel_to_table`'s
+  // output is `data_kind: "table"` but its writer is the generic vector
+  // format dispatch (same as GeoParquet/GPKG tools), which has no CSV driver
+  // -- defaulting a blank path to ".csv" made the tool reject its own default,
+  // the same failure mode as #1074.
+  // The capture must start with a letter so a decimal in the prose ("a
+  // tolerance of 0.5 recommended") cannot be mistaken for an extension.
+  const recommended = (param.description ?? "").match(/\.([a-z][a-z0-9]*)\s+recommended/i);
+  if (recommended) return recommended[1].toLowerCase();
   const hint = `${param.name ?? ""} ${param.description ?? ""} ${param.type ?? ""}`;
   if (/\bcsv\b/i.test(hint)) return "csv";
   if (/\bhtml\b/i.test(hint)) return "html";
@@ -447,6 +459,83 @@ function isFeatureCollection(value: unknown): value is FeatureCollection {
     typeof value === "object" &&
     (value as { type?: unknown }).type === "FeatureCollection",
   );
+}
+
+const WEB_MERCATOR_RADIUS = 6378137;
+const MAX_WEB_MERCATOR_LATITUDE = 85.0511287798066;
+
+export function projectGeographicBufferInput(geojson: FeatureCollection): FeatureCollection {
+  const projectPosition = (position: number[]): number[] => {
+    const longitude = position[0];
+    const latitude = Math.max(
+      -MAX_WEB_MERCATOR_LATITUDE,
+      Math.min(MAX_WEB_MERCATOR_LATITUDE, position[1]),
+    );
+    const x = WEB_MERCATOR_RADIUS * ((longitude * Math.PI) / 180);
+    const y = WEB_MERCATOR_RADIUS * Math.log(Math.tan(Math.PI / 4 + (latitude * Math.PI) / 360));
+    return [x, y, ...position.slice(2)];
+  };
+
+  const projectCoordinates = (coordinates: unknown): unknown => {
+    if (!Array.isArray(coordinates)) return coordinates;
+    if (
+      coordinates.length >= 2 &&
+      typeof coordinates[0] === "number" &&
+      typeof coordinates[1] === "number"
+    ) {
+      return projectPosition(coordinates as number[]);
+    }
+    return coordinates.map(projectCoordinates);
+  };
+
+  const projected = structuredClone(geojson) as FeatureCollection & {
+    crs?: { type: "name"; properties: { name: string } };
+  };
+  const projectGeometry = (geometry: (typeof projected.features)[number]["geometry"]): void => {
+    if (!geometry) return;
+    if (geometry.type === "GeometryCollection") {
+      for (const member of geometry.geometries) {
+        projectGeometry(member);
+      }
+      return;
+    }
+    if ("coordinates" in geometry) {
+      geometry.coordinates = projectCoordinates(geometry.coordinates) as never;
+    }
+  };
+  for (const feature of projected.features) {
+    projectGeometry(feature.geometry);
+  }
+  projected.crs = { type: "name", properties: { name: "EPSG:3857" } };
+  return projected;
+}
+
+/**
+ * Prepare a WGS84 map layer for Whitebox's planar buffer operation.
+ *
+ * `buffer_vector` treats both axes as Cartesian map units. Buffering RFC 7946
+ * longitude/latitude directly therefore creates a circle in degrees which is
+ * stretched into an oval when MapLibre displays it in Web Mercator. Projecting
+ * the input to EPSG:3857 makes the tool operate in the same conformal plane as
+ * the map. The GeoJSON writer sees the attached CRS and reprojects the result
+ * back to WGS84 before GeoLibre imports it.
+ *
+ * The dialog stores the buffer distance in degrees, including values converted
+ * from metres by its explicitly approximate geographic-distance control. Using
+ * the equatorial metres-per-degree scale preserves the old buffer's horizontal
+ * radius while making its vertical radius match.
+ */
+export function prepareGeographicBufferInput(
+  geojson: FeatureCollection,
+  distance: unknown,
+): { geojson: FeatureCollection; distance: number } | null {
+  const degrees = typeof distance === "number" ? distance : Number(distance);
+  if (!Number.isFinite(degrees) || degrees <= 0) return null;
+
+  return {
+    geojson: projectGeographicBufferInput(geojson),
+    distance: WEB_MERCATOR_RADIUS * ((degrees * Math.PI) / 180),
+  };
 }
 
 /**
@@ -563,10 +652,21 @@ export async function ensureWhiteboxRasterCog(bytes: Uint8Array): Promise<Uint8A
  * (Cloud Optimized GeoTIFF) for `raster_out` - never a server path.
  */
 export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Promise<WhiteboxJob> {
-  const { runTool } = await loadToolsModule();
   const encoder = new TextEncoder();
   const input: Record<string, Uint8Array> = {};
   const args: string[] = [];
+  const parameterOverrides: Record<string, unknown> = {};
+  let geographicBufferInput: FeatureCollection | null = null;
+  const geojson = request.layer_inputs?.input?.geojson;
+  if (request.tool_id === "buffer_vector" && geojson) {
+    const prepared = prepareGeographicBufferInput(geojson, request.parameters.distance);
+    if (prepared) {
+      geographicBufferInput = prepared.geojson;
+      parameterOverrides.distance = prepared.distance;
+    }
+  } else if (request.tool_id === "multiple_ring_buffer" && geojson) {
+    geographicBufferInput = projectGeographicBufferInput(geojson);
+  }
   // How each output file is turned into a job output: "geojson" is parsed into a
   // FeatureCollection (a map layer); "raster" is normalized to a COG before it
   // reaches the map; "bytes" is returned raw (a file_out blob or a
@@ -591,8 +691,12 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
     const name = param.name;
 
     if (kind === "vector_in") {
-      const geojson = request.layer_inputs?.[name]?.geojson;
+      let geojson = request.layer_inputs?.[name]?.geojson;
       if (!geojson) throw new Error(`Missing vector input for "${name}"`);
+      // A map layer is RFC 7946 WGS84, while Whitebox's buffer tools are
+      // Cartesian. Run them in Web Mercator; the EPSG tag makes the GeoJSON
+      // writer return WGS84.
+      if (name === "input" && geographicBufferInput) geojson = geographicBufferInput;
       const file = `${name}.geojson`;
       input[file] = encoder.encode(JSON.stringify(geojson));
       args.push(`--${name}=/work/${file}`);
@@ -659,14 +763,21 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
       outputs.push({ name, file, kind: kind === "raster_out" ? "raster" : "bytes" });
       args.push(`--${name}=/work/${file}`);
     } else {
-      const value = request.parameters[name];
+      const value = parameterOverrides[name] ?? request.parameters[name];
       if (value !== undefined && value !== null && value !== "") {
         args.push(`--${name}=${value}`);
       }
     }
   }
 
-  const { exitCode, stdout, files } = await runTool(request.tool_id, { args, input });
+  // Off the main thread: the WASI runner is one synchronous call with no yield
+  // points, so running it here would freeze the UI for the tool's whole
+  // duration (~60s for the 290-polygon dissolve in GeoLibre#1977).
+  const { exitCode, stdout, files } = await runWasmToolInBackground({
+    tool: request.tool_id,
+    args,
+    input,
+  });
   if (exitCode !== 0) {
     return job(
       request.tool_id,

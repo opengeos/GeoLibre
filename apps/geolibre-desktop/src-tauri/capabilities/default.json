@@ -25,6 +25,14 @@
       "allow": [{ "path": "$TEMP/geolibre-gdb-*.geojson" }]
     },
     {
+      "comment": "Restorable copies of the startup project (GeoLibre#1948). On Android a project picked from device storage is a content:// URI whose read grant dies with the process, so the startup restore has nothing to reopen; GeoLibre keeps its own copy here instead. Only a scope entry is needed, no new command permission: `mkdir` is already granted by `fs:default` (its `create-app-specific-dirs` set), and `read_text_file`/`write_text_file` by the entries above. It must be `fs:scope` rather than a path on those entries because an fs permission's scope applies only to the commands that permission grants, so `fs:default`'s app-directory scope reaches `read_text_file` but not `mkdir` or `write_text_file` (the app's other writes are to paths a dialog just added to the runtime scope) — without this the copies fail with \"forbidden path\". Two entries because the directory itself is the mkdir target and its files are the read/write targets. See lib/startup-project-snapshot.ts.",
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$APPLOCALDATA/startup-projects" },
+        { "path": "$APPLOCALDATA/startup-projects/*" }
+      ]
+    },
+    {
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "http://*" }, { "url": "https://*" }]
     },

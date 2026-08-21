@@ -725,14 +725,33 @@ export interface ProportionalSizeRange {
  */
 export function proportionalSizeRange(style: LayerStyle): ProportionalSizeRange | null {
   if (!styleValue(style, "proportionalSizeEnabled")) return null;
-  const property = styleValue(style, "proportionalSizeProperty").trim();
+  return validatedSizeRange(
+    styleValue(style, "proportionalSizeProperty"),
+    styleValue(style, "proportionalSizeMinValue"),
+    styleValue(style, "proportionalSizeMaxValue"),
+    styleValue(style, "proportionalSizeMinRadius"),
+    styleValue(style, "proportionalSizeMaxRadius"),
+  );
+}
+
+/**
+ * The validation every field-driven size range shares: a chosen field, a
+ * finite non-degenerate value span, and finite radii. Kept in one place so a
+ * future tightening (rejecting negative radii, say) cannot land on the
+ * layer-wide proportional renderer without also landing on the geometry
+ * generator's centroids.
+ */
+function validatedSizeRange(
+  rawProperty: string,
+  minValue: number,
+  maxValue: number,
+  minRadius: number,
+  maxRadius: number,
+): ProportionalSizeRange | null {
+  const property = rawProperty.trim();
   if (!property) return null;
-  const minValue = styleValue(style, "proportionalSizeMinValue");
-  const maxValue = styleValue(style, "proportionalSizeMaxValue");
   if (!(Number.isFinite(minValue) && Number.isFinite(maxValue))) return null;
   if (maxValue <= minValue) return null;
-  const minRadius = styleValue(style, "proportionalSizeMinRadius");
-  const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
   if (!(Number.isFinite(minRadius) && Number.isFinite(maxRadius))) return null;
   return { property, minValue, maxValue, minRadius, maxRadius };
 }
@@ -748,16 +767,65 @@ export function proportionalSizeRange(style: LayerStyle): ProportionalSizeRange 
  */
 export function proportionalRadiusExpression(style: LayerStyle): unknown[] | null {
   const range = proportionalSizeRange(style);
-  if (!range) return null;
+  return range ? radiusInterpolateExpression(range) : null;
+}
+
+/**
+ * The `interpolate` that maps a validated range's value span onto its radius
+ * span. Shared by the layer-wide proportional renderer and the geometry
+ * generator's centroid sizing so both scale identically (linear, with the
+ * value clamped to the range's ends by `interpolate`'s own stop behavior).
+ */
+function radiusInterpolateExpression(range: ProportionalSizeRange): unknown[] {
   return [
     "interpolate",
     ["linear"],
     ["to-number", ["get", range.property], range.minValue],
     range.minValue,
-    range.minRadius,
+    Math.max(0, range.minRadius),
     range.maxValue,
-    range.maxRadius,
+    Math.max(0, range.maxRadius),
   ];
+}
+
+/**
+ * The geometry generator's centroid-size configuration, or `null` when the
+ * generated points should all take the flat
+ * {@link LayerStyle.geometryGeneratorCircleRadius}: no field chosen, non-finite
+ * or degenerate (`maxValue <= minValue`) value range, or non-finite radii.
+ * Mirrors {@link proportionalSizeRange} against the generator's own keys.
+ *
+ * @param style - The layer style.
+ * @returns The validated range, or `null` when field-driven sizing is off.
+ */
+export function generatorSizeRange(style: LayerStyle): ProportionalSizeRange | null {
+  return validatedSizeRange(
+    styleValue(style, "geometryGeneratorSizeProperty"),
+    styleValue(style, "geometryGeneratorSizeMinValue"),
+    styleValue(style, "geometryGeneratorSizeMaxValue"),
+    styleValue(style, "geometryGeneratorSizeMinRadius"),
+    styleValue(style, "geometryGeneratorSizeMaxRadius"),
+  );
+}
+
+/**
+ * Builds the `circle-radius` paint value for the geometry generator's derived
+ * centroid points: an `interpolate` over
+ * {@link LayerStyle.geometryGeneratorSizeProperty} when field-driven sizing
+ * applies (see {@link generatorSizeRange}), otherwise the flat
+ * {@link LayerStyle.geometryGeneratorCircleRadius}.
+ *
+ * The flat fallback keeps the 1px floor the generator has always applied; the
+ * interpolate is left as authored, so a 0px min radius still hides the
+ * smallest symbols on purpose.
+ *
+ * @param style - The layer style.
+ * @returns A constant radius (pixels) or a MapLibre `interpolate` expression.
+ */
+export function generatorCircleRadiusValue(style: LayerStyle): number | unknown[] {
+  const range = generatorSizeRange(style);
+  if (range) return radiusInterpolateExpression(range);
+  return Math.max(1, styleValue(style, "geometryGeneratorCircleRadius"));
 }
 
 /**

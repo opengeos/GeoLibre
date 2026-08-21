@@ -1,6 +1,6 @@
 # Vector Analysis
 
-This tutorial runs a small vector workflow: buffer a layer, overlay it with another, and export the result. It uses the [Vector tools](../user-guide/processing.md#vector) under **Processing → Vector**.
+This tutorial runs a small vector workflow: buffer a layer, overlay it with another, and export the result. It uses the [Vector tools](../user-guide/processing.md#vector) under **Processing → GeoLibre Toolbox → Vector**.
 
 ## 1. Load input data
 
@@ -8,7 +8,7 @@ Add at least one vector layer (see [Adding Data](../user-guide/adding-data.md)).
 
 ## 2. Buffer a layer
 
-1. Open **Processing → Vector → Buffer**.
+1. Open **Processing → GeoLibre Toolbox → Vector → Buffer**.
 2. Set **Input layer** to your layer.
 3. Set the **Distance** and **Units** (kilometers, meters, or miles).
 4. Choose an **Engine**:
@@ -30,7 +30,7 @@ With the buffer (or any polygon layer) and a second layer, run an overlay:
 - **Spatial join** attaches a join layer's attributes to each input feature based on a spatial relationship (intersects, within, or contains) — for example, tagging each point with the polygon that contains it. Works with any geometry type.
 - **Attribute join** attaches a join table's attributes to each input feature where a key field matches — no geometry involved (for example, joining census statistics to boundary polygons by a shared FIPS code). It is one-to-one (the first matching join row wins); pick the key field on each side, optionally list which fields to bring over, and choose an inner or left join.
 
-Open the tool from **Processing → Vector**, pick the input and overlay layers, and **Run**.
+Open the tool from **Processing → GeoLibre Toolbox → Vector**, pick the input and overlay layers, and **Run**.
 
 ## 4. Inspect and refine
 
@@ -38,7 +38,7 @@ Open the [Attribute table](../user-guide/attribute-table.md) on the result layer
 
 ## 5. Export the result
 
-To save the output as a cloud-native file, use **Processing → Conversion** (for example **Vector to GeoParquet** or **Vector to FlatGeobuf**). See [Cloud-Native Data](cloud-native-data.md). You can also export records from the [Attribute table](../user-guide/attribute-table.md) or the [SQL Workspace](../user-guide/sql-workspace.md).
+To save the output as a cloud-native file, use **Processing → GeoLibre Toolbox → Conversion** (for example **Vector to GeoParquet** or **Vector to FlatGeobuf**). See [Cloud-Native Data](cloud-native-data.md). You can also export records from the [Attribute table](../user-guide/attribute-table.md) or the [SQL Workspace](../user-guide/sql-workspace.md).
 
 ## Next steps
 

@@ -1,6 +1,6 @@
 # AI Segmentation
 
-**Processing → AI Segmentation** turns imagery into vector features
+**Processing → GeoLibre Toolbox → AI Segmentation** turns imagery into vector features
 using [segment-geospatial](https://github.com/opengeos/segment-geospatial)
 (SamGeo) and Meta's **SAM 3** model. Describe what you want — *"trees"*,
 *"buildings"*, *"water"* — or run automatic segmentation, and GeoLibre adds the
@@ -87,7 +87,7 @@ pip install -e "backend/geolibre_server[ml]"
 
 ## Using it
 
-1. Open **Processing → AI Segmentation**.
+1. Open **Processing → GeoLibre Toolbox → AI Segmentation**.
 2. If the backend isn't reachable, the dialog shows a message and a **Start
    server** button (desktop) — click it to launch the sidecar and model server.
 3. **Choose a GeoTIFF.** Pick a georeferenced raster (`.tif`/`.tiff`; PNG/JPG

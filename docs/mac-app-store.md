@@ -158,10 +158,23 @@ bundle should show `com.apple.security.app-sandbox`, and must **not** show
 
 ## CI: the `mas-store.yml` workflow
 
-`workflow_dispatch` only, mirroring `msix-store.yml`: it builds the universal
-sandboxed app, signs it, verifies the sandbox entitlement, produces the signed
-`.pkg`, and uploads it as the `geolibre-mas-pkg` artifact. It does not touch
-GitHub releases and does not upload to App Store Connect.
+Runs on each **published GitHub release** (matching `release.yml`, `android.yml`
+and `ios.yml`) and on demand via the "Run workflow" button: it builds the
+universal sandboxed app, signs it, verifies the sandbox entitlement, produces the
+signed `.pkg`, and uploads it as the `geolibre-mas-pkg` artifact. On a release
+run it also attaches that `.pkg` to the release, so the exact submitted bytes for
+a tag remain available after the CI artifact's retention window. It never uploads
+to App Store Connect — that step stays manual (see *Submitting* below).
+
+> A MAS-signed `.pkg` can only be installed through the App Store; downloading it
+> from the releases page gets you a package that will not install. It is attached
+> as a submission archive, not as a macOS download. Point users at the App Store
+> listing, the Homebrew cask, or the Developer ID `.dmg` from `release.yml`.
+
+A missing-secrets run is handled by the `secrets-gate` job: on a
+`workflow_dispatch` it is a hard error (you asked for a `.pkg` and cannot get
+one), while on a release it logs a warning and skips the macOS job so an
+otherwise-good release does not go red.
 
 Required repository secrets:
 
@@ -191,8 +204,11 @@ Creating the inputs (Apple Developer account required):
    apps). This is already done for GeoLibre Desktop, App Store ID `6796848769`
    (the numeric listing identifier App Store Connect labels "Apple ID" on the App
    Information page), so later releases start at step 2.
-2. Download the `geolibre-mas-pkg` artifact and upload the `.pkg` with the
-   **Transporter** app (or `xcrun altool --upload-app -f <pkg> -t macos`).
+2. Download the `.pkg` — from the `geolibre-mas-pkg` artifact of the release's
+   workflow run, or from the release's own
+   `GeoLibre.Desktop_<version>_universal_mas.pkg` asset once the artifact has
+   expired — and upload it with the **Transporter** app (or
+   `xcrun altool --upload-app -f <pkg> -t macos`).
 3. Fill in screenshots, description, and the privacy questionnaire
    (see `docs/privacy.md`; the app makes no tracking calls).
 4. In the review notes, mention that processing engines run client-side as

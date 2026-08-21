@@ -258,6 +258,12 @@ export function MapLegendPanel({
       buildAutoLegend(layers, legend, {
         locale: i18n.language,
         resolveColormapColors: colormapColors,
+        geometryGeneratorLabels: {
+          centroid: t("style.generator.typeCentroid"),
+          "bounding-box": t("style.generator.typeBoundingBox"),
+          "convex-hull": t("style.generator.typeConvexHull"),
+          buffer: t("style.generator.typeBuffer"),
+        },
       }),
     // colormapGeneration re-derives once an async colormap sample lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -470,7 +476,7 @@ export function MapLegendPanel({
     // a flex column keeps header/footer fixed while the entry list scrolls.
     <div
       ref={panelRef}
-      className="relative flex w-64 flex-col overflow-hidden rounded-lg border border-border/50 bg-background/95 text-foreground shadow-lg backdrop-blur-md"
+      className="relative flex w-64 flex-col overflow-hidden rounded-lg border border-border/50 map-glass text-foreground shadow-lg"
       style={{
         maxHeight: maxHeight ?? undefined,
         ...(width !== undefined ? { width: clamp(width, MIN_PANEL_WIDTH, MAX_PANEL_WIDTH) } : {}),

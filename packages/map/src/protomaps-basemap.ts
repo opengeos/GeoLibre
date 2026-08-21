@@ -8,7 +8,7 @@
 // via getOfflineBasemapStyle(). Glyphs and sprites default to app-bundled
 // assets (see scripts/fetch-basemaps-assets.mjs) so it renders fully offline.
 import { layers, namedFlavor } from "@protomaps/basemaps";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 /** The Protomaps basemap flavors we expose. */
 export const PROTOMAPS_FLAVORS = ["light", "dark", "white", "grayscale", "black"] as const;

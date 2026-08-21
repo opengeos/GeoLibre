@@ -5,11 +5,10 @@
  * or MapLibre imports, so the math can be unit-tested in isolation.
  */
 
+import { getActiveMeanRadiusMeters } from "@geolibre/core";
+
 /** A geographic coordinate as a `[longitude, latitude]` tuple (degrees). */
 export type LngLat = [number, number];
-
-/** Mean Earth radius in meters (IUGG), used for haversine distances. */
-const EARTH_RADIUS_M = 6371008.8;
 
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 
@@ -28,7 +27,9 @@ export function haversineMeters(a: LngLat, b: LngLat): number {
   const sinDLat = Math.sin(dLat / 2);
   const sinDLng = Math.sin(dLng / 2);
   const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
+  // The active body's radius, not Earth's, so the profile's distance axis is
+  // correct on a Moon/Mars project too (GeoLibre#1128).
+  return 2 * getActiveMeanRadiusMeters() * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 /**
@@ -113,6 +114,32 @@ export function resampleLine(coords: LngLat[], maxPoints: number): ResampledLine
   sampledCoords[sampledCoords.length - 1] = coords[coords.length - 1];
 
   return { coords: sampledCoords, distances: sampledDistances };
+}
+
+/**
+ * Pick at most `maxPoints` evenly spaced indices out of `count`, always keeping
+ * the first and last.
+ *
+ * Used to thin a line that already carries its own elevations (a GPX track, for
+ * example) down to a drawable number of chart points. Unlike
+ * {@link resampleLine} this selects original vertices rather than interpolating
+ * between them, so the plotted elevations stay the recorded ones.
+ *
+ * @param count - Number of available samples
+ * @param maxPoints - Maximum number of indices to return (coerced to at least 2)
+ * @returns Ascending indices into the source array; all of them when
+ *   `count <= maxPoints`
+ */
+export function thinIndices(count: number, maxPoints: number): number[] {
+  if (count <= 0) return [];
+  const target = Math.max(2, Math.floor(maxPoints));
+  if (count <= target) return Array.from({ length: count }, (_, index) => index);
+
+  const indices: number[] = [];
+  for (let i = 0; i < target; i += 1) {
+    indices.push(Math.round((i * (count - 1)) / (target - 1)));
+  }
+  return indices;
 }
 
 /** Summary statistics for an elevation profile. */

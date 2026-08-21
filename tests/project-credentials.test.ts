@@ -74,6 +74,54 @@ describe("project credential redaction", () => {
     assert.equal(original.plugins?.settings.external.arbitraryName, "plugin-secret");
   });
 
+  it("keeps the first-party map controls so an export still renders them", () => {
+    const original = credentialProject();
+    original.plugins!.settings = {
+      external: { arbitraryName: "plugin-secret" },
+      "maplibre-gl-components": { legend: { A: "#112233" } },
+      "maplibre-gl-swipe": { position: 50 },
+    };
+    const { project, redactedPaths } = redactProjectCredentials(original);
+    const settings = project.plugins!.settings;
+
+    assert.deepEqual(settings["maplibre-gl-components"], { legend: { A: "#112233" } });
+    assert.deepEqual(settings["maplibre-gl-swipe"], { position: 50 });
+    // An unknown plugin's blob is free-form and can hold a key, so it still goes.
+    assert.ok(!("external" in settings));
+    assert.ok(redactedPaths.includes("plugins.settings"));
+  });
+
+  it("drops the components plugin's hand-authored HTML panel", () => {
+    const original = credentialProject();
+    original.plugins!.settings = {
+      "maplibre-gl-components": {
+        legend: { A: "#112233" },
+        html: { htmls: [{ html: '<img src="https://x/y?api_key=html-secret">' }] },
+      },
+    };
+    const { project } = redactProjectCredentials(original);
+    const components = project.plugins!.settings["maplibre-gl-components"];
+
+    assert.deepEqual(components, { legend: { A: "#112233" } });
+    assert.ok(!serializeProject(project).includes("html-secret"));
+  });
+
+  it("still sweeps a kept plugin blob for credentials", () => {
+    const original = credentialProject();
+    original.plugins!.settings = { "maplibre-gl-swipe": { position: 50, apiKey: "swipe-secret" } };
+    const { project } = redactProjectCredentials(original);
+
+    assert.ok(!serializeProject(project).includes("swipe-secret"));
+    assert.equal(project.plugins!.settings["maplibre-gl-swipe"].position, 50);
+  });
+
+  it("reports nothing redacted when only publishable plugin settings are present", () => {
+    const original = credentialProject();
+    original.plugins!.settings = { "maplibre-gl-swipe": { position: 50 } };
+    const { redactedPaths } = redactProjectCredentials(original);
+    assert.ok(!redactedPaths.includes("plugins.settings"));
+  });
+
   it("provides a stable schema-level credential decision registry", () => {
     assert.deepEqual(PROJECT_CREDENTIAL_FIELDS.preferences, [
       "environmentVariables",
@@ -156,6 +204,47 @@ describe("project credential redaction", () => {
     assert.equal(safe.layers[0].connection?.lastError, "Failed to fetch https://example.com/tiles");
     assert.equal(safe.layers[0].connection?.interval, 300);
     assert.ok(redactedPaths.includes("layers[0].connection.lastError"));
+  });
+
+  it("fingerprints the credential values, not just their paths", () => {
+    // The save prompt reuses a remembered Keep only while the fingerprints
+    // match, so a different secret at an unchanged path has to change one.
+    const original = credentialProject();
+    const baseline = redactProjectCredentials(original);
+    assert.equal(baseline.redactedFingerprints.length, baseline.redactedPaths.length);
+    assert.deepEqual(
+      redactProjectCredentials(credentialProject()).redactedFingerprints,
+      baseline.redactedFingerprints,
+    );
+    assert.ok(
+      !baseline.redactedFingerprints.some((fingerprint) => fingerprint.includes("header-secret")),
+    );
+
+    const rotated = credentialProject();
+    (
+      rotated.layers[0].source.nested as { headers: { Authorization: string } }
+    ).headers.Authorization = "Bearer rotated-secret";
+    const after = redactProjectCredentials(rotated);
+    assert.deepEqual(after.redactedPaths, baseline.redactedPaths);
+    assert.notDeepEqual(after.redactedFingerprints, baseline.redactedFingerprints);
+  });
+
+  it("fails closed for a credential it cannot fingerprint", () => {
+    // A fingerprint match skips the Keep confirmation, so a value that cannot
+    // be serialized is reported rather than hashed into something that could
+    // collide with an unrelated one.
+    const project = credentialProject();
+    assert.equal(redactProjectCredentials(project).hasUnfingerprintableCredential, false);
+
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    project.layers[0].source = { token: circular };
+    const result = redactProjectCredentials(project);
+
+    assert.equal(result.hasUnfingerprintableCredential, true);
+    assert.ok(result.redactedPaths.includes("layers[0].source.token"));
+    assert.ok(!result.redactedFingerprints.some((entry) => entry.startsWith("layers[0].source.")));
+    assert.ok(!serializeProject(result.project).includes("self"));
   });
 
   it("fails closed when configuration exceeds the traversal depth", () => {

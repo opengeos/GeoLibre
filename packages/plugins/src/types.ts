@@ -10,10 +10,11 @@ import type {
   QueryResult as ZarrQueryResult,
   Selector as ZarrSelector,
 } from "@carbonplan/zarr-layer";
-import type { FeatureCollection, Geometry } from "geojson";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 import type { OvertureTheme } from "maplibre-gl-overture-maps";
 import type { TemporalLayerAdapter } from "./plugins/temporal-layers";
+import type { GeoLibreToolbarLabel } from "./toolbar-menu-label";
 
 export type GeoLibreMapControlPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
@@ -169,6 +170,9 @@ export interface GeoLibreOvertureQueryResult {
   truncated: boolean;
 }
 
+/** Renderers the raster control can decode a COG with. */
+export type GeoLibreCogRenderEngine = "maplibre-gl-raster" | "cog-tiler-wasm" | "titiler";
+
 /**
  * Options for {@link GeoLibreAppAPI.addCogLayer}: a native Cloud-Optimized
  * GeoTIFF layer read directly from a URL and rendered client-side, with band
@@ -177,6 +181,14 @@ export interface GeoLibreOvertureQueryResult {
  * the GeoTIFF when they are omitted.
  */
 export interface GeoLibreCogLayerOptions {
+  /**
+   * Renderer that decodes this COG. WASM is globe-compatible; the GPU renderer
+   * requires Mercator. Unlike the other options here this is **not** per layer:
+   * the raster control holds one engine for every raster it manages, so naming
+   * one re-renders the rasters already on the map too. Pass `"auto"` to leave
+   * whatever the control is already on alone.
+   */
+  engine?: GeoLibreCogRenderEngine | "auto";
   /** Band selection, e.g. `"1"` (single band) or `"1,2,3"` (RGB). */
   bands?: string;
   /**
@@ -331,9 +343,28 @@ export interface GeoLibrePickedVectorFile {
   nativeData?: FeatureCollection;
 }
 
+export interface GeoLibreLayerSummary {
+  id: string;
+  name: string;
+  type: string;
+  visible: boolean;
+  opacity: number;
+}
+
+export interface GeoLibreSelection {
+  layerId: string | null;
+  features: Feature<Geometry | null>[];
+}
+
 export interface GeoLibreAppAPI {
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (name: string, data: FeatureCollection, sourcePath?: string) => string;
+  listLayers?: () => GeoLibreLayerSummary[];
+  getLayerFeatures?: (layerId: string) => Feature<Geometry | null>[];
+  getSelectedFeatures?: () => Feature<Geometry | null>[];
+  getSelectedLayerId?: () => string | null;
+  getDrawnFeatures?: () => Feature<Geometry | null>[];
+  onSelectionChange?: (callback: (selection: GeoLibreSelection) => void) => () => void;
   /**
    * Add a native XYZ raster tile layer from a tile URL template (with
    * `{x}`/`{y}`/`{z}` placeholders) and return its layer id. Unlike calling
@@ -375,8 +406,8 @@ export interface GeoLibreAppAPI {
   /**
    * Add a Zarr layer rendered by the **host's own** `@carbonplan/zarr-layer`
    * instance, returning a promise for the new layer's id. The Zarr counterpart
-   * of {@link addCogLayer}: it reads the store directly (Zarr v2/v3, Icechunk
-   * over HTTP), reprojects on the GPU when `crs`/`proj4` is given, and mirrors
+   * of {@link addCogLayer}: it reads the store directly (Zarr v2/v3 over HTTP),
+   * reprojects on the GPU when `crs`/`proj4` is given, and mirrors
    * the layer into the Layers panel with working visibility, opacity, ordering,
    * and removal.
    *
@@ -534,8 +565,16 @@ export interface GeoLibreAppAPI {
   /**
    * Desktop-native downloader for Add Vector Layer URL sources. The web app
    * leaves this unset so the control uses ordinary browser networking.
+   *
+   * Must resolve to a `File` rather than a bare `Blob`, and to the *same* object
+   * for concurrent callers asking for one URL. The vector control keys its
+   * per-source caches (a KMZ's unzipped KML, a GeoPackage's bytes) on the source
+   * object and wraps a plain `Blob` in a fresh `File` per call, so returning a
+   * `Blob` would make every sibling layer of a multi-layer container re-unzip
+   * and re-register the same archive. The type says `File` so that contract is
+   * enforced rather than only documented.
    */
-  fetchVectorUrl?: (url: string) => Promise<Blob | null>;
+  fetchVectorUrl?: (url: string) => Promise<File | null>;
   /**
    * Read a local vector file back into a File (with any shapefile sidecars) from
    * the absolute path persisted on a layer's `sourcePath`, so the Add Vector
@@ -661,6 +700,39 @@ export interface GeoLibreAppAPI {
   /** Where the active panel docks, or null when none is open. */
   getActiveRightPanelDock?: () => GeoLibreRightPanelDock | null;
   /**
+   * The host's active UI language as a BCP 47-ish catalog code (`"en"`, `"zh"`,
+   * `"pt-BR"`, …). Plugins render their panels as plain DOM and so cannot use
+   * the host's React i18n hooks; this, {@link onLocaleChange} and
+   * {@link translate} are the contract that lets that DOM follow the app
+   * language (GeoLibre#2021). Typed optional for forward-compatibility with
+   * hosts that ship no localization, so call it with optional chaining and fall
+   * back to your own default.
+   */
+  getLocale?: () => string;
+  /**
+   * Subscribe to app language changes. The listener is called with the new
+   * locale code after the host has switched (its catalog is already loaded, so
+   * {@link translate} is safe to call from inside). Returns an unsubscribe
+   * function — call it from `deactivate`, or the listener will keep re-rendering
+   * DOM the plugin no longer owns.
+   */
+  onLocaleChange?: (listener: (locale: string) => void) => () => void;
+  /**
+   * Translate a key against the host's catalogs, falling back to
+   * `defaultValue` when the active locale has no entry for it. `params` fills
+   * `{{placeholder}}` interpolations.
+   *
+   * A plugin should pass its own English text as `defaultValue`, so its UI reads
+   * correctly on a host with no entry for its keys and gains translations as
+   * catalogs grow. Namespace keys by plugin id (`plugin.<id>.<something>`) to
+   * avoid colliding with the host's own keys.
+   */
+  translate?: (
+    key: string,
+    defaultValue: string,
+    params?: Record<string, string | number>,
+  ) => string;
+  /**
    * Register a plugin-owned top-level toolbar menu shown in the GeoLibre banner
    * beside the built-in menus, with nested submenus and action items. Returns
    * an unregister function (call it from `deactivate`). Re-registering the same
@@ -701,8 +773,14 @@ export interface GeoLibreToolbarMenuAction {
   type?: "action";
   /** Stable id, unique within the menu. */
   id: string;
-  /** Label shown in the menu. */
-  label: string;
+  /**
+   * Label shown in the menu. Pass a getter function to make it reactive, the
+   * way panel titles already are: the host re-reads every label each time it
+   * renders the menu tree, and it re-renders on `languageChanged`, so a getter
+   * wired to a translation follows the app language without the plugin
+   * re-registering its menu. A plain string is frozen at registration time.
+   */
+  label: GeoLibreToolbarLabel;
   /** Optional icon: a URL or `data:` URI rendered as an image. */
   icon?: string;
   /** When true, the item is shown disabled and cannot be selected. */
@@ -716,8 +794,8 @@ export interface GeoLibreToolbarSubmenu {
   type: "submenu";
   /** Stable id, unique within the parent menu. */
   id: string;
-  /** Label shown on the submenu trigger. */
-  label: string;
+  /** Label shown on the submenu trigger. Reactive getters allowed, as above. */
+  label: GeoLibreToolbarLabel;
   /** Optional icon: a URL or `data:` URI rendered as an image. */
   icon?: string;
   /** Child items (actions, separators, or further submenus). */
@@ -744,8 +822,8 @@ export type GeoLibreToolbarMenuItem =
 export interface GeoLibreToolbarMenu {
   /** Stable unique id used to unregister the menu. */
   id: string;
-  /** Button label shown in the toolbar. */
-  label: string;
+  /** Button label shown in the toolbar. Reactive getters allowed, as above. */
+  label: GeoLibreToolbarLabel;
   /** Optional icon: a URL or `data:` URI rendered as an image. */
   icon?: string;
   /** Top-level items (actions, separators, or submenus). */

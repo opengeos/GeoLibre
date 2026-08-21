@@ -1,4 +1,5 @@
 import {
+  batchDecodePolylines,
   hasPathTraversal,
   isAbsoluteFilesystemPath,
   parseProject,
@@ -7,6 +8,8 @@ import {
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
+  BaseDirectory,
+  mkdir,
   readDir,
   readFile,
   readTextFile,
@@ -15,6 +18,7 @@ import {
   writeFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
+import type { StartupSettings } from "../hooks/useDesktopSettings";
 import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import i18next from "i18next";
@@ -22,11 +26,23 @@ import { combine, parseDbf, parseShp } from "shpjs";
 import {
   DELIMITER_CANDIDATES,
   NO_VALID_COORDINATES_MESSAGE,
+  countDelimitedTextRows,
   detectCoordinateFields,
   detectDelimitedTextDelimiter,
+  firstDelimitedTextLine,
+  hasCompleteHeaderLine,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "./delimited-text";
+import { isAndroidContentUri, writeInPlaceWithAndroidFallback } from "./android-content-uri";
+import { startupProjectPath } from "./startup-project";
+import {
+  readStartupSnapshot,
+  STARTUP_SNAPSHOT_DIR,
+  writeStartupSnapshot,
+  type StartupSnapshotIo,
+  type StartupSnapshotSlot,
+} from "./startup-project-snapshot";
 import { IS_MAS_BUILD } from "./build-flags";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import {
@@ -38,6 +54,7 @@ import {
 import type { GeotaggedPhotoResult } from "./geotagged-photos";
 import { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "./geotagged-photos";
 import { projectedGeoJsonCrs } from "./crs-utils";
+import { nativeFileDialogFilters, type FileDialogFilter } from "./file-dialog-filters";
 import { parseGpxLayer } from "./gpx";
 import { isTauri } from "./is-tauri";
 import { SHAPEFILE_COMPANION_EXTENSIONS, shapefileCompanionPathsFromSelection } from "./mas-build";
@@ -71,10 +88,7 @@ function browserSafeFileName(path: string): string {
   return path.split(/[/\\]/).pop() || "project.geolibre.json";
 }
 
-export interface FileDialogFilter {
-  name: string;
-  extensions: string[];
-}
+export type { FileDialogFilter } from "./file-dialog-filters";
 
 interface PickLocalPathOptions {
   accept?: string;
@@ -90,7 +104,10 @@ interface PickSavePathOptions {
 
 interface LocalDataFileOptions {
   filters: FileDialogFilter[];
+  androidFilters?: FileDialogFilter[];
   accept: string;
+  /** Extensions that should be read as bytes instead of text when readText is set. */
+  binaryExtensions?: string[];
   readBinary?: boolean;
   readText?: boolean;
 }
@@ -625,12 +642,136 @@ function parseGpxTextLayers(text: string, path: string): LoadedVectorLayer[] {
     }));
 }
 
+/**
+ * Checks whether a decoded polyline FeatureCollection contains valid, non-empty WGS84 coordinates.
+ *
+ * Rejects collections with no features or 0 total coordinates, non-finite values,
+ * or coordinate values falling outside the valid WGS84 domain ([-180, 180] lon, [-90, 90] lat).
+ */
+function hasValidPolylineCoordinates(fc: FeatureCollection): boolean {
+  if (!fc.features || fc.features.length === 0) return false;
+  let totalPoints = 0;
+  for (const feature of fc.features) {
+    const geometry = feature.geometry;
+    if (!geometry) continue;
+    if (geometry.type === "LineString") {
+      for (const coord of geometry.coordinates) {
+        const [lon, lat] = coord;
+        if (
+          !Number.isFinite(lon) ||
+          !Number.isFinite(lat) ||
+          lon < -180 ||
+          lon > 180 ||
+          lat < -90 ||
+          lat > 90
+        ) {
+          return false;
+        }
+        totalPoints++;
+      }
+    } else if (geometry.type === "MultiLineString") {
+      for (const line of geometry.coordinates) {
+        for (const coord of line) {
+          const [lon, lat] = coord;
+          if (
+            !Number.isFinite(lon) ||
+            !Number.isFinite(lat) ||
+            lon < -180 ||
+            lon > 180 ||
+            lat < -90 ||
+            lat > 90
+          ) {
+            return false;
+          }
+          totalPoints++;
+        }
+      }
+    }
+  }
+  return totalPoints > 0;
+}
+
+/**
+ * Parses raw polyline text from a dropped/opened file into a vector layer.
+ *
+ * Encoded polyline format does not self-describe its precision factor. Auto-detection
+ * first attempts standard precision 5 (Google Maps / OSRM standard, factor 1e5).
+ * If precision 5 yields coordinates outside valid WGS84 bounds (which occurs when
+ * precision 6 data with latitude > 9° or longitude > 18° is scaled up by 10x),
+ * it falls back to precision 6 (Valhalla / Mapbox standard, factor 1e6).
+ *
+ * That bounds check only settles the cases it can: the two decodes of the same
+ * bytes differ by exactly a factor of 10, so whenever precision 5 lands in
+ * bounds precision 6 necessarily does too, and nothing in the data says which
+ * one the author meant. Precision-6 data close to the prime meridian and the
+ * equator (|lon| <= 18°, |lat| <= 9°) therefore imports at precision 5, ten
+ * times too large, with no error. Drag-and-drop has nowhere to ask, so it takes
+ * the more common of the two; Add Data → Encoded Polyline is the path with an
+ * explicit precision picker and a preview to check the result against.
+ */
+function parsePolylineFileLayers(text: string, path: string): LoadedVectorLayer[] {
+  let fc = batchDecodePolylines(text, { precision: 5, unescape: true });
+  if (!hasValidPolylineCoordinates(fc)) {
+    fc = batchDecodePolylines(text, { precision: 6, unescape: true });
+  }
+  if (!hasValidPolylineCoordinates(fc)) {
+    throw new Error("No valid polyline coordinates could be decoded from this file.");
+  }
+  const baseName = pathWithoutExtension(browserSafeFileName(path)) || "Polyline";
+  return [
+    {
+      data: fc,
+      name: baseName,
+      path,
+    },
+  ];
+}
+
 /** Delimited text formats the drag-and-drop / open path loads as points. */
 const DELIMITED_TEXT_DROP_EXTENSIONS = ["csv", "tsv"];
 
 /** Whether a filename looks like a delimited text table (CSV/TSV). */
 function isDelimitedTextFileName(path: string): boolean {
   return DELIMITED_TEXT_DROP_EXTENSIONS.includes(fileExtension(path));
+}
+
+/**
+ * How much of a delimited file to decode when only its header is wanted. Large
+ * enough for any realistic header (the widest seen in the wild are a few tens
+ * of KB), and the read falls back to the whole file if no line break turns up
+ * within it, so an unusual file loses efficiency rather than correctness.
+ */
+const DELIMITED_TEXT_HEADER_PROBE_BYTES = 1024 * 1024;
+
+/**
+ * Reads enough of a delimited file to contain its header row, paired with a
+ * reader for the file's whole text.
+ *
+ * Only a genuine partial probe leaves a full read still to do. Whenever the
+ * header text *is* the whole file, which is every file under the probe size,
+ * it is handed back for reuse rather than decoded a second time.
+ *
+ * Decoding a slice can split a multi-byte character at the cut, but the damage
+ * is confined to the truncated tail, past the header the caller reads.
+ *
+ * @param file - The delimited file.
+ * @returns The header text and a reader for the full text.
+ */
+async function readDelimitedTextSource(file: File): Promise<{
+  headerText: string;
+  readFullText: () => Promise<string>;
+}> {
+  const alreadyWhole = (text: string) => ({
+    headerText: text,
+    readFullText: async () => text,
+  });
+  if (file.size <= DELIMITED_TEXT_HEADER_PROBE_BYTES) return alreadyWhole(await file.text());
+  const probe = await file.slice(0, DELIMITED_TEXT_HEADER_PROBE_BYTES).text();
+  // Deliberately not "does the probe contain a line break": blank lines before
+  // the header contribute breaks of their own, so a header that overruns the
+  // probe would still look terminated and be handed back truncated.
+  if (hasCompleteHeaderLine(probe)) return { headerText: probe, readFullText: () => file.text() };
+  return alreadyWhole(await file.text());
 }
 
 /**
@@ -642,21 +783,55 @@ function isDelimitedTextFileName(path: string): boolean {
  * (e.g. a CSV with a WKT geometry column). Throws a helpful error (pointing at
  * the Add Data dialog) when the file is empty or the auto-detected columns hold
  * no usable WGS84 coordinates (e.g. a CSV whose `x`/`y` columns are projected).
+ *
+ * @param source - `headerText` needs only to reach the end of the header row;
+ *   `readFullText` is called solely once coordinate columns are confirmed, so a
+ *   CSV large enough to have been probed rather than read whole is never
+ *   materialized as text just to be handed to the DuckDB fallback.
+ * @param path - The file name or path, used in the messages.
+ * @param options - Carries the caller's large-dataset guard.
  */
-function parseDelimitedTextFile(text: string, path: string): FeatureCollection | null {
+async function parseDelimitedTextFile(
+  source: { headerText: string; readFullText: () => Promise<string> },
+  path: string,
+  options?: DuckDbVectorLoadOptions,
+): Promise<FeatureCollection | null> {
   const name = browserSafeFileName(path);
   const pickColumns = `Use Add Data → Delimited Text to choose the coordinate columns for ${name}.`;
-  const delimiter = detectDelimitedTextDelimiter(text);
-  // Detect the coordinate columns from the header slice only;
-  // parseDelimitedTextLayer re-reads the header internally, so parsing the
-  // whole file here just to recover the column names would double the work.
-  const headerLine = text.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0] ?? "";
-  if (!headerLine.trim()) {
+  // Detect the delimiter and the coordinate columns from the header alone, so
+  // this preflight neither parses nor even reads the body. parseDelimitedText-
+  // Layer re-reads the header internally, so recovering the column names by
+  // parsing the whole file here would double the work.
+  //
+  // A header cell containing a quoted newline is cut short here (see
+  // firstDelimitedTextLine for why that cannot be resolved before the delimiter
+  // is known). That only ever costs auto-detection, never correctness: the
+  // column names below are resolved against a full, quote-aware parse of the
+  // file, so the worst case is that lon/lat columns past the cut go unnoticed
+  // and the file falls through to DuckDB, whose failure points at Add Data ->
+  // Delimited Text, where the user picks the columns by hand.
+  const headerLine = firstDelimitedTextLine(source.headerText);
+  if (!headerLine) {
     throw new Error(`${name} appears to be empty. ${pickColumns}`);
   }
+  const delimiter = detectDelimitedTextDelimiter(headerLine);
   const fields = parseDelimitedTextFields(headerLine, delimiter);
   const coordinateFields = detectCoordinateFields(fields);
   if (!coordinateFields) return null;
+
+  const text = await source.readFullText();
+  // Delimited text is the one vector path that never reaches the DuckDB loader
+  // (which has no lon/lat column detection), so it was also the one path with
+  // no oversized-import guard at all. Counting is a scan that allocates
+  // nothing, unlike the materialization it guards, so it runs for every file
+  // rather than only past some size: a CSV of short rows can clear the warn
+  // threshold on row count while staying far below any byte threshold.
+  if (options?.onLargeDataset) {
+    await confirmLargeDataset(
+      { name, featureCount: countDelimitedTextRows(text, delimiter) },
+      options.onLargeDataset,
+    );
+  }
   try {
     return parseDelimitedTextLayer(text, {
       delimiter,
@@ -1902,14 +2077,30 @@ async function loadBrowserVectorFile(
     };
   }
 
+  if (extension === "polyline") {
+    const text = await file.text();
+    const [layer] = parsePolylineFileLayers(text, file.name);
+    return {
+      data: layer.data,
+      path: file.name,
+    };
+  }
+
   // Deliberately NOT gated on `streamViaDuckDb`: `loadDuckDbVectorFile` has no
   // longitude/latitude column detection (that lives only in the GeoParquet
   // conversion path), so routing a plain lon/lat CSV to DuckDB fails with
-  // "DuckDB did not find a geometry column in this file." Delimited text is
-  // line-oriented and cheap to parse, so size is not the concern it is for
-  // GeoJSON or shapefiles.
+  // "DuckDB did not find a geometry column in this file." A big CSV therefore
+  // has to be parsed here rather than routed away, and carries its own
+  // oversized-import guard instead.
   if (isDelimitedTextFileName(file.name)) {
-    const points = parseDelimitedTextFile(await file.text(), file.name);
+    // Only the header decides whether this is a lon/lat CSV, and a `File` can
+    // be read in part, so a large CSV headed for the DuckDB fallback below is
+    // never decoded as text in full first.
+    const points = await parseDelimitedTextFile(
+      await readDelimitedTextSource(file),
+      file.name,
+      options,
+    );
     // No lon/lat columns: fall through to DuckDB so spatial CSV variants
     // (e.g. a WKT geometry column) still load.
     if (points) {
@@ -2095,6 +2286,7 @@ async function tryLoadPickedNativeVectorPath(
     extension === "kml" ||
     extension === "kmz" ||
     extension === "gpx" ||
+    extension === "polyline" ||
     extension === "zip"
   ) {
     return undefined;
@@ -2190,10 +2382,31 @@ async function loadTauriVectorFile(
     }
   }
 
+  if (extension === "polyline") {
+    try {
+      const text = await readLocalFileText(path);
+      const [layer] = parsePolylineFileLayers(text, path);
+      return {
+        data: layer.data,
+        path,
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      throw new Error(`Could not read this Polyline file. ${detail}`);
+    }
+  }
+
   // Not gated on `streamViaDuckDb` — see the note in `loadBrowserVectorFile`:
   // the DuckDB reader cannot build points from lon/lat columns.
   if (isDelimitedTextFileName(path)) {
-    const points = parseDelimitedTextFile(await readLocalFileText(path), path);
+    // Unlike the browser path there is no ranged read here, so the text is read
+    // once and serves as both the header probe and the body.
+    const text = await readLocalFileText(path);
+    const points = await parseDelimitedTextFile(
+      { headerText: text, readFullText: async () => text },
+      path,
+      options,
+    );
     // No lon/lat columns: fall through to DuckDB so spatial CSV variants
     // (e.g. a WKT geometry column) still load.
     if (points) {
@@ -2287,6 +2500,7 @@ async function readShapefileCompanionFiles(path: string, selectedPaths: string[]
 async function openProjectFileBrowser(): Promise<{
   project: GeoLibreProject;
   path: string;
+  text: string;
 } | null> {
   const pickerWindow = window as BrowserFilePickerWindow;
   if (pickerWindow.showOpenFilePicker) {
@@ -2298,9 +2512,11 @@ async function openProjectFileBrowser(): Promise<{
       });
       if (!handle) return null;
       const file = await handle.getFile();
+      const text = await file.text();
       return {
-        project: parseProject(await file.text()),
+        project: parseProject(text),
         path: handle.name || file.name,
+        text,
       };
     } catch (error) {
       if (isAbortError(error)) return null;
@@ -2317,6 +2533,7 @@ async function openProjectFileBrowser(): Promise<{
   return {
     project: parseProject(result.text),
     path: result.path,
+    text: result.text,
   };
 }
 
@@ -2459,14 +2676,23 @@ export async function openLocalDataFileWithFallback(options: LocalDataFileOption
   path: string;
   text?: string;
 } | null> {
+  const shouldReadBinaryByExtension = (path: string) => {
+    const extension = path.split(".").pop()?.toLowerCase();
+    return Boolean(
+      extension && options.binaryExtensions?.some((item) => item.toLowerCase() === extension),
+    );
+  };
+
   if (isTauri()) {
     const selected = await open({
       multiple: false,
-      filters: options.filters,
+      filters: nativeFileDialogFilters(options.filters, options.androidFilters),
     });
     if (!selected || typeof selected !== "string") return null;
-    const data = options.readBinary ? toArrayBuffer(await readFile(selected)) : undefined;
-    const text = options.readText ? await readTextFile(selected) : undefined;
+    const binaryByExtension = shouldReadBinaryByExtension(selected);
+    const data =
+      options.readBinary || binaryByExtension ? toArrayBuffer(await readFile(selected)) : undefined;
+    const text = options.readText && !binaryByExtension ? await readTextFile(selected) : undefined;
     return { data, path: selected, text };
   }
 
@@ -2481,8 +2707,9 @@ export async function openLocalDataFileWithFallback(options: LocalDataFileOption
           resolve(null);
           return;
         }
-        const data = options.readBinary ? await file.arrayBuffer() : undefined;
-        const text = options.readText ? await file.text() : undefined;
+        const binaryByExtension = shouldReadBinaryByExtension(file.name);
+        const data = options.readBinary || binaryByExtension ? await file.arrayBuffer() : undefined;
+        const text = options.readText && !binaryByExtension ? await file.text() : undefined;
         resolve({ data, path: file.name, text });
       } catch (error) {
         reject(error);
@@ -2579,9 +2806,17 @@ export async function openGeoJsonFile(): Promise<{
   return { data, path: selected };
 }
 
+/**
+ * Pick a GeoLibre project and parse it.
+ *
+ * @returns The parsed project, the path it came from, and the raw text — which
+ *   {@link saveStartupProjectSnapshot} copies verbatim rather than re-serializing
+ *   the parsed form. Null if the picker was cancelled.
+ */
 export async function openProjectFile(): Promise<{
   project: GeoLibreProject;
   path: string;
+  text: string;
 } | null> {
   if (!isTauri()) {
     return openProjectFileBrowser();
@@ -2594,7 +2829,7 @@ export async function openProjectFile(): Promise<{
   if (!selected || typeof selected !== "string") return null;
   const text = await readTextFile(selected);
   const project = parseProject(text);
-  return { project, path: selected };
+  return { project, path: selected, text };
 }
 
 /** Pick a QGIS project and return its raw bytes for the import converter. */
@@ -2638,6 +2873,80 @@ export class RecentProjectGoneError extends Error {
   }
 }
 
+/**
+ * Snapshot files live in the app's private data directory, the one place the
+ * `fs` plugin's default scope allows without a dialog having handed us the path
+ * — and on Android the one place still readable after the process restart that
+ * kills a `content://` grant.
+ */
+const startupSnapshotIo: StartupSnapshotIo = {
+  write: async (file, content) => {
+    await mkdir(STARTUP_SNAPSHOT_DIR, { baseDir: BaseDirectory.AppLocalData, recursive: true });
+    await writeTextFile(`${STARTUP_SNAPSHOT_DIR}/${file}`, content, {
+      baseDir: BaseDirectory.AppLocalData,
+    });
+  },
+  read: (file) =>
+    readTextFile(`${STARTUP_SNAPSHOT_DIR}/${file}`, { baseDir: BaseDirectory.AppLocalData }),
+};
+
+/**
+ * Keep a restorable copy of a project the startup preference will reopen
+ * (GeoLibre#1948). A no-op unless the path is an Android `content://` URI, whose
+ * read grant does not survive the process — every other path can simply be
+ * re-read.
+ *
+ * @param path - The path or content URI the project was opened from or saved to.
+ * @param text - The serialized project.
+ * @param settings - The committed startup preference.
+ * @returns The slot written, or null when nothing was.
+ */
+export async function saveStartupProjectSnapshot(
+  path: string,
+  text: string,
+  settings: StartupSettings,
+): Promise<StartupSnapshotSlot | null> {
+  if (!isTauri()) return null;
+  return writeStartupSnapshot(path, text, settings, startupSnapshotIo);
+}
+
+/**
+ * Make sure the project a *newly saved* startup preference points at has a
+ * restorable copy, reading it now rather than waiting for the next open or save.
+ *
+ * This is the moment the user's own steps land on: open a project from device
+ * storage, then go to Settings and ask for it back on the next launch. Nothing
+ * re-reads the project in between, so without this the preference would be
+ * saved with no copy behind it and the next launch would still come up empty.
+ * Reading works here and only here, because the picker's `content://` grant is
+ * alive until this process ends -- which is exactly what the copy outlives.
+ *
+ * @param settings - The startup preference being committed.
+ * @param recentProjects - Recent projects, to resolve "reopen the last project".
+ * @returns The slot written, or null when there was nothing to copy.
+ */
+export async function ensureStartupProjectSnapshot(
+  settings: StartupSettings,
+  recentProjects: readonly { path: string }[],
+): Promise<StartupSnapshotSlot | null> {
+  if (!isTauri()) return null;
+  const path = startupProjectPath(settings, recentProjects);
+  // Only a content URI needs a copy; every other path can be re-read on its own.
+  if (!path || !isAndroidContentUri(path)) return null;
+  let text: string;
+  try {
+    text = await readTextFile(path);
+  } catch (error) {
+    // The grant is already gone -- the project was opened in an earlier session
+    // and only reopened from the recent list, say. Nothing to copy, so the next
+    // launch reports the unavailable-project banner and the copy is made the
+    // next time the project is actually opened or saved.
+    console.warn("Could not read the startup project to keep a restorable copy.", error);
+    return null;
+  }
+  return writeStartupSnapshot(path, text, settings, startupSnapshotIo);
+}
+
 // Refuse to buffer absurdly large responses into memory (25 MB).
 const MAX_PROJECT_URL_BYTES = 25 * 1024 * 1024;
 
@@ -2651,12 +2960,23 @@ function isFileMissingError(error: unknown): boolean {
   );
 }
 
+/**
+ * Reopen a project from a remembered path, URL, or Android content URI.
+ *
+ * @param path - The remembered location.
+ * @param signal - Abort signal for the URL branch's fetch.
+ * @returns The parsed project, the path it came from, and the raw text -- which
+ *   callers hand to {@link saveStartupProjectSnapshot} so reopening from Open
+ *   Recent keeps the restorable copy pointing at the project that is now the
+ *   most recent one.
+ */
 export async function openRecentProjectFile(
   path: string,
   signal?: AbortSignal,
 ): Promise<{
   project: GeoLibreProject;
   path: string;
+  text: string;
 }> {
   if (isHttpUrl(path)) {
     const response = await fetch(path, {
@@ -2685,7 +3005,8 @@ export async function openRecentProjectFile(
       );
     }
 
-    return { project: parseProject(await response.text()), path };
+    const body = await response.text();
+    return { project: parseProject(body), path, text: body };
   }
 
   if (!isTauri()) {
@@ -2694,15 +3015,43 @@ export async function openRecentProjectFile(
 
   let text: string;
   try {
-    text = await invoke<string>("read_project_file", { path });
+    // A content URI is not a filesystem path, so `read_project_file` refuses it
+    // outright; the `fs` plugin resolves it through Android's ContentResolver
+    // instead. That succeeds while the picker's read grant is still alive —
+    // reopening from Open Recent in the same session — and fails once the
+    // process has restarted, which the stored copy below covers.
+    text = isAndroidContentUri(path)
+      ? await readTextFile(path)
+      : await invoke<string>("read_project_file", { path });
   } catch (error) {
+    // Fall back to the copy kept for exactly this project, if there is one
+    // (GeoLibre#1948). Only Android content URIs ever have one, and the source
+    // path has to match, so this can never substitute a different project.
+    //
+    // Deliberately ahead of the missing-file check. On a real filesystem "no
+    // such file" means the project is gone and the entry can be dropped; on a
+    // dead SAF grant it means nothing reliable, because content providers differ
+    // in how they report one -- the emulator's ExternalStorageProvider raises a
+    // SecurityException, but Drive, Downloads and some OEM file managers are
+    // known to report a revoked URI as a FileNotFoundException. Treating that as
+    // "gone" would make `useStartupProject` forget the recent entry and reset a
+    // "specific" preference to the default, silently wiping the user's chosen
+    // startup project on exactly the failure this copy exists to survive.
+    const snapshot = await readStartupSnapshot(path, startupSnapshotIo);
+    if (snapshot !== null) {
+      console.warn(
+        `Reopening the stored copy of "${path}"; the original could not be read.`,
+        error,
+      );
+      return { project: parseProject(snapshot), path, text: snapshot };
+    }
     if (isFileMissingError(error)) {
       throw new RecentProjectGoneError(`Project file no longer exists: ${path}`);
     }
     throw error;
   }
 
-  return { project: parseProject(text), path };
+  return { project: parseProject(text), path, text };
 }
 
 export async function saveProjectFile(
@@ -2726,13 +3075,33 @@ export async function saveProjectFile(
  * Save a project directly to an already-known local path without prompting.
  * Falls back to the save dialog when not running in Tauri (the browser never
  * has a writable filesystem path) or when the path is an HTTP(S) URL.
+ *
+ * @param content - The serialized project to write.
+ * @param path - The path the project was opened from or last saved to.
+ * @param fallbackName - File name for the save dialog when an attempted
+ *   in-place write is refused, and only when the path carries no usable name of
+ *   its own. The two branches below never attempt one, so they pass the path
+ *   itself as the dialog's name and ignore this.
+ * @returns The path actually written, or null if a fallback dialog was
+ *   cancelled.
  */
-export async function saveProjectFileToPath(content: string, path: string): Promise<string | null> {
+export async function saveProjectFileToPath(
+  content: string,
+  path: string,
+  fallbackName?: string,
+): Promise<string | null> {
   if (!isTauri() || isHttpUrl(path)) {
     return saveProjectFile(content, path);
   }
-  await writeTextFile(path, content);
-  return path;
+  // On Android a project opened through the document picker carries a read-only
+  // `content://` grant, so writing back to it is refused and Save fails outright
+  // (GeoLibre#1833). The save dialog asks Android to *create* the document,
+  // which does grant write, so the fallback below recovers; see
+  // `writeInPlaceWithAndroidFallback` for why it cannot lose data.
+  return writeInPlaceWithAndroidFallback(content, path, fallbackName, {
+    write: writeTextFile,
+    saveAs: saveProjectFile,
+  });
 }
 
 /**
@@ -2847,6 +3216,11 @@ export async function loadDroppedVectorFiles(
 
       if (extension === "gpx") {
         layers.push(...parseGpxTextLayers(await file.text(), file.name));
+        continue;
+      }
+
+      if (extension === "polyline") {
+        layers.push(...parsePolylineFileLayers(await file.text(), file.name));
         continue;
       }
 
@@ -3129,6 +3503,15 @@ export async function loadDroppedVectorPaths(
           // "Unknown error" when the fs-plugin fallback fails.
           const detail = error instanceof Error ? error.message : String(error);
           throw new Error(`Could not read this GPX file. ${detail}`);
+        }
+        continue;
+      }
+      if (extension === "polyline") {
+        try {
+          layers.push(...parsePolylineFileLayers(await readLocalFileText(path), path));
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          throw new Error(`Could not read this Polyline file. ${detail}`);
         }
         continue;
       }

@@ -38,15 +38,26 @@ export function detectGeometryProfile(fc: FeatureCollection): GeometryProfile {
 }
 
 export function getLayerBounds(layer: GeoLibreLayer): [number, number, number, number] | null {
-  if (!layer.geojson?.features?.length) return null;
-  const box = bbox(layer.geojson);
-  // A collection whose features all carry a null geometry (e.g. a delimited
-  // text file imported as an attribute table, or a non-spatial SQL result)
-  // yields a degenerate ±Infinity box. Report "no bounds" so callers such as
-  // fitLayer/"Zoom to layer" fall back or no-op instead of flying to an
-  // invalid extent.
-  if (!box.every((value) => Number.isFinite(value))) return null;
-  return box as [number, number, number, number];
+  if (layer.geojson?.features?.length) {
+    const box = bbox(layer.geojson);
+    // A collection whose features all carry a null geometry (e.g. a delimited
+    // text file imported as an attribute table, or a non-spatial SQL result)
+    // yields a degenerate ±Infinity box. Continue to the stored extent in
+    // that case instead of flying to invalid coordinates.
+    if (box.every((value) => Number.isFinite(value))) {
+      return box as [number, number, number, number];
+    }
+  }
+  for (const value of [layer.source.bounds, layer.metadata.bounds]) {
+    if (
+      Array.isArray(value) &&
+      value.length === 4 &&
+      value.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate))
+    ) {
+      return value as [number, number, number, number];
+    }
+  }
+  return null;
 }
 
 export function sourceId(layerId: string): string {

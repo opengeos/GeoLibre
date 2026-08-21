@@ -1,13 +1,19 @@
 import {
   applyGroupEffects,
+  applyMatchedSelection,
+  createPointerElevationResolver,
+  effectiveLayerRenderState,
+  getActiveEllipsoid,
   isDuckDBQueryLayer,
   NETCDF_IMAGE_SOURCE_KIND,
   PHOTO_FULL_PROPERTY,
   PHOTO_PROPERTY,
   useAppStore,
   type GeoLibreLayer,
+  type PointerElevationResolver,
 } from "@geolibre/core";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import type { Polygon } from "geojson";
 import { memo, useEffect, useMemo, useRef } from "react";
 import {
   circleLayerId,
@@ -21,6 +27,14 @@ import {
   mbtilesStyleLayerIds,
   vectorTileStyleLayerIds,
 } from "./layer-sync";
+import {
+  FEATURE_SELECTION_EVENT,
+  featuresIntersectingPolygon,
+  selectionModeFromModifiers,
+  type FeatureSelectionRequest,
+  type FeatureSelectionShape,
+} from "./feature-selection";
+import { isGlobeControlToggleClick } from "./globe-control-toggle";
 import { createMapController, type MapController } from "./map-controller";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
@@ -36,11 +50,52 @@ const MAPLIBRE_TILE_SIZE = 512;
 const WMS_IDENTIFY_QUERY_SIZE = 101;
 const WMS_IDENTIFY_QUERY_CENTER = Math.floor(WMS_IDENTIFY_QUERY_SIZE / 2);
 const WMS_IDENTIFY_INFO_FORMATS = ["application/json", "text/html", "text/plain"];
+/**
+ * Minimum screen distance, in pixels, between two vertices of a freehand
+ * selection ring. Small enough that the traced outline still reads as a smooth
+ * curve, large enough that a slow drag cannot grow the ring without bound.
+ */
+const FREEHAND_MIN_POINT_DISTANCE = 3;
+/**
+ * How close, in screen pixels, the two clicks a browser fires before `dblclick`
+ * have to land to count as the same vertex. Small: it only has to absorb the
+ * hand tremor within one double-click, never two deliberate vertices.
+ */
+const DOUBLE_CLICK_VERTEX_TOLERANCE = 2;
+/**
+ * Upper bound on the features a drawn selection will test on the main thread.
+ * Mirrors MAX_CLIENT_PAIRS in @geolibre/processing's vector tools, which caps
+ * the same kind of pairwise Turf loop so a very large layer cannot freeze the
+ * tab; Select by expression and Select by location handle the bigger jobs.
+ */
+const MAX_SELECTION_SCAN_FEATURES = 250_000;
+/** The camera interactions a drawing gesture suspends while it is running. */
+const CAMERA_HANDLERS = [
+  "dragPan",
+  "boxZoom",
+  "doubleClickZoom",
+  "scrollZoom",
+  "keyboard",
+  "dragRotate",
+  "touchZoomRotate",
+  "touchPitch",
+] as const;
 
 export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   onControllerReady?: () => void;
+  /**
+   * Whether the status bar's elevation readout may fall back to the public
+   * Open-Meteo service. Supplied by the app, which owns the persisted consent
+   * flag; `@geolibre/map` has no opinion about consent storage.
+   *
+   * **Omitting it denies the remote lookup.** A privacy gate that fails open
+   * would send coordinates off-device for any embedder that simply did not know
+   * to pass a predicate. The terrain path is unaffected either way, since it
+   * sends nothing anywhere.
+   */
+  canUseRemoteElevation?: () => boolean;
 }
 
 export interface MapDiagnosticEvent {
@@ -638,8 +693,11 @@ function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
 function timeSliderBridge(): GeoLibreTimeSliderBridge | undefined {
   return typeof window === "undefined"
     ? undefined
-    : (window as Window & { __GEOLIBRE_TIME_SLIDER__?: GeoLibreTimeSliderBridge })
-        .__GEOLIBRE_TIME_SLIDER__;
+    : (
+        window as Window & {
+          __GEOLIBRE_TIME_SLIDER__?: GeoLibreTimeSliderBridge;
+        }
+      ).__GEOLIBRE_TIME_SLIDER__;
 }
 
 /**
@@ -1022,6 +1080,7 @@ export const MapCanvas = memo(function MapCanvas({
   controllerRef,
   onMapDiagnosticEvent,
   onControllerReady,
+  canUseRemoteElevation,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -1049,10 +1108,55 @@ export const MapCanvas = memo(function MapCanvas({
   const selectFeature = useAppStore((s) => s.selectFeature);
   const setMapView = useAppStore((s) => s.setMapView);
   const setPointerCoords = useAppStore((s) => s.setPointerCoords);
+  const setPointerElevation = useAppStore((s) => s.setPointerElevation);
+  const setCameraAltitude = useAppStore((s) => s.setCameraAltitude);
+  const showPointerElevation = useAppStore((s) => s.preferences.map.showPointerElevation);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
+  const pointerElevationRef = useRef<PointerElevationResolver | null>(null);
+  // Held in a ref so the once-only init effect can read the current predicate
+  // without re-creating the map when the consent flag changes.
+  const canUseRemoteElevationRef = useRef<() => boolean>(() => true);
+  canUseRemoteElevationRef.current = canUseRemoteElevation ?? (() => false);
+
+  // loadProject resets the readout, but a lookup already in flight for the
+  // previous project would repaint it a moment later -- including Earth to
+  // Earth, where neither the body nor the pointer changed.
+  useEffect(() => {
+    pointerElevationRef.current?.invalidate();
+  }, [projectGeneration]);
+
+  // The resolver consults the preference, but only when a pointer event asks it
+  // to. Switching the toggle off with the cursor resting motionless over the
+  // map (a keyboard-only toggle) would otherwise leave the last resolved value
+  // on screen until the next mousemove.
+  useEffect(() => {
+    if (!showPointerElevation) {
+      // invalidate() before clearing: a lookup scheduled inside the 500ms
+      // debounce window would otherwise still fire the request, and only be
+      // suppressed afterwards by the isEnabled() re-check. Cancelling the timer
+      // means the request is never made at all.
+      pointerElevationRef.current?.invalidate();
+      setPointerElevation(null);
+      return;
+    }
+    // Symmetrically, switching it *on* while the cursor sits still would show
+    // nothing until the next mousemove. Resolve once for wherever the pointer
+    // already is, so the readout appears with the toggle.
+    const coords = useAppStore.getState().pointerCoords;
+    if (coords) pointerElevationRef.current?.update(coords);
+  }, [showPointerElevation, setPointerElevation]);
   const previousSelectedFeatureKey = useRef<string | null>(null);
   const previousDuckDBSelectionLayerId = useRef<string | null>(null);
   const identifyPopup = useRef<maplibregl.Popup | null>(null);
   const photoPopup = useRef<maplibregl.Popup | null>(null);
+  // Set for the duration of a map selection gesture. The other click handlers
+  // bound to the same map (Identify, geotagged-photo popups) read it and bail,
+  // so a rectangle drag or a polygon vertex click never also opens a popup.
+  const featureSelectionActive = useRef(false);
+  // Tears down the gesture in progress, if any. Held at component scope so the
+  // Identify effect can end a half-drawn selection when the user switches
+  // tools instead of finishing or pressing Esc.
+  const cancelFeatureSelection = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || controller.current) return;
@@ -1066,10 +1170,37 @@ export const MapCanvas = memo(function MapCanvas({
     controller.current = mc;
     if (controllerRef) controllerRef.current = mc;
 
-    map.on("mousemove", (e) => {
-      setPointerCoords([e.lngLat.lng, e.lngLat.lat]);
+    // Ground elevation under the cursor for the status bar (issue #1813).
+    // Terrain sampling is synchronous so the readout tracks the pointer live;
+    // the resolver only falls back to the network once the pointer settles.
+    const pointerElevation = createPointerElevationResolver({
+      getMap: () => map,
+      isEarth: () => getActiveEllipsoid().id === "earth",
+      // Read per call, not captured: the map is initialised once, so a captured
+      // value would freeze at whatever the toggle was at mount.
+      isEnabled: () => useAppStore.getState().preferences.map.showPointerElevation,
+      // Only the Open-Meteo fallback is gated; the terrain path sends nothing
+      // anywhere. Checked here rather than by scrubbing the stored preference,
+      // so a project that arrives with the readout switched on still cannot
+      // reach the network without local consent.
+      canUseRemote: () => canUseRemoteElevationRef.current(),
+      emit: setPointerElevation,
     });
-    map.on("mouseout", () => setPointerCoords(null));
+    pointerElevationRef.current = pointerElevation;
+
+    map.on("mousemove", (e) => {
+      const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+      setPointerCoords(point);
+      pointerElevation.update(point);
+    });
+    map.on("mouseout", () => {
+      // invalidate() rather than update(null): both cancel a pending lookup, but
+      // update(null) also emits null, and setPointerCoords(null) already clears
+      // the stored elevation — so emitting here would be a second store write
+      // and re-render saying the same thing.
+      pointerElevation.invalidate();
+      setPointerCoords(null);
+    });
     map.on("error", (event) => {
       // Cancelled tile fetches are already surfaced (as info) by the
       // network capture; logging them here would double-count aborts.
@@ -1090,13 +1221,16 @@ export const MapCanvas = memo(function MapCanvas({
       // overwrite the project's saved view ~60 times a second.
       if (event?.flightCameraToken !== undefined) return;
       setMapView(mc.readView(), Boolean(event?.originalEvent));
+      // Same moveend cadence as zoom/bearing/pitch: a bar where one number is
+      // live and the rest lag during a drag reads as broken.
+      setCameraAltitude(mc.readCameraAltitude());
     };
     map.on("moveend", updateView);
 
-    // Persist projection toggles (the GlobeControl) into project preferences so
-    // a project reopens with the projection it was saved in. getProjection()
-    // returns the configured type, so the internal globe→mercator switch at high
-    // zoom (which also fires this event) leaves the stored preference unchanged.
+    // Persist user clicks on MapLibre's GlobeControl into project preferences so
+    // a project reopens with the projection it was saved in. See
+    // `globe-control-toggle.ts` for why the click, and not MapLibre's
+    // `projectiontransition` event, is what this listens to.
     const updateProjection = () => {
       const projection = mc.readProjection();
       // Functional update so a concurrent preference change (zoom-limit edit,
@@ -1112,7 +1246,14 @@ export const MapCanvas = memo(function MapCanvas({
         };
       });
     };
-    map.on("projectiontransition", updateProjection);
+    const handleProjectionControlClick = (event: MouseEvent) => {
+      // The control's own handler runs on the button before the event reaches
+      // this container-level listener, and `setProjection` is synchronous, so
+      // `readProjection()` already reflects the toggle.
+      if (!isGlobeControlToggleClick(event.target)) return;
+      updateProjection();
+    };
+    map.getContainer().addEventListener("click", handleProjectionControlClick);
     map.on("load", () => {
       const state = useAppStore.getState();
       mc.setBasemapVisible(state.basemapVisible);
@@ -1170,6 +1311,8 @@ export const MapCanvas = memo(function MapCanvas({
       if (resizeFrame !== null) {
         window.cancelAnimationFrame(resizeFrame);
       }
+      pointerElevation.dispose();
+      map.getContainer().removeEventListener("click", handleProjectionControlClick);
       mc.destroy();
       controller.current = null;
       if (controllerRef) controllerRef.current = null;
@@ -1195,6 +1338,15 @@ export const MapCanvas = memo(function MapCanvas({
       onControllerReadyRef.current?.();
     });
     controller.current?.setStyle(basemapStyleUrl);
+    // Switching the active body without moving the camera -- the planet switcher
+    // or a different planetary basemap -- changes the radius the altitude is
+    // scaled by, but fires no moveend, so the readout would keep the previous
+    // body's number until the next pan. Mirrors how setStyle refreshes the
+    // scale bar for the same reason.
+    setCameraAltitude(controller.current?.readCameraAltitude() ?? null);
+    // setCameraAltitude is a stable store action; the effect is keyed on the
+    // basemap alone so it does not re-run on unrelated store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basemapStyleUrl]);
 
   useEffect(() => {
@@ -1218,6 +1370,311 @@ export const MapCanvas = memo(function MapCanvas({
   useEffect(() => {
     controller.current?.waitAndSyncLayers(renderLayers);
   }, [renderLayers]);
+
+  useEffect(() => {
+    const map = controller.current?.getMap();
+    if (!map) return;
+
+    // Only the drawn shapes scan the layer; `single` goes through
+    // queryRenderedFeatures, which is bounded by what is on screen. Checked
+    // both when the gesture starts — so the user is not left waiting on a scan
+    // that was never going to finish promptly — and again when it completes,
+    // since a connection-backed layer can refresh past the limit while a
+    // polygon or freehand gesture is still open.
+    const tooManyToScan = (candidate: GeoLibreLayer, shape: FeatureSelectionShape) => {
+      const featureCount = candidate.geojson?.features?.length ?? 0;
+      if (shape === "single" || featureCount <= MAX_SELECTION_SCAN_FEATURES) return false;
+      onMapDiagnosticEventRef.current?.({
+        message: `Selecting by shape would test ${featureCount} features (limit ${MAX_SELECTION_SCAN_FEATURES})`,
+        detail:
+          "Use Select by expression or Select by location on this layer instead — they run the same match without blocking the map.",
+        source: candidate.name,
+      });
+      return true;
+    };
+
+    const begin = (request: FeatureSelectionRequest) => {
+      cancelFeatureSelection.current?.();
+      const state = useAppStore.getState();
+      const layer = state.layers.find((item) => item.id === request.layerId);
+      if (!layer?.geojson?.features) return;
+      // A gesture on a hidden layer would match features the user cannot see —
+      // and the `single` shape, which queries rendered features, would match
+      // none at all. Folded through the group chain, so a layer hidden only by
+      // its group counts as hidden. LayerPanel disables the menu items; this is
+      // the guard for a layer hidden between opening the menu and drawing.
+      if (!effectiveLayerRenderState(layer, state.layerGroups).visible) return;
+      if (tooManyToScan(layer, request.shape)) return;
+
+      const canvas = map.getCanvas();
+      const container = map.getContainer();
+
+      // Every side effect below registers its own rollback as it happens, and
+      // the teardown is armed before the first of them. Arming it at the end
+      // instead would leave a throw part-way through to strand the overlay in
+      // the DOM with the camera handlers disabled and no way back.
+      const cleanups: Array<() => void> = [];
+      cancelFeatureSelection.current = () => {
+        cleanups.forEach((cleanup) => cleanup());
+        featureSelectionActive.current = false;
+        cancelFeatureSelection.current = null;
+      };
+
+      const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      overlay.setAttribute("aria-hidden", "true");
+      Object.assign(overlay.style, {
+        position: "absolute",
+        inset: "0",
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+        zIndex: "5",
+      });
+      const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      shape.setAttribute("fill", "rgba(37, 99, 235, 0.16)");
+      shape.setAttribute("stroke", "#2563eb");
+      shape.setAttribute("stroke-width", "2");
+      shape.setAttribute("stroke-dasharray", "6 4");
+      overlay.append(shape);
+      container.append(overlay);
+      cleanups.push(() => overlay.remove());
+
+      // Freeze every camera interaction for the gesture, not only the ones that
+      // would fight the drag. Vertices are recorded in screen space and are
+      // unprojected once, at finish(); a scroll-wheel zoom or an arrow-key pan
+      // placed between two polygon clicks would leave the earlier vertices
+      // pointing at different ground than the user aimed at.
+      if (request.shape !== "single") {
+        for (const name of CAMERA_HANDLERS) {
+          const handler = map[name];
+          if (!handler.isEnabled()) continue;
+          handler.disable();
+          cleanups.push(() => handler.enable());
+        }
+      }
+      canvas.style.cursor = "crosshair";
+      cleanups.push(() => {
+        canvas.style.cursor = "";
+      });
+      featureSelectionActive.current = true;
+
+      let points: maplibregl.Point[] = [];
+      let dragging = false;
+      const render = () => {
+        if (points.length === 0) return shape.setAttribute("d", "");
+        if (request.shape === "rectangle" && points.length > 1) {
+          const [a, b] = points;
+          shape.setAttribute(
+            "d",
+            `M ${a.x} ${a.y} L ${b.x} ${a.y} L ${b.x} ${b.y} L ${a.x} ${b.y} Z`,
+          );
+          return;
+        }
+        if (request.shape === "radius" && points.length > 1) {
+          const [center, edge] = points;
+          const radius = center.dist(edge);
+          shape.setAttribute(
+            "d",
+            `M ${center.x - radius} ${center.y} a ${radius} ${radius} 0 1 0 ${
+              radius * 2
+            } 0 a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`,
+          );
+          return;
+        }
+        const closed = request.shape !== "freehand" || !dragging;
+        shape.setAttribute(
+          "d",
+          `${points
+            .map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`)
+            .join(" ")}${closed && points.length > 2 ? " Z" : ""}`,
+        );
+      };
+      const polygonFromPoints = (): Polygon | null => {
+        let ring = points;
+        // A click with no drag leaves the two points coincident, which would
+        // otherwise build a zero-area rectangle or a zero-radius circle. Say
+        // "no shape was drawn" outright rather than leaning on Turf to reject
+        // the degenerate ring.
+        const twoPointShape = request.shape === "rectangle" || request.shape === "radius";
+        if (twoPointShape && (points.length < 2 || points[0].equals(points[1]))) return null;
+        if (request.shape === "rectangle" && points.length >= 2) {
+          const [a, b] = points;
+          ring = [a, new maplibregl.Point(b.x, a.y), b, new maplibregl.Point(a.x, b.y)];
+        } else if (request.shape === "radius" && points.length >= 2) {
+          const [center, edge] = points;
+          const radius = center.dist(edge);
+          ring = Array.from({ length: 64 }, (_, index) => {
+            const angle = (index / 64) * Math.PI * 2;
+            return new maplibregl.Point(
+              center.x + Math.cos(angle) * radius,
+              center.y + Math.sin(angle) * radius,
+            );
+          });
+        }
+        if (ring.length < 3) return null;
+        const coordinates = ring.map((point) => {
+          const lngLat = map.unproject(point);
+          return [lngLat.lng, lngLat.lat] as [number, number];
+        });
+        coordinates.push(coordinates[0]);
+        return { type: "Polygon", coordinates: [coordinates] };
+      };
+
+      const finish = (event: { shiftKey?: boolean; altKey?: boolean }) => {
+        // Re-read the layer rather than trusting the snapshot taken at gesture
+        // start: a polygon or freehand gesture stays open for as long as the
+        // user keeps drawing, long enough for a connection refresh to replace
+        // the features, for the layer to be hidden, or for it to be removed
+        // outright. Matching a deleted layer would also point selectedLayerId
+        // at something that no longer exists.
+        const store = useAppStore.getState();
+        const live = store.layers.find((item) => item.id === layer.id);
+        if (
+          !live?.geojson?.features ||
+          !effectiveLayerRenderState(live, store.layerGroups).visible ||
+          tooManyToScan(live, request.shape)
+        ) {
+          cancelFeatureSelection.current?.();
+          return;
+        }
+        let matched: string[] = [];
+        if (request.shape === "single" && points[0]) {
+          const point = points[0];
+          const queryIds = identifyStyleLayerIds(live).filter((id) => map.getLayer(id));
+          const rendered = map.queryRenderedFeatures(
+            [
+              [point.x - 4, point.y - 4],
+              [point.x + 4, point.y + 4],
+            ],
+            { layers: queryIds },
+          );
+          const id = rendered[0] ? findFeatureId(live, rendered[0]) : null;
+          if (id != null) matched = [id];
+        } else {
+          const polygon = polygonFromPoints();
+          // Nothing was drawn — a stray click rather than a drag. Leave the
+          // selection as it was instead of letting mode "new" replace it with
+          // the empty match. (Click-to-deselect stays the `single` shape's job,
+          // where an empty click is the deliberate gesture.)
+          if (!polygon) {
+            cancelFeatureSelection.current?.();
+            return;
+          }
+          matched = featuresIntersectingPolygon(live.geojson.features, polygon);
+        }
+        applyMatchedSelection(
+          layer.id,
+          matched,
+          selectionModeFromModifiers(Boolean(event.shiftKey), Boolean(event.altKey), request.mode),
+        );
+        cancelFeatureSelection.current?.();
+      };
+      const onMouseDown = (event: maplibregl.MapMouseEvent) => {
+        if (request.shape === "polygon" || request.shape === "single") return;
+        dragging = true;
+        points = [event.point];
+        render();
+      };
+      // The map's own mouse events stop at the canvas, so a drag released over
+      // the layer panel or the browser chrome would never deliver a mouseup and
+      // would leave the gesture armed with pan/zoom still disabled. Window
+      // listeners extend tracking past the canvas edge, the same way
+      // print-extent.ts does for its rubber band. Both sources feed the two
+      // helpers below, which are idempotent so the duplicate events a release
+      // inside the canvas produces cost nothing.
+      const canvasPoint = (clientX: number, clientY: number) => {
+        const rect = canvas.getBoundingClientRect();
+        return new maplibregl.Point(clientX - rect.left, clientY - rect.top);
+      };
+      const moveTo = (point: maplibregl.Point) => {
+        if (!dragging) return;
+        if (request.shape === "freehand") {
+          // Sample rather than take every mousemove: a slow trace would
+          // otherwise accumulate thousands of near-coincident vertices, and
+          // both render() (which rebuilds the whole path string) and the
+          // closing intersection test scale with the ring.
+          const last = points.at(-1);
+          if (last && last.dist(point) < FREEHAND_MIN_POINT_DISTANCE) return;
+          points.push(point);
+        } else {
+          if (points[1]?.equals(point)) return;
+          points = [points[0], point];
+        }
+        render();
+      };
+      const endDrag = (point: maplibregl.Point, modifiers: MouseEvent) => {
+        if (!dragging) return;
+        dragging = false;
+        // `.equals()`, not `!==`: every mouse event carries a freshly built
+        // Point, so a reference check would never skip the duplicate.
+        if (request.shape === "freehand" && !points.at(-1)?.equals(point)) points.push(point);
+        else if (request.shape !== "freehand") points = [points[0], point];
+        finish(modifiers);
+      };
+      const onMouseMove = (event: maplibregl.MapMouseEvent) => moveTo(event.point);
+      const onWindowMouseMove = (event: MouseEvent) =>
+        moveTo(canvasPoint(event.clientX, event.clientY));
+      const onMouseUp = (event: maplibregl.MapMouseEvent) =>
+        endDrag(event.point, event.originalEvent);
+      const onWindowMouseUp = (event: MouseEvent) =>
+        endDrag(canvasPoint(event.clientX, event.clientY), event);
+      const onClick = (event: maplibregl.MapMouseEvent) => {
+        if (request.shape === "single") {
+          points = [event.point];
+          finish(event.originalEvent);
+        } else if (request.shape === "polygon") {
+          points.push(event.point);
+          render();
+        }
+      };
+      const onDoubleClick = (event: maplibregl.MapMouseEvent) => {
+        if (request.shape !== "polygon") return;
+        event.preventDefault();
+        // A double-click fires two clicks first; drop the duplicate tail vertex
+        // they leave behind (same fix as ElevationProfileControl's drawing).
+        const [last, previous] = [points.at(-1), points.at(-2)];
+        if (last && previous && last.dist(previous) <= DOUBLE_CLICK_VERTEX_TOLERANCE) points.pop();
+        if (points.length > 2) finish(event.originalEvent);
+      };
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") cancelFeatureSelection.current?.();
+      };
+      // Only while a drag is in flight: that is the case where losing focus
+      // (Alt+Tab, a system dialog) means the mouseup never arrives. A polygon
+      // is drawn click by click with no armed state, so blurring away to check
+      // something must not throw away the vertices already placed.
+      const onBlur = () => {
+        if (dragging) cancelFeatureSelection.current?.();
+      };
+      map.on("mousedown", onMouseDown);
+      map.on("mousemove", onMouseMove);
+      map.on("mouseup", onMouseUp);
+      map.on("click", onClick);
+      map.on("dblclick", onDoubleClick);
+      window.addEventListener("mousemove", onWindowMouseMove);
+      window.addEventListener("mouseup", onWindowMouseUp);
+      window.addEventListener("keydown", onKeyDown);
+      window.addEventListener("blur", onBlur);
+      cleanups.push(
+        () => map.off("mousedown", onMouseDown),
+        () => map.off("mousemove", onMouseMove),
+        () => map.off("mouseup", onMouseUp),
+        () => map.off("click", onClick),
+        () => map.off("dblclick", onDoubleClick),
+        () => window.removeEventListener("mousemove", onWindowMouseMove),
+        () => window.removeEventListener("mouseup", onWindowMouseUp),
+        () => window.removeEventListener("keydown", onKeyDown),
+        () => window.removeEventListener("blur", onBlur),
+      );
+    };
+    const onRequest = (event: Event) =>
+      begin((event as CustomEvent<FeatureSelectionRequest>).detail);
+    window.addEventListener(FEATURE_SELECTION_EVENT, onRequest);
+    return () => {
+      window.removeEventListener(FEATURE_SELECTION_EVENT, onRequest);
+      cancelFeatureSelection.current?.();
+    };
+  }, []);
 
   // Stable key over just the geotagged-photo layer ids, so the photo-click
   // effect re-binds only when such a layer is added/removed, not on every
@@ -1273,9 +1730,16 @@ export const MapCanvas = memo(function MapCanvas({
     if (!map || !layer) {
       identifyPopup.current?.remove();
       identifyPopup.current = null;
-      if (map) map.getCanvas().style.cursor = "";
+      // Same guard as the cleanup below: picking a gesture turns Identify off,
+      // and begin() has already claimed the crosshair by the time this runs.
+      if (map && !featureSelectionActive.current) map.getCanvas().style.cursor = "";
       return;
     }
+
+    // Switching to Identify ends a half-drawn selection. Without this the
+    // gesture stays live and its handlers keep swallowing map clicks, so the
+    // Identify button would light up while Identify itself did nothing.
+    cancelFeatureSelection.current?.();
 
     // COG layers are identified by the raster control's pixel inspector (driven
     // by useRasterIdentify in the desktop app), not this vector/WMS feature
@@ -1293,6 +1757,8 @@ export const MapCanvas = memo(function MapCanvas({
     let pixelIdentifyAbortController: AbortController | null = null;
 
     const handleIdentifyClick = (event: maplibregl.MapMouseEvent) => {
+      // A selection gesture owns the map clicks while it runs.
+      if (featureSelectionActive.current) return;
       const clearIdentifyResult = () => {
         wmsIdentifyAbortController?.abort();
         wmsIdentifyAbortController = null;
@@ -1458,7 +1924,10 @@ export const MapCanvas = memo(function MapCanvas({
       map.off("click", handleIdentifyClick);
       identifyPopup.current?.remove();
       identifyPopup.current = null;
-      map.getCanvas().style.cursor = "";
+      // Starting a selection gesture turns Identify off, so this cleanup runs
+      // after the gesture has already claimed the crosshair — leave its cursor
+      // alone rather than resetting it out from under the drawing.
+      if (!featureSelectionActive.current) map.getCanvas().style.cursor = "";
     };
   }, [identifyLayerId, layers, selectFeature]);
 
@@ -1478,8 +1947,9 @@ export const MapCanvas = memo(function MapCanvas({
 
     const handleClick = (event: maplibregl.MapLayerMouseEvent) => {
       // The Identify tool already renders the photo in its own popup; skip ours
-      // so one click never opens two popups.
-      if (useAppStore.getState().identifyLayerId) return;
+      // so one click never opens two popups. Likewise while a selection gesture
+      // is drawing, where a click is a vertex rather than a pick.
+      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
       const feature = event.features?.[0];
       if (!feature) return;
       // Anchor to the feature's own coordinate rather than the click point, so
@@ -1500,11 +1970,11 @@ export const MapCanvas = memo(function MapCanvas({
         .addTo(map);
     };
     const handleEnter = () => {
-      if (useAppStore.getState().identifyLayerId) return;
+      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
       map.getCanvas().style.cursor = "pointer";
     };
     const handleLeave = () => {
-      if (useAppStore.getState().identifyLayerId) return;
+      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
       map.getCanvas().style.cursor = "";
     };
 

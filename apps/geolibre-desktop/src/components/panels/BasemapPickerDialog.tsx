@@ -1,9 +1,11 @@
 import {
   BLANK_BASEMAP,
+  REGIONAL_BASEMAPS,
   PLANETARY_BASEMAP_GROUPS,
   PLANETARY_BASEMAPS,
   useAppStore,
   type PlanetaryBasemap,
+  type RegionalBasemap,
 } from "@geolibre/core";
 import {
   Button,
@@ -30,6 +32,7 @@ import { isOfflineBasemapSentinel, PROTOMAPS_FLAVORS, type ProtomapsFlavor } fro
 import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/planetary-sections";
 import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
 import { CollapsibleSection } from "../CollapsibleSection";
+import { RegionalBasemapSection } from "./RegionalBasemapSection";
 
 // Picking the "Liberty 3D" preset applies the Liberty style and tilts the
 // current camera into a 3D perspective in place (matching the New Project
@@ -134,6 +137,11 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
         name: b.name,
         styleUrl: b.styleUrl,
       })),
+      ...REGIONAL_BASEMAPS.map((b) => ({
+        id: b.id,
+        name: b.name,
+        styleUrl: b.styleUrl,
+      })),
     ],
     [openFreeMapPresets, protomapsPresets],
   );
@@ -189,6 +197,13 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
   // control renders it as the correct sphere.
   const applyPlanetary = (basemap: PlanetaryBasemap) => {
     applyPlanetaryBasemap(basemap);
+    onOpenChange(false);
+  };
+
+  // A regional basemap is a plain raster style for Earth, so unlike the
+  // planetary ones it only swaps the style and leaves the ellipsoid alone.
+  const applyRegional = (basemap: RegionalBasemap) => {
+    setBasemapStyleUrl(basemap.styleUrl);
     onOpenChange(false);
   };
 
@@ -260,6 +275,8 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
               </div>
             </div>
           ) : null}
+
+          <RegionalBasemapSection selectedId={activeChoice} onSelect={applyRegional} />
 
           {PLANETARY_BASEMAP_GROUPS.map((group) => {
             const heading = t(planetaryBasemapSectionKey(group.id));

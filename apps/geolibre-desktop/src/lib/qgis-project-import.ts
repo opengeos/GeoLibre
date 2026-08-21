@@ -152,18 +152,20 @@ export function importQgisProject(
   const project = createEmptyProject(projectName, {
     mapView: parseMapView(document),
   });
-  const parsedGroups = parseLayerGroups(document);
-  const groupByLayerId = layerGroupAssignments(document, parsedGroups.ids);
-  const visibilityByLayerId = layerVisibility(document);
+  const treeRoot = layerTreeRoot(document);
+  const parsedGroups = parseLayerGroups(treeRoot);
+  const groupByLayerId = layerGroupAssignments(treeRoot, parsedGroups.ids);
+  const visibilityByLayerId = layerVisibility(treeRoot);
   const mapLayers = Array.from(document.querySelectorAll("projectlayers > maplayer"));
   const byId = new Map(
     mapLayers.map((element) => [text(element.querySelector(":scope > id")), element]),
   );
+  const orderedIds = layerOrder(treeRoot, mapLayers);
   const warnings: QgisProjectImportWarning[] = [];
   const layers: GeoLibreLayer[] = [];
   const rasters: QgisRasterImport[] = [];
 
-  for (const id of layerOrder(document, mapLayers)) {
+  for (const id of orderedIds) {
     const element = byId.get(id);
     if (!element) continue;
     const name = text(element.querySelector(":scope > layername")) || id || "QGIS layer";
@@ -173,7 +175,7 @@ export function importQgisProject(
     if (
       isOpenStreetMapBasemap(element, provider, dataSource) &&
       !groupByLayerId.has(id) &&
-      id === layerOrder(document, mapLayers)[0]
+      id === orderedIds[0]
     ) {
       project.basemapStyleUrl = DEFAULT_BASEMAP;
       project.basemapVisible = visibilityByLayerId.get(id) ?? true;
@@ -185,6 +187,7 @@ export function importQgisProject(
 
     if (isSupportedRasterLayer(element, provider, source)) {
       const state = parseRasterState(element);
+      const beforeId = nextLayerId(id, orderedIds);
       rasters.push({
         id,
         name,
@@ -192,9 +195,7 @@ export function importQgisProject(
         visible: visibilityByLayerId.get(id) ?? true,
         opacity: parseOpacity(element),
         ...(groupByLayerId.get(id) ? { groupId: groupByLayerId.get(id) } : {}),
-        ...(nextLayerId(id, layerOrder(document, mapLayers))
-          ? { beforeId: nextLayerId(id, layerOrder(document, mapLayers)) }
-          : {}),
+        ...(beforeId ? { beforeId } : {}),
         ...(state ? { state } : {}),
       });
       continue;
@@ -392,11 +393,21 @@ function zoomForBounds(west: number, south: number, east: number, north: number)
   return Math.max(0, Math.min(20, Math.log2(360 / span) - 0.75));
 }
 
-function parseLayerGroups(document: Document): {
+/**
+ * The project's own layer tree: the `<layer-tree-group>` that is a direct child
+ * of `<qgis>`. A Print Layout legend with `autoUpdateModel="0"` stores its own
+ * frozen `<layer-tree-group>` snapshot under `<Layouts>`, so a document-wide
+ * query would treat every layer those legends reference as another layer to
+ * import and duplicate it once per legend (GeoLibre#1964).
+ */
+function layerTreeRoot(document: Document): Element | null {
+  return document.documentElement.querySelector(":scope > layer-tree-group");
+}
+
+function parseLayerGroups(root: Element | null): {
   groups: LayerGroup[];
   ids: Map<Element, string>;
 } {
-  const root = document.querySelector("layer-tree-group");
   if (!root) return { groups: [], ids: new Map() };
   const ids = new Map<Element, string>();
   const groups = Array.from(root.querySelectorAll("layer-tree-group")).map((element, index) => {
@@ -433,9 +444,12 @@ function groupDisplayName(element: Element, root: Element): string {
   return element.getAttribute("name")?.trim() || "Group";
 }
 
-function layerGroupAssignments(document: Document, ids: Map<Element, string>): Map<string, string> {
+function layerGroupAssignments(
+  root: Element | null,
+  ids: Map<Element, string>,
+): Map<string, string> {
   const assignments = new Map<string, string>();
-  document.querySelectorAll("layer-tree-layer[id]").forEach((layer) => {
+  root?.querySelectorAll("layer-tree-layer[id]").forEach((layer) => {
     const layerId = layer.getAttribute("id");
     const parentGroup = layer.parentElement?.closest("layer-tree-group");
     const groupId = parentGroup ? ids.get(parentGroup) : undefined;
@@ -444,20 +458,21 @@ function layerGroupAssignments(document: Document, ids: Map<Element, string>): M
   return assignments;
 }
 
-function layerVisibility(document: Document): Map<string, boolean> {
+function layerVisibility(root: Element | null): Map<string, boolean> {
   const result = new Map<string, boolean>();
-  document.querySelectorAll("layer-tree-layer[id]").forEach((element) => {
+  root?.querySelectorAll("layer-tree-layer[id]").forEach((element) => {
     const id = element.getAttribute("id");
     if (id) result.set(id, element.getAttribute("checked") !== "Qt::Unchecked");
   });
   return result;
 }
 
-function layerOrder(document: Document, mapLayers: Element[]): string[] {
-  const ids = Array.from(document.querySelectorAll("layer-tree-layer[id]"))
+function layerOrder(root: Element | null, mapLayers: Element[]): string[] {
+  const ids = Array.from(root?.querySelectorAll("layer-tree-layer[id]") ?? [])
     .map((element) => element.getAttribute("id") ?? "")
     .filter(Boolean);
-  if (ids.length > 0) return ids.reverse();
+  const unique = Array.from(new Set(ids));
+  if (unique.length > 0) return unique.reverse();
   return mapLayers
     .map((element) => text(element.querySelector(":scope > id")))
     .filter(Boolean)

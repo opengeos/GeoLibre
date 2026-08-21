@@ -80,10 +80,10 @@ export function setKmlSuperOverlayResolver(resolver: KmlSuperOverlayResolver | n
 async function ensureProtocol(): Promise<void> {
   if (protocolRegistered) return;
   // Keep MapLibre out of tauri-io's static module graph. This also lets the
-  // DOM-only file-loader tests import tauri-io in Node — where maplibre-gl
-  // resolves to its CJS build, so the named exports sit under `default`.
-  const maplibre = await import("maplibre-gl");
-  const addProtocol = maplibre.addProtocol ?? maplibre.default.addProtocol;
+  // DOM-only file-loader tests import tauri-io in Node without pulling the map
+  // in. MapLibre v6 is ESM-only with named exports and no default export, so
+  // this reads `addProtocol` straight off the namespace.
+  const { addProtocol } = await import("maplibre-gl");
   addProtocol(PROTOCOL, handleTileRequest);
   protocolRegistered = true;
 }

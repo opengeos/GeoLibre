@@ -49,6 +49,7 @@ class CustomBuildHook(BuildHookInterface):
                 ["npm", "run", "build:embed"],
                 cwd=REPO_ROOT,
                 check=True,
+                shell=os.name == "nt",
                 timeout=600,  # 10 minutes; fail loudly rather than hang pip forever
             )
         except FileNotFoundError as exc:

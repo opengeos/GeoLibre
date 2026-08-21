@@ -143,7 +143,8 @@ export function ProjectMenu({
           {chrome.renderLabel(t("toolbar.menu.project"))}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
+      {/* No width class — see AddDataMenu: shrink-to-fit over a fixed w-64. */}
+      <DropdownMenuContent align="start">
         <DropdownMenuLabel>{t("toolbar.menu.project")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {show("project.new") && (

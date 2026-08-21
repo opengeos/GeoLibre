@@ -1,0 +1,144 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "stac_extensions": ["https://stac-extensions.github.io/datacube/v2.2.0/schema.json"],
+      "id": "DAYMET_DISALEXI",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-114.1, 37],
+            [-109, 37],
+            [-109, 42],
+            [-114.1, 42],
+            [-114.1, 37]
+          ]
+        ]
+      },
+      "bbox": [-114.1, 37, -109, 42],
+      "properties": {
+        "ubm:member": "DAYMET_DISALEXI",
+        "gsd": 1000,
+        "start_datetime": "2005-01-01T00:00:00Z",
+        "end_datetime": "2024-12-01T00:00:00Z",
+        "cube:dimensions": {
+          "time": {
+            "type": "temporal",
+            "extent": ["2005-01-01T00:00:00Z", "2024-12-01T00:00:00Z"],
+            "step": "P1M"
+          },
+          "x": {
+            "type": "spatial",
+            "axis": "x",
+            "extent": [-114.1, -109],
+            "reference_system": 4326
+          },
+          "y": {
+            "type": "spatial",
+            "axis": "y",
+            "extent": [37, 42],
+            "reference_system": 4326
+          }
+        },
+        "cube:variables": {
+          "AET": {
+            "dimensions": ["time", "y", "x"],
+            "type": "data",
+            "unit": "mm"
+          },
+          "Recharge": {
+            "dimensions": ["time", "y", "x"],
+            "type": "data",
+            "unit": "mm"
+          },
+          "Runoff": {
+            "dimensions": ["time", "y", "x"],
+            "type": "data",
+            "unit": "mm"
+          },
+          "irrigation": {
+            "dimensions": ["time", "y", "x"],
+            "type": "data",
+            "unit": "mm"
+          },
+          "precip_and_snowmelt_input": {
+            "dimensions": ["time", "y", "x"],
+            "type": "data",
+            "unit": "mm"
+          },
+          "Soil_Water_End_Of_Previous_Timestep": {
+            "dimensions": ["time", "y", "x"],
+            "type": "data",
+            "unit": "mm"
+          },
+          "Soil_Saturation_Percent_End_Of_Timestep": {
+            "dimensions": ["time", "y", "x"],
+            "type": "data",
+            "unit": "percent"
+          },
+          "field_capacity": {
+            "dimensions": ["time", "y", "x"],
+            "type": "data",
+            "unit": "mm"
+          },
+          "wilting_point": {
+            "dimensions": ["time", "y", "x"],
+            "type": "data",
+            "unit": "mm"
+          },
+          "soil_porosity": {
+            "dimensions": ["time", "y", "x"],
+            "type": "data",
+            "unit": "1"
+          },
+          "soil_thickness": {
+            "dimensions": ["time", "y", "x"],
+            "type": "data",
+            "unit": "mm"
+          },
+          "Geo_K": {
+            "dimensions": ["time", "y", "x"],
+            "type": "data",
+            "unit": "m/day"
+          }
+        },
+        "datetime": null
+      },
+      "links": [
+        {
+          "rel": "root",
+          "href": "../../catalog.json",
+          "type": "application/json",
+          "title": "UGS Soil Water Balance"
+        },
+        {
+          "rel": "collection",
+          "href": "../collection.json",
+          "type": "application/json",
+          "title": "UBM ensemble raster"
+        },
+        {
+          "rel": "parent",
+          "href": "../collection.json",
+          "type": "application/json",
+          "title": "UBM ensemble raster"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "https://ubm-assets.geology.utah.gov/zarr/ubm/v1/DAYMET_DISALEXI",
+          "type": "application/vnd.zarr",
+          "title": "UBM ensemble raster (DAYMET_DISALEXI) — Icechunk-Zarr",
+          "icechunk:branch": "main",
+          "roles": ["data"]
+        }
+      },
+      "collection": "ubm-ensemble-raster"
+    }
+  ],
+  "numberMatched": 1,
+  "links": []
+}

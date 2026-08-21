@@ -3,6 +3,7 @@ import {
   normalizeHexColor,
   proportionalSizeRange,
   styleValue,
+  vectorColorExpression,
   type LayerStyle,
   type MarkerShape,
 } from "@geolibre/core";
@@ -18,7 +19,11 @@ const MARKER_PIXEL_RATIO = 2;
 // enormous canvas; the rendered size is set via the marker image's own pixels.
 const MIN_MARKER_SIZE = 6;
 const MAX_MARKER_SIZE = 96;
+const MAX_SVG_SOURCE_CACHE = 64;
 export const KML_ICON_URL_PROPERTY = "__geolibre_kml_icon_url";
+const svgSourceCache = new Map<string, Promise<string | null>>();
+// The expression heads whose outputs markerImageValue rewrites into sprite ids.
+const COLOR_BRANCH_HEADS: ReadonlySet<string> = new Set(["match", "step", "case"]);
 
 const BUILTIN_SHAPES: ReadonlySet<MarkerShape> = new Set([
   "circle",
@@ -88,8 +93,53 @@ export function loadMarkerSvgImage(markup: string): Promise<HTMLImageElement | n
   });
 }
 
-function loadSvgMarker(markup: string, size: number): Promise<GeneratedImageResult | null> {
-  const src = resolveSvgSource(markup);
+function replaceSvgColorParameters(markup: string, color: string): string {
+  return markup
+    .replace(/param\(fill\)/gi, color)
+    .replace(/param\(fill-opacity\)/gi, "1")
+    .replace(/param\(outline\)/gi, color)
+    .replace(/param\(outline-opacity\)/gi, "1")
+    .replace(/param\(outline-width\)/gi, "0");
+}
+
+async function colorizedSvgSource(markup: string, color: string): Promise<string | null> {
+  let sourceMarkup = markup;
+  if (/^(?:https?:|data:image\/svg\+xml)/i.test(markup)) {
+    let pending = svgSourceCache.get(markup);
+    if (!pending) {
+      pending = fetch(markup)
+        .then((response) => (response.ok ? response.text() : null))
+        .catch(() => null);
+      if (svgSourceCache.size >= MAX_SVG_SOURCE_CACHE) {
+        const oldest = svgSourceCache.keys().next().value;
+        if (oldest !== undefined) svgSourceCache.delete(oldest);
+      }
+      svgSourceCache.set(markup, pending);
+    }
+    const fetched = await pending;
+    if (fetched !== null) {
+      sourceMarkup = fetched;
+    } else {
+      // Do not keep a failed fetch cached: a transient network error would
+      // otherwise block every later color variant of the same source (and any
+      // styleimagemissing retry) until the entry is evicted. Dropping it only
+      // after the await still lets concurrent callers share the in-flight
+      // promise.
+      if (svgSourceCache.get(markup) === pending) svgSourceCache.delete(markup);
+      // Preserve the original source when a remote host blocks CORS. The
+      // marker still renders, although its QGIS color parameters cannot be
+      // resolved without access to the SVG text.
+    }
+  }
+  return resolveSvgSource(replaceSvgColorParameters(sourceMarkup, color));
+}
+
+async function loadSvgMarker(
+  markup: string,
+  color: string,
+  size: number,
+): Promise<GeneratedImageResult | null> {
+  const src = await colorizedSvgSource(markup, color);
   if (!src) return Promise.resolve(null);
   const ratio = MARKER_PIXEL_RATIO;
   const px = size * ratio;
@@ -193,7 +243,7 @@ export function markerIconSizeValue(style: LayerStyle): number | unknown[] {
  * @param style - The layer style.
  * @returns The image id, or `null` when no marker applies.
  */
-export function prepareMarker(style: LayerStyle): string | null {
+export function prepareMarker(style: LayerStyle, colorOverride?: string): string | null {
   if (!styleValue(style, "markerEnabled")) return null;
   const shape = styleValue(style, "markerShape");
   const size = markerBakedSize(style);
@@ -201,18 +251,57 @@ export function prepareMarker(style: LayerStyle): string | null {
   if (shape === "custom") {
     const markup = styleValue(style, "markerSvg").trim();
     if (!markup) return null;
-    const id = `geolibre-marker-svg-${hashText(markup)}-${size}`;
+    const color = colorOverride ?? markerColor(style);
+    const id = `geolibre-marker-svg-${hashText(`${markup}\0${color}`)}-${size}`;
     // Capture the markup in the factory closure so the lazy generator never
     // depends on a separate, evictable cache (which could blank the marker).
-    registerGeneratedImage(id, () => loadSvgMarker(markup, size));
+    registerGeneratedImage(id, () => loadSvgMarker(markup, color, size));
     return id;
   }
 
   if (!BUILTIN_SHAPES.has(shape)) return null;
-  const color = markerColor(style);
+  const color = colorOverride ?? markerColor(style);
   const id = `geolibre-marker-${shape}-${color.replace("#", "")}-${size}`;
   registerGeneratedImage(id, () => drawBuiltinMarker(shape, color, size));
   return id;
+}
+
+/**
+ * Resolve a marker's `icon-image` layout value. Categorized, graduated, and
+ * rule-based color expressions select a separately baked sprite per class,
+ * because ordinary bitmap sprites cannot be tinted per feature by MapLibre.
+ */
+export function markerImageValue(style: LayerStyle): string | unknown[] | null {
+  const fallback = markerColor(style);
+  const baseId = prepareMarker(style, fallback);
+  if (!baseId) return null;
+
+  const imageFor = (value: unknown): unknown => {
+    if (typeof value === "string") {
+      // Bake the canonical form: prepareMarker uses the color verbatim for both
+      // the sprite id and the fill, so a bare or shorthand hex ("fff") from a
+      // hand-authored expression would otherwise draw black, and "#FDE725"
+      // would bake a second sprite for a color already registered lowercase.
+      const normalized = normalizeHexColor(value);
+      return normalized ? (prepareMarker(style, normalized) ?? baseId) : baseId;
+    }
+    if (!Array.isArray(value)) return baseId;
+
+    const expression = [...value];
+    const firstOutput = expression[0] === "match" ? 3 : 2;
+    if (!COLOR_BRANCH_HEADS.has(String(expression[0]))) return baseId;
+    for (let index = firstOutput; index < expression.length; index += 2) {
+      expression[index] = imageFor(expression[index]);
+    }
+    if (expression[0] !== "step") {
+      expression[expression.length - 1] = imageFor(expression[expression.length - 1]);
+    }
+    return expression;
+  };
+  // A flat resolved color still goes through imageFor: rule-based mode with no
+  // drawable rules returns the else rule's color, which need not equal the
+  // layer's markerColor that baseId was baked from.
+  return imageFor(vectorColorExpression(style, fallback)) as string | unknown[];
 }
 
 function loadRasterMarker(url: string): Promise<GeneratedImageResult | null> {
@@ -232,7 +321,7 @@ function loadRasterMarker(url: string): Promise<GeneratedImageResult | null> {
  */
 export function prepareKmlFeatureIcons(
   collection: GeoJSON.FeatureCollection,
-  fallbackImage = "",
+  fallbackImage: unknown = "",
 ): unknown[] | null {
   const matches: unknown[] = [];
   const seen = new Set<string>();

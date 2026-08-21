@@ -5,7 +5,7 @@ import {
   scaleSpan,
   type MapScaleUnit,
 } from "@geolibre/core";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 
 // Re-exported so the nice-number rounding and unit conversion — now shared with
 // the Print Layout scale bar in `@geolibre/core` — can still be imported from

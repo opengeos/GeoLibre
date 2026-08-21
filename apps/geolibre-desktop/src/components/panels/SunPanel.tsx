@@ -165,7 +165,7 @@ function SunPanelCard() {
 
   return (
     <div
-      className="absolute z-30 rounded-lg border border-border bg-background/95 shadow-lg backdrop-blur"
+      className="absolute z-30 rounded-lg border border-border map-glass shadow-lg"
       style={{ left: position.x, top: position.y, width: PANEL_WIDTH }}
       role="dialog"
       aria-label={t("toolbar.sun.title")}

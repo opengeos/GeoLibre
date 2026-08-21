@@ -1,8 +1,183 @@
 @import "@geolibre/ui/globals.css";
+
 /* Supplies the custom-color/border-radius theme that @geolibre/ui's globals.css
    relies on via @apply (background, border, etc.). globals.css is intentionally
    config-agnostic; the consuming app provides the Tailwind config here. */
 @config "../tailwind.config.js";
+
+/* App typeface: IBM Plex Sans for UI, IBM Plex Mono for the numeric/coordinate
+   readouts (StatusBar, code, feature IDs). One matched superfamily, so the mono
+   readouts and the surrounding UI share a voice. Fontsource's own @font-face
+   stylesheets are loaded from main.tsx — see the note there for why they cannot
+   be @imported here. Self-hosted rather than CDN-loaded: the desktop build must
+   render offline, and the Tauri CSP is `default-src 'self'`.
+
+   This block drives both the `font-sans`/`font-mono` utilities and Tailwind's
+   preflight default, so no `font-family` on <body> is needed.
+
+   Plex covers latin, latin-ext, cyrillic, greek and vietnamese only. The
+   locales it does NOT cover (ar, fa, hi, ja, ka, ko, th, zh) rely on per-glyph
+   fallback to the system stack below — which is why that stack must stay a
+   full, ordered list rather than a bare `sans-serif`. */
+@theme {
+  --font-sans:
+    "IBM Plex Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Noto Sans", "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono:
+    "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* Persian (fa) is the one locale that needs a second webfont: Plex has no
+   Arabic-script coverage, so without this the UI falls back to whatever the
+   system happens to ship. Only the *arabic* subset is loaded — Vazirmatn also
+   publishes latin and latin-ext, but those duplicate Plex for 56 KB, and the
+   service worker precaches every emitted asset, so an unused subset is weight
+   every user downloads on SW install rather than a lazy per-glyph fetch.
+
+   Written out by hand rather than imported from main.tsx because fontsource
+   ships no subset-scoped entry point: both index.css and wght.css declare all
+   three subsets. The Tailwind-inlining hazard described in main.tsx does not
+   apply here — it is specific to @importing fontsource's CSS, whose relative
+   url(./files/*.woff2) never reaches Vite's asset pipeline. A bare package
+   specifier in a url() that Tailwind passes through is rewritten normally.
+
+   unicode-range is copied verbatim from the package's wght.css; keep it in sync
+   if @fontsource-variable/vazirmatn is bumped and the subset boundaries move. */
+@font-face {
+  font-family: "Vazirmatn Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("@fontsource-variable/vazirmatn/files/vazirmatn-arabic-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range:
+    U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E,
+    U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB,
+    U+10E60-10E7E, U+10EC2-10EC4, U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22,
+    U+1EE24, U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42, U+1EE47, U+1EE49,
+    U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54, U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F,
+    U+1EE61-1EE62, U+1EE64, U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E,
+    U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9, U+1EEAB-1EEBB, U+1EEF0-1EEF1;
+}
+
+/* Vazirmatn covers the Arabic script; Plex stays second so the Latin text that
+   remains in a Persian UI (layer names, coordinates, product names) keeps the
+   same voice as every other locale instead of dropping to system-ui. */
+html:lang(fa) {
+  --font-sans:
+    "Vazirmatn Variable", "IBM Plex Sans Variable", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Noto Sans Arabic", "Noto Sans", "Helvetica Neue", Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+/* Map-floating chrome, a.k.a. "instrument glass".
+
+   The distinction this encodes: chrome docked BESIDE the map (top toolbar,
+   status bar, side panels) is fully opaque, while panels that hover OVER the
+   map are translucent and blurred so the data reads through them. Translucency
+   is the signal for "this floats above your map" — which is why it must not
+   spread to docked chrome or to dialogs, which sit on a dimmed overlay rather
+   than on the map.
+
+   Codified here because the recipe was already in use across 11 components
+   with drifted values — bg-background/90 vs /95, and backdrop-blur-sm vs -md vs
+   bare backdrop-blur — so tuning the look meant finding every copy. Components
+   keep their own radius, border, shadow and padding; this owns only the surface
+   itself.
+
+   Must be an `@utility`, i.e. inside Tailwind's utilities layer — NOT an
+   unlayered plain class. Unlayered CSS beats every layered declaration for the
+   same property, and cascade-layer precedence is resolved *before* specificity,
+   so an unlayered `.map-glass { background-color }` also silently beats
+   `hover:bg-accent`. That killed the hover fill on MapGrid's pane buttons and
+   the CollaborationStatusBadge toggle — verified dead, not theoretical. Inside
+   the layer, `.hover\:bg-accent:hover` (0,2,0) outranks `.map-glass` (0,1,0)
+   and hover works again.
+
+   The @supports fallback is nested so it stays in the layer too; hoisting it
+   out would reintroduce exactly the same bug for browsers without
+   backdrop-filter. Without the blur, 85% over live imagery is unreadable.
+
+   The saturate() boost keeps basemap imagery from going muddy under the blur. */
+@utility map-glass {
+  background-color: hsl(var(--background) / 0.85);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background-color: hsl(var(--background) / 0.97);
+  }
+}
+
+/* Elevation-tied shadow scale, replacing Tailwind's stock one. Each step maps to
+   a surface in the ladder rather than being picked by eye:
+
+     shadow-xs   form field — input, textarea, select, colour picker
+     shadow-sm   resting control / inline card
+     shadow-md   popover, dropdown, tooltip
+     shadow-lg   panel floating over the map
+     shadow-xl   modal dialog
+
+   shadow-xs matters more than its name suggests: it is what @geolibre/ui's form
+   primitives use, so leaving it on the stock colour would have left every input,
+   textarea, select and colour field in the app on the invisible-in-dark shadow
+   this block exists to fix. Bare `shadow` is defined too (one use, slider.tsx).
+   shadow-2xl and shadow-inner are unused; add them here if that changes,
+   otherwise they silently fall back to Tailwind's 10% black.
+
+   Redefining the tokens fixes all ~65 existing shadow sites without touching a
+   single component. The colours come from --elev-penumbra/--elev-umbra
+   (packages/ui/src/globals.css), which are theme-aware — Tailwind's built-in
+   scale hardcodes 10% black, so dark mode previously had no visible shadows at
+   all.
+
+   The colours are written bare here: Tailwind wraps each one in
+   var(--tw-shadow-color, …) when it generates the utility, so `shadow-<color>`
+   overrides keep working without spelling the wrapper out (writing it manually
+   just nests the fallback twice). */
+@theme {
+  --shadow-xs: 0 1px 1px 0 var(--elev-penumbra);
+  --shadow-sm: 0 1px 2px 0 var(--elev-penumbra), 0 1px 3px 0 var(--elev-umbra);
+  --shadow: 0 1px 2px 0 var(--elev-penumbra), 0 1px 3px 0 var(--elev-umbra);
+  --shadow-md: 0 2px 4px -1px var(--elev-penumbra), 0 4px 8px -2px var(--elev-umbra);
+  --shadow-lg: 0 4px 8px -2px var(--elev-penumbra), 0 12px 20px -4px var(--elev-umbra);
+  --shadow-xl: 0 8px 16px -4px var(--elev-penumbra), 0 24px 40px -8px var(--elev-umbra);
+}
+
+/* One global reduced-motion guard. Previously only two components respected the
+   preference while ~53 transition sites ignored it. Motion is reduced to a
+   near-instant cross-fade rather than removed outright, so state changes stay
+   perceptible (an abrupt swap is its own accessibility problem) — and scroll
+   behaviour is pinned to auto so programmatic smooth scrolls stop animating. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Indeterminate progress is exempt. The blanket rule above would give a
+     spinner a single 0.01ms iteration and then freeze it mid-rotation, so
+     during a long raster/segmentation/conversion job the UI would look hung —
+     a worse outcome for the same user than the abrupt transitions this guard
+     exists to fix. There are ~70 animate-spin sites and 6 animate-pulse.
+
+     Slowed rather than stopped: the point of the preference is to avoid large
+     vestibular-triggering motion, which a small in-place spinner is not, so
+     halving the speed keeps the "still working" signal while calming it. */
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  .animate-pulse {
+    animation-duration: 3s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
 
 html,
 body,
@@ -922,6 +1097,21 @@ body,
   pointer-events: none;
   position: absolute;
   z-index: 2;
+}
+
+/*
+ * Geoman's `text_marker` mode (via the GeoEditor plugin) appends a bare
+ * <textarea> into the map container with only inline position/opacity — no
+ * class, no appearance. `all: revert` undoes Tailwind's Preflight reset, which
+ * leaves it transparent and borderless (invisible while you type); its inline
+ * styles outrank the revert, so positioning survives. The z-index clears the
+ * Effects plugin's `z-index: 4` map canvas, and must come after `all`.
+ * Direct child only — that is the sole way to target the element, which carries
+ * no class, so re-check it on `@geoman-io/maplibre-geoman-free` bumps.
+ */
+.maplibregl-map > textarea {
+  all: revert;
+  z-index: 10;
 }
 
 /*
@@ -1865,10 +2055,12 @@ body,
 
 /* Maptoolkit logo control (Controls → Logos → Maptoolkit logo). The branding
    companion to Maptoolkit basemaps; mirrors MapLibre's own logo control. The
-   wordmark is an inline SVG with its own brand colours, so it needs no theming —
-   only sizing/placement. Maptoolkit's attribution terms require a minimum height
-   of 24px, so the mark is pinned there. The container reuses `maplibregl-ctrl`
-   for corner margins, so drop the control-group chrome to leave just the logo. */
+   mark is their official attribution PNG (apps/geolibre-desktop/public/
+   maptoolkit-attribution.png) with its own fixed brand colours, so it needs no
+   theming — only sizing/placement. Maptoolkit's attribution terms require a
+   minimum height of 24px, so the mark is pinned there. The container reuses
+   `maplibregl-ctrl` for corner margins, so drop the control-group chrome to
+   leave just the logo. */
 .geolibre-maptoolkit-logo-ctrl {
   background: none;
   box-shadow: none;
@@ -1884,7 +2076,7 @@ body,
   opacity: 1;
 }
 
-.geolibre-maptoolkit-logo svg {
+.geolibre-maptoolkit-logo img {
   display: block;
   height: 24px;
   width: auto;
@@ -3585,7 +3777,14 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   stroke-width: 1.5;
 }
 
-/* Hover readout */
+/* Hover readout. Its box must measure exactly one line whether or not it holds
+   text: the chart above it is `flex: 1 1 auto`, so any height the readout gains
+   on hover is taken out of the chart, which retriggers the chart's
+   ResizeObserver, which redraws and clears the readout again — the pointer sees
+   a flickering chart and a value that never settles. Hence an explicit
+   line-height matching min-height (the inherited 1.4 would make a filled line
+   15.4px against a 14px empty box) and nowrap, so a long
+   "distance · elevation" string in a narrow panel cannot wrap to two lines. */
 .elevation-profile-readout {
   margin-top: 6px;
   text-align: center;
@@ -3593,6 +3792,10 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   font-weight: 500;
   color: var(--ep-text);
   min-height: 14px;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .elevation-profile-readout:empty {

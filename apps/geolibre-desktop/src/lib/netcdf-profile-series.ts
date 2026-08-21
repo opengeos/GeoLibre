@@ -72,14 +72,25 @@ function tickCount(min: number, max: number, step: number): number {
  * @param max - Domain end.
  * @param target - Roughly how many ticks to aim for; round numbers win over
  *   hitting it exactly, so the result lands near it rather than on it.
+ * @param options.integerOnly - Restrict the step to whole numbers, for an axis
+ *   whose positions are counts rather than measurements. A band axis runs 1, 2,
+ *   3 …, so a tick at "1.5" labels a band that does not exist; a wavelength axis
+ *   has no such constraint and leaves this off. Falls back to the unrestricted
+ *   steps when no whole-numbered one fits, so a narrow domain still gets ticks.
  * @returns The ticks, ascending. A degenerate domain yields its single value.
  */
-export function niceTickValues(min: number, max: number, target: number): number[] {
+export function niceTickValues(
+  min: number,
+  max: number,
+  target: number,
+  options?: { integerOnly?: boolean },
+): number[] {
   const span = max - min;
   if (!Number.isFinite(span) || span <= 0 || target < 2) return [min];
 
   const middle = Math.floor(Math.log10(span / target));
   let best: { step: number; score: number } | null = null;
+  let bestAny: { step: number; score: number } | null = null;
   // Two powers either side of the estimate covers every step that could plausibly
   // land near `target`, without depending on where the rounding fell.
   for (let exponent = middle - 1; exponent <= middle + 2; exponent++) {
@@ -90,11 +101,16 @@ export function niceTickValues(min: number, max: number, target: number): number
       if (count < 2) continue;
       // Ties, and near-ties against 2.5, go to the rounder and sparser step.
       const score = Math.abs(count - target) + (multiplier === 2.5 ? 1 : 0);
-      if (!best || score < best.score || (score === best.score && step > best.step)) {
-        best = { step, score };
-      }
+      const better = (current: { step: number; score: number } | null) =>
+        !current || score < current.score || (score === current.score && step > current.step);
+      if (better(bestAny)) bestAny = { step, score };
+      // Ticks are multiples of the step, so a whole-numbered step is exactly the
+      // condition for whole-numbered labels, whatever the domain starts at.
+      if (options?.integerOnly && !Number.isInteger(step)) continue;
+      if (better(best)) best = { step, score };
     }
   }
+  best ??= bestAny;
   if (!best) return [min, max];
 
   const { step } = best;

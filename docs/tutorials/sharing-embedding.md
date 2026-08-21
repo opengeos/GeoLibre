@@ -52,6 +52,7 @@ Adjust the look with parameters (they combine):
 - `layout=viewer` gives a read-only map: Layers, View, Controls, basemaps, and
   search/identify stay, while everything that edits the project is hidden.
 - `layout=compact` keeps a slim, icon-only toolbar.
+- `toolbar=none` hides the top toolbar while keeping panels and the status bar.
 - `panels=none` hides the side and bottom panels but keeps the toolbar.
 - `theme=dark` forces the dark theme on load.
 

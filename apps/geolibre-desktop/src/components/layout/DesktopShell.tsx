@@ -2,7 +2,7 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
-import { MapCanvas, setExternalDeckLayerOrderHandler } from "@geolibre/map";
+import { getLayerBounds, MapCanvas, setExternalDeckLayerOrderHandler } from "@geolibre/map";
 import { useTranslation } from "react-i18next";
 import {
   addRasterToMap,
@@ -27,6 +27,7 @@ import {
   reattachSun,
   reattachRouteAnimation,
   reattachFlightSimulator,
+  restoreArcGISViewportLayers,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
@@ -35,6 +36,7 @@ import {
   setLocalRasterPicker,
   setNonTiledRasterHandler,
   setKmlFileImportHandler,
+  setTerrainMeasureBodyNames,
   setTerrainMeasureLabels,
   setViewStateLabels,
   startLayerGeometryEdit,
@@ -42,7 +44,14 @@ import {
   TIME_SLIDER_PLUGIN_ID,
   VIEWER_BLOCKED_PLUGIN_IDS,
 } from "@geolibre/plugins";
-import { convertGeoTiffToCog, isTiff, readGeoTiffInfo } from "@geolibre/processing";
+import {
+  convertGeoTiffToCog,
+  exceedsBrowserCogConversionLimit,
+  geoTiffSampleCount,
+  isTiff,
+  LARGE_BROWSER_COG_CONVERSION_SAMPLES,
+  readGeoTiffInfo,
+} from "@geolibre/processing";
 import {
   type CSSProperties,
   type DragEvent,
@@ -83,6 +92,7 @@ import {
   type DroppedRaster,
 } from "../../lib/tauri-io";
 import { buildKmlModelLayer } from "../../lib/kml-model-layer";
+import { PLANET_SWITCHER_LABEL_KEYS } from "../../lib/planet-labels";
 import { isPhotoDropFileName, type GeotaggedPhotoResult } from "../../lib/geotagged-photos";
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
 import { detectNonGeographicCoordinates } from "@geolibre/core";
@@ -106,6 +116,7 @@ import {
   useSwipeSplitViewExclusivity,
   useTimeSliderAutoClose,
 } from "../../hooks/usePlugins";
+import type { DataUrlLoadState } from "../../hooks/useDataUrlLoader";
 import { registerKmlSuperOverlayProtocol } from "../../lib/kml-super-overlay";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
@@ -115,6 +126,7 @@ import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
 import { useNetcdfIdentify } from "../../hooks/useNetcdfIdentify";
+import { useCogSpectralIdentify } from "../../hooks/useCogSpectralIdentify";
 import {
   useAutoCollapsedPanel,
   useReplaceLayersPanelId,
@@ -132,6 +144,7 @@ import { NetcdfSampleMarkers } from "./NetcdfSampleMarkers";
 import { NetcdfCubeSetupDialog } from "./NetcdfCubeSetupDialog";
 import { NetcdfCubeWindow } from "./NetcdfCubeWindow";
 import { NetcdfProfileWindow } from "./NetcdfProfileWindow";
+import { hasElevationConsent } from "../../lib/elevation-consent";
 import { MapLegendPanel } from "../legend/MapLegendPanel";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
@@ -183,14 +196,6 @@ import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
  * `window.confirm` (see the handlers below): a `false` return aborts that one
  * file's load without affecting the rest of a multi-file drop.
  */
-/**
- * Sample count (width × height × bands) above which in-browser COG conversion
- * gets an extra "this may be slow / memory-intensive" confirmation. The
- * converter reads the whole raster into memory as f64, so ~40M samples is
- * roughly where the transient allocation starts to be felt.
- */
-const LARGE_RASTER_SAMPLE_LIMIT = 40_000_000;
-
 function confirmLargeVectorDataset({ name, featureCount }: LargeVectorDataset) {
   return window.confirm(
     i18n.t("toolbar.item.largeVectorDesc", {
@@ -258,16 +263,30 @@ const VectorToolsDialog = lazy(() =>
     }),
 );
 
-const ModelBuilderDialog = lazy(() =>
-  import("../processing/ModelBuilderDialog")
+const BatchToolsDialog = lazy(() =>
+  import("../processing/BatchToolsDialog")
     .then((module) => ({
-      default: module.ModelBuilderDialog,
+      default: module.BatchToolsDialog,
     }))
     .catch((error) => {
       // Same chunk-load fallback rationale as ProcessingDialog above.
-      console.error("Failed to load ModelBuilderDialog", error);
+      console.error("Failed to load BatchToolsDialog", error);
       const Fallback = (() =>
-        null) as unknown as typeof import("../processing/ModelBuilderDialog").ModelBuilderDialog;
+        null) as unknown as typeof import("../processing/BatchToolsDialog").BatchToolsDialog;
+      return { default: Fallback };
+    }),
+);
+
+const ModelBuilderPanel = lazy(() =>
+  import("../processing/model-builder/ModelBuilderPanel")
+    .then((module) => ({
+      default: module.ModelBuilderPanel,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load ModelBuilderPanel", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/model-builder/ModelBuilderPanel").ModelBuilderPanel;
       return { default: Fallback };
     }),
 );
@@ -482,8 +501,11 @@ const PythonConsolePanel = lazy(() =>
 interface DesktopShellProps {
   layoutOptions: LayoutOptions;
   projectUrlLoadState?: ProjectUrlLoadState;
+  dataUrlLoadState?: DataUrlLoadState;
+  mapAppAPI: ReturnType<typeof createAppAPI> | null;
   themeMode: ThemeMode;
   onToggleThemeMode: () => void;
+  onMapReady?: (app: ReturnType<typeof createAppAPI>) => void;
 }
 
 function hasDroppedFiles(event: DragEvent<HTMLElement>): boolean {
@@ -535,8 +557,11 @@ type ShellStyle = CSSProperties &
 export function DesktopShell({
   layoutOptions,
   projectUrlLoadState,
+  dataUrlLoadState,
+  mapAppAPI,
   themeMode,
   onToggleThemeMode,
+  onMapReady,
 }: DesktopShellProps) {
   const { t } = useTranslation();
   const shellRef = useRef<HTMLDivElement>(null);
@@ -565,7 +590,17 @@ export function DesktopShell({
       meanSlope: t("terrainMeasure.meanSlope"),
       computing: t("terrainMeasure.computing"),
       partialData: t("terrainMeasure.partialData"),
+      heading: t("terrainMeasure.heading"),
+      finalHeading: t("terrainMeasure.finalHeading"),
+      bodyNote: t("terrainMeasure.bodyNote"),
     });
+    // The note names the body, so it uses the planet switcher's names rather
+    // than the ellipsoid records' datum-qualified ones.
+    setTerrainMeasureBodyNames(
+      Object.fromEntries(
+        Object.entries(PLANET_SWITCHER_LABEL_KEYS).map(([id, key]) => [id, t(key)]),
+      ),
+    );
   }, [t]);
   // The map's Fullscreen control maximizes the map *canvas* (it calls
   // requestFullscreen on the map container). Chromium promotes that element to
@@ -599,6 +634,29 @@ export function DesktopShell({
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => activeResizeCleanupRef.current?.(), []);
   const mapControllerRef = useRef<MapController | null>(null);
+
+  // Frame layers a `?data=` deep link added. Single non-GeoJSON datasets move
+  // the camera in their format-specific loader; a repeated `data` batch lists
+  // every added layer here so their stored extents are combined into one fit.
+  useEffect(() => {
+    const fitLayerIds = dataUrlLoadState?.fitLayerIds;
+    if (dataUrlLoadState?.status !== "loaded" || !fitLayerIds?.length) return;
+    const controller = mapControllerRef.current;
+    if (!controller) return;
+    const bounds = useAppStore
+      .getState()
+      .layers.filter((layer) => fitLayerIds.includes(layer.id))
+      .map(getLayerBounds)
+      .filter((value) => value !== null);
+    if (!bounds.length) return;
+    controller.fitBounds([
+      Math.min(...bounds.map((value) => value[0])),
+      Math.min(...bounds.map((value) => value[1])),
+      Math.max(...bounds.map((value) => value[2])),
+      Math.max(...bounds.map((value) => value[3])),
+    ]);
+  }, [dataUrlLoadState?.fitLayerIds, dataUrlLoadState?.status]);
+
   const projectHistory = useProjectHistory(mapControllerRef);
   const [projectHistoryOpen, setProjectHistoryOpen] = useState(false);
   // The place shown in the Wikipedia knowledge card, or null when it is closed.
@@ -833,6 +891,7 @@ export function DesktopShell({
   const collaboration = useCollaboration(mapControllerRef);
   const commentTool = useCommentTool({ mapControllerRef, collaboration });
   const [showResolvedComments, setShowResolvedComments] = useState(false);
+  const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
   const collaborateDialogOpen = useAppStore((s) => s.ui.collaborateDialogOpen);
   const setCollaborateDialogOpen = useAppStore((s) => s.setCollaborateDialogOpen);
   // When opened via a `?collab=<code>` share link, auto-open the Collaborate
@@ -853,7 +912,7 @@ export function DesktopShell({
   // Runtime postMessage API for a third-party host page that frames the app
   // (fly to a record, highlight it, open a tool; selection/view/tool events back
   // out). Off unless the deployment configured GEOLIBRE_EMBED_ORIGINS.
-  useEmbedApi(mapControllerRef);
+  useEmbedApi(mapControllerRef, mapAppAPI);
   // Same scripting surface, reached over the desktop Jupyter server's relay, so
   // a kernel driven from an EXTERNAL client (VS Code's Jupyter extension) can
   // control the map too. Inert until that server is running.
@@ -862,8 +921,13 @@ export function DesktopShell({
   // COG layers (read band values on click). Inert until a COG is identified.
   useRasterIdentify();
   useNetcdfIdentify(mapControllerRef, mapReadyGeneration);
+  useCogSpectralIdentify(mapControllerRef, mapReadyGeneration);
   const [layerPanelWidth, setLayerPanelWidth] = useState(initialSidePanelWidth);
   const [stylePanelWidth, setStylePanelWidth] = useState(initialSidePanelWidth);
+  const [stylePanelOpenRequest, setStylePanelOpenRequest] = useState(0);
+  const openStylePanel = useCallback(() => {
+    setStylePanelOpenRequest((request) => request + 1);
+  }, []);
   const [notebookPanelWidth, setNotebookPanelWidth] = useState(DEFAULT_NOTEBOOK_PANEL_WIDTH);
   // Opening the notebook (Processing → Jupyter Notebook) splits the workspace
   // 50/50 between the map and the notebook: we size the notebook to half of the
@@ -1099,13 +1163,21 @@ export function DesktopShell({
           window.alert(t("raster.rasterNotGeotiff", { name }));
           return;
         }
+        const info = await readGeoTiffInfo(bytes);
+        if (!info.ok) throw new Error("Not a readable GeoTIFF.");
+        const samples = geoTiffSampleCount(info);
+        if (exceedsBrowserCogConversionLimit(samples)) {
+          console.warn(
+            `[GeoLibre] Skipping in-browser COG conversion for "${name}": ${samples.toLocaleString()} decoded samples exceed the safe memory limit.`,
+          );
+          window.alert(t("raster.cogConvertTooLarge", { name }));
+          return;
+        }
         if (!bytesAreRemote) {
           // Local file: pick the prompt by size now that the header is cheap to
           // read, then confirm once. (A remote source already confirmed above.)
-          const info = await readGeoTiffInfo(bytes);
-          const samples = info.width * info.height * Math.max(info.bands, 1);
           const message =
-            samples > LARGE_RASTER_SAMPLE_LIMIT
+            samples > LARGE_BROWSER_COG_CONVERSION_SAMPLES
               ? t("raster.cogConvertLargeConfirm", {
                   name,
                   width: info.width,
@@ -1149,6 +1221,9 @@ export function DesktopShell({
     restoreRasterLayers(appAPI);
     restorePlanetaryComputerLayers(appAPI);
     restoreVectorLayers(appAPI);
+    // Re-bind saved ArcGIS feature layers to the viewport. Without this a
+    // reopened project's layer stays frozen on the extent it was saved with.
+    restoreArcGISViewportLayers(appAPI);
     // Re-stream saved LiDAR (COPC) point clouds. A `lidar-url` layer restores
     // into the store as inert metadata; the point cloud is loaded by the LiDAR
     // control, not the store, so without this the layer shows in the panel but
@@ -1227,7 +1302,8 @@ export function DesktopShell({
 
   const handleMapControllerReady = useCallback(() => {
     setMapReadyGeneration((generation) => generation + 1);
-  }, []);
+    onMapReady?.(createAppAPI(mapControllerRef));
+  }, [onMapReady]);
 
   // Keep the on-map compass (reset pitch/bearing) control's tooltip translated.
   // Re-runs when the controller (re)initialises (mapReadyGeneration) and on
@@ -2142,6 +2218,7 @@ export function DesktopShell({
             }}
             onToggleThemeMode={onToggleThemeMode}
             onOpenBasemapExtract={() => setBasemapExtractOpen(true)}
+            onAddComment={commentTool.toggleTool}
             viewer={layoutOptions.viewer}
           />
         </SectionErrorBoundary>
@@ -2168,6 +2245,8 @@ export function DesktopShell({
                 onActivateCommentTool={commentTool.toggleTool}
                 isCommentToolActive={commentTool.isActive}
                 onShowResolvedChange={setShowResolvedComments}
+                selectedCommentId={selectedCommentId}
+                onClearSelectedComment={() => setSelectedCommentId(null)}
               />,
               commentsContentEl,
             )
@@ -2219,7 +2298,9 @@ export function DesktopShell({
                   // On a phone-width viewport both start collapsed (panels overlay
                   // there), matching the mobile "panels default collapsed" behavior.
                   initialBuiltinExpanded={
-                    replaceLayersPanelId === BROWSER_PANEL_ID && !getIsMobileViewport()
+                    replaceLayersPanelId === BROWSER_PANEL_ID &&
+                    !getIsMobileViewport() &&
+                    !layoutOptions.panelsCollapsed
                   }
                   // The story-map presentation is the only standalone Layers
                   // autoCollapse trigger (the notebook collapses Style, not Layers).
@@ -2227,6 +2308,7 @@ export function DesktopShell({
                   renderBuiltin={({ collapsed, onCollapsedChange }) => (
                     <LayerPanel
                       mapControllerRef={mapControllerRef}
+                      collaborationApi={collaboration}
                       onResizeStart={startLayerPanelResize}
                       geometryEditLayerId={geometryEditLayerId}
                       onToggleGeometryEdit={handleToggleGeometryEdit}
@@ -2234,6 +2316,9 @@ export function DesktopShell({
                       onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
                       onOpenRasterStylePanel={() =>
                         openRasterLayerPanel(createAppAPI(mapControllerRef))
+                      }
+                      onOpenStylePanel={
+                        layoutOptions.stylePanelVisible ? openStylePanel : undefined
                       }
                       onOpenRasterSubset={setRasterSubsetLayer}
                       collapsed={collapsed}
@@ -2250,6 +2335,7 @@ export function DesktopShell({
                 ) : (
                   <LayerPanel
                     mapControllerRef={mapControllerRef}
+                    collaborationApi={collaboration}
                     onResizeStart={startLayerPanelResize}
                     geometryEditLayerId={geometryEditLayerId}
                     onToggleGeometryEdit={handleToggleGeometryEdit}
@@ -2258,8 +2344,13 @@ export function DesktopShell({
                     onOpenRasterStylePanel={() =>
                       openRasterLayerPanel(createAppAPI(mapControllerRef))
                     }
+                    onOpenStylePanel={layoutOptions.stylePanelVisible ? openStylePanel : undefined}
                     onOpenRasterSubset={setRasterSubsetLayer}
-                    autoCollapse={storymapPresenting || autoCollapsedPanel === "layers"}
+                    autoCollapse={
+                      storymapPresenting ||
+                      layoutOptions.panelsCollapsed ||
+                      autoCollapsedPanel === "layers"
+                    }
                   />
                 )}
               </SectionErrorBoundary>
@@ -2298,6 +2389,7 @@ export function DesktopShell({
           >
             <MapGrid>
               <MapCanvas
+                canUseRemoteElevation={hasElevationConsent}
                 controllerRef={mapControllerRef}
                 onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 onControllerReady={handleMapControllerReady}
@@ -2305,7 +2397,10 @@ export function DesktopShell({
               <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
               <CommentMapOverlay
                 mapControllerRef={mapControllerRef}
-                onSelectComment={() => openRightPanel(COMMENTS_PANEL_ID)}
+                onSelectComment={(commentId) => {
+                  setSelectedCommentId(commentId);
+                  openRightPanel(COMMENTS_PANEL_ID);
+                }}
                 showResolved={showResolvedComments}
               />
               <MapContextMenu
@@ -2374,6 +2469,23 @@ export function DesktopShell({
             displayName={t("shell.section.pluginFloatingPanels")}
           >
             <FloatingPanels />
+          </SectionErrorBoundary>
+          {/* Mounted inside the map area (like FloatingPanels) so the canvas
+              floats over the map and drag-clamps to it, not to the whole
+              window — the user keeps their layers in view while building. */}
+          <SectionErrorBoundary label="Model Builder" displayName={t("shell.section.modelBuilder")}>
+            <Suspense fallback={null}>
+              <ModelBuilderPanel
+                mapControllerRef={mapControllerRef}
+                onAddRaster={async (bytes, name, fileName) => {
+                  // Same Uint8Array -> BlobPart cast as ProcessingDialog below.
+                  const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
+                    type: "image/tiff",
+                  });
+                  await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
+                }}
+              />
+            </Suspense>
           </SectionErrorBoundary>
           {/* Mounted here (inside the map area, like FloatingPanels) so the
               selection panels anchor to the map canvas's top-left corner and
@@ -2476,6 +2588,7 @@ export function DesktopShell({
                     <StylePanel
                       mapControllerRef={mapControllerRef}
                       onResizeStart={startStylePanelResize}
+                      openRequest={stylePanelOpenRequest}
                       collapsed={collapsed}
                       onCollapsedChange={onCollapsedChange}
                       // Controlled mode ignores autoCollapse for collapsing (the
@@ -2496,8 +2609,12 @@ export function DesktopShell({
                 <StylePanel
                   mapControllerRef={mapControllerRef}
                   onResizeStart={startStylePanelResize}
+                  openRequest={stylePanelOpenRequest}
                   autoCollapse={
-                    notebookOpen || storymapPresenting || autoCollapsedPanel === "style"
+                    notebookOpen ||
+                    storymapPresenting ||
+                    layoutOptions.panelsCollapsed ||
+                    autoCollapsedPanel === "style"
                   }
                 />
               </SectionErrorBoundary>
@@ -2651,7 +2768,7 @@ export function DesktopShell({
         <NetworkToolsDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <Suspense fallback={null}>
-        <ModelBuilderDialog mapControllerRef={mapControllerRef} />
+        <BatchToolsDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <Suspense fallback={null}>
         <StatisticsToolsDialog mapControllerRef={mapControllerRef} />
@@ -2693,6 +2810,18 @@ export function DesktopShell({
           className="pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
         >
           {projectUrlLoadState.error}
+        </div>
+      ) : null}
+      {dataUrlLoadState?.error ? (
+        // A link can carry both `url=` and `data=`, and both loaders can fail.
+        // Drop below the project banner so neither message is covered.
+        <div
+          aria-live="assertive"
+          className={`pointer-events-none absolute left-1/2 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg ${
+            projectUrlLoadState?.error ? "top-28" : "top-14"
+          }`}
+        >
+          {dataUrlLoadState.error}
         </div>
       ) : null}
       {crsWarning ? (

@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import { type RefObject, useEffect } from "react";
-import type { MapController } from "@geolibre/map";
+import { getLayerBounds, type MapController } from "@geolibre/map";
 import { captureMapImage } from "../lib/print-layout-export";
 import {
   buildEmbedEvent,
@@ -20,6 +20,8 @@ import {
 import { fetchProjectFromUrl, projectUrlFromLocation } from "../lib/project-url";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { isKnownWhiteboxToolId } from "../lib/whitebox-tool-url";
+import { loadDataUrl } from "./useDataUrlLoader";
+import type { createAppAPI } from "./usePlugins";
 
 // Runtime `postMessage` API for a host page that frames GeoLibre (issue #1462).
 // Where `?url=`, `?maponly`, and `?tool=` configure the app once at load time,
@@ -52,9 +54,16 @@ const VIEW_THROTTLE_MS = 250;
  * @param mapControllerRef - Ref to the live map controller (shared with
  *   MapCanvas and the other bridges), used to drive and read the camera.
  */
-export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): void {
+export function useEmbedApi(
+  mapControllerRef: RefObject<MapController | null>,
+  mapAppAPI: ReturnType<typeof createAppAPI> | null,
+): void {
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // `ready` promises that every command is usable. Plugin-backed data loaders
+    // join the API only after the map has initialized, so do not advertise the
+    // bridge during the earlier render where that API is still absent.
+    if (!mapAppAPI) return;
     const allowedOrigins = readEmbedOrigins();
     if (allowedOrigins.length === 0) return;
     const host = window.parent;
@@ -112,6 +121,17 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
     // host can tell its own load from one the user triggered.
     let projectSourceUrl: string | null = projectUrlFromLocation();
     let loadAbort: AbortController | null = null;
+    const dataLoadAborts = new Set<AbortController>();
+    let dataLoadQueue: Promise<void> = Promise.resolve();
+
+    const queueDataLoad = <T>(operation: () => Promise<T>): Promise<T> => {
+      const next = dataLoadQueue.then(operation, operation);
+      dataLoadQueue = next.then(
+        () => undefined,
+        () => undefined,
+      );
+      return next;
+    };
 
     const loadProjectFromUrl = async (url: string) => {
       // A second load supersedes the first; otherwise a slow fetch could land
@@ -224,6 +244,33 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
           const layer = buildEmbedLayer(command.spec, state.layers);
           state.addLayer(layer, command.spec.beforeId);
           return layer.id;
+        }
+        case "addData": {
+          const abort = new AbortController();
+          dataLoadAborts.add(abort);
+          const result = await queueDataLoad(() =>
+            loadDataUrl(mapAppAPI, command.url, {
+              styleUrl: command.styleUrl,
+              signal: abort.signal,
+              fit: command.fit,
+            }),
+          ).finally(() => dataLoadAborts.delete(abort));
+          if (command.fit) {
+            const bounds = useAppStore
+              .getState()
+              .layers.filter((layer) => result.fitLayerIds.includes(layer.id))
+              .map(getLayerBounds)
+              .filter((value) => value !== null);
+            if (bounds.length) {
+              controller()?.fitBounds([
+                Math.min(...bounds.map((value) => value[0])),
+                Math.min(...bounds.map((value) => value[1])),
+                Math.max(...bounds.map((value) => value[2])),
+                Math.max(...bounds.map((value) => value[3])),
+              ]);
+            }
+          }
+          return result.layerIds;
         }
         case "exportImage": {
           const map = controller()?.getMap();
@@ -365,11 +412,12 @@ export function useEmbedApi(mapControllerRef: RefObject<MapController | null>): 
       window.removeEventListener("message", handleMessage);
       unsubscribe();
       loadAbort?.abort();
+      for (const abort of dataLoadAborts) abort.abort();
+      dataLoadAborts.clear();
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (trailingTimer !== null) window.clearTimeout(trailingTimer);
       viewMap?.off("move", onMapMove);
       viewMap?.off("moveend", onMapMove);
     };
-    // Mount-only: mapControllerRef is a stable ref read lazily inside handlers.
-  }, [mapControllerRef]);
+  }, [mapControllerRef, mapAppAPI]);
 }

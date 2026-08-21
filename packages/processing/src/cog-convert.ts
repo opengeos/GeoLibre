@@ -53,6 +53,22 @@ export interface ConvertGeoTiffToCogOptions {
   compression?: CogWasmCompression;
 }
 
+/** Hard ceiling for the browser converter's decoded sample count. */
+export const MAX_BROWSER_COG_CONVERSION_SAMPLES = 100_000_000;
+
+/** Sample count above which callers should show an extra memory warning. */
+export const LARGE_BROWSER_COG_CONVERSION_SAMPLES = 40_000_000;
+
+/** Return the decoded sample count used by the conversion memory guard. */
+export function geoTiffSampleCount(info: Pick<GeoTiffInfo, "width" | "height" | "bands">): number {
+  return info.width * info.height * Math.max(info.bands, 1);
+}
+
+/** Whether a decoded sample count exceeds the safe conversion memory cap. */
+export function exceedsBrowserCogConversionLimit(samples: number): boolean {
+  return !Number.isSafeInteger(samples) || samples > MAX_BROWSER_COG_CONVERSION_SAMPLES;
+}
+
 let wasmReady: Promise<void> | null = null;
 
 /**
@@ -140,6 +156,12 @@ export async function convertGeoTiffToCog(
   try {
     const info = JSON.parse(reader.info_json()) as GeoTiffInfo;
     if (!info.ok) throw new Error("Not a readable GeoTIFF.");
+    const samples = geoTiffSampleCount(info);
+    if (exceedsBrowserCogConversionLimit(samples)) {
+      throw new Error(
+        `GeoTIFF has ${samples.toLocaleString()} decoded samples, exceeding the safe browser conversion limit.`,
+      );
+    }
     const { width, height, bands } = reader;
     const builder = new CogBuilder(width, height, bands);
     try {

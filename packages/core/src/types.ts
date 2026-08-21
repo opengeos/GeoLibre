@@ -1,4 +1,5 @@
 import type { FeatureCollection } from "geojson";
+import type { PrintLayoutConfig } from "./print-layout-config";
 
 export const OPENFREEMAP_BASEMAPS = [
   {
@@ -527,6 +528,14 @@ export interface LayerStyle {
   geometryGenerator: GeometryGeneratorType;
   /** Buffer distance in meters for the `"buffer"` generator. */
   geometryGeneratorBufferDistance: number;
+  /**
+   * Attribute driving the `"buffer"` generator's distance, so each feature is
+   * buffered by its own value in meters (QGIS data-defined override on a
+   * geometry-generator symbol). An empty string buffers every feature by the
+   * flat {@link geometryGeneratorBufferDistance}, which also stands in for
+   * features whose value is missing or non-numeric.
+   */
+  geometryGeneratorBufferProperty: string;
   /** Fill color (6-digit hex) for generated polygons and centroid points. */
   geometryGeneratorFillColor: string;
   /** Outline color (6-digit hex) for generated geometry. */
@@ -537,6 +546,24 @@ export interface LayerStyle {
   geometryGeneratorOpacity: number;
   /** Circle radius in pixels for generated centroid points. */
   geometryGeneratorCircleRadius: number;
+  /**
+   * Attribute driving the radius of generated centroid points, scaling them
+   * between {@link geometryGeneratorSizeMinRadius} and
+   * {@link geometryGeneratorSizeMaxRadius} across
+   * {@link geometryGeneratorSizeMinValue} ..
+   * {@link geometryGeneratorSizeMaxValue} (proportional symbols on the derived
+   * centroids). An empty string draws every centroid at the flat
+   * {@link geometryGeneratorCircleRadius}.
+   *
+   * Deliberately separate from {@link proportionalSizeProperty}: that one also
+   * drives line width, so reusing it here would resize a polygon layer's
+   * outlines as a side effect of sizing its centroids.
+   */
+  geometryGeneratorSizeProperty: string;
+  geometryGeneratorSizeMinValue: number;
+  geometryGeneratorSizeMaxValue: number;
+  geometryGeneratorSizeMinRadius: number;
+  geometryGeneratorSizeMaxRadius: number;
   rasterBrightnessMin: number;
   rasterBrightnessMax: number;
   rasterSaturation: number;
@@ -639,11 +666,17 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   lineDecorationSpacing: 80,
   geometryGenerator: "none",
   geometryGeneratorBufferDistance: 1000,
+  geometryGeneratorBufferProperty: "",
   geometryGeneratorFillColor: "#f59e0b",
   geometryGeneratorStrokeColor: "#b45309",
   geometryGeneratorStrokeWidth: 2,
   geometryGeneratorOpacity: 0.4,
   geometryGeneratorCircleRadius: 5,
+  geometryGeneratorSizeProperty: "",
+  geometryGeneratorSizeMinValue: 0,
+  geometryGeneratorSizeMaxValue: 100,
+  geometryGeneratorSizeMinRadius: 4,
+  geometryGeneratorSizeMaxRadius: 24,
   rasterBrightnessMin: 0,
   rasterBrightnessMax: 1,
   rasterSaturation: 0,
@@ -853,6 +886,24 @@ export interface LayerConnection {
 }
 
 /**
+ * Configuration for automatic feature editor tracking (Issue #1677).
+ * Maintains `created_by`, `created_at`, `edited_by`, `edited_at` fields
+ * automatically when features are created or updated.
+ */
+export interface EditorTrackingConfig {
+  /** `true` enables automatic creation/edit timestamp and author stamping. */
+  enabled: boolean;
+  /** Field name for creation author (default `"created_by"`). */
+  createdByField?: string;
+  /** Field name for creation timestamp (default `"created_at"`). */
+  createdAtField?: string;
+  /** Field name for last-edit author (default `"edited_by"`). */
+  editedByField?: string;
+  /** Field name for last-edit timestamp (default `"edited_at"`). */
+  editedAtField?: string;
+}
+
+/**
  * Visibility of a layer's attribute field.
  * - "hidden": Not shown in the attribute table, identify popup, tooltips, or field pickers, but remains in the data.
  * - "excluded": Removed entirely from the data when the project is shared or exported.
@@ -870,6 +921,10 @@ export interface GeoLibreLayer {
   metadata: Record<string, unknown>;
   beforeId?: string;
   geojson?: FeatureCollection;
+  /**
+   * Automatic editor tracking configuration for feature creation/updates.
+   */
+  editorTracking?: EditorTrackingConfig;
   /**
    * Field-level visibility overrides. Fields marked as "excluded" are physically
    * removed from the data during export and sharing.
@@ -1099,6 +1154,21 @@ export type CollaborationRole = "host" | "guest";
 /** Whether guests may edit (`co-edit`) or only watch (`view-only`). */
 export type CollaborationMode = "view-only" | "co-edit";
 
+export interface ParticipantIdentity {
+  provider: string;
+  userId: string;
+  username: string;
+}
+
+export interface CollabInvite {
+  token: string;
+  role: CollaborationMode;
+  createdAt: number;
+  maxUses?: number;
+  useCount: number;
+  revoked: boolean;
+}
+
 export interface CollaborationParticipant {
   clientId: string;
   displayName: string;
@@ -1110,6 +1180,8 @@ export interface CollaborationParticipant {
    * `null` for the host (the host can always edit).
    */
   editOverride: boolean | null;
+  /** Optional account identity when signed-in identity binding is enabled. */
+  identity?: ParticipantIdentity | null;
 }
 
 /** A remote participant's live cursor + viewport, used to render presence. */
@@ -1153,6 +1225,19 @@ export interface CollaborationState {
   followHost: boolean;
   /** Recent session chat, oldest first, capped to a bounded window (#754). */
   chat: CollaborationChatMessage[];
+  /** Session flag requiring participants to be signed in. */
+  requireIdentity: boolean;
+  /**
+   * Whether the connected relay has an identity issuer configured. False (the
+   * default) means it cannot verify a sign-in, so the host UI hides the
+   * "require a signed-in account" toggle instead of offering a gate that would
+   * lock every guest out.
+   */
+  identitySupported: boolean;
+  /** Layer IDs marked locked by the host. */
+  lockedLayerIds: string[];
+  /** Active session invites minted by host. */
+  invites: CollabInvite[];
   /** Last human-readable error, surfaced in the Collaborate dialog. */
   error: string | null;
 }
@@ -1185,6 +1270,23 @@ export interface MapPreferences {
    * `"imperial"` for feet/miles or `"nautical"` for nautical miles.
    */
   scaleUnit: MapScaleUnit;
+  /**
+   * Whether the status bar resolves and shows the ground elevation under the
+   * pointer (issue #1813). **Defaults to `false`**: with 3D terrain off the
+   * lookup falls back to the public Open-Meteo service, so hovering would send
+   * coordinates off the device for a readout the user never asked for. Toggled
+   * from Controls -> Elevation.
+   */
+  showPointerElevation: boolean;
+  /**
+   * Notation the status bar reports the pointer coordinate in: `"dd"` decimal
+   * degrees (default), `"dms"` degrees/minutes/seconds, `"ddm"` degrees and
+   * decimal minutes, or `"utm"` zone easting/northing. Stored as a string
+   * rather than a union so `@geolibre/core` does not have to depend on the
+   * formatter, which lives with the app's DMS helpers and the Gridlines
+   * plugin's UTM projection; the app normalises unknown values to `"dd"`.
+   */
+  coordinateFormat: string;
 }
 
 export interface RuntimeEnvironmentVariable {
@@ -1249,6 +1351,10 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     projection: "globe",
     ellipsoidId: "earth",
     scaleUnit: "metric",
+    // Off by default: turning it on can send pointer coordinates to a public
+    // elevation service, which should be an explicit choice.
+    showPointerElevation: false,
+    coordinateFormat: "dd",
   },
   environmentVariables: [],
   geocoding: {
@@ -1479,14 +1585,94 @@ export interface ProcessingModelStep {
 }
 
 /**
- * A reusable, sequential processing pipeline ("model" in QGIS Graphical Modeler
- * / ArcGIS ModelBuilder terms). Steps run in order; each step's result feeds the
- * next. Saved in the project file so it can be reloaded and re-run.
+ * What flows along a model edge. Vector nodes exchange FeatureCollections;
+ * raster nodes exchange GeoTIFF bytes. A port declaring `"any"` accepts either
+ * and is resolved to a concrete kind at run time by whatever is wired into it.
+ */
+export type ModelPortKind = "vector" | "raster" | "any";
+
+/** One connection point on a {@link ModelGraphNode}. */
+export interface ModelGraphPort {
+  /**
+   * Port id, unique within its node and direction. For a tool node's inputs
+   * this is the underlying tool parameter id, so wiring an edge and setting the
+   * parameter by hand are the same operation.
+   */
+  id: string;
+  label: string;
+  kind: ModelPortKind;
+  /** Inputs only: the run fails when nothing is wired in and no value is set. */
+  required?: boolean;
+}
+
+/**
+ * What a node does. `input` sources an existing project layer, `tool` runs a
+ * processing algorithm, and `output` names a result to add back to the map.
+ */
+export type ModelGraphNodeKind = "input" | "tool" | "output";
+
+/** One node on the Model Builder canvas. */
+export interface ModelGraphNode {
+  /** Stable id, unique within the graph; referenced by {@link ModelGraphEdge}. */
+  id: string;
+  kind: ModelGraphNodeKind;
+  /** Canvas position in graph coordinates (unscaled by zoom). */
+  x: number;
+  y: number;
+  /** `input` nodes: the project layer id this node sources. */
+  layerId?: string;
+  /**
+   * `tool` nodes: the tool's id within {@link provider}'s registry. Kept
+   * separate from the provider so the same short id can exist in both.
+   */
+  toolId?: string;
+  /** `tool` nodes: which registry resolves {@link toolId}. */
+  provider?: ModelToolProvider;
+  /** `tool` nodes: parameter values for everything not supplied by an edge. */
+  parameters?: Record<string, unknown>;
+  /** `output` nodes: the layer name given to the result added to the map. */
+  name?: string;
+}
+
+/**
+ * A directed connection from one node's output port to another node's input
+ * port. Ports are named, so a tool with several inputs (Clip's target and
+ * overlay, say) wires each one unambiguously.
+ */
+export interface ModelGraphEdge {
+  id: string;
+  from: string;
+  fromPort: string;
+  to: string;
+  toPort: string;
+}
+
+/** The node-and-edge graph authored on the Model Builder canvas. */
+export interface ProcessingModelGraph {
+  nodes: ModelGraphNode[];
+  edges: ModelGraphEdge[];
+}
+
+/** Which registry a {@link ModelGraphNode.toolId} is resolved against. */
+export type ModelToolProvider = "vector" | "whitebox";
+
+/**
+ * A reusable processing pipeline ("model" in QGIS Graphical Modeler / ArcGIS
+ * ModelBuilder terms), saved in the project file so it can be reloaded and
+ * re-run.
+ *
+ * Two shapes coexist. {@link steps} is the original strictly linear chain, and
+ * remains the only thing older builds understand. {@link graph} is the
+ * Model Builder's directed graph, which supports multi-input tools, branches
+ * and merges. When both are present `graph` wins; a model saved by the canvas
+ * also writes a `steps` projection whenever its graph happens to be a single
+ * chain, so older builds can still run it.
  */
 export interface ProcessingModel {
   id: string;
   name: string;
   steps: ProcessingModelStep[];
+  graph?: ProcessingModelGraph;
 }
 
 /**
@@ -1756,6 +1942,12 @@ export interface GeoLibreProject {
   plugins?: ProjectPluginState;
   /** User customizations for the Print Layout legend. */
   legend?: LegendConfig;
+  /**
+   * Print Layout composer settings (title, page size, orientation, blocks,
+   * atlas). Omitted while the composer is untouched, so projects that never
+   * opened it are unaffected (GeoLibre discussion #1992).
+   */
+  printLayout?: PrintLayoutConfig;
   storymap?: StoryMap;
   /** Saved processing pipelines (batch/model chaining; issue #344). */
   models?: ProcessingModel[];

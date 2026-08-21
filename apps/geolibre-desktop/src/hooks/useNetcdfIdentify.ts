@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import type { TFunction } from "i18next";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { MapController } from "@geolibre/map";

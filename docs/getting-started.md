@@ -4,12 +4,15 @@
 [![GeoLibre shared project](https://img.shields.io/badge/GeoLibre-share-green.svg)](https://share.geolibre.app)
 [![GeoLibre plugins](https://img.shields.io/badge/GeoLibre-plugins-green.svg)](https://plugins.geolibre.app)
 [![image](https://img.shields.io/pypi/v/geolibre.svg)](https://pypi.python.org/pypi/geolibre)
+[![R package](https://img.shields.io/badge/R-package-276DC3?logo=r&logoColor=white)](https://r.geolibre.app/)
 [![image](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/opengeos/GeoLibre/blob/main/python/examples/getting-started.ipynb)
 [![image](https://img.shields.io/conda/vn/conda-forge/geolibre.svg)](https://anaconda.org/conda-forge/geolibre)
 [![Conda Recipe](https://img.shields.io/badge/recipe-geolibre-green.svg)](https://github.com/conda-forge/geolibre-feedstock)
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-GeoLibre-0078D4?logo=windows)](https://apps.microsoft.com/detail/9nwt67rv531x)
-[![Mac App Store](https://img.shields.io/badge/Mac%20App%20Store-GeoLibre-000000?logo=apple&logoColor=white)](https://apps.apple.com/app/geolibre-desktop/id6796848769)
+[![Mac App Store](https://img.shields.io/badge/Mac%20App%20Store-GeoLibre-0D96F6?logo=apple&logoColor=white)](https://apps.apple.com/app/geolibre-desktop/id6796848769)
+[![App Store](https://img.shields.io/badge/App%20Store-GeoLibre-0D96F6?logo=appstore&logoColor=white)](https://apps.apple.com/app/geolibre/id6796039674)
 [![Google Play](https://img.shields.io/badge/Google%20Play-GeoLibre-01875F?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=org.geolibre.app)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-GeoLibre-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/open-data-in-geolibre/joinecgbfoldanidcoakpjgkbaceaooj)
 [![AUR version](https://img.shields.io/aur/version/geolibre-bin?logo=archlinux&label=AUR)](https://aur.archlinux.org/packages/geolibre-bin)
 [![FlatPark](https://img.shields.io/badge/FlatPark-GeoLibre-4A90D9?logo=flatpak)](https://flatpark.org/apps/app.geolibre.GeoLibre/)
 [![image](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -33,7 +36,7 @@ You can load browser-selected vector data supported by DuckDB-WASM Spatial, drag
 
 ### On the desktop
 
-The desktop app adds local filesystem dialogs, local MBTiles, local raster file reads, and project save/open. Installers are available for Windows, macOS, and Linux, including the Microsoft Store, the Mac App Store, Homebrew, winget, the AUR, COPR, and Flatpak.
+The desktop app adds local filesystem dialogs, local MBTiles, local raster file reads, and project save/open. Installers are available for Windows, macOS, and Linux, including the Microsoft Store, the Mac App Store, Homebrew, winget, the AUR, COPR, and Flatpak. (The Mac App Store listing is the sandboxed *desktop* build; the [App Store](https://apps.apple.com/app/geolibre/id6796039674) listing is the iPhone and iPad app.)
 
 [Download the desktop app](downloads.md){ .md-button .md-button--primary }
 
@@ -55,6 +58,20 @@ conda install -c conda-forge geolibre
 
 See the [Python Package](python.md) reference to get started.
 
+### In R
+
+The [`geolibre`](r.md) R package embeds GeoLibre as an interactive HTML widget
+in RStudio, Quarto, R Markdown, and Shiny. Install the development release from
+GitHub:
+
+```r
+install.packages("pak")
+pak::pak("opengeos/geolibre-r")
+```
+
+[Read the R package guide](r.md){ .md-button .md-button--primary }
+[Try the interactive example](https://r.geolibre.app/articles/interactive-map.html){ .md-button }
+
 ### On Android
 
 GeoLibre ships as a native Android app built from the same codebase, with a responsive touch layout for phones. Install it from Google Play and it updates automatically:
@@ -63,10 +80,19 @@ GeoLibre ships as a native Android app built from the same codebase, with a resp
 
 Signed APKs are also attached to each [GitHub release](https://github.com/opengeos/GeoLibre/releases) if you prefer to sideload. See [Android](android.md) for what runs on mobile, sideloading instructions, and build details.
 
+### On iOS
+
+GeoLibre ships as a native iOS app for iPhone and iPad, built from the same codebase, with the same responsive touch layout. Install it from the App Store and it updates automatically:
+
+[Get GeoLibre on the App Store](https://apps.apple.com/app/geolibre/id6796039674){ .md-button .md-button--primary }
+
+See [iOS](ios.md) for what runs on mobile and for build details.
+
 ## Video tutorials
 
 - [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 - [Geoprocessing in the Browser: 700+ Free GIS Tools in GeoLibre, Zero Install](https://youtu.be/W32bIQO_nG8)
+- [GeoLibre + GeoLens: A Modern GIS Stack for Self-Hosting Geospatial Data](https://youtu.be/kQqgrxXGd4o)
 
 ## Run from source
 
@@ -111,6 +137,14 @@ Open `http://localhost:5173`. The map and browser vector import support local ve
 Desktop filesystem dialogs, local MBTiles, local raster file reads, project save/open, and other filesystem operations require Tauri.
 
 ### Run with Docker
+
+!!! tip "Private deployments"
+    If you are deploying GeoLibre so a team can work with data that must stay on
+    your own infrastructure, read
+    [Self-Hosting & Private Data](self-hosting.md) alongside this section: it
+    covers hosting the data (with [GeoLens](https://getgeolens.com)), putting
+    both behind one sign-on layer, and why serving them from the same origin
+    removes the CORS and cookie problems.
 
 The repository includes a Dockerfile for the browser version of GeoLibre. It builds the Vite app and serves the production files with nginx:
 
@@ -199,7 +233,7 @@ docker run --rm -p 8080:80 \
   -e GEOLIBRE_AUTH_USER=admin \
   -e GEOLIBRE_AUTH_PASSWORD='change-me' \
   -e GEOLIBRE_AI_URL=/ai \
-  -e GEOLIBRE_AI_MODEL=openai/gpt-5.5 \
+  -e GEOLIBRE_AI_MODEL=openai/gpt-5.6-luna \
   -e GEOLIBRE_AI_PROXY_URL=https://ai.geolibre.app \
   -e GEOLIBRE_AI_PROXY_TOKEN="$GEOLIBRE_AI_PROXY_TOKEN" \
   ghcr.io/opengeos/geolibre:latest
@@ -210,6 +244,12 @@ injects it server-side and it never appears in frontend configuration. Direct
 inference calls to `ai.geolibre.app` without the token return `401`. If
 `GEOLIBRE_AI_URL` is unset, the image leaves the managed proxy disabled. Use
 HTTPS and prefer an `--env-file` or secrets manager.
+
+The NASA OPERA disaster workflow also uses this same `/ai` route for Tavily
+news searches. Store `TAVILY_API_KEY` as a secret on the `geolibre-ai-proxy`
+Worker, not in the Docker container. If you run a separate compatible news
+Worker, set its public URL with
+`GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT=https://news.example.org`.
 
 Enabling the proxy does not by itself restrict who may use it: whoever can
 reach `/ai` on the container spends against your Cloudflare account. Set
@@ -230,11 +270,146 @@ manager.
 
 Basic Auth is a single shared credential, not per-user accounts, and sends
 credentials with every request. For multi-user or SSO needs, put an auth proxy
-such as `oauth2-proxy` or Authelia in front of the unmodified image instead.
+such as `oauth2-proxy` or Authelia in front of the unmodified image instead (see
+[Self-Hosting & Private Data](self-hosting.md#putting-both-behind-one-auth-layer)
+for a worked example that also covers the data behind it).
 Also see the note in
 [`docker/nginx.conf`](https://github.com/opengeos/GeoLibre/blob/main/docker/nginx.conf)
 about dropping the `localhost` CSP allowances before exposing the image
 publicly.
+
+#### Clerk sign-in gate (optional)
+
+For individual user accounts instead of one shared password, configure a Clerk
+application for the deployment domain and pass its publishable key. (If you
+already use Auth0, skip to [the Auth0 gate](#auth0-sign-in-gate-optional) —
+it is the same feature with a different provider, and you configure one or the
+other, never both.)
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_CLERK_PUBLISHABLE_KEY='pk_live_...' \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+Clerk is not loaded and GeoLibre behaves exactly as before when neither this
+variable nor the build-time `VITE_GEOLIBRE_CLERK_PUBLISHABLE_KEY` is set; the
+runtime variable wins when both are.
+The gate applies only to the hosted web application; the separately built
+Tauri, mobile, and embedded/Jupyter builds remain available offline. It is a
+property of the build, not of the request, so framing the gated deployment or
+loading it with `?embed=1` still requires sign-in. Control who may register or
+sign in through the Clerk Dashboard. Configure TLS and the deployment domain in
+Clerk before using a production key.
+
+##### Approving users
+
+Who may sign in is decided in the Clerk Dashboard, not by GeoLibre:
+
+- **Restrictions → Restricted** turns off self-service sign-up. You add people
+  by invitation, through an enterprise connection, or by creating the user
+  manually. This needs no extra configuration here.
+- **Waitlist** lets visitors request access, which you approve one at a time
+  (**Waitlist** page → the menu next to a person → **Invite**, or **Revoke** to
+  decline). Enable the matching screen in GeoLibre so the sign-in card offers a
+  "Join the waitlist" link instead of a dead end:
+
+  ```bash
+  docker run --rm -p 8080:80 \
+    -e GEOLIBRE_CLERK_PUBLISHABLE_KEY='pk_live_...' \
+    -e GEOLIBRE_CLERK_WAITLIST=1 \
+    ghcr.io/opengeos/geolibre:latest
+  ```
+
+  The waitlist form lives at the `#/waitlist` fragment of the same page, so
+  moving between it and the sign-in card never reloads the app. It is off
+  unless you set this variable, because on a restricted instance the form would
+  collect requests that cannot be approved. Set the Clerk instance's sign-up
+  mode to **Waitlist** as well — the variable adds the screen, the Dashboard
+  decides whether Clerk accepts submissions to it. Setting it without
+  `GEOLIBRE_CLERK_PUBLISHABLE_KEY` is an error rather than a silently public
+  app.
+
+This client-side gate controls access to the GeoLibre interface but is not a
+server authorization boundary by itself. Keep `/sidecar`, `/ai`, and any other
+sensitive upstream service behind nginx authentication, Cloudflare Access, or a
+backend that verifies Clerk session tokens on every request. Use the existing
+`GEOLIBRE_AUTH_USER` and `GEOLIBRE_AUTH_PASSWORD` variables as well when the
+whole container must be protected before its assets are served.
+
+#### Auth0 sign-in gate (optional)
+
+The same whole-app sign-in gate, for deployments that already use Auth0. Create
+a **Single Page Application** in the Auth0 Dashboard and pass its domain and
+client ID — both are public values, and an Auth0 client *secret* is neither
+needed nor accepted here:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_AUTH0_DOMAIN='example.us.auth0.com' \
+  -e GEOLIBRE_AUTH0_CLIENT_ID='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+Both variables are required together, and configuring Auth0 *and* Clerk at once
+is refused at startup rather than resolved silently — pick one provider. As with
+Clerk, neither SDK is loaded when nothing is configured, the gate applies only
+to the hosted web application (the Tauri, mobile, and embedded/Jupyter builds
+are compiled without it), and it is a property of the build rather than the
+request, so `?embed=1` cannot switch it off. The build-time equivalents are
+`VITE_GEOLIBRE_AUTH0_DOMAIN` and `VITE_GEOLIBRE_AUTH0_CLIENT_ID`; the runtime
+variables win when both are present.
+
+In the Auth0 application's settings, these three fields do not take the same
+value:
+
+- **Allowed Callback URLs** and **Allowed Logout URLs** take the deployment URL
+  **with its trailing slash** — `https://gis.example.com/`, or
+  `https://gis.example.com/geolibre/` for a [subpath
+  deployment](#subpath-and-onboarding-build-arguments). Auth0 matches these
+  exactly, and a missing entry surfaces as a callback error instead of a login.
+- **Allowed Web Origins** takes the **origin only** — no trailing slash and no
+  path, so `https://gis.example.com` even for a subpath deployment. A path here
+  is not matched and breaks the silent-authentication request that restores an
+  existing session.
+
+Auth0 has no embedded sign-in card, so GeoLibre uses **Universal Login**: the
+visitor clicks *Sign in*, is redirected to your tenant's hosted login page, and
+is returned to the app. The URL they arrived on is carried through the round
+trip, so a shared `?project=…` link still opens its project after signing in.
+
+##### Approving users
+
+Who may sign in is decided in the Auth0 Dashboard, not by GeoLibre:
+
+- **Authentication → Database → Sign Ups** — turning off self-service sign-up
+  makes the deployment invite-only; you then add people from **User Management
+  → Users** or through an enterprise connection.
+- **Actions** — a post-login Action that calls `api.access.deny()` for anyone
+  outside your organization or role. GeoLibre shows the denial on its own error
+  screen with a way to try another account, rather than a blank page.
+
+There is no equivalent of Clerk's waitlist form, so `GEOLIBRE_CLERK_WAITLIST`
+has no Auth0 counterpart.
+
+The session is cached in the browser's local storage so a page reload does not
+bounce through the login page again. Two things follow from that, worth knowing
+before you enable the gate. Nothing here requests an API audience, so what is
+cached is an identity assertion that grants no access to any upstream service by
+itself, and no refresh token is stored — once it expires, renewal goes back
+through a silent request to your tenant, which succeeds only while the Auth0
+session cookie is available to answer it (a browser blocking that cookie sends
+the visitor to the login page instead). But the cached entry does outlive the
+tab, and GeoLibre runs plugins on the same origin as the app — a plugin you
+install can read it, as it could any other same-origin storage. Install plugins
+you trust, and keep the server-side protections below in place regardless.
+
+Like the Clerk gate, this controls access to the GeoLibre interface but is not a
+server authorization boundary. Keep `/sidecar`, `/ai`, and any other sensitive
+upstream service behind nginx authentication, Cloudflare Access, or a backend
+that verifies Auth0 tokens on every request, and use `GEOLIBRE_AUTH_USER` /
+`GEOLIBRE_AUTH_PASSWORD` as well when the whole container must be protected
+before its assets are served.
 
 #### Subpath and onboarding build arguments
 
@@ -409,6 +584,25 @@ Where to find the output:
 - **Web build** — static files in `apps/geolibre-desktop/dist/`. Serve this directory with any static web server (or the Docker image above).
 - **Desktop installers** — `apps/geolibre-desktop/src-tauri/target/release/bundle/`, with per-platform subfolders: `deb/`, `rpm/`, and `appimage/` on Linux; `msi/` and `nsis/` on Windows; `dmg/` and `macos/` on macOS. The unbundled executable is in `apps/geolibre-desktop/src-tauri/target/release/`. On Linux, `npm run tauri:build` builds `deb` and `rpm` by default; passing `--bundles` replaces that default selection rather than adding to it, so list every format you want, for example `npm run tauri:build -- --bundles deb,rpm,appimage` for all three.
 
+### Build-time flags
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `GEOLIBRE_PGLITE_CDN` | `1` (CDN) | Set `0` to bundle PGlite/PostGIS into the build (~22 MB) instead of loading from jsDelivr. |
+| `GEOLIBRE_CEREUS_CDN` | `1` (CDN) | Set `0` to bundle CereusDB WASM (~40 MB) instead of loading from jsDelivr. |
+| `GEOLIBRE_GDAL_CDN` | `1` (CDN) | Set `0` to disable GDAL export (the ~40 MB WASM/data are not bundled, just unavailable). |
+| `GEOLIBRE_DUCKDB_WASM_CDN` | `0` (bundled) | Set `1` to move DuckDB-WASM to jsDelivr (required for Cloudflare Pages' 25 MiB per-file limit). |
+| `GEOLIBRE_NO_EXTERNAL_CDN` | unset | Set `1` to strip **all GeoLibre-controlled** external CDN references from the build. Forces all `*_CDN=0` flags (so PGlite, CereusDB and DuckDB-WASM are bundled rather than fetched) and disables features that embed CDN URLs (storymap HTML export, built-in detection models, ONNX WASM, 3D Tiles decoders, GDAL export). Pyodide is not hard-disabled: the flag drops only its default index URL, so point `VITE_PYODIDE_INDEX_URL` at an approved mirror to keep it working. Some third-party packages keep their own internal CDN URLs, which this flag cannot remove — see [architecture.md](architecture.md). Mutually exclusive with `npm run lite:build` (and so with Cloudflare Pages/Workers hosting), which needs `GEOLIBRE_DUCKDB_WASM_CDN=1` to stay under the 25 MiB per-file cap; the build rejects that combination outright. Intended for enterprise deployments that cannot reference untrusted CDNs. |
+| `GEOLIBRE_STORE_BUILD` | unset | Set `1` for Microsoft Store MSIX builds (removes in-app updater). |
+| `GEOLIBRE_MAS_BUILD` | unset | Set `1` for Mac App Store builds (removes sidecar/server features). |
+| `GEOLIBRE_EMBED` | unset | Set `1` for the Jupyter embed wheel build. |
+
+Example — build with no external CDN dependencies:
+
+```bash
+GEOLIBRE_NO_EXTERNAL_CDN=1 npx vite build
+```
+
 ## Optional imagery credentials
 
 The Street View plugin can use Google Street View and Mapillary imagery. The 3D Tiles panel can also load Google Photorealistic 3D Tiles with the same Google Maps key. Create `apps/geolibre-desktop/.env.local` and set one or both provider credentials:
@@ -469,6 +663,38 @@ VITE_STADIA_API_KEY=your_stadia_api_key         # https://client.stadiamaps.com
 ```
 
 Protomaps reuses the key described in [Optional basemap credentials](#optional-basemap-credentials) above — set it once and both places pick it up. Until each key is set, the panel shows a "Get a … API key" prompt in place of the basemap rather than loading tiles.
+
+## Basemaps in mainland China
+
+GeoLibre's default basemaps (OpenFreeMap, Protomaps) are hosted outside mainland China with no presence inside it, so from there they range from slow to unreachable, as does most of the Basemaps control's catalog. Two places offer basemaps served from inside China.
+
+### The Regional section (no key)
+
+**New project** and **Change basemap** both carry a collapsed **Regional → China (中国)** section with five keyless basemaps: 高德地图, 高德卫星, 高德混合 (Amap street, satellite, and satellite-with-labels) and 腾讯地图, 腾讯深色 (Tencent street and dark). Pick one and it applies like any other basemap. Nothing to configure.
+
+### The Basemaps control (adds Tianditu)
+
+The Basemaps control plugin carries the same Amap and Tencent tiles plus **Tianditu (天地图)**, China's official National Platform for Common Geospatial Information Services: vector, imagery, and terrain, each with a separate label overlay. Search the panel for `Tianditu`, `Amap`, or `Tencent`, or for their Chinese names.
+
+Tianditu needs a free key from [console.tianditu.gov.cn](https://console.tianditu.gov.cn/api/key). Set it in **Settings → Environment Variables** (or type it into the panel's **API keys** view):
+
+```env
+VITE_TIANDITU_API_KEY=your_tianditu_api_key   # https://console.tianditu.gov.cn/api/key
+```
+
+Tianditu ships each basemap and its labels as separate layers. Turn on **Add basemaps (stack instead of replace)** in the panel to lay a label overlay over its base.
+
+### Which to pick
+
+| Provider | Datum | Key | Where |
+|----------|-------|-----|-------|
+| Tianditu (天地图) | CGCS2000 | required | Basemaps control |
+| Amap (高德地图) | GCJ-02 | none | Regional section, Basemaps control |
+| Tencent Maps (腾讯地图) | GCJ-02 | none | Regional section, Basemaps control |
+
+**Prefer Tianditu whenever the map also carries your own data.** Chinese law requires public map services to publish in GCJ-02, an offset datum that displaces features by roughly 100 to 700 m from WGS84; nothing in GeoLibre or MapLibre applies the shift, so your layers will visibly misalign over Amap or Tencent. Tianditu publishes in CGCS2000, which is close enough to WGS84 that ordinary data lines up.
+
+The Amap and Tencent tile endpoints are not documented public APIs. They are fine for exploration, but obtain a commercial key from the provider before building a product on either.
 
 Keys set via **Settings → Environment Variables**, or typed directly into the panel's **API keys** view (the key button in the panel header), apply at runtime without reopening the project. A key baked into `apps/geolibre-desktop/.env.local` is read at build time and needs a dev server restart. When `VITE_AMAZON_LOCATION_API_KEY` is set in the environment it takes precedence over a key typed in the panel; removing it from the environment clears it on the next page reload.
 

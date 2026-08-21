@@ -11,11 +11,11 @@
   },
   "dependencies": {
     "@geolibre/collab-core": "*",
-    "ws": "^8.21.1"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.2"
   },
   "engines": {
     "node": ">=22.13"

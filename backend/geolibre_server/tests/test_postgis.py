@@ -530,16 +530,74 @@ def test_write_keyless_insert_needs_pk_default(live_table) -> None:
 
 @requires_live_postgis
 def test_read_excludes_secondary_geometry_columns(live_table) -> None:
-    """Extra geometry columns must not surface as (hex WKB) attributes."""
+    """A requested geometry is loaded while the others stay out of attributes."""
     with psycopg.connect(LIVE_DSN) as conn:
         with conn.cursor() as cur:
             cur.execute(f"ALTER TABLE {TABLE} ADD COLUMN geom2 geometry(Point, 4326)")
-            cur.execute(f"UPDATE {TABLE} SET geom2 = ST_Transform(geom, 4326)")
+            cur.execute(f"UPDATE {TABLE} SET geom2 = ST_Translate(ST_Transform(geom, 4326), 10, 0)")
         conn.commit()
-    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    read = postgis_read(
+        PostgisReadRequest(
+            connection=LIVE_DSN,
+            table=TABLE,
+            geometry_column="geom2",
+        )
+    )
+    assert read["geometry_column"] == "geom2"
     properties = read["geojson"]["features"][0]["properties"]
     assert "geom2" not in properties
-    # And a round-trip write must leave the secondary geometry untouched.
+    assert "geom" not in properties
+    # The selected secondary geometry is the translated lon/lat point, not the
+    # alphabetically first column.
+    source_lon = _rows(f"SELECT ST_X(ST_Transform(geom, 4326)) FROM {TABLE} ORDER BY gid LIMIT 1")[
+        0
+    ][0]
+    assert read["geojson"]["features"][0]["geometry"]["coordinates"][0] == pytest.approx(
+        source_lon + 10
+    )
+    edited = read["geojson"]["features"][0]
+    edited_id = edited["id"]
+    original_primary = _rows(f"SELECT ST_AsEWKT(geom) FROM {TABLE} WHERE gid = %s", (edited_id,))[
+        0
+    ][0]
+    edited["geometry"] = _point(42, 43)
+    # Write-back updates the selected geometry and leaves the other registered
+    # geometry column untouched.
+    postgis_write(
+        PostgisWriteRequest(
+            connection=LIVE_DSN,
+            table=TABLE,
+            geometry_column="geom2",
+            geojson=read["geojson"],
+        )
+    )
+    assert _rows(f"SELECT count(*) FROM {TABLE} WHERE geom2 IS NOT NULL")[0][0] == 3
+    written = _rows(
+        f"SELECT ST_X(geom2), ST_Y(geom2), ST_AsEWKT(geom) FROM {TABLE} WHERE gid = %s",
+        (edited_id,),
+    )[0]
+    assert written[:2] == pytest.approx((42, 43))
+    assert written[2] == original_primary
+
+
+@requires_live_postgis
+def test_multi_geometry_omitted_column_uses_first(live_table) -> None:
+    """Omitted read and write selectors consistently use the first geometry."""
+    with psycopg.connect(LIVE_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"ALTER TABLE {TABLE} ADD COLUMN geom2 geometry(Point, 4326)")
+            cur.execute(f"UPDATE {TABLE} SET geom2 = ST_Translate(ST_Transform(geom, 4326), 10, 0)")
+        conn.commit()
+
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    assert read["geometry_column"] == "geom"
+    edited = read["geojson"]["features"][0]
+    edited_id = edited["id"]
+    original_secondary = _rows(
+        f"SELECT ST_AsEWKT(geom2) FROM {TABLE} WHERE gid = %s", (edited_id,)
+    )[0][0]
+    edited["geometry"] = _point(41, 42)
+
     postgis_write(
         PostgisWriteRequest(
             connection=LIVE_DSN,
@@ -547,7 +605,29 @@ def test_read_excludes_secondary_geometry_columns(live_table) -> None:
             geojson=read["geojson"],
         )
     )
-    assert _rows(f"SELECT count(*) FROM {TABLE} WHERE geom2 IS NOT NULL")[0][0] == 3
+    written = _rows(
+        f"SELECT ST_X(ST_Transform(geom, 4326)), "
+        f"ST_Y(ST_Transform(geom, 4326)), ST_AsEWKT(geom2) "
+        f"FROM {TABLE} WHERE gid = %s",
+        (edited_id,),
+    )[0]
+    assert written[:2] == pytest.approx((41, 42))
+    assert written[2] == original_secondary
+
+
+@requires_live_postgis
+@pytest.mark.parametrize("geometry_column", ["not_a_geometry", ""])
+def test_read_rejects_unknown_geometry_column(live_table, geometry_column: str) -> None:
+    with pytest.raises(HTTPException) as exc:
+        postgis_read(
+            PostgisReadRequest(
+                connection=LIVE_DSN,
+                table=TABLE,
+                geometry_column=geometry_column,
+            )
+        )
+    assert exc.value.status_code == 400
+    assert "Geometry column not found" in str(exc.value.detail)
 
 
 @requires_live_postgis

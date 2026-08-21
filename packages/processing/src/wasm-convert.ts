@@ -14,7 +14,7 @@
 // All three run entirely client-side, so the web build needs no Python sidecar
 // for them.
 import type { RunToolOptions, ToolResult } from "geolibre-wasm/tools";
-import type { WasmToolRequest, WasmToolResponse } from "./wasm-convert.worker";
+import { runWasmToolInBackground } from "./wasm-tool-runner";
 
 /** The subset of `geolibre-wasm/tools` these converters use. */
 interface ConvertToolsModule {
@@ -57,61 +57,6 @@ export async function initConvertTools(
 ): Promise<void> {
   const { initTools } = await loadToolsModule();
   await initTools(source);
-}
-
-/**
- * Run a tool on a one-shot Web Worker and resolve with its result.
- *
- * No timeout: how long a tool runs is bounded by the data, not the clock (a
- * country-scale tile pyramid is minutes), and cutting off work that would have
- * finished is worse than waiting. `error`/`messageerror` still reject, so the
- * promise settles on every failure the worker can report.
- */
-function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL("./wasm-convert.worker.ts", import.meta.url), {
-      type: "module",
-    });
-    worker.addEventListener("message", (event: MessageEvent<WasmToolResponse>) => {
-      worker.terminate();
-      if (event.data.ok) resolve(event.data.result);
-      else reject(new Error(event.data.error || `${request.tool} failed.`));
-    });
-    worker.addEventListener("error", (event) => {
-      worker.terminate();
-      reject(new Error(event.message || `The ${request.tool} worker failed.`));
-    });
-    // `error` does not fire when a posted message cannot be deserialized, which
-    // would otherwise leave this promise pending forever.
-    worker.addEventListener("messageerror", () => {
-      worker.terminate();
-      reject(new Error(`The ${request.tool} worker posted an undeserializable message.`));
-    });
-    // The input files are structured-cloned rather than transferred: these
-    // wrappers do not otherwise take ownership of the caller's bytes, and a
-    // neutered input array would be a trap the sibling converters don't set.
-    try {
-      worker.postMessage(request);
-    } catch (error) {
-      // A throw here (e.g. DataCloneError) rejects the promise on its own, but
-      // the worker is already spawned and would leak without this.
-      worker.terminate();
-      reject(error instanceof Error ? error : new Error(String(error)));
-    }
-  });
-}
-
-/**
- * Run a tool off the main thread where Workers exist, inline where they do not
- * (node, tests). The inline path is why {@link initConvertTools} still takes an
- * explicit wasm source: a worker resolves its own bundled copy instead.
- */
-async function runToolInBackground(request: WasmToolRequest): Promise<ToolResult> {
-  if (typeof Worker === "undefined") {
-    const { runTool } = await loadToolsModule();
-    return runTool(request.tool, { args: request.args, input: request.input });
-  }
-  return runToolOnWorker(request);
 }
 
 /** An input file for a WASM conversion: its name (the extension drives format
@@ -295,7 +240,7 @@ export interface VectorToPmtilesOptions {
  * `siblings`, exactly as in {@link convertVectorWithWasm}.
  *
  * Unlike its siblings here this runs on a Web Worker (see
- * {@link runToolInBackground}). Tiling is by far the heaviest of these tools —
+ * {@link runWasmToolInBackground}). Tiling is by far the heaviest of these tools —
  * a US-wide layer to the default zoom 14 is millions of tiles and minutes of
  * uninterrupted WASM — so running it on the main thread would freeze the UI for
  * the whole conversion. The others finish quickly enough not to warrant the
@@ -322,7 +267,7 @@ export async function tileVectorToPmtiles(
   ]);
   const files: Record<string, Uint8Array> = { [input.name]: input.data };
   for (const sibling of siblings) files[sibling.name] = sibling.data;
-  const result = await runToolInBackground({
+  const result = await runWasmToolInBackground({
     tool: "vector_to_pmtiles",
     args,
     input: files,

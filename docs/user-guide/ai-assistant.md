@@ -64,7 +64,7 @@ docker run --rm -p 8080:80 \
   -e GEOLIBRE_AUTH_USER=admin \
   -e GEOLIBRE_AUTH_PASSWORD='change-me' \
   -e GEOLIBRE_AI_URL=/ai \
-  -e GEOLIBRE_AI_MODEL=openai/gpt-5.5 \
+  -e GEOLIBRE_AI_MODEL=openai/gpt-5.6-luna \
   -e GEOLIBRE_AI_PROXY_URL=https://ai.geolibre.app \
   -e GEOLIBRE_AI_PROXY_TOKEN="$GEOLIBRE_AI_PROXY_TOKEN" \
   ghcr.io/opengeos/geolibre:latest
@@ -73,13 +73,20 @@ docker run --rm -p 8080:80 \
 If `GEOLIBRE_AI_URL` is unset, the Docker entrypoint leaves the managed proxy
 disabled and does not inject any AI proxy URL into the application.
 
+For news search in the NASA OPERA disaster workflow, add `TAVILY_API_KEY` as a
+secret on the `geolibre-ai-proxy` Worker. Do not pass that key to the container
+with `docker run -e`: the container never reads it. The browser uses the same
+authenticated `/ai` route, and nginx keeps both the Worker token and Tavily key
+out of frontend configuration. The desktop app reads a variable of the same name
+for [its own web search](#reading-keys-from-your-system-environment-desktop),
+which is a separate client-side mechanism unrelated to this one.
+
 Optional variables:
 
 | Variable | Purpose |
 | --- | --- |
 | `GEOLIBRE_ASSISTANT_PROVIDER` | Force a provider (`google` / `anthropic` / `openai`) when several keys are set. |
 | `GEOLIBRE_ASSISTANT_MODEL` | Pin a specific model id, overriding the default and the picker. |
-| `TAVILY_API_KEY` | Enable reliable [web search](#what-it-can-do) (the keyless fallback is best-effort and may be blocked by the browser). |
 
 When more than one provider key is configured, a **provider** dropdown appears in
 the panel header; a **model** dropdown lets you switch models for the selected
@@ -133,7 +140,8 @@ that field blank to keep using the environment value.
 
 ## Using it
 
-Type a request and press **Ctrl/Cmd + Enter** (or click **Send**). The
+Type a request and press **Enter** (or click **Send**); **Shift + Enter**
+inserts a newline, and **Ctrl/Cmd + Enter** still sends. The
 assistant streams its reply, runs tools as needed, and reports what it did. While
 it is working, **Send** becomes **Stop** — click it to cancel. **Clear** (the
 eraser icon) starts a fresh conversation.
@@ -157,6 +165,8 @@ operations, so its actions stay within GeoLibre's validated surface.
 | **Inspect layers** | Lists loaded layers, their geometry, attribute fields, and SQL table names (schema only — never your full data). |
 | **NL → Spatial SQL** | Generates and runs a **read-only** DuckDB Spatial SQL query through the [SQL Workspace](sql-workspace.md), and can add the result as a layer. |
 | **Geoprocessing** | Runs the registered [processing](processing.md) algorithms (buffer, clip, dissolve, intersection, difference, union, spatial join, simplify, H3 grids, …) and chains them into multi-step pipelines, adding each result as a layer. |
+| **Raster tools** | Searches the Whitebox catalog and runs its tools in the browser via WASM — hydrology (fill depressions, flow accumulation, extract streams), terrain (slope, aspect, hillshade), LiDAR, image processing, raster↔vector conversion — adding each result as a layer. |
+| **Model Builder** | Creates a validated, editable Model Builder workflow from a description, saves it with the project, and opens it for review before you run it. It draws on the same palette as the canvas — client-side vector tools plus the full Whitebox catalog — so a raster chain such as fill depressions → flow accumulation → extract streams is a valid model. If the canvas holds unsaved work or a run is still in flight, Model Builder asks before replacing it. |
 | **Symbology** | Applies a **graduated** (numeric) or **categorized** (text) color ramp to a layer. |
 | **Add data** | Adds a layer from a public GeoJSON URL, or an XYZ tile basemap by name (`osm`, `opentopomap`, `carto-dark`) or a custom `{z}/{x}/{y}` URL. |
 | **Earth observation** | Searches the Microsoft [Planetary Computer](https://planetarycomputer.microsoft.com) STAC catalog (Sentinel-2, Landsat, NAIP, DEMs, …) and adds an item over the current view as a raster layer — tiles are signed server-side, so no credentials are needed. |
@@ -186,6 +196,7 @@ count points in each polygon of the districts layer
 ```text
 buffer the roads by 100 meters
 buffer the roads by 100 m, then clip the buffer to the county boundary
+create a Model Builder model that buffers roads by 100 m, clips the result to counties, and names the output Road buffers
 dissolve the parcels by zoning type
 find where the floodplain overlaps the buildings (intersection)
 create an H3 hex grid at resolution 8 over the points and count points per cell

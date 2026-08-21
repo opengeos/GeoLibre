@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
+import { decodePolyline } from "../packages/core/src/polyline";
 import {
   DEFAULT_ROUTING_ENDPOINT,
   buildIsochroneRequest,
   buildMatrixRequest,
   buildRouteRequest,
   compareSequenceValues,
-  decodePolyline,
   getRoutingConfig,
   isochroneResponseToFeatures,
   matrixResponseToFeatures,
@@ -202,9 +202,9 @@ describe("decodePolyline", () => {
     ]);
   });
 
-  it("decodes a Valhalla precision-6 polyline at the default precision", () => {
+  it("decodes a Valhalla precision-6 polyline", () => {
     // Encodes [[-77.05, 38.88], [-77.04, 38.89], [-77.02, 38.9]] at precision 6.
-    assert.deepEqual(decodePolyline("_o`diA~gw}qC_pR_pR_pR_af@"), [
+    assert.deepEqual(decodePolyline("_o`diA~gw}qC_pR_pR_pR_af@", 6), [
       [-77.05, 38.88],
       [-77.04, 38.89],
       [-77.02, 38.9],
@@ -217,7 +217,7 @@ describe("decodePolyline", () => {
 
   it("drops a truncated trailing chunk instead of emitting a garbage coord", () => {
     // The full string above with its last coordinate cut off mid-chunk.
-    assert.deepEqual(decodePolyline("_o`diA~gw}qC_pR_pR_p"), [
+    assert.deepEqual(decodePolyline("_o`diA~gw}qC_pR_pR_p", 6), [
       [-77.05, 38.88],
       [-77.04, 38.89],
     ]);

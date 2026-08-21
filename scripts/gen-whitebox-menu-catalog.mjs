@@ -21,7 +21,15 @@ const SNAPSHOT_URL =
 // categories (e.g. "Raster") and are not in the Whitebox snapshot, so we group
 // them under their own heading within each top-level category instead of mixing
 // them into the long "General" list.
-const GEOLIBRE_SUBCATEGORY = "GeoLibre";
+//
+// The "(WASM)" qualifier is load-bearing (GeoLibre#1904): a bare "GeoLibre"
+// here collides with the Processing menu's own top-level "GeoLibre" submenu —
+// two unrelated things sharing one name in the same menu tree, with nothing in
+// the label to tell them apart. "(WASM)" is the app's established user-facing
+// shorthand for the in-browser runtime ("Run locally (WASM)"), so it reads as a
+// runtime note rather than a second product. Nothing keys off the literal: the
+// subcategory sort ranks against this constant, so renaming it is safe.
+const GEOLIBRE_SUBCATEGORY = "GeoLibre (WASM)";
 
 const OUT = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -129,9 +137,9 @@ async function main() {
   const geolibre = wasmTools.filter((t) => t.source === "geolibre");
   const geolibreIds = new Set(geolibre.map((t) => t.id));
   // Whitebox-sourced WASM tools the snapshot has never heard of. They belong in
-  // the menu under their own category's regular subheading (not the "GeoLibre"
-  // one — they are not GeoLibre-authored), and they are the reason the menu
-  // could list fewer tools than the WASM actually ships.
+  // the menu under their own category's regular subheading (not the
+  // GEOLIBRE_SUBCATEGORY one — they are not GeoLibre-authored), and they are
+  // the reason the menu could list fewer tools than the WASM actually ships.
   const snapshotIds = new Set(tools.map((t) => t.id));
   const wasmOnly = wasmTools.filter((t) => t.source !== "geolibre" && !snapshotIds.has(t.id));
 
@@ -189,7 +197,7 @@ async function main() {
   L.push("// Whitebox tools come from the Whitebox Next Gen catalog snapshot");
   L.push("// (opengeos/Whitebox-Next-Gen-ArcGIS WNG/data/catalog_snapshot.json);");
   L.push("// GeoLibre-authored WASM tools come from the geolibre-wasm manifests and");
-  L.push('// are grouped under a "GeoLibre" subheading. Tool ids match the');
+  L.push(`// are grouped under a "${GEOLIBRE_SUBCATEGORY}" subheading. Tool ids match the`);
   L.push("// runtime/sidecar/WASM catalog used by ProcessingDialog.");
   L.push("// Regenerate with scripts/gen-whitebox-menu-catalog.mjs; do not hand-edit.");
   L.push("// Tool/subcategory names are catalog data and are intentionally not");
