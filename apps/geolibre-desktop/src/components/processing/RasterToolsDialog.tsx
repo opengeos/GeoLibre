@@ -551,13 +551,6 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       // thread blocks; a Web Worker would be the full fix for very large rasters.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       const pixelCount = raster.width * raster.height;
-      if (exceedsBrowserCogConversionLimit(pixelCount)) {
-        const message = t("raster.cogConvertTooLarge", { name: tool.defaultOutputName });
-        setError(message);
-        setClientLog((prev) => [...prev, message]);
-        tracker.finish("error", message);
-        return;
-      }
       if (pixelCount > 2_000_000) {
         setClientLog((prev) => [
           ...prev,
@@ -567,7 +560,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         ]);
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
       }
-      const { bytes } = runRasterToolClient(tool.id, raster, params);
+      const { raster: result, bytes } = runRasterToolClient(tool.id, raster, params);
       setClientLog((prev) => [
         ...prev,
         t("toolbar.rasterTool.computedInBrowser", { tool: tool.name }),
@@ -576,6 +569,14 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       // Persist the result before the map add so the Download button survives a
       // render failure (the compute already succeeded — don't discard it).
       setClientResult({ name: outName, bytes });
+      const resultSampleCount = result.width * result.height * result.bands.length;
+      if (exceedsBrowserCogConversionLimit(resultSampleCount)) {
+        const message = t("raster.cogConvertTooLarge", { name: outName });
+        setError(message);
+        setClientLog((prev) => [...prev, message]);
+        tracker.finish("error", message);
+        return;
+      }
       const app = createAppAPI(mapControllerRef);
       try {
         const cogBytes = await convertGeoTiffToCog(new Uint8Array(bytes));
