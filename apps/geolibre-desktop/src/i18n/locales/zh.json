@@ -332,6 +332,10 @@
       "video": {
         "label": "添加视频图层",
         "description": "通过提供 MP4 URL 和四个角点坐标，添加已地理配准的视频叠加层。"
+      },
+      "iceberg": {
+        "label": "添加 Apache Iceberg 图层",
+        "description": "读取 Iceberg 表（v3 或更高版本）并添加其要素子集。"
       }
     },
     "shared": {
@@ -781,7 +785,41 @@
       "extrusion": "3D 拉伸",
       "modelUrlPlaceholder": "https://example.com/model.glb"
     },
-    "nonGeographicCoordinates": "{{names}} 中的坐标不是经纬度，因此地图上不会绘制任何内容。坐标参考系标注有误 — 请重新投影数据（或修正 .prj）后再次加载。"
+    "nonGeographicCoordinates": "{{names}} 中的坐标不是经纬度，因此地图上不会绘制任何内容。坐标参考系标注有误 — 请重新投影数据（或修正 .prj）后再次加载。",
+    "iceberg": {
+      "defaultName": "Iceberg 图层",
+      "notice": "Iceberg 表按需读取一次。该图层是受下方行数限制的快照，不会自动重新扫描——请使用图层菜单中的“刷新”再次读取。",
+      "mode": "Iceberg 源",
+      "modeTable": "表位置",
+      "modeCatalog": "REST 目录",
+      "location": "表元数据位置",
+      "warehouse": "数仓",
+      "endpoint": "目录端点",
+      "connect": "连接",
+      "table": "Iceberg 表",
+      "sql": "SQL（可选）",
+      "selectTable": "选择一个表",
+      "geometryColumn": "几何列",
+      "rowLimit": "行数限制",
+      "statusConnecting": "正在读取 Iceberg 元数据…",
+      "statusInspecting": "正在检查表…",
+      "statusNoTables": "该目录没有暴露任何表。",
+      "errorLocation": "请输入 Iceberg 表的元数据位置。",
+      "errorWarehouse": "请输入要挂载的 Iceberg 数仓。",
+      "errorEndpoint": "请输入 Iceberg REST 目录端点。",
+      "errorConnect": "无法读取 Iceberg 数据源。",
+      "errorInspect": "无法检查 Iceberg 表。",
+      "errorConnectFirst": "请先连接并选择一个 Iceberg 表。",
+      "locationPlaceholder": "https://host/warehouse/table/metadata/v1.metadata.json",
+      "warehousePlaceholder": "my_warehouse",
+      "endpointPlaceholder": "https://catalog.example.com/api/catalog",
+      "sqlHint": "编辑以筛选或重塑渲染内容。语句必须返回一个 GEOMETRY 列；保持原样即可读取整张表。",
+      "rowLimitHint": "图层包含表的前几行，不超过此限制。上限为 {{max}} 行。",
+      "rowLimitTruncates": "表共有 {{total}} 行；图层将包含前 {{limit}} 行。",
+      "statusInspected": "{{rows}} 行。几何列：{{column}}（{{crs}}）。",
+      "statusNoGeometry": "{{rows}} 行，但未找到 GEOMETRY 列。Iceberg 几何必须使用 v3 几何类型。",
+      "statusTablesFound_other": "找到 {{count}} 张表。请选择一张以继续。"
+    }
   },
   "offline": {
     "title": "下载离线区域",
@@ -2237,7 +2275,8 @@
       "video": "视频图层",
       "deckglViz": "Deck.gl 图层",
       "gltfModel": "3D 模型（glTF）",
-      "postgres": "PostgreSQL 图层"
+      "postgres": "PostgreSQL 图层",
+      "iceberg": "Apache Iceberg 图层"
     },
     "conversion": {
       "vectorToVector": "矢量转矢量",
@@ -3391,7 +3430,15 @@
     "formatPmtiles": "PMTiles",
     "formatParquet": "Parquet",
     "formatUnknown": "未知格式",
-    "notAddable": "无法添加"
+    "notAddable": "无法添加",
+    "addNoTarget": "此资产未列出可绘制的内容",
+    "addIcechunk": "暂无法读取 Icechunk 存储",
+    "zarrProblemGroup": "此资产命名的是一组数组，而非可绘制的单个数组",
+    "zarrProblemUnauthorized": "此 Zarr 存储需要凭据，GeoLibre 暂无法提供",
+    "zarrProblemUnsupportedUrl": "此 Zarr 存储的地址无法逐键读取",
+    "zarrProblemUnavailable": "无法打开此 Zarr 存储",
+    "chooseTarget": "选择要添加的内容",
+    "formatZarr": "Zarr"
   },
   "earthdataGis": {
     "hint": "在 NASA Earthdata GIS 中搜索影像服务、地图服务和要素服务。",
@@ -4179,6 +4226,1438 @@
       "run": "运行",
       "outputPlaceholder": "输出将显示在此处。",
       "resolutionRange": "分辨率（0-{{max}}）"
+    },
+    "toolGroup": {
+      "analysis": "分析",
+      "clip": "裁剪",
+      "dataQuality": "数据质量",
+      "dggs": "DGGS",
+      "geometry": "几何",
+      "join": "连接",
+      "movementTime": "运动与时间",
+      "network": "网络",
+      "overlay": "叠加",
+      "rasterToVector": "栅格转矢量",
+      "reproject": "重投影",
+      "select": "选择",
+      "spatialStatistics": "空间统计",
+      "terrain": "地形",
+      "vectorToRaster": "矢量转栅格"
+    },
+    "toolMeta": {
+      "vector": {
+        "buffer": {
+          "name": "缓冲区",
+          "description": "按固定距离为每个要素创建缓冲区多边形",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "distance": {
+              "label": "距离"
+            },
+            "units": {
+              "label": "单位",
+              "options": {
+                "kilometers": "千米",
+                "meters": "米",
+                "miles": "英里"
+              }
+            }
+          }
+        },
+        "centroids": {
+          "name": "质心",
+          "description": "计算每个要素的质心点",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            }
+          }
+        },
+        "convex-hull": {
+          "name": "凸包",
+          "description": "计算包含所有要素的凸包",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            }
+          }
+        },
+        "dissolve": {
+          "name": "融合",
+          "description": "将多边形要素合并为单一几何，可按字段分组",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "field": {
+              "label": "融合字段（可选）",
+              "description": "融合前用于对要素进行分组的属性名"
+            }
+          }
+        },
+        "bounding-box": {
+          "name": "边界框",
+          "description": "计算所有要素的矩形包络",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            }
+          }
+        },
+        "simplify": {
+          "name": "简化",
+          "description": "使用 Douglas-Peucker 算法减少顶点数",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "tolerance": {
+              "label": "容差（度）"
+            },
+            "highQuality": {
+              "label": "高质量"
+            }
+          }
+        },
+        "clip": {
+          "name": "裁剪",
+          "description": "将输入图层裁剪到叠加图层覆盖的区域（保留输入属性）",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "overlay": {
+              "label": "叠加（裁剪）图层"
+            }
+          }
+        },
+        "intersection": {
+          "name": "相交",
+          "description": "仅保留两个多边形图层重叠的区域",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "overlay": {
+              "label": "叠加图层"
+            }
+          }
+        },
+        "difference": {
+          "name": "差集",
+          "description": "从输入图层中移除叠加图层的区域",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "overlay": {
+              "label": "叠加图层"
+            }
+          }
+        },
+        "union": {
+          "name": "联合",
+          "description": "将两个多边形图层合并为单一组合几何",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "overlay": {
+              "label": "叠加图层"
+            }
+          }
+        },
+        "spatial-join": {
+          "name": "空间连接",
+          "description": "根据空间关系将连接图层的属性附加到每个输入要素",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "overlay": {
+              "label": "连接图层"
+            },
+            "predicate": {
+              "label": "空间关系",
+              "options": {
+                "intersects": "相交",
+                "within": "在…内",
+                "contains": "包含"
+              }
+            },
+            "how": {
+              "label": "连接类型",
+              "options": {
+                "inner": "内部连接（仅保留匹配要素）",
+                "left": "左连接（保留所有输入要素）"
+              }
+            }
+          }
+        },
+        "attribute-join": {
+          "name": "属性连接",
+          "description": "在不使用几何的情况下，根据键字段匹配将连接图层（表格）的属性附加到每个输入要素。一对一：第一个匹配的连接行优先。",
+          "params": {
+            "layer": {
+              "label": "目标图层"
+            },
+            "overlay": {
+              "label": "连接图层（表格）",
+              "description": "属性将被带入的图层。其几何将被忽略。"
+            },
+            "target_field": {
+              "label": "目标键字段"
+            },
+            "join_field": {
+              "label": "连接键字段"
+            },
+            "how": {
+              "label": "连接类型",
+              "options": {
+                "left": "左连接（保留所有目标要素）",
+                "inner": "内部连接（仅保留匹配要素）"
+              }
+            },
+            "fields": {
+              "label": "要带入的字段（可选）",
+              "description": "逗号分隔的要复制的连接字段。留空则带入除键之外的所有连接字段。"
+            }
+          }
+        },
+        "select-by-value": {
+          "name": "按值选择",
+          "description": "将属性值匹配条件的要素提取到新图层",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "field": {
+              "label": "字段"
+            },
+            "operator": {
+              "label": "运算符",
+              "options": {
+                "eq": "=（等于）",
+                "neq": "≠（不等于）",
+                "gt": ">（大于）",
+                "gte": "≥（大于等于）",
+                "lt": "<（小于）",
+                "lte": "≤（小于等于）",
+                "contains": "包含（文本）",
+                "starts-with": "开头为（文本）",
+                "is-null": "为空",
+                "is-not-null": "不为空"
+              }
+            },
+            "value": {
+              "label": "值",
+              "description": "当两侧均为数值时按数值比较。"
+            }
+          }
+        },
+        "select-by-location": {
+          "name": "按位置选择",
+          "description": "根据与第二图层的空间关系将要素提取到新图层",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "overlay": {
+              "label": "筛选图层"
+            },
+            "predicate": {
+              "label": "空间关系",
+              "options": {
+                "intersects": "相交",
+                "within": "在…内",
+                "contains": "包含",
+                "disjoint": "相离（无交集）"
+              }
+            }
+          }
+        },
+        "random-extract": {
+          "name": "随机提取",
+          "description": "从要素中随机提取一个子集到新图层，可按要素数量或百分比指定大小。",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "method": {
+              "label": "方法",
+              "options": {
+                "count": "要素数量",
+                "percentage": "要素百分比"
+              }
+            },
+            "count": {
+              "label": "要素数量",
+              "description": "大于输入要素数时自动截断。"
+            },
+            "percentage": {
+              "label": "要素百分比"
+            }
+          }
+        },
+        "reproject": {
+          "name": "重投影",
+          "description": "将图层的坐标重新解释为源坐标系并转换到 WGS84，使其在正确位置显示。需要 Sidecar 或 Python 引擎。",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "source_crs": {
+              "label": "源坐标系",
+              "description": "图层坐标实际所在的坐标系（例如 EPSG:3857）。结果将转换到 WGS84（EPSG:4326）。"
+            }
+          }
+        },
+        "explode": {
+          "name": "打散",
+          "description": "将多部分几何拆分为单部分要素（每部分一个要素），保留每个父要素的属性",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            }
+          }
+        },
+        "aggregate": {
+          "name": "按属性聚合",
+          "description": "将共享同一属性值的要素融合为每组一个几何，并附带汇总统计",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "group_field": {
+              "label": "分组字段"
+            },
+            "statistic": {
+              "label": "统计量",
+              "options": {
+                "count": "计数",
+                "sum": "求和",
+                "mean": "均值",
+                "min": "最小值",
+                "max": "最大值",
+                "median": "中位数"
+              }
+            },
+            "stat_field": {
+              "label": "统计字段",
+              "description": "由上述统计量汇总的数值字段。"
+            }
+          }
+        },
+        "smooth": {
+          "name": "平滑",
+          "description": "使用 Chaikin 算法圆滑线和多边形要素的拐角（增加顶点），与简化的顶点减少不同。Z/高程值被保留；点要素不变。",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "iterations": {
+              "label": "迭代次数",
+              "description": "更多迭代产生更平滑的结果（1-10）。"
+            }
+          }
+        },
+        "grid": {
+          "name": "规则网格",
+          "description": "在指定范围内生成规则矩形网格（鱼网）单元。来源：当前地图视图、图层范围或手动边界框。",
+          "params": {
+            "source": {
+              "label": "范围来源",
+              "options": {
+                "viewport": "地图视口",
+                "layer": "图层范围",
+                "bbox": "手动边界框"
+              }
+            },
+            "layer": {
+              "label": "输入图层"
+            },
+            "west": {
+              "label": "西（最小经度）"
+            },
+            "south": {
+              "label": "南（最小纬度）"
+            },
+            "east": {
+              "label": "东（最大经度）"
+            },
+            "north": {
+              "label": "北（最大纬度）"
+            },
+            "cell_width": {
+              "label": "单元格宽度（度）"
+            },
+            "cell_height": {
+              "label": "单元格高度（度）",
+              "description": "留空则与单元格宽度一致。"
+            },
+            "cell_type": {
+              "label": "单元格类型",
+              "options": {
+                "polygon": "矩形",
+                "point": "点（单元格中心）"
+              }
+            }
+          }
+        },
+        "voronoi": {
+          "name": "Voronoi / Delaunay",
+          "description": "从点图层构建 Voronoi 图（每个点一个多边形，裁剪到点的范围）或 Delaunay 三角剖分。",
+          "params": {
+            "layer": {
+              "label": "输入点图层"
+            },
+            "type": {
+              "label": "图类型",
+              "options": {
+                "voronoi": "Voronoi 多边形",
+                "delaunay": "Delaunay 三角形"
+              }
+            }
+          }
+        },
+        "cell-sectors": {
+          "name": "基站扇区覆盖",
+          "description": "从点站点使用方位角、半径和波束宽度（从属性字段或固定值读取）构建天线扇区/楔形多边形。波束宽度上限为 360°（完整圆）；记录的波束宽度反映限幅后的值。适用于基站覆盖分析，类似 QGIS Shape Tools。",
+          "params": {
+            "layer": {
+              "label": "输入点图层"
+            },
+            "azimuthField": {
+              "label": "方位角字段（°）",
+              "description": "扇区朝向，从正北顺时针计度数。为空或非数值时回退到固定方位角。"
+            },
+            "azimuth": {
+              "label": "方位角（固定，°）"
+            },
+            "radiusField": {
+              "label": "半径字段",
+              "description": "覆盖半径。为空或非数值时回退到固定半径。"
+            },
+            "radius": {
+              "label": "半径（固定）"
+            },
+            "beamwidthField": {
+              "label": "波束宽度字段（°）",
+              "description": "扇区的角度宽度，上限为 360°（完整圆）。为空或非数值时回退到固定波束宽度。"
+            },
+            "beamwidth": {
+              "label": "波束宽度（固定，°）"
+            },
+            "units": {
+              "label": "半径单位",
+              "options": {
+                "kilometers": "千米",
+                "meters": "米",
+                "miles": "英里"
+              }
+            }
+          }
+        },
+        "dggs-grid": {
+          "name": "DGGS 生成器",
+          "description": "用 DGGS 单元格填充区域（H3、S2、A5、DGGRID、DGGAL）。来源：图层几何、图层范围、当前地图视图或手动边界框。",
+          "params": {
+            "dggsType": {
+              "label": "DGGS 类型",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "DGGRID",
+                "dggal": "DGGAL"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID 类型",
+              "description": "传递给 duck_dggs 的网格配置，作为 dggs_params（ISEA/FULLER × 孔径 × 拓扑）。",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL 类型",
+              "description": "传递给 dggal.createDGGRS 的 DGGRS（ISEA/IVEA/RTEA/HEALPix/GNOSIS）。",
+              "options": {
+                "gnosis": "gnosis",
+                "isea4r": "isea4r",
+                "isea9r": "isea9r",
+                "isea3h": "isea3h",
+                "isea7h": "isea7h",
+                "isea7h_z7": "isea7h_z7",
+                "ivea4r": "ivea4r",
+                "ivea9r": "ivea9r",
+                "ivea3h": "ivea3h",
+                "ivea7h": "ivea7h",
+                "ivea7h_z7": "ivea7h_z7",
+                "rtea4r": "rtea4r",
+                "rtea9r": "rtea9r",
+                "rtea3h": "rtea3h",
+                "rtea7h": "rtea7h",
+                "rtea7h_z7": "rtea7h_z7",
+                "healpix": "healpix",
+                "rhealpix": "rhealpix"
+              }
+            },
+            "source": {
+              "label": "区域来源",
+              "options": {
+                "polyfill": "图层几何（多边形填充）",
+                "extent": "图层范围（边界框）",
+                "viewport": "地图视口",
+                "bbox": "手动边界框"
+              }
+            },
+            "layer": {
+              "label": "输入图层"
+            },
+            "west": {
+              "label": "西（最小经度）"
+            },
+            "south": {
+              "label": "南（最小纬度）"
+            },
+            "east": {
+              "label": "东（最大经度）"
+            },
+            "north": {
+              "label": "北（最大纬度）"
+            },
+            "resolution": {
+              "label": "分辨率",
+              "description": "范围取决于 DGGS 类型。留空则根据区域自动选择。"
+            },
+            "compactCells": {
+              "label": "压缩单元格",
+              "description": "将完整的兄弟单元格集合合并为更粗的父级（更少要素，混合分辨率）。"
+            },
+            "fixAntimeridian": {
+              "label": "修复日期变更线",
+              "description": "展开跨越 ±180° 经度的单元格环。"
+            }
+          }
+        },
+        "dggs-bin": {
+          "name": "DGGS 分箱",
+          "description": "将点图层聚合到 DGGS 单元格中（计数，或对数值字段求和/均值/最小值/最大值）。",
+          "params": {
+            "dggsType": {
+              "label": "DGGS 类型",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggrid": "dggrid",
+                "dggal": "dggal"
+              }
+            },
+            "dggridType": {
+              "label": "DGGRID 类型",
+              "description": "传递给 duck_dggs 的网格配置，作为 dggs_params（ISEA/FULLER × 孔径 × 拓扑）。",
+              "options": {
+                "SUPERFUND": "SUPERFUND",
+                "PLANETRISK": "PLANETRISK",
+                "ISEA3H": "ISEA3H",
+                "ISEA4H": "ISEA4H",
+                "ISEA4T": "ISEA4T",
+                "ISEA4D": "ISEA4D",
+                "ISEA43H": "ISEA43H",
+                "ISEA7H": "ISEA7H",
+                "IGEO7": "IGEO7",
+                "FULLER3H": "FULLER3H",
+                "FULLER4H": "FULLER4H",
+                "FULLER4T": "FULLER4T",
+                "FULLER4D": "FULLER4D",
+                "FULLER43H": "FULLER43H",
+                "FULLER7H": "FULLER7H"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL 类型",
+              "description": "传递给 dggal.createDGGRS 的 DGGRS（ISEA/IVEA/RTEA/HEALPix/GNOSIS）。",
+              "options": {
+                "gnosis": "gnosis",
+                "isea4r": "isea4r",
+                "isea9r": "isea9r",
+                "isea3h": "isea3h",
+                "isea7h": "isea7h",
+                "isea7h_z7": "isea7h_z7",
+                "ivea4r": "ivea4r",
+                "ivea9r": "ivea9r",
+                "ivea3h": "ivea3h",
+                "ivea7h": "ivea7h",
+                "ivea7h_z7": "ivea7h_z7",
+                "rtea4r": "rtea4r",
+                "rtea9r": "rtea9r",
+                "rtea3h": "rtea3h",
+                "rtea7h": "rtea7h",
+                "rtea7h_z7": "rtea7h_z7",
+                "healpix": "healpix",
+                "rhealpix": "rhealpix"
+              }
+            },
+            "layer": {
+              "label": "输入点图层"
+            },
+            "aggOp": {
+              "label": "聚合方式",
+              "options": {
+                "count": "计数",
+                "sum": "求和",
+                "mean": "均值",
+                "min": "最小值",
+                "max": "最大值"
+              }
+            },
+            "field": {
+              "label": "字段",
+              "description": "要聚合的数值字段。"
+            },
+            "resolution": {
+              "label": "分辨率",
+              "description": "范围取决于 DGGS 类型。留空则根据区域自动选择。"
+            },
+            "fixAntimeridian": {
+              "label": "修复日期变更线",
+              "description": "展开跨越 ±180° 经度的单元格环。"
+            }
+          }
+        },
+        "dggs-compact": {
+          "name": "DGGS 压缩",
+          "description": "压缩 DGGS 多边形单元格，或将其展开为统一分辨率（H3、S2、A5、DGGAL）。输入必须是包含 ID 属性的单元格图层。",
+          "params": {
+            "dggsType": {
+              "label": "DGGS 类型",
+              "options": {
+                "h3": "H3",
+                "s2": "S2",
+                "a5": "A5",
+                "dggal": "dggal"
+              }
+            },
+            "dggalType": {
+              "label": "DGGAL 类型",
+              "description": "传递给 dggal.createDGGRS 的 DGGRS（ISEA/IVEA/RTEA/HEALPix/GNOSIS）。",
+              "options": {
+                "gnosis": "gnosis",
+                "isea4r": "isea4r",
+                "isea9r": "isea9r",
+                "isea3h": "isea3h",
+                "isea7h": "isea7h",
+                "isea7h_z7": "isea7h_z7",
+                "ivea4r": "ivea4r",
+                "ivea9r": "ivea9r",
+                "ivea3h": "ivea3h",
+                "ivea7h": "ivea7h",
+                "ivea7h_z7": "ivea7h_z7",
+                "rtea4r": "rtea4r",
+                "rtea9r": "rtea9r",
+                "rtea3h": "rtea3h",
+                "rtea7h": "rtea7h",
+                "rtea7h_z7": "rtea7h_z7",
+                "healpix": "healpix",
+                "rhealpix": "rhealpix"
+              }
+            },
+            "mode": {
+              "label": "模式",
+              "options": {
+                "compact": "压缩",
+                "expand": "展开"
+              }
+            },
+            "layer": {
+              "label": "输入 DGGS 图层",
+              "description": "来自 DGGS 生成器/分箱的多边形单元格图层（或等效来源）。"
+            },
+            "cellField": {
+              "label": "单元格 ID 字段",
+              "description": "留空时根据所选类型默认为 h3、a5、s2 或 dggal。"
+            },
+            "resolution": {
+              "label": "目标分辨率",
+              "description": "要展开到的分辨率。必须不粗于输入单元格。"
+            },
+            "fixAntimeridian": {
+              "label": "修复日期变更线",
+              "description": "展开跨越 ±180° 经度的单元格环。"
+            }
+          }
+        },
+        "trajectory-speed": {
+          "name": "轨迹速度",
+          "description": "按时间（按目标）对点排序，并将连续定位连接为携带距离、持续时间和速度的线段。类似 QGIS TrajecTools。",
+          "params": {
+            "layer": {
+              "label": "输入点图层"
+            },
+            "timeField": {
+              "label": "时间字段",
+              "description": "每个定位的时间戳：ISO 日期/时间字符串或纪元（秒或毫秒）。"
+            },
+            "idField": {
+              "label": "目标 ID 字段",
+              "description": "将点拆分为独立轨迹。留空则将所有点视为同一目标。"
+            },
+            "speedUnits": {
+              "label": "速度单位",
+              "options": {
+                "km/h": "千米/时",
+                "m/s": "米/秒",
+                "mph": "英里/时"
+              }
+            }
+          }
+        },
+        "detect-stops": {
+          "name": "停留检测",
+          "description": "查找目标停留的位置：连续定位序列中在指定距离内（吸收 GPS 漂移）持续至少最小时长的序列。每个停留输出一个点。类似 QGIS TrajecTools。",
+          "params": {
+            "layer": {
+              "label": "输入点图层"
+            },
+            "timeField": {
+              "label": "时间字段",
+              "description": "每个定位的时间戳：ISO 日期/时间字符串或纪元（秒或毫秒）。"
+            },
+            "idField": {
+              "label": "目标 ID 字段",
+              "description": "按目标检测停留。留空则将所有点视为同一目标。"
+            },
+            "maxDistance": {
+              "label": "最大距离",
+              "description": "停留中每个定位必须在该距离内（相对于停留的第一个定位），因此一个停留可跨越最多两倍此值。设为你的 GPS 漂移半径。"
+            },
+            "distanceUnits": {
+              "label": "距离单位",
+              "options": {
+                "meters": "米",
+                "kilometers": "千米",
+                "miles": "英里"
+              }
+            },
+            "minDuration": {
+              "label": "最小时长（秒）",
+              "description": "短于此值的停留不会报告。"
+            }
+          }
+        },
+        "space-time-proximity": {
+          "name": "时空邻近",
+          "description": "查找在空间和时间上均相近的点对——例如两个目标相遇。输出连接每个合格点对的线段，携带距离和时间差。",
+          "params": {
+            "layer": {
+              "label": "输入点图层"
+            },
+            "timeField": {
+              "label": "时间字段",
+              "description": "每个点的时间戳：ISO 日期/时间字符串或纪元（秒或毫秒）。"
+            },
+            "idField": {
+              "label": "目标 ID 字段",
+              "description": "设置后仅配对不同 ID 值的点（不同目标之间的相遇）。留空则考虑每一对。"
+            },
+            "maxDistance": {
+              "label": "最大距离"
+            },
+            "distanceUnits": {
+              "label": "距离单位",
+              "options": {
+                "meters": "米",
+                "kilometers": "千米",
+                "miles": "英里"
+              }
+            },
+            "maxTime": {
+              "label": "最大时间差"
+            },
+            "timeUnits": {
+              "label": "时间单位",
+              "options": {
+                "seconds": "秒",
+                "minutes": "分钟",
+                "hours": "小时"
+              }
+            }
+          }
+        },
+        "check-validity": {
+          "name": "检查有效性",
+          "description": "查找几何无效的要素（GEOS 规则：自相交环、洞在外壳外等）并在地图上标记",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            }
+          }
+        },
+        "fix-geometries": {
+          "name": "修复几何",
+          "description": "使用 ST_MakeValid（GEOS）修复无效几何；有效要素原样通过",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            }
+          }
+        },
+        "check-topology-rules": {
+          "name": "检查拓扑规则",
+          "description": "对照拓扑规则（重叠、间隙、自相交、悬挂）验证图层并在地图上标记每处违规",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "ruleSelfIntersect": {
+              "label": "线不得自相交"
+            },
+            "ruleOverlap": {
+              "label": "多边形不得重叠"
+            },
+            "ruleGaps": {
+              "label": "多边形不得有间隙"
+            },
+            "ruleDangles": {
+              "label": "线不得有悬挂"
+            },
+            "rulePointCovered": {
+              "label": "点必须被线覆盖"
+            },
+            "ruleEndpointSnap": {
+              "label": "线端点必须在容差内连接"
+            },
+            "snapTolerance": {
+              "label": "捕捉容差",
+              "description": "端点规则：两个线端点相距多远（以图层坐标单位计——WGS84 为度）仍算已连接。"
+            }
+          }
+        },
+        "fix-topology": {
+          "name": "修复拓扑",
+          "description": "自动修复拓扑违规：捕捉近似连接的线端点、修复悬挂、将点投影到线上。附近无几何的自由端保持不变。",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "ruleEndpointSnap": {
+              "label": "捕捉近似连接的线端点"
+            },
+            "ruleDangles": {
+              "label": "修复悬挂（捕捉或投影到附近几何）"
+            },
+            "rulePointCovered": {
+              "label": "将点投影到最近的线"
+            },
+            "snapTolerance": {
+              "label": "捕捉容差",
+              "description": "几何可移动以完成连接的最大距离（以图层坐标单位计——WGS84 为度）。"
+            },
+            "dryRun": {
+              "label": "仅预览（模拟运行）",
+              "description": "报告将要执行的修复，而不创建修复后的图层。"
+            }
+          }
+        }
+      },
+      "network": {
+        "isochrone": {
+          "name": "等时线 / 服务区",
+          "description": "从图层中每个点出发的出行时间或出行距离可达性多边形",
+          "params": {
+            "layer": {
+              "label": "起点"
+            },
+            "mode": {
+              "label": "出行方式",
+              "options": {
+                "auto": "驾车",
+                "pedestrian": "步行",
+                "bicycle": "骑行"
+              }
+            },
+            "metric": {
+              "label": "度量",
+              "options": {
+                "time": "出行时间（分钟）",
+                "distance": "距离（千米）"
+              }
+            },
+            "contours": {
+              "label": "等值线",
+              "description": "逗号分隔的值（时间为分钟，距离为千米）"
+            },
+            "endpoint": {
+              "label": "路由服务（Valhalla）"
+            }
+          }
+        },
+        "od-matrix": {
+          "name": "OD 成本矩阵",
+          "description": "计算每对起终点之间的出行时间和距离，以连接线表示",
+          "params": {
+            "origins": {
+              "label": "起点"
+            },
+            "destinations": {
+              "label": "终点"
+            },
+            "mode": {
+              "label": "出行方式",
+              "options": {
+                "auto": "驾车",
+                "pedestrian": "步行",
+                "bicycle": "骑行"
+              }
+            },
+            "endpoint": {
+              "label": "路由服务（Valhalla）"
+            }
+          }
+        },
+        "sequential-route": {
+          "name": "顺序路线（导航）",
+          "description": "沿路网按顺序连接点为路线。每个点被捕捉到最近的道路，因此非道路坐标（基站、传感器）也能路由。顺序遵循所选字段（如时间戳）或图层要素顺序。",
+          "params": {
+            "layer": {
+              "label": "输入点"
+            },
+            "order_field": {
+              "label": "排序字段（可选）",
+              "description": "路由前按此字段（数值或时间戳）排序点。留空使用图层要素顺序。"
+            },
+            "mode": {
+              "label": "出行方式",
+              "options": {
+                "auto": "驾车",
+                "pedestrian": "步行",
+                "bicycle": "骑行"
+              }
+            },
+            "endpoint": {
+              "label": "路由服务（Valhalla）"
+            }
+          }
+        }
+      },
+      "statistics": {
+        "kernel-density": {
+          "params": {
+            "cellSize": {
+              "label": "单元格大小（千米）"
+            },
+            "layer": {
+              "label": "点图层"
+            },
+            "weightField": {
+              "label": "权重字段（可选）",
+              "description": "对每个点加权的数值字段；留空则等权。"
+            },
+            "bandwidth": {
+              "label": "搜索半径 / 带宽（千米）"
+            }
+          },
+          "name": "核密度（热力图）",
+          "description": "使用四次核函数从点估计密度表面，输出为单元格网格。"
+        },
+        "emerging-hot-spot": {
+          "name": "新兴热点（时空立方体）",
+          "description": "从带时间戳的点构建时空立方体（鱼网网格 × 等时间步长），并将每个单元分类为新增、增强、持续、减弱、零星、振荡或历史热点/冷点。对每个时间片运行 Getis-Ord Gi*，然后对每个单元的 Gi* 序列进行 Mann-Kendall 趋势检验。客户端运行，类似 ArcGIS 新兴热点分析。",
+          "params": {
+            "layer": {
+              "label": "点图层"
+            },
+            "timeField": {
+              "label": "时间字段",
+              "description": "每个点的时间戳：ISO 日期/时间字符串或纪元（秒或毫秒）。"
+            },
+            "cellSize": {
+              "label": "单元格大小（千米）",
+              "description": "每个正方形空间 bin 的边长，单位千米。"
+            },
+            "timeStep": {
+              "label": "时间步长间隔"
+            },
+            "timeStepUnit": {
+              "label": "时间步长单位",
+              "options": {
+                "hours": "小时",
+                "days": "天",
+                "weeks": "周"
+              }
+            },
+            "weightField": {
+              "label": "权重字段（可选）",
+              "description": "每个时空 bin 求和的数值字段，而非计数点；留空则计数点。"
+            },
+            "confidence": {
+              "label": "置信水平",
+              "description": "bin 被计为热点/冷点以及趋势的显著性阈值。",
+              "options": {
+                "90": "90%",
+                "95": "95%",
+                "99": "99%"
+              }
+            }
+          }
+        },
+        "global-morans-i": {
+          "name": "全局 Moran's I",
+          "description": "衡量整个图层中某一数值属性的全局空间自相关。",
+          "params": {
+            "layer": {
+              "label": "图层"
+            },
+            "field": {
+              "label": "值字段"
+            },
+            "weightsType": {
+              "label": "空间权重",
+              "description": "如何定义每个要素的邻居。",
+              "options": {
+                "knn": "K 最近邻",
+                "distance": "距离带"
+              }
+            },
+            "k": {
+              "label": "邻居数（k）"
+            },
+            "threshold": {
+              "label": "距离带（千米）"
+            },
+            "permutations": {
+              "label": "置换次数",
+              "description": "用于伪 p 值的随机置换次数。"
+            }
+          }
+        },
+        "local-morans-i": {
+          "name": "局部 Moran's I（LISA）",
+          "description": "逐要素的聚类和异常值（高-高、低-低、高-低、低-高）及伪显著性。",
+          "params": {
+            "layer": {
+              "label": "图层"
+            },
+            "field": {
+              "label": "值字段"
+            },
+            "weightsType": {
+              "label": "空间权重",
+              "description": "如何定义每个要素的邻居。",
+              "options": {
+                "knn": "K 最近邻",
+                "distance": "距离带"
+              }
+            },
+            "k": {
+              "label": "邻居数（k）"
+            },
+            "threshold": {
+              "label": "距离带（千米）"
+            },
+            "permutations": {
+              "label": "置换次数",
+              "description": "用于伪 p 值的随机置换次数。"
+            }
+          }
+        },
+        "getis-ord-gi": {
+          "name": "Getis-Ord Gi* 热点",
+          "description": "识别数值属性的统计显著热点和冷点。",
+          "params": {
+            "layer": {
+              "label": "图层"
+            },
+            "field": {
+              "label": "值字段"
+            },
+            "weightsType": {
+              "label": "空间权重",
+              "description": "如何定义每个要素的邻居。",
+              "options": {
+                "knn": "K 最近邻",
+                "distance": "距离带"
+              }
+            },
+            "k": {
+              "label": "邻居数（k）"
+            },
+            "threshold": {
+              "label": "距离带（千米）"
+            }
+          }
+        },
+        "average-nearest-neighbor": {
+          "name": "平均最近邻",
+          "description": "检验点要素是聚类、离散还是随机分布（ANN 比率 + z 分数）。",
+          "params": {
+            "layer": {
+              "label": "点图层"
+            }
+          }
+        }
+      },
+      "raster": {
+        "polygonize": {
+          "params": {
+            "field": {
+              "label": "值字段名"
+            },
+            "band": {
+              "label": "波段"
+            },
+            "connectivity": {
+              "label": "连通性",
+              "options": {
+                "4": "4 连通",
+                "8": "8 连通"
+              }
+            }
+          },
+          "name": "多边形化",
+          "description": "将栅格波段转换为按像素值分组的多边形。"
+        },
+        "contour": {
+          "name": "等高线",
+          "description": "从高程模型生成等高线。",
+          "params": {
+            "band": {
+              "label": "波段"
+            },
+            "interval": {
+              "label": "等高距",
+              "description": "相邻等高线之间的高程差。"
+            },
+            "base": {
+              "label": "基值"
+            },
+            "attribute": {
+              "label": "高程字段名"
+            }
+          }
+        },
+        "interpolate": {
+          "name": "插值（IDW / Kriging）",
+          "description": "使用反距离加权或普通克里金将点图层数值属性插值为连续栅格表面。",
+          "params": {
+            "field": {
+              "label": "值字段",
+              "description": "要插值的数值点属性名（如高程、温度）。"
+            },
+            "method": {
+              "label": "方法",
+              "options": {
+                "idw": "反距离加权（IDW）",
+                "kriging": "普通克里金"
+              }
+            },
+            "resolution": {
+              "label": "输出像素大小",
+              "description": "以图层坐标系单位（WGS84 为度）计的单元大小。网格覆盖点的范围。"
+            },
+            "power": {
+              "label": "IDW 幂次",
+              "description": "值越高，近邻点影响越大。"
+            },
+            "variogram_model": {
+              "label": "变异函数模型",
+              "description": "拟合经验半变异函数的理论模型。克里金上限 1500 个点。",
+              "options": {
+                "spherical": "球状",
+                "exponential": "指数",
+                "gaussian": "高斯",
+                "linear": "线性"
+              }
+            }
+          }
+        },
+        "zonal": {
+          "name": "区域统计",
+          "description": "对矢量图层中每个多边形内的栅格值进行汇总（计数、最小值、最大值、均值、求和、标准差、中位数）。",
+          "params": {
+            "zones_path": {
+              "label": "区域图层",
+              "description": "定义区域的 GeoJSON 多边形图层。自动重投影到栅格坐标系（无坐标系的 GeoJSON 假定为 WGS84）。"
+            },
+            "band": {
+              "label": "波段"
+            },
+            "prefix": {
+              "label": "字段前缀",
+              "description": "在每个统计字段名前添加前缀（如 'dem_' → 'dem_mean'）。留空则为 bare 的 'mean'、'min' 等。"
+            }
+          }
+        },
+        "raster-calc": {
+          "name": "栅格计算器",
+          "description": "计算 NumPy 波段数学表达式。将每个输入的第 1 波段引用为 A、B、C，特定波段为 A1、A2 等；例如 NDVI 为 (A2 - A1) / (A2 + A1)。",
+          "params": {
+            "expression": {
+              "label": "表达式",
+              "description": "基于 A、B、C（以及 A1、A2 等）的 NumPy 表达式。函数：where、log、exp、sqrt、abs、clip、minimum、maximum、sin、cos、tan。"
+            },
+            "b_path": {
+              "label": "栅格 B（可选）",
+              "description": "第二个栅格，引用为 B / B1、B2 等。必须与 A 尺寸匹配。"
+            },
+            "c_path": {
+              "label": "栅格 C（可选）",
+              "description": "第三个栅格，引用为 C / C1、C2 等。必须与 A 尺寸匹配。"
+            }
+          }
+        },
+        "spectral-index": {
+          "name": "光谱指数",
+          "description": "从多波段栅格计算命名光谱指数（NDVI、NDWI、EVI 等）。选择传感器预设的波段布局，或使用自定义传感器手动设置波段号。",
+          "params": {
+            "index": {
+              "label": "指数",
+              "options": {
+                "ndvi": "NDVI（植被）",
+                "gndvi": "GNDVI（绿光植被）",
+                "ndwi": "NDWI（水体，McFeeters）",
+                "ndmi": "NDMI（水分）",
+                "ndbi": "NDBI（建成区）",
+                "nbr": "NBR（燃烧比）",
+                "evi": "EVI（增强植被）",
+                "savi": "SAVI（土壤调节植被）"
+              }
+            },
+            "sensor": {
+              "label": "传感器 / 波段布局",
+              "description": "常用传感器的预设波段号。选择自定义可手动映射不同波段堆叠的 GeoTIFF。",
+              "options": {
+                "sentinel2": "Sentinel-2（B2、B3、B4、B8、B11、B12）",
+                "landsat89": "Landsat 8/9（B1-B7）",
+                "naip": "NAIP（R、G、B、NIR）",
+                "custom": "自定义（在下方设置波段号）"
+              }
+            },
+            "red": {
+              "label": "红光波段号"
+            },
+            "green": {
+              "label": "绿光波段号"
+            },
+            "blue": {
+              "label": "蓝光波段号"
+            },
+            "nir": {
+              "label": "近红外波段号"
+            },
+            "swir1": {
+              "label": "短波红外 1 波段号"
+            },
+            "swir2": {
+              "label": "短波红外 2 波段号"
+            },
+            "L": {
+              "label": "土壤因子（L）",
+              "description": "SAVI 土壤亮度校正（0 密集覆盖 → 1 裸土）。"
+            },
+            "scale": {
+              "label": "反射率缩放",
+              "description": "将像素值转换为反射率（0-1）的乘数。归一化差值指数保持 1；对整数 DN 影像的 EVI/SAVI 设置此值（如 Sentinel-2 L2A 设为 0.0001）。"
+            }
+          }
+        },
+        "reclassify": {
+          "name": "重分类",
+          "description": "使用规则表将值范围重映射到新类别值。",
+          "params": {
+            "band": {
+              "label": "波段"
+            },
+            "table": {
+              "label": "规则",
+              "description": "逗号或换行分隔的 'min:max:newvalue' 规则，如 '0:10:1, 10:20:2, 20:max:3'。范围为半开区间 [min, max)；blank/min/max 表示 ±∞。"
+            },
+            "unmatched": {
+              "label": "未匹配值",
+              "options": {
+                "nodata": "设为 NoData",
+                "original": "保留原值"
+              }
+            }
+          }
+        },
+        "mosaic": {
+          "name": "镶嵌 / 合并",
+          "description": "将最多五个栅格（共享同一坐标系）合并为覆盖其并集的单一栅格。",
+          "params": {
+            "raster_2": {
+              "label": "第二个栅格"
+            },
+            "raster_3": {
+              "label": "第三个栅格（可选）"
+            },
+            "raster_4": {
+              "label": "第四个栅格（可选）"
+            },
+            "raster_5": {
+              "label": "第五个栅格（可选）"
+            },
+            "method": {
+              "label": "重叠处理方式",
+              "description": "输入重叠时哪个值优先。",
+              "options": {
+                "first": "第一个",
+                "last": "最后一个",
+                "min": "最小值",
+                "max": "最大值"
+              }
+            }
+          }
+        },
+        "focal": {
+          "name": "焦点统计",
+          "description": "对栅格波段应用移动窗口（邻域）统计。",
+          "params": {
+            "band": {
+              "label": "波段"
+            },
+            "statistic": {
+              "label": "统计量",
+              "options": {
+                "mean": "均值",
+                "median": "中位数",
+                "min": "最小值",
+                "max": "最大值",
+                "sum": "求和",
+                "std": "标准差",
+                "range": "值域（最大 - 最小）"
+              }
+            },
+            "size": {
+              "label": "窗口大小",
+              "description": "奇数邻域大小，以像素计（3 = 3×3）。上限 25。"
+            }
+          }
+        },
+        "hillshade": {
+          "name": "山体阴影",
+          "description": "从高程模型计算山体阴影栅格。",
+          "params": {
+            "azimuth": {
+              "label": "方位角（度）"
+            },
+            "altitude": {
+              "label": "高度角（度）"
+            },
+            "z_factor": {
+              "label": "Z 因子"
+            }
+          }
+        },
+        "slope": {
+          "name": "坡度",
+          "description": "从高程模型计算坡度（陡峭程度）。",
+          "params": {
+            "units": {
+              "label": "单位",
+              "options": {
+                "degrees": "度",
+                "percent": "百分比"
+              }
+            },
+            "z_factor": {
+              "label": "Z 因子"
+            }
+          }
+        },
+        "aspect": {
+          "name": "坡向",
+          "description": "从高程模型计算坡向（最陡坡面的罗盘方向）。"
+        },
+        "reproject": {
+          "name": "重投影",
+          "description": "将栅格变换到不同坐标系。",
+          "params": {
+            "dst_crs": {
+              "label": "目标坐标系",
+              "description": "权威代码，如 EPSG:3857 或 EPSG:4326。"
+            },
+            "resampling": {
+              "label": "重采样",
+              "options": {
+                "nearest": "最近邻",
+                "bilinear": "双线性",
+                "cubic": "三次"
+              }
+            }
+          }
+        },
+        "resample": {
+          "name": "重采样",
+          "description": "将栅格重采样到不同像素大小（分辨率）。",
+          "params": {
+            "resolution": {
+              "label": "目标像素大小",
+              "description": "以栅格坐标系单位表示的输出像素大小。"
+            },
+            "resampling": {
+              "label": "重采样",
+              "options": {
+                "nearest": "最近邻",
+                "bilinear": "双线性",
+                "cubic": "三次"
+              }
+            }
+          }
+        },
+        "clip-extent": {
+          "name": "按范围裁剪",
+          "description": "将栅格裁剪到边界框（在栅格坐标系中）。",
+          "params": {
+            "minx": {
+              "label": "最小 X"
+            },
+            "miny": {
+              "label": "最小 Y"
+            },
+            "maxx": {
+              "label": "最大 X"
+            },
+            "maxy": {
+              "label": "最大 Y"
+            }
+          }
+        },
+        "clip-mask": {
+          "name": "按掩膜图层裁剪",
+          "description": "将栅格裁剪到矢量掩膜文件的几何范围。",
+          "params": {
+            "mask_path": {
+              "label": "掩膜图层",
+              "description": "定义裁剪区域的 GeoJSON 文件。自动重投影到栅格坐标系（无坐标系的 GeoJSON 假定为 WGS84）。"
+            },
+            "crop": {
+              "label": "裁剪到掩膜范围"
+            },
+            "all_touched": {
+              "label": "包含所有触及的像素"
+            }
+          }
+        }
+      }
     }
   },
   "segmentation": {
@@ -5182,7 +6661,8 @@
       "m1": "1 分钟",
       "m5": "5 分钟",
       "m15": "15 分钟"
-    }
+    },
+    "refreshedTruncated": "已刷新 {{shown}} / {{total}} 个要素。"
   },
   "timeSliderSymbology": {
     "bands": "波段",
@@ -5596,5 +7076,9 @@
     "mapPoint": "地图点",
     "reply": "回复",
     "replyPlaceholder": "写下回复..."
+  },
+  "geoEditorPlugin": {
+    "attributePanelTitle": "要素属性",
+    "massingHeight": "高度（米）"
   }
 }
