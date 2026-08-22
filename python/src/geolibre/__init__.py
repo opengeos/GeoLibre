@@ -13,7 +13,7 @@ from .geolibre import Feature, Layer, Map
 from .legends import builtin_legend_names
 from .polyline import decode_polyline, encode_polyline, polyline_to_geojson, unescape_polyline
 
-__version__ = "2.6.0"
+__version__ = "2.7.0"
 __all__ = [
     "Feature",
     "Layer",

@@ -18,6 +18,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - A `?` shortcuts cheat sheet
 - Customizable UI profiles that tailor which menus, panels, and data sources are visible, so a deployment can present a focused subset of the app to its users. See [UI Profiles](ui-profiles.md)
 - Internationalization framework with react-i18next and 18 complete per-build translation catalogs — including right-to-left Arabic and Persian with a fully mirrored interface, Persian set in Vazirmatn — plus a `?locale`/`?lang` query parameter to set the embed language
+    - Plugin display names resolve through one place, so a plugin reads the same in the Plugins menu, the command palette, Settings, and Manage Plugins, and every processing tool name, description, group label, parameter, and select option is generated into the English catalog for translators to work from. See [Internationalization](i18n.md)
 - Accessibility pass with axe-checked screens, keyboard navigation, and screen-reader labels
 - App-wide, section, and plugin React error boundaries that contain failures and keep the rest of the workspace usable
 - Undo/redo for layer and style operations
@@ -49,15 +50,16 @@ kepler.gl, see the [Comparison](comparison.md).
 - Reproject vector layers to EPSG:4326 on load, render vector layers that carry Z coordinates in true 3D rather than flattening them onto the ground plane, and split dragged GPX files into named waypoint, track, and route layers
 - Large local vector layers render through client-side vector tiling, with a warning before loading very large files
 - Add Data menu covering every remote and cloud-native source:
-    - **URL deep links**: open GeoJSON, GeoParquet, PMTiles, a REST endpoint returning a GeoJSON FeatureCollection, a COG, or a ZIP/REST response containing multiple GeoJSON files with `?data=`; optionally apply vector or raster style JSON with `?style=`, automatically fit the layer extent, and associate per-file ZIP styles by filename stem
+    - **URL deep links**: open GeoJSON, GeoParquet, PMTiles, a REST endpoint returning a GeoJSON FeatureCollection, a COG, or a ZIP/REST response containing multiple GeoJSON files with `?data=`, repeated as many times as you have sources; optionally apply vector or raster style JSON with `?style=`, automatically fit the layer extent, and associate per-file ZIP styles by filename stem
     - **Tile and map services**: XYZ tiles; WMS and WFS, with layers and feature types discovered from the service's GetCapabilities so you pick from a populated dropdown; vector tiles, including OGC API - Tiles services; and ArcGIS FeatureServer, VectorTileServer, MapServer, and ImageServer layers. The last two load as ordinary raster layers, so opacity, the Style panel's brightness/contrast/saturation, reordering, and project save all apply, drawing from the service's own fused cache when it was built on the standard Web Mercator scheme and from `/export` or `/exportImage` otherwise. MapServer sublayers and ImageServer raster functions are browsed and picked from each service's advertised list, with custom raster function JSON still available for advanced ImageServer rules
     - **Feature services and feeds**: GeoJSON URLs; GeoRSS feeds from a URL or file; and OGC API - Features collections added as vector layers from whatever URL you have in hand — a landing page, `/collections`, a collection, or a full items URL
     - **Raster**: COG and GeoTIFF; Cloud-Optimized NetCDF/HDF via kerchunk references, plus local HDF5 and NetCDF-4 files; and MBTiles
     - **Cloud-native archives**: PMTiles, and Zarr from a remote store, an Icechunk repository, or a folder on disk, with variable and dimension pickers that offer the store's real coordinate values rather than raw indices
-    - **Files with pickers**: multi-layer GeoPackages, with a layer picker so only the chosen feature tables load; delimited text with a source CRS field so projected easting/northing columns reproject correctly, or an Addresses mode that concatenates the columns you pick and geocodes each row through the project's provider (unmatched rows are kept as null-geometry features so they stay visible and fixable in the attribute table); CAD drawings (DXF/DWG) with a drawing-layer picker and CRS selector; and Esri File Geodatabases (`.gdb` folders, desktop) with a feature-class picker and automatic reprojection
+    - **Files with pickers**: multi-layer GeoPackages, with a layer picker so only the chosen feature tables load; Excel workbooks imported as point layers from their X and Y columns, with a worksheet picker; delimited text with a source CRS field so projected easting/northing columns reproject correctly, or an Addresses mode that concatenates the columns you pick and geocodes each row through the project's provider (unmatched rows are kept as null-geometry features so they stay visible and fixable in the attribute table); CAD drawings (DXF/DWG) with a drawing-layer picker and CRS selector; and Esri File Geodatabases (`.gdb` folders, desktop) with a feature-class picker and automatic reprojection
     - **3D and media**: LiDAR; 3D Tiles, including authenticated tilesets via custom request headers; ArcGIS I3S scene layers (Integrated Mesh and 3D Object, rendered on deck.gl); Gaussian splats; glTF/GLB 3D models placed at coordinates; georeferenced video overlays; and geotagged photos imported as a point layer from their EXIF GPS, with manual placement and drag for photos lacking coordinates and a true native-resolution photo viewer
     - **Throughout**: a fully internationalized dialog, comma decimal support, drag-and-dropped CSV coordinate files, sample-data dropdowns on every upstream-backed panel for loading ready-made example datasets, and a saved service library for storing and re-adding frequently used web-service endpoints
-- QGIS-style Browser panel (Data Source Manager) for exploring and adding data from one place: browse map Services and Recent items, connect to PostGIS databases and browse their schemas and tables, drill into local files, save and reopen Favorites, and add a New connection per service kind, with full keyboard navigation of the tree
+- Encoded polylines as a first-class format: a codec for Google and OSRM precision 5 and Valhalla and Mapbox precision 6, with an interactive preview and coordinate inspector in Add Data, batch parsing with custom delimiters, processing tools for encoding and decoding, layer export at either precision, and matching support in the Python package
+- QGIS-style Browser panel (Data Source Manager) for exploring and adding data from one place: browse map Services and Recent items, connect to PostGIS databases and browse their schemas and tables (picking the geometry column explicitly on a table that registers more than one), drill into local files, save and reopen Favorites, and add a New connection per service kind, with full keyboard navigation of the tree
 - Layer Library: save a fully configured layer — source, style, labels, filters, joins, virtual fields, and attribute form — from the layer actions menu, then re-add it to any later project in one click from the Browser panel's **My Data** section
     - Entries can be renamed, removed, and exported or imported as a JSON bundle to share with a team
     - Entries store the source specification rather than the data, so a saved COG, PostGIS table, or remote GeoParquet always reflects its source's current contents
@@ -71,7 +73,7 @@ kepler.gl, see the [Comparison](comparison.md).
 
 ## Layers, styling, and labels
 
-- Layer panel for visibility, opacity, reordering, rename, zoom-to-layer, identify, labels, open attribute table, open Style panel, export, and remove actions. Selecting a layer never pops the Style panel open over the map on its own; it expands only from that explicit menu item
+- Layer panel for visibility, opacity, reordering, rename, zoom-to-layer, identify, labels, open attribute table, open Style panel, export, and remove actions. Selecting a layer never pops the Style panel open over the map on its own; it expands from a palette button on the layer card or from the matching menu item
     - A per-row symbology swatch (dot, line, square, or image glyph) colored from the layer's own styling
     - Copy and paste of a layer's style onto another layer
     - A metadata dialog that reads a raster's real georeferencing from the GeoTIFF header: CRS and EPSG code, pixel size and extent in CRS units, data type, nodata, compression, tiling, and overviews
@@ -114,11 +116,12 @@ kepler.gl, see the [Comparison](comparison.md).
     - **Browsing**: filtering, sorting, resize controls, feature highlighting with Ctrl- and Shift-click multi-row selection, optional zoom to selected features, and virtualized rows for large layers
     - **Editing and derived fields**: add-field and field-calculator tools (including geometry length and area calculation), virtual fields (expression-backed computed columns that update with the data), persistent attribute joins configured in layer properties, and automatic editor tracking (created by/at and edited by/at)
     - **Forms**: an attribute form designer with edit widgets, validation constraints, and conditional field visibility
-    - **Analysis**: a Charts panel (histogram, scatter, bar, line, box) and a field statistics summary panel
+    - **Analysis**: a Charts panel (histogram, scatter, bar, line, box) and a field statistics summary panel, scoped to the whole layer or to just the selected features
     - **Columns**: rename, delete, hide/show, and reorder, plus a column explorer for finding and toggling fields in wide tables
     - **Export** to GeoJSON, GeoParquet, Shapefile, GeoPackage, CSV, KML, or KMZ, honoring the fields hidden in the table so a hidden column stays out of the exported file
     - A **Raster Attribute Table** for single-band categorical rasters
 - Shared Expression Builder with a function reference, searchable field list, live preview, and reusable variables, wired into filters, labels, styling, field calculation, and selection, plus Select by Expression and Select by Location for building feature selections
+- Select features by drawing on the map, QGIS-style: click, rectangle, polygon, freehand, and radius gestures from the layer's Select features menu, with Shift and Alt combining the result into the existing selection and Clear selection alongside them
 
 ## SQL and databases
 
@@ -198,6 +201,8 @@ kepler.gl, see the [Comparison](comparison.md).
     - Download OSM Vector's four boundary numbers render as one Area of interest control with Use map extent and Draw on map shortcuts
 - Vector menu
     - **Geometry and analysis**: buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, attribute join, select by value, select by expression, select by location, random extract, movement, space-time, and cell coverage
+    - **Data management**: merge layers, through a multi-layer parameter picker that unites attribute schemas and can record each feature's source layer
+    - **Vertices and sampling**: extract vertices as points carrying their part and vertex index, and generate points along lines and polygon boundaries at a fixed geodesic interval
     - **Data quality**: check validity, fix geometries, and check topology rules
     - **Engines**: Turf.js in the browser, an optional GeoPandas sidecar engine for every tool, and an in-browser GeoPandas engine via Pyodide (no server, same results as the sidecar)
 - Raster menu with hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, contour, zonal statistics, raster calculator, reclassify, mosaic, and focal statistics
@@ -205,6 +210,9 @@ kepler.gl, see the [Comparison](comparison.md).
     - Plus in-browser extraction of COG, WMS, and XYZ bounding-box subsets, and a normalized-difference index builder for any HTTP COG
 - Spectral Index toolbox (NDVI, GNDVI, NDWI, NDMI, NDBI, NBR, EVI, SAVI) with Sentinel-2, Landsat 8-9, NAIP, and custom band layouts, evaluated client-side with geotiff.js or on the rasterio sidecar
 - Spatial Statistics toolbox, including Emerging Hot Spot Analysis that builds a space-time cube from timestamped points, runs Getis-Ord Gi\* per time slice, and classifies each cell as a new, intensifying, persistent, diminishing, sporadic, oscillating, or historical hot or cold spot
+- Model Builder, an ArcGIS-style canvas for processing workflows: drop tools as nodes, wire an output into the next tool's input, and save the graph as a model that re-runs as one job, with the whole graph validated (cycles, missing connections, invented parameters, wrong parameter types) before anything executes
+    - The AI assistant can author a validated model from a plain-English description and open it for review before it runs, over the same palette the canvas uses: client-side vector tools plus the full Whitebox catalog
+    - Any model copies out as a runnable Python script for the Notebook panel or JupyterLite
 - Processing batch runner with model and pipeline chaining, to run a sequence of tools as one job
 - Processing History panel that lists every tool run, re-runs any of them with one click, and copies the equivalent Python code
 - Raster Georeferencer (Processing → GeoLibre Toolbox → Raster → Georeferencing) that pins a non-georeferenced image to the map with ground control points using a least-squares affine fit, reporting per-GCP and RMS residuals
@@ -236,13 +244,16 @@ kepler.gl, see the [Comparison](comparison.md).
 - Imagery and street level: street view, Mapillary coverage and street-level image viewer, OpenAerialMap open-aerial-imagery search, and Historical Imagery
 - Data catalog browsers:
     - **Natural Earth** and **Source Cooperative**, including opening or streaming large GeoParquet from Source Cooperative
-    - **STAC catalogs**, which discovers catalogs from STAC Index, connects to both static catalogs and STAC APIs, searches a collection's items, and adds any visualizable asset as a layer
+    - **STAC catalogs**, which discovers catalogs from STAC Index, connects to both static catalogs and STAC APIs, searches a collection's items, and adds any visualizable asset as a layer (COG, PMTiles, GeoParquet, and Zarr with a variable picker), including an Icechunk repository read through its own manifest and Azure-hosted assets signed at add time so private Planetary Computer containers open like public ones. A static catalog can also be walked as a tree, opening a folder to read it and starting a search from whatever you picked
     - **Earthdata GIS**, which searches NASA's EOSDIS ArcGIS portal and renders its imagery, map, and feature services and published web maps as first-class layers
     - **Hugging Face**, for searching the Hub, walking a dataset repo's folders, adding its vector and raster files to the map, and creating and uploading dataset repos
     - **[GeoLens](https://github.com/geolens-io/geolens)**, which connects to a self-hosted GeoLens server and adds datasets as signed vector tiles, OGC API Features GeoJSON, or server-rendered raster tiles — and writes edits to a GeoJSON-loaded dataset back to the GeoLens server, feature by feature, when the server allows it
 - Analysis and editing integrations: Elevation Profile, Overture Maps, USGS LiDAR, GeoAgent, and GeoEditor
+    - Elevation Profile charts a drawn line or the line features currently selected on a layer, so a route already on the map does not have to be traced again
+    - USGS LiDAR clips a point cloud to an area of interest and downloads the result as COPC
     - The GeoEditor can pull the vector features currently visible in the map view into the editor for editing without re-importing the source, and write edits back to their origin, including GeoPackage and GeoJSON files and PostGIS database tables
     - Topological polygon digitizing, so a polygon drawn against its neighbor shares that edge instead of leaving a sliver or an overlap behind
+    - Building massing: sketch a footprint, give it a height, and get an extruded mass, with the extrusion style managed as massing features come and go and ordinary polygon sketches left flat
 - Configurable control positions and external plugin manifests, and external plugins can:
     - Render on the host's shared deck.gl instance via `app.getDeckGL()`
     - Use the maplibre-gl-raster stack and the map projection control, and register native raster and tile layers
@@ -271,9 +282,11 @@ See the [Plugin API](plugin-api.md) to build your own.
     - Embed-friendly URL parameters, including `?url=` project deep links that skip the welcome wizard and a `?welcome=0` param to opt out of onboarding
     - A `maponly` chrome-free mode, a `panels=collapsed` layout that keeps the Layers and Style icon rails reachable while starting both panels collapsed, and an option to hide the top toolbar outright for a focused viewer
     - A `layout=viewer` read-only preset that keeps Layers, View, Controls, basemaps, and search/identify while hiding every authoring path — menus, shortcuts, drag-and-drop import, and the plugins whose on-map control writes to the project — so an embed cannot be steered into editing
+    - A `settingsUrl=` parameter that loads shared presentation settings (language, layout, accent theme, and UI profile) before the first render, restricted to presentation fields so a link cannot inject credentials, plugins, or local paths, and lasting for that page only rather than replacing what the user has saved
 - Self-hostable sharing, accounts, and live collaboration, so a deployment keeps its projects on its own infrastructure
     - A documented version 1 projects and identity HTTP contract that any server may implement, with a FastAPI reference implementation in `backend/geolibre_server_api`. See [Server API](server-api.md)
     - A plain Node collaboration relay alongside the Cloudflare Durable Object one, both driven by a shared session core and both held to a single conformance suite so their permission behavior cannot drift
+    - An activity log: a project owner can read who opened and edited a shared project, and a session host can download the session log, bounded in both entry count and stored bytes and read through a bearer token rather than a URL query
     - `GEOLIBRE_SHARE_URL` and `GEOLIBRE_COLLAB_URL` repoint a published web image at those servers at container runtime instead of requiring a rebuilt fork; `off` removes Share and the Project Gallery from the UI entirely, and a malformed value stops the container at boot rather than falling back to the public hosted service
 - Optional Clerk access gate for a hosted deployment that needs individual sign-in, with an optional waitlist screen, loaded on demand and kept out of the default PWA precache. The gate is decided by the build target rather than by a client-controlled query parameter, so public, native, and embedded builds stay unchanged. See [Getting started](getting-started.md)
 - `GEOLIBRE_NO_EXTERNAL_CDN=1` build for deployments that cannot load from untrusted third-party hosts: it strips the GeoLibre-controlled CDN references, vendors the PGlite and CereusDB engines into the build rather than dropping them, and makes the few features that genuinely need a remote host (GDAL export, ONNX object detection and Segment Everything, story map HTML export, Pyodide without a configured mirror) report that up front instead of failing at the end of a run. See [Self-hosting](self-hosting.md)
