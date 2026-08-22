@@ -336,6 +336,10 @@
       "video": {
         "label": "비디오 레이어 추가",
         "description": "MP4 URL과 네 모서리 좌표를 입력하여 지리참조된 비디오 오버레이를 추가합니다."
+      },
+      "polyline": {
+        "label": "인코딩된 폴리라인 레이어 추가",
+        "description": "인코딩된 폴리라인 문자열(Google, OSRM, Valhalla)을 텍스트 또는 파일에서 벡터 라인으로 가져옵니다."
       }
     },
     "shared": {
@@ -504,6 +508,14 @@
       "noSublayersFound": "이 맵 서비스는 레이어를 제공하지 않았습니다.",
       "retrieveError": "맵 서비스의 레이어를 조회할 수 없습니다.",
       "errorMapServiceUrl": "ArcGIS MapServer URL을 입력하세요.",
+      "rasterFunction": "래스터 함수",
+      "serviceDefaultRasterFunction": "서비스 기본값",
+      "retrieveRasterFunctions": "함수 찾아보기",
+      "retrievingRasterFunctions": "조회하는 중...",
+      "noRasterFunctionsFound": "이 이미지 서비스는 래스터 함수를 제공하지 않았습니다.",
+      "retrieveRasterFunctionsError": "이미지 서비스의 래스터 함수를 조회할 수 없습니다.",
+      "errorImageServiceUrl": "ArcGIS ImageServer URL을 입력하세요.",
+      "customRenderingRule": "사용자 지정 렌더링 규칙",
       "renderingRule": "렌더링 규칙",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "서비스가 적용하는 래스터 함수 JSON(선택 사항)입니다. 렌더링 규칙을 지정하면 캐시된 타일 대신 서비스를 동적으로 그립니다.",
@@ -751,6 +763,47 @@
       "bottomRight": "오른쪽 아래(경도, 위도)",
       "bottomLeft": "왼쪽 아래(경도, 위도)",
       "cornersNote": "네 모서리 좌표로 비디오를 지도에 지리참조합니다. 프레임이 렌더링되려면 비디오가 HTTPS로 제공되어야 하고 호스트가 교차 출처 요청(CORS)을 허용해야 합니다."
+    },
+    "polyline": {
+      "defaultName": "폴리라인",
+      "modePaste": "텍스트 붙여넣기",
+      "modeFile": "파일 선택",
+      "precisionLabel": "정밀도",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "백슬래시 이스케이프 해제(\\\\ 를 \\ 로)",
+      "delimiterLabel": "폴리라인 구분 기호",
+      "delimNewline": "줄 바꿈(기본값)",
+      "delimSemicolon": "세미콜론 (;)",
+      "delimComma": "쉼표 (,)",
+      "delimTab": "탭",
+      "delimCustom": "사용자 지정 구분 기호",
+      "customDelimPlaceholder": "사용자 지정 구분 기호(예: | 또는 ---)",
+      "outputGeometryLabel": "출력 지오메트리",
+      "separateLines": "개별 LineString",
+      "multiLineString": "단일 MultiLineString",
+      "textLabel": "인코딩된 폴리라인 문자열",
+      "placeholder": "인코딩된 폴리라인 문자열 붙여넣기(예: _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "{{lines}}개 라인을 디코딩했습니다(총 {{points}}개 좌표점).",
+      "previewTitle": "디코딩된 지오메트리 미리보기",
+      "previewExtent": "범위",
+      "previewLength": "길이",
+      "previewCoordinates": "좌표 확인",
+      "previewLine": "라인",
+      "previewPoints": "점",
+      "previewStart": "시작",
+      "previewEnd": "끝",
+      "errorFileMissing": "선택한 파일이 비어 있거나 읽을 수 없습니다.",
+      "readError": "폴리라인 파일을 읽을 수 없습니다.",
+      "errorChooseFile": "불러올 폴리라인 파일을 선택하세요.",
+      "errorEmptyInput": "인코딩된 폴리라인 문자열을 하나 이상 입력하세요.",
+      "errorNoValidLines": "유효한 폴리라인 좌표를 디코딩할 수 없습니다.",
+      "sampleGoogle": "Google / OSRM(정밀도 5)",
+      "sampleValhalla": "Valhalla / Mapbox(정밀도 6)",
+      "sampleEscaped": "이스케이프된 백슬래시(JSON 문자열 형식)",
+      "sampleMultiLine": "여러 줄 경로 배치(3개 세그먼트)",
+      "unitMeters": "{{value}} m",
+      "unitKm": "{{value}} km"
     },
     "netcdf": {
       "sampleLabel": "기온",
@@ -2263,6 +2316,7 @@
       "delimitedText": "구분된 텍스트 레이어",
       "photos": "위치 태그 사진",
       "gpx": "GPX 레이어",
+      "polyline": "인코딩된 폴리라인",
       "mbtiles": "MBTiles 레이어",
       "xyz": "XYZ 레이어",
       "wms": "WMS 레이어",
@@ -2363,6 +2417,8 @@
       "dissolve": "디졸브",
       "boundingBox": "경계 상자",
       "simplify": "단순화",
+      "decodePolyline": "폴리라인 디코딩",
+      "encodePolyline": "라인을 폴리라인으로 인코딩",
       "clip": "자르기",
       "intersection": "교집합",
       "difference": "차집합",
@@ -2376,6 +2432,8 @@
       "explode": "분해",
       "aggregate": "속성별 집계",
       "smooth": "평활화",
+      "extractVertices": "꼭짓점 추출",
+      "pointsAlongGeometry": "지오메트리를 따라 점 생성",
       "grid": "정규 격자",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "기지국 커버리지",
@@ -2385,6 +2443,7 @@
       "trajectorySpeed": "궤적 속도",
       "detectStops": "정지 지점 감지",
       "spaceTimeProximity": "시공간 근접성",
+      "mergeLayers": "레이어 병합",
       "checkValidity": "유효성 검사",
       "fixGeometries": "지오메트리 수정",
       "checkTopologyRules": "토폴로지 규칙 검사",
@@ -2569,6 +2628,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "이동 및 시간",
+      "subGroupDataManagement": "데이터 관리",
       "subGroupDataQuality": "데이터 품질",
       "subGroupTerrain": "지형",
       "subGroupReproject": "재투영",
@@ -4125,7 +4185,8 @@
     "parameterField": {
       "selectLayer": "레이어 선택...",
       "selectField": "필드 선택...",
-      "selectLayerFirst": "먼저 레이어를 선택하세요"
+      "selectLayerFirst": "먼저 레이어를 선택하세요",
+      "layersSelected_other": "{{count}}개 레이어 선택됨"
     },
     "whitebox": {
       "run": "실행",
@@ -4551,6 +4612,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "꼭짓점 추출",
+          "description": "입력 피처의 모든 꼭짓점을 점으로 변환하고 원래 속성과 함께 vertex_index 및 part_index 열을 유지합니다(같은 이름의 원본 속성은 덮어씁니다)",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "지오메트리를 따라 점 생성",
+          "description": "라인 및 폴리곤 경계를 따라 고정된 거리 간격으로 점을 생성합니다. 첫 번째와 마지막 꼭짓점은 항상 포함됩니다. 각 점에는 distance 열이 추가됩니다(같은 이름의 원본 속성은 덮어씁니다)",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "interval": {
+              "label": "간격",
+              "description": "생성되는 점 사이의 거리"
+            },
+            "units": {
+              "label": "단위",
+              "options": {
+                "kilometers": "킬로미터",
+                "meters": "미터",
+                "miles": "마일"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "정규 격자",
           "description": "범위 위에 정규 직사각형 격자(피시넷) 셀을 생성합니다. 소스: 현재 지도 보기, 레이어 범위 또는 수동 경계 상자.",
@@ -4645,6 +4736,46 @@
                 "meters": "미터",
                 "miles": "마일"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "폴리라인 디코딩",
+          "description": "속성 필드의 인코딩된 폴리라인 문자열을 LineString 벡터 레이어로 디코딩합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "field": {
+              "label": "폴리라인 필드",
+              "description": "인코딩된 폴리라인 문자열이 포함된 속성 필드"
+            },
+            "precision": {
+              "label": "정밀도",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "라인을 폴리라인으로 인코딩",
+          "description": "LineString 및 MultiLineString 지오메트리를 인코딩된 폴리라인 속성 문자열로 인코딩합니다",
+          "params": {
+            "layer": {
+              "label": "입력 레이어"
+            },
+            "precision": {
+              "label": "정밀도",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "출력 필드 이름",
+              "description": "인코딩된 폴리라인을 저장할 속성 열 이름(기본값: polyline)"
             }
           }
         },
@@ -4987,6 +5118,24 @@
                 "minutes": "분",
                 "hours": "시간"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "레이어 병합",
+          "description": "여러 벡터 레이어를 하나로 결합하고 속성 스키마를 합칩니다(없는 속성은 null이 됩니다)",
+          "params": {
+            "layers": {
+              "label": "입력 레이어",
+              "description": "두 개 이상의 레이어를 선택하세요. 표시된 순서대로 연결됩니다"
+            },
+            "addSourceField": {
+              "label": "원본 레이어 필드 추가",
+              "description": "각 출력 피처의 원본 레이어 이름을 기록합니다"
+            },
+            "sourceFieldName": {
+              "label": "원본 필드 이름",
+              "description": "원본 레이어 이름을 저장하는 필드의 이름"
             }
           }
         },
@@ -5650,6 +5799,7 @@
     "toolGroup": {
       "analysis": "분석",
       "clip": "자르기",
+      "dataManagement": "데이터 관리",
       "dataQuality": "데이터 품질",
       "dggs": "DGGS",
       "geometry": "지오메트리",
@@ -6660,6 +6810,7 @@
     "exportedWithWarnings": "레이어를 내보냈습니다. {{warnings}}",
     "exported": "레이어를 내보냈습니다.",
     "exportLayerError": "이 레이어를 내보낼 수 없습니다.",
+    "exportPolyline": "인코딩된 폴리라인(정밀도 {{precision}})",
     "refreshIntervals": {
       "off": "끄기",
       "s15": "15초",

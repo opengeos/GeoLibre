@@ -346,6 +346,10 @@
       "video": {
         "label": "إضافة طبقة فيديو",
         "description": "إضافة تراكب فيديو مُسنَد جغرافيًا عبر توفير عنوان URL لملف MP4 وإحداثيات الزوايا الأربع."
+      },
+      "polyline": {
+        "label": "إضافة طبقة خط متعدد مشفر",
+        "description": "استيراد سلاسل الخطوط المتعددة المشفرة (Google وOSRM وValhalla) من نص أو ملفات كخطوط متجهة."
       }
     },
     "shared": {
@@ -539,6 +543,14 @@
       "noSublayersFound": "لم تعلن خدمة الخرائط هذه عن أي طبقات.",
       "retrieveError": "تعذر جلب طبقات خدمة الخرائط.",
       "errorMapServiceUrl": "أدخل عنوان URL لخدمة ArcGIS MapServer.",
+      "rasterFunction": "دالة نقطية",
+      "serviceDefaultRasterFunction": "الإعداد الافتراضي للخدمة",
+      "retrieveRasterFunctions": "استعراض الدوال",
+      "retrievingRasterFunctions": "جارٍ الجلب...",
+      "noRasterFunctionsFound": "لم تعلن خدمة الصور هذه عن أي دوال نقطية.",
+      "retrieveRasterFunctionsError": "تعذر جلب الدوال النقطية لخدمة الصور.",
+      "errorImageServiceUrl": "أدخل عنوان URL لخدمة ArcGIS ImageServer.",
+      "customRenderingRule": "قاعدة عرض مخصصة",
       "renderingRule": "قاعدة العرض",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON اختياري لدالة راستر تطبقها الخدمة. قاعدة العرض ترسم الخدمة ديناميكيًا بدلًا من استخدام بلاطاتها المخزنة.",
@@ -836,6 +848,47 @@
       "bottomRight": "السفلية اليمنى (lng, lat)",
       "bottomLeft": "السفلية اليسرى (lng, lat)",
       "cornersNote": "تُسنِد الزوايا الأربع الفيديو جغرافيًا على الخريطة. يجب تقديم الفيديو عبر HTTPS، ويجب أن يسمح المضيف بالطلبات عبر المصادر (CORS) حتى تُعرض الإطارات."
+    },
+    "polyline": {
+      "defaultName": "خط متعدد",
+      "modePaste": "لصق نص",
+      "modeFile": "اختيار ملف",
+      "precisionLabel": "الدقة",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "إلغاء تهريب الشرطات المائلة العكسية (\\\\ إلى \\)",
+      "delimiterLabel": "فاصل الخطوط المتعددة",
+      "delimNewline": "سطر جديد (افتراضي)",
+      "delimSemicolon": "فاصلة منقوطة (;)",
+      "delimComma": "فاصلة (,)",
+      "delimTab": "جدولة",
+      "delimCustom": "فاصل مخصص",
+      "customDelimPlaceholder": "فاصل مخصص (مثال: | أو ---)",
+      "outputGeometryLabel": "هندسة الإخراج",
+      "separateLines": "كائنات LineString منفصلة",
+      "multiLineString": "MultiLineString واحد",
+      "textLabel": "سلسلة (سلاسل) الخط المتعدد المشفرة",
+      "placeholder": "الصق سلسلة الخط المتعدد المشفرة (مثال: _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "تم فك تشفير {{lines}} خط (خطوط) بإجمالي {{points}} نقطة إحداثيات.",
+      "previewTitle": "معاينة الهندسة المفكوكة",
+      "previewExtent": "النطاق",
+      "previewLength": "الطول",
+      "previewCoordinates": "فحص الإحداثيات",
+      "previewLine": "خط",
+      "previewPoints": "نقاط",
+      "previewStart": "البداية",
+      "previewEnd": "النهاية",
+      "errorFileMissing": "الملف المحدد فارغ أو تعذرت قراءته.",
+      "readError": "تعذرت قراءة ملف الخطوط المتعددة.",
+      "errorChooseFile": "يرجى اختيار ملف خطوط متعددة لتحميله.",
+      "errorEmptyInput": "أدخل سلسلة واحدة أو أكثر من سلاسل الخطوط المتعددة المشفرة.",
+      "errorNoValidLines": "تعذر فك تشفير أي إحداثيات صالحة للخط المتعدد.",
+      "sampleGoogle": "Google / OSRM (الدقة 5)",
+      "sampleValhalla": "Valhalla / Mapbox (الدقة 6)",
+      "sampleEscaped": "شرطات مائلة عكسية مهربة (تنسيق سلسلة JSON)",
+      "sampleMultiLine": "دفعة مسارات متعددة الأسطر (3 مقاطع)",
+      "unitMeters": "{{value}} م",
+      "unitKm": "{{value}} كم"
     },
     "netcdf": {
       "sampleLabel": "درجة حرارة الهواء",
@@ -2492,6 +2545,7 @@
       "delimitedText": "طبقة نص محدد بفواصل",
       "photos": "صور موسومة جغرافيًا",
       "gpx": "طبقة GPX",
+      "polyline": "خط متعدد مشفر",
       "mbtiles": "طبقة MBTiles",
       "xyz": "طبقة XYZ",
       "wms": "طبقة WMS",
@@ -2592,6 +2646,8 @@
       "dissolve": "إذابة",
       "boundingBox": "الصندوق المحيط",
       "simplify": "تبسيط",
+      "decodePolyline": "فك تشفير الخط المتعدد",
+      "encodePolyline": "تشفير الخط إلى خط متعدد",
       "clip": "قص",
       "intersection": "تقاطع",
       "difference": "فرق",
@@ -2605,6 +2661,8 @@
       "explode": "تفكيك",
       "aggregate": "تجميع حسب السمة",
       "smooth": "تنعيم",
+      "extractVertices": "استخراج الرؤوس",
+      "pointsAlongGeometry": "نقاط على طول الهندسة",
       "grid": "شبكة منتظمة",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "تغطية المواقع الخلوية",
@@ -2614,6 +2672,7 @@
       "trajectorySpeed": "سرعة مسار الحركة",
       "detectStops": "اكتشاف التوقفات",
       "spaceTimeProximity": "التقارب الزماني المكاني",
+      "mergeLayers": "دمج الطبقات",
       "checkValidity": "التحقق من الصحة",
       "fixGeometries": "إصلاح الأشكال الهندسية",
       "checkTopologyRules": "التحقق من قواعد الطوبولوجيا",
@@ -2798,6 +2857,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "الحركة والزمن",
+      "subGroupDataManagement": "إدارة البيانات",
       "subGroupDataQuality": "جودة البيانات",
       "subGroupTerrain": "التضاريس",
       "subGroupReproject": "إعادة الإسقاط",
@@ -4464,7 +4524,13 @@
     "parameterField": {
       "selectLayer": "حدد طبقة...",
       "selectField": "حدد حقلًا...",
-      "selectLayerFirst": "حدد طبقة أولًا"
+      "selectLayerFirst": "حدد طبقة أولًا",
+      "layersSelected_one": "تم تحديد {{count}} طبقة",
+      "layersSelected_zero": "تم تحديد {{count}} طبقة",
+      "layersSelected_two": "تم تحديد {{count}} طبقتين",
+      "layersSelected_few": "تم تحديد {{count}} طبقات",
+      "layersSelected_many": "تم تحديد {{count}} طبقة",
+      "layersSelected_other": "تم تحديد {{count}} طبقة"
     },
     "whitebox": {
       "run": "تشغيل",
@@ -4895,6 +4961,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "استخراج الرؤوس",
+          "description": "تحويل كل رأس من رؤوس المعالم المدخلة إلى نقطة مع الاحتفاظ بالسمات الأصلية إضافة إلى عمودي vertex_index وpart_index (يتم استبدال سمات المصدر التي تحمل الاسم نفسه)",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "نقاط على طول الهندسة",
+          "description": "إنشاء نقاط على فاصل مسافة ثابت على طول الخطوط وحدود المضلعات؛ يتم دائمًا تضمين الرأس الأول والأخير. تحصل كل نقطة على عمود distance (يتم استبدال سمة المصدر التي تحمل الاسم نفسه)",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "interval": {
+              "label": "الفاصل",
+              "description": "المسافة بين النقاط المُنشأة"
+            },
+            "units": {
+              "label": "الوحدات",
+              "options": {
+                "kilometers": "كيلومترات",
+                "meters": "أمتار",
+                "miles": "أميال"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "شبكة منتظمة",
           "description": "توليد شبكة مستطيلة منتظمة (شبكة صيد) من الخلايا فوق مدى ما. المصدر: عرض الخريطة الحالي، أو مدى طبقة، أو صندوق محيط يدوي.",
@@ -4989,6 +5085,46 @@
                 "meters": "أمتار",
                 "miles": "أميال"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "فك تشفير الخط المتعدد",
+          "description": "فك تشفير سلاسل الخطوط المتعددة المشفرة من حقل سمة إلى طبقة متجهة من نوع LineString",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "field": {
+              "label": "حقل الخط المتعدد",
+              "description": "حقل السمة الذي يحتوي على سلسلة الخط المتعدد المشفرة"
+            },
+            "precision": {
+              "label": "الدقة",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "تشفير الخط إلى خط متعدد",
+          "description": "تشفير هندسات LineString وMultiLineString إلى سلسلة سمة خط متعدد مشفر",
+          "params": {
+            "layer": {
+              "label": "طبقة الإدخال"
+            },
+            "precision": {
+              "label": "الدقة",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "اسم حقل الإخراج",
+              "description": "اسم عمود السمة لتخزين الخطوط المتعددة المشفرة (الافتراضي: polyline)"
             }
           }
         },
@@ -5331,6 +5467,24 @@
                 "minutes": "دقائق",
                 "hours": "ساعات"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "دمج الطبقات",
+          "description": "دمج عدة طبقات متجهة في طبقة واحدة مع توحيد مخططات سماتها (تصبح السمات المفقودة null)",
+          "params": {
+            "layers": {
+              "label": "طبقات الإدخال",
+              "description": "حدد طبقتين أو أكثر؛ يتم ضمها بالترتيب المعروض"
+            },
+            "addSourceField": {
+              "label": "إضافة حقل طبقة المصدر",
+              "description": "تسجيل اسم الطبقة الأصلية لكل معلم في الإخراج"
+            },
+            "sourceFieldName": {
+              "label": "اسم حقل المصدر",
+              "description": "اسم الحقل الذي يخزن اسم الطبقة الأصلية"
             }
           }
         },
@@ -5994,6 +6148,7 @@
     "toolGroup": {
       "analysis": "التحليل",
       "clip": "القص",
+      "dataManagement": "إدارة البيانات",
       "dataQuality": "جودة البيانات",
       "dggs": "DGGS",
       "geometry": "الهندسة",
@@ -7039,6 +7194,7 @@
     "exportedWithWarnings": "تم تصدير الطبقة. {{warnings}}",
     "exported": "تم تصدير الطبقة.",
     "exportLayerError": "تعذر تصدير هذه الطبقة.",
+    "exportPolyline": "خط متعدد مشفر (الدقة {{precision}})",
     "refreshIntervals": {
       "off": "إيقاف",
       "s15": "15 ثانية",

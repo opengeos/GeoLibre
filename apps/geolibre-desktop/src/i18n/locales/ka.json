@@ -338,6 +338,10 @@
       "video": {
         "label": "ვიდეო შრის დამატება",
         "description": "დაამატეთ გეორეფერენცირებული ვიდეო-გადაფარვა MP4 URL-ისა და ოთხი კუთხის კოორდინატების მითითებით."
+      },
+      "polyline": {
+        "label": "დაშიფრული პოლიხაზის შრის დამატება",
+        "description": "დაშიფრული პოლიხაზის სტრიქონების (Google, OSRM, Valhalla) იმპორტი ტექსტიდან ან ფაილებიდან ვექტორული ხაზების სახით."
       }
     },
     "shared": {
@@ -511,6 +515,14 @@
       "noSublayersFound": "ამ რუკის სერვისს არცერთი შრე არ გამოუცხადებია.",
       "retrieveError": "რუკის სერვისის შრეების მიღება ვერ მოხერხდა.",
       "errorMapServiceUrl": "შეიყვანეთ ArcGIS MapServer-ის URL.",
+      "rasterFunction": "რასტრული ფუნქცია",
+      "serviceDefaultRasterFunction": "სერვისის ნაგულისხმევი",
+      "retrieveRasterFunctions": "ფუნქციების დათვალიერება",
+      "retrievingRasterFunctions": "მიმდინარეობს მიღება...",
+      "noRasterFunctionsFound": "ამ გამოსახულების სერვისს არცერთი რასტრული ფუნქცია არ გამოუცხადებია.",
+      "retrieveRasterFunctionsError": "გამოსახულების სერვისის რასტრული ფუნქციების მიღება ვერ მოხერხდა.",
+      "errorImageServiceUrl": "შეიყვანეთ ArcGIS ImageServer-ის URL.",
+      "customRenderingRule": "მორგებული რენდერინგის წესი",
       "renderingRule": "რენდერის წესი",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "არასავალდებულო რასტრული ფუნქციის JSON, რომელსაც სერვისი იყენებს. რენდერის წესის მითითებისას სერვისი დინამიკურად დაიხატება ქეშირებული ფილების ნაცვლად.",
@@ -768,6 +780,47 @@
       "bottomRight": "ქვედა მარჯვენა (გრძედი, განედი)",
       "bottomLeft": "ქვედა მარცხენა (გრძედი, განედი)",
       "cornersNote": "ოთხი კუთხე ვიდეოს რუკაზე გეორეფერენცირებას ახდენს. ვიდეო უნდა მიეწოდებოდეს HTTPS-ით და ჰოსტს უნდა უშვებდეს კროს-ორიგინ მოთხოვნებს (CORS), რომ კადრები აისახოს."
+    },
+    "polyline": {
+      "defaultName": "პოლიხაზი",
+      "modePaste": "ტექსტის ჩასმა",
+      "modeFile": "ფაილის არჩევა",
+      "precisionLabel": "სიზუსტე",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "უკუდახრილი ხაზების ესკეიპის მოხსნა (\\\\ -> \\)",
+      "delimiterLabel": "პოლიხაზის გამყოფი",
+      "delimNewline": "ახალი ხაზი (ნაგულისხმევი)",
+      "delimSemicolon": "წერტილ-მძიმე (;)",
+      "delimComma": "მძიმე (,)",
+      "delimTab": "ტაბულაცია",
+      "delimCustom": "მორგებული გამყოფი",
+      "customDelimPlaceholder": "მორგებული გამყოფი (მაგ. | ან ---)",
+      "outputGeometryLabel": "გამომავალი გეომეტრია",
+      "separateLines": "ცალკეული LineString-ები",
+      "multiLineString": "ერთი MultiLineString",
+      "textLabel": "დაშიფრული პოლიხაზის სტრიქონ(ებ)ი",
+      "placeholder": "ჩასვით დაშიფრული პოლიხაზის სტრიქონი (მაგ. _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "გაიშიფრა {{lines}} ხაზი, სულ {{points}} საკოორდინატო წერტილით.",
+      "previewTitle": "გაშიფრული გეომეტრიის გადახედვა",
+      "previewExtent": "ფარგლები",
+      "previewLength": "სიგრძე",
+      "previewCoordinates": "კოორდინატების დათვალიერება",
+      "previewLine": "ხაზი",
+      "previewPoints": "წერტილი",
+      "previewStart": "დასაწყისი",
+      "previewEnd": "დასასრული",
+      "errorFileMissing": "არჩეული ფაილი ცარიელია ან ვერ წაიკითხა.",
+      "readError": "პოლიხაზის ფაილის წაკითხვა ვერ მოხერხდა.",
+      "errorChooseFile": "გთხოვთ, აირჩიოთ ჩასატვირთი პოლიხაზის ფაილი.",
+      "errorEmptyInput": "შეიყვანეთ ერთი ან მეტი დაშიფრული პოლიხაზის სტრიქონი.",
+      "errorNoValidLines": "ვერცერთი სწორი პოლიხაზის კოორდინატი ვერ გაიშიფრა.",
+      "sampleGoogle": "Google / OSRM (სიზუსტე 5)",
+      "sampleValhalla": "Valhalla / Mapbox (სიზუსტე 6)",
+      "sampleEscaped": "ესკეიპირებული უკუდახრილი ხაზები (JSON სტრიქონის ფორმატი)",
+      "sampleMultiLine": "მრავალხაზიანი მარშრუტების პაკეტი (3 სეგმენტი)",
+      "unitMeters": "{{value}} მ",
+      "unitKm": "{{value}} კმ"
     },
     "netcdf": {
       "sampleLabel": "ჰაერის ტემპერატურა",
@@ -2309,6 +2362,7 @@
       "delimitedText": "დელიმიტირებული ტექსტის შრე",
       "photos": "გეოტეგირებული ფოტოები",
       "gpx": "GPX შრე",
+      "polyline": "დაშიფრული პოლიხაზი",
       "mbtiles": "MBTiles შრე",
       "xyz": "XYZ შრე",
       "wms": "WMS შრე",
@@ -2409,6 +2463,8 @@
       "dissolve": "შერწყმა",
       "boundingBox": "შემომსაზღვრელი ბლოკი",
       "simplify": "გამარტივება",
+      "decodePolyline": "პოლიხაზის გაშიფვრა",
+      "encodePolyline": "ხაზის დაშიფვრა პოლიხაზად",
       "clip": "ამოჭრა",
       "intersection": "გადაკვეთა",
       "difference": "სხვაობა",
@@ -2422,6 +2478,8 @@
       "explode": "დაშლა",
       "aggregate": "აგრეგირება ატრიბუტით",
       "smooth": "დაგლუვება",
+      "extractVertices": "წვეროების ამოღება",
+      "pointsAlongGeometry": "წერტილები გეომეტრიის გასწვრივ",
       "grid": "რეგულარული ბადე",
       "voronoi": "ვორონოი / დელონე",
       "cellSectors": "ფიჭური საიტის დაფარვა",
@@ -2431,6 +2489,7 @@
       "trajectorySpeed": "ტრაექტორიის სიჩქარე",
       "detectStops": "გაჩერებების ამოცნობა",
       "spaceTimeProximity": "სივრცე-დროითი სიახლოვე",
+      "mergeLayers": "შრეების გაერთიანება",
       "checkValidity": "ვალიდურობის შემოწმება",
       "fixGeometries": "გეომეტრიების გასწორება",
       "checkTopologyRules": "ტოპოლოგიის წესების შემოწმება",
@@ -2615,6 +2674,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "მოძრაობა & დრო",
+      "subGroupDataManagement": "მონაცემთა მართვა",
       "subGroupDataQuality": "მონაცემთა ხარისხი",
       "subGroupTerrain": "რელიეფი",
       "subGroupReproject": "რეპროექცია",
@@ -4193,7 +4253,9 @@
     "parameterField": {
       "selectLayer": "აირჩიეთ ფენა...",
       "selectField": "აირჩიეთ ველი...",
-      "selectLayerFirst": "ჯერ აირჩიეთ ფენა"
+      "selectLayerFirst": "ჯერ აირჩიეთ ფენა",
+      "layersSelected_one": "არჩეულია {{count}} შრე",
+      "layersSelected_other": "არჩეულია {{count}} შრე"
     },
     "whitebox": {
       "run": "გაშვება",
@@ -4620,6 +4682,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "წვეროების ამოღება",
+          "description": "შემავალი ობიექტების თითოეული წვეროს წერტილად გარდაქმნა თავდაპირველი ატრიბუტების, ასევე vertex_index და part_index სვეტების შენარჩუნებით (ამავე სახელის წყარო ატრიბუტები გადაიწერება)",
+          "params": {
+            "layer": {
+              "label": "შემავალი შრე"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "წერტილები გეომეტრიის გასწვრივ",
+          "description": "წერტილების შექმნა ფიქსირებული მანძილის ინტერვალით ხაზებისა და პოლიგონების საზღვრების გასწვრივ; პირველი და ბოლო წვეროები ყოველთვის შედის. თითოეული წერტილი იღებს distance სვეტს (ამავე სახელის წყარო ატრიბუტი გადაიწერება)",
+          "params": {
+            "layer": {
+              "label": "შემავალი შრე"
+            },
+            "interval": {
+              "label": "ინტერვალი",
+              "description": "მანძილი შექმნილ წერტილებს შორის"
+            },
+            "units": {
+              "label": "ერთეულები",
+              "options": {
+                "kilometers": "კილომეტრი",
+                "meters": "მეტრი",
+                "miles": "მილი"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "რეგულარული ბადე",
           "description": "უჯრედების რეგულარული მართკუთხა ბადის (fishnet) გენერირება არეალზე. წყარო: რუკის მიმდინარე ხედი, შრის არეალი ან ხელით მითითებული შემომსაზღვრელი მართკუთხედი.",
@@ -4714,6 +4806,46 @@
                 "meters": "მეტრი",
                 "miles": "მილი"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "პოლიხაზის გაშიფვრა",
+          "description": "ატრიბუტის ველიდან დაშიფრული პოლიხაზის სტრიქონების გაშიფვრა LineString ვექტორულ შრედ",
+          "params": {
+            "layer": {
+              "label": "შემავალი შრე"
+            },
+            "field": {
+              "label": "პოლიხაზის ველი",
+              "description": "ატრიბუტის ველი, რომელიც შეიცავს დაშიფრულ პოლიხაზის სტრიქონს"
+            },
+            "precision": {
+              "label": "სიზუსტე",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "ხაზის დაშიფვრა პოლიხაზად",
+          "description": "LineString და MultiLineString გეომეტრიების დაშიფვრა დაშიფრული პოლიხაზის ატრიბუტის სტრიქონად",
+          "params": {
+            "layer": {
+              "label": "შემავალი შრე"
+            },
+            "precision": {
+              "label": "სიზუსტე",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "გამომავალი ველის სახელი",
+              "description": "ატრიბუტის სვეტის სახელი დაშიფრული პოლიხაზების შესანახად (ნაგულისხმევი: polyline)"
             }
           }
         },
@@ -5056,6 +5188,24 @@
                 "minutes": "წუთი",
                 "hours": "საათი"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "შრეების გაერთიანება",
+          "description": "რამდენიმე ვექტორული შრის ერთში გაერთიანება მათი ატრიბუტების სქემების გაერთიანებით (არარსებული ატრიბუტები ხდება null)",
+          "params": {
+            "layers": {
+              "label": "შემავალი შრეები",
+              "description": "აირჩიეთ ორი ან მეტი შრე; ისინი ნაჩვენები თანმიმდევრობით გაერთიანდება"
+            },
+            "addSourceField": {
+              "label": "წყარო შრის ველის დამატება",
+              "description": "თითოეული გამომავალი ობიექტის საწყისი შრის სახელის ჩაწერა"
+            },
+            "sourceFieldName": {
+              "label": "წყარო ველის სახელი",
+              "description": "ველის სახელი, რომელშიც ინახება საწყისი შრის სახელი"
             }
           }
         },
@@ -5719,6 +5869,7 @@
     "toolGroup": {
       "analysis": "ანალიზი",
       "clip": "ამოჭრა",
+      "dataManagement": "მონაცემთა მართვა",
       "dataQuality": "მონაცემთა ხარისხი",
       "dggs": "DGGS",
       "geometry": "გეომეტრია",
@@ -6736,6 +6887,7 @@
     "exportedWithWarnings": "შრე ექსპორტირდა. {{warnings}}",
     "exported": "შრე ექსპორტირდა.",
     "exportLayerError": "ამ შრის ექსპორტი ვერ მოხერხდა.",
+    "exportPolyline": "დაშიფრული პოლიხაზი (სიზუსტე {{precision}})",
     "refreshIntervals": {
       "off": "გამორთული",
       "s15": "15 წამი",

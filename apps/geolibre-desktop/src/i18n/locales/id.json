@@ -336,6 +336,10 @@
       "video": {
         "label": "Tambahkan Layer Video",
         "description": "Tambahkan overlay video bergeoreferensi dengan memasukkan URL MP4 dan empat koordinat sudut."
+      },
+      "polyline": {
+        "label": "Tambahkan Layer Polyline Terenkode",
+        "description": "Impor string polyline terenkode (Google, OSRM, Valhalla) dari teks atau file sebagai garis vektor."
       }
     },
     "shared": {
@@ -504,6 +508,14 @@
       "noSublayersFound": "Layanan peta ini tidak mencantumkan layer apa pun.",
       "retrieveError": "Tidak dapat mengambil layer dari layanan peta.",
       "errorMapServiceUrl": "Masukkan URL ArcGIS MapServer.",
+      "rasterFunction": "Fungsi raster",
+      "serviceDefaultRasterFunction": "Default layanan",
+      "retrieveRasterFunctions": "Telusuri fungsi",
+      "retrievingRasterFunctions": "Mengambil...",
+      "noRasterFunctionsFound": "Layanan citra ini tidak mencantumkan fungsi raster apa pun.",
+      "retrieveRasterFunctionsError": "Tidak dapat mengambil fungsi raster dari layanan citra.",
+      "errorImageServiceUrl": "Masukkan URL ArcGIS ImageServer.",
+      "customRenderingRule": "Aturan rendering kustom",
       "renderingRule": "Aturan render",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON fungsi raster opsional yang diterapkan layanan. Aturan render menggambar layanan secara dinamis alih-alih memakai ubin cache-nya.",
@@ -751,6 +763,47 @@
       "bottomRight": "Kanan-bawah (bujur, lintang)",
       "bottomLeft": "Kiri-bawah (bujur, lintang)",
       "cornersNote": "Keempat sudut menggeoreferensikan video pada peta. Video harus disajikan melalui HTTPS dan host harus mengizinkan permintaan lintas asal (CORS) agar bingkai dapat dirender."
+    },
+    "polyline": {
+      "defaultName": "Polyline",
+      "modePaste": "Tempel teks",
+      "modeFile": "Pilih file",
+      "precisionLabel": "Presisi",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "Hapus escape backslash (\\\\ menjadi \\)",
+      "delimiterLabel": "Pembatas polyline",
+      "delimNewline": "Baris baru (default)",
+      "delimSemicolon": "Titik koma (;)",
+      "delimComma": "Koma (,)",
+      "delimTab": "Tab",
+      "delimCustom": "Pembatas kustom",
+      "customDelimPlaceholder": "Pembatas kustom (mis. | atau ---)",
+      "outputGeometryLabel": "Geometri keluaran",
+      "separateLines": "LineString terpisah",
+      "multiLineString": "MultiLineString tunggal",
+      "textLabel": "String polyline terenkode",
+      "placeholder": "Tempel string polyline terenkode (mis. _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "Berhasil mendekode {{lines}} garis dengan total {{points}} titik koordinat.",
+      "previewTitle": "Pratinjau Geometri Terdekode",
+      "previewExtent": "Cakupan",
+      "previewLength": "Panjang",
+      "previewCoordinates": "Periksa koordinat",
+      "previewLine": "Garis",
+      "previewPoints": "titik",
+      "previewStart": "Awal",
+      "previewEnd": "Akhir",
+      "errorFileMissing": "File yang dipilih kosong atau tidak dapat dibaca.",
+      "readError": "Tidak dapat membaca file polyline.",
+      "errorChooseFile": "Pilih file polyline untuk dimuat.",
+      "errorEmptyInput": "Masukkan satu atau beberapa string polyline terenkode.",
+      "errorNoValidLines": "Tidak ada koordinat polyline valid yang dapat didekode.",
+      "sampleGoogle": "Google / OSRM (presisi 5)",
+      "sampleValhalla": "Valhalla / Mapbox (presisi 6)",
+      "sampleEscaped": "Backslash ter-escape (format string JSON)",
+      "sampleMultiLine": "Batch rute multi-baris (3 segmen)",
+      "unitMeters": "{{value}} m",
+      "unitKm": "{{value}} km"
     },
     "netcdf": {
       "sampleLabel": "Suhu udara",
@@ -2263,6 +2316,7 @@
       "delimitedText": "Layer Teks Berpembatas",
       "photos": "Foto Bertag Geo",
       "gpx": "Layer GPX",
+      "polyline": "Polyline Terenkode",
       "mbtiles": "Layer MBTiles",
       "xyz": "Layer XYZ",
       "wms": "Layer WMS",
@@ -2363,6 +2417,8 @@
       "dissolve": "Dissolve",
       "boundingBox": "Kotak pembatas",
       "simplify": "Sederhanakan",
+      "decodePolyline": "Dekode polyline",
+      "encodePolyline": "Enkode garis menjadi polyline",
       "clip": "Potong",
       "intersection": "Irisan",
       "difference": "Selisih",
@@ -2376,6 +2432,8 @@
       "explode": "Pisahkan (explode)",
       "aggregate": "Agregasi berdasarkan atribut",
       "smooth": "Haluskan",
+      "extractVertices": "Ekstrak verteks",
+      "pointsAlongGeometry": "Titik di sepanjang geometri",
       "grid": "Grid teratur",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Cakupan sel BTS",
@@ -2385,6 +2443,7 @@
       "trajectorySpeed": "Kecepatan lintasan",
       "detectStops": "Deteksi pemberhentian",
       "spaceTimeProximity": "Kedekatan ruang-waktu",
+      "mergeLayers": "Gabungkan layer",
       "checkValidity": "Periksa validitas",
       "fixGeometries": "Perbaiki geometri",
       "checkTopologyRules": "Periksa aturan topologi",
@@ -2569,6 +2628,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "Pergerakan & waktu",
+      "subGroupDataManagement": "Manajemen data",
       "subGroupDataQuality": "Kualitas data",
       "subGroupTerrain": "Medan",
       "subGroupReproject": "Proyeksikan ulang",
@@ -4125,7 +4185,8 @@
     "parameterField": {
       "selectLayer": "Pilih layer...",
       "selectField": "Pilih bidang...",
-      "selectLayerFirst": "Pilih layer terlebih dahulu"
+      "selectLayerFirst": "Pilih layer terlebih dahulu",
+      "layersSelected_other": "{{count}} layer dipilih"
     },
     "whitebox": {
       "run": "Jalankan",
@@ -4551,6 +4612,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "Ekstrak verteks",
+          "description": "Ubah setiap verteks fitur masukan menjadi titik, dengan mempertahankan atribut asli ditambah kolom vertex_index dan part_index (atribut sumber dengan nama yang sama akan ditimpa)",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "Titik di sepanjang geometri",
+          "description": "Buat titik pada interval jarak tetap di sepanjang garis dan batas poligon; verteks pertama dan terakhir selalu disertakan. Setiap titik mendapat kolom distance (atribut sumber dengan nama yang sama akan ditimpa)",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "interval": {
+              "label": "Interval",
+              "description": "Jarak antar titik yang dibuat"
+            },
+            "units": {
+              "label": "Satuan",
+              "options": {
+                "kilometers": "Kilometer",
+                "meters": "Meter",
+                "miles": "Mil"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "Grid teratur",
           "description": "Membuat grid persegi panjang teratur (fishnet) dari sel-sel di atas suatu cakupan. Sumber: tampilan peta saat ini, cakupan layer, atau kotak pembatas manual.",
@@ -4645,6 +4736,46 @@
                 "meters": "Meter",
                 "miles": "Mil"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "Dekode polyline",
+          "description": "Dekode string polyline terenkode dari bidang atribut menjadi layer vektor LineString",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "field": {
+              "label": "Bidang polyline",
+              "description": "Bidang atribut yang berisi string polyline terenkode"
+            },
+            "precision": {
+              "label": "Presisi",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "Enkode garis menjadi polyline",
+          "description": "Enkode geometri LineString dan MultiLineString menjadi string atribut polyline terenkode",
+          "params": {
+            "layer": {
+              "label": "Layer masukan"
+            },
+            "precision": {
+              "label": "Presisi",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "Nama bidang keluaran",
+              "description": "Nama kolom atribut untuk menyimpan polyline terenkode (default: polyline)"
             }
           }
         },
@@ -4987,6 +5118,24 @@
                 "minutes": "Menit",
                 "hours": "Jam"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "Gabungkan layer",
+          "description": "Gabungkan beberapa layer vektor menjadi satu, dengan menyatukan skema atributnya (atribut yang tidak ada menjadi null)",
+          "params": {
+            "layers": {
+              "label": "Layer masukan",
+              "description": "Pilih dua layer atau lebih; layer digabungkan sesuai urutan yang ditampilkan"
+            },
+            "addSourceField": {
+              "label": "Tambahkan bidang layer sumber",
+              "description": "Catat nama layer asal untuk setiap fitur keluaran"
+            },
+            "sourceFieldName": {
+              "label": "Nama bidang sumber",
+              "description": "Nama bidang yang menyimpan nama layer asal"
             }
           }
         },
@@ -5650,6 +5799,7 @@
     "toolGroup": {
       "analysis": "Analisis",
       "clip": "Potong",
+      "dataManagement": "Manajemen data",
       "dataQuality": "Kualitas data",
       "dggs": "DGGS",
       "geometry": "Geometri",
@@ -6660,6 +6810,7 @@
     "exportedWithWarnings": "Layer berhasil diekspor. {{warnings}}",
     "exported": "Layer berhasil diekspor.",
     "exportLayerError": "Tidak dapat mengekspor layer ini.",
+    "exportPolyline": "Polyline Terenkode (presisi {{precision}})",
     "refreshIntervals": {
       "off": "Mati",
       "s15": "15 detik",

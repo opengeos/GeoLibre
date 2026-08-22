@@ -338,6 +338,10 @@
       "video": {
         "label": "Videoebene hinzufügen",
         "description": "Fügt eine georeferenzierte Video-Überlagerung hinzu, indem eine MP4-URL und vier Eckkoordinaten angegeben werden."
+      },
+      "polyline": {
+        "label": "Kodierte Polyline-Ebene hinzufügen",
+        "description": "Kodierte Polyline-Zeichenfolgen (Google, OSRM, Valhalla) aus Text oder Dateien als Vektorlinien importieren."
       }
     },
     "shared": {
@@ -511,6 +515,14 @@
       "noSublayersFound": "Dieser Kartendienst hat keine Ebenen angegeben.",
       "retrieveError": "Die Ebenen des Kartendienstes konnten nicht abgerufen werden.",
       "errorMapServiceUrl": "Geben Sie eine ArcGIS-MapServer-URL ein.",
+      "rasterFunction": "Rasterfunktion",
+      "serviceDefaultRasterFunction": "Dienststandard",
+      "retrieveRasterFunctions": "Funktionen durchsuchen",
+      "retrievingRasterFunctions": "Wird abgerufen …",
+      "noRasterFunctionsFound": "Dieser Bilddienst hat keine Rasterfunktionen angegeben.",
+      "retrieveRasterFunctionsError": "Die Rasterfunktionen des Bilddienstes konnten nicht abgerufen werden.",
+      "errorImageServiceUrl": "Geben Sie eine ArcGIS-ImageServer-URL ein.",
+      "customRenderingRule": "Benutzerdefinierte Rendering-Regel",
       "renderingRule": "Rendering-Regel",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "Optionales JSON einer Rasterfunktion, die der Dienst anwendet. Eine Rendering-Regel zeichnet den Dienst dynamisch statt über seine zwischengespeicherten Kacheln.",
@@ -768,6 +780,47 @@
       "bottomRight": "Unten rechts (Länge, Breite)",
       "bottomLeft": "Unten links (Länge, Breite)",
       "cornersNote": "Die vier Ecken georeferenzieren das Video auf der Karte. Das Video muss über HTTPS bereitgestellt werden, und der Host muss Cross-Origin-Anfragen (CORS) zulassen, damit die Bilder gerendert werden können."
+    },
+    "polyline": {
+      "defaultName": "Polyline",
+      "modePaste": "Text einfügen",
+      "modeFile": "Datei auswählen",
+      "precisionLabel": "Genauigkeit",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "Backslashes demaskieren (\\\\ zu \\)",
+      "delimiterLabel": "Polyline-Trennzeichen",
+      "delimNewline": "Zeilenumbruch (Standard)",
+      "delimSemicolon": "Semikolon (;)",
+      "delimComma": "Komma (,)",
+      "delimTab": "Tabulator",
+      "delimCustom": "Benutzerdefiniertes Trennzeichen",
+      "customDelimPlaceholder": "Benutzerdefiniertes Trennzeichen (z. B. | oder ---)",
+      "outputGeometryLabel": "Ausgabegeometrie",
+      "separateLines": "Separate LineStrings",
+      "multiLineString": "Einzelner MultiLineString",
+      "textLabel": "Kodierte Polyline-Zeichenfolge(n)",
+      "placeholder": "Kodierte Polyline-Zeichenfolge einfügen (z. B. _p~iF~ps|U_ulLnnqC_mqNvxq`@) …",
+      "previewInfo": "{{lines}} Linie(n) mit insgesamt {{points}} Koordinatenpunkten dekodiert.",
+      "previewTitle": "Vorschau der dekodierten Geometrie",
+      "previewExtent": "Ausdehnung",
+      "previewLength": "Länge",
+      "previewCoordinates": "Koordinaten prüfen",
+      "previewLine": "Linie",
+      "previewPoints": "Punkte",
+      "previewStart": "Start",
+      "previewEnd": "Ende",
+      "errorFileMissing": "Die ausgewählte Datei ist leer oder konnte nicht gelesen werden.",
+      "readError": "Die Polyline-Datei konnte nicht gelesen werden.",
+      "errorChooseFile": "Bitte wählen Sie eine Polyline-Datei zum Laden aus.",
+      "errorEmptyInput": "Geben Sie eine oder mehrere kodierte Polyline-Zeichenfolgen ein.",
+      "errorNoValidLines": "Es konnten keine gültigen Polyline-Koordinaten dekodiert werden.",
+      "sampleGoogle": "Google / OSRM (Genauigkeit 5)",
+      "sampleValhalla": "Valhalla / Mapbox (Genauigkeit 6)",
+      "sampleEscaped": "Maskierte Backslashes (JSON-Zeichenfolgenformat)",
+      "sampleMultiLine": "Mehrzeiliger Routen-Stapel (3 Segmente)",
+      "unitMeters": "{{value}} m",
+      "unitKm": "{{value}} km"
     },
     "netcdf": {
       "sampleLabel": "Lufttemperatur",
@@ -2309,6 +2362,7 @@
       "delimitedText": "Ebene mit Trennzeichen",
       "photos": "Geotagte Fotos",
       "gpx": "GPX-Ebene",
+      "polyline": "Kodierte Polyline",
       "mbtiles": "MBTiles-Ebene",
       "xyz": "XYZ-Ebene",
       "wms": "WMS-Ebene",
@@ -2409,6 +2463,8 @@
       "dissolve": "Auflösen",
       "boundingBox": "Begrenzungsrahmen",
       "simplify": "Vereinfachen",
+      "decodePolyline": "Polyline dekodieren",
+      "encodePolyline": "Linie zu Polyline kodieren",
       "clip": "Zuschneiden",
       "intersection": "Verschneidung",
       "difference": "Differenz",
@@ -2422,6 +2478,8 @@
       "explode": "Zerlegen",
       "aggregate": "Nach Attribut aggregieren",
       "smooth": "Glätten",
+      "extractVertices": "Stützpunkte extrahieren",
+      "pointsAlongGeometry": "Punkte entlang Geometrie",
       "grid": "Regelmäßiges Raster",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Mobilfunkzellen-Abdeckung",
@@ -2431,6 +2489,7 @@
       "trajectorySpeed": "Trajektoriengeschwindigkeit",
       "detectStops": "Stopps erkennen",
       "spaceTimeProximity": "Raum-Zeit-Nähe",
+      "mergeLayers": "Ebenen zusammenführen",
       "checkValidity": "Gültigkeit prüfen",
       "fixGeometries": "Geometrien reparieren",
       "checkTopologyRules": "Topologieregeln prüfen",
@@ -2615,6 +2674,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "Bewegung & Zeit",
+      "subGroupDataManagement": "Datenverwaltung",
       "subGroupDataQuality": "Datenqualität",
       "subGroupTerrain": "Gelände",
       "subGroupReproject": "Umprojizieren",
@@ -4193,7 +4253,9 @@
     "parameterField": {
       "selectLayer": "Ebene auswählen …",
       "selectField": "Feld auswählen …",
-      "selectLayerFirst": "Zuerst eine Ebene auswählen"
+      "selectLayerFirst": "Zuerst eine Ebene auswählen",
+      "layersSelected_one": "{{count}} Ebene ausgewählt",
+      "layersSelected_other": "{{count}} Ebenen ausgewählt"
     },
     "whitebox": {
       "run": "Ausführen",
@@ -4620,6 +4682,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "Stützpunkte extrahieren",
+          "description": "Jeden Stützpunkt der Eingabe-Features in einen Punkt umwandeln; die ursprünglichen Attribute sowie die Spalten vertex_index und part_index bleiben erhalten (gleichnamige Quellattribute werden überschrieben)",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "Punkte entlang Geometrie",
+          "description": "Punkte in einem festen Abstandsintervall entlang von Linien und Polygongrenzen erzeugen; der erste und der letzte Stützpunkt werden immer einbezogen. Jeder Punkt erhält eine Spalte distance (ein gleichnamiges Quellattribut wird überschrieben)",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "interval": {
+              "label": "Intervall",
+              "description": "Abstand zwischen den erzeugten Punkten"
+            },
+            "units": {
+              "label": "Einheiten",
+              "options": {
+                "kilometers": "Kilometer",
+                "meters": "Meter",
+                "miles": "Meilen"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "Regelmäßiges Raster",
           "description": "Ein regelmäßiges rechteckiges Gitter (Fischnetz) aus Zellen über eine Ausdehnung erzeugen. Quelle: der aktuelle Kartenausschnitt, die Ausdehnung einer Ebene oder ein manueller Begrenzungsrahmen.",
@@ -4714,6 +4806,46 @@
                 "meters": "Meter",
                 "miles": "Meilen"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "Polyline dekodieren",
+          "description": "Kodierte Polyline-Zeichenfolgen aus einem Attributfeld in eine LineString-Vektorebene dekodieren",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "field": {
+              "label": "Polyline-Feld",
+              "description": "Attributfeld, das die kodierte Polyline-Zeichenfolge enthält"
+            },
+            "precision": {
+              "label": "Genauigkeit",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "Linie zu Polyline kodieren",
+          "description": "LineString- und MultiLineString-Geometrien in eine kodierte Polyline-Attributzeichenfolge kodieren",
+          "params": {
+            "layer": {
+              "label": "Eingabeebene"
+            },
+            "precision": {
+              "label": "Genauigkeit",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "Name des Ausgabefelds",
+              "description": "Name der Attributspalte zum Speichern der kodierten Polylines (Standard: polyline)"
             }
           }
         },
@@ -5056,6 +5188,24 @@
                 "minutes": "Minuten",
                 "hours": "Stunden"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "Ebenen zusammenführen",
+          "description": "Mehrere Vektorebenen zu einer zusammenführen und ihre Attributschemata vereinigen (fehlende Attribute werden null)",
+          "params": {
+            "layers": {
+              "label": "Eingabeebenen",
+              "description": "Wählen Sie zwei oder mehr Ebenen aus; sie werden in der angezeigten Reihenfolge aneinandergehängt"
+            },
+            "addSourceField": {
+              "label": "Feld für Quellebene hinzufügen",
+              "description": "Den Namen der Ursprungsebene jedes Ausgabe-Features speichern"
+            },
+            "sourceFieldName": {
+              "label": "Name des Quellfelds",
+              "description": "Name des Felds, das den Namen der Ursprungsebene speichert"
             }
           }
         },
@@ -5719,6 +5869,7 @@
     "toolGroup": {
       "analysis": "Analyse",
       "clip": "Zuschneiden",
+      "dataManagement": "Datenverwaltung",
       "dataQuality": "Datenqualität",
       "dggs": "DGGS",
       "geometry": "Geometrie",
@@ -6736,6 +6887,7 @@
     "exportedWithWarnings": "Ebene exportiert. {{warnings}}",
     "exported": "Ebene exportiert.",
     "exportLayerError": "Diese Ebene konnte nicht exportiert werden.",
+    "exportPolyline": "Kodierte Polyline (Genauigkeit {{precision}})",
     "refreshIntervals": {
       "off": "Aus",
       "s15": "15 Sekunden",

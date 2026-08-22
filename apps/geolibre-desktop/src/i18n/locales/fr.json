@@ -338,6 +338,10 @@
       "video": {
         "label": "Ajouter une couche vidéo",
         "description": "Ajouter une superposition vidéo géoréférencée en fournissant une URL MP4 et quatre coordonnées d'angle."
+      },
+      "polyline": {
+        "label": "Ajouter une couche de polyligne encodée",
+        "description": "Importer des chaînes de polyligne encodée (Google, OSRM, Valhalla) depuis du texte ou des fichiers sous forme de lignes vectorielles."
       }
     },
     "shared": {
@@ -511,6 +515,14 @@
       "noSublayersFound": "Ce service de carte n'a annoncé aucune couche.",
       "retrieveError": "Impossible de récupérer les couches du service de carte.",
       "errorMapServiceUrl": "Entrez une URL ArcGIS MapServer.",
+      "rasterFunction": "Fonction raster",
+      "serviceDefaultRasterFunction": "Valeur par défaut du service",
+      "retrieveRasterFunctions": "Parcourir les fonctions",
+      "retrievingRasterFunctions": "Récupération...",
+      "noRasterFunctionsFound": "Ce service d'imagerie n'a annoncé aucune fonction raster.",
+      "retrieveRasterFunctionsError": "Impossible de récupérer les fonctions raster du service d'imagerie.",
+      "errorImageServiceUrl": "Entrez une URL ArcGIS ImageServer.",
+      "customRenderingRule": "Règle de rendu personnalisée",
       "renderingRule": "Règle de rendu",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON facultatif d'une fonction raster appliquée par le service. Une règle de rendu dessine le service dynamiquement au lieu d'utiliser ses tuiles en cache.",
@@ -768,6 +780,47 @@
       "bottomRight": "Bas-droite (lng, lat)",
       "bottomLeft": "Bas-gauche (lng, lat)",
       "cornersNote": "Les quatre coins géoréférencent la vidéo sur la carte. La vidéo doit être servie en HTTPS et l'hôte doit autoriser les requêtes cross-origin (CORS) pour que les images s'affichent."
+    },
+    "polyline": {
+      "defaultName": "Polyligne",
+      "modePaste": "Coller du texte",
+      "modeFile": "Choisir un fichier",
+      "precisionLabel": "Précision",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "Déséchapper les barres obliques inverses (\\\\ vers \\)",
+      "delimiterLabel": "Délimiteur de polylignes",
+      "delimNewline": "Saut de ligne (par défaut)",
+      "delimSemicolon": "Point-virgule (;)",
+      "delimComma": "Virgule (,)",
+      "delimTab": "Tabulation",
+      "delimCustom": "Délimiteur personnalisé",
+      "customDelimPlaceholder": "Délimiteur personnalisé (p. ex. | ou ---)",
+      "outputGeometryLabel": "Géométrie de sortie",
+      "separateLines": "LineStrings séparés",
+      "multiLineString": "Un seul MultiLineString",
+      "textLabel": "Chaîne(s) de polyligne encodée",
+      "placeholder": "Collez la chaîne de polyligne encodée (p. ex. _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "{{lines}} ligne(s) décodée(s) avec {{points}} points de coordonnées au total.",
+      "previewTitle": "Aperçu de la géométrie décodée",
+      "previewExtent": "Étendue",
+      "previewLength": "Longueur",
+      "previewCoordinates": "Inspecter les coordonnées",
+      "previewLine": "Ligne",
+      "previewPoints": "points",
+      "previewStart": "Début",
+      "previewEnd": "Fin",
+      "errorFileMissing": "Le fichier sélectionné est vide ou n'a pas pu être lu.",
+      "readError": "Impossible de lire le fichier de polylignes.",
+      "errorChooseFile": "Veuillez choisir un fichier de polylignes à charger.",
+      "errorEmptyInput": "Entrez une ou plusieurs chaînes de polyligne encodée.",
+      "errorNoValidLines": "Aucune coordonnée de polyligne valide n'a pu être décodée.",
+      "sampleGoogle": "Google / OSRM (précision 5)",
+      "sampleValhalla": "Valhalla / Mapbox (précision 6)",
+      "sampleEscaped": "Barres obliques inverses échappées (format de chaîne JSON)",
+      "sampleMultiLine": "Lot d'itinéraires multilignes (3 segments)",
+      "unitMeters": "{{value}} m",
+      "unitKm": "{{value}} km"
     },
     "netcdf": {
       "sampleLabel": "Température de l'air",
@@ -2309,6 +2362,7 @@
       "delimitedText": "Couche de texte délimité",
       "photos": "Photos géotaguées",
       "gpx": "Couche GPX",
+      "polyline": "Polyligne encodée",
       "mbtiles": "Couche MBTiles",
       "xyz": "Couche XYZ",
       "wms": "Couche WMS",
@@ -2409,6 +2463,8 @@
       "dissolve": "Fusionner",
       "boundingBox": "Boîte englobante",
       "simplify": "Simplifier",
+      "decodePolyline": "Décoder la polyligne",
+      "encodePolyline": "Encoder la ligne en polyligne",
       "clip": "Découper",
       "intersection": "Intersection",
       "difference": "Différence",
@@ -2422,6 +2478,8 @@
       "explode": "Décomposer",
       "aggregate": "Agréger par attribut",
       "smooth": "Lisser",
+      "extractVertices": "Extraire les sommets",
+      "pointsAlongGeometry": "Points le long de la géométrie",
       "grid": "Grille régulière",
       "voronoi": "Voronoï / Delaunay",
       "cellSectors": "Couverture de site cellulaire",
@@ -2431,6 +2489,7 @@
       "trajectorySpeed": "Vitesse de trajectoire",
       "detectStops": "Détecter les arrêts",
       "spaceTimeProximity": "Proximité spatio-temporelle",
+      "mergeLayers": "Fusionner les couches",
       "checkValidity": "Vérifier la validité",
       "fixGeometries": "Corriger les géométries",
       "checkTopologyRules": "Vérifier les règles de topologie",
@@ -2615,6 +2674,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "Mouvement et temps",
+      "subGroupDataManagement": "Gestion des données",
       "subGroupDataQuality": "Qualité des données",
       "subGroupTerrain": "Relief",
       "subGroupReproject": "Reprojeter",
@@ -4193,7 +4253,9 @@
     "parameterField": {
       "selectLayer": "Sélectionner une couche...",
       "selectField": "Sélectionner un champ...",
-      "selectLayerFirst": "Sélectionnez d'abord une couche"
+      "selectLayerFirst": "Sélectionnez d'abord une couche",
+      "layersSelected_one": "{{count}} couche sélectionnée",
+      "layersSelected_other": "{{count}} couches sélectionnées"
     },
     "whitebox": {
       "run": "Exécuter",
@@ -4620,6 +4682,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "Extraire les sommets",
+          "description": "Convertir chaque sommet des entités d'entrée en point, en conservant les attributs d'origine plus les colonnes vertex_index et part_index (les attributs source de même nom sont écrasés)",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "Points le long de la géométrie",
+          "description": "Générer des points à un intervalle de distance fixe le long des lignes et des limites de polygones ; le premier et le dernier sommet sont toujours inclus. Chaque point reçoit une colonne distance (un attribut source de même nom est écrasé)",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "interval": {
+              "label": "Intervalle",
+              "description": "Distance entre les points générés"
+            },
+            "units": {
+              "label": "Unités",
+              "options": {
+                "kilometers": "Kilomètres",
+                "meters": "Mètres",
+                "miles": "Milles"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "Grille régulière",
           "description": "Générer une grille rectangulaire régulière (maillage) de cellules sur une étendue. Source : la vue actuelle de la carte, l'étendue d'une couche ou une boîte englobante manuelle.",
@@ -4714,6 +4806,46 @@
                 "meters": "Mètres",
                 "miles": "Milles"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "Décoder la polyligne",
+          "description": "Décoder les chaînes de polyligne encodée d'un champ attributaire en une couche vectorielle LineString",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "field": {
+              "label": "Champ de polyligne",
+              "description": "Champ attributaire contenant la chaîne de polyligne encodée"
+            },
+            "precision": {
+              "label": "Précision",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "Encoder la ligne en polyligne",
+          "description": "Encoder les géométries LineString et MultiLineString en une chaîne attributaire de polyligne encodée",
+          "params": {
+            "layer": {
+              "label": "Couche d'entrée"
+            },
+            "precision": {
+              "label": "Précision",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "Nom du champ de sortie",
+              "description": "Nom de la colonne attributaire où stocker les polylignes encodées (par défaut : polyline)"
             }
           }
         },
@@ -5056,6 +5188,24 @@
                 "minutes": "Minutes",
                 "hours": "Heures"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "Fusionner les couches",
+          "description": "Combiner plusieurs couches vectorielles en une seule, en unissant leurs schémas attributaires (les attributs manquants deviennent null)",
+          "params": {
+            "layers": {
+              "label": "Couches d'entrée",
+              "description": "Sélectionnez deux couches ou plus ; elles sont concaténées dans l'ordre affiché"
+            },
+            "addSourceField": {
+              "label": "Ajouter un champ de couche source",
+              "description": "Enregistrer le nom de la couche d'origine de chaque entité de sortie"
+            },
+            "sourceFieldName": {
+              "label": "Nom du champ source",
+              "description": "Nom du champ qui stocke le nom de la couche d'origine"
             }
           }
         },
@@ -5719,6 +5869,7 @@
     "toolGroup": {
       "analysis": "Analyse",
       "clip": "Découpage",
+      "dataManagement": "Gestion des données",
       "dataQuality": "Qualité des données",
       "dggs": "DGGS",
       "geometry": "Géométrie",
@@ -6736,6 +6887,7 @@
     "exportedWithWarnings": "Couche exportée. {{warnings}}",
     "exported": "Couche exportée.",
     "exportLayerError": "Impossible d'exporter cette couche.",
+    "exportPolyline": "Polyligne encodée (précision {{precision}})",
     "refreshIntervals": {
       "off": "Désactivé",
       "s15": "15 secondes",

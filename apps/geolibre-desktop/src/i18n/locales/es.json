@@ -338,6 +338,10 @@
       "video": {
         "label": "Añadir capa de vídeo",
         "description": "Añade una superposición de vídeo georreferenciado indicando una URL MP4 y cuatro coordenadas de esquina."
+      },
+      "polyline": {
+        "label": "Añadir capa de polilínea codificada",
+        "description": "Importar cadenas de polilínea codificada (Google, OSRM, Valhalla) desde texto o archivos como líneas vectoriales."
       }
     },
     "shared": {
@@ -511,6 +515,14 @@
       "noSublayersFound": "Este servicio de mapas no publicó ninguna capa.",
       "retrieveError": "No se pudieron recuperar las capas del servicio de mapas.",
       "errorMapServiceUrl": "Introduzca una URL de ArcGIS MapServer.",
+      "rasterFunction": "Función ráster",
+      "serviceDefaultRasterFunction": "Valor predeterminado del servicio",
+      "retrieveRasterFunctions": "Explorar funciones",
+      "retrievingRasterFunctions": "Recuperando...",
+      "noRasterFunctionsFound": "Este servicio de imágenes no publicó ninguna función ráster.",
+      "retrieveRasterFunctionsError": "No se pudieron recuperar las funciones ráster del servicio de imágenes.",
+      "errorImageServiceUrl": "Introduzca una URL de ArcGIS ImageServer.",
+      "customRenderingRule": "Regla de renderizado personalizada",
       "renderingRule": "Regla de representación",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON opcional de una función ráster que aplica el servicio. Una regla de representación dibuja el servicio de forma dinámica en lugar de usar sus teselas en caché.",
@@ -768,6 +780,47 @@
       "bottomRight": "Inferior derecha (lng, lat)",
       "bottomLeft": "Inferior izquierda (lng, lat)",
       "cornersNote": "Las cuatro esquinas georreferencian el vídeo en el mapa. El vídeo debe servirse por HTTPS y el host debe permitir solicitudes entre orígenes (CORS) para que se representen los fotogramas."
+    },
+    "polyline": {
+      "defaultName": "Polilínea",
+      "modePaste": "Pegar texto",
+      "modeFile": "Elegir archivo",
+      "precisionLabel": "Precisión",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "Quitar escape de barras invertidas (\\\\ a \\)",
+      "delimiterLabel": "Delimitador de polilíneas",
+      "delimNewline": "Salto de línea (predeterminado)",
+      "delimSemicolon": "Punto y coma (;)",
+      "delimComma": "Coma (,)",
+      "delimTab": "Tabulador",
+      "delimCustom": "Delimitador personalizado",
+      "customDelimPlaceholder": "Delimitador personalizado (p. ej., | o ---)",
+      "outputGeometryLabel": "Geometría de salida",
+      "separateLines": "LineStrings separados",
+      "multiLineString": "Un solo MultiLineString",
+      "textLabel": "Cadena(s) de polilínea codificada",
+      "placeholder": "Pegue la cadena de polilínea codificada (p. ej., _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "Se decodificaron {{lines}} línea(s) con {{points}} puntos de coordenadas en total.",
+      "previewTitle": "Vista previa de la geometría decodificada",
+      "previewExtent": "Extensión",
+      "previewLength": "Longitud",
+      "previewCoordinates": "Inspeccionar coordenadas",
+      "previewLine": "Línea",
+      "previewPoints": "puntos",
+      "previewStart": "Inicio",
+      "previewEnd": "Fin",
+      "errorFileMissing": "El archivo seleccionado está vacío o no se pudo leer.",
+      "readError": "No se pudo leer el archivo de polilíneas.",
+      "errorChooseFile": "Elija un archivo de polilíneas para cargar.",
+      "errorEmptyInput": "Introduzca una o más cadenas de polilínea codificada.",
+      "errorNoValidLines": "No se pudo decodificar ninguna coordenada de polilínea válida.",
+      "sampleGoogle": "Google / OSRM (precisión 5)",
+      "sampleValhalla": "Valhalla / Mapbox (precisión 6)",
+      "sampleEscaped": "Barras invertidas escapadas (formato de cadena JSON)",
+      "sampleMultiLine": "Lote de rutas multilínea (3 segmentos)",
+      "unitMeters": "{{value}} m",
+      "unitKm": "{{value}} km"
     },
     "netcdf": {
       "sampleLabel": "Temperatura del aire",
@@ -2309,6 +2362,7 @@
       "delimitedText": "Capa de texto delimitado",
       "photos": "Fotos geoetiquetadas",
       "gpx": "Capa GPX",
+      "polyline": "Polilínea codificada",
       "mbtiles": "Capa MBTiles",
       "xyz": "Capa XYZ",
       "wms": "Capa WMS",
@@ -2409,6 +2463,8 @@
       "dissolve": "Disolver",
       "boundingBox": "Cuadro delimitador",
       "simplify": "Simplificar",
+      "decodePolyline": "Decodificar polilínea",
+      "encodePolyline": "Codificar línea a polilínea",
       "clip": "Recortar",
       "intersection": "Intersección",
       "difference": "Diferencia",
@@ -2422,6 +2478,8 @@
       "explode": "Explosionar",
       "aggregate": "Agregar por atributo",
       "smooth": "Suavizar",
+      "extractVertices": "Extraer vértices",
+      "pointsAlongGeometry": "Puntos a lo largo de la geometría",
       "grid": "Cuadrícula regular",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Cobertura de sitios celulares",
@@ -2431,6 +2489,7 @@
       "trajectorySpeed": "Velocidad de trayectoria",
       "detectStops": "Detectar paradas",
       "spaceTimeProximity": "Proximidad espacio-temporal",
+      "mergeLayers": "Fusionar capas",
       "checkValidity": "Comprobar validez",
       "fixGeometries": "Corregir geometrías",
       "checkTopologyRules": "Comprobar reglas de topología",
@@ -2615,6 +2674,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "Movimiento y tiempo",
+      "subGroupDataManagement": "Gestión de datos",
       "subGroupDataQuality": "Calidad de datos",
       "subGroupTerrain": "Terreno",
       "subGroupReproject": "Reproyectar",
@@ -4193,7 +4253,9 @@
     "parameterField": {
       "selectLayer": "Seleccionar una capa...",
       "selectField": "Seleccionar un campo...",
-      "selectLayerFirst": "Seleccione primero una capa"
+      "selectLayerFirst": "Seleccione primero una capa",
+      "layersSelected_one": "{{count}} capa seleccionada",
+      "layersSelected_other": "{{count}} capas seleccionadas"
     },
     "whitebox": {
       "run": "Ejecutar",
@@ -4620,6 +4682,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "Extraer vértices",
+          "description": "Convertir cada vértice de las entidades de entrada en un punto, conservando los atributos originales más las columnas vertex_index y part_index (los atributos de origen con el mismo nombre se sobrescriben)",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "Puntos a lo largo de la geometría",
+          "description": "Generar puntos a un intervalo de distancia fijo a lo largo de líneas y límites de polígonos; el primer y el último vértice siempre se incluyen. Cada punto recibe una columna distance (un atributo de origen con el mismo nombre se sobrescribe)",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "interval": {
+              "label": "Intervalo",
+              "description": "Distancia entre los puntos generados"
+            },
+            "units": {
+              "label": "Unidades",
+              "options": {
+                "kilometers": "Kilómetros",
+                "meters": "Metros",
+                "miles": "Millas"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "Cuadrícula regular",
           "description": "Genera una cuadrícula rectangular regular (malla) de celdas sobre una extensión. Origen: la vista actual del mapa, la extensión de una capa o un cuadro delimitador manual.",
@@ -4714,6 +4806,46 @@
                 "meters": "Metros",
                 "miles": "Millas"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "Decodificar polilínea",
+          "description": "Decodificar cadenas de polilínea codificada de un campo de atributo en una capa vectorial LineString",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "field": {
+              "label": "Campo de polilínea",
+              "description": "Campo de atributo que contiene la cadena de polilínea codificada"
+            },
+            "precision": {
+              "label": "Precisión",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "Codificar línea a polilínea",
+          "description": "Codificar geometrías LineString y MultiLineString en una cadena de atributo de polilínea codificada",
+          "params": {
+            "layer": {
+              "label": "Capa de entrada"
+            },
+            "precision": {
+              "label": "Precisión",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "Nombre del campo de salida",
+              "description": "Nombre de la columna de atributo donde almacenar las polilíneas codificadas (predeterminado: polyline)"
             }
           }
         },
@@ -5056,6 +5188,24 @@
                 "minutes": "Minutos",
                 "hours": "Horas"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "Fusionar capas",
+          "description": "Combinar varias capas vectoriales en una sola, uniendo sus esquemas de atributos (los atributos ausentes pasan a ser null)",
+          "params": {
+            "layers": {
+              "label": "Capas de entrada",
+              "description": "Seleccione dos o más capas; se concatenan en el orden mostrado"
+            },
+            "addSourceField": {
+              "label": "Añadir campo de capa de origen",
+              "description": "Registrar el nombre de la capa de origen de cada entidad de salida"
+            },
+            "sourceFieldName": {
+              "label": "Nombre del campo de origen",
+              "description": "Nombre del campo que almacena el nombre de la capa de origen"
             }
           }
         },
@@ -5719,6 +5869,7 @@
     "toolGroup": {
       "analysis": "Análisis",
       "clip": "Recorte",
+      "dataManagement": "Gestión de datos",
       "dataQuality": "Calidad de datos",
       "dggs": "DGGS",
       "geometry": "Geometría",
@@ -6736,6 +6887,7 @@
     "exportedWithWarnings": "Capa exportada. {{warnings}}",
     "exported": "Capa exportada.",
     "exportLayerError": "No se pudo exportar esta capa.",
+    "exportPolyline": "Polilínea codificada (precisión {{precision}})",
     "refreshIntervals": {
       "off": "Desactivado",
       "s15": "15 segundos",

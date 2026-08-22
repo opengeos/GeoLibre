@@ -336,6 +336,10 @@
       "video": {
         "label": "添加视频图层",
         "description": "通过提供 MP4 URL 和四个角点坐标，添加已地理配准的视频叠加层。"
+      },
+      "polyline": {
+        "label": "添加编码折线图层",
+        "description": "将编码折线字符串（Google、OSRM、Valhalla）从文本或文件导入为矢量线。"
       }
     },
     "shared": {
@@ -504,6 +508,14 @@
       "noSublayersFound": "该地图服务未提供任何图层。",
       "retrieveError": "无法获取该地图服务的图层。",
       "errorMapServiceUrl": "请输入 ArcGIS MapServer URL。",
+      "rasterFunction": "栅格函数",
+      "serviceDefaultRasterFunction": "服务默认",
+      "retrieveRasterFunctions": "浏览函数",
+      "retrievingRasterFunctions": "正在获取...",
+      "noRasterFunctionsFound": "该影像服务未提供任何栅格函数。",
+      "retrieveRasterFunctionsError": "无法获取该影像服务的栅格函数。",
+      "errorImageServiceUrl": "请输入 ArcGIS ImageServer URL。",
+      "customRenderingRule": "自定义渲染规则",
       "renderingRule": "渲染规则",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "可选的栅格函数 JSON，由服务端应用。设置渲染规则后将动态绘制该服务，而不使用其缓存切片。",
@@ -751,6 +763,47 @@
       "bottomRight": "右下角（经度, 纬度）",
       "bottomLeft": "左下角（经度, 纬度）",
       "cornersNote": "这四个角点用于在地图上对视频进行地理配准。视频必须通过 HTTPS 提供，且主机必须允许跨域请求（CORS），画面才能正常渲染。"
+    },
+    "polyline": {
+      "defaultName": "折线",
+      "modePaste": "粘贴文本",
+      "modeFile": "选择文件",
+      "precisionLabel": "精度",
+      "precision5": "5（Google / OSRM）",
+      "precision6": "6（Valhalla / Mapbox）",
+      "unescapeLabel": "取消反斜杠转义（\\\\ 转为 \\）",
+      "delimiterLabel": "折线分隔符",
+      "delimNewline": "换行符（默认）",
+      "delimSemicolon": "分号 (;)",
+      "delimComma": "逗号 (,)",
+      "delimTab": "制表符",
+      "delimCustom": "自定义分隔符",
+      "customDelimPlaceholder": "自定义分隔符（例如 | 或 ---）",
+      "outputGeometryLabel": "输出几何",
+      "separateLines": "独立的 LineString",
+      "multiLineString": "单个 MultiLineString",
+      "textLabel": "编码折线字符串",
+      "placeholder": "粘贴编码折线字符串（例如 _p~iF~ps|U_ulLnnqC_mqNvxq`@）...",
+      "previewInfo": "已解码 {{lines}} 条线，共 {{points}} 个坐标点。",
+      "previewTitle": "解码几何预览",
+      "previewExtent": "范围",
+      "previewLength": "长度",
+      "previewCoordinates": "查看坐标",
+      "previewLine": "线",
+      "previewPoints": "个点",
+      "previewStart": "起点",
+      "previewEnd": "终点",
+      "errorFileMissing": "所选文件为空或无法读取。",
+      "readError": "无法读取折线文件。",
+      "errorChooseFile": "请选择要加载的折线文件。",
+      "errorEmptyInput": "请输入一个或多个编码折线字符串。",
+      "errorNoValidLines": "无法解码出任何有效的折线坐标。",
+      "sampleGoogle": "Google / OSRM（精度 5）",
+      "sampleValhalla": "Valhalla / Mapbox（精度 6）",
+      "sampleEscaped": "转义反斜杠（JSON 字符串格式）",
+      "sampleMultiLine": "多线路线批量（3 段）",
+      "unitMeters": "{{value}} 米",
+      "unitKm": "{{value}} 千米"
     },
     "netcdf": {
       "sampleLabel": "气温",
@@ -2263,6 +2316,7 @@
       "delimitedText": "分隔文本图层",
       "photos": "带地理标记的照片",
       "gpx": "GPX 图层",
+      "polyline": "编码折线",
       "mbtiles": "MBTiles 图层",
       "xyz": "XYZ 图层",
       "wms": "WMS 图层",
@@ -2363,6 +2417,8 @@
       "dissolve": "融合",
       "boundingBox": "边界框",
       "simplify": "简化",
+      "decodePolyline": "解码折线",
+      "encodePolyline": "将线编码为折线",
       "clip": "裁剪",
       "intersection": "相交",
       "difference": "差集",
@@ -2376,6 +2432,8 @@
       "explode": "打散",
       "aggregate": "按属性聚合",
       "smooth": "平滑",
+      "extractVertices": "提取顶点",
+      "pointsAlongGeometry": "沿几何生成点",
       "grid": "规则格网",
       "voronoi": "泰森多边形 / 德劳内三角网",
       "cellSectors": "基站覆盖扇区",
@@ -2385,6 +2443,7 @@
       "trajectorySpeed": "轨迹速度",
       "detectStops": "检测停留点",
       "spaceTimeProximity": "时空邻近性",
+      "mergeLayers": "合并图层",
       "checkValidity": "检查有效性",
       "fixGeometries": "修复几何",
       "checkTopologyRules": "检查拓扑规则",
@@ -2569,6 +2628,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "移动与时间",
+      "subGroupDataManagement": "数据管理",
       "subGroupDataQuality": "数据质量",
       "subGroupTerrain": "地形",
       "subGroupReproject": "重投影",
@@ -4125,7 +4185,8 @@
     "parameterField": {
       "selectLayer": "选择一个图层...",
       "selectField": "选择一个字段...",
-      "selectLayerFirst": "请先选择一个图层"
+      "selectLayerFirst": "请先选择一个图层",
+      "layersSelected_other": "已选择 {{count}} 个图层"
     },
     "whitebox": {
       "run": "运行",
@@ -4551,6 +4612,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "提取顶点",
+          "description": "将输入要素的每个顶点转换为点，保留原始属性并添加 vertex_index 和 part_index 列（同名的源属性将被覆盖）",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "沿几何生成点",
+          "description": "沿线和多边形边界按固定距离间隔生成点；始终包含首尾顶点。每个点都会获得一个 distance 列（同名的源属性将被覆盖）",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "interval": {
+              "label": "间隔",
+              "description": "生成点之间的距离"
+            },
+            "units": {
+              "label": "单位",
+              "options": {
+                "kilometers": "千米",
+                "meters": "米",
+                "miles": "英里"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "规则格网",
           "description": "在指定范围内生成规则的矩形格网（渔网）。范围来源：当前地图视图、图层范围或手动输入的边界框。",
@@ -4645,6 +4736,46 @@
                 "meters": "米",
                 "miles": "英里"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "解码折线",
+          "description": "将属性字段中的编码折线字符串解码为 LineString 矢量图层",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "field": {
+              "label": "折线字段",
+              "description": "包含编码折线字符串的属性字段"
+            },
+            "precision": {
+              "label": "精度",
+              "options": {
+                "5": "5（Google / OSRM）",
+                "6": "6（Valhalla / Mapbox）"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "将线编码为折线",
+          "description": "将 LineString 和 MultiLineString 几何编码为编码折线属性字符串",
+          "params": {
+            "layer": {
+              "label": "输入图层"
+            },
+            "precision": {
+              "label": "精度",
+              "options": {
+                "5": "5（Google / OSRM）",
+                "6": "6（Valhalla / Mapbox）"
+              }
+            },
+            "targetField": {
+              "label": "输出字段名称",
+              "description": "用于存储编码折线的属性列名称（默认：polyline）"
             }
           }
         },
@@ -4987,6 +5118,24 @@
                 "minutes": "分钟",
                 "hours": "小时"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "合并图层",
+          "description": "将多个矢量图层合并为一个，并合并其属性架构（缺失的属性将为 null）",
+          "params": {
+            "layers": {
+              "label": "输入图层",
+              "description": "选择两个或更多图层；按显示顺序依次拼接"
+            },
+            "addSourceField": {
+              "label": "添加来源图层字段",
+              "description": "记录每个输出要素的来源图层名称"
+            },
+            "sourceFieldName": {
+              "label": "来源字段名称",
+              "description": "用于存储来源图层名称的字段名称"
             }
           }
         },
@@ -5650,6 +5799,7 @@
     "toolGroup": {
       "analysis": "分析",
       "clip": "裁剪",
+      "dataManagement": "数据管理",
       "dataQuality": "数据质量",
       "dggs": "DGGS",
       "geometry": "几何",
@@ -6660,6 +6810,7 @@
     "exportedWithWarnings": "图层已导出。{{warnings}}",
     "exported": "图层已导出。",
     "exportLayerError": "无法导出此图层。",
+    "exportPolyline": "编码折线（精度 {{precision}}）",
     "refreshIntervals": {
       "off": "关闭",
       "s15": "15 秒",

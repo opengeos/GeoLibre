@@ -336,6 +336,10 @@
       "video": {
         "label": "เพิ่มเลเยอร์วิดีโอ",
         "description": "เพิ่มวิดีโอซ้อนทับที่อ้างอิงพิกัดภูมิศาสตร์ โดยระบุ URL ของไฟล์ MP4 และพิกัดมุมทั้งสี่"
+      },
+      "polyline": {
+        "label": "เพิ่มเลเยอร์โพลีไลน์ที่เข้ารหัส",
+        "description": "นำเข้าสตริงโพลีไลน์ที่เข้ารหัส (Google, OSRM, Valhalla) จากข้อความหรือไฟล์เป็นเส้นเวกเตอร์"
       }
     },
     "shared": {
@@ -504,6 +508,14 @@
       "noSublayersFound": "บริการแผนที่นี้ไม่ได้ระบุเลเยอร์ใดไว้",
       "retrieveError": "ไม่สามารถดึงรายการเลเยอร์ของบริการแผนที่ได้",
       "errorMapServiceUrl": "ป้อน URL ของ ArcGIS MapServer",
+      "rasterFunction": "ฟังก์ชันแรสเตอร์",
+      "serviceDefaultRasterFunction": "ค่าเริ่มต้นของบริการ",
+      "retrieveRasterFunctions": "เรียกดูฟังก์ชัน",
+      "retrievingRasterFunctions": "กำลังดึงข้อมูล...",
+      "noRasterFunctionsFound": "บริการภาพนี้ไม่ได้ระบุฟังก์ชันแรสเตอร์ใดไว้",
+      "retrieveRasterFunctionsError": "ไม่สามารถดึงฟังก์ชันแรสเตอร์ของบริการภาพได้",
+      "errorImageServiceUrl": "ป้อน URL ของ ArcGIS ImageServer",
+      "customRenderingRule": "กฎการเรนเดอร์ที่กำหนดเอง",
       "renderingRule": "กฎการเรนเดอร์",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON ของฟังก์ชันแรสเตอร์ที่บริการนำไปใช้ (ไม่บังคับ) การกำหนดกฎการเรนเดอร์จะวาดบริการแบบไดนามิกแทนการใช้ไทล์ที่แคชไว้",
@@ -751,6 +763,47 @@
       "bottomRight": "ล่างขวา (ลองจิจูด, ละติจูด)",
       "bottomLeft": "ล่างซ้าย (ลองจิจูด, ละติจูด)",
       "cornersNote": "มุมทั้งสี่ใช้อ้างอิงตำแหน่งวิดีโอบนแผนที่ วิดีโอต้องให้บริการผ่าน HTTPS และโฮสต์ต้องอนุญาตคำขอข้ามต้นทาง (CORS) จึงจะแสดงเฟรมได้"
+    },
+    "polyline": {
+      "defaultName": "โพลีไลน์",
+      "modePaste": "วางข้อความ",
+      "modeFile": "เลือกไฟล์",
+      "precisionLabel": "ความละเอียด",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "ยกเลิก escape แบ็กสแลช (\\\\ เป็น \\)",
+      "delimiterLabel": "ตัวคั่นโพลีไลน์",
+      "delimNewline": "ขึ้นบรรทัดใหม่ (ค่าเริ่มต้น)",
+      "delimSemicolon": "อัฒภาค (;)",
+      "delimComma": "จุลภาค (,)",
+      "delimTab": "แท็บ",
+      "delimCustom": "ตัวคั่นที่กำหนดเอง",
+      "customDelimPlaceholder": "ตัวคั่นที่กำหนดเอง (เช่น | หรือ ---)",
+      "outputGeometryLabel": "เรขาคณิตผลลัพธ์",
+      "separateLines": "LineString แยกกัน",
+      "multiLineString": "MultiLineString เดียว",
+      "textLabel": "สตริงโพลีไลน์ที่เข้ารหัส",
+      "placeholder": "วางสตริงโพลีไลน์ที่เข้ารหัส (เช่น _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "ถอดรหัสได้ {{lines}} เส้น รวม {{points}} จุดพิกัด",
+      "previewTitle": "ตัวอย่างเรขาคณิตที่ถอดรหัสแล้ว",
+      "previewExtent": "ขอบเขต",
+      "previewLength": "ความยาว",
+      "previewCoordinates": "ตรวจสอบพิกัด",
+      "previewLine": "เส้น",
+      "previewPoints": "จุด",
+      "previewStart": "จุดเริ่มต้น",
+      "previewEnd": "จุดสิ้นสุด",
+      "errorFileMissing": "ไฟล์ที่เลือกว่างเปล่าหรือไม่สามารถอ่านได้",
+      "readError": "ไม่สามารถอ่านไฟล์โพลีไลน์ได้",
+      "errorChooseFile": "โปรดเลือกไฟล์โพลีไลน์ที่จะโหลด",
+      "errorEmptyInput": "ป้อนสตริงโพลีไลน์ที่เข้ารหัสอย่างน้อยหนึ่งรายการ",
+      "errorNoValidLines": "ไม่สามารถถอดรหัสพิกัดโพลีไลน์ที่ถูกต้องได้",
+      "sampleGoogle": "Google / OSRM (ความละเอียด 5)",
+      "sampleValhalla": "Valhalla / Mapbox (ความละเอียด 6)",
+      "sampleEscaped": "แบ็กสแลชที่ถูก escape (รูปแบบสตริง JSON)",
+      "sampleMultiLine": "ชุดเส้นทางหลายบรรทัด (3 ส่วน)",
+      "unitMeters": "{{value}} ม.",
+      "unitKm": "{{value}} กม."
     },
     "netcdf": {
       "sampleLabel": "อุณหภูมิอากาศ",
@@ -2263,6 +2316,7 @@
       "delimitedText": "เลเยอร์ข้อความคั่นด้วยตัวแบ่ง",
       "photos": "รูปภาพที่มีพิกัดภูมิศาสตร์",
       "gpx": "เลเยอร์ GPX",
+      "polyline": "โพลีไลน์ที่เข้ารหัส",
       "mbtiles": "เลเยอร์ MBTiles",
       "xyz": "เลเยอร์ XYZ",
       "wms": "เลเยอร์ WMS",
@@ -2363,6 +2417,8 @@
       "dissolve": "รวมพื้นที่ติดกัน",
       "boundingBox": "กรอบขอบเขต",
       "simplify": "ลดทอนรายละเอียด",
+      "decodePolyline": "ถอดรหัสโพลีไลน์",
+      "encodePolyline": "เข้ารหัสเส้นเป็นโพลีไลน์",
       "clip": "ตัดตามขอบเขต",
       "intersection": "ส่วนที่ซ้อนทับกัน",
       "difference": "ส่วนต่าง",
@@ -2376,6 +2432,8 @@
       "explode": "แยกออกเป็นชิ้นส่วน",
       "aggregate": "รวมค่าตามแอตทริบิวต์",
       "smooth": "ทำให้เส้นเรียบ",
+      "extractVertices": "แยกจุดยอด",
+      "pointsAlongGeometry": "จุดตามแนวเรขาคณิต",
       "grid": "กริดสม่ำเสมอ",
       "voronoi": "โวโรนอย / เดอโลเน",
       "cellSectors": "พื้นที่ครอบคลุมของสถานีฐาน",
@@ -2385,6 +2443,7 @@
       "trajectorySpeed": "ความเร็วตามเส้นทางการเคลื่อนที่",
       "detectStops": "ตรวจหาจุดหยุด",
       "spaceTimeProximity": "ความใกล้เคียงเชิงพื้นที่และเวลา",
+      "mergeLayers": "รวมเลเยอร์",
       "checkValidity": "ตรวจสอบความถูกต้องของเรขาคณิต",
       "fixGeometries": "แก้ไขเรขาคณิต",
       "checkTopologyRules": "ตรวจสอบกฎทางโทโพโลยี",
@@ -2569,6 +2628,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "การเคลื่อนที่และเวลา",
+      "subGroupDataManagement": "การจัดการข้อมูล",
       "subGroupDataQuality": "คุณภาพข้อมูล",
       "subGroupTerrain": "ภูมิประเทศ",
       "subGroupReproject": "การฉายพิกัดใหม่",
@@ -4125,7 +4185,8 @@
     "parameterField": {
       "selectLayer": "เลือกเลเยอร์...",
       "selectField": "เลือกฟิลด์...",
-      "selectLayerFirst": "เลือกเลเยอร์ก่อน"
+      "selectLayerFirst": "เลือกเลเยอร์ก่อน",
+      "layersSelected_other": "เลือกแล้ว {{count}} เลเยอร์"
     },
     "whitebox": {
       "run": "เรียกใช้",
@@ -4551,6 +4612,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "แยกจุดยอด",
+          "description": "แปลงทุกจุดยอดของฟีเจอร์นำเข้าเป็นจุด โดยคงแอตทริบิวต์เดิมไว้พร้อมเพิ่มคอลัมน์ vertex_index และ part_index (แอตทริบิวต์ต้นทางที่ชื่อซ้ำจะถูกเขียนทับ)",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "จุดตามแนวเรขาคณิต",
+          "description": "สร้างจุดตามช่วงระยะทางคงที่ไปตามเส้นและขอบเขตรูปหลายเหลี่ยม โดยรวมจุดยอดแรกและสุดท้ายเสมอ แต่ละจุดจะได้รับคอลัมน์ distance (แอตทริบิวต์ต้นทางที่ชื่อซ้ำจะถูกเขียนทับ)",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "interval": {
+              "label": "ช่วง",
+              "description": "ระยะห่างระหว่างจุดที่สร้าง"
+            },
+            "units": {
+              "label": "หน่วย",
+              "options": {
+                "kilometers": "กิโลเมตร",
+                "meters": "เมตร",
+                "miles": "ไมล์"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "กริดปกติ",
           "description": "สร้างกริดสี่เหลี่ยมปกติ (ตาข่าย) ของเซลล์ครอบคลุมขอบเขตหนึ่ง แหล่งที่มา: มุมมองแผนที่ปัจจุบัน ขอบเขตของเลเยอร์ หรือกรอบขอบเขตที่กำหนดเอง",
@@ -4645,6 +4736,46 @@
                 "meters": "เมตร",
                 "miles": "ไมล์"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "ถอดรหัสโพลีไลน์",
+          "description": "ถอดรหัสสตริงโพลีไลน์ที่เข้ารหัสจากฟิลด์แอตทริบิวต์เป็นเลเยอร์เวกเตอร์ LineString",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "field": {
+              "label": "ฟิลด์โพลีไลน์",
+              "description": "ฟิลด์แอตทริบิวต์ที่มีสตริงโพลีไลน์ที่เข้ารหัส"
+            },
+            "precision": {
+              "label": "ความละเอียด",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "เข้ารหัสเส้นเป็นโพลีไลน์",
+          "description": "เข้ารหัสเรขาคณิต LineString และ MultiLineString เป็นสตริงแอตทริบิวต์โพลีไลน์ที่เข้ารหัส",
+          "params": {
+            "layer": {
+              "label": "เลเยอร์นำเข้า"
+            },
+            "precision": {
+              "label": "ความละเอียด",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "ชื่อฟิลด์ผลลัพธ์",
+              "description": "ชื่อคอลัมน์แอตทริบิวต์สำหรับเก็บโพลีไลน์ที่เข้ารหัส (ค่าเริ่มต้น: polyline)"
             }
           }
         },
@@ -4987,6 +5118,24 @@
                 "minutes": "นาที",
                 "hours": "ชั่วโมง"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "รวมเลเยอร์",
+          "description": "รวมเลเยอร์เวกเตอร์หลายเลเยอร์เป็นเลเยอร์เดียว โดยรวมสคีมาแอตทริบิวต์เข้าด้วยกัน (แอตทริบิวต์ที่ไม่มีจะเป็น null)",
+          "params": {
+            "layers": {
+              "label": "เลเยอร์นำเข้า",
+              "description": "เลือกอย่างน้อยสองเลเยอร์ ระบบจะต่อกันตามลำดับที่แสดง"
+            },
+            "addSourceField": {
+              "label": "เพิ่มฟิลด์เลเยอร์ต้นทาง",
+              "description": "บันทึกชื่อเลเยอร์ต้นทางของแต่ละฟีเจอร์ผลลัพธ์"
+            },
+            "sourceFieldName": {
+              "label": "ชื่อฟิลด์ต้นทาง",
+              "description": "ชื่อฟิลด์ที่เก็บชื่อเลเยอร์ต้นทาง"
             }
           }
         },
@@ -5650,6 +5799,7 @@
     "toolGroup": {
       "analysis": "การวิเคราะห์",
       "clip": "ตัดตามขอบเขต",
+      "dataManagement": "การจัดการข้อมูล",
       "dataQuality": "คุณภาพข้อมูล",
       "dggs": "DGGS",
       "geometry": "เรขาคณิต",
@@ -6660,6 +6810,7 @@
     "exportedWithWarnings": "ส่งออกเลเยอร์แล้ว {{warnings}}",
     "exported": "ส่งออกเลเยอร์แล้ว",
     "exportLayerError": "ไม่สามารถส่งออกเลเยอร์นี้ได้",
+    "exportPolyline": "โพลีไลน์ที่เข้ารหัส (ความละเอียด {{precision}})",
     "refreshIntervals": {
       "off": "ปิด",
       "s15": "15 วินาที",

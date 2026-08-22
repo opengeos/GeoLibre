@@ -338,6 +338,10 @@
       "video": {
         "label": "Videolaag toevoegen",
         "description": "Voeg een gegeorefereerde video-overlay toe door een MP4-URL en vier hoekcoördinaten op te geven."
+      },
+      "polyline": {
+        "label": "Gecodeerde polylijnlaag toevoegen",
+        "description": "Gecodeerde polylijn-tekenreeksen (Google, OSRM, Valhalla) uit tekst of bestanden importeren als vectorlijnen."
       }
     },
     "shared": {
@@ -511,6 +515,14 @@
       "noSublayersFound": "Deze kaartservice heeft geen lagen opgegeven.",
       "retrieveError": "Kan de lagen van de kaartservice niet ophalen.",
       "errorMapServiceUrl": "Voer een ArcGIS MapServer-URL in.",
+      "rasterFunction": "Rasterfunctie",
+      "serviceDefaultRasterFunction": "Servicestandaard",
+      "retrieveRasterFunctions": "Functies doorbladeren",
+      "retrievingRasterFunctions": "Bezig met ophalen...",
+      "noRasterFunctionsFound": "Deze beeldservice heeft geen rasterfuncties opgegeven.",
+      "retrieveRasterFunctionsError": "Kan de rasterfuncties van de beeldservice niet ophalen.",
+      "errorImageServiceUrl": "Voer een ArcGIS ImageServer-URL in.",
+      "customRenderingRule": "Aangepaste renderregel",
       "renderingRule": "Renderregel",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "Optionele JSON van een rasterfunctie die de service toepast. Een renderregel tekent de service dynamisch in plaats van via de tegels in de cache.",
@@ -768,6 +780,47 @@
       "bottomRight": "Rechtsonder (lengtegraad, breedtegraad)",
       "bottomLeft": "Linksonder (lengtegraad, breedtegraad)",
       "cornersNote": "De vier hoeken georefereren de video op de kaart. De video moet via HTTPS worden aangeboden en de host moet cross-origin-verzoeken (CORS) toestaan om de beeldframes weer te geven."
+    },
+    "polyline": {
+      "defaultName": "Polylijn",
+      "modePaste": "Tekst plakken",
+      "modeFile": "Bestand kiezen",
+      "precisionLabel": "Precisie",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "Backslashes un-escapen (\\\\ naar \\)",
+      "delimiterLabel": "Polylijn-scheidingsteken",
+      "delimNewline": "Nieuwe regel (standaard)",
+      "delimSemicolon": "Puntkomma (;)",
+      "delimComma": "Komma (,)",
+      "delimTab": "Tab",
+      "delimCustom": "Aangepast scheidingsteken",
+      "customDelimPlaceholder": "Aangepast scheidingsteken (bijv. | of ---)",
+      "outputGeometryLabel": "Uitvoergeometrie",
+      "separateLines": "Afzonderlijke LineStrings",
+      "multiLineString": "Eén MultiLineString",
+      "textLabel": "Gecodeerde polylijn-tekenreeks(en)",
+      "placeholder": "Plak een gecodeerde polylijn-tekenreeks (bijv. _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "{{lines}} lijn(en) gedecodeerd met in totaal {{points}} coördinaatpunten.",
+      "previewTitle": "Voorbeeld van gedecodeerde geometrie",
+      "previewExtent": "Extent",
+      "previewLength": "Lengte",
+      "previewCoordinates": "Coördinaten inspecteren",
+      "previewLine": "Lijn",
+      "previewPoints": "punten",
+      "previewStart": "Begin",
+      "previewEnd": "Einde",
+      "errorFileMissing": "Het geselecteerde bestand is leeg of kan niet worden gelezen.",
+      "readError": "Kan het polylijnbestand niet lezen.",
+      "errorChooseFile": "Kies een polylijnbestand om te laden.",
+      "errorEmptyInput": "Voer een of meer gecodeerde polylijn-tekenreeksen in.",
+      "errorNoValidLines": "Er konden geen geldige polylijncoördinaten worden gedecodeerd.",
+      "sampleGoogle": "Google / OSRM (precisie 5)",
+      "sampleValhalla": "Valhalla / Mapbox (precisie 6)",
+      "sampleEscaped": "Ge-escapete backslashes (JSON-tekenreeksformaat)",
+      "sampleMultiLine": "Batch met meerdere routes (3 segmenten)",
+      "unitMeters": "{{value}} m",
+      "unitKm": "{{value}} km"
     },
     "netcdf": {
       "sampleLabel": "Luchttemperatuur",
@@ -2309,6 +2362,7 @@
       "delimitedText": "Laag met scheidingstekens",
       "photos": "Foto's met geotags",
       "gpx": "GPX-laag",
+      "polyline": "Gecodeerde polylijn",
       "mbtiles": "MBTiles-laag",
       "xyz": "XYZ-laag",
       "wms": "WMS-laag",
@@ -2409,6 +2463,8 @@
       "dissolve": "Samenvoegen",
       "boundingBox": "Begrenzingskader",
       "simplify": "Vereenvoudigen",
+      "decodePolyline": "Polylijn decoderen",
+      "encodePolyline": "Lijn naar polylijn coderen",
       "clip": "Knippen",
       "intersection": "Doorsnede",
       "difference": "Verschil",
@@ -2422,6 +2478,8 @@
       "explode": "Opsplitsen",
       "aggregate": "Aggregeren op attribuut",
       "smooth": "Gladstrijken",
+      "extractVertices": "Hoekpunten extraheren",
+      "pointsAlongGeometry": "Punten langs geometrie",
       "grid": "Regelmatig raster",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Dekkingsgebied zendmast",
@@ -2431,6 +2489,7 @@
       "trajectorySpeed": "Trajectsnelheid",
       "detectStops": "Stops detecteren",
       "spaceTimeProximity": "Ruimte-tijdnabijheid",
+      "mergeLayers": "Lagen samenvoegen",
       "checkValidity": "Geldigheid controleren",
       "fixGeometries": "Geometrieën herstellen",
       "checkTopologyRules": "Topologieregels controleren",
@@ -2615,6 +2674,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "Beweging & tijd",
+      "subGroupDataManagement": "Gegevensbeheer",
       "subGroupDataQuality": "Datakwaliteit",
       "subGroupTerrain": "Terrein",
       "subGroupReproject": "Herprojecteren",
@@ -4193,7 +4253,9 @@
     "parameterField": {
       "selectLayer": "Selecteer een laag...",
       "selectField": "Selecteer een veld...",
-      "selectLayerFirst": "Selecteer eerst een laag"
+      "selectLayerFirst": "Selecteer eerst een laag",
+      "layersSelected_one": "{{count}} laag geselecteerd",
+      "layersSelected_other": "{{count}} lagen geselecteerd"
     },
     "whitebox": {
       "run": "Uitvoeren",
@@ -4620,6 +4682,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "Hoekpunten extraheren",
+          "description": "Elk hoekpunt van de invoerobjecten omzetten in een punt, met behoud van de oorspronkelijke attributen plus de kolommen vertex_index en part_index (bronattributen met dezelfde naam worden overschreven)",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "Punten langs geometrie",
+          "description": "Punten genereren op een vast afstandsinterval langs lijnen en polygoongrenzen; het eerste en laatste hoekpunt worden altijd meegenomen. Elk punt krijgt een kolom distance (een bronattribuut met dezelfde naam wordt overschreven)",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "interval": {
+              "label": "Interval",
+              "description": "Afstand tussen de gegenereerde punten"
+            },
+            "units": {
+              "label": "Eenheden",
+              "options": {
+                "kilometers": "Kilometer",
+                "meters": "Meter",
+                "miles": "Mijl"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "Regelmatig raster",
           "description": "Genereer een regelmatig rechthoekig raster (fishnet) van cellen over een omvang. Bron: de huidige kaartweergave, de omvang van een laag of een handmatig begrenzingskader.",
@@ -4714,6 +4806,46 @@
                 "meters": "Meter",
                 "miles": "Mijl"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "Polylijn decoderen",
+          "description": "Gecodeerde polylijn-tekenreeksen uit een attribuutveld decoderen naar een LineString-vectorlaag",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "field": {
+              "label": "Polylijnveld",
+              "description": "Attribuutveld met de gecodeerde polylijn-tekenreeks"
+            },
+            "precision": {
+              "label": "Precisie",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "Lijn naar polylijn coderen",
+          "description": "LineString- en MultiLineString-geometrieën coderen naar een gecodeerde polylijn-attribuuttekenreeks",
+          "params": {
+            "layer": {
+              "label": "Invoerlaag"
+            },
+            "precision": {
+              "label": "Precisie",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "Naam uitvoerveld",
+              "description": "Naam van de attribuutkolom waarin de gecodeerde polylijnen worden opgeslagen (standaard: polyline)"
             }
           }
         },
@@ -5056,6 +5188,24 @@
                 "minutes": "Minuten",
                 "hours": "Uren"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "Lagen samenvoegen",
+          "description": "Meerdere vectorlagen samenvoegen tot één laag, met vereniging van hun attribuutschema's (ontbrekende attributen worden null)",
+          "params": {
+            "layers": {
+              "label": "Invoerlagen",
+              "description": "Selecteer twee of meer lagen; ze worden samengevoegd in de getoonde volgorde"
+            },
+            "addSourceField": {
+              "label": "Bronlaagveld toevoegen",
+              "description": "De naam van de bronlaag van elk uitvoerobject vastleggen"
+            },
+            "sourceFieldName": {
+              "label": "Naam bronveld",
+              "description": "Naam van het veld dat de naam van de bronlaag opslaat"
             }
           }
         },
@@ -5719,6 +5869,7 @@
     "toolGroup": {
       "analysis": "Analyse",
       "clip": "Knippen",
+      "dataManagement": "Gegevensbeheer",
       "dataQuality": "Datakwaliteit",
       "dggs": "DGGS",
       "geometry": "Geometrie",
@@ -6736,6 +6887,7 @@
     "exportedWithWarnings": "Laag geëxporteerd. {{warnings}}",
     "exported": "Laag geëxporteerd.",
     "exportLayerError": "Kon deze laag niet exporteren.",
+    "exportPolyline": "Gecodeerde polylijn (precisie {{precision}})",
     "refreshIntervals": {
       "off": "Uit",
       "s15": "15 seconden",

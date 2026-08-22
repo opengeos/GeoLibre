@@ -336,6 +336,10 @@
       "video": {
         "label": "動画レイヤーを追加",
         "description": "MP4のURLと4つの角の座標を指定して、位置情報付きの動画オーバーレイを追加します。"
+      },
+      "polyline": {
+        "label": "エンコードポリラインレイヤーを追加",
+        "description": "エンコードされたポリライン文字列（Google、OSRM、Valhalla）をテキストまたはファイルからベクターラインとしてインポートします。"
       }
     },
     "shared": {
@@ -504,6 +508,14 @@
       "noSublayersFound": "このマップサービスはレイヤーを公開していません。",
       "retrieveError": "マップサービスのレイヤーを取得できませんでした。",
       "errorMapServiceUrl": "ArcGIS MapServerのURLを入力してください。",
+      "rasterFunction": "ラスター関数",
+      "serviceDefaultRasterFunction": "サービスの既定値",
+      "retrieveRasterFunctions": "関数を参照",
+      "retrievingRasterFunctions": "取得中...",
+      "noRasterFunctionsFound": "このイメージサービスはラスター関数を公開していません。",
+      "retrieveRasterFunctionsError": "イメージサービスのラスター関数を取得できませんでした。",
+      "errorImageServiceUrl": "ArcGIS ImageServerのURLを入力してください。",
+      "customRenderingRule": "カスタムレンダリングルール",
       "renderingRule": "レンダリング ルール",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "サービスが適用するラスター関数の JSON(任意)。レンダリング ルールを指定すると、キャッシュされたタイルではなく動的な描画になります。",
@@ -751,6 +763,47 @@
       "bottomRight": "右下(経度, 緯度)",
       "bottomLeft": "左下(経度, 緯度)",
       "cornersNote": "4つの角の座標で動画を地図上に位置合わせします。動画はHTTPS経由で配信される必要があり、フレームを描画するにはホストがクロスオリジンリクエスト(CORS)を許可している必要があります。"
+    },
+    "polyline": {
+      "defaultName": "ポリライン",
+      "modePaste": "テキストを貼り付け",
+      "modeFile": "ファイルを選択",
+      "precisionLabel": "精度",
+      "precision5": "5（Google / OSRM）",
+      "precision6": "6（Valhalla / Mapbox）",
+      "unescapeLabel": "バックスラッシュのエスケープを解除（\\\\ を \\ に）",
+      "delimiterLabel": "ポリラインの区切り文字",
+      "delimNewline": "改行（既定）",
+      "delimSemicolon": "セミコロン (;)",
+      "delimComma": "カンマ (,)",
+      "delimTab": "タブ",
+      "delimCustom": "カスタム区切り文字",
+      "customDelimPlaceholder": "カスタム区切り文字（例: | または ---）",
+      "outputGeometryLabel": "出力ジオメトリ",
+      "separateLines": "個別のLineString",
+      "multiLineString": "単一のMultiLineString",
+      "textLabel": "エンコードされたポリライン文字列",
+      "placeholder": "エンコードされたポリライン文字列を貼り付け（例: _p~iF~ps|U_ulLnnqC_mqNvxq`@）...",
+      "previewInfo": "{{lines}}本のラインをデコードしました（座標点の合計: {{points}}）。",
+      "previewTitle": "デコードされたジオメトリのプレビュー",
+      "previewExtent": "範囲",
+      "previewLength": "長さ",
+      "previewCoordinates": "座標を確認",
+      "previewLine": "ライン",
+      "previewPoints": "点",
+      "previewStart": "始点",
+      "previewEnd": "終点",
+      "errorFileMissing": "選択したファイルは空か、読み取れませんでした。",
+      "readError": "ポリラインファイルを読み取れませんでした。",
+      "errorChooseFile": "読み込むポリラインファイルを選択してください。",
+      "errorEmptyInput": "エンコードされたポリライン文字列を1つ以上入力してください。",
+      "errorNoValidLines": "有効なポリライン座標をデコードできませんでした。",
+      "sampleGoogle": "Google / OSRM（精度5）",
+      "sampleValhalla": "Valhalla / Mapbox（精度6）",
+      "sampleEscaped": "エスケープされたバックスラッシュ（JSON文字列形式）",
+      "sampleMultiLine": "複数行のルートバッチ（3セグメント）",
+      "unitMeters": "{{value}} m",
+      "unitKm": "{{value}} km"
     },
     "netcdf": {
       "sampleLabel": "気温",
@@ -2263,6 +2316,7 @@
       "delimitedText": "区切りテキストレイヤー",
       "photos": "位置情報付き写真",
       "gpx": "GPXレイヤー",
+      "polyline": "エンコードポリライン",
       "mbtiles": "MBTilesレイヤー",
       "xyz": "XYZレイヤー",
       "wms": "WMSレイヤー",
@@ -2363,6 +2417,8 @@
       "dissolve": "ディゾルブ",
       "boundingBox": "バウンディングボックス",
       "simplify": "簡略化",
+      "decodePolyline": "ポリラインをデコード",
+      "encodePolyline": "ラインをポリラインにエンコード",
       "clip": "クリップ",
       "intersection": "交差",
       "difference": "差分",
@@ -2376,6 +2432,8 @@
       "explode": "分解",
       "aggregate": "属性で集計",
       "smooth": "平滑化",
+      "extractVertices": "頂点を抽出",
+      "pointsAlongGeometry": "ジオメトリに沿ったポイント",
       "grid": "正方格子",
       "voronoi": "ボロノイ / ドロネー",
       "cellSectors": "セルサイトのカバレッジ",
@@ -2385,6 +2443,7 @@
       "trajectorySpeed": "軌跡速度",
       "detectStops": "停止を検出",
       "spaceTimeProximity": "時空間近接",
+      "mergeLayers": "レイヤーをマージ",
       "checkValidity": "有効性をチェック",
       "fixGeometries": "ジオメトリを修復",
       "checkTopologyRules": "トポロジールールをチェック",
@@ -2569,6 +2628,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "移動と時間",
+      "subGroupDataManagement": "データ管理",
       "subGroupDataQuality": "データ品質",
       "subGroupTerrain": "地形",
       "subGroupReproject": "再投影",
@@ -4125,7 +4185,8 @@
     "parameterField": {
       "selectLayer": "レイヤーを選択...",
       "selectField": "フィールドを選択...",
-      "selectLayerFirst": "まずレイヤーを選択してください"
+      "selectLayerFirst": "まずレイヤーを選択してください",
+      "layersSelected_other": "{{count}}個のレイヤーを選択中"
     },
     "whitebox": {
       "run": "実行",
@@ -4551,6 +4612,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "頂点を抽出",
+          "description": "入力フィーチャの各頂点をポイントに変換し、元の属性に加えてvertex_index列とpart_index列を保持します（同名のソース属性は上書きされます）",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "ジオメトリに沿ったポイント",
+          "description": "ラインおよびポリゴン境界に沿って一定の距離間隔でポイントを生成します。最初と最後の頂点は常に含まれます。各ポイントにはdistance列が追加されます（同名のソース属性は上書きされます）",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "interval": {
+              "label": "間隔",
+              "description": "生成するポイント間の距離"
+            },
+            "units": {
+              "label": "単位",
+              "options": {
+                "kilometers": "キロメートル",
+                "meters": "メートル",
+                "miles": "マイル"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "規則的なグリッド",
           "description": "範囲を覆う規則的な矩形グリッド（フィッシュネット）のセルを生成します。範囲のソース: 現在の地図表示、レイヤーの範囲、または手動のバウンディングボックス。",
@@ -4645,6 +4736,46 @@
                 "meters": "メートル",
                 "miles": "マイル"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "ポリラインをデコード",
+          "description": "属性フィールドのエンコードされたポリライン文字列をLineStringベクターレイヤーにデコードします",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "field": {
+              "label": "ポリラインフィールド",
+              "description": "エンコードされたポリライン文字列を含む属性フィールド"
+            },
+            "precision": {
+              "label": "精度",
+              "options": {
+                "5": "5（Google / OSRM）",
+                "6": "6（Valhalla / Mapbox）"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "ラインをポリラインにエンコード",
+          "description": "LineStringおよびMultiLineStringジオメトリをエンコードされたポリライン属性文字列にエンコードします",
+          "params": {
+            "layer": {
+              "label": "入力レイヤー"
+            },
+            "precision": {
+              "label": "精度",
+              "options": {
+                "5": "5（Google / OSRM）",
+                "6": "6（Valhalla / Mapbox）"
+              }
+            },
+            "targetField": {
+              "label": "出力フィールド名",
+              "description": "エンコードされたポリラインを格納する属性列の名前（既定: polyline）"
             }
           }
         },
@@ -4987,6 +5118,24 @@
                 "minutes": "分",
                 "hours": "時間"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "レイヤーをマージ",
+          "description": "複数のベクターレイヤーを1つに結合し、属性スキーマを統合します（存在しない属性はnullになります）",
+          "params": {
+            "layers": {
+              "label": "入力レイヤー",
+              "description": "2つ以上のレイヤーを選択してください。表示順に連結されます"
+            },
+            "addSourceField": {
+              "label": "ソースレイヤーフィールドを追加",
+              "description": "各出力フィーチャの元のレイヤー名を記録します"
+            },
+            "sourceFieldName": {
+              "label": "ソースフィールド名",
+              "description": "元のレイヤー名を格納するフィールドの名前"
             }
           }
         },
@@ -5650,6 +5799,7 @@
     "toolGroup": {
       "analysis": "解析",
       "clip": "クリップ",
+      "dataManagement": "データ管理",
       "dataQuality": "データ品質",
       "dggs": "DGGS",
       "geometry": "ジオメトリ",
@@ -6660,6 +6810,7 @@
     "exportedWithWarnings": "レイヤーをエクスポートしました。{{warnings}}",
     "exported": "レイヤーをエクスポートしました。",
     "exportLayerError": "このレイヤーをエクスポートできませんでした。",
+    "exportPolyline": "エンコードポリライン（精度 {{precision}}）",
     "refreshIntervals": {
       "off": "オフ",
       "s15": "15秒",

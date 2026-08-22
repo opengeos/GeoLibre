@@ -338,6 +338,10 @@
       "video": {
         "label": "वीडियो लेयर जोड़ें",
         "description": "MP4 URL और चार कोने के निर्देशांक देकर एक जियोरेफ़रेंस्ड वीडियो ओवरले जोड़ें।"
+      },
+      "polyline": {
+        "label": "एन्कोडेड पॉलीलाइन लेयर जोड़ें",
+        "description": "एन्कोडेड पॉलीलाइन स्ट्रिंग (Google, OSRM, Valhalla) को टेक्स्ट या फ़ाइलों से वेक्टर लाइनों के रूप में आयात करें।"
       }
     },
     "shared": {
@@ -511,6 +515,14 @@
       "noSublayersFound": "इस मैप सेवा ने कोई लेयर घोषित नहीं की।",
       "retrieveError": "मैप सेवा की लेयर प्राप्त नहीं हो सकीं।",
       "errorMapServiceUrl": "एक ArcGIS MapServer URL दर्ज करें।",
+      "rasterFunction": "रास्टर फ़ंक्शन",
+      "serviceDefaultRasterFunction": "सेवा डिफ़ॉल्ट",
+      "retrieveRasterFunctions": "फ़ंक्शन ब्राउज़ करें",
+      "retrievingRasterFunctions": "प्राप्त किया जा रहा है...",
+      "noRasterFunctionsFound": "इस इमेज सेवा ने कोई रास्टर फ़ंक्शन घोषित नहीं किया।",
+      "retrieveRasterFunctionsError": "इमेज सेवा के रास्टर फ़ंक्शन प्राप्त नहीं हो सके।",
+      "errorImageServiceUrl": "एक ArcGIS ImageServer URL दर्ज करें।",
+      "customRenderingRule": "कस्टम रेंडरिंग नियम",
       "renderingRule": "रेंडरिंग नियम",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "सेवा द्वारा लागू किया जाने वाला वैकल्पिक रास्टर फ़ंक्शन JSON. रेंडरिंग नियम देने पर सेवा कैश की गई टाइल्स के बजाय गतिशील रूप से बनाई जाती है।",
@@ -768,6 +780,47 @@
       "bottomRight": "नीचे-दाएँ (lng, lat)",
       "bottomLeft": "नीचे-बाएँ (lng, lat)",
       "cornersNote": "चार कोने मानचित्र पर वीडियो को जियोरेफरेंस करते हैं। फ्रेम रेंडर करने के लिए वीडियो HTTPS पर परोसा जाना चाहिए और होस्ट को क्रॉस-ओरिजिन रिक्वेस्ट (CORS) की अनुमति देनी चाहिए।"
+    },
+    "polyline": {
+      "defaultName": "पॉलीलाइन",
+      "modePaste": "टेक्स्ट पेस्ट करें",
+      "modeFile": "फ़ाइल चुनें",
+      "precisionLabel": "परिशुद्धता",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "बैकस्लैश अनएस्केप करें (\\\\ से \\)",
+      "delimiterLabel": "पॉलीलाइन डिलिमिटर",
+      "delimNewline": "नई पंक्ति (डिफ़ॉल्ट)",
+      "delimSemicolon": "अर्धविराम (;)",
+      "delimComma": "अल्पविराम (,)",
+      "delimTab": "टैब",
+      "delimCustom": "कस्टम डिलिमिटर",
+      "customDelimPlaceholder": "कस्टम डिलिमिटर (उदा. | या ---)",
+      "outputGeometryLabel": "आउटपुट ज्यामिति",
+      "separateLines": "अलग-अलग LineString",
+      "multiLineString": "एकल MultiLineString",
+      "textLabel": "एन्कोडेड पॉलीलाइन स्ट्रिंग(ें)",
+      "placeholder": "एन्कोडेड पॉलीलाइन स्ट्रिंग पेस्ट करें (उदा. _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "{{lines}} लाइन(ें) डिकोड की गईं, कुल {{points}} निर्देशांक बिंदु।",
+      "previewTitle": "डिकोड की गई ज्यामिति का पूर्वावलोकन",
+      "previewExtent": "विस्तार",
+      "previewLength": "लंबाई",
+      "previewCoordinates": "निर्देशांक जाँचें",
+      "previewLine": "लाइन",
+      "previewPoints": "बिंदु",
+      "previewStart": "प्रारंभ",
+      "previewEnd": "अंत",
+      "errorFileMissing": "चयनित फ़ाइल खाली है या पढ़ी नहीं जा सकी।",
+      "readError": "पॉलीलाइन फ़ाइल पढ़ी नहीं जा सकी।",
+      "errorChooseFile": "कृपया लोड करने के लिए एक पॉलीलाइन फ़ाइल चुनें।",
+      "errorEmptyInput": "एक या अधिक एन्कोडेड पॉलीलाइन स्ट्रिंग दर्ज करें।",
+      "errorNoValidLines": "कोई मान्य पॉलीलाइन निर्देशांक डिकोड नहीं किया जा सका।",
+      "sampleGoogle": "Google / OSRM (परिशुद्धता 5)",
+      "sampleValhalla": "Valhalla / Mapbox (परिशुद्धता 6)",
+      "sampleEscaped": "एस्केप किए गए बैकस्लैश (JSON स्ट्रिंग प्रारूप)",
+      "sampleMultiLine": "बहु-पंक्ति रूट बैच (3 खंड)",
+      "unitMeters": "{{value}} मी",
+      "unitKm": "{{value}} किमी"
     },
     "netcdf": {
       "sampleLabel": "वायु तापमान",
@@ -2309,6 +2362,7 @@
       "delimitedText": "डीलिमिटेड टेक्स्ट लेयर",
       "photos": "जियोटैग की गई तस्वीरें",
       "gpx": "GPX लेयर",
+      "polyline": "एन्कोडेड पॉलीलाइन",
       "mbtiles": "MBTiles लेयर",
       "xyz": "XYZ लेयर",
       "wms": "WMS लेयर",
@@ -2409,6 +2463,8 @@
       "dissolve": "डिज़ॉल्व",
       "boundingBox": "बाउंडिंग बॉक्स",
       "simplify": "सरल बनाएं",
+      "decodePolyline": "पॉलीलाइन डिकोड करें",
+      "encodePolyline": "लाइन को पॉलीलाइन में एन्कोड करें",
       "clip": "क्लिप",
       "intersection": "प्रतिच्छेदन",
       "difference": "अंतर",
@@ -2422,6 +2478,8 @@
       "explode": "एक्सप्लोड करें",
       "aggregate": "विशेषता द्वारा एकत्रित करें",
       "smooth": "स्मूथ करें",
+      "extractVertices": "शीर्ष निकालें",
+      "pointsAlongGeometry": "ज्यामिति के साथ बिंदु",
       "grid": "नियमित ग्रिड",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "सेल-साइट कवरेज",
@@ -2431,6 +2489,7 @@
       "trajectorySpeed": "प्रक्षेपवक्र गति",
       "detectStops": "रुकावटें पहचानें",
       "spaceTimeProximity": "स्थान-समय निकटता",
+      "mergeLayers": "लेयर मर्ज करें",
       "checkValidity": "वैधता जाँचें",
       "fixGeometries": "ज्यामिति ठीक करें",
       "checkTopologyRules": "टोपोलॉजी नियम जाँचें",
@@ -2615,6 +2674,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "गति और समय",
+      "subGroupDataManagement": "डेटा प्रबंधन",
       "subGroupDataQuality": "डेटा गुणवत्ता",
       "subGroupTerrain": "भू-भाग",
       "subGroupReproject": "पुनः प्रोजेक्ट करें",
@@ -4193,7 +4253,9 @@
     "parameterField": {
       "selectLayer": "एक लेयर चुनें...",
       "selectField": "एक फ़ील्ड चुनें...",
-      "selectLayerFirst": "पहले एक लेयर चुनें"
+      "selectLayerFirst": "पहले एक लेयर चुनें",
+      "layersSelected_one": "{{count}} लेयर चयनित",
+      "layersSelected_other": "{{count}} लेयर चयनित"
     },
     "whitebox": {
       "run": "चलाएं",
@@ -4620,6 +4682,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "शीर्ष निकालें",
+          "description": "इनपुट फ़ीचर के प्रत्येक शीर्ष को एक बिंदु में बदलें, मूल विशेषताओं के साथ vertex_index और part_index कॉलम रखते हुए (समान नाम वाली स्रोत विशेषताएँ अधिलेखित हो जाती हैं)",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "ज्यामिति के साथ बिंदु",
+          "description": "लाइनों और बहुभुज सीमाओं के साथ एक निश्चित दूरी अंतराल पर बिंदु बनाएँ; पहला और अंतिम शीर्ष हमेशा शामिल होते हैं। प्रत्येक बिंदु को एक distance कॉलम मिलता है (समान नाम वाली स्रोत विशेषता अधिलेखित हो जाती है)",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "interval": {
+              "label": "अंतराल",
+              "description": "बनाए गए बिंदुओं के बीच की दूरी"
+            },
+            "units": {
+              "label": "इकाइयाँ",
+              "options": {
+                "kilometers": "किलोमीटर",
+                "meters": "मीटर",
+                "miles": "मील"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "नियमित ग्रिड",
           "description": "किसी सीमा पर कोशिकाओं का एक नियमित आयताकार ग्रिड (फ़िशनेट) बनाएँ। स्रोत: वर्तमान मानचित्र दृश्य, किसी लेयर की सीमा, या मैन्युअल बाउंडिंग बॉक्स।",
@@ -4714,6 +4806,46 @@
                 "meters": "मीटर",
                 "miles": "मील"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "पॉलीलाइन डिकोड करें",
+          "description": "एक विशेषता फ़ील्ड की एन्कोडेड पॉलीलाइन स्ट्रिंग को LineString वेक्टर लेयर में डिकोड करें",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "field": {
+              "label": "पॉलीलाइन फ़ील्ड",
+              "description": "एन्कोडेड पॉलीलाइन स्ट्रिंग वाला विशेषता फ़ील्ड"
+            },
+            "precision": {
+              "label": "परिशुद्धता",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "लाइन को पॉलीलाइन में एन्कोड करें",
+          "description": "LineString और MultiLineString ज्यामितियों को एन्कोडेड पॉलीलाइन विशेषता स्ट्रिंग में एन्कोड करें",
+          "params": {
+            "layer": {
+              "label": "इनपुट लेयर"
+            },
+            "precision": {
+              "label": "परिशुद्धता",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "आउटपुट फ़ील्ड का नाम",
+              "description": "एन्कोडेड पॉलीलाइन संग्रहीत करने वाले विशेषता कॉलम का नाम (डिफ़ॉल्ट: polyline)"
             }
           }
         },
@@ -5056,6 +5188,24 @@
                 "minutes": "मिनट",
                 "hours": "घंटे"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "लेयर मर्ज करें",
+          "description": "कई वेक्टर लेयरों को एक में मिलाएँ, उनकी विशेषता स्कीमा को एकीकृत करते हुए (अनुपस्थित विशेषताएँ null हो जाती हैं)",
+          "params": {
+            "layers": {
+              "label": "इनपुट लेयर",
+              "description": "दो या अधिक लेयर चुनें; वे दिखाए गए क्रम में जोड़ी जाती हैं"
+            },
+            "addSourceField": {
+              "label": "स्रोत लेयर फ़ील्ड जोड़ें",
+              "description": "प्रत्येक आउटपुट फ़ीचर की मूल लेयर का नाम दर्ज करें"
+            },
+            "sourceFieldName": {
+              "label": "स्रोत फ़ील्ड का नाम",
+              "description": "वह फ़ील्ड जिसमें मूल लेयर का नाम संग्रहीत होता है"
             }
           }
         },
@@ -5719,6 +5869,7 @@
     "toolGroup": {
       "analysis": "विश्लेषण",
       "clip": "क्लिप",
+      "dataManagement": "डेटा प्रबंधन",
       "dataQuality": "डेटा गुणवत्ता",
       "dggs": "DGGS",
       "geometry": "ज्यामिति",
@@ -6736,6 +6887,7 @@
     "exportedWithWarnings": "लेयर निर्यात की गई। {{warnings}}",
     "exported": "लेयर निर्यात की गई।",
     "exportLayerError": "इस लेयर को निर्यात नहीं किया जा सका।",
+    "exportPolyline": "एन्कोडेड पॉलीलाइन (परिशुद्धता {{precision}})",
     "refreshIntervals": {
       "off": "बंद",
       "s15": "15 सेकंड",

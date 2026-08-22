@@ -338,6 +338,10 @@
       "video": {
         "label": "افزودن لایهٔ ویدئو",
         "description": "با دادن یک نشانی MP4 و مختصات چهار گوشه، یک روپوش ویدئویی زمین‌مرجع بیفزایید."
+      },
+      "polyline": {
+        "label": "افزودن لایهٔ چندخطی کدگذاری‌شده",
+        "description": "وارد کردن رشته‌های چندخطی کدگذاری‌شده (Google، OSRM، Valhalla) از متن یا فایل‌ها به‌صورت خطوط برداری."
       }
     },
     "shared": {
@@ -511,6 +515,14 @@
       "noSublayersFound": "این سرویس نقشه هیچ لایه‌ای اعلام نکرد.",
       "retrieveError": "دریافت لایه‌های سرویس نقشه ممکن نشد.",
       "errorMapServiceUrl": "یک نشانی ArcGIS MapServer وارد کنید.",
+      "rasterFunction": "تابع رستری",
+      "serviceDefaultRasterFunction": "پیش‌فرض سرویس",
+      "retrieveRasterFunctions": "مرور توابع",
+      "retrievingRasterFunctions": "در حال دریافت...",
+      "noRasterFunctionsFound": "این سرویس تصویر هیچ تابع رستری اعلام نکرد.",
+      "retrieveRasterFunctionsError": "دریافت توابع رستری سرویس تصویر ممکن نشد.",
+      "errorImageServiceUrl": "یک نشانی ArcGIS ImageServer وارد کنید.",
+      "customRenderingRule": "قانون رندر سفارشی",
       "renderingRule": "قاعدهٔ رندر",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON اختیاری یک تابع رستری که سرویس اعمال می‌کند. قاعدهٔ رندر سرویس را به‌جای استفاده از کاشی‌های ذخیره‌شده‌اش به‌صورت پویا ترسیم می‌کند.",
@@ -768,6 +780,47 @@
       "bottomRight": "پایین-راست (طول، عرض)",
       "bottomLeft": "پایین-چپ (طول، عرض)",
       "cornersNote": "این چهار گوشه ویدئو را روی نقشه زمین‌مرجع می‌کنند. ویدئو باید روی HTTPS ارائه شود و میزبان باید درخواست‌های میان‌مبدأ (CORS) را بپذیرد تا فریم‌ها ترسیم شوند."
+    },
+    "polyline": {
+      "defaultName": "چندخطی",
+      "modePaste": "چسباندن متن",
+      "modeFile": "انتخاب فایل",
+      "precisionLabel": "دقت",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "حذف گریز بک‌اسلش‌ها (\\\\ به \\)",
+      "delimiterLabel": "جداکنندهٔ چندخطی‌ها",
+      "delimNewline": "خط جدید (پیش‌فرض)",
+      "delimSemicolon": "نقطه‌ویرگول (;)",
+      "delimComma": "ویرگول (,)",
+      "delimTab": "تب",
+      "delimCustom": "جداکنندهٔ سفارشی",
+      "customDelimPlaceholder": "جداکنندهٔ سفارشی (مثال: | یا ---)",
+      "outputGeometryLabel": "هندسهٔ خروجی",
+      "separateLines": "LineStringهای جداگانه",
+      "multiLineString": "یک MultiLineString واحد",
+      "textLabel": "رشته(های) چندخطی کدگذاری‌شده",
+      "placeholder": "رشتهٔ چندخطی کدگذاری‌شده را بچسبانید (مثال: _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "{{lines}} خط با مجموع {{points}} نقطهٔ مختصات رمزگشایی شد.",
+      "previewTitle": "پیش‌نمایش هندسهٔ رمزگشایی‌شده",
+      "previewExtent": "گستره",
+      "previewLength": "طول",
+      "previewCoordinates": "بررسی مختصات",
+      "previewLine": "خط",
+      "previewPoints": "نقطه",
+      "previewStart": "شروع",
+      "previewEnd": "پایان",
+      "errorFileMissing": "فایل انتخاب‌شده خالی است یا خوانده نشد.",
+      "readError": "خواندن فایل چندخطی ممکن نشد.",
+      "errorChooseFile": "لطفاً یک فایل چندخطی برای بارگذاری انتخاب کنید.",
+      "errorEmptyInput": "یک یا چند رشتهٔ چندخطی کدگذاری‌شده وارد کنید.",
+      "errorNoValidLines": "هیچ مختصات معتبری از چندخطی رمزگشایی نشد.",
+      "sampleGoogle": "Google / OSRM (دقت 5)",
+      "sampleValhalla": "Valhalla / Mapbox (دقت 6)",
+      "sampleEscaped": "بک‌اسلش‌های گریزداده‌شده (قالب رشتهٔ JSON)",
+      "sampleMultiLine": "دستهٔ مسیرهای چندخطی (3 بخش)",
+      "unitMeters": "{{value}} متر",
+      "unitKm": "{{value}} کیلومتر"
     },
     "netcdf": {
       "sampleLabel": "دمای هوا",
@@ -2309,6 +2362,7 @@
       "delimitedText": "لایهٔ متن جداشده",
       "photos": "عکس‌های مکان‌دار",
       "gpx": "لایهٔ GPX",
+      "polyline": "چندخطی کدگذاری‌شده",
       "mbtiles": "لایهٔ MBTiles",
       "xyz": "لایهٔ XYZ",
       "wms": "لایهٔ WMS",
@@ -2409,6 +2463,8 @@
       "dissolve": "ادغام",
       "boundingBox": "کادر محدوده",
       "simplify": "ساده‌سازی",
+      "decodePolyline": "رمزگشایی چندخطی",
+      "encodePolyline": "کدگذاری خط به چندخطی",
       "clip": "برش",
       "intersection": "اشتراک",
       "difference": "تفاضل",
@@ -2422,6 +2478,8 @@
       "explode": "تجزیه",
       "aggregate": "تجمیع بر پایهٔ صفت",
       "smooth": "هموارسازی",
+      "extractVertices": "استخراج رأس‌ها",
+      "pointsAlongGeometry": "نقاط در امتداد هندسه",
       "grid": "شبکهٔ منظم",
       "voronoi": "ورونوی / دلونی",
       "cellSectors": "پوشش دکل‌های مخابراتی",
@@ -2431,6 +2489,7 @@
       "trajectorySpeed": "سرعت مسیر حرکت",
       "detectStops": "تشخیص توقف‌ها",
       "spaceTimeProximity": "مجاورت فضا-زمان",
+      "mergeLayers": "ادغام لایه‌ها",
       "checkValidity": "بررسی اعتبار",
       "fixGeometries": "اصلاح هندسه‌ها",
       "checkTopologyRules": "بررسی قواعد توپولوژی",
@@ -2615,6 +2674,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "DGGS",
       "subGroupMovement": "حرکت و زمان",
+      "subGroupDataManagement": "مدیریت داده",
       "subGroupDataQuality": "کیفیت داده",
       "subGroupTerrain": "زمین",
       "subGroupReproject": "تغییر تصویر",
@@ -4193,7 +4253,9 @@
     "parameterField": {
       "selectLayer": "یک لایه برگزینید...",
       "selectField": "یک فیلد برگزینید...",
-      "selectLayerFirst": "نخست یک لایه برگزینید"
+      "selectLayerFirst": "نخست یک لایه برگزینید",
+      "layersSelected_one": "{{count}} لایه انتخاب شد",
+      "layersSelected_other": "{{count}} لایه انتخاب شد"
     },
     "whitebox": {
       "run": "اجرا",
@@ -4620,6 +4682,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "استخراج رأس‌ها",
+          "description": "تبدیل هر رأس عوارض ورودی به یک نقطه، با حفظ ویژگی‌های اصلی به‌علاوهٔ ستون‌های vertex_index و part_index (ویژگی‌های منبع هم‌نام بازنویسی می‌شوند)",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "نقاط در امتداد هندسه",
+          "description": "ایجاد نقاط با فاصلهٔ ثابت در امتداد خطوط و مرزهای چندضلعی‌ها؛ رأس اول و آخر همیشه گنجانده می‌شوند. هر نقطه یک ستون distance دریافت می‌کند (ویژگی منبع هم‌نام بازنویسی می‌شود)",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "interval": {
+              "label": "فاصله",
+              "description": "فاصله بین نقاط ایجادشده"
+            },
+            "units": {
+              "label": "یکاها",
+              "options": {
+                "kilometers": "کیلومتر",
+                "meters": "متر",
+                "miles": "مایل"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "شبکهٔ منظم",
           "description": "تولید یک شبکهٔ مستطیلی منظم (تور ماهیگیری) از سلول‌ها روی یک گستره. منبع: نمای کنونی نقشه، گسترهٔ یک لایه، یا یک کادر محدودهٔ دستی.",
@@ -4714,6 +4806,46 @@
                 "meters": "متر",
                 "miles": "مایل"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "رمزگشایی چندخطی",
+          "description": "رمزگشایی رشته‌های چندخطی کدگذاری‌شده از یک فیلد ویژگی به یک لایهٔ برداری LineString",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "field": {
+              "label": "فیلد چندخطی",
+              "description": "فیلد ویژگی حاوی رشتهٔ چندخطی کدگذاری‌شده"
+            },
+            "precision": {
+              "label": "دقت",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "کدگذاری خط به چندخطی",
+          "description": "کدگذاری هندسه‌های LineString و MultiLineString به یک رشتهٔ ویژگی چندخطی کدگذاری‌شده",
+          "params": {
+            "layer": {
+              "label": "لایهٔ ورودی"
+            },
+            "precision": {
+              "label": "دقت",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "نام فیلد خروجی",
+              "description": "نام ستون ویژگی برای ذخیرهٔ چندخطی‌های کدگذاری‌شده (پیش‌فرض: polyline)"
             }
           }
         },
@@ -5056,6 +5188,24 @@
                 "minutes": "دقیقه",
                 "hours": "ساعت"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "ادغام لایه‌ها",
+          "description": "ترکیب چند لایهٔ برداری در یک لایه با یکی‌کردن طرح‌وارهٔ ویژگی‌های آن‌ها (ویژگی‌های غایب null می‌شوند)",
+          "params": {
+            "layers": {
+              "label": "لایه‌های ورودی",
+              "description": "دو یا چند لایه انتخاب کنید؛ به ترتیب نمایش‌داده‌شده به هم متصل می‌شوند"
+            },
+            "addSourceField": {
+              "label": "افزودن فیلد لایهٔ منبع",
+              "description": "ثبت نام لایهٔ مبدأ هر عارضهٔ خروجی"
+            },
+            "sourceFieldName": {
+              "label": "نام فیلد منبع",
+              "description": "نام فیلدی که نام لایهٔ مبدأ را ذخیره می‌کند"
             }
           }
         },
@@ -5719,6 +5869,7 @@
     "toolGroup": {
       "analysis": "تحلیل",
       "clip": "برش",
+      "dataManagement": "مدیریت داده",
       "dataQuality": "کیفیت داده",
       "dggs": "DGGS",
       "geometry": "هندسه",
@@ -6736,6 +6887,7 @@
     "exportedWithWarnings": "لایه ایجاد شد. {{warnings}}",
     "exported": "لایه ایجاد شد.",
     "exportLayerError": "خروجی این لایه ممکن نشد.",
+    "exportPolyline": "چندخطی کدگذاری‌شده (دقت {{precision}})",
     "refreshIntervals": {
       "off": "خاموش",
       "s15": "۱۵ ثانیه",

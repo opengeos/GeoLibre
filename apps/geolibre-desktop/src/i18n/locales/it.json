@@ -338,6 +338,10 @@
       "video": {
         "label": "Aggiungi livello video",
         "description": "Aggiungi una sovrapposizione video georeferenziata fornendo un URL MP4 e le coordinate dei quattro angoli."
+      },
+      "polyline": {
+        "label": "Aggiungi livello polilinea codificata",
+        "description": "Importa stringhe di polilinea codificata (Google, OSRM, Valhalla) da testo o file come linee vettoriali."
       }
     },
     "shared": {
@@ -511,6 +515,14 @@
       "noSublayersFound": "Questo servizio mappa non ha dichiarato alcun livello.",
       "retrieveError": "Impossibile recuperare i livelli del servizio mappa.",
       "errorMapServiceUrl": "Inserisci un URL ArcGIS MapServer.",
+      "rasterFunction": "Funzione raster",
+      "serviceDefaultRasterFunction": "Predefinito del servizio",
+      "retrieveRasterFunctions": "Sfoglia funzioni",
+      "retrievingRasterFunctions": "Recupero in corso...",
+      "noRasterFunctionsFound": "Questo servizio immagini non ha dichiarato alcuna funzione raster.",
+      "retrieveRasterFunctionsError": "Impossibile recuperare le funzioni raster del servizio immagini.",
+      "errorImageServiceUrl": "Inserisci un URL ArcGIS ImageServer.",
+      "customRenderingRule": "Regola di rendering personalizzata",
       "renderingRule": "Regola di rendering",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "JSON facoltativo di una funzione raster applicata dal servizio. Una regola di rendering disegna il servizio in modo dinamico anziché usare le sue tile in cache.",
@@ -768,6 +780,47 @@
       "bottomRight": "In basso a destra (lng, lat)",
       "bottomLeft": "In basso a sinistra (lng, lat)",
       "cornersNote": "I quattro angoli georeferenziano il video sulla mappa. Il video deve essere servito tramite HTTPS e l'host deve consentire richieste cross-origin (CORS) affinché i fotogrammi vengano visualizzati."
+    },
+    "polyline": {
+      "defaultName": "Polilinea",
+      "modePaste": "Incolla testo",
+      "modeFile": "Scegli file",
+      "precisionLabel": "Precisione",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "Rimuovi escape dalle barre rovesciate (\\\\ in \\)",
+      "delimiterLabel": "Delimitatore delle polilinee",
+      "delimNewline": "A capo (predefinito)",
+      "delimSemicolon": "Punto e virgola (;)",
+      "delimComma": "Virgola (,)",
+      "delimTab": "Tabulazione",
+      "delimCustom": "Delimitatore personalizzato",
+      "customDelimPlaceholder": "Delimitatore personalizzato (es. | o ---)",
+      "outputGeometryLabel": "Geometria di output",
+      "separateLines": "LineString separati",
+      "multiLineString": "Singolo MultiLineString",
+      "textLabel": "Stringa/e di polilinea codificata",
+      "placeholder": "Incolla la stringa di polilinea codificata (es. _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "Decodificate {{lines}} linea/e con {{points}} punti di coordinate in totale.",
+      "previewTitle": "Anteprima della geometria decodificata",
+      "previewExtent": "Estensione",
+      "previewLength": "Lunghezza",
+      "previewCoordinates": "Ispeziona coordinate",
+      "previewLine": "Linea",
+      "previewPoints": "punti",
+      "previewStart": "Inizio",
+      "previewEnd": "Fine",
+      "errorFileMissing": "Il file selezionato è vuoto o non può essere letto.",
+      "readError": "Impossibile leggere il file di polilinee.",
+      "errorChooseFile": "Scegli un file di polilinee da caricare.",
+      "errorEmptyInput": "Inserisci una o più stringhe di polilinea codificata.",
+      "errorNoValidLines": "Non è stato possibile decodificare alcuna coordinata di polilinea valida.",
+      "sampleGoogle": "Google / OSRM (precisione 5)",
+      "sampleValhalla": "Valhalla / Mapbox (precisione 6)",
+      "sampleEscaped": "Barre rovesciate con escape (formato stringa JSON)",
+      "sampleMultiLine": "Batch di percorsi multilinea (3 segmenti)",
+      "unitMeters": "{{value}} m",
+      "unitKm": "{{value}} km"
     },
     "netcdf": {
       "sampleLabel": "Temperatura dell'aria",
@@ -2309,6 +2362,7 @@
       "delimitedText": "Livello di testo delimitato",
       "photos": "Foto geotaggate",
       "gpx": "Livello GPX",
+      "polyline": "Polilinea codificata",
       "mbtiles": "Livello MBTiles",
       "xyz": "Livello XYZ",
       "wms": "Livello WMS",
@@ -2409,6 +2463,8 @@
       "dissolve": "Dissolvi",
       "boundingBox": "Rettangolo di delimitazione",
       "simplify": "Semplifica",
+      "decodePolyline": "Decodifica polilinea",
+      "encodePolyline": "Codifica linea in polilinea",
       "clip": "Ritaglia",
       "intersection": "Intersezione",
       "difference": "Differenza",
@@ -2422,6 +2478,8 @@
       "explode": "Esplodi",
       "aggregate": "Aggrega per attributo",
       "smooth": "Smussa",
+      "extractVertices": "Estrai vertici",
+      "pointsAlongGeometry": "Punti lungo la geometria",
       "grid": "Griglia regolare",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Copertura delle celle radio",
@@ -2431,6 +2489,7 @@
       "trajectorySpeed": "Velocità di traiettoria",
       "detectStops": "Rileva soste",
       "spaceTimeProximity": "Prossimità spazio-temporale",
+      "mergeLayers": "Unisci livelli",
       "checkValidity": "Verifica validità",
       "fixGeometries": "Correggi geometrie",
       "checkTopologyRules": "Verifica regole topologiche",
@@ -2615,6 +2674,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "Movimento e tempo",
+      "subGroupDataManagement": "Gestione dati",
       "subGroupDataQuality": "Qualità dei dati",
       "subGroupTerrain": "Terreno",
       "subGroupReproject": "Riproiezione",
@@ -4193,7 +4253,9 @@
     "parameterField": {
       "selectLayer": "Seleziona un livello...",
       "selectField": "Seleziona un campo...",
-      "selectLayerFirst": "Seleziona prima un livello"
+      "selectLayerFirst": "Seleziona prima un livello",
+      "layersSelected_one": "{{count}} livello selezionato",
+      "layersSelected_other": "{{count}} livelli selezionati"
     },
     "whitebox": {
       "run": "Esegui",
@@ -4620,6 +4682,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "Estrai vertici",
+          "description": "Converte ogni vertice delle feature di input in un punto, mantenendo gli attributi originali più le colonne vertex_index e part_index (gli attributi di origine con lo stesso nome vengono sovrascritti)",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "Punti lungo la geometria",
+          "description": "Genera punti a un intervallo di distanza fisso lungo linee e confini di poligoni; il primo e l'ultimo vertice sono sempre inclusi. Ogni punto riceve una colonna distance (un attributo di origine con lo stesso nome viene sovrascritto)",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "interval": {
+              "label": "Intervallo",
+              "description": "Distanza tra i punti generati"
+            },
+            "units": {
+              "label": "Unità",
+              "options": {
+                "kilometers": "Chilometri",
+                "meters": "Metri",
+                "miles": "Miglia"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "Griglia regolare",
           "description": "Genera una griglia rettangolare regolare (fishnet) di celle su un'estensione. Origine: la vista corrente della mappa, l'estensione di un livello o un rettangolo di delimitazione manuale.",
@@ -4714,6 +4806,46 @@
                 "meters": "Metri",
                 "miles": "Miglia"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "Decodifica polilinea",
+          "description": "Decodifica le stringhe di polilinea codificata di un campo attributo in un livello vettoriale LineString",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "field": {
+              "label": "Campo polilinea",
+              "description": "Campo attributo contenente la stringa di polilinea codificata"
+            },
+            "precision": {
+              "label": "Precisione",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "Codifica linea in polilinea",
+          "description": "Codifica le geometrie LineString e MultiLineString in una stringa attributo di polilinea codificata",
+          "params": {
+            "layer": {
+              "label": "Livello di input"
+            },
+            "precision": {
+              "label": "Precisione",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "Nome del campo di output",
+              "description": "Nome della colonna attributo in cui salvare le polilinee codificate (predefinito: polyline)"
             }
           }
         },
@@ -5056,6 +5188,24 @@
                 "minutes": "Minuti",
                 "hours": "Ore"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "Unisci livelli",
+          "description": "Combina più livelli vettoriali in uno solo, unendo i loro schemi di attributi (gli attributi mancanti diventano null)",
+          "params": {
+            "layers": {
+              "label": "Livelli di input",
+              "description": "Seleziona due o più livelli; vengono concatenati nell'ordine mostrato"
+            },
+            "addSourceField": {
+              "label": "Aggiungi campo livello di origine",
+              "description": "Registra il nome del livello di origine di ogni feature di output"
+            },
+            "sourceFieldName": {
+              "label": "Nome del campo di origine",
+              "description": "Nome del campo che memorizza il nome del livello di origine"
             }
           }
         },
@@ -5719,6 +5869,7 @@
     "toolGroup": {
       "analysis": "Analisi",
       "clip": "Ritaglio",
+      "dataManagement": "Gestione dati",
       "dataQuality": "Qualità dei dati",
       "dggs": "DGGS",
       "geometry": "Geometria",
@@ -6736,6 +6887,7 @@
     "exportedWithWarnings": "Livello esportato. {{warnings}}",
     "exported": "Livello esportato.",
     "exportLayerError": "Impossibile esportare questo livello.",
+    "exportPolyline": "Polilinea codificata (precisione {{precision}})",
     "refreshIntervals": {
       "off": "Disattivato",
       "s15": "15 secondi",

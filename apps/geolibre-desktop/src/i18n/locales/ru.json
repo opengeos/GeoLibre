@@ -342,6 +342,10 @@
       "video": {
         "label": "Добавить видеослой",
         "description": "Добавить геопривязанное видеоналожение, указав URL MP4 и координаты четырёх углов."
+      },
+      "polyline": {
+        "label": "Добавить слой закодированной полилинии",
+        "description": "Импорт закодированных строк полилиний (Google, OSRM, Valhalla) из текста или файлов в виде векторных линий."
       }
     },
     "shared": {
@@ -525,6 +529,14 @@
       "noSublayersFound": "Этот сервис карт не объявил ни одного слоя.",
       "retrieveError": "Не удалось получить слои сервиса карт.",
       "errorMapServiceUrl": "Введите URL сервиса ArcGIS MapServer.",
+      "rasterFunction": "Растровая функция",
+      "serviceDefaultRasterFunction": "По умолчанию сервиса",
+      "retrieveRasterFunctions": "Обзор функций",
+      "retrievingRasterFunctions": "Получение...",
+      "noRasterFunctionsFound": "Этот сервис изображений не объявил ни одной растровой функции.",
+      "retrieveRasterFunctionsError": "Не удалось получить растровые функции сервиса изображений.",
+      "errorImageServiceUrl": "Введите URL сервиса ArcGIS ImageServer.",
+      "customRenderingRule": "Пользовательское правило отрисовки",
       "renderingRule": "Правило отрисовки",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "Необязательный JSON растровой функции, применяемой сервисом. Правило отрисовки отрисовывает сервис динамически вместо использования его кэшированных тайлов.",
@@ -802,6 +814,47 @@
       "bottomRight": "Нижний правый (долгота, широта)",
       "bottomLeft": "Нижний левый (долгота, широта)",
       "cornersNote": "Четыре угла задают геопривязку видео на карте. Видео должно передаваться по HTTPS, а сервер — разрешать межсайтовые запросы (CORS), чтобы кадры отображались."
+    },
+    "polyline": {
+      "defaultName": "Полилиния",
+      "modePaste": "Вставить текст",
+      "modeFile": "Выбрать файл",
+      "precisionLabel": "Точность",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "Снять экранирование обратных косых черт (\\\\ в \\)",
+      "delimiterLabel": "Разделитель полилиний",
+      "delimNewline": "Новая строка (по умолчанию)",
+      "delimSemicolon": "Точка с запятой (;)",
+      "delimComma": "Запятая (,)",
+      "delimTab": "Табуляция",
+      "delimCustom": "Пользовательский разделитель",
+      "customDelimPlaceholder": "Пользовательский разделитель (например, | или ---)",
+      "outputGeometryLabel": "Выходная геометрия",
+      "separateLines": "Отдельные LineString",
+      "multiLineString": "Один MultiLineString",
+      "textLabel": "Закодированная строка (строки) полилинии",
+      "placeholder": "Вставьте закодированную строку полилинии (например, _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "Декодировано линий: {{lines}}, всего координатных точек: {{points}}.",
+      "previewTitle": "Предпросмотр декодированной геометрии",
+      "previewExtent": "Охват",
+      "previewLength": "Длина",
+      "previewCoordinates": "Просмотреть координаты",
+      "previewLine": "Линия",
+      "previewPoints": "точек",
+      "previewStart": "Начало",
+      "previewEnd": "Конец",
+      "errorFileMissing": "Выбранный файл пуст или не может быть прочитан.",
+      "readError": "Не удалось прочитать файл полилиний.",
+      "errorChooseFile": "Выберите файл полилиний для загрузки.",
+      "errorEmptyInput": "Введите одну или несколько закодированных строк полилиний.",
+      "errorNoValidLines": "Не удалось декодировать ни одной допустимой координаты полилинии.",
+      "sampleGoogle": "Google / OSRM (точность 5)",
+      "sampleValhalla": "Valhalla / Mapbox (точность 6)",
+      "sampleEscaped": "Экранированные обратные косые черты (формат строки JSON)",
+      "sampleMultiLine": "Пакет маршрутов из нескольких строк (3 сегмента)",
+      "unitMeters": "{{value}} м",
+      "unitKm": "{{value}} км"
     },
     "netcdf": {
       "sampleLabel": "Температура воздуха",
@@ -2401,6 +2454,7 @@
       "delimitedText": "Слой с разделителями",
       "photos": "Геопривязанные фотографии",
       "gpx": "Слой GPX",
+      "polyline": "Закодированная полилиния",
       "mbtiles": "Слой MBTiles",
       "xyz": "Слой XYZ",
       "wms": "Слой WMS",
@@ -2501,6 +2555,8 @@
       "dissolve": "Растворить",
       "boundingBox": "Ограничивающий прямоугольник",
       "simplify": "Упростить",
+      "decodePolyline": "Декодировать полилинию",
+      "encodePolyline": "Закодировать линию в полилинию",
       "clip": "Обрезать",
       "intersection": "Пересечение",
       "difference": "Разность",
@@ -2514,6 +2570,8 @@
       "explode": "Разбить на части",
       "aggregate": "Агрегировать по атрибуту",
       "smooth": "Сгладить",
+      "extractVertices": "Извлечь вершины",
+      "pointsAlongGeometry": "Точки вдоль геометрии",
       "grid": "Регулярная сетка",
       "voronoi": "Вороного / Делоне",
       "cellSectors": "Зоны покрытия базовых станций",
@@ -2523,6 +2581,7 @@
       "trajectorySpeed": "Скорость траектории",
       "detectStops": "Определить остановки",
       "spaceTimeProximity": "Пространственно-временная близость",
+      "mergeLayers": "Объединить слои",
       "checkValidity": "Проверить корректность",
       "fixGeometries": "Исправить геометрию",
       "checkTopologyRules": "Проверить правила топологии",
@@ -2707,6 +2766,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "Движение и время",
+      "subGroupDataManagement": "Управление данными",
       "subGroupDataQuality": "Качество данных",
       "subGroupTerrain": "Рельеф",
       "subGroupReproject": "Перепроецирование",
@@ -4329,7 +4389,11 @@
     "parameterField": {
       "selectLayer": "Выберите слой...",
       "selectField": "Выберите поле...",
-      "selectLayerFirst": "Сначала выберите слой"
+      "selectLayerFirst": "Сначала выберите слой",
+      "layersSelected_one": "Выбран {{count}} слой",
+      "layersSelected_few": "Выбрано {{count}} слоя",
+      "layersSelected_many": "Выбрано {{count}} слоёв",
+      "layersSelected_other": "Выбрано {{count}} слоя"
     },
     "whitebox": {
       "run": "Выполнить",
@@ -4758,6 +4822,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "Извлечь вершины",
+          "description": "Преобразовать каждую вершину входных объектов в точку, сохранив исходные атрибуты и добавив столбцы vertex_index и part_index (одноимённые исходные атрибуты перезаписываются)",
+          "params": {
+            "layer": {
+              "label": "Входной слой"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "Точки вдоль геометрии",
+          "description": "Создать точки с фиксированным интервалом расстояния вдоль линий и границ полигонов; первая и последняя вершины всегда включаются. Каждая точка получает столбец distance (одноимённый исходный атрибут перезаписывается)",
+          "params": {
+            "layer": {
+              "label": "Входной слой"
+            },
+            "interval": {
+              "label": "Интервал",
+              "description": "Расстояние между создаваемыми точками"
+            },
+            "units": {
+              "label": "Единицы",
+              "options": {
+                "kilometers": "Километры",
+                "meters": "Метры",
+                "miles": "Мили"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "Регулярная сетка",
           "description": "Построить регулярную прямоугольную сетку (fishnet) ячеек по охвату. Источник: текущий вид карты, охват слоя или ограничивающий прямоугольник, заданный вручную.",
@@ -4852,6 +4946,46 @@
                 "meters": "Метры",
                 "miles": "Мили"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "Декодировать полилинию",
+          "description": "Декодировать закодированные строки полилиний из атрибутивного поля в векторный слой LineString",
+          "params": {
+            "layer": {
+              "label": "Входной слой"
+            },
+            "field": {
+              "label": "Поле полилинии",
+              "description": "Атрибутивное поле, содержащее закодированную строку полилинии"
+            },
+            "precision": {
+              "label": "Точность",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "Закодировать линию в полилинию",
+          "description": "Закодировать геометрии LineString и MultiLineString в атрибутивную строку закодированной полилинии",
+          "params": {
+            "layer": {
+              "label": "Входной слой"
+            },
+            "precision": {
+              "label": "Точность",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "Имя выходного поля",
+              "description": "Имя атрибутивного столбца для хранения закодированных полилиний (по умолчанию: polyline)"
             }
           }
         },
@@ -5194,6 +5328,24 @@
                 "minutes": "Минуты",
                 "hours": "Часы"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "Объединить слои",
+          "description": "Объединить несколько векторных слоёв в один, объединив их схемы атрибутов (отсутствующие атрибуты получают значение null)",
+          "params": {
+            "layers": {
+              "label": "Входные слои",
+              "description": "Выберите два или более слоёв; они объединяются в показанном порядке"
+            },
+            "addSourceField": {
+              "label": "Добавить поле исходного слоя",
+              "description": "Записывать имя исходного слоя для каждого выходного объекта"
+            },
+            "sourceFieldName": {
+              "label": "Имя поля источника",
+              "description": "Имя поля, в котором хранится имя исходного слоя"
             }
           }
         },
@@ -5857,6 +6009,7 @@
     "toolGroup": {
       "analysis": "Анализ",
       "clip": "Обрезка",
+      "dataManagement": "Управление данными",
       "dataQuality": "Качество данных",
       "dggs": "DGGS",
       "geometry": "Геометрия",
@@ -6888,6 +7041,7 @@
     "exportedWithWarnings": "Слой экспортирован. {{warnings}}",
     "exported": "Слой экспортирован.",
     "exportLayerError": "Не удалось экспортировать этот слой.",
+    "exportPolyline": "Закодированная полилиния (точность {{precision}})",
     "refreshIntervals": {
       "off": "Выключено",
       "s15": "15 секунд",

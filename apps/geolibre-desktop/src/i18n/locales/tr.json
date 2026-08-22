@@ -338,6 +338,10 @@
       "video": {
         "label": "Video Katmanı Ekle",
         "description": "Bir MP4 URL'si ve dört köşe koordinatı vererek coğrafi referanslı bir video kaplaması ekleyin."
+      },
+      "polyline": {
+        "label": "Kodlanmış Çoklu Çizgi Katmanı Ekle",
+        "description": "Kodlanmış çoklu çizgi dizelerini (Google, OSRM, Valhalla) metin veya dosyalardan vektör çizgiler olarak içe aktarın."
       }
     },
     "shared": {
@@ -511,6 +515,14 @@
       "noSublayersFound": "Bu harita servisi hiçbir katman bildirmedi.",
       "retrieveError": "Harita servisinin katmanları alınamadı.",
       "errorMapServiceUrl": "Bir ArcGIS MapServer URL'si girin.",
+      "rasterFunction": "Raster fonksiyonu",
+      "serviceDefaultRasterFunction": "Servis varsayılanı",
+      "retrieveRasterFunctions": "Fonksiyonlara göz at",
+      "retrievingRasterFunctions": "Getiriliyor...",
+      "noRasterFunctionsFound": "Bu görüntü servisi hiçbir raster fonksiyonu bildirmedi.",
+      "retrieveRasterFunctionsError": "Görüntü servisinin raster fonksiyonları alınamadı.",
+      "errorImageServiceUrl": "Bir ArcGIS ImageServer URL'si girin.",
+      "customRenderingRule": "Özel işleme kuralı",
       "renderingRule": "Görselleştirme kuralı",
       "renderingRulePlaceholder": "{\"rasterFunction\":\"Hillshade\"}",
       "renderingRuleHint": "Servisin uyguladığı isteğe bağlı raster işlevi JSON'u. Görselleştirme kuralı, servisi önbelleğe alınmış döşemeler yerine dinamik olarak çizer.",
@@ -768,6 +780,47 @@
       "bottomRight": "Sağ alt (boylam, enlem)",
       "bottomLeft": "Sol alt (boylam, enlem)",
       "cornersNote": "Dört köşe, videoyu haritada coğrafi olarak referanslar. Video HTTPS üzerinden sunulmalı ve kareler işlenebilmesi için sunucu çapraz kaynak isteklerine (CORS) izin vermelidir."
+    },
+    "polyline": {
+      "defaultName": "Çoklu çizgi",
+      "modePaste": "Metin yapıştır",
+      "modeFile": "Dosya seç",
+      "precisionLabel": "Hassasiyet",
+      "precision5": "5 (Google / OSRM)",
+      "precision6": "6 (Valhalla / Mapbox)",
+      "unescapeLabel": "Ters eğik çizgi kaçışlarını kaldır (\\\\ -> \\)",
+      "delimiterLabel": "Çoklu çizgi ayırıcısı",
+      "delimNewline": "Yeni satır (varsayılan)",
+      "delimSemicolon": "Noktalı virgül (;)",
+      "delimComma": "Virgül (,)",
+      "delimTab": "Sekme",
+      "delimCustom": "Özel ayırıcı",
+      "customDelimPlaceholder": "Özel ayırıcı (örn. | veya ---)",
+      "outputGeometryLabel": "Çıktı geometrisi",
+      "separateLines": "Ayrı LineString'ler",
+      "multiLineString": "Tek MultiLineString",
+      "textLabel": "Kodlanmış çoklu çizgi dizesi/dizeleri",
+      "placeholder": "Kodlanmış çoklu çizgi dizesini yapıştırın (örn. _p~iF~ps|U_ulLnnqC_mqNvxq`@)...",
+      "previewInfo": "{{lines}} çizgi çözüldü, toplam {{points}} koordinat noktası.",
+      "previewTitle": "Çözülen Geometri Önizlemesi",
+      "previewExtent": "Kapsam",
+      "previewLength": "Uzunluk",
+      "previewCoordinates": "Koordinatları incele",
+      "previewLine": "Çizgi",
+      "previewPoints": "nokta",
+      "previewStart": "Başlangıç",
+      "previewEnd": "Bitiş",
+      "errorFileMissing": "Seçilen dosya boş veya okunamadı.",
+      "readError": "Çoklu çizgi dosyası okunamadı.",
+      "errorChooseFile": "Lütfen yüklenecek bir çoklu çizgi dosyası seçin.",
+      "errorEmptyInput": "Bir veya daha fazla kodlanmış çoklu çizgi dizesi girin.",
+      "errorNoValidLines": "Geçerli bir çoklu çizgi koordinatı çözülemedi.",
+      "sampleGoogle": "Google / OSRM (hassasiyet 5)",
+      "sampleValhalla": "Valhalla / Mapbox (hassasiyet 6)",
+      "sampleEscaped": "Kaçış karakterli ters eğik çizgiler (JSON dize biçimi)",
+      "sampleMultiLine": "Çok satırlı rota grubu (3 parça)",
+      "unitMeters": "{{value}} m",
+      "unitKm": "{{value}} km"
     },
     "netcdf": {
       "sampleLabel": "Hava sıcaklığı",
@@ -2309,6 +2362,7 @@
       "delimitedText": "Sınırlayıcılı Metin Katmanı",
       "photos": "Coğrafi Etiketli Fotoğraflar",
       "gpx": "GPX Katmanı",
+      "polyline": "Kodlanmış Çoklu Çizgi",
       "mbtiles": "MBTiles Katmanı",
       "xyz": "XYZ Katmanı",
       "wms": "WMS Katmanı",
@@ -2409,6 +2463,8 @@
       "dissolve": "Eritme",
       "boundingBox": "Sınırlayıcı kutu",
       "simplify": "Basitleştir",
+      "decodePolyline": "Çoklu çizgiyi çöz",
+      "encodePolyline": "Çizgiyi çoklu çizgiye kodla",
       "clip": "Kırp",
       "intersection": "Kesişim",
       "difference": "Fark",
@@ -2422,6 +2478,8 @@
       "explode": "Parçalara ayır",
       "aggregate": "Özniteliğe göre kümeleştir",
       "smooth": "Yumuşat",
+      "extractVertices": "Köşe noktalarını çıkar",
+      "pointsAlongGeometry": "Geometri boyunca noktalar",
       "grid": "Düzenli ızgara",
       "voronoi": "Voronoi / Delaunay",
       "cellSectors": "Baz istasyonu kapsama alanı",
@@ -2431,6 +2489,7 @@
       "trajectorySpeed": "Güzergah hızı",
       "detectStops": "Durakları algıla",
       "spaceTimeProximity": "Uzay-zaman yakınlığı",
+      "mergeLayers": "Katmanları birleştir",
       "checkValidity": "Geçerliliği denetle",
       "fixGeometries": "Geometrileri düzelt",
       "checkTopologyRules": "Topoloji kurallarını denetle",
@@ -2615,6 +2674,7 @@
       "subGroupDggs": "DGGS",
       "subGroupH3": "H3",
       "subGroupMovement": "Hareket ve zaman",
+      "subGroupDataManagement": "Veri yönetimi",
       "subGroupDataQuality": "Veri kalitesi",
       "subGroupTerrain": "Arazi",
       "subGroupReproject": "Yeniden İzdüşüm",
@@ -4193,7 +4253,9 @@
     "parameterField": {
       "selectLayer": "Bir katman seçin...",
       "selectField": "Bir alan seçin...",
-      "selectLayerFirst": "Önce bir katman seçin"
+      "selectLayerFirst": "Önce bir katman seçin",
+      "layersSelected_one": "{{count}} katman seçildi",
+      "layersSelected_other": "{{count}} katman seçildi"
     },
     "whitebox": {
       "run": "Çalıştır",
@@ -4620,6 +4682,36 @@
             }
           }
         },
+        "extract-vertices": {
+          "name": "Köşe noktalarını çıkar",
+          "description": "Girdi öğelerinin her köşe noktasını, orijinal öznitelikler ile vertex_index ve part_index sütunlarını koruyarak noktaya dönüştürün (aynı adlı kaynak öznitelikler üzerine yazılır)",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            }
+          }
+        },
+        "points-along-geometry": {
+          "name": "Geometri boyunca noktalar",
+          "description": "Çizgiler ve poligon sınırları boyunca sabit mesafe aralığıyla noktalar oluşturun; ilk ve son köşe noktaları her zaman dahil edilir. Her nokta bir distance sütunu alır (aynı adlı kaynak öznitelik üzerine yazılır)",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "interval": {
+              "label": "Aralık",
+              "description": "Oluşturulan noktalar arasındaki mesafe"
+            },
+            "units": {
+              "label": "Birimler",
+              "options": {
+                "kilometers": "Kilometre",
+                "meters": "Metre",
+                "miles": "Mil"
+              }
+            }
+          }
+        },
         "grid": {
           "name": "Düzenli ızgara",
           "description": "Bir kapsam üzerinde hücrelerden oluşan düzenli dikdörtgen bir ızgara (balık ağı) oluşturur. Kaynak: geçerli harita görünümü, bir katmanın kapsamı veya elle girilen sınırlayıcı kutu.",
@@ -4714,6 +4806,46 @@
                 "meters": "Metre",
                 "miles": "Mil"
               }
+            }
+          }
+        },
+        "decode-polyline": {
+          "name": "Çoklu çizgiyi çöz",
+          "description": "Bir öznitelik alanındaki kodlanmış çoklu çizgi dizelerini LineString vektör katmanına çözün",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "field": {
+              "label": "Çoklu çizgi alanı",
+              "description": "Kodlanmış çoklu çizgi dizesini içeren öznitelik alanı"
+            },
+            "precision": {
+              "label": "Hassasiyet",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            }
+          }
+        },
+        "encode-polyline": {
+          "name": "Çizgiyi çoklu çizgiye kodla",
+          "description": "LineString ve MultiLineString geometrilerini kodlanmış çoklu çizgi öznitelik dizesine kodlayın",
+          "params": {
+            "layer": {
+              "label": "Girdi katmanı"
+            },
+            "precision": {
+              "label": "Hassasiyet",
+              "options": {
+                "5": "5 (Google / OSRM)",
+                "6": "6 (Valhalla / Mapbox)"
+              }
+            },
+            "targetField": {
+              "label": "Çıktı alanı adı",
+              "description": "Kodlanmış çoklu çizgilerin saklanacağı öznitelik sütununun adı (varsayılan: polyline)"
             }
           }
         },
@@ -5056,6 +5188,24 @@
                 "minutes": "Dakika",
                 "hours": "Saat"
               }
+            }
+          }
+        },
+        "merge-layers": {
+          "name": "Katmanları birleştir",
+          "description": "Birden çok vektör katmanını öznitelik şemalarını birleştirerek tek katmanda birleştirin (eksik öznitelikler null olur)",
+          "params": {
+            "layers": {
+              "label": "Girdi katmanları",
+              "description": "İki veya daha fazla katman seçin; gösterilen sırayla art arda eklenirler"
+            },
+            "addSourceField": {
+              "label": "Kaynak katman alanı ekle",
+              "description": "Her çıktı öğesinin kaynak katman adını kaydet"
+            },
+            "sourceFieldName": {
+              "label": "Kaynak alan adı",
+              "description": "Kaynak katman adını saklayan alanın adı"
             }
           }
         },
@@ -5719,6 +5869,7 @@
     "toolGroup": {
       "analysis": "Analiz",
       "clip": "Kırpma",
+      "dataManagement": "Veri yönetimi",
       "dataQuality": "Veri kalitesi",
       "dggs": "DGGS",
       "geometry": "Geometri",
@@ -6736,6 +6887,7 @@
     "exportedWithWarnings": "Katman dışa aktarıldı. {{warnings}}",
     "exported": "Katman dışa aktarıldı.",
     "exportLayerError": "Bu katman dışa aktarılamadı.",
+    "exportPolyline": "Kodlanmış Çoklu Çizgi (hassasiyet {{precision}})",
     "refreshIntervals": {
       "off": "Kapalı",
       "s15": "15 saniye",
