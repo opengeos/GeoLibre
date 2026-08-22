@@ -219,8 +219,10 @@ let promptPoints: PromptPoint[] = [];
 let promptBox: [number, number, number, number] | null = null;
 let cancelDrawing: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
-/** The in-flight health or segmentation request, aborted when the panel closes. */
-let pendingRequest: AbortController | null = null;
+/** In-flight requests, aborted when the panel closes. Health checks and
+ * segmentation run independently so one never cancels the other. */
+let pendingSegmentation: AbortController | null = null;
+let pendingHealth: AbortController | null = null;
 
 const HEALTH_TIMEOUT_MS = 10_000;
 
@@ -235,15 +237,44 @@ function rebuildPanel(): void {
   disposePanel = buildPanel(panelContainer);
 }
 
-function beginRequest(): AbortController {
-  pendingRequest?.abort();
+type RequestSlot = "segmentation" | "health";
+
+function beginRequest(slot: RequestSlot): AbortController {
   const controller = new AbortController();
-  pendingRequest = controller;
+  if (slot === "segmentation") {
+    pendingSegmentation?.abort();
+    pendingSegmentation = controller;
+  } else {
+    pendingHealth?.abort();
+    pendingHealth = controller;
+  }
   return controller;
 }
 
-function endRequest(controller: AbortController): void {
-  if (pendingRequest === controller) pendingRequest = null;
+function endRequest(slot: RequestSlot, controller: AbortController): void {
+  if (slot === "segmentation" && pendingSegmentation === controller) pendingSegmentation = null;
+  if (slot === "health" && pendingHealth === controller) pendingHealth = null;
+}
+
+function abortRequests(): void {
+  pendingSegmentation?.abort();
+  pendingSegmentation = null;
+  pendingHealth?.abort();
+  pendingHealth = null;
+}
+
+/** Everything a segmentation request reads, frozen when the user clicks Segment. */
+interface SegmentationSnapshot extends SamGeoState {
+  points: PromptPoint[];
+  box: [number, number, number, number] | null;
+}
+
+function snapshotRequest(): SegmentationSnapshot {
+  return {
+    ...state,
+    points: promptPoints.map((p) => ({ ...p })),
+    box: promptBox,
+  };
 }
 
 const css = {
@@ -503,33 +534,34 @@ export function reprojectSamGeoResult(
   return { type: "FeatureCollection", features };
 }
 
-function appendCommon(form: FormData): void {
+function appendCommon(form: FormData, req: SegmentationSnapshot): void {
   form.append("output_format", "geojson");
-  form.append("min_size", String(state.minSize));
-  if (state.maxSize > 0) form.append("max_size", String(state.maxSize));
-  if (state.modelId.trim()) form.append("model_id", state.modelId.trim());
+  form.append("min_size", String(req.minSize));
+  if (req.maxSize > 0) form.append("max_size", String(req.maxSize));
+  if (req.modelId.trim()) form.append("model_id", req.modelId.trim());
 }
 
 async function requestSegmentation(
   file: File,
   bytes: ArrayBuffer,
+  req: SegmentationSnapshot,
   signal: AbortSignal,
 ): Promise<FeatureCollection> {
   const form = new FormData();
   form.append("file", file, file.name);
-  appendCommon(form);
+  appendCommon(form, req);
   let endpoint: string;
-  if (state.mode === "text") {
+  if (req.mode === "text") {
     endpoint = "/segment/text";
-    form.append("prompt", state.prompt.trim());
-    form.append("backend", state.backend);
-    form.append("confidence_threshold", String(state.confidence));
-  } else if (state.mode === "automatic") {
+    form.append("prompt", req.prompt.trim());
+    form.append("backend", req.backend);
+    form.append("confidence_threshold", String(req.confidence));
+  } else if (req.mode === "automatic") {
     endpoint = "/segment/automatic";
     form.append("model_version", "sam3");
-    form.append("points_per_side", String(state.pointsPerSide));
-    form.append("pred_iou_thresh", String(state.predIou));
-    form.append("stability_score_thresh", String(state.stability));
+    form.append("points_per_side", String(req.pointsPerSide));
+    form.append("pred_iou_thresh", String(req.predIou));
+    form.append("stability_score_thresh", String(req.stability));
   } else {
     endpoint = "/segment/predict";
     form.append("model_version", "sam3");
@@ -537,16 +569,16 @@ async function requestSegmentation(
     // Match the QGIS plugin: multiple prompts and any background prompt are
     // already unambiguous; a lone foreground click benefits from alternatives.
     const multimask =
-      state.mode === "points" && promptPoints.length === 1 && promptPoints[0]?.label === 1;
+      req.mode === "points" && req.points.length === 1 && req.points[0]?.label === 1;
     form.append("multimask_output", String(multimask));
-    if (state.mode === "points") {
-      form.append("point_coords", JSON.stringify(promptPoints.map((point) => point.coordinates)));
-      form.append("point_labels", JSON.stringify(promptPoints.map((point) => point.label)));
-    } else if (promptBox) {
-      form.append("boxes", JSON.stringify([promptBox]));
+    if (req.mode === "points") {
+      form.append("point_coords", JSON.stringify(req.points.map((point) => point.coordinates)));
+      form.append("point_labels", JSON.stringify(req.points.map((point) => point.label)));
+    } else if (req.box) {
+      form.append("boxes", JSON.stringify([req.box]));
     }
   }
-  const response = await fetch(`${apiBase()}${endpoint}`, {
+  const response = await fetch(`${req.apiUrl.trim().replace(/\/+$/, "")}${endpoint}`, {
     method: "POST",
     body: form,
     signal,
@@ -636,6 +668,16 @@ function buildPanel(container: HTMLElement): () => void {
     return field(label, node);
   };
 
+  // Mask-size limits apply to every mode.
+  const sizeFields = () => [
+    numberField(labels.minSize, state.minSize, 0, 1_000_000, 1, (n) => {
+      state.minSize = n;
+    }),
+    numberField(labels.maxSize, state.maxSize, 0, 10_000_000, 1, (n) => {
+      state.maxSize = n;
+    }),
+  ];
+
   const refreshDynamic = () => {
     cancelDrawing?.();
     cancelDrawing = null;
@@ -653,16 +695,7 @@ function buildPanel(container: HTMLElement): () => void {
           state.confidence = n;
         }),
       );
-      dynamic.append(
-        numberField(labels.minSize, state.minSize, 0, 1_000_000, 1, (n) => {
-          state.minSize = n;
-        }),
-      );
-      dynamic.append(
-        numberField(labels.maxSize, state.maxSize, 0, 10_000_000, 1, (n) => {
-          state.maxSize = n;
-        }),
-      );
+      dynamic.append(...sizeFields());
       const backend = element("select");
       backend.style.cssText = css.input;
       for (const value of ["meta", "transformers"] as const) {
@@ -693,16 +726,7 @@ function buildPanel(container: HTMLElement): () => void {
       negative.addEventListener("click", () => arm(0));
       row.append(positive, negative);
       dynamic.append(row, drawSummary);
-      dynamic.append(
-        numberField(labels.minSize, state.minSize, 0, 1_000_000, 1, (n) => {
-          state.minSize = n;
-        }),
-      );
-      dynamic.append(
-        numberField(labels.maxSize, state.maxSize, 0, 10_000_000, 1, (n) => {
-          state.maxSize = n;
-        }),
-      );
+      dynamic.append(...sizeFields());
     } else if (state.mode === "box") {
       const draw = button(labels.drawBox);
       draw.addEventListener("click", () => {
@@ -715,16 +739,7 @@ function buildPanel(container: HTMLElement): () => void {
         });
       });
       dynamic.append(draw, drawSummary);
-      dynamic.append(
-        numberField(labels.minSize, state.minSize, 0, 1_000_000, 1, (n) => {
-          state.minSize = n;
-        }),
-      );
-      dynamic.append(
-        numberField(labels.maxSize, state.maxSize, 0, 10_000_000, 1, (n) => {
-          state.maxSize = n;
-        }),
-      );
+      dynamic.append(...sizeFields());
     } else {
       dynamic.append(
         numberField(labels.pointsPerSide, state.pointsPerSide, 1, 128, 1, (n) => {
@@ -741,16 +756,7 @@ function buildPanel(container: HTMLElement): () => void {
           state.stability = n;
         }),
       );
-      dynamic.append(
-        numberField(labels.minSize, state.minSize, 0, 1_000_000, 1, (n) => {
-          state.minSize = n;
-        }),
-      );
-      dynamic.append(
-        numberField(labels.maxSize, state.maxSize, 0, 10_000_000, 1, (n) => {
-          state.maxSize = n;
-        }),
-      );
+      dynamic.append(...sizeFields());
     }
     refreshSummary();
   };
@@ -799,10 +805,14 @@ function buildPanel(container: HTMLElement): () => void {
     }
     run.disabled = true;
     status.textContent = labels.segmenting;
-    const controller = beginRequest();
+    const controller = beginRequest("segmentation");
+    // Freeze the inputs now: the controls stay live while the file is read
+    // and the request is in flight, so a mode switch mid-way must not change
+    // what is submitted or how the result layer is named.
+    const req = snapshotRequest();
     try {
       const bytes = await file.arrayBuffer();
-      const result = await requestSegmentation(file, bytes, controller.signal);
+      const result = await requestSegmentation(file, bytes, req, controller.signal);
       // The panel was closed (or a newer request started) while this one was
       // in flight: drop the result rather than adding a layer the user has
       // moved on from.
@@ -811,7 +821,7 @@ function buildPanel(container: HTMLElement): () => void {
         status.textContent = labels.noObjects;
         return;
       }
-      const suffix = state.mode === "text" ? `: ${state.prompt.trim()}` : ` (${state.mode})`;
+      const suffix = req.mode === "text" ? `: ${req.prompt.trim()}` : ` (${req.mode})`;
       const layerId = appRef?.addGeoJsonLayer(`SamGeo${suffix}`, result);
       const bounds = result.features.flatMap((feature) => {
         const coords: Position[] = [];
@@ -822,18 +832,24 @@ function buildPanel(container: HTMLElement): () => void {
         return coords;
       });
       if (bounds.length) {
-        appRef?.fitBounds?.([
-          Math.min(...bounds.map((p) => p[0])),
-          Math.min(...bounds.map((p) => p[1])),
-          Math.max(...bounds.map((p) => p[0])),
-          Math.max(...bounds.map((p) => p[1])),
-        ]);
+        // A reduce rather than Math.min(...spread): automatic mode can return
+        // tens of thousands of vertices, past the argument limit of some engines.
+        const extent = bounds.reduce<[number, number, number, number]>(
+          (acc, [x, y]) => [
+            Math.min(acc[0], x),
+            Math.min(acc[1], y),
+            Math.max(acc[2], x),
+            Math.max(acc[3], y),
+          ],
+          [Infinity, Infinity, -Infinity, -Infinity],
+        );
+        appRef?.fitBounds?.(extent);
       }
       status.textContent = labels.added(result.features.length, layerId ? ` as ${layerId}` : "");
     } catch (error) {
       if (!controller.signal.aborted) status.textContent = errorMessage(error);
     } finally {
-      endRequest(controller);
+      endRequest("segmentation", controller);
       run.disabled = false;
     }
   });
@@ -841,7 +857,7 @@ function buildPanel(container: HTMLElement): () => void {
   health.addEventListener("click", async () => {
     health.disabled = true;
     healthText.textContent = labels.checking;
-    const controller = beginRequest();
+    const controller = beginRequest("health");
     const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
     try {
       const response = await fetch(`${apiBase()}/health`, {
@@ -854,7 +870,7 @@ function buildPanel(container: HTMLElement): () => void {
       healthText.textContent = labels.unavailable(errorMessage(error));
     } finally {
       clearTimeout(timer);
-      endRequest(controller);
+      endRequest("health", controller);
       health.disabled = false;
     }
   });
@@ -887,8 +903,7 @@ function buildPanel(container: HTMLElement): () => void {
   return () => {
     cancelDrawing?.();
     cancelDrawing = null;
-    pendingRequest?.abort();
-    pendingRequest = null;
+    abortRequests();
     container.replaceChildren();
   };
 }
