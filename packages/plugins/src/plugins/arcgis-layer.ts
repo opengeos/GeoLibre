@@ -1883,7 +1883,7 @@ function repairArcGISNestedPolygonRings(feature: Feature): Feature {
       }
       if (
         Math.abs(rings[candidate].area) < parentArea &&
-        pointInRing(rings[child].ring[0], rings[candidate].ring)
+        ringStrictlyContains(rings[candidate].ring, rings[child].ring)
       ) {
         rings[child].parent = candidate;
         parentArea = Math.abs(rings[candidate].area);
@@ -1940,6 +1940,54 @@ function pointInRing(point: Position, ring: Position[]): boolean {
     }
   }
   return inside;
+}
+
+function ringStrictlyContains(container: Position[], child: Position[]): boolean {
+  return (
+    child.slice(0, -1).every((point) => pointInRing(point, container)) &&
+    !ringsIntersect(container, child)
+  );
+}
+
+function ringsIntersect(first: Position[], second: Position[]): boolean {
+  for (let firstIndex = 0; firstIndex < first.length - 1; firstIndex += 1) {
+    for (let secondIndex = 0; secondIndex < second.length - 1; secondIndex += 1) {
+      if (
+        segmentsIntersect(
+          first[firstIndex],
+          first[firstIndex + 1],
+          second[secondIndex],
+          second[secondIndex + 1],
+        )
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function segmentsIntersect(a: Position, b: Position, c: Position, d: Position): boolean {
+  const cross = (start: Position, end: Position, point: Position): number =>
+    (end[0] - start[0]) * (point[1] - start[1]) - (end[1] - start[1]) * (point[0] - start[0]);
+  const abC = cross(a, b, c);
+  const abD = cross(a, b, d);
+  const cdA = cross(c, d, a);
+  const cdB = cross(c, d, b);
+  if (abC === 0 && pointOnSegment(c, a, b)) return true;
+  if (abD === 0 && pointOnSegment(d, a, b)) return true;
+  if (cdA === 0 && pointOnSegment(a, c, d)) return true;
+  if (cdB === 0 && pointOnSegment(b, c, d)) return true;
+  return abC > 0 !== abD > 0 && cdA > 0 !== cdB > 0;
+}
+
+function pointOnSegment(point: Position, start: Position, end: Position): boolean {
+  return (
+    point[0] >= Math.min(start[0], end[0]) &&
+    point[0] <= Math.max(start[0], end[0]) &&
+    point[1] >= Math.min(start[1], end[1]) &&
+    point[1] <= Math.max(start[1], end[1])
+  );
 }
 
 async function resolveFeatureLayerUrl(

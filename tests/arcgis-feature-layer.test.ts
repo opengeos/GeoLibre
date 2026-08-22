@@ -316,6 +316,15 @@ describe("addArcGISLayer (feature layer)", () => {
                   [4, 4],
                 ],
               ],
+              [
+                [
+                  [9, 1],
+                  [12, 1],
+                  [12, 4],
+                  [9, 4],
+                  [9, 1],
+                ],
+              ],
             ],
           },
         },
@@ -336,7 +345,11 @@ describe("addArcGISLayer (feature layer)", () => {
 
     assert.equal(geometry?.type, "MultiPolygon");
     if (geometry?.type !== "MultiPolygon") return;
-    assert.equal(geometry.coordinates.length, 2, "the nested island remains a separate polygon");
+    assert.equal(
+      geometry.coordinates.length,
+      3,
+      "the nested island and overlapping polygon remain separate polygons",
+    );
     assert.equal(geometry.coordinates[0].length, 2, "the contained ring becomes a hole");
     assert.deepEqual(geometry.coordinates[1][0][0], [4, 4]);
   });
