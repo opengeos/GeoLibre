@@ -24,9 +24,9 @@ html {
 body {
   margin: 0;
   color: var(--ink);
-  background: linear-gradient(rgba(13, 92, 77, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(13, 92, 77, 0.04) 1px, transparent 1px),
-    var(--paper);
+  background:
+    linear-gradient(rgba(13, 92, 77, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(13, 92, 77, 0.04) 1px, transparent 1px), var(--paper);
   background-size: 32px 32px;
 }
 
@@ -330,7 +330,9 @@ h2 {
   min-height: 82px;
   border-bottom: 1px solid var(--line);
   text-decoration: none;
-  transition: background 140ms ease, padding 140ms ease;
+  transition:
+    background 140ms ease,
+    padding 140ms ease;
 }
 
 .artifact-row:last-child {

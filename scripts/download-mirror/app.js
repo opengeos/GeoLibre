@@ -4,15 +4,7 @@ const emptyState = document.querySelector("#empty-state");
 const platformNav = document.querySelector("#platform-nav");
 let artifacts = [];
 
-const platformOrder = [
-  "Windows",
-  "macOS",
-  "Linux",
-  "Android",
-  "iOS",
-  "Browser",
-  "Other",
-];
+const platformOrder = ["Windows", "macOS", "Linux", "Android", "iOS", "Browser", "Other"];
 
 const bytes = new Intl.NumberFormat("en", {
   style: "unit",
@@ -31,20 +23,11 @@ function platformFor(name) {
   if (value.includes("android") || /\.(apk|aab)$/.test(value)) return "Android";
   if (value.includes("ios") || value.endsWith(".ipa")) return "iOS";
   if (value.includes("chrome")) return "Browser";
-  if (
-    /\.(exe|msi|msix)$/.test(value) ||
-    value.includes("windows") ||
-    value.includes("portable")
-  )
+  if (/\.(exe|msi|msix)$/.test(value) || value.includes("windows") || value.includes("portable"))
     return "Windows";
-  if (
-    /\.(dmg|pkg)$/.test(value) ||
-    value.includes("darwin") ||
-    value.includes(".app.")
-  )
+  if (/\.(dmg|pkg)$/.test(value) || value.includes("darwin") || value.includes(".app."))
     return "macOS";
-  if (/\.(deb|rpm|appimage|zsync)$/.test(value) || value.includes("linux"))
-    return "Linux";
+  if (/\.(deb|rpm|appimage|zsync)$/.test(value) || value.includes("linux")) return "Linux";
   return "Other";
 }
 
@@ -88,7 +71,7 @@ function artifactRow(artifact) {
 function render(query = "") {
   const normalizedQuery = query.trim().toLowerCase();
   const visible = artifacts.filter(({ element }) =>
-    element.dataset.search.includes(normalizedQuery)
+    element.dataset.search.includes(normalizedQuery),
   );
   const groups = platformOrder
     .map((platform) => {
@@ -105,9 +88,7 @@ function render(query = "") {
       title.textContent = platform;
       const count = document.createElement("span");
       count.className = "platform-count";
-      count.textContent = `— ${matches.length} ${
-        matches.length === 1 ? "file" : "files"
-      }`;
+      count.textContent = `— ${matches.length} ${matches.length === 1 ? "file" : "files"}`;
       title.append(count);
       heading.append(title);
       section.append(heading, ...matches.map(({ element }) => element));
@@ -121,9 +102,7 @@ function render(query = "") {
 
 function renderPlatformNav() {
   const counts = new Map(platformOrder.map((platform) => [platform, 0]));
-  artifacts.forEach(({ platform }) =>
-    counts.set(platform, counts.get(platform) + 1)
-  );
+  artifacts.forEach(({ platform }) => counts.set(platform, counts.get(platform) + 1));
   const links = platformOrder
     .filter((platform) => counts.get(platform) > 0)
     .map((platform) => {
@@ -144,17 +123,12 @@ async function loadManifest() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const manifest = await response.json();
 
-    document.querySelector("#release-version").textContent =
-      manifest.release.tag;
-    document.querySelector("#published-at").textContent =
-      new Intl.DateTimeFormat("en", {
-        dateStyle: "medium",
-      }).format(new Date(manifest.release.published_at));
-    document.querySelector("#file-count").textContent =
-      manifest.artifacts.length;
-    document.querySelector("#mirror-size").textContent = formatBytes(
-      manifest.mirrored_bytes
-    );
+    document.querySelector("#release-version").textContent = manifest.release.tag;
+    document.querySelector("#published-at").textContent = new Intl.DateTimeFormat("en", {
+      dateStyle: "medium",
+    }).format(new Date(manifest.release.published_at));
+    document.querySelector("#file-count").textContent = manifest.artifacts.length;
+    document.querySelector("#mirror-size").textContent = formatBytes(manifest.mirrored_bytes);
     document.title = `${manifest.release.tag} · GeoLibre downloads`;
 
     artifacts = manifest.artifacts.map((artifact) => {
