@@ -259,10 +259,13 @@ describe("mergeWasmToolManifests", () => {
   });
 
   it("hides a locked WASM-only pro-tier tool", () => {
-    const merged = mergeWasmToolManifests([], [
-      { id: "pro_tool", locked: true, params: [] },
-      { id: "free_tool", locked: false, params: [] },
-    ]);
+    const merged = mergeWasmToolManifests(
+      [],
+      [
+        { id: "pro_tool", locked: true, params: [] },
+        { id: "free_tool", locked: false, params: [] },
+      ],
+    );
     assert.deepEqual(
       merged.map((tool) => tool.id),
       ["free_tool"],

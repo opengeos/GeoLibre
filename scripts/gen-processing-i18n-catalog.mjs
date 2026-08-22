@@ -201,10 +201,7 @@ export function buildWhiteboxMenuTranslations(menuCatalog) {
   for (const category of menuCatalog) {
     for (const subcategory of category.subcategories) {
       const key = whiteboxMenuSubcategorySlug(subcategory.label);
-      if (
-        menuSubcategories[key] !== undefined &&
-        menuSubcategories[key] !== subcategory.label
-      ) {
+      if (menuSubcategories[key] !== undefined && menuSubcategories[key] !== subcategory.label) {
         throw new Error(
           `Whitebox menu subcategory labels "${menuSubcategories[key]}" and ` +
             `"${subcategory.label}" both map to the key "${key}".`,
