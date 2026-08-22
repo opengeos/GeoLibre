@@ -7357,7 +7357,7 @@
     "segment": "Segment",
     "chooseImage": "Choose an image first.",
     "enterPrompt": "Enter a text prompt.",
-    "addPoint": "Add at least one point prompt.",
+    "addPoint": "Add at least one foreground point.",
     "drawBoxFirst": "Draw a box first.",
     "segmenting": "Segmenting…",
     "noObjects": "No objects found.",

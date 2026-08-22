@@ -132,7 +132,7 @@ const DEFAULT_LABELS: SamGeoLabels = {
   segment: "Segment",
   chooseImage: "Choose an image first.",
   enterPrompt: "Enter a text prompt.",
-  addPoint: "Add at least one point prompt.",
+  addPoint: "Add at least one foreground point.",
   drawBoxFirst: "Draw a box first.",
   segmenting: "Segmenting…",
   noObjects: "No objects found.",
@@ -325,8 +325,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function normalizeApiUrl(url: string): string {
+  return url.trim().replace(/\/+$/, "");
+}
+
 function apiBase(): string {
-  return state.apiUrl.trim().replace(/\/+$/, "");
+  return normalizeApiUrl(state.apiUrl);
 }
 
 function promptFeatures(): FeatureCollection {
@@ -578,7 +582,7 @@ async function requestSegmentation(
       form.append("boxes", JSON.stringify([req.box]));
     }
   }
-  const response = await fetch(`${req.apiUrl.trim().replace(/\/+$/, "")}${endpoint}`, {
+  const response = await fetch(`${normalizeApiUrl(req.apiUrl)}${endpoint}`, {
     method: "POST",
     body: form,
     signal,
@@ -795,7 +799,9 @@ function buildPanel(container: HTMLElement): () => void {
       status.textContent = labels.enterPrompt;
       return;
     }
-    if (state.mode === "points" && promptPoints.length === 0) {
+    // SAM point prompting needs at least one positive click; background-only
+    // prompts have nothing to segment.
+    if (state.mode === "points" && !promptPoints.some((p) => p.label === 1)) {
       status.textContent = labels.addPoint;
       return;
     }
@@ -927,7 +933,7 @@ export const maplibreSamGeoPlugin: GeoLibrePlugin = {
           return () => {
             disposePanel?.();
             disposePanel = null;
-            panelContainer = null;
+            if (panelContainer === container) panelContainer = null;
             // The overlay is not a store layer, so closing the panel (header
             // "X") must tear it down here too, not only in deactivate.
             clearPrompts(appRef?.getMap?.());
