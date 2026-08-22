@@ -278,17 +278,17 @@ function snapshotRequest(): SegmentationSnapshot {
 }
 
 const css = {
-  root: "box-sizing:border-box;height:100%;overflow:auto;padding:12px;font:13px system-ui,sans-serif;color:var(--foreground);",
+  root: "box-sizing:border-box;height:100%;overflow:auto;padding:12px;font:13px system-ui,sans-serif;color:hsl(var(--foreground));",
   section: "display:grid;gap:7px;margin-bottom:13px;",
   label: "font-size:12px;font-weight:600;",
   input:
-    "box-sizing:border-box;width:100%;min-height:34px;border:1px solid var(--border);border-radius:6px;background:var(--background);color:var(--foreground);padding:6px 8px;",
+    "box-sizing:border-box;width:100%;min-height:34px;border:1px solid hsl(var(--border));border-radius:6px;background:hsl(var(--background));color:hsl(var(--foreground));padding:6px 8px;",
   row: "display:flex;gap:7px;align-items:center;",
   button:
-    "min-height:34px;border:1px solid var(--border);border-radius:6px;background:var(--background);color:var(--foreground);padding:6px 10px;cursor:pointer;",
+    "min-height:34px;border:1px solid hsl(var(--border));border-radius:6px;background:hsl(var(--background));color:hsl(var(--foreground));padding:6px 10px;cursor:pointer;",
   primary:
-    "min-height:36px;border:0;border-radius:6px;background:var(--primary);color:var(--primary-foreground);padding:7px 12px;font-weight:600;cursor:pointer;",
-  muted: "color:var(--muted-foreground);font-size:12px;line-height:1.4;",
+    "min-height:36px;border:0;border-radius:6px;background:hsl(var(--primary));color:hsl(var(--primary-foreground));padding:7px 12px;font-weight:600;cursor:pointer;",
+  muted: "color:hsl(var(--muted-foreground));font-size:12px;line-height:1.4;",
   status: "min-height:18px;font-size:12px;line-height:1.4;overflow-wrap:anywhere;",
 };
 
@@ -609,6 +609,9 @@ function buildPanel(container: HTMLElement): () => void {
   const root = element("div");
   root.style.cssText = css.root;
   root.dataset.testid = "samgeo-panel";
+  // Tag the panel so the host can theme its native form controls (select
+  // popups, number spinners) from the design tokens; see index.css.
+  root.classList.add("geolibre-samgeo-panel");
 
   const intro = element("p", labels.intro);
   intro.style.cssText = `${css.muted}margin:0 0 13px;`;
@@ -623,7 +626,7 @@ function buildPanel(container: HTMLElement): () => void {
   const healthText = element("span", labels.notChecked);
   healthText.style.cssText = css.muted;
   const healthRow = element("div");
-  healthRow.style.cssText = css.row;
+  healthRow.style.cssText = `${css.row}margin-bottom:13px;`;
   healthRow.append(health, healthText);
 
   const fileInput = input("file");

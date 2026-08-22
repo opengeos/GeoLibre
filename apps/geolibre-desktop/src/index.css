@@ -1626,6 +1626,26 @@ body,
   color-scheme: dark;
 }
 
+/* The SamGeo panel is plain DOM like the graticule panel above: its inline
+   styles cover the inputs, but the native <select> popup and spinner chrome
+   only follow the theme through these rules. */
+.geolibre-samgeo-panel select,
+.geolibre-samgeo-panel input {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.geolibre-samgeo-panel select option {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.dark .geolibre-samgeo-panel select,
+.dark .geolibre-samgeo-panel input {
+  color-scheme: dark;
+}
+
 /* The timelapse floating panel is plain DOM like the graticule panel above, so
    theme its native speed select (and dropdown popup) from the design tokens. */
 .geolibre-timelapse-panel select {

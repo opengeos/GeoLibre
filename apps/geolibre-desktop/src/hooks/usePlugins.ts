@@ -208,7 +208,6 @@ manager.registerAll([
   maplibreGeoAgentPlugin,
   maplibreUsgsLidarPlugin,
   maplibreStreetViewPlugin,
-  maplibreSamGeoPlugin,
   maplibreMapillaryPlugin,
   maplibreElevationProfilePlugin,
   maplibreSwipePlugin,
@@ -229,6 +228,9 @@ manager.registerAll([
   maplibreSunPlugin,
   maplibreRouteAnimationPlugin,
   flightSimulatorPlugin,
+  // Last visible entry of the Plugins menu; the ids below are skipped by
+  // PluginsMenu and surface elsewhere.
+  maplibreSamGeoPlugin,
   maplibreDirectionsPlugin,
   maplibreReverseGeocodePlugin,
   maplibreDeckGlVizPlugin,
