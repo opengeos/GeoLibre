@@ -71,6 +71,14 @@ const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
     attribution: "U.S. Geological Survey (USGS)",
   },
   {
+    // A 3-band RGB aerial scene of the UC Berkeley campus (NAIP): a natural
+    // colour COG that also serves as the SamGeo plugin's demo image for text,
+    // point and box prompting.
+    label: "Aerial imagery (UC Berkeley)",
+    url: "https://data.source.coop/giswqs/opengeos/uc_berkeley.tif",
+    attribution: "USDA Farm Service Agency (FSA)",
+  },
+  {
     // Global ocean/land bathymetry: a single-band DEM good for the colormap
     // and hillshade modes. Attribution feeds the map's attribution control
     // while the layer is visible (upstream RasterSampleDataset.attribution).
