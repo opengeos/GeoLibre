@@ -2147,6 +2147,10 @@ body,
   .geolibre-attribute-table-panel:not([data-collapsed]) {
     height: clamp(22rem, 60dvh, 32rem) !important;
   }
+
+  .geolibre-attribute-table-resize-handle {
+    display: none;
+  }
 }
 
 .geolibre-kml-description table {
