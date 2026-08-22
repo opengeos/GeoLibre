@@ -1,9 +1,30 @@
 # Downloads
 
-GeoLibre desktop installers are published from GitHub Releases.
+GeoLibre desktop installers are published from GitHub Releases and mirrored on
+a separate download site for regions where GitHub is unavailable.
 
-[View releases](https://github.com/opengeos/GeoLibre/releases){ .md-button .md-button--primary }
+[Download the latest release](https://downloads.geolibre.app/){ .md-button .md-button--primary }
+[View GitHub releases](https://github.com/opengeos/GeoLibre/releases){ .md-button }
 [Launch GeoLibre Web](https://web.geolibre.app/){ .md-button }
+
+## Download mirror
+
+Use [downloads.geolibre.app](https://downloads.geolibre.app/) when GitHub is
+blocked or slow in your region. The directory groups the latest public release
+downloads by platform and provides search, file sizes, SHA-256 checksums, and a
+machine-readable JSON manifest.
+
+Release assets up to 100 MiB are served directly from the mirror. Larger files
+are listed with their original GitHub download link because GitHub Pages cannot
+store individual files over that limit. Store-submission packages and automatic
+update metadata are not shown because they are not files users install
+directly.
+
+The mirror updates automatically after the release build workflows finish and
+runs a daily reconciliation in case an asset is added or replaced later. It
+keeps only the latest release; use the
+[GitHub Releases archive](https://github.com/opengeos/GeoLibre/releases) for
+older versions.
 
 ## Release assets
 

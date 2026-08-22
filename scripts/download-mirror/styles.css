@@ -6,7 +6,6 @@
   --line: #cbdcd7;
   --brand: #0d5c4d;
   --brand-bright: #16a085;
-  --map-water: #ccebe4;
   --github: #76562b;
   color-scheme: light;
   font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
@@ -75,11 +74,9 @@ footer {
 }
 
 .mark {
-  width: 34px;
-  fill: var(--brand);
-}
-.mark path + path {
-  fill: var(--map-water);
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
 }
 
 .site-label,
