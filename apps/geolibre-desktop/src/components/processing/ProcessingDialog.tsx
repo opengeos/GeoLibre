@@ -1517,6 +1517,13 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       const browsed = browsedInputsRef.current.get(param.name);
       if (browsed?.length && isDataInputParameter(param)) {
         const kind = parameterKind(param);
+        if (!runLocal && browsed.some((input) => !input.geojson)) {
+          setError(
+            `The sidecar cannot read browser-selected files for ${parameterLabel(param)}. Run locally (WASM), or enter filesystem paths available to the sidecar.`,
+          );
+          setRunningLocal(false);
+          return;
+        }
         const inputs = browsed.map((input) =>
           input.geojson
             ? { name: input.name, kind, geojson: input.geojson }
@@ -1536,23 +1543,50 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           .filter((layer): layer is GeoLibreLayer => Boolean(layer));
         const kind = parameterKind(param);
         if (runLocal && kind === "vector_in") {
+          const missing = selectedLayers.find((layer) => !layer.geojson);
+          if (missing) {
+            setError(
+              `Layer "${missing.name}" has no in-memory GeoJSON for ${parameterLabel(param)}.`,
+            );
+            setRunningLocal(false);
+            return;
+          }
           layerInputs[param.name] = selectedLayers.map((layer) => ({
             name: layer.name,
             kind,
             geojson: layer.geojson,
           }));
         } else if (runLocal) {
-          layerInputs[param.name] = await Promise.all(
-            selectedLayers.map(async (layer) => ({
-              name: layer.name,
-              kind,
-              bytes: (await fetchLayerBytes(layer)) ?? undefined,
-            })),
-          );
+          const inputs: WhiteboxLayerInput[] = [];
+          for (const layer of selectedLayers) {
+            const bytes = await fetchLayerBytes(layer);
+            if (!bytes) {
+              setError(`Layer "${layer.name}" is not fetchable for ${parameterLabel(param)}.`);
+              setRunningLocal(false);
+              return;
+            }
+            inputs.push({ name: layer.name, kind, bytes });
+          }
+          layerInputs[param.name] = inputs;
+        } else if (kind === "vector_in" && selectedLayers.every((layer) => layer.geojson)) {
+          layerInputs[param.name] = selectedLayers.map((layer) => ({
+            name: layer.name,
+            kind,
+            geojson: layer.geojson,
+          }));
         } else {
           // Whitebox list arguments use comma-delimited paths. The browser
           // runner builds the same form after staging each selected dataset.
-          parameters[param.name] = selectedLayers.map(layerPath).filter(Boolean).join(",");
+          const paths = selectedLayers.map(layerPath);
+          const missingIndex = paths.findIndex((path) => !path);
+          if (missingIndex >= 0) {
+            setError(
+              `Layer "${selectedLayers[missingIndex].name}" has no filesystem path for ${parameterLabel(param)}.`,
+            );
+            setRunningLocal(false);
+            return;
+          }
+          parameters[param.name] = paths.join(",");
         }
       } else if (typeof value === "string" && value.startsWith(LAYER_TOKEN_PREFIX)) {
         const layerId = value.slice(LAYER_TOKEN_PREFIX.length);
@@ -2482,6 +2516,7 @@ function ParameterField({
       ) : isDataInputParameter(param) && isMultipleDatasetParameter(param) ? (
         <MultiLayerOrPathInput
           id={`whitebox-${param.name}`}
+          label={label}
           layers={availableLayers}
           param={param}
           value={value}
@@ -2820,6 +2855,7 @@ interface LayerOrPathInputProps {
 
 interface MultiLayerOrPathInputProps {
   id: string;
+  label: string;
   layers: GeoLibreLayer[];
   onChange: (value: unknown) => void;
   onPickFiles?: (files: Array<{ fileName: string; bytes: Uint8Array }>) => void;
@@ -2830,6 +2866,7 @@ interface MultiLayerOrPathInputProps {
 /** Dataset-list picker used by merge, overlay, statistics, and stack tools. */
 function MultiLayerOrPathInput({
   id,
+  label,
   layers,
   onChange,
   onPickFiles,
@@ -2844,7 +2881,11 @@ function MultiLayerOrPathInput({
   return (
     <div className="grid gap-2">
       {layers.length > 0 ? (
-        <div id={id} className="grid max-h-40 gap-1 overflow-y-auto rounded-md border p-2">
+        <div
+          role="group"
+          aria-label={label}
+          className="grid max-h-40 gap-1 overflow-y-auto rounded-md border p-2"
+        >
           {layers.map((layer) => {
             const token = `${LAYER_TOKEN_PREFIX}${layer.id}`;
             return (
@@ -2868,6 +2909,7 @@ function MultiLayerOrPathInput({
       ) : null}
       <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
         <Input
+          id={id}
           value={usingLayers ? "" : String(value ?? "")}
           placeholder={
             usingLayers ? t("processing.whitebox.selectedLayer") : t("processing.whitebox.filePath")

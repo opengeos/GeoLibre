@@ -123,6 +123,24 @@ export interface WhiteboxToolParameter {
   schema?: unknown;
 }
 
+/** Whether a dataset input accepts several datasets rather than one. */
+export function isMultipleWhiteboxDatasetParameter(param: WhiteboxToolParameter): boolean {
+  const kind = String(param.kind ?? "").toLowerCase();
+  const schema =
+    param.schema && typeof param.schema === "object"
+      ? (param.schema as Record<string, unknown>)
+      : {};
+  const role = String(param.io_role ?? schema.kind ?? "").toLowerCase();
+  if (!(kind.endsWith("_in") || role === "input")) return false;
+  if (String(schema.cardinality ?? "").toLowerCase() === "multiple") return true;
+  const description = param.description ?? "";
+  return (
+    /\b(array|list|stack) of (?:[\w-]+\s+)*(?:paths?|rasters?|vectors?|layers?|files?)\b/i.test(
+      description,
+    ) || /\b(?:paths?|rasters?|vectors?|layers?|files?) (?:as|in) an array\b/i.test(description)
+  );
+}
+
 export interface WhiteboxTool {
   id: string;
   display_name?: string;

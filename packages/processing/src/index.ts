@@ -211,6 +211,7 @@ export {
   runWhiteboxTool,
   WHITEBOX_CATALOG_URL,
   VECTOR_OUTPUT_FORMATS,
+  isMultipleWhiteboxDatasetParameter,
   normalizeVectorOutputFormat,
   type ConversionJob,
   type ConversionStatus,

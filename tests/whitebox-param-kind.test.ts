@@ -28,6 +28,18 @@ describe("isMultipleDatasetParameter", () => {
     );
   });
 
+  it("recognizes descriptions with several dataset qualifiers", () => {
+    assert.equal(
+      isMultipleDatasetParameter({
+        name: "tiles",
+        description: "Array of LiDAR tile paths or a directory containing LAS/LAZ tiles.",
+        data_kind: "lidar",
+        io_role: "input",
+      }),
+      true,
+    );
+  });
+
   it("does not turn ordinary dataset inputs or scalar lists into dataset pickers", () => {
     assert.equal(isMultipleDatasetParameter({ name: "input", kind: "vector_in" }), false);
     assert.equal(

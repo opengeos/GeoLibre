@@ -111,7 +111,7 @@ class WhiteboxRunRequest(BaseModel):
     tool_id: str
     parameters: dict[str, Any] = {}
     tool: dict[str, Any] | None = None
-    layer_inputs: dict[str, dict[str, Any]] = {}
+    layer_inputs: dict[str, dict[str, Any] | list[dict[str, Any]]] = {}
     include_pro: bool = False
     tier: str = "open"
 
@@ -870,7 +870,24 @@ def _prepare_arguments(
         if name in request.layer_inputs:
             # Embedded layers are materialized to a server-owned temp file, so
             # the caller never controls this path.
-            value = _write_layer_input(name, request.layer_inputs[name], temp_paths)
+            embedded = request.layer_inputs[name]
+            if isinstance(embedded, list):
+                value = ",".join(
+                    _write_layer_input(f"{name}_{index + 1}", layer, temp_paths)
+                    for index, layer in enumerate(embedded)
+                )
+            else:
+                value = _write_layer_input(name, embedded, temp_paths)
+        elif isinstance(value, str) and kind.endswith("_in") and "," in value:
+            # Multi-dataset parameters use a comma-delimited path list. Validate
+            # every member independently; treating the whole list as one path
+            # both rejects valid inputs and weakens the root-boundary check.
+            for path_value in (item.strip() for item in value.split(",")):
+                if not path_value:
+                    continue
+                _ensure_within_roots(path_value)
+                if Path(path_value).expanduser().is_absolute():
+                    absolute_paths.append(path_value)
         elif isinstance(value, str) and _looks_like_fs_path(value):
             # A path-shaped value must stay inside the allowlisted roots,
             # regardless of the client-declared `kind`. `request.tool` is
@@ -1167,16 +1184,20 @@ def whitebox_run(request: WhiteboxRunRequest):
     # Reject oversized embedded layers before enqueueing work, matching the
     # 413 vector/PostGIS/Sedona feature cap (defense-in-depth also lives in
     # ``_write_layer_input``).
-    for name, layer in request.layer_inputs.items():
-        geojson = layer.get("geojson") if isinstance(layer, dict) else None
-        if not isinstance(geojson, dict):
-            continue
-        features = geojson.get("features") or []
-        if isinstance(features, list) and len(features) > MAX_LAYER_FEATURES:
-            raise HTTPException(
-                status_code=413,
-                detail=(f"Layer input for {name} exceeds the {MAX_LAYER_FEATURES}-feature limit"),
-            )
+    for name, value in request.layer_inputs.items():
+        layers = value if isinstance(value, list) else [value]
+        for layer in layers:
+            geojson = layer.get("geojson") if isinstance(layer, dict) else None
+            if not isinstance(geojson, dict):
+                continue
+            features = geojson.get("features") or []
+            if isinstance(features, list) and len(features) > MAX_LAYER_FEATURES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"Layer input for {name} exceeds the {MAX_LAYER_FEATURES}-feature limit"
+                    ),
+                )
     job_id = str(uuid.uuid4())
     now = _utc_now()
     with _JOBS_LOCK:

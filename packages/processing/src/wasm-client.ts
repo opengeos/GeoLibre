@@ -7,7 +7,7 @@
 // single-threaded execution (use the sidecar for very large data).
 import type { FeatureCollection } from "geojson";
 import { convertGeoTiffToCog } from "./cog-convert";
-import { normalizeVectorOutputFormat } from "./sidecar-client";
+import { isMultipleWhiteboxDatasetParameter, normalizeVectorOutputFormat } from "./sidecar-client";
 import { runWasmToolInBackground } from "./wasm-tool-runner";
 import type {
   RunWhiteboxToolRequest,
@@ -693,7 +693,26 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
 
     if (kind === "vector_in") {
       const supplied = request.layer_inputs?.[name];
-      const layerInputs = Array.isArray(supplied) ? supplied : supplied ? [supplied] : [];
+      let layerInputs = Array.isArray(supplied) ? supplied : supplied ? [supplied] : [];
+      if (!layerInputs.length) {
+        const provided = request.parameters[name];
+        const paths =
+          isMultipleWhiteboxDatasetParameter(param) && typeof provided === "string"
+            ? provided
+                .split(/[;,]/)
+                .map((path) => path.trim())
+                .filter(Boolean)
+            : provided == null || provided === ""
+              ? []
+              : [String(provided)];
+        layerInputs = await Promise.all(
+          paths.map(async (path) => ({
+            name: path,
+            kind,
+            bytes: (await fetchBytes(path)) ?? undefined,
+          })),
+        );
+      }
       if (!layerInputs.length || layerInputs.some((item) => !item.geojson && !item.bytes)) {
         throw new Error(`Missing vector input for "${name}"`);
       }
@@ -719,16 +738,25 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
       const hasValue = typeof provided === "string" ? provided.length > 0 : provided != null;
       const supplied = request.layer_inputs?.[name];
       const suppliedInputs = Array.isArray(supplied) ? supplied : supplied ? [supplied] : [];
+      const paths =
+        isMultipleWhiteboxDatasetParameter(param) && typeof provided === "string"
+          ? provided
+              .split(/[;,]/)
+              .map((path) => path.trim())
+              .filter(Boolean)
+          : hasValue
+            ? [provided]
+            : [];
       const byteInputs = suppliedInputs.length
         ? suppliedInputs.map((item) => item.bytes ?? null)
-        : [hasValue ? await fetchBytes(provided) : null];
-      if (byteInputs.some((bytes) => !bytes)) {
+        : await Promise.all(paths.map((path) => fetchBytes(path)));
+      if (!byteInputs.length || byteInputs.some((bytes) => !bytes)) {
         // An optional data input the user left blank is simply omitted rather
         // than force-fetched: e.g. extract_cog_subset's `input` when a `url` is
         // supplied instead (the tool reads the COG by byte-range from that url).
         // Only a required input, or one with a value that could not be fetched,
         // is a hard error.
-        if (!param.required && !hasValue) continue;
+        if (!param.required && !hasValue && !suppliedInputs.length) continue;
         throw new Error(
           `Could not read input "${name}" in the browser. Its data is not fetchable here (only available via the sidecar); turn off "Run locally (WASM)" to use the sidecar.`,
         );
