@@ -5,6 +5,11 @@ set -euo pipefail
 readonly SOURCE_REPOSITORY="opengeos/GeoLibre"
 readonly MIRROR_ORIGIN="https://downloads.geolibre.app"
 readonly MAX_MIRRORED_BYTES=$((100 * 1024 * 1024))
+readonly OMITTED_ASSET_PATTERNS_JSON='[
+  "^geolibre-android\\.aab$",
+  "^GeoLibre\\.Desktop_[^/]+_universal_mas\\.pkg$",
+  "^GeoLibre_[^/]+_ios_app-store\\.ipa$"
+]'
 
 if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "Usage: $0 OUTPUT_DIRECTORY [RELEASE_TAG]" >&2
@@ -42,6 +47,7 @@ jq \
   --arg generated_at "$generated_at" \
   --arg mirror_origin "$MIRROR_ORIGIN" \
   --argjson max_mirrored_bytes "$MAX_MIRRORED_BYTES" \
+  --argjson omitted_asset_patterns "$OMITTED_ASSET_PATTERNS_JSON" \
   '{
     schema_version: 1,
     product: "GeoLibre",
@@ -56,6 +62,7 @@ jq \
     artifacts: [
       .assets[]
       | . as $asset
+      | select(([$omitted_asset_patterns[] as $pattern | $asset.name | test($pattern)] | any) | not)
       | ($asset.size <= $max_mirrored_bytes) as $mirrored
       | {
           name: $asset.name,
@@ -109,7 +116,12 @@ while IFS= read -r encoded_asset; do
 done < <(
   jq -r \
     --argjson max_mirrored_bytes "$MAX_MIRRORED_BYTES" \
-    '.assets[] | select(.size <= $max_mirrored_bytes) | @base64' \
+    --argjson omitted_asset_patterns "$OMITTED_ASSET_PATTERNS_JSON" \
+    '.assets[]
+     | . as $asset
+     | select(([$omitted_asset_patterns[] as $pattern | $asset.name | test($pattern)] | any) | not)
+     | select(.size <= $max_mirrored_bytes)
+     | @base64' \
     "$release_json"
 )
 
