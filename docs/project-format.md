@@ -219,9 +219,22 @@ bound to a missing or non-attribute layer are shown as empty.
     "createdAtField": "created_at",
     "editedByField": "edited_by",
     "editedAtField": "edited_at"
+  },
+  "capabilities": {
+    "query": true,
+    "create": true,
+    "update": true,
+    "delete": true,
+    "export": true
   }
 }
 ```
+
+A layer can define an optional `capabilities` set (`query`, `create`, `update`,
+`delete`, `export`) to explicitly declare allowed user and session actions.
+Omitted capabilities default to standard inferred behavior based on the layer's
+source kind. When `export` is `false`, project sharing/publishing automatically
+strips embedded GeoJSON for that layer.
 
 For WFS GetFeature and GeoJSON URL layers, `metadata.refresh` can persist an
 optional auto-refresh interval. `intervalMs` can be any positive interval in

@@ -10,6 +10,7 @@ import {
   useAppStore,
   validateAttributeFormValues,
   excludeHiddenFieldsFromGeojson,
+  resolveLayerCapabilities,
   type AttributeFormConfig,
   type AttributeFormFieldConfig,
   type AttributeFormFieldError,
@@ -507,7 +508,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const attributeRows: AttributeTableRow[] = isDuckDBLayer
     ? duckDBRowsToAttributeRows(duckdbRows)
     : geojsonRows;
-  const hasAttributeSource = Boolean(layer?.geojson || isDuckDBLayer);
+  const layerCaps = resolveLayerCapabilities(layer);
+  const hasAttributeSource = Boolean((layer?.geojson || isDuckDBLayer) && layerCaps.query);
   // Add Vector Layer (geojson-mode) layers render from a MapLibre source the
   // control owns, and their `layer.geojson` is dropped when a project is saved.
   // Edits made here would neither redraw on the map nor survive a save, so the
@@ -787,7 +789,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // Column management mutates layer.geojson/style/metadata, so it is offered
   // only for in-store, editable GeoJSON layers — not DuckDB query results or
   // Add Vector Layer layers (whose geojson is not persisted).
-  const canManageColumns = Boolean(layer?.geojson) && !isDuckDBLayer && !isReadOnlyVectorLayer;
+  const canManageColumns =
+    Boolean(layer?.geojson) && !isDuckDBLayer && !isReadOnlyVectorLayer && layerCaps.update;
 
   const columnWidth = (key: SortKey) =>
     columnWidths[key] ??
@@ -1495,7 +1498,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              disabled={readOnlyColumns.has(col)}
+              disabled={readOnlyColumns.has(col) || !layerCaps.delete}
               onSelect={() => setColumnPendingDelete(col)}
             >
               <Trash2 className="me-2 h-3.5 w-3.5" />
@@ -1565,17 +1568,19 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           size="sm"
           className="ms-auto h-7 px-2"
           title={
-            isGeometryEditing
-              ? t("attributeTable.editTitleFinishGeometry")
-              : isReadOnlyVectorLayer
-                ? t("attributeTable.editTitleReadOnly")
-                : isEditing
-                  ? hasEdits
-                    ? t("attributeTable.editTitleUseSaveCancel")
-                    : t("attributeTable.exitEditMode")
-                  : isDuckDBLayer
-                    ? t("attributeTable.editTitleDuckdb")
-                    : t("attributeTable.editValues")
+            !layerCaps.update
+              ? t("attributeTable.editTitleReadOnly")
+              : isGeometryEditing
+                ? t("attributeTable.editTitleFinishGeometry")
+                : isReadOnlyVectorLayer
+                  ? t("attributeTable.editTitleReadOnly")
+                  : isEditing
+                    ? hasEdits
+                      ? t("attributeTable.editTitleUseSaveCancel")
+                      : t("attributeTable.exitEditMode")
+                    : isDuckDBLayer
+                      ? t("attributeTable.editTitleDuckdb")
+                      : t("attributeTable.editValues")
           }
           aria-label={
             isEditing && !hasEdits
@@ -1584,6 +1589,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           }
           disabled={
             !hasAttributeSource ||
+            !layerCaps.update ||
             isReadOnlyVectorLayer ||
             isGeometryEditing ||
             (isEditing && hasEdits)
@@ -1756,12 +1762,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               size="sm"
               className="h-7 px-2"
               title={
-                layer?.geojson
-                  ? t("attributeTable.exportSelectedLayer")
-                  : t("attributeTable.exportTitleDisabled")
+                !layerCaps.export
+                  ? t("attributeTable.exportTitleDisabled")
+                  : layer?.geojson
+                    ? t("attributeTable.exportSelectedLayer")
+                    : t("attributeTable.exportTitleDisabled")
               }
               aria-label={t("attributeTable.exportSelectedLayer")}
-              disabled={!layer?.geojson}
+              disabled={!layer?.geojson || !layerCaps.export}
             >
               <Download className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">{t("attributeTable.buttons.export")}</span>

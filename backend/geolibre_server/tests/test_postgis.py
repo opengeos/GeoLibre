@@ -274,6 +274,16 @@ def test_write_rejects_oversized_payloads() -> None:
     assert exc.value.status_code == 413
 
 
+def test_write_request_capabilities_parsing() -> None:
+    req = PostgisWriteRequest(
+        connection="postgresql://localhost/db",
+        table="roads",
+        geojson=_collection([{"type": "Feature", "properties": {}, "geometry": _point(0, 0)}]),
+        capabilities={"update": False, "create": True, "delete": False},
+    )
+    assert req.capabilities == {"update": False, "create": True, "delete": False}
+
+
 # --- Live round-trip tests ---------------------------------------------------
 
 
@@ -815,3 +825,59 @@ def test_write_requires_single_column_primary_key(live_table) -> None:
         )
     assert exc.value.status_code == 400
     assert "primary key" in str(exc.value.detail)
+
+
+@requires_live_postgis
+def test_write_enforces_layer_capabilities(live_table) -> None:
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    features = read["geojson"]["features"]
+    knox = next(f for f in features if f["properties"]["name"] == "Knoxville")
+
+    # 1. Update rejected when update capability is False
+    knox_modified = [dict(f) for f in features]
+    knox_mod_target = next(f for f in knox_modified if f["properties"]["name"] == "Knoxville")
+    knox_mod_target["properties"] = dict(knox_mod_target["properties"])
+    knox_mod_target["properties"]["population"] = 999999
+
+    with pytest.raises(HTTPException) as exc_update:
+        postgis_write(
+            PostgisWriteRequest(
+                connection=LIVE_DSN,
+                table=TABLE,
+                geojson=_collection(knox_modified),
+                capabilities={"update": False},
+            )
+        )
+    assert exc_update.value.status_code == 403
+    assert "updates" in str(exc_update.value.detail)
+
+    # 2. Insert rejected when create capability is False
+    new_city = {
+        "type": "Feature",
+        "properties": {"name": "New City", "population": 1000},
+        "geometry": _point(-85.0, 35.0),
+    }
+    with pytest.raises(HTTPException) as exc_create:
+        postgis_write(
+            PostgisWriteRequest(
+                connection=LIVE_DSN,
+                table=TABLE,
+                geojson=_collection(features + [new_city]),
+                capabilities={"create": False},
+            )
+        )
+    assert exc_create.value.status_code == 403
+    assert "creation" in str(exc_create.value.detail)
+
+    # 3. Delete rejected when delete capability is False
+    with pytest.raises(HTTPException) as exc_delete:
+        postgis_write(
+            PostgisWriteRequest(
+                connection=LIVE_DSN,
+                table=TABLE,
+                geojson=_collection([knox]),
+                capabilities={"delete": False},
+            )
+        )
+    assert exc_delete.value.status_code == 403
+    assert "deletion" in str(exc_delete.value.detail)

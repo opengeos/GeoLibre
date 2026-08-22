@@ -43,6 +43,7 @@ export const GEOMETRY_EDIT_FID_PROPERTY = "__geolibre_fid";
  */
 export function canEditLayerGeometry(layer: GeoLibreLayer | undefined): boolean {
   if (!layer) return false;
+  if (layer.capabilities?.update === false) return false;
   // Only geojson-mode vector layers; "vector-tiles" (DuckDB tiles) are excluded.
   if (layer.type !== "geojson") return false;
   if (isDuckDBQueryLayer(layer)) return false;

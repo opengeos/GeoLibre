@@ -910,6 +910,23 @@ export interface EditorTrackingConfig {
  */
 export type FieldVisibility = "hidden" | "excluded";
 
+/**
+ * Explicit capability flags defining what actions a user/session may perform on a layer.
+ * Any omitted capability falls back to the inferred default behavior for that layer's source.
+ */
+export interface LayerCapabilities {
+  /** Can the layer's features or attributes be queried / identified. */
+  query?: boolean;
+  /** Can new features be created/added to the layer. */
+  create?: boolean;
+  /** Can existing features/attributes be modified. */
+  update?: boolean;
+  /** Can features be deleted from the layer. */
+  delete?: boolean;
+  /** Can the layer data/symbology be exported/downloaded. */
+  export?: boolean;
+}
+
 export interface GeoLibreLayer {
   id: string;
   name: string;
@@ -921,6 +938,11 @@ export interface GeoLibreLayer {
   metadata: Record<string, unknown>;
   beforeId?: string;
   geojson?: FeatureCollection;
+  /**
+   * Explicit capability set for the layer (query, create, update, delete, export).
+   * Unset capabilities default to the inferred behavior for the layer's source kind.
+   */
+  capabilities?: LayerCapabilities;
   /**
    * Automatic editor tracking configuration for feature creation/updates.
    */

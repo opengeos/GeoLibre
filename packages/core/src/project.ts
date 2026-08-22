@@ -56,6 +56,7 @@ import {
 } from "./types";
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
 import { normalizeStyleLibraryEntries } from "./style-library";
+import { normalizeLayerCapabilities } from "./capabilities";
 import {
   createDefaultPrintLayout,
   isDefaultPrintLayout,
@@ -1403,6 +1404,7 @@ function isPlainObject(value: object): boolean {
 }
 
 function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
+  const capabilities = normalizeLayerCapabilities(layer.capabilities);
   return {
     ...layer,
     style: { ...DEFAULT_LAYER_STYLE, ...layer.style },
@@ -1410,6 +1412,7 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     opacity: layer.opacity ?? 1,
     metadata: layer.metadata ?? {},
     source: layer.source ?? {},
+    ...(capabilities ? { capabilities } : {}),
   };
 }
 

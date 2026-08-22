@@ -365,41 +365,49 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
     );
   }
 
-  const layers = (project.layers ?? []).map((layer, index) => ({
-    ...layer,
-    source: redactConfigurationValue(
-      layer.source,
-      `layers[${index}].source`,
-      accumulator,
-    ) as Record<string, unknown>,
-    metadata: redactConfigurationValue(
+  const layers = (project.layers ?? []).map((layer, index) => {
+    const isNoExport = layer.capabilities?.export === false;
+    const cleanMetadata = redactConfigurationValue(
       layer.metadata,
       `layers[${index}].metadata`,
       accumulator,
-    ) as Record<string, unknown>,
-    ...(typeof layer.sourcePath === "string"
-      ? {
-          sourcePath: redactConfigurationValue(
-            layer.sourcePath,
-            `layers[${index}].sourcePath`,
-            accumulator,
-          ) as string,
-        }
-      : {}),
-    // `connection.lastError` is free-form text taken from a caught error, and a
-    // refresh path that words it as `Failed to fetch ${url}` would carry the
-    // request's credential parameters. Sweeping it costs nothing and keeps the
-    // no-secret guarantee from depending on how an error message is phrased.
-    ...(layer.connection
-      ? {
-          connection: redactConfigurationValue(
-            layer.connection,
-            `layers[${index}].connection`,
-            accumulator,
-          ) as LayerConnection,
-        }
-      : {}),
-  }));
+    ) as Record<string, unknown>;
+    if (isNoExport && "embeddedGeoJSON" in cleanMetadata) {
+      delete cleanMetadata.embeddedGeoJSON;
+    }
+    return {
+      ...layer,
+      ...(isNoExport ? { geojson: undefined } : {}),
+      source: redactConfigurationValue(
+        layer.source,
+        `layers[${index}].source`,
+        accumulator,
+      ) as Record<string, unknown>,
+      metadata: cleanMetadata,
+      ...(typeof layer.sourcePath === "string"
+        ? {
+            sourcePath: redactConfigurationValue(
+              layer.sourcePath,
+              `layers[${index}].sourcePath`,
+              accumulator,
+            ) as string,
+          }
+        : {}),
+      // `connection.lastError` is free-form text taken from a caught error, and a
+      // refresh path that words it as `Failed to fetch ${url}` would carry the
+      // request's credential parameters. Sweeping it costs nothing and keeps the
+      // no-secret guarantee from depending on how an error message is phrased.
+      ...(layer.connection
+        ? {
+            connection: redactConfigurationValue(
+              layer.connection,
+              `layers[${index}].connection`,
+              accumulator,
+            ) as LayerConnection,
+          }
+        : {}),
+    };
+  });
 
   let plugins = project.plugins;
   if (plugins) {

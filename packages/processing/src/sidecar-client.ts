@@ -1,4 +1,5 @@
 import type { FeatureCollection } from "geojson";
+import type { LayerCapabilities } from "@geolibre/core";
 
 const LOCAL_SIDECAR_URL = "http://127.0.0.1:8765";
 
@@ -844,6 +845,8 @@ export interface WritePostgisTableRequest {
    * survive the save; when omitted the sidecar diffs the whole table.
    */
   baseline_keys?: Array<string | number>;
+  /** Optional layer capability overrides enforcing create/update/delete restrictions. */
+  capabilities?: LayerCapabilities;
 }
 
 export interface WritePostgisTableResult {

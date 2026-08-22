@@ -33,6 +33,7 @@ import {
   layerGroupDepth,
   layerGroupMoveability,
   layerPanelGroupHeaders,
+  resolveLayerCapabilities,
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
@@ -377,6 +378,7 @@ function isPostgisEditableLayer(layer: GeoLibreLayer): boolean {
  * needs real filesystem/database access, so this is false on the web build.
  */
 function canWriteEditsToSource(layer: GeoLibreLayer): boolean {
+  if (layer.capabilities?.update === false) return false;
   if (!isTauri() || layer.type !== "geojson") return false;
   // Both write-back paths (PostGIS tables and local files) run through the
   // Python sidecar, which the Mac App Store build compiles out, so edits are
@@ -2021,6 +2023,7 @@ export function LayerPanel({
             // The baseline lives on the layer metadata, so it survives a
             // project reload.
             baseline_keys: postgisBaselineKeys(layer),
+            capabilities: layer.capabilities,
           });
           // Re-read the table so inserted features pick up their database-
           // assigned primary keys; without this a second save would insert
@@ -3077,29 +3080,19 @@ export function LayerPanel({
               : layer.visible
                 ? t("layers.hideLayer")
                 : t("layers.showLayer");
+            const layerCaps = resolveLayerCapabilities(layer);
             const canIdentify =
-              layer.type === "geojson" ||
-              isDuckDBQueryLayer(layer) ||
-              (layer.type === "wms" &&
-                typeof layer.source.layers === "string" &&
-                Boolean(layer.source.layers.trim()) &&
-                Boolean(
+              layerCaps.query &&
+              ((layer.type === "geojson" &&
+                ((layer.geojson?.features?.length ?? 0) > 0 ||
                   (typeof layer.source.url === "string" && layer.source.url.trim()) ||
-                  layer.sourcePath,
-                )) ||
-              layer.type === "vector-tiles" ||
-              (layer.type === "mbtiles" && layer.metadata.tileType === "vector") ||
-              // COG layers identify pixel values via the raster control's pixel
-              // inspector (see useRasterIdentify), not the vector feature query.
-              layer.type === "cog" ||
-              hasNativeIdentifyLayers(layer);
+                  layer.sourcePath)) ||
+                layer.type === "vector-tiles" ||
+                (layer.type === "mbtiles" && layer.metadata.tileType === "vector") ||
+                layer.type === "cog" ||
+                hasNativeIdentifyLayers(layer));
             const identifyActive = identifyLayerId === layer.id;
-            // COGs inspect raw pixel/band values rather than vector features, so
-            // the icon's tooltip reflects that distinct action. Time Slider COG
-            // and mosaic sources read the same way, at the current timeline
-            // date, and mark themselves with `pixelIdentify`.
             const isPixelIdentify = layer.type === "cog" || layer.metadata.pixelIdentify === true;
-            // Shared by the button's title and aria-label so they can't diverge.
             const identifyLabel = canIdentify
               ? identifyActive
                 ? isPixelIdentify
@@ -3109,15 +3102,9 @@ export function LayerPanel({
                   ? t("layers.identifyInspectPixels")
                   : t("layers.identifyFeatures")
               : t("layers.identifyUnavailable");
-            const canEditGeometry = canEditLayerGeometry(layer);
-            // A vector layer whose in-view features can be loaded into the
-            // GeoEditor (a copy, not in-place): geojson and vector tile layers
-            // (vector-tiles, and PMTiles/MBTiles carrying vector tiles),
-            // excluding the editor's own Sketches layer. Tile layers are
-            // included here (unlike Edit geometry) because loading grabs a copy
-            // of what is rendered rather than editing the source in place;
-            // raster PMTiles/MBTiles have no vector features so are excluded.
+            const canEditGeometry = canEditLayerGeometry(layer) && layerCaps.update;
             const canLoadIntoEditor =
+              layerCaps.create &&
               layer.metadata.sourceKind !== SKETCHES_SOURCE_KIND &&
               layer.metadata.tileType !== "raster" &&
               (layer.type === "geojson" ||
@@ -3128,82 +3115,39 @@ export function LayerPanel({
             const geometryEditElsewhere = geometryEditLayerId !== null && !geometryEditActive;
             const canMaterializeDuckDB =
               isDuckDBQueryLayer(layer) && typeof layer.metadata.query === "string";
-            // The attribute table reads features from geojson layers (including
-            // Add Vector Layer geojson-mode) and DuckDB query layers.
-            const canOpenAttributeTable = layer.type === "geojson" || isDuckDBQueryLayer(layer);
-            // The interactive selection dialogs (#1314) resolve selection ids
-            // against in-store features, like the highlight overlay does.
+            const canOpenAttributeTable =
+              layerCaps.query && (layer.type === "geojson" || isDuckDBQueryLayer(layer));
             const canSelectFeatures = (layer.geojson?.features?.length ?? 0) > 0;
-            // Selection actions act on the live selection, which always
-            // belongs to the active layer.
             const holdsSelection =
               canSelectFeatures && layer.id === selectedLayerId && selectedFeatureCount > 0;
-            // Export writes the layer's GeoJSON features to disk; only
-            // geojson-backed vector layers carry those features.
-            const canExportLayer = layer.type === "geojson";
+            const canExportLayer = layerCaps.export && layer.type === "geojson";
             const canExportPolyline = canExportLayer && layerSupportsPolylineExport(layer);
-            // Importing a style (Mapbox GL or SLD) only writes the layer's
-            // vector symbology, so it applies to any vector-styled layer (local
-            // GeoJSON and vector tiles), not just the export-capable GeoJSON
-            // layers. Shares the Style Manager's gate so the two can't drift.
             const canImportStyle = isStyleLibraryTargetLayer(layer.type);
-            // Saving the whole layer (source + style + labels + filters + joins)
-            // to the Layer Library needs something re-addable to point at AND a
-            // way to render it again (issue #1520), so a layer with no source and
-            // no features is excluded — and so is a control-painted layer whose
-            // kind has no restore route, which would otherwise re-add blank.
-            // `hasMaterializableFeatures` is the same predicate the save handler
-            // uses to read features out of the vector control, so the menu never
-            // hides a layer the capture path could in fact embed (a tiles-mode
-            // Add Vector Layer layer has no `layer.geojson` to look at).
-            const canSaveToLibrary = canSaveLayerToLibrary(layer, {
-              canRestoreControlPainted: canRestoreLibraryLayer,
-              hasMaterializableFeatures: isEmbeddableLocalVectorLayer,
-            });
-            // Copy/paste symbology (issue #1339). Vector-styled layers and
-            // deck.gl rasters each copy their own style family; a paste only
-            // lands when the clipboard entry shares the target's family.
+            const canSaveToLibrary =
+              layerCaps.export &&
+              canSaveLayerToLibrary(layer, {
+                canRestoreControlPainted: canRestoreLibraryLayer,
+                hasMaterializableFeatures: isEmbeddableLocalVectorLayer,
+              });
             const copyStyleKind = copyableLayerStyleKind(layer);
             const canPasteStyle = copiedLayerStyle?.kind === copyStyleKind;
-            // Write-back commits edits to the layer's local source file in place
-            // (desktop only, supported formats); Export writes a new file.
-            const canWriteBack = canWriteEditsToSource(layer);
-            // Vector layers with a date/timestamp property can be driven by the
-            // Time Slider; the binding (if any) lives on the layer metadata.
-            // Tile-backed vector layers qualify too: the window is a MapLibre
-            // filter evaluated per feature as each tile decodes, so it needs no
-            // local copy of the data (see the bind dialog for how the timeline's
-            // extent is established without one).
-            // A layer whose time is an internal dimension (a Zarr data cube)
-            // binds through its registered temporal adapter instead, with no
-            // property to pick: see handleBindTemporalLayer.
+            const canWriteBack =
+              canWriteEditsToSource(layer) &&
+              (layerCaps.update || layerCaps.create || layerCaps.delete);
             const temporalAdapter = getTemporalLayerAdapter(layer.id);
             const canBindTimeSlider =
               layer.type === "geojson" || isTileVectorLayer(layer) || Boolean(temporalAdapter);
             const timeBinding = getLayerTimeBinding(layer);
-            // Raster/COG layers backed by a downloadable file (a retained
-            // local-bytes blob URL or a source URL) export to GeoTIFF.
-            const canExportRaster = canExportRasterLayer(layer);
-            // COG/WMS/XYZ layers can also export a bounding-box subset (a clip)
-            // via the in-browser geolibre-wasm extractors, drawn on the map.
-            const canExtractSubset = canExtractRasterSubset(layer);
-            // Rasters added through the floating Add Raster Layer panel are
-            // styled there; offer a shortcut to reopen that panel since it is
-            // dismissed (and its on-map icon removed) when closed.
+            const canExportRaster = layerCaps.export && canExportRasterLayer(layer);
+            const canExtractSubset = layerCaps.export && canExtractRasterSubset(layer);
             const canEditRasterStyle = layer.metadata.sourceKind === RASTER_SOURCE_KIND;
             const canRefresh = isRefreshableLayer(layer);
-            // Iceberg layers refresh only on demand: scanning a table that
-            // large on a timer is never what the user meant, so the interval
-            // settings are unavailable even though Refresh is not.
             const canAutoRefresh = canRefresh && supportsAutoRefresh(layer);
             const isLayerLocked =
               collaboration.isActive && (collaboration.lockedLayerIds ?? []).includes(layer.id);
-            const layerEditable = canEditLayer(layer.id);
+            const layerEditable = canEditLayer(layer.id) && layerCaps.update;
             const refreshConfig = getLayerRefreshConfig(layer);
-            // Live SQL query layers (issue #1295) refresh by re-running their
-            // stored DuckDB statement and offer a shortcut to edit it.
             const isSqlLayer = isSqlQueryLayer(layer);
-            // Local-file vector layers (desktop only) can be reloaded from disk
             // and watched for changes instead of the URL-based refresh above.
             const canWatchLocalFile = isTauri() && isLocalFileLayer(layer);
             const watchConfig = getLayerWatchConfig(layer);
