@@ -1,4 +1,4 @@
-import { useState, type ComponentProps } from "react";
+import { useState, type ReactElement } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import {
   Button,
@@ -18,7 +18,7 @@ import { formatShortcut, isMacPlatform, matchesShortcut, type Shortcut } from ".
 // Ctrl/⌘+Shift+Enter too, a chord the button never advertises.
 export const POST_COMMENT_SHORTCUT: Shortcut = { key: "Enter", mod: true, shift: false };
 
-const postingAsComponents: ComponentProps<typeof Trans>["components"] = {
+const postingAsComponents: Record<string, ReactElement> = {
   strong: <strong className="text-foreground" />,
 };
 

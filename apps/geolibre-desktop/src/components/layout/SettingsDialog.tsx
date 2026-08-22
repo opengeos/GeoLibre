@@ -68,7 +68,15 @@ import {
   TriangleAlert,
   Puzzle,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ComponentProps, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactElement,
+  type RefObject,
+} from "react";
 import { Trans, useTranslation } from "react-i18next";
 import {
   DEFAULT_DESKTOP_LAYOUT_SETTINGS,
@@ -182,7 +190,17 @@ interface SettingsDialogProps {
   onToggleThemeMode: () => void;
 }
 
-type TransComponents = ComponentProps<typeof Trans>["components"];
+type TransComponents = Record<string, ReactElement>;
+
+type SettingsTransProps = {
+  i18nKey: "settings.env.tokenDescription" | "settings.env.cesiumTokenDescription";
+  values?: { shareHost: string };
+  components?: TransComponents;
+};
+
+// TS 7 exhausts its instantiation depth when it expands Trans's catalog-wide
+// generics from this large generated locale type. Keep the key union explicit.
+const SettingsTrans = Trans as ComponentType<SettingsTransProps>;
 
 const cesiumTokenComponents: TransComponents = {
   tokenLink: (
@@ -2391,7 +2409,7 @@ export function SettingsDialog({
                     {shareTokenUsable ? (
                       <>
                         <p className="text-xs text-muted-foreground">
-                          <Trans
+                          <SettingsTrans
                             i18nKey="settings.env.tokenDescription"
                             values={{ shareHost }}
                             // Non-null here: this branch requires shareBaseUrl,
@@ -2421,7 +2439,7 @@ export function SettingsDialog({
                   <div className="space-y-2 border-t pt-5">
                     <h3 className="text-sm font-semibold">{t("settings.env.cesiumTokenTitle")}</h3>
                     <p className="text-xs text-muted-foreground">
-                      <Trans
+                      <SettingsTrans
                         i18nKey="settings.env.cesiumTokenDescription"
                         components={cesiumTokenComponents}
                       />
