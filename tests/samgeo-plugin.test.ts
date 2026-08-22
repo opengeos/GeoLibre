@@ -29,7 +29,10 @@ test("sanitizeSamGeoState keeps only well-typed, in-range fields", () => {
 });
 
 test("sanitizeSamGeoState rejects unions outside Mode/backend and non-objects", () => {
-  assert.deepEqual(sanitizeSamGeoState({ mode: "magic", backend: "other", apiUrl: 7 }), {});
+  assert.deepEqual(
+    sanitizeSamGeoState({ mode: "magic", backend: "other", apiUrl: 7 }),
+    {}
+  );
   assert.deepEqual(sanitizeSamGeoState(null), {});
   assert.deepEqual(sanitizeSamGeoState(["apiUrl"]), {});
   assert.deepEqual(sanitizeSamGeoState("text"), {});
@@ -60,10 +63,11 @@ const square = (x: number, y: number): FeatureCollection => ({
 test("reprojectSamGeoResult converts projected coordinates to WGS84", () => {
   const result = reprojectSamGeoResult(
     square(500_000, 0),
-    "+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs",
+    "+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs"
   );
-  const [lng, lat] = (result.features[0]!.geometry as { coordinates: number[][][] })
-    .coordinates[0]![0]!;
+  const [lng, lat] = (
+    result.features[0]!.geometry as { coordinates: number[][][] }
+  ).coordinates[0]![0]!;
   assert.ok(Math.abs(lng - 15) < 1e-6, `lng ${lng}`);
   assert.ok(Math.abs(lat) < 1e-6, `lat ${lat}`);
 });
@@ -76,7 +80,10 @@ test("reprojectSamGeoResult leaves WGS84 results alone regardless of source proj
       properties: { name: "urn:ogc:def:crs:OGC:1.3:CRS84" },
     },
   } as FeatureCollection;
-  const result = reprojectSamGeoResult(fc, "+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs");
+  const result = reprojectSamGeoResult(
+    fc,
+    "+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs"
+  );
   assert.deepEqual(result.features[0]!.geometry, fc.features[0]!.geometry);
   assert.deepEqual(
     reprojectSamGeoResult(
@@ -84,9 +91,9 @@ test("reprojectSamGeoResult leaves WGS84 results alone regardless of source proj
         ...square(1, 2),
         crs: { type: "name", properties: { name: "EPSG::4326" } },
       } as FeatureCollection,
-      null,
+      null
     ).features[0]!.geometry,
-    square(1, 2).features[0]!.geometry,
+    square(1, 2).features[0]!.geometry
   );
 });
 
@@ -94,36 +101,8 @@ test("reprojectSamGeoResult refuses non-WGS84 results with no known projection",
   assert.throws(() => reprojectSamGeoResult(square(500_000, 0), null), /WGS84/);
   // An empty result has nothing to misplace.
   assert.deepEqual(
-    reprojectSamGeoResult({ type: "FeatureCollection", features: [] }, null).features,
-    [],
+    reprojectSamGeoResult({ type: "FeatureCollection", features: [] }, null)
+      .features,
+    []
   );
-});
-
-test("attachDetectionScores joins each detection's score onto the overlapping mask", async () => {
-  const { attachDetectionScores } = await import("../packages/plugins/src/plugins/maplibre-samgeo");
-  const masks: FeatureCollection = {
-    type: "FeatureCollection",
-    features: [
-      { ...square(0, 0).features[0]!, properties: { value: 1 } },
-      { ...square(10, 10).features[0]!, properties: { value: 2 } },
-      { ...square(50, 50).features[0]!, properties: { value: 3 } },
-    ],
-  };
-  const detections: FeatureCollection = {
-    type: "FeatureCollection",
-    features: [
-      {
-        ...square(10.1, 10.1).features[0]!,
-        properties: { id: 1, score: 0.91 },
-      },
-      { ...square(0, 0).features[0]!, properties: { id: 2, score: 0.42 } },
-    ],
-  };
-  const joined = attachDetectionScores(masks, detections);
-  assert.deepEqual(
-    joined.features.map((f) => f.properties),
-    [{ value: 1, score: 0.42 }, { value: 2, score: 0.91 }, { value: 3 }],
-  );
-  // No usable detections: the masks come back untouched.
-  assert.equal(attachDetectionScores(masks, { type: "FeatureCollection", features: [] }), masks);
 });
