@@ -172,6 +172,11 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "explode", titleKey: "toolbar.vectorTool.explode" },
   { kind: "aggregate", titleKey: "toolbar.vectorTool.aggregate" },
   { kind: "smooth", titleKey: "toolbar.vectorTool.smooth" },
+  { kind: "extract-vertices", titleKey: "toolbar.vectorTool.extractVertices" },
+  {
+    kind: "points-along-geometry",
+    titleKey: "toolbar.vectorTool.pointsAlongGeometry",
+  },
   { kind: "grid", titleKey: "toolbar.vectorTool.grid" },
   { kind: "voronoi", titleKey: "toolbar.vectorTool.voronoi" },
   { kind: "dggs-grid", titleKey: "toolbar.vectorTool.dggsGenerator" },

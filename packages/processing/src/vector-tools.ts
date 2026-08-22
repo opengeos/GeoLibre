@@ -1795,6 +1795,7 @@ function* walkAlong(
   positions: Position[],
   interval: number,
   units: AlongUnits,
+  segmentLengths: number[],
 ): Generator<{ position: Position; step: number }> {
   let travelled = 0;
   let atDistance = 0;
@@ -1802,7 +1803,7 @@ function* walkAlong(
   for (let i = 1; i < positions.length; i += 1) {
     const start = positions[i - 1];
     const end = positions[i];
-    const segment = distance(start, end, { units });
+    const segment = segmentLengths[i - 1];
     if (segment <= 0) continue;
     let heading: number | null = null;
     // A step landing within float noise of a vertex snaps to the vertex itself
@@ -1828,13 +1829,13 @@ function* walkAlong(
   }
 }
 
-/** Haversine length of an open coordinate ring. */
-function ringLength(positions: Position[], units: AlongUnits): number {
-  let total = 0;
+/** Haversine lengths of an open coordinate ring's segments. */
+function ringSegmentLengths(positions: Position[], units: AlongUnits): number[] {
+  const lengths: number[] = [];
   for (let i = 1; i < positions.length; i += 1) {
-    total += distance(positions[i - 1], positions[i], { units });
+    lengths.push(distance(positions[i - 1], positions[i], { units }));
   }
-  return total;
+  return lengths;
 }
 
 export const pointsAlongGeometryTool: ProcessingAlgorithm = {
@@ -1891,7 +1892,12 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
     // frame for the walk, and post-scale every length Turf measures back into
     // the active body's frame before it reaches the distance column.
     const turfInterval = bodyLengthToEarth(interval);
-    const parts: { feature: Feature; part: Position[]; length: number }[] = [];
+    const parts: {
+      feature: Feature;
+      part: Position[];
+      length: number;
+      segmentLengths: number[];
+    }[] = [];
     let skipped = 0;
     let estimated = 0;
     for (const feature of fc.features) {
@@ -1904,9 +1910,10 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
       for (const part of linear) {
         if (part.length < 2) continue;
         // Interval multiples plus the closing end vertex.
-        const length = ringLength(part, alongUnits);
+        const segmentLengths = ringSegmentLengths(part, alongUnits);
+        const length = segmentLengths.reduce((total, segment) => total + segment, 0);
         estimated += Math.floor(length / turfInterval) + 2;
-        parts.push({ feature, part, length });
+        parts.push({ feature, part, length, segmentLengths });
       }
     }
     // Bail before allocating anything, the way gridTool does for its cells.
@@ -1920,11 +1927,11 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
     // measured endpoint length both read cleanly.
     const roundDistance = (value: number) => Number(value.toFixed(6));
     const points: Feature<Point>[] = [];
-    for (const { feature, part, length } of parts) {
+    for (const { feature, part, length, segmentLengths } of parts) {
       // Walk every interval multiple, then always close with the part's
       // final vertex so endpoints survive rounding of the total length.
       let lastPushed: Feature<Point> | undefined;
-      for (const { position, step } of walkAlong(part, turfInterval, alongUnits)) {
+      for (const { position, step } of walkAlong(part, turfInterval, alongUnits, segmentLengths)) {
         lastPushed = {
           type: "Feature",
           properties: { ...(feature.properties ?? {}), distance: roundDistance(step * interval) },
