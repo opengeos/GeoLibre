@@ -1344,25 +1344,6 @@ export function ModelBuilderPanel({
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 w-7 shrink-0 p-0"
-            onClick={toggleMaximized}
-            aria-pressed={maximized}
-            aria-label={
-              maximized
-                ? t("processing.modelBuilder.restorePanelSize")
-                : t("processing.modelBuilder.maximizePanel")
-            }
-            title={
-              maximized
-                ? t("processing.modelBuilder.restorePanelSize")
-                : t("processing.modelBuilder.maximizePanel")
-            }
-          >
-            {maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
             className="h-7 shrink-0 gap-1 px-2"
             onClick={handleNewModel}
             aria-label={t("processing.modelBuilder.newModel")}
@@ -1476,6 +1457,25 @@ export function ModelBuilderPanel({
             }
           >
             {minimized ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 shrink-0 p-0"
+            onClick={toggleMaximized}
+            aria-pressed={maximized}
+            aria-label={
+              maximized
+                ? t("processing.modelBuilder.restorePanelSize")
+                : t("processing.modelBuilder.maximizePanel")
+            }
+            title={
+              maximized
+                ? t("processing.modelBuilder.restorePanelSize")
+                : t("processing.modelBuilder.maximizePanel")
+            }
+          >
+            {maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>
           <Button
             size="sm"
