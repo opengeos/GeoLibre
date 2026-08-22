@@ -89,13 +89,23 @@ jobs:
           } > "$HOME/.ssh/config"
           chmod 600 "$HOME/.ssh/config"
 
-      - name: Build mirror
+      - name: Resolve release tag
+        id: release
         env:
           REQUESTED_TAG: ${{ inputs.tag }}
           WORKFLOW_TAG: ${{ github.event.workflow_run.head_branch }}
         run: |
           tag="${REQUESTED_TAG:-${WORKFLOW_TAG:-}}"
-          scripts/build-download-mirror.sh "$RUNNER_TEMP/site" "$tag"
+          if [[ -z "$tag" ]]; then
+            tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build candidate manifest
+        env:
+          DOWNLOAD_MIRROR_METADATA_ONLY: "true"
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: scripts/build-download-mirror.sh "$RUNNER_TEMP/candidate" "$RELEASE_TAG"
 
       - name: Skip an unchanged mirror
         id: changes
@@ -106,8 +116,8 @@ jobs:
             "git@github.com:$DESTINATION_REPOSITORY.git" current
           if git -C current show HEAD:manifest.json > current-manifest.json 2>/dev/null; then
             jq 'del(.generated_at)' current-manifest.json > current-normalized.json
-            jq 'del(.generated_at)' site/manifest.json > site-normalized.json
-            if cmp -s current-normalized.json site-normalized.json; then
+            jq 'del(.generated_at)' candidate/manifest.json > candidate-normalized.json
+            if cmp -s current-normalized.json candidate-normalized.json; then
               echo "The mirror already contains this release and asset set."
               echo "publish=false" >> "$GITHUB_OUTPUT"
               exit 0
@@ -115,11 +125,17 @@ jobs:
           fi
           echo "publish=true" >> "$GITHUB_OUTPUT"
 
+      - name: Build mirror
+        if: steps.changes.outputs.publish == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: scripts/build-download-mirror.sh "$RUNNER_TEMP/site" "$RELEASE_TAG"
+
       - name: Publish an orphan snapshot
         if: steps.changes.outputs.publish == 'true'
         working-directory: ${{ runner.temp }}/site
         env:
-          RELEASE_TAG: ${{ inputs.tag || github.event.workflow_run.head_branch || 'latest' }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
           git init --initial-branch=main

@@ -5,6 +5,7 @@ set -euo pipefail
 readonly SOURCE_REPOSITORY="opengeos/GeoLibre"
 readonly MIRROR_ORIGIN="https://downloads.geolibre.app"
 readonly MAX_MIRRORED_BYTES=$((100 * 1024 * 1024))
+readonly METADATA_ONLY="${DOWNLOAD_MIRROR_METADATA_ONLY:-false}"
 readonly OMITTED_ASSET_PATTERNS_JSON='[
   "^geolibre-android\\.aab$",
   "^GeoLibre\\.Desktop_[^/]+_universal_mas\\.pkg$",
@@ -85,6 +86,12 @@ jq \
   | .mirrored_count = ([.artifacts[] | select(.mirrored)] | length)
   | .github_only_count = ([.artifacts[] | select(.mirrored | not)] | length)' \
   "$release_json" > "$output_directory/manifest.json"
+
+if [[ "$METADATA_ONLY" == "true" ]]; then
+  rm "$release_json"
+  echo "Built candidate manifest for $release_tag."
+  exit 0
+fi
 
 while IFS= read -r encoded_asset; do
   asset="$(base64 --decode <<< "$encoded_asset")"
