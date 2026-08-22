@@ -147,6 +147,7 @@ let labels: SamGeoLabels = { ...DEFAULT_LABELS };
 /** Replace the panel's user-facing strings; call again on language change. */
 export function setSamGeoLabels(next: Partial<SamGeoLabels>): void {
   labels = { ...DEFAULT_LABELS, ...next };
+  rebuildPanel();
 }
 
 const DEFAULT_STATE: SamGeoState = {
@@ -217,6 +218,33 @@ let disposePanel: (() => void) | null = null;
 let promptPoints: PromptPoint[] = [];
 let promptBox: [number, number, number, number] | null = null;
 let cancelDrawing: (() => void) | null = null;
+let panelContainer: HTMLElement | null = null;
+/** The in-flight health or segmentation request, aborted when the panel closes. */
+let pendingRequest: AbortController | null = null;
+
+const HEALTH_TIMEOUT_MS = 10_000;
+
+/**
+ * Re-render the open panel from the module state, mirroring
+ * `maplibre-graticule`. Prompt geometry lives outside the DOM so it survives;
+ * a chosen file does not, the same trade-off that plugin makes.
+ */
+function rebuildPanel(): void {
+  if (!panelContainer) return;
+  disposePanel?.();
+  disposePanel = buildPanel(panelContainer);
+}
+
+function beginRequest(): AbortController {
+  pendingRequest?.abort();
+  const controller = new AbortController();
+  pendingRequest = controller;
+  return controller;
+}
+
+function endRequest(controller: AbortController): void {
+  if (pendingRequest === controller) pendingRequest = null;
+}
 
 const css = {
   root: "box-sizing:border-box;height:100%;overflow:auto;padding:12px;font:13px system-ui,sans-serif;color:var(--foreground);",
@@ -450,7 +478,7 @@ export function reprojectSamGeoResult(
   const namedCrs = (fc as FeatureCollection & { crs?: { properties?: { name?: unknown } } }).crs
     ?.properties?.name;
   const crsText = typeof namedCrs === "string" ? namedCrs : "";
-  const alreadyWgs84 = /(?:EPSG(?::|::)4326|CRS84)/i.test(crsText);
+  const alreadyWgs84 = /EPSG:{1,2}4326|CRS84/i.test(crsText);
   if (!alreadyWgs84 && !sourceProjection && fc.features.length > 0) {
     throw new Error(labels.unknownProjection);
   }
@@ -482,7 +510,11 @@ function appendCommon(form: FormData): void {
   if (state.modelId.trim()) form.append("model_id", state.modelId.trim());
 }
 
-async function requestSegmentation(file: File, bytes: ArrayBuffer): Promise<FeatureCollection> {
+async function requestSegmentation(
+  file: File,
+  bytes: ArrayBuffer,
+  signal: AbortSignal,
+): Promise<FeatureCollection> {
   const form = new FormData();
   form.append("file", file, file.name);
   appendCommon(form);
@@ -517,6 +549,7 @@ async function requestSegmentation(file: File, bytes: ArrayBuffer): Promise<Feat
   const response = await fetch(`${apiBase()}${endpoint}`, {
     method: "POST",
     body: form,
+    signal,
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
@@ -766,9 +799,14 @@ function buildPanel(container: HTMLElement): () => void {
     }
     run.disabled = true;
     status.textContent = labels.segmenting;
+    const controller = beginRequest();
     try {
       const bytes = await file.arrayBuffer();
-      const result = await requestSegmentation(file, bytes);
+      const result = await requestSegmentation(file, bytes, controller.signal);
+      // The panel was closed (or a newer request started) while this one was
+      // in flight: drop the result rather than adding a layer the user has
+      // moved on from.
+      if (controller.signal.aborted) return;
       if (!result.features.length) {
         status.textContent = labels.noObjects;
         return;
@@ -793,8 +831,9 @@ function buildPanel(container: HTMLElement): () => void {
       }
       status.textContent = labels.added(result.features.length, layerId ? ` as ${layerId}` : "");
     } catch (error) {
-      status.textContent = errorMessage(error);
+      if (!controller.signal.aborted) status.textContent = errorMessage(error);
     } finally {
+      endRequest(controller);
       run.disabled = false;
     }
   });
@@ -802,14 +841,20 @@ function buildPanel(container: HTMLElement): () => void {
   health.addEventListener("click", async () => {
     health.disabled = true;
     healthText.textContent = labels.checking;
+    const controller = beginRequest();
+    const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
     try {
-      const response = await fetch(`${apiBase()}/health`);
+      const response = await fetch(`${apiBase()}/health`, {
+        signal: controller.signal,
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = (await response.json()) as { version?: string };
       healthText.textContent = `${labels.connected}${data.version ? ` · v${data.version}` : ""}`;
     } catch (error) {
       healthText.textContent = labels.unavailable(errorMessage(error));
     } finally {
+      clearTimeout(timer);
+      endRequest(controller);
       health.disabled = false;
     }
   });
@@ -842,9 +887,8 @@ function buildPanel(container: HTMLElement): () => void {
   return () => {
     cancelDrawing?.();
     cancelDrawing = null;
-    // The overlay is not a store layer, so closing the panel (header "X")
-    // must tear it down here too, not only in deactivate.
-    clearPrompts(appRef?.getMap?.());
+    pendingRequest?.abort();
+    pendingRequest = null;
     container.replaceChildren();
   };
 }
@@ -858,15 +902,20 @@ export const maplibreSamGeoPlugin: GeoLibrePlugin = {
     unregisterPanel =
       app.registerRightPanel?.({
         id: PANEL_ID,
-        title: labels.panelTitle,
+        title: () => labels.panelTitle,
         dock: "replace-style",
         defaultWidth: 390,
         render(container) {
+          panelContainer = container;
           disposePanel?.();
           disposePanel = buildPanel(container);
           return () => {
             disposePanel?.();
             disposePanel = null;
+            panelContainer = null;
+            // The overlay is not a store layer, so closing the panel (header
+            // "X") must tear it down here too, not only in deactivate.
+            clearPrompts(appRef?.getMap?.());
           };
         },
       }) ?? null;
@@ -892,6 +941,8 @@ export const maplibreSamGeoPlugin: GeoLibrePlugin = {
     const next = sanitizeSamGeoState(value);
     if (Object.keys(next).length === 0) return false;
     Object.assign(state, next);
+    // Keep an already-open panel's inputs in step with the restored state.
+    rebuildPanel();
     return true;
   },
 };
