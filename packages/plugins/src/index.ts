@@ -577,6 +577,7 @@ export {
 export { maplibreNationalMapPlugin } from "./plugins/maplibre-national-map";
 export { maplibreOvertureMapsPlugin } from "./plugins/maplibre-overture-maps";
 export { maplibreStreetViewPlugin } from "./plugins/maplibre-streetview";
+export { maplibreSamGeoPlugin, SAMGEO_PLUGIN_ID } from "./plugins/maplibre-samgeo";
 export {
   maplibreMapillaryPlugin,
   MAPILLARY_PLUGIN_ID,
