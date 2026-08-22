@@ -252,7 +252,11 @@ export function translateWhiteboxParameterLabel(
   toolId: string,
   param: WhiteboxToolParameter,
 ): string {
-  return text(t, parameterLabelKey("whitebox", toolId, param.name), humanizeParameterName(param.name));
+  return text(
+    t,
+    parameterLabelKey("whitebox", toolId, param.name),
+    humanizeParameterName(param.name),
+  );
 }
 
 /** A Whitebox parameter's combined form label and localized help text. */
