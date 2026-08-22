@@ -219,6 +219,7 @@ kepler.gl, see the [Comparison](comparison.md).
 - Network analysis tools for isochrones, service areas, origin–destination (OD) cost matrices, and sequential routes (directions) through an ordered set of waypoints
 - Geocoding tools for forward, batch, and reverse geocoding through a multi-provider abstraction
 - AI Segmentation (SamGeo) that turns imagery into vector features with [segment-geospatial](https://github.com/opengeos/segment-geospatial) and Meta's SAM 3 — text prompts ("trees", "buildings") or automatic segmentation, proxied to a separate `samgeo-api` model server (GPU recommended). See [AI Segmentation](user-guide/segmentation.md)
+    - An interactive **SamGeo** plugin (Plugins → SamGeo) that talks to `samgeo-api` directly, so it also works in the browser build: segment a COG already on the map or an uploaded image with a text prompt, foreground/background points clicked on the map, a bounding box dragged on the map ("find similar"), or SAM 2's automatic mask generator; results arrive as GeoJSON layers with a per-feature confidence `score`
 - In-browser object detection that runs ONNX/YOLO models directly in the webview, with no server or Python required, over map imagery or an imported geotagged photo layer
 - H3 tools to create hexagonal grids over an extent and bin point layers into H3 cells
 - DGGS tools for discrete global grid systems: a DGGS Generator that fills an extent with cells, DGGS Binning that aggregates a point layer into them, and DGGS Compact that collapses a complete set of children into their parent

@@ -7338,6 +7338,8 @@
     "modeBox": "Bounding box (find similar)",
     "modeAutomatic": "Automatic (everything)",
     "modelId": "Model ID",
+    "sam2ModelId": "SAM2 model",
+    "automaticHint": "Automatic mode runs SAM2's mask generator, which segments every object; SAM3 only responds to prompts.",
     "textPrompt": "Text prompt",
     "confidence": "Confidence threshold",
     "minSize": "Minimum mask size (pixels)",

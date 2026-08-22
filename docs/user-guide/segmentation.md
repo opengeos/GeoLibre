@@ -110,8 +110,52 @@ pip install -e "backend/geolibre_server[ml]"
   and the Python sidecar; it is not available in the browser-only build.
 - **No objects found** is a normal outcome — try a different prompt or lower the
   confidence threshold.
-- **Box / point prompts** drawn on the map are not in the UI yet; the
-  `/ml/segment/predict` endpoint already supports them for scripted use.
+- **Box / point prompts** drawn on the map are available in the interactive
+  [SamGeo plugin](#interactive-samgeo-plugin) below; this dialog covers text and
+  automatic modes only.
+
+## Interactive SamGeo plugin
+
+**Plugins → SamGeo** opens a dockable panel that talks to `samgeo-api`
+directly (default `http://127.0.0.1:8000`, editable in the panel) rather than
+through the sidecar, so it works in the browser build as well as on desktop.
+It mirrors `segment-geospatial`'s own interactive map: one uploaded image is
+shared by every prompt type, and results land as GeoJSON polygon layers.
+
+1. Start the model server (`samgeo-api --port 8000`; the panel links to the
+   [setup guide](https://samgeo.gishub.org/api/)) and click **Check
+   connection**.
+2. **Choose the image.** *Image source* lists every COG or GeoTIFF layer
+   already on the map — pick one to segment it in place — or leave it on
+   **Upload a file** and choose a local `.tif`/`.png`/`.jpg`. The
+   **Aerial imagery (UC Berkeley)** sample in *Add Data → Raster Layer* is a
+   good first image.
+3. **Pick a mode:**
+    - **Text prompt** — a concept such as `building` or `tree`, with a
+      confidence threshold and mask-size limits.
+    - **Point prompts** — click **+ Foreground point** / **− Background
+      point**, then click the map; green and red markers show the prompts.
+      At least one foreground point is required.
+    - **Bounding box (find similar)** — click **Draw box on map** and drag a
+      rectangle; SAM 3 returns every object that resembles the boxed one.
+    - **Automatic (everything)** — segments all distinct objects. SAM 3 is a
+      prompt-driven model, so this mode runs SAM 2's automatic mask generator
+      instead (choose the checkpoint under *SAM2 model*; `points_per_side`,
+      IoU and stability thresholds apply here).
+4. Click **Segment**. Polygons are reprojected from the raster's CRS to WGS84
+   and added as a layer named after the prompt or mode; the map zooms to it.
+   With `segment-geospatial` 1.4.2 or newer each feature carries a `score`
+   attribute with the model's confidence, visible in the attribute table.
+
+Use **Clear prompts** to remove the points or box. Switching modes clears the
+other mode's prompts, and closing the panel removes the on-map prompt overlay.
+The panel's settings (API URL, mode, model, thresholds) persist with the
+project.
+
+!!! note "Image uploads go to the API URL you configure"
+    The image is POSTed to the configured server. A project file can carry a
+    saved API URL, so check the field before segmenting a local image with a
+    project you did not author.
 
 ## API (advanced)
 
