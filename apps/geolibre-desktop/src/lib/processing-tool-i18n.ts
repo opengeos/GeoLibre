@@ -113,8 +113,20 @@ export function whiteboxCategoryKey(category: string): string {
   return `processing.whitebox.categories.${toolGroupKey(category)}`;
 }
 
+function localizedText(
+  t: TFunction,
+  key: string,
+  fallback: string,
+): { value: string; resolved: boolean } {
+  const missingValue = "\u0000geolibre-i18n-missing\u0000";
+  const translated = t(key, { defaultValue: missingValue });
+  return translated === missingValue
+    ? { value: fallback, resolved: false }
+    : { value: String(translated), resolved: true };
+}
+
 function text(t: TFunction, key: string, fallback: string): string {
-  return String(t(key, { defaultValue: fallback }));
+  return localizedText(t, key, fallback).value;
 }
 
 function isEnglishLocale(t: TFunction): boolean {
@@ -261,15 +273,21 @@ export function whiteboxParameterLabel(
   param: WhiteboxToolParameter,
 ): string {
   const fallbackLabel = humanize(param.name);
-  const label = translateWhiteboxParameterLabel(t, toolId, param);
-  const desc = translateWhiteboxParameterDescription(t, toolId, param);
-  // i18next falls back to the manifest description. A translated label must
-  // not splice that untranslated fallback into the display string. Symbol-only
-  // labels (K, Sigma, X) stay unchanged in every locale, so retain the English
-  // help text only for English users.
-  const translatedDesc =
-    desc !== param.description || (label === fallbackLabel && isEnglishLocale(t));
-  return desc && translatedDesc ? `${label}: ${desc}` : label;
+  const label = localizedText(
+    t,
+    parameterLabelKey("whitebox", toolId, param.name),
+    fallbackLabel,
+  );
+  const desc = localizedText(
+    t,
+    parameterDescriptionKey("whitebox", toolId, param.name),
+    param.description ?? "",
+  );
+  // A catalog entry is present even when a technical description intentionally
+  // equals the English manifest text. Suppress only a genuinely missing entry,
+  // except in English where the manifest help is already locale-appropriate.
+  const showDescription = desc.resolved || isEnglishLocale(t);
+  return desc.value && showDescription ? `${label.value}: ${desc.value}` : label.value;
 }
 
 /**

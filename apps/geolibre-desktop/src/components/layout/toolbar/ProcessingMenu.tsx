@@ -15,18 +15,22 @@ import {
 import { Wrench } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { isMobile } from "../../../lib/is-mobile";
 import type { ToolbarPanel } from "../../../hooks/useToolbarPanels";
 import type { ParseKeys } from "i18next";
-/** Convert a Whitebox subcategory label to an i18n key. */
-function subcatKey(label: string): string {
-  return `processing.whitebox.menuSubcategory.${label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/_+$/, "")}`;
-}
-import { isMobile } from "../../../lib/is-mobile";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { masHidesMenuItem } from "../../../lib/mas-build";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
 import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
 import type { ToolbarChrome } from "./constants";
+
+/** Convert a Whitebox subcategory label to an i18n key. */
+function subcatKey(label: string): string {
+  return `processing.whitebox.menuSubcategory.${label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/_+$/, "")}`;
+}
 
 // Earth Engine sign-in needs the Rust loopback OAuth listener, which the Apple
 // App Store builds (Mac App Store and iOS) compile out so the app claims no

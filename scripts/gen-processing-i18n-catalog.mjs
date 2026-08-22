@@ -114,7 +114,9 @@ function buildToolMeta(CATALOGS) {
     const entries = {};
     for (const tool of tools) {
       const isWhitebox = catalog === "whitebox";
-      const entry = { name: isWhitebox ? tool.display_name || tool.id : tool.name };
+      const entry = {
+        name: isWhitebox ? tool.display_name || humanize(tool.id) : tool.name,
+      };
       // Whitebox snapshot stores tool summaries in `summary`, not `description`.
       const desc = isWhitebox ? tool.summary || tool.description : tool.description;
       if (desc) entry.description = desc;

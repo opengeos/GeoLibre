@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
+import { WHITEBOX_MENU_CATALOG } from "../apps/geolibre-desktop/src/lib/whitebox-menu-catalog";
 
 const localesDir = fileURLToPath(
   new URL("../apps/geolibre-desktop/src/i18n/locales/", import.meta.url),
@@ -96,6 +97,48 @@ describe("i18n catalogs", () => {
     );
     for (const value of Object.values(zh.whitebox.categories)) {
       assert.match(value, /[\p{Script=Han}]/u);
+    }
+  });
+
+  it("covers every Whitebox Processing menu key in English and Chinese", () => {
+    const expectedTools = new Set(
+      WHITEBOX_MENU_CATALOG.flatMap((category) =>
+        category.subcategories.flatMap((subcategory) =>
+          subcategory.tools.map((tool) => tool.id),
+        ),
+      ),
+    );
+    const expectedSubcategories = new Set(
+      WHITEBOX_MENU_CATALOG.flatMap((category) =>
+        category.subcategories.map((subcategory) => subcategory.label),
+      ),
+    );
+    assert.equal(expectedTools.size, 1066);
+    assert.equal(expectedSubcategories.size, 45);
+
+    const subcategoryKey = (label: string) =>
+      label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/_+$/, "");
+
+    for (const code of ["en", "zh"]) {
+      const whitebox = loadCatalog(code).processing as {
+        whitebox: {
+          menuTool: Record<string, unknown>;
+          menuSubcategory: Record<string, unknown>;
+        };
+      };
+      assert.deepEqual(
+        Object.keys(whitebox.whitebox.menuTool).sort(),
+        [...expectedTools].sort(),
+        `${code}.json Whitebox menuTool keys do not match the menu catalog`,
+      );
+      assert.deepEqual(
+        Object.keys(whitebox.whitebox.menuSubcategory).sort(),
+        [...expectedSubcategories].map(subcategoryKey).sort(),
+        `${code}.json Whitebox menuSubcategory keys do not match the menu catalog`,
+      );
     }
   });
 

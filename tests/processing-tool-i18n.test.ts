@@ -221,6 +221,15 @@ describe("Whitebox metadata translation", () => {
     );
   });
 
+  it("appends a catalog description that intentionally matches the English text", () => {
+    const param = { name: "units", description: "meters" };
+    const t = fakeT({
+      "processing.toolMeta.whitebox.measure.params.units.label": "单位",
+      "processing.toolMeta.whitebox.measure.params.units.description": "meters",
+    });
+    assert.equal(whiteboxParameterLabel(t, "measure", param), "单位: meters");
+  });
+
   it("keeps the English description fallback for English locales", () => {
     const param = { name: "tolerance", description: "Minimum deflection angle." };
     assert.equal(
