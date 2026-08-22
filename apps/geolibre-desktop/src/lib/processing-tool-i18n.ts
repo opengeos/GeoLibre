@@ -1,10 +1,9 @@
-import type { AlgorithmParameter } from "@geolibre/processing";
+import type { AlgorithmParameter, WhiteboxToolParameter } from "@geolibre/processing";
 import type { TFunction } from "i18next";
 
 /**
- * Translation layer for the metadata the GeoLibre-native processing registries
- * carry: tool names, descriptions, grouping labels, parameter labels/help text
- * and select-option labels.
+ * Translation layer for processing registry metadata: tool names, descriptions,
+ * grouping labels, parameter labels/help text and select-option labels.
  *
  * Those strings live in `@geolibre/processing`, a package with no i18n access,
  * so the Processing *menu* entries were translated while the dialog they opened
@@ -24,23 +23,23 @@ import type { TFunction } from "i18next";
  * layer) and a raster tool (warp a GeoTIFF) — so the catalog name is part of
  * every key.
  */
-export type ProcessingToolCatalog = "vector" | "network" | "statistics" | "raster";
+export type ProcessingToolCatalog = "vector" | "network" | "statistics" | "raster" | "whitebox";
 
 /**
- * A catalog, or `null` for tool metadata GeoLibre does not own and so cannot
- * translate — today that is the Whitebox WASM catalog, whose ~800 tool
- * descriptions come from the bundled binary. Passing `null` returns the
- * registry's own text unchanged, so a caller that mixes owned and unowned tools
- * (the Model Builder palette) needs no branch of its own.
+ * A catalog, or `null` for tool metadata the host cannot translate. Passing
+ * `null` returns the registry's own text unchanged, so a caller that mixes
+ * supported and unsupported providers needs no branch of its own.
  */
 export type ProcessingToolCatalogOrNone = ProcessingToolCatalog | null;
 
 /**
  * Catalog backing a Model Builder descriptor's `provider`, or `null` when the
- * provider's metadata is not GeoLibre's to translate.
+ * provider's metadata the host cannot translate.
  */
 export function modelProviderCatalog(provider: string): ProcessingToolCatalogOrNone {
-  return provider === "vector" ? "vector" : null;
+  if (provider === "vector") return "vector";
+  if (provider === "whitebox") return "whitebox";
+  return null;
 }
 
 /** Root of the generated tool-metadata namespace in the message catalogs. */
@@ -104,6 +103,39 @@ export function parameterDescriptionKey(
   return `${TOOL_META_KEY_PREFIX}.${catalog}.${toolId}.params.${paramId}.description`;
 }
 
+/** Key holding a translated raw Whitebox category label. */
+export function whiteboxCategoryKey(category: string): string {
+  return `processing.whitebox.categories.${toolGroupKey(category)}`;
+}
+
+/** Key fragment for a translated Whitebox Processing menu subcategory. */
+export function whiteboxMenuSubcategorySlug(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/_+$/, "");
+}
+
+function localizedText(
+  t: TFunction,
+  key: string,
+  fallback: string,
+): { value: string; resolved: boolean } {
+  const missingValue = "\u0000geolibre-i18n-missing\u0000";
+  const translated = t(key, { defaultValue: missingValue });
+  return translated === missingValue
+    ? { value: fallback, resolved: false }
+    : { value: String(translated), resolved: true };
+}
+
+function text(t: TFunction, key: string, fallback: string): string {
+  return localizedText(t, key, fallback).value;
+}
+
+function isEnglishLocale(language: string | null | undefined): boolean {
+  return typeof language === "string" && language.toLowerCase().startsWith("en");
+}
+
 /** Key holding a select option's translated label. */
 export function parameterOptionKey(
   catalog: ProcessingToolCatalog,
@@ -121,7 +153,7 @@ export function translateToolName(
   tool: ProcessingToolMeta,
 ): string {
   if (!catalog) return tool.name;
-  return t(toolNameKey(catalog, tool.id), { defaultValue: tool.name });
+  return text(t, toolNameKey(catalog, tool.id), tool.name);
 }
 
 /** A tool's description for the active locale (empty when it has none). */
@@ -132,12 +164,18 @@ export function translateToolDescription(
 ): string {
   if (!tool.description) return "";
   if (!catalog) return tool.description;
-  return t(toolDescriptionKey(catalog, tool.id), { defaultValue: tool.description });
+  return text(t, toolDescriptionKey(catalog, tool.id), tool.description);
 }
 
 /** A grouping label for the active locale. */
 export function translateToolGroup(t: TFunction, group: string): string {
-  return t(`${TOOL_GROUP_KEY_PREFIX}.${toolGroupKey(group)}`, { defaultValue: group });
+  return text(t, `${TOOL_GROUP_KEY_PREFIX}.${toolGroupKey(group)}`, group);
+}
+
+/** A raw Whitebox category label for the active locale. */
+export function translateWhiteboxCategory(t: TFunction, category?: string): string {
+  if (!category) return t("processing.whitebox.categoryGeneral");
+  return text(t, whiteboxCategoryKey(category), category);
 }
 
 /**
@@ -152,18 +190,16 @@ export function translateToolGroup(t: TFunction, group: string): string {
  * `processing.toolGroup.terrain`, which would render the palette with two
  * identically-labelled headings.
  *
- * So a heading is translated only when at least one of its tools comes from a
- * catalog GeoLibre owns. A group of purely Whitebox categories renders its
- * label verbatim, the way the rest of that catalog's metadata does; a mixed
- * group (none exist today, since no Whitebox category matches an owned label
- * exactly) counts as owned, because an owned tool sitting under the heading
- * means the label is ours to translate.
+ * So a heading is translated only when at least one of its tools comes from the
+ * vector registry, whose labels share the generated tool-group namespace.
+ * Whitebox categories still render verbatim: they key on raw category text and
+ * can collide with an owned label after slugging.
  */
 export function translateModelToolGroup(
   t: TFunction,
   group: { group: string; tools: { provider: string }[] },
 ): string {
-  const owned = group.tools.some((tool) => modelProviderCatalog(tool.provider) !== null);
+  const owned = group.tools.some((tool) => tool.provider === "vector");
   return owned ? translateToolGroup(t, group.group) : group.group;
 }
 
@@ -186,20 +222,85 @@ export function translateParameter<T extends AlgorithmParameter>(
   if (!catalog) return param;
   const translated: T = {
     ...param,
-    label: t(parameterLabelKey(catalog, toolId, param.id), { defaultValue: param.label }),
+    label: text(t, parameterLabelKey(catalog, toolId, param.id), param.label),
   };
   if (param.description) {
-    translated.description = t(parameterDescriptionKey(catalog, toolId, param.id), {
-      defaultValue: param.description,
-    });
+    translated.description = text(
+      t,
+      parameterDescriptionKey(catalog, toolId, param.id),
+      param.description,
+    );
   }
   if (param.options) {
     translated.options = param.options.map((option) => ({
       ...option,
-      label: t(parameterOptionKey(catalog, toolId, param.id, option.value), {
-        defaultValue: option.label,
-      }),
+      label: text(t, parameterOptionKey(catalog, toolId, param.id, option.value), option.label),
     }));
   }
   return translated;
+}
+
+/** Humanize a snake_case identifier into a Title Case display string. */
+export function humanizeParameterName(value: string): string {
+  return (
+    value
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Parameter"
+  );
+}
+
+/**
+ * A Whitebox manifest parameter label (humanized name) for the active locale.
+ */
+export function translateWhiteboxParameterLabel(
+  t: TFunction,
+  toolId: string,
+  param: WhiteboxToolParameter,
+): string {
+  return text(
+    t,
+    parameterLabelKey("whitebox", toolId, param.name),
+    humanizeParameterName(param.name),
+  );
+}
+
+/** A Whitebox parameter's combined form label and localized help text. */
+export function whiteboxParameterLabel(
+  t: TFunction,
+  language: string | null | undefined,
+  toolId: string,
+  param: WhiteboxToolParameter,
+): string {
+  const fallbackLabel = humanizeParameterName(param.name);
+  const label = localizedText(t, parameterLabelKey("whitebox", toolId, param.name), fallbackLabel);
+  const desc = localizedText(
+    t,
+    parameterDescriptionKey("whitebox", toolId, param.name),
+    param.description ?? "",
+  );
+  // A catalog entry is present even when a technical description intentionally
+  // equals the English manifest text. Suppress only a genuinely missing entry,
+  // except in English where the manifest help is already locale-appropriate.
+  const showDescription = desc.resolved || isEnglishLocale(language);
+  return desc.value && showDescription ? `${label.value}: ${desc.value}` : label.value;
+}
+
+/**
+ * A Whitebox manifest parameter help text for the active locale.
+ *
+ * The Processing toolbox uses the raw manifest for control selection as well as
+ * display: heuristics such as path, CRS, field, and extent detection read the
+ * English description. Translating the whole object would make those choices
+ * depend on the active locale, so callers should use this text for display and
+ * keep passing the original parameter to behavior-bearing code.
+ */
+export function translateWhiteboxParameterDescription(
+  t: TFunction,
+  toolId: string,
+  param: WhiteboxToolParameter,
+): string | undefined {
+  if (!param.description) return param.description;
+  return text(t, parameterDescriptionKey("whitebox", toolId, param.name), param.description);
 }

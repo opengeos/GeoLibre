@@ -21,6 +21,9 @@ repos:
         exclude: ^e2e/fixtures/malformed\.geojson$
       - id: check-added-large-files
         args: ["--maxkb=1024", "--enforce-all"]
+        # Full processing locale catalogs are generated and can exceed the
+        # generic 1MB guard while remaining reviewable as source catalogs.
+        exclude: ^apps/geolibre-desktop/src/i18n/locales/(en|zh)\.json$
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml

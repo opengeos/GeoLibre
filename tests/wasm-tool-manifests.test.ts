@@ -258,6 +258,20 @@ describe("mergeWasmToolManifests", () => {
     );
   });
 
+  it("hides a locked WASM-only pro-tier tool", () => {
+    const merged = mergeWasmToolManifests(
+      [],
+      [
+        { id: "pro_tool", locked: true, params: [] },
+        { id: "free_tool", locked: false, params: [] },
+      ],
+    );
+    assert.deepEqual(
+      merged.map((tool) => tool.id),
+      ["free_tool"],
+    );
+  });
+
   it("keeps catalog params when the WASM manifest declares none", () => {
     // geolibre-wasm ships 138 manifests with an empty `params` array — every
     // Hydrology → Flow Routing tool among them (d8_pointer, fill_depressions,

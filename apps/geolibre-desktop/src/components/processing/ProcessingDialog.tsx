@@ -45,6 +45,7 @@ import {
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   isTauri,
   openLocalDataFileWithFallback,
@@ -96,6 +97,14 @@ import {
 } from "../../lib/processing-history";
 import { CrsPickerInput } from "./CrsPickerInput";
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
+import {
+  whiteboxParameterLabel,
+  translateToolDescription,
+  translateToolName,
+  translateWhiteboxParameterLabel,
+  translateWhiteboxParameterDescription,
+  translateWhiteboxCategory,
+} from "../../lib/processing-tool-i18n";
 
 interface ProcessingDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
@@ -118,8 +127,11 @@ const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
 const PANEL_MIN_W = 560;
 const PANEL_MIN_H = 400;
 
-function toolLabel(tool: WhiteboxTool): string {
-  return tool.display_name || humanize(tool.id);
+function toolLabel(t: TFunction, tool: WhiteboxTool): string {
+  return translateToolName(t, "whitebox", {
+    id: tool.id,
+    name: tool.display_name || humanize(tool.id),
+  });
 }
 
 function humanize(value: string): string {
@@ -130,10 +142,6 @@ function humanize(value: string): string {
       .trim()
       .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Tool"
   );
-}
-
-function parameterLabel(param: WhiteboxToolParameter): string {
-  return param.description || humanize(param.name);
 }
 
 function isOutputParameter(param: WhiteboxToolParameter): boolean {
@@ -405,7 +413,7 @@ function jobStatusTone(job: WhiteboxJob | null): string {
 }
 
 export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const open = useAppStore((s) => s.ui.processingOpen);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const processingInitialTool = useAppStore((s) => s.ui.processingInitialTool);
@@ -883,33 +891,44 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     for (const tool of tools) {
       if (!matchesSource(tool)) continue;
       total += 1;
-      const name = tool.category || t("processing.whitebox.categoryGeneral");
-      counts.set(name, (counts.get(name) ?? 0) + 1);
+      const value = tool.category ?? "";
+      counts.set(value, (counts.get(value) ?? 0) + 1);
     }
-    const sorted = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const sorted = [...counts.entries()].sort((a, b) =>
+      translateWhiteboxCategory(t, a[0] || undefined).localeCompare(
+        translateWhiteboxCategory(t, b[0] || undefined),
+        i18n.language,
+      ),
+    );
     return [
       { value: "All", label: t("processing.whitebox.categoryAll", { total }) },
       ...sorted.map(([name, count]) => ({
         value: name,
-        label: `${name} (${count})`,
+        label: `${translateWhiteboxCategory(t, name || undefined)} (${count})`,
       })),
     ];
-  }, [tools, matchesSource]);
+  }, [tools, matchesSource, t, i18n.language]);
 
   const filteredTools = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return tools.filter((tool) => {
-      if (category !== "All" && (tool.category || "General") !== category) {
+      if (category !== "All" && (tool.category ?? "") !== category) {
         return false;
       }
       if (!matchesSource(tool)) return false;
       if (!normalizedQuery) return true;
-      return [tool.id, toolLabel(tool), tool.category || "", tool.summary || ""]
+      return [
+        tool.id,
+        toolLabel(t, tool),
+        tool.category ?? "",
+        translateWhiteboxCategory(t, tool.category),
+        tool.summary || "",
+      ]
         .join(" ")
         .toLowerCase()
         .includes(normalizedQuery);
     });
-  }, [category, matchesSource, query, tools]);
+  }, [category, matchesSource, query, t, tools]);
 
   const loadWhitebox = useCallback(async () => {
     setLoadingTools(true);
@@ -1014,7 +1033,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       setRuntimeAvailable(status.available);
       setRuntimeMessage(status.message);
       if (!status.available) {
-        await applyRemoteCatalogSnapshot(`${status.message} Showing GitHub catalog only.`, false);
+        await applyRemoteCatalogSnapshot(
+          `${status.message} ${t("processing.whitebox.showingSnapshotOnly")}`,
+          false,
+        );
         return;
       }
       let nextTools: WhiteboxTool[];
@@ -1024,16 +1046,13 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         await applyRemoteCatalogSnapshot(
           `${
             err instanceof Error ? err.message : t("processing.whitebox.errorLoadLive")
-          } Showing GitHub catalog only.`,
+          } ${t("processing.whitebox.showingSnapshotOnly")}`,
           true,
         );
         return;
       }
       if (nextTools.length === 0) {
-        await applyRemoteCatalogSnapshot(
-          "Live catalog is empty. Showing GitHub catalog only.",
-          true,
-        );
+        await applyRemoteCatalogSnapshot(t("processing.whitebox.liveCatalogEmpty"), true);
         return;
       }
       try {
@@ -1053,7 +1072,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       await applyRemoteCatalogSnapshot(
         `${
           err instanceof Error ? err.message : t("processing.whitebox.errorConnect")
-        } Showing GitHub catalog only.`,
+        } ${t("processing.whitebox.showingSnapshotOnly")}`,
         false,
       );
     } finally {
@@ -1420,7 +1439,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       // `selectedTool`, so switching tools while a job finishes does not
       // mislabel the imported layer.
       const jobTool = tools.find((item) => item.id === nextJob.tool_id);
-      const jobToolLabel = jobTool ? toolLabel(jobTool) : humanize(nextJob.tool_id);
+      const jobToolLabel = jobTool ? toolLabel(t, jobTool) : humanize(nextJob.tool_id);
       // This job's own run parameters (not a shared slot), consumed once here so a
       // concurrent re-run cannot repoint the output-path lookup below.
       const runParameters = runParametersByJobRef.current.get(nextJob.id) ?? {};
@@ -1476,13 +1495,13 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         }
       }
     },
-    [addGeoJsonLayer, mapControllerRef, onAddRaster, tools],
+    [addGeoJsonLayer, mapControllerRef, onAddRaster, t, tools],
   );
 
   useEffect(() => {
     if (job?.status !== "succeeded") return;
     void importGeoJsonOutputs(job).catch((err) => {
-      setError(err instanceof Error ? err.message : "Could not import Whitebox output.");
+      setError(err instanceof Error ? err.message : t("processing.whitebox.importOutputFailed"));
     });
   }, [importGeoJsonOutputs, job]);
 
@@ -1498,6 +1517,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     const layerInputs: Record<string, WhiteboxLayerInput | WhiteboxLayerInput[]> = {};
 
     for (const param of selectedTool.params ?? []) {
+      const parameterLabelText = translateWhiteboxParameterLabel(t, selectedTool.id, param);
       const value = values[param.name];
       if (
         param.required &&
@@ -1507,7 +1527,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           value === "" ||
           (Array.isArray(value) && value.length === 0))
       ) {
-        setError(`Missing required parameter: ${parameterLabel(param)}`);
+        setError(
+          t("processing.whitebox.missingRequiredParameter", {
+            label: parameterLabelText,
+          }),
+        );
         setRunningLocal(false);
         return;
       }
@@ -1519,7 +1543,9 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         const kind = parameterKind(param);
         if (!runLocal && browsed.some((input) => !input.geojson)) {
           setError(
-            `The sidecar cannot read browser-selected files for ${parameterLabel(param)}. Run locally (WASM), or enter filesystem paths available to the sidecar.`,
+            t("processing.whitebox.sidecarCannotReadBrowserFiles", {
+              label: parameterLabelText,
+            }),
           );
           setRunningLocal(false);
           return;
@@ -1542,7 +1568,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           .map((item) => layers.find((layer) => layer.id === item.slice(LAYER_TOKEN_PREFIX.length)))
           .filter((layer): layer is GeoLibreLayer => Boolean(layer));
         if (selectedLayers.length !== value.length) {
-          setError(`One or more selected layers for ${parameterLabel(param)} no longer exist.`);
+          setError(
+            t("processing.whitebox.selectedLayersMissing", {
+              label: parameterLabelText,
+            }),
+          );
           setRunningLocal(false);
           return;
         }
@@ -1551,7 +1581,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           const missing = selectedLayers.find((layer) => !layer.geojson);
           if (missing) {
             setError(
-              `Layer "${missing.name}" has no in-memory GeoJSON for ${parameterLabel(param)}.`,
+              t("processing.whitebox.layerMissingGeoJson", {
+                layer: missing.name,
+                label: parameterLabelText,
+              }),
             );
             setRunningLocal(false);
             return;
@@ -1566,7 +1599,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           for (const layer of selectedLayers) {
             const bytes = await fetchLayerBytes(layer);
             if (!bytes) {
-              setError(`Layer "${layer.name}" is not fetchable for ${parameterLabel(param)}.`);
+              setError(
+                t("processing.whitebox.layerNotFetchable", {
+                  layer: layer.name,
+                  label: parameterLabelText,
+                }),
+              );
               setRunningLocal(false);
               return;
             }
@@ -1586,7 +1624,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           const missingIndex = paths.findIndex((path) => !path);
           if (missingIndex >= 0) {
             setError(
-              `Layer "${selectedLayers[missingIndex].name}" has no filesystem path for ${parameterLabel(param)}.`,
+              t("processing.whitebox.layerMissingPath", {
+                layer: selectedLayers[missingIndex].name,
+                label: parameterLabelText,
+              }),
             );
             setRunningLocal(false);
             return;
@@ -1642,7 +1683,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     const tracker = beginProcessingRun({
       kind: "whitebox",
       toolId: selectedTool.id,
-      toolName: toolLabel(selectedTool),
+      toolName: toolLabel(t, selectedTool),
       engine: runLocal ? "wasm" : "sidecar",
       parameters: { ...values },
     });
@@ -1858,7 +1899,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               ) : (
                 <Server className="h-4 w-4" />
               )}
-              Start server
+              {t("processing.whitebox.startServer")}
             </Button>
           )}
 
@@ -1874,7 +1915,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               ) : (
                 <ServerOff className="h-4 w-4" />
               )}
-              Stop server
+              {t("processing.whitebox.stopServer")}
             </Button>
           )}
 
@@ -1940,7 +1981,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               {loadingTools ? (
                 <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading
+                  {t("processing.whitebox.loadingTools")}
                 </div>
               ) : filteredTools.length === 0 ? (
                 <div className="p-3 text-sm text-muted-foreground">
@@ -1960,11 +2001,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                     onClick={() => setSelectedToolId(tool.id)}
                   >
                     <span className="block truncate font-medium">
-                      {tool.locked ? "[Locked] " : ""}
-                      {toolLabel(tool)}
+                      {tool.locked ? t("processing.whitebox.lockedPrefix") : ""}
+                      {toolLabel(t, tool)}
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {tool.category || "General"}
+                      {translateWhiteboxCategory(t, tool.category)}
                     </span>
                   </button>
                 ))
@@ -1986,7 +2027,9 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
             <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
               <div className="min-w-0 grow basis-48">
                 <h3 className="truncate text-base font-semibold">
-                  {selectedTool ? toolLabel(selectedTool) : t("processing.whitebox.noToolSelected")}
+                  {selectedTool
+                    ? toolLabel(t, selectedTool)
+                    : t("processing.whitebox.noToolSelected")}
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {selectedTool?.id}
@@ -2044,7 +2087,13 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               </Button>
             </div>
             {selectedTool?.summary && (
-              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{selectedTool.summary}</p>
+              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                {translateToolDescription(t, "whitebox", {
+                  id: selectedTool.id,
+                  name: toolLabel(t, selectedTool),
+                  description: selectedTool.summary,
+                })}
+              </p>
             )}
             {selectedTool?.locked && (
               <p className="mt-2 flex items-center gap-2 text-sm text-destructive">
@@ -2097,6 +2146,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                     return (
                       <ExtentParameterGroup
                         key="extent"
+                        toolId={selectedTool.id}
                         params={cornerExtentParams}
                         values={values}
                         onChange={updateValue}
@@ -2203,6 +2253,9 @@ function JobOutputPanel({ job }: { job: WhiteboxJob }) {
   const outputs = outputEntries(job.outputs);
   const hasMessages = job.messages.length > 0;
   const hasOutputs = outputs.length > 0;
+  const statusLabel = t(`processing.whitebox.jobStatus.${job.status}`, {
+    defaultValue: job.status,
+  });
 
   return (
     <div className="grid gap-2">
@@ -2214,7 +2267,7 @@ function JobOutputPanel({ job }: { job: WhiteboxJob }) {
         ) : (
           <Loader2 className="h-4 w-4 animate-spin" />
         )}
-        {job.status}
+        {statusLabel}
         {job.error ? `: ${job.error}` : ""}
       </p>
       <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
@@ -2245,6 +2298,8 @@ const EXTENT_LABEL_KEYS = {
 } as const;
 
 interface ExtentParameterGroupProps {
+  /** The tool whose boundary parameters are rendered; used for i18n keys. */
+  toolId: string;
   /** The tool's four boundary parameters, in reading order. */
   params: WhiteboxToolParameter[];
   values: ParameterValues;
@@ -2269,6 +2324,7 @@ interface ExtentParameterGroupProps {
  *   map-shortcut callbacks.
  */
 function ExtentParameterGroup({
+  toolId,
   params,
   values,
   onChange,
@@ -2329,12 +2385,13 @@ function ExtentParameterGroup({
           // of an empty one.
           const labelKey = EXTENT_LABEL_KEYS[param.name as keyof typeof EXTENT_LABEL_KEYS];
           const value = values[param.name];
+          const description = translateWhiteboxParameterDescription(t, toolId, param);
           return (
             <div key={param.name} className="grid gap-1">
               <Label
                 htmlFor={`whitebox-${param.name}`}
                 className="text-xs text-muted-foreground"
-                title={param.description || undefined}
+                title={description || undefined}
               >
                 {labelKey ? t(labelKey) : humanize(param.name)}
               </Label>
@@ -2399,13 +2456,15 @@ function ParameterField({
   runLocal,
   value,
 }: ParameterFieldProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const kind = parameterKind(param);
   const availableLayers = layers.filter((layer) => canUseLayerForParameter(layer, param));
   // Loaded layers that can fill this subset `url` field, only computed for the
   // url param the dialog wired `onPopulateFromLayer` to.
   const subsetUrlLayers = onPopulateFromLayer ? layersForSubsetUrl(toolId, layers) : [];
-  const label = parameterLabel(param);
+  // Display text resolves through i18n, while the original manifest parameter
+  // continues to feed the control-selection heuristics below.
+  const label = whiteboxParameterLabel(t, i18n.language, toolId, param);
   const valueText = value === undefined || value === null ? "" : String(value);
 
   return (
@@ -2620,7 +2679,7 @@ function ParameterField({
           id={`whitebox-${param.name}`}
           type="text"
           value={valueText}
-          placeholder={isOutputParameter(param) ? "Auto" : undefined}
+          placeholder={isOutputParameter(param) ? t("processing.whitebox.auto") : undefined}
           onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
         />
       )}

@@ -68,7 +68,15 @@ import {
   TriangleAlert,
   Puzzle,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactElement,
+  type RefObject,
+} from "react";
 import { Trans, useTranslation } from "react-i18next";
 import {
   DEFAULT_DESKTOP_LAYOUT_SETTINGS,
@@ -181,6 +189,29 @@ interface SettingsDialogProps {
   /** Flip the light/dark mode; the Appearance cards drive the same toggle. */
   onToggleThemeMode: () => void;
 }
+
+type TransComponents = Record<string, ReactElement>;
+
+type SettingsTransProps = {
+  i18nKey: "settings.env.tokenDescription" | "settings.env.cesiumTokenDescription";
+  values?: { shareHost: string };
+  components?: TransComponents;
+};
+
+// TS 7 exhausts its instantiation depth when it expands Trans's catalog-wide
+// generics from this large generated locale type. Keep the key union explicit.
+const SettingsTrans = Trans as ComponentType<SettingsTransProps>;
+
+const cesiumTokenComponents: TransComponents = {
+  tokenLink: (
+    <a
+      className="underline"
+      href="https://ion.cesium.com/tokens"
+      target="_blank"
+      rel="noreferrer noopener"
+    />
+  ),
+};
 
 const SECTION_ITEMS: Array<{
   id: SettingsSection;
@@ -396,6 +427,16 @@ export function SettingsDialog({
   const shareBaseUrl = shareHostState.baseUrl;
   const shareHost = shareHostLabel();
   const shareSettingsUrl = shareBaseUrl ? `${shareBaseUrl}/settings` : null;
+  const shareTokenComponents: TransComponents = {
+    tokenLink: (
+      <a
+        className="underline"
+        href={shareSettingsUrl ?? undefined}
+        target="_blank"
+        rel="noreferrer noopener"
+      />
+    ),
+  };
   // No usable host (sharing turned off, or a configured address that was
   // rejected) means the token field is dead: it would authenticate against a
   // server this deployment never talks to. Say so instead of rendering guidance
@@ -2368,21 +2409,12 @@ export function SettingsDialog({
                     {shareTokenUsable ? (
                       <>
                         <p className="text-xs text-muted-foreground">
-                          <Trans
+                          <SettingsTrans
                             i18nKey="settings.env.tokenDescription"
                             values={{ shareHost }}
-                            components={{
-                              // Non-null here: this branch requires shareBaseUrl,
-                              // which is what shareSettingsUrl is derived from.
-                              tokenLink: (
-                                <a
-                                  className="underline"
-                                  href={shareSettingsUrl ?? undefined}
-                                  target="_blank"
-                                  rel="noreferrer noopener"
-                                />
-                              ),
-                            }}
+                            // Non-null here: this branch requires shareBaseUrl,
+                            // which is what shareSettingsUrl is derived from.
+                            components={shareTokenComponents}
                           />
                         </p>
                         <Input
@@ -2407,18 +2439,9 @@ export function SettingsDialog({
                   <div className="space-y-2 border-t pt-5">
                     <h3 className="text-sm font-semibold">{t("settings.env.cesiumTokenTitle")}</h3>
                     <p className="text-xs text-muted-foreground">
-                      <Trans
+                      <SettingsTrans
                         i18nKey="settings.env.cesiumTokenDescription"
-                        components={{
-                          tokenLink: (
-                            <a
-                              className="underline"
-                              href="https://ion.cesium.com/tokens"
-                              target="_blank"
-                              rel="noreferrer noopener"
-                            />
-                          ),
-                        }}
+                        components={cesiumTokenComponents}
                       />
                     </p>
                     <Input
