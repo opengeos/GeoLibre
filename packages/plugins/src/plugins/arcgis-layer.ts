@@ -1858,7 +1858,8 @@ async function fetchArcGISGeoJson(
  * MultiPolygon whose nested rings are all independent polygons. MapLibre then
  * fills the intended holes. This guarded containment heuristic is limited to
  * small all-one-ring exports; ordinary polygons, structured multipolygons,
- * and large multipart features pass through unchanged.
+ * large multipart features, and boundary-touching rings pass through
+ * unchanged rather than risk destructive reclassification.
  */
 function repairArcGISNestedPolygonRings(feature: Feature): Feature {
   const geometry = feature.geometry;
@@ -1873,6 +1874,7 @@ function repairArcGISNestedPolygonRings(feature: Feature): Feature {
 
   const rings = geometry.coordinates.map(([ring]) => ({
     area: signedRingArea(ring),
+    bounds: ringBounds(ring),
     depth: 0,
     parent: -1,
     ring,
@@ -1889,6 +1891,7 @@ function repairArcGISNestedPolygonRings(feature: Feature): Feature {
         continue;
       }
       if (
+        boundsContain(rings[candidate].bounds, rings[child].bounds) &&
         Math.abs(rings[candidate].area) < parentArea &&
         ringStrictlyContains(rings[candidate].ring, rings[child].ring)
       ) {
@@ -1928,6 +1931,29 @@ function signedRingArea(ring: Position[]): number {
     twiceArea += ring[index][0] * ring[index + 1][1] - ring[index + 1][0] * ring[index][1];
   }
   return twiceArea / 2;
+}
+
+type RingBounds = [west: number, south: number, east: number, north: number];
+
+function ringBounds(ring: Position[]): RingBounds {
+  return ring.reduce<RingBounds>(
+    (bounds, position) => [
+      Math.min(bounds[0], position[0]),
+      Math.min(bounds[1], position[1]),
+      Math.max(bounds[2], position[0]),
+      Math.max(bounds[3], position[1]),
+    ],
+    [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, -Infinity, -Infinity],
+  );
+}
+
+function boundsContain(container: RingBounds, child: RingBounds): boolean {
+  return (
+    container[0] <= child[0] &&
+    container[1] <= child[1] &&
+    container[2] >= child[2] &&
+    container[3] >= child[3]
+  );
 }
 
 function ringCrossesAntimeridian(ring: Position[]): boolean {
