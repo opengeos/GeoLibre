@@ -413,7 +413,7 @@ function jobStatusTone(job: WhiteboxJob | null): string {
 }
 
 export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const open = useAppStore((s) => s.ui.processingOpen);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const processingInitialTool = useAppStore((s) => s.ui.processingInitialTool);
@@ -894,7 +894,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       const value = tool.category ?? "";
       counts.set(value, (counts.get(value) ?? 0) + 1);
     }
-    const sorted = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const sorted = [...counts.entries()].sort((a, b) =>
+      translateWhiteboxCategory(t, a[0] || undefined).localeCompare(
+        translateWhiteboxCategory(t, b[0] || undefined),
+        i18n.language,
+      ),
+    );
     return [
       { value: "All", label: t("processing.whitebox.categoryAll", { total }) },
       ...sorted.map(([name, count]) => ({
@@ -902,7 +907,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         label: `${translateWhiteboxCategory(t, name || undefined)} (${count})`,
       })),
     ];
-  }, [tools, matchesSource, t]);
+  }, [tools, matchesSource, t, i18n.language]);
 
   const filteredTools = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -2451,7 +2456,7 @@ function ParameterField({
   runLocal,
   value,
 }: ParameterFieldProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const kind = parameterKind(param);
   const availableLayers = layers.filter((layer) => canUseLayerForParameter(layer, param));
   // Loaded layers that can fill this subset `url` field, only computed for the
@@ -2459,7 +2464,7 @@ function ParameterField({
   const subsetUrlLayers = onPopulateFromLayer ? layersForSubsetUrl(toolId, layers) : [];
   // Display text resolves through i18n, while the original manifest parameter
   // continues to feed the control-selection heuristics below.
-  const label = whiteboxParameterLabel(t, toolId, param);
+  const label = whiteboxParameterLabel(t, i18n.language, toolId, param);
   const valueText = value === undefined || value === null ? "" : String(value);
 
   return (

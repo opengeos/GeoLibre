@@ -124,13 +124,7 @@ function text(t: TFunction, key: string, fallback: string): string {
   return localizedText(t, key, fallback).value;
 }
 
-function isEnglishLocale(t: TFunction): boolean {
-  const localeAwareT = t as {
-    lng?: unknown;
-    lngs?: readonly unknown[];
-    i18n?: { language?: unknown };
-  };
-  const language = localeAwareT.lng ?? localeAwareT.lngs?.[0] ?? localeAwareT.i18n?.language;
+function isEnglishLocale(language: string | null | undefined): boolean {
   return typeof language === "string" && language.toLowerCase().startsWith("en");
 }
 
@@ -267,6 +261,7 @@ export function translateWhiteboxParameterLabel(
 /** A Whitebox parameter's combined form label and localized help text. */
 export function whiteboxParameterLabel(
   t: TFunction,
+  language: string | null | undefined,
   toolId: string,
   param: WhiteboxToolParameter,
 ): string {
@@ -280,7 +275,7 @@ export function whiteboxParameterLabel(
   // A catalog entry is present even when a technical description intentionally
   // equals the English manifest text. Suppress only a genuinely missing entry,
   // except in English where the manifest help is already locale-appropriate.
-  const showDescription = desc.resolved || isEnglishLocale(t);
+  const showDescription = desc.resolved || isEnglishLocale(language);
   return desc.value && showDescription ? `${label.value}: ${desc.value}` : label.value;
 }
 

@@ -14,16 +14,10 @@ import {
   whiteboxParameterLabel,
 } from "../apps/geolibre-desktop/src/lib/processing-tool-i18n";
 
-function fakeT(catalog: Record<string, string> = {}, language = "zh-CN"): TFunction {
+function fakeT(catalog: Record<string, string> = {}): TFunction {
   const translate = ((key: string, options?: { defaultValue?: string }) =>
     catalog[key] ?? options?.defaultValue ?? key) as TFunction;
-  return Object.assign(translate, { lng: language });
-}
-
-function fakeArrayLanguageT(catalog: Record<string, string>, languages: string[]): TFunction {
-  const translate = ((key: string, options?: { defaultValue?: string }) =>
-    catalog[key] ?? options?.defaultValue ?? key) as TFunction;
-  return Object.assign(translate, { lngs: languages });
+  return translate;
 }
 
 describe("toolGroupKey", () => {
@@ -226,7 +220,7 @@ describe("Whitebox metadata translation", () => {
     const t = fakeT({
       "processing.toolMeta.whitebox.simplify_shared_edges.params.tolerance.label": "容差",
     });
-    assert.equal(whiteboxParameterLabel(t, "simplify_shared_edges", param), "容差");
+    assert.equal(whiteboxParameterLabel(t, "zh-CN", "simplify_shared_edges", param), "容差");
   });
 
   it("appends a translated parameter description to its label", () => {
@@ -236,7 +230,10 @@ describe("Whitebox metadata translation", () => {
       "processing.toolMeta.whitebox.simplify_shared_edges.params.tolerance.description":
         "最小偏转角。",
     });
-    assert.equal(whiteboxParameterLabel(t, "simplify_shared_edges", param), "容差: 最小偏转角。");
+    assert.equal(
+      whiteboxParameterLabel(t, "zh-CN", "simplify_shared_edges", param),
+      "容差: 最小偏转角。",
+    );
   });
 
   it("appends a catalog description that intentionally matches the English text", () => {
@@ -245,28 +242,28 @@ describe("Whitebox metadata translation", () => {
       "processing.toolMeta.whitebox.measure.params.units.label": "单位",
       "processing.toolMeta.whitebox.measure.params.units.description": "meters",
     });
-    assert.equal(whiteboxParameterLabel(t, "measure", param), "单位: meters");
+    assert.equal(whiteboxParameterLabel(t, "zh-CN", "measure", param), "单位: meters");
   });
 
   it("keeps the English description fallback for English locales", () => {
     const param = { name: "tolerance", description: "Minimum deflection angle." };
     assert.equal(
-      whiteboxParameterLabel(fakeT({}, "en-US"), "simplify_shared_edges", param),
+      whiteboxParameterLabel(fakeT(), "en-US", "simplify_shared_edges", param),
       "Tolerance: Minimum deflection angle.",
     );
   });
 
-  it("detects English when i18next exposes an array of languages", () => {
+  it("does not infer English from the translation function itself", () => {
     const param = { name: "tolerance", description: "Minimum deflection angle." };
     assert.equal(
-      whiteboxParameterLabel(fakeArrayLanguageT({}, ["en-US"]), "simplify_shared_edges", param),
-      "Tolerance: Minimum deflection angle.",
+      whiteboxParameterLabel(fakeT(), undefined, "simplify_shared_edges", param),
+      "Tolerance",
     );
   });
 
   it("does not splice English help into a symbol-only label in Chinese", () => {
     const param = { name: "k", description: "Number of nearest neighbours." };
-    assert.equal(whiteboxParameterLabel(fakeT(), "knn_classification", param), "K");
+    assert.equal(whiteboxParameterLabel(fakeT(), "zh-CN", "knn_classification", param), "K");
   });
 });
 

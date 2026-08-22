@@ -7,8 +7,8 @@
 //
 // Groups the requested top-level categories (Conversion, Hydrology, LiDAR,
 // Network, Projection, Raster, Remote Sensing, Terrain, Vector) by the catalog's
-// "<Category> - <Subcategory>" naming. Tool/subcategory names are catalog data
-// and are emitted verbatim (not translated), matching the dialog.
+// "<Category> - <Subcategory>" naming. Tool/subcategory names are English
+// catalog data and are translated at render time via ProcessingMenu.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -200,8 +200,8 @@ async function main() {
   L.push(`// are grouped under a "${GEOLIBRE_SUBCATEGORY}" subheading. Tool ids match the`);
   L.push("// runtime/sidecar/WASM catalog used by ProcessingDialog.");
   L.push("// Regenerate with scripts/gen-whitebox-menu-catalog.mjs; do not hand-edit.");
-  L.push("// Tool/subcategory names are catalog data and are intentionally not");
-  L.push("// translated, matching the Whitebox toolbox dialog.");
+  L.push("// Tool/subcategory names are English catalog data; ProcessingMenu");
+  L.push("// translates them through processing.whitebox.menuTool/menuSubcategory.");
   L.push("");
   L.push('import type { ParseKeys } from "i18next";');
   L.push("");
@@ -213,7 +213,7 @@ async function main() {
   L.push("}");
   L.push("");
   L.push("export interface WhiteboxMenuSubcategory {");
-  L.push("  /** Subcategory label (catalog data, not translated). */");
+  L.push("  /** Subcategory label (English; translated at render time via i18n). */");
   L.push("  label: string;");
   L.push("  tools: WhiteboxMenuTool[];");
   L.push("}");
