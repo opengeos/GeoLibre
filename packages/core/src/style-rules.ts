@@ -1,11 +1,9 @@
 // The colours a control gave an archive's source layers.
 //
-// A control assigns one per source layer when it adds an archive and records them all, but a layer
-// carries a single style — so every part drew in the first one's colour. Where an archive is still
-// one layer (the STAC panel, an offline extract), this is what tells each source layer apart.
-//
-// An archive added through the PMTiles control is expanded into a layer per source layer instead,
-// each with its own colour already in its style, and never reaches this.
+// A control assigns one per source layer and records them all, but a layer carries a single style,
+// so every part drew in the first one's colour. This is for archives that are still one layer — the
+// STAC panel's, an offline extract. One added through the PMTiles control is split into a layer per
+// source layer and never reaches here.
 
 import type { GeoLibreLayer, LayerStyle } from "./types";
 
@@ -21,12 +19,9 @@ export function layerSourceLayers(layer: GeoLibreLayer): string[] {
 /**
  * The colour a control gave one source layer when it added the archive, or undefined.
  *
- * A user restyling the layer takes it back: the layer's `fillColor` is seeded from the *first*
- * source layer's colour when the archive is added, so while those still agree nobody has touched
- * the Style panel. Once they differ the user's colour is the whole archive's.
- *
- * That comparison needs a seed to compare against. A layer that records colours but declares no
- * source layers has none, so a restyle cannot be detected and the assignment stands.
+ * A restyle takes it back: the layer's `fillColor` is seeded from the *first* source layer's colour
+ * when the archive is added, so while they agree nobody has touched the Style panel. With no source
+ * layers declared there is no seed to compare, and the assignment stands.
  */
 export function assignedSourceLayerColor(
   layer: GeoLibreLayer,
@@ -44,11 +39,8 @@ export function assignedSourceLayerColor(
 }
 
 /**
- * How one source layer of an archive should be painted.
- *
- * @param layer - The layer being rendered.
- * @param sourceLayer - The source layer about to be drawn, or undefined for a layer that is one.
- * @returns The style to paint it with.
+ * How one source layer of an archive should be painted. `sourceLayer` is undefined for a layer that
+ * is not part of one, which paints as itself.
  */
 export function styleForSourceLayer(layer: GeoLibreLayer, sourceLayer?: string): LayerStyle {
   if (!sourceLayer) return layer.style;

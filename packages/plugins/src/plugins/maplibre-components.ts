@@ -11,7 +11,6 @@ import {
 } from "@geolibre/core";
 import {
   createPMTilesArchiveLayers,
-  createPMTilesStoreLayer,
   type PMTilesStoreLayerOptions,
 } from "@geolibre/map/pmtiles-layer";
 import type {
@@ -4808,9 +4807,11 @@ function createPMTilesLayerAddHandler(): PMTilesLayerEventHandler {
 
     const store = useAppStore.getState();
     const layers = pmtilesStoreLayers(event.layerId, layerInfo);
-    const known = layers.filter((layer) => store.layers.some((item) => item.id === layer.id));
-    if (known.length > 0) {
-      for (const layer of known) {
+    // Each layer is added or updated on its own, so a later event reporting a source layer the
+    // first did not still lands rather than being skipped as "this archive is already here".
+    const added: string[] = [];
+    for (const layer of layers) {
+      if (store.layers.some((item) => item.id === layer.id)) {
         store.updateLayer(layer.id, {
           metadata: layer.metadata,
           opacity: layer.opacity,
@@ -4818,13 +4819,13 @@ function createPMTilesLayerAddHandler(): PMTilesLayerEventHandler {
           style: layer.style,
           visible: layer.visible,
         });
+        continue;
       }
-      return;
+      store.addLayer(layer);
+      added.push(layer.id);
     }
-    for (const layer of layers) store.addLayer(layer);
-    // An archive of several source layers is a folder of them, named after the archive, so the
-    // panel shows one row that opens rather than a run of loose layers.
-    if (layers.length > 1) {
+    // An archive of several source layers is a folder of them, named after the archive.
+    if (layers.length > 1 && added.length === layers.length) {
       store.addLayerGroup(
         layerInfo.name || layerNameFromUrl(layerInfo.url, event.layerId),
         layers.map((layer) => layer.id),
@@ -5423,11 +5424,6 @@ function createGeoTiffRasterStoreLayer(state: GeoTiffRasterLayerState): GeoLibre
     },
     sourcePath: state.url,
   };
-}
-
-/** @internal Exported only so the control's layer shape can be unit-tested. */
-export function pmtilesStoreLayer(id: string, layerInfo: PMTilesLayerInfo): GeoLibreLayer {
-  return createPMTilesStoreLayer(pmtilesLayerOptions(id, layerInfo));
 }
 
 /**

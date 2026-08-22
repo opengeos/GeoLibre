@@ -8,6 +8,9 @@ import { syncLayer } from "../packages/map/src/layer-sync";
 // and there are several, so each is pinned here.
 type Painted = Record<string, { color?: string; visibility?: string }>;
 
+// Whichever of these a layer kind paints with is the colour under test.
+const colorKeys = ["fill-color", "fill-extrusion-color", "line-color", "circle-color"];
+
 function mapStub(nativeIds: string[], sourceLayerOf: (id: string) => string | undefined) {
   const painted: Painted = {};
   const record = (id: string) => (painted[id] ??= {});
@@ -19,7 +22,7 @@ function mapStub(nativeIds: string[], sourceLayerOf: (id: string) => string | un
         nativeIds.includes(id) ? { id, type: "fill", sourceLayer: sourceLayerOf(id) } : undefined,
       getSource: () => ({ id: "src" }),
       getPaintProperty: (id: string, key: string) =>
-        key === "fill-color" ? painted[id]?.color : undefined,
+        colorKeys.includes(key) ? painted[id]?.color : undefined,
       getLayoutProperty: (id: string, key: string) =>
         key === "visibility" ? painted[id]?.visibility : undefined,
       getFilter: () => undefined,
@@ -29,8 +32,9 @@ function mapStub(nativeIds: string[], sourceLayerOf: (id: string) => string | un
         const id = String(spec.id);
         const paint = (spec.paint ?? {}) as Record<string, unknown>;
         const layout = (spec.layout ?? {}) as Record<string, unknown>;
+        const color = colorKeys.map((key) => paint[key]).find((value) => value !== undefined);
         painted[id] = {
-          color: paint["fill-color"] === undefined ? undefined : String(paint["fill-color"]),
+          color: color === undefined ? undefined : String(color),
           visibility: layout.visibility === undefined ? undefined : String(layout.visibility),
         };
       },
@@ -41,7 +45,7 @@ function mapStub(nativeIds: string[], sourceLayerOf: (id: string) => string | un
         if (key === "visibility") record(id).visibility = String(value);
       },
       setPaintProperty: (id: string, key: string, value: unknown) => {
-        if (key === "fill-color") record(id).color = String(value);
+        if (colorKeys.includes(key)) record(id).color = String(value);
       },
       setLayerZoomRange: () => {},
     },
@@ -115,5 +119,34 @@ describe("an archive's assigned colours reach every kind of vector archive", () 
     assert.equal(roads[1].color, "#ff0000");
     assert.ok(water, "a fill layer was created for water");
     assert.equal(water[1].color, "#00ff00");
+  });
+});
+
+// The extrusion branch is a fourth paint call in the same loop, and takes the same part style as
+// its three neighbours — but paints from `extrusionColor`, which the assignment does not touch.
+describe("an extruded archive layer", () => {
+  it("keeps the extrusion colour rather than taking the source layer's", () => {
+    const layer = {
+      ...base,
+      type: "vector-tiles",
+      source: {
+        type: "vector",
+        tiles: ["https://x/{z}/{x}/{y}.pbf"],
+        sourceLayers: ["roads", "water"],
+      },
+      style: { ...base.style, extrusionEnabled: true },
+      metadata: { sourceLayerColors: { roads: "#ff0000", water: "#00ff00" } },
+    } as unknown as GeoLibreLayer;
+    const { map, painted } = mapStub([], () => undefined);
+
+    syncLayer(map as never, layer);
+
+    const water = Object.entries(painted).find(
+      ([id]) => id.includes("extrusion") && id.includes("water"),
+    );
+    assert.ok(water, "an extrusion layer was created for water");
+    // A user who turned extrusion on chose this colour in the Style panel; the archive's palette,
+    // which exists to tell flat parts apart, does not overrule it.
+    assert.equal(water[1].color, DEFAULT_LAYER_STYLE.extrusionColor);
   });
 });

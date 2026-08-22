@@ -919,11 +919,9 @@ function ensurePMTilesExternalLayer(
   }
 
   for (const sourceLayer of sourceLayers) {
-    // Created with the source layer's own colour rather than the layer's, so an archive that is
-    // still one layer is legible from the first frame. `setExternalNativeLayerPaint` below resolves
-    // the same colour on every later sync; both read `styleForSourceLayer`, so neither can drift.
+    // Created with the source layer's own colour; `setExternalNativeLayerPaint` below resolves the
+    // same one on later syncs. Both read `styleForSourceLayer`, so neither can drift.
     const partStyle = styleForSourceLayer(layer, sourceLayer);
-    const partVisibility = layer.visible ? "visible" : "none";
     const fillId = getPMTilesNativeLayerId(
       nativeLayerIds,
       pmtilesVectorLayerId(sourceId, sourceLayer, "fill"),
@@ -948,7 +946,7 @@ function ensurePMTilesExternalLayer(
         ...styleLayerZoomRange(layer.style),
         filter: withFeatureFilters(layer, ["==", ["geometry-type"], "Polygon"]),
         paint: fillPaint(partStyle, layer.opacity),
-        layout: { visibility: partVisibility },
+        layout: { visibility: layer.visible ? "visible" : "none" },
       },
       beforeId,
     );
@@ -968,7 +966,7 @@ function ensurePMTilesExternalLayer(
           ["==", ["geometry-type"], "Polygon"],
         ]),
         paint: linePaint(partStyle, layer.opacity),
-        layout: { visibility: partVisibility },
+        layout: { visibility: layer.visible ? "visible" : "none" },
       },
       beforeId,
     );
@@ -984,7 +982,7 @@ function ensurePMTilesExternalLayer(
         ...styleLayerZoomRange(layer.style),
         filter: withFeatureFilters(layer, ["==", ["geometry-type"], "Point"]),
         paint: circlePaint(partStyle, layer.opacity),
-        layout: { visibility: partVisibility },
+        layout: { visibility: layer.visible ? "visible" : "none" },
       },
       beforeId,
     );
@@ -1746,8 +1744,7 @@ function setExternalNativeLayerPaint(
   layer: GeoLibreLayer,
   sourceLayer?: string,
 ): void {
-  // A source layer may have its own colour from the archive that holds it. MapLibre knows which
-  // one this native layer draws, so the caller need not decode its id.
+  // MapLibre knows which source layer this native layer draws, so no id decoding is needed.
   const style = styleForSourceLayer(layer, sourceLayer);
   const paint =
     nativeLayerType === "fill"
@@ -1927,9 +1924,8 @@ function applyVectorDataRenderLayers(
     ? { source: src, "source-layer": sourceLayer }
     : { source: src };
 
-  // A vector source can be one layer of an archive, which the archive may have given its own
-  // colour. `sourceLayer` is undefined for an ordinary source, and `styleForSourceLayer` then
-  // answers with the layer's own style.
+  // `sourceLayer` names one layer of an archive, which may have its own colour; undefined for an
+  // ordinary source.
   const partStyle = styleForSourceLayer(layer, sourceLayer);
   const visibility = layer.visible ? "visible" : "none";
   const opacity = layer.opacity;
@@ -3079,13 +3075,15 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
     // changes — without it only zooms the user had not visited yet look updated.
     updateVectorSourceEndpoint(existingSource, url, tiles);
   }
+  const visibility = layer.visible ? "visible" : "none";
   const sourceLayers = getVectorTileSourceLayers(layer);
   const currentLayerIds = new Set(vectorTileStyleLayerIds(layer));
 
   for (const sourceLayer of sourceLayers) {
-    // Each source layer draws in the colour the archive gave it, where it named one.
+    // Each source layer draws in the colour the archive gave it, where it named one. Passed to the
+    // extrusion branch too, though it paints from `extrusionColor` and so is unaffected today —
+    // otherwise that branch is the one left behind when the part style covers another property.
     const partStyle = styleForSourceLayer(layer, sourceLayer);
-    const partVisible = layer.visible;
     const layerPart = vectorTileScopedSourceLayer(layer, sourceLayer);
     if (layer.style.extrusionEnabled) {
       removeIfExists(map, vectorTileLayerId(layer.id, false, layerPart));
@@ -3107,8 +3105,8 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
             true,
             false,
           ]),
-          paint: fillExtrusionPaint(layer.style, layer.opacity),
-          layout: { visibility: partVisible ? "visible" : "none" },
+          paint: fillExtrusionPaint(partStyle, layer.opacity),
+          layout: { visibility },
         },
         beforeId,
       );
@@ -3131,7 +3129,7 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
             false,
           ]),
           paint: fillPaint(partStyle, layer.opacity),
-          layout: { visibility: partVisible ? "visible" : "none" },
+          layout: { visibility },
         },
         beforeId,
       );
@@ -3152,7 +3150,7 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
             false,
           ]),
           paint: linePaint(partStyle, layer.opacity),
-          layout: { visibility: partVisible ? "visible" : "none" },
+          layout: { visibility },
         },
         beforeId,
       );
@@ -3173,7 +3171,7 @@ function syncVectorTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
             false,
           ]),
           paint: circlePaint(partStyle, layer.opacity),
-          layout: { visibility: partVisible ? "visible" : "none" },
+          layout: { visibility },
         },
         beforeId,
       );
@@ -3211,13 +3209,13 @@ function syncMbtilesVectorLayer(
     });
   }
 
+  const visibility = layer.visible ? "visible" : "none";
   const sourceLayers = getMbtilesSourceLayers(layer);
   const currentLayerIds = new Set(mbtilesStyleLayerIds(layer));
 
   for (const sourceLayer of sourceLayers) {
     // Each source layer draws in the colour the archive gave it, where it named one.
     const partStyle = styleForSourceLayer(layer, sourceLayer);
-    const partVisibility = layer.visible ? "visible" : "none";
     const fillId = mbtilesFillLayerId(layer.id, sourceLayer);
     const extrusionId = mbtilesExtrusionLayerId(layer.id, sourceLayer);
 
@@ -3240,7 +3238,7 @@ function syncMbtilesVectorLayer(
             false,
           ]),
           paint: fillExtrusionPaint(partStyle, layer.opacity),
-          layout: { visibility: partVisibility },
+          layout: { visibility },
         },
         beforeId,
       );
@@ -3263,7 +3261,7 @@ function syncMbtilesVectorLayer(
             false,
           ]),
           paint: fillPaint(partStyle, layer.opacity),
-          layout: { visibility: partVisibility },
+          layout: { visibility },
         },
         beforeId,
       );
@@ -3289,7 +3287,7 @@ function syncMbtilesVectorLayer(
             false,
           ]),
           paint: linePaint(partStyle, layer.opacity),
-          layout: { visibility: partVisibility },
+          layout: { visibility },
         },
         beforeId,
       );
@@ -3310,7 +3308,7 @@ function syncMbtilesVectorLayer(
             false,
           ]),
           paint: circlePaint(partStyle, layer.opacity),
-          layout: { visibility: partVisibility },
+          layout: { visibility },
         },
         beforeId,
       );
@@ -3692,9 +3690,8 @@ export function removeLayerFromMap(
   ]) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
-  // An archive's source layers are separate layers over one MapLibre source, so a source is only
-  // gone once nothing still draws from it. Without the surviving layers to check, the old
-  // behaviour stands: this layer owned its sources alone.
+  // An archive's source layers are separate layers over one source, so it goes only once nothing
+  // draws from it. Without the survivors to check, the old behaviour stands.
   const stillInUse = new Set(
     (survivingLayers ?? [])
       .filter((candidate) => candidate.id !== layerId)

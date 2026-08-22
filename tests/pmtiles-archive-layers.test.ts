@@ -88,3 +88,55 @@ describe("removing one of an archive's layers", () => {
     assert.equal(removedSources.includes("grid"), true);
   });
 });
+
+// Source layer names overlap in real archives — `water` and `waterway` in the Protomaps basemap —
+// and the ids each layer claims decide what the sync path styles, reorders and hides.
+describe("splitting an archive whose source layer names overlap", () => {
+  it("gives each layer only the ids that are its own", () => {
+    const layers = createPMTilesArchiveLayers({
+      id: "a",
+      name: "overlapping",
+      url: "https://example.org/a.pmtiles",
+      tileType: "vector",
+      sourceLayers: ["water", "waterway"],
+      nativeLayerIds: [
+        "a-water-fill",
+        "a-water-line",
+        "a-water-circle",
+        "a-waterway-fill",
+        "a-waterway-line",
+        "a-waterway-circle",
+      ],
+    });
+
+    assert.deepEqual(layers[0].metadata.nativeLayerIds, [
+      "a-water-fill",
+      "a-water-line",
+      "a-water-circle",
+    ]);
+    assert.deepEqual(layers[1].metadata.nativeLayerIds, [
+      "a-waterway-fill",
+      "a-waterway-line",
+      "a-waterway-circle",
+    ]);
+  });
+
+  it("derives ids for a layer whose control named none of them, rather than drawing nothing", () => {
+    const layers = createPMTilesArchiveLayers({
+      id: "a",
+      name: "renamed",
+      url: "https://example.org/a.pmtiles",
+      tileType: "vector",
+      sourceLayers: ["water", "waterway"],
+      nativeLayerIds: ["some-other-naming-scheme"],
+    });
+
+    // The ids `ensurePMTilesExternalLayer` creates: scoped to the archive, not to this layer, so
+    // deriving them from the layer's own id would name ids nothing on the map answers to.
+    assert.deepEqual(layers[0].metadata.nativeLayerIds, [
+      "a-water-fill",
+      "a-water-line",
+      "a-water-circle",
+    ]);
+  });
+});

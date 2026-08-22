@@ -19,6 +19,28 @@ export function normalizePMTilesUrl(url: string): string {
   return url.startsWith(`${PMTILES_PROTOCOL}://`) ? url : `${PMTILES_PROTOCOL}://${url}`;
 }
 
+/** The MapLibre layers one source layer is drawn with. */
+const pmtilesLayerKinds = ["fill", "line", "circle"] as const;
+
+/**
+ * The ids one source layer of an archive draws under.
+ *
+ * Matched on the whole segment, not a substring: `water` must not claim `waterway`'s ids, which the
+ * fallback loop in `syncExternalNativeLayer` would then style and reorder as if they were this
+ * layer's. Matching nothing means the control named its layers some other way, and the ids
+ * `ensurePMTilesExternalLayer` goes on to create stand instead — they are scoped to the archive,
+ * not to the split-out layer, so letting the layer derive its own would name ids that never exist.
+ */
+function ownNativeLayerIds(
+  ids: readonly string[] | undefined,
+  sourceId: string,
+  sourceLayer: string,
+): string[] {
+  const scoped = pmtilesLayerKinds.map((kind) => pmtilesVectorLayerId(sourceId, sourceLayer, kind));
+  const own = ids?.filter((id) => scoped.includes(id));
+  return own && own.length > 0 ? own : scoped;
+}
+
 export function pmtilesVectorLayerId(sourceId: string, sourceLayer: string, kind: string): string {
   return `${sourceId}-${encodeVectorTileLayerPart(sourceLayer)}-${kind}`;
 }
@@ -117,21 +139,13 @@ export function createPMTilesStoreLayer(options: PMTilesStoreLayerOptions): GeoL
 }
 
 /**
- * One layer per source layer in a vector archive, all drawing from the one MapLibre source.
+ * One layer per source layer in a vector archive, so the Layers panel can show, reorder, style and
+ * hide them with the machinery it already has. The caller groups them under the archive's name.
  *
- * An archive is several things — a basemap holds roads, water, buildings — and treating it as one
- * layer leaves them unnameable and impossible to hide apart. Expanded here instead: each becomes an
- * ordinary layer, so the Layers panel shows, reorders, styles and hides them with the machinery it
- * already has, and the caller puts them in a group named after the archive.
+ * They share `metadata.sourceId` — one MapLibre source under all of them — so removing one must not
+ * remove that source. `removeLayerFromMap` refcounts it against the layers that survive.
  *
- * They share `metadata.sourceId`, which is what keeps one MapLibre source under all of them.
- * Removing one must not remove that source; `removeLayerFromMap` refcounts it against the layers
- * that survive.
- *
- * A raster archive has nothing to expand and comes back as the single layer it is.
- *
- * @param options - The archive, as {@link createPMTilesStoreLayer} takes it.
- * @returns One layer per source layer, in the order the archive lists them.
+ * A raster archive, or one holding a single source layer, comes back as the one layer it is.
  */
 export function createPMTilesArchiveLayers(options: PMTilesStoreLayerOptions): GeoLibreLayer[] {
   const sourceLayers = [...options.sourceLayers];
@@ -145,17 +159,12 @@ export function createPMTilesArchiveLayers(options: PMTilesStoreLayerOptions): G
       id: `${options.id}-${encodeVectorTileLayerPart(sourceLayer)}`,
       name: sourceLayer,
       sourceLayers: [sourceLayer],
-      nativeLayerIds: options.nativeLayerIds?.filter((id) =>
-        id.includes(encodeVectorTileLayerPart(sourceLayer)),
-      ),
+      nativeLayerIds: ownNativeLayerIds(options.nativeLayerIds, options.id, sourceLayer),
       ...(assigned
         ? { style: { ...options.style, fillColor: assigned, strokeColor: assigned } }
         : {}),
     });
-    return {
-      ...layer,
-      metadata: { ...layer.metadata, sourceId: options.id, archiveId: options.id },
-    };
+    return { ...layer, metadata: { ...layer.metadata, sourceId: options.id } };
   });
 }
 
