@@ -96,10 +96,11 @@ import {
 import { CrsPickerInput } from "./CrsPickerInput";
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
 import {
+  whiteboxParameterLabel,
   translateToolDescription,
   translateToolName,
   translateWhiteboxParameterDescription,
-  translateWhiteboxParameterLabel,
+  translateWhiteboxCategory,
 } from "../../lib/processing-tool-i18n";
 
 interface ProcessingDialogProps {
@@ -138,19 +139,6 @@ function humanize(value: string): string {
       .trim()
       .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Tool"
   );
-}
-
-function parameterLabel(
-  t: TFunction,
-  toolId: string,
-  param: WhiteboxToolParameter,
-): string {
-  const label = translateWhiteboxParameterLabel(t, toolId, param);
-  const desc = translateWhiteboxParameterDescription(t, toolId, param);
-  // Show the translated label; append a translated description only when it
-  // adds information beyond the humanized name.
-  return desc && desc !== label ? `${label}: ${desc}` : label;
-
 }
 
 function isOutputParameter(param: WhiteboxToolParameter): boolean {
@@ -897,28 +885,34 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     for (const tool of tools) {
       if (!matchesSource(tool)) continue;
       total += 1;
-      const name = tool.category || t("processing.whitebox.categoryGeneral");
-      counts.set(name, (counts.get(name) ?? 0) + 1);
+      const value = tool.category ?? "";
+      counts.set(value, (counts.get(value) ?? 0) + 1);
     }
     const sorted = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     return [
       { value: "All", label: t("processing.whitebox.categoryAll", { total }) },
       ...sorted.map(([name, count]) => ({
         value: name,
-        label: `${name} (${count})`,
+        label: `${translateWhiteboxCategory(t, name || undefined)} (${count})`,
       })),
     ];
-  }, [tools, matchesSource]);
+  }, [tools, matchesSource, t]);
 
   const filteredTools = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return tools.filter((tool) => {
-      if (category !== "All" && (tool.category || "General") !== category) {
+      if (category !== "All" && (tool.category ?? "") !== category) {
         return false;
       }
       if (!matchesSource(tool)) return false;
       if (!normalizedQuery) return true;
-      return [tool.id, toolLabel(t, tool), tool.category || "", tool.summary || ""]
+      return [
+        tool.id,
+        toolLabel(t, tool),
+        tool.category ?? "",
+        translateWhiteboxCategory(t, tool.category),
+        tool.summary || "",
+      ]
         .join(" ")
         .toLowerCase()
         .includes(normalizedQuery);
@@ -1028,7 +1022,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       setRuntimeAvailable(status.available);
       setRuntimeMessage(status.message);
       if (!status.available) {
-        await applyRemoteCatalogSnapshot(`${status.message} Showing GitHub catalog only.`, false);
+        await applyRemoteCatalogSnapshot(
+          `${status.message} ${t("processing.whitebox.showingSnapshotOnly")}`,
+          false,
+        );
         return;
       }
       let nextTools: WhiteboxTool[];
@@ -1038,14 +1035,14 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         await applyRemoteCatalogSnapshot(
           `${
             err instanceof Error ? err.message : t("processing.whitebox.errorLoadLive")
-          } Showing GitHub catalog only.`,
+          } ${t("processing.whitebox.showingSnapshotOnly")}`,
           true,
         );
         return;
       }
       if (nextTools.length === 0) {
         await applyRemoteCatalogSnapshot(
-          "Live catalog is empty. Showing GitHub catalog only.",
+          t("processing.whitebox.liveCatalogEmpty"),
           true,
         );
         return;
@@ -1067,7 +1064,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
       await applyRemoteCatalogSnapshot(
         `${
           err instanceof Error ? err.message : t("processing.whitebox.errorConnect")
-        } Showing GitHub catalog only.`,
+        } ${t("processing.whitebox.showingSnapshotOnly")}`,
         false,
       );
     } finally {
@@ -1476,7 +1473,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   useEffect(() => {
     if (job?.status !== "succeeded") return;
     void importGeoJsonOutputs(job).catch((err) => {
-      setError(err instanceof Error ? err.message : "Could not import Whitebox output.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : t("processing.whitebox.importOutputFailed"),
+      );
     });
   }, [importGeoJsonOutputs, job]);
 
@@ -1498,7 +1499,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         !isOutputParameter(param) &&
         (value === undefined || value === null || value === "")
       ) {
-        setError(`Missing required parameter: ${parameterLabel(t, selectedTool.id, param)}`);
+        setError(
+          t("processing.whitebox.missingRequiredParameter", {
+            label: whiteboxParameterLabel(t, selectedTool.id, param),
+          }),
+        );
         setRunningLocal(false);
         return;
       }
@@ -1779,7 +1784,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               ) : (
                 <Server className="h-4 w-4" />
               )}
-              Start server
+              {t("processing.whitebox.startServer")}
             </Button>
           )}
 
@@ -1795,7 +1800,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               ) : (
                 <ServerOff className="h-4 w-4" />
               )}
-              Stop server
+              {t("processing.whitebox.stopServer")}
             </Button>
           )}
 
@@ -1861,7 +1866,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               {loadingTools ? (
                 <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading
+                  {t("processing.whitebox.loadingTools")}
                 </div>
               ) : filteredTools.length === 0 ? (
                 <div className="p-3 text-sm text-muted-foreground">
@@ -1881,11 +1886,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                     onClick={() => setSelectedToolId(tool.id)}
                   >
                     <span className="block truncate font-medium">
-                      {tool.locked ? "[Locked] " : ""}
+                      {tool.locked ? t("processing.whitebox.lockedPrefix") : ""}
                       {toolLabel(t, tool)}
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {tool.category || "General"}
+                      {translateWhiteboxCategory(t, tool.category)}
                     </span>
                   </button>
                 ))
@@ -2024,6 +2029,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
                     return (
                       <ExtentParameterGroup
                         key="extent"
+                        toolId={selectedTool.id}
                         params={cornerExtentParams}
                         values={values}
                         onChange={updateValue}
@@ -2129,6 +2135,9 @@ function JobOutputPanel({ job }: { job: WhiteboxJob }) {
   const outputs = outputEntries(job.outputs);
   const hasMessages = job.messages.length > 0;
   const hasOutputs = outputs.length > 0;
+  const statusLabel = t(`processing.whitebox.jobStatus.${job.status}`, {
+    defaultValue: job.status,
+  });
 
   return (
     <div className="grid gap-2">
@@ -2140,7 +2149,7 @@ function JobOutputPanel({ job }: { job: WhiteboxJob }) {
         ) : (
           <Loader2 className="h-4 w-4 animate-spin" />
         )}
-        {job.status}
+        {statusLabel}
         {job.error ? `: ${job.error}` : ""}
       </p>
       <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
@@ -2171,6 +2180,8 @@ const EXTENT_LABEL_KEYS = {
 } as const;
 
 interface ExtentParameterGroupProps {
+  /** The tool whose boundary parameters are rendered; used for i18n keys. */
+  toolId: string;
   /** The tool's four boundary parameters, in reading order. */
   params: WhiteboxToolParameter[];
   values: ParameterValues;
@@ -2195,6 +2206,7 @@ interface ExtentParameterGroupProps {
  *   map-shortcut callbacks.
  */
 function ExtentParameterGroup({
+  toolId,
   params,
   values,
   onChange,
@@ -2255,12 +2267,15 @@ function ExtentParameterGroup({
           // of an empty one.
           const labelKey = EXTENT_LABEL_KEYS[param.name as keyof typeof EXTENT_LABEL_KEYS];
           const value = values[param.name];
+          const description = translateWhiteboxParameterDescription(t, toolId, param);
           return (
             <div key={param.name} className="grid gap-1">
               <Label
                 htmlFor={`whitebox-${param.name}`}
                 className="text-xs text-muted-foreground"
-                title={param.description || undefined}
+                title={
+                  description && description !== param.description ? description : undefined
+                }
               >
                 {labelKey ? t(labelKey) : humanize(param.name)}
               </Label>
@@ -2331,7 +2346,7 @@ function ParameterField({
   const subsetUrlLayers = onPopulateFromLayer ? layersForSubsetUrl(toolId, layers) : [];
   // Display text resolves through i18n, while the original manifest parameter
   // continues to feed the control-selection heuristics below.
-  const label = parameterLabel(t, toolId, param);
+  const label = whiteboxParameterLabel(t, toolId, param);
   const valueText = value === undefined || value === null ? "" : String(value);
 
   return (
@@ -2536,7 +2551,7 @@ function ParameterField({
           id={`whitebox-${param.name}`}
           type="text"
           value={valueText}
-          placeholder={isOutputParameter(param) ? "Auto" : undefined}
+          placeholder={isOutputParameter(param) ? t("processing.whitebox.auto") : undefined}
           onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
         />
       )}

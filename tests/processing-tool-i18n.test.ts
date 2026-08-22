@@ -10,11 +10,16 @@ import {
   translateToolGroup,
   translateToolName,
   translateWhiteboxParameterDescription,
+  whiteboxParameterLabel,
 } from "../apps/geolibre-desktop/src/lib/processing-tool-i18n";
 
-function fakeT(catalog: Record<string, string> = {}): TFunction {
-  return ((key: string, options?: { defaultValue?: string }) =>
-    catalog[key] ?? options?.defaultValue ?? key) as unknown as TFunction;
+function fakeT(
+  catalog: Record<string, string> = {},
+  language = "zh-CN",
+): TFunction {
+  const translate = ((key: string, options?: { defaultValue?: string }) =>
+    catalog[key] ?? options?.defaultValue ?? key) as TFunction;
+  return Object.assign(translate, { language });
 }
 
 describe("toolGroupKey", () => {
@@ -193,6 +198,40 @@ describe("Whitebox metadata translation", () => {
       translateWhiteboxParameterDescription(fakeT(), "a_tool", param),
       "Input DEM raster path.",
     );
+  });
+
+  it("does not splice an untranslated description into a translated label", () => {
+    const param = { name: "tolerance", description: "Minimum deflection angle." };
+    const t = fakeT({
+      "processing.toolMeta.whitebox.simplify_shared_edges.params.tolerance.label": "容差",
+    });
+    assert.equal(whiteboxParameterLabel(t, "simplify_shared_edges", param), "容差");
+  });
+
+  it("appends a translated parameter description to its label", () => {
+    const param = { name: "tolerance", description: "Minimum deflection angle." };
+    const t = fakeT({
+      "processing.toolMeta.whitebox.simplify_shared_edges.params.tolerance.label": "容差",
+      "processing.toolMeta.whitebox.simplify_shared_edges.params.tolerance.description":
+        "最小偏转角。",
+    });
+    assert.equal(
+      whiteboxParameterLabel(t, "simplify_shared_edges", param),
+      "容差: 最小偏转角。",
+    );
+  });
+
+  it("keeps the English description fallback for English locales", () => {
+    const param = { name: "tolerance", description: "Minimum deflection angle." };
+    assert.equal(
+      whiteboxParameterLabel(fakeT({}, "en-US"), "simplify_shared_edges", param),
+      "Tolerance: Minimum deflection angle.",
+    );
+  });
+
+  it("does not splice English help into a symbol-only label in Chinese", () => {
+    const param = { name: "k", description: "Number of nearest neighbours." };
+    assert.equal(whiteboxParameterLabel(fakeT(), "knn_classification", param), "K");
   });
 });
 

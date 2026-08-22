@@ -108,6 +108,22 @@ export function parameterDescriptionKey(
   return `${TOOL_META_KEY_PREFIX}.${catalog}.${toolId}.params.${paramId}.description`;
 }
 
+/** Key holding a translated raw Whitebox category label. */
+export function whiteboxCategoryKey(category: string): string {
+  return `processing.whitebox.categories.${toolGroupKey(category)}`;
+}
+
+function text(t: TFunction, key: string, fallback: string): string {
+  return String(t(key, { defaultValue: fallback }));
+}
+
+function isEnglishLocale(t: TFunction): boolean {
+  const language =
+    (t as { language?: string }).language ??
+    (t as { i18n?: { language?: string } }).i18n?.language;
+  return language?.toLowerCase().startsWith("en") ?? false;
+}
+
 /** Key holding a select option's translated label. */
 export function parameterOptionKey(
   catalog: ProcessingToolCatalog,
@@ -125,7 +141,7 @@ export function translateToolName(
   tool: ProcessingToolMeta,
 ): string {
   if (!catalog) return tool.name;
-  return t(toolNameKey(catalog, tool.id), { defaultValue: tool.name });
+  return text(t, toolNameKey(catalog, tool.id), tool.name);
 }
 
 /** A tool's description for the active locale (empty when it has none). */
@@ -136,12 +152,18 @@ export function translateToolDescription(
 ): string {
   if (!tool.description) return "";
   if (!catalog) return tool.description;
-  return t(toolDescriptionKey(catalog, tool.id), { defaultValue: tool.description });
+  return text(t, toolDescriptionKey(catalog, tool.id), tool.description);
 }
 
 /** A grouping label for the active locale. */
 export function translateToolGroup(t: TFunction, group: string): string {
-  return t(`${TOOL_GROUP_KEY_PREFIX}.${toolGroupKey(group)}`, { defaultValue: group });
+  return text(t, `${TOOL_GROUP_KEY_PREFIX}.${toolGroupKey(group)}`, group);
+}
+
+/** A raw Whitebox category label for the active locale. */
+export function translateWhiteboxCategory(t: TFunction, category?: string): string {
+  if (!category) return t("processing.whitebox.categoryGeneral");
+  return text(t, whiteboxCategoryKey(category), category);
 }
 
 /**
@@ -188,19 +210,23 @@ export function translateParameter<T extends AlgorithmParameter>(
   if (!catalog) return param;
   const translated: T = {
     ...param,
-    label: t(parameterLabelKey(catalog, toolId, param.id), { defaultValue: param.label }),
+    label: text(t, parameterLabelKey(catalog, toolId, param.id), param.label),
   };
   if (param.description) {
-    translated.description = t(parameterDescriptionKey(catalog, toolId, param.id), {
-      defaultValue: param.description,
-    });
+    translated.description = text(
+      t,
+      parameterDescriptionKey(catalog, toolId, param.id),
+      param.description,
+    );
   }
   if (param.options) {
     translated.options = param.options.map((option) => ({
       ...option,
-      label: t(parameterOptionKey(catalog, toolId, param.id, option.value), {
-        defaultValue: option.label,
-      }),
+      label: text(
+        t,
+        parameterOptionKey(catalog, toolId, param.id, option.value),
+        option.label,
+      ),
     }));
   }
   return translated;
@@ -225,9 +251,25 @@ export function translateWhiteboxParameterLabel(
   toolId: string,
   param: WhiteboxToolParameter,
 ): string {
-  return t(parameterLabelKey("whitebox", toolId, param.name), {
-    defaultValue: humanize(param.name),
-  });
+  return text(t, parameterLabelKey("whitebox", toolId, param.name), humanize(param.name));
+}
+
+/** A Whitebox parameter's combined form label and localized help text. */
+export function whiteboxParameterLabel(
+  t: TFunction,
+  toolId: string,
+  param: WhiteboxToolParameter,
+): string {
+  const fallbackLabel = humanize(param.name);
+  const label = translateWhiteboxParameterLabel(t, toolId, param);
+  const desc = translateWhiteboxParameterDescription(t, toolId, param);
+  // i18next falls back to the manifest description. A translated label must
+  // not splice that untranslated fallback into the display string. Symbol-only
+  // labels (K, Sigma, X) stay unchanged in every locale, so retain the English
+  // help text only for English users.
+  const translatedDesc =
+    desc !== param.description || (label === fallbackLabel && isEnglishLocale(t));
+  return desc && translatedDesc ? `${label}: ${desc}` : label;
 }
 
 /**
@@ -245,7 +287,9 @@ export function translateWhiteboxParameterDescription(
   param: WhiteboxToolParameter,
 ): string | undefined {
   if (!param.description) return param.description;
-  return t(parameterDescriptionKey("whitebox", toolId, param.name), {
-    defaultValue: param.description,
-  });
+  return text(
+    t,
+    parameterDescriptionKey("whitebox", toolId, param.name),
+    param.description,
+  );
 }

@@ -72,6 +72,64 @@ describe("i18n catalogs", () => {
 
   const enStrings = flatStrings(loadCatalog("en"));
 
+  it("covers the WASM-only Whitebox tools used by local Processing mode", () => {
+    const en = loadCatalog("en").processing as {
+      toolMeta: {
+        whitebox: Record<
+          string,
+          { name?: string; description?: string; params?: Record<string, { label?: string }> }
+        >;
+      };
+      whitebox: { categories: Record<string, string> };
+    };
+    const zh = loadCatalog("zh").processing as typeof en;
+    const tool = en.toolMeta.whitebox.write_geoparquet;
+    assert.equal(tool.name, "Write GeoParquet");
+    assert.equal(tool.params?.input?.label, "Input");
+    assert.equal(zh.toolMeta.whitebox.write_geoparquet.name, "写入 GeoParquet");
+    assert.equal(zh.toolMeta.whitebox.write_geoparquet.params?.input?.label, "输入");
+    assert.match(zh.toolMeta.whitebox.write_geoparquet.description ?? "", /[\p{Script=Han}]/u);
+
+    assert.deepEqual(
+      Object.keys(zh.whitebox.categories).sort(),
+      Object.keys(en.whitebox.categories).sort(),
+    );
+    for (const value of Object.values(zh.whitebox.categories)) {
+      assert.match(value, /[\p{Script=Han}]/u);
+    }
+  });
+
+  it("zh covers every Whitebox tool name and parameter label in the baseline", () => {
+    type WhiteboxMeta = Record<
+      string,
+      { name: string; params?: Record<string, { label: string }> }
+    >;
+    const enTools = (loadCatalog("en").processing as {
+      toolMeta: { whitebox: WhiteboxMeta };
+    }).toolMeta.whitebox;
+    const zhTools = (loadCatalog("zh").processing as {
+      toolMeta: { whitebox: WhiteboxMeta };
+    }).toolMeta.whitebox;
+    const untranslatedToolNames = new Set(["LandTrendr", "Ripley's K"]);
+    const symbolLabels =
+      /^(?:[A-Z](?:\d+)?|Alpha|Beta|Gamma|Sigma\d?|Epsilon|Kappa|Lambda|D[xy])$/;
+    const missing: string[] = [];
+
+    for (const [toolId, tool] of Object.entries(enTools)) {
+      const zhTool = zhTools[toolId];
+      if (!zhTool?.name || (zhTool.name === tool.name && !untranslatedToolNames.has(tool.name))) {
+        missing.push(`${toolId}.name`);
+      }
+      for (const [paramId, param] of Object.entries(tool.params ?? {})) {
+        const zhLabel = zhTool?.params?.[paramId]?.label;
+        if (!zhLabel || (zhLabel === param.label && !symbolLabels.test(param.label))) {
+          missing.push(`${toolId}.params.${paramId}.label`);
+        }
+      }
+    }
+    assert.deepEqual(missing, [], `zh.json has untranslated Whitebox labels: ${missing.length}`);
+  });
+
   for (const code of localeCodes.filter((c) => c !== "en")) {
     it(`${code}: preserves interpolation placeholders for translated keys`, () => {
       const strings = flatStrings(loadCatalog(code));
