@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { TFunction } from "i18next";
+import { buildWhiteboxCategories } from "../scripts/gen-processing-i18n-catalog.mjs";
 import {
   modelProviderCatalog,
   translateModelToolGroup,
@@ -17,6 +18,12 @@ function fakeT(catalog: Record<string, string> = {}, language = "zh-CN"): TFunct
   const translate = ((key: string, options?: { defaultValue?: string }) =>
     catalog[key] ?? options?.defaultValue ?? key) as TFunction;
   return Object.assign(translate, { lng: language });
+}
+
+function fakeArrayLanguageT(catalog: Record<string, string>, languages: string[]): TFunction {
+  const translate = ((key: string, options?: { defaultValue?: string }) =>
+    catalog[key] ?? options?.defaultValue ?? key) as TFunction;
+  return Object.assign(translate, { lngs: languages });
 }
 
 describe("toolGroupKey", () => {
@@ -49,6 +56,27 @@ describe("toolGroupKey", () => {
     // guard would fire on a group that has no collision at all.
     assert.equal(toolGroupKey("Constructor"), "constructor");
     assert.equal(toolGroupKey("To String"), "toString");
+  });
+
+  it("rejects distinct Whitebox category labels that slug to one key", () => {
+    assert.throws(
+      () =>
+        buildWhiteboxCategories([
+          { id: "one", category: "Terrain Analysis" },
+          { id: "two", category: "Terrain-Analysis" },
+        ]),
+      /Whitebox category labels "Terrain Analysis" and "Terrain-Analysis" both map/,
+    );
+  });
+
+  it("merges a repeated Whitebox category into one key", () => {
+    assert.deepEqual(
+      buildWhiteboxCategories([
+        { id: "one", category: "Terrain Analysis" },
+        { id: "two", category: "Terrain Analysis" },
+      ]),
+      { terrainAnalysis: "Terrain Analysis" },
+    );
   });
 });
 
@@ -224,6 +252,14 @@ describe("Whitebox metadata translation", () => {
     const param = { name: "tolerance", description: "Minimum deflection angle." };
     assert.equal(
       whiteboxParameterLabel(fakeT({}, "en-US"), "simplify_shared_edges", param),
+      "Tolerance: Minimum deflection angle.",
+    );
+  });
+
+  it("detects English when i18next exposes an array of languages", () => {
+    const param = { name: "tolerance", description: "Minimum deflection angle." };
+    assert.equal(
+      whiteboxParameterLabel(fakeArrayLanguageT({}, ["en-US"]), "simplify_shared_edges", param),
       "Tolerance: Minimum deflection angle.",
     );
   });

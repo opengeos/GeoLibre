@@ -173,16 +173,23 @@ function buildToolGroups(CATALOGS) {
 }
 
 /** Build translate-once keys for raw Whitebox category strings. */
-function buildWhiteboxCategories(tools) {
+export function buildWhiteboxCategories(tools) {
   const categories = new Map();
   for (const tool of tools) {
-    if (tool.category) categories.set(tool.category, tool.category);
+    if (!tool.category) continue;
+    const key = toolGroupKey(tool.category);
+    // Whitebox categories are raw upstream strings, so punctuation/case can
+    // make two labels slug onto one translation key. Fail rather than let the
+    // later label silently replace the earlier one.
+    if (categories.has(key) && categories.get(key) !== tool.category) {
+      throw new Error(
+        `Whitebox category labels "${categories.get(key)}" and "${tool.category}" both map ` +
+          `to the key "${key}". Rename one, or make toolGroupKey distinguish them.`,
+      );
+    }
+    categories.set(key, tool.category);
   }
-  return Object.fromEntries(
-    [...categories.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([label, value]) => [toolGroupKey(label), value]),
-  );
+  return Object.fromEntries([...categories.entries()].sort(([, a], [, b]) => a.localeCompare(b)));
 }
 
 async function main() {
@@ -237,7 +244,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+// Only generate when invoked directly, so tests can import the pure builders
+// without loading WASM manifests or touching en.json.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

@@ -125,8 +125,13 @@ function text(t: TFunction, key: string, fallback: string): string {
 }
 
 function isEnglishLocale(t: TFunction): boolean {
-  const language = (t as { lng?: string }).lng;
-  return language?.toLowerCase().startsWith("en") ?? false;
+  const localeAwareT = t as {
+    lng?: unknown;
+    lngs?: readonly unknown[];
+    i18n?: { language?: unknown };
+  };
+  const language = localeAwareT.lng ?? localeAwareT.lngs?.[0] ?? localeAwareT.i18n?.language;
+  return typeof language === "string" && language.toLowerCase().startsWith("en");
 }
 
 /** Key holding a select option's translated label. */
