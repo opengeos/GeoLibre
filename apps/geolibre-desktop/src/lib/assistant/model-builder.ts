@@ -67,8 +67,13 @@ function parameterTypeMatches(param: AlgorithmParameter, value: unknown): boolea
         (!param.options?.length || param.options.some((option) => option.value === value))
       );
     case "layers":
-      // A multi-layer picker arrives as an array of layer ids, not as text.
-      return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+      // A multi-layer picker arrives as an array of layer ids, not as text. A
+      // blank entry would survive resolution below and then be dropped at Run
+      // time, quietly merging fewer layers than the model names.
+      return (
+        Array.isArray(value) &&
+        value.every((entry) => typeof entry === "string" && entry.trim().length > 0)
+      );
     default:
       // layer / string / field / path all arrive as text.
       return typeof value === "string";

@@ -413,6 +413,31 @@ describe("AI-created Model Builder models", () => {
         ),
       /"layers" of "merge-layers" is required/,
     );
+    // An empty entry is falsy, so the resolution loop leaves it alone; without
+    // the type check it would reach the saved model and be dropped at Run time,
+    // merging fewer layers than the model names.
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layers: ["roads-id", ""] } }] },
+          layers,
+          [MERGE],
+          ids(),
+        ),
+      /expects a layers value/,
+    );
+    // A whitespace-only entry is truthy, so resolution rejects it first -- also
+    // at build time, just with the layer-reference message.
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          { ...base, steps: [{ ...base.steps[0], parameters: { layers: ["roads-id", "  "] } }] },
+          layers,
+          [MERGE],
+          ids(),
+        ),
+      /No layer matching "  " for "layers" of "merge-layers"/,
+    );
   });
 
   it("resolves layer names inside a multi-layer parameter to ids", () => {
