@@ -864,7 +864,11 @@ def _prepare_arguments(
     args: dict[str, Any] = {}
     working_directory: str | None = None
     absolute_paths: list[str] = []
-    for name, value in request.parameters.items():
+    # Preserve parameter order, then append embedded-only inputs. Browser and
+    # in-memory layers intentionally have no matching filesystem parameter.
+    names = dict.fromkeys((*request.parameters, *request.layer_inputs))
+    for name in names:
+        value = request.parameters.get(name)
         spec = specs.get(str(name), {})
         kind = str(spec.get("kind") or "")
         if name in request.layer_inputs:
@@ -878,16 +882,16 @@ def _prepare_arguments(
                 )
             else:
                 value = _write_layer_input(name, embedded, temp_paths)
-        elif isinstance(value, str) and kind.endswith("_in") and "," in value:
-            # Multi-dataset parameters use a comma-delimited path list. Validate
-            # every member independently; treating the whole list as one path
-            # both rejects valid inputs and weakens the root-boundary check.
-            for path_value in (item.strip() for item in value.split(",")):
-                if not path_value:
-                    continue
-                _ensure_within_roots(path_value)
-                if Path(path_value).expanduser().is_absolute():
-                    absolute_paths.append(path_value)
+        elif isinstance(value, str) and "," in value:
+            # The tool metadata is untrusted. When any comma-delimited member
+            # looks path-shaped, validate every member independently rather than
+            # trusting `kind` or treating the list as one opaque path.
+            path_values = [item.strip() for item in value.split(",") if item.strip()]
+            if any(_looks_like_fs_path(path_value) for path_value in path_values):
+                for path_value in path_values:
+                    _ensure_within_roots(path_value)
+                    if Path(path_value).expanduser().is_absolute():
+                        absolute_paths.append(path_value)
         elif isinstance(value, str) and _looks_like_fs_path(value):
             # A path-shaped value must stay inside the allowlisted roots,
             # regardless of the client-declared `kind`. `request.tool` is

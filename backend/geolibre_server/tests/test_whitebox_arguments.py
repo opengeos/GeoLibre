@@ -14,7 +14,6 @@ def test_prepare_arguments_materializes_multiple_embedded_layers(tmp_path: Path)
     feature_collection = {"type": "FeatureCollection", "features": []}
     request = WhiteboxRunRequest(
         tool_id="merge_vectors",
-        parameters={"inputs": ""},
         tool={"params": [{"name": "inputs", "kind": "vector_in"}]},
         layer_inputs={
             "inputs": [

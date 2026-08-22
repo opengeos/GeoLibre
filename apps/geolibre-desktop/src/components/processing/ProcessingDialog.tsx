@@ -1541,6 +1541,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           )
           .map((item) => layers.find((layer) => layer.id === item.slice(LAYER_TOKEN_PREFIX.length)))
           .filter((layer): layer is GeoLibreLayer => Boolean(layer));
+        if (selectedLayers.length !== value.length) {
+          setError(`One or more selected layers for ${parameterLabel(param)} no longer exist.`);
+          setRunningLocal(false);
+          return;
+        }
         const kind = parameterKind(param);
         if (runLocal && kind === "vector_in") {
           const missing = selectedLayers.find((layer) => !layer.geojson);

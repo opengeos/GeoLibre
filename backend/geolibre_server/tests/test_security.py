@@ -183,6 +183,27 @@ def test_whitebox_path_check_ignores_mislabeled_kind(
     assert args["input"] == "EPSG:4326"
 
 
+def test_whitebox_multi_path_check_ignores_mislabeled_kind(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Every path-list member stays confined even when its kind is mislabeled."""
+    from geolibre_server.app import conversion
+    from geolibre_server.app.whitebox import WhiteboxRunRequest, _prepare_arguments
+
+    root = tmp_path / "data"
+    root.mkdir()
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(root.resolve())])
+    request = WhiteboxRunRequest(
+        tool_id="merge_vectors",
+        parameters={"inputs": "a.geojson,/etc/passwd"},
+        tool={"params": [{"name": "inputs", "kind": "string"}]},
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        _prepare_arguments(request, [])
+    assert excinfo.value.status_code == 403
+
+
 def test_whitebox_relative_path_confined_by_cwd(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """A relative path arg is confined by pinning the subprocess cwd to a root.
 
