@@ -9,7 +9,11 @@ import {
   setExternalNativePaintBridge,
   useAppStore,
 } from "@geolibre/core";
-import { createPMTilesStoreLayer } from "@geolibre/map/pmtiles-layer";
+import {
+  createPMTilesArchiveLayers,
+  createPMTilesStoreLayer,
+  type PMTilesStoreLayerOptions,
+} from "@geolibre/map/pmtiles-layer";
 import type {
   QueryGeometry,
   QueryOptions,
@@ -4803,18 +4807,29 @@ function createPMTilesLayerAddHandler(): PMTilesLayerEventHandler {
     if (!layerInfo) return;
 
     const store = useAppStore.getState();
-    const layer = pmtilesStoreLayer(event.layerId, layerInfo);
-    if (store.layers.some((item) => item.id === layer.id)) {
-      store.updateLayer(layer.id, {
-        metadata: layer.metadata,
-        opacity: layer.opacity,
-        source: layer.source,
-        style: layer.style,
-        visible: layer.visible,
-      });
+    const layers = pmtilesStoreLayers(event.layerId, layerInfo);
+    const known = layers.filter((layer) => store.layers.some((item) => item.id === layer.id));
+    if (known.length > 0) {
+      for (const layer of known) {
+        store.updateLayer(layer.id, {
+          metadata: layer.metadata,
+          opacity: layer.opacity,
+          source: layer.source,
+          style: layer.style,
+          visible: layer.visible,
+        });
+      }
       return;
     }
-    store.addLayer(layer);
+    for (const layer of layers) store.addLayer(layer);
+    // An archive of several source layers is a folder of them, named after the archive, so the
+    // panel shows one row that opens rather than a run of loose layers.
+    if (layers.length > 1) {
+      store.addLayerGroup(
+        layerInfo.name || layerNameFromUrl(layerInfo.url, event.layerId),
+        layers.map((layer) => layer.id),
+      );
+    }
   };
 }
 
@@ -5412,7 +5427,19 @@ function createGeoTiffRasterStoreLayer(state: GeoTiffRasterLayerState): GeoLibre
 
 /** @internal Exported only so the control's layer shape can be unit-tested. */
 export function pmtilesStoreLayer(id: string, layerInfo: PMTilesLayerInfo): GeoLibreLayer {
-  return createPMTilesStoreLayer({
+  return createPMTilesStoreLayer(pmtilesLayerOptions(id, layerInfo));
+}
+
+/**
+ * @internal An archive as its own layer each, so the panel can show, reorder, style and hide the
+ * pieces with the machinery it already has. One layer for a raster archive or a single-layer one.
+ */
+export function pmtilesStoreLayers(id: string, layerInfo: PMTilesLayerInfo): GeoLibreLayer[] {
+  return createPMTilesArchiveLayers(pmtilesLayerOptions(id, layerInfo));
+}
+
+function pmtilesLayerOptions(id: string, layerInfo: PMTilesLayerInfo): PMTilesStoreLayerOptions {
+  return {
     id,
     name: layerInfo.name || layerNameFromUrl(layerInfo.url, id),
     url: layerInfo.url,
@@ -5425,7 +5452,7 @@ export function pmtilesStoreLayer(id: string, layerInfo: PMTilesLayerInfo): GeoL
     // The control created these MapLibre layers itself, so its ids stand rather than derived ones.
     nativeLayerIds: layerInfo.layerIds,
     ...(layerInfo.sourceLayerColors ? { sourceLayerColors: layerInfo.sourceLayerColors } : {}),
-  });
+  };
 }
 
 function createZarrStoreLayer(id: string, layerInfo: ZarrLayerInfo): GeoLibreLayer {

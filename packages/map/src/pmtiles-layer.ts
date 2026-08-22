@@ -116,6 +116,49 @@ export function createPMTilesStoreLayer(options: PMTilesStoreLayerOptions): GeoL
   };
 }
 
+/**
+ * One layer per source layer in a vector archive, all drawing from the one MapLibre source.
+ *
+ * An archive is several things — a basemap holds roads, water, buildings — and treating it as one
+ * layer leaves them unnameable and impossible to hide apart. Expanded here instead: each becomes an
+ * ordinary layer, so the Layers panel shows, reorders, styles and hides them with the machinery it
+ * already has, and the caller puts them in a group named after the archive.
+ *
+ * They share `metadata.sourceId`, which is what keeps one MapLibre source under all of them.
+ * Removing one must not remove that source; `removeLayerFromMap` refcounts it against the layers
+ * that survive.
+ *
+ * A raster archive has nothing to expand and comes back as the single layer it is.
+ *
+ * @param options - The archive, as {@link createPMTilesStoreLayer} takes it.
+ * @returns One layer per source layer, in the order the archive lists them.
+ */
+export function createPMTilesArchiveLayers(options: PMTilesStoreLayerOptions): GeoLibreLayer[] {
+  const sourceLayers = [...options.sourceLayers];
+  if (options.tileType === "raster" || sourceLayers.length < 2) {
+    return [createPMTilesStoreLayer(options)];
+  }
+  return sourceLayers.map((sourceLayer) => {
+    const assigned = options.sourceLayerColors?.[sourceLayer];
+    const layer = createPMTilesStoreLayer({
+      ...options,
+      id: `${options.id}-${encodeVectorTileLayerPart(sourceLayer)}`,
+      name: sourceLayer,
+      sourceLayers: [sourceLayer],
+      nativeLayerIds: options.nativeLayerIds?.filter((id) =>
+        id.includes(encodeVectorTileLayerPart(sourceLayer)),
+      ),
+      ...(assigned
+        ? { style: { ...options.style, fillColor: assigned, strokeColor: assigned } }
+        : {}),
+    });
+    return {
+      ...layer,
+      metadata: { ...layer.metadata, sourceId: options.id, archiveId: options.id },
+    };
+  });
+}
+
 /** Facts about a PMTiles archive needed to build a GeoLibre layer for it. */
 export interface PMTilesArchiveInfo {
   tileType: "vector" | "raster";

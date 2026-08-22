@@ -141,6 +141,7 @@ export {
   redactUrlCredentials,
   type CredentialRedactionResult,
 } from "./credentials";
+export { assignedSourceLayerColor, layerSourceLayers, styleForSourceLayer } from "./style-rules";
 export { excludeHiddenFieldsFromGeojson, excludeHiddenFieldsFromProject } from "./visibility";
 export * from "./editor-tracking";
 export {

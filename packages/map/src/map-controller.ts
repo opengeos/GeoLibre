@@ -1227,7 +1227,7 @@ export class MapController {
     const previousLayers = new Map(this.syncedLayers.map((layer) => [layer.id, layer]));
     for (const id of this.layerIds) {
       if (!nextIdSet.has(id)) {
-        removeLayerFromMap(map, id, previousLayers.get(id));
+        removeLayerFromMap(map, id, previousLayers.get(id), layers);
       }
     }
 
