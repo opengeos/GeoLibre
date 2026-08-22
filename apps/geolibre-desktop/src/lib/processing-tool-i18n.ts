@@ -23,12 +23,7 @@ import type { TFunction } from "i18next";
  * layer) and a raster tool (warp a GeoTIFF) — so the catalog name is part of
  * every key.
  */
-export type ProcessingToolCatalog =
-  | "vector"
-  | "network"
-  | "statistics"
-  | "raster"
-  | "whitebox";
+export type ProcessingToolCatalog = "vector" | "network" | "statistics" | "raster" | "whitebox";
 
 /**
  * A catalog, or `null` for tool metadata the host cannot translate. Passing
@@ -131,8 +126,7 @@ function text(t: TFunction, key: string, fallback: string): string {
 
 function isEnglishLocale(t: TFunction): boolean {
   const language =
-    (t as { language?: string }).language ??
-    (t as { i18n?: { language?: string } }).i18n?.language;
+    (t as { language?: string }).language ?? (t as { i18n?: { language?: string } }).i18n?.language;
   return language?.toLowerCase().startsWith("en") ?? false;
 }
 
@@ -234,11 +228,7 @@ export function translateParameter<T extends AlgorithmParameter>(
   if (param.options) {
     translated.options = param.options.map((option) => ({
       ...option,
-      label: text(
-        t,
-        parameterOptionKey(catalog, toolId, param.id, option.value),
-        option.label,
-      ),
+      label: text(t, parameterOptionKey(catalog, toolId, param.id, option.value), option.label),
     }));
   }
   return translated;
@@ -273,11 +263,7 @@ export function whiteboxParameterLabel(
   param: WhiteboxToolParameter,
 ): string {
   const fallbackLabel = humanize(param.name);
-  const label = localizedText(
-    t,
-    parameterLabelKey("whitebox", toolId, param.name),
-    fallbackLabel,
-  );
+  const label = localizedText(t, parameterLabelKey("whitebox", toolId, param.name), fallbackLabel);
   const desc = localizedText(
     t,
     parameterDescriptionKey("whitebox", toolId, param.name),
@@ -305,9 +291,5 @@ export function translateWhiteboxParameterDescription(
   param: WhiteboxToolParameter,
 ): string | undefined {
   if (!param.description) return param.description;
-  return text(
-    t,
-    parameterDescriptionKey("whitebox", toolId, param.name),
-    param.description,
-  );
+  return text(t, parameterDescriptionKey("whitebox", toolId, param.name), param.description);
 }

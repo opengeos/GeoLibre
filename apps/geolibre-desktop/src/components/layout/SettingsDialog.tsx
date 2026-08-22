@@ -68,14 +68,7 @@ import {
   TriangleAlert,
   Puzzle,
 } from "lucide-react";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentProps,
-  type RefObject,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type RefObject } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import {
   DEFAULT_DESKTOP_LAYOUT_SETTINGS,

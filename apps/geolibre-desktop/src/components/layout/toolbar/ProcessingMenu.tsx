@@ -180,7 +180,9 @@ export function ProcessingMenu({
                     ))
                   : cat.subcategories.map((sub) => (
                       <DropdownMenuSub key={sub.label}>
-                        <DropdownMenuSubTrigger>{t(subcatKey(sub.label) as ParseKeys)}</DropdownMenuSubTrigger>
+                        <DropdownMenuSubTrigger>
+                          {t(subcatKey(sub.label) as ParseKeys)}
+                        </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                           {sub.tools.map((tool) => (
                             <DropdownMenuItem

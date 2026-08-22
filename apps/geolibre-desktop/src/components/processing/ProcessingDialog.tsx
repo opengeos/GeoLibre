@@ -1046,10 +1046,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         return;
       }
       if (nextTools.length === 0) {
-        await applyRemoteCatalogSnapshot(
-          t("processing.whitebox.liveCatalogEmpty"),
-          true,
-        );
+        await applyRemoteCatalogSnapshot(t("processing.whitebox.liveCatalogEmpty"), true);
         return;
       }
       try {
@@ -1498,11 +1495,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   useEffect(() => {
     if (job?.status !== "succeeded") return;
     void importGeoJsonOutputs(job).catch((err) => {
-      setError(
-        err instanceof Error
-          ? err.message
-          : t("processing.whitebox.importOutputFailed"),
-      );
+      setError(err instanceof Error ? err.message : t("processing.whitebox.importOutputFailed"));
     });
   }, [importGeoJsonOutputs, job]);
 
@@ -1575,9 +1568,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         if (runLocal && kind === "vector_in") {
           const missing = selectedLayers.find((layer) => !layer.geojson);
           if (missing) {
-            setError(
-              `Layer "${missing.name}" has no in-memory GeoJSON for ${parameterLabelText}.`,
-            );
+            setError(`Layer "${missing.name}" has no in-memory GeoJSON for ${parameterLabelText}.`);
             setRunningLocal(false);
             return;
           }
@@ -2011,7 +2002,9 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
             <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
               <div className="min-w-0 grow basis-48">
                 <h3 className="truncate text-base font-semibold">
-                  {selectedTool ? toolLabel(t, selectedTool) : t("processing.whitebox.noToolSelected")}
+                  {selectedTool
+                    ? toolLabel(t, selectedTool)
+                    : t("processing.whitebox.noToolSelected")}
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {selectedTool?.id}
@@ -2373,9 +2366,7 @@ function ExtentParameterGroup({
               <Label
                 htmlFor={`whitebox-${param.name}`}
                 className="text-xs text-muted-foreground"
-                title={
-                  description && description !== param.description ? description : undefined
-                }
+                title={description && description !== param.description ? description : undefined}
               >
                 {labelKey ? t(labelKey) : humanize(param.name)}
               </Label>

@@ -121,7 +121,7 @@ function buildToolMeta(CATALOGS) {
       const desc = isWhitebox ? tool.summary || tool.description : tool.description;
       if (desc) entry.description = desc;
       const params = {};
-      for (const param of isWhitebox ? tool.params ?? [] : tool.parameters ?? []) {
+      for (const param of isWhitebox ? (tool.params ?? []) : (tool.parameters ?? [])) {
         const paramEntry = { label: isWhitebox ? humanize(param.name) : param.label };
         if (param.description) paramEntry.description = param.description;
         // Whitebox enum values are CLI values, not display labels owned by the

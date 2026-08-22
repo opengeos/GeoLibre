@@ -103,9 +103,7 @@ describe("i18n catalogs", () => {
   it("covers every Whitebox Processing menu key in English and Chinese", () => {
     const expectedTools = new Set(
       WHITEBOX_MENU_CATALOG.flatMap((category) =>
-        category.subcategories.flatMap((subcategory) =>
-          subcategory.tools.map((tool) => tool.id),
-        ),
+        category.subcategories.flatMap((subcategory) => subcategory.tools.map((tool) => tool.id)),
       ),
     );
     const expectedSubcategories = new Set(
@@ -147,15 +145,18 @@ describe("i18n catalogs", () => {
       string,
       { name: string; params?: Record<string, { label: string }> }
     >;
-    const enTools = (loadCatalog("en").processing as {
-      toolMeta: { whitebox: WhiteboxMeta };
-    }).toolMeta.whitebox;
-    const zhTools = (loadCatalog("zh").processing as {
-      toolMeta: { whitebox: WhiteboxMeta };
-    }).toolMeta.whitebox;
+    const enTools = (
+      loadCatalog("en").processing as {
+        toolMeta: { whitebox: WhiteboxMeta };
+      }
+    ).toolMeta.whitebox;
+    const zhTools = (
+      loadCatalog("zh").processing as {
+        toolMeta: { whitebox: WhiteboxMeta };
+      }
+    ).toolMeta.whitebox;
     const untranslatedToolNames = new Set(["LandTrendr", "Ripley's K"]);
-    const symbolLabels =
-      /^(?:[A-Z](?:\d+)?|Alpha|Beta|Gamma|Sigma\d?|Epsilon|Kappa|Lambda|D[xy])$/;
+    const symbolLabels = /^(?:[A-Z](?:\d+)?|Alpha|Beta|Gamma|Sigma\d?|Epsilon|Kappa|Lambda|D[xy])$/;
     const missing: string[] = [];
 
     for (const [toolId, tool] of Object.entries(enTools)) {

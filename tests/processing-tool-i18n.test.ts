@@ -13,10 +13,7 @@ import {
   whiteboxParameterLabel,
 } from "../apps/geolibre-desktop/src/lib/processing-tool-i18n";
 
-function fakeT(
-  catalog: Record<string, string> = {},
-  language = "zh-CN",
-): TFunction {
+function fakeT(catalog: Record<string, string> = {}, language = "zh-CN"): TFunction {
   const translate = ((key: string, options?: { defaultValue?: string }) =>
     catalog[key] ?? options?.defaultValue ?? key) as TFunction;
   return Object.assign(translate, { language });
@@ -182,11 +179,7 @@ describe("Whitebox metadata translation", () => {
         "输入 DEM 栅格路径或类型化的栅格对象。",
     });
     assert.equal(
-      translateWhiteboxParameterDescription(
-        t,
-        "feature_preserving_smoothing_multiscale",
-        param,
-      ),
+      translateWhiteboxParameterDescription(t, "feature_preserving_smoothing_multiscale", param),
       "输入 DEM 栅格路径或类型化的栅格对象。",
     );
     assert.equal(param.description, "Input DEM raster path or typed raster object.");
@@ -215,10 +208,7 @@ describe("Whitebox metadata translation", () => {
       "processing.toolMeta.whitebox.simplify_shared_edges.params.tolerance.description":
         "最小偏转角。",
     });
-    assert.equal(
-      whiteboxParameterLabel(t, "simplify_shared_edges", param),
-      "容差: 最小偏转角。",
-    );
+    assert.equal(whiteboxParameterLabel(t, "simplify_shared_edges", param), "容差: 最小偏转角。");
   });
 
   it("appends a catalog description that intentionally matches the English text", () => {
