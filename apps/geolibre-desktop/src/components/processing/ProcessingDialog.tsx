@@ -101,6 +101,7 @@ import {
   whiteboxParameterLabel,
   translateToolDescription,
   translateToolName,
+  translateWhiteboxParameterLabel,
   translateWhiteboxParameterDescription,
   translateWhiteboxCategory,
 } from "../../lib/processing-tool-i18n";
@@ -1511,7 +1512,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
     const layerInputs: Record<string, WhiteboxLayerInput | WhiteboxLayerInput[]> = {};
 
     for (const param of selectedTool.params ?? []) {
-      const parameterLabelText = whiteboxParameterLabel(t, selectedTool.id, param);
+      const parameterLabelText = translateWhiteboxParameterLabel(t, selectedTool.id, param);
       const value = values[param.name];
       if (
         param.required &&
@@ -1537,7 +1538,9 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         const kind = parameterKind(param);
         if (!runLocal && browsed.some((input) => !input.geojson)) {
           setError(
-            `The sidecar cannot read browser-selected files for ${parameterLabelText}. Run locally (WASM), or enter filesystem paths available to the sidecar.`,
+            t("processing.whitebox.sidecarCannotReadBrowserFiles", {
+              label: parameterLabelText,
+            }),
           );
           setRunningLocal(false);
           return;
@@ -1560,7 +1563,11 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           .map((item) => layers.find((layer) => layer.id === item.slice(LAYER_TOKEN_PREFIX.length)))
           .filter((layer): layer is GeoLibreLayer => Boolean(layer));
         if (selectedLayers.length !== value.length) {
-          setError(`One or more selected layers for ${parameterLabelText} no longer exist.`);
+          setError(
+            t("processing.whitebox.selectedLayersMissing", {
+              label: parameterLabelText,
+            }),
+          );
           setRunningLocal(false);
           return;
         }
@@ -1568,7 +1575,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         if (runLocal && kind === "vector_in") {
           const missing = selectedLayers.find((layer) => !layer.geojson);
           if (missing) {
-            setError(`Layer "${missing.name}" has no in-memory GeoJSON for ${parameterLabelText}.`);
+            setError(
+              t("processing.whitebox.layerMissingGeoJson", {
+                layer: missing.name,
+                label: parameterLabelText,
+              }),
+            );
             setRunningLocal(false);
             return;
           }
@@ -1582,7 +1594,12 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           for (const layer of selectedLayers) {
             const bytes = await fetchLayerBytes(layer);
             if (!bytes) {
-              setError(`Layer "${layer.name}" is not fetchable for ${parameterLabelText}.`);
+              setError(
+                t("processing.whitebox.layerNotFetchable", {
+                  layer: layer.name,
+                  label: parameterLabelText,
+                }),
+              );
               setRunningLocal(false);
               return;
             }
@@ -1602,7 +1619,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
           const missingIndex = paths.findIndex((path) => !path);
           if (missingIndex >= 0) {
             setError(
-              `Layer "${selectedLayers[missingIndex].name}" has no filesystem path for ${parameterLabelText}.`,
+              t("processing.whitebox.layerMissingPath", {
+                layer: selectedLayers[missingIndex].name,
+                label: parameterLabelText,
+              }),
             );
             setRunningLocal(false);
             return;
@@ -2366,7 +2386,7 @@ function ExtentParameterGroup({
               <Label
                 htmlFor={`whitebox-${param.name}`}
                 className="text-xs text-muted-foreground"
-                title={description && description !== param.description ? description : undefined}
+                title={description || undefined}
               >
                 {labelKey ? t(labelKey) : humanize(param.name)}
               </Label>

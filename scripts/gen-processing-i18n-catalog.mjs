@@ -41,7 +41,10 @@ import {
   STATISTICS_TOOLS,
   VECTOR_TOOLS,
 } from "../packages/processing/src/index.ts";
-import { toolGroupKey } from "../apps/geolibre-desktop/src/lib/processing-tool-i18n.ts";
+import {
+  humanizeParameterName,
+  toolGroupKey,
+} from "../apps/geolibre-desktop/src/lib/processing-tool-i18n.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const enPath = join(repoRoot, "apps/geolibre-desktop/src/i18n/locales/en.json");
@@ -97,16 +100,6 @@ function mergeWhiteboxBaseline(catalogTools, wasmTools) {
   return [...merged, ...[...wasmById.values()].filter((tool) => !tool.locked)];
 }
 
-function humanize(value) {
-  return (
-    value
-      .replace(/[_-]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Parameter"
-  );
-}
-
 /** Build the `processing.toolMeta` subtree from the registries. */
 function buildToolMeta(CATALOGS) {
   const meta = {};
@@ -115,14 +108,14 @@ function buildToolMeta(CATALOGS) {
     for (const tool of tools) {
       const isWhitebox = catalog === "whitebox";
       const entry = {
-        name: isWhitebox ? tool.display_name || humanize(tool.id) : tool.name,
+        name: isWhitebox ? tool.display_name || humanizeParameterName(tool.id) : tool.name,
       };
       // Whitebox snapshot stores tool summaries in `summary`, not `description`.
       const desc = isWhitebox ? tool.summary || tool.description : tool.description;
       if (desc) entry.description = desc;
       const params = {};
       for (const param of isWhitebox ? (tool.params ?? []) : (tool.parameters ?? [])) {
-        const paramEntry = { label: isWhitebox ? humanize(param.name) : param.label };
+        const paramEntry = { label: isWhitebox ? humanizeParameterName(param.name) : param.label };
         if (param.description) paramEntry.description = param.description;
         // Whitebox enum values are CLI values, not display labels owned by the
         // host; leave them verbatim in the dropdown.

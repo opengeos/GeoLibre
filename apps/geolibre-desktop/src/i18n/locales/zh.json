@@ -4238,6 +4238,11 @@
       "loadingTools": "正在加载…",
       "lockedPrefix": "[已锁定] ",
       "missingRequiredParameter": "缺少必填参数：{{label}}",
+      "sidecarCannotReadBrowserFiles": "Sidecar 无法读取 {{label}} 的浏览器所选文件。请本地运行（WASM），或输入 sidecar 可访问的文件系统路径。",
+      "selectedLayersMissing": "{{label}} 的一个或多个所选图层已不存在。",
+      "layerMissingGeoJson": "图层“{{layer}}”没有 {{label}} 可用的内存 GeoJSON。",
+      "layerNotFetchable": "无法获取图层“{{layer}}”以用于 {{label}}。",
+      "layerMissingPath": "图层“{{layer}}”没有可用于 {{label}} 的文件系统路径。",
       "importOutputFailed": "无法导入 Whitebox 输出。",
       "showingSnapshotOnly": "仅显示 GitHub 目录。",
       "liveCatalogEmpty": "实时目录为空。仅显示 GitHub 目录。",
@@ -9326,7 +9331,7 @@
           "params": {
             "wbe": {
               "label": "WBE",
-              "description": "Wbe"
+              "description": "WBE"
             },
             "output": {
               "label": "输出",
@@ -9761,7 +9766,7 @@
           "params": {
             "wbe": {
               "label": "WBE",
-              "description": "Wbe"
+              "description": "WBE"
             },
             "output": {
               "label": "输出",
@@ -19430,7 +19435,7 @@
             },
             "linkid": {
               "label": "链接 ID",
-              "description": "Linkid"
+              "description": "链接 ID"
             },
             "streams": {
               "label": "河流",
@@ -19459,7 +19464,7 @@
             },
             "linkid": {
               "label": "链接 ID",
-              "description": "Linkid"
+              "description": "链接 ID"
             },
             "streams": {
               "label": "河流",

@@ -125,8 +125,7 @@ function text(t: TFunction, key: string, fallback: string): string {
 }
 
 function isEnglishLocale(t: TFunction): boolean {
-  const language =
-    (t as { language?: string }).language ?? (t as { i18n?: { language?: string } }).i18n?.language;
+  const language = (t as { lng?: string }).lng;
   return language?.toLowerCase().startsWith("en") ?? false;
 }
 
@@ -235,7 +234,7 @@ export function translateParameter<T extends AlgorithmParameter>(
 }
 
 /** Humanize a snake_case identifier into a Title Case display string. */
-function humanize(value: string): string {
+export function humanizeParameterName(value: string): string {
   return (
     value
       .replace(/[_-]+/g, " ")
@@ -253,7 +252,7 @@ export function translateWhiteboxParameterLabel(
   toolId: string,
   param: WhiteboxToolParameter,
 ): string {
-  return text(t, parameterLabelKey("whitebox", toolId, param.name), humanize(param.name));
+  return text(t, parameterLabelKey("whitebox", toolId, param.name), humanizeParameterName(param.name));
 }
 
 /** A Whitebox parameter's combined form label and localized help text. */
@@ -262,7 +261,7 @@ export function whiteboxParameterLabel(
   toolId: string,
   param: WhiteboxToolParameter,
 ): string {
-  const fallbackLabel = humanize(param.name);
+  const fallbackLabel = humanizeParameterName(param.name);
   const label = localizedText(t, parameterLabelKey("whitebox", toolId, param.name), fallbackLabel);
   const desc = localizedText(
     t,

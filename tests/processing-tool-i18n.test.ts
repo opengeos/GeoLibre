@@ -16,7 +16,7 @@ import {
 function fakeT(catalog: Record<string, string> = {}, language = "zh-CN"): TFunction {
   const translate = ((key: string, options?: { defaultValue?: string }) =>
     catalog[key] ?? options?.defaultValue ?? key) as TFunction;
-  return Object.assign(translate, { language });
+  return Object.assign(translate, { lng: language });
 }
 
 describe("toolGroupKey", () => {

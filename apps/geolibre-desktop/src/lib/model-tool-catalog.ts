@@ -6,20 +6,11 @@ import type {
   WhiteboxTool,
   WhiteboxToolParameter,
 } from "@geolibre/processing";
+import { humanizeParameterName } from "./processing-tool-i18n";
 import { parameterKind } from "./whitebox-param-kind";
 
 /** Palette group for Whitebox tools that arrive without a category. */
 const UNCATEGORIZED = "Other";
-
-function humanize(value: string): string {
-  return (
-    value
-      .replace(/[_-]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Parameter"
-  );
-}
 
 /**
  * Build the palette key for a tool. Whitebox and the client vector registry both
@@ -81,7 +72,7 @@ function whiteboxScalarParameter(
 ): AlgorithmParameter | null {
   const base = {
     id: param.name,
-    label: humanize(param.name),
+    label: humanizeParameterName(param.name),
     required: param.required,
     description: param.description,
     default: param.default,

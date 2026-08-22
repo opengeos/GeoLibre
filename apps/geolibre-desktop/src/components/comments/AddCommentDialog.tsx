@@ -1,4 +1,4 @@
-import { useState, type ComponentType, type ReactElement } from "react";
+import { useState, type ComponentType, type FormEvent, type ReactElement } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import {
   Button,
@@ -54,7 +54,7 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
   const canSubmit = !!text.trim() && (hasSavedName || !!authorName.trim());
   const shortcutLabel = formatShortcut(POST_COMMENT_SHORTCUT, isMacPlatform());
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!text.trim()) return;
 

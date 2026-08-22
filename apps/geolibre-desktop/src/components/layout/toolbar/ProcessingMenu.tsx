@@ -175,13 +175,17 @@ export function ProcessingMenu({
                 {cat.subcategories.length === 1
                   ? cat.subcategories[0].tools.map((tool) => (
                       <DropdownMenuItem key={tool.id} onSelect={() => openWhiteboxTool(tool.id)}>
-                        {t(`processing.whitebox.menuTool.${tool.id}` as ParseKeys)}
+                        {t(`processing.whitebox.menuTool.${tool.id}` as ParseKeys, {
+                          defaultValue: tool.name,
+                        })}
                       </DropdownMenuItem>
                     ))
                   : cat.subcategories.map((sub) => (
                       <DropdownMenuSub key={sub.label}>
                         <DropdownMenuSubTrigger>
-                          {t(subcatKey(sub.label) as ParseKeys)}
+                          {t(subcatKey(sub.label) as ParseKeys, {
+                            defaultValue: sub.label,
+                          })}
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                           {sub.tools.map((tool) => (
@@ -189,7 +193,9 @@ export function ProcessingMenu({
                               key={tool.id}
                               onSelect={() => openWhiteboxTool(tool.id)}
                             >
-                              {t(`processing.whitebox.menuTool.${tool.id}` as ParseKeys)}
+                              {t(`processing.whitebox.menuTool.${tool.id}` as ParseKeys, {
+                                defaultValue: tool.name,
+                              })}
                             </DropdownMenuItem>
                           ))}
                         </DropdownMenuSubContent>

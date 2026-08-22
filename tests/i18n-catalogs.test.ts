@@ -78,7 +78,11 @@ describe("i18n catalogs", () => {
       toolMeta: {
         whitebox: Record<
           string,
-          { name?: string; description?: string; params?: Record<string, { label?: string }> }
+          {
+            name?: string;
+            description?: string;
+            params?: Record<string, { label?: string }>;
+          }
         >;
       };
       whitebox: { categories: Record<string, string> };
@@ -101,24 +105,30 @@ describe("i18n catalogs", () => {
   });
 
   it("covers every Whitebox Processing menu key in English and Chinese", () => {
-    const expectedTools = new Set(
-      WHITEBOX_MENU_CATALOG.flatMap((category) =>
-        category.subcategories.flatMap((subcategory) => subcategory.tools.map((tool) => tool.id)),
-      ),
-    );
-    const expectedSubcategories = new Set(
-      WHITEBOX_MENU_CATALOG.flatMap((category) =>
-        category.subcategories.map((subcategory) => subcategory.label),
-      ),
-    );
-    assert.equal(expectedTools.size, 1066);
-    assert.equal(expectedSubcategories.size, 45);
-
     const subcategoryKey = (label: string) =>
       label
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "_")
         .replace(/_+$/, "");
+    const expectedTools = new Map(
+      WHITEBOX_MENU_CATALOG.flatMap((category) =>
+        category.subcategories.flatMap((subcategory) =>
+          subcategory.tools.map((tool) => [tool.id, tool.name] as const),
+        ),
+      ),
+    );
+    const expectedSubcategories = new Map(
+      WHITEBOX_MENU_CATALOG.flatMap((category) =>
+        category.subcategories.map(
+          (subcategory) => [subcategoryKey(subcategory.label), subcategory.label] as const,
+        ),
+      ),
+    );
+    assert.equal(expectedTools.size, 1066);
+    assert.equal(expectedSubcategories.size, 45);
+
+    const untranslatedMenuTools = new Set(["landtrendr", "ripleys_k"]);
+    const untranslatedMenuSubcategories = new Set(["geolibre_wasm"]);
 
     for (const code of ["en", "zh"]) {
       const whitebox = loadCatalog(code).processing as {
@@ -129,21 +139,53 @@ describe("i18n catalogs", () => {
       };
       assert.deepEqual(
         Object.keys(whitebox.whitebox.menuTool).sort(),
-        [...expectedTools].sort(),
+        [...expectedTools.keys()].sort(),
         `${code}.json Whitebox menuTool keys do not match the menu catalog`,
       );
       assert.deepEqual(
         Object.keys(whitebox.whitebox.menuSubcategory).sort(),
-        [...expectedSubcategories].map(subcategoryKey).sort(),
+        [...expectedSubcategories.keys()].sort(),
         `${code}.json Whitebox menuSubcategory keys do not match the menu catalog`,
       );
     }
+
+    type WhiteboxMenuCatalog = {
+      whitebox: {
+        menuTool: Record<string, string>;
+        menuSubcategory: Record<string, string>;
+      };
+    };
+    const enWhitebox = loadCatalog("en").processing as WhiteboxMenuCatalog;
+    const zhWhitebox = loadCatalog("zh").processing as WhiteboxMenuCatalog;
+    for (const [key, value] of expectedTools) {
+      assert.equal(enWhitebox.whitebox.menuTool[key], value);
+      if (!untranslatedMenuTools.has(key)) {
+        assert.notEqual(zhWhitebox.whitebox.menuTool[key], enWhitebox.whitebox.menuTool[key]);
+      } else {
+        assert.equal(zhWhitebox.whitebox.menuTool[key], value);
+      }
+    }
+    for (const [key, value] of expectedSubcategories) {
+      assert.equal(enWhitebox.whitebox.menuSubcategory[key], value);
+      if (!untranslatedMenuSubcategories.has(key)) {
+        assert.notEqual(
+          zhWhitebox.whitebox.menuSubcategory[key],
+          enWhitebox.whitebox.menuSubcategory[key],
+        );
+      } else {
+        assert.equal(zhWhitebox.whitebox.menuSubcategory[key], value);
+      }
+    }
   });
 
-  it("zh covers every Whitebox tool name and parameter label in the baseline", () => {
+  it("zh covers every Whitebox tool name, parameter label, and description in the baseline", () => {
     type WhiteboxMeta = Record<
       string,
-      { name: string; params?: Record<string, { label: string }> }
+      {
+        name: string;
+        description?: string;
+        params?: Record<string, { label: string; description?: string }>;
+      }
     >;
     const enTools = (
       loadCatalog("en").processing as {
@@ -169,9 +211,43 @@ describe("i18n catalogs", () => {
         if (!zhLabel || (zhLabel === param.label && !symbolLabels.test(param.label))) {
           missing.push(`${toolId}.params.${paramId}.label`);
         }
+        const zhDescription = zhTool?.params?.[paramId]?.description;
+        if (param.description && (!zhDescription || zhDescription === param.description)) {
+          missing.push(`${toolId}.params.${paramId}.description`);
+        }
+      }
+      if (tool.description && (!zhTool?.description || zhTool.description === tool.description)) {
+        missing.push(`${toolId}.description`);
       }
     }
-    assert.deepEqual(missing, [], `zh.json has untranslated Whitebox labels: ${missing.length}`);
+    assert.deepEqual(
+      missing,
+      [],
+      `zh.json has untranslated Whitebox labels or descriptions: ${missing.length}`,
+    );
+  });
+
+  it("covers the Processing vector toolbar keys in English and Chinese", () => {
+    const keys = [
+      "decodePolyline",
+      "encodePolyline",
+      "reproject",
+      "explode",
+      "aggregate",
+      "smooth",
+    ];
+    for (const code of ["en", "zh"]) {
+      const toolbar = loadCatalog(code).toolbar as {
+        vectorTool: Record<string, unknown>;
+      };
+      for (const key of keys) {
+        assert.equal(
+          typeof toolbar.vectorTool[key],
+          "string",
+          `${code}.json toolbar.vectorTool.${key}`,
+        );
+      }
+    }
   });
 
   for (const code of localeCodes.filter((c) => c !== "en")) {
