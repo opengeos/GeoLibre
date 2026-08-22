@@ -1874,6 +1874,10 @@ function repairArcGISNestedPolygonRings(feature: Feature): Feature {
     parent: -1,
     ring,
   }));
+  // Planar containment is ambiguous across the antimeridian. Leave those
+  // geometries untouched rather than risk turning a separate polygon into a
+  // hole; MapLibre already handles their original GeoJSON representation.
+  if (rings.some(({ ring }) => ringCrossesAntimeridian(ring))) return feature;
 
   for (let child = 0; child < rings.length; child += 1) {
     let parentArea = Number.POSITIVE_INFINITY;
@@ -1904,9 +1908,9 @@ function repairArcGISNestedPolygonRings(feature: Feature): Feature {
   rings.forEach((entry, index) => {
     if (entry.depth % 2 !== 0) return;
     const polygon: Position[][] = [orientRing(entry.ring, true)];
-    rings.forEach((candidate, candidateIndex) => {
+    rings.forEach((candidate) => {
       if (candidate.parent === index && candidate.depth % 2 === 1) {
-        polygon.push(orientRing(rings[candidateIndex].ring, false));
+        polygon.push(orientRing(candidate.ring, false));
       }
     });
     coordinates.push(polygon);
@@ -1921,6 +1925,12 @@ function signedRingArea(ring: Position[]): number {
     twiceArea += ring[index][0] * ring[index + 1][1] - ring[index + 1][0] * ring[index][1];
   }
   return twiceArea / 2;
+}
+
+function ringCrossesAntimeridian(ring: Position[]): boolean {
+  return ring
+    .slice(0, -1)
+    .some((position, index) => Math.abs(position[0] - ring[index + 1][0]) > 180);
 }
 
 function orientRing(ring: Position[], counterClockwise: boolean): Position[] {

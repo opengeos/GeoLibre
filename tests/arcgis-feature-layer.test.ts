@@ -354,6 +354,51 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.deepEqual(geometry.coordinates[1][0][0], [4, 4]);
   });
 
+  it("leaves disjoint one-ring ArcGIS polygons unchanged", async () => {
+    const disjointGeometry = {
+      type: "MultiPolygon" as const,
+      coordinates: [
+        [
+          [
+            [0, 0],
+            [0, 2],
+            [2, 2],
+            [2, 0],
+            [0, 0],
+          ],
+        ],
+        [
+          [
+            [10, 10],
+            [10, 12],
+            [12, 12],
+            [12, 10],
+            [10, 10],
+          ],
+        ],
+      ],
+    };
+    const response = {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: {}, geometry: disjointGeometry }],
+    };
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      return jsonResponse(url.includes("/query") ? response : LAYER_INFO);
+    }) as typeof fetch;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+
+    assert.deepEqual(
+      useAppStore.getState().layers.find((layer) => layer.id === id)?.geojson?.features[0].geometry,
+      disjointGeometry,
+    );
+  });
+
   it("adds an interactive layer immediately and queries the current viewport", async () => {
     const requests: URL[] = [];
     // Only the first page of each viewport query is deferred, so the test can
