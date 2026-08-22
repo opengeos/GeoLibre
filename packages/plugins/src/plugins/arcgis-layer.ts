@@ -2,7 +2,7 @@
 
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { HostedLayer, VectorTileLayer } from "@esri/maplibre-arcgis";
-import type { Feature, FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection, MultiPolygon, Position } from "geojson";
 import type * as maplibregl from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
 
@@ -1832,6 +1832,7 @@ async function fetchArcGISGeoJson(
   if (json.type !== "FeatureCollection" || !Array.isArray(json.features)) {
     throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
   }
+  const features = json.features.map(repairArcGISNestedPolygonRings);
   // ArcGIS caps a single query at the service's maxRecordCount and flags the
   // shortfall with `exceededTransferLimit`. In `f=geojson` output that flag is
   // not always where the `f=json` output puts it — some servers only nest it
@@ -1840,10 +1841,105 @@ async function fetchArcGISGeoJson(
   // genuinely last one.
   return {
     ...json,
+    features,
     exceededTransferLimit: Boolean(
       json.exceededTransferLimit || json.properties?.exceededTransferLimit,
     ),
   };
+}
+
+/**
+ * Reassemble rings that ArcGIS exported as separate one-ring polygons.
+ *
+ * ArcGIS determines shell/hole membership from its own winding convention. If
+ * a service contains rings wound the other way around, `f=geojson` can emit a
+ * MultiPolygon whose nested rings are all independent polygons. MapLibre then
+ * fills the intended holes. Only that unmistakable shape is repaired here:
+ * ordinary polygons and multipolygons that already contain hole rings pass
+ * through unchanged.
+ */
+function repairArcGISNestedPolygonRings(feature: Feature): Feature {
+  const geometry = feature.geometry;
+  if (
+    geometry?.type !== "MultiPolygon" ||
+    geometry.coordinates.length < 2 ||
+    geometry.coordinates.some((polygon) => polygon.length !== 1)
+  ) {
+    return feature;
+  }
+
+  const rings = geometry.coordinates.map(([ring]) => ({
+    area: signedRingArea(ring),
+    depth: 0,
+    parent: -1,
+    ring,
+  }));
+
+  for (let child = 0; child < rings.length; child += 1) {
+    let parentArea = Number.POSITIVE_INFINITY;
+    for (let candidate = 0; candidate < rings.length; candidate += 1) {
+      if (candidate === child || Math.abs(rings[candidate].area) <= Math.abs(rings[child].area)) {
+        continue;
+      }
+      if (
+        Math.abs(rings[candidate].area) < parentArea &&
+        pointInRing(rings[child].ring[0], rings[candidate].ring)
+      ) {
+        rings[child].parent = candidate;
+        parentArea = Math.abs(rings[candidate].area);
+      }
+    }
+  }
+
+  if (!rings.some((ring) => ring.parent !== -1)) return feature;
+  const depthOf = (index: number): number => {
+    const parent = rings[index].parent;
+    return parent === -1 ? 0 : depthOf(parent) + 1;
+  };
+  rings.forEach((ring, index) => {
+    ring.depth = depthOf(index);
+  });
+
+  const coordinates: MultiPolygon["coordinates"] = [];
+  rings.forEach((entry, index) => {
+    if (entry.depth % 2 !== 0) return;
+    const polygon: Position[][] = [orientRing(entry.ring, true)];
+    rings.forEach((candidate, candidateIndex) => {
+      if (candidate.parent === index && candidate.depth % 2 === 1) {
+        polygon.push(orientRing(rings[candidateIndex].ring, false));
+      }
+    });
+    coordinates.push(polygon);
+  });
+
+  return { ...feature, geometry: { ...geometry, coordinates } };
+}
+
+function signedRingArea(ring: Position[]): number {
+  let twiceArea = 0;
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    twiceArea += ring[index][0] * ring[index + 1][1] - ring[index + 1][0] * ring[index][1];
+  }
+  return twiceArea / 2;
+}
+
+function orientRing(ring: Position[], counterClockwise: boolean): Position[] {
+  return signedRingArea(ring) > 0 === counterClockwise ? ring : [...ring].reverse();
+}
+
+function pointInRing(point: Position, ring: Position[]): boolean {
+  let inside = false;
+  for (let current = 0, previous = ring.length - 1; current < ring.length; previous = current++) {
+    const [x1, y1] = ring[current];
+    const [x2, y2] = ring[previous];
+    if (
+      y1 > point[1] !== y2 > point[1] &&
+      point[0] < ((x2 - x1) * (point[1] - y1)) / (y2 - y1) + x1
+    ) {
+      inside = !inside;
+    }
+  }
+  return inside;
 }
 
 async function resolveFeatureLayerUrl(

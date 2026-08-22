@@ -279,6 +279,68 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.deepEqual(fitBoundsCalls, [[-160, 18, -154, 23]]);
   });
 
+  it("reassembles nested rings exported as separate ArcGIS polygons", async () => {
+    const malformedMask = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { NAME: "Mask" },
+          geometry: {
+            type: "MultiPolygon",
+            coordinates: [
+              [
+                [
+                  [0, 0],
+                  [0, 10],
+                  [10, 10],
+                  [10, 0],
+                  [0, 0],
+                ],
+              ],
+              [
+                [
+                  [2, 2],
+                  [8, 2],
+                  [8, 8],
+                  [2, 8],
+                  [2, 2],
+                ],
+              ],
+              [
+                [
+                  [4, 4],
+                  [4, 6],
+                  [6, 6],
+                  [6, 4],
+                  [4, 4],
+                ],
+              ],
+            ],
+          },
+        },
+      ],
+    };
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      return jsonResponse(url.includes("/query") ? malformedMask : LAYER_INFO);
+    }) as typeof fetch;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+    const geometry = useAppStore.getState().layers.find((layer) => layer.id === id)?.geojson
+      ?.features[0].geometry;
+
+    assert.equal(geometry?.type, "MultiPolygon");
+    if (geometry?.type !== "MultiPolygon") return;
+    assert.equal(geometry.coordinates.length, 2, "the nested island remains a separate polygon");
+    assert.equal(geometry.coordinates[0].length, 2, "the contained ring becomes a hole");
+    assert.deepEqual(geometry.coordinates[1][0][0], [4, 4]);
+  });
+
   it("adds an interactive layer immediately and queries the current viewport", async () => {
     const requests: URL[] = [];
     // Only the first page of each viewport query is deferred, so the test can
