@@ -883,15 +883,18 @@ def _prepare_arguments(
             else:
                 value = _write_layer_input(name, embedded, temp_paths)
         elif isinstance(value, str) and "," in value:
-            # The tool metadata is untrusted. When any comma-delimited member
-            # looks path-shaped, validate every member independently rather than
-            # trusting `kind` or treating the list as one opaque path.
-            path_values = [item.strip() for item in value.split(",") if item.strip()]
-            if any(_looks_like_fs_path(path_value) for path_value in path_values):
-                for path_value in path_values:
-                    _ensure_within_roots(path_value)
-                    if Path(path_value).expanduser().is_absolute():
-                        absolute_paths.append(path_value)
+            # The tool metadata is untrusted. Validate each escape-shaped
+            # comma-delimited member independently rather than trusting `kind`
+            # or treating the list as one opaque path. Plain relative members
+            # are deferred to the defense-in-depth pass below, which resolves
+            # them against the pinned working directory (checking them here
+            # would resolve against the sidecar's own cwd and wrongly reject).
+            for path_value in (item.strip() for item in value.split(",")):
+                if not _looks_like_fs_path(path_value):
+                    continue
+                _ensure_within_roots(path_value)
+                if Path(path_value).expanduser().is_absolute():
+                    absolute_paths.append(path_value)
         elif isinstance(value, str) and _looks_like_fs_path(value):
             # A path-shaped value must stay inside the allowlisted roots,
             # regardless of the client-declared `kind`. `request.tool` is

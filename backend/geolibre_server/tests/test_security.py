@@ -344,6 +344,17 @@ def test_whitebox_relative_path_list_member_through_symlink_is_rejected(
     args, _ = _prepare_arguments(ok, [])
     assert args["inputs"] == "safe.geojson,subdir/other.geojson"
 
+    # A relative member alongside an absolute in-root member is resolved
+    # against the pinned root, not the sidecar's own cwd.
+    mixed = WhiteboxRunRequest(
+        tool_id="merge_vectors",
+        parameters={"inputs": f"safe.geojson,{root / 'other.geojson'}"},
+        tool=tool,
+    )
+    args, cwd = _prepare_arguments(mixed, [])
+    assert cwd == str(root.resolve())
+    assert args["inputs"] == f"safe.geojson,{root / 'other.geojson'}"
+
 
 def test_whitebox_null_byte_path_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """An embedded NUL byte yields a clean 403, not an uncaught 500."""

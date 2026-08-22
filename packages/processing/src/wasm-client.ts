@@ -706,11 +706,25 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
               ? []
               : [String(provided)];
         layerInputs = await Promise.all(
-          paths.map(async (path) => ({
-            name: path,
-            kind,
-            bytes: (await fetchBytes(path)) ?? undefined,
-          })),
+          paths.map(async (path) => {
+            const bytes = (await fetchBytes(path)) ?? undefined;
+            // A fetched URL is untyped: parse it as GeoJSON when it is one, and
+            // fail fast on an unrecognised payload (e.g. an HTML error page)
+            // rather than handing Whitebox an opaque `.dat`.
+            let geojson: FeatureCollection | undefined;
+            if (bytes) {
+              try {
+                const parsed = JSON.parse(new TextDecoder().decode(bytes));
+                if (isFeatureCollection(parsed)) geojson = parsed;
+              } catch {
+                // not JSON; fall through to the extension check
+              }
+              if (!geojson && !/\.[A-Za-z0-9]+$/.test(path.split(/[?#]/)[0])) {
+                throw new Error(`Input "${name}" at ${path} is not a readable vector file.`);
+              }
+            }
+            return { name: path, kind, bytes, geojson };
+          }),
         );
       }
       if (!layerInputs.length || layerInputs.some((item) => !item.geojson && !item.bytes)) {
